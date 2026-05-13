@@ -3,8 +3,9 @@ import { useAppStore } from '../store'
 import type { ActionDef } from '../store'
 import { parseScriptToAction } from '../store'
 import { t } from '../i18n'
-import { AlertTriangle, Upload, Plus, Edit, Trash2, RefreshCw, Globe, X, Loader2, Search, Eye, Power } from 'lucide-react'
+import { AlertTriangle, Upload, Plus, Edit, Trash2, RefreshCw, Globe, X, Loader2, Search, Eye, Power, Download } from 'lucide-react'
 import { resolveIcon } from '../utils/resolveIcon'
+import { checkBuiltinScriptsUpdate } from '../configInit'
 
 interface ScriptFile {
   name: string
@@ -126,6 +127,25 @@ export function ScriptsView() {
   const builtinTabRef = useRef<HTMLButtonElement>(null)
   const customTabRef = useRef<HTMLButtonElement>(null)
   const [indicatorStyle, setIndicatorStyle] = useState<{ left: number; width: number }>({ left: 0, width: 0 })
+
+  // 内置脚本更新检查
+  const [scriptsCheckStatus, setScriptsCheckStatus] = useState<'idle' | 'checking' | 'updated' | 'up-to-date' | 'error'>('idle')
+  const [scriptsNewVersion, setScriptsNewVersion] = useState(0)
+
+  const handleCheckScriptsUpdate = async () => {
+    setScriptsCheckStatus('checking')
+    try {
+      const result = await checkBuiltinScriptsUpdate()
+      if (result.updated) {
+        setScriptsCheckStatus('updated')
+        setScriptsNewVersion(result.version || 0)
+      } else {
+        setScriptsCheckStatus(result.error ? 'error' : 'up-to-date')
+      }
+    } catch {
+      setScriptsCheckStatus('error')
+    }
+  }
 
   const builtinActions = actions.filter((a) => a.builtin)
 
@@ -635,6 +655,37 @@ export function ScriptsView() {
             >
               {/* Built-in Panel */}
               <div className="scripts-tab-panel">
+                <div className="flex items-center justify-end gap-2 mb-2 px-1">
+                  {scriptsCheckStatus === 'checking' ? (
+                    <span className="flex items-center gap-1" style={{ fontSize: '0.75em', color: 'var(--color-text-tertiary)' }}>
+                      <RefreshCw size={11} className="animate-spin" />
+                      {t(locale, 'scripts.checkingUpdate')}
+                    </span>
+                  ) : scriptsCheckStatus === 'updated' ? (
+                    <span className="flex items-center gap-1" style={{ fontSize: '0.75em', color: 'var(--color-success-text)' }}>
+                      <Download size={11} />
+                      {t(locale, 'scripts.scriptsUpdated').replace('{version}', String(scriptsNewVersion))}
+                    </span>
+                  ) : scriptsCheckStatus === 'up-to-date' ? (
+                    <span style={{ fontSize: '0.75em', color: 'var(--color-text-tertiary)' }}>
+                      {t(locale, 'scripts.scriptsUpToDate')}
+                    </span>
+                  ) : scriptsCheckStatus === 'error' ? (
+                    <span style={{ fontSize: '0.75em', color: 'var(--color-error-text)' }}>
+                      {t(locale, 'scripts.scriptsUpdateError')}
+                    </span>
+                  ) : null}
+                  {scriptsCheckStatus !== 'checking' && (
+                    <button
+                      onClick={handleCheckScriptsUpdate}
+                      className="scripts-btn"
+                      style={{ fontSize: '0.75em', padding: '2px 8px' }}
+                    >
+                      <RefreshCw size={11} />
+                      {t(locale, 'scripts.checkUpdate')}
+                    </button>
+                  )}
+                </div>
                 {builtinActions.map((a, i) => renderBuiltinCard(a, i))}
               </div>
               {/* Custom Panel */}
