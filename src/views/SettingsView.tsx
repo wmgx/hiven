@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from 'react'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { getVersion } from '@tauri-apps/api/app'
+import { checkBuiltinScriptsUpdate } from '../configInit'
 
 export function SettingsView() {
   const { settings, updateSetting } = useAppStore()
@@ -240,11 +241,14 @@ function UpdateChecker({ locale }: { locale: 'zh' | 'en' }) {
   const [status, setStatus] = useState<UpdateStatus>('idle')
   const [version, setVersion] = useState('')
   const [error, setError] = useState('')
+  const [scriptsStatus, setScriptsStatus] = useState<'idle' | 'checking' | 'updated' | 'up-to-date' | 'error'>('idle')
+  const [scriptsVersion, setScriptsVersion] = useState(0)
   const updateRef = useRef<Awaited<ReturnType<typeof check>> | null>(null)
 
   const handleCheck = async () => {
     setStatus('checking')
     setError('')
+    setScriptsStatus('checking')
     try {
       const update = await check()
       if (update) {
@@ -257,6 +261,19 @@ function UpdateChecker({ locale }: { locale: 'zh' | 'en' }) {
     } catch (e) {
       setError(String(e))
       setStatus('error')
+    }
+
+    // 同时检查内置脚本更新
+    try {
+      const result = await checkBuiltinScriptsUpdate()
+      if (result.updated) {
+        setScriptsStatus('updated')
+        setScriptsVersion(result.version || 0)
+      } else {
+        setScriptsStatus(result.error ? 'error' : 'up-to-date')
+      }
+    } catch {
+      setScriptsStatus('error')
     }
   }
 
@@ -360,6 +377,18 @@ function UpdateChecker({ locale }: { locale: 'zh' | 'en' }) {
           color: status === 'error' ? 'var(--color-error-text)' : status === 'no-update' ? 'var(--color-text-tertiary)' : 'var(--color-success-text)',
         }}>
           {statusText()}
+        </span>
+      )}
+      {scriptsStatus !== 'idle' && scriptsStatus !== 'checking' && (
+        <span style={{
+          fontSize: '0.8em',
+          color: scriptsStatus === 'updated' ? 'var(--color-success-text)' : scriptsStatus === 'error' ? 'var(--color-error-text)' : 'var(--color-text-tertiary)',
+        }}>
+          {scriptsStatus === 'updated'
+            ? t(locale, 'update.scriptsUpdated').replace('{version}', String(scriptsVersion))
+            : scriptsStatus === 'up-to-date'
+              ? t(locale, 'update.scriptsUpToDate')
+              : ''}
         </span>
       )}
     </div>

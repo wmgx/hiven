@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "files": [
+    "base64.ts",
+    "case.ts",
+    "count.ts",
+    "css.ts",
+    "csv.ts",
+    "dedup.ts",
+    "extract.ts",
+    "hash.ts",
+    "hex.ts",
+    "html.ts",
+    "join.ts",
+    "json.ts",
+    "jwt.ts",
+    "lorem.ts",
+    "mdquote.ts",
+    "querystring.ts",
+    "reverse.ts",
+    "slashes.ts",
+    "sort.ts",
+    "sortjson.ts",
+    "sql.ts",
+    "timestamp.ts",
+    "trim.ts",
+    "url.ts",
+    "xml.ts",
+    "yaml.ts"
+  ]
+}

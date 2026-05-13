@@ -93,6 +93,7 @@ interface AppState {
   registerAction: (action: ActionDef) => void
   registerActions: (actions: ActionDef[]) => void
   setCustomActions: (customs: ActionDef[]) => void
+  setBuiltinActionsFromDisk: (diskBuiltins: ActionDef[]) => void
 
   // Command Palette
   commandPaletteOpen: boolean
@@ -147,8 +148,12 @@ interface AppState {
     autoCopyOutput: boolean
     realtimePreview: boolean
     locale: Locale
+    disabledBuiltins: string[]
+    disabledCustoms: string[]
   }
   updateSetting: (key: string, value: any) => void
+  toggleBuiltinDisabled: (name: string) => void
+  toggleCustomDisabled: (name: string) => void
   locale: Locale
   setLocale: (locale: Locale) => void
 }
@@ -201,6 +206,22 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   setCustomActions: (customs) => set((state) => ({
     actions: [...state.actions.filter(a => a.builtin), ...customs]
   })),
+  setBuiltinActionsFromDisk: (diskBuiltins: ActionDef[]) => set((state) => {
+    const diskMap = new Map(diskBuiltins.map(a => [a.name, a]))
+    // 用磁盘版本覆盖同名硬编码版本，解析失败的保留硬编码
+    const merged: ActionDef[] = []
+    for (const hc of builtinActions) {
+      const disk = diskMap.get(hc.name)
+      merged.push(disk ? { ...disk, builtin: true } : hc)
+      diskMap.delete(hc.name)
+    }
+    // 远程可能新增了硬编码中没有的脚本
+    for (const [, a] of diskMap) {
+      merged.push({ ...a, builtin: true })
+    }
+    const customs = state.actions.filter(a => !a.builtin)
+    return { actions: [...merged, ...customs] }
+  }),
 
   // Command Palette
   commandPaletteOpen: false,
@@ -331,6 +352,8 @@ hello@fluxtext.app (duplicate)`,
     autoCopyOutput: false,
     realtimePreview: true,
     locale: 'en' as Locale,
+    disabledBuiltins: [],
+    disabledCustoms: [],
   },
   updateSetting: (key, value) =>
     set((state) => {
@@ -339,6 +362,18 @@ hello@fluxtext.app (duplicate)`,
         return { settings: newSettings, locale: value as Locale }
       }
       return { settings: newSettings }
+    }),
+  toggleBuiltinDisabled: (name) =>
+    set((state) => {
+      const list = state.settings.disabledBuiltins
+      const newList = list.includes(name) ? list.filter(n => n !== name) : [...list, name]
+      return { settings: { ...state.settings, disabledBuiltins: newList } }
+    }),
+  toggleCustomDisabled: (name) =>
+    set((state) => {
+      const list = state.settings.disabledCustoms
+      const newList = list.includes(name) ? list.filter(n => n !== name) : [...list, name]
+      return { settings: { ...state.settings, disabledCustoms: newList } }
     }),
   locale: 'en' as Locale,
   setLocale: (locale) =>

@@ -3,7 +3,7 @@ import { useAppStore } from '../store'
 import type { ActionDef } from '../store'
 import { parseScriptToAction } from '../store'
 import { t } from '../i18n'
-import { AlertTriangle, Upload, Plus, Edit, Trash2, RefreshCw, Globe, X, Loader2, Search } from 'lucide-react'
+import { AlertTriangle, Upload, Plus, Edit, Trash2, RefreshCw, Globe, X, Loader2, Search, Eye, Power } from 'lucide-react'
 import { resolveIcon } from '../utils/resolveIcon'
 
 interface ScriptFile {
@@ -109,6 +109,8 @@ export function ScriptsView() {
   const settings = useAppStore((s) => s.settings)
   const locale = useAppStore((s) => s.locale)
   const actions = useAppStore((s) => s.actions)
+  const toggleBuiltinDisabled = useAppStore((s) => s.toggleBuiltinDisabled)
+  const toggleCustomDisabled = useAppStore((s) => s.toggleCustomDisabled)
   const [customScripts, setCustomScripts] = useState<ScriptFile[]>([])
   const [loading, setLoading] = useState(false)
   const [showRemoteModal, setShowRemoteModal] = useState(false)
@@ -359,11 +361,12 @@ export function ScriptsView() {
 
   /** 渲染一张内置脚本卡片 */
   function renderBuiltinCard(action: typeof builtinActions[number], i: number) {
+    const isDisabled = settings.disabledBuiltins.includes(action.name)
     return (
       <div
         key={action.name}
         className="script-card anim-card-in"
-        style={{ animationDelay: `${i * 0.03}s` }}
+        style={{ animationDelay: `${i * 0.03}s`, opacity: isDisabled ? 0.5 : 1 }}
       >
         <div className="script-icon">
           {resolveIcon(action.icon, 16, action.name)}
@@ -379,9 +382,17 @@ export function ScriptsView() {
         <button
           onClick={() => openScript(action.name)}
           className="script-action-btn"
-          title="Edit"
+          title={t(locale, 'scripts.viewSource')}
         >
-          <Edit size={14} />
+          <Eye size={14} />
+        </button>
+        <button
+          onClick={() => toggleBuiltinDisabled(action.name)}
+          className="script-action-btn"
+          title={isDisabled ? t(locale, 'scripts.disabled') : t(locale, 'scripts.enabled')}
+          style={{ color: isDisabled ? 'var(--color-error-text)' : 'var(--color-success-text)' }}
+        >
+          <Power size={14} />
         </button>
         <span className="script-badge">built-in</span>
       </div>
@@ -390,6 +401,7 @@ export function ScriptsView() {
 
   /** 渲染一张自定义脚本卡片 */
   function renderCustomCard(s: ScriptFile, i: number) {
+    const isDisabled = settings.disabledCustoms.includes(s.name)
     return (
       <div
         key={s.name}
@@ -397,6 +409,7 @@ export function ScriptsView() {
         style={{
           animationDelay: `${i * 0.03}s`,
           borderColor: s.status === 'error' ? 'var(--color-error)' : undefined,
+          opacity: isDisabled ? 0.5 : 1,
         }}
       >
         <div className="script-icon" style={s.status === 'error' ? {
@@ -438,6 +451,14 @@ export function ScriptsView() {
           title="Delete"
         >
           <Trash2 size={14} />
+        </button>
+        <button
+          onClick={() => toggleCustomDisabled(s.name)}
+          className="script-action-btn"
+          title={isDisabled ? t(locale, 'scripts.disabled') : t(locale, 'scripts.enabled')}
+          style={{ color: isDisabled ? 'var(--color-error-text)' : 'var(--color-success-text)' }}
+        >
+          <Power size={14} />
         </button>
         <span
           className="script-badge"

@@ -35,6 +35,9 @@ const messages = {
     'scripts.remoteImportError': 'Import failed',
     'scripts.cancel': 'Cancel',
     'scripts.confirm': 'Import',
+    'scripts.viewSource': 'View source',
+    'scripts.enabled': 'Enabled',
+    'scripts.disabled': 'Disabled',
 
     // Debugger
     'debugger.run': 'Run',
@@ -105,6 +108,9 @@ const messages = {
     'update.readyRestart': 'Update downloaded, restart to apply',
     'update.restart': 'Restart now',
     'update.error': 'Update check failed',
+    'update.scriptsUpToDate': 'Built-in scripts are up to date',
+    'update.scriptsUpdated': 'Built-in scripts updated to v{version}',
+    'update.checkingScripts': 'Checking script updates...',
   },
   zh: {
     // Sidebar
@@ -140,6 +146,9 @@ const messages = {
     'scripts.remoteImportError': '导入失败',
     'scripts.cancel': '取消',
     'scripts.confirm': '导入',
+    'scripts.viewSource': '查看源码',
+    'scripts.enabled': '已启用',
+    'scripts.disabled': '已禁用',
 
     // Debugger
     'debugger.run': '运行',
@@ -210,6 +219,9 @@ const messages = {
     'update.readyRestart': '更新已下载，重启以生效',
     'update.restart': '立即重启',
     'update.error': '检查更新失败',
+    'update.scriptsUpToDate': '内置脚本已是最新',
+    'update.scriptsUpdated': '内置脚本已更新到 v{version}',
+    'update.checkingScripts': '检查脚本更新...',
   },
 } as const
 

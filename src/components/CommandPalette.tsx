@@ -16,6 +16,8 @@ export function CommandPalette() {
   const open = useAppStore((s) => s.commandPaletteOpen)
   const setOpen = useAppStore((s) => s.setCommandPaletteOpen)
   const actions = useAppStore((s) => s.actions)
+  const disabledBuiltins = useAppStore((s) => s.settings.disabledBuiltins)
+  const disabledCustoms = useAppStore((s) => s.settings.disabledCustoms)
   const editorText = useAppStore((s) => s.editorText)
   const setEditorText = useAppStore((s) => s.setEditorText)
   const setLastResult = useAppStore((s) => s.setLastResult)
@@ -60,10 +62,16 @@ export function CommandPalette() {
       return true
     })
 
-    let list = unique
+    // 过滤掉已禁用的 action
+    const enabled = unique.filter((a) => {
+      if (a.builtin) return !disabledBuiltins.includes(a.name)
+      return !disabledCustoms.includes(a.name)
+    })
+
+    let list = enabled
     if (query.trim()) {
       const q = query.toLowerCase()
-      list = unique.filter((a) =>
+      list = enabled.filter((a) =>
         a.name.toLowerCase().includes(q) ||
         a.title.toLowerCase().includes(q) ||
         Object.values(a.titleI18n || {}).some((v) => v && v.toLowerCase().includes(q)) ||
@@ -83,7 +91,7 @@ export function CommandPalette() {
       if (bi === -1) return -1
       return ai - bi
     })
-  }, [query, actions, recentActionNames])
+  }, [query, actions, recentActionNames, disabledBuiltins, disabledCustoms])
 
   // 当前参数
   const currentParam: ActionParam | null =

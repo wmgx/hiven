@@ -70,6 +70,12 @@ fn save_script(path: String, content: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn read_file(path: String) -> Result<String, String> {
+    let file_path = expand_path(&path);
+    fs::read_to_string(&file_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn delete_script(path: String) -> Result<(), String> {
     let file_path = expand_path(&path);
     fs::remove_file(&file_path).map_err(|e| e.to_string())
@@ -161,6 +167,7 @@ pub fn run() {
             get_config_dir,
             init_config_dir,
             read_scripts_dir,
+            read_file,
             save_script,
             delete_script,
             fetch_url,

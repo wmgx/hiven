@@ -1,9 +1,16 @@
 /**
- * 应用配置目录初始化
- * 首次启动时创建 ~/.local/fluxtext/scripts/builtin/ 并释放内置脚本
+ * 应用配置目录初始化 & 内置脚本管理
+ *
+ * 三层架构：
+ *   L0 安装包内嵌（编译时打包）→ 保底，离线可用
+ *   L1 本地 builtin/ 目录       → 运行时实际使用
+ *   L2 GitHub 远程              → 跟随 app 更新检查拉取
+ *
+ * 启动时比较内嵌 manifest.version 与本地 manifest.version，
+ * 内嵌版本更高则覆盖本地 builtin/ 目录。
  */
 
-// 通过 Vite ?raw import 读取源码目录中的脚本文件内容
+// 内嵌脚本（Vite ?raw import）
 import dedupScript from './builtin-scripts/dedup.ts?raw'
 import sortScript from './builtin-scripts/sort.ts?raw'
 import trimScript from './builtin-scripts/trim.ts?raw'
@@ -30,6 +37,9 @@ import sortjsonScript from './builtin-scripts/sortjson.ts?raw'
 import loremScript from './builtin-scripts/lorem.ts?raw'
 import mdquoteScript from './builtin-scripts/mdquote.ts?raw'
 import yamlScript from './builtin-scripts/yaml.ts?raw'
+
+// 内嵌 manifest
+import embeddedManifest from './builtin-scripts/manifest.json'
 
 const BUILTIN_SCRIPTS: Record<string, string> = {
   'dedup.ts': dedupScript,
@@ -60,12 +70,32 @@ const BUILTIN_SCRIPTS: Record<string, string> = {
   'yaml.ts': yamlScript,
 }
 
+const REMOTE_MANIFEST_URL =
+  'https://raw.githubusercontent.com/wmgx/flux_text/main/src/builtin-scripts/manifest.json'
+const REMOTE_SCRIPT_BASE_URL =
+  'https://raw.githubusercontent.com/wmgx/flux_text/main/src/builtin-scripts'
+
 function isTauri() {
   return !!(window as any).__TAURI_INTERNALS__
 }
 
 /**
- * 初始化配置目录，释放内置脚本（仅首次）
+ * 读取本地 builtin/manifest.json 的 version 字段
+ */
+async function getLocalManifestVersion(builtinDir: string): Promise<number> {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    const content = await invoke<string>('read_file', {
+      path: `${builtinDir}/manifest.json`,
+    })
+    return JSON.parse(content).version || 0
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * 初始化配置目录，按需释放内置脚本
  * 返回配置根目录路径
  */
 export async function initConfigDir(): Promise<string | null> {
@@ -78,26 +108,84 @@ export async function initConfigDir(): Promise<string | null> {
     const configDir = await invoke<string>('init_config_dir')
     const builtinDir = `${configDir}/scripts/builtin`
 
-    // 检查是否需要释放内置脚本（检查目录下文件数）
-    const existing = await invoke<{ name: string }[]>('read_scripts_dir', {
-      path: builtinDir,
-    })
+    // 比较内嵌版本与本地版本
+    const localVersion = await getLocalManifestVersion(builtinDir)
 
-    // 只在 builtin 目录为空时释放
-    if (existing.length === 0) {
+    if (embeddedManifest.version > localVersion) {
+      // 内嵌版本更新 → 覆盖本地 builtin 目录
       for (const [filename, content] of Object.entries(BUILTIN_SCRIPTS)) {
         await invoke('save_script', {
           path: `${builtinDir}/${filename}`,
           content,
         })
       }
-      console.log(`[FluxText] Released ${Object.keys(BUILTIN_SCRIPTS).length} builtin scripts to ${builtinDir}`)
+      await invoke('save_script', {
+        path: `${builtinDir}/manifest.json`,
+        content: JSON.stringify(embeddedManifest, null, 2),
+      })
+      console.log(
+        `[FluxText] Released builtin scripts v${embeddedManifest.version} (local was v${localVersion})`,
+      )
     }
 
     return configDir
   } catch (e) {
     console.error('[FluxText] Failed to init config dir:', e)
     return null
+  }
+}
+
+/**
+ * 从 GitHub 检查并更新内置脚本（跟随 app 更新检查调用）
+ */
+export async function checkBuiltinScriptsUpdate(): Promise<{
+  updated: boolean
+  version?: number
+  error?: string
+}> {
+  if (!isTauri()) return { updated: false }
+
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    const configDir = await invoke<string>('get_config_dir')
+    const builtinDir = `${configDir}/scripts/builtin`
+
+    const localVersion = await getLocalManifestVersion(builtinDir)
+
+    // 拉取远程 manifest
+    const remoteManifestStr = await invoke<string>('fetch_url', {
+      url: REMOTE_MANIFEST_URL,
+    })
+    const remoteManifest = JSON.parse(remoteManifestStr)
+
+    if (remoteManifest.version <= localVersion) {
+      return { updated: false }
+    }
+
+    // 下载所有脚本文件
+    for (const filename of remoteManifest.files) {
+      const content = await invoke<string>('fetch_url', {
+        url: `${REMOTE_SCRIPT_BASE_URL}/${filename}`,
+      })
+      await invoke('save_script', {
+        path: `${builtinDir}/${filename}`,
+        content,
+      })
+    }
+
+    // 保存新 manifest
+    await invoke('save_script', {
+      path: `${builtinDir}/manifest.json`,
+      content: JSON.stringify(remoteManifest, null, 2),
+    })
+
+    console.log(
+      `[FluxText] Updated builtin scripts from v${localVersion} to v${remoteManifest.version}`,
+    )
+    return { updated: true, version: remoteManifest.version }
+  } catch (e: any) {
+    console.error('[FluxText] Failed to check builtin scripts update:', e)
+    return { updated: false, error: e.message || String(e) }
   }
 }
 

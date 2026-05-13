@@ -37,19 +37,30 @@ export default function App() {
           useAppStore.getState().updateSetting('watchDirectory', scriptsDir)
         }
       }
-      // 启动时加载自定义脚本并注册到 Command Palette
+      // 启动时加载脚本并注册到 Command Palette
       if ((window as any).__TAURI_INTERNALS__) {
         try {
           const { invoke } = await import('@tauri-apps/api/core')
           const watchDir = useAppStore.getState().settings.watchDirectory
           const scripts = await invoke<{ name: string; path: string; content: string; builtin?: boolean }[]>('read_scripts_dir', { path: watchDir })
+
+          // 从磁盘 builtin 脚本覆盖硬编码版本（支持远程更新生效）
+          const builtinsFromDisk = scripts
+            .filter(s => s.builtin)
+            .map(s => parseScriptToAction(s.content))
+            .filter((a): a is ActionDef => a !== null)
+          if (builtinsFromDisk.length > 0) {
+            useAppStore.getState().setBuiltinActionsFromDisk(builtinsFromDisk)
+          }
+
+          // 注册自定义脚本
           const customs = scripts
             .filter(s => !s.builtin)
             .map(s => parseScriptToAction(s.content))
             .filter((a): a is ActionDef => a !== null)
           useAppStore.getState().setCustomActions(customs)
         } catch (e) {
-          console.error('[FluxText] Failed to load custom scripts:', e)
+          console.error('[FluxText] Failed to load scripts:', e)
         }
       }
     })
