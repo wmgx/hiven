@@ -41,17 +41,17 @@ export default defineAction({
   async run(ctx) {
     const BigNumber = ctx.deps.bignumber.default || ctx.deps.bignumber
 
-    const sepRegex: Record<string, RegExp> = {
+    const sepRegex = {
       auto: /[\s,]+/,
       space: /\s+/,
       comma: /,\s*/,
       tab: /\t+/,
     }
-    const re = sepRegex[ctx.params.separator as string] || sepRegex.auto
+    const re = sepRegex[ctx.params.separator] || sepRegex.auto
 
     const lines = ctx.input.text.split('\n')
 
-    function sumLine(line: string): string {
+    function sumLine(line) {
       const tokens = line.trim().split(re).filter(Boolean)
       const nums = tokens.filter(t => !new BigNumber(t).isNaN())
       if (nums.length === 0) return ''
