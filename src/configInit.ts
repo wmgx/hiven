@@ -37,6 +37,10 @@ import sortjsonScript from './builtin-scripts/sortjson.ts?raw'
 import loremScript from './builtin-scripts/lorem.ts?raw'
 import mdquoteScript from './builtin-scripts/mdquote.ts?raw'
 import yamlScript from './builtin-scripts/yaml.ts?raw'
+import appendScript from './builtin-scripts/append.ts?raw'
+import prependScript from './builtin-scripts/prepend.ts?raw'
+import wrapScript from './builtin-scripts/wrap.ts?raw'
+import sqlinScript from './builtin-scripts/sqlin.ts?raw'
 
 // 内嵌 manifest
 import embeddedManifest from './builtin-scripts/manifest.json'
@@ -68,6 +72,10 @@ const BUILTIN_SCRIPTS: Record<string, string> = {
   'lorem.ts': loremScript,
   'mdquote.ts': mdquoteScript,
   'yaml.ts': yamlScript,
+  'append.ts': appendScript,
+  'prepend.ts': prependScript,
+  'wrap.ts': wrapScript,
+  'sqlin.ts': sqlinScript,
 }
 
 const REMOTE_MANIFEST_URL =
