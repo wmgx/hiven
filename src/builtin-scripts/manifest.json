@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "files": [
     "append.ts",
     "base64.ts",
@@ -30,6 +30,7 @@
     "url.ts",
     "wrap.ts",
     "xml.ts",
-    "yaml.ts"
+    "yaml.ts",
+    "sum.ts"
   ]
 }

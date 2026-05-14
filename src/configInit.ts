@@ -41,6 +41,7 @@ import appendScript from './builtin-scripts/append.ts?raw'
 import prependScript from './builtin-scripts/prepend.ts?raw'
 import wrapScript from './builtin-scripts/wrap.ts?raw'
 import sqlinScript from './builtin-scripts/sqlin.ts?raw'
+import sumScript from './builtin-scripts/sum.ts?raw'
 
 // 内嵌 manifest
 import embeddedManifest from './builtin-scripts/manifest.json'
@@ -76,6 +77,7 @@ const BUILTIN_SCRIPTS: Record<string, string> = {
   'prepend.ts': prependScript,
   'wrap.ts': wrapScript,
   'sqlin.ts': sqlinScript,
+  'sum.ts': sumScript,
 }
 
 const REMOTE_MANIFEST_URL =
