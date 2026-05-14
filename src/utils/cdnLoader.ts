@@ -66,8 +66,25 @@ async function setCache(key: string, source: string): Promise<void> {
 
 // ---------- Module import from source text ----------
 
-async function importFromSource(source: string): Promise<any> {
-  const blob = new Blob([source], { type: 'application/javascript' })
+/**
+ * 将源码中的相对路径 import 重写为绝对 URL
+ * 例如: from '/bignumber.js@9/...' → from 'https://esm.sh/bignumber.js@9/...'
+ */
+function rewriteImports(source: string, originUrl: string): string {
+  const origin = new URL(originUrl).origin
+  // 匹配 import/export 语句中以 / 开头的路径
+  return source.replace(
+    /(from\s+['"])(\/[^'"]+)(['"])/g,
+    (_, prefix, path, suffix) => `${prefix}${origin}${path}${suffix}`
+  ).replace(
+    /(import\s*\(\s*['"])(\/[^'"]+)(['"]\s*\))/g,
+    (_, prefix, path, suffix) => `${prefix}${origin}${path}${suffix}`
+  )
+}
+
+async function importFromSource(source: string, originUrl?: string): Promise<any> {
+  const finalSource = originUrl ? rewriteImports(source, originUrl) : source
+  const blob = new Blob([finalSource], { type: 'application/javascript' })
   const url = URL.createObjectURL(blob)
   try {
     return await import(/* @vite-ignore */ url)
@@ -107,7 +124,7 @@ export async function loadCDN(url: string): Promise<any> {
   const cached = await getCached(url)
   if (cached) {
     try {
-      const mod = await importFromSource(cached)
+      const mod = await importFromSource(cached, url)
       memoryCache.set(url, mod)
       return mod
     } catch {
@@ -135,7 +152,7 @@ export async function loadCDN(url: string): Promise<any> {
   await setCache(url, source)
 
   // 5. 执行模块
-  const mod = await importFromSource(source)
+  const mod = await importFromSource(source, url)
   memoryCache.set(url, mod)
   return mod
 }
