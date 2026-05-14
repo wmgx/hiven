@@ -1,7 +1,14 @@
 /**
  * CDN 模块动态加载器
  * 从指定 URL 加载远程 ESM 模块，支持 IndexedDB 持久缓存 + 内存缓存
+ * 内置脚本的依赖优先从本地加载，自定义脚本的依赖从网络加载（失败时报错提示）
  */
+
+// 内置脚本依赖本地注册表：URL → 本地模块
+const LOCAL_REGISTRY: Record<string, () => Promise<any>> = {
+  'https://esm.sh/js-yaml@4?bundle': () => import('js-yaml'),
+  'https://esm.sh/sql-formatter@15?bundle': () => import('sql-formatter'),
+}
 
 const DB_NAME = 'fluxtext-cdn-cache'
 const DB_VERSION = 1
@@ -84,6 +91,14 @@ export async function loadCDN(url: string): Promise<any> {
     throw new Error(`loadCDN requires a full URL, got: ${url}`)
   }
 
+  // 0. 检查本地注册表（内置依赖优先本地加载）
+  if (LOCAL_REGISTRY[url]) {
+    if (memoryCache.has(url)) return memoryCache.get(url)
+    const mod = await LOCAL_REGISTRY[url]()
+    memoryCache.set(url, mod)
+    return mod
+  }
+
   // 1. 内存缓存（同 session 内零延迟）
   if (memoryCache.has(url)) return memoryCache.get(url)
 
@@ -99,10 +114,19 @@ export async function loadCDN(url: string): Promise<any> {
     }
   }
 
-  // 3. 从网络拉取
-  const res = await fetch(url)
+  // 3. 从网络拉取（自定义脚本依赖）
+  let res: Response
+  try {
+    res = await fetch(url)
+  } catch (e: any) {
+    throw new Error(
+      `无法加载依赖 ${url}：网络请求失败 (${e.message})。请检查网络连接或使用可访问的 CDN 地址。`
+    )
+  }
   if (!res.ok) {
-    throw new Error(`Failed to load ${url}: ${res.status} ${res.statusText}`)
+    throw new Error(
+      `无法加载依赖 ${url}：HTTP ${res.status} ${res.statusText}。请检查 URL 是否正确。`
+    )
   }
   const source = await res.text()
 

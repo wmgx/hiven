@@ -140,7 +140,15 @@ export function CommandPalette() {
     }
 
     // 加载脚本声明的 @deps 依赖并注入 ctx
-    const deps = action.source ? await loadDeps(action.source) : {}
+    let deps: Record<string, any> = {}
+    try {
+      deps = action.source ? await loadDeps(action.source) : {}
+    } catch (e: any) {
+      setLastResult(`Error: ${e.message}`)
+      setLastActionName(action.name)
+      setOpen(false)
+      return
+    }
 
     const ctx = {
       input: { text: inputText },
