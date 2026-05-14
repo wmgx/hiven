@@ -34,6 +34,10 @@ let _tabIdCounter = 0
 function nextTabId() { return `tab-${++_tabIdCounter}-${Date.now().toString(36)}` }
 
 function generateScriptSource(action: import('../store').ActionDef): string {
+  // 如果 source 已是完整脚本，直接返回
+  if (action.source && /export\s+default/.test(action.source)) {
+    return action.source
+  }
   const lines: string[] = []
   if (action.source) {
     lines.push(action.source)
