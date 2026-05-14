@@ -1,8 +1,9 @@
 import { useRef, useEffect, useState } from 'react'
-import { useAppStore, localized } from '../store'
+import { useAppStore, localized, parseScriptToAction } from '../store'
 import { t } from '../i18n'
 import Editor from '@monaco-editor/react'
 import { Play, Save, Trash2, FileType, Copy, ChevronDown, Check, X } from 'lucide-react'
+import { loadCDN, loadDeps } from '../utils/cdnLoader'
 
 function isTauri() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -116,40 +117,61 @@ export function DebuggerView() {
     return []
   })()
 
-  function handleRun() {
+  async function handleRun() {
     setDebuggerRunning(true)
     clearConsoleLogs()
     addConsoleLog({ type: 'dim', message: `> run ${debuggerFileName.replace('.ts', '')}` })
     addConsoleLog({ type: 'dim', message: `  params: ${JSON.stringify(debuggerParams)}` })
     addConsoleLog({ type: 'dim', message: `  input: ${debuggerInput.split('\n').length} lines` })
 
-    setTimeout(() => {
-      try {
-        // Execute the extract-emails logic
-        const re = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi
-        const allMatches = debuggerInput.match(re) || []
-        const results = debuggerParams.unique
-          ? [...new Set(allMatches.map((e: string) => e.toLowerCase()))]
-          : allMatches
-        const dupes = allMatches.length - results.length
+    const startTime = performance.now()
 
-        addConsoleLog({ type: 'ok', message: `✓ regex matched ${allMatches.length} address${allMatches.length !== 1 ? 'es' : ''}` })
-        if (debuggerParams.unique && dupes > 0) {
-          addConsoleLog({ type: 'ok', message: `✓ deduplicated → removed ${dupes} duplicate${dupes !== 1 ? 's' : ''}` })
-        }
-        addConsoleLog({ type: 'ok', message: `✓ output: ${results.length} address${results.length !== 1 ? 'es' : ''}` })
-        addConsoleLog({ type: 'dim', message: `  done in ${Math.floor(Math.random() * 3) + 1}ms` })
-
-        const outputText = debuggerParams.format === 'comma separated'
-          ? results.join(', ')
-          : results.join('\n')
-        setDebuggerOutput(outputText)
-      } catch (e: any) {
-        addConsoleLog({ type: 'err', message: `✗ ${e.message}` })
-        setDebuggerOutput(`Error: ${e.message}`)
+    try {
+      // 解析脚本源码为 action
+      const action = parseScriptToAction(debuggerScript)
+      if (!action || typeof action.run !== 'function') {
+        addConsoleLog({ type: 'err', message: '✗ failed to parse script: no valid run() found' })
+        setDebuggerRunning(false)
+        return
       }
-      setDebuggerRunning(false)
-    }, 700)
+
+      // 加载 @deps 依赖
+      let deps: Record<string, any> = {}
+      try {
+        deps = await loadDeps(debuggerScript)
+        if (Object.keys(deps).length > 0) {
+          addConsoleLog({ type: 'ok', message: `✓ loaded deps: ${Object.keys(deps).join(', ')}` })
+        }
+      } catch (e: any) {
+        addConsoleLog({ type: 'err', message: `✗ failed to load deps: ${e.message}` })
+        setDebuggerRunning(false)
+        return
+      }
+
+      const ctx = {
+        input: { text: debuggerInput },
+        params: debuggerParams,
+        readClipboard: async () => '',
+        loadCDN,
+        deps,
+      }
+
+      const result = await Promise.resolve(action.run(ctx))
+      const elapsed = Math.round(performance.now() - startTime)
+
+      if (result && result.text !== undefined) {
+        addConsoleLog({ type: 'ok', message: `✓ output: ${result.text.split('\n').length} lines` })
+        addConsoleLog({ type: 'dim', message: `  done in ${elapsed}ms` })
+        setDebuggerOutput(result.text)
+      } else {
+        addConsoleLog({ type: 'warn', message: '⚠ run() returned no text' })
+        addConsoleLog({ type: 'dim', message: `  done in ${elapsed}ms` })
+      }
+    } catch (e: any) {
+      addConsoleLog({ type: 'err', message: `✗ ${e.message}` })
+      setDebuggerOutput(`Error: ${e.message}`)
+    }
+    setDebuggerRunning(false)
   }
 
   async function handleSave() {

@@ -16,6 +16,9 @@ self.MonacoEnvironment = {
 
 loader.config({ monaco })
 
+// 禁用浏览器右键菜单
+document.addEventListener('contextmenu', (e) => e.preventDefault())
+
 // Monaco 0.55+ 使用 globalThis._VSCODE_NLS_MESSAGES 进行本地化
 async function init() {
   try {
