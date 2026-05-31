@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
+use tauri::{Manager, WindowEvent};
 
 /// 配置根目录: ~/.local/fluxtext
 fn config_dir() -> Result<PathBuf, String> {
@@ -121,6 +122,7 @@ fn dirs_next_home() -> Option<PathBuf> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
@@ -153,6 +155,18 @@ pub fn run() {
                 .item(&edit_submenu)
                 .build()?;
             app.set_menu(menu)?;
+
+            for label in ["main", "launcher"] {
+                if let Some(window) = app.get_webview_window(label) {
+                    let window_for_close = window.clone();
+                    window.on_window_event(move |event| {
+                        if let WindowEvent::CloseRequested { api, .. } = event {
+                            api.prevent_close();
+                            let _ = window_for_close.hide();
+                        }
+                    });
+                }
+            }
 
             if cfg!(debug_assertions) {
                 app.handle().plugin(

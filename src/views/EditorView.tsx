@@ -11,6 +11,8 @@ export function EditorView() {
   const lastResult = useAppStore((s) => s.lastResult)
   const lastActionName = useAppStore((s) => s.lastActionName)
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
+  const launchMode = useAppStore((s) => s.launchMode)
+  const keepQuickTab = useAppStore((s) => s.keepQuickTab)
   const settings = useAppStore((s) => s.settings)
   const locale = useAppStore((s) => s.locale)
 
@@ -44,6 +46,20 @@ export function EditorView() {
           <Type size={13} />
           {chars} {t(locale, 'editor.chars')}
         </span>
+        {launchMode === 'quick' && (
+          <span className="text-[11px] flex items-center gap-1.5">
+            <span className="px-1.5 py-0.5 rounded" style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-tertiary)' }}>
+              {t(locale, 'editor.quick')}
+            </span>
+            <button
+              className="text-[11px] px-1.5 py-0.5 rounded cursor-pointer"
+              style={{ background: 'transparent', color: 'var(--color-accent)', border: '0.5px solid var(--color-border-tertiary)' }}
+              onClick={keepQuickTab}
+            >
+              {t(locale, 'editor.keep')}
+            </button>
+          </span>
+        )}
         <span
           className="ml-auto text-[11px] cursor-pointer hover:opacity-70"
           style={{ color: 'var(--color-text-tertiary)' }}

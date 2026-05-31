@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "files": [
     "append.ts",
     "base64.ts",
@@ -31,6 +31,7 @@
     "wrap.ts",
     "xml.ts",
     "yaml.ts",
-    "sum.ts"
+    "sum.ts",
+    "blanklines.ts"
   ]
 }

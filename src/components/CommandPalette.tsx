@@ -1,18 +1,26 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useAppStore, localized } from '../store'
 import type { ActionDef, ActionParam } from '../store'
-import { Search, Check } from 'lucide-react'
+import { Search, Check, Copy, ExternalLink } from 'lucide-react'
 import { t } from '../i18n'
-import { readText } from '@tauri-apps/plugin-clipboard-manager'
+import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager'
+import { open as openUrl } from '@tauri-apps/plugin-shell'
 import { loadCDN, loadDeps } from '../utils/cdnLoader'
 import { resolveIcon } from '../utils/resolveIcon'
+import { isSafeOpenUrl, normalizeActionResult } from '../utils/actionResult'
+import { openResultInMainWindow } from '../utils/globalShortcut'
 
 // 步骤类型
 type Step =
   | { type: 'search' }
   | { type: 'param'; paramIndex: number }
+  | { type: 'result' }
 
-export function CommandPalette() {
+interface CommandPaletteProps {
+  variant?: 'app' | 'launcher'
+}
+
+export function CommandPalette({ variant = 'app' }: CommandPaletteProps) {
   const open = useAppStore((s) => s.commandPaletteOpen)
   const setOpen = useAppStore((s) => s.setCommandPaletteOpen)
   const actions = useAppStore((s) => s.actions)
@@ -20,6 +28,8 @@ export function CommandPalette() {
   const disabledCustoms = useAppStore((s) => s.settings.disabledCustoms)
   const editorText = useAppStore((s) => s.editorText)
   const setEditorText = useAppStore((s) => s.setEditorText)
+  const commandPaletteInputOverride = useAppStore((s) => s.commandPaletteInputOverride)
+  const setCommandPaletteInputOverride = useAppStore((s) => s.setCommandPaletteInputOverride)
   const setLastResult = useAppStore((s) => s.setLastResult)
   const setLastActionName = useAppStore((s) => s.setLastActionName)
   const recentActionNames = useAppStore((s) => s.recentActionNames)
@@ -34,9 +44,13 @@ export function CommandPalette() {
   const [inputValue, setInputValue] = useState('')
   const [inputError, setInputError] = useState('')
   const [multiSelected, setMultiSelected] = useState<string[]>([])
+  const [resultText, setResultText] = useState('')
+  const [resultActionName, setResultActionName] = useState('')
+  const [resultCopied, setResultCopied] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const isKeyboardNav = useRef(false)
+  const wasOpenRef = useRef(false)
 
   useEffect(() => {
     if (open) {
@@ -48,9 +62,38 @@ export function CommandPalette() {
       setInputValue('')
       setInputError('')
       setMultiSelected([])
+      setResultText('')
+      setResultActionName('')
+      setResultCopied(false)
       setTimeout(() => inputRef.current?.focus(), 50)
     }
   }, [open])
+
+  async function copyTextToClipboard(text: string) {
+    if ((window as any).__TAURI_INTERNALS__) {
+      await writeText(text)
+      return
+    }
+    await navigator.clipboard?.writeText(text)
+  }
+
+  useEffect(() => {
+    if (variant !== 'launcher') return
+    if (open) {
+      wasOpenRef.current = true
+      return
+    }
+    if (!wasOpenRef.current || !(window as any).__TAURI_INTERNALS__) return
+    wasOpenRef.current = false
+
+    async function hideLauncher() {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window')
+      await getCurrentWindow().hide()
+    }
+
+    hideLauncher().catch((e) => console.error('[FluxText] Failed to hide launcher:', e))
+    setCommandPaletteInputOverride(null)
+  }, [open, setCommandPaletteInputOverride, variant])
 
   // 按最近使用排序，有搜索词则过滤
   const filtered = useMemo(() => {
@@ -121,16 +164,40 @@ export function CommandPalette() {
   // 是否为多选模式
   const isMultiSelect = currentParam?.type === 'multi-select'
 
+  useEffect(() => {
+    if (variant !== 'launcher' || !open || !(window as any).__TAURI_INTERNALS__) return
+
+    const listRows = step.type === 'search'
+      ? (filtered.length === 0 ? 1 : Math.min(filtered.length, 6))
+      : (step.type === 'result' ? 0 : (isInputMode ? 0 : Math.min(currentOptions.length, 5)))
+    const sourceHeight = step.type === 'search' && commandPaletteInputOverride ? 28 : 0
+    const listHeight = step.type === 'search'
+      ? (filtered.length === 0 ? 48 : listRows * 48 + 8)
+      : (step.type === 'result' ? 178 : (isInputMode ? (inputError ? 30 : 8) : listRows * 40 + 8))
+    const panelHeight = 44 + sourceHeight + listHeight + 31
+    const windowHeight = Math.max(132, Math.min(388, panelHeight + 28))
+
+    async function resizeLauncher() {
+      const { getCurrentWindow, LogicalSize } = await import('@tauri-apps/api/window')
+      await getCurrentWindow().setSize(new LogicalSize(680, windowHeight))
+      await getCurrentWindow().center()
+    }
+
+    resizeLauncher().catch((e) => console.error('[FluxText] Failed to resize launcher:', e))
+  }, [commandPaletteInputOverride, currentOptions.length, filtered.length, inputError, isInputMode, open, step.type, variant])
+
   async function runAction(action: ActionDef, finalParams: Record<string, any>) {
     pushRecentAction(action.name)
 
     // 获取 editor 实例，判断是否有选区
     const editor = useAppStore.getState().editorInstance
-    let inputText = editorText
+    let inputText = variant === 'launcher'
+      ? (useAppStore.getState().commandPaletteInputOverride ?? '')
+      : editorText
     let hasSelection = false
     let selection: any = null
 
-    if (editor) {
+    if (variant !== 'launcher' && editor) {
       const sel = editor.getSelection()
       if (sel && !sel.isEmpty()) {
         inputText = editor.getModel()?.getValueInRange(sel) || editorText
@@ -146,7 +213,6 @@ export function CommandPalette() {
     } catch (e: any) {
       setLastResult(`Error: ${e.message}`)
       setLastActionName(action.name)
-      setOpen(false)
       return
     }
 
@@ -165,6 +231,10 @@ export function CommandPalette() {
     }
 
     function applyResult(resultText: string) {
+      if (variant === 'launcher') {
+        return
+      }
+
       if (hasSelection && editor && selection) {
         // 只替换选区
         editor.executeEdits('action', [{
@@ -181,25 +251,65 @@ export function CommandPalette() {
       setLastActionName(action.name)
     }
 
-    try {
-      const result = action.run(ctx)
-      if (result && typeof (result as any).then === 'function') {
-        ;(result as Promise<{ text: string }>).then((r) => {
-          if (r && r.text !== undefined) {
-            applyResult(r.text)
+    async function handleActionResult(raw: Awaited<ReturnType<ActionDef['run']>>) {
+      const normalized = normalizeActionResult(raw)
+      let ok = true
+      if (variant === 'launcher' && normalized.text !== undefined) {
+        const shouldCopy = Boolean(useAppStore.getState().settings.autoCopyOutput || normalized.copyToClipboard)
+        if (shouldCopy) {
+          await copyTextToClipboard(normalized.text)
+        }
+        setResultText(normalized.text)
+        setResultActionName(action.name)
+        setResultCopied(shouldCopy)
+        setStep({ type: 'result' })
+      } else if (normalized.text !== undefined) {
+        applyResult(normalized.text)
+        const shouldCopy = useAppStore.getState().settings.autoCopyOutput || normalized.copyToClipboard
+        if (shouldCopy) {
+          await copyTextToClipboard(normalized.text)
+        }
+      }
+      if (normalized.openUrl) {
+        if (isSafeOpenUrl(normalized.openUrl)) {
+          if ((window as any).__TAURI_INTERNALS__) {
+            await openUrl(normalized.openUrl)
+          } else {
+            window.open(normalized.openUrl, '_blank', 'noopener,noreferrer')
           }
-        }).catch((e: any) => {
-          setLastResult(`Error: ${e.message}`)
+        } else {
+          setLastResult(`Error: Unsafe URL scheme: ${normalized.openUrl}`)
           setLastActionName(action.name)
-        })
-      } else if (result && (result as { text: string }).text !== undefined) {
-        applyResult((result as { text: string }).text)
+          ok = false
+        }
+      }
+      if (normalized.notification && normalized.text === undefined) {
+        setLastResult(normalized.notification)
+        setLastActionName(action.name)
+      }
+      return ok
+    }
+
+    try {
+      const result = await action.run(ctx)
+      const ok = await handleActionResult(result)
+      if (ok) {
+        const state = useAppStore.getState()
+        if (variant === 'launcher') {
+          if (normalizeActionResult(result).text === undefined) {
+            setOpen(false)
+          }
+          return
+        } else if (state.launchMode === 'quick' && state.settings.hideAfterQuickAction && (window as any).__TAURI_INTERNALS__) {
+          const { getCurrentWindow } = await import('@tauri-apps/api/window')
+          await getCurrentWindow().hide()
+        }
+        setOpen(false)
       }
     } catch (e: any) {
       setLastResult(`Error: ${e.message}`)
       setLastActionName(action.name)
     }
-    setOpen(false)
   }
 
   function selectAction(action: ActionDef) {
@@ -263,7 +373,6 @@ export function CommandPalette() {
 
   function confirmCurrentParam() {
     if (!selectedAction || !currentParam) return
-    const paramsList = selectedAction.params || []
     const index = step.type === 'param' ? step.paramIndex : 0
     let newParams = { ...params }
 
@@ -364,14 +473,14 @@ export function CommandPalette() {
 
   return (
     <div
-      className={`fixed inset-0 flex items-start justify-center pt-[70px] z-50 palette-overlay ${open ? 'open' : ''}`}
+      className={`fixed inset-0 flex items-start justify-center z-50 palette-overlay ${variant === 'launcher' ? 'launcher-palette pt-4' : 'pt-[70px]'} ${open ? 'open' : ''}`}
       style={{ pointerEvents: open ? 'auto' : 'none' }}
       onClick={(e) => { if (e.target === e.currentTarget) setOpen(false) }}
     >
       <div
         ref={panelRef}
         tabIndex={-1}
-        className="w-[min(630px,90vw)] overflow-hidden outline-none palette-panel"
+        className={`${variant === 'launcher' ? 'w-[calc(100vw-28px)]' : 'w-[min(630px,90vw)]'} overflow-hidden outline-none palette-panel`}
         style={{
           background: 'var(--color-background-primary)',
           border: '0.5px solid var(--color-border-secondary)',
@@ -391,6 +500,7 @@ export function CommandPalette() {
             setSelectedIndex={setSelectedIndex}
             isKeyboardNav={isKeyboardNav}
             locale={locale}
+            inputSource={variant === 'launcher' ? commandPaletteInputOverride : null}
           />
         )}
 
@@ -415,7 +525,23 @@ export function CommandPalette() {
               )
             }}
             onSelectItem={(i) => { setSelectedIndex(i); confirmCurrentParam() }}
-            onConfirm={confirmCurrentParam}
+            locale={locale}
+          />
+        )}
+
+        {step.type === 'result' && (
+          <LauncherResultStep
+            actionName={resultActionName}
+            resultText={resultText}
+            copied={resultCopied}
+            onCopy={async () => {
+              await copyTextToClipboard(resultText)
+              setResultCopied(true)
+            }}
+            onOpenInEditor={async () => {
+              await openResultInMainWindow(resultText, resultActionName)
+              setOpen(false)
+            }}
             locale={locale}
           />
         )}
@@ -424,9 +550,63 @@ export function CommandPalette() {
   )
 }
 
+function LauncherResultStep({
+  actionName, resultText, copied, onCopy, onOpenInEditor, locale,
+}: {
+  actionName: string
+  resultText: string
+  copied: boolean
+  onCopy: () => void | Promise<void>
+  onOpenInEditor: () => void | Promise<void>
+  locale: import('../i18n').Locale
+}) {
+  return (
+    <>
+      <div className="flex items-center px-3.5 gap-2 h-[44px]" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
+        <span className="text-[13px] font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>{actionName}</span>
+        <span className="ml-auto text-[11px]" style={{ color: copied ? 'var(--color-success-text)' : 'var(--color-text-tertiary)' }}>
+          {copied ? t(locale, 'palette.copied') : t(locale, 'palette.result')}
+        </span>
+      </div>
+      <div className="px-3.5 py-2.5">
+        <pre
+          className="max-h-[116px] overflow-auto whitespace-pre-wrap break-words rounded-md p-2.5 text-[12px] leading-relaxed"
+          style={{
+            background: 'var(--color-background-secondary)',
+            border: '0.5px solid var(--color-border-tertiary)',
+            color: 'var(--color-text-primary)',
+            fontFamily: 'var(--font-mono)',
+          }}
+        >
+          {resultText || ' '}
+        </pre>
+      </div>
+      <div className="flex items-center gap-2 px-3.5 py-2" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
+        <button
+          className="h-7 px-2 rounded flex items-center gap-1.5 cursor-pointer"
+          style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-secondary)', border: '0.5px solid var(--color-border-tertiary)', fontSize: '0.8em' }}
+          onClick={onCopy}
+        >
+          <Copy size={13} />
+          {t(locale, 'palette.copy')}
+        </button>
+        <button
+          className="h-7 px-2 rounded flex items-center gap-1.5 cursor-pointer"
+          style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-secondary)', border: '0.5px solid var(--color-border-tertiary)', fontSize: '0.8em' }}
+          onClick={onOpenInEditor}
+        >
+          <ExternalLink size={13} />
+          {t(locale, 'palette.openInEditor')}
+        </button>
+        <span className="ml-auto text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>esc {t(locale, 'palette.close')}</span>
+      </div>
+    </>
+  )
+}
+
 // 搜索步骤
 function SearchStep({
-  inputRef, query, setQuery, filtered, selectedIndex, onSelect, setSelectedIndex, isKeyboardNav, locale,
+  inputRef, query, setQuery, filtered, selectedIndex, onSelect, setSelectedIndex, isKeyboardNav, locale, inputSource,
 }: {
   inputRef: React.RefObject<HTMLInputElement | null>
   query: string
@@ -437,6 +617,7 @@ function SearchStep({
   setSelectedIndex: (i: number) => void
   isKeyboardNav: React.MutableRefObject<boolean>
   locale: import('../i18n').Locale
+  inputSource: string | null
 }) {
   return (
     <>
@@ -451,6 +632,14 @@ function SearchStep({
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
+      {inputSource && (
+        <div className="h-7 flex items-center gap-2 px-3.5" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)', color: 'var(--color-text-tertiary)' }}>
+          <span className="text-[10px] uppercase tracking-wide">{t(locale, 'palette.inputSource')}</span>
+          <span className="min-w-0 truncate text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>
+            {inputSource.replace(/\s+/g, ' ').trim()}
+          </span>
+        </div>
+      )}
       <div className="max-h-[300px] overflow-y-auto py-1" onMouseMove={() => { isKeyboardNav.current = false }}>
         {filtered.map((action, i) => (
           <ActionItem key={`${action.name}-${i}`} action={action} selected={selectedIndex === i} onClick={() => onSelect(action)} onMouseEnter={() => { if (!isKeyboardNav.current) setSelectedIndex(i) }} />
@@ -473,7 +662,7 @@ function ParamStep({
   inputRef, action, param, paramIndex, totalParams,
   options, selectedIndex, isInputMode, isMultiSelect,
   inputValue, setInputValue, inputError,
-  multiSelected, onToggleMulti, onSelectItem, onConfirm, locale,
+  multiSelected, onToggleMulti, onSelectItem, locale,
 }: {
   inputRef: React.RefObject<HTMLInputElement | null>
   action: ActionDef
@@ -490,7 +679,6 @@ function ParamStep({
   multiSelected: string[]
   onToggleMulti: (val: string) => void
   onSelectItem: (i: number) => void
-  onConfirm: () => void
   locale: import('../i18n').Locale
 }) {
   return (

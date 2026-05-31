@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAppStore } from './store'
 import type { ViewId, ActionDef } from './store'
 import { initConfigDir } from './configInit'
@@ -9,6 +9,7 @@ import { ScriptsView } from './views/ScriptsView'
 import { DebuggerView } from './views/DebuggerView'
 import { SettingsView } from './views/SettingsView'
 import { CommandPalette } from './components/CommandPalette'
+import { registerGlobalShortcut, unregisterGlobalShortcut } from './utils/globalShortcut'
 
 const VIEW_INDEX: Record<ViewId, number> = { editor: 0, scripts: 1, debugger: 2, settings: 3 }
 
@@ -23,10 +24,35 @@ function ViewContent({ viewId }: { viewId: ViewId }) {
 
 export default function App() {
   const activeView = useAppStore((s) => s.activeView)
-  const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
   const fontSize = useAppStore((s) => s.settings.fontSize)
+  const globalShortcut = useAppStore((s) => s.settings.globalShortcut)
   const prevViewRef = useRef<ViewId>(activeView)
   const containerRef = useRef<HTMLDivElement>(null)
+  const [windowLabel, setWindowLabel] = useState<string | null>(
+    (window as any).__TAURI_INTERNALS__ ? null : 'main'
+  )
+
+  useEffect(() => {
+    if (!(window as any).__TAURI_INTERNALS__) return
+
+    async function setupWindowLabel() {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window')
+      setWindowLabel(getCurrentWindow().label)
+    }
+
+    setupWindowLabel().catch(() => setWindowLabel('main'))
+  }, [])
+
+  useEffect(() => {
+    if (windowLabel !== 'main') return
+
+    registerGlobalShortcut(globalShortcut)
+      .catch((e) => console.error('[FluxText] Failed to register global shortcut:', e))
+
+    return () => {
+      unregisterGlobalShortcut().catch((e) => console.error('[FluxText] Failed to unregister global shortcut:', e))
+    }
+  }, [globalShortcut, windowLabel])
 
   useEffect(() => {
     initConfigDir().then(async (dir) => {
@@ -78,6 +104,63 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler, true)
   }, [])
 
+  useEffect(() => {
+    if (windowLabel !== 'launcher') return
+
+    let unlisten: (() => void) | undefined
+
+    async function setup() {
+      const { listen } = await import('@tauri-apps/api/event')
+      const { readText } = await import('@tauri-apps/plugin-clipboard-manager')
+      unlisten = await listen('fluxtext://global-launch', async () => {
+        const store = useAppStore.getState()
+        const text = store.settings.useClipboardOnGlobalLaunch ? ((await readText()) ?? '') : ''
+        store.setCommandPaletteInputOverride(text)
+        if (store.settings.openCommandPaletteOnGlobalLaunch) {
+          store.setCommandPaletteOpen(true)
+        }
+      })
+    }
+
+    setup().catch((e) => console.error('[FluxText] Failed to listen global launch:', e))
+    return () => { unlisten?.() }
+  }, [windowLabel])
+
+  useEffect(() => {
+    if (windowLabel !== 'main') return
+
+    let unlistenOpen: (() => void) | undefined
+    let unlistenResult: (() => void) | undefined
+
+    async function setup() {
+      const { listen } = await import('@tauri-apps/api/event')
+      const { getCurrentWindow } = await import('@tauri-apps/api/window')
+
+      unlistenOpen = await listen('fluxtext://open-command-palette', () => {
+        useAppStore.getState().setCommandPaletteOpen(true)
+      })
+
+      unlistenResult = await listen<{ text: string; actionName: string }>('fluxtext://launcher-result', async ({ payload }) => {
+        const store = useAppStore.getState()
+        store.openQuickTabFromClipboard(payload.text)
+        store.setLastResult(payload.text)
+        store.setLastActionName(payload.actionName)
+        store.setCommandPaletteOpen(false)
+
+        const main = getCurrentWindow()
+        await main.show()
+        await main.unminimize()
+        await main.setFocus()
+      })
+    }
+
+    setup().catch((e) => console.error('[FluxText] Failed to listen main window events:', e))
+    return () => {
+      unlistenOpen?.()
+      unlistenResult?.()
+    }
+  }, [windowLabel])
+
   // Direction-aware view transition
   useEffect(() => {
     const el = containerRef.current?.firstElementChild as HTMLElement | null
@@ -105,13 +188,23 @@ export default function App() {
     prevViewRef.current = activeView
   }, [activeView])
 
+  if (!windowLabel) return null
+
+  if (windowLabel === 'launcher') {
+    return (
+      <div className="h-full w-full overflow-hidden launcher-root" style={{ fontFamily: 'var(--font-mono)', fontSize }}>
+        <CommandPalette variant="launcher" />
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full w-full overflow-hidden" style={{ fontFamily: 'var(--font-mono)', fontSize }}>
       <Sidebar />
       <main className="flex-1 flex flex-col overflow-hidden view-container" ref={containerRef}>
         <ViewContent viewId={activeView} />
       </main>
-      <CommandPalette />
+      <CommandPalette variant="app" />
     </div>
   )
 }

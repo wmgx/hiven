@@ -2,21 +2,50 @@ import { useAppStore } from '../store'
 import type { ActionDef } from '../store'
 import { parseScriptToAction } from '../store'
 import { t } from '../i18n'
-import { Puzzle, Layout, SlidersHorizontal, Languages, ChevronDown, Check, Minus, Plus, Info, RefreshCw, Download } from 'lucide-react'
+import { Puzzle, Layout, SlidersHorizontal, Languages, ChevronDown, Check, Minus, Plus, Info, RefreshCw, Download, Keyboard } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { getVersion } from '@tauri-apps/api/app'
 import { checkBuiltinScriptsUpdate } from '../configInit'
+import { normalizeGlobalShortcut, registerGlobalShortcut } from '../utils/globalShortcut'
 
 export function SettingsView() {
   const { settings, updateSetting } = useAppStore()
   const locale = useAppStore((s) => s.locale)
   const [appVersion, setAppVersion] = useState('')
+  const [shortcutInput, setShortcutInput] = useState(settings.globalShortcut)
+  const [shortcutStatus, setShortcutStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [shortcutError, setShortcutError] = useState('')
 
   useEffect(() => {
     getVersion().then((v) => setAppVersion(v))
   }, [])
+
+  useEffect(() => {
+    setShortcutInput(settings.globalShortcut)
+  }, [settings.globalShortcut])
+
+  const handleSaveShortcut = async () => {
+    const nextShortcut = normalizeGlobalShortcut(shortcutInput)
+    if (!nextShortcut) {
+      setShortcutStatus('error')
+      setShortcutError(t(locale, 'settings.shortcutRequired'))
+      return
+    }
+
+    setShortcutStatus('saving')
+    setShortcutError('')
+    try {
+      await registerGlobalShortcut(nextShortcut)
+      updateSetting('globalShortcut', nextShortcut)
+      setShortcutInput(nextShortcut)
+      setShortcutStatus('saved')
+    } catch (e) {
+      setShortcutStatus('error')
+      setShortcutError(`${t(locale, 'settings.shortcutRegisterFailed')}: ${String(e)}`)
+    }
+  }
 
   return (
     <div className="flex-1 overflow-auto p-5">
@@ -93,6 +122,72 @@ export function SettingsView() {
           </SettingRow>
         </SettingCard>
 
+        {/* Quick Launch */}
+        <SettingCard icon={<Keyboard size={16} />} title={t(locale, 'settings.quickLaunch')}>
+          <SettingRow label={t(locale, 'settings.globalShortcut')} info={t(locale, 'settings.globalShortcutInfo')}>
+            <div className="flex flex-col items-end gap-1">
+              <div className="flex items-center gap-1.5">
+                <input
+                  className="h-6 w-[150px] rounded px-2 outline-none"
+                  style={{
+                    fontSize: '0.8em',
+                    background: 'var(--color-background-primary)',
+                    border: shortcutStatus === 'error' ? '0.5px solid var(--color-error)' : '0.5px solid var(--color-border-secondary)',
+                    color: 'var(--color-text-primary)',
+                  }}
+                  value={shortcutInput}
+                  placeholder={t(locale, 'settings.shortcutPlaceholder')}
+                  onChange={(e) => {
+                    setShortcutInput(e.target.value)
+                    setShortcutStatus('idle')
+                    setShortcutError('')
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSaveShortcut()
+                    }
+                  }}
+                />
+                <button
+                  className="h-6 px-2 rounded cursor-pointer disabled:cursor-default"
+                  style={{
+                    fontSize: '0.8em',
+                    background: shortcutStatus === 'saved' ? 'var(--color-accent-light)' : 'var(--color-background-tertiary)',
+                    border: '0.5px solid var(--color-border-tertiary)',
+                    color: shortcutStatus === 'saved' ? 'var(--color-accent-hover)' : 'var(--color-text-secondary)',
+                    opacity: shortcutStatus === 'saving' ? 0.65 : 1,
+                  }}
+                  disabled={shortcutStatus === 'saving'}
+                  onClick={handleSaveShortcut}
+                >
+                  {shortcutStatus === 'saving'
+                    ? t(locale, 'settings.shortcutSaving')
+                    : shortcutStatus === 'saved'
+                      ? t(locale, 'settings.shortcutSaved')
+                      : t(locale, 'settings.shortcutSave')}
+                </button>
+              </div>
+              {shortcutError && (
+                <span className="max-w-[240px] text-right leading-relaxed" style={{ fontSize: '0.72em', color: 'var(--color-error)' }}>
+                  {shortcutError}
+                </span>
+              )}
+            </div>
+          </SettingRow>
+          <SettingRow label={t(locale, 'settings.useClipboardOnGlobalLaunch')}>
+            <Toggle value={settings.useClipboardOnGlobalLaunch} onChange={(v) => updateSetting('useClipboardOnGlobalLaunch', v)} />
+          </SettingRow>
+          <SettingRow label={t(locale, 'settings.openPaletteOnGlobalLaunch')}>
+            <Toggle value={settings.openCommandPaletteOnGlobalLaunch} onChange={(v) => updateSetting('openCommandPaletteOnGlobalLaunch', v)} />
+          </SettingRow>
+          <SettingRow label={t(locale, 'settings.autoCopy')}>
+            <Toggle value={settings.autoCopyOutput} onChange={(v) => updateSetting('autoCopyOutput', v)} />
+          </SettingRow>
+          <SettingRow label={t(locale, 'settings.hideAfterQuickAction')}>
+            <Toggle value={settings.hideAfterQuickAction} onChange={(v) => updateSetting('hideAfterQuickAction', v)} />
+          </SettingRow>
+        </SettingCard>
+
         {/* Update */}
         <SettingCard icon={<Download size={16} />} title={t(locale, 'update.title')}>
           <UpdateChecker locale={locale} />
@@ -102,7 +197,7 @@ export function SettingsView() {
   )
 }
 
-function SettingCard({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+function SettingCard({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode; delay?: number }) {
   return (
     <div className="p-3.5 px-4 rounded-xl" style={{ border: '0.5px solid var(--color-border-tertiary)', background: 'var(--color-background-primary)' }}>
       <div className="font-medium flex items-center gap-1.5 mb-3" style={{ fontSize: '1em', color: 'var(--color-text-primary)' }}>
