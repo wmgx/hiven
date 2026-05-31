@@ -431,7 +431,7 @@ export function DebuggerView() {
                   </div>
                 ) : param.type === 'single-select' ? (
                   <CustomSelect
-                    options={(param.options || []).map((o: string | { label: string; value: string; labelI18n?: Partial<Record<typeof locale, string>> }) =>
+                    options={(param.options || []).map((o) =>
                       typeof o === 'string' ? o : { ...o, label: localized(o.label, o.labelI18n, locale) }
                     )}
                     value={debuggerParams[param.key] || ''}

@@ -1,6 +1,5 @@
 use std::fs;
 use std::path::PathBuf;
-use tauri::{Manager, WindowEvent};
 
 /// 配置根目录: ~/.local/fluxtext
 fn config_dir() -> Result<PathBuf, String> {
@@ -44,7 +43,11 @@ fn collect_scripts(dir: &PathBuf, scripts: &mut Vec<ScriptFile>) -> Result<(), S
             collect_scripts(&path, scripts)?;
         } else if let Some(ext) = path.extension() {
             if ext == "ts" || ext == "js" {
-                let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                let name = path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string();
                 let content = fs::read_to_string(&path).unwrap_or_default();
                 // 判断是否在 builtin 子目录下
                 let is_builtin = path.components().any(|c| c.as_os_str() == "builtin");
@@ -121,7 +124,6 @@ fn dirs_next_home() -> Option<PathBuf> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
@@ -129,18 +131,6 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
-            for label in ["main", "launcher"] {
-                if let Some(window) = app.get_webview_window(label) {
-                    let window_for_close = window.clone();
-                    window.on_window_event(move |event| {
-                        if let WindowEvent::CloseRequested { api, .. } = event {
-                            api.prevent_close();
-                            let _ = window_for_close.hide();
-                        }
-                    });
-                }
-            }
-
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()

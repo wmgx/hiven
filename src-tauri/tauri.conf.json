@@ -12,7 +12,6 @@
   "app": {
     "windows": [
       {
-        "label": "main",
         "title": "FluxText",
         "width": 1100,
         "height": 720,
@@ -21,21 +20,6 @@
         "resizable": true,
         "fullscreen": false,
         "decorations": true
-      },
-      {
-        "label": "launcher",
-        "title": "FluxText Launcher",
-        "width": 680,
-        "height": 180,
-        "minWidth": 560,
-        "minHeight": 132,
-        "resizable": false,
-        "fullscreen": false,
-        "decorations": false,
-        "alwaysOnTop": true,
-        "skipTaskbar": true,
-        "visible": false,
-        "center": true
       }
     ],
     "security": {

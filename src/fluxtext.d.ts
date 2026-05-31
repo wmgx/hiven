@@ -1,17 +1,5 @@
 // fluxtext 模块类型声明，供 builtin-scripts 中的脚本使用
-declare module 'monaco-editor/esm/nls.messages.zh-cn.js' {
-  const messages: string
-  export default messages
-}
-
 declare module 'fluxtext' {
-  export interface ActionResult {
-    text?: string
-    copyToClipboard?: boolean
-    openUrl?: string
-    notification?: string
-  }
-
   export interface ActionContext {
     input: { text: string }
     params: Record<string, any>
@@ -25,7 +13,6 @@ declare module 'fluxtext' {
     name: string
     title: string
     icon?: string
-    run?: (ctx: ActionContext) => ActionResult | Promise<ActionResult> | void
     [key: string]: any
   }): any
 }

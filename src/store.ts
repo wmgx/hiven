@@ -2,46 +2,8 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Locale } from './i18n'
 import { builtinActions } from './actions/builtins'
-import { DEFAULT_GLOBAL_SHORTCUT, LEGACY_GLOBAL_SHORTCUTS } from './utils/globalShortcut'
 
 export type ViewId = 'editor' | 'scripts' | 'debugger' | 'settings'
-export type LaunchMode = 'full' | 'quick'
-
-export interface EditorTab {
-  id: string
-  title: string
-  text: string
-  kind: 'normal' | 'quick'
-  dirty: boolean
-  createdAt: number
-  updatedAt: number
-}
-
-export interface ActionResult {
-  text?: string
-  copyToClipboard?: boolean
-  openUrl?: string
-  notification?: string
-}
-
-export interface AppSettings {
-  watchDirectory: string
-  autoReload: boolean
-  fontSize: number
-  wordWrap: boolean
-  lineNumbers: boolean
-  persistParams: boolean
-  autoCopyOutput: boolean
-  realtimePreview: boolean
-  locale: Locale
-  disabledBuiltins: string[]
-  disabledCustoms: string[]
-  globalShortcut: string
-  openCommandPaletteOnGlobalLaunch: boolean
-  useClipboardOnGlobalLaunch: boolean
-  hideAfterQuickAction: boolean
-  quickTabBehavior: 'reuse' | 'new'
-}
 
 export interface ActionParam {
   key: string
@@ -64,7 +26,7 @@ export interface ActionDef {
   descriptionI18n?: Partial<Record<Locale, string>>
   tags?: string[]
   params?: ActionParam[]
-  run: (ctx: ActionContext) => ActionResult | Promise<ActionResult> | void
+  run: (ctx: ActionContext) => { text: string } | Promise<{ text: string }> | void
   builtin?: boolean
   source?: string
   error?: string
@@ -122,14 +84,6 @@ interface AppState {
   setActiveView: (view: ViewId) => void
 
   // Editor
-  tabs: EditorTab[]
-  activeTabId: string
-  launchMode: LaunchMode
-  setLaunchMode: (mode: LaunchMode) => void
-  setActiveTab: (id: string) => void
-  updateActiveTabText: (text: string) => void
-  openQuickTabFromClipboard: (text: string) => void
-  keepQuickTab: () => void
   editorText: string
   setEditorText: (text: string) => void
   editorInstance: any | null
@@ -145,8 +99,6 @@ interface AppState {
   // Command Palette
   commandPaletteOpen: boolean
   setCommandPaletteOpen: (open: boolean) => void
-  commandPaletteInputOverride: string | null
-  setCommandPaletteInputOverride: (text: string | null) => void
 
   // Last Action Result
   lastResult: string | null
@@ -188,7 +140,19 @@ interface AppState {
   switchDebuggerTab: (id: string) => void
 
   // Settings
-  settings: AppSettings
+  settings: {
+    watchDirectory: string
+    autoReload: boolean
+    fontSize: number
+    wordWrap: boolean
+    lineNumbers: boolean
+    persistParams: boolean
+    autoCopyOutput: boolean
+    realtimePreview: boolean
+    locale: Locale
+    disabledBuiltins: string[]
+    disabledCustoms: string[]
+  }
   updateSetting: (key: string, value: any) => void
   toggleBuiltinDisabled: (name: string) => void
   toggleCustomDisabled: (name: string) => void
@@ -228,109 +192,14 @@ function _loadTabState(tab: DebuggerTab) {
   }
 }
 
-const DEFAULT_SETTINGS: AppSettings = {
-  watchDirectory: '~/.local/fluxtext/scripts',
-  autoReload: true,
-  fontSize: 13,
-  wordWrap: false,
-  lineNumbers: true,
-  persistParams: true,
-  autoCopyOutput: true,
-  realtimePreview: true,
-  locale: 'en',
-  disabledBuiltins: [],
-  disabledCustoms: [],
-  globalShortcut: DEFAULT_GLOBAL_SHORTCUT,
-  openCommandPaletteOnGlobalLaunch: true,
-  useClipboardOnGlobalLaunch: true,
-  hideAfterQuickAction: false,
-  quickTabBehavior: 'reuse',
-}
-
 export const useAppStore = create<AppState>()(persist((set) => ({
   // Navigation
   activeView: 'editor',
   setActiveView: (view) => set({ activeView: view }),
 
   // Editor
-  tabs: [{
-    id: 'main',
-    title: 'Untitled',
-    text: '',
-    kind: 'normal',
-    dirty: false,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  }],
-  activeTabId: 'main',
-  launchMode: 'full',
-  setLaunchMode: (mode) => set({ launchMode: mode }),
-  setActiveTab: (id) => set((state) => {
-    const tab = state.tabs.find((t) => t.id === id)
-    if (!tab) return {}
-    return {
-      activeTabId: id,
-      editorText: tab.text,
-      launchMode: tab.kind === 'quick' ? 'quick' : 'full',
-    }
-  }),
-  updateActiveTabText: (text) => set((state) => ({
-    editorText: text,
-    tabs: state.tabs.map((tab) =>
-      tab.id === state.activeTabId
-        ? { ...tab, text, dirty: true, updatedAt: Date.now() }
-        : tab
-    ),
-  })),
   editorText: '',
-  setEditorText: (text) => set((state) => ({
-    editorText: text,
-    tabs: state.tabs.map((tab) =>
-      tab.id === state.activeTabId
-        ? { ...tab, text, dirty: true, updatedAt: Date.now() }
-        : tab
-    ),
-  })),
-  openQuickTabFromClipboard: (text) => set((state) => {
-    const now = Date.now()
-    const quickId = state.settings.quickTabBehavior === 'new'
-      ? `quick-${now.toString(36)}`
-      : 'quick'
-    const quick: EditorTab = {
-      id: quickId,
-      title: 'Quick',
-      text,
-      kind: 'quick',
-      dirty: false,
-      createdAt: now,
-      updatedAt: now,
-    }
-    const hasQuick = state.tabs.some((tab) => tab.id === quickId)
-    return {
-      tabs: hasQuick
-        ? state.tabs.map((tab) => tab.id === quickId ? quick : tab)
-        : [...state.tabs, quick],
-      activeTabId: quickId,
-      editorText: text,
-      launchMode: 'quick',
-      activeView: 'editor',
-    }
-  }),
-  keepQuickTab: () => set((state) => {
-    const active = state.tabs.find((tab) => tab.id === state.activeTabId)
-    if (!active || active.kind !== 'quick') return {}
-    const now = Date.now()
-    const newId = `tab-${now.toString(36)}`
-    return {
-      tabs: state.tabs.map((tab) =>
-        tab.id === active.id
-          ? { ...tab, id: newId, title: 'Quick Saved', kind: 'normal', dirty: true, updatedAt: now }
-          : tab
-      ),
-      activeTabId: newId,
-      launchMode: 'full',
-    }
-  }),
+  setEditorText: (text) => set({ editorText: text }),
   editorInstance: null,
   setEditorInstance: (editor) => set({ editorInstance: editor }),
 
@@ -365,8 +234,6 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     if (open && state.activeView !== 'editor') return {}
     return { commandPaletteOpen: open }
   }),
-  commandPaletteInputOverride: null,
-  setCommandPaletteInputOverride: (text) => set({ commandPaletteInputOverride: text }),
 
   // Last Action Result
   lastResult: null,
@@ -480,7 +347,19 @@ hello@fluxtext.app (duplicate)`,
   }),
 
   // Settings
-  settings: DEFAULT_SETTINGS,
+  settings: {
+    watchDirectory: '~/.local/fluxtext/scripts',
+    autoReload: true,
+    fontSize: 13,
+    wordWrap: false,
+    lineNumbers: true,
+    persistParams: true,
+    autoCopyOutput: false,
+    realtimePreview: true,
+    locale: 'en' as Locale,
+    disabledBuiltins: [],
+    disabledCustoms: [],
+  },
   updateSetting: (key, value) =>
     set((state) => {
       const newSettings = { ...state.settings, [key]: value }
@@ -507,19 +386,6 @@ hello@fluxtext.app (duplicate)`,
 }), {
   name: 'fluxtext-settings',
   partialize: (state) => ({ settings: state.settings, locale: state.locale }),
-  merge: (persisted, current) => {
-    const persistedState = persisted as Partial<AppState> | undefined
-    const persistedSettings: Partial<AppSettings> = persistedState?.settings ?? {}
-    const globalShortcut = persistedSettings.globalShortcut && LEGACY_GLOBAL_SHORTCUTS.includes(persistedSettings.globalShortcut)
-      ? DEFAULT_GLOBAL_SHORTCUT
-      : (persistedSettings.globalShortcut ?? DEFAULT_GLOBAL_SHORTCUT)
-    return {
-      ...current,
-      ...persistedState,
-      settings: { ...DEFAULT_SETTINGS, ...persistedSettings, globalShortcut },
-      locale: persistedState?.locale ?? persistedSettings.locale ?? current.locale,
-    }
-  },
 }))
 
 /**
