@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::PathBuf;
+use tauri::menu::MenuBuilder;
 
 /// 配置根目录: ~/.local/fluxtext
 fn config_dir() -> Result<PathBuf, String> {
@@ -131,6 +132,10 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
+            // 设置空菜单，移除 macOS 默认菜单栏
+            let menu = MenuBuilder::new(app).build()?;
+            app.set_menu(menu)?;
+
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
