@@ -24,6 +24,9 @@ export function CommandPalette() {
   const setLastActionName = useAppStore((s) => s.setLastActionName)
   const recentActionNames = useAppStore((s) => s.recentActionNames)
   const pushRecentAction = useAppStore((s) => s.pushRecentAction)
+  const persistParams = useAppStore((s) => s.settings.persistParams)
+  const savedActionParams = useAppStore((s) => s.savedActionParams)
+  const saveActionParams = useAppStore((s) => s.saveActionParams)
   const locale = useAppStore((s) => s.locale)
 
   const [query, setQuery] = useState('')
@@ -124,6 +127,19 @@ export function CommandPalette() {
   async function runAction(action: ActionDef, finalParams: Record<string, any>) {
     pushRecentAction(action.name)
 
+    // 保存参数（仅保存 boolean/select 类型的值）
+    if (persistParams && action.params && action.params.length > 0) {
+      const toSave: Record<string, any> = {}
+      for (const param of action.params) {
+        if (param.type === 'boolean' || param.type === 'single-select' || param.type === 'multi-select') {
+          toSave[param.key] = finalParams[param.key]
+        }
+      }
+      if (Object.keys(toSave).length > 0) {
+        saveActionParams(action.name, toSave)
+      }
+    }
+
     // 获取 editor 实例，判断是否有选区
     const editor = useAppStore.getState().editorInstance
     let inputText = editorText
@@ -208,6 +224,15 @@ export function CommandPalette() {
     const p: Record<string, any> = {}
     for (const param of action.params || []) {
       p[param.key] = param.default ?? getDefaultForType(param)
+    }
+    // 如果开启了参数持久化，用上次保存的值覆盖默认值（仅覆盖 boolean 和 select 类型）
+    if (persistParams && savedActionParams[action.name]) {
+      const saved = savedActionParams[action.name]
+      for (const param of action.params || []) {
+        if (param.key in saved && (param.type === 'boolean' || param.type === 'single-select' || param.type === 'multi-select')) {
+          p[param.key] = saved[param.key]
+        }
+      }
     }
     setParams(p)
 

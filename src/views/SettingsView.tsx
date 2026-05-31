@@ -2,7 +2,7 @@ import { useAppStore } from '../store'
 import type { ActionDef } from '../store'
 import { parseScriptToAction } from '../store'
 import { t } from '../i18n'
-import { Puzzle, Layout, SlidersHorizontal, Languages, ChevronDown, Check, Minus, Plus, Info, RefreshCw, Download } from 'lucide-react'
+import { Layout, SlidersHorizontal, Languages, ChevronDown, Check, Minus, Plus, Info, RefreshCw, Download } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
@@ -44,12 +44,6 @@ export function SettingsView() {
           </SettingRow>
         </SettingCard>
 
-        {/* Scripts */}
-        <SettingCard icon={<Puzzle size={16} />} title={t(locale, 'settings.scripts')}>
-          <SettingRow label={t(locale, 'settings.autoReload')} info={t(locale, 'settings.autoReloadInfo')}>
-            <Toggle value={settings.autoReload} onChange={(v) => updateSetting('autoReload', v)} />
-          </SettingRow>
-        </SettingCard>
 
         {/* Editor */}
         <SettingCard icon={<Layout size={16} />} title={t(locale, 'settings.editor')} delay={0.15}>
@@ -84,12 +78,6 @@ export function SettingsView() {
         <SettingCard icon={<SlidersHorizontal size={16} />} title={t(locale, 'settings.behavior')}>
           <SettingRow label={t(locale, 'settings.persistParams')} info={t(locale, 'settings.persistParamsInfo')}>
             <Toggle value={settings.persistParams} onChange={(v) => updateSetting('persistParams', v)} />
-          </SettingRow>
-          <SettingRow label={t(locale, 'settings.autoCopy')} info={t(locale, 'settings.autoCopyInfo')}>
-            <Toggle value={settings.autoCopyOutput} onChange={(v) => updateSetting('autoCopyOutput', v)} />
-          </SettingRow>
-          <SettingRow label={t(locale, 'settings.realtimePreview')} info={t(locale, 'settings.realtimePreviewInfo')}>
-            <Toggle value={settings.realtimePreview} onChange={(v) => updateSetting('realtimePreview', v)} />
           </SettingRow>
         </SettingCard>
 

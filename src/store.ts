@@ -110,6 +110,10 @@ interface AppState {
   recentActionNames: string[]
   pushRecentAction: (name: string) => void
 
+  // Saved params per action (for persistParams feature)
+  savedActionParams: Record<string, Record<string, any>>
+  saveActionParams: (actionName: string, params: Record<string, any>) => void
+
   // Debugger
   debuggerScript: string
   setDebuggerScript: (script: string) => void
@@ -142,13 +146,10 @@ interface AppState {
   // Settings
   settings: {
     watchDirectory: string
-    autoReload: boolean
     fontSize: number
     wordWrap: boolean
     lineNumbers: boolean
     persistParams: boolean
-    autoCopyOutput: boolean
-    realtimePreview: boolean
     locale: Locale
     disabledBuiltins: string[]
     disabledCustoms: string[]
@@ -247,6 +248,12 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     const filtered = state.recentActionNames.filter((n) => n !== name)
     return { recentActionNames: [name, ...filtered].slice(0, 50) }
   }),
+
+  // Saved params per action
+  savedActionParams: {},
+  saveActionParams: (actionName, params) => set((state) => ({
+    savedActionParams: { ...state.savedActionParams, [actionName]: params }
+  })),
 
   // Debugger
   debuggerScript: `import { defineAction } from 'fluxtext'
@@ -349,13 +356,10 @@ hello@fluxtext.app (duplicate)`,
   // Settings
   settings: {
     watchDirectory: '~/.local/fluxtext/scripts',
-    autoReload: true,
     fontSize: 13,
     wordWrap: false,
     lineNumbers: true,
     persistParams: true,
-    autoCopyOutput: false,
-    realtimePreview: true,
     locale: 'en' as Locale,
     disabledBuiltins: [],
     disabledCustoms: [],
@@ -385,7 +389,7 @@ hello@fluxtext.app (duplicate)`,
     set((state) => ({ locale, settings: { ...state.settings, locale } })),
 }), {
   name: 'fluxtext-settings',
-  partialize: (state) => ({ settings: state.settings, locale: state.locale }),
+  partialize: (state) => ({ settings: state.settings, locale: state.locale, savedActionParams: state.savedActionParams }),
 }))
 
 /**
