@@ -6,8 +6,8 @@ export default defineAction({
   titleI18n: { zh: '进制转换' },
   icon: 'Calculator',
   aliases: ['decimal', 'binary', 'octal', 'hex-convert'],
-  description: 'Convert between number bases',
-  descriptionI18n: { zh: '数字进制互转' },
+  description: 'Convert between number bases (dec/hex/bin)',
+  descriptionI18n: { zh: '数字进制互转（十进制/十六进制/二进制）' },
   tags: ['number', 'convert'],
 
   params: [

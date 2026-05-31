@@ -6,8 +6,8 @@ export default defineAction({
   titleI18n: { zh: 'JSON 格式化' },
   icon: 'Braces',
   aliases: ['json-format', 'pretty-json'],
-  description: 'Pretty-print or compact JSON',
-  descriptionI18n: { zh: '美化或压缩 JSON' },
+  description: 'Format JSON (auto pretty-print, or explicitly compact)',
+  descriptionI18n: { zh: '格式化 JSON（默认美化，可选压缩）' },
   tags: ['json', 'format'],
 
   params: [
@@ -30,7 +30,7 @@ export default defineAction({
       if (ctx.params.mode === 'compact') return { text: JSON.stringify(obj) }
       return { text: JSON.stringify(obj, null, 2) }
     } catch (e: any) {
-      return { text: `Error: ${e.message}` }
+      return { text: `Error: Invalid JSON - ${e.message}` }
     }
   },
 })
