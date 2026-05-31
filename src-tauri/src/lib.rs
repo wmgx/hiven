@@ -1,6 +1,5 @@
 use std::fs;
 use std::path::PathBuf;
-use tauri::menu::{MenuBuilder, SubmenuBuilder};
 use tauri::{Manager, WindowEvent};
 
 /// 配置根目录: ~/.local/fluxtext
@@ -130,32 +129,6 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
-            // 自定义菜单：移除 Cmd+H (Hide) 绑定，避免与编辑器的查找替换冲突
-            let app_submenu = SubmenuBuilder::new(app, "FluxText")
-                .about(None)
-                .separator()
-                .services()
-                .separator()
-                .hide_others()
-                .show_all()
-                .separator()
-                .quit()
-                .build()?;
-            let edit_submenu = SubmenuBuilder::new(app, "Edit")
-                .undo()
-                .redo()
-                .separator()
-                .cut()
-                .copy()
-                .paste()
-                .select_all()
-                .build()?;
-            let menu = MenuBuilder::new(app)
-                .item(&app_submenu)
-                .item(&edit_submenu)
-                .build()?;
-            app.set_menu(menu)?;
-
             for label in ["main", "launcher"] {
                 if let Some(window) = app.get_webview_window(label) {
                     let window_for_close = window.clone();
