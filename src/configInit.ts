@@ -82,13 +82,38 @@ const BUILTIN_SCRIPTS: Record<string, string> = {
   'blanklines.ts': blanklinesScript,
 }
 
-const REMOTE_MANIFEST_URL =
-  'https://raw.githubusercontent.com/wmgx/flux_text/main/src/builtin-scripts/manifest.json'
-const REMOTE_SCRIPT_BASE_URL =
-  'https://raw.githubusercontent.com/wmgx/flux_text/main/src/builtin-scripts'
+// 自建 Cloudflare Worker 代理（国内可达，路径白名单限制仅本项目可用）优先
+// jsdelivr 和 GitHub raw 作为 fallback
+const REMOTE_MANIFEST_URLS = [
+  'https://proxy.flux.wmgx.top/raw/wmgx/flux_text/main/src/builtin-scripts/manifest.json',
+  'https://cdn.jsdelivr.net/gh/wmgx/flux_text@main/src/builtin-scripts/manifest.json',
+  'https://raw.githubusercontent.com/wmgx/flux_text/main/src/builtin-scripts/manifest.json',
+]
+const REMOTE_SCRIPT_BASE_URLS = [
+  'https://proxy.flux.wmgx.top/raw/wmgx/flux_text/main/src/builtin-scripts',
+  'https://cdn.jsdelivr.net/gh/wmgx/flux_text@main/src/builtin-scripts',
+  'https://raw.githubusercontent.com/wmgx/flux_text/main/src/builtin-scripts',
+]
 
 function isTauri() {
   return !!(window as any).__TAURI_INTERNALS__
+}
+
+/**
+ * 带 fallback 的 URL 请求：依次尝试多个 URL，第一个成功即返回
+ */
+async function fetchWithFallback(urls: string[]): Promise<string> {
+  const { invoke } = await import('@tauri-apps/api/core')
+  let lastError = ''
+  for (const url of urls) {
+    try {
+      return await invoke<string>('fetch_url', { url })
+    } catch (e: any) {
+      lastError = e.message || String(e)
+      console.warn(`[FluxText] fetch failed for ${url}: ${lastError}`)
+    }
+  }
+  throw new Error(`All mirrors failed. Last error: ${lastError}`)
 }
 
 /**
@@ -148,7 +173,7 @@ export async function initConfigDir(): Promise<string | null> {
 }
 
 /**
- * 从 GitHub 检查并更新内置脚本（跟随 app 更新检查调用）
+ * 检查并更新内置脚本（使用 CDN 镜像 + GitHub fallback）
  */
 export async function checkBuiltinScriptsUpdate(): Promise<{
   updated: boolean
@@ -164,21 +189,19 @@ export async function checkBuiltinScriptsUpdate(): Promise<{
 
     const localVersion = await getLocalManifestVersion(builtinDir)
 
-    // 拉取远程 manifest
-    const remoteManifestStr = await invoke<string>('fetch_url', {
-      url: REMOTE_MANIFEST_URL,
-    })
+    // 拉取远程 manifest（多镜像 fallback）
+    const remoteManifestStr = await fetchWithFallback(REMOTE_MANIFEST_URLS)
     const remoteManifest = JSON.parse(remoteManifestStr)
 
     if (remoteManifest.version <= localVersion) {
       return { updated: false }
     }
 
-    // 下载所有脚本文件
+    // 下载所有脚本文件（多镜像 fallback）
     for (const filename of remoteManifest.files) {
-      const content = await invoke<string>('fetch_url', {
-        url: `${REMOTE_SCRIPT_BASE_URL}/${filename}`,
-      })
+      const content = await fetchWithFallback(
+        REMOTE_SCRIPT_BASE_URLS.map((base) => `${base}/${filename}`),
+      )
       await invoke('save_script', {
         path: `${builtinDir}/${filename}`,
         content,

@@ -57,6 +57,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
+        "https://proxy.flux.wmgx.top/github/wmgx/flux_text/releases/latest/download/latest.json",
         "https://github.com/wmgx/flux_text/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZENDZBRjVFMTEzRTdGNjkKUldScGZ6NFJYcTlHL2RCR3c0eXJ4REZSNUVZRktQV1BsdkhoNnBHd3BwMTA5a3lWNE8zeTl5UHcK"
