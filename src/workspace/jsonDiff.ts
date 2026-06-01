@@ -47,8 +47,9 @@ export interface JsonParseResult {
 // ─── Parse ──────────────────────────────────────────────────────────────────
 
 export function parseJson(text: string): JsonParseResult {
+  const jsonText = text.replace(/^\uFEFF/, '')
   try {
-    const value = JSON.parse(text)
+    const value = JSON.parse(jsonText)
     return { ok: true, value }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Invalid JSON'
@@ -58,7 +59,7 @@ export function parseJson(text: string): JsonParseResult {
     let column = 1
     if (posMatch) {
       const pos = parseInt(posMatch[1], 10)
-      const before = text.slice(0, pos)
+      const before = jsonText.slice(0, pos)
       line = (before.match(/\n/g) || []).length + 1
       const lastNewline = before.lastIndexOf('\n')
       column = pos - lastNewline

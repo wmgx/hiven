@@ -1,6 +1,6 @@
 /**
  * FluxText Core - Core JSON Diff Renderer
- * Shows semantic JSON differences with a red/green aligned view.
+ * Shows normalized JSON text in an editable DiffEditor.
  * When either is invalid: fallback to plain text diff with a subtle note.
  * Adapted from JsonObjectDiffRenderer for the new RendererProps API.
  * Registered as 'core.json-diff' in the production plugin registry.
@@ -11,9 +11,9 @@ import { DiffEditor } from '@monaco-editor/react'
 import type { editor as MonacoEditor } from 'monaco-editor'
 import { useAppStore } from '../store'
 import { runtimeRegistry } from '../workspace/runtimeRegistry'
-import { jsonDiff, normalizeJson, parseJson } from '../workspace/jsonDiff'
+import { jsonDiff } from '../workspace/jsonDiff'
 import type { PaneInput, RendererProps } from '../workspace/pluginTypes'
-import type { JsonArrayCompareMode, JsonValue } from '../workspace/jsonDiff'
+import type { JsonArrayCompareMode } from '../workspace/jsonDiff'
 import { t } from '../i18n'
 
 type JsonDiffInputs = {
@@ -32,7 +32,6 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId, host }: RendererProps<
   const settings = useAppStore((s) => s.settings)
   const locale = useAppStore((s) => s.locale)
   const diffEditorRef = useRef<MonacoEditor.IStandaloneDiffEditor | null>(null)
-  const changeRefs = useRef<Array<HTMLDivElement | null>>([])
   const isInternalEdit = useRef<{ original: boolean; modified: boolean }>({ original: false, modified: false })
   const isApplyingExternalText = useRef(false)
 
@@ -49,7 +48,6 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId, host }: RendererProps<
   // Store initial text for uncontrolled DiffEditor
   // When both valid on mount, use normalized text to hide formatting-only differences
   const [initialText] = useState(() => {
-    if (!originalPaneId || !modifiedPaneId) return null
     return jsonDiff(originalText, modifiedText, { arrayCompareMode: { type: 'by-index' } })
   })
 
@@ -58,32 +56,17 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId, host }: RendererProps<
 
   // Compute JSON diff (returns error info if invalid)
   const diffResult = useMemo(() => {
-    if (!originalPaneId || !modifiedPaneId) return null
     return jsonDiff(originalText, modifiedText, { arrayCompareMode })
-  }, [originalPaneId, modifiedPaneId, originalText, modifiedText, arrayCompareMode])
+  }, [originalText, modifiedText, arrayCompareMode])
 
-  const isJsonValid = diffResult && !diffResult.originalError && !diffResult.modifiedError
-  const changes = (isJsonValid && diffResult?.result?.changes) || []
-  const semanticRows = useMemo(() => {
-    if (!isJsonValid) return []
-    return buildJsonDiffRows(originalText, modifiedText, arrayCompareMode)
-  }, [isJsonValid, originalText, modifiedText, arrayCompareMode])
-  const changedRows = useMemo(() => semanticRows.filter((row) => row.kind !== 'equal'), [semanticRows])
-  const navigationChangeCount = isJsonValid ? changedRows.length : changes.length
-
-  useEffect(() => {
-    changeRefs.current = []
-  }, [semanticRows])
+  const isJsonValid = Boolean(diffResult.result && !diffResult.originalError && !diffResult.modifiedError)
+  const invalidJsonMessage = [diffResult.originalError, diffResult.modifiedError].filter(Boolean).join('\n')
+  const changes = diffResult.result?.changes ?? []
 
   const jumpToChange = useCallback((idx: number) => {
-    if (navigationChangeCount === 0) return
-    const clampedIdx = Math.max(0, Math.min(idx, navigationChangeCount - 1))
+    if (changes.length === 0) return
+    const clampedIdx = Math.max(0, Math.min(idx, changes.length - 1))
     setCurrentChangeIdx(clampedIdx)
-    if (isJsonValid) {
-      changeRefs.current[clampedIdx]?.scrollIntoView({ block: 'nearest' })
-      return
-    }
-
     const editor = diffEditorRef.current
     const lineChanges = editor?.getLineChanges()
     const lineChange = lineChanges?.[clampedIdx]
@@ -93,7 +76,7 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId, host }: RendererProps<
     modifiedEditor.revealLineInCenter(line)
     modifiedEditor.setPosition({ lineNumber: line, column: 1 })
     modifiedEditor.focus()
-  }, [isJsonValid, navigationChangeCount])
+  }, [changes.length])
 
   // --- Editor mounting & edit sync ---
 
@@ -137,18 +120,7 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId, host }: RendererProps<
       return
     }
 
-    // Determine what to show: normalized if valid, raw if invalid
-    let targetText = originalText
-    try {
-      const parsed = JSON.parse(originalText)
-      targetText = JSON.stringify(parsed, Object.keys(parsed).sort ? undefined : null, 2)
-      // Use stableStringify from diffResult if available
-      if (diffResult?.result?.originalNormalized) {
-        targetText = diffResult.result.originalNormalized
-      }
-    } catch {
-      // Invalid JSON - use raw text
-    }
+    const targetText = diffResult.result?.originalNormalized ?? originalText
 
     if (model.getValue() !== targetText) {
       const fullRange = model.getFullModelRange()
@@ -172,17 +144,7 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId, host }: RendererProps<
       return
     }
 
-    // Determine what to show: normalized if valid, raw if invalid
-    let targetText = modifiedText
-    try {
-      const parsed = JSON.parse(modifiedText)
-      targetText = JSON.stringify(parsed, Object.keys(parsed).sort ? undefined : null, 2)
-      if (diffResult?.result?.modifiedNormalized) {
-        targetText = diffResult.result.modifiedNormalized
-      }
-    } catch {
-      // Invalid JSON - use raw text
-    }
+    const targetText = diffResult.result?.modifiedNormalized ?? modifiedText
 
     if (model.getValue() !== targetText) {
       const fullRange = model.getFullModelRange()
@@ -229,7 +191,11 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId, host }: RendererProps<
         </span>
 
         {!isJsonValid && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: '#fef3c7', color: '#92400e' }}>
+          <span
+            className="text-[10px] px-1.5 py-0.5 rounded"
+            style={{ background: '#fef3c7', color: '#92400e' }}
+            title={invalidJsonMessage}
+          >
             {t(locale, 'diff.invalidJson')}
           </span>
         )}
@@ -251,13 +217,13 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId, host }: RendererProps<
               ↑
             </button>
             <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
-              {Math.min(currentChangeIdx + 1, navigationChangeCount)}/{navigationChangeCount}
+              {currentChangeIdx + 1}/{changes.length}
             </span>
             <button
               className="text-[10px] px-1 py-0.5 rounded hover:opacity-80"
               style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-secondary)' }}
               onClick={() => jumpToChange(currentChangeIdx + 1)}
-              disabled={currentChangeIdx >= navigationChangeCount - 1}
+              disabled={currentChangeIdx >= changes.length - 1}
             >
               ↓
             </button>
@@ -361,20 +327,13 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId, host }: RendererProps<
         </div>
       )}
 
-      {isJsonValid ? (
-        <SemanticJsonDiffView
-          rows={semanticRows}
-          currentChangeIdx={currentChangeIdx}
-          changeRefs={changeRefs}
-        />
-      ) : (
       <div className="flex-1 overflow-hidden">
         <DiffEditor
           height="100%"
           original={initialOriginal}
           modified={initialModified}
-          originalLanguage={isJsonValid ? 'json' : 'plaintext'}
-          modifiedLanguage={isJsonValid ? 'json' : 'plaintext'}
+          originalLanguage="json"
+          modifiedLanguage="json"
           onMount={handleMount}
           options={{
             renderSideBySide,
@@ -400,264 +359,6 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId, host }: RendererProps<
           theme="vs"
         />
       </div>
-      )}
     </div>
   )
-}
-
-type JsonDiffRowKind = 'equal' | 'changed' | 'added' | 'removed'
-
-type JsonDiffRow = {
-  left?: string
-  right?: string
-  kind: JsonDiffRowKind
-}
-
-type DisplayJsonDiffRow = JsonDiffRow & {
-  leftLine: number | null
-  rightLine: number | null
-  changeIndex: number | null
-}
-
-function SemanticJsonDiffView({
-  rows,
-  currentChangeIdx,
-  changeRefs,
-}: {
-  rows: JsonDiffRow[]
-  currentChangeIdx: number
-  changeRefs: React.MutableRefObject<Array<HTMLDivElement | null>>
-}) {
-  const displayRows = useMemo(() => withLineNumbers(rows), [rows])
-
-  return (
-    <div className="flex-1 min-h-0 overflow-auto font-mono text-[13px] leading-[1.45]">
-      {displayRows.map((row, index) => {
-        const hasLeft = row.left !== undefined
-        const hasRight = row.right !== undefined
-        const active = row.changeIndex !== null && row.changeIndex === currentChangeIdx
-
-        return (
-          <div
-            key={index}
-            ref={(el) => {
-              if (row.changeIndex !== null) changeRefs.current[row.changeIndex] = el
-            }}
-            className="grid min-w-max"
-            style={{
-              gridTemplateColumns: '64px minmax(420px, 1fr) 64px minmax(420px, 1fr)',
-              outline: active ? '1px solid var(--color-accent)' : undefined,
-              outlineOffset: -1,
-            }}
-          >
-            <LineNumber value={hasLeft ? row.leftLine : null} sign={row.kind === 'removed' ? '-' : undefined} />
-            <JsonCell text={row.left} side="left" kind={row.kind} />
-            <LineNumber value={hasRight ? row.rightLine : null} sign={row.kind === 'added' ? '+' : undefined} />
-            <JsonCell text={row.right} side="right" kind={row.kind} />
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function withLineNumbers(rows: JsonDiffRow[]): DisplayJsonDiffRow[] {
-  let leftLine = 0
-  let rightLine = 0
-  let changeIndex = -1
-
-  return rows.map((row) => {
-    const hasLeft = row.left !== undefined
-    const hasRight = row.right !== undefined
-    if (hasLeft) leftLine += 1
-    if (hasRight) rightLine += 1
-    if (row.kind !== 'equal') changeIndex += 1
-    return {
-      ...row,
-      leftLine: hasLeft ? leftLine : null,
-      rightLine: hasRight ? rightLine : null,
-      changeIndex: row.kind !== 'equal' ? changeIndex : null,
-    }
-  })
-}
-
-function LineNumber({ value, sign }: { value: number | null; sign?: string }) {
-  return (
-    <div
-      className="select-none text-right pr-2"
-      style={{
-        color: sign ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
-        background: 'var(--color-background-secondary)',
-        borderRight: '0.5px solid var(--color-border-tertiary)',
-      }}
-    >
-      {value ?? ''}
-      {sign ?? ' '}
-    </div>
-  )
-}
-
-function JsonCell({ text, side, kind }: { text?: string; side: 'left' | 'right'; kind: JsonDiffRowKind }) {
-  const color = kind === 'removed' && side === 'left'
-    ? 'rgba(255, 0, 0, 0.16)'
-    : kind === 'added' && side === 'right'
-      ? 'rgba(85, 170, 35, 0.18)'
-      : kind === 'changed'
-        ? side === 'left' ? 'rgba(255, 0, 0, 0.14)' : 'rgba(85, 170, 35, 0.16)'
-        : 'transparent'
-
-  return (
-    <pre
-      className="m-0 px-3 whitespace-pre overflow-hidden"
-      style={{
-        minHeight: '1.45em',
-        background: color,
-        color: text === undefined ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)',
-      }}
-    >
-      {text ?? ''}
-    </pre>
-  )
-}
-
-function buildJsonDiffRows(
-  originalText: string,
-  modifiedText: string,
-  arrayCompareMode: JsonArrayCompareMode
-): JsonDiffRow[] {
-  const originalParsed = parseJson(originalText)
-  const modifiedParsed = parseJson(modifiedText)
-  if (!originalParsed.ok || !modifiedParsed.ok || originalParsed.value === undefined || modifiedParsed.value === undefined) return []
-
-  const originalValue = normalizeJson(originalParsed.value, { arrayCompareMode })
-  const modifiedValue = normalizeJson(modifiedParsed.value, { arrayCompareMode })
-  return renderPair(originalValue, modifiedValue, 0, undefined, false, arrayCompareMode)
-}
-
-function renderPair(
-  left: JsonValue,
-  right: JsonValue,
-  depth: number,
-  label: string | undefined,
-  comma: boolean,
-  arrayCompareMode: JsonArrayCompareMode
-): JsonDiffRow[] {
-  if (JSON.stringify(left) === JSON.stringify(right)) {
-    return renderSame(left, depth, label, comma)
-  }
-
-  if (isObjectRecord(left) && isObjectRecord(right)) {
-    const rows: JsonDiffRow[] = [{ left: `${indent(depth)}${label ?? ''}{`, right: `${indent(depth)}${label ?? ''}{`, kind: 'equal' }]
-    const keys = Array.from(new Set([...Object.keys(left), ...Object.keys(right)])).sort()
-    keys.forEach((key, index) => {
-      const childComma = index < keys.length - 1
-      const childLabel = `${JSON.stringify(key)}: `
-      if (key in left && key in right) {
-        rows.push(...renderPair(left[key], right[key], depth + 1, childLabel, childComma, arrayCompareMode))
-      } else if (key in left) {
-        rows.push(...renderSingle(left[key], 'removed', depth + 1, childLabel, childComma))
-      } else {
-        rows.push(...renderSingle(right[key], 'added', depth + 1, childLabel, childComma))
-      }
-    })
-    rows.push({ left: `${indent(depth)}}${comma ? ',' : ''}`, right: `${indent(depth)}}${comma ? ',' : ''}`, kind: 'equal' })
-    return rows
-  }
-
-  if (Array.isArray(left) && Array.isArray(right)) {
-    const pairs = alignArrayItems(left, right, arrayCompareMode)
-    const rows: JsonDiffRow[] = [{ left: `${indent(depth)}${label ?? ''}[`, right: `${indent(depth)}${label ?? ''}[`, kind: 'equal' }]
-    pairs.forEach((pair, index) => {
-      const childComma = index < pairs.length - 1
-      if (pair.left !== undefined && pair.right !== undefined) {
-        rows.push(...renderPair(pair.left, pair.right, depth + 1, undefined, childComma, arrayCompareMode))
-      } else if (pair.left !== undefined) {
-        rows.push(...renderSingle(pair.left, 'removed', depth + 1, undefined, childComma))
-      } else if (pair.right !== undefined) {
-        rows.push(...renderSingle(pair.right, 'added', depth + 1, undefined, childComma))
-      }
-    })
-    rows.push({ left: `${indent(depth)}]${comma ? ',' : ''}`, right: `${indent(depth)}]${comma ? ',' : ''}`, kind: 'equal' })
-    return rows
-  }
-
-  return [{
-    left: `${indent(depth)}${label ?? ''}${formatScalar(left)}${comma ? ',' : ''}`,
-    right: `${indent(depth)}${label ?? ''}${formatScalar(right)}${comma ? ',' : ''}`,
-    kind: 'changed',
-  }]
-}
-
-function renderSame(value: JsonValue, depth: number, label: string | undefined, comma: boolean): JsonDiffRow[] {
-  return stringifyWithLabel(value, depth, label, comma).map((line) => ({ left: line, right: line, kind: 'equal' }))
-}
-
-function renderSingle(value: JsonValue, kind: 'added' | 'removed', depth: number, label: string | undefined, comma: boolean): JsonDiffRow[] {
-  return stringifyWithLabel(value, depth, label, comma).map((line) => (
-    kind === 'removed'
-      ? { left: line, kind }
-      : { right: line, kind }
-  ))
-}
-
-function stringifyWithLabel(value: JsonValue, depth: number, label: string | undefined, comma: boolean): string[] {
-  const rawLines = JSON.stringify(value, null, 2).split('\n')
-  const prefix = indent(depth)
-  if (rawLines.length === 1) return [`${prefix}${label ?? ''}${rawLines[0]}${comma ? ',' : ''}`]
-  const lines = rawLines.map((line) => `${prefix}${line}`)
-  lines[0] = `${prefix}${label ?? ''}${rawLines[0]}`
-  lines[lines.length - 1] = `${lines[lines.length - 1]}${comma ? ',' : ''}`
-  return lines
-}
-
-function alignArrayItems(
-  left: JsonValue[],
-  right: JsonValue[],
-  arrayCompareMode: JsonArrayCompareMode
-): Array<{ left?: JsonValue; right?: JsonValue }> {
-  if (arrayCompareMode.type === 'by-object-key') {
-    return alignArrayByObjectKey(left, right, arrayCompareMode.key)
-  }
-  const maxLength = Math.max(left.length, right.length)
-  return Array.from({ length: maxLength }, (_, index) => ({ left: left[index], right: right[index] }))
-}
-
-function alignArrayByObjectKey(left: JsonValue[], right: JsonValue[], key: string): Array<{ left?: JsonValue; right?: JsonValue }> {
-  const leftMap = mapArrayObjectsByKey(left, key)
-  const rightMap = mapArrayObjectsByKey(right, key)
-  const keys = Array.from(new Set([...leftMap.keys(), ...rightMap.keys()])).sort()
-  const rows = keys.map((itemKey) => ({ left: leftMap.get(itemKey), right: rightMap.get(itemKey) }))
-  const leftRest = left.filter((item) => !arrayObjectKey(item, key))
-  const rightRest = right.filter((item) => !arrayObjectKey(item, key))
-  const maxRest = Math.max(leftRest.length, rightRest.length)
-  for (let index = 0; index < maxRest; index += 1) {
-    rows.push({ left: leftRest[index], right: rightRest[index] })
-  }
-  return rows
-}
-
-function mapArrayObjectsByKey(items: JsonValue[], key: string): Map<string, JsonValue> {
-  const map = new Map<string, JsonValue>()
-  for (const item of items) {
-    const itemKey = arrayObjectKey(item, key)
-    if (itemKey) map.set(itemKey, item)
-  }
-  return map
-}
-
-function arrayObjectKey(value: JsonValue, key: string): string | null {
-  if (!isObjectRecord(value) || !(key in value)) return null
-  return JSON.stringify(value[key])
-}
-
-function isObjectRecord(value: JsonValue): value is Record<string, JsonValue> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
-function formatScalar(value: JsonValue): string {
-  return JSON.stringify(value)
-}
-
-function indent(depth: number): string {
-  return '  '.repeat(depth)
 }
