@@ -366,7 +366,7 @@ function applyPanelV2Effect(effect: PanelV2Effect) {
         inputs: effect.inputs ?? existing.inputs,
         title: effect.title ?? panelEntry.contribution.title,
         ownerPluginId: effect.ownerPluginId ?? panelEntry.meta.pluginId,
-        isDevPanel: effect._isDev,
+        isDevPanel: effect._isDev ?? existing.isDevPanel,
       })
       return
     }
