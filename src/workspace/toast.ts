@@ -12,6 +12,8 @@ export interface ToastItem {
   message: string
   level: ToastLevel
   createdAt: number
+  /** If true, toast will not auto-dismiss */
+  persistent?: boolean
 }
 
 interface ToastStore {
@@ -27,14 +29,36 @@ export const useToastStore = create<ToastStore>((set) => ({
 }))
 
 /**
- * Show a toast notification. Auto-dismisses after 3.5s.
+ * Show a toast notification.
+ * @param message - The message to display
+ * @param level - Toast severity level (default: 'info')
+ * @param options - Optional: { durationMs, persistent }
+ *   - durationMs: auto-dismiss delay (default 3500ms)
+ *   - persistent: if true, toast does not auto-dismiss (overrides durationMs)
  */
-export function showToast(message: string, level: ToastLevel = 'info') {
+export function showToast(
+  message: string,
+  level: ToastLevel = 'info',
+  options?: number | { durationMs?: number; persistent?: boolean }
+) {
   const id = `toast-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`
-  const item: ToastItem = { id, message, level, createdAt: Date.now() }
+
+  let persistent = false
+  let durationMs = 3500
+
+  if (typeof options === 'number') {
+    durationMs = options
+  } else if (options) {
+    persistent = options.persistent ?? false
+    durationMs = options.durationMs ?? 3500
+  }
+
+  const item: ToastItem = { id, message, level, createdAt: Date.now(), persistent }
   useToastStore.getState().addToast(item)
 
-  setTimeout(() => {
-    useToastStore.getState().removeToast(id)
-  }, 3500)
+  if (!persistent) {
+    setTimeout(() => {
+      useToastStore.getState().removeToast(id)
+    }, durationMs)
+  }
 }

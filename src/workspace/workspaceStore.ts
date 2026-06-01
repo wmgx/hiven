@@ -14,8 +14,9 @@ import type {
   PanelInstance,
   SurfaceOccupancy,
   PaneRenderStackItem,
+  PaneRendererState,
+  PanelInstanceV2,
 } from './types'
-import type { PaneSelectionRequest } from './paneSelection'
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -37,6 +38,27 @@ function renamePanesSequentially(panes: Record<PaneId, EditorPane>, paneOrder: P
   return updated
 }
 
+function rendererReferencesPane(renderer: PaneRendererState, paneId: PaneId): boolean {
+  return valueReferencesPane(renderer.rendererInputs, paneId)
+}
+
+function findRendererForPane(paneRenderers: Record<PaneId, PaneRendererState>, paneId: PaneId): PaneId | undefined {
+  if (paneRenderers[paneId]) return paneId
+  return Object.entries(paneRenderers).find(([, renderer]) => rendererReferencesPane(renderer, paneId))?.[0]
+}
+
+function valueReferencesPane(value: unknown, paneId: PaneId): boolean {
+  if (!value || typeof value !== 'object') return false
+  if (
+    (value as { kind?: unknown }).kind === 'pane' &&
+    (value as { paneId?: unknown }).paneId === paneId
+  ) {
+    return true
+  }
+  if (Array.isArray(value)) return value.some((item) => valueReferencesPane(item, paneId))
+  return Object.values(value as Record<string, unknown>).some((item) => valueReferencesPane(item, paneId))
+}
+
 // ─── Store Shape ────────────────────────────────────────────────────────────
 
 interface WorkspaceSlice {
@@ -55,9 +77,10 @@ interface WorkspaceSlice {
   occupancies: Record<string, SurfaceOccupancy>
   renderStacks: Record<PaneId, PaneRenderStackItem[]>
 
-  // Pane selection
-  paneSelectionRequest: PaneSelectionRequest | null
-  setPaneSelectionRequest: (req: PaneSelectionRequest | null) => void
+  // Plugin system: pane renderer state (pane.setRenderer / pane.clearRenderer)
+  paneRenderers: Record<PaneId, PaneRendererState>
+  // Plugin system: panel instances V2 (single-instance by panelId)
+  panelInstancesV2: Record<string, PanelInstanceV2>
 
   // Actions
   setActivePaneText: (text: string) => void
@@ -66,6 +89,7 @@ interface WorkspaceSlice {
   setPaneSelection: (paneId: PaneId, selection: SerializedSelection | null) => void
   createPane: (options?: { text?: string; title?: string; language?: string; focus?: boolean; direction?: 'left' | 'right' | 'top' | 'bottom' }) => PaneId
   closePane: (paneId: PaneId) => boolean
+  closeActiveSurfaceOrPane: () => boolean
   setLayout: (layout: WorkspaceLayout) => void
   updatePaneTitle: (paneId: PaneId, title: string) => void
   updatePaneLanguage: (paneId: PaneId, language: string) => void
@@ -79,6 +103,16 @@ interface WorkspaceSlice {
   openPanel: (instance: PanelInstance) => void
   closePanel: (instanceId: string) => void
   updatePanel: (instanceId: string, props: Record<string, unknown>) => void
+
+  // Panel V2 actions (new single-instance plugin panel model)
+  openPanelV2: (instance: PanelInstanceV2) => void
+  closePanelV2: (panelId: string) => void
+  updatePanelV2Inputs: (panelId: string, inputs: unknown) => void
+
+  // Pane renderer actions (plugin system)
+  setPaneRenderer: (paneId: PaneId, state: PaneRendererState) => void
+  clearPaneRenderer: (paneId: PaneId) => void
+  clearPaneRenderersForPlugin: (pluginId: string) => void
 
   // Compat: legacy editorText getter
   getActivePaneText: () => string
@@ -108,9 +142,8 @@ export const useWorkspaceStore = create<WorkspaceSlice>()(persist(
     panels: {},
     occupancies: {},
     renderStacks: {},
-
-    paneSelectionRequest: null,
-    setPaneSelectionRequest: (req) => set({ paneSelectionRequest: req }),
+    paneRenderers: {},
+    panelInstancesV2: {},
 
     setActivePaneText: (text) => {
       const { activePaneId, panes } = get()
@@ -187,7 +220,7 @@ export const useWorkspaceStore = create<WorkspaceSlice>()(persist(
     },
 
     closePane: (paneId) => {
-      const { panes, paneOrder, activePaneId, layout } = get()
+      const { panes, paneOrder, activePaneId, layout, paneRenderers } = get()
       if (paneOrder.length <= 1) return false
       if (!panes[paneId]) return false
 
@@ -205,13 +238,34 @@ export const useWorkspaceStore = create<WorkspaceSlice>()(persist(
         newActivePaneId = newOrder[Math.min(idx, newOrder.length - 1)]
       }
 
+      const nextPaneRenderers = Object.fromEntries(
+        Object.entries(paneRenderers).filter(([rendererPaneId, renderer]) => (
+          rendererPaneId !== paneId && !rendererReferencesPane(renderer, paneId)
+        ))
+      ) as Record<PaneId, PaneRendererState>
+
       set({
         panes: renamePanesSequentially(newPanes, newOrder),
         paneOrder: newOrder,
         layout: newLayout,
         activePaneId: newActivePaneId,
+        paneRenderers: nextPaneRenderers,
       })
       return true
+    },
+
+    closeActiveSurfaceOrPane: () => {
+      const { activePaneId, paneRenderers, paneOrder } = get()
+      const rendererPaneId = findRendererForPane(paneRenderers, activePaneId)
+      if (rendererPaneId) {
+        get().clearPaneRenderer(rendererPaneId)
+        return true
+      }
+      if (paneOrder.length <= 1) {
+        get().setActivePaneText('')
+        return true
+      }
+      return get().closePane(activePaneId)
     },
 
     setLayout: (layout) => set({ layout }),
@@ -277,6 +331,52 @@ export const useWorkspaceStore = create<WorkspaceSlice>()(persist(
       if (!panel) return
       set({ panels: { ...panels, [instanceId]: { ...panel, ...props } } })
     },
+
+    // ─── Panel V2 Actions ────────────────────────────────────────────────────
+
+    openPanelV2: (instance) => {
+      const { panelInstancesV2 } = get()
+      set({ panelInstancesV2: { ...panelInstancesV2, [instance.panelId]: instance } })
+    },
+
+    closePanelV2: (panelId) => {
+      const { panelInstancesV2 } = get()
+      const next = { ...panelInstancesV2 }
+      delete next[panelId]
+      set({ panelInstancesV2: next })
+    },
+
+    updatePanelV2Inputs: (panelId, inputs) => {
+      const { panelInstancesV2 } = get()
+      const instance = panelInstancesV2[panelId]
+      if (!instance) return
+      set({ panelInstancesV2: { ...panelInstancesV2, [panelId]: { ...instance, inputs } } })
+    },
+
+    // ─── Pane Renderer Actions ───────────────────────────────────────────────
+
+    setPaneRenderer: (paneId, state) => {
+      const { paneRenderers } = get()
+      set({ paneRenderers: { ...paneRenderers, [paneId]: state } })
+    },
+
+    clearPaneRenderer: (paneId) => {
+      const { paneRenderers } = get()
+      const next = { ...paneRenderers }
+      delete next[paneId]
+      set({ paneRenderers: next })
+    },
+
+    clearPaneRenderersForPlugin: (pluginId) => {
+      const { paneRenderers } = get()
+      const next: Record<string, PaneRendererState> = {}
+      for (const [paneId, state] of Object.entries(paneRenderers)) {
+        if (state.ownerPluginId !== pluginId) {
+          next[paneId] = state
+        }
+      }
+      set({ paneRenderers: next })
+    },
   }),
   {
     name: 'fluxtext-workspace',
@@ -292,7 +392,7 @@ export const useWorkspaceStore = create<WorkspaceSlice>()(persist(
       layout: state.layout,
     }),
     // Migration from legacy editorText
-    migrate: (persisted: any, version: number) => {
+    migrate: (persisted: unknown, version: number) => {
       if (version === 0 || !persisted) {
         return persisted
       }

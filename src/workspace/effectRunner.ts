@@ -9,9 +9,11 @@ import type {
   TextReplaceEffect,
   StatusEffect,
   PaneEffect,
+  PaneRendererEffect,
   WorkspaceLayoutEffect,
   PresentationEffect,
   PanelEffect,
+  PanelV2Effect,
   MonacoEffect,
   SurfaceClaim,
   ConflictPolicy,
@@ -32,6 +34,8 @@ import {
   applyMonacoUpdateOptions,
   applyMonacoDiffUpdateOptions,
 } from './monacoBridge'
+import { showToast } from './toast'
+import { pluginRegistry } from './pluginRegistry'
 
 export interface EffectRunnerResult {
   applied: FluxEffect[]
@@ -98,6 +102,11 @@ export function applyEffects(
           applyPaneEffect(effect)
           result.applied.push(effect)
           break
+        case 'pane.setRenderer':
+        case 'pane.clearRenderer':
+          applyPaneRendererEffect(effect)
+          result.applied.push(effect)
+          break
         case 'workspace.layout':
         case 'workspace.split':
           applyWorkspaceEffect(effect)
@@ -119,6 +128,11 @@ export function applyEffects(
           applyPanelEffect(effect)
           result.applied.push(effect)
           break
+        case 'panel.openV2':
+        case 'panel.closeV2':
+          applyPanelV2Effect(effect)
+          result.applied.push(effect)
+          break
         case 'monaco.decorate':
         case 'monaco.updateOptions':
         case 'monaco.diff.updateOptions':
@@ -126,10 +140,11 @@ export function applyEffects(
           result.applied.push(effect)
           break
         default:
-          result.errors.push(`Unsupported effect type: ${(effect as any).type}`)
+          result.errors.push(`Unsupported effect type: ${(effect as { type?: string }).type ?? 'unknown'}`)
       }
-    } catch (e: any) {
-      result.errors.push(`Effect ${effect.type} failed: ${e.message}`)
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e)
+      result.errors.push(`Effect ${effect.type} failed: ${message}`)
     }
   }
 
@@ -299,6 +314,74 @@ function applyWorkspaceEffect(effect: WorkspaceLayoutEffect) {
 
 function applyStatus(effect: StatusEffect) {
   console.log(`[FluxText ${effect.level}] ${effect.message}`)
+  const defaultDuration = effect.level === 'error' ? 5000 : effect.level === 'warning' ? 4000 : 3000
+  showToast(effect.message, effect.level, {
+    persistent: effect.persistent,
+    durationMs: effect.durationMs ?? defaultDuration,
+  })
+}
+
+// ─── Plugin Effect Handlers ──────────────────────────────────────────────────
+
+function applyPaneRendererEffect(effect: PaneRendererEffect) {
+  const ws = useWorkspaceStore.getState()
+
+  if (effect.type === 'pane.setRenderer') {
+    // Validate renderer exists — prefer dev registry if effect was dispatched from a dev command
+    const rendererEntry = pluginRegistry.resolveRenderer(effect.renderer, effect._isDev)
+    if (!rendererEntry) {
+      // Emit status warning, do not throw
+      showToast(`Renderer "${effect.renderer}" not found`, 'warning')
+      return
+    }
+
+    ws.setPaneRenderer(effect.paneId, {
+      rendererId: effect.renderer,
+      rendererInputs: effect.inputs,
+      ownerPluginId: effect.ownerPluginId ?? rendererEntry.meta.pluginId,
+      ownerContributionId: effect.ownerContributionId,
+      isDevRenderer: effect._isDev,
+    })
+  } else if (effect.type === 'pane.clearRenderer') {
+    ws.clearPaneRenderer(effect.paneId)
+  }
+}
+
+function applyPanelV2Effect(effect: PanelV2Effect) {
+  const ws = useWorkspaceStore.getState()
+
+  if (effect.type === 'panel.openV2') {
+    const panelEntry = pluginRegistry.resolvePanel(effect.panelId, effect._isDev)
+    if (!panelEntry) {
+      showToast(`Panel "${effect.panelId}" not found`, 'warning')
+      return
+    }
+
+    const placement = effect.placement ?? panelEntry.contribution.defaultPlacement ?? 'bottom'
+    const existing = ws.panelInstancesV2[effect.panelId]
+    if (existing) {
+      ws.openPanelV2({
+        ...existing,
+        placement: effect.placement ?? existing.placement ?? placement,
+        inputs: effect.inputs ?? existing.inputs,
+        title: effect.title ?? panelEntry.contribution.title,
+        ownerPluginId: effect.ownerPluginId ?? panelEntry.meta.pluginId,
+        isDevPanel: effect._isDev,
+      })
+      return
+    }
+
+    ws.openPanelV2({
+      panelId: effect.panelId,
+      placement,
+      inputs: effect.inputs ?? null,
+      title: effect.title ?? panelEntry.contribution.title,
+      ownerPluginId: effect.ownerPluginId ?? panelEntry.meta.pluginId,
+      isDevPanel: effect._isDev,
+    })
+  } else if (effect.type === 'panel.closeV2') {
+    ws.closePanelV2(effect.panelId)
+  }
 }
 
 function applyPresentationEffect(effect: PresentationEffect) {

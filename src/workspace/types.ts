@@ -84,9 +84,11 @@ export type FluxCommand = {
 export type FluxEffect =
   | TextReplaceEffect
   | PaneEffect
+  | PaneRendererEffect
   | WorkspaceLayoutEffect
   | PresentationEffect
   | PanelEffect
+  | PanelV2Effect
   | MonacoEffect
   | StatusEffect
 
@@ -101,6 +103,22 @@ export type PaneEffect =
   | { type: 'pane.close'; paneId: PaneId }
   | { type: 'pane.focus'; paneId: PaneId }
   | { type: 'pane.update'; paneId: PaneId; patch: Partial<EditorPane> }
+
+/** New plugin-system renderer effects (replaces presentation.open for renderer use cases) */
+export type PaneRendererEffect =
+  | {
+      type: 'pane.setRenderer'
+      paneId: PaneId
+      /** rendererId from RendererRegistry */
+      renderer: string
+      /** passed to renderer props.inputs */
+      inputs: unknown
+      ownerPluginId?: string
+      ownerContributionId?: string
+      /** When true, prefer dev registry when resolving renderer */
+      _isDev?: boolean
+    }
+  | { type: 'pane.clearRenderer'; paneId: PaneId }
 
 export type WorkspaceLayoutEffect =
   | { type: 'workspace.layout'; layout: WorkspaceLayout }
@@ -152,6 +170,20 @@ export type PanelEffect =
   | { type: 'panel.close'; instanceId: string }
   | { type: 'panel.update'; instanceId: string; props: Record<string, unknown> }
 
+/** New plugin-system panel effects (single-instance by panelId) */
+export type PanelV2Effect =
+  | {
+      type: 'panel.openV2'
+      panelId: string
+      placement?: 'bottom' | 'right' | 'left'
+      inputs?: unknown
+      title?: string
+      ownerPluginId?: string
+      /** When true, prefer dev registry when resolving panel */
+      _isDev?: boolean
+    }
+  | { type: 'panel.closeV2'; panelId: string }
+
 export type MonacoEffect =
   | {
       type: 'monaco.decorate'
@@ -174,6 +206,10 @@ export type StatusEffect = {
   type: 'status.message'
   level: 'info' | 'success' | 'warning' | 'error'
   message: string
+  /** If true, status message persists until manually dismissed */
+  persistent?: boolean
+  /** Auto-dismiss after this many ms (default varies by level) */
+  durationMs?: number
 }
 
 // ─── Presentation Session ───────────────────────────────────────────────────
@@ -261,6 +297,31 @@ export type WorkspaceState = {
   panels: Record<string, PanelInstance>
   occupancies: Record<string, SurfaceOccupancy>
   renderStacks: Record<PaneId, PaneRenderStackItem[]>
+  /** New plugin-system renderer state: paneId → renderer state */
+  paneRenderers: Record<PaneId, PaneRendererState>
+  /** New plugin-system panel state: panelId → panel instance (single-instance) */
+  panelInstancesV2: Record<string, PanelInstanceV2>
+}
+
+// ─── Pane Renderer State (plugin system) ────────────────────────────────────
+
+export type PaneRendererState = {
+  rendererId: string
+  rendererInputs: unknown
+  ownerPluginId?: string
+  ownerContributionId?: string
+  isDevRenderer?: boolean
+}
+
+// ─── Panel Instance V2 State (plugin system, single-instance model) ──────────
+
+export type PanelInstanceV2 = {
+  panelId: string
+  placement: 'bottom' | 'right' | 'left'
+  inputs: unknown
+  title?: string
+  ownerPluginId?: string
+  isDevPanel?: boolean
 }
 
 // ─── Render Status ──────────────────────────────────────────────────────────
