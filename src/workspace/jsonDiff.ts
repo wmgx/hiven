@@ -1,0 +1,338 @@
+/**
+ * FluxText - JSON Object Diff
+ * Provides JSON normalization, stable stringify, and semantic diff algorithm.
+ */
+
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+export type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue }
+
+export type JsonDiffChange =
+  | { kind: 'added'; path: string; newValue: JsonValue }
+  | { kind: 'removed'; path: string; oldValue: JsonValue }
+  | { kind: 'changed'; path: string; oldValue: JsonValue; newValue: JsonValue; oldType: string; newType: string }
+  | { kind: 'moved-or-reordered'; path: string; note: string }
+
+export type JsonArrayCompareMode =
+  | { type: 'by-index' }
+  | { type: 'unordered-scalar' }
+  | { type: 'by-object-key'; key: string }
+
+export interface JsonDiffOptions {
+  arrayCompareMode?: JsonArrayCompareMode
+  ignoreKeyOrder?: boolean // default true
+}
+
+export interface JsonDiffResult {
+  changes: JsonDiffChange[]
+  originalNormalized: string
+  modifiedNormalized: string
+  hasSementicDifferences: boolean
+}
+
+export interface JsonParseResult {
+  ok: boolean
+  value?: JsonValue
+  error?: string
+  line?: number
+  column?: number
+}
+
+// ─── Parse ──────────────────────────────────────────────────────────────────
+
+export function parseJson(text: string): JsonParseResult {
+  try {
+    const value = JSON.parse(text)
+    return { ok: true, value }
+  } catch (e: any) {
+    const msg = e.message || 'Invalid JSON'
+    // Try to extract line/column from error message
+    const posMatch = msg.match(/position (\d+)/)
+    let line = 1
+    let column = 1
+    if (posMatch) {
+      const pos = parseInt(posMatch[1], 10)
+      const before = text.slice(0, pos)
+      line = (before.match(/\n/g) || []).length + 1
+      const lastNewline = before.lastIndexOf('\n')
+      column = pos - lastNewline
+    }
+    return { ok: false, error: msg, line, column }
+  }
+}
+
+// ─── Normalize ──────────────────────────────────────────────────────────────
+
+/**
+ * Normalize a JSON value: sort object keys recursively (stable).
+ * Arrays preserve order by default.
+ */
+export function normalizeJson(value: JsonValue): JsonValue {
+  if (value === null || typeof value !== 'object') {
+    return value
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(normalizeJson)
+  }
+
+  // Object: sort keys alphabetically
+  const sortedKeys = Object.keys(value).sort()
+  const result: Record<string, JsonValue> = {}
+  for (const key of sortedKeys) {
+    result[key] = normalizeJson(value[key])
+  }
+  return result
+}
+
+/**
+ * Stable stringify: normalize then pretty-print with 2-space indent.
+ */
+export function stableStringify(value: JsonValue): string {
+  return JSON.stringify(normalizeJson(value), null, 2)
+}
+
+// ─── Semantic Diff ──────────────────────────────────────────────────────────
+
+function typeOf(value: JsonValue): string {
+  if (value === null) return 'null'
+  if (Array.isArray(value)) return 'array'
+  return typeof value
+}
+
+function deepEqual(a: JsonValue, b: JsonValue): boolean {
+  if (a === b) return true
+  if (a === null || b === null) return a === b
+  if (typeof a !== typeof b) return false
+  if (typeof a !== 'object') return a === b
+
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false
+    return a.every((item, i) => deepEqual(item, b[i]))
+  }
+
+  if (Array.isArray(a) !== Array.isArray(b)) return false
+
+  const aObj = a as Record<string, JsonValue>
+  const bObj = b as Record<string, JsonValue>
+  const aKeys = Object.keys(aObj).sort()
+  const bKeys = Object.keys(bObj).sort()
+  if (aKeys.length !== bKeys.length) return false
+  if (!aKeys.every((k, i) => k === bKeys[i])) return false
+  return aKeys.every((k) => deepEqual(aObj[k], bObj[k]))
+}
+
+/**
+ * Compute semantic diff between two JSON values.
+ */
+export function computeJsonDiff(
+  original: JsonValue,
+  modified: JsonValue,
+  options: JsonDiffOptions = {}
+): JsonDiffChange[] {
+  const changes: JsonDiffChange[] = []
+  const arrayMode = options.arrayCompareMode || { type: 'by-index' }
+
+  function diffRecursive(orig: JsonValue, mod: JsonValue, path: string) {
+    const origType = typeOf(orig)
+    const modType = typeOf(mod)
+
+    // Different types
+    if (origType !== modType) {
+      changes.push({ kind: 'changed', path, oldValue: orig, newValue: mod, oldType: origType, newType: modType })
+      return
+    }
+
+    // Primitives
+    if (origType !== 'object' && origType !== 'array') {
+      if (orig !== mod) {
+        changes.push({ kind: 'changed', path, oldValue: orig, newValue: mod, oldType: origType, newType: modType })
+      }
+      return
+    }
+
+    // Arrays
+    if (Array.isArray(orig) && Array.isArray(mod)) {
+      diffArray(orig, mod, path, arrayMode)
+      return
+    }
+
+    // Objects
+    const origObj = orig as Record<string, JsonValue>
+    const modObj = mod as Record<string, JsonValue>
+    const allKeys = new Set([...Object.keys(origObj), ...Object.keys(modObj)])
+
+    for (const key of [...allKeys].sort()) {
+      const childPath = path ? `${path}.${key}` : `$.${key}`
+      const inOrig = key in origObj
+      const inMod = key in modObj
+
+      if (inOrig && !inMod) {
+        changes.push({ kind: 'removed', path: childPath, oldValue: origObj[key] })
+      } else if (!inOrig && inMod) {
+        changes.push({ kind: 'added', path: childPath, newValue: modObj[key] })
+      } else {
+        diffRecursive(origObj[key], modObj[key], childPath)
+      }
+    }
+  }
+
+  function diffArray(orig: JsonValue[], mod: JsonValue[], path: string, mode: JsonArrayCompareMode) {
+    switch (mode.type) {
+      case 'by-index':
+        diffArrayByIndex(orig, mod, path)
+        break
+      case 'unordered-scalar':
+        diffArrayUnorderedScalar(orig, mod, path)
+        break
+      case 'by-object-key':
+        diffArrayByObjectKey(orig, mod, path, mode.key)
+        break
+    }
+  }
+
+  function diffArrayByIndex(orig: JsonValue[], mod: JsonValue[], path: string) {
+    const maxLen = Math.max(orig.length, mod.length)
+    for (let i = 0; i < maxLen; i++) {
+      const childPath = `${path}[${i}]`
+      if (i >= orig.length) {
+        changes.push({ kind: 'added', path: childPath, newValue: mod[i] })
+      } else if (i >= mod.length) {
+        changes.push({ kind: 'removed', path: childPath, oldValue: orig[i] })
+      } else {
+        diffRecursive(orig[i], mod[i], childPath)
+      }
+    }
+  }
+
+  function diffArrayUnorderedScalar(orig: JsonValue[], mod: JsonValue[], path: string) {
+    // Only works for scalar arrays
+    const isScalar = (v: JsonValue) => v === null || typeof v !== 'object'
+    const allScalar = orig.every(isScalar) && mod.every(isScalar)
+
+    if (!allScalar) {
+      // Fallback to by-index
+      diffArrayByIndex(orig, mod, path)
+      return
+    }
+
+    const origCounts = new Map<string, number>()
+    const modCounts = new Map<string, number>()
+
+    for (const v of orig) {
+      const key = JSON.stringify(v)
+      origCounts.set(key, (origCounts.get(key) || 0) + 1)
+    }
+    for (const v of mod) {
+      const key = JSON.stringify(v)
+      modCounts.set(key, (modCounts.get(key) || 0) + 1)
+    }
+
+    const allKeys = new Set([...origCounts.keys(), ...modCounts.keys()])
+    for (const key of allKeys) {
+      const origCount = origCounts.get(key) || 0
+      const modCount = modCounts.get(key) || 0
+      const value = JSON.parse(key)
+
+      if (origCount > modCount) {
+        for (let i = 0; i < origCount - modCount; i++) {
+          changes.push({ kind: 'removed', path: `${path}[]`, oldValue: value })
+        }
+      } else if (modCount > origCount) {
+        for (let i = 0; i < modCount - origCount; i++) {
+          changes.push({ kind: 'added', path: `${path}[]`, newValue: value })
+        }
+      }
+    }
+  }
+
+  function diffArrayByObjectKey(orig: JsonValue[], mod: JsonValue[], path: string, key: string) {
+    const indexByKey = (arr: JsonValue[]): Map<string, { index: number; value: JsonValue }> => {
+      const map = new Map<string, { index: number; value: JsonValue }>()
+      for (let i = 0; i < arr.length; i++) {
+        const item = arr[i]
+        if (item && typeof item === 'object' && !Array.isArray(item) && key in item) {
+          const keyVal = JSON.stringify((item as Record<string, JsonValue>)[key])
+          map.set(keyVal, { index: i, value: item })
+        }
+      }
+      return map
+    }
+
+    const origMap = indexByKey(orig)
+    const modMap = indexByKey(mod)
+    const allKeys = new Set([...origMap.keys(), ...modMap.keys()])
+
+    for (const k of allKeys) {
+      const origEntry = origMap.get(k)
+      const modEntry = modMap.get(k)
+      const keyLabel = JSON.parse(k)
+
+      if (origEntry && !modEntry) {
+        changes.push({ kind: 'removed', path: `${path}[${key}=${keyLabel}]`, oldValue: origEntry.value })
+      } else if (!origEntry && modEntry) {
+        changes.push({ kind: 'added', path: `${path}[${key}=${keyLabel}]`, newValue: modEntry.value })
+      } else if (origEntry && modEntry) {
+        diffRecursive(origEntry.value, modEntry.value, `${path}[${key}=${keyLabel}]`)
+      }
+    }
+
+    // Handle items without the key (fallback)
+    const origWithout = orig.filter(item => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return true
+      return !(key in (item as Record<string, JsonValue>))
+    })
+    const modWithout = mod.filter(item => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return true
+      return !(key in (item as Record<string, JsonValue>))
+    })
+    if (origWithout.length > 0 || modWithout.length > 0) {
+      diffArrayByIndex(origWithout, modWithout, `${path}[no-key]`)
+    }
+  }
+
+  diffRecursive(original, modified, '$')
+  return changes
+}
+
+/**
+ * Full JSON diff pipeline:
+ * 1. Parse both inputs
+ * 2. Normalize
+ * 3. Compute semantic changes
+ * 4. Generate stable stringified versions for Monaco Diff display
+ */
+export function jsonDiff(
+  originalText: string,
+  modifiedText: string,
+  options: JsonDiffOptions = {}
+): { result?: JsonDiffResult; originalError?: string; modifiedError?: string } {
+  const origParsed = parseJson(originalText)
+  const modParsed = parseJson(modifiedText)
+
+  if (!origParsed.ok || !modParsed.ok) {
+    return {
+      originalError: origParsed.ok ? undefined : `Parse error at Ln ${origParsed.line}, Col ${origParsed.column}: ${origParsed.error}`,
+      modifiedError: modParsed.ok ? undefined : `Parse error at Ln ${modParsed.line}, Col ${modParsed.column}: ${modParsed.error}`,
+    }
+  }
+
+  const changes = computeJsonDiff(origParsed.value!, modParsed.value!, options)
+  const originalNormalized = stableStringify(origParsed.value!)
+  const modifiedNormalized = stableStringify(modParsed.value!)
+
+  return {
+    result: {
+      changes,
+      originalNormalized,
+      modifiedNormalized,
+      hasSementicDifferences: changes.length > 0,
+    },
+  }
+}

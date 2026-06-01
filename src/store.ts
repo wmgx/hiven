@@ -2,6 +2,9 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Locale } from './i18n'
 import { builtinActions } from './actions/builtins'
+import { useWorkspaceStore } from './workspace/workspaceStore'
+import { workspaceActions } from './commands/workspaceCommands'
+import { json4mateActions } from './commands/json4mateCommands'
 
 export type ViewId = 'editor' | 'scripts' | 'debugger' | 'settings'
 
@@ -12,6 +15,13 @@ export interface ActionParam {
   type: 'boolean' | 'text' | 'textarea' | 'number' | 'single-select' | 'multi-select'
   default?: any
   options?: { label: string; value: string; labelI18n?: Partial<Record<Locale, string>> }[] | string[]
+  /** Dynamic options: called at render time to get the current option list */
+  optionsFn?: () => { label: string; value: string }[]
+  /** For multi-select: max items user can select. Auto-confirms when reached. */
+  maxSelect?: number
+  /** Hint text shown at bottom, e.g. "选择对比面板" */
+  hint?: string
+  hintI18n?: Partial<Record<Locale, string>>
   visibleWhen?: Record<string, any>
   required?: boolean
 }
@@ -198,14 +208,18 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   activeView: 'editor',
   setActiveView: (view) => set({ activeView: view }),
 
-  // Editor
+  // Editor (bridged to workspace store for backwards compat)
   editorText: '',
-  setEditorText: (text) => set({ editorText: text }),
+  setEditorText: (text) => {
+    set({ editorText: text })
+    // Sync to workspace store
+    useWorkspaceStore.getState().setActivePaneText(text)
+  },
   editorInstance: null,
   setEditorInstance: (editor) => set({ editorInstance: editor }),
 
   // Action System
-  actions: [...builtinActions],
+  actions: [...builtinActions, ...workspaceActions, ...json4mateActions],
   registerAction: (action) => set((state) => ({ actions: [...state.actions, action] })),
   registerActions: (actions) => set((state) => ({ actions: [...state.actions, ...actions] })),
   setCustomActions: (customs) => set((state) => ({
@@ -225,7 +239,10 @@ export const useAppStore = create<AppState>()(persist((set) => ({
       merged.push({ ...a, builtin: true })
     }
     const customs = state.actions.filter(a => !a.builtin)
-    return { actions: [...merged, ...customs] }
+    // 保留 workspace 扩展注册的内置命令（不在脚本 builtinActions 中）
+    const scriptNames = new Set([...builtinActions.map(a => a.name), ...diskBuiltins.map(a => a.name)])
+    const extensionBuiltins = state.actions.filter(a => a.builtin && !scriptNames.has(a.name))
+    return { actions: [...merged, ...extensionBuiltins, ...customs] }
   }),
 
   // Command Palette

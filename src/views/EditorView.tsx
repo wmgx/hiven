@@ -1,30 +1,41 @@
 import { useEffect } from 'react'
 import { useAppStore } from '../store'
-import Editor from '@monaco-editor/react'
-import { FileText, Type } from 'lucide-react'
+import { useWorkspaceStore } from '../workspace/workspaceStore'
+import { WorkspaceShell } from '../components/workspace/WorkspaceShell'
+import { RenderStatusBar } from '../components/workspace/RenderStatusBar'
+import { PanelHost } from '../components/workspace/PanelHost'
+import { ToastContainer } from '../components/workspace/ToastContainer'
+import { Plus } from 'lucide-react'
 import { t } from '../i18n'
 
 export function EditorView() {
-  const editorText = useAppStore((s) => s.editorText)
-  const setEditorText = useAppStore((s) => s.setEditorText)
-  const setEditorInstance = useAppStore((s) => s.setEditorInstance)
   const lastResult = useAppStore((s) => s.lastResult)
   const lastActionName = useAppStore((s) => s.lastActionName)
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
-  const settings = useAppStore((s) => s.settings)
   const locale = useAppStore((s) => s.locale)
+  const createPane = useWorkspaceStore((s) => s.createPane)
+  const closePane = useWorkspaceStore((s) => s.closePane)
+  const activePaneId = useWorkspaceStore((s) => s.activePaneId)
+  const paneOrder = useWorkspaceStore((s) => s.paneOrder)
 
-  // 组件卸载时清除 editor 引用，避免泄漏
+  // Cmd+W to close active pane
   useEffect(() => {
-    return () => { setEditorInstance(null) }
-  }, [setEditorInstance])
-
-  const lines = editorText.split('\n').length
-  const chars = editorText.length
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
+        if (paneOrder.length > 1) {
+          e.preventDefault()
+          e.stopPropagation()
+          closePane(activePaneId)
+        }
+      }
+    }
+    window.addEventListener('keydown', handler, true)
+    return () => window.removeEventListener('keydown', handler, true)
+  }, [activePaneId, paneOrder.length, closePane])
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      {/* Status bar */}
+      {/* Top bar */}
       <div
         className="h-[26px] flex items-center px-3.5 gap-3.5 shrink-0"
         style={{
@@ -36,65 +47,38 @@ export function EditorView() {
           <span className="w-1.5 h-1.5 rounded-full anim-pulse-dot" style={{ background: '#27C93F' }} />
           {t(locale, 'editor.ready')}
         </span>
-        <span className="text-[11px] flex items-center gap-1.5" style={{ color: 'var(--color-text-tertiary)' }}>
-          <FileText size={13} />
-          {lines} {t(locale, 'editor.lines')}
-        </span>
-        <span className="text-[11px] flex items-center gap-1.5" style={{ color: 'var(--color-text-tertiary)' }}>
-          <Type size={13} />
-          {chars} {t(locale, 'editor.chars')}
-        </span>
-        <span
-          className="ml-auto text-[11px] cursor-pointer hover:opacity-70"
-          style={{ color: 'var(--color-text-tertiary)' }}
-          onClick={() => setCommandPaletteOpen(true)}
-        >
-          {t(locale, 'editor.runAction')}
-        </span>
+
+        {/* Right side: Split button + Run Action */}
+        <div className="ml-auto flex items-center gap-1.5">
+          <button
+            className="flex items-center justify-center w-[22px] h-[18px] rounded"
+            style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-tertiary)' }}
+            onClick={() => createPane({ text: '', language: 'plaintext', focus: true, direction: 'right' })}
+            title={locale === 'zh' ? '向右分栏' : 'Split Right'}
+          >
+            <Plus size={12} />
+          </button>
+
+          <span
+            className="text-[11px] cursor-pointer px-1.5 py-0.5 rounded"
+            style={{ color: 'var(--color-text-tertiary)' }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-background-tertiary)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            onClick={() => setCommandPaletteOpen(true)}
+          >
+            {t(locale, 'editor.runAction')}
+          </span>
+        </div>
       </div>
 
-      {/* Editor */}
-      <div className="flex-1 overflow-hidden">
-        <Editor
-          height="100%"
-          defaultLanguage="plaintext"
-          value={editorText}
-          onChange={(v) => setEditorText(v || '')}
-          onMount={(editor) => {
-            setEditorInstance(editor)
-            // 覆盖默认的 Cmd+F，直接打开带替换的查找面板
-            editor.addAction({
-              id: 'find-and-replace',
-              label: 'Find and Replace',
-              keybindings: [
-                2048 /* CtrlCmd */ | 36 /* KeyF */,
-                2048 /* CtrlCmd */ | 512 /* Alt */ | 36 /* KeyF */,
-                2048 /* CtrlCmd */ | 35 /* KeyH */,
-              ],
-              run: (ed) => {
-                ed.getAction('editor.action.startFindReplaceAction')?.run()
-              },
-            })
-          }}
-          options={{
-            fontSize: settings.fontSize,
-            lineNumbers: settings.lineNumbers ? 'on' : 'off',
-            wordWrap: settings.wordWrap ? 'on' : 'off',
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-            renderLineHighlight: 'none',
-            overviewRulerLanes: 0,
-            hideCursorInOverviewRuler: true,
-            folding: false,
-            glyphMargin: false,
-            lineDecorationsWidth: 12,
-            lineNumbersMinChars: 4,
-            padding: { top: 12 },
-            fontFamily: 'var(--font-mono)',
-          }}
-          theme="vs"
-        />
-      </div>
+      {/* Workspace */}
+      <WorkspaceShell />
+
+      {/* Panel Host (bottom panels) */}
+      <PanelHost />
+
+      {/* Render Status */}
+      <RenderStatusBar />
 
       {/* Bottom bar */}
       <div
@@ -124,6 +108,9 @@ export function EditorView() {
           </span>
         )}
       </div>
+
+      {/* Toast notifications */}
+      <ToastContainer />
     </div>
   )
 }

@@ -1,6 +1,9 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useAppStore, localized } from '../store'
 import type { ActionDef, ActionParam } from '../store'
+import { useWorkspaceStore } from '../workspace/workspaceStore'
+import { runLegacyAction } from '../workspace/commandAdapter'
+import { applyEffects } from '../workspace/effectRunner'
 import { Search, Check } from 'lucide-react'
 import { t } from '../i18n'
 import { readText } from '@tauri-apps/plugin-clipboard-manager'
@@ -18,8 +21,6 @@ export function CommandPalette() {
   const actions = useAppStore((s) => s.actions)
   const disabledBuiltins = useAppStore((s) => s.settings.disabledBuiltins)
   const disabledCustoms = useAppStore((s) => s.settings.disabledCustoms)
-  const editorText = useAppStore((s) => s.editorText)
-  const setEditorText = useAppStore((s) => s.setEditorText)
   const setLastResult = useAppStore((s) => s.setLastResult)
   const setLastActionName = useAppStore((s) => s.setLastActionName)
   const recentActionNames = useAppStore((s) => s.recentActionNames)
@@ -105,6 +106,10 @@ export function CommandPalette() {
   // 当前参数的选项列表（单选/多选模式）
   const currentOptions = useMemo(() => {
     if (!currentParam) return []
+    // Dynamic options via optionsFn
+    if (currentParam.optionsFn) {
+      return currentParam.optionsFn()
+    }
     if (currentParam.type === 'boolean') {
       return [
         { label: locale === 'zh' ? '是' : 'Yes', value: 'true' },
@@ -127,10 +132,11 @@ export function CommandPalette() {
   async function runAction(action: ActionDef, finalParams: Record<string, any>) {
     pushRecentAction(action.name)
 
-    // 保存参数（仅保存 boolean/select 类型的值）
+    // 保存参数（仅保存 boolean/select 类型的值，跳过动态参数）
     if (persistParams && action.params && action.params.length > 0) {
       const toSave: Record<string, any> = {}
       for (const param of action.params) {
+        if (param.optionsFn) continue // 动态选项不持久化
         if (param.type === 'boolean' || param.type === 'single-select' || param.type === 'multi-select') {
           toSave[param.key] = finalParams[param.key]
         }
@@ -142,16 +148,13 @@ export function CommandPalette() {
 
     // 获取 editor 实例，判断是否有选区
     const editor = useAppStore.getState().editorInstance
+    const editorText = useWorkspaceStore.getState().getActivePaneText()
     let inputText = editorText
-    let hasSelection = false
-    let selection: any = null
 
     if (editor) {
       const sel = editor.getSelection()
       if (sel && !sel.isEmpty()) {
         inputText = editor.getModel()?.getValueInRange(sel) || editorText
-        hasSelection = true
-        selection = sel
       }
     }
 
@@ -180,36 +183,21 @@ export function CommandPalette() {
       deps,
     }
 
-    function applyResult(resultText: string) {
-      if (hasSelection && editor && selection) {
-        // 只替换选区
-        editor.executeEdits('action', [{
-          range: selection,
-          text: resultText,
-        }])
-        // 同步 store
-        const newFullText = editor.getModel()?.getValue() || ''
-        setEditorText(newFullText)
-      } else {
-        setEditorText(resultText)
-      }
-      setLastResult(resultText)
-      setLastActionName(action.name)
-    }
-
     try {
-      const result = action.run(ctx)
-      if (result && typeof (result as any).then === 'function') {
-        ;(result as Promise<{ text: string }>).then((r) => {
-          if (r && r.text !== undefined) {
-            applyResult(r.text)
-          }
-        }).catch((e: any) => {
-          setLastResult(`Error: ${e.message}`)
+      // Use command adapter + effect runner pipeline
+      const commandResult = await runLegacyAction(action, ctx)
+
+      if (commandResult.effects.length > 0) {
+        const runResult = applyEffects(commandResult.effects)
+        if (runResult.errors.length > 0) {
+          setLastResult(`Error: ${runResult.errors[0]}`)
           setLastActionName(action.name)
-        })
-      } else if (result && (result as { text: string }).text !== undefined) {
-        applyResult((result as { text: string }).text)
+        } else {
+          // Success - find text from applied effects for display
+          const textEffect = commandResult.effects.find(e => e.type === 'text.replace')
+          setLastResult(textEffect ? (textEffect as any).text : 'Done')
+          setLastActionName(action.name)
+        }
       }
     } catch (e: any) {
       setLastResult(`Error: ${e.message}`)
@@ -225,10 +213,11 @@ export function CommandPalette() {
     for (const param of action.params || []) {
       p[param.key] = param.default ?? getDefaultForType(param)
     }
-    // 如果开启了参数持久化，用上次保存的值覆盖默认值（仅覆盖 boolean 和 select 类型）
+    // 如果开启了参数持久化，用上次保存的值覆盖默认值（仅覆盖 boolean 和 select 类型，跳过动态参数）
     if (persistParams && savedActionParams[action.name]) {
       const saved = savedActionParams[action.name]
       for (const param of action.params || []) {
+        if (param.optionsFn) continue // 动态选项不恢复
         if (param.key in saved && (param.type === 'boolean' || param.type === 'single-select' || param.type === 'multi-select')) {
           p[param.key] = saved[param.key]
         }
@@ -253,6 +242,20 @@ export function CommandPalette() {
       return
     }
     const param = paramsList[index]
+
+    // Skip multi-select params when optionsFn returns <= maxSelect items (no choice needed)
+    if ((param.type === 'multi-select' || param.type === 'single-select') && param.optionsFn) {
+      const dynamicOpts = param.optionsFn()
+      if (param.type === 'multi-select' && param.maxSelect && dynamicOpts.length <= param.maxSelect) {
+        // Auto-select all and skip
+        const allValues = dynamicOpts.map(o => o.value)
+        const newParams = { ...currentParams, [param.key]: allValues }
+        setParams(newParams)
+        goToParam(action, index + 1, newParams)
+        return
+      }
+    }
+
     setStep({ type: 'param', paramIndex: index })
     setSelectedIndex(0)
     setInputValue('')
@@ -290,7 +293,7 @@ export function CommandPalette() {
     if (!selectedAction || !currentParam) return
     const paramsList = selectedAction.params || []
     const index = step.type === 'param' ? step.paramIndex : 0
-    let newParams = { ...params }
+    const newParams = { ...params }
 
     if (currentParam.type === 'boolean') {
       newParams[currentParam.key] = selectedIndex === 0
@@ -319,6 +322,21 @@ export function CommandPalette() {
 
     setParams(newParams)
     goToParam(selectedAction, index + 1, newParams)
+  }
+
+  function toggleMultiWithAutoConfirm(val: string) {
+    setMultiSelected((prev) => {
+      if (prev.includes(val)) {
+        // Deselect
+        return prev.filter((v) => v !== val)
+      } else {
+        // At maxSelect — ignore new selections (disabled items handle UI)
+        if (currentParam?.maxSelect && prev.length >= currentParam.maxSelect) {
+          return prev
+        }
+        return [...prev, val]
+      }
+    })
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -366,9 +384,7 @@ export function CommandPalette() {
         e.preventDefault()
         const val = currentOptions[selectedIndex]?.value
         if (val) {
-          setMultiSelected((prev) =>
-            prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val]
-          )
+          toggleMultiWithAutoConfirm(val)
         }
       }
       if (e.key === 'Enter') {
@@ -435,9 +451,7 @@ export function CommandPalette() {
             inputError={inputError}
             multiSelected={multiSelected}
             onToggleMulti={(val) => {
-              setMultiSelected((prev) =>
-                prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val]
-              )
+              toggleMultiWithAutoConfirm(val)
             }}
             onSelectItem={(i) => { setSelectedIndex(i); confirmCurrentParam() }}
             onConfirm={confirmCurrentParam}
@@ -518,6 +532,9 @@ function ParamStep({
   onConfirm: () => void
   locale: import('../i18n').Locale
 }) {
+  const hintText = param.hintI18n?.[locale] || param.hint || ''
+  const maxSelect = param.maxSelect
+
   return (
     <>
       {/* Header */}
@@ -547,7 +564,14 @@ function ParamStep({
             autoFocus
           />
         )}
-        <span className="ml-auto text-[10px] shrink-0" style={{ color: 'var(--color-text-tertiary)' }}>{action.name}</span>
+        {isMultiSelect && maxSelect && (
+          <span className="ml-auto text-[11px] px-1.5 py-0.5 rounded shrink-0" style={{ background: 'var(--color-accent-light)', color: 'var(--color-accent)' }}>
+            {multiSelected.length}/{maxSelect}
+          </span>
+        )}
+        {!isMultiSelect && (
+          <span className="ml-auto text-[10px] shrink-0" style={{ color: 'var(--color-text-tertiary)' }}>{action.name}</span>
+        )}
       </div>
 
       {/* 输入错误/提示 */}
@@ -594,12 +618,17 @@ function ParamStep({
         <div className="max-h-[240px] overflow-y-auto py-1">
           {options.map((opt, i) => {
             const checked = multiSelected.includes(opt.value)
+            const atLimit = !!(param.maxSelect && multiSelected.length >= param.maxSelect)
+            const disabled = atLimit && !checked
             return (
               <div
                 key={opt.value}
-                className="flex items-center px-3.5 py-2 cursor-pointer gap-2.5"
-                style={{ background: selectedIndex === i ? 'var(--color-accent-light)' : 'transparent' }}
-                onClick={() => onToggleMulti(opt.value)}
+                className={`flex items-center px-3.5 py-2 gap-2.5 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                style={{
+                  background: selectedIndex === i ? 'var(--color-accent-light)' : 'transparent',
+                  opacity: disabled ? 0.4 : 1,
+                }}
+                onClick={() => !disabled && onToggleMulti(opt.value)}
               >
                 <div
                   className="w-4 h-4 rounded border flex items-center justify-center shrink-0"
@@ -627,6 +656,9 @@ function ParamStep({
         {isMultiSelect && <HintKey keys="space" label={t(locale, 'palette.toggle')} />}
         {isMultiSelect && <HintKey keys="↵" label={t(locale, 'palette.confirm')} />}
         <HintKey keys="esc" label={t(locale, 'palette.back')} />
+        {hintText && (
+          <span className="ml-auto text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>{hintText}</span>
+        )}
       </div>
     </>
   )

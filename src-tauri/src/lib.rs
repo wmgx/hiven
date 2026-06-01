@@ -1,6 +1,6 @@
 use std::fs;
 use std::path::PathBuf;
-use tauri::menu::MenuBuilder;
+use tauri::menu::{MenuBuilder, SubmenuBuilder};
 
 /// 配置根目录: ~/.local/fluxtext
 fn config_dir() -> Result<PathBuf, String> {
@@ -132,8 +132,15 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
-            // 设置空菜单，移除 macOS 默认菜单栏
-            let menu = MenuBuilder::new(app).build()?;
+            // 构建 Edit 子菜单（macOS 需要原生 Edit 菜单才能让剪贴板快捷键生效）
+            // 注意：不加 Undo/Redo，否则会拦截 Monaco 自己的撤销栈
+            let edit_menu = SubmenuBuilder::new(app, "Edit")
+                .cut()
+                .copy()
+                .paste()
+                .select_all()
+                .build()?;
+            let menu = MenuBuilder::new(app).item(&edit_menu).build()?;
             app.set_menu(menu)?;
 
             if cfg!(debug_assertions) {
