@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { useWorkspaceStore } from '../../workspace/workspaceStore'
 import { useAppStore } from '../../store'
+import { useWorkspaceStore } from '../../workspace/workspaceStore'
 import { applyEffects } from '../../workspace/effectRunner'
 import { X, ChevronDown } from 'lucide-react'
+import { t } from '../../i18n'
 
 export function RenderStatusBar() {
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
@@ -10,15 +11,21 @@ export function RenderStatusBar() {
   const paneOrder = useWorkspaceStore((s) => s.paneOrder)
   const presentations = useWorkspaceStore((s) => s.presentations)
   const panels = useWorkspaceStore((s) => s.panels)
+  const paneRenderers = useWorkspaceStore((s) => s.paneRenderers)
+  const panelInstancesV2 = useWorkspaceStore((s) => s.panelInstancesV2)
   const occupancies = useWorkspaceStore((s) => s.occupancies)
+  const locale = useAppStore((s) => s.locale)
   const [menuOpen, setMenuOpen] = useState(false)
 
   const hasPresentations = Object.keys(presentations).length > 0
   const hasPanels = Object.keys(panels).length > 0
+  const hasPaneRenderers = Object.keys(paneRenderers).length > 0
+  const hasPanelInstancesV2 = Object.keys(panelInstancesV2).length > 0
   const hasOccupancies = Object.keys(occupancies).length > 0
+  const activeRenderer = paneRenderers[activePaneId] ?? Object.values(paneRenderers).find((renderer) => rendererInputReferencesPane(renderer.rendererInputs, activePaneId))
 
   // Only show when multiple panes or active presentations/panels
-  if (paneOrder.length <= 1 && !hasPresentations && !hasPanels) return null
+  if (paneOrder.length <= 1 && !hasPresentations && !hasPanels && !hasPaneRenderers && !hasPanelInstancesV2) return null
 
   return (
     <div
@@ -30,12 +37,12 @@ export function RenderStatusBar() {
     >
       {/* Active Pane */}
       <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
-        Active: {pane?.title || activePaneId}
+        {t(locale, 'status.active')}: {pane?.title || activePaneId}
       </span>
 
       {/* Renderer */}
       <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
-        Renderer: Code
+        {t(locale, 'status.renderer')}: {activeRenderer?.rendererId ?? t(locale, 'status.code')}
       </span>
 
       {/* Presentations */}
@@ -56,7 +63,13 @@ export function RenderStatusBar() {
       {/* Panels */}
       {hasPanels && Object.values(panels).map((panel) => (
         <span key={panel.id} className="text-[10px]" style={{ color: 'var(--color-text-secondary)' }}>
-          Panel: {panel.title}
+          {t(locale, 'status.panel')}: {panel.title}
+        </span>
+      ))}
+
+      {hasPanelInstancesV2 && Object.values(panelInstancesV2).map((panel) => (
+        <span key={panel.panelId} className="text-[10px]" style={{ color: 'var(--color-text-secondary)' }}>
+          {t(locale, 'status.panel')}: {panel.title ?? panel.panelId}
         </span>
       ))}
 
@@ -67,7 +80,7 @@ export function RenderStatusBar() {
           style={{ color: 'var(--color-text-tertiary)' }}
           onClick={() => setMenuOpen(!menuOpen)}
         >
-          Status <ChevronDown size={10} />
+          {t(locale, 'status.status')} <ChevronDown size={10} />
         </button>
       )}
 
@@ -81,25 +94,35 @@ export function RenderStatusBar() {
           }}
         >
           <div className="px-3 py-1 text-[10px] font-medium" style={{ color: 'var(--color-text-tertiary)' }}>
-            Rendering
+            {t(locale, 'status.rendering')}
           </div>
           <div className="px-3 py-1 text-[11px]" style={{ color: 'var(--color-text-primary)' }}>
-            Main: Code Editor
+            {t(locale, 'status.main')}: {t(locale, 'status.codeEditor')}
           </div>
           {Object.values(presentations).map((session) => (
             <div key={session.id} className="px-3 py-1 text-[11px]" style={{ color: 'var(--color-text-primary)' }}>
-              Presentation: {session.renderer}
+              {t(locale, 'status.presentation')}: {session.renderer}
             </div>
           ))}
           {Object.values(panels).map((panel) => (
             <div key={panel.id} className="px-3 py-1 text-[11px]" style={{ color: 'var(--color-text-primary)' }}>
-              Panel: {panel.title}
+              {t(locale, 'status.panel')}: {panel.title}
+            </div>
+          ))}
+          {Object.entries(paneRenderers).map(([paneId, renderer]) => (
+            <div key={paneId} className="px-3 py-1 text-[11px]" style={{ color: 'var(--color-text-primary)' }}>
+              {t(locale, 'status.pane')} {paneId}: {renderer.rendererId}
+            </div>
+          ))}
+          {Object.values(panelInstancesV2).map((panel) => (
+            <div key={panel.panelId} className="px-3 py-1 text-[11px]" style={{ color: 'var(--color-text-primary)' }}>
+              {t(locale, 'status.panel')}: {panel.title ?? panel.panelId}
             </div>
           ))}
 
           <div className="my-1" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }} />
           <div className="px-3 py-1 text-[10px] font-medium" style={{ color: 'var(--color-text-tertiary)' }}>
-            Actions
+            {t(locale, 'status.actions')}
           </div>
           {Object.values(occupancies).map((occ) => (
             <button
@@ -117,7 +140,7 @@ export function RenderStatusBar() {
                 setMenuOpen(false)
               }}
             >
-              Exit {occ.title}
+              {t(locale, 'status.exit')} {occ.title}
             </button>
           ))}
           <button
@@ -125,10 +148,17 @@ export function RenderStatusBar() {
             style={{ color: 'var(--color-text-secondary)' }}
             onClick={() => setMenuOpen(false)}
           >
-            Close menu
+            {t(locale, 'status.closeMenu')}
           </button>
         </div>
       )}
     </div>
   )
+}
+
+function rendererInputReferencesPane(value: unknown, paneId: string): boolean {
+  if (!value || typeof value !== 'object') return false
+  if ((value as { kind?: unknown }).kind === 'pane' && (value as { paneId?: unknown }).paneId === paneId) return true
+  if (Array.isArray(value)) return value.some((item) => rendererInputReferencesPane(item, paneId))
+  return Object.values(value as Record<string, unknown>).some((item) => rendererInputReferencesPane(item, paneId))
 }

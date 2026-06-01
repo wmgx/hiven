@@ -4,6 +4,7 @@ import { useWorkspaceStore } from '../workspace/workspaceStore'
 import { WorkspaceShell } from '../components/workspace/WorkspaceShell'
 import { RenderStatusBar } from '../components/workspace/RenderStatusBar'
 import { PanelHost } from '../components/workspace/PanelHost'
+import { PanelHostV2 } from '../components/workspace/PanelHostV2'
 import { ToastContainer } from '../components/workspace/ToastContainer'
 import { Plus } from 'lucide-react'
 import { t } from '../i18n'
@@ -14,24 +15,20 @@ export function EditorView() {
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
   const locale = useAppStore((s) => s.locale)
   const createPane = useWorkspaceStore((s) => s.createPane)
-  const closePane = useWorkspaceStore((s) => s.closePane)
-  const activePaneId = useWorkspaceStore((s) => s.activePaneId)
-  const paneOrder = useWorkspaceStore((s) => s.paneOrder)
+  const closeActiveSurfaceOrPane = useWorkspaceStore((s) => s.closeActiveSurfaceOrPane)
 
   // Cmd+W to close active pane
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
-        if (paneOrder.length > 1) {
-          e.preventDefault()
-          e.stopPropagation()
-          closePane(activePaneId)
-        }
+        e.preventDefault()
+        e.stopPropagation()
+        closeActiveSurfaceOrPane()
       }
     }
     window.addEventListener('keydown', handler, true)
     return () => window.removeEventListener('keydown', handler, true)
-  }, [activePaneId, paneOrder.length, closePane])
+  }, [closeActiveSurfaceOrPane])
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -71,11 +68,26 @@ export function EditorView() {
         </div>
       </div>
 
-      {/* Workspace */}
-      <WorkspaceShell />
+      {/* Main area: left panel + workspace + right panel */}
+      <div className="flex flex-row flex-1 overflow-hidden">
+        {/* Left panel */}
+        <PanelHostV2 placement="left" />
 
-      {/* Panel Host (bottom panels) */}
-      <PanelHost />
+        {/* Center: workspace + bottom panels */}
+        <div className="flex flex-col flex-1 overflow-hidden">
+          {/* Workspace */}
+          <WorkspaceShell />
+
+          {/* Panel Host (bottom panels - legacy system) */}
+          <PanelHost />
+
+          {/* Panel Host V2 (bottom plugin panels) */}
+          <PanelHostV2 placement="bottom" />
+        </div>
+
+        {/* Right panel */}
+        <PanelHostV2 placement="right" />
+      </div>
 
       {/* Render Status */}
       <RenderStatusBar />

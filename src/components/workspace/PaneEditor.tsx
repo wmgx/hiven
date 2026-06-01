@@ -2,7 +2,9 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useAppStore } from '../../store'
 import { useWorkspaceStore } from '../../workspace/workspaceStore'
 import { runtimeRegistry } from '../../workspace/runtimeRegistry'
+import { RendererHost } from './RendererHost'
 import Editor from '@monaco-editor/react'
+import type { editor as MonacoEditor } from 'monaco-editor'
 
 interface PaneEditorProps {
   paneId: string
@@ -15,7 +17,8 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
   const setEditorInstance = useAppStore((s) => s.setEditorInstance)
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
   const settings = useAppStore((s) => s.settings)
-  const editorRef = useRef<any>(null)
+  const rendererState = useWorkspaceStore((s) => s.paneRenderers[paneId])
+  const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
   const isLocalChange = useRef(false)
 
   // Per-pane cursor position state
@@ -39,7 +42,7 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
         forceMoveMarkers: false,
       }])
     }
-  }, [pane?.text])
+  }, [pane])
 
   const handleChange = useCallback((v: string | undefined) => {
     isLocalChange.current = true
@@ -56,6 +59,11 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
   }, [paneId, activePaneId, setEditorInstance])
 
   if (!pane) return null
+
+  // If a plugin renderer is active, show RendererHost instead of Monaco
+  if (rendererState) {
+    return <RendererHost paneId={paneId} rendererState={rendererState} />
+  }
 
   const lines = pane.text.split('\n').length
   const chars = pane.text.length
@@ -80,7 +88,7 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
               setEditorInstance(editor)
             })
             // Track cursor position
-            editor.onDidChangeCursorPosition((e: any) => {
+            editor.onDidChangeCursorPosition((e: MonacoEditor.ICursorPositionChangedEvent) => {
               setCursorInfo({ line: e.position.lineNumber, col: e.position.column })
             })
             // Override Cmd+F
@@ -92,7 +100,7 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
                 2048 | 512 | 36, // CtrlCmd + Alt + KeyF
                 2048 | 35, // CtrlCmd + KeyH
               ],
-              run: (ed: any) => {
+              run: (ed: MonacoEditor.IStandaloneCodeEditor) => {
                 ed.getAction('editor.action.startFindReplaceAction')?.run()
               },
             })
@@ -111,10 +119,7 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
               label: 'Close Pane',
               keybindings: [2048 | 53], // CtrlCmd + KeyW
               run: () => {
-                const ws = useWorkspaceStore.getState()
-                if (ws.paneOrder.length > 1) {
-                  ws.closePane(ws.activePaneId)
-                }
+                useWorkspaceStore.getState().closeActiveSurfaceOrPane()
               },
             })
           }}

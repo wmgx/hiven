@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 import { useAppStore } from './store'
 import type { ViewId, ActionDef } from './store'
 import { initConfigDir } from './configInit'
@@ -10,11 +10,11 @@ import { DebuggerView } from './views/DebuggerView'
 import { SettingsView } from './views/SettingsView'
 import { CommandPalette } from './components/CommandPalette'
 
-// Register built-in presentation renderers
-import './presentations/register'
-
 // Register built-in panels
 import './panels/register'
+
+// Register core plugin (diff, json-diff, regex-tester)
+import './workspace/corePlugin'
 
 const VIEW_INDEX: Record<ViewId, number> = { editor: 0, scripts: 1, debugger: 2, settings: 3 }
 
@@ -29,7 +29,6 @@ function ViewContent({ viewId }: { viewId: ViewId }) {
 
 export default function App() {
   const activeView = useAppStore((s) => s.activeView)
-  const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
   const fontSize = useAppStore((s) => s.settings.fontSize)
   const prevViewRef = useRef<ViewId>(activeView)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -44,7 +43,7 @@ export default function App() {
         }
       }
       // 启动时加载脚本并注册到 Command Palette
-      if ((window as any).__TAURI_INTERNALS__) {
+      if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
         try {
           const { invoke } = await import('@tauri-apps/api/core')
           const watchDir = useAppStore.getState().settings.watchDirectory

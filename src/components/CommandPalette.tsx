@@ -4,8 +4,14 @@ import type { ActionDef, ActionParam } from '../store'
 import { useWorkspaceStore } from '../workspace/workspaceStore'
 import { runLegacyAction } from '../workspace/commandAdapter'
 import { applyEffects } from '../workspace/effectRunner'
+import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
+import { resolvePluginInputs, buildPluginCommandContext } from '../workspace/pluginInputResolver'
+import { showToast } from '../workspace/toast'
+import type { CommandEntry } from '../workspace/pluginRegistry'
+import type { CommandParam, InputSlot, PaneInput } from '../workspace/pluginTypes'
+import type { ResolvedInputs } from '../workspace/pluginTypes'
 import { Search, Check } from 'lucide-react'
-import { t } from '../i18n'
+import { t, type Locale } from '../i18n'
 import { readText } from '@tauri-apps/plugin-clipboard-manager'
 import { loadCDN, loadDeps } from '../utils/cdnLoader'
 import { resolveIcon } from '../utils/resolveIcon'
@@ -14,6 +20,22 @@ import { resolveIcon } from '../utils/resolveIcon'
 type Step =
   | { type: 'search' }
   | { type: 'param'; paramIndex: number }
+
+type PaletteItem =
+  | { kind: 'legacy'; action: ActionDef }
+  | { kind: 'plugin'; entry: CommandEntry; isDev: boolean }
+
+type SelectedPluginCommand = {
+  entry: CommandEntry
+  isDev: boolean
+  inputs: ResolvedInputs
+  params: ActionParam[]
+  inputSlots: InputSlot[]
+  inputParamKeys: Record<string, string>
+  inputPairParamKey?: string
+  inputPairSlotKeys?: string[]
+  clipboardText?: string
+}
 
 export function CommandPalette() {
   const open = useAppStore((s) => s.commandPaletteOpen)
@@ -34,25 +56,35 @@ export function CommandPalette() {
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [step, setStep] = useState<Step>({ type: 'search' })
   const [selectedAction, setSelectedAction] = useState<ActionDef | null>(null)
-  const [params, setParams] = useState<Record<string, any>>({})
+  const [selectedPlugin, setSelectedPlugin] = useState<SelectedPluginCommand | null>(null)
+  const [params, setParams] = useState<Record<string, unknown>>({})
   const [inputValue, setInputValue] = useState('')
   const [inputError, setInputError] = useState('')
   const [multiSelected, setMultiSelected] = useState<string[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
-  const isKeyboardNav = useRef(false)
+  const isKeyboardNavRef = useRef(false)
+
+  const pluginRegistryVersion = usePluginRegistryVersion()
 
   useEffect(() => {
-    if (open) {
+    if (!open) return
+    let cancelled = false
+    queueMicrotask(() => {
+      if (cancelled) return
       setQuery('')
       setSelectedIndex(0)
       setStep({ type: 'search' })
       setSelectedAction(null)
+      setSelectedPlugin(null)
       setParams({})
       setInputValue('')
       setInputError('')
       setMultiSelected([])
       setTimeout(() => inputRef.current?.focus(), 50)
+    })
+    return () => {
+      cancelled = true
     }
   }, [open])
 
@@ -97,10 +129,40 @@ export function CommandPalette() {
     })
   }, [query, actions, recentActionNames, disabledBuiltins, disabledCustoms])
 
+  // Plugin commands from registry (production + dev)
+  const filteredPluginItems = useMemo<PaletteItem[]>(() => {
+    void pluginRegistryVersion
+    const allPluginCommands = pluginRegistry.getAllCommands()
+    const q = query.trim().toLowerCase()
+    return allPluginCommands
+      .filter(({ contribution }) => {
+        if (!q) return true
+        return (
+          contribution.id.toLowerCase().includes(q) ||
+          contribution.title.toLowerCase().includes(q) ||
+          Object.values(contribution.titleI18n || {}).some((value) => value && value.toLowerCase().includes(q)) ||
+          (contribution.description || '').toLowerCase().includes(q) ||
+          Object.values(contribution.descriptionI18n || {}).some((value) => value && value.toLowerCase().includes(q)) ||
+          (contribution.tags || []).some((tag) => tag.toLowerCase().includes(q))
+        )
+      })
+      .map(({ contribution, meta, isDev }) => ({
+        kind: 'plugin' as const,
+        entry: { contribution, meta },
+        isDev,
+      }))
+  }, [query, pluginRegistryVersion])
+
+  // 合并 legacy actions 和 plugin commands
+  const allFiltered = useMemo<PaletteItem[]>(() => {
+    const legacyItems = filtered.map((action): PaletteItem => ({ kind: 'legacy', action }))
+    return [...legacyItems, ...filteredPluginItems]
+  }, [filtered, filteredPluginItems])
+
   // 当前参数
   const currentParam: ActionParam | null =
-    step.type === 'param' && selectedAction?.params
-      ? selectedAction.params[step.paramIndex] ?? null
+    step.type === 'param'
+      ? (selectedPlugin?.params ?? selectedAction?.params ?? [])[step.paramIndex] ?? null
       : null
 
   // 当前参数的选项列表（单选/多选模式）
@@ -129,12 +191,12 @@ export function CommandPalette() {
   // 是否为多选模式
   const isMultiSelect = currentParam?.type === 'multi-select'
 
-  async function runAction(action: ActionDef, finalParams: Record<string, any>) {
+  async function runAction(action: ActionDef, finalParams: Record<string, unknown>) {
     pushRecentAction(action.name)
 
     // 保存参数（仅保存 boolean/select 类型的值，跳过动态参数）
     if (persistParams && action.params && action.params.length > 0) {
-      const toSave: Record<string, any> = {}
+      const toSave: Record<string, unknown> = {}
       for (const param of action.params) {
         if (param.optionsFn) continue // 动态选项不持久化
         if (param.type === 'boolean' || param.type === 'single-select' || param.type === 'multi-select') {
@@ -159,11 +221,12 @@ export function CommandPalette() {
     }
 
     // 加载脚本声明的 @deps 依赖并注入 ctx
-    let deps: Record<string, any> = {}
+    let deps: Record<string, unknown>
     try {
       deps = action.source ? await loadDeps(action.source) : {}
-    } catch (e: any) {
-      setLastResult(`Error: ${e.message}`)
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e)
+      setLastResult(`Error: ${message}`)
       setLastActionName(action.name)
       setOpen(false)
       return
@@ -195,24 +258,147 @@ export function CommandPalette() {
         } else {
           // Success - find text from applied effects for display
           const textEffect = commandResult.effects.find(e => e.type === 'text.replace')
-          setLastResult(textEffect ? (textEffect as any).text : 'Done')
+          setLastResult(textEffect && 'text' in textEffect ? String(textEffect.text) : 'Done')
           setLastActionName(action.name)
         }
       }
-    } catch (e: any) {
-      setLastResult(`Error: ${e.message}`)
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e)
+      setLastResult(`Error: ${message}`)
       setLastActionName(action.name)
     }
     setOpen(false)
   }
 
+  // Execute a plugin command with already-resolved inputs
+  function executePluginCommand(
+    entry: CommandEntry,
+    isDev: boolean,
+    inputs: ResolvedInputs,
+    finalParams?: Record<string, unknown>
+  ) {
+    const ctx = buildPluginCommandContext(inputs, finalParams ?? getDefaultPluginParams(entry.contribution.params ?? []))
+    try {
+      const result = entry.contribution.run(ctx)
+      // Stamp effects with _isDev so effectRunner uses dev registry for renderer/panel resolution
+      const effects = isDev
+        ? result.effects.map((e) => {
+            if (e.type === 'pane.setRenderer') return { ...e, _isDev: true }
+            if (e.type === 'panel.openV2') return { ...e, _isDev: true }
+            return e
+          })
+        : result.effects
+      if (effects.length > 0) applyEffects(effects)
+      setLastActionName(entry.contribution.id)
+      setLastResult('Done')
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setLastResult(`Error: ${msg}`)
+      setLastActionName(entry.contribution.id)
+    }
+    setOpen(false)
+    setSelectedPlugin(null)
+  }
+
+  function startPluginParamFlow(entry: CommandEntry, isDev: boolean, inputs: ResolvedInputs) {
+    const pluginParams = normalizePluginParams(entry.contribution.params ?? [])
+    const initialParams = getDefaultActionParams(pluginParams)
+    if (pluginParams.length === 0) {
+      executePluginCommand(entry, isDev, inputs, initialParams)
+      return
+    }
+
+    const pluginSelection: SelectedPluginCommand = {
+      entry,
+      isDev,
+      inputs,
+      params: pluginParams,
+      inputSlots: [],
+      inputParamKeys: {},
+    }
+    setSelectedAction(null)
+    setSelectedPlugin(pluginSelection)
+    setParams(initialParams)
+    goToParam(null, pluginSelection, 0, initialParams)
+  }
+
+  function startPluginInputParamFlow(
+    entry: CommandEntry,
+    isDev: boolean,
+    slots: InputSlot[],
+    clipboardText?: string
+  ) {
+    const { params: inputParams, inputParamKeys, inputPairParamKey, inputPairSlotKeys } = buildPluginInputParams(slots, clipboardText)
+    const pluginParams = normalizePluginParams(entry.contribution.params ?? [])
+    const allParams = [...inputParams, ...pluginParams]
+    const initialParams = getDefaultActionParams(allParams)
+
+    const pluginSelection: SelectedPluginCommand = {
+      entry,
+      isDev,
+      inputs: {},
+      params: allParams,
+      inputSlots: slots,
+      inputParamKeys,
+      inputPairParamKey,
+      inputPairSlotKeys,
+      clipboardText,
+    }
+    setSelectedAction(null)
+    setSelectedPlugin(pluginSelection)
+    setParams(initialParams)
+    goToParam(null, pluginSelection, 0, initialParams)
+  }
+
+  async function runPluginCommand(entry: CommandEntry, isDev: boolean) {
+    pushRecentAction(entry.contribution.id)
+    const slots = entry.contribution.inputs ?? []
+    const resolution = entry.contribution.inputResolution ?? { strategy: 'use-active' as const, fallback: 'fail' as const }
+
+    // Pre-read clipboard if any clipboard slots exist
+    const needsClipboard = slots.some((s) => s.kind === 'clipboard') || shouldOfferPaneFallbacks(slots)
+    let clipboardText: string | undefined
+    if (needsClipboard) {
+      try {
+        clipboardText = (await readText()) ?? ''
+      } catch {
+        clipboardText = ''
+      }
+    }
+
+    const resolveResult = resolvePluginInputs(slots, resolution, clipboardText !== undefined ? { clipboardText } : undefined)
+
+    if (!resolveResult.ok) {
+      if (resolveResult.reason === 'prompt') {
+        startPluginInputParamFlow(entry, isDev, resolveResult.slots, clipboardText)
+        return
+      }
+      if (resolveResult.reason === 'needs-clipboard') {
+        showToast(t(locale, 'palette.clipboardUnavailable'), 'error')
+        setOpen(false)
+        return
+      }
+      // reason === 'fail' — toast already shown by resolver
+      setOpen(false)
+      return
+    }
+
+    startPluginParamFlow(entry, isDev, resolveResult.inputs)
+  }
+
+  function selectItem(item: PaletteItem) {
+    if (item.kind === 'legacy') {
+      selectAction(item.action)
+    } else {
+      runPluginCommand(item.entry, item.isDev)
+    }
+  }
+
   function selectAction(action: ActionDef) {
     setSelectedAction(action)
+    setSelectedPlugin(null)
     // 初始化所有参数为默认值
-    const p: Record<string, any> = {}
-    for (const param of action.params || []) {
-      p[param.key] = param.default ?? getDefaultForType(param)
-    }
+    const p = getDefaultActionParams(action.params || [])
     // 如果开启了参数持久化，用上次保存的值覆盖默认值（仅覆盖 boolean 和 select 类型，跳过动态参数）
     if (persistParams && savedActionParams[action.name]) {
       const saved = savedActionParams[action.name]
@@ -230,15 +416,25 @@ export function CommandPalette() {
       runAction(action, p)
     } else {
       // 进入第一个参数步骤
-      goToParam(action, 0, p)
+      goToParam(action, null, 0, p)
     }
   }
 
-  function goToParam(action: ActionDef, index: number, currentParams: Record<string, any>) {
-    const paramsList = action.params || []
+  function goToParam(
+    action: ActionDef | null,
+    plugin: SelectedPluginCommand | null,
+    index: number,
+    currentParams: Record<string, unknown>
+  ) {
+    const paramsList = action?.params || plugin?.params || []
     if (index >= paramsList.length) {
       // 所有参数配置完毕，执行
-      runAction(action, currentParams)
+      if (action) {
+        runAction(action, currentParams)
+      } else if (plugin) {
+        const { inputs, commandParams } = resolveSelectedPluginCommand(plugin, currentParams)
+        executePluginCommand(plugin.entry, plugin.isDev, inputs, commandParams)
+      }
       return
     }
     const param = paramsList[index]
@@ -251,7 +447,7 @@ export function CommandPalette() {
         const allValues = dynamicOpts.map(o => o.value)
         const newParams = { ...currentParams, [param.key]: allValues }
         setParams(newParams)
-        goToParam(action, index + 1, newParams)
+        goToParam(action, plugin, index + 1, newParams)
         return
       }
     }
@@ -273,7 +469,7 @@ export function CommandPalette() {
       const val = currentParams[param.key]
       setSelectedIndex(val ? 0 : 1)
     } else if (param.type === 'single-select') {
-      const opts = (param.options || []).map((o) => typeof o === 'string' ? o : o.value)
+      const opts = getParamOptionValues(param)
       const idx = opts.indexOf(currentParams[param.key])
       setSelectedIndex(idx >= 0 ? idx : 0)
     } else if (param.type === 'text' || param.type === 'textarea' || param.type === 'number') {
@@ -289,18 +485,23 @@ export function CommandPalette() {
     }, 30)
   }
 
-  function confirmCurrentParam() {
-    if (!selectedAction || !currentParam) return
-    const paramsList = selectedAction.params || []
+  function confirmCurrentParam(selectedIndexOverride?: number) {
+    if ((!selectedAction && !selectedPlugin) || !currentParam) return
     const index = step.type === 'param' ? step.paramIndex : 0
     const newParams = { ...params }
+    const optionIndex = selectedIndexOverride ?? selectedIndex
 
     if (currentParam.type === 'boolean') {
-      newParams[currentParam.key] = selectedIndex === 0
+      newParams[currentParam.key] = optionIndex === 0
     } else if (currentParam.type === 'single-select') {
-      const opts = (currentParam.options || []).map((o) => typeof o === 'string' ? o : o.value)
-      newParams[currentParam.key] = opts[selectedIndex] ?? ''
+      const opts = currentOptions.map((option) => option.value)
+      newParams[currentParam.key] = opts[optionIndex] ?? ''
     } else if (currentParam.type === 'multi-select') {
+      if (currentParam.required && currentParam.maxSelect && multiSelected.length !== currentParam.maxSelect) {
+        setInputError(t(locale, 'palette.needTwoPanes'))
+        return
+      }
+      setInputError('')
       newParams[currentParam.key] = multiSelected
     } else if (currentParam.type === 'number') {
         const num = Number(inputValue)
@@ -321,7 +522,7 @@ export function CommandPalette() {
     }
 
     setParams(newParams)
-    goToParam(selectedAction, index + 1, newParams)
+    goToParam(selectedAction, selectedPlugin, index + 1, newParams)
   }
 
   function toggleMultiWithAutoConfirm(val: string) {
@@ -346,12 +547,12 @@ export function CommandPalette() {
     // 搜索步骤
     if (step.type === 'search') {
       if (e.key === 'Escape') { setOpen(false); return }
-      if (e.key === 'ArrowDown') { e.preventDefault(); isKeyboardNav.current = true; setSelectedIndex((i) => Math.min(i + 1, filtered.length - 1)) }
-      if (e.key === 'ArrowUp') { e.preventDefault(); isKeyboardNav.current = true; setSelectedIndex((i) => Math.max(i - 1, 0)) }
+      if (e.key === 'ArrowDown') { e.preventDefault(); isKeyboardNavRef.current = true; setSelectedIndex((i) => Math.min(i + 1, allFiltered.length - 1)) }
+      if (e.key === 'ArrowUp') { e.preventDefault(); isKeyboardNavRef.current = true; setSelectedIndex((i) => Math.max(i - 1, 0)) }
       if (e.key === 'Enter') {
         e.preventDefault()
-        const action = filtered[selectedIndex]
-        if (action) selectAction(action)
+        const item = allFiltered[selectedIndex]
+        if (item) selectItem(item)
       }
       return
     }
@@ -360,10 +561,11 @@ export function CommandPalette() {
     if (e.key === 'Escape') {
       // 返回上一步
       if (step.type === 'param' && step.paramIndex > 0) {
-        goToParam(selectedAction!, step.paramIndex - 1, params)
+        goToParam(selectedAction, selectedPlugin, step.paramIndex - 1, params)
       } else {
         setStep({ type: 'search' })
         setSelectedAction(null)
+        setSelectedPlugin(null)
         setTimeout(() => inputRef.current?.focus(), 30)
       }
       return
@@ -426,11 +628,11 @@ export function CommandPalette() {
             inputRef={inputRef}
             query={query}
             setQuery={(v) => { setQuery(v); setSelectedIndex(0) }}
-            filtered={filtered}
+            filteredItems={allFiltered}
             selectedIndex={selectedIndex}
-            onSelect={(action) => selectAction(action)}
+            onSelectItem={(item) => selectItem(item)}
             setSelectedIndex={setSelectedIndex}
-            isKeyboardNav={isKeyboardNav}
+            isKeyboardNavRef={isKeyboardNavRef}
             locale={locale}
           />
         )}
@@ -438,10 +640,10 @@ export function CommandPalette() {
         {step.type === 'param' && currentParam && (
           <ParamStep
             inputRef={inputRef}
-            action={selectedAction!}
+            actionName={selectedPlugin ? getPluginDisplayTitle(selectedPlugin.entry, selectedPlugin.isDev, locale) : selectedAction?.name ?? ''}
             param={currentParam}
             paramIndex={step.paramIndex}
-            totalParams={(selectedAction?.params || []).length}
+            totalParams={(selectedPlugin?.params ?? selectedAction?.params ?? []).length}
             options={currentOptions}
             selectedIndex={selectedIndex}
             isInputMode={isInputMode}
@@ -453,8 +655,7 @@ export function CommandPalette() {
             onToggleMulti={(val) => {
               toggleMultiWithAutoConfirm(val)
             }}
-            onSelectItem={(i) => { setSelectedIndex(i); confirmCurrentParam() }}
-            onConfirm={confirmCurrentParam}
+            onSelectItem={(i) => { setSelectedIndex(i); confirmCurrentParam(i) }}
             locale={locale}
           />
         )}
@@ -465,16 +666,16 @@ export function CommandPalette() {
 
 // 搜索步骤
 function SearchStep({
-  inputRef, query, setQuery, filtered, selectedIndex, onSelect, setSelectedIndex, isKeyboardNav, locale,
+  inputRef, query, setQuery, filteredItems, selectedIndex, onSelectItem, setSelectedIndex, isKeyboardNavRef, locale,
 }: {
   inputRef: React.RefObject<HTMLInputElement | null>
   query: string
   setQuery: (v: string) => void
-  filtered: ActionDef[]
+  filteredItems: PaletteItem[]
   selectedIndex: number
-  onSelect: (action: ActionDef) => void
+  onSelectItem: (item: PaletteItem) => void
   setSelectedIndex: (i: number) => void
-  isKeyboardNav: React.MutableRefObject<boolean>
+  isKeyboardNavRef: React.MutableRefObject<boolean>
   locale: import('../i18n').Locale
 }) {
   return (
@@ -490,11 +691,11 @@ function SearchStep({
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
-      <div className="max-h-[300px] overflow-y-auto py-1" onMouseMove={() => { isKeyboardNav.current = false }}>
-        {filtered.map((action, i) => (
-          <ActionItem key={`${action.name}-${i}`} action={action} selected={selectedIndex === i} onClick={() => onSelect(action)} onMouseEnter={() => { if (!isKeyboardNav.current) setSelectedIndex(i) }} />
+      <div className="max-h-[300px] overflow-y-auto py-1" onMouseMove={() => { isKeyboardNavRef.current = false }}>
+        {filteredItems.map((item, i) => (
+          <ActionItem key={i} item={item} selected={selectedIndex === i} onClick={() => onSelectItem(item)} onMouseEnter={() => { if (!isKeyboardNavRef.current) setSelectedIndex(i) }} locale={locale} />
         ))}
-        {filtered.length === 0 && (
+        {filteredItems.length === 0 && (
           <div className="px-3.5 py-4 text-center text-xs" style={{ color: 'var(--color-text-tertiary)' }}>{t(locale, 'palette.noResults')}</div>
         )}
       </div>
@@ -509,13 +710,13 @@ function SearchStep({
 
 // 参数配置步骤
 function ParamStep({
-  inputRef, action, param, paramIndex, totalParams,
+  inputRef, actionName, param, paramIndex, totalParams,
   options, selectedIndex, isInputMode, isMultiSelect,
   inputValue, setInputValue, inputError,
-  multiSelected, onToggleMulti, onSelectItem, onConfirm, locale,
+  multiSelected, onToggleMulti, onSelectItem, locale,
 }: {
   inputRef: React.RefObject<HTMLInputElement | null>
-  action: ActionDef
+  actionName: string
   param: ActionParam
   paramIndex: number
   totalParams: number
@@ -529,7 +730,6 @@ function ParamStep({
   multiSelected: string[]
   onToggleMulti: (val: string) => void
   onSelectItem: (i: number) => void
-  onConfirm: () => void
   locale: import('../i18n').Locale
 }) {
   const hintText = param.hintI18n?.[locale] || param.hint || ''
@@ -570,12 +770,12 @@ function ParamStep({
           </span>
         )}
         {!isMultiSelect && (
-          <span className="ml-auto text-[10px] shrink-0" style={{ color: 'var(--color-text-tertiary)' }}>{action.name}</span>
+          <span className="ml-auto text-[10px] shrink-0" style={{ color: 'var(--color-text-tertiary)' }}>{actionName}</span>
         )}
       </div>
 
       {/* 输入错误/提示 */}
-      {isInputMode && (inputError || param.type === 'number') && (
+      {(inputError || (isInputMode && param.type === 'number')) && (
         <div className="px-3.5 pb-2">
           {inputError && (
             <div className="text-[11px] mt-1" style={{ color: 'var(--color-error)' }}>{inputError}</div>
@@ -664,7 +864,7 @@ function ParamStep({
   )
 }
 
-function ActionItem({ action, selected, onClick, onMouseEnter }: { action: ActionDef; selected: boolean; onClick: () => void; onMouseEnter: () => void }) {
+function ActionItem({ item, selected, onClick, onMouseEnter, locale }: { item: PaletteItem; selected: boolean; onClick: () => void; onMouseEnter: () => void; locale: Locale }) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -672,6 +872,15 @@ function ActionItem({ action, selected, onClick, onMouseEnter }: { action: Actio
       ref.current.scrollIntoView({ block: 'nearest' })
     }
   }, [selected])
+
+  const isPlugin = item.kind === 'plugin'
+  const isDev = isPlugin && item.isDev
+  const name = isPlugin ? item.entry.contribution.id : item.action.name
+  const title = isPlugin ? getPluginDisplayTitle(item.entry, item.isDev, locale) : localized(item.action.title, item.action.titleI18n, locale)
+  const subtitle = isPlugin
+    ? localized(item.entry.contribution.description || item.entry.contribution.id, item.entry.contribution.descriptionI18n, locale)
+    : title
+  const icon = isPlugin ? item.entry.contribution.icon : item.action.icon
 
   return (
     <div
@@ -688,14 +897,19 @@ function ActionItem({ action, selected, onClick, onMouseEnter }: { action: Actio
           color: selected ? 'white' : 'var(--color-text-secondary)',
         }}
       >
-        {resolveIcon(action.icon, 14, action.name)}
+        {resolveIcon(icon, 14, name)}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-[13px] font-medium" style={{ color: selected ? 'var(--color-accent-hover)' : 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>
-          {action.name}
+        <div className="flex items-center gap-1.5">
+          {isDev && (
+            <span className="text-[9px] px-1 py-0.5 rounded font-semibold shrink-0" style={{ background: 'var(--color-accent)', color: '#fff' }}>DEV</span>
+          )}
+          <div className="text-[13px] font-medium truncate" style={{ color: selected ? 'var(--color-accent-hover)' : 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>
+            {isPlugin ? title : name}
+          </div>
         </div>
         <div className="text-[11px]" style={{ color: selected ? 'var(--color-accent)' : 'var(--color-text-tertiary)', marginTop: 1 }}>
-          {action.titleI18n?.zh || action.title}
+          {subtitle}
         </div>
       </div>
       {selected && (
@@ -714,7 +928,247 @@ function HintKey({ keys, label }: { keys: string; label: string }) {
   )
 }
 
-function getDefaultForType(param: ActionParam): any {
+function normalizePluginParams(pluginParams: CommandParam[]): ActionParam[] {
+  return pluginParams.map((param) => ({
+    key: param.key,
+    label: param.label,
+    labelI18n: param.labelI18n,
+    type: param.type,
+    options: param.options,
+    default: param.default,
+    required: param.required,
+    hint: param.hint,
+    hintI18n: param.hintI18n,
+  }))
+}
+
+function getDefaultActionParams(paramList: ActionParam[]): Record<string, unknown> {
+  const result: Record<string, unknown> = {}
+  for (const param of paramList) {
+    result[param.key] = param.default ?? getDefaultForType(param)
+  }
+  return result
+}
+
+function getDefaultPluginParams(paramList: CommandParam[]): Record<string, unknown> {
+  return getDefaultActionParams(normalizePluginParams(paramList))
+}
+
+function getParamOptionValues(param: ActionParam): string[] {
+  if (param.optionsFn) return param.optionsFn().map((option) => option.value)
+  return (param.options || []).map((option) => typeof option === 'string' ? option : option.value)
+}
+
+function buildPluginInputParams(
+  slots: InputSlot[],
+  clipboardText?: string
+): { params: ActionParam[]; inputParamKeys: Record<string, string>; inputPairParamKey?: string; inputPairSlotKeys?: string[] } {
+  const paneSlots = slots.filter((slot) => slot.kind === 'pane')
+  const inputParamKeys: Record<string, string> = {}
+  const params: ActionParam[] = []
+  const offerFallbacks = shouldOfferPaneFallbacks(slots)
+
+  if (paneSlots.length === 2 && paneSlots.every((slot) => slot.required)) {
+    const pairKey = '__input:panePair'
+    inputParamKeys[paneSlots[0].key] = pairKey
+    inputParamKeys[paneSlots[1].key] = pairKey
+    params.push({
+      key: pairKey,
+      label: 'Select 2 panes',
+      labelI18n: { zh: '选择 2 个面板' },
+      type: 'multi-select',
+      required: true,
+      maxSelect: 2,
+      optionsFn: () => buildPanePairInputOptions(offerFallbacks, clipboardText),
+      default: getDefaultPanePairInputValues(offerFallbacks),
+      hint: 'Select any two panes or sources to compare',
+      hintI18n: { zh: '选择任意两个面板或来源进行对比' },
+    })
+    return { params, inputParamKeys, inputPairParamKey: pairKey, inputPairSlotKeys: paneSlots.map((slot) => slot.key) }
+  }
+
+  for (const slot of paneSlots) {
+    const key = `__input:${slot.key}`
+    inputParamKeys[slot.key] = key
+    params.push({
+      key,
+      label: slot.label || slot.key,
+      labelI18n: slot.labelI18n,
+      type: 'single-select',
+      required: slot.required,
+      optionsFn: () => buildPaneInputOptions(slot, offerFallbacks, clipboardText),
+      default: getDefaultPaneInputValue(slot, paneSlots, offerFallbacks),
+      hint: 'Select a pane or source',
+      hintI18n: { zh: '选择一个面板或来源' },
+    })
+  }
+
+  return { params, inputParamKeys }
+}
+
+function buildPanePairInputOptions(
+  offerFallbacks: boolean,
+  clipboardText?: string
+): { label: string; value: string }[] {
+  const locale = useAppStore.getState().locale
+  const ws = useWorkspaceStore.getState()
+  const options = ws.paneOrder.map((paneId) => ({
+    label: ws.panes[paneId]?.title || paneId,
+    value: `pane:${paneId}`,
+  }))
+
+  if (offerFallbacks) {
+    if (clipboardText) {
+      options.push({
+        label: `${t(locale, 'palette.clipboard')} (${formatPreview(clipboardText)})`,
+        value: 'source:clipboard',
+      })
+    }
+    options.push(
+      { label: t(locale, 'palette.emptyRightPane'), value: 'source:empty-pane' },
+      { label: t(locale, 'palette.duplicateCurrentPane'), value: 'source:duplicate' }
+    )
+  }
+
+  return options
+}
+
+function buildPaneInputOptions(
+  slot: InputSlot,
+  offerFallbacks: boolean,
+  clipboardText?: string
+): { label: string; value: string }[] {
+  const ws = useWorkspaceStore.getState()
+  const locale = useAppStore.getState().locale
+  const options = ws.paneOrder.map((paneId) => ({
+    label: ws.panes[paneId]?.title || paneId,
+    value: `pane:${paneId}`,
+  }))
+
+  if (offerFallbacks && slot.key !== 'original') {
+    if (clipboardText) {
+      options.push({
+        label: `${t(locale, 'palette.clipboard')} (${formatPreview(clipboardText)})`,
+        value: 'source:clipboard',
+      })
+    }
+    options.push(
+      { label: t(locale, 'palette.emptyRightPane'), value: 'source:empty-pane' },
+      { label: t(locale, 'palette.duplicateCurrentPane'), value: 'source:duplicate' }
+    )
+  }
+
+  return options
+}
+
+function getDefaultPaneInputValue(
+  slot: InputSlot,
+  paneSlots: InputSlot[],
+  offerFallbacks: boolean
+): string {
+  const ws = useWorkspaceStore.getState()
+  const slotIndex = paneSlots.findIndex((paneSlot) => paneSlot.key === slot.key)
+
+  if (slotIndex === 0 && ws.activePaneId) {
+    return `pane:${ws.activePaneId}`
+  }
+  if (slotIndex === 1) {
+    const fallbackPaneId = ws.paneOrder.find((paneId) => paneId !== ws.activePaneId)
+    if (fallbackPaneId) return `pane:${fallbackPaneId}`
+    if (offerFallbacks) return 'source:empty-pane'
+  }
+
+  return ws.paneOrder[0] ? `pane:${ws.paneOrder[0]}` : ''
+}
+
+function getDefaultPanePairInputValues(offerFallbacks: boolean): string[] {
+  const ws = useWorkspaceStore.getState()
+  const values: string[] = []
+  if (ws.activePaneId) values.push(`pane:${ws.activePaneId}`)
+  const secondPaneId = ws.paneOrder.find((paneId) => paneId !== ws.activePaneId)
+  if (secondPaneId) values.push(`pane:${secondPaneId}`)
+  if (values.length < 2 && offerFallbacks) values.push('source:empty-pane')
+  return values.slice(0, 2)
+}
+
+function shouldOfferPaneFallbacks(slots: InputSlot[]): boolean {
+  const paneSlots = slots.filter((slot) => slot.kind === 'pane' && slot.required)
+  return paneSlots.length > 1 && useWorkspaceStore.getState().paneOrder.length === 1
+}
+
+function resolveSelectedPluginCommand(
+  plugin: SelectedPluginCommand,
+  finalParams: Record<string, unknown>
+): { inputs: ResolvedInputs; commandParams: Record<string, unknown> } {
+  const inputs: ResolvedInputs = { ...plugin.inputs }
+  const commandParams: Record<string, unknown> = {}
+  const inputParamKeySet = new Set(Object.values(plugin.inputParamKeys))
+
+  for (const [key, value] of Object.entries(finalParams)) {
+    if (!inputParamKeySet.has(key)) commandParams[key] = value
+  }
+
+  if (plugin.inputPairParamKey && plugin.inputPairSlotKeys) {
+    const values = Array.isArray(finalParams[plugin.inputPairParamKey]) ? finalParams[plugin.inputPairParamKey] as string[] : []
+    plugin.inputPairSlotKeys.forEach((slotKey, index) => {
+      inputs[slotKey] = resolvePaneInputValue(values[index] ?? '', plugin.clipboardText)
+    })
+  } else {
+    for (const slot of plugin.inputSlots) {
+      if (slot.kind !== 'pane') continue
+      const paramKey = plugin.inputParamKeys[slot.key]
+      const value = String(finalParams[paramKey] ?? '')
+      inputs[slot.key] = resolvePaneInputValue(value, plugin.clipboardText)
+    }
+  }
+
+  return { inputs, commandParams }
+}
+
+function resolvePaneInputValue(value: string, clipboardText?: string): PaneInput {
+  const ws = useWorkspaceStore.getState()
+  const locale = useAppStore.getState().locale
+  if (value.startsWith('pane:')) {
+    const paneId = value.slice('pane:'.length)
+    return toPaneInput(paneId, ws.panes[paneId])
+  }
+
+  if (value === 'source:clipboard') {
+    const newPaneId = ws.createPane({ text: clipboardText ?? '', title: t(locale, 'palette.clipboard'), focus: false, direction: 'right' })
+    return toPaneInput(newPaneId, useWorkspaceStore.getState().panes[newPaneId])
+  }
+
+  if (value === 'source:duplicate') {
+    const sourcePane = ws.panes[ws.activePaneId] ?? ws.panes[ws.paneOrder[0]]
+    const newPaneId = ws.createPane({ text: sourcePane?.text ?? '', title: locale === 'zh' ? '副本' : 'Copy', language: sourcePane?.language, focus: false, direction: 'right' })
+    return toPaneInput(newPaneId, useWorkspaceStore.getState().panes[newPaneId])
+  }
+
+  const newPaneId = ws.createPane({ text: '', focus: false, direction: 'right' })
+  return toPaneInput(newPaneId, useWorkspaceStore.getState().panes[newPaneId])
+}
+
+function toPaneInput(paneId: string, pane: ReturnType<typeof useWorkspaceStore.getState>['panes'][string] | undefined): PaneInput {
+  return {
+    kind: 'pane',
+    paneId,
+    text: pane?.text ?? '',
+    title: pane?.title ?? 'New Pane',
+    language: pane?.language ?? 'plaintext',
+  }
+}
+
+function formatPreview(text: string): string {
+  const compact = text.replace(/\s+/g, ' ').trim()
+  return compact.length > 30 ? `${compact.slice(0, 30)}...` : compact
+}
+
+function getPluginDisplayTitle(entry: CommandEntry, isDev: boolean, locale: Locale): string {
+  const title = localized(entry.contribution.title || entry.contribution.id, entry.contribution.titleI18n, locale)
+  return isDev ? `[DEV] ${title}` : title
+}
+
+function getDefaultForType(param: ActionParam): unknown {
   switch (param.type) {
     case 'boolean': return false
     case 'number': return 0

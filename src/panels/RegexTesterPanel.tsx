@@ -2,11 +2,14 @@
  * FluxText - Regex Tester Panel
  * Tests regex patterns against active pane text with live highlighting.
  */
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useWorkspaceStore } from '../workspace/workspaceStore'
+import { useAppStore } from '../store'
 import { runtimeRegistry } from '../workspace/runtimeRegistry'
 import type { PanelComponentProps } from '../workspace/panelRegistry'
+import { t } from '../i18n'
 
 interface MatchResult {
   index: number
@@ -16,13 +19,14 @@ interface MatchResult {
   col: number
 }
 
-export function RegexTesterPanel({ instanceId, activePaneId, onClose }: PanelComponentProps) {
+export function RegexTesterPanel({ activePaneId, onClose }: PanelComponentProps) {
   const [pattern, setPattern] = useState('')
   const [flags, setFlags] = useState('g')
   const [error, setError] = useState<string | null>(null)
   const [matches, setMatches] = useState<MatchResult[]>([])
   const [pinned, setPinned] = useState(false)
   const [pinnedPaneId, setPinnedPaneId] = useState<string | null>(null)
+  const locale = useAppStore((s) => s.locale)
   const decorationIdsRef = useRef<string[]>([])
 
   const targetPaneId = pinned && pinnedPaneId ? pinnedPaneId : activePaneId
@@ -51,8 +55,8 @@ export function RegexTesterPanel({ instanceId, activePaneId, onClose }: PanelCom
     try {
       regex = new RegExp(pattern, flags)
       setError(null)
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
       clearDecorations()
       setMatches([])
       return
@@ -60,8 +64,6 @@ export function RegexTesterPanel({ instanceId, activePaneId, onClose }: PanelCom
 
     // Find all matches
     const results: MatchResult[] = []
-    const lines = paneText.split('\n')
-    let globalOffset = 0
 
     // Use regex.exec for global matching
     if (flags.includes('g')) {
@@ -171,7 +173,7 @@ export function RegexTesterPanel({ instanceId, activePaneId, onClose }: PanelCom
         style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}
       >
         <span className="text-[11px] font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-          Regex Tester
+          {t(locale, 'core.regexTester.title')}
         </span>
         <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
           · {paneTitle}
@@ -184,14 +186,14 @@ export function RegexTesterPanel({ instanceId, activePaneId, onClose }: PanelCom
           }}
           onClick={handlePin}
         >
-          {pinned ? 'Pinned' : 'Pin'}
+          {pinned ? t(locale, 'regex.pinned') : t(locale, 'regex.pin')}
         </button>
         <button
           className="ml-auto text-[10px] px-1.5 py-0.5 rounded hover:opacity-80"
           style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-secondary)' }}
           onClick={onClose}
         >
-          Close
+          {t(locale, 'workspace.close')}
         </button>
       </div>
 
@@ -201,7 +203,7 @@ export function RegexTesterPanel({ instanceId, activePaneId, onClose }: PanelCom
         <input
           className="flex-1 text-[12px] bg-transparent outline-none"
           style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
-          placeholder="pattern"
+          placeholder={t(locale, 'regex.pattern')}
           value={pattern}
           onChange={(e) => setPattern(e.target.value)}
           autoFocus
@@ -210,7 +212,7 @@ export function RegexTesterPanel({ instanceId, activePaneId, onClose }: PanelCom
         <input
           className="w-[40px] text-[12px] bg-transparent outline-none text-center"
           style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
-          placeholder="flags"
+          placeholder={t(locale, 'regex.flags')}
           value={flags}
           onChange={(e) => setFlags(e.target.value)}
         />
@@ -225,7 +227,9 @@ export function RegexTesterPanel({ instanceId, activePaneId, onClose }: PanelCom
         )}
         {!error && matches.length > 0 && (
           <div className="text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>
-            <span style={{ color: 'var(--color-success-text)' }}>{matches.length}</span> match{matches.length !== 1 ? 'es' : ''}
+            <span style={{ color: 'var(--color-success-text)' }}>
+              {t(locale, matches.length === 1 ? 'regex.match' : 'regex.matches', { count: matches.length })}
+            </span>
             {matches.slice(0, 20).map((m, i) => (
               <div key={i} className="flex gap-2 py-0.5" style={{ color: 'var(--color-text-tertiary)' }}>
                 <span className="shrink-0">{m.line}:{m.col}</span>
@@ -234,21 +238,21 @@ export function RegexTesterPanel({ instanceId, activePaneId, onClose }: PanelCom
                 </span>
                 {m.groups.length > 0 && (
                   <span style={{ color: 'var(--color-text-tertiary)' }}>
-                    [{m.groups.map((g, j) => g || '∅').join(', ')}]
+                    [{m.groups.map((g) => g || '∅').join(', ')}]
                   </span>
                 )}
               </div>
             ))}
             {matches.length > 20 && (
               <div className="py-0.5" style={{ color: 'var(--color-text-tertiary)' }}>
-                ... and {matches.length - 20} more
+                {t(locale, 'regex.more', { count: matches.length - 20 })}
               </div>
             )}
           </div>
         )}
         {!error && pattern && matches.length === 0 && (
           <div className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
-            No matches
+            {t(locale, 'regex.noMatches')}
           </div>
         )}
       </div>
