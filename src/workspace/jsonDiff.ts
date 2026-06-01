@@ -143,10 +143,84 @@ function sortArrayByObjectKey(items: JsonValue[], key: string): JsonValue[] {
 }
 
 /**
- * Stable stringify: normalize then pretty-print with 2-space indent.
+ * Stable stringify: canonicalize then pretty-print with 2-space indent.
  */
 export function stableStringify(value: JsonValue, options: JsonDiffOptions = {}): string {
   return JSON.stringify(normalizeJson(value, options), null, 2)
+}
+
+/**
+ * Display stringify keeps object key order readable.
+ *
+ * The original side preserves its own key insertion order. The modified side
+ * can receive the original value as a reference so shared keys are displayed in
+ * the same order without falling back to alphabetical sorting.
+ */
+export function displayStringify(
+  value: JsonValue,
+  reference?: JsonValue,
+  options: JsonDiffOptions = {}
+): string {
+  return JSON.stringify(normalizeJsonForDisplay(value, reference, options), null, 2)
+}
+
+function normalizeJsonForDisplay(
+  value: JsonValue,
+  reference: JsonValue | undefined,
+  options: JsonDiffOptions
+): JsonValue {
+  if (value === null || typeof value !== 'object') {
+    return value
+  }
+
+  if (Array.isArray(value)) {
+    const referenceArray = Array.isArray(reference) ? reference : undefined
+    const arrayMode = options.arrayCompareMode
+    if (arrayMode?.type === 'unordered-scalar' && value.every(isScalar)) {
+      return [...value].sort(compareJsonValues)
+    }
+    if (arrayMode?.type === 'by-object-key') {
+      return sortArrayByObjectKeyForDisplay(value, referenceArray, arrayMode.key, options)
+    }
+    return value.map((item, index) => normalizeJsonForDisplay(item, referenceArray?.[index], options))
+  }
+
+  const referenceObj = isJsonObject(reference) ? reference : undefined
+  const valueObj = value as Record<string, JsonValue>
+  const keys = orderObjectKeysForDisplay(valueObj, referenceObj)
+  const result: Record<string, JsonValue> = {}
+  for (const key of keys) {
+    result[key] = normalizeJsonForDisplay(valueObj[key], referenceObj?.[key], options)
+  }
+  return result
+}
+
+function orderObjectKeysForDisplay(
+  value: Record<string, JsonValue>,
+  reference?: Record<string, JsonValue>
+): string[] {
+  const valueKeys = Object.keys(value)
+  if (!reference) return valueKeys
+
+  const valueKeySet = new Set(valueKeys)
+  const sharedInReferenceOrder = Object.keys(reference).filter((key) => valueKeySet.has(key))
+  const addedInValueOrder = valueKeys.filter((key) => !(key in reference))
+  return [...sharedInReferenceOrder, ...addedInValueOrder]
+}
+
+function sortArrayByObjectKeyForDisplay(
+  items: JsonValue[],
+  reference: JsonValue[] | undefined,
+  key: string,
+  options: JsonDiffOptions
+): JsonValue[] {
+  const sortedItems = sortArrayByObjectKey(items, key)
+  const sortedReference = reference ? sortArrayByObjectKey(reference, key) : undefined
+  return sortedItems.map((item, index) => normalizeJsonForDisplay(item, sortedReference?.[index], options))
+}
+
+function isJsonObject(value: JsonValue | undefined): value is Record<string, JsonValue> {
+  return value !== undefined && value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
 // ─── Semantic Diff ──────────────────────────────────────────────────────────
@@ -353,8 +427,8 @@ export function jsonDiff(
   }
 
   const changes = computeJsonDiff(origParsed.value!, modParsed.value!, options)
-  const originalNormalized = stableStringify(origParsed.value!, options)
-  const modifiedNormalized = stableStringify(modParsed.value!, options)
+  const originalNormalized = displayStringify(origParsed.value!, undefined, options)
+  const modifiedNormalized = displayStringify(modParsed.value!, origParsed.value!, options)
 
   return {
     result: {
@@ -370,9 +444,9 @@ export function jsonDiff(
 /**
  * Build the text model consumed by Monaco DiffEditor.
  *
- * Valid JSON is displayed as stable normalized text so object key order and
- * formatting do not become textual noise. Invalid JSON deliberately falls back
- * to raw text diff for both sides.
+ * Valid JSON is displayed as pretty text that preserves object key order while
+ * aligning shared keys across sides. Invalid JSON deliberately falls back to raw
+ * text diff for both sides.
  */
 export function buildJsonDiffViewModel(
   originalText: string,
