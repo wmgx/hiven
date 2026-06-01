@@ -33,6 +33,7 @@ export interface JsonDiffResult {
   changes: JsonDiffChange[]
   originalNormalized: string
   modifiedNormalized: string
+  hasSemanticDifferences: boolean
   hasSementicDifferences: boolean
 }
 
@@ -42,6 +43,18 @@ export interface JsonParseResult {
   error?: string
   line?: number
   column?: number
+}
+
+export interface JsonDiffViewModel {
+  status: 'json' | 'text'
+  changes: JsonDiffChange[]
+  originalDisplayText: string
+  modifiedDisplayText: string
+  originalLanguage: 'json' | 'plaintext'
+  modifiedLanguage: 'json' | 'plaintext'
+  originalError?: string
+  modifiedError?: string
+  invalidSides: Array<'original' | 'modified'>
 }
 
 // ─── Parse ──────────────────────────────────────────────────────────────────
@@ -348,7 +361,50 @@ export function jsonDiff(
       changes,
       originalNormalized,
       modifiedNormalized,
+      hasSemanticDifferences: changes.length > 0,
       hasSementicDifferences: changes.length > 0,
     },
+  }
+}
+
+/**
+ * Build the text model consumed by Monaco DiffEditor.
+ *
+ * Valid JSON is displayed as stable normalized text so object key order and
+ * formatting do not become textual noise. Invalid JSON deliberately falls back
+ * to raw text diff for both sides.
+ */
+export function buildJsonDiffViewModel(
+  originalText: string,
+  modifiedText: string,
+  options: JsonDiffOptions = {}
+): JsonDiffViewModel {
+  const diff = jsonDiff(originalText, modifiedText, options)
+  const invalidSides: Array<'original' | 'modified'> = []
+  if (diff.originalError) invalidSides.push('original')
+  if (diff.modifiedError) invalidSides.push('modified')
+
+  if (!diff.result) {
+    return {
+      status: 'text',
+      changes: [],
+      originalDisplayText: originalText,
+      modifiedDisplayText: modifiedText,
+      originalLanguage: 'plaintext',
+      modifiedLanguage: 'plaintext',
+      originalError: diff.originalError,
+      modifiedError: diff.modifiedError,
+      invalidSides,
+    }
+  }
+
+  return {
+    status: 'json',
+    changes: diff.result.changes,
+    originalDisplayText: diff.result.originalNormalized,
+    modifiedDisplayText: diff.result.modifiedNormalized,
+    originalLanguage: 'json',
+    modifiedLanguage: 'json',
+    invalidSides,
   }
 }

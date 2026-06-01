@@ -11,7 +11,7 @@ import { DiffEditor } from '@monaco-editor/react'
 import type { editor as MonacoEditor } from 'monaco-editor'
 import { useAppStore } from '../store'
 import { runtimeRegistry } from '../workspace/runtimeRegistry'
-import { jsonDiff } from '../workspace/jsonDiff'
+import { buildJsonDiffViewModel } from '../workspace/jsonDiff'
 import type { PaneInput, RendererProps } from '../workspace/pluginTypes'
 import type { JsonArrayCompareMode } from '../workspace/jsonDiff'
 import { t } from '../i18n'
@@ -32,7 +32,6 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId, host }: RendererProps<
   const settings = useAppStore((s) => s.settings)
   const locale = useAppStore((s) => s.locale)
   const diffEditorRef = useRef<MonacoEditor.IStandaloneDiffEditor | null>(null)
-  const isInternalEdit = useRef<{ original: boolean; modified: boolean }>({ original: false, modified: false })
   const isApplyingExternalText = useRef(false)
 
   const [renderSideBySide, setRenderSideBySide] = useState(inputs?.renderMode !== 'inline')
@@ -45,23 +44,26 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId, host }: RendererProps<
       : { type: arrayMode }
   ), [arrayMode, objectKey])
 
-  // Store initial text for uncontrolled DiffEditor
-  // When both valid on mount, use normalized text to hide formatting-only differences
-  const [initialText] = useState(() => {
-    return jsonDiff(originalText, modifiedText, { arrayCompareMode: { type: 'by-index' } })
+  const [initialViewModel] = useState(() => {
+    return buildJsonDiffViewModel(originalText, modifiedText, { arrayCompareMode: { type: 'by-index' } })
   })
 
-  const initialOriginal = initialText?.result?.originalNormalized || originalPane?.text || ''
-  const initialModified = initialText?.result?.modifiedNormalized || modifiedPane?.text || ''
+  const initialOriginal = initialViewModel.originalDisplayText
+  const initialModified = initialViewModel.modifiedDisplayText
 
-  // Compute JSON diff (returns error info if invalid)
-  const diffResult = useMemo(() => {
-    return jsonDiff(originalText, modifiedText, { arrayCompareMode })
+  const viewModel = useMemo(() => {
+    return buildJsonDiffViewModel(originalText, modifiedText, { arrayCompareMode })
   }, [originalText, modifiedText, arrayCompareMode])
 
-  const isJsonValid = Boolean(diffResult.result && !diffResult.originalError && !diffResult.modifiedError)
-  const invalidJsonMessage = [diffResult.originalError, diffResult.modifiedError].filter(Boolean).join('\n')
-  const changes = diffResult.result?.changes ?? []
+  const isJsonValid = viewModel.status === 'json'
+  const invalidJsonMessage = [
+    viewModel.originalError ? `${t(locale, 'diff.original')}: ${viewModel.originalError}` : '',
+    viewModel.modifiedError ? `${t(locale, 'diff.modified')}: ${viewModel.modifiedError}` : '',
+  ].filter(Boolean).join('\n')
+  const invalidJsonSides = viewModel.invalidSides
+    .map((side) => t(locale, side === 'original' ? 'diff.original' : 'diff.modified'))
+    .join(' / ')
+  const changes = viewModel.changes
 
   const jumpToChange = useCallback((idx: number) => {
     if (changes.length === 0) return
@@ -95,32 +97,26 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId, host }: RendererProps<
     editor.getOriginalEditor().onDidChangeModelContent(() => {
       if (isApplyingExternalText.current) return
       if (!originalPaneId) return
-      isInternalEdit.current.original = true
       host.updatePaneText(originalPaneId, editor.getOriginalEditor().getModel()?.getValue() ?? '')
     })
 
     editor.getModifiedEditor().onDidChangeModelContent(() => {
       if (isApplyingExternalText.current) return
       if (!modifiedPaneId) return
-      isInternalEdit.current.modified = true
       host.updatePaneText(modifiedPaneId, editor.getModifiedEditor().getModel()?.getValue() ?? '')
     })
   }, [surfaceId, originalPaneId, modifiedPaneId, host])
 
   // Sync external text changes into editor without cursor reset
-  // When JSON is valid, push normalized text to hide formatting differences
+  // Valid JSON is always displayed normalized; invalid JSON falls back to raw text.
   useEffect(() => {
     const editor = diffEditorRef.current
     if (!editor || !originalPaneId) return
     const origEditor = editor.getOriginalEditor()
     const model = origEditor.getModel()
     if (!model) return
-    if (isInternalEdit.current.original) {
-      isInternalEdit.current.original = false
-      return
-    }
 
-    const targetText = diffResult.result?.originalNormalized ?? originalText
+    const targetText = viewModel.originalDisplayText
 
     if (model.getValue() !== targetText) {
       const fullRange = model.getFullModelRange()
@@ -131,7 +127,7 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId, host }: RendererProps<
         isApplyingExternalText.current = false
       }
     }
-  }, [originalPaneId, originalText, diffResult?.result?.originalNormalized])
+  }, [originalPaneId, viewModel.originalDisplayText])
 
   useEffect(() => {
     const editor = diffEditorRef.current
@@ -139,12 +135,8 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId, host }: RendererProps<
     const modEditor = editor.getModifiedEditor()
     const model = modEditor.getModel()
     if (!model) return
-    if (isInternalEdit.current.modified) {
-      isInternalEdit.current.modified = false
-      return
-    }
 
-    const targetText = diffResult.result?.modifiedNormalized ?? modifiedText
+    const targetText = viewModel.modifiedDisplayText
 
     if (model.getValue() !== targetText) {
       const fullRange = model.getFullModelRange()
@@ -155,7 +147,7 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId, host }: RendererProps<
         isApplyingExternalText.current = false
       }
     }
-  }, [modifiedPaneId, modifiedText, diffResult?.result?.modifiedNormalized])
+  }, [modifiedPaneId, viewModel.modifiedDisplayText])
 
   useEffect(() => {
     return () => {
@@ -196,7 +188,9 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId, host }: RendererProps<
             style={{ background: '#fef3c7', color: '#92400e' }}
             title={invalidJsonMessage}
           >
-            {t(locale, 'diff.invalidJson')}
+            {invalidJsonSides
+              ? t(locale, 'diff.invalidJsonWithSides', { sides: invalidJsonSides })
+              : t(locale, 'diff.invalidJson')}
           </span>
         )}
 
@@ -332,8 +326,8 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId, host }: RendererProps<
           height="100%"
           original={initialOriginal}
           modified={initialModified}
-          originalLanguage="json"
-          modifiedLanguage="json"
+          originalLanguage={viewModel.originalLanguage}
+          modifiedLanguage={viewModel.modifiedLanguage}
           onMount={handleMount}
           options={{
             renderSideBySide,
