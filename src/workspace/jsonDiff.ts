@@ -50,8 +50,8 @@ export function parseJson(text: string): JsonParseResult {
   try {
     const value = JSON.parse(text)
     return { ok: true, value }
-  } catch (e: any) {
-    const msg = e.message || 'Invalid JSON'
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Invalid JSON'
     // Try to extract line/column from error message
     const posMatch = msg.match(/position (\d+)/)
     let line = 1
@@ -69,33 +69,70 @@ export function parseJson(text: string): JsonParseResult {
 
 // ─── Normalize ──────────────────────────────────────────────────────────────
 
+function isScalar(value: JsonValue): boolean {
+  return value === null || typeof value !== 'object'
+}
+
+function compareJsonValues(a: JsonValue, b: JsonValue): number {
+  return JSON.stringify(a).localeCompare(JSON.stringify(b))
+}
+
 /**
  * Normalize a JSON value: sort object keys recursively (stable).
- * Arrays preserve order by default.
+ * Arrays preserve order unless a display-oriented array mode asks for alignment.
  */
-export function normalizeJson(value: JsonValue): JsonValue {
+export function normalizeJson(value: JsonValue, options: JsonDiffOptions = {}): JsonValue {
   if (value === null || typeof value !== 'object') {
     return value
   }
 
   if (Array.isArray(value)) {
-    return value.map(normalizeJson)
+    const normalizedItems = value.map((item) => normalizeJson(item, options))
+    const arrayMode = options.arrayCompareMode
+    if (arrayMode?.type === 'unordered-scalar' && normalizedItems.every(isScalar)) {
+      return [...normalizedItems].sort(compareJsonValues)
+    }
+    if (arrayMode?.type === 'by-object-key') {
+      return sortArrayByObjectKey(normalizedItems, arrayMode.key)
+    }
+    return normalizedItems
   }
 
   // Object: sort keys alphabetically
   const sortedKeys = Object.keys(value).sort()
   const result: Record<string, JsonValue> = {}
   for (const key of sortedKeys) {
-    result[key] = normalizeJson(value[key])
+    result[key] = normalizeJson(value[key], options)
   }
   return result
+}
+
+function sortArrayByObjectKey(items: JsonValue[], key: string): JsonValue[] {
+  const withKey: JsonValue[] = []
+  const withoutKey: JsonValue[] = []
+
+  for (const item of items) {
+    if (item && typeof item === 'object' && !Array.isArray(item) && key in item) {
+      withKey.push(item)
+    } else {
+      withoutKey.push(item)
+    }
+  }
+
+  withKey.sort((a, b) => {
+    const aKey = (a as Record<string, JsonValue>)[key]
+    const bKey = (b as Record<string, JsonValue>)[key]
+    return compareJsonValues(aKey, bKey)
+  })
+
+  return [...withKey, ...withoutKey]
 }
 
 /**
  * Stable stringify: normalize then pretty-print with 2-space indent.
  */
-export function stableStringify(value: JsonValue): string {
-  return JSON.stringify(normalizeJson(value), null, 2)
+export function stableStringify(value: JsonValue, options: JsonDiffOptions = {}): string {
+  return JSON.stringify(normalizeJson(value, options), null, 2)
 }
 
 // ─── Semantic Diff ──────────────────────────────────────────────────────────
@@ -104,28 +141,6 @@ function typeOf(value: JsonValue): string {
   if (value === null) return 'null'
   if (Array.isArray(value)) return 'array'
   return typeof value
-}
-
-function deepEqual(a: JsonValue, b: JsonValue): boolean {
-  if (a === b) return true
-  if (a === null || b === null) return a === b
-  if (typeof a !== typeof b) return false
-  if (typeof a !== 'object') return a === b
-
-  if (Array.isArray(a) && Array.isArray(b)) {
-    if (a.length !== b.length) return false
-    return a.every((item, i) => deepEqual(item, b[i]))
-  }
-
-  if (Array.isArray(a) !== Array.isArray(b)) return false
-
-  const aObj = a as Record<string, JsonValue>
-  const bObj = b as Record<string, JsonValue>
-  const aKeys = Object.keys(aObj).sort()
-  const bKeys = Object.keys(bObj).sort()
-  if (aKeys.length !== bKeys.length) return false
-  if (!aKeys.every((k, i) => k === bKeys[i])) return false
-  return aKeys.every((k) => deepEqual(aObj[k], bObj[k]))
 }
 
 /**
@@ -324,8 +339,8 @@ export function jsonDiff(
   }
 
   const changes = computeJsonDiff(origParsed.value!, modParsed.value!, options)
-  const originalNormalized = stableStringify(origParsed.value!)
-  const modifiedNormalized = stableStringify(modParsed.value!)
+  const originalNormalized = stableStringify(origParsed.value!, options)
+  const modifiedNormalized = stableStringify(modParsed.value!, options)
 
   return {
     result: {

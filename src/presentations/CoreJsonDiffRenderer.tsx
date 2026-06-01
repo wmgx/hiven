@@ -8,13 +8,12 @@
  */
 
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react'
-import Editor, { DiffEditor } from '@monaco-editor/react'
+import { DiffEditor } from '@monaco-editor/react'
 import type { editor as MonacoEditor } from 'monaco-editor'
 import { useAppStore } from '../store'
 import { runtimeRegistry } from '../workspace/runtimeRegistry'
 import { jsonDiff } from '../workspace/jsonDiff'
 import type { PaneInput, RendererProps } from '../workspace/pluginTypes'
-import type { JsonDiffChange, JsonValue } from '../workspace/jsonDiff'
 import { t } from '../i18n'
 
 type JsonDiffInputs = {
@@ -33,7 +32,6 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId, host }: RendererProps<
   const settings = useAppStore((s) => s.settings)
   const locale = useAppStore((s) => s.locale)
   const diffEditorRef = useRef<MonacoEditor.IStandaloneDiffEditor | null>(null)
-  const changeRefs = useRef<Array<HTMLDivElement | null>>([])
   const isInternalEdit = useRef<{ original: boolean; modified: boolean }>({ original: false, modified: false })
   const isApplyingExternalText = useRef(false)
 
@@ -67,10 +65,18 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId, host }: RendererProps<
   const changes = (isJsonValid && diffResult?.result?.changes) || []
 
   const jumpToChange = useCallback((idx: number) => {
+    const editor = diffEditorRef.current
     if (changes.length === 0) return
     const clampedIdx = Math.max(0, Math.min(idx, changes.length - 1))
     setCurrentChangeIdx(clampedIdx)
-    changeRefs.current[clampedIdx]?.scrollIntoView({ block: 'nearest' })
+    const lineChanges = editor?.getLineChanges()
+    const lineChange = lineChanges?.[clampedIdx]
+    if (!editor || !lineChange) return
+    const line = lineChange.modifiedStartLineNumber || lineChange.originalStartLineNumber || 1
+    const modifiedEditor = editor.getModifiedEditor()
+    modifiedEditor.revealLineInCenter(line)
+    modifiedEditor.setPosition({ lineNumber: line, column: 1 })
+    modifiedEditor.focus()
   }, [changes.length])
 
   // --- Editor mounting & edit sync ---
@@ -191,8 +197,6 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId, host }: RendererProps<
   }, [inputs?.renderMode])
 
   if (!originalPane || !modifiedPane) return null
-  const normalizedOriginal = diffResult?.result?.originalNormalized ?? originalText
-  const normalizedModified = diffResult?.result?.modifiedNormalized ?? modifiedText
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -341,135 +345,19 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId, host }: RendererProps<
         </div>
       )}
 
-      {isJsonValid ? (
-        <div className="flex-1 min-h-0 flex overflow-hidden">
-          <div
-            className="w-[320px] shrink-0 overflow-auto"
-            style={{
-              borderRight: '0.5px solid var(--color-border-tertiary)',
-              background: 'var(--color-background-secondary)',
-            }}
-          >
-            <div className="px-3 py-2 text-[10px] font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-              {t(locale, 'diff.semanticChanges')}
-            </div>
-            {changes.length === 0 ? (
-              <div className="px-3 py-2 text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
-                {t(locale, 'diff.semanticEqual')}
-              </div>
-            ) : (
-              <div className="px-2 pb-2 space-y-2">
-                {changes.map((change, index) => (
-                  <SemanticChangeRow
-                    key={`${change.kind}:${change.path}:${index}`}
-                    change={change}
-                    active={index === currentChangeIdx}
-                    locale={locale}
-                    refSetter={(el) => { changeRefs.current[index] = el }}
-                    onClick={() => setCurrentChangeIdx(index)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-          <div className={`flex flex-1 min-w-0 overflow-hidden ${renderSideBySide ? 'flex-row' : 'flex-col'}`}>
-            <EditableJsonPane
-              title={`${t(locale, 'diff.original')}: ${originalPane.title}`}
-              value={normalizedOriginal}
-              onChange={(value) => {
-                if (originalPaneId) host.updatePaneText(originalPaneId, value)
-              }}
-              onFocus={() => {
-                if (originalPaneId) host.focusPane(originalPaneId)
-              }}
-              settings={settings}
-            />
-            <EditableJsonPane
-              title={`${t(locale, 'diff.modified')}: ${modifiedPane.title}`}
-              value={normalizedModified}
-              onChange={(value) => {
-                if (modifiedPaneId) host.updatePaneText(modifiedPaneId, value)
-              }}
-              onFocus={() => {
-                if (modifiedPaneId) host.focusPane(modifiedPaneId)
-              }}
-              settings={settings}
-            />
-          </div>
-        </div>
-      ) : (
-        <div className="flex-1 overflow-hidden">
-          <DiffEditor
-            height="100%"
-            original={initialOriginal}
-            modified={initialModified}
-            originalLanguage="plaintext"
-            modifiedLanguage="plaintext"
-            onMount={handleMount}
-            options={{
-              renderSideBySide,
-              renderSideBySideInlineBreakpoint: 0,
-              originalEditable: true,
-              readOnly: false,
-              fontSize: settings.fontSize,
-              lineNumbers: settings.lineNumbers ? 'on' : 'off',
-              wordWrap: settings.wordWrap ? 'on' : 'off',
-              minimap: { enabled: false },
-              scrollBeyondLastLine: false,
-              renderLineHighlight: 'none',
-              overviewRulerLanes: 0,
-              folding: true,
-              glyphMargin: false,
-              lineDecorationsWidth: 12,
-              lineNumbersMinChars: 4,
-              padding: { top: 12 },
-              fontFamily: 'var(--font-mono)',
-              renderIndicators: true,
-              ignoreTrimWhitespace: false,
-            }}
-            theme="vs"
-          />
-        </div>
-      )}
-    </div>
-  )
-}
-
-function EditableJsonPane({
-  title,
-  value,
-  onChange,
-  onFocus,
-  settings,
-}: {
-  title: string
-  value: string
-  onChange: (value: string) => void
-  onFocus: () => void
-  settings: ReturnType<typeof useAppStore.getState>['settings']
-}) {
-  return (
-    <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-      <div
-        className="h-[24px] shrink-0 flex items-center px-3 text-[10px]"
-        style={{
-          borderBottom: '0.5px solid var(--color-border-tertiary)',
-          background: 'var(--color-background-secondary)',
-          color: 'var(--color-text-tertiary)',
-        }}
-      >
-        {title}
-      </div>
-      <div className="flex-1 min-h-0">
-        <Editor
+      <div className="flex-1 overflow-hidden">
+        <DiffEditor
           height="100%"
-          language="json"
-          value={value}
-          onChange={(next) => onChange(next ?? '')}
-          onMount={(editor) => {
-            editor.onDidFocusEditorText(onFocus)
-          }}
+          original={initialOriginal}
+          modified={initialModified}
+          originalLanguage={isJsonValid ? 'json' : 'plaintext'}
+          modifiedLanguage={isJsonValid ? 'json' : 'plaintext'}
+          onMount={handleMount}
           options={{
+            renderSideBySide,
+            renderSideBySideInlineBreakpoint: 0,
+            originalEditable: true,
+            readOnly: false,
             fontSize: settings.fontSize,
             lineNumbers: settings.lineNumbers ? 'on' : 'off',
             wordWrap: settings.wordWrap ? 'on' : 'off',
@@ -483,100 +371,12 @@ function EditableJsonPane({
             lineNumbersMinChars: 4,
             padding: { top: 12 },
             fontFamily: 'var(--font-mono)',
+            renderIndicators: true,
+            ignoreTrimWhitespace: false,
           }}
           theme="vs"
         />
       </div>
     </div>
   )
-}
-
-function SemanticChangeRow({
-  change,
-  active,
-  locale,
-  refSetter,
-  onClick,
-}: {
-  change: JsonDiffChange
-  active: boolean
-  locale: import('../i18n').Locale
-  refSetter: (el: HTMLDivElement | null) => void
-  onClick: () => void
-}) {
-  return (
-    <div
-      ref={refSetter}
-      className="rounded-md px-2 py-2 cursor-pointer"
-      style={{
-        border: active ? '1px solid var(--color-accent)' : '0.5px solid var(--color-border-tertiary)',
-        background: active ? 'var(--color-accent-bg)' : 'var(--color-background-primary)',
-      }}
-      onClick={onClick}
-    >
-      <div className="flex items-center gap-2 mb-1">
-        <span className="text-[10px] font-medium" style={{ color: changeColor(change.kind) }}>
-          {changeKindLabel(locale, change.kind)}
-        </span>
-        <span className="text-[10px] truncate" style={{ color: 'var(--color-text-tertiary)' }}>
-          {change.path}
-        </span>
-      </div>
-      <ChangeValues change={change} locale={locale} />
-    </div>
-  )
-}
-
-function ChangeValues({ change, locale }: { change: JsonDiffChange; locale: import('../i18n').Locale }) {
-  if (change.kind === 'added') {
-    return <ValueBlock label={t(locale, 'diff.after')} value={change.newValue} color="var(--color-success-text)" />
-  }
-  if (change.kind === 'removed') {
-    return <ValueBlock label={t(locale, 'diff.before')} value={change.oldValue} color="var(--color-error-text)" />
-  }
-  if (change.kind === 'changed') {
-    return (
-      <div className="space-y-1">
-        <ValueBlock label={t(locale, 'diff.before')} value={change.oldValue} color="var(--color-error-text)" />
-        <ValueBlock label={t(locale, 'diff.after')} value={change.newValue} color="var(--color-success-text)" />
-      </div>
-    )
-  }
-  return (
-    <div className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
-      {change.note}
-    </div>
-  )
-}
-
-function ValueBlock({ label, value, color }: { label: string; value: JsonValue; color: string }) {
-  return (
-    <div>
-      <div className="text-[9px] mb-0.5" style={{ color }}>{label}</div>
-      <pre
-        className="text-[10px] leading-snug whitespace-pre-wrap break-words max-h-[90px] overflow-auto"
-        style={{ color: 'var(--color-text-secondary)' }}
-      >
-        {formatJsonValue(value)}
-      </pre>
-    </div>
-  )
-}
-
-function formatJsonValue(value: JsonValue): string {
-  return typeof value === 'string' ? value : JSON.stringify(value, null, 2)
-}
-
-function changeKindLabel(locale: import('../i18n').Locale, kind: JsonDiffChange['kind']): string {
-  if (kind === 'added') return t(locale, 'diff.added')
-  if (kind === 'removed') return t(locale, 'diff.removed')
-  if (kind === 'changed') return t(locale, 'diff.changed')
-  return t(locale, 'diff.reordered')
-}
-
-function changeColor(kind: JsonDiffChange['kind']): string {
-  if (kind === 'added') return 'var(--color-success-text)'
-  if (kind === 'removed') return 'var(--color-error-text)'
-  if (kind === 'changed') return 'var(--color-warning-text, #856404)'
-  return 'var(--color-text-secondary)'
 }
