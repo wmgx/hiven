@@ -9,6 +9,7 @@ export default defineAction({
   description: 'Convert lines to SQL IN clause',
   descriptionI18n: { zh: '将多行文本转为 SQL IN 子句' },
   tags: ['sql', 'convert'],
+  optionalParams: true,
 
   params: [
     {

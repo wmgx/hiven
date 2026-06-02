@@ -10,6 +10,7 @@ export default defineAction({
   description: 'Format or minify SQL',
   descriptionI18n: { zh: '美化或压缩 SQL' },
   tags: ['sql', 'format'],
+  optionalParams: true,
 
   params: [
     {

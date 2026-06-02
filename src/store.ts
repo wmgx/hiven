@@ -35,6 +35,7 @@ export interface ActionDef {
   descriptionI18n?: Partial<Record<Locale, string>>
   tags?: string[]
   params?: ActionParam[]
+  optionalParams?: boolean
   run: (ctx: ActionContext) => { text: string } | Promise<{ text: string }> | void
   builtin?: boolean
   source?: string

@@ -106,6 +106,7 @@ const messages = {
     'palette.duplicateCurrentPane': 'Duplicate current pane',
     'palette.clipboardUnavailable': 'This command requires clipboard access but it could not be read.',
     'palette.numbersOnly': 'Numbers only',
+    'palette.customizeParamsLabel': 'params',
 
     // Workspace / core plugin
     'workspace.close': 'Close',
@@ -282,6 +283,7 @@ const messages = {
     'palette.duplicateCurrentPane': '复制当前面板',
     'palette.clipboardUnavailable': '此命令需要读取剪贴板，但当前无法读取。',
     'palette.numbersOnly': '仅允许数字',
+    'palette.customizeParamsLabel': '参数',
 
     // Workspace / core plugin
     'workspace.close': '关闭',

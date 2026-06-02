@@ -31,6 +31,7 @@ type SelectedPluginCommand = {
   isDev: boolean
   inputs: ResolvedInputs
   params: ActionParam[]
+  customizeParams: boolean
   inputSlots: InputSlot[]
   inputParamKeys: Record<string, string>
   inputPairParamKey?: string
@@ -52,6 +53,7 @@ export function CommandPalette() {
   const savedActionParams = useAppStore((s) => s.savedActionParams)
   const saveActionParams = useAppStore((s) => s.saveActionParams)
   const locale = useAppStore((s) => s.locale)
+  const shortcutMeta = useMemo(() => getPlatformShortcutMeta(), [])
 
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -286,10 +288,14 @@ export function CommandPalette() {
     setSelectedPlugin(null)
   }
 
-  function startPluginParamFlow(entry: CommandEntry, isDev: boolean, inputs: ResolvedInputs) {
+  function startPluginParamFlow(entry: CommandEntry, isDev: boolean, inputs: ResolvedInputs, customizeParams: boolean) {
     const pluginParams = normalizePluginParams(entry.contribution.params ?? [])
     const initialParams = getDefaultActionParams(pluginParams)
     if (pluginParams.length === 0) {
+      executePluginCommand(entry, isDev, inputs, initialParams)
+      return
+    }
+    if (supportsDefaultParamRun(entry.contribution, pluginParams) && !customizeParams) {
       executePluginCommand(entry, isDev, inputs, initialParams)
       return
     }
@@ -299,6 +305,7 @@ export function CommandPalette() {
       isDev,
       inputs,
       params: pluginParams,
+      customizeParams,
       inputSlots: [],
       inputParamKeys: {},
     }
@@ -312,7 +319,8 @@ export function CommandPalette() {
     entry: CommandEntry,
     isDev: boolean,
     slots: InputSlot[],
-    clipboardText?: string
+    clipboardText: string | undefined,
+    customizeParams: boolean
   ) {
     const { params: inputParams, inputParamKeys, inputPairParamKey, inputPairSlotKeys } = buildPluginInputParams(slots, clipboardText)
     const pluginParams = normalizePluginParams(entry.contribution.params ?? [])
@@ -324,6 +332,7 @@ export function CommandPalette() {
       isDev,
       inputs: {},
       params: allParams,
+      customizeParams,
       inputSlots: slots,
       inputParamKeys,
       inputPairParamKey,
@@ -336,7 +345,7 @@ export function CommandPalette() {
     goToParam(null, pluginSelection, 0, initialParams)
   }
 
-  async function runPluginCommand(entry: CommandEntry, isDev: boolean) {
+  async function runPluginCommand(entry: CommandEntry, isDev: boolean, customizeParams: boolean) {
     pushRecentAction(entry.contribution.id)
     const slots = entry.contribution.inputs ?? []
     const resolution = entry.contribution.inputResolution ?? { strategy: 'use-active' as const, fallback: 'fail' as const }
@@ -356,7 +365,7 @@ export function CommandPalette() {
 
     if (!resolveResult.ok) {
       if (resolveResult.reason === 'prompt') {
-        startPluginInputParamFlow(entry, isDev, resolveResult.slots, clipboardText)
+        startPluginInputParamFlow(entry, isDev, resolveResult.slots, clipboardText, customizeParams)
         return
       }
       if (resolveResult.reason === 'needs-clipboard') {
@@ -373,22 +382,31 @@ export function CommandPalette() {
       return
     }
 
-    startPluginParamFlow(entry, isDev, resolveResult.inputs)
+    startPluginParamFlow(entry, isDev, resolveResult.inputs, customizeParams)
   }
 
-  function selectItem(item: PaletteItem) {
+  function selectItem(item: PaletteItem, customizeParams = false) {
     if (item.kind === 'legacy') {
-      selectAction(item.action)
+      selectAction(item.action, customizeParams)
     } else {
-      runPluginCommand(item.entry, item.isDev)
+      runPluginCommand(item.entry, item.isDev, customizeParams)
     }
   }
 
-  function selectAction(action: ActionDef) {
+  function shouldCustomizeParams(metaKey: boolean, ctrlKey: boolean) {
+    return shortcutMeta.modifier === 'meta' ? metaKey : ctrlKey
+  }
+
+  function selectAction(action: ActionDef, customizeParams: boolean) {
     setSelectedAction(action)
     setSelectedPlugin(null)
     // 初始化所有参数为默认值
-    const p = getDefaultActionParams(action.params || [])
+    const defaultParams = getDefaultActionParams(action.params || [])
+    const p = { ...defaultParams }
+    if (supportsDefaultParamRun(action, action.params || []) && !customizeParams) {
+      runAction(action, defaultParams)
+      return
+    }
     // 如果开启了参数持久化，用上次保存的值覆盖默认值（仅覆盖 boolean 和 select 类型，跳过动态参数）
     if (persistParams && savedActionParams[action.name]) {
       const saved = savedActionParams[action.name]
@@ -428,6 +446,10 @@ export function CommandPalette() {
       return
     }
     const param = paramsList[index]
+    if (plugin && shouldSkipPluginCommandParam(plugin, param)) {
+      goToParam(action, plugin, index + 1, currentParams)
+      return
+    }
 
     // Skip multi-select params when optionsFn returns <= maxSelect items (no choice needed)
     if ((param.type === 'multi-select' || param.type === 'single-select') && param.optionsFn) {
@@ -544,7 +566,7 @@ export function CommandPalette() {
       if (e.key === 'Enter') {
         e.preventDefault()
         const item = allFiltered[selectedIndex]
-        if (item) selectItem(item)
+        if (item) selectItem(item, shouldCustomizeParams(e.metaKey, e.ctrlKey))
       }
       return
     }
@@ -623,9 +645,11 @@ export function CommandPalette() {
             setQuery={(v) => { setQuery(v); setSelectedIndex(0) }}
             filteredItems={allFiltered}
             selectedIndex={selectedIndex}
-            onSelectItem={(item) => selectItem(item)}
+            onSelectItem={(item, customizeParams) => selectItem(item, customizeParams)}
             setSelectedIndex={setSelectedIndex}
             isKeyboardNavRef={isKeyboardNavRef}
+            shouldCustomizeParams={shouldCustomizeParams}
+            shortcutMeta={shortcutMeta}
             locale={locale}
           />
         )}
@@ -664,16 +688,18 @@ export function CommandPalette() {
 
 // 搜索步骤
 function SearchStep({
-  inputRef, query, setQuery, filteredItems, selectedIndex, onSelectItem, setSelectedIndex, isKeyboardNavRef, locale,
+  inputRef, query, setQuery, filteredItems, selectedIndex, onSelectItem, setSelectedIndex, isKeyboardNavRef, shouldCustomizeParams, shortcutMeta, locale,
 }: {
   inputRef: React.RefObject<HTMLInputElement | null>
   query: string
   setQuery: (v: string) => void
   filteredItems: PaletteItem[]
   selectedIndex: number
-  onSelectItem: (item: PaletteItem) => void
+  onSelectItem: (item: PaletteItem, customizeParams: boolean) => void
   setSelectedIndex: (i: number) => void
   isKeyboardNavRef: React.MutableRefObject<boolean>
+  shouldCustomizeParams: (metaKey: boolean, ctrlKey: boolean) => boolean
+  shortcutMeta: ShortcutMeta
   locale: import('../i18n').Locale
 }) {
   return (
@@ -691,7 +717,7 @@ function SearchStep({
       </div>
       <div className="max-h-[300px] overflow-y-auto py-1" onMouseMove={() => { isKeyboardNavRef.current = false }}>
         {filteredItems.map((item, i) => (
-          <ActionItem key={i} item={item} selected={selectedIndex === i} onClick={() => onSelectItem(item)} onMouseEnter={() => { if (!isKeyboardNavRef.current) setSelectedIndex(i) }} locale={locale} />
+          <ActionItem key={i} item={item} selected={selectedIndex === i} onClick={(event) => onSelectItem(item, shouldCustomizeParams(event.metaKey, event.ctrlKey))} onMouseEnter={() => { if (!isKeyboardNavRef.current) setSelectedIndex(i) }} shortcutMeta={shortcutMeta} locale={locale} />
         ))}
         {filteredItems.length === 0 && (
           <div className="px-3.5 py-4 text-center text-xs" style={{ color: 'var(--color-text-tertiary)' }}>{t(locale, 'palette.noResults')}</div>
@@ -884,7 +910,7 @@ function ParamStep({
   )
 }
 
-function ActionItem({ item, selected, onClick, onMouseEnter, locale }: { item: PaletteItem; selected: boolean; onClick: () => void; onMouseEnter: () => void; locale: Locale }) {
+function ActionItem({ item, selected, onClick, onMouseEnter, shortcutMeta, locale }: { item: PaletteItem; selected: boolean; onClick: (event: React.MouseEvent<HTMLDivElement>) => void; onMouseEnter: () => void; shortcutMeta: ShortcutMeta; locale: Locale }) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -901,6 +927,9 @@ function ActionItem({ item, selected, onClick, onMouseEnter, locale }: { item: P
     ? localized(item.entry.contribution.description || item.entry.contribution.id, item.entry.contribution.descriptionI18n, locale)
     : title
   const icon = isPlugin ? item.entry.contribution.icon : item.action.icon
+  const canCustomizeParams = item.kind === 'plugin'
+    ? supportsDefaultParamRun(item.entry.contribution, normalizePluginParams(item.entry.contribution.params ?? []))
+    : supportsDefaultParamRun(item.action, item.action.params ?? [])
 
   return (
     <div
@@ -932,6 +961,28 @@ function ActionItem({ item, selected, onClick, onMouseEnter, locale }: { item: P
           {subtitle}
         </div>
       </div>
+      {canCustomizeParams && (
+        <div
+          className="customize-shortcut-chip flex items-center gap-1.5 shrink-0 rounded-md px-1.5 py-0.5"
+          title={`${shortcutMeta.label} ${localized('params', { zh: '参数' }, locale)}`}
+          style={{
+            background: selected ? 'var(--color-background-primary)' : 'var(--color-background-secondary)',
+            border: '0.5px solid var(--color-border-tertiary)',
+            color: selected ? 'var(--color-accent-hover)' : 'var(--color-text-tertiary)',
+          }}
+        >
+          <kbd
+            className="text-[10px] leading-none"
+            style={{
+              color: selected ? 'var(--color-accent-hover)' : 'var(--color-text-secondary)',
+              fontFamily: 'var(--font-mono)',
+            }}
+          >
+            {shortcutMeta.label}
+          </kbd>
+          <span className="text-[10px] leading-none">{t(locale, 'palette.customizeParamsLabel')}</span>
+        </div>
+      )}
       {selected && (
         <kbd className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--color-background-tertiary)', border: '0.5px solid var(--color-border-tertiary)', color: 'var(--color-text-secondary)' }}>↵</kbd>
       )}
@@ -1090,6 +1141,23 @@ function scorePaletteItem(
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+type ShortcutMeta = {
+  modifier: 'meta' | 'ctrl'
+  label: string
+}
+
+function getPlatformShortcutMeta(): ShortcutMeta {
+  return isMacPlatform() ? { modifier: 'meta', label: '⌘' } : { modifier: 'ctrl', label: 'Ctrl' }
+}
+
+function isMacPlatform(): boolean {
+  const nav = typeof navigator === 'undefined' ? undefined : navigator
+  const platform = nav?.platform || ''
+  const userAgent = nav?.userAgent || ''
+  const userAgentDataPlatform = (nav as Navigator & { userAgentData?: { platform?: string } } | undefined)?.userAgentData?.platform || ''
+  return /Mac|iPhone|iPad|iPod/i.test(`${platform} ${userAgentDataPlatform} ${userAgent}`)
+}
+
 function normalizePluginParams(pluginParams: CommandParam[]): ActionParam[] {
   return pluginParams.map((param) => ({
     key: param.key,
@@ -1114,6 +1182,24 @@ function getDefaultActionParams(paramList: ActionParam[]): Record<string, unknow
 
 function getDefaultPluginParams(paramList: CommandParam[]): Record<string, unknown> {
   return getDefaultActionParams(normalizePluginParams(paramList))
+}
+
+function supportsDefaultParamRun(
+  command: { optionalParams?: boolean },
+  paramList: ActionParam[]
+): boolean {
+  return command.optionalParams === true && hasExplicitDefaultParams(paramList)
+}
+
+function hasExplicitDefaultParams(paramList: ActionParam[]): boolean {
+  return paramList.length > 0 && paramList.every((param) => param.default !== undefined)
+}
+
+function shouldSkipPluginCommandParam(plugin: SelectedPluginCommand, param: ActionParam): boolean {
+  if (plugin.customizeParams) return false
+  const pluginParams = normalizePluginParams(plugin.entry.contribution.params ?? [])
+  if (!supportsDefaultParamRun(plugin.entry.contribution, pluginParams)) return false
+  return !Object.values(plugin.inputParamKeys).includes(param.key)
 }
 
 function getParamOptionValues(param: ActionParam): string[] {

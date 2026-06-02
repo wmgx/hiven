@@ -66,6 +66,9 @@ function generateScriptSource(action: import('../store').ActionDef): string {
   if (action.tags?.length) {
     lines.push(`  tags: [${action.tags.map(t => `'${t}'`).join(', ')}],`)
   }
+  if (action.optionalParams) {
+    lines.push(`  optionalParams: true,`)
+  }
   if (action.params?.length) {
     const cleanParams = action.params.map(p => {
       const clean: Record<string, unknown> = { key: p.key, label: p.label, type: p.type }

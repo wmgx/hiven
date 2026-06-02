@@ -87,6 +87,7 @@ export type CommandContribution = {
   inputs?: InputSlot[]
   inputResolution?: InputResolution
   params?: CommandParam[]
+  optionalParams?: boolean
   run(ctx: PluginCommandContext): PluginCommandResult
 }
 

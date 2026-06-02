@@ -13,6 +13,7 @@ declare module 'fluxtext' {
     name: string
     title: string
     icon?: string
+    optionalParams?: boolean
     [key: string]: any
   }): any
 }
