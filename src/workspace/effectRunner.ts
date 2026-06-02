@@ -32,7 +32,6 @@ import {
 import {
   applyMonacoDecorate,
   applyMonacoUpdateOptions,
-  applyMonacoDiffUpdateOptions,
 } from './monacoBridge'
 import { showToast } from './toast'
 import { pluginRegistry } from './pluginRegistry'
@@ -135,7 +134,6 @@ export function applyEffects(
           break
         case 'monaco.decorate':
         case 'monaco.updateOptions':
-        case 'monaco.diff.updateOptions':
           applyMonacoEffect(effect)
           result.applied.push(effect)
           break
@@ -499,9 +497,6 @@ function applyMonacoEffect(effect: MonacoEffect) {
       break
     case 'monaco.updateOptions':
       applyMonacoUpdateOptions(effect.paneId, effect.options)
-      break
-    case 'monaco.diff.updateOptions':
-      applyMonacoDiffUpdateOptions(effect.sessionId, effect.options)
       break
   }
 }

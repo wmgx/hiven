@@ -196,11 +196,6 @@ export type MonacoEffect =
       paneId: PaneId
       options: Record<string, any>
     }
-  | {
-      type: 'monaco.diff.updateOptions'
-      sessionId: string
-      options: Record<string, any>
-    }
 
 export type StatusEffect = {
   type: 'status.message'

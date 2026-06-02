@@ -12,7 +12,6 @@ export interface Disposable {
 
 class RuntimeRegistryImpl {
   codeEditors: Map<PaneId, any> = new Map() // monaco.editor.ICodeEditor
-  diffEditors: Map<string, any> = new Map() // monaco.editor.IStandaloneDiffEditor
   disposables: Map<string, Disposable[]> = new Map()
   decorationOwners: Map<string, string[]> = new Map() // paneId -> owner decoration ids
   viewZoneOwners: Map<string, string[]> = new Map()
@@ -28,18 +27,6 @@ class RuntimeRegistryImpl {
 
   getCodeEditor(paneId: PaneId): any | null {
     return this.codeEditors.get(paneId) ?? null
-  }
-
-  registerDiffEditor(sessionId: string, editor: any) {
-    this.diffEditors.set(sessionId, editor)
-  }
-
-  unregisterDiffEditor(sessionId: string) {
-    this.diffEditors.delete(sessionId)
-  }
-
-  getDiffEditor(sessionId: string): any | null {
-    return this.diffEditors.get(sessionId) ?? null
   }
 
   addDisposable(ownerId: string, disposable: Disposable) {
@@ -66,7 +53,6 @@ class RuntimeRegistryImpl {
       this.disposeOwner(ownerId)
     }
     this.codeEditors.clear()
-    this.diffEditors.clear()
   }
 }
 

@@ -1,5 +1,7 @@
 # Multi Pane Diff 与结构化 Diff 实施方案
 
+> 状态说明：本文是早期 Diff 方案背景。关于 Diff 与 framework/plugin/kit 的边界，以 `doc/diff-plugin-boundary-decision.md` 为准；Diff 不再作为 framework 能力设计，而是由 first-party plugins 使用 workspace/editor primitives 实现。
+
 ## 背景
 
 当前 Workspace / Panel / Presentation 能力已经初步落地，基础链路可以跑通：

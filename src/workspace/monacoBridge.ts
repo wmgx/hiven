@@ -1,7 +1,7 @@
 /**
  * FluxText Workspace Extension - Monaco Bridge
  * Exposes Monaco Editor capabilities to the workspace extension system.
- * Full implementation: DiffEditor, decorations, viewZones, widgets, options.
+ * Full implementation: code editors, decorations, viewZones, widgets, options.
  */
 
 import { runtimeRegistry, type Disposable } from './runtimeRegistry'
@@ -12,9 +12,6 @@ import type { PaneId } from './types'
 export interface MonacoBridgeApi {
   getMonaco(): any | null
   getCodeEditor(paneId: PaneId): any | null
-  getDiffEditor(sessionId: string): any | null
-  getOriginalEditor(sessionId: string): any | null
-  getModifiedEditor(sessionId: string): any | null
 }
 
 export const monacoBridge: MonacoBridgeApi = {
@@ -24,20 +21,6 @@ export const monacoBridge: MonacoBridgeApi = {
 
   getCodeEditor(paneId: PaneId) {
     return runtimeRegistry.getCodeEditor(paneId)
-  },
-
-  getDiffEditor(sessionId: string) {
-    return runtimeRegistry.getDiffEditor(sessionId)
-  },
-
-  getOriginalEditor(sessionId: string) {
-    const diffEditor = runtimeRegistry.getDiffEditor(sessionId)
-    return diffEditor?.getOriginalEditor() ?? null
-  },
-
-  getModifiedEditor(sessionId: string) {
-    const diffEditor = runtimeRegistry.getDiffEditor(sessionId)
-    return diffEditor?.getModifiedEditor() ?? null
   },
 }
 
@@ -62,8 +45,6 @@ export interface PresentationApi {
   /** Update editor options for a pane. Returns Disposable that restores previous options. */
   updateEditorOptions(paneId: PaneId, options: Record<string, any>, owner: string): Disposable
 
-  /** Update diff editor options for a session. */
-  updateDiffOptions(sessionId: string, options: Record<string, any>): void
 }
 
 export const presentationApi: PresentationApi = {
@@ -217,13 +198,6 @@ export const presentationApi: PresentationApi = {
     runtimeRegistry.addDisposable(owner, disposable)
     return disposable
   },
-
-  updateDiffOptions(sessionId, options) {
-    const diffEditor = runtimeRegistry.getDiffEditor(sessionId)
-    if (diffEditor) {
-      diffEditor.updateOptions(options)
-    }
-  },
 }
 
 // ─── Monaco Effect Applier (for effectRunner) ───────────────────────────────
@@ -238,8 +212,4 @@ export function applyMonacoUpdateOptions(paneId: PaneId, options: Record<string,
   if (editor) {
     editor.updateOptions(options)
   }
-}
-
-export function applyMonacoDiffUpdateOptions(sessionId: string, options: Record<string, any>) {
-  presentationApi.updateDiffOptions(sessionId, options)
 }

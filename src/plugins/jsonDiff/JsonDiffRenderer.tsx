@@ -1,19 +1,18 @@
 /**
- * FluxText Core - Core JSON Diff Renderer
+ * JSON Diff plugin renderer.
  * Single DualEditorView instance. Diff algorithm switches based on JSON validity:
  *   Valid JSON   → semantic diff (buildDiffTree + buildSideLines), formatted output
  *   Invalid JSON → line-level LCS diff, raw text
- * Registered as 'core.json-diff' in the production plugin registry.
  */
 
-import { useEffect, useState, useMemo } from 'react'
-import { useAppStore } from '../store'
-import { buildJsonDiffViewModel, buildDiffTree, parseJson, buildSideLines } from '../workspace/jsonDiff'
-import type { PaneInput, RendererProps } from '../workspace/pluginTypes'
-import type { JsonArrayCompareMode } from '../workspace/jsonDiff'
-import { t } from '../i18n'
-import { DualEditorView } from './DualEditorView'
-import { computeTextLineDiff } from '../workspace/lineDiff'
+import { useCallback, useState, useMemo } from 'react'
+import { useAppStore } from '../../store'
+import { buildJsonDiffViewModel, buildDiffTree, parseJson, buildSideLines } from './jsonSemanticDiff'
+import type { PaneInput, RendererProps } from '../../workspace/pluginTypes'
+import type { JsonArrayCompareMode } from './jsonSemanticDiff'
+import { t } from '../../i18n'
+import { DualEditorView } from '../../kits/ui/DualEditorView'
+import { computeTextLineDiff } from '../../kits/diff/lineDiff'
 
 type JsonDiffInputs = {
   original: PaneInput
@@ -21,7 +20,7 @@ type JsonDiffInputs = {
   renderMode?: 'side-by-side' | 'inline'
 }
 
-export function CoreJsonDiffRenderer({ inputs, surfaceId: _surfaceId, host }: RendererProps<JsonDiffInputs>) {
+export function JsonDiffRenderer({ inputs, host }: RendererProps<JsonDiffInputs>) {
   const originalPane = inputs?.original
   const modifiedPane = inputs?.modified
   const originalPaneId = originalPane?.paneId
@@ -31,9 +30,9 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId: _surfaceId, host }: Re
   const settings = useAppStore((s) => s.settings)
   const locale = useAppStore((s) => s.locale)
 
-  const [layout, setLayout] = useState<'side-by-side' | 'inline'>(
-    inputs?.renderMode === 'inline' ? 'inline' : 'side-by-side'
-  )
+  const requestedLayout = inputs?.renderMode === 'inline' ? 'inline' : 'side-by-side'
+  const [layoutOverride, setLayoutOverride] = useState<'side-by-side' | 'inline' | null>(null)
+  const layout = layoutOverride ?? requestedLayout
 
   const [arrayMode, setArrayMode] = useState<'by-index' | 'unordered-scalar' | 'by-object-key'>('by-index')
   const [objectKey, setObjectKey] = useState('id')
@@ -80,9 +79,21 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId: _surfaceId, host }: Re
     return { leftText: originalText, rightText: modifiedText, leftHighlights, rightHighlights }
   }, [isJsonValid, originalText, modifiedText, arrayCompareMode])
 
-  useEffect(() => {
-    setLayout(inputs?.renderMode === 'inline' ? 'inline' : 'side-by-side')
-  }, [inputs?.renderMode])
+  const handleOriginalFocus = useCallback(() => {
+    if (originalPaneId) host.focusPane(originalPaneId)
+  }, [originalPaneId, host])
+
+  const handleModifiedFocus = useCallback(() => {
+    if (modifiedPaneId) host.focusPane(modifiedPaneId)
+  }, [modifiedPaneId, host])
+
+  const handleOriginalChange = useCallback((text: string) => {
+    if (originalPaneId) host.updatePaneText(originalPaneId, text)
+  }, [originalPaneId, host])
+
+  const handleModifiedChange = useCallback((text: string) => {
+    if (modifiedPaneId) host.updatePaneText(modifiedPaneId, text)
+  }, [modifiedPaneId, host])
 
   if (!originalPane || !modifiedPane) return null
 
@@ -94,7 +105,7 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId: _surfaceId, host }: Re
         style={{ borderBottom: '0.5px solid var(--color-border-tertiary)', background: 'var(--color-background-secondary)' }}
       >
         <span className="text-[11px] font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-          {t(locale, 'core.jsonDiff.title')}: {originalPane.title} ↔ {modifiedPane.title}
+          {t(locale, 'jsonDiff.title')}: {originalPane.title} ↔ {modifiedPane.title}
         </span>
 
         {!isJsonValid && (
@@ -121,14 +132,14 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId: _surfaceId, host }: Re
         <button
           className="text-[10px] px-1.5 py-0.5 rounded hover:opacity-80"
           style={{ background: layout === 'side-by-side' ? 'var(--color-accent-bg)' : 'var(--color-background-tertiary)', color: layout === 'side-by-side' ? 'var(--color-accent)' : 'var(--color-text-tertiary)' }}
-          onClick={() => setLayout('side-by-side')}
+          onClick={() => setLayoutOverride('side-by-side')}
         >
           {t(locale, 'diff.sideBySide')}
         </button>
         <button
           className="text-[10px] px-1.5 py-0.5 rounded hover:opacity-80"
           style={{ background: layout === 'inline' ? 'var(--color-accent-bg)' : 'var(--color-background-tertiary)', color: layout === 'inline' ? 'var(--color-accent)' : 'var(--color-text-tertiary)' }}
-          onClick={() => setLayout('inline')}
+          onClick={() => setLayoutOverride('inline')}
         >
           {t(locale, 'diff.inline')}
         </button>
@@ -179,9 +190,11 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId: _surfaceId, host }: Re
           leftHighlights={leftHighlights}
           rightHighlights={rightHighlights}
           layout={layout}
-          originalPaneId={originalPaneId}
-          modifiedPaneId={modifiedPaneId}
-          host={host}
+          language={viewModel.originalLanguage}
+          onLeftFocus={handleOriginalFocus}
+          onRightFocus={handleModifiedFocus}
+          onLeftChange={handleOriginalChange}
+          onRightChange={handleModifiedChange}
           fontSize={settings.fontSize}
           lineNumbers={settings.lineNumbers}
           wordWrap={settings.wordWrap}

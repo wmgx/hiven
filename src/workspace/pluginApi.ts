@@ -79,14 +79,6 @@ export function registerPresentationRenderer(def: PresentationRendererDef): Disp
   }
 }
 
-// ─── Register Compare Renderer (alias for presentation with diff semantics) ─
-
-export type CompareRendererDef = PresentationRendererDef
-
-export function registerCompareRenderer(def: CompareRendererDef): Disposable {
-  return registerPresentationRenderer(def)
-}
-
 // ─── Workspace API (read-only access for extensions) ─────────────────────────
 
 export interface WorkspaceApi {

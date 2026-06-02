@@ -697,7 +697,7 @@ export function buildSideLines(node: DiffTreeNode, side: 'left' | 'right'): Side
 }
 
 /**
- * Build the text model consumed by Monaco DiffEditor.
+ * Build the text model consumed by the JSON diff renderer.
  *
  * Valid JSON is displayed as pretty text that preserves object key order while
  * aligning shared keys across sides. Invalid JSON deliberately falls back to raw

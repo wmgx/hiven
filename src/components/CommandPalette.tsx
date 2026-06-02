@@ -952,7 +952,7 @@ function paletteItemMatchesQuery(item: PaletteItem, q: string, locale: import('.
   if (tags.some((tag) => tag.toLowerCase().includes(q))) return true
 
   // 缩写匹配：从 id/name 算一遍，再从英文原始 title 算一遍
-  // 例如 id="core.json-diff" name 缩写是 "cjd"，但 title="JSON Diff" 缩写是 "jd" ✓
+  // 例如 id="json-diff.compare" name 缩写是 "jdc"，但 title="JSON Diff" 缩写是 "jd" ✓
   const acronym = getAcronym(name)
   if (acronym.startsWith(q) || acronym === q) return true
 

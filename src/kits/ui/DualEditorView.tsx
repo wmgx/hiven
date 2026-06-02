@@ -1,13 +1,12 @@
 /**
- * DualEditorView - Generic two-pane Monaco editor with synchronized scrolling
- * and diff highlights via deltaDecorations.
- * Used by both JSON semantic diff and plain text diff.
+ * Generic two-editor Monaco view with synchronized scrolling and line
+ * decorations. This is a pure UI kit component: callers own all product
+ * semantics, pane binding, and highlight computation.
  */
 
 import { useRef, useEffect, useCallback } from 'react'
 import { Editor } from '@monaco-editor/react'
 import type { editor as MonacoEditor } from 'monaco-editor'
-import type { RendererHost } from '../workspace/pluginTypes'
 
 let cssInjected = false
 function ensureCss() {
@@ -15,8 +14,8 @@ function ensureCss() {
   cssInjected = true
   const style = document.createElement('style')
   style.textContent = `
-    .jd-removed-line { background: rgba(252, 165, 165, 0.22) !important; }
-    .jd-added-line   { background: rgba(134, 239, 172, 0.22) !important; }
+    .ft-left-change-line  { background: rgba(252, 165, 165, 0.22) !important; }
+    .ft-right-change-line { background: rgba(134, 239, 172, 0.22) !important; }
   `
   document.head.appendChild(style)
 }
@@ -29,9 +28,11 @@ export function DualEditorView({
   leftHighlights,
   rightHighlights,
   layout,
-  originalPaneId,
-  modifiedPaneId,
-  host,
+  language = 'plaintext',
+  onLeftFocus,
+  onRightFocus,
+  onLeftChange,
+  onRightChange,
   fontSize,
   lineNumbers,
   wordWrap,
@@ -41,9 +42,11 @@ export function DualEditorView({
   leftHighlights: number[]
   rightHighlights: number[]
   layout: 'side-by-side' | 'inline'
-  originalPaneId: string | undefined
-  modifiedPaneId: string | undefined
-  host: RendererHost
+  language?: string
+  onLeftFocus?: () => void
+  onRightFocus?: () => void
+  onLeftChange?: (text: string) => void
+  onRightChange?: (text: string) => void
   fontSize: number
   lineNumbers: boolean
   wordWrap: boolean
@@ -62,7 +65,7 @@ export function DualEditorView({
     cls: string,
   ) => {
     if (!editor) return
-    const rulerColor = cls === 'jd-removed-line'
+    const rulerColor = cls === 'ft-left-change-line'
       ? 'rgba(252, 165, 165, 0.22)'
       : 'rgba(134, 239, 172, 0.22)'
     idsRef.current = editor.deltaDecorations(
@@ -97,8 +100,8 @@ export function DualEditorView({
   useEffect(() => { syncText(rightRef.current, rightText) }, [rightText, syncText])
 
   useEffect(() => {
-    applyDecs(leftRef.current,  leftDecIds,  leftHighlights,  'jd-removed-line')
-    applyDecs(rightRef.current, rightDecIds, rightHighlights, 'jd-added-line')
+    applyDecs(leftRef.current,  leftDecIds,  leftHighlights,  'ft-left-change-line')
+    applyDecs(rightRef.current, rightDecIds, rightHighlights, 'ft-right-change-line')
   }, [leftHighlights, rightHighlights, applyDecs])
 
   const editorOptions: MonacoEditor.IStandaloneEditorConstructionOptions = {
@@ -122,11 +125,11 @@ export function DualEditorView({
     ensureCss()
     leftRef.current = editor
     editor.onDidFocusEditorText(() => {
-      if (originalPaneId) host.focusPane(originalPaneId)
+      onLeftFocus?.()
     })
     editor.onDidChangeModelContent(() => {
-      if (isApplying.current || !originalPaneId) return
-      host.updatePaneText(originalPaneId, editor.getModel()?.getValue() ?? '')
+      if (isApplying.current) return
+      onLeftChange?.(editor.getModel()?.getValue() ?? '')
     })
     editor.onDidScrollChange((e) => {
       if (isSyncing.current) return
@@ -135,18 +138,18 @@ export function DualEditorView({
       right.setScrollPosition({ scrollTop: e.scrollTop, scrollLeft: e.scrollLeft })
       isSyncing.current = false
     })
-    applyDecs(editor, leftDecIds, leftHighlights, 'jd-removed-line')
-  }, [originalPaneId, host, applyDecs, leftHighlights])
+    applyDecs(editor, leftDecIds, leftHighlights, 'ft-left-change-line')
+  }, [onLeftFocus, onLeftChange, applyDecs, leftHighlights])
 
   const handleRightMount = useCallback((editor: MonacoEditor.IStandaloneCodeEditor) => {
     ensureCss()
     rightRef.current = editor
     editor.onDidFocusEditorText(() => {
-      if (modifiedPaneId) host.focusPane(modifiedPaneId)
+      onRightFocus?.()
     })
     editor.onDidChangeModelContent(() => {
-      if (isApplying.current || !modifiedPaneId) return
-      host.updatePaneText(modifiedPaneId, editor.getModel()?.getValue() ?? '')
+      if (isApplying.current) return
+      onRightChange?.(editor.getModel()?.getValue() ?? '')
     })
     editor.onDidScrollChange((e) => {
       if (isSyncing.current) return
@@ -155,8 +158,8 @@ export function DualEditorView({
       left.setScrollPosition({ scrollTop: e.scrollTop, scrollLeft: e.scrollLeft })
       isSyncing.current = false
     })
-    applyDecs(editor, rightDecIds, rightHighlights, 'jd-added-line')
-  }, [modifiedPaneId, host, applyDecs, rightHighlights])
+    applyDecs(editor, rightDecIds, rightHighlights, 'ft-right-change-line')
+  }, [onRightFocus, onRightChange, applyDecs, rightHighlights])
 
   const border = '1px solid var(--color-border-tertiary)'
 
@@ -164,11 +167,11 @@ export function DualEditorView({
     return (
       <div style={{ display: 'flex', height: '100%' }}>
         <div style={{ flex: 1, overflow: 'hidden', borderRight: border }}>
-          <Editor height="100%" defaultValue={leftText}
+          <Editor height="100%" defaultValue={leftText} defaultLanguage={language}
             onMount={handleLeftMount} options={editorOptions} theme="vs" />
         </div>
         <div style={{ flex: 1, overflow: 'hidden' }}>
-          <Editor height="100%" defaultValue={rightText}
+          <Editor height="100%" defaultValue={rightText} defaultLanguage={language}
             onMount={handleRightMount} options={editorOptions} theme="vs" />
         </div>
       </div>
@@ -178,11 +181,11 @@ export function DualEditorView({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ flex: 1, overflow: 'hidden', borderBottom: border }}>
-        <Editor height="100%" defaultValue={leftText}
+        <Editor height="100%" defaultValue={leftText} defaultLanguage={language}
           onMount={handleLeftMount} options={editorOptions} theme="vs" />
       </div>
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        <Editor height="100%" defaultValue={rightText}
+        <Editor height="100%" defaultValue={rightText} defaultLanguage={language}
           onMount={handleRightMount} options={editorOptions} theme="vs" />
       </div>
     </div>

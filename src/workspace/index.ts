@@ -64,7 +64,6 @@ export {
   registerCommand,
   registerPanel,
   registerPresentationRenderer,
-  registerCompareRenderer,
 
   // Effect execution
   executeEffects,
@@ -82,7 +81,6 @@ export type {
   ExtensionContext,
   ExtensionContribution,
   WorkspaceApi,
-  CompareRendererDef,
   MonacoBridgeApi,
   PresentationApi,
   PanelComponentProps,

@@ -13,8 +13,10 @@ import { CommandPalette } from './components/CommandPalette'
 // Register built-in panels
 import './panels/register'
 
-// Register core plugin (diff, json-diff, regex-tester)
+// Register core plugin and first-party product plugins
 import './workspace/corePlugin'
+import './plugins/textDiff'
+import './plugins/jsonDiff'
 
 const VIEW_INDEX: Record<ViewId, number> = { editor: 0, scripts: 1, debugger: 2, settings: 3 }
 
