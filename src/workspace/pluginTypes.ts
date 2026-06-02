@@ -164,40 +164,67 @@ export type PluginDefinition = {
 /** manifest.json structure for a plugin package */
 export type PluginManifest = {
   pluginId: string
-  displayName: string
-  version: string
-  entry: string
+  displayName?: string
+  displayNameI18n?: Partial<Record<Locale, string>>
+  version?: string
   capabilities?: string[]
 }
 
 // ─── Plugin Runtime State ─────────────────────────────────────────────────────
 
 export type InstalledPluginStatus = 'disabled' | 'enabled' | 'error' | 'loading'
+export type PluginPackageSource = 'local' | 'github' | 'zip' | 'builtin'
+
+export type PluginPackageUpdateState = {
+  status: 'idle' | 'checking' | 'available' | 'up-to-date' | 'error'
+  latestVersion?: string
+  checkedAt?: number
+  error?: string
+}
 
 /** Persisted record for an installed (production) plugin */
 export type InstalledPlugin = {
   pluginId: string
   displayName: string
+  displayNameI18n?: Partial<Record<Locale, string>>
   version: string
   entry: string
   capabilities: string[]
   folderPath: string
+  packagePath?: string
+  source: 'local' | 'github' | 'zip' | 'builtin'
+  sourceUrl?: string
   status: InstalledPluginStatus
   error?: string
+  update?: PluginPackageUpdateState
   installedAt: number
+  updatedAt: number
 }
 
 /** Session-scoped dev plugin (not persisted) */
 export type DevPlugin = {
   pluginId: string
   displayName: string
+  displayNameI18n?: Partial<Record<Locale, string>>
   version: string
   folderPath: string
+  packagePath?: string
+  source?: PluginPackageSource
+  sourceUrl?: string
+  capabilities?: string[]
   status: 'active' | 'error'
   error?: string
   loadedAt: number
+  updatedAt?: number
   /** Whether this dev plugin has an active file watcher for auto-reload */
   watching?: boolean
+}
+
+export type PluginFileTree = {
+  name: string
+  path: string
+  isDir: boolean
+  children?: PluginFileTree[]
 }
 
 // ─── Contribution Source ──────────────────────────────────────────────────────

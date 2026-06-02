@@ -4,8 +4,57 @@ import type { Locale } from './i18n'
 import { builtinActions } from './actions/builtins'
 import { useWorkspaceStore } from './workspace/workspaceStore'
 import { workspaceActions } from './commands/workspaceCommands'
+import {
+  DEFAULT_PINNED_RUNTIME_CONFIG,
+  activatePinnedRuntime,
+  disposePinnedRuntime,
+  tombstonePinnedRuntime,
+} from './workspace/pinnedActionRuntime'
+import type { PinnedRuntimeConfig as WorkspacePinnedRuntimeConfig } from './workspace/pinnedActionRuntime'
 
-export type ViewId = 'editor' | 'scripts' | 'debugger' | 'settings'
+export type ViewId = 'editor' | 'scripts' | 'plugin-editor' | 'pinned-runner' | 'debugger' | 'settings'
+
+export type PinnedOutputKind = 'text' | 'error' | 'presentation'
+
+export interface PinnedAction {
+  id: string
+  actionId: string
+  title: string
+  icon?: string
+  inputText: string
+  outputText: string
+  outputKind: PinnedOutputKind
+  params: Record<string, unknown>
+  autoRun: boolean
+  debounceMs: number
+  controlsOpen: boolean
+  controlPanelInstanceId?: string
+  lastRunAt?: number
+  lastDurationMs?: number
+  lastError?: string
+}
+
+export type PinnedRuntime = import('./workspace/pinnedActionRuntime').PinnedRuntime
+export type PinnedTombstone = import('./workspace/pinnedActionRuntime').PinnedTombstone
+export type PinnedRuntimeConfig = {
+  idleTimeoutMs: WorkspacePinnedRuntimeConfig['idleTimeoutMs']
+  maxWarmRuntimes: WorkspacePinnedRuntimeConfig['maxWarmRuntimes']
+}
+export type PinnedTombstoneOutputSummary = {
+  outputSummary?: {
+    kind: 'empty' | 'text' | 'error' | 'stale'
+    preview?: string
+    generatedAt?: number
+  }
+}
+
+export type PluginEditorState = {
+  pluginId: string
+  folderPath: string
+  activeFile?: string
+  readOnly?: boolean
+  source?: 'builtin' | 'installed' | 'dev'
+}
 
 export interface ActionParam {
   key: string
@@ -84,7 +133,6 @@ export interface DebuggerTab {
   consoleLogs: ConsoleLog[]
   dirty: boolean
   running: boolean
-  fileNameEditing: boolean
   builtin?: boolean
 }
 
@@ -99,6 +147,25 @@ interface AppState {
   // Navigation
   activeView: ViewId
   setActiveView: (view: ViewId) => void
+  pluginEditor: PluginEditorState | null
+  openPluginEditor: (plugin: PluginEditorState) => void
+  closePluginEditor: () => void
+
+  // Pinned Action / Live Runner
+  pinnedActions: PinnedAction[]
+  activePinnedActionId: string | null
+  pinnedRuntimes: Record<string, PinnedRuntime>
+  pinnedTombstones: Record<string, PinnedTombstone>
+  pinnedRuntimeConfig: PinnedRuntimeConfig
+  pinAction: (action: ActionDef | string) => string
+  unpinAction: (pinnedId: string) => void
+  reorderPinnedActions: (orderedIds: string[]) => void
+  setActivePinnedAction: (pinnedId: string) => void
+  activatePinnedAction: (pinnedId: string) => void
+  openPinnedAction: (pinnedId: string) => void
+  updatePinnedAction: (pinnedId: string, patch: Partial<PinnedAction>) => void
+  updatePinnedRuntime: (pinnedId: string, patch: Partial<PinnedRuntime>) => void
+  releasePinnedRuntime: (pinnedId: string, reason?: PinnedTombstone['reason']) => void
 
   // Editor
   editorText: string
@@ -149,8 +216,6 @@ interface AppState {
   setDebuggerDirty: (dirty: boolean) => void
   debuggerRunning: boolean
   setDebuggerRunning: (running: boolean) => void
-  debuggerFileNameEditing: boolean
-  setDebuggerFileNameEditing: (editing: boolean) => void
   debuggerBuiltin: boolean
 
   // Debugger Tabs
@@ -189,7 +254,6 @@ function _snapshotActiveTab(state: AppState): DebuggerTab {
     consoleLogs: state.consoleLogs,
     dirty: state.debuggerDirty,
     running: state.debuggerRunning,
-    fileNameEditing: false,
     builtin: state.debuggerBuiltin,
   }
 }
@@ -205,8 +269,29 @@ function _loadTabState(tab: DebuggerTab) {
     consoleLogs: tab.consoleLogs,
     debuggerDirty: tab.dirty,
     debuggerRunning: tab.running,
-    debuggerFileNameEditing: tab.fileNameEditing,
     debuggerBuiltin: !!tab.builtin,
+  }
+}
+
+function _makePinnedId(actionId: string): string {
+  return `pinned-${actionId.replace(/[^a-z0-9_-]+/gi, '-').toLowerCase()}-${Date.now().toString(36)}`
+}
+
+function _actionToPinnedAction(action: ActionDef | string, actions: ActionDef[]): PinnedAction {
+  const actionId = typeof action === 'string' ? action : action.name
+  const def = typeof action === 'string' ? actions.find(a => a.name === action) : action
+  return {
+    id: _makePinnedId(actionId),
+    actionId,
+    title: def?.title ?? actionId,
+    icon: def?.icon,
+    inputText: '',
+    outputText: '',
+    outputKind: 'text',
+    params: {},
+    autoRun: true,
+    debounceMs: 250,
+    controlsOpen: false,
   }
 }
 
@@ -214,6 +299,107 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   // Navigation
   activeView: 'editor',
   setActiveView: (view) => set({ activeView: view }),
+  pluginEditor: null,
+  openPluginEditor: (plugin) => set({ pluginEditor: plugin, activeView: 'plugin-editor' }),
+  closePluginEditor: () => set({ pluginEditor: null, activeView: 'scripts' }),
+
+  // Pinned Action / Live Runner
+  pinnedActions: [],
+  activePinnedActionId: null,
+  pinnedRuntimes: {},
+  pinnedTombstones: {},
+  pinnedRuntimeConfig: DEFAULT_PINNED_RUNTIME_CONFIG,
+  pinAction: (action) => {
+    const current = useAppStore.getState()
+    const actionId = typeof action === 'string' ? action : action.name
+    const existing = current.pinnedActions.find((pinned) => pinned.actionId === actionId)
+    if (existing) {
+      current.activatePinnedAction(existing.id)
+      return existing.id
+    }
+    const pinned = _actionToPinnedAction(action, current.actions)
+    set((state) => ({
+      pinnedActions: [...state.pinnedActions, pinned],
+      activePinnedActionId: pinned.id,
+      activeView: 'pinned-runner',
+      pinnedRuntimes: {
+        ...state.pinnedRuntimes,
+        [pinned.id]: activatePinnedRuntime(pinned, state.pinnedRuntimes[pinned.id], state.pinnedTombstones[pinned.id]),
+      },
+    }))
+    return pinned.id
+  },
+  unpinAction: (pinnedId) => set((state) => {
+    const { [pinnedId]: _runtime, ...pinnedRuntimes } = state.pinnedRuntimes
+    const { [pinnedId]: _tombstone, ...pinnedTombstones } = state.pinnedTombstones
+    const remaining = state.pinnedActions.filter((pinned) => pinned.id !== pinnedId)
+    return {
+      pinnedActions: remaining,
+      pinnedRuntimes,
+      pinnedTombstones,
+      activePinnedActionId: state.activePinnedActionId === pinnedId ? remaining[0]?.id ?? null : state.activePinnedActionId,
+      activeView: state.activePinnedActionId === pinnedId && remaining.length === 0 ? 'editor' : state.activeView,
+    }
+  }),
+  reorderPinnedActions: (orderedIds) => set((state) => {
+    const byId = new Map(state.pinnedActions.map((pinned) => [pinned.id, pinned]))
+    const ordered = orderedIds.map((id) => byId.get(id)).filter((pinned): pinned is PinnedAction => !!pinned)
+    const leftovers = state.pinnedActions.filter((pinned) => !orderedIds.includes(pinned.id))
+    return { pinnedActions: [...ordered, ...leftovers] }
+  }),
+  setActivePinnedAction: (pinnedId) => set((state) => (
+    state.pinnedActions.some((pinned) => pinned.id === pinnedId)
+      ? { activePinnedActionId: pinnedId, activeView: 'pinned-runner' }
+      : {}
+  )),
+  activatePinnedAction: (pinnedId) => set((state) => {
+    const pinned = state.pinnedActions.find((item) => item.id === pinnedId)
+    if (!pinned) return {}
+    const nextRuntimes: Record<string, PinnedRuntime> = {}
+    for (const [id, runtime] of Object.entries(state.pinnedRuntimes)) {
+      nextRuntimes[id] = id === pinnedId ? runtime : { ...runtime, status: runtime.status === 'active' ? 'idle' : runtime.status }
+    }
+    nextRuntimes[pinnedId] = activatePinnedRuntime(pinned, nextRuntimes[pinnedId], state.pinnedTombstones[pinnedId])
+    return {
+      activePinnedActionId: pinnedId,
+      activeView: 'pinned-runner',
+      pinnedRuntimes: nextRuntimes,
+    }
+  }),
+  openPinnedAction: (pinnedId) => {
+    useAppStore.getState().activatePinnedAction(pinnedId)
+  },
+  updatePinnedAction: (pinnedId, patch) => set((state) => ({
+    pinnedActions: state.pinnedActions.map((pinned) => (
+      pinned.id === pinnedId ? { ...pinned, ...patch } : pinned
+    )),
+  })),
+  updatePinnedRuntime: (pinnedId, patch) => set((state) => {
+    const current = state.pinnedRuntimes[pinnedId]
+    if (!current) return {}
+    return {
+      pinnedRuntimes: {
+        ...state.pinnedRuntimes,
+        [pinnedId]: { ...current, ...patch, lastInteractedAt: Date.now() },
+      },
+    }
+  }),
+  releasePinnedRuntime: (pinnedId, reason = 'manual') => set((state) => {
+    const runtime = state.pinnedRuntimes[pinnedId]
+    const pinned = state.pinnedActions.find((item) => item.id === pinnedId)
+    if (!runtime || !pinned) return {}
+    const tombstone = tombstonePinnedRuntime(pinned, runtime, reason)
+    return {
+      pinnedRuntimes: {
+        ...state.pinnedRuntimes,
+        [pinnedId]: disposePinnedRuntime(runtime),
+      },
+      pinnedTombstones: {
+        ...state.pinnedTombstones,
+        [pinnedId]: tombstone,
+      },
+    }
+  }),
 
   // Editor (bridged to workspace store for backwards compat)
   editorText: '',
@@ -343,8 +529,6 @@ hello@fluxtext.app (duplicate)`,
   setDebuggerDirty: (dirty) => set({ debuggerDirty: dirty }),
   debuggerRunning: false,
   setDebuggerRunning: (running) => set({ debuggerRunning: running }),
-  debuggerFileNameEditing: false,
-  setDebuggerFileNameEditing: (editing) => set({ debuggerFileNameEditing: editing }),
   debuggerBuiltin: false,
 
   // Debugger Tabs
@@ -353,7 +537,7 @@ hello@fluxtext.app (duplicate)`,
     fileName: 'extract-emails.ts',
     script: '', input: '', output: '',
     params: {}, consoleLogs: [],
-    dirty: false, running: false, fileNameEditing: false,
+    dirty: false, running: false,
   }],
   activeDebuggerTabId: 'default',
   addDebuggerTab: (tab) => set((state) => {
@@ -416,7 +600,20 @@ hello@fluxtext.app (duplicate)`,
     set((state) => ({ locale, settings: { ...state.settings, locale } })),
 }), {
   name: 'fluxtext-settings',
-  partialize: (state) => ({ settings: state.settings, locale: state.locale, savedActionParams: state.savedActionParams, recentActionNames: state.recentActionNames, actionUsageCounts: state.actionUsageCounts }),
+  partialize: (state) => ({
+    settings: state.settings,
+    locale: state.locale,
+    savedActionParams: state.savedActionParams,
+    recentActionNames: state.recentActionNames,
+    actionUsageCounts: state.actionUsageCounts,
+    pinnedActions: state.pinnedActions.map(({ outputText: _outputText, lastError: _lastError, lastDurationMs: _lastDurationMs, controlPanelInstanceId: _controlPanelInstanceId, ...pinned }) => ({
+      ...pinned,
+      outputText: '',
+      outputKind: 'text' as PinnedOutputKind,
+    })),
+    activePinnedActionId: state.activePinnedActionId,
+    pinnedRuntimeConfig: state.pinnedRuntimeConfig,
+  }),
 }))
 
 /**

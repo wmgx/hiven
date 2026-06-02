@@ -1,6 +1,6 @@
 import { useAppStore } from '../store'
 import type { ViewId } from '../store'
-import { LayoutPanelLeft, Puzzle, Terminal, Settings } from 'lucide-react'
+import { LayoutPanelLeft, Pin, Puzzle, Terminal, Settings } from 'lucide-react'
 import { t } from '../i18n'
 
 const navItems: { id: ViewId; icon: React.ReactNode; labelKey: 'nav.editor' | 'nav.scripts' | 'nav.debugger' }[] = [
@@ -12,6 +12,9 @@ const navItems: { id: ViewId; icon: React.ReactNode; labelKey: 'nav.editor' | 'n
 export function Sidebar() {
   const activeView = useAppStore((s) => s.activeView)
   const setActiveView = useAppStore((s) => s.setActiveView)
+  const pinnedActions = useAppStore((s) => s.pinnedActions)
+  const activePinnedActionId = useAppStore((s) => s.activePinnedActionId)
+  const openPinnedAction = useAppStore((s) => s.openPinnedAction)
   const locale = useAppStore((s) => s.locale)
 
   return (
@@ -39,6 +42,25 @@ export function Sidebar() {
         className="w-5 my-1"
         style={{ height: '0.5px', background: 'var(--color-border-tertiary)' }}
       />
+      {pinnedActions.length > 0 && (
+        <div className="flex flex-col items-center gap-1" aria-label="Pinned">
+          {pinnedActions.map((pinned) => (
+            <button
+              key={pinned.id}
+              title={`Pinned · ${pinned.title}`}
+              onClick={() => openPinnedAction(pinned.id)}
+              className={`sidebar-btn w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer border-none bg-transparent ${activeView === 'pinned-runner' && activePinnedActionId === pinned.id ? 'active' : ''}`}
+              style={{
+                color: activeView === 'pinned-runner' && activePinnedActionId === pinned.id ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
+              }}
+            >
+              <span className="flex items-center justify-center">
+                {pinned.icon ? <span className="text-[14px]">{pinned.icon}</span> : <Pin size={16} />}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="mt-auto">
         <button
           title={t(locale, 'nav.settings')}

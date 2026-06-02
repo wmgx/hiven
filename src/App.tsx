@@ -1,29 +1,71 @@
-import { useEffect, useRef } from 'react'
+import { Component, type ReactNode, useEffect, useRef } from 'react'
 import { useAppStore } from './store'
-import type { ViewId, ActionDef } from './store'
+import type { ViewId } from './store'
 import { initConfigDir } from './configInit'
-import { parseScriptToAction } from './store'
 import { Sidebar } from './components/Sidebar'
 import { EditorView } from './views/EditorView'
 import { ScriptsView } from './views/ScriptsView'
+import { PluginEditorView } from './views/PluginEditorView'
+import { PinnedRunnerView } from './views/PinnedRunnerView'
 import { DebuggerView } from './views/DebuggerView'
 import { SettingsView } from './views/SettingsView'
 import { CommandPalette } from './components/CommandPalette'
+import { loadInstalledPluginsFromStore } from './workspace/pluginRuntime'
+import { registerBundledPluginPackages } from './workspace/bundledPluginLoader'
 
 // Register built-in panels
 import './panels/register'
 
-// Register core plugin and first-party product plugins
+// Register core plugin and first-party product plugin packages
 import './workspace/corePlugin'
-import './plugins/textDiff'
-import './plugins/jsonDiff'
 
-const VIEW_INDEX: Record<ViewId, number> = { editor: 0, scripts: 1, debugger: 2, settings: 3 }
+registerBundledPluginPackages()
+
+const VIEW_INDEX: Record<ViewId, number> = { editor: 0, scripts: 1, 'plugin-editor': 2, 'pinned-runner': 3, debugger: 4, settings: 5 }
+
+class ViewErrorBoundary extends Component<
+  { viewId: ViewId; children: ReactNode },
+  { error: Error | null; viewId: ViewId }
+> {
+  state = { error: null, viewId: this.props.viewId }
+
+  static getDerivedStateFromError(error: Error) {
+    return { error }
+  }
+
+  static getDerivedStateFromProps(props: { viewId: ViewId }, state: { error: Error | null; viewId: ViewId }) {
+    if (props.viewId !== state.viewId) {
+      return { error: null, viewId: props.viewId }
+    }
+    return null
+  }
+
+  componentDidCatch(error: Error) {
+    console.error('[FluxText] View render failed:', error)
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6" style={{ color: 'var(--color-text-tertiary)' }}>
+          <div className="scripts-title">View failed to render</div>
+          <div className="max-w-[640px] text-center text-[12px]" style={{ color: 'var(--color-error-text)' }}>
+            {this.state.error.message}
+          </div>
+          <button className="scripts-btn" onClick={() => this.setState({ error: null })}>Retry</button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 function ViewContent({ viewId }: { viewId: ViewId }) {
   switch (viewId) {
     case 'editor': return <EditorView />
     case 'scripts': return <ScriptsView />
+    case 'plugin-editor': return <PluginEditorView />
+    case 'pinned-runner': return <PinnedRunnerView />
     case 'debugger': return <DebuggerView />
     case 'settings': return <SettingsView />
   }
@@ -38,36 +80,17 @@ export default function App() {
   useEffect(() => {
     initConfigDir().then(async (dir) => {
       if (dir) {
-        const scriptsDir = `${dir}/scripts`
+        const pluginDir = `${dir}/plugins/installed`
         const current = useAppStore.getState().settings.watchDirectory
         if (current === '~/FluxText/actions' || current === '~/.local/fluxtext/scripts') {
-          useAppStore.getState().updateSetting('watchDirectory', scriptsDir)
+          useAppStore.getState().updateSetting('watchDirectory', pluginDir)
         }
       }
-      // 启动时加载脚本并注册到 Command Palette
       if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
         try {
-          const { invoke } = await import('@tauri-apps/api/core')
-          const watchDir = useAppStore.getState().settings.watchDirectory
-          const scripts = await invoke<{ name: string; path: string; content: string; builtin?: boolean }[]>('read_scripts_dir', { path: watchDir })
-
-          // 从磁盘 builtin 脚本覆盖硬编码版本（支持远程更新生效）
-          const builtinsFromDisk = scripts
-            .filter(s => s.builtin)
-            .map(s => parseScriptToAction(s.content))
-            .filter((a): a is ActionDef => a !== null)
-          if (builtinsFromDisk.length > 0) {
-            useAppStore.getState().setBuiltinActionsFromDisk(builtinsFromDisk)
-          }
-
-          // 注册自定义脚本
-          const customs = scripts
-            .filter(s => !s.builtin)
-            .map(s => parseScriptToAction(s.content))
-            .filter((a): a is ActionDef => a !== null)
-          useAppStore.getState().setCustomActions(customs)
+          await loadInstalledPluginsFromStore()
         } catch (e) {
-          console.error('[FluxText] Failed to load scripts:', e)
+          console.error('[FluxText] Failed to load plugins:', e)
         }
       }
     })
@@ -116,7 +139,9 @@ export default function App() {
     <div className="flex h-full w-full overflow-hidden" style={{ fontFamily: 'var(--font-mono)', fontSize }}>
       <Sidebar />
       <main className="flex-1 flex flex-col overflow-hidden view-container" ref={containerRef}>
-        <ViewContent viewId={activeView} />
+        <ViewErrorBoundary viewId={activeView}>
+          <ViewContent viewId={activeView} />
+        </ViewErrorBoundary>
       </main>
       <CommandPalette />
     </div>

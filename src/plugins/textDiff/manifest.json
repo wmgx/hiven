@@ -1,0 +1,6 @@
+{
+  "pluginId": "text-diff",
+  "displayName": "Text Diff",
+  "version": "1.0.0",
+  "capabilities": ["command", "renderer"]
+}

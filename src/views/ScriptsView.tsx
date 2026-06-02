@@ -1,808 +1,594 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { useAppStore } from '../store'
-import type { ActionDef } from '../store'
-import { parseScriptToAction } from '../store'
+import { useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
+import { AlertTriangle, Archive, Download, FolderOpen, Globe, Loader2, Package, Plus, Power, RefreshCw, Search, Trash2, Upload } from 'lucide-react'
 import { t } from '../i18n'
-import { AlertTriangle, Upload, Plus, Edit, Trash2, RefreshCw, Globe, X, Loader2, Search, Eye, Power, Download } from 'lucide-react'
-import { resolveIcon } from '../utils/resolveIcon'
-import { checkBuiltinScriptsUpdate } from '../configInit'
+import { useAppStore } from '../store'
+import { checkBuiltinPluginsUpdate, getConfigDir } from '../configInit'
+import { usePluginStore } from '../workspace/pluginStore'
+import {
+  createDevPluginScaffold,
+  disablePlugin,
+  enablePlugin,
+  importDevPluginDirectory,
+  importGithubDirectory,
+  importLocalPluginDirectory,
+  importPluginZip,
+  listPluginDirs,
+  pickLocalPluginFolder,
+  pickPluginZipFile,
+  rejectSingleFileRemoteImport,
+  reloadDevPlugin,
+  reloadPlugin,
+  removeDevPlugin,
+  uninstallPlugin,
+  unwatchDevPlugin,
+  watchDevPlugin,
+} from '../workspace/pluginRuntime'
+import type { PluginPackageSummary } from '../workspace/pluginRuntime'
+import type { DevPlugin, InstalledPlugin } from '../workspace/pluginTypes'
 
-interface ScriptFile {
-  name: string
-  path: string
-  content: string
-  builtin?: boolean
-  status?: 'loaded' | 'error'
-  error?: string
-}
+type TabId = 'builtin' | 'installed' | 'dev'
+type BusyMap = Record<string, boolean>
+type ErrorMap = Record<string, string>
 
 function isTauri() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return !!(window as any).__TAURI_INTERNALS__
+  return !!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
 }
 
-function getParamDefault(type: string): string | boolean | number | unknown[] {
-  switch (type) {
-    case 'boolean': return false
-    case 'number': return 0
-    case 'multi-select': return []
-    default: return ''
-  }
+function textMatches(value: string | undefined, query: string) {
+  return (value ?? '').toLowerCase().includes(query)
 }
 
-let _tabIdCounter = 0
-function nextTabId() { return `tab-${++_tabIdCounter}-${Date.now().toString(36)}` }
-
-function generateScriptSource(action: import('../store').ActionDef): string {
-  // 如果 source 已是完整脚本，直接返回
-  if (action.source && /export\s+default/.test(action.source)) {
-    return action.source
-  }
-  const lines: string[] = []
-  if (action.source) {
-    lines.push(action.source)
-  }
-  lines.push(`// ${action.name}.ts`)
-  lines.push(`// ${action.title}${action.description ? ' — ' + action.description : ''}`)
-  lines.push('')
-  lines.push(`export default {`)
-  lines.push(`  name: '${action.name}',`)
-  lines.push(`  title: '${action.title}',`)
-  if (action.titleI18n) {
-    lines.push(`  titleI18n: ${JSON.stringify(action.titleI18n)},`)
-  }
-  if (action.icon) {
-    lines.push(`  icon: '${action.icon}',`)
-  }
-  if (action.aliases?.length) {
-    lines.push(`  aliases: [${action.aliases.map(a => `'${a}'`).join(', ')}],`)
-  }
-  if (action.description) {
-    lines.push(`  description: '${action.description}',`)
-  }
-  if (action.descriptionI18n) {
-    lines.push(`  descriptionI18n: ${JSON.stringify(action.descriptionI18n)},`)
-  }
-  if (action.tags?.length) {
-    lines.push(`  tags: [${action.tags.map(t => `'${t}'`).join(', ')}],`)
-  }
-  if (action.optionalParams) {
-    lines.push(`  optionalParams: true,`)
-  }
-  if (action.params?.length) {
-    const cleanParams = action.params.map(p => {
-      const clean: Record<string, unknown> = { key: p.key, label: p.label, type: p.type }
-      if (p.labelI18n) clean.labelI18n = p.labelI18n
-      if (p.default !== undefined) clean.default = p.default
-      if (p.options) {
-        clean.options = p.options.map((o: string | { label: string; value: string; labelI18n?: any }) =>
-          typeof o === 'string' ? o : (o.labelI18n ? { label: o.label, value: o.value, labelI18n: o.labelI18n } : { label: o.label, value: o.value })
-        )
-      }
-      if (p.required) clean.required = true
-      return clean
-    })
-    lines.push(`  params: ${JSON.stringify(cleanParams, null, 4).replace(/\n/g, '\n  ')},`)
-  }
-  if (action.run) {
-    const runStr = action.run.toString()
-    if (/^(async\s+)?run[\s(]/.test(runStr)) {
-      lines.push(`  ${runStr},`)
-    } else {
-      lines.push(`  run: ${runStr},`)
-    }
-  }
-  lines.push(`}`)
-  return lines.join('\n')
+function sourceLabel(plugin: InstalledPlugin | DevPlugin, locale: 'zh' | 'en') {
+  const source = plugin.source ?? 'local'
+  if (source === 'github') return t(locale, 'scripts.source.github')
+  if (source === 'zip') return t(locale, 'scripts.source.zip')
+  if (source === 'builtin') return t(locale, 'scripts.source.builtin')
+  return t(locale, 'scripts.source.local')
 }
 
-/** 高亮搜索匹配文本 */
-function HighlightText({ text, query }: { text: string; query: string }) {
-  if (!query) return <>{text}</>
-  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const parts = text.split(new RegExp(`(${escaped})`, 'gi'))
-  return (
-    <>
-      {parts.map((part, i) =>
-        part.toLowerCase() === query.toLowerCase()
-          ? <span key={i} className="scripts-search-highlight">{part}</span>
-          : part
-      )}
-    </>
-  )
+function statusLabel(status: string, locale: 'zh' | 'en') {
+  if (status === 'enabled') return t(locale, 'scripts.status.enabled')
+  if (status === 'disabled') return t(locale, 'scripts.status.disabled')
+  if (status === 'error') return t(locale, 'scripts.status.error')
+  if (status === 'loading') return t(locale, 'scripts.status.loading')
+  if (status === 'active') return t(locale, 'scripts.status.active')
+  return t(locale, 'scripts.status.available')
+}
+
+function packagePath(plugin: InstalledPlugin | DevPlugin) {
+  return plugin.packagePath ?? plugin.folderPath ?? ''
+}
+
+function capabilitiesOf(plugin: InstalledPlugin | DevPlugin | PluginPackageSummary) {
+  return Array.isArray(plugin.capabilities) ? plugin.capabilities : []
 }
 
 export function ScriptsView() {
-  const setActiveView = useAppStore((s) => s.setActiveView)
-  const settings = useAppStore((s) => s.settings)
   const locale = useAppStore((s) => s.locale)
-  const actions = useAppStore((s) => s.actions)
-  const toggleBuiltinDisabled = useAppStore((s) => s.toggleBuiltinDisabled)
-  const toggleCustomDisabled = useAppStore((s) => s.toggleCustomDisabled)
-  const [customScripts, setCustomScripts] = useState<ScriptFile[]>([])
-  const [loading, setLoading] = useState(false)
-  const [showRemoteModal, setShowRemoteModal] = useState(false)
+  const openPluginEditor = useAppStore((s) => s.openPluginEditor)
+  const plugins = usePluginStore((s) => s.plugins)
+  const devPlugins = usePluginStore((s) => s.devPlugins)
+  const [activeTab, setActiveTab] = useState<TabId>('builtin')
+  const [query, setQuery] = useState('')
+  const [builtinPlugins, setBuiltinPlugins] = useState<PluginPackageSummary[]>([])
+  const [installedPackages, setInstalledPackages] = useState<PluginPackageSummary[]>([])
+  const [busy, setBusy] = useState<BusyMap>({})
+  const [errors, setErrors] = useState<ErrorMap>({})
+  const [listError, setListError] = useState('')
   const [remoteUrl, setRemoteUrl] = useState('')
-  const [remoteImporting, setRemoteImporting] = useState(false)
-  const [remoteError, setRemoteError] = useState('')
+  const [remoteOpen, setRemoteOpen] = useState(false)
+  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'done' | 'error'>('idle')
 
-  // 搜索
-  const [searchQuery, setSearchQuery] = useState('')
-  // Tab
-  const [activeTab, setActiveTab] = useState<'builtin' | 'custom'>('builtin')
-  const tabsRef = useRef<HTMLDivElement>(null)
-  const builtinTabRef = useRef<HTMLButtonElement>(null)
-  const customTabRef = useRef<HTMLButtonElement>(null)
-  const [indicatorStyle, setIndicatorStyle] = useState<{ left: number; width: number }>({ left: 0, width: 0 })
+  const installedList = useMemo(() => {
+    const byId = new Map<string, InstalledPlugin>()
+    for (const plugin of Object.values(plugins).filter(Boolean)) {
+      byId.set(plugin.pluginId, plugin)
+    }
+    for (const pkg of installedPackages) {
+      if (byId.has(pkg.pluginId)) continue
+      byId.set(pkg.pluginId, {
+        pluginId: pkg.pluginId,
+        displayName: pkg.displayName,
+        version: pkg.version,
+        entry: pkg.entry,
+        capabilities: pkg.capabilities,
+        folderPath: pkg.folderPath,
+        packagePath: pkg.folderPath,
+        source: 'local',
+        status: 'disabled',
+        update: { status: 'idle' },
+        installedAt: Date.now(),
+        updatedAt: Date.now(),
+      })
+    }
+    return Array.from(byId.values())
+  }, [plugins, installedPackages])
+  const devList = useMemo(() => Object.values(devPlugins).filter(Boolean), [devPlugins])
+  const normalizedQuery = query.trim().toLowerCase()
 
-  // 内置脚本更新检查
-  const [scriptsCheckStatus, setScriptsCheckStatus] = useState<'idle' | 'checking' | 'updated' | 'up-to-date' | 'error'>('idle')
-  const [scriptsNewVersion, setScriptsNewVersion] = useState(0)
-
-  const handleCheckScriptsUpdate = async () => {
-    setScriptsCheckStatus('checking')
-    try {
-      const result = await checkBuiltinScriptsUpdate()
-      if (result.updated) {
-        setScriptsCheckStatus('updated')
-        setScriptsNewVersion(result.version || 0)
-        // 更新后自动重载到内存，无需重启
-        if ((window as any).__TAURI_INTERNALS__) {
-          try {
-            const { invoke } = await import('@tauri-apps/api/core')
-            const watchDir = useAppStore.getState().settings.watchDirectory
-            const scripts = await invoke<{ name: string; path: string; content: string; builtin?: boolean }[]>('read_scripts_dir', { path: watchDir })
-            const builtinsFromDisk = scripts
-              .filter(s => s.builtin)
-              .map(s => parseScriptToAction(s.content))
-              .filter((a): a is ActionDef => a !== null)
-            if (builtinsFromDisk.length > 0) {
-              useAppStore.getState().setBuiltinActionsFromDisk(builtinsFromDisk)
-            }
-          } catch (e) {
-            console.error('[FluxText] Failed to reload scripts after update:', e)
+  useEffect(() => {
+    let cancelled = false
+    async function loadDirectoryPlugins() {
+      if (!isTauri()) return
+      const configDir = await getConfigDir()
+      if (!configDir || cancelled) return
+      try {
+        setListError('')
+        const [builtinSummaries, installedSummaries] = await Promise.all([
+          listPluginDirs(`${configDir}/plugins/builtin`),
+          listPluginDirs(`${configDir}/plugins/installed`),
+        ])
+        if (!cancelled) {
+          setBuiltinPlugins(builtinSummaries)
+          setInstalledPackages(installedSummaries)
+          const store = usePluginStore.getState()
+          for (const pkg of installedSummaries) {
+            if (store.plugins[pkg.pluginId]) continue
+            store.installPlugin({
+              pluginId: pkg.pluginId,
+              displayName: pkg.displayName,
+              version: pkg.version,
+              entry: pkg.entry,
+              capabilities: pkg.capabilities,
+              folderPath: pkg.folderPath,
+              packagePath: pkg.folderPath,
+              source: 'local',
+              status: 'disabled',
+              update: { status: 'idle' },
+              installedAt: Date.now(),
+              updatedAt: Date.now(),
+            })
           }
         }
-      } else {
-        setScriptsCheckStatus(result.error ? 'error' : 'up-to-date')
+      } catch (error) {
+        if (!cancelled) setBuiltinPlugins([])
+        if (!cancelled) setInstalledPackages([])
+        if (!cancelled) setListError(error instanceof Error ? error.message : String(error))
       }
-    } catch {
-      setScriptsCheckStatus('error')
     }
-  }
-
-  const builtinActions = actions.filter((a) => a.builtin)
-
-  // 更新 tab 指示条位置
-  const updateIndicator = useCallback(() => {
-    const container = tabsRef.current
-    const btn = activeTab === 'builtin' ? builtinTabRef.current : customTabRef.current
-    if (!container || !btn) return
-    const containerRect = container.getBoundingClientRect()
-    const btnRect = btn.getBoundingClientRect()
-    setIndicatorStyle({
-      left: btnRect.left - containerRect.left,
-      width: btnRect.width,
-    })
-  }, [activeTab])
-
-  useEffect(() => {
-    updateIndicator()
-  }, [updateIndicator])
-
-  useEffect(() => {
-    window.addEventListener('resize', updateIndicator)
-    return () => window.removeEventListener('resize', updateIndicator)
-  }, [updateIndicator])
-
-  // 搜索过滤
-  const trimmedQuery = searchQuery.trim().toLowerCase()
-  const isSearching = trimmedQuery.length > 0
+    void loadDirectoryPlugins()
+    return () => { cancelled = true }
+  }, [updateStatus])
 
   const filteredBuiltin = useMemo(() => {
-    if (!isSearching) return builtinActions
-    return builtinActions.filter(a =>
-      a.name.toLowerCase().includes(trimmedQuery) ||
-      a.title.toLowerCase().includes(trimmedQuery) ||
-      (a.titleI18n?.zh || '').toLowerCase().includes(trimmedQuery)
+    if (!normalizedQuery) return builtinPlugins
+    return builtinPlugins.filter((plugin) =>
+      textMatches(plugin.pluginId, normalizedQuery) ||
+      textMatches(plugin.displayName, normalizedQuery) ||
+      textMatches(plugin.folderPath, normalizedQuery),
     )
-  }, [builtinActions, trimmedQuery, isSearching])
+  }, [builtinPlugins, normalizedQuery])
 
-  const filteredCustom = useMemo(() => {
-    if (!isSearching) return customScripts
-    return customScripts.filter(s =>
-      s.name.toLowerCase().includes(trimmedQuery) ||
-      s.path.toLowerCase().includes(trimmedQuery)
+  const filteredInstalled = useMemo(() => {
+    if (!normalizedQuery) return installedList
+    return installedList.filter((plugin) =>
+      textMatches(plugin.pluginId, normalizedQuery) ||
+      textMatches(plugin.displayName, normalizedQuery) ||
+      textMatches(plugin.folderPath, normalizedQuery) ||
+      textMatches(plugin.sourceUrl, normalizedQuery),
     )
-  }, [customScripts, trimmedQuery, isSearching])
+  }, [installedList, normalizedQuery])
 
-  const totalCount = isSearching
-    ? filteredBuiltin.length + filteredCustom.length
-    : builtinActions.length + customScripts.length
+  const filteredDev = useMemo(() => {
+    if (!normalizedQuery) return devList
+    return devList.filter((plugin) =>
+      textMatches(plugin.pluginId, normalizedQuery) ||
+      textMatches(plugin.displayName, normalizedQuery) ||
+      textMatches(plugin.folderPath, normalizedQuery),
+    )
+  }, [devList, normalizedQuery])
 
-  function openScript(actionName: string) {
-    const action = actions.find((a) => a.name === actionName)
-    if (!action) return
-    const script = generateScriptSource(action)
-    const defaultParams: Record<string, string | boolean | number | unknown[]> = {}
-    for (const p of action.params || []) {
-      defaultParams[p.key] = p.default ?? getParamDefault(p.type)
-    }
-    useAppStore.getState().addDebuggerTab({
-      id: nextTabId(),
-      fileName: `${action.name}.ts`,
-      script,
-      input: '',
-      output: '',
-      params: defaultParams,
-      consoleLogs: [{ type: 'dim', message: '— ready —' }],
-      dirty: false,
-      running: false,
-      fileNameEditing: false,
-      builtin: true,
+  const setItemBusy = (key: string, value: boolean) =>
+    setBusy((prev) => ({ ...prev, [key]: value }))
+  const setItemError = (key: string, message: string) =>
+    setErrors((prev) => ({ ...prev, [key]: message }))
+  const clearItemError = (key: string) =>
+    setErrors((prev) => {
+      const next = { ...prev }
+      delete next[key]
+      return next
     })
-    setActiveView('debugger')
-  }
 
-  const loadScripts = useCallback(async () => {
-    if (!isTauri()) return
-    setLoading(true)
-    try {
-      const { invoke } = await import('@tauri-apps/api/core')
-      const scripts = await invoke<ScriptFile[]>('read_scripts_dir', { path: settings.watchDirectory })
-      const userScripts = scripts.filter((s) => !s.builtin)
-      setCustomScripts(userScripts.map((s) => {
-        try {
-          if (s.content.includes('export default') || s.content.includes('module.exports')) {
-            return { ...s, status: 'loaded' as const }
-          }
-          return { ...s, status: 'loaded' as const }
-        } catch {
-          return { ...s, status: 'error' as const, error: 'Parse error' }
-        }
-      }))
-
-      // 将自定义脚本注册到 Command Palette
-      const customActions = userScripts
-        .map(s => parseScriptToAction(s.content))
-        .filter((a): a is ActionDef => a !== null)
-      useAppStore.getState().setCustomActions(customActions)
-    } catch (e) {
-      console.error('Failed to load scripts:', e)
-    }
-    setLoading(false)
-  }, [settings.watchDirectory])
-
-  useEffect(() => {
-    void loadScripts()
-  }, [loadScripts])
-
-  async function handleImport() {
+  async function runTask(key: string, task: () => Promise<void>) {
     if (!isTauri()) {
-      alert('Import requires Tauri desktop environment')
+      setItemError(key, t(locale, 'scripts.desktopRequired'))
       return
     }
+    setItemBusy(key, true)
+    clearItemError(key)
     try {
-      const { open } = await import('@tauri-apps/plugin-dialog')
-      const { invoke } = await import('@tauri-apps/api/core')
-      const { readTextFile } = await import('@tauri-apps/plugin-fs')
-
-      const selected = await open({
-        title: 'Import Script',
-        filters: [{ name: 'Scripts', extensions: ['js', 'ts'] }],
-        multiple: true,
-      })
-
-      if (!selected) return
-      const files = Array.isArray(selected) ? selected : [selected]
-
-      for (const filePath of files) {
-        const content = await readTextFile(filePath)
-        const fileName = filePath.split('/').pop() || filePath.split('\\').pop() || 'script.ts'
-        const destPath = `${settings.watchDirectory}/${fileName}`
-        await invoke('save_script', { path: destPath, content })
-      }
-
-      await loadScripts()
-      setActiveTab('custom')
-    } catch (e) {
-      console.error('Import failed:', e)
+      await task()
+    } catch (error) {
+      setItemError(key, error instanceof Error ? error.message : String(error))
+    } finally {
+      setItemBusy(key, false)
     }
   }
 
-  async function handleDelete(script: ScriptFile) {
-    if (!isTauri()) return
-    if (!confirm(`Delete ${script.name}?`)) return
-    try {
-      const { invoke } = await import('@tauri-apps/api/core')
-      await invoke('delete_script', { path: script.path })
-      await loadScripts()
-    } catch (e) {
-      console.error('Delete failed:', e)
-    }
+  async function handleInstallDirectory() {
+    const folder = await pickLocalPluginFolder()
+    if (!folder) return
+    await runTask('_install-folder', async () => {
+      await importLocalPluginDirectory(folder)
+      setActiveTab('installed')
+    })
   }
 
-  function fileNameFromUrl(url: string): string {
-    try {
-      const pathname = new URL(url).pathname
-      const name = pathname.split('/').pop()
-      if (name && /\.(js|ts)$/i.test(name)) return name
-    } catch { /* ignore */ }
-    return `remote_${Date.now()}.ts`
+  async function handleInstallZip() {
+    const zipPath = await pickPluginZipFile()
+    if (!zipPath) return
+    await runTask('_install-zip', async () => {
+      await importPluginZip(zipPath)
+      setActiveTab('installed')
+    })
   }
 
-  function isTxtUrl(url: string): boolean {
-    try {
-      return new URL(url).pathname.toLowerCase().endsWith('.txt')
-    } catch { return false }
+  async function handleSideloadDev() {
+    const folder = await pickLocalPluginFolder()
+    if (!folder) return
+    await runTask('_dev-folder', async () => {
+      await importDevPluginDirectory(folder)
+      setActiveTab('dev')
+    })
   }
 
-  async function handleRemoteImport() {
+  async function handleCreatePlugin() {
+    await runTask('_new-plugin', async () => {
+      const plugin = await createDevPluginScaffold()
+      setActiveTab('dev')
+      openPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'dev' })
+    })
+  }
+
+  async function handleRemoteInstall() {
     const url = remoteUrl.trim()
     if (!url) return
-    if (!isTauri()) {
-      alert('Import requires Tauri desktop environment')
-      return
-    }
-
-    setRemoteImporting(true)
-    setRemoteError('')
-
-    try {
-      const { invoke } = await import('@tauri-apps/api/core')
-      const content = await invoke<string>('fetch_url', { url })
-
-      let scriptUrls: string[]
-
-      if (isTxtUrl(url)) {
-        scriptUrls = content
-          .split('\n')
-          .map((line) => line.trim())
-          .filter((line) => line && !line.startsWith('#') && /^https?:\/\//.test(line))
-      } else {
-        const fileName = fileNameFromUrl(url)
-        const destPath = `${settings.watchDirectory}/${fileName}`
-        await invoke('save_script', { path: destPath, content })
-        await loadScripts()
-        setShowRemoteModal(false)
-        setRemoteUrl('')
-        setRemoteImporting(false)
-        setActiveTab('custom')
-        return
-      }
-
-      if (scriptUrls.length === 0) {
-        setRemoteError(t(locale, 'scripts.remoteImportError') + ': No valid URLs found in txt')
-        setRemoteImporting(false)
-        return
-      }
-
-      let successCount = 0
-      for (const scriptUrl of scriptUrls) {
-        try {
-          const scriptContent = await invoke<string>('fetch_url', { url: scriptUrl })
-          const fileName = fileNameFromUrl(scriptUrl)
-          const destPath = `${settings.watchDirectory}/${fileName}`
-          await invoke('save_script', { path: destPath, content: scriptContent })
-          successCount++
-        } catch (e) {
-          console.error(`Failed to fetch ${scriptUrl}:`, e)
-        }
-      }
-
-      await loadScripts()
-      setShowRemoteModal(false)
+    await runTask('_remote', async () => {
+      rejectSingleFileRemoteImport(url)
+      await importGithubDirectory(url)
+      setRemoteOpen(false)
       setRemoteUrl('')
-      setActiveTab('custom')
-      if (successCount === 0) {
-        setRemoteError(t(locale, 'scripts.remoteImportError'))
-      }
-    } catch (e: unknown) {
-      console.error('Remote import failed:', e)
-      setRemoteError(`${t(locale, 'scripts.remoteImportError')}: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      setActiveTab('installed')
+    })
+  }
+
+  async function handlePackageUpdateCheck() {
+    setUpdateStatus('checking')
+    try {
+      await checkBuiltinPluginsUpdate()
+      setUpdateStatus('done')
+    } catch {
+      setUpdateStatus('error')
     }
-    setRemoteImporting(false)
   }
 
-  /** 渲染一张内置脚本卡片 */
-  function renderBuiltinCard(action: typeof builtinActions[number], i: number) {
-    const isDisabled = settings.disabledBuiltins.includes(action.name)
+  function renderInstalled(plugin: InstalledPlugin) {
+    const key = plugin.pluginId
+    const loading = !!busy[key]
+    const localError = errors[key]
     return (
-      <div
-        key={action.name}
-        className="script-card anim-card-in"
-        style={{ animationDelay: `${i * 0.03}s`, opacity: isDisabled ? 0.5 : 1 }}
-      >
-        <div className="script-icon">
-          {resolveIcon(action.icon, 16, action.name)}
-        </div>
-        <div className="script-info">
-          <div className="script-name">
-            <HighlightText text={action.name} query={trimmedQuery} />
-          </div>
-          <div className="script-desc">
-            <HighlightText text={action.titleI18n?.zh || action.title} query={trimmedQuery} />
-          </div>
-        </div>
-        <button
-          onClick={() => openScript(action.name)}
-          className="script-action-btn"
-          title={t(locale, 'scripts.viewSource')}
-        >
-          <Eye size={14} />
-        </button>
-        <button
-          onClick={() => toggleBuiltinDisabled(action.name)}
-          className="script-action-btn"
-          title={isDisabled ? t(locale, 'scripts.disabled') : t(locale, 'scripts.enabled')}
-          style={{ color: isDisabled ? 'var(--color-error-text)' : 'var(--color-success-text)' }}
-        >
-          <Power size={14} />
-        </button>
-        <span className="script-badge">built-in</span>
-      </div>
+      <PluginCard
+        key={plugin.pluginId}
+        title={plugin.displayName || plugin.pluginId}
+        subtitle={plugin.pluginId}
+        version={plugin.version || '0.0.0'}
+        source={sourceLabel(plugin, locale)}
+        status={statusLabel(plugin.status, locale)}
+        folderPath={packagePath(plugin)}
+        sourceUrl={plugin.sourceUrl}
+        capabilities={capabilitiesOf(plugin)}
+        error={plugin.error || localError}
+        loading={loading}
+        actions={
+          <>
+            <IconButton
+              title={t(locale, 'scripts.actionOpenEditor')}
+              onClick={() => openPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'installed' })}
+            >
+              <FolderOpen size={13} />
+            </IconButton>
+            {plugin.status !== 'enabled' && (
+              <IconButton title={t(locale, 'scripts.actionEnable')} onClick={() => runTask(key, () => enablePlugin(plugin.pluginId))}>
+                <Power size={13} />
+              </IconButton>
+            )}
+            {plugin.status === 'enabled' && (
+              <IconButton title={t(locale, 'scripts.actionDisable')} onClick={() => disablePlugin(plugin.pluginId)}>
+                <Power size={13} />
+              </IconButton>
+            )}
+            <IconButton title={t(locale, 'scripts.actionReload')} onClick={() => runTask(key, () => reloadPlugin(plugin.pluginId))}>
+              <RefreshCw size={13} />
+            </IconButton>
+            <IconButton title={t(locale, 'scripts.actionUninstall')} onClick={() => uninstallPlugin(plugin.pluginId)}>
+              <Trash2 size={13} />
+            </IconButton>
+          </>
+        }
+      />
     )
   }
 
-  /** 渲染一张自定义脚本卡片 */
-  function renderCustomCard(s: ScriptFile, i: number) {
-    const isDisabled = settings.disabledCustoms.includes(s.name)
+  function renderDev(plugin: DevPlugin) {
+    const key = `dev:${plugin.pluginId}`
     return (
-      <div
-        key={s.name}
-        className="script-card anim-card-in"
-        style={{
-          animationDelay: `${i * 0.03}s`,
-          borderColor: s.status === 'error' ? 'var(--color-error)' : undefined,
-          opacity: isDisabled ? 0.5 : 1,
-        }}
-      >
-        <div className="script-icon" style={s.status === 'error' ? {
-          background: 'var(--color-error-bg)',
-          color: 'var(--color-error-text)',
-        } : undefined}>
-          {s.status === 'error' ? <AlertTriangle size={16} /> : resolveIcon(undefined, 16, s.name)}
-        </div>
-        <div className="script-info">
-          <div className="script-name">
-            <HighlightText text={s.name} query={trimmedQuery} />
-          </div>
-          <div className="script-desc truncate">{s.error || s.path}</div>
-        </div>
-        <button
-          onClick={() => {
-            useAppStore.getState().addDebuggerTab({
-              id: nextTabId(),
-              fileName: s.name,
-              script: s.content,
-              input: '',
-              output: '',
-              params: {},
-              consoleLogs: [{ type: 'dim', message: '— ready —' }],
-              dirty: false,
-              running: false,
-              fileNameEditing: false,
-            })
-            setActiveView('debugger')
-          }}
-          className="script-action-btn"
-          title="Edit"
-        >
-          <Edit size={14} />
-        </button>
-        <button
-          onClick={() => handleDelete(s)}
-          className="script-action-btn"
-          title="Delete"
-        >
-          <Trash2 size={14} />
-        </button>
-        <button
-          onClick={() => toggleCustomDisabled(s.name)}
-          className="script-action-btn"
-          title={isDisabled ? t(locale, 'scripts.disabled') : t(locale, 'scripts.enabled')}
-          style={{ color: isDisabled ? 'var(--color-error-text)' : 'var(--color-success-text)' }}
-        >
-          <Power size={14} />
-        </button>
-        <span
-          className="script-badge"
-          style={s.status === 'loaded' ? {
-            background: 'var(--color-success-bg)',
-            color: 'var(--color-success-text)',
-          } : s.status === 'error' ? {
-            background: 'var(--color-error-bg)',
-            color: 'var(--color-error-text)',
-          } : undefined}
-        >
-          {s.status}
-        </span>
-      </div>
+      <PluginCard
+        key={plugin.pluginId}
+        title={plugin.displayName || plugin.pluginId}
+        subtitle={plugin.pluginId}
+        version={plugin.version || '0.0.0'}
+        source={sourceLabel(plugin, locale)}
+        status={statusLabel(plugin.status, locale)}
+        folderPath={packagePath(plugin)}
+        sourceUrl={plugin.sourceUrl}
+        capabilities={capabilitiesOf(plugin)}
+        error={plugin.error || errors[key]}
+        loading={!!busy[key]}
+        actions={
+          <>
+            <IconButton
+              title={t(locale, 'scripts.actionOpenEditor')}
+              onClick={() => openPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'dev' })}
+            >
+              <FolderOpen size={13} />
+            </IconButton>
+            {plugin.watching ? (
+              <IconButton title={t(locale, 'scripts.actionStopWatching')} onClick={() => unwatchDevPlugin(plugin.pluginId)}>
+                <Power size={13} />
+              </IconButton>
+            ) : (
+              <IconButton title={t(locale, 'scripts.actionWatchDev')} onClick={() => runTask(key, () => watchDevPlugin(plugin.pluginId))}>
+                <Power size={13} />
+              </IconButton>
+            )}
+            <IconButton title={t(locale, 'scripts.actionReloadDev')} onClick={() => runTask(key, () => reloadDevPlugin(plugin.pluginId))}>
+              <RefreshCw size={13} />
+            </IconButton>
+            <IconButton title={t(locale, 'scripts.actionRemoveDev')} onClick={() => removeDevPlugin(plugin.pluginId)}>
+              <Trash2 size={13} />
+            </IconButton>
+          </>
+        }
+      />
     )
   }
+
+  function renderBuiltin(plugin: PluginPackageSummary) {
+    return (
+      <PluginCard
+        key={plugin.pluginId}
+        title={plugin.displayName || plugin.pluginId}
+        subtitle={plugin.pluginId}
+        version={plugin.version || '0.0.0'}
+        source={t(locale, 'scripts.source.builtin')}
+        status={t(locale, 'scripts.status.available')}
+        folderPath={plugin.folderPath || ''}
+        capabilities={capabilitiesOf(plugin)}
+        actions={
+          <>
+            <IconButton
+              title={t(locale, 'scripts.actionOpenEditor')}
+              onClick={() => openPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'builtin', readOnly: true })}
+            >
+              <FolderOpen size={13} />
+            </IconButton>
+            <span className="script-badge">{t(locale, 'scripts.readOnly')}</span>
+          </>
+        }
+      />
+    )
+  }
+
+  const activeItems = activeTab === 'builtin' ? filteredBuiltin : activeTab === 'installed' ? filteredInstalled : filteredDev
+  const totalCount = filteredBuiltin.length + filteredInstalled.length + filteredDev.length
 
   return (
     <div className="scripts-content">
-      {/* Header */}
       <div className="scripts-header">
         <span className="scripts-title">{t(locale, 'scripts.title')}</span>
         <div className="scripts-header-actions">
-          <button
-            onClick={() => { setShowRemoteModal(true); setRemoteError('') }}
-            className="scripts-btn"
-          >
-            <Globe size={14} /> {t(locale, 'scripts.remoteImport')}
-          </button>
-          <button onClick={handleImport} className="scripts-btn">
-            <Upload size={14} /> {t(locale, 'scripts.import')}
-          </button>
-          <button
-            onClick={() => {
-              const demoScript = `export default {
-  name: 'my-script',
-  title: 'My Script',
-  titleI18n: { zh: '我的脚本' },
-  icon: 'Filter',                   // lucide 图标名，参考 https://lucide.dev/icons，不填则显示 name 前两个字母
-  description: 'A demo script showing all available features',
-  descriptionI18n: { zh: '展示所有可用功能的示例脚本' },
-  tags: ['demo', 'template'],
-
-  params: [
-    {
-      key: 'trim',
-      label: 'Trim whitespace',
-      labelI18n: { zh: '去除空白' },
-      type: 'boolean',
-      default: true,
-    },
-    {
-      key: 'separator',
-      label: 'Output separator',
-      labelI18n: { zh: '输出分隔符' },
-      type: 'single-select',
-      options: [
-        { label: 'Newline', value: 'newline', labelI18n: { zh: '换行' } },
-        { label: 'Comma', value: 'comma', labelI18n: { zh: '逗号' } },
-        { label: 'Tab', value: 'tab', labelI18n: { zh: '制表符' } },
-      ],
-      default: 'newline',
-    },
-  ],
-
-  /**
-   * run(ctx) — 脚本入口 / Script entry
-   *
-   * ctx.input.text   — 编辑器文本 / editor text (string)
-   * ctx.params        — 用户参数 / user params (Record<string, any>)
-   *
-   * return { text }   — 写入输出面板 / write to output panel
-   */
-  run(ctx) {
-    const lines = ctx.input.text.split('\\n')
-
-    const processed = ctx.params.trim
-      ? lines.map(line => line.trim()).filter(Boolean)
-      : lines
-
-    const sep = { newline: '\\n', comma: ', ', tab: '\\t' }[ctx.params.separator] || '\\n'
-
-    return { text: processed.join(sep) }
-  }
-}
-`
-              useAppStore.getState().addDebuggerTab({
-                id: nextTabId(),
-                fileName: 'my-script.ts',
-                script: demoScript,
-                input: '',
-                output: '',
-                params: { trim: true, separator: 'newline' },
-                consoleLogs: [{ type: 'dim', message: '— ready —' }],
-                dirty: false,
-                running: false,
-                fileNameEditing: true,
-              })
-              setActiveView('debugger')
-            }}
-            className="scripts-btn scripts-btn-primary"
-          >
+          <button onClick={handleCreatePlugin} className="scripts-btn scripts-btn-primary">
             <Plus size={14} /> {t(locale, 'scripts.new')}
+          </button>
+          <button onClick={() => setRemoteOpen(true)} className="scripts-btn">
+            <Globe size={14} /> {t(locale, 'scripts.importGithub')}
+          </button>
+          <button onClick={handleInstallZip} className="scripts-btn">
+            <Archive size={14} /> {t(locale, 'scripts.importZip')}
+          </button>
+          <button onClick={handleInstallDirectory} className="scripts-btn">
+            <Upload size={14} /> {t(locale, 'scripts.importFolder')}
+          </button>
+          <button onClick={handleSideloadDev} className="scripts-btn scripts-btn-primary">
+            <FolderOpen size={14} /> {t(locale, 'scripts.importDev')}
           </button>
         </div>
       </div>
 
-      {/* 搜索栏 */}
       <div className="scripts-search-bar">
         <Search size={14} />
         <input
           className="scripts-search-input"
           type="text"
           placeholder={t(locale, 'scripts.searchPlaceholder')}
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
         />
-        <span className={`scripts-search-count ${isSearching ? 'has-query' : ''}`}>
-          {totalCount}
-        </span>
+        <span className={`scripts-search-count ${query ? 'has-query' : ''}`}>{totalCount}</span>
       </div>
 
-      {/* 搜索模式 — 平铺结果 */}
-      {isSearching ? (
-        <div className="scripts-search-results">
-          {totalCount === 0 ? (
-            <div className="scripts-empty">
-              <Search size={40} strokeWidth={1.5} />
-              <div className="scripts-empty-text">{t(locale, 'scripts.noResults')}</div>
-            </div>
-          ) : (
-            <>
-              {filteredBuiltin.map((a, i) => renderBuiltinCard(a, i))}
-              {filteredCustom.map((s, i) => renderCustomCard(s, filteredBuiltin.length + i))}
-            </>
-          )}
-        </div>
-      ) : (
-        <>
-          {/* Tabs */}
-          <div className="scripts-tabs" ref={tabsRef}>
-            <button
-              ref={builtinTabRef}
-              className={`scripts-tab ${activeTab === 'builtin' ? 'active' : ''}`}
-              onClick={() => setActiveTab('builtin')}
-            >
-              {t(locale, 'scripts.builtIn')}
-              <span className={`scripts-tab-count ${activeTab === 'builtin' ? 'active' : ''}`}>
-                {builtinActions.length}
-              </span>
-            </button>
-            <button
-              ref={customTabRef}
-              className={`scripts-tab ${activeTab === 'custom' ? 'active' : ''}`}
-              onClick={() => setActiveTab('custom')}
-            >
-              {t(locale, 'scripts.custom')}
-              <span className={`scripts-tab-count ${activeTab === 'custom' ? 'active' : ''}`}>
-                {customScripts.length}
-              </span>
-              {loading && <RefreshCw size={11} className="animate-spin" style={{ marginLeft: 4, color: 'var(--color-text-tertiary)' }} />}
-            </button>
-            <div
-              className="scripts-tab-indicator"
-              style={{ left: indicatorStyle.left, width: indicatorStyle.width }}
-            />
-          </div>
+      <div className="scripts-tabs">
+        <button className={`scripts-tab ${activeTab === 'builtin' ? 'active' : ''}`} onClick={() => setActiveTab('builtin')}>
+          {t(locale, 'scripts.tabBuiltin')}
+          <span className={`scripts-tab-count ${activeTab === 'builtin' ? 'active' : ''}`}>{builtinPlugins.length}</span>
+        </button>
+        <button className={`scripts-tab ${activeTab === 'installed' ? 'active' : ''}`} onClick={() => setActiveTab('installed')}>
+          {t(locale, 'scripts.tabInstalled')}
+          <span className={`scripts-tab-count ${activeTab === 'installed' ? 'active' : ''}`}>{installedList.length}</span>
+        </button>
+        <button className={`scripts-tab ${activeTab === 'dev' ? 'active' : ''}`} onClick={() => setActiveTab('dev')}>
+          {t(locale, 'scripts.tabDev')}
+          <span className={`scripts-tab-count ${activeTab === 'dev' ? 'active' : ''}`}>{devList.length}</span>
+        </button>
+      </div>
 
-          {/* Tab Panels — 滑动面板 */}
-          <div className="scripts-tab-panels">
-            <div
-              className="scripts-tab-track"
-              style={{ transform: activeTab === 'builtin' ? 'translateX(0)' : 'translateX(-50%)' }}
-            >
-              {/* Built-in Panel */}
-              <div className="scripts-tab-panel">
-                <div className="flex items-center justify-end gap-2 mb-2 px-1">
-                  {scriptsCheckStatus === 'checking' ? (
-                    <span className="flex items-center gap-1" style={{ fontSize: '0.75em', color: 'var(--color-text-tertiary)' }}>
-                      <RefreshCw size={11} className="animate-spin" />
-                      {t(locale, 'scripts.checkingUpdate')}
-                    </span>
-                  ) : scriptsCheckStatus === 'updated' ? (
-                    <span className="flex items-center gap-1" style={{ fontSize: '0.75em', color: 'var(--color-success-text)' }}>
-                      <Download size={11} />
-                      {t(locale, 'scripts.scriptsUpdated').replace('{version}', String(scriptsNewVersion))}
-                    </span>
-                  ) : scriptsCheckStatus === 'up-to-date' ? (
-                    <span style={{ fontSize: '0.75em', color: 'var(--color-text-tertiary)' }}>
-                      {t(locale, 'scripts.scriptsUpToDate')}
-                    </span>
-                  ) : scriptsCheckStatus === 'error' ? (
-                    <span style={{ fontSize: '0.75em', color: 'var(--color-error-text)' }}>
-                      {t(locale, 'scripts.scriptsUpdateError')}
-                    </span>
-                  ) : null}
-                  {scriptsCheckStatus !== 'checking' && (
-                    <button
-                      onClick={handleCheckScriptsUpdate}
-                      className="scripts-btn"
-                      style={{ fontSize: '0.75em', padding: '2px 8px' }}
-                    >
-                      <RefreshCw size={11} />
-                      {t(locale, 'scripts.checkUpdate')}
-                    </button>
-                  )}
-                </div>
-                {builtinActions.map((a, i) => renderBuiltinCard(a, i))}
-              </div>
-              {/* Custom Panel */}
-              <div className="scripts-tab-panel">
-                {customScripts.length === 0 ? (
-                  <div className="scripts-empty">
-                    <Upload size={40} strokeWidth={1.5} />
-                    <div className="scripts-empty-text">
-                      {isTauri() ? 'No custom scripts found. Import or create one.' : 'Import requires Tauri desktop app.'}
-                    </div>
-                  </div>
-                ) : (
-                  customScripts.map((s, i) => renderCustomCard(s, i))
-                )}
-              </div>
-            </div>
-          </div>
-        </>
+      <div className="flex items-center justify-between mb-2 px-1">
+        <span style={{ fontSize: '0.75em', color: 'var(--color-text-tertiary)' }}>
+          {activeTab === 'builtin'
+            ? t(locale, 'scripts.sectionBuiltin')
+            : activeTab === 'installed'
+              ? t(locale, 'scripts.sectionInstalled')
+              : t(locale, 'scripts.sectionDev')}
+        </span>
+        <button onClick={handlePackageUpdateCheck} className="scripts-btn" style={{ fontSize: '0.75em', padding: '2px 8px' }}>
+          {updateStatus === 'checking' ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
+          {t(locale, 'scripts.checkPackageUpdates')}
+        </button>
+      </div>
+      {updateStatus === 'error' && (
+        <div className="text-[11px] mb-2" style={{ color: 'var(--color-error-text)' }}>{t(locale, 'scripts.packageUpdateError')}</div>
+      )}
+      {listError && (
+        <div className="text-[11px] mb-2 flex items-center gap-1" style={{ color: 'var(--color-error-text)' }}>
+          <AlertTriangle size={12} /> {listError}
+        </div>
       )}
 
-      {/* Remote Import Modal */}
-      {showRemoteModal && (
-        <div
-          className="modal-overlay open"
-          onClick={() => { if (!remoteImporting) setShowRemoteModal(false) }}
-        >
-          <div
-            className="modal-panel"
-            onClick={(e) => e.stopPropagation()}
-          >
+      <div className="scripts-search-results">
+        {activeItems.length === 0 ? (
+          <div className="scripts-empty">
+            <Package size={40} strokeWidth={1.5} />
+            <div className="scripts-empty-text">
+              {activeTab === 'installed'
+                ? t(locale, 'scripts.emptyInstalled')
+                : activeTab === 'builtin'
+                  ? t(locale, 'scripts.emptyBuiltin')
+                  : t(locale, 'scripts.emptyDev')}
+            </div>
+          </div>
+        ) : (
+          activeTab === 'builtin'
+            ? filteredBuiltin.map(renderBuiltin)
+            : activeTab === 'installed'
+            ? filteredInstalled.map(renderInstalled)
+            : filteredDev.map(renderDev)
+        )}
+      </div>
+
+      {(errors['_install-folder'] || errors['_install-zip'] || errors['_dev-folder'] || errors['_new-plugin']) && (
+        <div className="mt-2 flex items-center gap-1" style={{ fontSize: '0.85em', color: 'var(--color-error-text)' }}>
+          <AlertTriangle size={12} />
+          {errors['_install-folder'] || errors['_install-zip'] || errors['_dev-folder'] || errors['_new-plugin']}
+        </div>
+      )}
+
+      {remoteOpen && (
+        <div className="modal-overlay open" onClick={() => { if (!busy['_remote']) setRemoteOpen(false) }}>
+          <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <div className="modal-title">
-                <Upload size={16} />
-                {t(locale, 'scripts.remoteImportTitle')}
+                <Globe size={16} />
+                {t(locale, 'scripts.remoteImportDirectoryTitle')}
               </div>
-              <button
-                onClick={() => { if (!remoteImporting) setShowRemoteModal(false) }}
-                className="modal-close"
-              >
-                <X size={14} />
-              </button>
+              <button onClick={() => setRemoteOpen(false)} className="modal-close">x</button>
             </div>
             <div className="modal-body">
               <div className="modal-desc">
-                {t(locale, 'scripts.remoteImportDesc')}
+                {t(locale, 'scripts.remoteImportDirectoryDesc')}
               </div>
               <div className="modal-url-row">
                 <input
                   type="text"
                   className="modal-url-input"
                   value={remoteUrl}
-                  onChange={(e) => { setRemoteUrl(e.target.value); setRemoteError('') }}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && !remoteImporting) handleRemoteImport() }}
-                  placeholder={t(locale, 'scripts.remoteImportPlaceholder')}
+                  onChange={(event) => {
+                    setRemoteUrl(event.target.value)
+                    clearItemError('_remote')
+                  }}
+                  onKeyDown={(event) => { if (event.key === 'Enter' && !busy['_remote']) void handleRemoteInstall() }}
+                  placeholder="https://github.com/owner/repo/tree/main/plugin"
                   autoFocus
-                  disabled={remoteImporting}
+                  disabled={busy['_remote']}
                 />
-                <button
-                  onClick={handleRemoteImport}
-                  disabled={remoteImporting || !remoteUrl.trim()}
-                  className="scripts-btn scripts-btn-primary"
-                  style={{ height: 36, padding: '0 16px', fontSize: 12 }}
-                >
-                  {remoteImporting ? <Loader2 size={12} className="animate-spin" /> : 'Fetch'}
+                <button onClick={handleRemoteInstall} disabled={busy['_remote'] || !remoteUrl.trim()} className="scripts-btn scripts-btn-primary">
+                  {busy['_remote'] ? <Loader2 size={12} className="animate-spin" /> : t(locale, 'scripts.confirm')}
                 </button>
               </div>
-              {remoteError && (
-                <div className="mt-2 flex items-center gap-1" style={{ fontSize: '0.9em', color: 'var(--color-error-text, #ef4444)' }}>
-                  <AlertTriangle size={12} /> {remoteError}
+              {errors['_remote'] && (
+                <div className="mt-2 flex items-center gap-1" style={{ fontSize: '0.85em', color: 'var(--color-error-text)' }}>
+                  <AlertTriangle size={12} /> {errors['_remote']}
                 </div>
               )}
-            </div>
-            <div className="modal-footer">
-              <button
-                onClick={() => { setShowRemoteModal(false); setRemoteUrl('') }}
-                disabled={remoteImporting}
-                className="scripts-btn"
-              >
-                {t(locale, 'scripts.cancel')}
-              </button>
-              <button
-                onClick={handleRemoteImport}
-                disabled={remoteImporting || !remoteUrl.trim()}
-                className="scripts-btn scripts-btn-primary"
-              >
-                {remoteImporting && <Loader2 size={12} className="animate-spin" />}
-                {remoteImporting ? t(locale, 'scripts.remoteImporting') : t(locale, 'scripts.confirm')}
-              </button>
             </div>
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function IconButton({ title, onClick, children }: { title: string; onClick: () => void; children: ReactNode }) {
+  return (
+    <button onClick={onClick} className="script-action-btn" title={title}>
+      {children}
+    </button>
+  )
+}
+
+function PluginCard({
+  title,
+  subtitle,
+  version,
+  source,
+  status,
+  folderPath,
+  sourceUrl,
+  capabilities,
+  error,
+  loading,
+  actions,
+}: {
+  title: string
+  subtitle: string
+  version: string
+  source: string
+  status: string
+  folderPath: string
+  sourceUrl?: string
+  capabilities?: string[]
+  error?: string
+  loading?: boolean
+  actions: ReactNode
+}) {
+  return (
+    <div className="script-card anim-card-in" style={{ borderColor: error ? 'var(--color-error)' : undefined }}>
+      <div className="script-icon">
+        {loading ? <Loader2 size={16} className="animate-spin" /> : <Package size={16} />}
+      </div>
+      <div className="script-info">
+        <div className="script-name">
+          {title}
+          <span className="script-badge ml-2">{source}</span>
+          <span className="script-badge ml-1">{status}</span>
+        </div>
+        <div className="script-desc truncate">v{version} · {subtitle}</div>
+        <div className="script-desc truncate">{folderPath}</div>
+        {sourceUrl && <div className="script-desc truncate">{sourceUrl}</div>}
+        {(capabilities ?? []).length > 0 && (
+          <div className="flex items-center gap-1 mt-1 flex-wrap">
+            {(capabilities ?? []).map((capability) => (
+              <span key={capability} className="script-badge">{capability}</span>
+            ))}
+          </div>
+        )}
+        {error && (
+          <div className="flex items-center gap-1 mt-1" style={{ color: 'var(--color-error-text)', fontSize: '0.8em' }}>
+            <AlertTriangle size={12} /> {error}
+          </div>
+        )}
+      </div>
+      {actions}
     </div>
   )
 }

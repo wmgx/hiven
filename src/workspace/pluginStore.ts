@@ -21,6 +21,7 @@ interface PluginStoreState {
   installPlugin: (plugin: InstalledPlugin) => void
   updatePluginStatus: (pluginId: string, status: InstalledPluginStatus, error?: string) => void
   updatePluginVersion: (pluginId: string, version: string, entry: string, capabilities: string[]) => void
+  updatePluginMetadata: (pluginId: string, patch: Partial<InstalledPlugin>) => void
   uninstallPlugin: (pluginId: string) => void
 
   // ─── Dev Plugin Actions ─────────────────────────────────────────────────────
@@ -64,7 +65,19 @@ export const usePluginStore = create<PluginStoreState>()(
           return {
             plugins: {
               ...state.plugins,
-              [pluginId]: { ...plugin, version, entry, capabilities },
+              [pluginId]: { ...plugin, version, entry, capabilities, updatedAt: Date.now() },
+            },
+          }
+        }),
+
+      updatePluginMetadata: (pluginId, patch) =>
+        set((state) => {
+          const plugin = state.plugins[pluginId]
+          if (!plugin) return state
+          return {
+            plugins: {
+              ...state.plugins,
+              [pluginId]: { ...plugin, ...patch, updatedAt: Date.now() },
             },
           }
         }),

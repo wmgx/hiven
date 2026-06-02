@@ -23,7 +23,6 @@ const commandPalette = read('src/components/CommandPalette.tsx')
 const paneEditor = read('src/components/workspace/PaneEditor.tsx')
 const dualEditor = read('src/kits/ui/DualEditorView.tsx')
 const textDiff = read('src/plugins/textDiff/TextDiffRenderer.tsx')
-const jsonDiff = read('src/plugins/jsonDiff/JsonDiffRenderer.tsx')
 const corePlugin = read('src/workspace/corePlugin.ts')
 
 assert(!/settings:\s*\{[\s\S]*stickyScroll:\s*boolean/.test(store), 'App settings should not expose global stickyScroll')
@@ -41,8 +40,6 @@ assert(/stickyScroll:\s*\{\s*enabled:\s*leftStickyScrollEnabled\s*\}/s.test(dual
 assert(/stickyScroll:\s*\{\s*enabled:\s*rightStickyScrollEnabled\s*\}/s.test(dualEditor), 'DualEditorView should pass right stickyScroll to Monaco')
 assert(/leftStickyScrollEnabled=\{originalPane\.stickyScroll\s*===\s*true\}/.test(textDiff), 'TextDiffRenderer should pass original pane stickyScroll')
 assert(/rightStickyScrollEnabled=\{modifiedPane\.stickyScroll\s*===\s*true\}/.test(textDiff), 'TextDiffRenderer should pass modified pane stickyScroll')
-assert(/leftStickyScrollEnabled=\{originalPane\.stickyScroll\s*===\s*true\}/.test(jsonDiff), 'JsonDiffRenderer should pass original pane stickyScroll')
-assert(/rightStickyScrollEnabled=\{modifiedPane\.stickyScroll\s*===\s*true\}/.test(jsonDiff), 'JsonDiffRenderer should pass modified pane stickyScroll')
 assert(/id:\s*'core\.toggle-sticky-scroll'/.test(corePlugin), 'Core plugin should register a command-palette toggle command')
 assert(/patch:\s*\{\s*stickyScroll:\s*!stickyScrollEnabled\s*\}/s.test(corePlugin), 'Toggle command should update only the target pane')
 

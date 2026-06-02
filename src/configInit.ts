@@ -1,236 +1,342 @@
 /**
- * 应用配置目录初始化 & 内置脚本管理
+ * 应用配置目录初始化 & 目录插件包管理
  *
- * 三层架构：
- *   L0 安装包内嵌（编译时打包）→ 保底，离线可用
- *   L1 本地 builtin/ 目录       → 运行时实际使用
- *   L2 GitHub 远程              → 跟随 app 更新检查拉取
+ * FluxText framework 现在只管理目录插件包：
+ *   ~/.local/fluxtext/plugins/builtin
+ *   ~/.local/fluxtext/plugins/installed
+ *   ~/.local/fluxtext/plugins/dev
  *
- * 启动时比较内嵌 manifest.version 与本地 manifest.version，
- * 内嵌版本更高则覆盖本地 builtin/ 目录。
+ * 旧 scripts/ 目录只作为兼容释放来源；启动时不再把裸 .js/.ts 文件注册为能力。
  */
 
-// 内嵌脚本（Vite ?raw import）
-import dedupScript from './builtin-scripts/dedup.ts?raw'
-import sortScript from './builtin-scripts/sort.ts?raw'
-import trimScript from './builtin-scripts/trim.ts?raw'
-import jsonScript from './builtin-scripts/json.ts?raw'
-import extractScript from './builtin-scripts/extract.ts?raw'
-import caseScript from './builtin-scripts/case.ts?raw'
-import base64Script from './builtin-scripts/base64.ts?raw'
-import urlScript from './builtin-scripts/url.ts?raw'
-import countScript from './builtin-scripts/count.ts?raw'
-import csvScript from './builtin-scripts/csv.ts?raw'
-import cssScript from './builtin-scripts/css.ts?raw'
-import sqlScript from './builtin-scripts/sql.ts?raw'
-import xmlScript from './builtin-scripts/xml.ts?raw'
-import htmlScript from './builtin-scripts/html.ts?raw'
-import hashScript from './builtin-scripts/hash.ts?raw'
-import jwtScript from './builtin-scripts/jwt.ts?raw'
-import timestampScript from './builtin-scripts/timestamp.ts?raw'
-import hexScript from './builtin-scripts/hex.ts?raw'
-import slashesScript from './builtin-scripts/slashes.ts?raw'
-import reverseScript from './builtin-scripts/reverse.ts?raw'
-import joinScript from './builtin-scripts/join.ts?raw'
-import querystringScript from './builtin-scripts/querystring.ts?raw'
-import sortjsonScript from './builtin-scripts/sortjson.ts?raw'
-import loremScript from './builtin-scripts/lorem.ts?raw'
-import mdquoteScript from './builtin-scripts/mdquote.ts?raw'
-import yamlScript from './builtin-scripts/yaml.ts?raw'
-import appendScript from './builtin-scripts/append.ts?raw'
-import prependScript from './builtin-scripts/prepend.ts?raw'
-import wrapScript from './builtin-scripts/wrap.ts?raw'
-import sqlinScript from './builtin-scripts/sqlin.ts?raw'
-import sumScript from './builtin-scripts/sum.ts?raw'
-import blanklinesScript from './builtin-scripts/blanklines.ts?raw'
+import { parseScriptToAction } from './store'
+import { createScriptPluginEntrySource } from './workspace/legacyScriptPlugin'
+import textDiffIndexSource from './plugins/textDiff/index.ts?raw'
+import textDiffRendererSource from './plugins/textDiff/TextDiffRenderer.tsx?raw'
+import textDiffAutoModeSource from './plugins/textDiff/autoDiffMode.ts?raw'
 
-// 内嵌 manifest
-import embeddedManifest from './builtin-scripts/manifest.json'
+const REMOTE_BUILTIN_PLUGIN_INDEX_URLS = [
+  'https://proxy.flux.wmgx.top/raw/wmgx/flux_text/main/src/builtin-plugins/index.json',
+  'https://cdn.jsdelivr.net/gh/wmgx/flux_text@main/src/builtin-plugins/index.json',
+  'https://raw.githubusercontent.com/wmgx/flux_text/main/src/builtin-plugins/index.json',
+]
 
-const BUILTIN_SCRIPTS: Record<string, string> = {
-  'dedup.ts': dedupScript,
-  'sort.ts': sortScript,
-  'trim.ts': trimScript,
-  'json.ts': jsonScript,
-  'extract.ts': extractScript,
-  'case.ts': caseScript,
-  'base64.ts': base64Script,
-  'url.ts': urlScript,
-  'count.ts': countScript,
-  'csv.ts': csvScript,
-  'css.ts': cssScript,
-  'sql.ts': sqlScript,
-  'xml.ts': xmlScript,
-  'html.ts': htmlScript,
-  'hash.ts': hashScript,
-  'jwt.ts': jwtScript,
-  'timestamp.ts': timestampScript,
-  'hex.ts': hexScript,
-  'slashes.ts': slashesScript,
-  'reverse.ts': reverseScript,
-  'join.ts': joinScript,
-  'querystring.ts': querystringScript,
-  'sortjson.ts': sortjsonScript,
-  'lorem.ts': loremScript,
-  'mdquote.ts': mdquoteScript,
-  'yaml.ts': yamlScript,
-  'append.ts': appendScript,
-  'prepend.ts': prependScript,
-  'wrap.ts': wrapScript,
-  'sqlin.ts': sqlinScript,
-  'sum.ts': sumScript,
-  'blanklines.ts': blanklinesScript,
+const BUILTIN_PLUGIN_PACKAGES = [
+  {
+    pluginId: 'core',
+    displayName: 'Core Workspace',
+    version: '1.0.0',
+    capabilities: ['command', 'panel'],
+  },
+  {
+    pluginId: 'text-diff',
+    displayName: 'Text Diff',
+    version: '1.0.0',
+    capabilities: ['command', 'renderer'],
+  },
+]
+
+const BUILTIN_PLUGIN_SOURCE_FILES: Record<string, Record<string, string>> = {
+  'text-diff': {
+    'index.ts': textDiffIndexSource,
+    'TextDiffRenderer.tsx': textDiffRendererSource,
+    'autoDiffMode.ts': textDiffAutoModeSource,
+    'README.md': `# Text Diff
+
+This is the first-party adaptive diff plugin package.
+
+- \`index.ts\` registers the renderer contribution.
+- \`TextDiffRenderer.tsx\` owns the diff UI controls: semantic toggle, JSON semantic status, array compare mode, object key input, close action, and editable dual editor wiring.
+- \`autoDiffMode.ts\` decides whether the same renderer uses JSON semantic diff or text line diff.
+
+The runtime registration comes from the same source plugin package through the bundled plugin loader.`,
+  },
 }
 
-// 自建 Cloudflare Worker 代理（国内可达，路径白名单限制仅本项目可用）优先
-// jsdelivr 和 GitHub raw 作为 fallback
-const REMOTE_MANIFEST_URLS = [
-  'https://proxy.flux.wmgx.top/raw/wmgx/flux_text/main/src/builtin-scripts/manifest.json',
-  'https://cdn.jsdelivr.net/gh/wmgx/flux_text@main/src/builtin-scripts/manifest.json',
-  'https://raw.githubusercontent.com/wmgx/flux_text/main/src/builtin-scripts/manifest.json',
-]
-const REMOTE_SCRIPT_BASE_URLS = [
-  'https://proxy.flux.wmgx.top/raw/wmgx/flux_text/main/src/builtin-scripts',
-  'https://cdn.jsdelivr.net/gh/wmgx/flux_text@main/src/builtin-scripts',
-  'https://raw.githubusercontent.com/wmgx/flux_text/main/src/builtin-scripts',
-]
+const DEMO_PLUGIN_SOURCE = `import { defineAction } from 'fluxtext'
+
+export default defineAction({
+  name: 'demo-uppercase-prefix',
+  title: 'Demo: Uppercase With Prefix',
+  titleI18n: { zh: '示例：大写并添加前缀' },
+  description: 'A small reference plugin users can edit, run, and copy.',
+  descriptionI18n: { zh: '一个可编辑、可运行、可复制的插件参考示例。' },
+  tags: ['demo', 'text'],
+  optionalParams: true,
+  params: [
+    {
+      key: 'prefix',
+      label: 'Prefix',
+      labelI18n: { zh: '前缀' },
+      type: 'text',
+      default: '[demo] ',
+    },
+  ],
+  run(ctx) {
+    const prefix = String(ctx.params.prefix ?? '')
+    return { text: ctx.input.text.split('\\n').map((line) => prefix + line.toUpperCase()).join('\\n') }
+  },
+})`
+
+const DEMO_PLUGIN_README = `# FluxText Demo Plugin
+
+This directory is a runnable reference plugin package.
+
+- \`manifest.json\` describes package metadata only.
+- \`index.js\` is the fixed plugin entry and exports a plugin command.
+- Open \`index.js\` in the plugin editor, edit the sample code, and use the debug panel to run it with sample input.
+
+New plugins should prefer \`definePlugin\`; script-origin packages are released as ordinary command plugins.`
 
 function isTauri() {
-  return !!(window as any).__TAURI_INTERNALS__
+  return !!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
 }
 
-/**
- * 带 fallback 的 URL 请求：依次尝试多个 URL，第一个成功即返回
- */
+async function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  const api = await import('@tauri-apps/api/core')
+  return api.invoke<T>(command, args)
+}
+
+async function ensureTextFile(path: string, content: string) {
+  await invoke<void>('save_plugin_file', { path, content })
+}
+
 async function fetchWithFallback(urls: string[]): Promise<string> {
-  const { invoke } = await import('@tauri-apps/api/core')
   let lastError = ''
   for (const url of urls) {
     try {
       return await invoke<string>('fetch_url', { url })
-    } catch (e: any) {
-      lastError = e.message || String(e)
-      console.warn(`[FluxText] fetch failed for ${url}: ${lastError}`)
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error)
     }
   }
-  throw new Error(`All mirrors failed. Last error: ${lastError}`)
+  throw new Error(`All plugin package index mirrors failed. Last error: ${lastError}`)
 }
 
-/**
- * 读取本地 builtin/manifest.json 的 version 字段
- */
-async function getLocalManifestVersion(builtinDir: string): Promise<number> {
+function safePluginName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    || 'script'
+}
+
+async function releaseBuiltinScriptPluginPackages(configDir: string, pluginBuiltinDir: string): Promise<string[]> {
+  const scriptsBuiltinDir = `${configDir}/scripts/builtin`
+  let scripts: { name: string; path: string; content: string }[] = []
   try {
-    const { invoke } = await import('@tauri-apps/api/core')
-    const content = await invoke<string>('read_file', {
-      path: `${builtinDir}/manifest.json`,
-    })
-    return JSON.parse(content).version || 0
+    scripts = await invoke('read_scripts_dir', { path: scriptsBuiltinDir })
   } catch {
-    return 0
+    scripts = []
+  }
+
+  const released: string[] = []
+  const usedIds = new Set(BUILTIN_PLUGIN_PACKAGES.map((pkg) => pkg.pluginId))
+  for (const script of scripts) {
+    if (!/\.(ts|js)$/i.test(script.name)) continue
+    const action = parseScriptToAction(script.content)
+    const baseId = safePluginName(action?.name || script.name.replace(/\.(ts|js)$/i, ''))
+    let pluginId = baseId
+    let suffix = 2
+    while (usedIds.has(pluginId)) {
+      pluginId = `${baseId}-${suffix++}`
+    }
+    usedIds.add(pluginId)
+
+    const displayName = action?.title || action?.name || script.name.replace(/\.(ts|js)$/i, '')
+    const pluginDir = `${pluginBuiltinDir}/${pluginId}`
+    const manifest = {
+      pluginId,
+      displayName,
+      version: '1.0.0',
+      capabilities: ['command'],
+    }
+
+    await ensureTextFile(`${pluginDir}/manifest.json`, JSON.stringify(manifest, null, 2))
+    await ensureTextFile(`${pluginDir}/index.js`, createScriptPluginEntrySource({
+      pluginId,
+      fallbackTitle: displayName,
+      source: script.content,
+    }))
+    released.push(pluginId)
+  }
+
+  return released
+}
+
+async function releaseBuiltinPluginManifests(configDir: string, pluginBuiltinDir: string) {
+  for (const manifest of BUILTIN_PLUGIN_PACKAGES) {
+    const pluginDir = `${pluginBuiltinDir}/${manifest.pluginId}`
+    await ensureTextFile(
+      `${pluginDir}/manifest.json`,
+      JSON.stringify(manifest, null, 2),
+    )
+    const sourceFiles = BUILTIN_PLUGIN_SOURCE_FILES[manifest.pluginId]
+    if (sourceFiles) {
+      for (const [fileName, content] of Object.entries(sourceFiles)) {
+        await ensureTextFile(`${pluginDir}/${fileName}`, content)
+      }
+    }
+  }
+  const demoPluginId = 'demo-text-plugin'
+  await ensureTextFile(
+    `${pluginBuiltinDir}/${demoPluginId}/manifest.json`,
+    JSON.stringify({
+      pluginId: demoPluginId,
+      displayName: 'Demo Text Plugin',
+      version: '1.0.0',
+      capabilities: ['command', 'demo'],
+    }, null, 2),
+  )
+  await ensureTextFile(`${pluginBuiltinDir}/${demoPluginId}/index.js`, createScriptPluginEntrySource({
+    pluginId: demoPluginId,
+    fallbackTitle: 'Demo Text Plugin',
+    source: DEMO_PLUGIN_SOURCE,
+  }))
+  await ensureTextFile(`${pluginBuiltinDir}/${demoPluginId}/README.md`, DEMO_PLUGIN_README)
+  const scriptPluginIds = await releaseBuiltinScriptPluginPackages(configDir, pluginBuiltinDir)
+  const embeddedIndex = {
+    version: 1,
+    packages: [...BUILTIN_PLUGIN_PACKAGES.map((pkg) => pkg.pluginId), demoPluginId, ...scriptPluginIds],
+  }
+  const expectedPackages = new Set(embeddedIndex.packages)
+  const existingPackages = await invoke<{ pluginId: string }[]>('list_plugin_dirs', { path: pluginBuiltinDir }).catch(() => [])
+  for (const plugin of existingPackages) {
+    if (!expectedPackages.has(plugin.pluginId)) {
+      await invoke<void>('remove_plugin_dir', {
+        rootPath: pluginBuiltinDir,
+        pluginId: plugin.pluginId,
+      }).catch(() => undefined)
+    }
+  }
+  const indexPath = `${pluginBuiltinDir}/index.json`
+  const currentIndex = await invoke<string>('read_plugin_file', { path: indexPath })
+    .then((raw) => JSON.parse(raw) as { version?: number; packages?: string[] })
+    .catch(() => ({ version: 0, packages: [] }))
+  const currentPackages = new Set(currentIndex.packages ?? [])
+  const embeddedPackagesChanged =
+    currentPackages.size !== embeddedIndex.packages.length ||
+    embeddedIndex.packages.some((pluginId) => !currentPackages.has(pluginId))
+  if (Number(currentIndex.version ?? 0) < embeddedIndex.version || embeddedPackagesChanged) {
+    await ensureTextFile(indexPath, JSON.stringify(embeddedIndex, null, 2))
   }
 }
 
+export async function releaseUserScriptPluginPackages(configDir: string): Promise<string[]> {
+  const scriptsDir = `${configDir}/scripts`
+  const installedDir = `${configDir}/plugins/installed`
+
+  let scripts: { name: string; path: string; content: string; builtin?: boolean }[] = []
+  try {
+    scripts = await invoke('read_scripts_dir', { path: scriptsDir })
+  } catch {
+    scripts = []
+  }
+
+  const released: string[] = []
+  const usedIds = new Set<string>()
+
+  for (const script of scripts) {
+    if (script.builtin) continue
+    const action = parseScriptToAction(script.content)
+    if (!action) continue
+
+    const baseId = `user-${safePluginName(action.name || script.name.replace(/\.(ts|js)$/i, ''))}`
+    let pluginId = baseId
+    let suffix = 2
+    while (usedIds.has(pluginId)) {
+      pluginId = `${baseId}-${suffix++}`
+    }
+    usedIds.add(pluginId)
+
+    const pluginDir = `${installedDir}/${pluginId}`
+    const manifest = {
+      pluginId,
+      displayName: action.title || action.name,
+      version: '1.0.0',
+      capabilities: ['command'],
+    }
+
+    await ensureTextFile(`${pluginDir}/manifest.json`, JSON.stringify(manifest, null, 2))
+    await ensureTextFile(`${pluginDir}/index.js`, createScriptPluginEntrySource({
+      pluginId,
+      fallbackTitle: action.title || action.name,
+      source: script.content,
+    }))
+    released.push(pluginId)
+  }
+
+  return released
+}
+
 /**
- * 初始化配置目录，按需释放内置脚本
- * 返回配置根目录路径
+ * 初始化配置目录，按目录约定释放内置包和用户脚本包。
+ * 返回配置根目录路径。
  */
 export async function initConfigDir(): Promise<string | null> {
   if (!isTauri()) return null
 
   try {
-    const { invoke } = await import('@tauri-apps/api/core')
-
-    // 创建目录结构
     const configDir = await invoke<string>('init_config_dir')
-    const builtinDir = `${configDir}/scripts/builtin`
+    const pluginBuiltinDir = `${configDir}/plugins/builtin`
+    const pluginInstalledDir = `${configDir}/plugins/installed`
+    const pluginDevDir = `${configDir}/plugins/dev`
 
-    // 比较内嵌版本与本地版本
-    const localVersion = await getLocalManifestVersion(builtinDir)
-
-    if (embeddedManifest.version > localVersion) {
-      // 内嵌版本更新 → 覆盖本地 builtin 目录
-      for (const [filename, content] of Object.entries(BUILTIN_SCRIPTS)) {
-        await invoke('save_script', {
-          path: `${builtinDir}/${filename}`,
-          content,
-        })
-      }
-      await invoke('save_script', {
-        path: `${builtinDir}/manifest.json`,
-        content: JSON.stringify(embeddedManifest, null, 2),
-      })
-      console.log(
-        `[FluxText] Released builtin scripts v${embeddedManifest.version} (local was v${localVersion})`,
-      )
-    }
+    await ensureTextFile(`${pluginBuiltinDir}/.keep`, '')
+    await ensureTextFile(`${pluginInstalledDir}/.keep`, '')
+    await ensureTextFile(`${pluginDevDir}/.keep`, '')
+    await releaseBuiltinPluginManifests(configDir, pluginBuiltinDir)
+    await releaseUserScriptPluginPackages(configDir)
 
     return configDir
-  } catch (e) {
-    console.error('[FluxText] Failed to init config dir:', e)
+  } catch (error) {
+    console.error('[FluxText] Failed to init config dir:', error)
     return null
   }
 }
 
 /**
- * 检查并更新内置脚本（使用 CDN 镜像 + GitHub fallback）
+ * 检查内置插件包更新。
+ *
+ * 当前 first-party 能力仍由硬编码 builtinActions 和本地 first-party plugins 保底；
+ * 这里保守退化为包检查占位，避免继续维护旧裸脚本更新通道。
  */
-export async function checkBuiltinScriptsUpdate(): Promise<{
+export async function checkBuiltinPluginsUpdate(): Promise<{
   updated: boolean
   version?: number
   error?: string
 }> {
-  if (!isTauri()) return { updated: false }
+  if (!isTauri()) return { updated: false, version: 0 }
 
   try {
-    const { invoke } = await import('@tauri-apps/api/core')
-    const configDir = await invoke<string>('get_config_dir')
-    const builtinDir = `${configDir}/scripts/builtin`
+    const configDir = await initConfigDir()
+    if (!configDir) return { updated: false, version: 0 }
 
-    const localVersion = await getLocalManifestVersion(builtinDir)
+    const localIndexPath = `${configDir}/plugins/builtin/index.json`
+    const localIndexRaw = await invoke<string>('read_plugin_file', { path: localIndexPath }).catch(() => '{"version":0,"packages":[]}')
+    const localIndex = JSON.parse(localIndexRaw) as { version?: number }
+    const remoteIndexRaw = await fetchWithFallback(REMOTE_BUILTIN_PLUGIN_INDEX_URLS)
+    const remoteIndex = JSON.parse(remoteIndexRaw) as { version?: number }
 
-    // 拉取远程 manifest（多镜像 fallback）
-    const remoteManifestStr = await fetchWithFallback(REMOTE_MANIFEST_URLS)
-    const remoteManifest = JSON.parse(remoteManifestStr)
-
-    if (remoteManifest.version <= localVersion) {
-      return { updated: false }
+    const localVersion = Number(localIndex.version ?? 0)
+    const remoteVersion = Number(remoteIndex.version ?? 0)
+    if (remoteVersion > localVersion) {
+      await ensureTextFile(localIndexPath, JSON.stringify(remoteIndex, null, 2))
+      return { updated: true, version: remoteVersion }
     }
 
-    // 下载所有脚本文件（多镜像 fallback）
-    for (const filename of remoteManifest.files) {
-      const content = await fetchWithFallback(
-        REMOTE_SCRIPT_BASE_URLS.map((base) => `${base}/${filename}`),
-      )
-      await invoke('save_script', {
-        path: `${builtinDir}/${filename}`,
-        content,
-      })
-    }
-
-    // 保存新 manifest
-    await invoke('save_script', {
-      path: `${builtinDir}/manifest.json`,
-      content: JSON.stringify(remoteManifest, null, 2),
-    })
-
-    console.log(
-      `[FluxText] Updated builtin scripts from v${localVersion} to v${remoteManifest.version}`,
-    )
-    return { updated: true, version: remoteManifest.version }
-  } catch (e: any) {
-    console.error('[FluxText] Failed to check builtin scripts update:', e)
-    return { updated: false, error: e.message || String(e) }
+    return { updated: false, version: localVersion }
+  } catch (error) {
+    return { updated: false, error: error instanceof Error ? error.message : String(error) }
   }
 }
 
 /**
- * 获取配置目录路径
+ * 获取配置目录路径。
  */
 export async function getConfigDir(): Promise<string | null> {
   if (!isTauri()) return null
   try {
-    const { invoke } = await import('@tauri-apps/api/core')
     return await invoke<string>('get_config_dir')
   } catch {
     return null

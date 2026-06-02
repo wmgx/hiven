@@ -8,7 +8,7 @@
  *   3. Dynamic import with cache-busting timestamp works for dev reload
  *
  * Loading strategy:
- *   - Production plugins: manifest.json + entry.js loaded from installed folder
+ *   - Production plugins: manifest.json + fixed index.* entry loaded from installed folder
  *   - Dev plugins: same, but registered to dev registry only, session-scoped
  *   - Cache busting: append ?t=<timestamp> to entry URL on every reload
  */
@@ -17,10 +17,53 @@ import { pluginRegistry } from './pluginRegistry'
 import { useWorkspaceStore } from './workspaceStore'
 import { usePluginStore } from './pluginStore'
 import { showToast } from './toast'
-import type { PluginDefinition, PluginManifest, InstalledPlugin, DevPlugin } from './pluginTypes'
+import { definePlugin } from './definePlugin'
+import type {
+  PluginDefinition,
+  PluginManifest,
+  InstalledPlugin,
+  DevPlugin,
+  PluginFileTree,
+  PluginPackageSource,
+} from './pluginTypes'
+
+declare global {
+  interface Window {
+    FluxTextPlugin?: {
+      definePlugin: typeof definePlugin
+      effects: {
+        replaceActiveText: (text: string) => { type: 'text.replace'; target: 'active-input'; text: string }
+        createPane: (text: string, title?: string) => { type: 'pane.create'; pane: { text: string; title?: string }; focus: boolean }
+        status: (message: string, level?: 'info' | 'success' | 'warning' | 'error') => { type: 'status.message'; level: 'info' | 'success' | 'warning' | 'error'; message: string }
+      }
+    }
+  }
+}
+
+export type PluginPackageSummary = {
+  pluginId: string
+  displayName: string
+  displayNameI18n?: PluginManifest['displayNameI18n']
+  version: string
+  entry: string
+  capabilities: string[]
+  folderPath: string
+}
 
 /** Maps pluginId → watcher unlisten fn for dev plugins */
 const watcherCleanups = new Map<string, () => void>()
+
+function installPluginGlobals(): void {
+  if (typeof window === 'undefined') return
+  window.FluxTextPlugin = {
+    definePlugin,
+    effects: {
+      replaceActiveText: (text) => ({ type: 'text.replace' as const, target: 'active-input' as const, text }),
+      createPane: (text, title) => ({ type: 'pane.create' as const, pane: { text, title }, focus: true }),
+      status: (message, level = 'info') => ({ type: 'status.message' as const, level, message }),
+    },
+  }
+}
 
 // ─── Tauri Helpers ────────────────────────────────────────────────────────────
 
@@ -38,13 +81,50 @@ async function toAssetUrl(filePath: string, cacheBust = false): Promise<string> 
 
 /** Read a file as text using Tauri FS plugin */
 async function readFileText(path: string): Promise<string> {
-  const { readTextFile } = await import('@tauri-apps/plugin-fs')
-  return readTextFile(path)
+  return invokeCommand<string>('read_plugin_file', { path })
+}
+
+async function invokeCommand<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  const { invoke } = await import('@tauri-apps/api/core')
+  return invoke<T>(command, args)
 }
 
 /** Join path segments (simple cross-platform helper) */
 function joinPath(...parts: string[]): string {
   return parts.join('/').replace(/\/+/g, '/')
+}
+
+function validatePackageRelativePath(value: string, label: string): void {
+  const trimmed = value.trim()
+  const segments = trimmed.split('/')
+  if (
+    !trimmed ||
+    trimmed.includes('\\') ||
+    trimmed.includes('?') ||
+    trimmed.includes('#') ||
+    trimmed.startsWith('/') ||
+    /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed) ||
+    segments.some((segment) => !segment || segment === '.' || segment === '..')
+  ) {
+    throw new Error(`Invalid plugin ${label}: must be a package-relative path`)
+  }
+}
+
+export const PLUGIN_ENTRY_CANDIDATES = ['index.tsx', 'index.ts', 'index.jsx', 'index.js', 'index.mjs'] as const
+
+async function resolveFixedPluginEntry(folderPath: string): Promise<string> {
+  const tried: string[] = []
+  for (const entry of PLUGIN_ENTRY_CANDIDATES) {
+    validatePackageRelativePath(entry, 'entry')
+    tried.push(entry)
+    try {
+      await readFileText(joinPath(folderPath, entry))
+      return entry
+    } catch {
+      // Try the next fixed entry candidate.
+    }
+  }
+  throw new Error(`Plugin package must include one fixed entry file: ${tried.join(', ')}`)
 }
 
 // ─── Manifest Loading ─────────────────────────────────────────────────────────
@@ -61,20 +141,45 @@ async function loadManifest(folderPath: string): Promise<PluginManifest> {
   if (!manifest.pluginId || typeof manifest.pluginId !== 'string') {
     throw new Error(`Invalid manifest: missing pluginId in ${manifestPath}`)
   }
-  if (!manifest.version || typeof manifest.version !== 'string') {
-    throw new Error(`Invalid manifest: missing version in ${manifestPath}`)
+  const version = typeof manifest.version === 'string' && manifest.version.trim()
+    ? manifest.version
+    : '1.0.0'
+  if (typeof manifest.displayName !== 'undefined' && typeof manifest.displayName !== 'string') {
+    throw new Error(`Invalid manifest: displayName must be a string in ${manifestPath}`)
   }
-  if (!manifest.entry || typeof manifest.entry !== 'string') {
-    throw new Error(`Invalid manifest: missing entry in ${manifestPath}`)
-  }
+  const entry = await resolveFixedPluginEntry(folderPath)
 
   return {
     pluginId: manifest.pluginId,
     displayName: manifest.displayName || manifest.pluginId,
-    version: manifest.version,
-    entry: manifest.entry,
+    displayNameI18n: manifest.displayNameI18n,
+    version,
+    entry,
     capabilities: manifest.capabilities || [],
   }
+}
+
+export async function getPluginPackageSummary(folderPath: string): Promise<PluginPackageSummary> {
+  const manifest = await loadManifest(folderPath)
+  return {
+    pluginId: manifest.pluginId,
+    displayName: manifest.displayName,
+    displayNameI18n: manifest.displayNameI18n,
+    version: manifest.version,
+    entry: manifest.entry,
+    capabilities: manifest.capabilities ?? [],
+    folderPath,
+  }
+}
+
+async function getInstalledPluginRoot(): Promise<string> {
+  const configDir = await invokeCommand<string>('get_config_dir')
+  return joinPath(configDir, 'plugins', 'installed')
+}
+
+async function getDevPluginRoot(): Promise<string> {
+  const configDir = await invokeCommand<string>('get_config_dir')
+  return joinPath(configDir, 'plugins', 'dev')
 }
 
 // ─── Plugin Entry Loading ─────────────────────────────────────────────────────
@@ -84,9 +189,11 @@ async function loadManifest(folderPath: string): Promise<PluginManifest> {
  * Entry must export a PluginDefinition as default export.
  */
 async function loadPluginEntry(folderPath: string, entryFile: string, cacheBust = false): Promise<PluginDefinition> {
+  validatePackageRelativePath(entryFile, 'entry')
   const entryPath = joinPath(folderPath, entryFile)
   const url = await toAssetUrl(entryPath, cacheBust)
 
+  installPluginGlobals()
   const mod = await import(/* @vite-ignore */ url)
 
   const definition: PluginDefinition | undefined = mod.default
@@ -157,11 +264,18 @@ function validateContributionIds(
  * Install a plugin from a local folder into production store (disabled state).
  * Does NOT enable the plugin.
  */
-export async function installLocalPlugin(folderPath: string): Promise<InstalledPlugin> {
+export async function installLocalPlugin(
+  folderPath: string,
+  options: {
+    source?: PluginPackageSource
+    sourceUrl?: string
+    status?: InstalledPlugin['status']
+  } = {},
+): Promise<InstalledPlugin> {
   const manifest = await loadManifest(folderPath)
   const pluginId = manifest.pluginId
 
-  const { plugins, installPlugin, updatePluginVersion } = usePluginStore.getState()
+  const { plugins, installPlugin, updatePluginVersion, updatePluginMetadata } = usePluginStore.getState()
 
   // Check for existing plugin with same id
   if (plugins[pluginId]) {
@@ -169,7 +283,25 @@ export async function installLocalPlugin(folderPath: string): Promise<InstalledP
     if (existing.folderPath === folderPath) {
       // Re-installing from same folder → update version info only
       updatePluginVersion(pluginId, manifest.version, manifest.entry, manifest.capabilities ?? [])
-      return { ...existing, version: manifest.version, entry: manifest.entry, capabilities: manifest.capabilities ?? [] }
+      updatePluginMetadata(pluginId, {
+        displayName: manifest.displayName,
+        displayNameI18n: manifest.displayNameI18n,
+        source: options.source ?? existing.source,
+        sourceUrl: options.sourceUrl ?? existing.sourceUrl,
+        folderPath,
+        packagePath: folderPath,
+      })
+      return {
+        ...existing,
+        version: manifest.version,
+        entry: manifest.entry,
+        capabilities: manifest.capabilities ?? [],
+        source: options.source ?? existing.source,
+        sourceUrl: options.sourceUrl ?? existing.sourceUrl,
+        folderPath,
+        packagePath: folderPath,
+        updatedAt: Date.now(),
+      }
     }
     // Different folder → conflict: caller should ask user to overwrite
     throw new Error(`Plugin "${pluginId}" is already installed from "${existing.folderPath}". Uninstall it first.`)
@@ -178,12 +310,18 @@ export async function installLocalPlugin(folderPath: string): Promise<InstalledP
   const record: InstalledPlugin = {
     pluginId,
     displayName: manifest.displayName,
+    displayNameI18n: manifest.displayNameI18n,
     version: manifest.version,
     entry: manifest.entry,
     capabilities: manifest.capabilities ?? [],
     folderPath,
-    status: 'disabled',
+    packagePath: folderPath,
+    source: options.source ?? 'local',
+    sourceUrl: options.sourceUrl,
+    status: options.status ?? 'disabled',
+    update: { status: 'idle' },
     installedAt: Date.now(),
+    updatedAt: Date.now(),
   }
 
   installPlugin(record)
@@ -276,8 +414,8 @@ export async function reloadPlugin(pluginId: string): Promise<void> {
     const newManifest = await loadManifest(record.folderPath)
     const newCapabilities = newManifest.capabilities ?? []
 
-    const definition = await loadPluginEntry(record.folderPath, record.entry, true /* cache bust */)
-    validatePluginIdMatch(definition, { pluginId, displayName: record.displayName, version: record.version, entry: record.entry, capabilities: record.capabilities })
+    const definition = await loadPluginEntry(record.folderPath, newManifest.entry, true /* cache bust */)
+    validatePluginIdMatch(definition, newManifest)
     validateContributionIds(definition, 'production', pluginId)
 
     pluginRegistry.registerProductionPlugin(
@@ -346,10 +484,15 @@ export async function sideloadDevPlugin(folderPath: string): Promise<DevPlugin> 
   const devRecord: DevPlugin = {
     pluginId,
     displayName: manifest.displayName,
+    displayNameI18n: manifest.displayNameI18n,
     version: manifest.version,
     folderPath,
+    packagePath: folderPath,
+    source: 'local',
+    capabilities: manifest.capabilities ?? [],
     status: 'active',
     loadedAt: Date.now(),
+    updatedAt: Date.now(),
   }
 
   try {
@@ -529,4 +672,204 @@ export async function pickLocalPluginFolder(): Promise<string | null> {
   } catch {
     return null
   }
+}
+
+export async function pickPluginZipFile(): Promise<string | null> {
+  try {
+    const { open } = await import('@tauri-apps/plugin-dialog')
+    const result = await open({
+      multiple: false,
+      title: 'Select Plugin Zip',
+      filters: [{ name: 'Plugin Zip', extensions: ['zip'] }],
+    })
+    if (typeof result === 'string') return result
+    return null
+  } catch {
+    return null
+  }
+}
+
+export function rejectSingleFileRemoteImport(url: string): void {
+  try {
+    const pathname = new URL(url).pathname.toLowerCase()
+    if (/\.(js|ts)(?:$|\?)/.test(pathname)) {
+      throw new Error('Remote single-file plugin import is no longer supported. Install a plugin directory or zip package instead.')
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('single-file plugin import')) throw error
+  }
+}
+
+export async function installPluginZip(zipPath: string, destinationRoot?: string): Promise<InstalledPlugin> {
+  const root = destinationRoot ?? await getInstalledPluginRoot()
+  const folderPath = await invokeCommand<string>('install_plugin_zip', {
+    zipPath,
+    destinationRoot: root,
+  })
+  return installLocalPlugin(folderPath, { source: 'zip', sourceUrl: zipPath })
+}
+
+export const importPluginZip = installPluginZip
+
+export async function importLocalPluginDirectory(folderPath: string, destinationRoot?: string): Promise<InstalledPlugin> {
+  const root = destinationRoot ?? await getInstalledPluginRoot()
+  const installedFolderPath = await invokeCommand<string>('install_plugin_dir', {
+    sourcePath: folderPath,
+    destinationRoot: root,
+  })
+  return installLocalPlugin(installedFolderPath, { source: 'local', sourceUrl: folderPath })
+}
+
+export async function importDevPluginDirectory(folderPath: string, destinationRoot?: string): Promise<DevPlugin> {
+  const root = destinationRoot ?? await getDevPluginRoot()
+  const installedFolderPath = await invokeCommand<string>('install_plugin_dir', {
+    sourcePath: folderPath,
+    destinationRoot: root,
+  })
+  return sideloadDevPlugin(installedFolderPath)
+}
+
+function parseGithubDirectoryUrl(sourceUrl: string): {
+  owner: string
+  repo: string
+  branch: string
+  path: string
+} {
+  rejectSingleFileRemoteImport(sourceUrl)
+  const url = new URL(sourceUrl)
+  if (url.hostname !== 'github.com') {
+    throw new Error('Only github.com directory URLs are supported for remote plugin import.')
+  }
+
+  const parts = url.pathname.split('/').filter(Boolean)
+  const ref = url.searchParams.get('ref')
+  const [owner, repo, marker, branch, ...rest] = parts
+  if (!owner || !repo) {
+    throw new Error('GitHub URL must include owner and repository.')
+  }
+  if (!marker) {
+    return { owner, repo, branch: ref || 'main', path: '' }
+  }
+  if (marker !== 'tree') {
+    throw new Error('Remote plugin import expects a GitHub repository or /tree/{branch}/{path} directory URL.')
+  }
+  if (ref) {
+    return { owner, repo, branch: ref, path: [branch, ...rest].filter(Boolean).join('/') }
+  }
+  return { owner, repo, branch: branch || 'main', path: rest.join('/') }
+}
+
+export async function fetchGithubDirectory(sourceUrl: string, destinationRoot?: string): Promise<string> {
+  const root = destinationRoot ?? await getInstalledPluginRoot()
+  const target = parseGithubDirectoryUrl(sourceUrl)
+  return invokeCommand<string>('fetch_github_directory', {
+    ...target,
+    destinationRoot: root,
+  })
+}
+
+export async function importGithubDirectory(sourceUrl: string, destinationRoot?: string): Promise<InstalledPlugin> {
+  const folderPath = await fetchGithubDirectory(sourceUrl, destinationRoot)
+  return installLocalPlugin(folderPath, { source: 'github', sourceUrl })
+}
+
+export const installGithubDirectory = importGithubDirectory
+
+function pluginTemplate(pluginId: string, title: string) {
+  return `const { definePlugin, effects } = globalThis.FluxTextPlugin
+
+export default definePlugin({
+  id: ${JSON.stringify(pluginId)},
+  title: ${JSON.stringify(title)},
+  version: '1.0.0',
+  commands: [{
+    id: ${JSON.stringify(`${pluginId}.run`)},
+    title: ${JSON.stringify(title)},
+    titleI18n: { zh: ${JSON.stringify(title)} },
+    description: 'Transform input text and write the result only when the command is run.',
+    descriptionI18n: { zh: '运行命令时处理输入文本。' },
+    tags: ['text'],
+    optionalParams: true,
+    inputs: [{ key: 'input', label: 'Input', labelI18n: { zh: '输入' }, kind: 'text', required: true }],
+    inputResolution: { strategy: 'use-active', fallback: 'fail' },
+    params: [{
+      key: 'prefix',
+      label: 'Prefix',
+      labelI18n: { zh: '前缀' },
+      type: 'text',
+      default: '',
+    }],
+    run(ctx) {
+      const input = ctx.inputs.input
+      const text = input?.kind === 'text' ? input.text : ''
+      const prefix = String(ctx.params.prefix ?? '')
+      return { effects: [effects.replaceActiveText(prefix + text)] }
+    },
+  }],
+})
+`
+}
+
+export async function createDevPluginScaffold(options: {
+  pluginId?: string
+  title?: string
+} = {}): Promise<DevPlugin> {
+  const root = await getDevPluginRoot()
+  const suffix = Date.now().toString(36)
+  const pluginId = options.pluginId?.trim() || `new-plugin-${suffix}`
+  const title = options.title?.trim() || 'New Plugin'
+  validatePackageRelativePath(pluginId, 'plugin id')
+  const folderPath = joinPath(root, pluginId)
+  const manifest = {
+    pluginId,
+    displayName: title,
+    displayNameI18n: { zh: title },
+    version: '1.0.0',
+    capabilities: ['command'],
+  }
+  await savePluginFile(joinPath(folderPath, 'manifest.json'), JSON.stringify(manifest, null, 2))
+  await savePluginFile(joinPath(folderPath, 'index.js'), pluginTemplate(pluginId, title))
+  await savePluginFile(joinPath(folderPath, 'README.md'), `# ${title}
+
+This is a FluxText directory plugin.
+
+- \`manifest.json\` contains package metadata only.
+- \`index.js\` is the fixed entry.
+- Runtime helpers are injected as \`globalThis.FluxTextPlugin\`; no relative framework import is needed.
+`)
+  return sideloadDevPlugin(folderPath)
+}
+
+export async function loadInstalledPluginsFromStore(): Promise<void> {
+  const plugins = Object.values(usePluginStore.getState().plugins)
+  for (const plugin of plugins) {
+    try {
+      await getPluginPackageSummary(plugin.folderPath)
+      if (plugin.status === 'enabled' || plugin.status === 'loading') {
+        await enablePlugin(plugin.pluginId)
+      }
+    } catch (error: unknown) {
+      usePluginStore.getState().updatePluginStatus(
+        plugin.pluginId,
+        'error',
+        error instanceof Error ? error.message : String(error),
+      )
+    }
+  }
+}
+
+export async function listPluginDirs(path: string): Promise<PluginPackageSummary[]> {
+  return invokeCommand<PluginPackageSummary[]>('list_plugin_dirs', { path })
+}
+
+export async function listPluginFiles(path: string): Promise<PluginFileTree[]> {
+  return invokeCommand<PluginFileTree[]>('list_plugin_files', { path })
+}
+
+export async function readPluginFile(path: string): Promise<string> {
+  return invokeCommand<string>('read_plugin_file', { path })
+}
+
+export async function savePluginFile(path: string, content: string): Promise<void> {
+  await invokeCommand<void>('save_plugin_file', { path, content })
 }

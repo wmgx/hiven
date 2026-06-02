@@ -2,7 +2,7 @@ import { useRef, useEffect, useState } from 'react'
 import { useAppStore, localized, parseScriptToAction } from '../store'
 import { t } from '../i18n'
 import Editor from '@monaco-editor/react'
-import { Play, Save, Trash2, FileType, Copy, ChevronDown, Check, X } from 'lucide-react'
+import { Play, Trash2, FileType, Copy, ChevronDown, Check, X } from 'lucide-react'
 import { loadCDN, loadDeps } from '../utils/cdnLoader'
 
 function isTauri() {
@@ -23,13 +23,9 @@ export function DebuggerView() {
   const addConsoleLog = useAppStore((s) => s.addConsoleLog)
   const clearConsoleLogs = useAppStore((s) => s.clearConsoleLogs)
   const debuggerFileName = useAppStore((s) => s.debuggerFileName)
-  const setDebuggerFileName = useAppStore((s) => s.setDebuggerFileName)
   const debuggerDirty = useAppStore((s) => s.debuggerDirty)
-  const setDebuggerDirty = useAppStore((s) => s.setDebuggerDirty)
   const debuggerRunning = useAppStore((s) => s.debuggerRunning)
   const setDebuggerRunning = useAppStore((s) => s.setDebuggerRunning)
-  const debuggerFileNameEditing = useAppStore((s) => s.debuggerFileNameEditing)
-  const setDebuggerFileNameEditing = useAppStore((s) => s.setDebuggerFileNameEditing)
   const debuggerBuiltin = useAppStore((s) => s.debuggerBuiltin)
   const debuggerTabs = useAppStore((s) => s.debuggerTabs)
   const activeDebuggerTabId = useAppStore((s) => s.activeDebuggerTabId)
@@ -38,45 +34,6 @@ export function DebuggerView() {
   const locale = useAppStore((s) => s.locale)
   const actions = useAppStore((s) => s.actions)
   const settings = useAppStore((s) => s.settings)
-
-  const [editingFileName, setEditingFileName] = useState(false)
-  const [fileNameDraft, setFileNameDraft] = useState(debuggerFileName)
-  const fileNameInputRef = useRef<HTMLInputElement>(null)
-
-  // 切换 tab 时重置编辑状态
-  useEffect(() => {
-    setEditingFileName(false)
-    setFileNameDraft(debuggerFileName)
-  }, [activeDebuggerTabId, debuggerFileName])
-
-  // 新建脚本时自动进入文件名编辑模式
-  useEffect(() => {
-    if (debuggerFileNameEditing) {
-      setFileNameDraft(debuggerFileName)
-      setEditingFileName(true)
-      setDebuggerFileNameEditing(false)
-    }
-  }, [debuggerFileNameEditing]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (editingFileName && fileNameInputRef.current) {
-      fileNameInputRef.current.focus()
-      const dotIdx = fileNameDraft.lastIndexOf('.')
-      fileNameInputRef.current.setSelectionRange(0, dotIdx > 0 ? dotIdx : fileNameDraft.length)
-    }
-  }, [editingFileName]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  function commitFileName() {
-    const name = fileNameDraft.trim()
-    if (name && name !== debuggerFileName) {
-      const finalName = /\.(ts|js)$/.test(name) ? name : name + '.ts'
-      setDebuggerFileName(finalName)
-      setFileNameDraft(finalName)
-    } else {
-      setFileNameDraft(debuggerFileName)
-    }
-    setEditingFileName(false)
-  }
 
   const consoleRef = useRef<HTMLDivElement>(null)
 
@@ -174,23 +131,6 @@ export function DebuggerView() {
     setDebuggerRunning(false)
   }
 
-  async function handleSave() {
-    if (isTauri()) {
-      try {
-        const { invoke } = await import('@tauri-apps/api/core')
-        const destPath = `${settings.watchDirectory}/${debuggerFileName}`
-        await invoke('save_script', { path: destPath, content: debuggerScript })
-        addConsoleLog({ type: 'ok', message: `✓ saved ${debuggerFileName} → ${destPath}` })
-      } catch (e: unknown) {
-        addConsoleLog({ type: 'err', message: `✗ save failed: ${e instanceof Error ? e.message : e}` })
-        return
-      }
-    } else {
-      addConsoleLog({ type: 'ok', message: `✓ saved ${debuggerFileName} (in-memory only)` })
-    }
-    setDebuggerDirty(false)
-  }
-
   function handleToggle(key: string) {
     setDebuggerParams({ ...debuggerParams, [key]: !debuggerParams[key] })
   }
@@ -205,10 +145,6 @@ export function DebuggerView() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         e.preventDefault()
         handleRun()
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-        e.preventDefault()
-        if (!debuggerBuiltin) handleSave()
       }
     }
     window.addEventListener('keydown', handler)
@@ -241,42 +177,13 @@ export function DebuggerView() {
                   onClick={() => { if (!isActive) switchDebuggerTab(tab.id) }}
                 >
                   <FileType size={12} style={{ color: '#185FA5' }} />
-                  {isActive && editingFileName ? (
-                    <input
-                      ref={fileNameInputRef}
-                      className="text-[11px] bg-transparent border-none outline-none px-1 py-0.5 rounded"
-                      style={{
-                        color: 'var(--color-text-primary)',
-                        background: 'var(--color-background-primary)',
-                        border: '1px solid var(--color-accent)',
-                        fontFamily: 'var(--font-mono)',
-                        minWidth: 100,
-                        maxWidth: 180,
-                      }}
-                      value={fileNameDraft}
-                      onChange={(e) => setFileNameDraft(e.target.value)}
-                      onBlur={commitFileName}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') commitFileName()
-                        if (e.key === 'Escape') { setFileNameDraft(debuggerFileName); setEditingFileName(false) }
-                      }}
-                    />
-                  ) : (
-                    <span
-                      className="truncate max-w-[150px]"
-                      style={{ fontFamily: 'var(--font-mono)' }}
-                      onDoubleClick={(e) => {
-                        if (isActive && !debuggerBuiltin) {
-                          e.stopPropagation()
-                          setFileNameDraft(debuggerFileName)
-                          setEditingFileName(true)
-                        }
-                      }}
-                      title={isActive ? (debuggerBuiltin ? 'Built-in (read-only)' : t(locale, 'debugger.dblClickRename')) : name}
-                    >
-                      {name}
-                    </span>
-                  )}
+                  <span
+                    className="truncate max-w-[150px]"
+                    style={{ fontFamily: 'var(--font-mono)' }}
+                    title={isActive ? (debuggerBuiltin ? 'Built-in (read-only)' : 'Debugger session file') : name}
+                  >
+                    {name}
+                  </span>
                   {isDirty && <span style={{ color: 'var(--color-warning)', fontSize: '14px', lineHeight: 1 }}>●</span>}
                   {debuggerTabs.length > 1 && (
                     <button
@@ -292,15 +199,6 @@ export function DebuggerView() {
             })}
           </div>
           <div className="flex gap-1 px-2 shrink-0">
-            <button
-              onClick={handleSave}
-              className="w-7 h-7 rounded-md border-none bg-transparent cursor-pointer flex items-center justify-center"
-              style={{ color: 'var(--color-text-tertiary)', opacity: debuggerBuiltin ? 0.3 : 1 }}
-              title="Save (⌘S)"
-              disabled={debuggerBuiltin}
-            >
-              <Save size={14} />
-            </button>
             <button
               onClick={handleRun}
               disabled={debuggerRunning}

@@ -2,12 +2,11 @@
  * First-party Text Diff plugin.
  */
 
-import { pluginRegistry } from '../../workspace/pluginRegistry'
 import { definePlugin } from '../../workspace/definePlugin'
 import type { PaneInput } from '../../workspace/pluginTypes'
 import { TextDiffRenderer } from './TextDiffRenderer'
 
-const textDiffPlugin = definePlugin({
+export const textDiffPlugin = definePlugin({
   id: 'text-diff',
   title: 'Text Diff',
   version: '1.0.0',
@@ -58,11 +57,4 @@ const textDiffPlugin = definePlugin({
   ],
 })
 
-pluginRegistry.registerProductionPlugin(
-  'text-diff',
-  textDiffPlugin.commands ?? [],
-  textDiffPlugin.renderers ?? [],
-  textDiffPlugin.panels ?? [],
-)
-
-export { textDiffPlugin }
+export default textDiffPlugin

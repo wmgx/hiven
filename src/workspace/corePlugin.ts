@@ -3,7 +3,7 @@
  * Registers framework-owned core capabilities into the production plugin
  * registry using the standard plugin system.
  *
- * Product tools such as text-diff and json-diff are first-party plugins under
+ * Product tools such as adaptive text/JSON diff are first-party plugins under
  * src/plugins, not framework core.
  *
  * Imported at app startup (App.tsx) to ensure registration happens before
