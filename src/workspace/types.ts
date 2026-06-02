@@ -12,6 +12,9 @@ export type EditorPane = {
   title: string
   text: string
   language?: string
+  detectedLanguage?: string
+  languageSource?: 'auto' | 'manual'
+  stickyScroll?: boolean
   uri?: string
   groupId?: string
 }

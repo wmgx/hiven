@@ -35,6 +35,7 @@ export type PaneInput = {
   text: string
   title?: string
   language?: string
+  stickyScroll?: boolean
 }
 
 export type TextInput = {

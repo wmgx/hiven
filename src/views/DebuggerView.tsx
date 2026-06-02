@@ -347,6 +347,7 @@ export function DebuggerView() {
               padding: { top: 10 },
               fontFamily: 'var(--font-mono)',
               tabSize: 2,
+              stickyScroll: { enabled: false },
               readOnly: debuggerBuiltin,
             }}
             theme="vs"

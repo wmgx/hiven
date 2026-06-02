@@ -87,6 +87,13 @@ export interface DebuggerTab {
   builtin?: boolean
 }
 
+export type LastCommandStatus = {
+  title: string
+  status: 'running' | 'success' | 'error'
+  message?: string
+  updatedAt: number
+}
+
 interface AppState {
   // Navigation
   activeView: ViewId
@@ -109,11 +116,9 @@ interface AppState {
   commandPaletteOpen: boolean
   setCommandPaletteOpen: (open: boolean) => void
 
-  // Last Action Result
-  lastResult: string | null
-  setLastResult: (result: string | null) => void
-  lastActionName: string | null
-  setLastActionName: (name: string | null) => void
+  // Last command status
+  lastCommandStatus: LastCommandStatus | null
+  setLastCommandStatus: (status: LastCommandStatus | null) => void
 
   // Recent actions (most recent first)
   recentActionNames: string[]
@@ -254,11 +259,9 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     return { commandPaletteOpen: open }
   }),
 
-  // Last Action Result
-  lastResult: null,
-  setLastResult: (result) => set({ lastResult: result }),
-  lastActionName: null,
-  setLastActionName: (name) => set({ lastActionName: name }),
+  // Last command status
+  lastCommandStatus: null,
+  setLastCommandStatus: (status) => set({ lastCommandStatus: status }),
 
   // Recent actions
   recentActionNames: [],

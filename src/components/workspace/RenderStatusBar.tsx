@@ -15,6 +15,7 @@ export function RenderStatusBar() {
   const panelInstancesV2 = useWorkspaceStore((s) => s.panelInstancesV2)
   const occupancies = useWorkspaceStore((s) => s.occupancies)
   const locale = useAppStore((s) => s.locale)
+  const lastCommandStatus = useAppStore((s) => s.lastCommandStatus)
   const [menuOpen, setMenuOpen] = useState(false)
 
   const hasPresentations = Object.keys(presentations).length > 0
@@ -25,7 +26,20 @@ export function RenderStatusBar() {
   const activeRenderer = paneRenderers[activePaneId] ?? Object.values(paneRenderers).find((renderer) => rendererInputReferencesPane(renderer.rendererInputs, activePaneId))
 
   // Only show when multiple panes or active presentations/panels
-  if (paneOrder.length <= 1 && !hasPresentations && !hasPanels && !hasPaneRenderers && !hasPanelInstancesV2) return null
+  if (paneOrder.length <= 1 && !hasPresentations && !hasPanels && !hasPaneRenderers && !hasPanelInstancesV2 && !lastCommandStatus) return null
+
+  const commandStatusLabel = lastCommandStatus
+    ? t(locale, lastCommandStatus.status === 'running'
+      ? 'status.commandRunning'
+      : lastCommandStatus.status === 'success'
+        ? 'status.commandSuccess'
+        : 'status.commandError')
+    : ''
+  const commandStatusColor = lastCommandStatus?.status === 'success'
+    ? 'var(--color-success-text)'
+    : lastCommandStatus?.status === 'error'
+      ? 'var(--color-error-text)'
+      : 'var(--color-text-secondary)'
 
   return (
     <div
@@ -82,6 +96,16 @@ export function RenderStatusBar() {
         >
           {t(locale, 'status.status')} <ChevronDown size={10} />
         </button>
+      )}
+
+      {lastCommandStatus && (
+        <span
+          className={`${hasOccupancies ? '' : 'ml-auto'} text-[10px] min-w-0 max-w-[40vw] truncate`}
+          style={{ color: commandStatusColor }}
+          title={lastCommandStatus.message ? `${lastCommandStatus.title}: ${lastCommandStatus.message}` : lastCommandStatus.title}
+        >
+          {t(locale, 'status.lastCommand')}: {lastCommandStatus.title} · {commandStatusLabel}
+        </span>
       )}
 
       {/* Status menu dropdown */}

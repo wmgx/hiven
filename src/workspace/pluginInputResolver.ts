@@ -103,6 +103,7 @@ function resolveUseActive(
         text: activePane.text,
         title: activePane.title,
         language: activePane.language,
+        stickyScroll: activePane.stickyScroll === true,
       }
       inputs[slot.key] = paneInput
     }
@@ -166,6 +167,7 @@ function resolveAutoFill(
         text: pane.text,
         title: pane.title,
         language: pane.language,
+        stickyScroll: pane.stickyScroll === true,
       }
     }
     return { ok: true, inputs }
@@ -179,11 +181,14 @@ function resolveAutoFill(
     }
 
     if (paneOrder.length === 2) {
-      // Exactly 2 panes → use paneOrder[0] and paneOrder[1]
-      const original = panes[paneOrder[0]]
-      const modified = panes[paneOrder[1]]
-      inputs[paneSlots[0].key] = { kind: 'pane', paneId: paneOrder[0], text: original?.text || '', title: original?.title, language: original?.language }
-      inputs[paneSlots[1].key] = { kind: 'pane', paneId: paneOrder[1], text: modified?.text || '', title: modified?.title, language: modified?.language }
+      // Exactly 2 panes → use active pane first, then the other pane.
+      const activePaneIndex = paneOrder.indexOf(activePaneId)
+      const firstPaneId = activePaneIndex >= 0 ? activePaneId : paneOrder[0]
+      const otherPaneId = paneOrder.find((paneId) => paneId !== firstPaneId) ?? paneOrder[1]
+      const activePane = panes[firstPaneId]
+      const otherPane = panes[otherPaneId]
+      inputs[paneSlots[0].key] = { kind: 'pane', paneId: firstPaneId, text: activePane?.text || '', title: activePane?.title, language: activePane?.language, stickyScroll: activePane?.stickyScroll === true }
+      inputs[paneSlots[1].key] = { kind: 'pane', paneId: otherPaneId, text: otherPane?.text || '', title: otherPane?.title, language: otherPane?.language, stickyScroll: otherPane?.stickyScroll === true }
       return { ok: true, inputs }
     }
 
@@ -195,6 +200,7 @@ function resolveAutoFill(
         text: panes[previousActivePaneId]!.text,
         title: panes[previousActivePaneId]!.title,
         language: panes[previousActivePaneId]!.language,
+        stickyScroll: panes[previousActivePaneId]!.stickyScroll === true,
       }
       inputs[paneSlots[1].key] = {
         kind: 'pane',
@@ -202,6 +208,7 @@ function resolveAutoFill(
         text: panes[activePaneId]!.text,
         title: panes[activePaneId]!.title,
         language: panes[activePaneId]!.language,
+        stickyScroll: panes[activePaneId]!.stickyScroll === true,
       }
       // 3+ panes: filled from previous+active, but prompt to confirm
       return { ok: false, reason: 'prompt', slots }

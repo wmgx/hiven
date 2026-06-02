@@ -5,14 +5,15 @@
  *   Invalid JSON → line-level LCS diff, raw text
  */
 
-import { useCallback, useState, useMemo } from 'react'
+import { useCallback, useEffect, useState, useMemo } from 'react'
 import { useAppStore } from '../../store'
-import { buildJsonDiffViewModel, buildDiffTree, parseJson, buildSideLines } from './jsonSemanticDiff'
+import { buildJsonDiffViewModel, buildDiffTree, parseJson, buildSideLines } from '../../kits/diff/jsonSemanticDiff'
 import type { PaneInput, RendererProps } from '../../workspace/pluginTypes'
-import type { JsonArrayCompareMode } from './jsonSemanticDiff'
+import type { JsonArrayCompareMode } from '../../kits/diff/jsonSemanticDiff'
 import { t } from '../../i18n'
 import { DualEditorView } from '../../kits/ui/DualEditorView'
 import { computeTextLineDiff } from '../../kits/diff/lineDiff'
+import { detectExternalEditorLanguage } from '../../workspace/languageDetector'
 
 type JsonDiffInputs = {
   original: PaneInput
@@ -30,9 +31,7 @@ export function JsonDiffRenderer({ inputs, host }: RendererProps<JsonDiffInputs>
   const settings = useAppStore((s) => s.settings)
   const locale = useAppStore((s) => s.locale)
 
-  const requestedLayout = inputs?.renderMode === 'inline' ? 'inline' : 'side-by-side'
-  const [layoutOverride, setLayoutOverride] = useState<'side-by-side' | 'inline' | null>(null)
-  const layout = layoutOverride ?? requestedLayout
+  const layout = 'side-by-side'
 
   const [arrayMode, setArrayMode] = useState<'by-index' | 'unordered-scalar' | 'by-object-key'>('by-index')
   const [objectKey, setObjectKey] = useState('id')
@@ -57,6 +56,14 @@ export function JsonDiffRenderer({ inputs, host }: RendererProps<JsonDiffInputs>
   const invalidJsonSides = viewModel.invalidSides
     .map((side) => t(locale, side === 'original' ? 'diff.original' : 'diff.modified'))
     .join(' / ')
+  const editorLanguage = useMemo(() => (
+    isJsonValid
+      ? 'json'
+      : detectExternalEditorLanguage(
+        [originalText, modifiedText],
+        [originalPane?.language, modifiedPane?.language]
+      )
+  ), [isJsonValid, originalText, modifiedText, originalPane?.language, modifiedPane?.language])
 
   // Compute editor content: semantic diff when JSON valid, line diff otherwise
   const { leftText, rightText, leftHighlights, rightHighlights } = useMemo(() => {
@@ -95,6 +102,16 @@ export function JsonDiffRenderer({ inputs, host }: RendererProps<JsonDiffInputs>
     if (modifiedPaneId) host.updatePaneText(modifiedPaneId, text)
   }, [modifiedPaneId, host])
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      host.close()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [host])
+
   if (!originalPane || !modifiedPane) return null
 
   return (
@@ -128,21 +145,6 @@ export function JsonDiffRenderer({ inputs, host }: RendererProps<JsonDiffInputs>
           </span>
         )}
 
-        {/* Layout buttons */}
-        <button
-          className="text-[10px] px-1.5 py-0.5 rounded hover:opacity-80"
-          style={{ background: layout === 'side-by-side' ? 'var(--color-accent-bg)' : 'var(--color-background-tertiary)', color: layout === 'side-by-side' ? 'var(--color-accent)' : 'var(--color-text-tertiary)' }}
-          onClick={() => setLayoutOverride('side-by-side')}
-        >
-          {t(locale, 'diff.sideBySide')}
-        </button>
-        <button
-          className="text-[10px] px-1.5 py-0.5 rounded hover:opacity-80"
-          style={{ background: layout === 'inline' ? 'var(--color-accent-bg)' : 'var(--color-background-tertiary)', color: layout === 'inline' ? 'var(--color-accent)' : 'var(--color-text-tertiary)' }}
-          onClick={() => setLayoutOverride('inline')}
-        >
-          {t(locale, 'diff.inline')}
-        </button>
         <button
           className="ml-auto text-[10px] px-1.5 py-0.5 rounded hover:opacity-80"
           style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-secondary)' }}
@@ -190,7 +192,7 @@ export function JsonDiffRenderer({ inputs, host }: RendererProps<JsonDiffInputs>
           leftHighlights={leftHighlights}
           rightHighlights={rightHighlights}
           layout={layout}
-          language={viewModel.originalLanguage}
+          language={editorLanguage}
           onLeftFocus={handleOriginalFocus}
           onRightFocus={handleModifiedFocus}
           onLeftChange={handleOriginalChange}
@@ -198,6 +200,8 @@ export function JsonDiffRenderer({ inputs, host }: RendererProps<JsonDiffInputs>
           fontSize={settings.fontSize}
           lineNumbers={settings.lineNumbers}
           wordWrap={settings.wordWrap}
+          leftStickyScrollEnabled={originalPane.stickyScroll === true}
+          rightStickyScrollEnabled={modifiedPane.stickyScroll === true}
         />
       </div>
     </div>

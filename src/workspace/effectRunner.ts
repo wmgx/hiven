@@ -287,6 +287,9 @@ function applyPaneEffect(effect: PaneEffect) {
       if (effect.patch.text !== undefined) ws.setPaneText(effect.paneId, effect.patch.text)
       if (effect.patch.title !== undefined) ws.updatePaneTitle(effect.paneId, effect.patch.title)
       if (effect.patch.language !== undefined) ws.updatePaneLanguage(effect.paneId, effect.patch.language)
+      if (effect.patch.detectedLanguage !== undefined) ws.updatePaneDetectedLanguage(effect.paneId, effect.patch.detectedLanguage)
+      if (effect.patch.languageSource !== undefined) ws.updatePaneLanguageSource(effect.paneId, effect.patch.languageSource)
+      if (effect.patch.stickyScroll !== undefined) ws.updatePaneStickyScroll(effect.paneId, effect.patch.stickyScroll)
       break
   }
 }

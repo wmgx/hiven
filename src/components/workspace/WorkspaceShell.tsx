@@ -67,6 +67,7 @@ export function WorkspaceShell() {
             <div
               key={paneId}
               className="flex-1 overflow-hidden relative"
+              onPointerDownCapture={() => setActivePaneId(paneId)}
               style={{
                 borderRight: isHorizontal && idx < layout.panes.length - 1
                   ? '1px solid var(--color-border-tertiary)'

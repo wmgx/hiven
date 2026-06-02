@@ -145,6 +145,7 @@ function useResolvedRendererInputs(
             text: pane.text,
             title: pane.title,
             language: pane.language,
+            stickyScroll: pane.stickyScroll === true,
           }
           resolved[key] = paneInput
         } else {

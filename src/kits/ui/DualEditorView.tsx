@@ -6,6 +6,7 @@
 
 import { useRef, useEffect, useCallback } from 'react'
 import { Editor } from '@monaco-editor/react'
+import * as monaco from 'monaco-editor'
 import type { editor as MonacoEditor } from 'monaco-editor'
 
 let cssInjected = false
@@ -36,6 +37,8 @@ export function DualEditorView({
   fontSize,
   lineNumbers,
   wordWrap,
+  leftStickyScrollEnabled,
+  rightStickyScrollEnabled,
 }: {
   leftText: string
   rightText: string
@@ -50,6 +53,8 @@ export function DualEditorView({
   fontSize: number
   lineNumbers: boolean
   wordWrap: boolean
+  leftStickyScrollEnabled: boolean
+  rightStickyScrollEnabled: boolean
 }) {
   const leftRef  = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
   const rightRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
@@ -57,6 +62,23 @@ export function DualEditorView({
   const rightDecIds = useRef<DecId>([])
   const isApplying  = useRef(false)
   const isSyncing   = useRef(false)
+  const skipNextLeftSync = useRef(false)
+  const skipNextRightSync = useRef(false)
+  const foldingEnabled = language !== 'plaintext'
+
+  const applyLanguage = useCallback((editor: MonacoEditor.IStandaloneCodeEditor | null) => {
+    const model = editor?.getModel()
+    if (!editor || !model) return
+    if (model.getLanguageId() !== language) {
+      monaco.editor.setModelLanguage(model, language)
+    }
+    editor.updateOptions({ folding: foldingEnabled })
+  }, [language, foldingEnabled])
+
+  useEffect(() => {
+    applyLanguage(leftRef.current)
+    applyLanguage(rightRef.current)
+  }, [applyLanguage])
 
   const applyDecs = useCallback((
     editor: MonacoEditor.IStandaloneCodeEditor | null,
@@ -84,10 +106,19 @@ export function DualEditorView({
   const syncText = useCallback((
     editor: MonacoEditor.IStandaloneCodeEditor | null,
     text: string,
+    skipNextSyncRef: React.MutableRefObject<boolean>,
   ) => {
     if (!editor) return
     const model = editor.getModel()
-    if (!model || model.getValue() === text) return
+    if (!model) return
+    if (model.getValue() === text) {
+      skipNextSyncRef.current = false
+      return
+    }
+    if (skipNextSyncRef.current) {
+      skipNextSyncRef.current = false
+      return
+    }
     isApplying.current = true
     try {
       editor.executeEdits('external', [{ range: model.getFullModelRange(), text, forceMoveMarkers: false }])
@@ -96,8 +127,8 @@ export function DualEditorView({
     }
   }, [])
 
-  useEffect(() => { syncText(leftRef.current,  leftText)  }, [leftText,  syncText])
-  useEffect(() => { syncText(rightRef.current, rightText) }, [rightText, syncText])
+  useEffect(() => { syncText(leftRef.current,  leftText,  skipNextLeftSync)  }, [leftText,  syncText])
+  useEffect(() => { syncText(rightRef.current, rightText, skipNextRightSync) }, [rightText, syncText])
 
   useEffect(() => {
     applyDecs(leftRef.current,  leftDecIds,  leftHighlights,  'ft-left-change-line')
@@ -112,7 +143,7 @@ export function DualEditorView({
     minimap: { enabled: false },
     scrollBeyondLastLine: false,
     renderLineHighlight: 'none',
-    folding: true,
+    folding: foldingEnabled,
     glyphMargin: false,
     lineDecorationsWidth: 12,
     lineNumbersMinChars: 4,
@@ -129,6 +160,7 @@ export function DualEditorView({
     })
     editor.onDidChangeModelContent(() => {
       if (isApplying.current) return
+      skipNextLeftSync.current = true
       onLeftChange?.(editor.getModel()?.getValue() ?? '')
     })
     editor.onDidScrollChange((e) => {
@@ -138,8 +170,9 @@ export function DualEditorView({
       right.setScrollPosition({ scrollTop: e.scrollTop, scrollLeft: e.scrollLeft })
       isSyncing.current = false
     })
+    applyLanguage(editor)
     applyDecs(editor, leftDecIds, leftHighlights, 'ft-left-change-line')
-  }, [onLeftFocus, onLeftChange, applyDecs, leftHighlights])
+  }, [onLeftFocus, onLeftChange, applyDecs, applyLanguage, leftHighlights])
 
   const handleRightMount = useCallback((editor: MonacoEditor.IStandaloneCodeEditor) => {
     ensureCss()
@@ -149,6 +182,7 @@ export function DualEditorView({
     })
     editor.onDidChangeModelContent(() => {
       if (isApplying.current) return
+      skipNextRightSync.current = true
       onRightChange?.(editor.getModel()?.getValue() ?? '')
     })
     editor.onDidScrollChange((e) => {
@@ -158,8 +192,9 @@ export function DualEditorView({
       left.setScrollPosition({ scrollTop: e.scrollTop, scrollLeft: e.scrollLeft })
       isSyncing.current = false
     })
+    applyLanguage(editor)
     applyDecs(editor, rightDecIds, rightHighlights, 'ft-right-change-line')
-  }, [onRightFocus, onRightChange, applyDecs, rightHighlights])
+  }, [onRightFocus, onRightChange, applyDecs, applyLanguage, rightHighlights])
 
   const border = '1px solid var(--color-border-tertiary)'
 
@@ -168,11 +203,11 @@ export function DualEditorView({
       <div style={{ display: 'flex', height: '100%' }}>
         <div style={{ flex: 1, overflow: 'hidden', borderRight: border }}>
           <Editor height="100%" defaultValue={leftText} defaultLanguage={language}
-            onMount={handleLeftMount} options={editorOptions} theme="vs" />
+            onMount={handleLeftMount} options={{ ...editorOptions, stickyScroll: { enabled: leftStickyScrollEnabled } }} theme="vs" />
         </div>
         <div style={{ flex: 1, overflow: 'hidden' }}>
           <Editor height="100%" defaultValue={rightText} defaultLanguage={language}
-            onMount={handleRightMount} options={editorOptions} theme="vs" />
+            onMount={handleRightMount} options={{ ...editorOptions, stickyScroll: { enabled: rightStickyScrollEnabled } }} theme="vs" />
         </div>
       </div>
     )
@@ -182,11 +217,11 @@ export function DualEditorView({
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ flex: 1, overflow: 'hidden', borderBottom: border }}>
         <Editor height="100%" defaultValue={leftText} defaultLanguage={language}
-          onMount={handleLeftMount} options={editorOptions} theme="vs" />
+          onMount={handleLeftMount} options={{ ...editorOptions, stickyScroll: { enabled: leftStickyScrollEnabled } }} theme="vs" />
       </div>
       <div style={{ flex: 1, overflow: 'hidden' }}>
         <Editor height="100%" defaultValue={rightText} defaultLanguage={language}
-          onMount={handleRightMount} options={editorOptions} theme="vs" />
+          onMount={handleRightMount} options={{ ...editorOptions, stickyScroll: { enabled: rightStickyScrollEnabled } }} theme="vs" />
       </div>
     </div>
   )

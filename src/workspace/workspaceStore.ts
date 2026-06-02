@@ -87,12 +87,15 @@ interface WorkspaceSlice {
   setPaneText: (paneId: PaneId, text: string) => void
   setActivePaneId: (paneId: PaneId) => void
   setPaneSelection: (paneId: PaneId, selection: SerializedSelection | null) => void
-  createPane: (options?: { text?: string; title?: string; language?: string; focus?: boolean; direction?: 'left' | 'right' | 'top' | 'bottom' }) => PaneId
+  createPane: (options?: { text?: string; title?: string; language?: string; stickyScroll?: boolean; focus?: boolean; direction?: 'left' | 'right' | 'top' | 'bottom' }) => PaneId
   closePane: (paneId: PaneId) => boolean
   closeActiveSurfaceOrPane: () => boolean
   setLayout: (layout: WorkspaceLayout) => void
   updatePaneTitle: (paneId: PaneId, title: string) => void
   updatePaneLanguage: (paneId: PaneId, language: string) => void
+  updatePaneDetectedLanguage: (paneId: PaneId, language: string) => void
+  updatePaneLanguageSource: (paneId: PaneId, source: EditorPane['languageSource']) => void
+  updatePaneStickyScroll: (paneId: PaneId, stickyScroll: boolean) => void
 
   // Presentation actions
   openPresentation: (session: PresentationSession) => void
@@ -129,6 +132,9 @@ export const useWorkspaceStore = create<WorkspaceSlice>()(persist(
         title: '1',
         text: '',
         language: 'plaintext',
+        detectedLanguage: 'plaintext',
+        languageSource: 'auto',
+        stickyScroll: false,
       },
     },
     paneOrder: [DEFAULT_PANE_ID],
@@ -166,6 +172,7 @@ export const useWorkspaceStore = create<WorkspaceSlice>()(persist(
     setActivePaneId: (paneId) => {
       const { activePaneId, panes } = get()
       if (!panes[paneId]) return
+      if (activePaneId === paneId) return
       set({
         previousActivePaneId: activePaneId,
         activePaneId: paneId,
@@ -185,6 +192,9 @@ export const useWorkspaceStore = create<WorkspaceSlice>()(persist(
         title: '', // will be set by renamePanesSequentially
         text: options?.text || '',
         language: options?.language || 'plaintext',
+        detectedLanguage: options?.language || 'plaintext',
+        languageSource: options?.language && options.language !== 'plaintext' ? 'manual' : 'auto',
+        stickyScroll: options?.stickyScroll === true,
       }
       const newPanes = { ...panes, [id]: newPane }
 
@@ -282,6 +292,44 @@ export const useWorkspaceStore = create<WorkspaceSlice>()(persist(
       const pane = panes[paneId]
       if (!pane) return
       set({ panes: { ...panes, [paneId]: { ...pane, language } } })
+    },
+
+    updatePaneDetectedLanguage: (paneId, language) => {
+      const { panes } = get()
+      const pane = panes[paneId]
+      if (!pane) return
+      const languageSource = pane.languageSource ?? (pane.language && pane.language !== 'plaintext' ? 'manual' : 'auto')
+      if (
+        pane.detectedLanguage === language &&
+        (languageSource === 'manual' || (pane.language === language && (pane.languageSource ?? 'auto') === 'auto'))
+      ) {
+        return
+      }
+      set({
+        panes: {
+          ...panes,
+          [paneId]: {
+            ...pane,
+            detectedLanguage: language,
+            ...(languageSource === 'manual' ? {} : { language, languageSource: 'auto' as const }),
+          },
+        },
+      })
+    },
+
+    updatePaneLanguageSource: (paneId, source) => {
+      const { panes } = get()
+      const pane = panes[paneId]
+      if (!pane) return
+      const nextLanguage = source === 'auto' ? (pane.detectedLanguage || 'plaintext') : (pane.language || 'plaintext')
+      set({ panes: { ...panes, [paneId]: { ...pane, languageSource: source, language: nextLanguage } } })
+    },
+
+    updatePaneStickyScroll: (paneId, stickyScroll) => {
+      const { panes } = get()
+      const pane = panes[paneId]
+      if (!pane || pane.stickyScroll === stickyScroll) return
+      set({ panes: { ...panes, [paneId]: { ...pane, stickyScroll } } })
     },
 
     getActivePaneText: () => {
@@ -384,7 +432,15 @@ export const useWorkspaceStore = create<WorkspaceSlice>()(persist(
       panes: Object.fromEntries(
         Object.entries(state.panes).map(([id, pane]) => [
           id,
-          { id: pane.id, title: pane.title, text: pane.text, language: pane.language },
+          {
+            id: pane.id,
+            title: pane.title,
+            text: pane.text,
+            language: pane.language,
+            detectedLanguage: pane.detectedLanguage,
+            languageSource: pane.languageSource,
+            stickyScroll: pane.stickyScroll,
+          },
         ])
       ),
       paneOrder: state.paneOrder,

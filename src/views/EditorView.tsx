@@ -10,8 +10,6 @@ import { Plus } from 'lucide-react'
 import { t } from '../i18n'
 
 export function EditorView() {
-  const lastResult = useAppStore((s) => s.lastResult)
-  const lastActionName = useAppStore((s) => s.lastActionName)
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
   const locale = useAppStore((s) => s.locale)
   const createPane = useWorkspaceStore((s) => s.createPane)
@@ -91,35 +89,6 @@ export function EditorView() {
 
       {/* Render Status */}
       <RenderStatusBar />
-
-      {/* Bottom bar */}
-      <div
-        className="h-7 flex items-center px-3.5 gap-2.5 shrink-0"
-        style={{
-          borderTop: '0.5px solid var(--color-border-tertiary)',
-          background: 'var(--color-background-secondary)',
-        }}
-      >
-        <span className="text-[11px] uppercase tracking-wide" style={{ color: 'var(--color-text-tertiary)' }}>
-          {t(locale, 'editor.output')}
-        </span>
-        {lastResult ? (
-          <span
-            key={lastActionName}
-            className="text-[11px] px-1.5 py-0.5 rounded anim-badge-pop"
-            style={{ background: 'var(--color-success-bg)', color: 'var(--color-success-text)' }}
-          >
-            {lastActionName} ✓
-          </span>
-        ) : (
-          <span
-            className="text-[11px] px-1.5 py-0.5 rounded"
-            style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-tertiary)' }}
-          >
-            —
-          </span>
-        )}
-      </div>
 
       {/* Toast notifications */}
       <ToastContainer />

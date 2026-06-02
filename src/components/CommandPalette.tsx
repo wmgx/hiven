@@ -44,8 +44,7 @@ export function CommandPalette() {
   const actions = useAppStore((s) => s.actions)
   const disabledBuiltins = useAppStore((s) => s.settings.disabledBuiltins)
   const disabledCustoms = useAppStore((s) => s.settings.disabledCustoms)
-  const setLastResult = useAppStore((s) => s.setLastResult)
-  const setLastActionName = useAppStore((s) => s.setLastActionName)
+  const setLastCommandStatus = useAppStore((s) => s.setLastCommandStatus)
   const recentActionNames = useAppStore((s) => s.recentActionNames)
   const pushRecentAction = useAppStore((s) => s.pushRecentAction)
   const actionUsageCounts = useAppStore((s) => s.actionUsageCounts)
@@ -156,9 +155,26 @@ export function CommandPalette() {
   const isInputMode = currentParam?.type === 'text' || currentParam?.type === 'textarea' || currentParam?.type === 'number'
   // 是否为多选模式
   const isMultiSelect = currentParam?.type === 'multi-select'
+  const isFilterableSelect = currentParam?.type === 'single-select' || currentParam?.type === 'multi-select'
+  const visibleOptions = useMemo(() => {
+    if (!isFilterableSelect) return currentOptions
+    const q = inputValue.trim().toLowerCase()
+    if (!q) return currentOptions
+    return currentOptions.filter((option) => paramOptionMatchesQuery(option, q))
+  }, [currentOptions, inputValue, isFilterableSelect])
+
+  useEffect(() => {
+    if (step.type !== 'param' || !isFilterableSelect) return
+    setSelectedIndex((index) => {
+      if (visibleOptions.length === 0) return 0
+      return Math.min(index, visibleOptions.length - 1)
+    })
+  }, [isFilterableSelect, step.type, visibleOptions.length])
 
   async function runAction(action: ActionDef, finalParams: Record<string, unknown>) {
     pushRecentAction(action.name)
+    const commandTitle = localized(action.title, action.titleI18n, locale)
+    setLastCommandStatus({ title: commandTitle, status: 'running', updatedAt: Date.now() })
 
     // 保存参数（仅保存 boolean/select 类型的值，跳过动态参数）
     if (persistParams && action.params && action.params.length > 0) {
@@ -192,8 +208,7 @@ export function CommandPalette() {
       deps = action.source ? await loadDeps(action.source) : {}
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
-      setLastResult(`Error: ${message}`)
-      setLastActionName(action.name)
+      setLastCommandStatus({ title: commandTitle, status: 'error', message, updatedAt: Date.now() })
       setOpen(false)
       return
     }
@@ -219,19 +234,16 @@ export function CommandPalette() {
       if (commandResult.effects.length > 0) {
         const runResult = applyEffects(commandResult.effects)
         if (runResult.errors.length > 0) {
-          setLastResult(`Error: ${runResult.errors[0]}`)
-          setLastActionName(action.name)
+          setLastCommandStatus({ title: commandTitle, status: 'error', message: runResult.errors[0], updatedAt: Date.now() })
         } else {
-          // Success - find text from applied effects for display
-          const textEffect = commandResult.effects.find(e => e.type === 'text.replace')
-          setLastResult(textEffect && 'text' in textEffect ? String(textEffect.text) : 'Done')
-          setLastActionName(action.name)
+          setLastCommandStatus({ title: commandTitle, status: 'success', updatedAt: Date.now() })
         }
+      } else {
+        setLastCommandStatus({ title: commandTitle, status: 'success', updatedAt: Date.now() })
       }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
-      setLastResult(`Error: ${message}`)
-      setLastActionName(action.name)
+      setLastCommandStatus({ title: commandTitle, status: 'error', message, updatedAt: Date.now() })
     }
     setOpen(false)
   }
@@ -243,6 +255,8 @@ export function CommandPalette() {
     inputs: ResolvedInputs,
     finalParams?: Record<string, unknown>
   ) {
+    const commandTitle = getPluginDisplayTitle(entry, isDev, locale)
+    setLastCommandStatus({ title: commandTitle, status: 'running', updatedAt: Date.now() })
     const ctx = buildPluginCommandContext(inputs, finalParams ?? getDefaultPluginParams(entry.contribution.params ?? []))
     try {
       const result = entry.contribution.run(ctx)
@@ -254,13 +268,19 @@ export function CommandPalette() {
             return e
           })
         : result.effects
-      if (effects.length > 0) applyEffects(effects)
-      setLastActionName(entry.contribution.id)
-      setLastResult('Done')
+      if (effects.length > 0) {
+        const runResult = applyEffects(effects)
+        if (runResult.errors.length > 0) {
+          setLastCommandStatus({ title: commandTitle, status: 'error', message: runResult.errors[0], updatedAt: Date.now() })
+        } else {
+          setLastCommandStatus({ title: commandTitle, status: 'success', updatedAt: Date.now() })
+        }
+      } else {
+        setLastCommandStatus({ title: commandTitle, status: 'success', updatedAt: Date.now() })
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
-      setLastResult(`Error: ${msg}`)
-      setLastActionName(entry.contribution.id)
+      setLastCommandStatus({ title: commandTitle, status: 'error', message: msg, updatedAt: Date.now() })
     }
     setOpen(false)
     setSelectedPlugin(null)
@@ -340,11 +360,15 @@ export function CommandPalette() {
         return
       }
       if (resolveResult.reason === 'needs-clipboard') {
+        const commandTitle = getPluginDisplayTitle(entry, isDev, locale)
+        setLastCommandStatus({ title: commandTitle, status: 'error', message: t(locale, 'palette.clipboardUnavailable'), updatedAt: Date.now() })
         showToast(t(locale, 'palette.clipboardUnavailable'), 'error')
         setOpen(false)
         return
       }
       // reason === 'fail' — toast already shown by resolver
+      const commandTitle = getPluginDisplayTitle(entry, isDev, locale)
+      setLastCommandStatus({ title: commandTitle, status: 'error', updatedAt: Date.now() })
       setOpen(false)
       return
     }
@@ -443,7 +467,7 @@ export function CommandPalette() {
     }
 
     setTimeout(() => {
-      if (param.type === 'text' || param.type === 'textarea' || param.type === 'number') {
+      if (param.type === 'text' || param.type === 'textarea' || param.type === 'number' || param.type === 'single-select' || param.type === 'multi-select') {
         inputRef.current?.focus()
       } else {
         panelRef.current?.focus()
@@ -460,8 +484,10 @@ export function CommandPalette() {
     if (currentParam.type === 'boolean') {
       newParams[currentParam.key] = optionIndex === 0
     } else if (currentParam.type === 'single-select') {
-      const opts = currentOptions.map((option) => option.value)
-      newParams[currentParam.key] = opts[optionIndex] ?? ''
+      const opts = visibleOptions.map((option) => option.value)
+      const selectedValue = opts[optionIndex]
+      if (selectedValue === undefined) return
+      newParams[currentParam.key] = selectedValue
     } else if (currentParam.type === 'multi-select') {
       if (currentParam.required && currentParam.maxSelect && multiSelected.length !== currentParam.maxSelect) {
         setInputError(t(locale, 'palette.needTwoPanes'))
@@ -546,11 +572,11 @@ export function CommandPalette() {
     }
 
     if (isMultiSelect) {
-      if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedIndex((i) => Math.min(i + 1, currentOptions.length - 1)) }
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedIndex((i) => Math.min(i + 1, Math.max(0, visibleOptions.length - 1))) }
       if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedIndex((i) => Math.max(i - 1, 0)) }
       if (e.key === ' ') {
         e.preventDefault()
-        const val = currentOptions[selectedIndex]?.value
+        const val = visibleOptions[selectedIndex]?.value
         if (val) {
           toggleMultiWithAutoConfirm(val)
         }
@@ -563,7 +589,8 @@ export function CommandPalette() {
     }
 
     // 单选 (boolean / single-select)
-    if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedIndex((i) => Math.min(i + 1, currentOptions.length - 1)) }
+    const optionCount = isFilterableSelect ? visibleOptions.length : currentOptions.length
+    if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedIndex((i) => Math.min(i + 1, Math.max(0, optionCount - 1))) }
     if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedIndex((i) => Math.max(i - 1, 0)) }
     if (e.key === 'Enter') {
       e.preventDefault()
@@ -610,18 +637,23 @@ export function CommandPalette() {
             param={currentParam}
             paramIndex={step.paramIndex}
             totalParams={(selectedPlugin?.params ?? selectedAction?.params ?? []).length}
-            options={currentOptions}
+            options={visibleOptions}
             selectedIndex={selectedIndex}
             isInputMode={isInputMode}
             isMultiSelect={isMultiSelect}
             inputValue={inputValue}
-            setInputValue={setInputValue}
+            setInputValue={(value) => {
+              setInputValue(value)
+              if (isFilterableSelect) setSelectedIndex(0)
+            }}
             inputError={inputError}
             multiSelected={multiSelected}
             onToggleMulti={(val) => {
               toggleMultiWithAutoConfirm(val)
             }}
             onSelectItem={(i) => { setSelectedIndex(i); confirmCurrentParam(i) }}
+            optionQuery={isFilterableSelect ? inputValue : ''}
+            isFilterableSelect={isFilterableSelect}
             locale={locale}
           />
         )}
@@ -679,7 +711,7 @@ function ParamStep({
   inputRef, actionName, param, paramIndex, totalParams,
   options, selectedIndex, isInputMode, isMultiSelect,
   inputValue, setInputValue, inputError,
-  multiSelected, onToggleMulti, onSelectItem, locale,
+  multiSelected, onToggleMulti, onSelectItem, optionQuery, isFilterableSelect, locale,
 }: {
   inputRef: React.RefObject<HTMLInputElement | null>
   actionName: string
@@ -696,6 +728,8 @@ function ParamStep({
   multiSelected: string[]
   onToggleMulti: (val: string) => void
   onSelectItem: (i: number) => void
+  optionQuery: string
+  isFilterableSelect: boolean
   locale: import('../i18n').Locale
 }) {
   const hintText = param.hintI18n?.[locale] || param.hint || ''
@@ -711,6 +745,20 @@ function ParamStep({
         <span className="text-[13px] font-medium shrink-0" style={{ color: 'var(--color-text-primary)' }}>{localized(param.label, param.labelI18n, locale)}</span>
         {param.required && (
           <span className="text-[10px] px-1.5 rounded shrink-0" style={{ background: 'var(--color-error-bg)', color: 'var(--color-error-text)' }}>{t(locale, 'palette.required')}</span>
+        )}
+        {isFilterableSelect && (
+          <div className="flex items-center flex-1 min-w-0 gap-1.5">
+            <Search size={14} className="shrink-0" style={{ color: 'var(--color-text-tertiary)' }} />
+            <input
+              ref={inputRef}
+              className="flex-1 min-w-0 border-none outline-none text-sm bg-transparent"
+              style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
+              placeholder={t(locale, 'palette.filterOptions')}
+              value={optionQuery}
+              onChange={(e) => setInputValue(e.target.value)}
+              autoFocus
+            />
+          </div>
         )}
         {isInputMode && (
           <input
@@ -731,7 +779,7 @@ function ParamStep({
           />
         )}
         {isMultiSelect && maxSelect && (
-          <span className="ml-auto text-[11px] px-1.5 py-0.5 rounded shrink-0" style={{ background: 'var(--color-accent-light)', color: 'var(--color-accent)' }}>
+          <span className="text-[11px] px-1.5 py-0.5 rounded shrink-0" style={{ background: 'var(--color-accent-light)', color: 'var(--color-accent)' }}>
             {multiSelected.length}/{maxSelect}
           </span>
         )}
@@ -776,6 +824,9 @@ function ParamStep({
               </span>
             </div>
           ))}
+          {options.length === 0 && (
+            <div className="px-3.5 py-4 text-center text-xs" style={{ color: 'var(--color-text-tertiary)' }}>{t(locale, 'palette.noOptions')}</div>
+          )}
         </div>
       )}
 
@@ -811,6 +862,9 @@ function ParamStep({
               </div>
             )
           })}
+          {options.length === 0 && (
+            <div className="px-3.5 py-4 text-center text-xs" style={{ color: 'var(--color-text-tertiary)' }}>{t(locale, 'palette.noOptions')}</div>
+          )}
         </div>
       )}
 
@@ -923,6 +977,16 @@ function pinyinMatch(text: string, query: string): boolean {
   }
 
   return cached.full.includes(query) || cached.initials.startsWith(query)
+}
+
+function paramOptionMatchesQuery(option: { label: string; value: string }, query: string): boolean {
+  const label = option.label.toLowerCase()
+  const value = option.value.toLowerCase()
+  return label.includes(query) || (isSearchableOptionValue(value) && value.includes(query)) || pinyinMatch(option.label, query)
+}
+
+function isSearchableOptionValue(value: string): boolean {
+  return !value.includes(':')
 }
 
 /** 检查 query 是否匹配某个 PaletteItem（含缩写匹配） */
@@ -1238,7 +1302,7 @@ function resolvePaneInputValue(value: string, clipboardText?: string): PaneInput
 
   if (value === 'source:duplicate') {
     const sourcePane = ws.panes[ws.activePaneId] ?? ws.panes[ws.paneOrder[0]]
-    const newPaneId = ws.createPane({ text: sourcePane?.text ?? '', title: locale === 'zh' ? '副本' : 'Copy', language: sourcePane?.language, focus: false, direction: 'right' })
+    const newPaneId = ws.createPane({ text: sourcePane?.text ?? '', title: locale === 'zh' ? '副本' : 'Copy', language: sourcePane?.language, stickyScroll: sourcePane?.stickyScroll === true, focus: false, direction: 'right' })
     return toPaneInput(newPaneId, useWorkspaceStore.getState().panes[newPaneId])
   }
 
@@ -1253,6 +1317,7 @@ function toPaneInput(paneId: string, pane: ReturnType<typeof useWorkspaceStore.g
     text: pane?.text ?? '',
     title: pane?.title ?? 'New Pane',
     language: pane?.language ?? 'plaintext',
+    stickyScroll: pane?.stickyScroll === true,
   }
 }
 
