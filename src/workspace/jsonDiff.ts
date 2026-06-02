@@ -407,6 +407,295 @@ export function jsonDiff(
   }
 }
 
+// ─── Diff Tree ──────────────────────────────────────────────────────────────
+
+export type DiffTreeNode =
+  | { type: 'same'; value: JsonValue }
+  | { type: 'added'; value: JsonValue }
+  | { type: 'removed'; value: JsonValue }
+  | { type: 'changed'; oldValue: JsonValue; newValue: JsonValue }
+  | {
+      type: 'object'
+      // entries: orig key 顺序（orig keys 在前，mod-only keys 在后）
+      entries: Array<{ key: string; node: DiffTreeNode }>
+      // modEntries: mod key 顺序（mod keys 在前，orig-only keys 在后）
+      modEntries: Array<{ key: string; node: DiffTreeNode }>
+      hasChanges: boolean
+    }
+  | { type: 'array'; items: DiffTreeNode[]; hasChanges: boolean }
+
+/**
+ * Build a diff tree from two JSON values.
+ * Nodes with no differences are marked as { type: 'same' } and can be skipped in rendering.
+ */
+export function buildDiffTree(
+  original: JsonValue,
+  modified: JsonValue,
+  options: JsonDiffOptions = {}
+): DiffTreeNode {
+  const arrayMode = options.arrayCompareMode ?? ({ type: 'by-index' } as const)
+
+  function nodeHasChanges(node: DiffTreeNode): boolean {
+    if (node.type === 'same') return false
+    if (node.type === 'object') return node.hasChanges
+    if (node.type === 'array') return node.hasChanges
+    return true
+  }
+
+  function build(orig: JsonValue, mod: JsonValue): DiffTreeNode {
+    const origType = typeOf(orig)
+    const modType = typeOf(mod)
+
+    if (origType !== modType) {
+      return { type: 'changed', oldValue: orig, newValue: mod }
+    }
+
+    if (origType !== 'object' && origType !== 'array') {
+      if (orig === mod) return { type: 'same', value: orig }
+      return { type: 'changed', oldValue: orig, newValue: mod }
+    }
+
+    if (Array.isArray(orig) && Array.isArray(mod)) {
+      return buildArrayNode(orig, mod)
+    }
+
+    return buildObjectNode(
+      orig as Record<string, JsonValue>,
+      mod as Record<string, JsonValue>
+    )
+  }
+
+  function buildObjectNode(
+    orig: Record<string, JsonValue>,
+    mod: Record<string, JsonValue>
+  ): DiffTreeNode {
+    // 先把所有 key 的 DiffTreeNode 计算出来
+    const origKeys = Object.keys(orig)
+    const modKeys = Object.keys(mod)
+    const allKeys = [...new Set([...origKeys, ...modKeys])]
+    const nodeMap = new Map<string, DiffTreeNode>()
+    let hasChanges = false
+
+    for (const key of allKeys) {
+      const inOrig = key in orig
+      const inMod = key in mod
+      let node: DiffTreeNode
+
+      if (inOrig && !inMod) {
+        node = { type: 'removed', value: orig[key] }
+        hasChanges = true
+      } else if (!inOrig && inMod) {
+        node = { type: 'added', value: mod[key] }
+        hasChanges = true
+      } else {
+        node = build(orig[key], mod[key])
+        if (nodeHasChanges(node)) hasChanges = true
+      }
+      nodeMap.set(key, node)
+    }
+
+    // entries: orig key 顺序（orig keys 在前，mod-only keys 在后）
+    const origOnlyInMod = modKeys.filter(k => !(k in orig))
+    const entries = [...origKeys, ...origOnlyInMod].map(k => ({ key: k, node: nodeMap.get(k)! }))
+
+    // modEntries: mod key 顺序（mod keys 在前，orig-only keys 在后）
+    const modOnlyInOrig = origKeys.filter(k => !(k in mod))
+    const modEntries = [...modKeys, ...modOnlyInOrig].map(k => ({ key: k, node: nodeMap.get(k)! }))
+
+    return { type: 'object', entries, modEntries, hasChanges }
+  }
+
+  function buildArrayNode(orig: JsonValue[], mod: JsonValue[]): DiffTreeNode {
+    if (arrayMode.type === 'unordered-scalar') return buildArrayUnorderedScalar(orig, mod)
+    if (arrayMode.type === 'by-object-key') return buildArrayByObjectKey(orig, mod, arrayMode.key)
+    return buildArrayByIndex(orig, mod)
+  }
+
+  function buildArrayByIndex(orig: JsonValue[], mod: JsonValue[]): DiffTreeNode {
+    const maxLen = Math.max(orig.length, mod.length)
+    const items: DiffTreeNode[] = []
+    let hasChanges = false
+
+    for (let i = 0; i < maxLen; i++) {
+      let node: DiffTreeNode
+      if (i >= orig.length) {
+        node = { type: 'added', value: mod[i] }
+        hasChanges = true
+      } else if (i >= mod.length) {
+        node = { type: 'removed', value: orig[i] }
+        hasChanges = true
+      } else {
+        node = build(orig[i], mod[i])
+        if (nodeHasChanges(node)) hasChanges = true
+      }
+      items.push(node)
+    }
+
+    return { type: 'array', items, hasChanges }
+  }
+
+  function buildArrayUnorderedScalar(orig: JsonValue[], mod: JsonValue[]): DiffTreeNode {
+    const isScalarVal = (v: JsonValue) => v === null || typeof v !== 'object'
+    if (!orig.every(isScalarVal) || !mod.every(isScalarVal)) return buildArrayByIndex(orig, mod)
+
+    const origCounts = new Map<string, number>()
+    const modCounts = new Map<string, number>()
+    for (const v of orig) { const k = JSON.stringify(v); origCounts.set(k, (origCounts.get(k) || 0) + 1) }
+    for (const v of mod)  { const k = JSON.stringify(v); modCounts.set(k, (modCounts.get(k) || 0) + 1) }
+
+    const allKeys = new Set([...origCounts.keys(), ...modCounts.keys()])
+    const items: DiffTreeNode[] = []
+    let hasChanges = false
+
+    for (const k of allKeys) {
+      const oc = origCounts.get(k) || 0
+      const mc = modCounts.get(k) || 0
+      const value = JSON.parse(k) as JsonValue
+      for (let i = 0; i < Math.max(oc, mc); i++) {
+        if (i < oc && i < mc) {
+          items.push({ type: 'same', value })
+        } else if (i < oc) {
+          items.push({ type: 'removed', value }); hasChanges = true
+        } else {
+          items.push({ type: 'added', value }); hasChanges = true
+        }
+      }
+    }
+
+    return { type: 'array', items, hasChanges }
+  }
+
+  function buildArrayByObjectKey(orig: JsonValue[], mod: JsonValue[], key: string): DiffTreeNode {
+    const toMap = (arr: JsonValue[]): Map<string, JsonValue> => {
+      const map = new Map<string, JsonValue>()
+      for (const item of arr) {
+        if (item && typeof item === 'object' && !Array.isArray(item) && key in (item as Record<string, JsonValue>)) {
+          map.set(JSON.stringify((item as Record<string, JsonValue>)[key]), item)
+        }
+      }
+      return map
+    }
+
+    const origMap = toMap(orig)
+    const modMap = toMap(mod)
+    const allKeys = [...new Set([...origMap.keys(), ...modMap.keys()])].sort()
+    const items: DiffTreeNode[] = []
+    let hasChanges = false
+
+    for (const k of allKeys) {
+      const origItem = origMap.get(k)
+      const modItem = modMap.get(k)
+      let node: DiffTreeNode
+
+      if (origItem !== undefined && modItem === undefined) {
+        node = { type: 'removed', value: origItem }; hasChanges = true
+      } else if (origItem === undefined && modItem !== undefined) {
+        node = { type: 'added', value: modItem }; hasChanges = true
+      } else if (origItem !== undefined && modItem !== undefined) {
+        node = build(origItem, modItem)
+        if (nodeHasChanges(node)) hasChanges = true
+      } else {
+        node = { type: 'same' }
+      }
+      items.push(node)
+    }
+
+    return { type: 'array', items, hasChanges }
+  }
+
+  return build(original, modified)
+}
+
+// ─── Side Lines (for dual Monaco editor) ────────────────────────────────────
+
+export type SideLine = {
+  text: string
+  highlight: boolean
+}
+
+/** Serialize a JSON value into indented lines with key prefix and trailing comma. */
+function fmtLines(value: JsonValue, depth: number, keyPrefix: string, comma: string): string[] {
+  const indent = '  '.repeat(depth)
+  const lines = JSON.stringify(value, null, 2).split('\n')
+  return lines.map((line, idx) => {
+    const isFirst = idx === 0
+    const isLast = idx === lines.length - 1
+    return isFirst
+      ? `${indent}${keyPrefix}${line}${isLast ? comma : ''}`
+      : `${indent}${line}${isLast ? comma : ''}`
+  })
+}
+
+function buildSideLinesImpl(
+  node: DiffTreeNode,
+  side: 'left' | 'right',
+  depth: number,
+  keyPrefix: string,
+  comma: string,
+): SideLine[] {
+  const indent = '  '.repeat(depth)
+  // left 侧跳过 added（原始 JSON 里没有）；right 侧跳过 removed（修改后 JSON 里没有）
+  const skipType = side === 'left' ? 'added' : 'removed'
+
+  if (node.type === skipType) return []
+
+  if (node.type === 'same') {
+    return fmtLines(node.value, depth, keyPrefix, comma).map(text => ({ text, highlight: false }))
+  }
+
+  if (node.type === 'removed') {
+    // 只有 left 侧会到这里
+    return fmtLines(node.value, depth, keyPrefix, comma).map(text => ({ text, highlight: true }))
+  }
+
+  if (node.type === 'added') {
+    // 只有 right 侧会到这里
+    return fmtLines(node.value, depth, keyPrefix, comma).map(text => ({ text, highlight: true }))
+  }
+
+  if (node.type === 'changed') {
+    const value = side === 'left' ? node.oldValue : node.newValue
+    return fmtLines(value, depth, keyPrefix, comma).map(text => ({ text, highlight: true }))
+  }
+
+  if (node.type === 'object') {
+    const result: SideLine[] = []
+    result.push({ text: `${indent}${keyPrefix}{`, highlight: false })
+    // left 侧按 orig key 顺序，right 侧按 mod key 顺序
+    const entriesToUse = side === 'left' ? node.entries : node.modEntries
+    const visible = entriesToUse.filter(({ node: child }) => child.type !== skipType)
+    visible.forEach(({ key, node: child }, idx) => {
+      const isLast = idx === visible.length - 1
+      result.push(...buildSideLinesImpl(child, side, depth + 1, `"${key}": `, isLast ? '' : ','))
+    })
+    result.push({ text: `${indent}}${comma}`, highlight: false })
+    return result
+  }
+
+  if (node.type === 'array') {
+    const result: SideLine[] = []
+    result.push({ text: `${indent}${keyPrefix}[`, highlight: false })
+    const visible = node.items.filter(item => item.type !== skipType)
+    visible.forEach((item, idx) => {
+      const isLast = idx === visible.length - 1
+      result.push(...buildSideLinesImpl(item, side, depth + 1, '', isLast ? '' : ','))
+    })
+    result.push({ text: `${indent}]${comma}`, highlight: false })
+    return result
+  }
+
+  return []
+}
+
+/**
+ * Build the text and highlight information for one side of a semantic diff.
+ * side='left' → original JSON (without added entries)
+ * side='right' → modified JSON (without removed entries)
+ */
+export function buildSideLines(node: DiffTreeNode, side: 'left' | 'right'): SideLine[] {
+  return buildSideLinesImpl(node, side, 0, '', '')
+}
+
 /**
  * Build the text model consumed by Monaco DiffEditor.
  *
