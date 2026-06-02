@@ -29,7 +29,6 @@ export function DualEditorView({
   leftHighlights,
   rightHighlights,
   layout,
-  language = 'plaintext',
   originalPaneId,
   modifiedPaneId,
   host,
@@ -42,7 +41,6 @@ export function DualEditorView({
   leftHighlights: number[]
   rightHighlights: number[]
   layout: 'side-by-side' | 'inline'
-  language?: string
   originalPaneId: string | undefined
   modifiedPaneId: string | undefined
   host: RendererHost
@@ -166,11 +164,11 @@ export function DualEditorView({
     return (
       <div style={{ display: 'flex', height: '100%' }}>
         <div style={{ flex: 1, overflow: 'hidden', borderRight: border }}>
-          <Editor height="100%" defaultValue={leftText} defaultLanguage={language}
+          <Editor height="100%" defaultValue={leftText}
             onMount={handleLeftMount} options={editorOptions} theme="vs" />
         </div>
         <div style={{ flex: 1, overflow: 'hidden' }}>
-          <Editor height="100%" defaultValue={rightText} defaultLanguage={language}
+          <Editor height="100%" defaultValue={rightText}
             onMount={handleRightMount} options={editorOptions} theme="vs" />
         </div>
       </div>
@@ -180,11 +178,11 @@ export function DualEditorView({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ flex: 1, overflow: 'hidden', borderBottom: border }}>
-        <Editor height="100%" defaultValue={leftText} defaultLanguage={language}
+        <Editor height="100%" defaultValue={leftText}
           onMount={handleLeftMount} options={editorOptions} theme="vs" />
       </div>
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        <Editor height="100%" defaultValue={rightText} defaultLanguage={language}
+        <Editor height="100%" defaultValue={rightText}
           onMount={handleRightMount} options={editorOptions} theme="vs" />
       </div>
     </div>

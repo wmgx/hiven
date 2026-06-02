@@ -179,7 +179,6 @@ export function CoreJsonDiffRenderer({ inputs, surfaceId: _surfaceId, host }: Re
           leftHighlights={leftHighlights}
           rightHighlights={rightHighlights}
           layout={layout}
-          language={viewModel.originalLanguage ?? 'plaintext'}
           originalPaneId={originalPaneId}
           modifiedPaneId={modifiedPaneId}
           host={host}
