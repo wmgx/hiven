@@ -6,11 +6,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAppStore } from '../../store'
-import type { PaneInput, RendererProps } from '../../workspace/pluginTypes'
+import type { PaneInput, RendererProps } from '@fluxtext/plugin'
 import { t } from '../../i18n'
 import { computeTextLineDiff } from '../../kits/diff/lineDiff'
 import { DualEditorView } from '../../kits/ui/DualEditorView'
-import { detectExternalEditorLanguage } from '../../workspace/languageDetector'
+import { detectExternalEditorLanguage } from '@fluxtext/plugin'
 import {
   buildDiffTree,
   buildJsonDiffViewModel,

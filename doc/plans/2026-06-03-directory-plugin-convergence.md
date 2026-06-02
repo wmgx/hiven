@@ -68,7 +68,7 @@
 
 - [ ] During `initConfigDir()`, create `plugins/builtin`, `plugins/installed`, and `plugins/dev`.
 - [ ] If migration marker `plugins/.migrated-scripts-v1` is absent, scan old `scripts/` for non-builtin `.js` / `.ts` files.
-- [ ] For each valid legacy action, write `plugins/installed/user-{safeName}/manifest.json` and `entry.js`.
+- [ ] For each valid script action, write `plugins/installed/user-{safeName}/manifest.json` and `index.js`.
 - [ ] The generated `index.js` exports a normal `PluginDefinition` with one command that calls the script action `run(ctx)` and maps `{ text }` to the current workspace text-output effect already used by commands.
 - [ ] After migration succeeds, write the marker with migrated file names and leave original files untouched for rollback.
 - [ ] Stop `App.tsx` from calling `read_scripts_dir` for custom scripts.

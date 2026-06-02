@@ -10,7 +10,8 @@
     /* Bundler mode */
     "moduleResolution": "bundler",
     "paths": {
-      "fluxtext": ["./src/fluxtext.d.ts"]
+      "fluxtext": ["./src/fluxtext.d.ts"],
+      "@fluxtext/plugin": ["./src/plugin-sdk.ts"]
     },
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,

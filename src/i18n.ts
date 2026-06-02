@@ -170,6 +170,7 @@ const messages = {
     'palette.clipboardUnavailable': 'This command requires clipboard access but it could not be read.',
     'palette.numbersOnly': 'Numbers only',
     'palette.customizeParamsLabel': 'params',
+    'palette.pinAction': 'Pin action',
 
     // Workspace / core plugin
     'workspace.close': 'Close',
@@ -411,6 +412,7 @@ const messages = {
     'palette.clipboardUnavailable': '此命令需要读取剪贴板，但当前无法读取。',
     'palette.numbersOnly': '仅允许数字',
     'palette.customizeParamsLabel': '参数',
+    'palette.pinAction': '固定操作',
 
     // Workspace / core plugin
     'workspace.close': '关闭',

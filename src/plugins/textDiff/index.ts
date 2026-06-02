@@ -2,8 +2,7 @@
  * First-party Text Diff plugin.
  */
 
-import { definePlugin } from '../../workspace/definePlugin'
-import type { PaneInput } from '../../workspace/pluginTypes'
+import { definePlugin, type PaneInput } from '@fluxtext/plugin'
 import { TextDiffRenderer } from './TextDiffRenderer'
 
 export const textDiffPlugin = definePlugin({

@@ -10,7 +10,7 @@ import { showToast } from '../workspace/toast'
 import type { CommandEntry } from '../workspace/pluginRegistry'
 import type { CommandParam, InputSlot, PaneInput } from '../workspace/pluginTypes'
 import type { ResolvedInputs } from '../workspace/pluginTypes'
-import { Search, Check } from 'lucide-react'
+import { Search, Check, Pin } from 'lucide-react'
 import { t, type Locale } from '../i18n'
 import { readText } from '@tauri-apps/plugin-clipboard-manager'
 import { loadCDN, loadDeps } from '../utils/cdnLoader'
@@ -52,6 +52,7 @@ export function CommandPalette() {
   const persistParams = useAppStore((s) => s.settings.persistParams)
   const savedActionParams = useAppStore((s) => s.savedActionParams)
   const saveActionParams = useAppStore((s) => s.saveActionParams)
+  const pinAction = useAppStore((s) => s.pinAction)
   const locale = useAppStore((s) => s.locale)
   const shortcutMeta = useMemo(() => getPlatformShortcutMeta(), [])
 
@@ -646,6 +647,11 @@ export function CommandPalette() {
             filteredItems={allFiltered}
             selectedIndex={selectedIndex}
             onSelectItem={(item, customizeParams) => selectItem(item, customizeParams)}
+            onPinItem={(item) => {
+              if (item.kind !== 'legacy') return
+              pinAction(item.action)
+              setOpen(false)
+            }}
             setSelectedIndex={setSelectedIndex}
             isKeyboardNavRef={isKeyboardNavRef}
             shouldCustomizeParams={shouldCustomizeParams}
@@ -688,7 +694,7 @@ export function CommandPalette() {
 
 // 搜索步骤
 function SearchStep({
-  inputRef, query, setQuery, filteredItems, selectedIndex, onSelectItem, setSelectedIndex, isKeyboardNavRef, shouldCustomizeParams, shortcutMeta, locale,
+  inputRef, query, setQuery, filteredItems, selectedIndex, onSelectItem, onPinItem, setSelectedIndex, isKeyboardNavRef, shouldCustomizeParams, shortcutMeta, locale,
 }: {
   inputRef: React.RefObject<HTMLInputElement | null>
   query: string
@@ -696,6 +702,7 @@ function SearchStep({
   filteredItems: PaletteItem[]
   selectedIndex: number
   onSelectItem: (item: PaletteItem, customizeParams: boolean) => void
+  onPinItem: (item: PaletteItem) => void
   setSelectedIndex: (i: number) => void
   isKeyboardNavRef: React.MutableRefObject<boolean>
   shouldCustomizeParams: (metaKey: boolean, ctrlKey: boolean) => boolean
@@ -717,7 +724,7 @@ function SearchStep({
       </div>
       <div className="max-h-[300px] overflow-y-auto py-1" onMouseMove={() => { isKeyboardNavRef.current = false }}>
         {filteredItems.map((item, i) => (
-          <ActionItem key={i} item={item} selected={selectedIndex === i} onClick={(event) => onSelectItem(item, shouldCustomizeParams(event.metaKey, event.ctrlKey))} onMouseEnter={() => { if (!isKeyboardNavRef.current) setSelectedIndex(i) }} shortcutMeta={shortcutMeta} locale={locale} />
+          <ActionItem key={i} item={item} selected={selectedIndex === i} onClick={(event) => onSelectItem(item, shouldCustomizeParams(event.metaKey, event.ctrlKey))} onPin={() => onPinItem(item)} onMouseEnter={() => { if (!isKeyboardNavRef.current) setSelectedIndex(i) }} shortcutMeta={shortcutMeta} locale={locale} />
         ))}
         {filteredItems.length === 0 && (
           <div className="px-3.5 py-4 text-center text-xs" style={{ color: 'var(--color-text-tertiary)' }}>{t(locale, 'palette.noResults')}</div>
@@ -910,7 +917,7 @@ function ParamStep({
   )
 }
 
-function ActionItem({ item, selected, onClick, onMouseEnter, shortcutMeta, locale }: { item: PaletteItem; selected: boolean; onClick: (event: React.MouseEvent<HTMLDivElement>) => void; onMouseEnter: () => void; shortcutMeta: ShortcutMeta; locale: Locale }) {
+function ActionItem({ item, selected, onClick, onPin, onMouseEnter, shortcutMeta, locale }: { item: PaletteItem; selected: boolean; onClick: (event: React.MouseEvent<HTMLDivElement>) => void; onPin: () => void; onMouseEnter: () => void; shortcutMeta: ShortcutMeta; locale: Locale }) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -982,6 +989,20 @@ function ActionItem({ item, selected, onClick, onMouseEnter, shortcutMeta, local
           </kbd>
           <span className="text-[10px] leading-none">{t(locale, 'palette.customizeParamsLabel')}</span>
         </div>
+      )}
+      {item.kind === 'legacy' && (
+        <button
+          className="w-6 h-6 rounded-md border-none bg-transparent cursor-pointer flex items-center justify-center shrink-0"
+          title={t(locale, 'palette.pinAction')}
+          style={{ color: selected ? 'var(--color-accent-hover)' : 'var(--color-text-tertiary)' }}
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            onPin()
+          }}
+        >
+          <Pin size={13} />
+        </button>
       )}
       {selected && (
         <kbd className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--color-background-tertiary)', border: '0.5px solid var(--color-border-tertiary)', color: 'var(--color-text-secondary)' }}>↵</kbd>

@@ -50,6 +50,15 @@ export type PluginPackageSummary = {
   folderPath: string
 }
 
+type ResolvedPluginManifest = {
+  pluginId: string
+  displayName: string
+  displayNameI18n?: PluginManifest['displayNameI18n']
+  version: string
+  entry: string
+  capabilities: string[]
+}
+
 /** Maps pluginId → watcher unlisten fn for dev plugins */
 const watcherCleanups = new Map<string, () => void>()
 
@@ -133,7 +142,7 @@ async function resolveFixedPluginEntry(folderPath: string): Promise<string> {
  * Load and validate a plugin manifest from a folder.
  * Throws if manifest is missing or invalid.
  */
-async function loadManifest(folderPath: string): Promise<PluginManifest> {
+async function loadManifest(folderPath: string): Promise<ResolvedPluginManifest> {
   const manifestPath = joinPath(folderPath, 'manifest.json')
   const raw = await readFileText(manifestPath)
   const manifest = JSON.parse(raw) as Partial<PluginManifest>
@@ -147,27 +156,27 @@ async function loadManifest(folderPath: string): Promise<PluginManifest> {
   if (typeof manifest.displayName !== 'undefined' && typeof manifest.displayName !== 'string') {
     throw new Error(`Invalid manifest: displayName must be a string in ${manifestPath}`)
   }
-  const entry = await resolveFixedPluginEntry(folderPath)
+  const resolvedEntry = await resolveFixedPluginEntry(folderPath)
 
   return {
     pluginId: manifest.pluginId,
     displayName: manifest.displayName || manifest.pluginId,
     displayNameI18n: manifest.displayNameI18n,
     version,
-    entry,
+    entry: resolvedEntry,
     capabilities: manifest.capabilities || [],
   }
 }
 
 export async function getPluginPackageSummary(folderPath: string): Promise<PluginPackageSummary> {
-  const manifest = await loadManifest(folderPath)
+  const packageMeta = await loadManifest(folderPath)
   return {
-    pluginId: manifest.pluginId,
-    displayName: manifest.displayName,
-    displayNameI18n: manifest.displayNameI18n,
-    version: manifest.version,
-    entry: manifest.entry,
-    capabilities: manifest.capabilities ?? [],
+    pluginId: packageMeta.pluginId,
+    displayName: packageMeta.displayName,
+    displayNameI18n: packageMeta.displayNameI18n,
+    version: packageMeta.version,
+    entry: packageMeta.entry,
+    capabilities: packageMeta.capabilities ?? [],
     folderPath,
   }
 }
@@ -272,8 +281,8 @@ export async function installLocalPlugin(
     status?: InstalledPlugin['status']
   } = {},
 ): Promise<InstalledPlugin> {
-  const manifest = await loadManifest(folderPath)
-  const pluginId = manifest.pluginId
+  const packageMeta = await loadManifest(folderPath)
+  const pluginId = packageMeta.pluginId
 
   const { plugins, installPlugin, updatePluginVersion, updatePluginMetadata } = usePluginStore.getState()
 
@@ -282,10 +291,10 @@ export async function installLocalPlugin(
     const existing = plugins[pluginId]
     if (existing.folderPath === folderPath) {
       // Re-installing from same folder → update version info only
-      updatePluginVersion(pluginId, manifest.version, manifest.entry, manifest.capabilities ?? [])
+      updatePluginVersion(pluginId, packageMeta.version, packageMeta.entry, packageMeta.capabilities ?? [])
       updatePluginMetadata(pluginId, {
-        displayName: manifest.displayName,
-        displayNameI18n: manifest.displayNameI18n,
+        displayName: packageMeta.displayName,
+        displayNameI18n: packageMeta.displayNameI18n,
         source: options.source ?? existing.source,
         sourceUrl: options.sourceUrl ?? existing.sourceUrl,
         folderPath,
@@ -293,9 +302,9 @@ export async function installLocalPlugin(
       })
       return {
         ...existing,
-        version: manifest.version,
-        entry: manifest.entry,
-        capabilities: manifest.capabilities ?? [],
+        version: packageMeta.version,
+        entry: packageMeta.entry,
+        capabilities: packageMeta.capabilities ?? [],
         source: options.source ?? existing.source,
         sourceUrl: options.sourceUrl ?? existing.sourceUrl,
         folderPath,
@@ -309,11 +318,11 @@ export async function installLocalPlugin(
 
   const record: InstalledPlugin = {
     pluginId,
-    displayName: manifest.displayName,
-    displayNameI18n: manifest.displayNameI18n,
-    version: manifest.version,
-    entry: manifest.entry,
-    capabilities: manifest.capabilities ?? [],
+    displayName: packageMeta.displayName,
+    displayNameI18n: packageMeta.displayNameI18n,
+    version: packageMeta.version,
+    entry: packageMeta.entry,
+    capabilities: packageMeta.capabilities ?? [],
     folderPath,
     packagePath: folderPath,
     source: options.source ?? 'local',
@@ -469,8 +478,8 @@ export function uninstallPlugin(pluginId: string): void {
  * Session-scoped, not persisted.
  */
 export async function sideloadDevPlugin(folderPath: string): Promise<DevPlugin> {
-  const manifest = await loadManifest(folderPath)
-  const pluginId = manifest.pluginId
+  const packageMeta = await loadManifest(folderPath)
+  const pluginId = packageMeta.pluginId
 
   const { addDevPlugin } = usePluginStore.getState()
 
@@ -483,21 +492,21 @@ export async function sideloadDevPlugin(folderPath: string): Promise<DevPlugin> 
 
   const devRecord: DevPlugin = {
     pluginId,
-    displayName: manifest.displayName,
-    displayNameI18n: manifest.displayNameI18n,
-    version: manifest.version,
+    displayName: packageMeta.displayName,
+    displayNameI18n: packageMeta.displayNameI18n,
+    version: packageMeta.version,
     folderPath,
     packagePath: folderPath,
     source: 'local',
-    capabilities: manifest.capabilities ?? [],
+    capabilities: packageMeta.capabilities ?? [],
     status: 'active',
     loadedAt: Date.now(),
     updatedAt: Date.now(),
   }
 
   try {
-    const definition = await loadPluginEntry(folderPath, manifest.entry)
-    validatePluginIdMatch(definition, manifest)
+    const definition = await loadPluginEntry(folderPath, packageMeta.entry)
+    validatePluginIdMatch(definition, packageMeta)
 
     pluginRegistry.registerDevPlugin(
       pluginId,
@@ -507,7 +516,7 @@ export async function sideloadDevPlugin(folderPath: string): Promise<DevPlugin> 
     )
 
     addDevPlugin(devRecord)
-    showToast(`[DEV] Plugin "${manifest.displayName}" loaded`, 'success')
+    showToast(`[DEV] Plugin "${packageMeta.displayName}" loaded`, 'success')
     return devRecord
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err)
@@ -538,9 +547,9 @@ export async function reloadDevPlugin(pluginId: string): Promise<void> {
   }
 
   try {
-    const manifest = await loadManifest(record.folderPath)
-    const definition = await loadPluginEntry(record.folderPath, manifest.entry, true /* cache bust */)
-    validatePluginIdMatch(definition, manifest)
+    const packageMeta = await loadManifest(record.folderPath)
+    const definition = await loadPluginEntry(record.folderPath, packageMeta.entry, true /* cache bust */)
+    validatePluginIdMatch(definition, packageMeta)
 
     pluginRegistry.registerDevPlugin(
       pluginId,
