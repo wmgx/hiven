@@ -621,10 +621,16 @@ export function CommandPalette() {
     }
   }
 
+  if (!open) return null
+
   return (
     <div
       className={`fixed inset-0 flex items-start justify-center pt-[70px] z-50 palette-overlay ${open ? 'open' : ''}`}
-      style={{ pointerEvents: open ? 'auto' : 'none' }}
+      style={{
+        pointerEvents: 'auto',
+        visibility: 'visible',
+        zIndex: 1000,
+      }}
       onClick={(e) => { if (e.target === e.currentTarget) setOpen(false) }}
     >
       <div
