@@ -4,7 +4,6 @@ import type { Locale } from './i18n'
 import { builtinActions } from './actions/builtins'
 import { useWorkspaceStore } from './workspace/workspaceStore'
 import { workspaceActions } from './commands/workspaceCommands'
-import { json4mateActions } from './commands/json4mateCommands'
 
 export type ViewId = 'editor' | 'scripts' | 'debugger' | 'settings'
 
@@ -119,6 +118,8 @@ interface AppState {
   // Recent actions (most recent first)
   recentActionNames: string[]
   pushRecentAction: (name: string) => void
+  // Usage frequency per action (cumulative count)
+  actionUsageCounts: Record<string, number>
 
   // Saved params per action (for persistParams feature)
   savedActionParams: Record<string, Record<string, any>>
@@ -219,7 +220,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   setEditorInstance: (editor) => set({ editorInstance: editor }),
 
   // Action System
-  actions: [...builtinActions, ...workspaceActions, ...json4mateActions],
+  actions: [...builtinActions, ...workspaceActions],
   registerAction: (action) => set((state) => ({ actions: [...state.actions, action] })),
   registerActions: (actions) => set((state) => ({ actions: [...state.actions, ...actions] })),
   setCustomActions: (customs) => set((state) => ({
@@ -263,8 +264,13 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   recentActionNames: [],
   pushRecentAction: (name) => set((state) => {
     const filtered = state.recentActionNames.filter((n) => n !== name)
-    return { recentActionNames: [name, ...filtered].slice(0, 50) }
+    const newCounts = { ...state.actionUsageCounts, [name]: (state.actionUsageCounts[name] ?? 0) + 1 }
+    return {
+      recentActionNames: [name, ...filtered].slice(0, 50),
+      actionUsageCounts: newCounts,
+    }
   }),
+  actionUsageCounts: {},
 
   // Saved params per action
   savedActionParams: {},
@@ -406,7 +412,7 @@ hello@fluxtext.app (duplicate)`,
     set((state) => ({ locale, settings: { ...state.settings, locale } })),
 }), {
   name: 'fluxtext-settings',
-  partialize: (state) => ({ settings: state.settings, locale: state.locale, savedActionParams: state.savedActionParams }),
+  partialize: (state) => ({ settings: state.settings, locale: state.locale, savedActionParams: state.savedActionParams, recentActionNames: state.recentActionNames, actionUsageCounts: state.actionUsageCounts }),
 }))
 
 /**

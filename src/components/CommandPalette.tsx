@@ -15,6 +15,7 @@ import { t, type Locale } from '../i18n'
 import { readText } from '@tauri-apps/plugin-clipboard-manager'
 import { loadCDN, loadDeps } from '../utils/cdnLoader'
 import { resolveIcon } from '../utils/resolveIcon'
+import { pinyin } from 'pinyin-pro'
 
 // 步骤类型
 type Step =
@@ -47,6 +48,7 @@ export function CommandPalette() {
   const setLastActionName = useAppStore((s) => s.setLastActionName)
   const recentActionNames = useAppStore((s) => s.recentActionNames)
   const pushRecentAction = useAppStore((s) => s.pushRecentAction)
+  const actionUsageCounts = useAppStore((s) => s.actionUsageCounts)
   const persistParams = useAppStore((s) => s.settings.persistParams)
   const savedActionParams = useAppStore((s) => s.savedActionParams)
   const saveActionParams = useAppStore((s) => s.saveActionParams)
@@ -88,76 +90,40 @@ export function CommandPalette() {
     }
   }, [open])
 
-  // 按最近使用排序，有搜索词则过滤
-  const filtered = useMemo(() => {
-    // 先去重（防止重复注册）
-    const seen = new Set<string>()
-    const unique = actions.filter((a) => {
-      if (seen.has(a.name)) return false
-      seen.add(a.name)
-      return true
-    })
-
-    // 过滤掉已禁用的 action
-    const enabled = unique.filter((a) => {
-      if (a.builtin) return !disabledBuiltins.includes(a.name)
-      return !disabledCustoms.includes(a.name)
-    })
-
-    let list = enabled
-    if (query.trim()) {
-      const q = query.toLowerCase()
-      list = enabled.filter((a) =>
-        a.name.toLowerCase().includes(q) ||
-        a.title.toLowerCase().includes(q) ||
-        Object.values(a.titleI18n || {}).some((v) => v && v.toLowerCase().includes(q)) ||
-        (a.aliases || []).some((al) => al.toLowerCase().includes(q)) ||
-        (a.tags || []).some((t) => t.toLowerCase().includes(q)) ||
-        (a.description || '').toLowerCase().includes(q) ||
-        Object.values(a.descriptionI18n || {}).some((v) => v && v.toLowerCase().includes(q))
-      )
-    }
-    // 按最近使用排序
-    return [...list].sort((a, b) => {
-      const ai = recentActionNames.indexOf(a.name)
-      const bi = recentActionNames.indexOf(b.name)
-      // 用过的排前面，没用过的保持原序
-      if (ai === -1 && bi === -1) return 0
-      if (ai === -1) return 1
-      if (bi === -1) return -1
-      return ai - bi
-    })
-  }, [query, actions, recentActionNames, disabledBuiltins, disabledCustoms])
-
-  // Plugin commands from registry (production + dev)
-  const filteredPluginItems = useMemo<PaletteItem[]>(() => {
-    void pluginRegistryVersion
-    const allPluginCommands = pluginRegistry.getAllCommands()
-    const q = query.trim().toLowerCase()
-    return allPluginCommands
-      .filter(({ contribution }) => {
-        if (!q) return true
-        return (
-          contribution.id.toLowerCase().includes(q) ||
-          contribution.title.toLowerCase().includes(q) ||
-          Object.values(contribution.titleI18n || {}).some((value) => value && value.toLowerCase().includes(q)) ||
-          (contribution.description || '').toLowerCase().includes(q) ||
-          Object.values(contribution.descriptionI18n || {}).some((value) => value && value.toLowerCase().includes(q)) ||
-          (contribution.tags || []).some((tag) => tag.toLowerCase().includes(q))
-        )
-      })
-      .map(({ contribution, meta, isDev }) => ({
-        kind: 'plugin' as const,
-        entry: { contribution, meta },
-        isDev,
-      }))
-  }, [query, pluginRegistryVersion])
-
-  // 合并 legacy actions 和 plugin commands
+  // 统一过滤 + 排序：legacy 与 plugin 命令合并，支持缩写匹配和复合评分
   const allFiltered = useMemo<PaletteItem[]>(() => {
-    const legacyItems = filtered.map((action): PaletteItem => ({ kind: 'legacy', action }))
-    return [...legacyItems, ...filteredPluginItems]
-  }, [filtered, filteredPluginItems])
+    void pluginRegistryVersion
+
+    // 去重收集 legacy items
+    const seen = new Set<string>()
+    const legacyItems: PaletteItem[] = actions
+      .filter((a) => {
+        if (seen.has(a.name)) return false
+        seen.add(a.name)
+        if (a.builtin) return !disabledBuiltins.includes(a.name)
+        return !disabledCustoms.includes(a.name)
+      })
+      .map((action) => ({ kind: 'legacy' as const, action }))
+
+    // 收集 plugin items
+    const pluginItems: PaletteItem[] = pluginRegistry.getAllCommands().map(({ contribution, meta, isDev }) => ({
+      kind: 'plugin' as const,
+      entry: { contribution, meta },
+      isDev,
+    }))
+
+    const allItems = [...legacyItems, ...pluginItems]
+    const q = query.trim().toLowerCase()
+
+    // 过滤（含缩写匹配）
+    const filtered = q ? allItems.filter((item) => paletteItemMatchesQuery(item, q, locale)) : allItems
+
+    // 按复合评分降序排列
+    return [...filtered].sort((a, b) =>
+      scorePaletteItem(b, q, locale, recentActionNames, actionUsageCounts) -
+      scorePaletteItem(a, q, locale, recentActionNames, actionUsageCounts)
+    )
+  }, [query, actions, recentActionNames, actionUsageCounts, disabledBuiltins, disabledCustoms, locale, pluginRegistryVersion])
 
   // 当前参数
   const currentParam: ActionParam | null =
@@ -927,6 +893,138 @@ function HintKey({ keys, label }: { keys: string; label: string }) {
     </span>
   )
 }
+
+// ── 推荐算法辅助函数 ───────────────────────────────────────────────────────────
+
+/** 将命令 id/name 转为首字母缩写，例如 "json-format" → "jf" */
+function getAcronym(name: string): string {
+  return name.split(/[-_\s]+/).filter(Boolean).map((w) => w[0]).join('')
+}
+
+// 拼音转换缓存（避免在同一次渲染中重复计算）
+const _pinyinCache = new Map<string, { full: string; initials: string }>()
+
+/**
+ * 拼音匹配：
+ *   - 全拼包含：query "geshihua" 可匹配 "格式化"
+ *   - 首字母前缀：query "gsh" 可匹配 "格式化"（声母 g-sh-h 的首字母）
+ * 只对纯 ASCII 字母 query 生效，避免误触发。
+ */
+function pinyinMatch(text: string, query: string): boolean {
+  if (!text || !query) return false
+  if (!/^[a-z]+$/.test(query)) return false
+
+  let cached = _pinyinCache.get(text)
+  if (!cached) {
+    const full = pinyin(text, { toneType: 'none', separator: '' }).toLowerCase()
+    const initials = pinyin(text, { pattern: 'initial', toneType: 'none', separator: '' }).toLowerCase()
+    cached = { full, initials }
+    _pinyinCache.set(text, cached)
+  }
+
+  return cached.full.includes(query) || cached.initials.startsWith(query)
+}
+
+/** 检查 query 是否匹配某个 PaletteItem（含缩写匹配） */
+function paletteItemMatchesQuery(item: PaletteItem, q: string, locale: import('../i18n').Locale): boolean {
+  const id = item.kind === 'legacy' ? item.action.name : item.entry.contribution.id
+  const name = id.toLowerCase()
+  const title = (
+    item.kind === 'legacy'
+      ? localized(item.action.title, item.action.titleI18n, locale)
+      : localized(item.entry.contribution.title || id, item.entry.contribution.titleI18n, locale)
+  ).toLowerCase()
+
+  if (name.includes(q) || title.includes(q)) return true
+
+  const titleI18n = item.kind === 'legacy' ? item.action.titleI18n : item.entry.contribution.titleI18n
+  if (Object.values(titleI18n || {}).some((v) => v && v.toLowerCase().includes(q))) return true
+
+  const desc = item.kind === 'legacy' ? (item.action.description || '') : (item.entry.contribution.description || '')
+  if (desc.toLowerCase().includes(q)) return true
+
+  const descI18n = item.kind === 'legacy' ? item.action.descriptionI18n : item.entry.contribution.descriptionI18n
+  if (Object.values(descI18n || {}).some((v) => v && v.toLowerCase().includes(q))) return true
+
+  if (item.kind === 'legacy' && (item.action.aliases || []).some((a) => a.toLowerCase().includes(q))) return true
+
+  const tags = item.kind === 'legacy' ? (item.action.tags || []) : (item.entry.contribution.tags || [])
+  if (tags.some((tag) => tag.toLowerCase().includes(q))) return true
+
+  // 缩写匹配：从 id/name 算一遍，再从英文原始 title 算一遍
+  // 例如 id="core.json-diff" name 缩写是 "cjd"，但 title="JSON Diff" 缩写是 "jd" ✓
+  const acronym = getAcronym(name)
+  if (acronym.startsWith(q) || acronym === q) return true
+
+  const engTitle = (item.kind === 'legacy'
+    ? item.action.title
+    : (item.entry.contribution.title || id)
+  ).toLowerCase()
+  const titleAcronym = getAcronym(engTitle)
+  if (titleAcronym.startsWith(q) || titleAcronym === q) return true
+
+  // 拼音匹配：对所有中文文本字段检查全拼和首字母
+  const zhTitle = (item.kind === 'legacy' ? item.action.titleI18n?.zh : item.entry.contribution.titleI18n?.zh) ?? ''
+  const zhDesc = (item.kind === 'legacy' ? item.action.descriptionI18n?.zh : item.entry.contribution.descriptionI18n?.zh) ?? ''
+  if (pinyinMatch(zhTitle || title, q)) return true
+  if (zhDesc && pinyinMatch(zhDesc, q)) return true
+
+  return false
+}
+
+/**
+ * 计算 PaletteItem 的综合推荐分（越高越靠前）。
+ *
+ * 无搜索词时：recency(0-50) + log(频次)×5
+ * 有搜索词时：匹配质量层(×1000) + recency + log(频次)×5
+ *   层级：精确名/id(6) > 名前缀(5) > 标题前缀(4) > 词边界(3) > 缩写(2) > 子串(1)
+ */
+function scorePaletteItem(
+  item: PaletteItem,
+  q: string,
+  locale: import('../i18n').Locale,
+  recentNames: string[],
+  usageCounts: Record<string, number>
+): number {
+  const id = item.kind === 'legacy' ? item.action.name : item.entry.contribution.id
+  const recentIdx = recentNames.indexOf(id)
+  const recencyScore = recentIdx >= 0 ? 50 - recentIdx : 0
+  const freq = usageCounts[id] ?? 0
+  const freqScore = Math.log1p(freq) * 5
+  const baseScore = recencyScore + freqScore
+
+  if (!q) return baseScore
+
+  const name = id.toLowerCase()
+  const title = (
+    item.kind === 'legacy'
+      ? localized(item.action.title, item.action.titleI18n, locale)
+      : localized(item.entry.contribution.title || id, item.entry.contribution.titleI18n, locale)
+  ).toLowerCase()
+
+  let tier = 1 // 默认子串匹配层
+  if (name === q || title === q) {
+    tier = 6
+  } else if (name.startsWith(q)) {
+    tier = 5
+  } else if (title.startsWith(q)) {
+    tier = 4
+  } else {
+    // 词边界：name 或 title 按分隔符拆词后，有词以 q 开头
+    const nameWords = name.split(/[-_\s]+/).filter(Boolean)
+    const titleWords = title.split(/[-_\s]+/).filter(Boolean)
+    if (nameWords.some((w) => w.startsWith(q)) || titleWords.some((w) => w.startsWith(q))) {
+      tier = 3
+    } else if (getAcronym(name).startsWith(q)) {
+      // 缩写匹配
+      tier = 2
+    }
+  }
+
+  return tier * 1000 + baseScore
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function normalizePluginParams(pluginParams: CommandParam[]): ActionParam[] {
   return pluginParams.map((param) => ({
