@@ -2,12 +2,28 @@ import { useAppStore } from '../store'
 import type { ActionDef } from '../store'
 import { parseScriptToAction } from '../store'
 import { t } from '../i18n'
-import { Layout, SlidersHorizontal, Languages, ChevronDown, Check, Minus, Plus, Info, RefreshCw, Download } from 'lucide-react'
+import { Layout, SlidersHorizontal, Languages, ChevronDown, Check, Minus, Plus, Info, RefreshCw, Download, Plug, Package, AlertCircle } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { getVersion } from '@tauri-apps/api/app'
 import { checkBuiltinScriptsUpdate } from '../configInit'
+import { usePluginStore } from '../workspace/pluginStore'
+import {
+  installLocalPlugin,
+  enablePlugin,
+  disablePlugin,
+  reloadPlugin,
+  uninstallPlugin as doUninstallPlugin,
+  sideloadDevPlugin,
+  reloadDevPlugin,
+  removeDevPlugin as doRemoveDevPlugin,
+  pickLocalPluginFolder,
+  watchDevPlugin,
+  unwatchDevPlugin,
+} from '../workspace/pluginRuntime'
+import { showToast } from '../workspace/toast'
+import type { InstalledPlugin, DevPlugin } from '../workspace/pluginTypes'
 
 export function SettingsView() {
   const { settings, updateSetting } = useAppStore()
@@ -85,6 +101,8 @@ export function SettingsView() {
         <SettingCard icon={<Download size={16} />} title={t(locale, 'update.title')}>
           <UpdateChecker locale={locale} />
         </SettingCard>
+        {/* Plugins */}
+        <PluginsCard />
       </div>
     </div>
   )
@@ -260,7 +278,7 @@ function UpdateChecker({ locale }: { locale: 'zh' | 'en' }) {
         setScriptsStatus('updated')
         setScriptsVersion(result.version || 0)
         // 更新后自动重载到内存
-        if ((window as any).__TAURI_INTERNALS__) {
+        if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
           try {
             const { invoke } = await import('@tauri-apps/api/core')
             const watchDir = useAppStore.getState().settings.watchDirectory
@@ -398,6 +416,321 @@ function UpdateChecker({ locale }: { locale: 'zh' | 'en' }) {
               : ''}
         </span>
       )}
+    </div>
+  )
+}
+
+function PluginsCard() {
+  const plugins = usePluginStore((s) => s.plugins)
+  const devPlugins = usePluginStore((s) => s.devPlugins)
+  const [loading, setLoading] = useState<Record<string, boolean>>({})
+  const [error, setError] = useState<Record<string, string>>({})
+
+  const setItemLoading = (key: string, v: boolean) =>
+    setLoading((prev) => ({ ...prev, [key]: v }))
+
+  const setItemError = (key: string, msg: string) =>
+    setError((prev) => ({ ...prev, [key]: msg }))
+
+  const clearItemError = (key: string) =>
+    setError((prev) => { const n = { ...prev }; delete n[key]; return n })
+
+  async function handleInstall() {
+    const folder = await pickLocalPluginFolder()
+    if (!folder) return
+    setItemLoading('_install', true)
+    clearItemError('_install')
+    try {
+      const plugin = await installLocalPlugin(folder)
+      showToast(`Plugin "${plugin.displayName}" installed (disabled by default)`, 'success')
+    } catch (err: unknown) {
+      setItemError('_install', err instanceof Error ? err.message : String(err))
+    } finally {
+      setItemLoading('_install', false)
+    }
+  }
+
+  async function handleSideload() {
+    const folder = await pickLocalPluginFolder()
+    if (!folder) return
+    setItemLoading('_sideload', true)
+    clearItemError('_sideload')
+    try {
+      await sideloadDevPlugin(folder)
+    } catch (err: unknown) {
+      setItemError('_sideload', err instanceof Error ? err.message : String(err))
+    } finally {
+      setItemLoading('_sideload', false)
+    }
+  }
+
+  async function handleEnable(pluginId: string) {
+    setItemLoading(pluginId, true)
+    clearItemError(pluginId)
+    try {
+      await enablePlugin(pluginId)
+    } catch (err: unknown) {
+      setItemError(pluginId, err instanceof Error ? err.message : String(err))
+    } finally {
+      setItemLoading(pluginId, false)
+    }
+  }
+
+  function handleDisable(pluginId: string) {
+    disablePlugin(pluginId)
+  }
+
+  async function handleReload(pluginId: string) {
+    setItemLoading(pluginId, true)
+    clearItemError(pluginId)
+    try {
+      await reloadPlugin(pluginId)
+    } catch (err: unknown) {
+      setItemError(pluginId, err instanceof Error ? err.message : String(err))
+    } finally {
+      setItemLoading(pluginId, false)
+    }
+  }
+
+  function handleUninstall(pluginId: string) {
+    doUninstallPlugin(pluginId)
+  }
+
+  async function handleReloadDev(pluginId: string) {
+    const key = 'dev:' + pluginId
+    setItemLoading(key, true)
+    clearItemError(key)
+    try {
+      await reloadDevPlugin(pluginId)
+    } catch (err: unknown) {
+      setItemError(key, err instanceof Error ? err.message : String(err))
+    } finally {
+      setItemLoading(key, false)
+    }
+  }
+
+  function handleRemoveDev(pluginId: string) {
+    doRemoveDevPlugin(pluginId)
+  }
+
+  async function handleWatch(pluginId: string) {
+    const key = 'dev:watch:' + pluginId
+    setItemLoading(key, true)
+    clearItemError(key)
+    try {
+      await watchDevPlugin(pluginId)
+    } catch (err: unknown) {
+      setItemError(key, err instanceof Error ? err.message : String(err))
+    } finally {
+      setItemLoading(key, false)
+    }
+  }
+
+  function handleUnwatch(pluginId: string) {
+    unwatchDevPlugin(pluginId)
+  }
+
+  const prodPlugins = Object.values(plugins)
+  const devPluginList = Object.values(devPlugins)
+
+  return (
+    <div className="col-span-2 p-3.5 px-4 rounded-xl" style={{ border: '0.5px solid var(--color-border-tertiary)', background: 'var(--color-background-primary)' }}>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="font-medium flex items-center gap-1.5" style={{ fontSize: '1em', color: 'var(--color-text-primary)' }}>
+          <span style={{ color: 'var(--color-accent)' }}><Plug size={16} /></span>
+          Plugins
+        </div>
+        <div className="flex items-center gap-2">
+          <ActionButton onClick={handleInstall} loading={loading['_install']} label="Install Local Plugin" />
+          <ActionButton onClick={handleSideload} loading={loading['_sideload']} label="Side-load [DEV]" accent />
+        </div>
+      </div>
+      {error['_install'] && <div className="text-[11px] mb-2" style={{ color: 'var(--color-error-text)' }}>{error['_install']}</div>}
+      {error['_sideload'] && <div className="text-[11px] mb-2" style={{ color: 'var(--color-error-text)' }}>{error['_sideload']}</div>}
+
+      {/* Production plugins */}
+      {prodPlugins.length > 0 && (
+        <div className="mb-3">
+          <div className="text-[11px] mb-1.5" style={{ color: 'var(--color-text-tertiary)' }}>Installed Plugins</div>
+          <div className="flex flex-col gap-1.5">
+            {prodPlugins.map((plugin) => (
+              <PluginRow
+                key={plugin.pluginId}
+                plugin={plugin}
+                loading={!!loading[plugin.pluginId]}
+                localError={error[plugin.pluginId]}
+                onEnable={() => handleEnable(plugin.pluginId)}
+                onDisable={() => handleDisable(plugin.pluginId)}
+                onReload={() => handleReload(plugin.pluginId)}
+                onUninstall={() => handleUninstall(plugin.pluginId)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Dev plugins */}
+      {devPluginList.length > 0 && (
+        <div>
+          <div className="text-[11px] mb-1.5" style={{ color: 'var(--color-text-tertiary)' }}>Dev Plugins (session-scoped)</div>
+          <div className="flex flex-col gap-1.5">
+            {devPluginList.map((plugin) => (
+              <DevPluginRow
+                key={plugin.pluginId}
+                plugin={plugin}
+                loading={!!loading['dev:' + plugin.pluginId]}
+                watchLoading={!!loading['dev:watch:' + plugin.pluginId]}
+                localError={error['dev:' + plugin.pluginId]}
+                onReload={() => handleReloadDev(plugin.pluginId)}
+                onRemove={() => handleRemoveDev(plugin.pluginId)}
+                onWatch={() => handleWatch(plugin.pluginId)}
+                onUnwatch={() => handleUnwatch(plugin.pluginId)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {prodPlugins.length === 0 && devPluginList.length === 0 && (
+        <div className="py-4 text-center" style={{ fontSize: '0.85em', color: 'var(--color-text-tertiary)' }}>
+          No plugins installed. Use "Install Local Plugin" or "Side-load [DEV]" to add plugins.
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ActionButton({ onClick, loading, label, accent }: { onClick: () => void; loading?: boolean; label: string; accent?: boolean }) {
+  return (
+    <button
+      className="flex items-center gap-1 px-2.5 py-1 rounded-md cursor-pointer text-[11px]"
+      style={{
+        background: accent ? 'var(--color-accent-light)' : 'var(--color-background-tertiary)',
+        color: accent ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+        border: '0.5px solid var(--color-border-tertiary)',
+        opacity: loading ? 0.6 : 1,
+        pointerEvents: loading ? 'none' : 'auto',
+      }}
+      onClick={onClick}
+      disabled={loading}
+    >
+      {loading ? '...' : label}
+    </button>
+  )
+}
+
+function StatusBadge({ status }: { status: InstalledPlugin['status'] }) {
+  const color = status === 'enabled' ? 'var(--color-success-text)' : status === 'error' ? 'var(--color-error-text)' : status === 'loading' ? 'var(--color-accent)' : 'var(--color-text-tertiary)'
+  const bg = status === 'enabled' ? 'var(--color-success-bg)' : status === 'error' ? 'var(--color-error-bg)' : status === 'loading' ? 'var(--color-accent-light)' : 'var(--color-background-tertiary)'
+  return (
+    <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0" style={{ background: bg, color }}>
+      {status}
+    </span>
+  )
+}
+
+function PluginRow({
+  plugin, loading, localError,
+  onEnable, onDisable, onReload, onUninstall,
+}: {
+  plugin: InstalledPlugin
+  loading: boolean
+  localError?: string
+  onEnable: () => void
+  onDisable: () => void
+  onReload: () => void
+  onUninstall: () => void
+}) {
+  const [showCaps, setShowCaps] = useState(false)
+  return (
+    <div className="p-2.5 rounded-lg" style={{ background: 'var(--color-background-secondary)', border: '0.5px solid var(--color-border-tertiary)' }}>
+      <div className="flex items-center gap-2">
+        <Package size={14} style={{ color: 'var(--color-text-tertiary)', flexShrink: 0 }} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[12px] font-medium" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>{plugin.displayName}</span>
+            <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>v{plugin.version}</span>
+            <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>· {plugin.pluginId}</span>
+          </div>
+          {(plugin.error || localError) && (
+            <div className="flex items-center gap-1 mt-0.5">
+              <AlertCircle size={10} style={{ color: 'var(--color-error-text)', flexShrink: 0 }} />
+              <span className="text-[10px]" style={{ color: 'var(--color-error-text)' }}>{plugin.error || localError}</span>
+            </div>
+          )}
+          {plugin.capabilities && plugin.capabilities.length > 0 && (
+            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+              {plugin.capabilities.slice(0, showCaps ? undefined : 3).map((cap) => (
+                <span key={cap} className="text-[9px] px-1 py-0.5 rounded" style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-tertiary)' }}>{cap}</span>
+              ))}
+              {!showCaps && plugin.capabilities.length > 3 && (
+                <button className="text-[9px]" style={{ color: 'var(--color-accent)' }} onClick={() => setShowCaps(true)}>+{plugin.capabilities.length - 3} more</button>
+              )}
+            </div>
+          )}
+        </div>
+        <StatusBadge status={plugin.status} />
+        <div className="flex items-center gap-1 shrink-0">
+          {loading && <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>...</span>}
+          {!loading && plugin.status === 'disabled' && <ActionButton onClick={onEnable} label="Enable" />}
+          {!loading && plugin.status === 'enabled' && <ActionButton onClick={onDisable} label="Disable" />}
+          {!loading && (plugin.status === 'enabled' || plugin.status === 'error') && <ActionButton onClick={onReload} label="Reload" />}
+          {!loading && <ActionButton onClick={onUninstall} label="Uninstall" />}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DevPluginRow({
+  plugin, loading, watchLoading, localError, onReload, onRemove, onWatch, onUnwatch,
+}: {
+  plugin: DevPlugin
+  loading: boolean
+  watchLoading?: boolean
+  localError?: string
+  onReload: () => void
+  onRemove: () => void
+  onWatch: () => void
+  onUnwatch: () => void
+}) {
+  return (
+    <div className="p-2.5 rounded-lg" style={{ background: 'var(--color-accent-light)', border: '0.5px solid var(--color-border-tertiary)' }}>
+      <div className="flex items-center gap-2">
+        <Plug size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-medium px-1 py-0.5 rounded" style={{ background: 'var(--color-accent)', color: '#fff' }}>[DEV]</span>
+            <span className="text-[12px] font-medium" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>{plugin.displayName}</span>
+            <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>v{plugin.version}</span>
+            <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>· {plugin.pluginId}</span>
+            {plugin.watching && (
+              <span className="text-[9px] px-1 py-0.5 rounded" style={{ background: 'var(--color-accent)', color: '#fff' }}>watching</span>
+            )}
+          </div>
+          {(plugin.error || localError) && (
+            <div className="flex items-center gap-1 mt-0.5">
+              <AlertCircle size={10} style={{ color: 'var(--color-error-text)', flexShrink: 0 }} />
+              <span className="text-[10px]" style={{ color: 'var(--color-error-text)' }}>{plugin.error || localError}</span>
+            </div>
+          )}
+        </div>
+        <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0" style={{ background: plugin.status === 'active' ? 'var(--color-success-bg)' : 'var(--color-error-bg)', color: plugin.status === 'active' ? 'var(--color-success-text)' : 'var(--color-error-text)' }}>
+          {plugin.status}
+        </span>
+        <div className="flex items-center gap-1 shrink-0">
+          {(loading || watchLoading) && <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>...</span>}
+          {!loading && !watchLoading && !plugin.watching && (
+            <ActionButton onClick={onWatch} label="Watch" accent />
+          )}
+          {!loading && !watchLoading && plugin.watching && (
+            <ActionButton onClick={onUnwatch} label="Unwatch" />
+          )}
+          {!loading && <ActionButton onClick={onReload} label="Reload" />}
+          {!loading && <ActionButton onClick={onRemove} label="Remove" />}
+        </div>
+      </div>
     </div>
   )
 }

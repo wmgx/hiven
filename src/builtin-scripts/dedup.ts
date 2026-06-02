@@ -9,6 +9,7 @@ export default defineAction({
   description: 'Remove duplicate lines from text',
   descriptionI18n: { zh: '移除文本中的重复行' },
   tags: ['text', 'cleanup'],
+  optionalParams: true,
 
   params: [
     {

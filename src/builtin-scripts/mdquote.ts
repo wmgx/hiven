@@ -9,6 +9,7 @@ export default defineAction({
   description: 'Add or remove Markdown quote prefix',
   descriptionI18n: { zh: '添加或移除 Markdown 引用前缀' },
   tags: ['markdown', 'text'],
+  optionalParams: true,
 
   params: [
     {

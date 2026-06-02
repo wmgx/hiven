@@ -9,6 +9,7 @@ export default defineAction({
   description: 'Format JSON (auto pretty-print, or explicitly compact)',
   descriptionI18n: { zh: '格式化 JSON（默认美化，可选压缩）' },
   tags: ['json', 'format'],
+  optionalParams: true,
 
   params: [
     {

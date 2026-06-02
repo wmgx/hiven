@@ -9,6 +9,7 @@ export default defineAction({
   description: 'Sort lines alphabetically',
   descriptionI18n: { zh: '按字母顺序排列行' },
   tags: ['text'],
+  optionalParams: true,
 
   params: [
     {

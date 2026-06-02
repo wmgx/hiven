@@ -1,5 +1,7 @@
 # FluxText Workspace Extension Architecture
 
+> 状态说明：本文是 workspace extension 的早期总体架构。关于 Diff / Compare 的边界，以 `doc/diff-plugin-boundary-decision.md` 为准；framework 不再提供 diff/compare API，diff 相关能力由 first-party plugins 实现。
+
 ## 背景
 
 FluxText 当前是一个命令驱动的文本处理工作台：

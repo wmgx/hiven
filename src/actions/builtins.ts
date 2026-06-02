@@ -11,14 +11,24 @@ export const builtinActions: ActionDef[] = [
     descriptionI18n: { zh: '移除文本中的重复行' },
     tags: ['text', 'cleanup'],
     builtin: true,
-    params: [],
+    optionalParams: true,
+    params: [
+      {
+        key: 'ignoreCase',
+        label: 'Ignore Case',
+        labelI18n: { zh: '忽略大小写' },
+        type: 'boolean',
+        default: false,
+      },
+    ],
     run(ctx) {
       const lines = ctx.input.text.split('\n')
       const seen = new Set<string>()
       const result: string[] = []
       for (const line of lines) {
-        if (!seen.has(line)) {
-          seen.add(line)
+        const key = ctx.params.ignoreCase ? line.toLowerCase() : line
+        if (!seen.has(key)) {
+          seen.add(key)
           result.push(line)
         }
       }
@@ -35,6 +45,7 @@ export const builtinActions: ActionDef[] = [
     descriptionI18n: { zh: '按字母顺序排列行' },
     tags: ['text'],
     builtin: true,
+    optionalParams: true,
     params: [
       {
         key: 'direction',
@@ -47,11 +58,20 @@ export const builtinActions: ActionDef[] = [
         ],
         default: 'asc',
       },
+      {
+        key: 'ignoreCase',
+        label: 'Ignore Case',
+        labelI18n: { zh: '忽略大小写' },
+        type: 'boolean',
+        default: false,
+      },
     ],
     run(ctx) {
       const lines = ctx.input.text.split('\n')
       lines.sort((a, b) => {
-        return ctx.params.direction === 'desc' ? b.localeCompare(a) : a.localeCompare(b)
+        const x = ctx.params.ignoreCase ? a.toLowerCase() : a
+        const y = ctx.params.ignoreCase ? b.toLowerCase() : b
+        return ctx.params.direction === 'desc' ? y.localeCompare(x) : x.localeCompare(y)
       })
       return { text: lines.join('\n') }
     },
@@ -82,6 +102,7 @@ export const builtinActions: ActionDef[] = [
     descriptionI18n: { zh: '美化或压缩 JSON' },
     tags: ['json', 'format'],
     builtin: true,
+    optionalParams: true,
     params: [
       {
         key: 'mode',
@@ -391,6 +412,7 @@ export const builtinActions: ActionDef[] = [
     tags: ['sql', 'format'],
     source: '// @deps sql-formatter https://esm.sh/sql-formatter@15?bundle',
     builtin: true,
+    optionalParams: true,
     params: [
       {
         key: 'mode',
@@ -506,6 +528,7 @@ export const builtinActions: ActionDef[] = [
     descriptionI18n: { zh: '计算哈希摘要' },
     tags: ['hash', 'crypto'],
     builtin: true,
+    optionalParams: true,
     params: [
       {
         key: 'algorithm',
@@ -832,6 +855,7 @@ export const builtinActions: ActionDef[] = [
     descriptionI18n: { zh: '添加或移除 Markdown 引用前缀' },
     tags: ['markdown', 'text'],
     builtin: true,
+    optionalParams: true,
     params: [
       {
         key: 'mode',
@@ -947,6 +971,7 @@ export const builtinActions: ActionDef[] = [
     descriptionI18n: { zh: '在每行两端添加指定文本' },
     tags: ['text', 'lines'],
     builtin: true,
+    optionalParams: true,
     params: [
       {
         key: 'left',
@@ -1003,6 +1028,7 @@ export const builtinActions: ActionDef[] = [
     descriptionI18n: { zh: '将多行文本转为 SQL IN 子句' },
     tags: ['sql', 'convert'],
     builtin: true,
+    optionalParams: true,
     params: [
       {
         key: 'mode',

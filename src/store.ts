@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Locale } from './i18n'
 import { builtinActions } from './actions/builtins'
+import { useWorkspaceStore } from './workspace/workspaceStore'
+import { workspaceActions } from './commands/workspaceCommands'
 
 export type ViewId = 'editor' | 'scripts' | 'debugger' | 'settings'
 
@@ -12,6 +14,13 @@ export interface ActionParam {
   type: 'boolean' | 'text' | 'textarea' | 'number' | 'single-select' | 'multi-select'
   default?: any
   options?: { label: string; value: string; labelI18n?: Partial<Record<Locale, string>> }[] | string[]
+  /** Dynamic options: called at render time to get the current option list */
+  optionsFn?: () => { label: string; value: string }[]
+  /** For multi-select: max items user can select. Auto-confirms when reached. */
+  maxSelect?: number
+  /** Hint text shown at bottom, e.g. "选择对比面板" */
+  hint?: string
+  hintI18n?: Partial<Record<Locale, string>>
   visibleWhen?: Record<string, any>
   required?: boolean
 }
@@ -26,6 +35,7 @@ export interface ActionDef {
   descriptionI18n?: Partial<Record<Locale, string>>
   tags?: string[]
   params?: ActionParam[]
+  optionalParams?: boolean
   run: (ctx: ActionContext) => { text: string } | Promise<{ text: string }> | void
   builtin?: boolean
   source?: string
@@ -78,6 +88,13 @@ export interface DebuggerTab {
   builtin?: boolean
 }
 
+export type LastCommandStatus = {
+  title: string
+  status: 'running' | 'success' | 'error'
+  message?: string
+  updatedAt: number
+}
+
 interface AppState {
   // Navigation
   activeView: ViewId
@@ -100,15 +117,15 @@ interface AppState {
   commandPaletteOpen: boolean
   setCommandPaletteOpen: (open: boolean) => void
 
-  // Last Action Result
-  lastResult: string | null
-  setLastResult: (result: string | null) => void
-  lastActionName: string | null
-  setLastActionName: (name: string | null) => void
+  // Last command status
+  lastCommandStatus: LastCommandStatus | null
+  setLastCommandStatus: (status: LastCommandStatus | null) => void
 
   // Recent actions (most recent first)
   recentActionNames: string[]
   pushRecentAction: (name: string) => void
+  // Usage frequency per action (cumulative count)
+  actionUsageCounts: Record<string, number>
 
   // Saved params per action (for persistParams feature)
   savedActionParams: Record<string, Record<string, any>>
@@ -198,14 +215,18 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   activeView: 'editor',
   setActiveView: (view) => set({ activeView: view }),
 
-  // Editor
+  // Editor (bridged to workspace store for backwards compat)
   editorText: '',
-  setEditorText: (text) => set({ editorText: text }),
+  setEditorText: (text) => {
+    set({ editorText: text })
+    // Sync to workspace store
+    useWorkspaceStore.getState().setActivePaneText(text)
+  },
   editorInstance: null,
   setEditorInstance: (editor) => set({ editorInstance: editor }),
 
   // Action System
-  actions: [...builtinActions],
+  actions: [...builtinActions, ...workspaceActions],
   registerAction: (action) => set((state) => ({ actions: [...state.actions, action] })),
   registerActions: (actions) => set((state) => ({ actions: [...state.actions, ...actions] })),
   setCustomActions: (customs) => set((state) => ({
@@ -225,7 +246,10 @@ export const useAppStore = create<AppState>()(persist((set) => ({
       merged.push({ ...a, builtin: true })
     }
     const customs = state.actions.filter(a => !a.builtin)
-    return { actions: [...merged, ...customs] }
+    // 保留 workspace 扩展注册的内置命令（不在脚本 builtinActions 中）
+    const scriptNames = new Set([...builtinActions.map(a => a.name), ...diskBuiltins.map(a => a.name)])
+    const extensionBuiltins = state.actions.filter(a => a.builtin && !scriptNames.has(a.name))
+    return { actions: [...merged, ...extensionBuiltins, ...customs] }
   }),
 
   // Command Palette
@@ -236,18 +260,21 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     return { commandPaletteOpen: open }
   }),
 
-  // Last Action Result
-  lastResult: null,
-  setLastResult: (result) => set({ lastResult: result }),
-  lastActionName: null,
-  setLastActionName: (name) => set({ lastActionName: name }),
+  // Last command status
+  lastCommandStatus: null,
+  setLastCommandStatus: (status) => set({ lastCommandStatus: status }),
 
   // Recent actions
   recentActionNames: [],
   pushRecentAction: (name) => set((state) => {
     const filtered = state.recentActionNames.filter((n) => n !== name)
-    return { recentActionNames: [name, ...filtered].slice(0, 50) }
+    const newCounts = { ...state.actionUsageCounts, [name]: (state.actionUsageCounts[name] ?? 0) + 1 }
+    return {
+      recentActionNames: [name, ...filtered].slice(0, 50),
+      actionUsageCounts: newCounts,
+    }
   }),
+  actionUsageCounts: {},
 
   // Saved params per action
   savedActionParams: {},
@@ -389,7 +416,7 @@ hello@fluxtext.app (duplicate)`,
     set((state) => ({ locale, settings: { ...state.settings, locale } })),
 }), {
   name: 'fluxtext-settings',
-  partialize: (state) => ({ settings: state.settings, locale: state.locale, savedActionParams: state.savedActionParams }),
+  partialize: (state) => ({ settings: state.settings, locale: state.locale, savedActionParams: state.savedActionParams, recentActionNames: state.recentActionNames, actionUsageCounts: state.actionUsageCounts }),
 }))
 
 /**

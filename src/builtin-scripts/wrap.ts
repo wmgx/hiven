@@ -9,6 +9,7 @@ export default defineAction({
   description: 'Wrap each line with prefix and suffix',
   descriptionI18n: { zh: '在每行两端添加指定文本' },
   tags: ['text', 'lines'],
+  optionalParams: true,
 
   params: [
     {

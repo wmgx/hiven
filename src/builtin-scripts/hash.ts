@@ -9,6 +9,7 @@ export default defineAction({
   description: 'Calculate hash digest',
   descriptionI18n: { zh: '计算哈希摘要' },
   tags: ['hash', 'crypto'],
+  optionalParams: true,
 
   params: [
     {
