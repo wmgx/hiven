@@ -107,6 +107,8 @@ export function PinnedRunnerView() {
         const output = await runTextPluginCommand(commandContribution, {
           inputText: pinned.inputText,
           params,
+          isDev: pinned.isDev,
+          ownerPluginId: pluginCommand?.meta.pluginId,
         })
         text = output.text
         outputKind = output.kind

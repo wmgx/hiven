@@ -4,6 +4,8 @@ import type { FluxEffect } from './types'
 export type TextPluginCommandRunOptions = {
   inputText: string
   params?: Record<string, unknown>
+  isDev?: boolean
+  ownerPluginId?: string
 }
 
 export type TextPluginCommandOutput = {
@@ -42,7 +44,28 @@ export async function runTextPluginCommand(
       ...(options.params ?? {}),
     },
   }))
-  return textOutputFromPluginEffects(result)
+  return textOutputFromPluginEffects({
+    effects: stampPluginCommandEffects(result.effects ?? [], {
+      isDev: options.isDev,
+      ownerPluginId: options.ownerPluginId,
+    }),
+  })
+}
+
+export function stampPluginCommandEffects(
+  effects: FluxEffect[],
+  options: { isDev?: boolean; ownerPluginId?: string } = {},
+): FluxEffect[] {
+  return effects.map((effect) => {
+    if (effect.type === 'pane.setRenderer' || effect.type === 'panel.openV2') {
+      return {
+        ...effect,
+        ownerPluginId: effect.ownerPluginId ?? options.ownerPluginId,
+        _isDev: effect._isDev ?? (options.isDev ? true : undefined),
+      }
+    }
+    return effect
+  })
 }
 
 export function textOutputFromPluginEffects(result: PluginCommandResult): TextPluginCommandOutput {

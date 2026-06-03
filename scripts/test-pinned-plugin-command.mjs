@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import assert from 'node:assert/strict'
 import { pinnedParamsFingerprint, samePinnedParams, samePinnedPluginCommandIdentity } from '../src/workspace/pinnedActionIdentity.ts'
+import { stampPluginCommandEffects } from '../src/workspace/pluginCommandRunner.ts'
 
 function read(path) {
   return fs.readFileSync(path, 'utf8')
@@ -45,5 +46,18 @@ assertHas(files.pinnedRunner, /runTextPluginCommand[\s\S]*inputText:\s*pinned\.i
 assertHas(files.pluginCommandRunner, /buildTextPluginInputs[\s\S]*kind:\s*['"]text['"][\s\S]*inputText/, 'plugin command runner should resolve pinned text input slots')
 assertHas(files.pluginCommandRunner, /text\.replace[\s\S]*textReplace\.text/, 'plugin command runner should map text.replace effects into runner output')
 assertNotHas(files.pinnedRunner, /disabled=\{running\s*\|\|\s*!action\}/, 'Run Now should not disable plugin-command pinned actions')
+assertHas(files.pinnedRunner, /runTextPluginCommand[\s\S]*isDev:\s*pinned\.isDev/, 'PinnedRunner should preserve dev command context when normalizing plugin command effects')
+
+const stampedEffects = stampPluginCommandEffects([
+  { type: 'pane.setRenderer', paneId: 'pane-1', renderer: 'dev-plugin.renderer', inputs: {} },
+  { type: 'panel.openV2', panelId: 'dev-plugin.panel' },
+  { type: 'text.replace', target: 'active-input', text: 'ok' },
+], { isDev: true, ownerPluginId: 'dev-plugin' })
+
+assert.equal(stampedEffects[0]._isDev, true, 'dev renderer effects should keep dev registry context')
+assert.equal(stampedEffects[0].ownerPluginId, 'dev-plugin', 'dev renderer effects should keep owner plugin id')
+assert.equal(stampedEffects[1]._isDev, true, 'dev panel effects should keep dev registry context')
+assert.equal(stampedEffects[1].ownerPluginId, 'dev-plugin', 'dev panel effects should keep owner plugin id')
+assert.equal(stampedEffects[2]._isDev, undefined, 'plain text effects should not gain renderer/panel dev metadata')
 
 console.log('pinned plugin command checks passed')

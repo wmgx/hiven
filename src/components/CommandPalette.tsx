@@ -6,6 +6,7 @@ import { runLegacyAction } from '../workspace/commandAdapter'
 import { applyEffects } from '../workspace/effectRunner'
 import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
 import { resolvePluginInputs, buildPluginCommandContext } from '../workspace/pluginInputResolver'
+import { stampPluginCommandEffects } from '../workspace/pluginCommandRunner'
 import { showToast } from '../workspace/toast'
 import type { CommandEntry } from '../workspace/pluginRegistry'
 import type { CommandParam, InputSlot, PaneInput } from '../workspace/pluginTypes'
@@ -264,14 +265,8 @@ export function CommandPalette() {
     const ctx = buildPluginCommandContext(inputs, finalParams ?? getDefaultPluginParams(entry.contribution.params ?? []))
     try {
       const result = entry.contribution.run(ctx)
-      // Stamp effects with _isDev so effectRunner uses dev registry for renderer/panel resolution
-      const effects = isDev
-        ? result.effects.map((e) => {
-            if (e.type === 'pane.setRenderer') return { ...e, _isDev: true }
-            if (e.type === 'panel.openV2') return { ...e, _isDev: true }
-            return e
-          })
-        : result.effects
+      // Stamp plugin-owned surface effects so dev commands resolve dev renderers/panels.
+      const effects = stampPluginCommandEffects(result.effects, { isDev, ownerPluginId: entry.meta.pluginId })
       if (effects.length > 0) {
         const runResult = applyEffects(effects)
         if (runResult.errors.length > 0) {
