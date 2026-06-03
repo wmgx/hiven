@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Copy, Eraser, FilePlus, PanelRightOpen, PinOff, Play, RotateCcw, Send } from 'lucide-react'
-import { useAppStore, type ActionContext } from '../store'
+import { localized, useAppStore, type ActionContext, type ActionParam, type PinnedAction } from '../store'
 import { useWorkspaceStore } from '../workspace/workspaceStore'
+import type { Locale } from '../i18n'
 
 function defaultParams(actionParams: { key: string; default?: unknown }[] | undefined): Record<string, unknown> {
   const params: Record<string, unknown> = {}
@@ -9,6 +10,16 @@ function defaultParams(actionParams: { key: string; default?: unknown }[] | unde
     if (param.default !== undefined) params[param.key] = param.default
   }
   return params
+}
+
+function paramOptions(param: ActionParam): { label: string; value: string; labelI18n?: Partial<Record<Locale, string>> }[] {
+  const options = param.optionsFn?.() ?? param.options ?? []
+  return options.map((option) => typeof option === 'string' ? { label: option, value: option } : option)
+}
+
+function isParamVisible(param: ActionParam, params: Record<string, unknown>): boolean {
+  if (!param.visibleWhen) return true
+  return Object.entries(param.visibleWhen).every(([key, value]) => params[key] === value)
 }
 
 export function PinnedRunnerView() {
@@ -31,6 +42,7 @@ export function PinnedRunnerView() {
     ...defaultParams(action?.params),
     ...(pinned?.params ?? {}),
   }), [action?.params, pinned?.params])
+  const paramsFingerprint = useMemo(() => JSON.stringify(params), [params])
 
   const runPinnedAction = async () => {
     if (!pinned || !action) return
@@ -82,7 +94,7 @@ export function PinnedRunnerView() {
       void runPinnedAction()
     }, pinned.debounceMs)
     return () => window.clearTimeout(timer)
-  }, [pinned?.id, pinned?.inputText, pinned?.autoRun, pinned?.debounceMs])
+  }, [pinned?.id, pinned?.inputText, pinned?.autoRun, pinned?.debounceMs, paramsFingerprint])
 
   if (!pinned) {
     return (
@@ -193,10 +205,118 @@ export function PinnedRunnerView() {
       </div>
 
       {pinned.controlsOpen && (
-        <div className="h-10 flex items-center px-4 text-[12px] shrink-0" style={{ borderTop: '0.5px solid var(--color-border-tertiary)', color: 'var(--color-text-tertiary)' }}>
-          Controls panel placeholder · params are preserved per pinned action
-        </div>
+        <PinnedActionControls
+          pinned={pinned}
+          params={params}
+          actionParams={action?.params ?? []}
+          locale={useAppStore.getState().locale}
+          onChange={(nextParams) => updatePinnedAction(pinned.id, { params: nextParams })}
+        />
       )}
+    </div>
+  )
+}
+
+function PinnedActionControls({ pinned, params, actionParams, locale, onChange }: { pinned: PinnedAction; params: Record<string, unknown>; actionParams: ActionParam[]; locale: Locale; onChange: (params: Record<string, unknown>) => void }) {
+  const visibleParams = actionParams.filter((param) => isParamVisible(param, params))
+
+  const updateParam = (key: string, value: unknown) => {
+    onChange({ ...params, [key]: value })
+  }
+
+  if (visibleParams.length === 0) {
+    return (
+      <div className="min-h-10 flex items-center px-4 text-[12px] shrink-0" style={{ borderTop: '0.5px solid var(--color-border-tertiary)', color: 'var(--color-text-tertiary)' }}>
+        No controls for {pinned.title}
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className="flex flex-wrap items-center gap-3 px-4 py-2 text-[12px] shrink-0"
+      style={{ borderTop: '0.5px solid var(--color-border-tertiary)', color: 'var(--color-text-secondary)' }}
+    >
+      {visibleParams.map((param) => {
+        const label = localized(param.label, param.labelI18n, locale)
+        const value = params[param.key]
+        if (param.type === 'boolean') {
+          return (
+            <label key={param.key} className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={value === true}
+                onChange={(event) => updateParam(param.key, event.target.checked)}
+              />
+              {label}
+            </label>
+          )
+        }
+        if (param.type === 'single-select') {
+          return (
+            <label key={param.key} className="flex items-center gap-1.5">
+              {label}
+              <select
+                value={String(value ?? '')}
+                onChange={(event) => updateParam(param.key, event.target.value)}
+                className="scripts-input h-7"
+              >
+                {paramOptions(param).map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {localized(option.label, option.labelI18n, locale)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )
+        }
+        if (param.type === 'multi-select') {
+          const selected = Array.isArray(value) ? value.map(String) : []
+          return (
+            <label key={param.key} className="flex items-center gap-1.5">
+              {label}
+              <select
+                multiple={true}
+                value={selected}
+                onChange={(event) => {
+                  updateParam(param.key, Array.from(event.currentTarget.selectedOptions).map((option) => option.value))
+                }}
+                className="scripts-input min-h-16"
+              >
+                {paramOptions(param).map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {localized(option.label, option.labelI18n, locale)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )
+        }
+        if (param.type === 'number') {
+          return (
+            <label key={param.key} className="flex items-center gap-1.5">
+              {label}
+              <input
+                type="number"
+                value={value === undefined || value === null ? '' : String(value)}
+                onChange={(event) => updateParam(param.key, event.target.value === '' ? undefined : Number(event.target.value))}
+                className="scripts-input h-7 w-24"
+              />
+            </label>
+          )
+        }
+        return (
+          <label key={param.key} className="flex items-center gap-1.5">
+            {label}
+            <input
+              type="text"
+              value={value === undefined || value === null ? '' : String(value)}
+              onChange={(event) => updateParam(param.key, event.target.value)}
+              className="scripts-input h-7 w-44"
+            />
+          </label>
+        )
+      })}
     </div>
   )
 }

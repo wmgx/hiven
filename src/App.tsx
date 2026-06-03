@@ -10,6 +10,7 @@ import { PinnedRunnerView } from './views/PinnedRunnerView'
 import { DebuggerView } from './views/DebuggerView'
 import { SettingsView } from './views/SettingsView'
 import { CommandPalette } from './components/CommandPalette'
+import { GlobalLauncher } from './components/GlobalLauncher'
 import { loadInstalledPluginsFromStore } from './workspace/pluginRuntime'
 import { registerBundledPluginPackages } from './workspace/bundledPluginLoader'
 
@@ -98,6 +99,12 @@ export default function App() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        e.stopPropagation()
+        useAppStore.getState().setGlobalLauncherOpen(true)
+        return
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault()
         e.stopPropagation()
@@ -144,6 +151,7 @@ export default function App() {
         </ViewErrorBoundary>
       </main>
       <CommandPalette />
+      <GlobalLauncher />
     </div>
   )
 }

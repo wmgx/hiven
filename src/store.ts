@@ -183,6 +183,8 @@ interface AppState {
   // Command Palette
   commandPaletteOpen: boolean
   setCommandPaletteOpen: (open: boolean) => void
+  globalLauncherOpen: boolean
+  setGlobalLauncherOpen: (open: boolean) => void
 
   // Last command status
   lastCommandStatus: LastCommandStatus | null
@@ -440,11 +442,9 @@ export const useAppStore = create<AppState>()(persist((set) => ({
 
   // Command Palette
   commandPaletteOpen: false,
-  setCommandPaletteOpen: (open) => set((state) => {
-    // 只在编辑器主页面允许打开面板
-    if (open && state.activeView !== 'editor') return {}
-    return { commandPaletteOpen: open }
-  }),
+  setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
+  globalLauncherOpen: false,
+  setGlobalLauncherOpen: (open) => set({ globalLauncherOpen: open }),
 
   // Last command status
   lastCommandStatus: null,
