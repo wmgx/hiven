@@ -55,6 +55,7 @@ export function PinnedRunnerView() {
   const actions = useAppStore((s) => s.actions)
   const updatePinnedAction = useAppStore((s) => s.updatePinnedAction)
   const updatePinnedRuntime = useAppStore((s) => s.updatePinnedRuntime)
+  const prunePinnedRuntimes = useAppStore((s) => s.prunePinnedRuntimes)
   const releasePinnedRuntime = useAppStore((s) => s.releasePinnedRuntime)
   const unpinAction = useAppStore((s) => s.unpinAction)
   const setActiveView = useAppStore((s) => s.setActiveView)
@@ -135,6 +136,13 @@ export function PinnedRunnerView() {
       }
     }
   }
+
+  const canApplyOutput = !!pinned?.outputText && pinned.outputKind !== 'error'
+
+  useEffect(() => {
+    const timer = window.setInterval(() => prunePinnedRuntimes(), 30_000)
+    return () => window.clearInterval(timer)
+  }, [prunePinnedRuntimes])
 
   useEffect(() => {
     if (!pinned || !pinned.autoRun || !pinned.inputText) return
@@ -228,11 +236,11 @@ export function PinnedRunnerView() {
                 <Eraser size={14} />
                 Clear Output
               </button>
-              <button className="scripts-btn" onClick={() => applyOutputToActivePane(pinned.outputText)} title="Apply Output to Active Pane">
+              <button className="scripts-btn" onClick={() => { if (canApplyOutput) applyOutputToActivePane(pinned.outputText) }} disabled={!canApplyOutput} title="Apply Output to Active Pane">
                 <Send size={14} />
                 Apply
               </button>
-              <button className="scripts-btn" onClick={() => createPane({ text: pinned.outputText, title: pinned.title, focus: true, direction: 'right' })} title="Send Output to New Pane">
+              <button className="scripts-btn" onClick={() => { if (canApplyOutput) createPane({ text: pinned.outputText, title: pinned.title, focus: true, direction: 'right' }) }} disabled={!canApplyOutput} title="Send Output to New Pane">
                 <FilePlus size={14} />
                 Send New Pane
               </button>

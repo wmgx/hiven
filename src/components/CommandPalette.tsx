@@ -666,6 +666,7 @@ export function CommandPalette() {
                   titleI18n: item.entry.contribution.titleI18n,
                   icon: item.entry.contribution.icon,
                   isDev: item.isDev,
+                  live: item.entry.contribution.live,
                 })
               }
               setOpen(false)

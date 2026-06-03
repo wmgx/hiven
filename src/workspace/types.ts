@@ -153,6 +153,7 @@ export type PanelScope =
   | { type: 'pane'; paneId: PaneId }
   | { type: 'workspace' }
   | { type: 'presentation'; sessionId: string }
+  | { type: 'pinned-action'; pinnedId: string }
 
 export type PanelBinding = {
   paneIds?: PaneId[]

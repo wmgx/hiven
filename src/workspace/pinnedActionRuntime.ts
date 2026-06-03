@@ -65,7 +65,7 @@ export function ensurePinnedRuntime(
 export function activatePinnedRuntime(
   pinned: PinnedAction,
   runtime?: PinnedRuntime,
-  _tombstone?: PinnedTombstone
+  tombstone?: PinnedTombstone
 ): PinnedRuntime {
   const now = Date.now()
   if (runtime && runtime.status !== 'disposed' && runtime.status !== 'disposing') {
@@ -83,10 +83,28 @@ export function activatePinnedRuntime(
     outputModelId: `pinned-output:${pinned.id}`,
     inputEditorId: `pinned-input-editor:${pinned.id}`,
     outputEditorId: `pinned-output-editor:${pinned.id}`,
-    controlPanelInstanceId: pinned.controlsOpen ? pinned.controlPanelInstanceId : undefined,
+    controlPanelInstanceId: (pinned.controlsOpen || tombstone?.controlsOpen) ? pinned.controlPanelInstanceId : undefined,
     disposables: [],
     lastActivatedAt: now,
     lastInteractedAt: now,
+  }
+}
+
+export function restorePinnedFromTombstone(pinned: PinnedAction, tombstone?: PinnedTombstone): PinnedAction {
+  if (!tombstone) return pinned
+  const stalePreview = tombstone.outputSummary?.preview
+  return {
+    ...pinned,
+    inputText: tombstone.inputText,
+    params: tombstone.params,
+    autoRun: tombstone.autoRun,
+    debounceMs: tombstone.debounceMs,
+    controlsOpen: tombstone.controlsOpen,
+    outputText: stalePreview ? `Previous result preview (stale): ${stalePreview}` : '',
+    outputKind: tombstone.outputSummary?.kind === 'error' ? 'error' : 'text',
+    lastRunAt: tombstone.lastRunAt,
+    lastDurationMs: tombstone.lastDurationMs,
+    lastError: tombstone.lastError,
   }
 }
 
@@ -134,7 +152,7 @@ export function tombstonePinnedRuntime(
     debounceMs: pinned.debounceMs,
     controlsOpen: pinned.controlsOpen,
     outputSummary: {
-      kind: outputKind === 'presentation' ? 'text' : outputKind,
+      kind: pinned.lastError ? 'error' : pinned.outputText ? (outputKind === 'presentation' ? 'text' : outputKind) : 'stale',
       preview: pinned.outputText.slice(0, 240),
       generatedAt: pinned.lastRunAt,
     },

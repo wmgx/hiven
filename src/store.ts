@@ -8,6 +8,8 @@ import {
   DEFAULT_PINNED_RUNTIME_CONFIG,
   activatePinnedRuntime,
   disposePinnedRuntime,
+  pruneIdlePinnedRuntimes,
+  restorePinnedFromTombstone,
   tombstonePinnedRuntime,
 } from './workspace/pinnedActionRuntime'
 import type { PinnedRuntimeConfig as WorkspacePinnedRuntimeConfig } from './workspace/pinnedActionRuntime'
@@ -26,6 +28,7 @@ export type PinnedPluginCommandInput = {
   icon?: string
   isDev?: boolean
   params?: Record<string, unknown>
+  live?: import('./workspace/pluginTypes').LiveActionCapability
 }
 
 export interface PinnedAction {
@@ -183,6 +186,7 @@ interface AppState {
   updatePinnedAction: (pinnedId: string, patch: Partial<PinnedAction>) => void
   updatePinnedRuntime: (pinnedId: string, patch: Partial<PinnedRuntime>) => void
   releasePinnedRuntime: (pinnedId: string, reason?: PinnedTombstone['reason']) => void
+  prunePinnedRuntimes: (now?: number) => void
 
   // Editor
   editorText: string
@@ -379,9 +383,11 @@ export const useAppStore = create<AppState>()(persist((set) => ({
       outputText: '',
       outputKind: 'text',
       params: command.params ?? {},
-      autoRun: true,
-      debounceMs: 250,
-      controlsOpen: false,
+      autoRun: command.live?.live?.enabled === true &&
+        command.live.live.sideEffects !== 'writes' &&
+        command.live.live.trigger !== 'manual',
+      debounceMs: command.live?.live?.debounceMs ?? 250,
+      controlsOpen: command.live?.controls?.defaultOpen ?? false,
     }
     set((state) => ({
       pinnedActions: [...state.pinnedActions, pinned],
@@ -420,12 +426,14 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   activatePinnedAction: (pinnedId) => set((state) => {
     const pinned = state.pinnedActions.find((item) => item.id === pinnedId)
     if (!pinned) return {}
+    const restoredPinned = restorePinnedFromTombstone(pinned, state.pinnedTombstones[pinnedId])
     const nextRuntimes: Record<string, PinnedRuntime> = {}
     for (const [id, runtime] of Object.entries(state.pinnedRuntimes)) {
       nextRuntimes[id] = id === pinnedId ? runtime : { ...runtime, status: runtime.status === 'active' ? 'idle' : runtime.status }
     }
-    nextRuntimes[pinnedId] = activatePinnedRuntime(pinned, nextRuntimes[pinnedId], state.pinnedTombstones[pinnedId])
+    nextRuntimes[pinnedId] = activatePinnedRuntime(restoredPinned, nextRuntimes[pinnedId], state.pinnedTombstones[pinnedId])
     return {
+      pinnedActions: state.pinnedActions.map((item) => item.id === pinnedId ? restoredPinned : item),
       activePinnedActionId: pinnedId,
       activeView: 'pinned-runner',
       pinnedRuntimes: nextRuntimes,
@@ -447,6 +455,28 @@ export const useAppStore = create<AppState>()(persist((set) => ({
         ...state.pinnedRuntimes,
         [pinnedId]: { ...current, ...patch, lastInteractedAt: Date.now() },
       },
+    }
+  }),
+  prunePinnedRuntimes: (now) => set((state) => {
+    const pruneIds = pruneIdlePinnedRuntimes(
+      state.pinnedRuntimes,
+      state.activePinnedActionId,
+      state.pinnedRuntimeConfig,
+      now,
+    )
+    if (pruneIds.length === 0) return {}
+    const nextRuntimes = { ...state.pinnedRuntimes }
+    const nextTombstones = { ...state.pinnedTombstones }
+    for (const pinnedId of pruneIds) {
+      const runtime = nextRuntimes[pinnedId]
+      const pinned = state.pinnedActions.find((item) => item.id === pinnedId)
+      if (!runtime || !pinned) continue
+      nextRuntimes[pinnedId] = disposePinnedRuntime(runtime)
+      nextTombstones[pinnedId] = tombstonePinnedRuntime(pinned, runtime, 'idle-timeout')
+    }
+    return {
+      pinnedRuntimes: nextRuntimes,
+      pinnedTombstones: nextTombstones,
     }
   }),
   releasePinnedRuntime: (pinnedId, reason = 'manual') => set((state) => {

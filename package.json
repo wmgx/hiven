@@ -13,6 +13,7 @@
     "test:pinned-action-completion-gaps": "node scripts/test-pinned-action-completion-gaps.mjs",
     "test:pinned-plugin-command": "node scripts/test-pinned-plugin-command.mjs",
     "test:pinned-persistence-settings": "node scripts/test-pinned-persistence-settings.mjs",
+    "test:pinned-runner-policy": "node scripts/test-pinned-runner-policy.mjs",
     "test:plugin-package-lifecycle": "node scripts/test-plugin-package-lifecycle.mjs",
     "preview": "vite preview",
     "tauri": "tauri"

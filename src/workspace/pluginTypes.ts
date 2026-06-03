@@ -75,6 +75,21 @@ export type PluginCommandResult = {
   effects: FluxEffect[]
 }
 
+export type LiveActionCapability = {
+  pinnable?: boolean
+  live?: {
+    enabled: boolean
+    debounceMs?: number
+    trigger?: 'on-input' | 'manual' | 'on-blur'
+    sideEffects: 'none' | 'read-only' | 'writes'
+  }
+  controls?: {
+    panelId: string
+    placement: 'bottom' | 'right' | 'left' | 'floating'
+    defaultOpen?: boolean
+  }
+}
+
 /** New-model command contribution from a plugin */
 export type CommandContribution = {
   id: string
@@ -88,6 +103,7 @@ export type CommandContribution = {
   inputResolution?: InputResolution
   params?: CommandParam[]
   optionalParams?: boolean
+  live?: LiveActionCapability
   run(ctx: PluginCommandContext): PluginCommandResult
 }
 
