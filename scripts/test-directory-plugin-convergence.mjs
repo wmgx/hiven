@@ -16,6 +16,7 @@ function readIfExists(path) {
 }
 
 const files = {
+  packageJson: read('package.json'),
   scriptsView: read('src/views/ScriptsView.tsx'),
   settingsView: read('src/views/SettingsView.tsx'),
   pluginRuntime: read('src/workspace/pluginRuntime.ts'),
@@ -306,6 +307,16 @@ check('App protects menu navigation from plugin view render crashes', () => {
 })
 
 check('Tauri exposes plugin directory filesystem commands', () => {
+  assert.match(
+    files.packageJson,
+    /test:tauri-plugin-dir-commands/,
+    'package.json should expose a Tauri plugin directory command test',
+  )
+  assert.match(
+    files.tauriLib,
+    /mod\s+plugin_dir_command_tests/,
+    'Tauri plugin directory commands should have Rust unit coverage',
+  )
   for (const name of [
     'list_plugin_dirs',
     'list_plugin_files',

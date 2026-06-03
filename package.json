@@ -19,6 +19,7 @@
     "test:plugin-authoring-e2e-harness": "node scripts/test-plugin-authoring-e2e-harness.mjs",
     "test:plugin-authoring-flow": "node scripts/test-plugin-authoring-flow.mjs",
     "test:plugin-package-lifecycle": "node scripts/test-plugin-package-lifecycle.mjs",
+    "test:tauri-plugin-dir-commands": "cargo test --manifest-path src-tauri/Cargo.toml plugin_dir_command_tests -- --test-threads=1",
     "preview": "vite preview",
     "tauri": "tauri"
   },

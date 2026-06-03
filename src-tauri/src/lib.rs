@@ -650,3 +650,135 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
+#[cfg(test)]
+mod plugin_dir_command_tests {
+    use super::*;
+    use std::env;
+
+    fn unique_home(label: &str) -> PathBuf {
+        let millis = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("test clock should be after epoch")
+            .as_millis();
+        env::temp_dir().join(format!("fluxtext-{}-{}-{}", label, std::process::id(), millis))
+    }
+
+    fn with_isolated_home<T>(label: &str, test: impl FnOnce(PathBuf) -> T) -> T {
+        let previous_home = env::var_os("HOME");
+        let home = unique_home(label);
+        fs::create_dir_all(&home).expect("test home should be created");
+        env::set_var("HOME", &home);
+        let result = test(home.clone());
+        if let Some(value) = previous_home {
+            env::set_var("HOME", value);
+        } else {
+            env::remove_var("HOME");
+        }
+        let _ = fs::remove_dir_all(home);
+        result
+    }
+
+    #[test]
+    fn fixed_entry_summary_and_file_commands_round_trip() {
+        with_isolated_home("plugin-round-trip", |_| {
+            let config = PathBuf::from(init_config_dir().expect("config dir should initialize"));
+            let installed = config.join("plugins").join("installed");
+            let plugin = installed.join("authoring-e2e");
+
+            save_plugin_file(
+                plugin.join("manifest.json").to_string_lossy().to_string(),
+                r#"{
+  "pluginId": "authoring-e2e",
+  "displayName": "Authoring E2E",
+  "displayNameI18n": { "zh": "插件创作验证" },
+  "version": "1.0.0",
+  "capabilities": ["command"]
+}"#.to_string(),
+            )
+            .expect("manifest should be writable under plugins root");
+            save_plugin_file(
+                plugin.join("index.js").to_string_lossy().to_string(),
+                "export default { id: 'authoring-e2e', version: '1.0.0' }".to_string(),
+            )
+            .expect("index.js should be writable");
+            save_plugin_file(
+                plugin.join("index.ts").to_string_lossy().to_string(),
+                "export default { id: 'authoring-e2e', version: '1.0.0' }".to_string(),
+            )
+            .expect("index.ts should be writable");
+            save_plugin_file(
+                plugin.join("README.md").to_string_lossy().to_string(),
+                "# Authoring E2E".to_string(),
+            )
+            .expect("README should be writable");
+
+            let summaries = list_plugin_dirs(installed.to_string_lossy().to_string())
+                .expect("installed plugin root should list");
+            assert_eq!(summaries.len(), 1);
+            let summary = &summaries[0];
+            assert_eq!(summary.plugin_id, "authoring-e2e");
+            assert_eq!(summary.display_name, "Authoring E2E");
+            assert_eq!(summary.entry, "index.ts");
+            assert_eq!(summary.capabilities, vec!["command".to_string()]);
+            assert_eq!(
+                summary
+                    .display_name_i18n
+                    .as_ref()
+                    .and_then(|value| value.get("zh"))
+                    .and_then(|value| value.as_str()),
+                Some("插件创作验证"),
+            );
+
+            let files = list_plugin_files(plugin.to_string_lossy().to_string())
+                .expect("plugin file tree should list");
+            let names: Vec<String> = files.iter().map(|node| node.name.clone()).collect();
+            assert!(names.contains(&"manifest.json".to_string()));
+            assert!(names.contains(&"index.ts".to_string()));
+            assert!(names.contains(&"README.md".to_string()));
+
+            let readme = read_plugin_file(plugin.join("README.md").to_string_lossy().to_string())
+                .expect("editable plugin files should be readable");
+            assert_eq!(readme, "# Authoring E2E");
+        });
+    }
+
+    #[test]
+    fn rejects_manifest_entry_and_parent_path_writes() {
+        with_isolated_home("plugin-rejects", |_| {
+            let config = PathBuf::from(init_config_dir().expect("config dir should initialize"));
+            let installed = config.join("plugins").join("installed");
+            let plugin = installed.join("bad-entry");
+
+            save_plugin_file(
+                plugin.join("manifest.json").to_string_lossy().to_string(),
+                r#"{
+  "pluginId": "bad-entry",
+  "displayName": "Bad Entry",
+  "entry": "custom.js",
+  "version": "1.0.0"
+}"#.to_string(),
+            )
+            .expect("manifest should be writable before validation");
+            save_plugin_file(
+                plugin.join("index.js").to_string_lossy().to_string(),
+                "export default { id: 'bad-entry', version: '1.0.0' }".to_string(),
+            )
+            .expect("index.js should be writable");
+
+            let entry_error = match list_plugin_dirs(installed.to_string_lossy().to_string()) {
+                Ok(_) => panic!("manifest.entry should be rejected"),
+                Err(error) => error,
+            };
+            assert!(entry_error.contains("must not declare entry"));
+
+            let parent_path = installed.join("..").join("escape").join("index.js");
+            let parent_error = save_plugin_file(
+                parent_path.to_string_lossy().to_string(),
+                "export default {}".to_string(),
+            )
+            .expect_err("plugin write paths with parent components should be rejected");
+            assert!(parent_error.contains("parent directory"));
+        });
+    }
+}
