@@ -19,6 +19,7 @@ const files = {
   store: read('src/store.ts'),
   commandPalette: read('src/components/CommandPalette.tsx'),
   pinnedRunner: read('src/views/PinnedRunnerView.tsx'),
+  i18n: read('src/i18n.ts'),
 }
 
 assertHas(files.packageJson, /test:pinned-action-completion-gaps/, 'package.json should expose this completion-gap verifier')
@@ -33,9 +34,14 @@ assertNotHas(files.store, /if\s*\(\s*open\s*&&\s*state\.activeView\s*!==\s*['"]e
 const globalLauncherPath = 'src/components/GlobalLauncher.tsx'
 assert.ok(fs.existsSync(globalLauncherPath), 'GlobalLauncher component should exist')
 const globalLauncher = read(globalLauncherPath)
-assertHas(globalLauncher, /Pinned Actions/, 'GlobalLauncher should group pinned actions')
-assertHas(globalLauncher, /Recent Commands/, 'GlobalLauncher should group recent commands')
-assertHas(globalLauncher, /Workspace Views/, 'GlobalLauncher should group workspace views')
+assertHas(files.i18n, /palette\.globalPinned/, 'i18n should define a localized GlobalLauncher pinned section label')
+assertHas(files.i18n, /palette\.globalRecent/, 'i18n should define a localized GlobalLauncher recent section label')
+assertHas(files.i18n, /palette\.globalViews/, 'i18n should define a localized GlobalLauncher workspace views section label')
+assertHas(globalLauncher, /t\(locale,\s*['"]palette\.globalPinned['"]\)/, 'GlobalLauncher should localize the pinned section label')
+assertHas(globalLauncher, /t\(locale,\s*['"]palette\.globalRecent['"]\)/, 'GlobalLauncher should localize the recent section label')
+assertHas(globalLauncher, /t\(locale,\s*['"]palette\.globalViews['"]\)/, 'GlobalLauncher should localize the workspace views section label')
+assertHas(globalLauncher, /placeholder=\{t\(locale,\s*['"]palette\.globalPlaceholder['"]\)\}/, 'GlobalLauncher placeholder should be localized')
+assertHas(globalLauncher, /item\.kind\s*===\s*['"]pinned['"][\s\S]*resolveIcon\(item\.icon,\s*14,\s*item\.title\)/, 'GlobalLauncher pinned items should resolve icon names instead of rendering raw icon strings')
 assertHas(globalLauncher, /openPinnedAction|activatePinnedAction/, 'GlobalLauncher should jump to pinned action runners')
 assertHas(globalLauncher, /setActiveView/, 'GlobalLauncher should switch workspace views')
 

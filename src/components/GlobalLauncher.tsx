@@ -39,11 +39,14 @@ export function GlobalLauncher() {
 
   const items = useMemo<LauncherItem[]>(() => {
     const actionByName = new Map(actions.map((action) => [action.name, action]))
+    const pinnedLabel = t(locale, 'palette.globalPinned')
+    const recentLabel = t(locale, 'palette.globalRecent')
+    const viewsLabel = t(locale, 'palette.globalViews')
     const pinned = pinnedActions.map((item) => ({
       kind: 'pinned' as const,
       id: item.id,
       title: item.title,
-      subtitle: 'Pinned Actions',
+      subtitle: pinnedLabel,
       icon: item.icon,
     }))
     const recent = recentActionNames.slice(0, 8).map((name) => {
@@ -52,7 +55,7 @@ export function GlobalLauncher() {
         kind: 'recent' as const,
         id: name,
         title: action ? localized(action.title, action.titleI18n, locale) : name,
-        subtitle: 'Recent Commands',
+        subtitle: recentLabel,
         icon: action?.icon,
       }
     })
@@ -60,7 +63,7 @@ export function GlobalLauncher() {
       kind: 'view' as const,
       id: item.id,
       title: localized(item.title, item.titleI18n, locale),
-      subtitle: 'Workspace Views',
+      subtitle: viewsLabel,
       icon: item.icon,
     }))
     return [...pinned, ...recent, ...views]
@@ -121,27 +124,27 @@ export function GlobalLauncher() {
             ref={inputRef}
             value={query}
             onChange={(event) => { setQuery(event.target.value); setSelectedIndex(0) }}
-            placeholder="Pinned Actions, Recent Commands, Workspace Views"
+            placeholder={t(locale, 'palette.globalPlaceholder')}
             className="flex-1 outline-none border-none bg-transparent text-[14px]"
             style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
           />
         </div>
         <LauncherSection
-          title="Pinned Actions"
+          title={t(locale, 'palette.globalPinned')}
           items={filtered.filter((item) => item.kind === 'pinned')}
           selected={filtered[selectedIndex]}
           onSelect={selectItem}
           locale={locale}
         />
         <LauncherSection
-          title="Recent Commands"
+          title={t(locale, 'palette.globalRecent')}
           items={filtered.filter((item) => item.kind === 'recent')}
           selected={filtered[selectedIndex]}
           onSelect={selectItem}
           locale={locale}
         />
         <LauncherSection
-          title="Workspace Views"
+          title={t(locale, 'palette.globalViews')}
           items={filtered.filter((item) => item.kind === 'view')}
           selected={filtered[selectedIndex]}
           onSelect={selectItem}
@@ -185,7 +188,7 @@ function LauncherSection({ title, items, selected, onSelect, locale }: { title: 
               }}
             >
               {item.kind === 'pinned'
-                ? item.icon ? <span>{item.icon}</span> : <Pin size={14} />
+                ? resolveIcon(item.icon, 14, item.title) || <Pin size={14} />
                 : item.kind === 'view' ? item.icon : resolveIcon(item.icon, 14, item.title)}
             </span>
             <span className="min-w-0 flex-1">

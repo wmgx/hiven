@@ -175,6 +175,10 @@ const messages = {
     'palette.numbersOnly': 'Numbers only',
     'palette.customizeParamsLabel': 'params',
     'palette.pinAction': 'Pin action',
+    'palette.globalPlaceholder': 'Pinned actions, recent commands, workspace views',
+    'palette.globalPinned': 'Pinned Actions',
+    'palette.globalRecent': 'Recent Commands',
+    'palette.globalViews': 'Workspace Views',
 
     // Workspace / core plugin
     'workspace.close': 'Close',
@@ -421,6 +425,10 @@ const messages = {
     'palette.numbersOnly': '仅允许数字',
     'palette.customizeParamsLabel': '参数',
     'palette.pinAction': '固定操作',
+    'palette.globalPlaceholder': '固定操作、最近命令、工作区视图',
+    'palette.globalPinned': '固定操作',
+    'palette.globalRecent': '最近命令',
+    'palette.globalViews': '工作区视图',
 
     // Workspace / core plugin
     'workspace.close': '关闭',
