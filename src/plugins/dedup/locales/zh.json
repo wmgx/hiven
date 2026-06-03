@@ -1,0 +1,6 @@
+{
+  "command.run.title": "去除重复行",
+  "command.run.description": "移除文本中的重复行",
+  "input.text.label": "输入",
+  "param.ignoreCase.label": "忽略大小写"
+}

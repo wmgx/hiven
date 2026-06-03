@@ -1,0 +1,7 @@
+{
+  "command.run.title": "包裹每行",
+  "command.run.description": "在每行两端添加指定文本",
+  "input.text.label": "输入",
+  "param.left.label": "左侧",
+  "param.right.label": "右侧"
+}

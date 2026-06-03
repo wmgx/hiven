@@ -1,0 +1,8 @@
+{
+  "command.run.title": "Lines to SQL IN",
+  "command.run.description": "Convert lines to SQL IN clause",
+  "input.text.label": "Input",
+  "param.mode.label": "Mode",
+  "param.mode.option.string.label": "String",
+  "param.mode.option.number.label": "Number"
+}

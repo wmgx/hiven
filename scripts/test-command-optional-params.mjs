@@ -47,14 +47,9 @@ function hardcodedActionEntry(name) {
 }
 
 const selectedScripts = [
-  'dedup',
   'hash',
   'json',
-  'wrap',
-  'mdquote',
-  'sort',
   'sql',
-  'sqlin',
 ]
 
 for (const name of selectedScripts) {
@@ -65,20 +60,9 @@ for (const name of selectedScripts) {
 }
 
 const notSelectedScripts = [
-  'append',
   'base64',
-  'case',
-  'css',
-  'csv',
-  'extract',
-  'html',
-  'join',
-  'prepend',
-  'querystring',
-  'slashes',
   'timestamp',
   'url',
-  'xml',
   'yaml',
 ]
 

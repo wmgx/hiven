@@ -1,0 +1,7 @@
+{
+  "pluginId": "css",
+  "displayName": "CSS Formatter",
+  "displayNameI18n": { "zh": "CSS 格式化" },
+  "version": "1.0.0",
+  "capabilities": ["command"]
+}

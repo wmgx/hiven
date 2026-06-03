@@ -1,0 +1,11 @@
+{
+  "command.run.title": "大小写转换",
+  "command.run.description": "转换文本大小写",
+  "input.text.label": "输入",
+  "param.mode.label": "转换为",
+  "param.mode.option.upper.label": "大写",
+  "param.mode.option.lower.label": "小写",
+  "param.mode.option.title.label": "首字母大写",
+  "param.mode.option.camel.label": "camelCase",
+  "param.mode.option.snake.label": "snake_case"
+}

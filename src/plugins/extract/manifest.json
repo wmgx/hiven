@@ -1,0 +1,7 @@
+{
+  "pluginId": "extract",
+  "displayName": "Extract Patterns",
+  "displayNameI18n": { "zh": "提取模式" },
+  "version": "1.0.0",
+  "capabilities": ["command"]
+}

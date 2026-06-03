@@ -1,0 +1,11 @@
+{
+  "command.run.title": "Case Convert",
+  "command.run.description": "Convert text case",
+  "input.text.label": "Input",
+  "param.mode.label": "Convert To",
+  "param.mode.option.upper.label": "UPPERCASE",
+  "param.mode.option.lower.label": "lowercase",
+  "param.mode.option.title.label": "Title Case",
+  "param.mode.option.camel.label": "camelCase",
+  "param.mode.option.snake.label": "snake_case"
+}

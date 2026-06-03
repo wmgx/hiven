@@ -1,0 +1,7 @@
+{
+  "pluginId": "sqlin",
+  "displayName": "Lines to SQL IN",
+  "displayNameI18n": { "zh": "行转 SQL IN" },
+  "version": "1.0.0",
+  "capabilities": ["command"]
+}

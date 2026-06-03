@@ -1,0 +1,7 @@
+{
+  "pluginId": "jwt",
+  "displayName": "JWT Decode",
+  "displayNameI18n": { "zh": "JWT 解码" },
+  "version": "1.0.0",
+  "capabilities": ["command"]
+}

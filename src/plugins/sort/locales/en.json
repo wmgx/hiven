@@ -1,0 +1,9 @@
+{
+  "command.run.title": "Sort Lines",
+  "command.run.description": "Sort lines alphabetically",
+  "input.text.label": "Input",
+  "param.direction.label": "Direction",
+  "param.direction.option.asc.label": "Ascending",
+  "param.direction.option.desc.label": "Descending",
+  "param.ignoreCase.label": "Ignore Case"
+}

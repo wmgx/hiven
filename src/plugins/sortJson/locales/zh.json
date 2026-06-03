@@ -1,0 +1,5 @@
+{
+  "command.run.title": "JSON Key 排序",
+  "command.run.description": "按字母顺序排列 JSON 对象的 key",
+  "input.text.label": "输入"
+}

@@ -1,0 +1,7 @@
+{
+  "pluginId": "case",
+  "displayName": "Case Convert",
+  "displayNameI18n": { "zh": "大小写转换" },
+  "version": "1.0.0",
+  "capabilities": ["command"]
+}

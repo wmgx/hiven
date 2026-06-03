@@ -1,0 +1,10 @@
+{
+  "command.run.title": "CSV / TSV Convert",
+  "command.run.description": "Convert between CSV/TSV and JSON",
+  "input.text.label": "Input",
+  "param.mode.label": "Mode",
+  "param.mode.option.csv2json.label": "CSV → JSON",
+  "param.mode.option.json2csv.label": "JSON → CSV",
+  "param.mode.option.tsv2json.label": "TSV → JSON",
+  "param.mode.option.json2tsv.label": "JSON → TSV"
+}

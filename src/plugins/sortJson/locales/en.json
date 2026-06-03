@@ -1,0 +1,5 @@
+{
+  "command.run.title": "Sort JSON Keys",
+  "command.run.description": "Sort JSON object keys alphabetically",
+  "input.text.label": "Input"
+}

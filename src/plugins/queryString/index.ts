@@ -1,0 +1,63 @@
+/**
+ * First-party JSON ↔ Query String plugin (migrated from legacy builtin action).
+ */
+
+import { definePlugin, type TextInput } from '@fluxtext/plugin'
+
+export const queryStringPlugin = definePlugin({
+  id: 'query-string',
+  title: 'JSON ↔ Query String',
+  version: '1.0.0',
+
+  commands: [
+    {
+      id: 'query-string.run',
+      title: 'command.run.title',
+      description: 'command.run.description',
+      icon: 'Search',
+      aliases: ['query-json', 'json-query', 'qs'],
+      tags: ['json', 'url', 'convert'],
+      params: [
+        {
+          key: 'mode',
+          label: 'param.mode.label',
+          type: 'single-select',
+          options: [
+            { label: 'param.mode.option.json2qs.label', value: 'json2qs' },
+            { label: 'param.mode.option.qs2json.label', value: 'qs2json' },
+          ],
+          default: 'json2qs',
+        },
+      ],
+      inputs: [
+        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
+      ],
+      inputResolution: { strategy: 'use-active', fallback: 'fail' },
+      run(ctx) {
+        const input = ctx.inputs.input as TextInput
+        const text = input?.kind === 'text' ? input.text : ''
+        const reply = (t: string) => ({ effects: [{ type: 'text.replace' as const, target: input?.paneId ? { paneId: input.paneId } : 'active-input' as const, text: t }] })
+        try {
+          if (ctx.params.mode === 'json2qs') {
+            const obj = JSON.parse(text)
+            const params = new URLSearchParams()
+            for (const [k, v] of Object.entries(obj)) {
+              params.set(k, String(v))
+            }
+            return reply(params.toString())
+          }
+          let qs = text.trim()
+          if (qs.startsWith('?')) qs = qs.slice(1)
+          const params = new URLSearchParams(qs)
+          const obj: Record<string, string> = {}
+          params.forEach((v, k) => { obj[k] = v })
+          return reply(JSON.stringify(obj, null, 2))
+        } catch (e: any) {
+          return reply(`Error: ${e.message}`)
+        }
+      },
+    },
+  ],
+})
+
+export default queryStringPlugin

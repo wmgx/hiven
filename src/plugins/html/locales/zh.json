@@ -1,0 +1,8 @@
+{
+  "command.run.title": "HTML 编解码",
+  "command.run.description": "HTML 实体编码或解码",
+  "input.text.label": "输入",
+  "param.mode.label": "模式",
+  "param.mode.option.encode.label": "编码",
+  "param.mode.option.decode.label": "解码"
+}

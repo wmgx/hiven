@@ -1,0 +1,10 @@
+{
+  "command.run.title": "CSV / TSV 转换",
+  "command.run.description": "CSV/TSV 与 JSON 互转",
+  "input.text.label": "输入",
+  "param.mode.label": "模式",
+  "param.mode.option.csv2json.label": "CSV → JSON",
+  "param.mode.option.json2csv.label": "JSON → CSV",
+  "param.mode.option.tsv2json.label": "TSV → JSON",
+  "param.mode.option.json2tsv.label": "JSON → TSV"
+}

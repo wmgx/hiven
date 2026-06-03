@@ -1,0 +1,8 @@
+{
+  "command.run.title": "HTML Encode/Decode",
+  "command.run.description": "HTML entity encode or decode",
+  "input.text.label": "Input",
+  "param.mode.label": "Mode",
+  "param.mode.option.encode.label": "Encode",
+  "param.mode.option.decode.label": "Decode"
+}

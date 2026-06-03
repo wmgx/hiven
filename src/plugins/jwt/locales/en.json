@@ -1,0 +1,5 @@
+{
+  "command.run.title": "JWT Decode",
+  "command.run.description": "Decode JWT token",
+  "input.text.label": "Input"
+}

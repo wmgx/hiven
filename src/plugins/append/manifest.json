@@ -1,0 +1,7 @@
+{
+  "pluginId": "append",
+  "displayName": "Append to Lines",
+  "displayNameI18n": { "zh": "追加到每行" },
+  "version": "1.0.0",
+  "capabilities": ["command"]
+}

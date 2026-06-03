@@ -1,0 +1,8 @@
+{
+  "command.run.title": "JSON ↔ 查询字符串",
+  "command.run.description": "JSON 与 URL 查询字符串互转",
+  "input.text.label": "输入",
+  "param.mode.label": "模式",
+  "param.mode.option.json2qs.label": "JSON → 查询字符串",
+  "param.mode.option.qs2json.label": "查询字符串 → JSON"
+}

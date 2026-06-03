@@ -1,0 +1,7 @@
+{
+  "pluginId": "reverse",
+  "displayName": "Reverse Lines",
+  "displayNameI18n": { "zh": "反转行" },
+  "version": "1.0.0",
+  "capabilities": ["command"]
+}

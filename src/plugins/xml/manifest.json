@@ -1,0 +1,7 @@
+{
+  "pluginId": "xml",
+  "displayName": "XML Formatter",
+  "displayNameI18n": { "zh": "XML 格式化" },
+  "version": "1.0.0",
+  "capabilities": ["command"]
+}

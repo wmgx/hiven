@@ -1,0 +1,6 @@
+{
+  "command.run.title": "追加到每行",
+  "command.run.description": "在每行末尾追加指定文本",
+  "input.text.label": "输入",
+  "param.suffix.label": "后缀"
+}

@@ -1,0 +1,8 @@
+{
+  "command.run.title": "Markdown 引用",
+  "command.run.description": "添加或移除 Markdown 引用前缀",
+  "input.text.label": "输入",
+  "param.mode.label": "模式",
+  "param.mode.option.add.label": "添加",
+  "param.mode.option.remove.label": "移除"
+}
