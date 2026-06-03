@@ -60,7 +60,6 @@ export function PinnedRunnerView() {
   const actions = useAppStore((s) => s.actions)
   const updatePinnedAction = useAppStore((s) => s.updatePinnedAction)
   const updatePinnedRuntime = useAppStore((s) => s.updatePinnedRuntime)
-  const prunePinnedRuntimes = useAppStore((s) => s.prunePinnedRuntimes)
   const releasePinnedRuntime = useAppStore((s) => s.releasePinnedRuntime)
   const unpinAction = useAppStore((s) => s.unpinAction)
   const setActiveView = useAppStore((s) => s.setActiveView)
@@ -188,11 +187,6 @@ export function PinnedRunnerView() {
       : { type: 'panel.closeV2', panelId: customControls.panelId },
     ])
   }
-
-  useEffect(() => {
-    const timer = window.setInterval(() => prunePinnedRuntimes(), 30_000)
-    return () => window.clearInterval(timer)
-  }, [prunePinnedRuntimes])
 
   useEffect(() => {
     if (!pinned || !pinned.autoRun || !pinned.inputText) return

@@ -15,6 +15,7 @@ function assertNotHas(source, pattern, message) {
 
 const files = {
   packageJson: read('package.json'),
+  app: read('src/App.tsx'),
   store: read('src/store.ts'),
   pluginTypes: read('src/workspace/pluginTypes.ts'),
   workspaceTypes: read('src/workspace/types.ts'),
@@ -39,7 +40,8 @@ assertHas(files.store, /pruneIdlePinnedRuntimes/, 'store should use pruneIdlePin
 assertHas(files.pinnedRuntime, /_tombstone|tombstone/, 'activatePinnedRuntime should accept tombstone data')
 assertHas(files.pinnedRuntime, /outputSummary[\s\S]*stale|stale[\s\S]*outputSummary/, 'tombstone restore should mark output summary stale instead of restoring full output')
 
-assertHas(files.pinnedRunner, /useEffect[\s\S]*prunePinnedRuntimes/, 'PinnedRunnerView should schedule idle runtime pruning')
+assertHas(files.app, /useEffect[\s\S]*prunePinnedRuntimes/, 'App should schedule idle runtime pruning outside the PinnedRunnerView lifecycle')
+assertNotHas(files.pinnedRunner, /setInterval\(\(\)\s*=>\s*prunePinnedRuntimes/, 'PinnedRunnerView should not own the root idle-prune scheduler')
 assertHas(files.store, /sideEffects\s*!==\s*['"]writes['"][\s\S]*trigger\s*!==\s*['"]manual['"]|trigger\s*!==\s*['"]manual['"][\s\S]*sideEffects\s*!==\s*['"]writes['"]/, 'writes side-effect commands should default to manual run')
 assertHas(files.store, /def\?\.live[\s\S]*autoRun:\s*shouldAutoRunLiveAction/, 'legacy actions should derive autoRun from live capability metadata')
 assertHas(files.store, /serializePinnedTombstones[\s\S]*tombstoneTtlDays[\s\S]*disposedAt/, 'persisted tombstones should be pruned by tombstoneTtlDays')

@@ -75,6 +75,7 @@ function ViewContent({ viewId }: { viewId: ViewId }) {
 export default function App() {
   const activeView = useAppStore((s) => s.activeView)
   const fontSize = useAppStore((s) => s.settings.fontSize)
+  const prunePinnedRuntimes = useAppStore((s) => s.prunePinnedRuntimes)
   const prevViewRef = useRef<ViewId>(activeView)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -114,6 +115,11 @@ export default function App() {
     window.addEventListener('keydown', handler, true)
     return () => window.removeEventListener('keydown', handler, true)
   }, [])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => prunePinnedRuntimes(), 30_000)
+    return () => window.clearInterval(timer)
+  }, [prunePinnedRuntimes])
 
   // Direction-aware view transition
   useEffect(() => {
