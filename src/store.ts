@@ -15,11 +15,27 @@ import type { PinnedRuntimeConfig as WorkspacePinnedRuntimeConfig } from './work
 export type ViewId = 'editor' | 'scripts' | 'plugin-editor' | 'pinned-runner' | 'debugger' | 'settings'
 
 export type PinnedOutputKind = 'text' | 'error' | 'presentation'
+export type PinnedActionKind = 'legacy' | 'plugin-command'
+
+export type PinnedPluginCommandInput = {
+  kind: 'plugin-command'
+  actionId: string
+  pluginId: string
+  title: string
+  titleI18n?: Partial<Record<Locale, string>>
+  icon?: string
+  isDev?: boolean
+  params?: Record<string, unknown>
+}
 
 export interface PinnedAction {
   id: string
+  kind?: PinnedActionKind
   actionId: string
+  pluginId?: string
+  isDev?: boolean
   title: string
+  titleI18n?: Partial<Record<Locale, string>>
   icon?: string
   inputText: string
   outputText: string
@@ -158,6 +174,7 @@ interface AppState {
   pinnedTombstones: Record<string, PinnedTombstone>
   pinnedRuntimeConfig: PinnedRuntimeConfig
   pinAction: (action: ActionDef | string) => string
+  pinPluginCommand: (command: PinnedPluginCommandInput) => string
   unpinAction: (pinnedId: string) => void
   reorderPinnedActions: (orderedIds: string[]) => void
   setActivePinnedAction: (pinnedId: string) => void
@@ -284,8 +301,10 @@ function _actionToPinnedAction(action: ActionDef | string, actions: ActionDef[])
   const def = typeof action === 'string' ? actions.find(a => a.name === action) : action
   return {
     id: _makePinnedId(actionId),
+    kind: 'legacy',
     actionId,
     title: def?.title ?? actionId,
+    titleI18n: def?.titleI18n,
     icon: def?.icon,
     inputText: '',
     outputText: '',
@@ -314,12 +333,52 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   pinAction: (action) => {
     const current = useAppStore.getState()
     const actionId = typeof action === 'string' ? action : action.name
-    const existing = current.pinnedActions.find((pinned) => pinned.actionId === actionId)
+    const existing = current.pinnedActions.find((pinned) => (pinned.kind ?? 'legacy') === 'legacy' && pinned.actionId === actionId)
     if (existing) {
       current.activatePinnedAction(existing.id)
       return existing.id
     }
     const pinned = _actionToPinnedAction(action, current.actions)
+    set((state) => ({
+      pinnedActions: [...state.pinnedActions, pinned],
+      activePinnedActionId: pinned.id,
+      activeView: 'pinned-runner',
+      pinnedRuntimes: {
+        ...state.pinnedRuntimes,
+        [pinned.id]: activatePinnedRuntime(pinned, state.pinnedRuntimes[pinned.id], state.pinnedTombstones[pinned.id]),
+      },
+    }))
+    return pinned.id
+  },
+  pinPluginCommand: (command) => {
+    const current = useAppStore.getState()
+    const existing = current.pinnedActions.find((pinned) => (
+      pinned.kind === 'plugin-command' &&
+      pinned.actionId === command.actionId &&
+      pinned.pluginId === command.pluginId &&
+      !!pinned.isDev === !!command.isDev
+    ))
+    if (existing) {
+      current.activatePinnedAction(existing.id)
+      return existing.id
+    }
+    const pinned: PinnedAction = {
+      id: _makePinnedId(command.actionId),
+      kind: 'plugin-command',
+      actionId: command.actionId,
+      pluginId: command.pluginId,
+      isDev: !!command.isDev,
+      title: command.title,
+      titleI18n: command.titleI18n,
+      icon: command.icon,
+      inputText: '',
+      outputText: '',
+      outputKind: 'text',
+      params: command.params ?? {},
+      autoRun: true,
+      debounceMs: 250,
+      controlsOpen: false,
+    }
     set((state) => ({
       pinnedActions: [...state.pinnedActions, pinned],
       activePinnedActionId: pinned.id,

@@ -53,6 +53,7 @@ export function CommandPalette() {
   const savedActionParams = useAppStore((s) => s.savedActionParams)
   const saveActionParams = useAppStore((s) => s.saveActionParams)
   const pinAction = useAppStore((s) => s.pinAction)
+  const pinPluginCommand = useAppStore((s) => s.pinPluginCommand)
   const locale = useAppStore((s) => s.locale)
   const shortcutMeta = useMemo(() => getPlatformShortcutMeta(), [])
 
@@ -654,8 +655,19 @@ export function CommandPalette() {
             selectedIndex={selectedIndex}
             onSelectItem={(item, customizeParams) => selectItem(item, customizeParams)}
             onPinItem={(item) => {
-              if (item.kind !== 'legacy') return
-              pinAction(item.action)
+              if (item.kind === 'legacy') {
+                pinAction(item.action)
+              } else {
+                pinPluginCommand({
+                  kind: 'plugin-command',
+                  actionId: item.entry.contribution.id,
+                  pluginId: item.entry.meta.pluginId,
+                  title: item.entry.contribution.title || item.entry.contribution.id,
+                  titleI18n: item.entry.contribution.titleI18n,
+                  icon: item.entry.contribution.icon,
+                  isDev: item.isDev,
+                })
+              }
               setOpen(false)
             }}
             setSelectedIndex={setSelectedIndex}
@@ -996,7 +1008,7 @@ function ActionItem({ item, selected, onClick, onPin, onMouseEnter, shortcutMeta
           <span className="text-[10px] leading-none">{t(locale, 'palette.customizeParamsLabel')}</span>
         </div>
       )}
-      {item.kind === 'legacy' && (
+      {(item.kind === 'legacy' || item.kind === 'plugin') && (
         <button
           className="w-6 h-6 rounded-md border-none bg-transparent cursor-pointer flex items-center justify-center shrink-0"
           title={t(locale, 'palette.pinAction')}

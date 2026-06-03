@@ -3,6 +3,11 @@ import { Copy, Eraser, FilePlus, PanelRightOpen, PinOff, Play, RotateCcw, Send }
 import { localized, useAppStore, type ActionContext, type ActionParam, type PinnedAction } from '../store'
 import { useWorkspaceStore } from '../workspace/workspaceStore'
 import type { Locale } from '../i18n'
+import { pluginRegistry } from '../workspace/pluginRegistry'
+import type { CommandContribution, CommandParam, InputSlot, PluginCommandResult, ResolvedInputs } from '../workspace/pluginTypes'
+import type { FluxEffect } from '../workspace/types'
+
+type ControlParam = ActionParam | CommandParam
 
 function defaultParams(actionParams: { key: string; default?: unknown }[] | undefined): Record<string, unknown> {
   const params: Record<string, unknown> = {}
@@ -12,14 +17,36 @@ function defaultParams(actionParams: { key: string; default?: unknown }[] | unde
   return params
 }
 
-function paramOptions(param: ActionParam): { label: string; value: string; labelI18n?: Partial<Record<Locale, string>> }[] {
-  const options = param.optionsFn?.() ?? param.options ?? []
+function paramOptions(param: ControlParam): { label: string; value: string; labelI18n?: Partial<Record<Locale, string>> }[] {
+  const dynamicOptions = 'optionsFn' in param ? param.optionsFn?.() : undefined
+  const options = dynamicOptions ?? param.options ?? []
   return options.map((option) => typeof option === 'string' ? { label: option, value: option } : option)
 }
 
-function isParamVisible(param: ActionParam, params: Record<string, unknown>): boolean {
-  if (!param.visibleWhen) return true
+function isParamVisible(param: ControlParam, params: Record<string, unknown>): boolean {
+  if (!('visibleWhen' in param) || !param.visibleWhen) return true
   return Object.entries(param.visibleWhen).every(([key, value]) => params[key] === value)
+}
+
+function buildPinnedPluginInputs(slots: InputSlot[] | undefined, inputText: string): ResolvedInputs {
+  const inputs: ResolvedInputs = {}
+  if (!slots || slots.length === 0) {
+    inputs.input = { kind: 'text', text: inputText }
+    return inputs
+  }
+  for (const slot of slots) {
+    inputs[slot.key] = { kind: 'text', text: inputText }
+  }
+  return inputs
+}
+
+function outputFromPluginEffects(result: PluginCommandResult): { text: string; kind: 'text' | 'error' } {
+  const effects = result.effects ?? []
+  const textReplace = effects.find((effect): effect is Extract<FluxEffect, { type: 'text.replace' }> => effect.type === 'text.replace')
+  if (textReplace) return { text: textReplace.text, kind: 'text' }
+  const status = effects.find((effect): effect is Extract<FluxEffect, { type: 'status.message' }> => effect.type === 'status.message')
+  if (status) return { text: status.message, kind: status.level === 'error' ? 'error' : 'text' }
+  return { text: '', kind: 'text' }
 }
 
 export function PinnedRunnerView() {
@@ -37,34 +64,55 @@ export function PinnedRunnerView() {
   const runIdRef = useRef<string | null>(null)
 
   const pinned = pinnedActions.find((item) => item.id === activePinnedActionId)
-  const action = actions.find((item) => item.name === pinned?.actionId)
+  const action = (pinned?.kind ?? 'legacy') === 'legacy'
+    ? actions.find((item) => item.name === pinned?.actionId)
+    : undefined
+  const pluginCommand = pinned?.kind === 'plugin-command'
+    ? pluginRegistry.resolveCommand(pinned.actionId, pinned.isDev ? 'dev' : 'production')
+    : undefined
+  const commandContribution: CommandContribution | undefined = pluginCommand?.contribution
+  const actionParams = action?.params ?? commandContribution?.params ?? []
   const params = useMemo(() => ({
-    ...defaultParams(action?.params),
+    ...defaultParams(actionParams),
     ...(pinned?.params ?? {}),
-  }), [action?.params, pinned?.params])
+  }), [actionParams, pinned?.params])
   const paramsFingerprint = useMemo(() => JSON.stringify(params), [params])
 
   const runPinnedAction = async () => {
-    if (!pinned || !action) return
+    if (!pinned) return
     const runId = `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
     const startedAt = performance.now()
     runIdRef.current = runId
     setRunning(true)
     updatePinnedRuntime(pinned.id, { pendingRunId: runId, status: 'active' })
     try {
-      const ctx: ActionContext = {
-        input: { text: pinned.inputText },
-        params,
-        readClipboard: async () => navigator.clipboard?.readText?.() ?? '',
-        loadCDN: async (url: string) => import(/* @vite-ignore */ url),
-        deps: {},
+      let text = ''
+      let outputKind: 'text' | 'error' = 'text'
+      if ((pinned.kind ?? 'legacy') === 'legacy') {
+        if (!action) throw new Error(`Pinned action "${pinned.actionId}" is not registered`)
+        const ctx: ActionContext = {
+          input: { text: pinned.inputText },
+          params,
+          readClipboard: async () => navigator.clipboard?.readText?.() ?? '',
+          loadCDN: async (url: string) => import(/* @vite-ignore */ url),
+          deps: {},
+        }
+        const result = await Promise.resolve(action.run(ctx))
+        text = result && 'text' in result ? result.text : ''
+      } else {
+        if (!commandContribution) throw new Error(`Pinned plugin command "${pinned.actionId}" is not registered`)
+        const result = await Promise.resolve(commandContribution.run({
+          inputs: buildPinnedPluginInputs(commandContribution.inputs, pinned.inputText),
+          params,
+        }))
+        const output = outputFromPluginEffects(result)
+        text = output.text
+        outputKind = output.kind
       }
-      const result = await Promise.resolve(action.run(ctx))
       if (runIdRef.current !== runId) return
-      const text = result && 'text' in result ? result.text : ''
       updatePinnedAction(pinned.id, {
         outputText: text,
-        outputKind: 'text',
+        outputKind,
         lastRunAt: Date.now(),
         lastDurationMs: Math.round(performance.now() - startedAt),
         lastError: undefined,
@@ -132,7 +180,7 @@ export function PinnedRunnerView() {
             />
             Auto
           </label>
-          <button className="scripts-btn scripts-btn-primary" onClick={() => void runPinnedAction()} disabled={running || !action} title="Run Now">
+          <button className="scripts-btn scripts-btn-primary" onClick={() => void runPinnedAction()} disabled={running || (!action && !commandContribution)} title="Run Now">
             <Play size={14} />
             Run Now
           </button>
@@ -208,7 +256,7 @@ export function PinnedRunnerView() {
         <PinnedActionControls
           pinned={pinned}
           params={params}
-          actionParams={action?.params ?? []}
+          actionParams={actionParams}
           locale={useAppStore.getState().locale}
           onChange={(nextParams) => updatePinnedAction(pinned.id, { params: nextParams })}
         />
@@ -217,7 +265,7 @@ export function PinnedRunnerView() {
   )
 }
 
-function PinnedActionControls({ pinned, params, actionParams, locale, onChange }: { pinned: PinnedAction; params: Record<string, unknown>; actionParams: ActionParam[]; locale: Locale; onChange: (params: Record<string, unknown>) => void }) {
+function PinnedActionControls({ pinned, params, actionParams, locale, onChange }: { pinned: PinnedAction; params: Record<string, unknown>; actionParams: ControlParam[]; locale: Locale; onChange: (params: Record<string, unknown>) => void }) {
   const visibleParams = actionParams.filter((param) => isParamVisible(param, params))
 
   const updateParam = (key: string, value: unknown) => {
