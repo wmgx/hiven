@@ -1,5 +1,5 @@
-import type { PluginDefinition, PluginCommandResult } from './pluginTypes'
-import type { FluxEffect } from './types'
+import type { PluginDefinition } from './pluginTypes'
+import { buildTextPluginInputs, defaultPluginCommandParams, textOutputFromPluginEffects } from './pluginCommandRunner.ts'
 
 export type PluginDebugRunOptions = {
   inputText: string
@@ -53,9 +53,9 @@ export async function runPluginDebugSource(
   }
 
   const result = await Promise.resolve(command.run({
-    inputs: buildDebugInputs(command.inputs, options.inputText),
+    inputs: buildTextPluginInputs(command.inputs, options.inputText),
     params: {
-      ...defaultDebugParams(command.params),
+      ...defaultPluginCommandParams(command.params),
       ...(options.params ?? {}),
     },
   }))
@@ -63,31 +63,7 @@ export async function runPluginDebugSource(
   const elapsed = Math.round(now() - started)
 
   return {
-    output: outputFromPluginEffects({ effects }),
+    output: textOutputFromPluginEffects({ effects }).text,
     logs: [...logs, `effects: ${effects.length}`, `done in ${elapsed}ms`],
   }
-}
-
-function buildDebugInputs(inputs: PluginDefinition['commands'][number]['inputs'], inputText: string) {
-  const slots = inputs && inputs.length > 0 ? inputs : [{ key: 'input' }]
-  return Object.fromEntries(slots.map((slot) => [slot.key, { kind: 'text' as const, text: inputText }]))
-}
-
-function defaultDebugParams(params: PluginDefinition['commands'][number]['params']) {
-  const defaults: Record<string, unknown> = {}
-  for (const param of params ?? []) {
-    if (param.default !== undefined) defaults[param.key] = param.default
-  }
-  return defaults
-}
-
-function outputFromPluginEffects(result: PluginCommandResult): string {
-  const effects = result.effects ?? []
-  const textReplace = effects.find((effect): effect is Extract<FluxEffect, { type: 'text.replace' }> => effect.type === 'text.replace')
-  if (textReplace) return textReplace.text
-  const createPane = effects.find((effect): effect is Extract<FluxEffect, { type: 'pane.create' }> => effect.type === 'pane.create')
-  if (createPane) return String(createPane.pane.text ?? '')
-  const status = effects.find((effect): effect is Extract<FluxEffect, { type: 'status.message' }> => effect.type === 'status.message')
-  if (status) return status.message
-  return ''
 }

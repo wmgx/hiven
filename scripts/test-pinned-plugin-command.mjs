@@ -18,6 +18,7 @@ const files = {
   store: read('src/store.ts'),
   commandPalette: read('src/components/CommandPalette.tsx'),
   pinnedRunner: read('src/views/PinnedRunnerView.tsx'),
+  pluginCommandRunner: read('src/workspace/pluginCommandRunner.ts'),
 }
 
 assertHas(files.packageJson, /test:pinned-plugin-command/, 'package.json should expose pinned plugin command verifier')
@@ -33,8 +34,9 @@ assertHas(files.commandPalette, /\{item\.kind === ['"]legacy['"][\s\S]*<button[\
 
 assertHas(files.pinnedRunner, /pluginRegistry\.resolveCommand/, 'PinnedRunnerView should resolve plugin commands from the plugin registry')
 assertHas(files.pinnedRunner, /pinned\?\.kind\s*===\s*['"]plugin-command['"]/, 'PinnedRunnerView should branch for plugin-command pinned actions')
-assertHas(files.pinnedRunner, /buildPinnedPluginInputs[\s\S]*kind:\s*['"]text['"][\s\S]*inputText/, 'PinnedRunnerView should run plugin commands with the pinned input buffer')
-assertHas(files.pinnedRunner, /text\.replace[\s\S]*outputText|outputText[\s\S]*text\.replace/, 'PinnedRunnerView should map text.replace effects into runner output')
+assertHas(files.pinnedRunner, /runTextPluginCommand[\s\S]*inputText:\s*pinned\.inputText/, 'PinnedRunnerView should run plugin commands with the pinned input buffer')
+assertHas(files.pluginCommandRunner, /buildTextPluginInputs[\s\S]*kind:\s*['"]text['"][\s\S]*inputText/, 'plugin command runner should resolve pinned text input slots')
+assertHas(files.pluginCommandRunner, /text\.replace[\s\S]*textReplace\.text/, 'plugin command runner should map text.replace effects into runner output')
 assertNotHas(files.pinnedRunner, /disabled=\{running\s*\|\|\s*!action\}/, 'Run Now should not disable plugin-command pinned actions')
 
 console.log('pinned plugin command checks passed')

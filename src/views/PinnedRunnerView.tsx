@@ -6,8 +6,8 @@ import type { Locale } from '../i18n'
 import { pluginRegistry } from '../workspace/pluginRegistry'
 import { applyEffects } from '../workspace/effectRunner'
 import { runtimeRegistry } from '../workspace/runtimeRegistry'
-import type { CommandContribution, CommandParam, InputSlot, PluginCommandResult, ResolvedInputs } from '../workspace/pluginTypes'
-import type { FluxEffect } from '../workspace/types'
+import { runTextPluginCommand } from '../workspace/pluginCommandRunner.ts'
+import type { CommandContribution, CommandParam } from '../workspace/pluginTypes'
 
 type ControlParam = ActionParam | CommandParam
 
@@ -28,27 +28,6 @@ function paramOptions(param: ControlParam): { label: string; value: string; labe
 function isParamVisible(param: ControlParam, params: Record<string, unknown>): boolean {
   if (!('visibleWhen' in param) || !param.visibleWhen) return true
   return Object.entries(param.visibleWhen).every(([key, value]) => params[key] === value)
-}
-
-function buildPinnedPluginInputs(slots: InputSlot[] | undefined, inputText: string): ResolvedInputs {
-  const inputs: ResolvedInputs = {}
-  if (!slots || slots.length === 0) {
-    inputs.input = { kind: 'text', text: inputText }
-    return inputs
-  }
-  for (const slot of slots) {
-    inputs[slot.key] = { kind: 'text', text: inputText }
-  }
-  return inputs
-}
-
-function outputFromPluginEffects(result: PluginCommandResult): { text: string; kind: 'text' | 'error' } {
-  const effects = result.effects ?? []
-  const textReplace = effects.find((effect): effect is Extract<FluxEffect, { type: 'text.replace' }> => effect.type === 'text.replace')
-  if (textReplace) return { text: textReplace.text, kind: 'text' }
-  const status = effects.find((effect): effect is Extract<FluxEffect, { type: 'status.message' }> => effect.type === 'status.message')
-  if (status) return { text: status.message, kind: status.level === 'error' ? 'error' : 'text' }
-  return { text: '', kind: 'text' }
 }
 
 function normalizePanelV2Placement(placement?: string): 'bottom' | 'right' | 'left' {
@@ -124,11 +103,10 @@ export function PinnedRunnerView() {
         text = result && 'text' in result ? result.text : ''
       } else {
         if (!commandContribution) throw new Error(`Pinned plugin command "${pinned.actionId}" is not registered`)
-        const result = await Promise.resolve(commandContribution.run({
-          inputs: buildPinnedPluginInputs(commandContribution.inputs, pinned.inputText),
+        const output = await runTextPluginCommand(commandContribution, {
+          inputText: pinned.inputText,
           params,
-        }))
-        const output = outputFromPluginEffects(result)
+        })
         text = output.text
         outputKind = output.kind
       }
@@ -280,7 +258,7 @@ export function PinnedRunnerView() {
         <section className="flex flex-col min-w-0 min-h-0" style={{ borderRight: '0.5px solid var(--color-border-tertiary)' }}>
           <div className="h-9 flex items-center justify-between px-3 shrink-0" style={{ color: 'var(--color-text-secondary)' }}>
             <span className="text-[12px]">Input</span>
-            <button className="scripts-btn" onClick={() => updatePinnedAction(pinned.id, { inputText: '' })} title="Clear Input">
+            <button className="scripts-btn" onClick={() => updateInputText('')} title="Clear Input">
               <Eraser size={14} />
               Clear Input
             </button>

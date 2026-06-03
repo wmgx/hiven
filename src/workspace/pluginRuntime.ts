@@ -18,6 +18,7 @@ import { useWorkspaceStore } from './workspaceStore'
 import { usePluginStore } from './pluginStore'
 import { showToast } from './toast'
 import { definePlugin } from './definePlugin'
+import { createPluginScaffoldFiles } from './pluginScaffold.ts'
 import type {
   PluginDefinition,
   PluginManifest,
@@ -792,41 +793,6 @@ export async function importGithubDirectory(sourceUrl: string, destinationRoot?:
 
 export const installGithubDirectory = importGithubDirectory
 
-function pluginTemplate(pluginId: string, title: string) {
-  return `const { definePlugin, effects } = globalThis.FluxTextPlugin
-
-export default definePlugin({
-  id: ${JSON.stringify(pluginId)},
-  title: ${JSON.stringify(title)},
-  version: '1.0.0',
-  commands: [{
-    id: ${JSON.stringify(`${pluginId}.run`)},
-    title: ${JSON.stringify(title)},
-    titleI18n: { zh: ${JSON.stringify(title)} },
-    description: 'Transform input text and write the result only when the command is run.',
-    descriptionI18n: { zh: '运行命令时处理输入文本。' },
-    tags: ['text'],
-    optionalParams: true,
-    inputs: [{ key: 'input', label: 'Input', labelI18n: { zh: '输入' }, kind: 'text', required: true }],
-    inputResolution: { strategy: 'use-active', fallback: 'fail' },
-    params: [{
-      key: 'prefix',
-      label: 'Prefix',
-      labelI18n: { zh: '前缀' },
-      type: 'text',
-      default: '',
-    }],
-    run(ctx) {
-      const input = ctx.inputs.input
-      const text = input?.kind === 'text' ? input.text : ''
-      const prefix = String(ctx.params.prefix ?? '')
-      return { effects: [effects.replaceActiveText(prefix + text)] }
-    },
-  }],
-})
-`
-}
-
 export async function createDevPluginScaffold(options: {
   pluginId?: string
   title?: string
@@ -837,23 +803,10 @@ export async function createDevPluginScaffold(options: {
   const title = options.title?.trim() || 'New Plugin'
   validatePackageRelativePath(pluginId, 'plugin id')
   const folderPath = joinPath(root, pluginId)
-  const manifest = {
-    pluginId,
-    displayName: title,
-    displayNameI18n: { zh: title },
-    version: '1.0.0',
-    capabilities: ['command'],
-  }
-  await savePluginFile(joinPath(folderPath, 'manifest.json'), JSON.stringify(manifest, null, 2))
-  await savePluginFile(joinPath(folderPath, 'index.js'), pluginTemplate(pluginId, title))
-  await savePluginFile(joinPath(folderPath, 'README.md'), `# ${title}
-
-This is a FluxText directory plugin.
-
-- \`manifest.json\` contains package metadata only.
-- \`index.js\` is the fixed entry.
-- Runtime helpers are injected as \`globalThis.FluxTextPlugin\`; no relative framework import is needed.
-`)
+  const scaffold = createPluginScaffoldFiles({ pluginId, title })
+  await savePluginFile(joinPath(folderPath, 'manifest.json'), JSON.stringify(scaffold.manifest, null, 2))
+  await savePluginFile(joinPath(folderPath, 'index.js'), scaffold.indexSource)
+  await savePluginFile(joinPath(folderPath, 'README.md'), scaffold.readmeSource)
   return sideloadDevPlugin(folderPath)
 }
 
