@@ -1,10 +1,15 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 const root = process.cwd()
 
 function read(path) {
   return readFileSync(join(root, path), 'utf8')
+}
+
+function readI18n() {
+  const dir = join(root, 'src/i18n/locales')
+  return readdirSync(dir).filter((f) => f.endsWith('.ts')).map((f) => readFileSync(join(dir, f), 'utf8')).join('\n')
 }
 
 function assert(condition, message) {
@@ -17,8 +22,7 @@ const commandPalette = read('src/components/CommandPalette.tsx')
 const store = read('src/store.ts')
 const hardcodedBuiltins = read('src/actions/builtins.ts')
 const pluginTypes = read('src/workspace/pluginTypes.ts')
-const i18n = read('src/i18n.ts')
-const manifest = JSON.parse(read('src/builtin-scripts/manifest.json'))
+const i18n = readI18n()
 
 assert(/optionalParams\?:\s*boolean/.test(store), 'ActionDef should expose optionalParams')
 assert(/optionalParams\?:\s*boolean/.test(pluginTypes), 'CommandContribution should expose optionalParams')
@@ -33,7 +37,14 @@ assert(/return\s+shortcutMeta\.modifier === 'meta' \? metaKey : ctrlKey/.test(co
 assert(/supportsDefaultParamRun/.test(commandPalette), 'CommandPalette should gate default runs behind explicit default support')
 assert(/hasExplicitDefaultParams/.test(commandPalette), 'CommandPalette should require explicit defaults for optional params')
 assert(/customize-shortcut-chip/.test(commandPalette), 'CommandPalette should render optional params as a compact shortcut chip')
-assert(manifest.version >= 8, 'builtin script manifest should bump so Tauri refreshes local builtin scripts')
+
+function hardcodedActionEntry(name) {
+  const start = hardcodedBuiltins.search(new RegExp(`name:\\s*'${name}'`))
+  if (start < 0) return null
+  const segment = hardcodedBuiltins.slice(start)
+  const nextEntryIndex = segment.slice(1).search(/\n\s*\{\s*\n\s*name:\s*'/)
+  return nextEntryIndex >= 0 ? segment.slice(0, nextEntryIndex + 1) : segment
+}
 
 const selectedScripts = [
   'dedup',
@@ -47,16 +58,10 @@ const selectedScripts = [
 ]
 
 for (const name of selectedScripts) {
-  const source = read(`src/builtin-scripts/${name}.ts`)
-  assert(/optionalParams:\s*true/.test(source), `${name} should opt into default-run optional params`)
-  assert(/default:/.test(source), `${name} should provide explicit parameter defaults`)
-
-  const hardcodedEntry = new RegExp(`name:\\s*'${name}'[\\s\\S]*?params:\\s*\\[`)
-  assert(hardcodedEntry.test(hardcodedBuiltins), `${name} should exist in hardcoded builtin actions`)
-  const hardcodedSegment = hardcodedBuiltins.slice(hardcodedBuiltins.search(new RegExp(`name:\\s*'${name}'`)))
-  const nextEntryIndex = hardcodedSegment.slice(1).search(/\n\s*\{\s*\n\s*name:\s*'/)
-  const entryText = nextEntryIndex >= 0 ? hardcodedSegment.slice(0, nextEntryIndex + 1) : hardcodedSegment
+  const entryText = hardcodedActionEntry(name)
+  assert(entryText, `${name} should exist in hardcoded builtin actions`)
   assert(/optionalParams:\s*true/.test(entryText), `${name} hardcoded action should opt into optional params`)
+  assert(/default:/.test(entryText), `${name} hardcoded action should provide explicit parameter defaults`)
 }
 
 const notSelectedScripts = [
@@ -78,14 +83,8 @@ const notSelectedScripts = [
 ]
 
 for (const name of notSelectedScripts) {
-  const source = read(`src/builtin-scripts/${name}.ts`)
-  assert(!/optionalParams:\s*true/.test(source), `${name} should not opt into optional params in this pass`)
-
-  const start = hardcodedBuiltins.search(new RegExp(`name:\\s*'${name}'`))
-  if (start >= 0) {
-    const hardcodedSegment = hardcodedBuiltins.slice(start)
-    const nextEntryIndex = hardcodedSegment.slice(1).search(/\n\s*\{\s*\n\s*name:\s*'/)
-    const entryText = nextEntryIndex >= 0 ? hardcodedSegment.slice(0, nextEntryIndex + 1) : hardcodedSegment
+  const entryText = hardcodedActionEntry(name)
+  if (entryText) {
     assert(!/optionalParams:\s*true/.test(entryText), `${name} hardcoded action should not opt into optional params in this pass`)
   }
 }

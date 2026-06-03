@@ -9,11 +9,16 @@ function assertHas(source, pattern, message) {
   assert.match(source, pattern, message)
 }
 
+function readI18n() {
+  const dir = 'src/i18n/locales'
+  return fs.readdirSync(dir).filter((f) => f.endsWith('.ts')).map((f) => fs.readFileSync(`${dir}/${f}`, 'utf8')).join('\n')
+}
+
 const files = {
   packageJson: read('package.json'),
   store: read('src/store.ts'),
   settingsView: read('src/views/SettingsView.tsx'),
-  i18n: read('src/i18n.ts'),
+  i18n: readI18n(),
 }
 
 assertHas(files.packageJson, /test:pinned-persistence-settings/, 'package.json should expose pinned persistence verifier')

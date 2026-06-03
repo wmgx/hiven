@@ -1,10 +1,15 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 const root = process.cwd()
 
 function read(path) {
   return readFileSync(join(root, path), 'utf8')
+}
+
+function readI18n() {
+  const dir = join(root, 'src/i18n/locales')
+  return readdirSync(dir).filter((f) => f.endsWith('.ts')).map((f) => readFileSync(join(dir, f), 'utf8')).join('\n')
 }
 
 function assert(condition, message) {
@@ -17,7 +22,7 @@ const editorView = read('src/views/EditorView.tsx')
 const renderStatusBar = read('src/components/workspace/RenderStatusBar.tsx')
 const commandPalette = read('src/components/CommandPalette.tsx')
 const store = read('src/store.ts')
-const i18n = read('src/i18n.ts')
+const i18n = readI18n()
 
 assert(
   !/lastResult|lastActionName|editor\.output|Bottom bar/.test(editorView),

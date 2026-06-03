@@ -13,13 +13,18 @@ function assertNotHas(source, pattern, message) {
   assert.doesNotMatch(source, pattern, message)
 }
 
+function readI18n() {
+  const dir = 'src/i18n/locales'
+  return fs.readdirSync(dir).filter((f) => f.endsWith('.ts')).map((f) => fs.readFileSync(`${dir}/${f}`, 'utf8')).join('\n')
+}
+
 const files = {
   packageJson: read('package.json'),
   app: read('src/App.tsx'),
   store: read('src/store.ts'),
   commandPalette: read('src/components/CommandPalette.tsx'),
   pinnedRunner: read('src/views/PinnedRunnerView.tsx'),
-  i18n: read('src/i18n.ts'),
+  i18n: readI18n(),
 }
 
 assertHas(files.packageJson, /test:pinned-action-completion-gaps/, 'package.json should expose this completion-gap verifier')

@@ -236,21 +236,27 @@ check('Builtin scripts and demo are released as ordinary builtin plugin director
 })
 
 check('Text Diff builtin directory includes the adaptive diff UI source files', () => {
+  // First-party packages are auto-discovered (no hardcoded file lists), and the
+  // package directory must be self-contained with the renderer + auto diff mode.
   assert.match(
     files.configInit,
-    /textDiffRendererSource[\s\S]*\.\/plugins\/textDiff\/TextDiffRenderer\.tsx\?raw/,
-    'configInit should bundle TextDiffRenderer.tsx as raw source',
+    /import\.meta\.glob\(['"]\.\/plugins\/\*\/manifest\.json['"]/,
+    'configInit should auto-discover first-party plugin manifests via import.meta.glob',
   )
   assert.match(
     files.configInit,
-    /BUILTIN_PLUGIN_SOURCE_FILES[\s\S]*['"]text-diff['"][\s\S]*TextDiffRenderer\.tsx[\s\S]*autoDiffMode\.ts|BUILTIN_PLUGIN_SOURCE_FILES[\s\S]*['"]text-diff['"][\s\S]*autoDiffMode\.ts[\s\S]*TextDiffRenderer\.tsx/,
-    'text-diff builtin package should release the renderer and auto diff mode files, not manifest.json only',
+    /import\.meta\.glob\(['"]\.\/plugins\/\*\/\*\*\/\*\.\{[^}]+\}['"]/,
+    'configInit should auto-discover all package source files via import.meta.glob, not a hardcoded list',
   )
-  assert.match(
+  assert.doesNotMatch(
     files.configInit,
-    /TextDiffRenderer\.tsx[\s\S]*JSON semantic status|JSON semantic status[\s\S]*TextDiffRenderer\.tsx/,
-    'text-diff package README/source metadata should make the adaptive JSON/text UI controls visible in the directory editor',
+    /BUILTIN_PLUGIN_SOURCE_FILES/,
+    'configInit should not keep a hardcoded BUILTIN_PLUGIN_SOURCE_FILES map',
   )
+  const renderer = read('src/plugins/textDiff/TextDiffRenderer.tsx')
+  assert.match(renderer, /JSON semantic status|json-semantic|semanticAvailable/, 'text-diff renderer should own the adaptive JSON/text UI controls')
+  assert.ok(readIfExists('src/plugins/textDiff/autoDiffMode.ts'), 'text-diff package should ship autoDiffMode.ts')
+  assert.ok(readIfExists('src/plugins/textDiff/manifest.json'), 'text-diff package should ship manifest.json')
   assert.doesNotMatch(
     files.configInit,
     /pluginId:\s*['"]json-diff['"]|['"]json-diff['"]:\s*\{/,

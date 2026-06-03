@@ -11,9 +11,6 @@
 
 import { parseScriptToAction } from './store'
 import { createScriptPluginEntrySource } from './workspace/legacyScriptPlugin'
-import textDiffIndexSource from './plugins/textDiff/index.ts?raw'
-import textDiffRendererSource from './plugins/textDiff/TextDiffRenderer.tsx?raw'
-import textDiffAutoModeSource from './plugins/textDiff/autoDiffMode.ts?raw'
 
 const REMOTE_BUILTIN_PLUGIN_INDEX_URLS = [
   'https://proxy.flux.wmgx.top/raw/wmgx/flux_text/main/src/builtin-plugins/index.json',
@@ -21,31 +18,70 @@ const REMOTE_BUILTIN_PLUGIN_INDEX_URLS = [
   'https://raw.githubusercontent.com/wmgx/flux_text/main/src/builtin-plugins/index.json',
 ]
 
-const BUILTIN_PLUGIN_PACKAGES = [
-  {
-    pluginId: 'text-diff',
-    displayName: 'Text Diff',
-    version: '1.0.0',
-    capabilities: ['command', 'renderer'],
-  },
-]
+// ─── First-party plugin package discovery ─────────────────────────────────────
+// First-party plugin packages live under `src/plugins/<id>/`. They are
+// discovered automatically: the manifest provides metadata and every other file
+// in the package is released verbatim into `plugins/builtin/<id>/`. Adding a new
+// first-party plugin requires no framework code change — just a new directory.
 
-const BUILTIN_PLUGIN_SOURCE_FILES: Record<string, Record<string, string>> = {
-  'text-diff': {
-    'index.ts': textDiffIndexSource,
-    'TextDiffRenderer.tsx': textDiffRendererSource,
-    'autoDiffMode.ts': textDiffAutoModeSource,
-    'README.md': `# Text Diff
-
-This is the first-party adaptive diff plugin package.
-
-- \`index.ts\` registers the renderer contribution.
-- \`TextDiffRenderer.tsx\` owns the diff UI controls: semantic toggle, JSON semantic status, array compare mode, object key input, close action, and editable dual editor wiring.
-- \`autoDiffMode.ts\` decides whether the same renderer uses JSON semantic diff or text line diff.
-
-The runtime registration comes from the same source plugin package through the bundled plugin loader.`,
-  },
+type DiscoveredBuiltinPackage = {
+  pluginId: string
+  displayName: string
+  displayNameI18n?: Record<string, string>
+  version: string
+  capabilities: string[]
+  files: Record<string, string>
 }
+
+const PLUGIN_MANIFEST_MODULES = import.meta.glob('./plugins/*/manifest.json', {
+  eager: true,
+  query: '?raw',
+  import: 'default',
+}) as Record<string, string>
+
+const PLUGIN_FILE_MODULES = import.meta.glob('./plugins/*/**/*.{ts,tsx,js,jsx,mjs,json,md}', {
+  eager: true,
+  query: '?raw',
+  import: 'default',
+}) as Record<string, string>
+
+function pluginDirFromModulePath(path: string): string | null {
+  const match = path.match(/\.\/plugins\/([^/]+)\//)
+  return match ? match[1] : null
+}
+
+function discoverBuiltinPluginPackages(): DiscoveredBuiltinPackage[] {
+  const packages: DiscoveredBuiltinPackage[] = []
+  for (const [manifestPath, rawManifest] of Object.entries(PLUGIN_MANIFEST_MODULES)) {
+    const dir = pluginDirFromModulePath(manifestPath)
+    if (!dir) continue
+    const manifest = JSON.parse(rawManifest) as {
+      pluginId: string
+      displayName?: string
+      displayNameI18n?: Record<string, string>
+      version?: string
+      capabilities?: string[]
+    }
+    const prefix = `./plugins/${dir}/`
+    const files: Record<string, string> = {}
+    for (const [filePath, content] of Object.entries(PLUGIN_FILE_MODULES)) {
+      if (!filePath.startsWith(prefix)) continue
+      files[filePath.slice(prefix.length)] = content
+    }
+    files['manifest.json'] = rawManifest
+    packages.push({
+      pluginId: manifest.pluginId,
+      displayName: manifest.displayName || manifest.pluginId,
+      displayNameI18n: manifest.displayNameI18n,
+      version: manifest.version || '1.0.0',
+      capabilities: manifest.capabilities || ['command'],
+      files,
+    })
+  }
+  return packages
+}
+
+const BUILTIN_PLUGIN_PACKAGES = discoverBuiltinPluginPackages()
 
 const DEMO_PLUGIN_SOURCE = `import { defineAction } from 'fluxtext'
 
@@ -160,17 +196,10 @@ async function releaseBuiltinScriptPluginPackages(configDir: string, pluginBuilt
 }
 
 async function releaseBuiltinPluginManifests(configDir: string, pluginBuiltinDir: string) {
-  for (const manifest of BUILTIN_PLUGIN_PACKAGES) {
-    const pluginDir = `${pluginBuiltinDir}/${manifest.pluginId}`
-    await ensureTextFile(
-      `${pluginDir}/manifest.json`,
-      JSON.stringify(manifest, null, 2),
-    )
-    const sourceFiles = BUILTIN_PLUGIN_SOURCE_FILES[manifest.pluginId]
-    if (sourceFiles) {
-      for (const [fileName, content] of Object.entries(sourceFiles)) {
-        await ensureTextFile(`${pluginDir}/${fileName}`, content)
-      }
+  for (const pkg of BUILTIN_PLUGIN_PACKAGES) {
+    const pluginDir = `${pluginBuiltinDir}/${pkg.pluginId}`
+    for (const [fileName, content] of Object.entries(pkg.files)) {
+      await ensureTextFile(`${pluginDir}/${fileName}`, content)
     }
   }
   const demoPluginId = 'demo-text-plugin'
