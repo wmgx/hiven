@@ -11,6 +11,7 @@
     "test:directory-plugin-convergence": "node scripts/test-directory-plugin-convergence.mjs",
     "test:pinned-action-live-runner": "node scripts/test-pinned-action-live-runner.mjs",
     "test:pinned-action-completion-gaps": "node scripts/test-pinned-action-completion-gaps.mjs",
+    "test:plugin-package-lifecycle": "node scripts/test-plugin-package-lifecycle.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },

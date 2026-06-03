@@ -90,6 +90,7 @@ export function ScriptsView() {
       byId.set(pkg.pluginId, {
         pluginId: pkg.pluginId,
         displayName: pkg.displayName,
+        displayNameI18n: pkg.displayNameI18n,
         version: pkg.version,
         entry: pkg.entry,
         capabilities: pkg.capabilities,
@@ -301,7 +302,11 @@ export function ScriptsView() {
             <IconButton title={t(locale, 'scripts.actionReload')} onClick={() => runTask(key, () => reloadPlugin(plugin.pluginId))}>
               <RefreshCw size={13} />
             </IconButton>
-            <IconButton title={t(locale, 'scripts.actionUninstall')} onClick={() => uninstallPlugin(plugin.pluginId)}>
+            <IconButton title={t(locale, 'scripts.actionUninstall')} onClick={() => runTask(key, async () => {
+              await uninstallPlugin(plugin.pluginId)
+              setUpdateStatus('checking')
+              setUpdateStatus('done')
+            })}>
               <Trash2 size={13} />
             </IconButton>
           </>

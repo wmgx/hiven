@@ -99,6 +99,8 @@ struct PluginDirSummary {
     plugin_id: String,
     #[serde(rename = "displayName")]
     display_name: String,
+    #[serde(rename = "displayNameI18n", skip_serializing_if = "Option::is_none")]
+    display_name_i18n: Option<serde_json::Value>,
     version: String,
     entry: String,
     capabilities: Vec<String>,
@@ -290,6 +292,7 @@ fn read_plugin_manifest_summary(folder: &Path) -> Result<PluginDirSummary, Strin
         .and_then(|v| v.as_str())
         .unwrap_or(&plugin_id)
         .to_string();
+    let display_name_i18n = value.get("displayNameI18n").cloned();
     let version = value
         .get("version")
         .and_then(|v| v.as_str())
@@ -313,6 +316,7 @@ fn read_plugin_manifest_summary(folder: &Path) -> Result<PluginDirSummary, Strin
     Ok(PluginDirSummary {
         plugin_id,
         display_name,
+        display_name_i18n,
         version,
         entry,
         capabilities,

@@ -250,6 +250,12 @@ export async function releaseUserScriptPluginPackages(configDir: string): Promis
     usedIds.add(pluginId)
 
     const pluginDir = `${installedDir}/${pluginId}`
+    const existingManifest = await invoke<string>('read_plugin_file', { path: `${pluginDir}/manifest.json` })
+      .then(() => true)
+      .catch(() => false)
+    if (existingManifest) {
+      continue
+    }
     const manifest = {
       pluginId,
       displayName: action.title || action.name,

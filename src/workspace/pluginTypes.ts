@@ -153,6 +153,7 @@ export type PanelContributionV2 = {
 export type PluginDefinition = {
   id: string
   title: string
+  titleI18n?: Partial<Record<Locale, string>>
   version: string
   commands?: CommandContribution[]
   renderers?: RendererContribution[]

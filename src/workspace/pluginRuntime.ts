@@ -457,15 +457,23 @@ export async function reloadPlugin(pluginId: string): Promise<void> {
 }
 
 /**
- * Uninstall a plugin: disable it, then remove from store.
+ * Uninstall a plugin: disable it, remove its installed package directory, then remove from store.
  */
-export function uninstallPlugin(pluginId: string): void {
+export async function uninstallPlugin(pluginId: string): Promise<void> {
   const { plugins, uninstallPlugin: removeFromStore } = usePluginStore.getState()
   const record = plugins[pluginId]
   if (!record) return
 
   if (record.status === 'enabled') {
     disablePlugin(pluginId)
+  }
+
+  if (record.source !== 'builtin') {
+    const installedRoot = await getInstalledPluginRoot()
+    await invokeCommand<void>('remove_plugin_dir', {
+      rootPath: installedRoot,
+      pluginId,
+    })
   }
 
   removeFromStore(pluginId)
