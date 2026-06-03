@@ -20,7 +20,7 @@ import { showToast } from './toast'
 import { createPluginScaffoldFiles } from './pluginScaffold.ts'
 import { parsePluginDefinitionSource } from './pluginDebugRunner.ts'
 import { createPluginHostSdk, type PluginHostSdk } from '../pluginHostSdk.ts'
-import { registerPluginMessages, type PluginMessages } from '../i18n/pluginI18nRegistry.ts'
+import { registerPluginMessages, localizeContributions, type PluginMessages } from '../i18n/pluginI18nRegistry.ts'
 import type {
   PluginDefinition,
   PluginManifest,
@@ -385,11 +385,12 @@ export async function enablePlugin(pluginId: string): Promise<void> {
     validateContributionIds(definition, 'production')
 
     await loadAndRegisterPluginMessages(pluginId, record.folderPath)
+    const localized = localizeContributions(pluginId, definition)
     pluginRegistry.registerProductionPlugin(
       pluginId,
-      definition.commands ?? [],
-      definition.renderers ?? [],
-      definition.panels ?? []
+      localized.commands,
+      localized.renderers,
+      localized.panels
     )
 
     updatePluginStatus(pluginId, 'enabled')
@@ -455,11 +456,12 @@ export async function reloadPlugin(pluginId: string): Promise<void> {
     validateContributionIds(definition, 'production', pluginId)
 
     await loadAndRegisterPluginMessages(pluginId, record.folderPath)
+    const localized = localizeContributions(pluginId, definition)
     pluginRegistry.registerProductionPlugin(
       pluginId,
-      definition.commands ?? [],
-      definition.renderers ?? [],
-      definition.panels ?? []
+      localized.commands,
+      localized.renderers,
+      localized.panels
     )
 
     // Update stored capabilities
@@ -545,11 +547,12 @@ export async function sideloadDevPlugin(folderPath: string): Promise<DevPlugin> 
     validatePluginIdMatch(definition, packageMeta)
 
     await loadAndRegisterPluginMessages(pluginId, folderPath)
+    const localized = localizeContributions(pluginId, definition)
     pluginRegistry.registerDevPlugin(
       pluginId,
-      definition.commands ?? [],
-      definition.renderers ?? [],
-      definition.panels ?? []
+      localized.commands,
+      localized.renderers,
+      localized.panels
     )
 
     addDevPlugin(devRecord)
@@ -589,11 +592,12 @@ export async function reloadDevPlugin(pluginId: string): Promise<void> {
     validatePluginIdMatch(definition, packageMeta)
 
     await loadAndRegisterPluginMessages(pluginId, record.folderPath)
+    const localized = localizeContributions(pluginId, definition)
     pluginRegistry.registerDevPlugin(
       pluginId,
-      definition.commands ?? [],
-      definition.renderers ?? [],
-      definition.panels ?? []
+      localized.commands,
+      localized.renderers,
+      localized.panels
     )
 
     updateDevPluginStatus(pluginId, 'active')

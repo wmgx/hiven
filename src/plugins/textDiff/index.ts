@@ -13,15 +13,13 @@ export const textDiffPlugin = definePlugin({
   commands: [
     {
       id: 'text-diff.compare',
-      title: 'Text Diff',
-      titleI18n: { zh: '文本对比' },
-      description: 'Compare two text panes',
-      descriptionI18n: { zh: '对比两个文本面板' },
+      title: 'command.compare.title',
+      description: 'command.compare.description',
       tags: ['diff', 'text', 'compare'],
       icon: 'git-compare',
       inputs: [
-        { key: 'original', label: 'Pane A', labelI18n: { zh: '面板 A' }, kind: 'pane', required: true },
-        { key: 'modified', label: 'Pane B', labelI18n: { zh: '面板 B' }, kind: 'pane', required: true },
+        { key: 'original', label: 'input.original.label', kind: 'pane', required: true },
+        { key: 'modified', label: 'input.modified.label', kind: 'pane', required: true },
       ],
       inputResolution: { strategy: 'auto-fill', fallback: 'prompt' },
       run(ctx) {
@@ -47,8 +45,7 @@ export const textDiffPlugin = definePlugin({
   renderers: [
     {
       id: 'text-diff.renderer',
-      title: 'Text Diff Renderer',
-      titleI18n: { zh: '文本对比渲染器' },
+      title: 'renderer.title',
       surface: 'workspace',
       inputKinds: ['pane', 'pane'],
       component: TextDiffRenderer,

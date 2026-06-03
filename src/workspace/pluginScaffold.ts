@@ -36,8 +36,20 @@ This is a FluxText directory plugin.
 - Read-only store hooks are injected as \`hooks.useSettings\`, \`hooks.useLocale\`, \`hooks.usePaneText\`, and \`hooks.useT(pluginId)\`.
 - i18n strings live in \`locales/en.json\` and \`locales/zh.json\`; code writes only keys via \`hooks.useT('${pluginId}')\` or \`i18n.makeT('${pluginId}', locale)\`.
 `,
-    localeEn: JSON.stringify({ 'run.done': 'Done' }, null, 2) + '\n',
-    localeZh: JSON.stringify({ 'run.done': '完成' }, null, 2) + '\n',
+    localeEn: JSON.stringify({
+      'command.run.title': title,
+      'command.run.description': 'Transform input text and write the result only when the command is run.',
+      'input.text.label': 'Input',
+      'param.prefix.label': 'Prefix',
+      'panel.main.title': `${title} Panel`,
+    }, null, 2) + '\n',
+    localeZh: JSON.stringify({
+      'command.run.title': title,
+      'command.run.description': '运行命令时处理输入文本。',
+      'input.text.label': '输入',
+      'param.prefix.label': '前缀',
+      'panel.main.title': `${title} 面板`,
+    }, null, 2) + '\n',
   }
 }
 
@@ -50,18 +62,15 @@ export default definePlugin({
   version: '1.0.0',
   commands: [{
     id: ${JSON.stringify(`${pluginId}.run`)},
-    title: ${JSON.stringify(title)},
-    titleI18n: { zh: ${JSON.stringify(title)} },
-    description: 'Transform input text and write the result only when the command is run.',
-    descriptionI18n: { zh: '运行命令时处理输入文本。' },
+    title: 'command.run.title',
+    description: 'command.run.description',
     tags: ['text'],
     optionalParams: true,
-    inputs: [{ key: 'input', label: 'Input', labelI18n: { zh: '输入' }, kind: 'text', required: true }],
+    inputs: [{ key: 'input', label: 'input.text.label', kind: 'text', required: true }],
     inputResolution: { strategy: 'use-active', fallback: 'fail' },
     params: [{
       key: 'prefix',
-      label: 'Prefix',
-      labelI18n: { zh: '前缀' },
+      label: 'param.prefix.label',
       type: 'text',
       default: '',
     }],
@@ -74,8 +83,7 @@ export default definePlugin({
   }],
   panels: [{
     id: ${JSON.stringify(`${pluginId}.panel`)},
-    title: ${JSON.stringify(`${title} Panel`)},
-    titleI18n: { zh: ${JSON.stringify(`${title} 面板`)} },
+    title: 'panel.main.title',
     component() {
       return ui.EmptyState({ children: 'Build plugin UI with host-injected ui primitives.' })
     },

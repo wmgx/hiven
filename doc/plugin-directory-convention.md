@@ -81,12 +81,16 @@ A plugin package localizes its strings through a per-package `locales/` director
     zh.json
 ```
 
-Each locale file is a flat `{ key: message }` map. Messages may contain `{name}` placeholders interpolated from `vars`. On load, the host registers these dictionaries under the `pluginId` namespace. Plugin code only writes short keys and resolves them with a namespaced translate function:
+Each locale file is a flat `{ key: message }` map. Messages may contain `{name}` placeholders interpolated from `vars`. On load, the host registers these dictionaries under the `pluginId` namespace.
+
+Contribution declaration fields (`title`, `description`, input/param `label`, param `hint`, and option labels) are authored as plain locale keys. At load time the host expands each key into the existing `{ text, titleI18n }` protocol using the plugin's `locales/`, so the command palette and other views localize them with zero awareness of plugin namespaces. If a field value is not a key present in `locales/`, it is left as a literal string (legacy inline strings keep working).
+
+Runtime UI strings inside a renderer/panel are resolved by the plugin itself:
 
 - In a React renderer/panel: `const t = hooks.useT('<plugin-id>')` then `t('some.key', { count })`.
 - Outside React: `const t = i18n.makeT('<plugin-id>', locale)`.
 
-Resolution uses a three-level fallback: plugin namespace (current locale → `en`) → host global dictionary → the raw key. Existing inline `titleI18n` / `labelI18n` on contributions still work for static command-palette display, but runtime UI strings should live in `locales/` and be looked up by key. The first-party `text-diff` package is the reference example.
+Resolution uses a three-level fallback: plugin namespace (current locale → `en`) → host global dictionary → the raw key. The first-party `text-diff` package is the reference example: its `index.ts` declares only keys (`command.compare.title`, `input.original.label`, `renderer.title`, …) and `TextDiffRenderer` uses `hooks.useT('text-diff')`, with all copy living in `locales/{en,zh}.json`.
 
 ## Import Contract
 

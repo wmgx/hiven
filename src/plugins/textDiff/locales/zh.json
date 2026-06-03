@@ -1,4 +1,9 @@
 {
+  "command.compare.title": "文本对比",
+  "command.compare.description": "对比两个文本面板",
+  "input.original.label": "面板 A",
+  "input.modified.label": "面板 B",
+  "renderer.title": "文本对比渲染器",
   "textDiff.title": "文本对比",
   "diff.textLineDiff": "文本行对比",
   "diff.jsonSemanticDiff": "JSON 语义对比",

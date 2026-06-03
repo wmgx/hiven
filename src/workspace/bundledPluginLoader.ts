@@ -1,5 +1,5 @@
 import { pluginRegistry } from './pluginRegistry'
-import { registerPluginMessages, type PluginMessages } from '../i18n/pluginI18nRegistry'
+import { registerPluginMessages, localizeContributions, type PluginMessages } from '../i18n/pluginI18nRegistry'
 import type { PluginDefinition, PluginManifest } from './pluginTypes'
 
 type BundledPluginModule = {
@@ -79,11 +79,16 @@ export function registerBundledPluginPackages() {
 
   for (const { dir, manifest, definition } of readBundledPluginPackages()) {
     registerPluginMessages(manifest.pluginId, readBundledPluginMessages(dir))
+    const localized = localizeContributions(manifest.pluginId, {
+      commands: definition.commands,
+      renderers: definition.renderers,
+      panels: definition.panels,
+    })
     pluginRegistry.registerProductionPlugin(
       manifest.pluginId,
-      definition.commands ?? [],
-      definition.renderers ?? [],
-      definition.panels ?? [],
+      localized.commands,
+      localized.renderers,
+      localized.panels,
     )
   }
 }

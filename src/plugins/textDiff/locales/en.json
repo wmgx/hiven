@@ -1,4 +1,9 @@
 {
+  "command.compare.title": "Text Diff",
+  "command.compare.description": "Compare two text panes",
+  "input.original.label": "Pane A",
+  "input.modified.label": "Pane B",
+  "renderer.title": "Text Diff Renderer",
   "textDiff.title": "Text Diff",
   "diff.textLineDiff": "Text line diff",
   "diff.jsonSemanticDiff": "JSON semantic diff",
