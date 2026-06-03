@@ -15,7 +15,7 @@ export function SettingsView() {
   const [appVersion, setAppVersion] = useState('')
 
   useEffect(() => {
-    getVersion().then((v) => setAppVersion(v))
+    getVersion().then((v) => setAppVersion(v)).catch(() => setAppVersion('dev'))
   }, [])
 
   return (
@@ -65,6 +65,12 @@ export function SettingsView() {
         <SettingCard icon={<SlidersHorizontal size={16} />} title={t(locale, 'settings.behavior')}>
           <SettingRow label={t(locale, 'settings.persistParams')} info={t(locale, 'settings.persistParamsInfo')}>
             <Toggle value={settings.persistParams} onChange={(value) => updateSetting('persistParams', value)} />
+          </SettingRow>
+          <SettingRow label={t(locale, 'settings.persistPinnedInput')} info={t(locale, 'settings.persistPinnedInputInfo')}>
+            <Toggle value={settings.persistPinnedInput} onChange={(value) => updateSetting('persistPinnedInput', value)} />
+          </SettingRow>
+          <SettingRow label={t(locale, 'settings.persistPinnedTombstone')} info={t(locale, 'settings.persistPinnedTombstoneInfo')}>
+            <Toggle value={settings.persistPinnedTombstone} onChange={(value) => updateSetting('persistPinnedTombstone', value)} />
           </SettingRow>
         </SettingCard>
 

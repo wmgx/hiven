@@ -251,6 +251,10 @@ interface AppState {
     wordWrap: boolean
     lineNumbers: boolean
     persistParams: boolean
+    persistPinnedInput: boolean
+    persistPinnedTombstone: boolean
+    outputPreviewLimit: number
+    tombstoneTtlDays: number
     locale: Locale
     disabledBuiltins: string[]
     disabledCustoms: string[]
@@ -630,6 +634,10 @@ hello@fluxtext.app (duplicate)`,
     wordWrap: false,
     lineNumbers: true,
     persistParams: true,
+    persistPinnedInput: true,
+    persistPinnedTombstone: true,
+    outputPreviewLimit: 2048,
+    tombstoneTtlDays: 30,
     locale: 'en' as Locale,
     disabledBuiltins: [],
     disabledCustoms: [],
@@ -667,11 +675,27 @@ hello@fluxtext.app (duplicate)`,
     actionUsageCounts: state.actionUsageCounts,
     pinnedActions: state.pinnedActions.map(({ outputText: _outputText, lastError: _lastError, lastDurationMs: _lastDurationMs, controlPanelInstanceId: _controlPanelInstanceId, ...pinned }) => ({
       ...pinned,
+      inputText: state.settings.persistPinnedInput ? pinned.inputText : '',
       outputText: '',
       outputKind: 'text' as PinnedOutputKind,
     })),
     activePinnedActionId: state.activePinnedActionId,
     pinnedRuntimeConfig: state.pinnedRuntimeConfig,
+    pinnedTombstones: state.settings.persistPinnedTombstone
+      ? Object.fromEntries(Object.entries(state.pinnedTombstones).map(([id, tombstone]) => [
+        id,
+        {
+          ...tombstone,
+          inputText: state.settings.persistPinnedInput ? tombstone.inputText : '',
+          outputSummary: tombstone.outputSummary
+            ? {
+              ...tombstone.outputSummary,
+              preview: tombstone.outputSummary.preview?.slice(0, state.settings.outputPreviewLimit),
+            }
+            : undefined,
+        },
+      ]))
+      : {},
   }),
 }))
 
