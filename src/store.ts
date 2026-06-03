@@ -13,6 +13,7 @@ import {
   tombstonePinnedRuntime,
 } from './workspace/pinnedActionRuntime'
 import type { PinnedRuntimeConfig as WorkspacePinnedRuntimeConfig } from './workspace/pinnedActionRuntime'
+import type { LiveActionCapability } from './workspace/pluginTypes'
 
 export type ViewId = 'editor' | 'scripts' | 'plugin-editor' | 'pinned-runner' | 'debugger' | 'settings'
 
@@ -28,7 +29,7 @@ export type PinnedPluginCommandInput = {
   icon?: string
   isDev?: boolean
   params?: Record<string, unknown>
-  live?: import('./workspace/pluginTypes').LiveActionCapability
+  live?: LiveActionCapability
 }
 
 export interface PinnedAction {
@@ -104,6 +105,7 @@ export interface ActionDef {
   tags?: string[]
   params?: ActionParam[]
   optionalParams?: boolean
+  live?: LiveActionCapability
   run: (ctx: ActionContext) => { text: string } | Promise<{ text: string }> | void
   builtin?: boolean
   source?: string
@@ -304,9 +306,16 @@ function _makePinnedId(actionId: string): string {
   return `pinned-${actionId.replace(/[^a-z0-9_-]+/gi, '-').toLowerCase()}-${Date.now().toString(36)}`
 }
 
+function shouldAutoRunLiveAction(live?: LiveActionCapability): boolean {
+  return live?.live?.enabled === true &&
+    live.live.sideEffects !== 'writes' &&
+    live.live.trigger !== 'manual'
+}
+
 function _actionToPinnedAction(action: ActionDef | string, actions: ActionDef[]): PinnedAction {
   const actionId = typeof action === 'string' ? action : action.name
   const def = typeof action === 'string' ? actions.find(a => a.name === action) : action
+  const live = def?.live
   return {
     id: _makePinnedId(actionId),
     kind: 'legacy',
@@ -318,10 +327,30 @@ function _actionToPinnedAction(action: ActionDef | string, actions: ActionDef[])
     outputText: '',
     outputKind: 'text',
     params: {},
-    autoRun: true,
-    debounceMs: 250,
-    controlsOpen: false,
+    autoRun: shouldAutoRunLiveAction(live),
+    debounceMs: live?.live?.debounceMs ?? 250,
+    controlsOpen: live?.controls?.defaultOpen ?? false,
   }
+}
+
+function serializePinnedTombstones(state: AppState): Record<string, PinnedTombstone> {
+  const ttlMs = Math.max(0, state.settings.tombstoneTtlDays) * 24 * 60 * 60 * 1000
+  const now = Date.now()
+  return Object.fromEntries(Object.entries(state.pinnedTombstones)
+    .filter(([, tombstone]) => ttlMs === 0 || now - tombstone.disposedAt <= ttlMs)
+    .map(([id, tombstone]) => [
+      id,
+      {
+        ...tombstone,
+        inputText: state.settings.persistPinnedInput ? tombstone.inputText : '',
+        outputSummary: tombstone.outputSummary
+          ? {
+            ...tombstone.outputSummary,
+            preview: tombstone.outputSummary.preview?.slice(0, state.settings.outputPreviewLimit),
+          }
+          : undefined,
+      },
+    ]))
 }
 
 export const useAppStore = create<AppState>()(persist((set) => ({
@@ -383,9 +412,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
       outputText: '',
       outputKind: 'text',
       params: command.params ?? {},
-      autoRun: command.live?.live?.enabled === true &&
-        command.live.live.sideEffects !== 'writes' &&
-        command.live.live.trigger !== 'manual',
+      autoRun: shouldAutoRunLiveAction(command.live),
       debounceMs: command.live?.live?.debounceMs ?? 250,
       controlsOpen: command.live?.controls?.defaultOpen ?? false,
     }
@@ -712,19 +739,7 @@ hello@fluxtext.app (duplicate)`,
     activePinnedActionId: state.activePinnedActionId,
     pinnedRuntimeConfig: state.pinnedRuntimeConfig,
     pinnedTombstones: state.settings.persistPinnedTombstone
-      ? Object.fromEntries(Object.entries(state.pinnedTombstones).map(([id, tombstone]) => [
-        id,
-        {
-          ...tombstone,
-          inputText: state.settings.persistPinnedInput ? tombstone.inputText : '',
-          outputSummary: tombstone.outputSummary
-            ? {
-              ...tombstone.outputSummary,
-              preview: tombstone.outputSummary.preview?.slice(0, state.settings.outputPreviewLimit),
-            }
-            : undefined,
-        },
-      ]))
+      ? serializePinnedTombstones(state)
       : {},
   }),
 }))

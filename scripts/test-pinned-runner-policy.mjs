@@ -28,6 +28,7 @@ assertHas(files.packageJson, /test:pinned-runner-policy/, 'package.json should e
 assertHas(files.pluginTypes, /export\s+type\s+LiveActionCapability/, 'pluginTypes should define LiveActionCapability')
 assertHas(files.pluginTypes, /sideEffects:\s*['"]none['"]\s*\|\s*['"]read-only['"]\s*\|\s*['"]writes['"]/, 'LiveActionCapability should classify side effects')
 assertHas(files.pluginTypes, /live\??\s*:\s*LiveActionCapability/, 'CommandContribution should expose live capability metadata')
+assertHas(files.store, /live\??\s*:\s*LiveActionCapability/, 'legacy ActionDef should expose live capability metadata')
 assertHas(files.workspaceTypes, /\|\s*\{\s*type:\s*['"]pinned-action['"];\s*pinnedId:\s*string\s*\}/, 'PanelScope should support pinned-action scope')
 assertHas(files.workspaceTypes, /type:\s*['"]panel\.openV2['"][\s\S]*scope\??\s*:\s*PanelScope/, 'panel.openV2 should carry panel scope')
 assertHas(files.workspaceTypes, /export\s+type\s+PanelInstanceV2[\s\S]*scope\??\s*:\s*PanelScope/, 'PanelInstanceV2 should preserve panel scope')
@@ -40,7 +41,10 @@ assertHas(files.pinnedRuntime, /outputSummary[\s\S]*stale|stale[\s\S]*outputSumm
 
 assertHas(files.pinnedRunner, /useEffect[\s\S]*prunePinnedRuntimes/, 'PinnedRunnerView should schedule idle runtime pruning')
 assertHas(files.store, /sideEffects\s*!==\s*['"]writes['"][\s\S]*trigger\s*!==\s*['"]manual['"]|trigger\s*!==\s*['"]manual['"][\s\S]*sideEffects\s*!==\s*['"]writes['"]/, 'writes side-effect commands should default to manual run')
+assertHas(files.store, /def\?\.live[\s\S]*autoRun:\s*shouldAutoRunLiveAction/, 'legacy actions should derive autoRun from live capability metadata')
+assertHas(files.store, /serializePinnedTombstones[\s\S]*tombstoneTtlDays[\s\S]*disposedAt/, 'persisted tombstones should be pruned by tombstoneTtlDays')
 assertHas(files.pinnedRunner, /const\s+canApplyOutput\s*=\s*!!pinned\?\.outputText\s*&&\s*pinned\.outputKind\s*!==\s*['"]error['"]/, 'PinnedRunnerView should derive apply eligibility from non-empty non-error output')
+assertHas(files.pinnedRunner, /isCurrentPinnedRun[\s\S]*pendingRunId\s*!==\s*runId[\s\S]*disposed/, 'disposed or superseded pinned runs should not write stale output')
 assertHas(files.pinnedRunner, /disabled=\{!canApplyOutput\}/, 'Apply should be disabled for empty or error output')
 assertHas(files.pinnedRunner, /applyEffects\(\[\{\s*type:\s*['"]text\.replace['"][\s\S]*target:\s*['"]active-input['"]/, 'Apply should write through the Effect Runner text.replace path')
 assertHas(files.pinnedRunner, /applyEffects\(\[\{\s*type:\s*['"]pane\.create['"][\s\S]*text:\s*pinned\.outputText/, 'Send New Pane should write through the Effect Runner pane.create path')

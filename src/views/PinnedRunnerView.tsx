@@ -67,6 +67,14 @@ export function PinnedRunnerView() {
   const [running, setRunning] = useState(false)
   const runIdRef = useRef<string | null>(null)
 
+  const isCurrentPinnedRun = (pinnedId: string, runId: string): boolean => {
+    const runtime = useAppStore.getState().pinnedRuntimes[pinnedId]
+    if (runIdRef.current !== runId) return false
+    if (!runtime || runtime.pendingRunId !== runId) return false
+    if (runtime.status === 'disposed' || runtime.status === 'disposing') return false
+    return true
+  }
+
   const pinned = pinnedActions.find((item) => item.id === activePinnedActionId)
   const action = (pinned?.kind ?? 'legacy') === 'legacy'
     ? actions.find((item) => item.name === pinned?.actionId)
@@ -114,7 +122,7 @@ export function PinnedRunnerView() {
         text = output.text
         outputKind = output.kind
       }
-      if (runIdRef.current !== runId) return
+      if (!isCurrentPinnedRun(pinned.id, runId)) return
       updatePinnedAction(pinned.id, {
         outputText: text,
         outputKind,
@@ -123,7 +131,7 @@ export function PinnedRunnerView() {
         lastError: undefined,
       })
     } catch (error) {
-      if (runIdRef.current !== runId) return
+      if (!isCurrentPinnedRun(pinned.id, runId)) return
       const message = error instanceof Error ? error.message : String(error)
       updatePinnedAction(pinned.id, {
         outputText: message,
@@ -136,7 +144,10 @@ export function PinnedRunnerView() {
       if (runIdRef.current === runId) {
         runIdRef.current = null
         setRunning(false)
-        updatePinnedRuntime(pinned.id, { pendingRunId: undefined, status: 'active' })
+        const runtime = useAppStore.getState().pinnedRuntimes[pinned.id]
+        if (runtime && runtime.status !== 'disposed' && runtime.status !== 'disposing') {
+          updatePinnedRuntime(pinned.id, { pendingRunId: undefined, status: 'active' })
+        }
       }
     }
   }
