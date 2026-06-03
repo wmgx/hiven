@@ -65,6 +65,7 @@ check('Milestone A adds a sidebar Pinned section with entries that open existing
   assertSourceHas(files.sidebar, /Pinned|pinned/i, 'Sidebar should render a Pinned section')
   assertSourceHas(files.sidebar, /pinnedActions\.map\(|\.map\([^)]*pinned/i, 'Sidebar should render one entry per pinned action')
   assertSourceHas(files.sidebar, /setActivePinnedAction|openPinnedAction|activatePinnedAction|activeView:\s*['"]pinned/, 'Sidebar pinned entry should open/focus its runner view')
+  assertSourceHas(files.sidebar, /resolveIcon\([^)]*pinned\.icon/, 'Sidebar pinned entry should resolve icon names instead of rendering raw icon strings')
 })
 
 check('Milestone B wires a PinnedRunnerView into app navigation', () => {

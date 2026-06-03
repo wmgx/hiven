@@ -2,6 +2,7 @@ import { useAppStore } from '../store'
 import type { ViewId } from '../store'
 import { LayoutPanelLeft, Pin, Puzzle, Terminal, Settings } from 'lucide-react'
 import { t } from '../i18n'
+import { resolveIcon } from '../utils/resolveIcon'
 
 const navItems: { id: ViewId; icon: React.ReactNode; labelKey: 'nav.editor' | 'nav.scripts' | 'nav.debugger' }[] = [
   { id: 'editor', icon: <LayoutPanelLeft size={18} />, labelKey: 'nav.editor' },
@@ -55,7 +56,7 @@ export function Sidebar() {
               }}
             >
               <span className="flex items-center justify-center">
-                {pinned.icon ? <span className="text-[14px]">{pinned.icon}</span> : <Pin size={16} />}
+                {pinned.icon ? resolveIcon(pinned.icon, 16, pinned.title) : <Pin size={16} />}
               </span>
             </button>
           ))}
