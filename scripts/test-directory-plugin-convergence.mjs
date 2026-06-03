@@ -27,6 +27,7 @@ const files = {
   debuggerView: read('src/views/DebuggerView.tsx'),
   legacyScriptPlugin: readIfExists('src/workspace/legacyScriptPlugin.ts'),
   pluginEditorView: readIfExists('src/views/PluginEditorView.tsx'),
+  pluginDebugRunner: readIfExists('src/workspace/pluginDebugRunner.ts'),
   bundledPluginLoader: readIfExists('src/workspace/bundledPluginLoader.ts'),
   directoryConventionDoc: readIfExists('doc/plugin-directory-convention.md'),
   directoryConvergencePlan: readIfExists('doc/plans/2026-06-03-directory-plugin-convergence.md'),
@@ -286,10 +287,12 @@ check('Plugin cards expose directory editor entry for builtin, installed, and de
 
 check('PluginEditorView includes directory tree, file switching, and runnable debug panel', () => {
   assert.ok(files.pluginEditorView, 'src/views/PluginEditorView.tsx should exist')
+  assert.ok(files.pluginDebugRunner, 'src/workspace/pluginDebugRunner.ts should exist')
   assert.match(files.pluginEditorView + files.pluginRuntime, /list_plugin_files|PluginFileTree|activeFile|selectedFile/i, 'plugin editor should include directory tree/file switching')
   assert.match(files.pluginEditorView + files.pluginRuntime, /read_plugin_file/, 'plugin editor should read selected plugin files')
   assert.match(files.pluginEditorView + files.pluginRuntime, /save_plugin_file/, 'plugin editor should save selected plugin files')
-  assert.match(files.pluginEditorView, /parsePluginDefinitionSource/, 'PluginEditorView should run plugin command definitions for debugging')
+  assert.match(files.pluginEditorView + files.pluginDebugRunner, /parsePluginDefinitionSource/, 'PluginEditorView should run plugin command definitions for debugging')
+  assert.match(files.pluginEditorView + files.pluginDebugRunner, /runPluginDebugSource/, 'PluginEditorView should use the tested plugin debug runner')
   assert.doesNotMatch(files.pluginEditorView, /legacySource|extractRunnableSource/, 'PluginEditorView should not extract legacySource from generated entries')
   assert.match(files.pluginEditorView, /runDebug/, 'PluginEditorView should expose a debug run path')
   assert.match(files.pluginEditorView, /debugInput[\s\S]*debugOutput[\s\S]*debugLogs/, 'PluginEditorView should include input, output, and console state')

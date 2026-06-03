@@ -4,7 +4,8 @@ import { ArrowLeft, Copy, FileText, Folder, FolderTree, Play, RefreshCw, Save } 
 import { localized, parseScriptToAction, useAppStore } from '../store'
 import { t } from '../i18n'
 import { listPluginFiles, readPluginFile, savePluginFile } from '../workspace/pluginRuntime'
-import type { PluginDefinition, PluginFileTree } from '../workspace/pluginTypes'
+import { parsePluginDefinitionSource, runPluginDebugSource } from '../workspace/pluginDebugRunner'
+import type { PluginFileTree } from '../workspace/pluginTypes'
 import { loadCDN, loadDeps } from '../utils/cdnLoader'
 
 function flattenFileTree(nodes: PluginFileTree[]): PluginFileTree[] {
@@ -31,27 +32,6 @@ function preferredFile(nodes: PluginFileTree[], requested?: string): string {
   const files = flattenFileTree(nodes).filter((node) => !node.isDir)
   if (requested && files.some((node) => node.path === requested)) return requested
   return files.find((node) => /\/index\.(js|ts|jsx|tsx|mjs)$/.test(node.path))?.path || files[0]?.path || ''
-}
-
-function parsePluginDefinitionSource(source: string): PluginDefinition | null {
-  try {
-    const definePlugin = (definition: PluginDefinition) => definition
-    const effects = {
-      replaceActiveText: (text: string) => ({ type: 'text.replace' as const, target: 'active-input' as const, text }),
-      createPane: (text: string, title?: string) => ({ type: 'pane.create' as const, pane: { text, title }, focus: true }),
-      status: (message: string, level: 'info' | 'success' | 'warning' | 'error' = 'info') => ({ type: 'status.message' as const, level, message }),
-    }
-    const code = source
-      .replace(/^\s*import\s+.*?['"].*?['"]\s*;?\s*$/gm, '')
-      .replace(/const\s+\{\s*definePlugin\s*,\s*effects\s*\}\s*=\s*globalThis\.FluxTextPlugin\s*;?/, '')
-      .replace(/export\s+default\s+definePlugin\s*\(/, 'return definePlugin(')
-      .replace(/export\s+default\s+/, 'return ')
-    const value = new Function('definePlugin', 'effects', code)(definePlugin, effects)
-    if (!value || typeof value !== 'object' || typeof value.id !== 'string') return null
-    return value as PluginDefinition
-  } catch {
-    return null
-  }
 }
 
 function TreeNode({
@@ -184,26 +164,13 @@ export function PluginEditorView() {
     setDebugOutput('')
     const started = performance.now()
     try {
-      const plugin = parsePluginDefinitionSource(content)
-      const command = plugin?.commands?.[0]
-      if (command) {
-        const result = await Promise.resolve(command.run({
-          inputs: { input: { kind: 'text', text: debugInput } },
+      if (debugCommand) {
+        const result = await runPluginDebugSource(content, {
+          inputText: debugInput,
           params: debugParams,
-        }))
-        const elapsed = Math.round(performance.now() - started)
-        const textEffect = result.effects.find((effect) => effect.type === 'text.replace')
-        const createPaneEffect = result.effects.find((effect) => effect.type === 'pane.create')
-        const statusEffect = result.effects.find((effect) => effect.type === 'status.message')
-        const output = textEffect && 'text' in textEffect
-          ? String(textEffect.text)
-          : createPaneEffect && 'pane' in createPaneEffect
-            ? String(createPaneEffect.pane.text ?? '')
-            : statusEffect && 'message' in statusEffect
-              ? String(statusEffect.message)
-              : ''
-        setDebugOutput(output)
-        setDebugLogs((logs) => [...logs, `effects: ${result.effects.length}`, `done in ${elapsed}ms`])
+        })
+        setDebugOutput(result.output)
+        setDebugLogs(result.logs)
         return
       }
 
