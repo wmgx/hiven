@@ -183,6 +183,7 @@ export type PanelV2Effect =
       inputs?: unknown
       title?: string
       ownerPluginId?: string
+      scope?: PanelScope
       /** When true, prefer dev registry when resolving panel */
       _isDev?: boolean
     }
@@ -318,6 +319,7 @@ export type PanelInstanceV2 = {
   panelId: string
   placement: 'bottom' | 'right' | 'left'
   inputs: unknown
+  scope?: PanelScope
   title?: string
   ownerPluginId?: string
   isDevPanel?: boolean

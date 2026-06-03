@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Copy, Eraser, FilePlus, PanelRightOpen, PinOff, Play, RotateCcw, Send } from 'lucide-react'
 import { localized, useAppStore, type ActionContext, type ActionParam, type PinnedAction } from '../store'
-import { useWorkspaceStore } from '../workspace/workspaceStore'
 import type { Locale } from '../i18n'
 import { pluginRegistry } from '../workspace/pluginRegistry'
+import { applyEffects } from '../workspace/effectRunner'
 import type { CommandContribution, CommandParam, InputSlot, PluginCommandResult, ResolvedInputs } from '../workspace/pluginTypes'
 import type { FluxEffect } from '../workspace/types'
 
@@ -49,6 +49,11 @@ function outputFromPluginEffects(result: PluginCommandResult): { text: string; k
   return { text: '', kind: 'text' }
 }
 
+function normalizePanelV2Placement(placement?: string): 'bottom' | 'right' | 'left' {
+  if (placement === 'bottom' || placement === 'right' || placement === 'left') return placement
+  return 'right'
+}
+
 export function PinnedRunnerView() {
   const activePinnedActionId = useAppStore((s) => s.activePinnedActionId)
   const pinnedActions = useAppStore((s) => s.pinnedActions)
@@ -59,8 +64,6 @@ export function PinnedRunnerView() {
   const releasePinnedRuntime = useAppStore((s) => s.releasePinnedRuntime)
   const unpinAction = useAppStore((s) => s.unpinAction)
   const setActiveView = useAppStore((s) => s.setActiveView)
-  const applyOutputToActivePane = useWorkspaceStore((s) => s.setActivePaneText)
-  const createPane = useWorkspaceStore((s) => s.createPane)
   const [running, setRunning] = useState(false)
   const runIdRef = useRef<string | null>(null)
 
@@ -73,6 +76,7 @@ export function PinnedRunnerView() {
     : undefined
   const commandContribution: CommandContribution | undefined = pluginCommand?.contribution
   const actionParams = action?.params ?? commandContribution?.params ?? []
+  const customControls = commandContribution?.live?.controls
   const params = useMemo(() => ({
     ...defaultParams(actionParams),
     ...(pinned?.params ?? {}),
@@ -139,6 +143,41 @@ export function PinnedRunnerView() {
 
   const canApplyOutput = !!pinned?.outputText && pinned.outputKind !== 'error'
 
+  const applyOutputToActivePane = () => {
+    if (!pinned || !canApplyOutput) return
+    applyEffects([{ type: 'text.replace', target: 'active-input', text: pinned.outputText }])
+  }
+
+  const sendOutputToNewPane = () => {
+    if (!pinned || !canApplyOutput) return
+    applyEffects([{ type: 'pane.create', pane: { text: pinned.outputText, title: pinned.title }, focus: true }])
+  }
+
+  const toggleControls = () => {
+    if (!pinned) return
+    const nextOpen = !pinned.controlsOpen
+    updatePinnedAction(pinned.id, { controlsOpen: nextOpen })
+    if (!customControls?.panelId) return
+    applyEffects([nextOpen
+      ? {
+          type: 'panel.openV2',
+          panelId: customControls.panelId,
+          placement: normalizePanelV2Placement(customControls.placement),
+          inputs: {
+            pinnedId: pinned.id,
+            actionId: pinned.actionId,
+            inputText: pinned.inputText,
+            params,
+          },
+          scope: { type: 'pinned-action', pinnedId: pinned.id },
+          title: `${pinned.title} Controls`,
+          ownerPluginId: pluginCommand?.meta.pluginId,
+          _isDev: pinned.isDev,
+        }
+      : { type: 'panel.closeV2', panelId: customControls.panelId },
+    ])
+  }
+
   useEffect(() => {
     const timer = window.setInterval(() => prunePinnedRuntimes(), 30_000)
     return () => window.clearInterval(timer)
@@ -192,7 +231,7 @@ export function PinnedRunnerView() {
             <Play size={14} />
             Run Now
           </button>
-          <button className="scripts-btn" onClick={() => updatePinnedAction(pinned.id, { controlsOpen: !pinned.controlsOpen })} title="Open Controls">
+          <button className="scripts-btn" onClick={toggleControls} title="Open Controls">
             <PanelRightOpen size={14} />
             Controls
           </button>
@@ -236,11 +275,11 @@ export function PinnedRunnerView() {
                 <Eraser size={14} />
                 Clear Output
               </button>
-              <button className="scripts-btn" onClick={() => { if (canApplyOutput) applyOutputToActivePane(pinned.outputText) }} disabled={!canApplyOutput} title="Apply Output to Active Pane">
+              <button className="scripts-btn" onClick={applyOutputToActivePane} disabled={!canApplyOutput} title="Apply Output to Active Pane">
                 <Send size={14} />
                 Apply
               </button>
-              <button className="scripts-btn" onClick={() => { if (canApplyOutput) createPane({ text: pinned.outputText, title: pinned.title, focus: true, direction: 'right' }) }} disabled={!canApplyOutput} title="Send Output to New Pane">
+              <button className="scripts-btn" onClick={sendOutputToNewPane} disabled={!canApplyOutput} title="Send Output to New Pane">
                 <FilePlus size={14} />
                 Send New Pane
               </button>
@@ -260,7 +299,7 @@ export function PinnedRunnerView() {
         </section>
       </div>
 
-      {pinned.controlsOpen && (
+      {pinned.controlsOpen && !customControls?.panelId && (
         <PinnedActionControls
           pinned={pinned}
           params={params}
