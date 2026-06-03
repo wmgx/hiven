@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Copy, Eraser, FilePlus, PanelRightOpen, PinOff, Play, RotateCcw, Send } from 'lucide-react'
+import Editor from '@monaco-editor/react'
 import { localized, useAppStore, type ActionContext, type ActionParam, type PinnedAction } from '../store'
 import type { Locale } from '../i18n'
 import { pluginRegistry } from '../workspace/pluginRegistry'
 import { applyEffects } from '../workspace/effectRunner'
+import { runtimeRegistry } from '../workspace/runtimeRegistry'
 import type { CommandContribution, CommandParam, InputSlot, PluginCommandResult, ResolvedInputs } from '../workspace/pluginTypes'
 import type { FluxEffect } from '../workspace/types'
 
@@ -63,6 +65,7 @@ export function PinnedRunnerView() {
   const releasePinnedRuntime = useAppStore((s) => s.releasePinnedRuntime)
   const unpinAction = useAppStore((s) => s.unpinAction)
   const setActiveView = useAppStore((s) => s.setActiveView)
+  const pinnedRuntime = useAppStore((s) => activePinnedActionId ? s.pinnedRuntimes[activePinnedActionId] : undefined)
   const [running, setRunning] = useState(false)
   const runIdRef = useRef<string | null>(null)
 
@@ -258,13 +261,12 @@ export function PinnedRunnerView() {
               Clear Input
             </button>
           </div>
-          <textarea
+          <PinnedMonacoBuffer
+            editorId={pinnedRuntime?.inputEditorId ?? `pinned-input-editor:${pinned.id}`}
+            modelId={pinnedRuntime?.inputModelId ?? `pinned-input:${pinned.id}`}
             value={pinned.inputText}
-            onChange={(event) => updatePinnedAction(pinned.id, { inputText: event.target.value })}
-            spellCheck={false}
-            className="flex-1 w-full resize-none outline-none border-none p-3 font-mono text-[13px]"
-            style={{ background: 'var(--color-background-primary)', color: 'var(--color-text-primary)' }}
-            placeholder="Input"
+            readOnly={false}
+            onChange={(text) => updatePinnedAction(pinned.id, { inputText: text })}
           />
         </section>
 
@@ -290,16 +292,12 @@ export function PinnedRunnerView() {
               </button>
             </div>
           </div>
-          <textarea
+          <PinnedMonacoBuffer
+            editorId={pinnedRuntime?.outputEditorId ?? `pinned-output-editor:${pinned.id}`}
+            modelId={pinnedRuntime?.outputModelId ?? `pinned-output:${pinned.id}`}
             value={pinned.outputText}
             readOnly={true}
-            spellCheck={false}
-            className="flex-1 w-full resize-none outline-none border-none p-3 font-mono text-[13px]"
-            style={{
-              background: 'var(--color-background-secondary)',
-              color: pinned.outputKind === 'error' ? 'var(--color-error-text)' : 'var(--color-text-primary)',
-            }}
-            placeholder="Output"
+            outputKind={pinned.outputKind}
           />
         </section>
       </div>
@@ -313,6 +311,73 @@ export function PinnedRunnerView() {
           onChange={(nextParams) => updatePinnedAction(pinned.id, { params: nextParams })}
         />
       )}
+    </div>
+  )
+}
+
+function PinnedMonacoBuffer({
+  editorId,
+  modelId,
+  value,
+  readOnly,
+  outputKind,
+  onChange,
+}: {
+  editorId: string
+  modelId: string
+  value: string
+  readOnly: boolean
+  outputKind?: PinnedAction['outputKind']
+  onChange?: (text: string) => void
+}) {
+  const settings = useAppStore((s) => s.settings)
+
+  useEffect(() => {
+    return () => {
+      runtimeRegistry.unregisterCodeEditor(editorId)
+    }
+  }, [editorId])
+
+  return (
+    <div
+      className="flex-1 min-h-0"
+      style={{
+        background: readOnly ? 'var(--color-background-secondary)' : 'var(--color-background-primary)',
+        outline: outputKind === 'error' ? '1px solid var(--color-error-border)' : undefined,
+      }}
+    >
+      <Editor
+        height="100%"
+        path={modelId}
+        language="plaintext"
+        value={value}
+        onChange={(nextValue) => {
+          if (!readOnly) onChange?.(nextValue ?? '')
+        }}
+        onMount={(editor) => {
+          runtimeRegistry.registerCodeEditor(editorId, editor)
+        }}
+        options={{
+          readOnly,
+          domReadOnly: readOnly,
+          fontSize: settings.fontSize,
+          lineNumbers: settings.lineNumbers ? 'on' : 'off',
+          wordWrap: settings.wordWrap ? 'on' : 'off',
+          minimap: { enabled: false },
+          scrollBeyondLastLine: false,
+          renderLineHighlight: readOnly ? 'none' : 'line',
+          overviewRulerLanes: 0,
+          hideCursorInOverviewRuler: true,
+          folding: false,
+          stickyScroll: { enabled: false },
+          glyphMargin: false,
+          lineDecorationsWidth: 12,
+          lineNumbersMinChars: 4,
+          padding: { top: 12 },
+          fontFamily: 'var(--font-mono)',
+        }}
+        theme="vs"
+      />
     </div>
   )
 }
