@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make FluxText use directory-based plugin packages only, remove single-file script import/edit paths, restore directory plugin listing, support GitHub directory and zip imports, replace builtin-script update checks with plugin-package update checks, and migrate legacy user scripts into the new directory shape.
+**Goal:** Make FluxText use directory-based plugin packages only, remove single-file script import/edit paths, restore directory plugin listing, support GitHub directory and zip imports, replace builtin-script update checks with plugin-package update checks, and release existing user scripts as ordinary installed directory packages.
 
 **Architecture:** `scripts/` becomes a compatibility release source, not an active runtime source. Active extensions live under `~/.local/fluxtext/plugins/{builtin,installed,dev}` as folders with metadata-only `manifest.json` and a fixed `index.*` entry. The framework remains a plugin host; concrete text transform commands become first-party or user plugin packages.
 
@@ -13,7 +13,7 @@
 ## Decisions
 
 1. **Single-file plugins are removed as an active feature.** Local import accepts folders and zip archives only. Remote import accepts GitHub repository directories or zip URLs only.
-2. **Legacy scripts are migrated once.** Existing user `.js` / `.ts` files under the configured scripts directory are converted into user plugin directories, then the app stops registering raw scripts.
+2. **Legacy scripts are only a compatibility input.** Existing user `.js` / `.ts` files under the configured scripts directory can be released as ordinary installed plugin directories, then the app stops registering raw scripts. There is no migration marker, migration badge, migrated-from metadata, or migration state in the plugin store.
 3. **Plugin listing moves to directory records.** The visible list shows installed/dev plugin package folders, their manifest data, source type, status, and path.
 4. **Editing is dev-only and directory-based.** Keep a minimal directory tree + file switcher + Monaco editor for dev plugins. Do not revive the old single-file script editor or manifest form builder.
 5. **Update checks are package checks.** Builtin updates fetch a plugin index/manifest set, compare package versions, and replace whole package folders atomically.
@@ -21,9 +21,9 @@
 ## File Structure
 
 - Modify `src-tauri/src/lib.rs`: add filesystem commands for plugin directories, zip extraction, GitHub directory download helpers, recursive file listing, and atomic directory replacement.
-- Modify `src/configInit.ts`: initialize `plugins/builtin`, `plugins/installed`, `plugins/dev`, run legacy migration, and replace builtin script update with builtin plugin package update.
+- Modify `src/configInit.ts`: initialize `plugins/builtin`, `plugins/installed`, `plugins/dev`, release script-origin packages as compatibility input, and replace builtin script update with builtin plugin package update.
 - Modify `src/workspace/pluginTypes.ts`: extend installed records with `source`, `sourceUrl`, `update`, and `packagePath`; add directory/file tree types.
-- Modify `src/workspace/pluginStore.ts`: persist directory package metadata, migration marker, and update-check state.
+- Modify `src/workspace/pluginStore.ts`: persist only directory package metadata and update-check state.
 - Modify `src/workspace/pluginRuntime.ts`: expose install/import/update APIs for local folder, zip, GitHub directory, builtin package sync, and legacy script wrapping.
 - Modify `src/App.tsx`: load plugins from directory state on startup and stop registering custom raw scripts.
 - Replace or heavily modify `src/views/ScriptsView.tsx`: make it a plugin package view with tabs for Builtin, Installed, and Dev; remove single-file import/new/edit actions.
@@ -59,7 +59,7 @@
 - [ ] Add `fetch_github_directory(owner, repo, branch, path, destination_root)` using the GitHub contents API or codeload zip fallback, then install it as a package folder.
 - [ ] Keep network imports read-only until the final folder replacement step; never delete an existing installed plugin without an explicit overwrite path.
 
-## Task 3: Legacy Script Migration
+## Task 3: Compatibility Script Release
 
 **Files:**
 - Modify: `src/configInit.ts`
@@ -67,10 +67,10 @@
 - Create: `src/workspace/legacyScriptPlugin.ts`
 
 - [ ] During `initConfigDir()`, create `plugins/builtin`, `plugins/installed`, and `plugins/dev`.
-- [ ] If migration marker `plugins/.migrated-scripts-v1` is absent, scan old `scripts/` for non-builtin `.js` / `.ts` files.
+- [ ] Scan old `scripts/` for non-builtin `.js` / `.ts` files as a compatibility release source.
 - [ ] For each valid script action, write `plugins/installed/user-{safeName}/manifest.json` and `index.js`.
 - [ ] The generated `index.js` exports a normal `PluginDefinition` with one command that calls the script action `run(ctx)` and maps `{ text }` to the current workspace text-output effect already used by commands.
-- [ ] After migration succeeds, write the marker with migrated file names and leave original files untouched for rollback.
+- [ ] Do not write a marker or plugin metadata that labels these packages as migrated; once released, they are normal installed command plugins. Leave original files untouched for rollback.
 - [ ] Stop `App.tsx` from calling `read_scripts_dir` for custom scripts.
 
 ## Task 4: Plugin Package List UI
@@ -142,7 +142,7 @@
 
 ## Risks
 
-- Legacy script `run` functions may contain TypeScript-only syntax that cannot be dynamically imported as plain JS. The migration must either preserve the old parse/eval wrapper inside `legacyScriptPlugin.ts` or emit a wrapper that stores the original source as a string and parses it at runtime.
+- Legacy script `run` functions may contain TypeScript-only syntax that cannot be dynamically imported as plain JS. The compatibility release must either preserve the old parse/eval wrapper inside `legacyScriptPlugin.ts` or emit a wrapper that stores the original source as a string and parses it at runtime.
 - GitHub directory import can hit unauthenticated API rate limits. The fallback should support codeload zip URLs where possible.
 - Tauri zip extraction introduces a new dependency and filesystem risk. Extraction must validate paths and reject zip-slip entries before writing.
 - Replacing the current Scripts view is a product-visible change; browser verification is required, not just build success.

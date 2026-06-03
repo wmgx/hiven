@@ -29,6 +29,7 @@ const files = {
   pluginEditorView: readIfExists('src/views/PluginEditorView.tsx'),
   bundledPluginLoader: readIfExists('src/workspace/bundledPluginLoader.ts'),
   directoryConventionDoc: readIfExists('doc/plugin-directory-convention.md'),
+  directoryConvergencePlan: readIfExists('doc/plans/2026-06-03-directory-plugin-convergence.md'),
 }
 
 const failures = []
@@ -129,6 +130,12 @@ check('Plugin records carry package source and update metadata but no migration 
   }
   assert.doesNotMatch(files.pluginTypes, /\bmigration\??:/, 'InstalledPlugin should not have a migration field')
   assert.doesNotMatch(files.pluginStore, /\bmigration\b/, 'pluginStore should not persist migration state')
+})
+
+check('Directory plugin plan matches compatibility-release wording', () => {
+  assert.ok(files.directoryConvergencePlan, 'directory plugin convergence plan should exist')
+  assert.doesNotMatch(files.directoryConvergencePlan, /\.migrated-scripts-v1|migratedFrom|write\s+the\s+marker|persist\s+[^.]*migration/i, 'directory convergence plan should not require migration markers or migration metadata')
+  assert.match(files.directoryConvergencePlan, /compatibility release source|compatibility input/i, 'directory convergence plan should describe old scripts as compatibility release input')
 })
 
 check('Generated directory packages do not advertise legacy migration capabilities', () => {
