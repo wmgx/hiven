@@ -37,4 +37,30 @@ assert.equal(run.output, '>> hello fluxtext', 'debug runner should execute the f
 assert.deepEqual(run.logs.slice(0, 2), ['> run demo-runner.run', 'effects: 1'], 'debug runner should report command and effect count')
 assert.match(run.logs.at(-1) ?? '', /^done in \d+ms$/, 'debug runner should report elapsed time')
 
+const customInputSource = `const { definePlugin, effects } = globalThis.FluxTextPlugin
+
+export default definePlugin({
+  id: 'custom-input-runner',
+  title: 'Custom Input Runner',
+  version: '1.0.0',
+  commands: [{
+    id: 'custom-input-runner.run',
+    title: 'Run',
+    inputs: [{ key: 'body', label: 'Body', kind: 'text', required: true }],
+    params: [{ key: 'suffix', label: 'Suffix', type: 'text', default: '!' }],
+    run(ctx) {
+      const body = ctx.inputs.body
+      const text = body?.kind === 'text' ? body.text : 'missing'
+      return { effects: [effects.replaceActiveText(text + String(ctx.params.suffix ?? ''))] }
+    },
+  }],
+})
+`
+
+const customInputRun = await runPluginDebugSource(customInputSource, {
+  inputText: 'custom key',
+})
+
+assert.equal(customInputRun.output, 'custom key!', 'debug runner should honor command input keys and param defaults')
+
 console.log('plugin editor debug runner checks passed')

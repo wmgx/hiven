@@ -53,8 +53,11 @@ export async function runPluginDebugSource(
   }
 
   const result = await Promise.resolve(command.run({
-    inputs: { input: { kind: 'text', text: options.inputText } },
-    params: options.params ?? {},
+    inputs: buildDebugInputs(command.inputs, options.inputText),
+    params: {
+      ...defaultDebugParams(command.params),
+      ...(options.params ?? {}),
+    },
   }))
   const effects = result?.effects ?? []
   const elapsed = Math.round(now() - started)
@@ -63,6 +66,19 @@ export async function runPluginDebugSource(
     output: outputFromPluginEffects({ effects }),
     logs: [...logs, `effects: ${effects.length}`, `done in ${elapsed}ms`],
   }
+}
+
+function buildDebugInputs(inputs: PluginDefinition['commands'][number]['inputs'], inputText: string) {
+  const slots = inputs && inputs.length > 0 ? inputs : [{ key: 'input' }]
+  return Object.fromEntries(slots.map((slot) => [slot.key, { kind: 'text' as const, text: inputText }]))
+}
+
+function defaultDebugParams(params: PluginDefinition['commands'][number]['params']) {
+  const defaults: Record<string, unknown> = {}
+  for (const param of params ?? []) {
+    if (param.default !== undefined) defaults[param.key] = param.default
+  }
+  return defaults
 }
 
 function outputFromPluginEffects(result: PluginCommandResult): string {
