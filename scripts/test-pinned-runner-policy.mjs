@@ -36,6 +36,7 @@ assertHas(files.workspaceTypes, /export\s+type\s+PanelInstanceV2[\s\S]*scope\??\
 assertHas(files.effectRunner, /scope:\s*effect\.scope/, 'effectRunner should store panel.openV2 scope on PanelInstanceV2')
 
 assertHas(files.store, /\bprunePinnedRuntimes\s*:/, 'store should expose a prunePinnedRuntimes action')
+assertHas(files.store, /PinnedOutputKind[\s\S]*['"]stale['"]/, 'Pinned output kind should represent stale runner output')
 assertHas(files.store, /pruneIdlePinnedRuntimes/, 'store should use pruneIdlePinnedRuntimes for idle timeout and warm limit cleanup')
 assertHas(files.pinnedRuntime, /_tombstone|tombstone/, 'activatePinnedRuntime should accept tombstone data')
 assertHas(files.pinnedRuntime, /outputSummary[\s\S]*stale|stale[\s\S]*outputSummary/, 'tombstone restore should mark output summary stale instead of restoring full output')
@@ -45,7 +46,8 @@ assertNotHas(files.pinnedRunner, /setInterval\(\(\)\s*=>\s*prunePinnedRuntimes/,
 assertHas(files.store, /sideEffects\s*!==\s*['"]writes['"][\s\S]*trigger\s*!==\s*['"]manual['"]|trigger\s*!==\s*['"]manual['"][\s\S]*sideEffects\s*!==\s*['"]writes['"]/, 'writes side-effect commands should default to manual run')
 assertHas(files.store, /def\?\.live[\s\S]*autoRun:\s*shouldAutoRunLiveAction/, 'legacy actions should derive autoRun from live capability metadata')
 assertHas(files.store, /serializePinnedTombstones[\s\S]*tombstoneTtlDays[\s\S]*disposedAt/, 'persisted tombstones should be pruned by tombstoneTtlDays')
-assertHas(files.pinnedRunner, /const\s+canApplyOutput\s*=\s*!!pinned\?\.outputText\s*&&\s*pinned\.outputKind\s*!==\s*['"]error['"]/, 'PinnedRunnerView should derive apply eligibility from non-empty non-error output')
+assertHas(files.pinnedRunner, /markPinnedOutputStale[\s\S]*outputKind:\s*['"]stale['"]/, 'Manual input or param edits should mark existing output stale')
+assertHas(files.pinnedRunner, /const\s+canApplyOutput\s*=\s*!!pinned\?\.outputText[\s\S]*pinned\.outputKind\s*!==\s*['"]error['"][\s\S]*pinned\.outputKind\s*!==\s*['"]stale['"]/, 'PinnedRunnerView should not apply empty, error, or stale output')
 assertHas(files.pinnedRunner, /isCurrentPinnedRun[\s\S]*pendingRunId\s*!==\s*runId[\s\S]*disposed/, 'disposed or superseded pinned runs should not write stale output')
 assertHas(files.pinnedRunner, /import\s+Editor\s+from\s+['"]@monaco-editor\/react['"]/, 'PinnedRunnerView should use Monaco Editor for input/output buffers')
 assertHas(files.pinnedRunner, /runtimeRegistry\.registerCodeEditor\([^)]*editorId[^)]*editor/, 'PinnedRunnerView should register pinned input/output editors in the runtime registry')

@@ -17,7 +17,7 @@ import type { LiveActionCapability } from './workspace/pluginTypes'
 
 export type ViewId = 'editor' | 'scripts' | 'plugin-editor' | 'pinned-runner' | 'debugger' | 'settings'
 
-export type PinnedOutputKind = 'text' | 'error' | 'presentation'
+export type PinnedOutputKind = 'text' | 'error' | 'presentation' | 'stale'
 export type PinnedActionKind = 'legacy' | 'plugin-command'
 
 export type PinnedPluginCommandInput = {

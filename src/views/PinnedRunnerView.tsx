@@ -56,6 +56,14 @@ function normalizePanelV2Placement(placement?: string): 'bottom' | 'right' | 'le
   return 'right'
 }
 
+function markPinnedOutputStale(pinned: PinnedAction): Partial<PinnedAction> {
+  if (pinned.autoRun || !pinned.outputText || pinned.outputKind === 'error' || pinned.outputKind === 'stale') return {}
+  return {
+    outputKind: 'stale',
+    lastError: undefined,
+  }
+}
+
 export function PinnedRunnerView() {
   const activePinnedActionId = useAppStore((s) => s.activePinnedActionId)
   const pinnedActions = useAppStore((s) => s.pinnedActions)
@@ -154,7 +162,23 @@ export function PinnedRunnerView() {
     }
   }
 
-  const canApplyOutput = !!pinned?.outputText && pinned.outputKind !== 'error'
+  const canApplyOutput = !!pinned?.outputText && pinned.outputKind !== 'error' && pinned.outputKind !== 'stale'
+
+  const updateInputText = (text: string) => {
+    if (!pinned) return
+    updatePinnedAction(pinned.id, {
+      inputText: text,
+      ...markPinnedOutputStale(pinned),
+    })
+  }
+
+  const updateParams = (nextParams: Record<string, unknown>) => {
+    if (!pinned) return
+    updatePinnedAction(pinned.id, {
+      params: nextParams,
+      ...markPinnedOutputStale(pinned),
+    })
+  }
 
   const applyOutputToActivePane = () => {
     if (!pinned || !canApplyOutput) return
@@ -266,7 +290,7 @@ export function PinnedRunnerView() {
             modelId={pinnedRuntime?.inputModelId ?? `pinned-input:${pinned.id}`}
             value={pinned.inputText}
             readOnly={false}
-            onChange={(text) => updatePinnedAction(pinned.id, { inputText: text })}
+            onChange={updateInputText}
           />
         </section>
 
@@ -308,7 +332,7 @@ export function PinnedRunnerView() {
           params={params}
           actionParams={actionParams}
           locale={useAppStore.getState().locale}
-          onChange={(nextParams) => updatePinnedAction(pinned.id, { params: nextParams })}
+          onChange={updateParams}
         />
       )}
     </div>
@@ -343,7 +367,11 @@ function PinnedMonacoBuffer({
       className="flex-1 min-h-0"
       style={{
         background: readOnly ? 'var(--color-background-secondary)' : 'var(--color-background-primary)',
-        outline: outputKind === 'error' ? '1px solid var(--color-error-border)' : undefined,
+        outline: outputKind === 'error'
+          ? '1px solid var(--color-error-border)'
+          : outputKind === 'stale'
+            ? '1px solid var(--color-warning)'
+            : undefined,
       }}
     >
       <Editor
