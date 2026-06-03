@@ -148,6 +148,7 @@ async function releaseBuiltinScriptPluginPackages(configDir: string, pluginBuilt
     const manifest = {
       pluginId,
       displayName,
+      displayNameI18n: action?.titleI18n,
       version: '1.0.0',
       capabilities: ['command'],
     }
@@ -184,6 +185,7 @@ async function releaseBuiltinPluginManifests(configDir: string, pluginBuiltinDir
     JSON.stringify({
       pluginId: demoPluginId,
       displayName: 'Demo Text Plugin',
+      displayNameI18n: { zh: '示例：大写并添加前缀' },
       version: '1.0.0',
       capabilities: ['command', 'demo'],
     }, null, 2),
@@ -259,6 +261,7 @@ export async function releaseUserScriptPluginPackages(configDir: string): Promis
     const manifest = {
       pluginId,
       displayName: action.title || action.name,
+      displayNameI18n: action.titleI18n,
       version: '1.0.0',
       capabilities: ['command'],
     }

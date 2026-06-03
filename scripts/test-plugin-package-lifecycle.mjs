@@ -33,10 +33,17 @@ assertHas(files.scriptsView, /setUpdateStatus\(['"`]checking['"`]\)|setUpdateSta
 
 assertHas(files.configInit, /read_plugin_file[\s\S]*manifest\.json[\s\S]*catch/, 'user script release should read an existing package manifest before writing')
 assertHas(files.configInit, /continue[\s\S]*createScriptPluginEntrySource|createScriptPluginEntrySource[\s\S]*continue/, 'user script release should skip existing packages instead of overwriting user edits')
+assertHas(files.configInit, /displayNameI18n:\s*action\?\.titleI18n/, 'builtin script package manifests should inherit titleI18n as displayNameI18n')
+assertHas(files.configInit, /displayNameI18n:\s*action\.titleI18n/, 'user script package manifests should inherit titleI18n as displayNameI18n')
+assertHas(files.configInit, /displayNameI18n:\s*\{\s*zh:\s*['"`]示例：大写并添加前缀['"`]\s*\}/, 'demo plugin manifest should expose a localized display name')
 
 assertHas(files.pluginTypes, /export\s+type\s+PluginDefinition[\s\S]*titleI18n\??\s*:/, 'PluginDefinition should support root titleI18n')
 assertHas(files.tauriLib, /display_name_i18n|displayNameI18n/, 'Tauri PluginDirSummary should include displayNameI18n')
 assertHas(files.tauriLib, /get\("displayNameI18n"\)/, 'Tauri manifest summary should read displayNameI18n from manifest.json')
 assertHas(files.scriptsView, /displayNameI18n:\s*pkg\.displayNameI18n/, 'ScriptsView should preserve displayNameI18n when syncing scanned packages into store')
+assertHas(files.scriptsView, /updatePluginMetadata\(pkg\.pluginId[\s\S]*displayNameI18n:\s*pkg\.displayNameI18n/, 'ScriptsView should refresh displayNameI18n for already persisted packages')
+assertHas(files.scriptsView, /function\s+pluginDisplayName[\s\S]*localized\([\s\S]*displayNameI18n[\s\S]*locale[\s\S]*\)/, 'ScriptsView should localize plugin package display names from displayNameI18n')
+assertHas(files.scriptsView, /title=\{pluginDisplayName\(plugin,\s*locale\)\}/, 'ScriptsView cards should render localized plugin display names')
+assertHas(files.scriptsView, /textMatches\(pluginDisplayName\(plugin,\s*locale\),\s*normalizedQuery\)/, 'ScriptsView search should match localized plugin display names')
 
 console.log('plugin package lifecycle checks passed')

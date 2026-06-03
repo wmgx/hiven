@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AlertTriangle, Archive, Download, FolderOpen, Globe, Loader2, Package, Plus, Power, RefreshCw, Search, Trash2, Upload } from 'lucide-react'
 import { t } from '../i18n'
-import { useAppStore } from '../store'
+import type { Locale } from '../i18n'
+import { localized, useAppStore } from '../store'
 import { checkBuiltinPluginsUpdate, getConfigDir } from '../configInit'
 import { usePluginStore } from '../workspace/pluginStore'
 import {
@@ -62,6 +63,13 @@ function packagePath(plugin: InstalledPlugin | DevPlugin) {
 
 function capabilitiesOf(plugin: InstalledPlugin | DevPlugin | PluginPackageSummary) {
   return Array.isArray(plugin.capabilities) ? plugin.capabilities : []
+}
+
+function pluginDisplayName(
+  plugin: Pick<InstalledPlugin | DevPlugin | PluginPackageSummary, 'pluginId' | 'displayName' | 'displayNameI18n'>,
+  locale: Locale,
+) {
+  return localized(plugin.displayName || plugin.pluginId, plugin.displayNameI18n, locale)
 }
 
 export function ScriptsView() {
@@ -125,10 +133,22 @@ export function ScriptsView() {
           setInstalledPackages(installedSummaries)
           const store = usePluginStore.getState()
           for (const pkg of installedSummaries) {
-            if (store.plugins[pkg.pluginId]) continue
+            if (store.plugins[pkg.pluginId]) {
+              store.updatePluginMetadata(pkg.pluginId, {
+                displayName: pkg.displayName,
+                displayNameI18n: pkg.displayNameI18n,
+                version: pkg.version,
+                entry: pkg.entry,
+                capabilities: pkg.capabilities,
+                folderPath: pkg.folderPath,
+                packagePath: pkg.folderPath,
+              })
+              continue
+            }
             store.installPlugin({
               pluginId: pkg.pluginId,
               displayName: pkg.displayName,
+              displayNameI18n: pkg.displayNameI18n,
               version: pkg.version,
               entry: pkg.entry,
               capabilities: pkg.capabilities,
@@ -156,29 +176,29 @@ export function ScriptsView() {
     if (!normalizedQuery) return builtinPlugins
     return builtinPlugins.filter((plugin) =>
       textMatches(plugin.pluginId, normalizedQuery) ||
-      textMatches(plugin.displayName, normalizedQuery) ||
+      textMatches(pluginDisplayName(plugin, locale), normalizedQuery) ||
       textMatches(plugin.folderPath, normalizedQuery),
     )
-  }, [builtinPlugins, normalizedQuery])
+  }, [builtinPlugins, locale, normalizedQuery])
 
   const filteredInstalled = useMemo(() => {
     if (!normalizedQuery) return installedList
     return installedList.filter((plugin) =>
       textMatches(plugin.pluginId, normalizedQuery) ||
-      textMatches(plugin.displayName, normalizedQuery) ||
+      textMatches(pluginDisplayName(plugin, locale), normalizedQuery) ||
       textMatches(plugin.folderPath, normalizedQuery) ||
       textMatches(plugin.sourceUrl, normalizedQuery),
     )
-  }, [installedList, normalizedQuery])
+  }, [installedList, locale, normalizedQuery])
 
   const filteredDev = useMemo(() => {
     if (!normalizedQuery) return devList
     return devList.filter((plugin) =>
       textMatches(plugin.pluginId, normalizedQuery) ||
-      textMatches(plugin.displayName, normalizedQuery) ||
+      textMatches(pluginDisplayName(plugin, locale), normalizedQuery) ||
       textMatches(plugin.folderPath, normalizedQuery),
     )
-  }, [devList, normalizedQuery])
+  }, [devList, locale, normalizedQuery])
 
   const setItemBusy = (key: string, value: boolean) =>
     setBusy((prev) => ({ ...prev, [key]: value }))
@@ -271,7 +291,7 @@ export function ScriptsView() {
     return (
       <PluginCard
         key={plugin.pluginId}
-        title={plugin.displayName || plugin.pluginId}
+        title={pluginDisplayName(plugin, locale)}
         subtitle={plugin.pluginId}
         version={plugin.version || '0.0.0'}
         source={sourceLabel(plugin, locale)}
@@ -320,7 +340,7 @@ export function ScriptsView() {
     return (
       <PluginCard
         key={plugin.pluginId}
-        title={plugin.displayName || plugin.pluginId}
+        title={pluginDisplayName(plugin, locale)}
         subtitle={plugin.pluginId}
         version={plugin.version || '0.0.0'}
         source={sourceLabel(plugin, locale)}
@@ -363,7 +383,7 @@ export function ScriptsView() {
     return (
       <PluginCard
         key={plugin.pluginId}
-        title={plugin.displayName || plugin.pluginId}
+        title={pluginDisplayName(plugin, locale)}
         subtitle={plugin.pluginId}
         version={plugin.version || '0.0.0'}
         source={t(locale, 'scripts.source.builtin')}
