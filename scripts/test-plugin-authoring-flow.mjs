@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 
 import { pluginRegistry } from '../src/workspace/pluginRegistry.ts'
 import { createPluginScaffoldFiles } from '../src/workspace/pluginScaffold.ts'
 import { parsePluginDefinitionSource, runPluginDebugSource } from '../src/workspace/pluginDebugRunner.ts'
 import { runTextPluginCommand } from '../src/workspace/pluginCommandRunner.ts'
+
+const pluginRuntimeSource = readFileSync('src/workspace/pluginRuntime.ts', 'utf8')
 
 const scaffold = createPluginScaffoldFiles({
   pluginId: 'authoring-flow',
@@ -44,6 +47,32 @@ assert.deepEqual(
   pinnedRun,
   { text: 'live: pinned', kind: 'text' },
   'pinned runner command execution should share the same input and params behavior',
+)
+
+assert.match(
+  pluginRuntimeSource,
+  /loadDevPluginEntry\(/,
+  'pluginRuntime should provide a dedicated dev entry loader',
+)
+assert.match(
+  pluginRuntimeSource,
+  /sideloadDevPlugin[\s\S]*loadDevPluginEntry\(/,
+  'dev sideload should use dev entry parsing path instead of shared asset URL loader',
+)
+assert.match(
+  pluginRuntimeSource,
+  /reloadDevPlugin[\s\S]*loadDevPluginEntry\(/,
+  'dev reload should use dev entry parsing path instead of shared asset URL loader',
+)
+assert.doesNotMatch(
+  pluginRuntimeSource,
+  /sideloadDevPlugin[\s\S]*loadPluginEntry\(/,
+  'dev sideload should avoid calling URL-based shared loader directly',
+)
+assert.doesNotMatch(
+  pluginRuntimeSource,
+  /reloadDevPlugin[\s\S]*loadPluginEntry\(/,
+  'dev reload should avoid calling URL-based shared loader directly',
 )
 
 const paneEffectSource = `const { definePlugin, effects } = globalThis.FluxTextPlugin

@@ -105,6 +105,16 @@ check('ScriptsView scans plugins/installed directories instead of only reading p
     /store\.installPlugin\(|usePluginStore\.getState\(\)\.installPlugin\(/,
     'ScriptsView should reconcile discovered installed directories into pluginStore for enable/reload flows',
   )
+  assert.match(
+    files.scriptsView,
+    /pkg\.error[\s\S]*status:\s*['"]error['"][\s\S]*error:\s*pkg\.error/,
+    'ScriptsView should surface malformed installed plugin directories as visible error cards',
+  )
+  assert.match(
+    files.scriptsView,
+    /if\s*\(\s*pkg\.error\s*\)\s*continue/,
+    'ScriptsView should not reconcile malformed package summaries into the persistent plugin store',
+  )
 })
 
 check('Plugin package roots are builtin, installed, and dev directories', () => {
@@ -248,6 +258,14 @@ check('Text Diff builtin directory includes the adaptive diff UI source files', 
   )
 })
 
+check('Built-in release packages should not include internal core', () => {
+  assert.doesNotMatch(
+    files.configInit,
+    /const\s+BUILTIN_PLUGIN_PACKAGES[\s\S]*\{[\s\S]*pluginId:\s*['"]core['"][\s\S]*\}/,
+    'BUILTIN_PLUGIN_PACKAGES should not include core pseudo-plugin metadata',
+  )
+})
+
 check('First-party diff registration goes through bundled plugin package loader', () => {
   assert.ok(files.bundledPluginLoader, 'src/workspace/bundledPluginLoader.ts should exist')
   assert.match(files.bundledPluginLoader, /import\.meta\.glob\(['"]\.\.\/plugins\/\*\/manifest\.json['"]/, 'bundled loader should discover plugin package manifests')
@@ -339,6 +357,21 @@ check('Tauri plugin file commands stay within plugin roots', () => {
   )
   assert.match(files.tauriLib, /symlink_metadata[\s\S]*is_symlink\(\)[\s\S]*continue/, 'plugin file listing/copying should skip symlinks')
   assert.match(files.tauriLib, /find_fixed_plugin_entry[\s\S]*index\.tsx[\s\S]*index\.js/, 'Tauri manifest parsing should resolve fixed index.* entries')
+  assert.match(
+    files.tauriLib,
+    /for entry in fs::read_dir\(&root\)[\s\S]*match\s+read_plugin_manifest_summary\(&folder\)/,
+    'list_plugin_dirs should handle malformed package manifests without aborting the whole list',
+  )
+  assert.match(
+    files.tauriLib,
+    /plugins\.push\(\s*PluginDirSummary\s*\{\s*plugin_id:\s*plugin_id\.clone\(\),[\s\S]*error:\s*Some\(error\),/,
+    'list_plugin_dirs should return malformed plugin packages as visible error summaries',
+  )
+  assert.doesNotMatch(
+    files.tauriLib,
+    /plugins\.push\(read_plugin_manifest_summary\(&folder\)\?\)/,
+    'list_plugin_dirs should never abort on a malformed manifest',
+  )
   assert.match(
     files.tauriLib,
     /validate_plugin_relative_path\(&path,\s*["']GitHub directory path["']\)[\s\S]*canonical_candidate[\s\S]*starts_with/,

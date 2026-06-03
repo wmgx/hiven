@@ -94,7 +94,24 @@ export function ScriptsView() {
       byId.set(plugin.pluginId, plugin)
     }
     for (const pkg of installedPackages) {
-      if (byId.has(pkg.pluginId)) continue
+      const existing = byId.get(pkg.pluginId)
+      if (existing) {
+        if (pkg.error) {
+          byId.set(pkg.pluginId, {
+            ...existing,
+            displayName: pkg.displayName,
+            displayNameI18n: pkg.displayNameI18n,
+            version: pkg.version,
+            entry: pkg.entry,
+            capabilities: pkg.capabilities,
+            folderPath: pkg.folderPath,
+            packagePath: pkg.folderPath,
+            status: 'error',
+            error: pkg.error,
+          })
+        }
+        continue
+      }
       byId.set(pkg.pluginId, {
         pluginId: pkg.pluginId,
         displayName: pkg.displayName,
@@ -105,7 +122,8 @@ export function ScriptsView() {
         folderPath: pkg.folderPath,
         packagePath: pkg.folderPath,
         source: 'local',
-        status: 'disabled',
+        status: pkg.error ? 'error' : 'disabled',
+        error: pkg.error,
         update: { status: 'idle' },
         installedAt: Date.now(),
         updatedAt: Date.now(),
@@ -133,6 +151,7 @@ export function ScriptsView() {
           setInstalledPackages(installedSummaries)
           const store = usePluginStore.getState()
           for (const pkg of installedSummaries) {
+            if (pkg.error) continue
             if (store.plugins[pkg.pluginId]) {
               store.updatePluginMetadata(pkg.pluginId, {
                 displayName: pkg.displayName,
@@ -390,6 +409,7 @@ export function ScriptsView() {
         status={t(locale, 'scripts.status.available')}
         folderPath={plugin.folderPath || ''}
         capabilities={capabilitiesOf(plugin)}
+        error={plugin.error}
         actions={
           <>
             <IconButton

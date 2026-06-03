@@ -23,12 +23,6 @@ const REMOTE_BUILTIN_PLUGIN_INDEX_URLS = [
 
 const BUILTIN_PLUGIN_PACKAGES = [
   {
-    pluginId: 'core',
-    displayName: 'Core Workspace',
-    version: '1.0.0',
-    capabilities: ['command', 'panel'],
-  },
-  {
     pluginId: 'text-diff',
     displayName: 'Text Diff',
     version: '1.0.0',

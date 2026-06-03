@@ -106,6 +106,8 @@ struct PluginDirSummary {
     capabilities: Vec<String>,
     #[serde(rename = "folderPath")]
     folder_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -132,7 +134,26 @@ fn list_plugin_dirs(path: String) -> Result<Vec<PluginDirSummary>, String> {
         let entry = entry.map_err(|e| e.to_string())?;
         let folder = entry.path();
         if folder.is_dir() && folder.join("manifest.json").exists() {
-            plugins.push(read_plugin_manifest_summary(&folder)?);
+            match read_plugin_manifest_summary(&folder) {
+                Ok(summary) => plugins.push(summary),
+                Err(error) => {
+                    let plugin_id = folder
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or("invalid-plugin")
+                        .to_string();
+                    plugins.push(PluginDirSummary {
+                        plugin_id: plugin_id.clone(),
+                        display_name: plugin_id,
+                        display_name_i18n: None,
+                        version: "0.0.0".to_string(),
+                        entry: "".to_string(),
+                        capabilities: Vec::new(),
+                        folder_path: folder.to_string_lossy().to_string(),
+                        error: Some(error),
+                    });
+                }
+            }
         }
     }
     Ok(plugins)
@@ -321,6 +342,7 @@ fn read_plugin_manifest_summary(folder: &Path) -> Result<PluginDirSummary, Strin
         entry,
         capabilities,
         folder_path: folder.to_string_lossy().to_string(),
+        error: None,
     })
 }
 
@@ -766,11 +788,17 @@ mod plugin_dir_command_tests {
             )
             .expect("index.js should be writable");
 
-            let entry_error = match list_plugin_dirs(installed.to_string_lossy().to_string()) {
-                Ok(_) => panic!("manifest.entry should be rejected"),
-                Err(error) => error,
-            };
-            assert!(entry_error.contains("must not declare entry"));
+            let summaries = list_plugin_dirs(installed.to_string_lossy().to_string())
+                .expect("malformed plugin packages should be returned as visible error summaries");
+            assert_eq!(summaries.len(), 1);
+            assert_eq!(summaries[0].plugin_id, "bad-entry");
+            assert_eq!(summaries[0].entry, "");
+            assert!(
+                summaries[0]
+                    .error
+                    .as_ref()
+                    .is_some_and(|error| error.contains("must not declare entry"))
+            );
 
             let parent_path = installed.join("..").join("escape").join("index.js");
             let parent_error = save_plugin_file(

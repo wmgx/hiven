@@ -18,6 +18,7 @@ import { useWorkspaceStore } from './workspaceStore'
 import { usePluginStore } from './pluginStore'
 import { showToast } from './toast'
 import { createPluginScaffoldFiles } from './pluginScaffold.ts'
+import { parsePluginDefinitionSource } from './pluginDebugRunner.ts'
 import { createPluginHostSdk, type PluginHostSdk } from './pluginHostSdk.ts'
 import type {
   PluginDefinition,
@@ -42,6 +43,7 @@ export type PluginPackageSummary = {
   entry: string
   capabilities: string[]
   folderPath: string
+  error?: string
 }
 
 type ResolvedPluginManifest = {
@@ -202,6 +204,25 @@ async function loadPluginEntry(folderPath: string, entryFile: string, cacheBust 
   }
   if (!definition.version || typeof definition.version !== 'string') {
     throw new Error(`Plugin entry at "${entryPath}" default export is missing version`)
+  }
+
+  return definition
+}
+
+async function loadDevPluginEntry(folderPath: string, entryFile: string): Promise<PluginDefinition> {
+  validatePackageRelativePath(entryFile, 'entry')
+  const entryPath = joinPath(folderPath, entryFile)
+  const source = await readFileText(entryPath)
+  const definition = parsePluginDefinitionSource(source)
+
+  if (!definition) {
+    throw new Error(`Dev plugin entry at "${entryPath}" is not a runnable plugin definition`)
+  }
+  if (!definition.id || typeof definition.id !== 'string') {
+    throw new Error(`Dev plugin entry at "${entryPath}" is missing id`)
+  }
+  if (!definition.version || typeof definition.version !== 'string') {
+    throw new Error(`Dev plugin entry at "${entryPath}" is missing version`)
   }
 
   return definition
@@ -500,7 +521,7 @@ export async function sideloadDevPlugin(folderPath: string): Promise<DevPlugin> 
   }
 
   try {
-    const definition = await loadPluginEntry(folderPath, packageMeta.entry)
+    const definition = await loadDevPluginEntry(folderPath, packageMeta.entry)
     validatePluginIdMatch(definition, packageMeta)
 
     pluginRegistry.registerDevPlugin(
@@ -543,7 +564,7 @@ export async function reloadDevPlugin(pluginId: string): Promise<void> {
 
   try {
     const packageMeta = await loadManifest(record.folderPath)
-    const definition = await loadPluginEntry(record.folderPath, packageMeta.entry, true /* cache bust */)
+    const definition = await loadDevPluginEntry(record.folderPath, packageMeta.entry)
     validatePluginIdMatch(definition, packageMeta)
 
     pluginRegistry.registerDevPlugin(
