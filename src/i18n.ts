@@ -105,7 +105,7 @@ const messages = {
     'pluginEditor.running': 'Running...',
     'pluginEditor.copyOutput': 'Copy output',
     'pluginEditor.runToSee': 'Run to see output',
-    'pluginEditor.unsupportedDebug': 'Current file is not a runnable legacy action.',
+    'pluginEditor.unsupportedDebug': 'Current file is not a runnable plugin command.',
 
     // Debugger
     'debugger.run': 'Run',
@@ -355,7 +355,7 @@ const messages = {
     'pluginEditor.running': '运行中...',
     'pluginEditor.copyOutput': '复制输出',
     'pluginEditor.runToSee': '运行后查看输出',
-    'pluginEditor.unsupportedDebug': '当前文件不是可运行的 legacy action。',
+    'pluginEditor.unsupportedDebug': '当前文件不是可运行的插件命令。',
 
     // Debugger
     'debugger.run': '运行',

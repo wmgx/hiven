@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
 
 const {
   parsePluginDefinitionSource,
@@ -62,5 +63,8 @@ const customInputRun = await runPluginDebugSource(customInputSource, {
 })
 
 assert.equal(customInputRun.output, 'custom key!', 'debug runner should honor command input keys and param defaults')
+
+const i18nSource = fs.readFileSync('src/i18n.ts', 'utf8')
+assert.doesNotMatch(i18nSource, /pluginEditor\.unsupportedDebug['"][^:]*:\s*['"][^'"]*legacy action/i, 'plugin editor unsupported-run copy should not expose legacy action wording')
 
 console.log('plugin editor debug runner checks passed')
