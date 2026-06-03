@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import assert from 'node:assert/strict'
+import { restorePinnedFromTombstone } from '../src/workspace/pinnedActionRuntime.ts'
 
 function read(path) {
   return fs.readFileSync(path, 'utf8')
@@ -46,6 +47,37 @@ assertNotHas(files.pinnedRunner, /setInterval\(\(\)\s*=>\s*prunePinnedRuntimes/,
 assertHas(files.store, /sideEffects\s*!==\s*['"]writes['"][\s\S]*trigger\s*!==\s*['"]manual['"]|trigger\s*!==\s*['"]manual['"][\s\S]*sideEffects\s*!==\s*['"]writes['"]/, 'writes side-effect commands should default to manual run')
 assertHas(files.store, /def\?\.live[\s\S]*autoRun:\s*shouldAutoRunLiveAction/, 'legacy actions should derive autoRun from live capability metadata')
 assertHas(files.store, /serializePinnedTombstones[\s\S]*tombstoneTtlDays[\s\S]*disposedAt/, 'persisted tombstones should be pruned by tombstoneTtlDays')
+
+const restoredPreview = restorePinnedFromTombstone({
+  id: 'pinned-1',
+  kind: 'legacy',
+  actionId: 'demo',
+  title: 'Demo',
+  inputText: '',
+  outputText: '',
+  outputKind: 'text',
+  params: {},
+  autoRun: false,
+  debounceMs: 300,
+  controlsOpen: false,
+}, {
+  pinnedId: 'pinned-1',
+  actionId: 'demo',
+  inputText: 'old input',
+  params: {},
+  autoRun: false,
+  debounceMs: 300,
+  controlsOpen: false,
+  outputSummary: {
+    kind: 'text',
+    preview: 'old generated output',
+    generatedAt: 100,
+  },
+  disposedAt: 200,
+  reason: 'idle-timeout',
+})
+assert.equal(restoredPreview.outputKind, 'stale', 'restored tombstone previews should be stale so Apply remains disabled')
+
 assertHas(files.pinnedRunner, /markPinnedOutputStale[\s\S]*outputKind:\s*['"]stale['"]/, 'Manual input or param edits should mark existing output stale')
 assertHas(files.pinnedRunner, /onClick=\{\(\)\s*=>\s*updateInputText\(['"]{2}\)\}[\s\S]*title=['"]Clear Input['"]/, 'Clear Input should share the stale-output input update path')
 assertHas(files.pinnedRunner, /const\s+canApplyOutput\s*=\s*!!pinned\?\.outputText[\s\S]*pinned\.outputKind\s*!==\s*['"]error['"][\s\S]*pinned\.outputKind\s*!==\s*['"]stale['"]/, 'PinnedRunnerView should not apply empty, error, or stale output')

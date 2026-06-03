@@ -101,7 +101,7 @@ export function restorePinnedFromTombstone(pinned: PinnedAction, tombstone?: Pin
     debounceMs: tombstone.debounceMs,
     controlsOpen: tombstone.controlsOpen,
     outputText: stalePreview ? `Previous result preview (stale): ${stalePreview}` : '',
-    outputKind: tombstone.outputSummary?.kind === 'error' ? 'error' : 'text',
+    outputKind: tombstone.outputSummary?.kind === 'error' ? 'error' : stalePreview ? 'stale' : 'text',
     lastRunAt: tombstone.lastRunAt,
     lastDurationMs: tombstone.lastDurationMs,
     lastError: tombstone.lastError,
