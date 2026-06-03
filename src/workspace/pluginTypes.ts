@@ -98,6 +98,7 @@ export type CommandContribution = {
   description?: string
   descriptionI18n?: Partial<Record<Locale, string>>
   tags?: string[]
+  aliases?: string[]
   icon?: string
   inputs?: InputSlot[]
   inputResolution?: InputResolution

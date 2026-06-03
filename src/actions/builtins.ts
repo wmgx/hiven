@@ -86,22 +86,6 @@ export const builtinActions: ActionDef[] = [
     },
   },
   {
-    name: 'trim',
-    title: 'Trim Whitespace',
-    titleI18n: { zh: '去除空白' },
-    icon: 'Type',
-    aliases: ['strip', 'clean'],
-    description: 'Strip leading/trailing whitespace from each line',
-    descriptionI18n: { zh: '去除每行首尾空白字符' },
-    tags: ['text', 'cleanup'],
-    builtin: true,
-    params: [],
-    run(ctx) {
-      const lines = ctx.input.text.split('\n').map(l => l.trim())
-      return { text: lines.join('\n') }
-    },
-  },
-  {
     name: 'json',
     title: 'JSON Formatter',
     titleI18n: { zh: 'JSON 格式化' },
@@ -404,11 +388,11 @@ export const builtinActions: ActionDef[] = [
             .trim()
         }
       }
-      let result = text
+      const result = text
         .replace(/\s*\{\s*/g, ' {\n  ')
         .replace(/\s*\}\s*/g, '\n}\n')
         .replace(/\s*;\s*/g, ';\n  ')
-        .replace(/  \n\}/g, '\n}')
+        .replace(/ {2}\n\}/g, '\n}')
         .replace(/\n{3,}/g, '\n\n')
         .trim()
       return { text: result }

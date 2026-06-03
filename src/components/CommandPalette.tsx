@@ -1097,7 +1097,8 @@ function paletteItemMatchesQuery(item: PaletteItem, q: string, locale: import('.
   const descI18n = item.kind === 'legacy' ? item.action.descriptionI18n : item.entry.contribution.descriptionI18n
   if (Object.values(descI18n || {}).some((v) => v && v.toLowerCase().includes(q))) return true
 
-  if (item.kind === 'legacy' && (item.action.aliases || []).some((a) => a.toLowerCase().includes(q))) return true
+  const aliases = item.kind === 'legacy' ? (item.action.aliases || []) : (item.entry.contribution.aliases || [])
+  if (aliases.some((a) => a.toLowerCase().includes(q))) return true
 
   const tags = item.kind === 'legacy' ? (item.action.tags || []) : (item.entry.contribution.tags || [])
   if (tags.some((tag) => tag.toLowerCase().includes(q))) return true
