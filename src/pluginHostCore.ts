@@ -1,6 +1,6 @@
 import { createElement } from 'react'
 import type { ComponentPropsWithoutRef, CSSProperties, ReactNode } from 'react'
-import { definePlugin } from './definePlugin.ts'
+import { definePlugin } from './workspace/definePlugin.ts'
 
 type HostElementProps = {
   children?: ReactNode
@@ -24,17 +24,20 @@ export type PluginHostUi = {
   EmptyState: (props: HostElementProps) => ReactNode
 }
 
-export type PluginHostSdk = {
+export type PluginHostEffects = {
+  replaceActiveText: (text: string) => { type: 'text.replace'; target: 'active-input'; text: string }
+  createPane: (text: string, title?: string) => { type: 'pane.create'; pane: { text: string; title?: string }; focus: boolean }
+  status: (message: string, level?: 'info' | 'success' | 'warning' | 'error') => { type: 'status.message'; level: 'info' | 'success' | 'warning' | 'error'; message: string }
+}
+
+/** The monaco-free core SDK: definePlugin, effects, ui. Safe to load in Node. */
+export type PluginHostCoreSdk = {
   definePlugin: typeof definePlugin
-  effects: {
-    replaceActiveText: (text: string) => { type: 'text.replace'; target: 'active-input'; text: string }
-    createPane: (text: string, title?: string) => { type: 'pane.create'; pane: { text: string; title?: string }; focus: boolean }
-    status: (message: string, level?: 'info' | 'success' | 'warning' | 'error') => { type: 'status.message'; level: 'info' | 'success' | 'warning' | 'error'; message: string }
-  }
+  effects: PluginHostEffects
   ui: PluginHostUi
 }
 
-export function createPluginHostSdk(): PluginHostSdk {
+export function createPluginHostCoreSdk(): PluginHostCoreSdk {
   return {
     definePlugin,
     effects: {
@@ -46,7 +49,7 @@ export function createPluginHostSdk(): PluginHostSdk {
   }
 }
 
-function createPluginHostUi(): PluginHostUi {
+export function createPluginHostUi(): PluginHostUi {
   return {
     Button: ({ className = '', style, ...props }) => createElement('button', {
       ...props,

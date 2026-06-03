@@ -9,6 +9,8 @@ export type PluginScaffoldFiles = {
   manifest: PluginManifest
   indexSource: string
   readmeSource: string
+  localeEn: string
+  localeZh: string
 }
 
 export function createPluginScaffoldFiles(options: PluginScaffoldOptions): PluginScaffoldFiles {
@@ -30,7 +32,12 @@ This is a FluxText directory plugin.
 - \`index.js\` is the fixed entry.
 - Runtime helpers are injected as \`globalThis.FluxTextPlugin\`; no relative framework import is needed.
 - Host UI primitives are injected as \`ui.Button\`, \`ui.TextInput\`, \`ui.Select\`, \`ui.Checkbox\`, \`ui.Stack\`, \`ui.Text\`, \`ui.CodeBlock\`, and \`ui.EmptyState\`.
+- Reusable rendering kits are injected as \`kits.DualEditorView\` and \`kits.diff.*\`.
+- Read-only store hooks are injected as \`hooks.useSettings\`, \`hooks.useLocale\`, \`hooks.usePaneText\`, and \`hooks.useT(pluginId)\`.
+- i18n strings live in \`locales/en.json\` and \`locales/zh.json\`; code writes only keys via \`hooks.useT('${pluginId}')\` or \`i18n.makeT('${pluginId}', locale)\`.
 `,
+    localeEn: JSON.stringify({ 'run.done': 'Done' }, null, 2) + '\n',
+    localeZh: JSON.stringify({ 'run.done': '完成' }, null, 2) + '\n',
   }
 }
 

@@ -1,0 +1,15 @@
+{
+  "textDiff.title": "文本对比",
+  "diff.textLineDiff": "文本行对比",
+  "diff.jsonSemanticDiff": "JSON 语义对比",
+  "diff.semantic": "语义",
+  "diff.semanticUnavailable": "两侧都是合法 JSON 时可用语义对比",
+  "diff.exit": "退出对比",
+  "diff.changeCount": "{count} 处差异",
+  "diff.semanticEqual": "语义一致",
+  "diff.array": "数组",
+  "diff.byIndex": "按索引",
+  "diff.unorderedScalar": "标量无序",
+  "diff.byKey": "按键",
+  "diff.keyPlaceholder": "键"
+}

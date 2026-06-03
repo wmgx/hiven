@@ -1,9 +1,9 @@
 import type { PluginDefinition } from './pluginTypes'
 import { buildTextPluginInputs, defaultPluginCommandParams, textOutputFromPluginEffects } from './pluginCommandRunner.ts'
-import { createPluginHostSdk, type PluginHostSdk } from './pluginHostSdk.ts'
+import { createPluginHostCoreSdk, type PluginHostCoreSdk } from '../pluginHostCore.ts'
 
 declare global {
-  var FluxTextPlugin: PluginHostSdk | undefined
+  var FluxTextPlugin: PluginHostCoreSdk | undefined
 }
 
 export type PluginDebugRunOptions = {
@@ -19,7 +19,7 @@ export type PluginDebugRunResult = {
 
 export function parsePluginDefinitionSource(source: string): PluginDefinition | null {
   const previousSdk = globalThis.FluxTextPlugin
-  globalThis.FluxTextPlugin = createPluginHostSdk()
+  globalThis.FluxTextPlugin = createPluginHostCoreSdk()
   try {
     const definePlugin = (definition: PluginDefinition) => definition
     const { effects, ui } = globalThis.FluxTextPlugin

@@ -1,4 +1,5 @@
 import { pluginRegistry } from './pluginRegistry'
+import { registerPluginMessages, type PluginMessages } from '../i18n/pluginI18nRegistry'
 import type { PluginDefinition, PluginManifest } from './pluginTypes'
 
 type BundledPluginModule = {
@@ -20,6 +21,28 @@ const manifestModules = import.meta.glob('../plugins/*/manifest.json', {
 const entryModules = import.meta.glob('../plugins/*/index.{ts,tsx}', {
   eager: true,
 }) as Record<string, BundledPluginModule>
+
+const localeModules = import.meta.glob('../plugins/*/locales/*.json', {
+  eager: true,
+  import: 'default',
+}) as Record<string, Record<string, string>>
+
+function localeFromPath(path: string): string | null {
+  const match = path.match(/\/locales\/([^/]+)\.json$/)
+  return match ? match[1] : null
+}
+
+function readBundledPluginMessages(dir: string): PluginMessages {
+  const messages: PluginMessages = {}
+  for (const [path, dict] of Object.entries(localeModules)) {
+    if (!path.includes(`/plugins/${dir}/locales/`)) continue
+    const locale = localeFromPath(path)
+    if (locale === 'en' || locale === 'zh') {
+      messages[locale] = dict
+    }
+  }
+  return messages
+}
 
 function pluginDirFromPath(path: string): string {
   const match = path.match(/\/plugins\/([^/]+)\//)
@@ -54,7 +77,8 @@ export function registerBundledPluginPackages() {
   if (registered) return
   registered = true
 
-  for (const { manifest, definition } of readBundledPluginPackages()) {
+  for (const { dir, manifest, definition } of readBundledPluginPackages()) {
+    registerPluginMessages(manifest.pluginId, readBundledPluginMessages(dir))
     pluginRegistry.registerProductionPlugin(
       manifest.pluginId,
       definition.commands ?? [],

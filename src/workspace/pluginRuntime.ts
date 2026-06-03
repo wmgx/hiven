@@ -19,7 +19,8 @@ import { usePluginStore } from './pluginStore'
 import { showToast } from './toast'
 import { createPluginScaffoldFiles } from './pluginScaffold.ts'
 import { parsePluginDefinitionSource } from './pluginDebugRunner.ts'
-import { createPluginHostSdk, type PluginHostSdk } from './pluginHostSdk.ts'
+import { createPluginHostSdk, type PluginHostSdk } from '../pluginHostSdk.ts'
+import { registerPluginMessages, type PluginMessages } from '../i18n/pluginI18nRegistry.ts'
 import type {
   PluginDefinition,
   PluginManifest,
@@ -80,6 +81,23 @@ async function toAssetUrl(filePath: string, cacheBust = false): Promise<string> 
 /** Read a file as text using Tauri FS plugin */
 async function readFileText(path: string): Promise<string> {
   return invokeCommand<string>('read_plugin_file', { path })
+}
+
+/**
+ * Load a plugin package's locale dictionaries from `locales/{en,zh}.json`
+ * and register them under the pluginId namespace. Missing files are ignored.
+ */
+async function loadAndRegisterPluginMessages(pluginId: string, folderPath: string): Promise<void> {
+  const messages: PluginMessages = {}
+  for (const locale of ['en', 'zh'] as const) {
+    try {
+      const raw = await readFileText(joinPath(folderPath, 'locales', `${locale}.json`))
+      messages[locale] = JSON.parse(raw) as Record<string, string>
+    } catch {
+      // No locale file for this language; skip.
+    }
+  }
+  registerPluginMessages(pluginId, messages)
 }
 
 async function invokeCommand<T>(command: string, args?: Record<string, unknown>): Promise<T> {
@@ -366,6 +384,7 @@ export async function enablePlugin(pluginId: string): Promise<void> {
     validatePluginIdMatch(definition, { pluginId, displayName: record.displayName, version: record.version, entry: record.entry, capabilities: record.capabilities })
     validateContributionIds(definition, 'production')
 
+    await loadAndRegisterPluginMessages(pluginId, record.folderPath)
     pluginRegistry.registerProductionPlugin(
       pluginId,
       definition.commands ?? [],
@@ -435,6 +454,7 @@ export async function reloadPlugin(pluginId: string): Promise<void> {
     validatePluginIdMatch(definition, newManifest)
     validateContributionIds(definition, 'production', pluginId)
 
+    await loadAndRegisterPluginMessages(pluginId, record.folderPath)
     pluginRegistry.registerProductionPlugin(
       pluginId,
       definition.commands ?? [],
@@ -524,6 +544,7 @@ export async function sideloadDevPlugin(folderPath: string): Promise<DevPlugin> 
     const definition = await loadDevPluginEntry(folderPath, packageMeta.entry)
     validatePluginIdMatch(definition, packageMeta)
 
+    await loadAndRegisterPluginMessages(pluginId, folderPath)
     pluginRegistry.registerDevPlugin(
       pluginId,
       definition.commands ?? [],
@@ -567,6 +588,7 @@ export async function reloadDevPlugin(pluginId: string): Promise<void> {
     const definition = await loadDevPluginEntry(record.folderPath, packageMeta.entry)
     validatePluginIdMatch(definition, packageMeta)
 
+    await loadAndRegisterPluginMessages(pluginId, record.folderPath)
     pluginRegistry.registerDevPlugin(
       pluginId,
       definition.commands ?? [],
@@ -814,6 +836,8 @@ export async function createDevPluginScaffold(options: {
   await savePluginFile(joinPath(folderPath, 'manifest.json'), JSON.stringify(scaffold.manifest, null, 2))
   await savePluginFile(joinPath(folderPath, 'index.js'), scaffold.indexSource)
   await savePluginFile(joinPath(folderPath, 'README.md'), scaffold.readmeSource)
+  await savePluginFile(joinPath(folderPath, 'locales', 'en.json'), scaffold.localeEn)
+  await savePluginFile(joinPath(folderPath, 'locales', 'zh.json'), scaffold.localeZh)
   return sideloadDevPlugin(folderPath)
 }
 

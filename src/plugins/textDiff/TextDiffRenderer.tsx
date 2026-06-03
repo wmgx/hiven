@@ -1,29 +1,25 @@
 /**
  * Text Diff plugin renderer.
  * Owns the plain text comparison UI and delegates only the line highlight
- * calculation to diff-kit.
+ * calculation to host-injected diff kits.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useAppStore } from '../../store'
-import type { PaneInput, RendererProps } from '@fluxtext/plugin'
-import { t } from '../../i18n'
-import { computeTextLineDiff } from '../../kits/diff/lineDiff'
-import { DualEditorView } from '../../kits/ui/DualEditorView'
-import { detectExternalEditorLanguage } from '@fluxtext/plugin'
 import {
-  buildDiffTree,
-  buildJsonDiffViewModel,
-  buildSideLines,
-  parseJson,
-} from '../../kits/diff/jsonSemanticDiff'
-import type { JsonArrayCompareMode } from '../../kits/diff/jsonSemanticDiff'
+  getPluginHostSdk,
+  detectExternalEditorLanguage,
+  type PaneInput,
+  type RendererProps,
+  type JsonArrayCompareMode,
+} from '@fluxtext/plugin'
 import {
   canUseSemanticJsonDiff,
   decideAutoDiffMode,
   isAutoDiffExitKey,
   normalizeAutoDiffLayout,
 } from './autoDiffMode'
+
+const PLUGIN_ID = 'text-diff'
 
 type TextDiffInputs = {
   original: PaneInput
@@ -32,14 +28,17 @@ type TextDiffInputs = {
 }
 
 export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>) {
+  const { kits, hooks } = getPluginHostSdk()
+  const { DualEditorView, diff } = kits
+  const t = hooks.useT(PLUGIN_ID)
+  const settings = hooks.useSettings()
+
   const originalPane = inputs?.original
   const modifiedPane = inputs?.modified
   const originalPaneId = originalPane?.paneId
   const modifiedPaneId = modifiedPane?.paneId
   const originalText = originalPane?.text ?? ''
   const modifiedText = modifiedPane?.text ?? ''
-  const settings = useAppStore((s) => s.settings)
-  const locale = useAppStore((s) => s.locale)
 
   const layout = normalizeAutoDiffLayout(inputs?.renderMode)
   const [semanticEnabled, setSemanticEnabled] = useState(true)
@@ -61,19 +60,19 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
 
   const viewModel = useMemo(
     () => semanticAvailable
-      ? buildJsonDiffViewModel(originalText, modifiedText, { arrayCompareMode })
+      ? diff.buildJsonDiffViewModel(originalText, modifiedText, { arrayCompareMode })
       : null,
-    [semanticAvailable, originalText, modifiedText, arrayCompareMode],
+    [semanticAvailable, originalText, modifiedText, arrayCompareMode, diff],
   )
   const changes = viewModel?.changes ?? []
   const { leftText, rightText, leftHighlights, rightHighlights } = useMemo(() => {
     if (autoMode === 'json-semantic') {
-      const origParsed = parseJson(originalText)
-      const modParsed = parseJson(modifiedText)
+      const origParsed = diff.parseJson(originalText)
+      const modParsed = diff.parseJson(modifiedText)
       if (origParsed.ok && modParsed.ok && origParsed.value != null && modParsed.value != null) {
-        const tree = buildDiffTree(origParsed.value, modParsed.value, { arrayCompareMode })
-        const leftLines = buildSideLines(tree, 'left')
-        const rightLines = buildSideLines(tree, 'right')
+        const tree = diff.buildDiffTree(origParsed.value, modParsed.value, { arrayCompareMode })
+        const leftLines = diff.buildSideLines(tree, 'left')
+        const rightLines = diff.buildSideLines(tree, 'right')
         return {
           leftText: leftLines.map((line) => line.text).join('\n'),
           rightText: rightLines.map((line) => line.text).join('\n'),
@@ -89,9 +88,9 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
       }
     }
 
-    const { leftHighlights, rightHighlights } = computeTextLineDiff(originalText, modifiedText)
+    const { leftHighlights, rightHighlights } = diff.computeTextLineDiff(originalText, modifiedText)
     return { leftText: originalText, rightText: modifiedText, leftHighlights, rightHighlights }
-  }, [autoMode, originalText, modifiedText, arrayCompareMode])
+  }, [autoMode, originalText, modifiedText, arrayCompareMode, diff])
   const editorLanguage = useMemo(
     () => autoMode === 'json-semantic'
       ? 'json'
@@ -137,19 +136,19 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
         style={{ borderBottom: '0.5px solid var(--color-border-tertiary)', background: 'var(--color-background-secondary)' }}
       >
         <span className="text-[11px] font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-          {t(locale, 'textDiff.title')}: {originalPane.title} ↔ {modifiedPane.title}
+          {t('textDiff.title')}: {originalPane.title} ↔ {modifiedPane.title}
         </span>
         <span className="text-[10px] px-1 py-0.5 rounded" style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-tertiary)' }}>
-          {autoMode === 'json-semantic' ? t(locale, 'diff.jsonSemanticDiff') : t(locale, 'diff.textLineDiff')}
+          {autoMode === 'json-semantic' ? t('diff.jsonSemanticDiff') : t('diff.textLineDiff')}
         </span>
         {autoMode === 'json-semantic' && changes.length > 0 && (
           <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--color-warning-bg, #fff3cd)', color: 'var(--color-warning-text, #856404)' }}>
-            {t(locale, 'diff.changeCount', { count: changes.length })}
+            {t('diff.changeCount', { count: changes.length })}
           </span>
         )}
         {autoMode === 'json-semantic' && changes.length === 0 && (
           <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--color-success-bg)', color: 'var(--color-success-text)' }}>
-            {t(locale, 'diff.semanticEqual')}
+            {t('diff.semanticEqual')}
           </span>
         )}
         <button
@@ -160,17 +159,17 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
           }}
           disabled={!semanticAvailable}
           aria-pressed={semanticEnabled && semanticAvailable}
-          title={semanticAvailable ? t(locale, 'diff.semantic') : t(locale, 'diff.semanticUnavailable')}
+          title={semanticAvailable ? t('diff.semantic') : t('diff.semanticUnavailable')}
           onClick={() => setSemanticEnabled((enabled) => !enabled)}
         >
-          {t(locale, 'diff.semantic')}
+          {t('diff.semantic')}
         </button>
         <button
           className="ml-auto text-[10px] px-1.5 py-0.5 rounded hover:opacity-80"
           style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-secondary)' }}
           onClick={host.close}
         >
-          {t(locale, 'diff.exit')}
+          {t('diff.exit')}
         </button>
       </div>
 
@@ -180,7 +179,7 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
           style={{ borderBottom: '0.5px solid var(--color-border-tertiary)', background: 'var(--color-background-secondary)' }}
         >
           <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
-            {t(locale, 'diff.array')}:
+            {t('diff.array')}:
           </span>
           {(['by-index', 'unordered-scalar', 'by-object-key'] as const).map((mode) => (
             <button
@@ -189,7 +188,7 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
               style={{ background: arrayMode === mode ? 'var(--color-accent-bg)' : 'var(--color-background-tertiary)', color: arrayMode === mode ? 'var(--color-accent)' : 'var(--color-text-tertiary)' }}
               onClick={() => setArrayMode(mode)}
             >
-              {t(locale, mode === 'by-index' ? 'diff.byIndex' : mode === 'unordered-scalar' ? 'diff.unorderedScalar' : 'diff.byKey')}
+              {t(mode === 'by-index' ? 'diff.byIndex' : mode === 'unordered-scalar' ? 'diff.unorderedScalar' : 'diff.byKey')}
             </button>
           ))}
           {arrayMode === 'by-object-key' && (
@@ -198,7 +197,7 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
               style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border-tertiary)' }}
               value={objectKey}
               onChange={(event) => setObjectKey(event.target.value)}
-              placeholder={t(locale, 'diff.keyPlaceholder')}
+              placeholder={t('diff.keyPlaceholder')}
             />
           )}
         </div>

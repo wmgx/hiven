@@ -32,11 +32,17 @@ The directory is the plugin package:
 
 The entry file exports the plugin definition. Plugin name customization lives in `manifest.displayName` and `manifest.displayNameI18n` for package lists, and in `definePlugin({ title, titleI18n })` plus contribution `title/titleI18n` for runtime UI. Parameters are declared on command contributions through `params`, using `boolean`, `text`, `number`, `single-select`, or `multi-select`, with `labelI18n`, `default`, `required`, and option labels.
 
-New plugins should use injected host helpers instead of relative framework imports. The host SDK is available as `globalThis.FluxTextPlugin` and currently exposes:
+New plugins should use injected host helpers instead of relative framework imports. The host SDK is available as `globalThis.FluxTextPlugin` (and, for first-party bundled plugins, via `getPluginHostSdk()` from `@fluxtext/plugin`). It currently exposes:
 
 - `definePlugin` for the plugin definition.
+- `react` — the shared host React instance (plugins must not bundle their own).
 - `effects` for standard command effects.
 - `ui` for host-styled primitive components: `ui.Button`, `ui.TextInput`, `ui.Select`, `ui.Checkbox`, `ui.Stack`, `ui.Text`, `ui.CodeBlock`, and `ui.EmptyState`.
+- `kits` for reusable rendering helpers: `kits.DualEditorView` and `kits.diff.*` (`computeTextLineDiff`, `buildDiffTree`, `buildJsonDiffViewModel`, `buildSideLines`, `parseJson`).
+- `hooks` for read-only store access: `hooks.useSettings`, `hooks.useLocale`, `hooks.usePaneText`, and `hooks.useT(pluginId)`.
+- `i18n.makeT(pluginId, locale)` for building a namespaced translate function outside React.
+
+> IMPORTANT: never destructure the SDK at module top level. Bundled first-party plugins are evaluated before the host globals are installed, so always call `getPluginHostSdk()` (or read `globalThis.FluxTextPlugin`) inside a component body or `run()`.
 
 ```js
 const { definePlugin, effects, ui } = globalThis.FluxTextPlugin
@@ -62,7 +68,25 @@ export default definePlugin({
 })
 ```
 
-Framework internals such as `../workspace/*` are not part of the plugin author contract. First-party source may still live in the repository, but public plugin examples and generated packages should use the injected SDK shape.
+Framework internals such as `../workspace/*` are not part of the plugin author contract. First-party source may still live in the repository, but public plugin examples and generated packages should use the injected SDK shape. First-party renderers consume the SDK through `getPluginHostSdk()` (imported from the `@fluxtext/plugin` alias), never via `../../workspace`, `../../store`, `../../i18n`, or `../../kits` deep paths.
+
+## i18n Convention
+
+A plugin package localizes its strings through a per-package `locales/` directory:
+
+```text
+<plugin-id>/
+  locales/
+    en.json
+    zh.json
+```
+
+Each locale file is a flat `{ key: message }` map. Messages may contain `{name}` placeholders interpolated from `vars`. On load, the host registers these dictionaries under the `pluginId` namespace. Plugin code only writes short keys and resolves them with a namespaced translate function:
+
+- In a React renderer/panel: `const t = hooks.useT('<plugin-id>')` then `t('some.key', { count })`.
+- Outside React: `const t = i18n.makeT('<plugin-id>', locale)`.
+
+Resolution uses a three-level fallback: plugin namespace (current locale → `en`) → host global dictionary → the raw key. Existing inline `titleI18n` / `labelI18n` on contributions still work for static command-palette display, but runtime UI strings should live in `locales/` and be looked up by key. The first-party `text-diff` package is the reference example.
 
 ## Import Contract
 

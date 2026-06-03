@@ -1,0 +1,15 @@
+{
+  "textDiff.title": "Text Diff",
+  "diff.textLineDiff": "Text line diff",
+  "diff.jsonSemanticDiff": "JSON semantic diff",
+  "diff.semantic": "Semantic",
+  "diff.semanticUnavailable": "Semantic diff is available when both sides are valid JSON",
+  "diff.exit": "Exit diff",
+  "diff.changeCount": "{count} changes",
+  "diff.semanticEqual": "Semantic equal",
+  "diff.array": "Array",
+  "diff.byIndex": "By index",
+  "diff.unorderedScalar": "Unordered scalar",
+  "diff.byKey": "By key",
+  "diff.keyPlaceholder": "key"
+}
