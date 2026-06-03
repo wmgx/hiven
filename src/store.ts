@@ -14,6 +14,7 @@ import {
 } from './workspace/pinnedActionRuntime'
 import type { PinnedRuntimeConfig as WorkspacePinnedRuntimeConfig } from './workspace/pinnedActionRuntime'
 import type { LiveActionCapability } from './workspace/pluginTypes'
+import { samePinnedPluginCommandIdentity } from './workspace/pinnedActionIdentity'
 
 export type ViewId = 'editor' | 'scripts' | 'plugin-editor' | 'pinned-runner' | 'debugger' | 'settings'
 
@@ -389,12 +390,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   },
   pinPluginCommand: (command) => {
     const current = useAppStore.getState()
-    const existing = current.pinnedActions.find((pinned) => (
-      pinned.kind === 'plugin-command' &&
-      pinned.actionId === command.actionId &&
-      pinned.pluginId === command.pluginId &&
-      !!pinned.isDev === !!command.isDev
-    ))
+    const existing = current.pinnedActions.find((pinned) => samePinnedPluginCommandIdentity(pinned, command))
     if (existing) {
       current.activatePinnedAction(existing.id)
       return existing.id

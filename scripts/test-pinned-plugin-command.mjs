@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import assert from 'node:assert/strict'
+import { pinnedParamsFingerprint, samePinnedParams, samePinnedPluginCommandIdentity } from '../src/workspace/pinnedActionIdentity.ts'
 
 function read(path) {
   return fs.readFileSync(path, 'utf8')
@@ -27,6 +28,12 @@ assertHas(files.store, /PinnedActionKind\s*=\s*['"]legacy['"]\s*\|\s*['"]plugin-
 assertHas(files.store, /\bpinPluginCommand\s*:/, 'store should expose pinPluginCommand')
 assertHas(files.store, /pluginId\??\s*:\s*string/, 'PinnedAction should remember pluginId for plugin commands')
 assertHas(files.store, /isDev\??\s*:\s*boolean/, 'PinnedAction should remember dev/prod source for plugin commands')
+assertHas(files.store, /samePinnedPluginCommandIdentity/, 'plugin command pin identity should include params')
+assert.ok(samePinnedParams({ mode: 'encode', flags: { trim: true, sort: 'asc' } }, { flags: { sort: 'asc', trim: true }, mode: 'encode' }), 'pinned params fingerprint should be stable across object key order')
+assert.notEqual(pinnedParamsFingerprint({ mode: 'encode' }), pinnedParamsFingerprint({ mode: 'decode' }), 'different plugin params should create distinct pinned identities')
+const pinnedCommand = { kind: 'plugin-command', actionId: 'tools.transform', pluginId: 'tools', isDev: false, params: { mode: 'encode', flags: { trim: true, sort: 'asc' } } }
+assert.equal(samePinnedPluginCommandIdentity(pinnedCommand, { ...pinnedCommand, params: { flags: { sort: 'asc', trim: true }, mode: 'encode' } }), true, 'same plugin command params should focus an existing pinned action')
+assert.equal(samePinnedPluginCommandIdentity(pinnedCommand, { ...pinnedCommand, params: { mode: 'decode', flags: { trim: true, sort: 'asc' } } }), false, 'different plugin command params should create another pinned action')
 
 assertHas(files.commandPalette, /pinPluginCommand/, 'CommandPalette should pin plugin commands')
 assertNotHas(files.commandPalette, /if\s*\(\s*item\.kind\s*!==\s*['"]legacy['"]\s*\)\s*return/, 'CommandPalette pin handler should not ignore plugin items')
