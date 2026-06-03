@@ -59,19 +59,14 @@ check('Command palette exposes a stable pin control for plugin commands', () => 
 check('Pinned runner exposes stable live-runner controls and buffers', () => {
   for (const [testId, label] of [
     ['pinned-runner-run-button', 'Run Now'],
+    ['pinned-runner-input-buffer', 'input buffer'],
+    ['pinned-runner-output-buffer', 'output buffer'],
     ['pinned-runner-copy-output', 'Copy Output'],
     ['pinned-runner-clear-input', 'Clear Input'],
     ['pinned-runner-clear-output', 'Clear Output'],
   ]) {
     assertHas(files.pinnedRunner, new RegExp(`data-testid=['"]${testId}['"]`), `${label} should be targetable`)
   }
-  for (const [testId, label] of [
-    ['pinned-runner-input-buffer', 'input buffer'],
-    ['pinned-runner-output-buffer', 'output buffer'],
-  ]) {
-    assertHas(files.pinnedRunner, new RegExp(`testId=['"]${testId}['"]`), `${label} should pass a stable test id to the Monaco wrapper`)
-  }
-  assertHas(files.pinnedRunner, /data-testid=\{testId\}/, 'PinnedMonacoBuffer should render its testId as a DOM data-testid')
 })
 
 check('Scaffolded plugins stay on the injected SDK contract', () => {

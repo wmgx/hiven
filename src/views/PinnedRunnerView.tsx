@@ -266,17 +266,18 @@ export function PinnedRunnerView() {
               Clear Input
             </button>
           </div>
-          <PinnedMonacoBuffer
-            editorId={pinnedRuntime?.inputEditorId ?? `pinned-input-editor:${pinned.id}`}
-            modelId={pinnedRuntime?.inputModelId ?? `pinned-input:${pinned.id}`}
-            value={pinned.inputText}
-            readOnly={false}
-            onChange={updateInputText}
-            onBlur={() => {
-              if (pinned.autoRun && pinned.inputText && liveTrigger === 'on-blur') void runPinnedAction()
-            }}
-            testId="pinned-runner-input-buffer"
-          />
+          <div data-testid="pinned-runner-input-buffer" className="flex-1 min-h-0">
+            <PinnedMonacoBuffer
+              editorId={pinnedRuntime?.inputEditorId ?? `pinned-input-editor:${pinned.id}`}
+              modelId={pinnedRuntime?.inputModelId ?? `pinned-input:${pinned.id}`}
+              value={pinned.inputText}
+              readOnly={false}
+              onChange={updateInputText}
+              onBlur={() => {
+                if (pinned.autoRun && pinned.inputText && liveTrigger === 'on-blur') void runPinnedAction()
+              }}
+            />
+          </div>
         </section>
 
         <section className="flex flex-col min-w-0 min-h-0">
@@ -301,14 +302,15 @@ export function PinnedRunnerView() {
               </button>
             </div>
           </div>
-          <PinnedMonacoBuffer
-            editorId={pinnedRuntime?.outputEditorId ?? `pinned-output-editor:${pinned.id}`}
-            modelId={pinnedRuntime?.outputModelId ?? `pinned-output:${pinned.id}`}
-            value={pinned.outputText}
-            readOnly={true}
-            outputKind={pinned.outputKind}
-            testId="pinned-runner-output-buffer"
-          />
+          <div data-testid="pinned-runner-output-buffer" className="flex-1 min-h-0">
+            <PinnedMonacoBuffer
+              editorId={pinnedRuntime?.outputEditorId ?? `pinned-output-editor:${pinned.id}`}
+              modelId={pinnedRuntime?.outputModelId ?? `pinned-output:${pinned.id}`}
+              value={pinned.outputText}
+              readOnly={true}
+              outputKind={pinned.outputKind}
+            />
+          </div>
         </section>
       </div>
 
@@ -333,7 +335,6 @@ function PinnedMonacoBuffer({
   outputKind,
   onChange,
   onBlur,
-  testId,
 }: {
   editorId: string
   modelId: string
@@ -342,7 +343,6 @@ function PinnedMonacoBuffer({
   outputKind?: PinnedAction['outputKind']
   onChange?: (text: string) => void
   onBlur?: () => void
-  testId?: string
 }) {
   const settings = useAppStore((s) => s.settings)
   const blurDisposableRef = useRef<{ dispose: () => void } | null>(null)
@@ -357,7 +357,6 @@ function PinnedMonacoBuffer({
 
   return (
     <div
-      data-testid={testId}
       className="flex-1 min-h-0"
       style={{
         background: readOnly ? 'var(--color-background-secondary)' : 'var(--color-background-primary)',

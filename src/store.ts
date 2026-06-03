@@ -15,6 +15,7 @@ import {
 import type { PinnedRuntimeConfig as WorkspacePinnedRuntimeConfig } from './workspace/pinnedActionRuntime'
 import type { LiveActionCapability } from './workspace/pluginTypes'
 import { samePinnedPluginCommandIdentity } from './workspace/pinnedActionIdentity'
+import { createPinnedPluginCommandAction, makePinnedId } from './workspace/pinnedActionFactory'
 
 export type ViewId = 'editor' | 'scripts' | 'plugin-editor' | 'pinned-runner' | 'debugger' | 'settings'
 
@@ -304,7 +305,7 @@ function _loadTabState(tab: DebuggerTab) {
 }
 
 function _makePinnedId(actionId: string): string {
-  return `pinned-${actionId.replace(/[^a-z0-9_-]+/gi, '-').toLowerCase()}-${Date.now().toString(36)}`
+  return makePinnedId(actionId)
 }
 
 function shouldAutoRunLiveAction(live?: LiveActionCapability): boolean {
@@ -395,23 +396,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
       current.activatePinnedAction(existing.id)
       return existing.id
     }
-    const pinned: PinnedAction = {
-      id: _makePinnedId(command.actionId),
-      kind: 'plugin-command',
-      actionId: command.actionId,
-      pluginId: command.pluginId,
-      isDev: !!command.isDev,
-      title: command.title,
-      titleI18n: command.titleI18n,
-      icon: command.icon,
-      inputText: '',
-      outputText: '',
-      outputKind: 'text',
-      params: command.params ?? {},
-      autoRun: shouldAutoRunLiveAction(command.live),
-      debounceMs: command.live?.live?.debounceMs ?? 250,
-      controlsOpen: command.live?.controls?.defaultOpen ?? false,
-    }
+    const pinned = createPinnedPluginCommandAction(command)
     set((state) => ({
       pinnedActions: [...state.pinnedActions, pinned],
       activePinnedActionId: pinned.id,
