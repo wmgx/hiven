@@ -47,6 +47,9 @@ assertNotHas(files.pinnedRunner, /setInterval\(\(\)\s*=>\s*prunePinnedRuntimes/,
 assertHas(files.store, /sideEffects\s*!==\s*['"]writes['"][\s\S]*trigger\s*!==\s*['"]manual['"]|trigger\s*!==\s*['"]manual['"][\s\S]*sideEffects\s*!==\s*['"]writes['"]/, 'writes side-effect commands should default to manual run')
 assertHas(files.store, /def\?\.live[\s\S]*autoRun:\s*shouldAutoRunLiveAction/, 'legacy actions should derive autoRun from live capability metadata')
 assertHas(files.store, /serializePinnedTombstones[\s\S]*tombstoneTtlDays[\s\S]*disposedAt/, 'persisted tombstones should be pruned by tombstoneTtlDays')
+assertHas(files.pinnedRunner, /liveTrigger[\s\S]*['"]on-blur['"]/, 'PinnedRunnerView should resolve live.trigger including on-blur')
+assertHas(files.pinnedRunner, /liveTrigger\s*===\s*['"]on-blur['"][\s\S]*return[\s\S]*window\.setTimeout|liveTrigger\s*!==\s*['"]on-blur['"][\s\S]*window\.setTimeout|window\.setTimeout[\s\S]*liveTrigger\s*!==\s*['"]on-blur['"]/, 'PinnedRunnerView should only debounce input changes for non on-blur triggers')
+assertHas(files.pinnedRunner, /onDidBlurEditorWidget[\s\S]*runPinnedAction|runPinnedAction[\s\S]*onDidBlurEditorWidget/, 'Pinned input editor should run on Monaco blur for on-blur live actions')
 
 const restoredPreview = restorePinnedFromTombstone({
   id: 'pinned-1',

@@ -74,6 +74,7 @@ export function PinnedRunnerView() {
   const commandContribution: CommandContribution | undefined = pluginCommand?.contribution
   const actionParams = action?.params ?? commandContribution?.params ?? []
   const customControls = commandContribution?.live?.controls
+  const liveTrigger = action?.live?.live?.trigger ?? commandContribution?.live?.live?.trigger ?? 'on-input'
   const params = useMemo(() => ({
     ...defaultParams(actionParams),
     ...(pinned?.params ?? {}),
@@ -194,12 +195,12 @@ export function PinnedRunnerView() {
   }
 
   useEffect(() => {
-    if (!pinned || !pinned.autoRun || !pinned.inputText) return
+    if (!pinned || !pinned.autoRun || !pinned.inputText || liveTrigger === 'on-blur') return
     const timer = window.setTimeout(() => {
       void runPinnedAction()
     }, pinned.debounceMs)
     return () => window.clearTimeout(timer)
-  }, [pinned?.id, pinned?.inputText, pinned?.autoRun, pinned?.debounceMs, paramsFingerprint])
+  }, [pinned?.id, pinned?.inputText, pinned?.autoRun, pinned?.debounceMs, paramsFingerprint, liveTrigger])
 
   if (!pinned) {
     return (
@@ -269,6 +270,9 @@ export function PinnedRunnerView() {
             value={pinned.inputText}
             readOnly={false}
             onChange={updateInputText}
+            onBlur={() => {
+              if (pinned.autoRun && pinned.inputText && liveTrigger === 'on-blur') void runPinnedAction()
+            }}
           />
         </section>
 
@@ -324,6 +328,7 @@ function PinnedMonacoBuffer({
   readOnly,
   outputKind,
   onChange,
+  onBlur,
 }: {
   editorId: string
   modelId: string
@@ -331,11 +336,15 @@ function PinnedMonacoBuffer({
   readOnly: boolean
   outputKind?: PinnedAction['outputKind']
   onChange?: (text: string) => void
+  onBlur?: () => void
 }) {
   const settings = useAppStore((s) => s.settings)
+  const blurDisposableRef = useRef<{ dispose: () => void } | null>(null)
 
   useEffect(() => {
     return () => {
+      blurDisposableRef.current?.dispose()
+      blurDisposableRef.current = null
       runtimeRegistry.unregisterCodeEditor(editorId)
     }
   }, [editorId])
@@ -362,6 +371,10 @@ function PinnedMonacoBuffer({
         }}
         onMount={(editor) => {
           runtimeRegistry.registerCodeEditor(editorId, editor)
+          blurDisposableRef.current?.dispose()
+          blurDisposableRef.current = !readOnly && onBlur
+            ? editor.onDidBlurEditorWidget(() => onBlur())
+            : null
         }}
         options={{
           readOnly,
