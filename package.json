@@ -20,6 +20,7 @@
     "test:plugin-authoring-flow": "node scripts/test-plugin-authoring-flow.mjs",
     "test:plugin-package-lifecycle": "node scripts/test-plugin-package-lifecycle.mjs",
     "test:tauri-plugin-dir-commands": "cargo test --manifest-path src-tauri/Cargo.toml plugin_dir_command_tests -- --test-threads=1",
+    "test:plugin-goal-suite": "node scripts/test-plugin-goal-suite.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },
