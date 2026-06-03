@@ -238,7 +238,7 @@ export function PinnedRunnerView() {
             />
             Auto
           </label>
-          <button className="scripts-btn scripts-btn-primary" onClick={() => void runPinnedAction()} disabled={running || (!action && !commandContribution)} title="Run Now">
+          <button data-testid="pinned-runner-run-button" className="scripts-btn scripts-btn-primary" onClick={() => void runPinnedAction()} disabled={running || (!action && !commandContribution)} title="Run Now">
             <Play size={14} />
             Run Now
           </button>
@@ -259,7 +259,7 @@ export function PinnedRunnerView() {
         <section className="flex flex-col min-w-0 min-h-0" style={{ borderRight: '0.5px solid var(--color-border-tertiary)' }}>
           <div className="h-9 flex items-center justify-between px-3 shrink-0" style={{ color: 'var(--color-text-secondary)' }}>
             <span className="text-[12px]">Input</span>
-            <button className="scripts-btn" onClick={() => updateInputText('')} title="Clear Input">
+            <button data-testid="pinned-runner-clear-input" className="scripts-btn" onClick={() => updateInputText('')} title="Clear Input">
               <Eraser size={14} />
               Clear Input
             </button>
@@ -273,6 +273,7 @@ export function PinnedRunnerView() {
             onBlur={() => {
               if (pinned.autoRun && pinned.inputText && liveTrigger === 'on-blur') void runPinnedAction()
             }}
+            testId="pinned-runner-input-buffer"
           />
         </section>
 
@@ -280,11 +281,11 @@ export function PinnedRunnerView() {
           <div className="h-9 flex items-center justify-between px-3 shrink-0" style={{ color: 'var(--color-text-secondary)' }}>
             <span className="text-[12px]">Output</span>
             <div className="flex items-center gap-2">
-              <button className="scripts-btn" onClick={() => { if (pinned.outputText) void navigator.clipboard.writeText(pinned.outputText) }} title="Copy Output">
+              <button data-testid="pinned-runner-copy-output" className="scripts-btn" onClick={() => { if (pinned.outputText) void navigator.clipboard.writeText(pinned.outputText) }} title="Copy Output">
                 <Copy size={14} />
                 Copy Output
               </button>
-              <button className="scripts-btn" onClick={() => updatePinnedAction(pinned.id, { outputText: '', outputKind: 'text', lastError: undefined })} title="Clear Output">
+              <button data-testid="pinned-runner-clear-output" className="scripts-btn" onClick={() => updatePinnedAction(pinned.id, { outputText: '', outputKind: 'text', lastError: undefined })} title="Clear Output">
                 <Eraser size={14} />
                 Clear Output
               </button>
@@ -304,6 +305,7 @@ export function PinnedRunnerView() {
             value={pinned.outputText}
             readOnly={true}
             outputKind={pinned.outputKind}
+            testId="pinned-runner-output-buffer"
           />
         </section>
       </div>
@@ -329,6 +331,7 @@ function PinnedMonacoBuffer({
   outputKind,
   onChange,
   onBlur,
+  testId,
 }: {
   editorId: string
   modelId: string
@@ -337,6 +340,7 @@ function PinnedMonacoBuffer({
   outputKind?: PinnedAction['outputKind']
   onChange?: (text: string) => void
   onBlur?: () => void
+  testId?: string
 }) {
   const settings = useAppStore((s) => s.settings)
   const blurDisposableRef = useRef<{ dispose: () => void } | null>(null)
@@ -351,6 +355,7 @@ function PinnedMonacoBuffer({
 
   return (
     <div
+      data-testid={testId}
       className="flex-1 min-h-0"
       style={{
         background: readOnly ? 'var(--color-background-secondary)' : 'var(--color-background-primary)',

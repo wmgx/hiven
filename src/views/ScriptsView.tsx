@@ -393,7 +393,7 @@ export function ScriptsView() {
       <div className="scripts-header">
         <span className="scripts-title">{t(locale, 'scripts.title')}</span>
         <div className="scripts-header-actions">
-          <button onClick={handleCreatePlugin} className="scripts-btn scripts-btn-primary">
+          <button data-testid="plugin-new-button" onClick={handleCreatePlugin} className="scripts-btn scripts-btn-primary">
             <Plus size={14} /> {t(locale, 'scripts.new')}
           </button>
           <button onClick={() => setRemoteOpen(true)} className="scripts-btn">

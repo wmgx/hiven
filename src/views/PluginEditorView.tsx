@@ -301,6 +301,7 @@ export function PluginEditorView() {
           <div className="h-10 px-3 flex items-center gap-2 shrink-0" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)', background: 'var(--color-background-secondary)' }}>
             <span className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>{t(locale, 'pluginEditor.debug')}</span>
             <button
+              data-testid="plugin-editor-run-button"
               className="scripts-btn scripts-btn-primary ml-auto"
               onClick={runDebug}
               disabled={debugRunning}
@@ -355,6 +356,7 @@ export function PluginEditorView() {
               <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--color-text-tertiary)' }}>{t(locale, 'pluginEditor.input')}</span>
             </div>
             <textarea
+              data-testid="plugin-editor-debug-input"
               className="flex-1 min-h-0 p-2.5 text-xs leading-5 resize-none bg-transparent border-none outline-none"
               style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
               value={debugInput}
@@ -375,7 +377,7 @@ export function PluginEditorView() {
                 <Copy size={12} />
               </button>
             </div>
-            <div className="flex-1 min-h-0 p-2.5 text-xs leading-5 overflow-auto whitespace-pre-wrap" style={{ color: debugOutput ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)', fontFamily: 'var(--font-mono)' }}>
+            <div data-testid="plugin-editor-debug-output" className="flex-1 min-h-0 p-2.5 text-xs leading-5 overflow-auto whitespace-pre-wrap" style={{ color: debugOutput ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)', fontFamily: 'var(--font-mono)' }}>
               {debugOutput || t(locale, 'pluginEditor.runToSee')}
             </div>
           </div>

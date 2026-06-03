@@ -15,6 +15,7 @@
     "test:pinned-persistence-settings": "node scripts/test-pinned-persistence-settings.mjs",
     "test:pinned-runner-policy": "node scripts/test-pinned-runner-policy.mjs",
     "test:plugin-editor-debug-runner": "node scripts/test-plugin-editor-debug-runner.mjs",
+    "test:plugin-authoring-ui-contract": "node scripts/test-plugin-authoring-ui-contract.mjs",
     "test:plugin-authoring-flow": "node scripts/test-plugin-authoring-flow.mjs",
     "test:plugin-package-lifecycle": "node scripts/test-plugin-package-lifecycle.mjs",
     "preview": "vite preview",

@@ -1011,6 +1011,7 @@ function ActionItem({ item, selected, onClick, onPin, onMouseEnter, shortcutMeta
       )}
       {(item.kind === 'legacy' || item.kind === 'plugin') && (
         <button
+          data-testid="command-palette-pin-action"
           className="w-6 h-6 rounded-md border-none bg-transparent cursor-pointer flex items-center justify-center shrink-0"
           title={t(locale, 'palette.pinAction')}
           style={{ color: selected ? 'var(--color-accent-hover)' : 'var(--color-text-tertiary)' }}
