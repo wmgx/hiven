@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { builtinActions } from '../src/actions/builtins.ts'
 
 const root = process.cwd()
 
@@ -58,6 +59,16 @@ check('Milestone A models persistent pinned action definitions in the app store'
   assertSourceHas(files.store, /\bunpinAction\s*:/, 'AppState should expose unpinAction')
   assertSourceHas(files.store, /\breorderPinnedActions\s*:/, 'AppState should expose reorderPinnedActions')
   assertSourceHas(files.store, /pinAction[\s\S]*(?:find|some)\([^)]*actionId|actionId[\s\S]*(?:find|some)\(/, 'pinAction should de-duplicate by actionId')
+})
+
+check('High-frequency builtin text tools declare live on-input capability', () => {
+  for (const name of ['base64', 'url', 'hash', 'timestamp', 'json', 'count']) {
+    const action = builtinActions.find((item) => item.name === name)
+    assert.ok(action, `${name} builtin action should exist`)
+    assert.equal(action.live?.live?.enabled, true, `${name} should opt into live running`)
+    assert.equal(action.live?.live?.trigger, 'on-input', `${name} should update from pinned input changes`)
+    assert.equal(action.live?.live?.sideEffects, 'none', `${name} should be side-effect free in pinned runner`)
+  }
 })
 
 check('Milestone A adds a sidebar Pinned section with entries that open existing pinned actions', () => {

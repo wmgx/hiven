@@ -1,5 +1,14 @@
 import type { ActionDef } from '../store'
 
+const liveOnInput: NonNullable<ActionDef['live']> = {
+  live: {
+    enabled: true,
+    trigger: 'on-input',
+    sideEffects: 'none',
+    debounceMs: 250,
+  },
+}
+
 export const builtinActions: ActionDef[] = [
   {
     name: 'dedup',
@@ -102,6 +111,7 @@ export const builtinActions: ActionDef[] = [
     descriptionI18n: { zh: '美化或压缩 JSON' },
     tags: ['json', 'format'],
     builtin: true,
+    live: liveOnInput,
     optionalParams: true,
     params: [
       {
@@ -220,6 +230,7 @@ export const builtinActions: ActionDef[] = [
     descriptionI18n: { zh: 'Base64 编码或解码文本' },
     tags: ['encode', 'decode'],
     builtin: true,
+    live: liveOnInput,
     params: [
       {
         key: 'mode',
@@ -254,6 +265,7 @@ export const builtinActions: ActionDef[] = [
     descriptionI18n: { zh: 'URL 编码或解码文本' },
     tags: ['encode', 'decode', 'url'],
     builtin: true,
+    live: liveOnInput,
     params: [
       {
         key: 'mode',
@@ -288,6 +300,7 @@ export const builtinActions: ActionDef[] = [
     descriptionI18n: { zh: '统计行数、词数和字符数' },
     tags: ['text', 'stats'],
     builtin: true,
+    live: liveOnInput,
     params: [],
     run(ctx) {
       const text = ctx.input.text
@@ -528,6 +541,7 @@ export const builtinActions: ActionDef[] = [
     descriptionI18n: { zh: '计算哈希摘要' },
     tags: ['hash', 'crypto'],
     builtin: true,
+    live: liveOnInput,
     optionalParams: true,
     params: [
       {
@@ -591,6 +605,7 @@ export const builtinActions: ActionDef[] = [
     descriptionI18n: { zh: '时间戳与日期互转' },
     tags: ['time', 'convert'],
     builtin: true,
+    live: liveOnInput,
     params: [
       {
         key: 'mode',
