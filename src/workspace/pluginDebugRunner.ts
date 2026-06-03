@@ -1,5 +1,10 @@
 import type { PluginDefinition } from './pluginTypes'
 import { buildTextPluginInputs, defaultPluginCommandParams, textOutputFromPluginEffects } from './pluginCommandRunner.ts'
+import { createPluginHostSdk, type PluginHostSdk } from './pluginHostSdk.ts'
+
+declare global {
+  var FluxTextPlugin: PluginHostSdk | undefined
+}
 
 export type PluginDebugRunOptions = {
   inputText: string
@@ -12,25 +17,28 @@ export type PluginDebugRunResult = {
   logs: string[]
 }
 
-const debugEffects = {
-  replaceActiveText: (text: string) => ({ type: 'text.replace' as const, target: 'active-input' as const, text }),
-  createPane: (text: string, title?: string) => ({ type: 'pane.create' as const, pane: { text, title }, focus: true }),
-  status: (message: string, level: 'info' | 'success' | 'warning' | 'error' = 'info') => ({ type: 'status.message' as const, level, message }),
-}
-
 export function parsePluginDefinitionSource(source: string): PluginDefinition | null {
+  const previousSdk = globalThis.FluxTextPlugin
+  globalThis.FluxTextPlugin = createPluginHostSdk()
   try {
     const definePlugin = (definition: PluginDefinition) => definition
+    const { effects, ui } = globalThis.FluxTextPlugin
     const code = source
       .replace(/^\s*import\s+.*?['"].*?['"]\s*;?\s*$/gm, '')
-      .replace(/const\s+\{\s*definePlugin\s*,\s*effects\s*\}\s*=\s*globalThis\.FluxTextPlugin\s*;?/, '')
+      .replace(/^\s*const\s+\{[^}]*\}\s*=\s*globalThis\.FluxTextPlugin\s*;?\s*$/gm, '')
       .replace(/export\s+default\s+definePlugin\s*\(/, 'return definePlugin(')
       .replace(/export\s+default\s+/, 'return ')
-    const value = new Function('definePlugin', 'effects', code)(definePlugin, debugEffects)
+    const value = new Function('definePlugin', 'effects', 'ui', code)(definePlugin, effects, ui)
     if (!value || typeof value !== 'object' || typeof value.id !== 'string') return null
     return value as PluginDefinition
   } catch {
     return null
+  } finally {
+    if (previousSdk === undefined) {
+      delete globalThis.FluxTextPlugin
+    } else {
+      globalThis.FluxTextPlugin = previousSdk
+    }
   }
 }
 

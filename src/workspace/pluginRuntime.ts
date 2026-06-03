@@ -17,8 +17,8 @@ import { pluginRegistry } from './pluginRegistry'
 import { useWorkspaceStore } from './workspaceStore'
 import { usePluginStore } from './pluginStore'
 import { showToast } from './toast'
-import { definePlugin } from './definePlugin'
 import { createPluginScaffoldFiles } from './pluginScaffold.ts'
+import { createPluginHostSdk, type PluginHostSdk } from './pluginHostSdk.ts'
 import type {
   PluginDefinition,
   PluginManifest,
@@ -30,14 +30,7 @@ import type {
 
 declare global {
   interface Window {
-    FluxTextPlugin?: {
-      definePlugin: typeof definePlugin
-      effects: {
-        replaceActiveText: (text: string) => { type: 'text.replace'; target: 'active-input'; text: string }
-        createPane: (text: string, title?: string) => { type: 'pane.create'; pane: { text: string; title?: string }; focus: boolean }
-        status: (message: string, level?: 'info' | 'success' | 'warning' | 'error') => { type: 'status.message'; level: 'info' | 'success' | 'warning' | 'error'; message: string }
-      }
-    }
+    FluxTextPlugin?: PluginHostSdk
   }
 }
 
@@ -65,14 +58,7 @@ const watcherCleanups = new Map<string, () => void>()
 
 function installPluginGlobals(): void {
   if (typeof window === 'undefined') return
-  window.FluxTextPlugin = {
-    definePlugin,
-    effects: {
-      replaceActiveText: (text) => ({ type: 'text.replace' as const, target: 'active-input' as const, text }),
-      createPane: (text, title) => ({ type: 'pane.create' as const, pane: { text, title }, focus: true }),
-      status: (message, level = 'info') => ({ type: 'status.message' as const, level, message }),
-    },
-  }
+  window.FluxTextPlugin = createPluginHostSdk()
 }
 
 // ─── Tauri Helpers ────────────────────────────────────────────────────────────

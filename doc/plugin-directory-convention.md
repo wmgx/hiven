@@ -32,10 +32,14 @@ The directory is the plugin package:
 
 The entry file exports the plugin definition. Plugin name customization lives in `manifest.displayName` and `manifest.displayNameI18n` for package lists, and in `definePlugin({ title, titleI18n })` plus contribution `title/titleI18n` for runtime UI. Parameters are declared on command contributions through `params`, using `boolean`, `text`, `number`, `single-select`, or `multi-select`, with `labelI18n`, `default`, `required`, and option labels.
 
-New plugins should use injected host helpers instead of relative framework imports:
+New plugins should use injected host helpers instead of relative framework imports. The host SDK is available as `globalThis.FluxTextPlugin` and currently exposes:
+
+- `definePlugin` for the plugin definition.
+- `effects` for standard command effects.
+- `ui` for host-styled primitive components: `ui.Button`, `ui.TextInput`, `ui.Select`, `ui.Checkbox`, `ui.Stack`, `ui.Text`, `ui.CodeBlock`, and `ui.EmptyState`.
 
 ```js
-const { definePlugin, effects } = globalThis.FluxTextPlugin
+const { definePlugin, effects, ui } = globalThis.FluxTextPlugin
 
 export default definePlugin({
   id: 'my-plugin',

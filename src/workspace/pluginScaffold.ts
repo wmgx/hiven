@@ -29,12 +29,13 @@ This is a FluxText directory plugin.
 - \`manifest.json\` contains package metadata only.
 - \`index.js\` is the fixed entry.
 - Runtime helpers are injected as \`globalThis.FluxTextPlugin\`; no relative framework import is needed.
+- Host UI primitives are injected as \`ui.Button\`, \`ui.TextInput\`, \`ui.Select\`, \`ui.Checkbox\`, \`ui.Stack\`, \`ui.Text\`, \`ui.CodeBlock\`, and \`ui.EmptyState\`.
 `,
   }
 }
 
 function pluginTemplate(pluginId: string, title: string) {
-  return `const { definePlugin, effects } = globalThis.FluxTextPlugin
+  return `const { definePlugin, effects, ui } = globalThis.FluxTextPlugin
 
 export default definePlugin({
   id: ${JSON.stringify(pluginId)},
@@ -62,6 +63,14 @@ export default definePlugin({
       const text = input?.kind === 'text' ? input.text : ''
       const prefix = String(ctx.params.prefix ?? '')
       return { effects: [effects.replaceActiveText(prefix + text)] }
+    },
+  }],
+  panels: [{
+    id: ${JSON.stringify(`${pluginId}.panel`)},
+    title: ${JSON.stringify(`${title} Panel`)},
+    titleI18n: { zh: ${JSON.stringify(`${title} 面板`)} },
+    component() {
+      return ui.EmptyState({ children: 'Build plugin UI with host-injected ui primitives.' })
     },
   }],
 })

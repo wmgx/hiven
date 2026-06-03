@@ -28,6 +28,7 @@ const files = {
   legacyScriptPlugin: readIfExists('src/workspace/legacyScriptPlugin.ts'),
   pluginEditorView: readIfExists('src/views/PluginEditorView.tsx'),
   pluginDebugRunner: readIfExists('src/workspace/pluginDebugRunner.ts'),
+  pluginHostSdk: readIfExists('src/workspace/pluginHostSdk.ts'),
   pluginScaffold: readIfExists('src/workspace/pluginScaffold.ts'),
   bundledPluginLoader: readIfExists('src/workspace/bundledPluginLoader.ts'),
   directoryConventionDoc: readIfExists('doc/plugin-directory-convention.md'),
@@ -203,14 +204,14 @@ check('pluginRuntime exposes directory, zip, GitHub directory, and single-file r
 
 check('pluginRuntime exposes injected SDK helpers for plugin authors', () => {
   assert.match(
-    files.pluginRuntime,
-    /window\.FluxTextPlugin[\s\S]*definePlugin[\s\S]*effects/,
-    'pluginRuntime should inject definePlugin/effects helpers',
+    files.pluginRuntime + files.pluginHostSdk,
+    /window\.FluxTextPlugin[\s\S]*createPluginHostSdk|createPluginHostSdk[\s\S]*definePlugin[\s\S]*effects[\s\S]*ui/,
+    'pluginRuntime should inject definePlugin/effects/ui helpers',
   )
   assert.match(
     files.pluginRuntime + files.pluginScaffold,
-    /createDevPluginScaffold[\s\S]*index\.js[\s\S]*createPluginScaffoldFiles|createPluginScaffoldFiles[\s\S]*indexSource[\s\S]*globalThis\.FluxTextPlugin/,
-    'new plugin scaffolds should use injected SDK and fixed index.js',
+    /createDevPluginScaffold[\s\S]*index\.js[\s\S]*createPluginScaffoldFiles|createPluginScaffoldFiles[\s\S]*indexSource[\s\S]*globalThis\.FluxTextPlugin[\s\S]*ui/,
+    'new plugin scaffolds should use injected SDK with UI helpers and fixed index.js',
   )
 })
 

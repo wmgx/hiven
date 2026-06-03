@@ -14,6 +14,8 @@ assert.equal(scaffold.manifest.pluginId, 'authoring-flow', 'scaffold manifest sh
 assert.equal(scaffold.manifest.displayName, 'Authoring Flow', 'scaffold manifest should use the requested display name')
 assert.equal(scaffold.manifest.entry, undefined, 'scaffold manifest must not configure an entry file')
 assert.match(scaffold.indexSource, /globalThis\.FluxTextPlugin/, 'scaffold should use the injected FluxTextPlugin SDK')
+assert.match(scaffold.indexSource, /\{\s*definePlugin,\s*effects,\s*ui\s*\}\s*=\s*globalThis\.FluxTextPlugin/, 'scaffold should expose injected UI helpers to plugin authors')
+assert.match(scaffold.readmeSource, /ui\.(?:Button|TextInput|Select|Checkbox)/, 'scaffold README should document host-injected UI primitives')
 assert.doesNotMatch(scaffold.indexSource, /\.\.\/workspace|@\/workspace/, 'scaffold must not import framework internals')
 
 const definition = parsePluginDefinitionSource(scaffold.indexSource)
@@ -70,6 +72,42 @@ assert.deepEqual(
   { text: 'pane output', kind: 'text' },
   'pinned runner output mapping should handle plugin pane.create effects',
 )
+
+const injectedUiSource = `const { definePlugin, effects, ui } = globalThis.FluxTextPlugin
+
+export default definePlugin({
+  id: 'ui-authoring-flow',
+  title: 'UI Authoring Flow',
+  version: '1.0.0',
+  panels: [{
+    id: 'ui-authoring-flow.panel',
+    title: 'Panel',
+    component() {
+      return ui.Text({ children: 'host injected ui' })
+    },
+  }],
+  commands: [{
+    id: 'ui-authoring-flow.run',
+    title: 'Run',
+    run() {
+      return { effects: [effects.status('ui ok')] }
+    },
+  }],
+})
+`
+
+const injectedUiDefinition = parsePluginDefinitionSource(injectedUiSource)
+assert.equal(injectedUiDefinition?.panels?.[0]?.id, 'ui-authoring-flow.panel', 'debug parser should support injected UI helper destructuring')
+const panelElement = injectedUiDefinition.panels[0].component({
+  inputs: {},
+  panelId: 'ui-authoring-flow.panel',
+  host: {
+    close() {},
+    dispatch() {},
+  },
+})
+assert.equal(panelElement?.type, 'span', 'injected ui.Text should create a host React text primitive')
+assert.equal(typeof globalThis.FluxTextPlugin, 'undefined', 'debug parser should not leak FluxTextPlugin globals in Node')
 
 pluginRegistry.unregisterDevPlugin('authoring-flow')
 
