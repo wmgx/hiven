@@ -4,6 +4,7 @@ import { parsePluginDefinitionSource, runPluginDebugSource } from './pluginDebug
 import { runTextPluginCommand, stampPluginCommandEffects } from './pluginCommandRunner.ts'
 import { samePinnedPluginCommandIdentity } from './pinnedActionIdentity.ts'
 import { createPinnedPluginCommandAction } from './pinnedActionFactory.ts'
+import { runPinnedPluginCommandToPatch } from './pinnedPluginCommandRunner.ts'
 
 export type PluginAuthoringHarnessOptions = {
   pluginId: string
@@ -58,6 +59,17 @@ export async function runPluginAuthoringHarness(options: PluginAuthoringHarnessO
     params: options.params,
     live: command.live,
   })
+  const pinnedRunPatch = await runPinnedPluginCommandToPatch({
+    command: resolved.contribution,
+    pinned: {
+      ...pinnedAction,
+      inputText: options.pinnedInput,
+    },
+    params: options.params ?? {},
+    ownerPluginId: options.pluginId,
+    now: () => 1234567890,
+    elapsedMs: () => 42,
+  })
   const devEffects = stampPluginCommandEffects([
     { type: 'pane.setRenderer', paneId: 'pane-1', renderer: `${options.pluginId}.renderer`, inputs: {} },
     { type: 'panel.openV2', panelId: `${options.pluginId}.panel` },
@@ -89,6 +101,7 @@ export async function runPluginAuthoringHarness(options: PluginAuthoringHarnessO
     },
     pinnedRun: {
       output: pinnedRun,
+      patch: pinnedRunPatch,
       devEffectsKeepContext: devEffects.every((effect) =>
         (effect.type === 'pane.setRenderer' || effect.type === 'panel.openV2') &&
         effect._isDev === true &&

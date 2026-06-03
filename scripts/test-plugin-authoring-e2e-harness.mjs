@@ -34,6 +34,10 @@ assert.deepEqual(result.pinStore.pinnedAction.params, { prefix: 'ok: ' }, 'pin f
 assert.equal(result.pinIdentity.sameParamsFocusExisting, true, 'same plugin command params should focus existing pinned action')
 assert.equal(result.pinIdentity.differentParamsCreateNew, true, 'different params should create another pinned action')
 assert.deepEqual(result.pinnedRun.output, { text: 'ok: pinned input', kind: 'text' }, 'PinnedRunner command execution should match debug input/params behavior')
+assert.equal(result.pinnedRun.patch.outputText, 'ok: pinned input', 'PinnedRunner plugin run patch should write output text')
+assert.equal(result.pinnedRun.patch.outputKind, 'text', 'PinnedRunner plugin run patch should mark text output')
+assert.equal(result.pinnedRun.patch.lastError, undefined, 'PinnedRunner plugin run patch should clear previous errors')
+assert.equal(result.pinnedRun.patch.lastRunAt, 1234567890, 'PinnedRunner plugin run patch should keep the provided run timestamp')
 assert.equal(result.pinnedRun.devEffectsKeepContext, true, 'dev pinned command effects should preserve dev renderer/panel context')
 
 console.log('plugin authoring e2e harness checks passed')

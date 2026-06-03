@@ -6,7 +6,7 @@ import type { Locale } from '../i18n'
 import { pluginRegistry } from '../workspace/pluginRegistry'
 import { applyEffects } from '../workspace/effectRunner'
 import { runtimeRegistry } from '../workspace/runtimeRegistry'
-import { runTextPluginCommand } from '../workspace/pluginCommandRunner.ts'
+import { runPinnedPluginCommandToPatch } from '../workspace/pinnedPluginCommandRunner.ts'
 import type { CommandContribution, CommandParam } from '../workspace/pluginTypes'
 
 type ControlParam = ActionParam | CommandParam
@@ -91,6 +91,7 @@ export function PinnedRunnerView() {
     try {
       let text = ''
       let outputKind: 'text' | 'error' = 'text'
+      let nextPatch: Partial<PinnedAction> | null = null
       if ((pinned.kind ?? 'legacy') === 'legacy') {
         if (!action) throw new Error(`Pinned action "${pinned.actionId}" is not registered`)
         const ctx: ActionContext = {
@@ -104,17 +105,17 @@ export function PinnedRunnerView() {
         text = result && 'text' in result ? result.text : ''
       } else {
         if (!commandContribution) throw new Error(`Pinned plugin command "${pinned.actionId}" is not registered`)
-        const output = await runTextPluginCommand(commandContribution, {
-          inputText: pinned.inputText,
+        nextPatch = await runPinnedPluginCommandToPatch({
+          command: commandContribution,
+          pinned,
           params,
-          isDev: pinned.isDev,
           ownerPluginId: pluginCommand?.meta.pluginId,
+          now: () => Date.now(),
+          elapsedMs: () => performance.now() - startedAt,
         })
-        text = output.text
-        outputKind = output.kind
       }
       if (!isCurrentPinnedRun(pinned.id, runId)) return
-      updatePinnedAction(pinned.id, {
+      updatePinnedAction(pinned.id, nextPatch ?? {
         outputText: text,
         outputKind,
         lastRunAt: Date.now(),

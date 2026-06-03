@@ -21,6 +21,7 @@ const files = {
   commandPalette: read('src/components/CommandPalette.tsx'),
   pinnedRunner: read('src/views/PinnedRunnerView.tsx'),
   pluginCommandRunner: read('src/workspace/pluginCommandRunner.ts'),
+  pinnedPluginCommandRunner: read('src/workspace/pinnedPluginCommandRunner.ts'),
 }
 
 assertHas(files.packageJson, /test:pinned-plugin-command/, 'package.json should expose pinned plugin command verifier')
@@ -42,11 +43,12 @@ assertHas(files.commandPalette, /\{item\.kind === ['"]legacy['"][\s\S]*<button[\
 
 assertHas(files.pinnedRunner, /pluginRegistry\.resolveCommand/, 'PinnedRunnerView should resolve plugin commands from the plugin registry')
 assertHas(files.pinnedRunner, /pinned\?\.kind\s*===\s*['"]plugin-command['"]/, 'PinnedRunnerView should branch for plugin-command pinned actions')
-assertHas(files.pinnedRunner, /runTextPluginCommand[\s\S]*inputText:\s*pinned\.inputText/, 'PinnedRunnerView should run plugin commands with the pinned input buffer')
+assertHas(files.pinnedRunner, /runPinnedPluginCommandToPatch[\s\S]*pinned,[\s\S]*params/, 'PinnedRunnerView should run plugin commands through the tested pinned command runner')
+assertHas(files.pinnedPluginCommandRunner, /runTextPluginCommand[\s\S]*inputText:\s*options\.pinned\.inputText/, 'pinned command runner should run plugin commands with the pinned input buffer')
 assertHas(files.pluginCommandRunner, /buildTextPluginInputs[\s\S]*kind:\s*['"]text['"][\s\S]*inputText/, 'plugin command runner should resolve pinned text input slots')
 assertHas(files.pluginCommandRunner, /text\.replace[\s\S]*textReplace\.text/, 'plugin command runner should map text.replace effects into runner output')
 assertNotHas(files.pinnedRunner, /disabled=\{running\s*\|\|\s*!action\}/, 'Run Now should not disable plugin-command pinned actions')
-assertHas(files.pinnedRunner, /runTextPluginCommand[\s\S]*isDev:\s*pinned\.isDev/, 'PinnedRunner should preserve dev command context when normalizing plugin command effects')
+assertHas(files.pinnedPluginCommandRunner, /isDev:\s*options\.pinned\.isDev/, 'pinned command runner should preserve dev command context when normalizing plugin command effects')
 
 const stampedEffects = stampPluginCommandEffects([
   { type: 'pane.setRenderer', paneId: 'pane-1', renderer: 'dev-plugin.renderer', inputs: {} },
