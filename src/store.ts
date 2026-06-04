@@ -201,9 +201,6 @@ interface AppState {
   // Action System
   actions: ActionDef[]
   registerAction: (action: ActionDef) => void
-  registerActions: (actions: ActionDef[]) => void
-  setCustomActions: (customs: ActionDef[]) => void
-  setBuiltinActionsFromDisk: (diskBuiltins: ActionDef[]) => void
 
   // Command Palette
   commandPaletteOpen: boolean
@@ -517,29 +514,6 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   // Action System
   actions: [...builtinActions, ...workspaceActions],
   registerAction: (action) => set((state) => ({ actions: [...state.actions, action] })),
-  registerActions: (actions) => set((state) => ({ actions: [...state.actions, ...actions] })),
-  setCustomActions: (customs) => set((state) => ({
-    actions: [...state.actions.filter(a => a.builtin), ...customs]
-  })),
-  setBuiltinActionsFromDisk: (diskBuiltins: ActionDef[]) => set((state) => {
-    const diskMap = new Map(diskBuiltins.map(a => [a.name, a]))
-    // 用磁盘版本覆盖同名硬编码版本，解析失败的保留硬编码
-    const merged: ActionDef[] = []
-    for (const hc of builtinActions) {
-      const disk = diskMap.get(hc.name)
-      merged.push(disk ? { ...disk, builtin: true } : hc)
-      diskMap.delete(hc.name)
-    }
-    // 远程可能新增了硬编码中没有的脚本
-    for (const [, a] of diskMap) {
-      merged.push({ ...a, builtin: true })
-    }
-    const customs = state.actions.filter(a => !a.builtin)
-    // 保留 workspace 扩展注册的内置命令（不在脚本 builtinActions 中）
-    const scriptNames = new Set([...builtinActions.map(a => a.name), ...diskBuiltins.map(a => a.name)])
-    const extensionBuiltins = state.actions.filter(a => a.builtin && !scriptNames.has(a.name))
-    return { actions: [...merged, ...extensionBuiltins, ...customs] }
-  }),
 
   // Command Palette
   commandPaletteOpen: false,

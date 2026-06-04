@@ -1,5 +1,3 @@
-import type { PluginDefinition } from './pluginTypes'
-
 export type LegacyScriptAction = {
   name: string
   title: string
@@ -44,64 +42,6 @@ function parseLegacyActionSource(source: string): LegacyScriptAction | null {
     return value as LegacyScriptAction
   } catch {
     return null
-  }
-}
-
-export function createLegacyScriptPlugin(options: {
-  pluginId: string
-  source: string
-  fallbackTitle?: string
-  version?: string
-}): PluginDefinition {
-  const parsed = parseLegacyActionSource(options.source)
-  const title = parsed?.title || options.fallbackTitle || options.pluginId
-  const commandId = `${options.pluginId}.run`
-
-  return {
-    id: options.pluginId,
-    title,
-    version: options.version ?? '1.0.0',
-    commands: [{
-      id: commandId,
-      title,
-      description: parsed?.description,
-      tags: parsed?.tags,
-      params: (parsed?.params ?? []) as never,
-      optionalParams: parsed?.optionalParams,
-      inputs: [
-        { key: 'input', label: 'Input', kind: 'text', required: true },
-      ],
-      inputResolution: { strategy: 'use-active', fallback: 'fail' },
-      async run(ctx) {
-        const action = parseLegacyActionSource(options.source)
-        if (!action) {
-          throw new Error('Legacy script could not be parsed')
-        }
-        const input = ctx.inputs.input
-        const text = input?.kind === 'text' ? input.text : ''
-        const result = await Promise.resolve(action.run({
-          input: { text },
-          params: ctx.params,
-          readClipboard: async () => '',
-          loadCDN: async () => {
-            throw new Error('Compat script packages cannot load remote CDN dependencies yet')
-          },
-          deps: {},
-        }))
-
-        if (!result || result.text === undefined) {
-          return { effects: [] }
-        }
-
-        return {
-          effects: [{
-            type: 'text.replace',
-            target: input?.kind === 'text' && input.paneId ? { paneId: input.paneId } : 'active-input',
-            text: String(result.text),
-          }],
-        }
-      },
-    }],
   }
 }
 
@@ -167,5 +107,3 @@ export function createScriptPluginEntrySource(options: {
     '',
   ].join('\n')
 }
-
-export const createLegacyPluginEntrySource = createScriptPluginEntrySource
