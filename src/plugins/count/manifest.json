@@ -1,0 +1,7 @@
+{
+  "pluginId": "count",
+  "displayName": "Text Statistics",
+  "displayNameI18n": { "zh": "文本统计" },
+  "version": "1.0.0",
+  "capabilities": ["command"]
+}

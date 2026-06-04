@@ -1,0 +1,8 @@
+{
+  "command.run.title": "SQL Formatter",
+  "command.run.description": "Format or minify SQL",
+  "input.text.label": "Input",
+  "param.mode.label": "Mode",
+  "param.mode.option.pretty.label": "Pretty",
+  "param.mode.option.compact.label": "Compact"
+}

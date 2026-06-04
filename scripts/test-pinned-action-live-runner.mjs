@@ -3,7 +3,6 @@
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { builtinActions } from '../src/actions/builtins.ts'
 
 const root = process.cwd()
 
@@ -63,11 +62,12 @@ check('Milestone A models persistent pinned action definitions in the app store'
 
 check('High-frequency builtin text tools declare live on-input capability', () => {
   for (const name of ['base64', 'url', 'hash', 'timestamp', 'json', 'count']) {
-    const action = builtinActions.find((item) => item.name === name)
-    assert.ok(action, `${name} builtin action should exist`)
-    assert.equal(action.live?.live?.enabled, true, `${name} should opt into live running`)
-    assert.equal(action.live?.live?.trigger, 'on-input', `${name} should update from pinned input changes`)
-    assert.equal(action.live?.live?.sideEffects, 'none', `${name} should be side-effect free in pinned runner`)
+    const src = readIfExists(`src/plugins/${name}/index.ts`)
+    assert.ok(src, `${name} plugin package should exist`)
+    assert.match(src, /live:\s*\{\s*live:\s*\{/, `${name} should declare a live capability`)
+    assert.match(src, /enabled:\s*true/, `${name} should opt into live running`)
+    assert.match(src, /trigger:\s*'on-input'/, `${name} should update from pinned input changes`)
+    assert.match(src, /sideEffects:\s*'none'/, `${name} should be side-effect free in pinned runner`)
   }
 })
 

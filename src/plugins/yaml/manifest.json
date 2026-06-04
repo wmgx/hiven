@@ -1,0 +1,7 @@
+{
+  "pluginId": "yaml",
+  "displayName": "JSON ↔ YAML",
+  "displayNameI18n": { "zh": "JSON ↔ YAML" },
+  "version": "1.0.0",
+  "capabilities": ["command"]
+}

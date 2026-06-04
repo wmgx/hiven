@@ -1,0 +1,8 @@
+{
+  "command.run.title": "JSON 格式化",
+  "command.run.description": "美化或压缩 JSON",
+  "input.text.label": "输入",
+  "param.mode.label": "模式",
+  "param.mode.option.pretty.label": "美化",
+  "param.mode.option.compact.label": "压缩"
+}

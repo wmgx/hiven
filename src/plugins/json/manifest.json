@@ -1,0 +1,7 @@
+{
+  "pluginId": "json",
+  "displayName": "JSON Formatter",
+  "displayNameI18n": { "zh": "JSON 格式化" },
+  "version": "1.0.0",
+  "capabilities": ["command"]
+}

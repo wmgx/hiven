@@ -1,0 +1,9 @@
+{
+  "command.run.title": "哈希计算",
+  "command.run.description": "计算哈希摘要",
+  "input.text.label": "输入",
+  "param.algorithm.label": "算法",
+  "param.algorithm.option.SHA-256.label": "SHA-256",
+  "param.algorithm.option.SHA-1.label": "SHA-1",
+  "param.algorithm.option.SHA-512.label": "SHA-512"
+}

@@ -1,0 +1,5 @@
+{
+  "command.run.title": "文本统计",
+  "command.run.description": "统计行数、词数和字符数",
+  "input.text.label": "输入"
+}

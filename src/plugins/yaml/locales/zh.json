@@ -1,0 +1,8 @@
+{
+  "command.run.title": "JSON ↔ YAML",
+  "command.run.description": "JSON 与 YAML 互转",
+  "input.text.label": "输入",
+  "param.mode.label": "模式",
+  "param.mode.option.json2yaml.label": "JSON → YAML",
+  "param.mode.option.yaml2json.label": "YAML → JSON"
+}

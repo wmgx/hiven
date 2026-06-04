@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs'
+import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 
 const root = process.cwd()
@@ -20,7 +20,6 @@ function assert(condition, message) {
 
 const commandPalette = read('src/components/CommandPalette.tsx')
 const store = read('src/store.ts')
-const hardcodedBuiltins = read('src/actions/builtins.ts')
 const pluginTypes = read('src/workspace/pluginTypes.ts')
 const i18n = readI18n()
 
@@ -38,14 +37,12 @@ assert(/supportsDefaultParamRun/.test(commandPalette), 'CommandPalette should ga
 assert(/hasExplicitDefaultParams/.test(commandPalette), 'CommandPalette should require explicit defaults for optional params')
 assert(/customize-shortcut-chip/.test(commandPalette), 'CommandPalette should render optional params as a compact shortcut chip')
 
-function hardcodedActionEntry(name) {
-  const start = hardcodedBuiltins.search(new RegExp(`name:\\s*'${name}'`))
-  if (start < 0) return null
-  const segment = hardcodedBuiltins.slice(start)
-  const nextEntryIndex = segment.slice(1).search(/\n\s*\{\s*\n\s*name:\s*'/)
-  return nextEntryIndex >= 0 ? segment.slice(0, nextEntryIndex + 1) : segment
+function pluginIndex(dir) {
+  const p = join(root, 'src/plugins', dir, 'index.ts')
+  return existsSync(p) ? readFileSync(p, 'utf8') : null
 }
 
+// optionalParams now lives in first-party plugin packages, not builtins.ts.
 const selectedScripts = [
   'hash',
   'json',
@@ -53,10 +50,10 @@ const selectedScripts = [
 ]
 
 for (const name of selectedScripts) {
-  const entryText = hardcodedActionEntry(name)
-  assert(entryText, `${name} should exist in hardcoded builtin actions`)
-  assert(/optionalParams:\s*true/.test(entryText), `${name} hardcoded action should opt into optional params`)
-  assert(/default:/.test(entryText), `${name} hardcoded action should provide explicit parameter defaults`)
+  const src = pluginIndex(name)
+  assert(src, `${name} should exist as a first-party plugin package`)
+  assert(/optionalParams:\s*true/.test(src), `${name} plugin should opt into optional params`)
+  assert(/default:/.test(src), `${name} plugin should provide explicit parameter defaults`)
 }
 
 const notSelectedScripts = [
@@ -67,9 +64,9 @@ const notSelectedScripts = [
 ]
 
 for (const name of notSelectedScripts) {
-  const entryText = hardcodedActionEntry(name)
-  if (entryText) {
-    assert(!/optionalParams:\s*true/.test(entryText), `${name} hardcoded action should not opt into optional params in this pass`)
+  const src = pluginIndex(name)
+  if (src) {
+    assert(!/optionalParams:\s*true/.test(src), `${name} plugin should not opt into optional params in this pass`)
   }
 }
 

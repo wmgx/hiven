@@ -1,0 +1,7 @@
+{
+  "pluginId": "base64",
+  "displayName": "Base64 Encode/Decode",
+  "displayNameI18n": { "zh": "Base64 编解码" },
+  "version": "1.0.0",
+  "capabilities": ["command"]
+}

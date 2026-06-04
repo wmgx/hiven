@@ -105,7 +105,7 @@ export type CommandContribution = {
   params?: CommandParam[]
   optionalParams?: boolean
   live?: LiveActionCapability
-  run(ctx: PluginCommandContext): PluginCommandResult
+  run(ctx: PluginCommandContext): PluginCommandResult | Promise<PluginCommandResult>
 }
 
 // ─── Renderer Contribution ────────────────────────────────────────────────────

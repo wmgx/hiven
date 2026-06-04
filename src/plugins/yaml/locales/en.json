@@ -1,0 +1,8 @@
+{
+  "command.run.title": "JSON ↔ YAML",
+  "command.run.description": "Convert between JSON and YAML",
+  "input.text.label": "Input",
+  "param.mode.label": "Mode",
+  "param.mode.option.json2yaml.label": "JSON → YAML",
+  "param.mode.option.yaml2json.label": "YAML → JSON"
+}

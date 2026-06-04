@@ -1,0 +1,9 @@
+{
+  "command.run.title": "Hash",
+  "command.run.description": "Calculate hash digest",
+  "input.text.label": "Input",
+  "param.algorithm.label": "Algorithm",
+  "param.algorithm.option.SHA-256.label": "SHA-256",
+  "param.algorithm.option.SHA-1.label": "SHA-1",
+  "param.algorithm.option.SHA-512.label": "SHA-512"
+}

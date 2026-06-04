@@ -254,7 +254,7 @@ export function CommandPalette() {
   }
 
   // Execute a plugin command with already-resolved inputs
-  function executePluginCommand(
+  async function executePluginCommand(
     entry: CommandEntry,
     isDev: boolean,
     inputs: ResolvedInputs,
@@ -264,7 +264,7 @@ export function CommandPalette() {
     setLastCommandStatus({ title: commandTitle, status: 'running', updatedAt: Date.now() })
     const ctx = buildPluginCommandContext(inputs, finalParams ?? getDefaultPluginParams(entry.contribution.params ?? []))
     try {
-      const result = entry.contribution.run(ctx)
+      const result = await entry.contribution.run(ctx)
       // Stamp plugin-owned surface effects so dev commands resolve dev renderers/panels.
       const effects = stampPluginCommandEffects(result.effects, { isDev, ownerPluginId: entry.meta.pluginId })
       if (effects.length > 0) {

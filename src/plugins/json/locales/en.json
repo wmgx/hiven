@@ -1,0 +1,8 @@
+{
+  "command.run.title": "JSON Formatter",
+  "command.run.description": "Pretty-print or compact JSON",
+  "input.text.label": "Input",
+  "param.mode.label": "Mode",
+  "param.mode.option.pretty.label": "Pretty",
+  "param.mode.option.compact.label": "Compact"
+}

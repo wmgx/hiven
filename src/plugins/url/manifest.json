@@ -1,0 +1,7 @@
+{
+  "pluginId": "url",
+  "displayName": "URL Encode/Decode",
+  "displayNameI18n": { "zh": "URL 编解码" },
+  "version": "1.0.0",
+  "capabilities": ["command"]
+}

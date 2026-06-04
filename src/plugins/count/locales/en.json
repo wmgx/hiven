@@ -1,0 +1,5 @@
+{
+  "command.run.title": "Text Statistics",
+  "command.run.description": "Count lines, words, and characters",
+  "input.text.label": "Input"
+}

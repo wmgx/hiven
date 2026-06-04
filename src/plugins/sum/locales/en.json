@@ -1,0 +1,5 @@
+{
+  "command.run.title": "Sum",
+  "command.run.description": "Sum all numbers across all lines (BigNumber precision)",
+  "input.text.label": "Input"
+}

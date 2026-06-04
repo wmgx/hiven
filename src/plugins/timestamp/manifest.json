@@ -1,0 +1,7 @@
+{
+  "pluginId": "timestamp",
+  "displayName": "Timestamp Convert",
+  "displayNameI18n": { "zh": "时间戳转换" },
+  "version": "1.0.0",
+  "capabilities": ["command"]
+}
