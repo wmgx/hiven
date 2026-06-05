@@ -106,16 +106,38 @@ async function fetchWithFallback(urls: string[]): Promise<string> {
 }
 
 async function releaseBuiltinPluginManifests(_configDir: string, pluginBuiltinDir: string) {
-  for (const pkg of BUILTIN_PLUGIN_PACKAGES) {
-    const pluginDir = `${pluginBuiltinDir}/${pkg.pluginId}`
-    for (const [fileName, content] of Object.entries(pkg.files)) {
-      await ensureTextFile(`${pluginDir}/${fileName}`, content)
-    }
-  }
   const embeddedIndex = {
-    version: 1,
+    version: 2,
     packages: [...BUILTIN_PLUGIN_PACKAGES.map((pkg) => pkg.pluginId)],
   }
+
+  // 读取本地已释放的 index，判断是否需要重新释放内置包。
+  const currentIndex = await invoke<string>('read_plugin_file', { path: `${pluginBuiltinDir}/index.json` })
+    .then((raw) => JSON.parse(raw) as { version?: number; packages?: string[] })
+    .catch(() => ({ version: 0, packages: [] }))
+  const currentPackages = new Set(currentIndex.packages ?? [])
+  const packagesChanged =
+    currentPackages.size !== embeddedIndex.packages.length ||
+    embeddedIndex.packages.some((pluginId) => !currentPackages.has(pluginId))
+  const versionChanged = Number(currentIndex.version ?? 0) < embeddedIndex.version
+  const needsRelease = versionChanged || packagesChanged
+
+  if (needsRelease) {
+    // 整目录覆盖：先删除每个内置包的现有目录，清掉历史残留文件
+    // （如旧版释放的 index.js / entry.js），再以当前源码包内容重写。
+    for (const pkg of BUILTIN_PLUGIN_PACKAGES) {
+      await invoke<void>('remove_plugin_dir', {
+        rootPath: pluginBuiltinDir,
+        pluginId: pkg.pluginId,
+      }).catch(() => undefined)
+      const pluginDir = `${pluginBuiltinDir}/${pkg.pluginId}`
+      for (const [fileName, content] of Object.entries(pkg.files)) {
+        await ensureTextFile(`${pluginDir}/${fileName}`, content)
+      }
+    }
+  }
+
+  // 移除不再属于内置集合的历史包目录。
   const expectedPackages = new Set(embeddedIndex.packages)
   const existingPackages = await invoke<{ pluginId: string }[]>('list_plugin_dirs', { path: pluginBuiltinDir }).catch(() => [])
   for (const plugin of existingPackages) {
@@ -126,15 +148,9 @@ async function releaseBuiltinPluginManifests(_configDir: string, pluginBuiltinDi
       }).catch(() => undefined)
     }
   }
+
   const indexPath = `${pluginBuiltinDir}/index.json`
-  const currentIndex = await invoke<string>('read_plugin_file', { path: indexPath })
-    .then((raw) => JSON.parse(raw) as { version?: number; packages?: string[] })
-    .catch(() => ({ version: 0, packages: [] }))
-  const currentPackages = new Set(currentIndex.packages ?? [])
-  const embeddedPackagesChanged =
-    currentPackages.size !== embeddedIndex.packages.length ||
-    embeddedIndex.packages.some((pluginId) => !currentPackages.has(pluginId))
-  if (Number(currentIndex.version ?? 0) < embeddedIndex.version || embeddedPackagesChanged) {
+  if (needsRelease) {
     await ensureTextFile(indexPath, JSON.stringify(embeddedIndex, null, 2))
   }
 }
