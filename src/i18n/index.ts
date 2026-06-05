@@ -2,7 +2,6 @@ import { nav } from './locales/nav'
 import { editor } from './locales/editor'
 import { scripts } from './locales/scripts'
 import { pluginEditor } from './locales/pluginEditor'
-import { debuggerPanel } from './locales/debugger'
 import { settings } from './locales/settings'
 import { palette } from './locales/palette'
 import { workspace } from './locales/workspace'
@@ -17,7 +16,6 @@ const modules: LocaleModule[] = [
   editor,
   scripts,
   pluginEditor,
-  debuggerPanel,
   settings,
   palette,
   workspace,
@@ -38,7 +36,6 @@ export type MessageKey =
   | keyof typeof editor['en']
   | keyof typeof scripts['en']
   | keyof typeof pluginEditor['en']
-  | keyof typeof debuggerPanel['en']
   | keyof typeof settings['en']
   | keyof typeof palette['en']
   | keyof typeof workspace['en']

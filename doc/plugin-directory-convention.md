@@ -110,11 +110,11 @@ Importers copy packages into `plugins/installed` or `plugins/dev`, validate the 
 
 ## Compatibility Release
 
-Existing user scripts under `scripts/` are only a compatibility input. On startup, parseable user scripts are released into `plugins/installed/<plugin-id>/manifest.json` plus `index.js`. Built-in script sources are released into `plugins/builtin`.
+There is no legacy `defineAction` compatibility release. The app no longer parses bare scripts under `scripts/` into plugin packages; all capabilities — first-party and user — are authored as directory plugin packages (`manifest.json` + fixed `index.*` + `locales/`). The legacy single-file `defineAction` authoring format and its in-app debugger have been removed.
 
-There is no migration marker, migration badge, migration field, or migrated-from metadata. 不做迁移 UI, and the app does not show these packages as migrated. After release, the UI treats these packages exactly like any other installed or builtin directory plugin.
+There is no migration marker, migration badge, migration field, or migrated-from metadata. 不做迁移 UI.
 
-## Listing And Editing
+## Listing And Viewing
 
 The plugin list is directory-first:
 
@@ -122,11 +122,11 @@ The plugin list is directory-first:
 - scan `plugins/installed` for installed packages;
 - read dev packages from the dev session store.
 
-The editor opens a package directory, shows a file tree, switches between files, and saves editable package files. Builtin packages open in read-only mode. The debug panel runs the first command from the current `index.*` plugin definition and keeps legacy `defineAction` parsing only as a fallback for older script-origin files.
+The in-app plugin view is **read-only**: it opens a package directory, shows a file tree, and lets you read source files. It does not edit, save, or debug source in-app. Editing is delegated to an external IDE — dev packages expose an "open in external editor" action that launches VS Code (`code` CLI) when available, falling back to the system file manager.
 
 ## Creating A Plugin
 
-The Plugins page provides **New Plugin**. It creates a dev package under `plugins/dev/<plugin-id>/`, writes `manifest.json`, `index.js`, and `README.md`, side-loads it, and opens the directory editor. The generated `index.js` uses `globalThis.FluxTextPlugin`, so authors can run the command immediately without installing SDK packages or importing from framework paths.
+The Plugins page provides **New Plugin**. It creates a dev package under `plugins/dev/<plugin-id>/`, writes `manifest.json`, `index.js`, and `README.md`, side-loads it, and opens the package directory in an external editor (VS Code → system file manager). The generated `index.js` uses `globalThis.FluxTextPlugin`, so authors can run the command immediately without installing SDK packages or importing from framework paths. Saving in the external editor triggers Watch-based hot reload back in the app.
 
 ## Update Detection / 更新检测
 

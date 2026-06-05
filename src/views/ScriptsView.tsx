@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { AlertTriangle, Archive, Download, FolderOpen, Globe, Loader2, Package, Plus, Power, RefreshCw, Search, Trash2, Upload } from 'lucide-react'
+import { AlertTriangle, Archive, Download, ExternalLink, FolderOpen, Globe, Loader2, Package, Plus, Power, RefreshCw, Search, Trash2, Upload } from 'lucide-react'
 import { t } from '../i18n'
 import type { Locale } from '../i18n'
 import { localized, useAppStore } from '../store'
@@ -15,6 +15,7 @@ import {
   importLocalPluginDirectory,
   importPluginZip,
   listPluginDirs,
+  openPluginDir,
   pickLocalPluginFolder,
   pickPluginZipFile,
   rejectSingleFileRemoteImport,
@@ -277,7 +278,7 @@ export function ScriptsView() {
     await runTask('_new-plugin', async () => {
       const plugin = await createDevPluginScaffold()
       setActiveTab('dev')
-      openPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'dev' })
+      await openPluginDir(plugin.folderPath)
     })
   }
 
@@ -376,6 +377,12 @@ export function ScriptsView() {
               onClick={() => openPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'dev' })}
             >
               <FolderOpen size={13} />
+            </IconButton>
+            <IconButton
+              title={t(locale, 'scripts.actionOpenExternal')}
+              onClick={() => runTask(key, () => openPluginDir(plugin.folderPath))}
+            >
+              <ExternalLink size={13} />
             </IconButton>
             {plugin.watching ? (
               <IconButton title={t(locale, 'scripts.actionStopWatching')} onClick={() => unwatchDevPlugin(plugin.pluginId)}>

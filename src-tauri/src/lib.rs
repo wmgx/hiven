@@ -190,6 +190,39 @@ fn list_plugin_files(path: String) -> Result<Vec<PluginFileNode>, String> {
 }
 
 #[tauri::command]
+fn open_plugin_dir(path: String) -> Result<(), String> {
+    let dir = ensure_existing_plugin_path(&expand_path(&path))?;
+    if !dir.is_dir() {
+        return Err("Plugin path is not a directory".to_string());
+    }
+    let dir_str = dir.to_string_lossy().to_string();
+
+    // Prefer opening in VS Code (`code` CLI) when available.
+    let code_command = if cfg!(target_os = "windows") { "code.cmd" } else { "code" };
+    if std::process::Command::new(code_command)
+        .arg(&dir_str)
+        .spawn()
+        .is_ok()
+    {
+        return Ok(());
+    }
+
+    // Fall back to the system file manager.
+    let (program, args): (&str, Vec<&str>) = if cfg!(target_os = "macos") {
+        ("open", vec![dir_str.as_str()])
+    } else if cfg!(target_os = "windows") {
+        ("explorer", vec![dir_str.as_str()])
+    } else {
+        ("xdg-open", vec![dir_str.as_str()])
+    };
+    std::process::Command::new(program)
+        .args(&args)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn read_plugin_file(path: String) -> Result<String, String> {
     let file_path = ensure_existing_plugin_path(&expand_path(&path))?;
     ensure_plugin_text_file(&file_path)?;
@@ -663,6 +696,7 @@ pub fn run() {
             list_plugin_dirs,
             remove_plugin_dir,
             list_plugin_files,
+            open_plugin_dir,
             read_plugin_file,
             save_plugin_file,
             install_plugin_dir,

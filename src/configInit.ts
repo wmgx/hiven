@@ -9,9 +9,6 @@
  * 旧 scripts/ 目录只作为兼容释放来源；启动时不再把裸 .js/.ts 文件注册为能力。
  */
 
-import { parseScriptToAction } from './store'
-import { createScriptPluginEntrySource } from './workspace/legacyScriptPlugin'
-
 const REMOTE_BUILTIN_PLUGIN_INDEX_URLS = [
   'https://proxy.flux.wmgx.top/raw/wmgx/flux_text/main/src/builtin-plugins/index.json',
   'https://cdn.jsdelivr.net/gh/wmgx/flux_text@main/src/builtin-plugins/index.json',
@@ -83,41 +80,6 @@ function discoverBuiltinPluginPackages(): DiscoveredBuiltinPackage[] {
 
 const BUILTIN_PLUGIN_PACKAGES = discoverBuiltinPluginPackages()
 
-const DEMO_PLUGIN_SOURCE = `import { defineAction } from 'fluxtext'
-
-export default defineAction({
-  name: 'demo-uppercase-prefix',
-  title: 'Demo: Uppercase With Prefix',
-  titleI18n: { zh: '示例：大写并添加前缀' },
-  description: 'A small reference plugin users can edit, run, and copy.',
-  descriptionI18n: { zh: '一个可编辑、可运行、可复制的插件参考示例。' },
-  tags: ['demo', 'text'],
-  optionalParams: true,
-  params: [
-    {
-      key: 'prefix',
-      label: 'Prefix',
-      labelI18n: { zh: '前缀' },
-      type: 'text',
-      default: '[demo] ',
-    },
-  ],
-  run(ctx) {
-    const prefix = String(ctx.params.prefix ?? '')
-    return { text: ctx.input.text.split('\\n').map((line) => prefix + line.toUpperCase()).join('\\n') }
-  },
-})`
-
-const DEMO_PLUGIN_README = `# FluxText Demo Plugin
-
-This directory is a runnable reference plugin package.
-
-- \`manifest.json\` describes package metadata only.
-- \`index.js\` is the fixed plugin entry and exports a plugin command.
-- Open \`index.js\` in the plugin editor, edit the sample code, and use the debug panel to run it with sample input.
-
-New plugins should prefer \`definePlugin\`; script-origin packages are released as ordinary command plugins.`
-
 function isTauri() {
   return !!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
 }
@@ -143,86 +105,16 @@ async function fetchWithFallback(urls: string[]): Promise<string> {
   throw new Error(`All plugin package index mirrors failed. Last error: ${lastError}`)
 }
 
-function safePluginName(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    || 'script'
-}
-
-async function releaseBuiltinScriptPluginPackages(configDir: string, pluginBuiltinDir: string): Promise<string[]> {
-  const scriptsBuiltinDir = `${configDir}/scripts/builtin`
-  let scripts: { name: string; path: string; content: string }[] = []
-  try {
-    scripts = await invoke('read_scripts_dir', { path: scriptsBuiltinDir })
-  } catch {
-    scripts = []
-  }
-
-  const released: string[] = []
-  const usedIds = new Set(BUILTIN_PLUGIN_PACKAGES.map((pkg) => pkg.pluginId))
-  for (const script of scripts) {
-    if (!/\.(ts|js)$/i.test(script.name)) continue
-    const action = parseScriptToAction(script.content)
-    const baseId = safePluginName(action?.name || script.name.replace(/\.(ts|js)$/i, ''))
-    let pluginId = baseId
-    let suffix = 2
-    while (usedIds.has(pluginId)) {
-      pluginId = `${baseId}-${suffix++}`
-    }
-    usedIds.add(pluginId)
-
-    const displayName = action?.title || action?.name || script.name.replace(/\.(ts|js)$/i, '')
-    const pluginDir = `${pluginBuiltinDir}/${pluginId}`
-    const manifest = {
-      pluginId,
-      displayName,
-      displayNameI18n: action?.titleI18n,
-      version: '1.0.0',
-      capabilities: ['command'],
-    }
-
-    await ensureTextFile(`${pluginDir}/manifest.json`, JSON.stringify(manifest, null, 2))
-    await ensureTextFile(`${pluginDir}/index.js`, createScriptPluginEntrySource({
-      pluginId,
-      fallbackTitle: displayName,
-      source: script.content,
-    }))
-    released.push(pluginId)
-  }
-
-  return released
-}
-
-async function releaseBuiltinPluginManifests(configDir: string, pluginBuiltinDir: string) {
+async function releaseBuiltinPluginManifests(_configDir: string, pluginBuiltinDir: string) {
   for (const pkg of BUILTIN_PLUGIN_PACKAGES) {
     const pluginDir = `${pluginBuiltinDir}/${pkg.pluginId}`
     for (const [fileName, content] of Object.entries(pkg.files)) {
       await ensureTextFile(`${pluginDir}/${fileName}`, content)
     }
   }
-  const demoPluginId = 'demo-text-plugin'
-  await ensureTextFile(
-    `${pluginBuiltinDir}/${demoPluginId}/manifest.json`,
-    JSON.stringify({
-      pluginId: demoPluginId,
-      displayName: 'Demo Text Plugin',
-      displayNameI18n: { zh: '示例：大写并添加前缀' },
-      version: '1.0.0',
-      capabilities: ['command', 'demo'],
-    }, null, 2),
-  )
-  await ensureTextFile(`${pluginBuiltinDir}/${demoPluginId}/index.js`, createScriptPluginEntrySource({
-    pluginId: demoPluginId,
-    fallbackTitle: 'Demo Text Plugin',
-    source: DEMO_PLUGIN_SOURCE,
-  }))
-  await ensureTextFile(`${pluginBuiltinDir}/${demoPluginId}/README.md`, DEMO_PLUGIN_README)
-  const scriptPluginIds = await releaseBuiltinScriptPluginPackages(configDir, pluginBuiltinDir)
   const embeddedIndex = {
     version: 1,
-    packages: [...BUILTIN_PLUGIN_PACKAGES.map((pkg) => pkg.pluginId), demoPluginId, ...scriptPluginIds],
+    packages: [...BUILTIN_PLUGIN_PACKAGES.map((pkg) => pkg.pluginId)],
   }
   const expectedPackages = new Set(embeddedIndex.packages)
   const existingPackages = await invoke<{ pluginId: string }[]>('list_plugin_dirs', { path: pluginBuiltinDir }).catch(() => [])
@@ -247,62 +139,8 @@ async function releaseBuiltinPluginManifests(configDir: string, pluginBuiltinDir
   }
 }
 
-export async function releaseUserScriptPluginPackages(configDir: string): Promise<string[]> {
-  const scriptsDir = `${configDir}/scripts`
-  const installedDir = `${configDir}/plugins/installed`
-
-  let scripts: { name: string; path: string; content: string; builtin?: boolean }[] = []
-  try {
-    scripts = await invoke('read_scripts_dir', { path: scriptsDir })
-  } catch {
-    scripts = []
-  }
-
-  const released: string[] = []
-  const usedIds = new Set<string>()
-
-  for (const script of scripts) {
-    if (script.builtin) continue
-    const action = parseScriptToAction(script.content)
-    if (!action) continue
-
-    const baseId = `user-${safePluginName(action.name || script.name.replace(/\.(ts|js)$/i, ''))}`
-    let pluginId = baseId
-    let suffix = 2
-    while (usedIds.has(pluginId)) {
-      pluginId = `${baseId}-${suffix++}`
-    }
-    usedIds.add(pluginId)
-
-    const pluginDir = `${installedDir}/${pluginId}`
-    const existingManifest = await invoke<string>('read_plugin_file', { path: `${pluginDir}/manifest.json` })
-      .then(() => true)
-      .catch(() => false)
-    if (existingManifest) {
-      continue
-    }
-    const manifest = {
-      pluginId,
-      displayName: action.title || action.name,
-      displayNameI18n: action.titleI18n,
-      version: '1.0.0',
-      capabilities: ['command'],
-    }
-
-    await ensureTextFile(`${pluginDir}/manifest.json`, JSON.stringify(manifest, null, 2))
-    await ensureTextFile(`${pluginDir}/index.js`, createScriptPluginEntrySource({
-      pluginId,
-      fallbackTitle: action.title || action.name,
-      source: script.content,
-    }))
-    released.push(pluginId)
-  }
-
-  return released
-}
-
 /**
- * 初始化配置目录，按目录约定释放内置包和用户脚本包。
+ * 初始化配置目录，按目录约定释放内置插件包。
  * 返回配置根目录路径。
  */
 export async function initConfigDir(): Promise<string | null> {
@@ -318,7 +156,6 @@ export async function initConfigDir(): Promise<string | null> {
     await ensureTextFile(`${pluginInstalledDir}/.keep`, '')
     await ensureTextFile(`${pluginDevDir}/.keep`, '')
     await releaseBuiltinPluginManifests(configDir, pluginBuiltinDir)
-    await releaseUserScriptPluginPackages(configDir)
 
     return configDir
   } catch (error) {

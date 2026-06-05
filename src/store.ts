@@ -17,7 +17,7 @@ import type { LiveActionCapability } from './workspace/pluginTypes'
 import { samePinnedPluginCommandIdentity } from './workspace/pinnedActionIdentity'
 import { createPinnedPluginCommandAction, makePinnedId } from './workspace/pinnedActionFactory'
 
-export type ViewId = 'editor' | 'scripts' | 'plugin-editor' | 'pinned-runner' | 'debugger' | 'settings'
+export type ViewId = 'editor' | 'scripts' | 'plugin-editor' | 'pinned-runner' | 'settings'
 
 export type PinnedOutputKind = 'text' | 'error' | 'presentation' | 'stale'
 export type PinnedActionKind = 'legacy' | 'plugin-command'
@@ -146,19 +146,6 @@ export interface ConsoleLog {
   message: string
 }
 
-export interface DebuggerTab {
-  id: string
-  fileName: string
-  script: string
-  input: string
-  output: string
-  params: Record<string, any>
-  consoleLogs: ConsoleLog[]
-  dirty: boolean
-  running: boolean
-  builtin?: boolean
-}
-
 export type LastCommandStatus = {
   title: string
   status: 'running' | 'success' | 'error'
@@ -222,33 +209,6 @@ interface AppState {
   savedActionParams: Record<string, Record<string, any>>
   saveActionParams: (actionName: string, params: Record<string, any>) => void
 
-  // Debugger
-  debuggerScript: string
-  setDebuggerScript: (script: string) => void
-  debuggerInput: string
-  setDebuggerInput: (input: string) => void
-  debuggerOutput: string
-  setDebuggerOutput: (output: string) => void
-  debuggerParams: Record<string, any>
-  setDebuggerParams: (params: Record<string, any>) => void
-  consoleLogs: ConsoleLog[]
-  addConsoleLog: (log: ConsoleLog) => void
-  clearConsoleLogs: () => void
-  debuggerFileName: string
-  setDebuggerFileName: (name: string) => void
-  debuggerDirty: boolean
-  setDebuggerDirty: (dirty: boolean) => void
-  debuggerRunning: boolean
-  setDebuggerRunning: (running: boolean) => void
-  debuggerBuiltin: boolean
-
-  // Debugger Tabs
-  debuggerTabs: DebuggerTab[]
-  activeDebuggerTabId: string
-  addDebuggerTab: (tab: DebuggerTab) => void
-  removeDebuggerTab: (id: string) => void
-  switchDebuggerTab: (id: string) => void
-
   // Settings
   settings: {
     watchDirectory: string
@@ -269,36 +229,6 @@ interface AppState {
   toggleCustomDisabled: (name: string) => void
   locale: Locale
   setLocale: (locale: Locale) => void
-}
-
-function _snapshotActiveTab(state: AppState): DebuggerTab {
-  return {
-    id: state.activeDebuggerTabId,
-    fileName: state.debuggerFileName,
-    script: state.debuggerScript,
-    input: state.debuggerInput,
-    output: state.debuggerOutput,
-    params: state.debuggerParams,
-    consoleLogs: state.consoleLogs,
-    dirty: state.debuggerDirty,
-    running: state.debuggerRunning,
-    builtin: state.debuggerBuiltin,
-  }
-}
-
-function _loadTabState(tab: DebuggerTab) {
-  return {
-    activeDebuggerTabId: tab.id,
-    debuggerFileName: tab.fileName,
-    debuggerScript: tab.script,
-    debuggerInput: tab.input,
-    debuggerOutput: tab.output,
-    debuggerParams: tab.params,
-    consoleLogs: tab.consoleLogs,
-    debuggerDirty: tab.dirty,
-    debuggerRunning: tab.running,
-    debuggerBuiltin: !!tab.builtin,
-  }
 }
 
 function _makePinnedId(actionId: string): string {
@@ -543,102 +473,6 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     savedActionParams: { ...state.savedActionParams, [actionName]: params }
   })),
 
-  // Debugger
-  debuggerScript: `import { defineAction } from 'fluxtext'
-
-export default defineAction({
-  name: 'extract-emails',
-  title: 'Extract Email Addresses',
-  tags: ['extract', 'email'],
-
-  params: [
-    {
-      key: 'unique',
-      label: 'Deduplicate',
-      type: 'boolean',
-      default: true,
-    },
-    {
-      key: 'format',
-      label: 'Output format',
-      type: 'single-select',
-      options: ['one per line', 'comma separated'],
-      default: 'one per line',
-    },
-  ],
-
-  run(ctx) {
-    const re = /[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}/gi
-    const allMatches = ctx.input.text.match(re) || []
-    let results = ctx.params.unique
-      ? [...new Set(allMatches.map(e => e.toLowerCase()))]
-      : allMatches
-    return {
-      text: ctx.params.format === 'comma separated'
-        ? results.join(', ')
-        : results.join('\\n')
-    }
-  }
-})`,
-  setDebuggerScript: (script) => set({ debuggerScript: script, debuggerDirty: true }),
-  debuggerInput: `Contact us at hello@fluxtext.app
-or support@fluxtext.app for help.
-Billing: billing@company.io
-Spam: not-an-email, foo@
-hello@fluxtext.app (duplicate)`,
-  setDebuggerInput: (input) => set({ debuggerInput: input }),
-  debuggerOutput: '',
-  setDebuggerOutput: (output) => set({ debuggerOutput: output }),
-  debuggerParams: { unique: true, format: 'one per line' },
-  setDebuggerParams: (params) => set({ debuggerParams: params }),
-  consoleLogs: [{ type: 'dim', message: '— ready —' }],
-  addConsoleLog: (log) => set((state) => {
-    const logs = [...state.consoleLogs, log]
-    // 限制最多 500 条日志，防止无限增长
-    return { consoleLogs: logs.length > 500 ? logs.slice(-500) : logs }
-  }),
-  clearConsoleLogs: () => set({ consoleLogs: [{ type: 'dim', message: '— cleared —' }] }),
-  debuggerFileName: 'extract-emails.ts',
-  setDebuggerFileName: (name) => set({ debuggerFileName: name }),
-  debuggerDirty: false,
-  setDebuggerDirty: (dirty) => set({ debuggerDirty: dirty }),
-  debuggerRunning: false,
-  setDebuggerRunning: (running) => set({ debuggerRunning: running }),
-  debuggerBuiltin: false,
-
-  // Debugger Tabs
-  debuggerTabs: [{
-    id: 'default',
-    fileName: 'extract-emails.ts',
-    script: '', input: '', output: '',
-    params: {}, consoleLogs: [],
-    dirty: false, running: false,
-  }],
-  activeDebuggerTabId: 'default',
-  addDebuggerTab: (tab) => set((state) => {
-    const snapshot = _snapshotActiveTab(state)
-    const updatedTabs = state.debuggerTabs.map(t => t.id === state.activeDebuggerTabId ? snapshot : t)
-    return { debuggerTabs: [...updatedTabs, tab], ..._loadTabState(tab) }
-  }),
-  removeDebuggerTab: (id) => set((state) => {
-    if (state.debuggerTabs.length <= 1) return {}
-    const snapshot = _snapshotActiveTab(state)
-    const snapshotTabs = state.debuggerTabs.map(t => t.id === state.activeDebuggerTabId ? snapshot : t)
-    const remaining = snapshotTabs.filter(t => t.id !== id)
-    if (id !== state.activeDebuggerTabId) return { debuggerTabs: remaining }
-    const idx = snapshotTabs.findIndex(t => t.id === id)
-    const next = remaining[Math.min(idx, remaining.length - 1)]
-    return { debuggerTabs: remaining, ..._loadTabState(next) }
-  }),
-  switchDebuggerTab: (id) => set((state) => {
-    if (id === state.activeDebuggerTabId) return {}
-    const target = state.debuggerTabs.find(t => t.id === id)
-    if (!target) return {}
-    const snapshot = _snapshotActiveTab(state)
-    const updatedTabs = state.debuggerTabs.map(t => t.id === state.activeDebuggerTabId ? snapshot : t)
-    return { debuggerTabs: updatedTabs, ..._loadTabState(target) }
-  }),
-
   // Settings
   settings: {
     watchDirectory: '~/.local/fluxtext/scripts',
@@ -698,44 +532,3 @@ hello@fluxtext.app (duplicate)`,
       : {},
   }),
 }))
-
-/**
- * 将自定义脚本源码解析为 ActionDef
- * 支持 export default defineAction({...}) 和 export default {...} 两种格式
- */
-export function parseScriptToAction(content: string): ActionDef | null {
-  try {
-    let code = content
-      // 移除 import 语句
-      .replace(/^\s*import\s+.*?['"].*?['"]\s*;?\s*$/gm, '')
-      .trim()
-
-    let hadDefineAction = false
-    if (/export\s+default\s+defineAction\s*\(/.test(code)) {
-      code = code.replace(/export\s+default\s+defineAction\s*\(\s*/, '')
-      hadDefineAction = true
-    } else {
-      code = code.replace(/export\s+default\s+/, '')
-      code = code.replace(/module\.exports\s*=\s*/, '')
-    }
-
-    if (hadDefineAction) {
-      // 移除 defineAction(...) 的末尾 )
-      code = code.replace(/\)\s*;?\s*$/, '')
-    }
-
-    // 移除常见 TypeScript 泛型
-    code = code.replace(/<(?:string|number|boolean|any|void|never|unknown|[A-Z]\w*)(?:\s*,\s*(?:string|number|boolean|any|void|never|unknown|[A-Z]\w*))*>/g, '')
-
-    const fn = new Function(`return (${code})`)
-    const def = fn()
-
-    if (!def || typeof def !== 'object' || !def.name || typeof def.run !== 'function') {
-      return null
-    }
-
-    return { ...def, builtin: false, source: content }
-  } catch {
-    return null
-  }
-}

@@ -7,7 +7,6 @@ import { EditorView } from './views/EditorView'
 import { ScriptsView } from './views/ScriptsView'
 import { PluginEditorView } from './views/PluginEditorView'
 import { PinnedRunnerView } from './views/PinnedRunnerView'
-import { DebuggerView } from './views/DebuggerView'
 import { SettingsView } from './views/SettingsView'
 import { CommandPalette } from './components/CommandPalette'
 import { GlobalLauncher } from './components/GlobalLauncher'
@@ -22,7 +21,7 @@ import './workspace/corePlugin'
 
 registerBundledPluginPackages()
 
-const VIEW_INDEX: Record<ViewId, number> = { editor: 0, scripts: 1, 'plugin-editor': 2, 'pinned-runner': 3, debugger: 4, settings: 5 }
+const VIEW_INDEX: Record<ViewId, number> = { editor: 0, scripts: 1, 'plugin-editor': 2, 'pinned-runner': 3, settings: 4 }
 
 class ViewErrorBoundary extends Component<
   { viewId: ViewId; children: ReactNode },
@@ -67,7 +66,6 @@ function ViewContent({ viewId }: { viewId: ViewId }) {
     case 'scripts': return <ScriptsView />
     case 'plugin-editor': return <PluginEditorView />
     case 'pinned-runner': return <PinnedRunnerView />
-    case 'debugger': return <DebuggerView />
     case 'settings': return <SettingsView />
   }
 }

@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react'
 import Editor from '@monaco-editor/react'
-import { ArrowLeft, Copy, FileText, Folder, FolderTree, Play, RefreshCw, Save } from 'lucide-react'
-import { localized, parseScriptToAction, useAppStore } from '../store'
+import { ArrowLeft, FileText, Folder, FolderTree, RefreshCw } from 'lucide-react'
+import { useAppStore } from '../store'
 import { t } from '../i18n'
-import { listPluginFiles, readPluginFile, savePluginFile } from '../workspace/pluginRuntime'
-import { parsePluginDefinitionSource, runPluginDebugSource } from '../workspace/pluginDebugRunner'
+import { listPluginFiles, readPluginFile } from '../workspace/pluginRuntime'
 import type { PluginFileTree } from '../workspace/pluginTypes'
-import { loadCDN, loadDeps } from '../utils/cdnLoader'
 
 function flattenFileTree(nodes: PluginFileTree[]): PluginFileTree[] {
   const result: PluginFileTree[] = []
@@ -93,23 +91,11 @@ export function PluginEditorView() {
   const pluginEditor = useAppStore((s) => s.pluginEditor)
   const closePluginEditor = useAppStore((s) => s.closePluginEditor)
   const locale = useAppStore((s) => s.locale)
-  const readOnly = !!pluginEditor?.readOnly
   const [fileTree, setFileTree] = useState<PluginFileTree[]>([])
   const [activeFile, setActiveFile] = useState('')
   const [content, setContent] = useState('')
-  const [dirty, setDirty] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [debugInput, setDebugInput] = useState('hello fluxtext\nwrite plugins faster')
-  const [debugOutput, setDebugOutput] = useState('')
-  const [debugParams, setDebugParams] = useState<Record<string, unknown>>({})
-  const [debugLogs, setDebugLogs] = useState<string[]>(['ready'])
-  const [debugRunning, setDebugRunning] = useState(false)
-
-  const debugPlugin = parsePluginDefinitionSource(content)
-  const debugCommand = debugPlugin?.commands?.[0] ?? null
-  const debugAction = debugCommand ? null : parseScriptToAction(content)
-  const debugParamsDef = debugCommand?.params ?? debugAction?.params ?? []
 
   async function refreshTree() {
     if (!pluginEditor) return
@@ -136,76 +122,11 @@ export function PluginEditorView() {
       const text = await readPluginFile(path)
       setActiveFile(path)
       setContent(text)
-      setDirty(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setLoading(false)
     }
-  }
-
-  async function saveActiveFile() {
-    if (!activeFile || readOnly) return
-    setLoading(true)
-    setError('')
-    try {
-      await savePluginFile(activeFile, content)
-      setDirty(false)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function runDebug() {
-    setDebugRunning(true)
-    setDebugLogs([`> run ${debugCommand?.id ?? debugAction?.name ?? activeFile.split('/').pop() ?? 'plugin'}`])
-    setDebugOutput('')
-    const started = performance.now()
-    try {
-      if (debugCommand) {
-        const result = await runPluginDebugSource(content, {
-          inputText: debugInput,
-          params: debugParams,
-        })
-        setDebugOutput(result.output)
-        setDebugLogs(result.logs)
-        return
-      }
-
-      const action = parseScriptToAction(content)
-      if (!action || typeof action.run !== 'function') {
-        setDebugLogs((logs) => [...logs, t(locale, 'pluginEditor.unsupportedDebug')])
-        return
-      }
-      const deps = await loadDeps(content)
-      const result = await Promise.resolve(action.run({
-        input: { text: debugInput },
-        params: debugParams,
-        readClipboard: async () => '',
-        loadCDN,
-        deps,
-      }))
-      const elapsed = Math.round(performance.now() - started)
-      if (result && result.text !== undefined) {
-        const text = String(result.text)
-        setDebugOutput(text)
-        setDebugLogs((logs) => [...logs, `output: ${text.split('\n').length} lines`, `done in ${elapsed}ms`])
-      } else {
-        setDebugLogs((logs) => [...logs, `run() returned no text`, `done in ${elapsed}ms`])
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      setDebugOutput(`Error: ${message}`)
-      setDebugLogs((logs) => [...logs, message])
-    } finally {
-      setDebugRunning(false)
-    }
-  }
-
-  function setDebugParam(key: string, value: unknown) {
-    setDebugParams((prev) => ({ ...prev, [key]: value }))
   }
 
   useEffect(() => {
@@ -231,13 +152,7 @@ export function PluginEditorView() {
             <ArrowLeft size={14} />
           </button>
           <span className="scripts-title">{t(locale, 'pluginEditor.title')}</span>
-          <span className="script-badge">
-            {readOnly
-              ? t(locale, 'pluginEditor.readOnly')
-              : pluginEditor.source === 'installed'
-                ? t(locale, 'pluginEditor.installed')
-                : t(locale, 'pluginEditor.devOnly')}
-          </span>
+          <span className="script-badge">{t(locale, 'pluginEditor.readOnly')}</span>
           <span className="truncate" style={{ color: 'var(--color-text-tertiary)', fontSize: '0.8em' }}>
             {pluginEditor.pluginId} · {pluginEditor.folderPath}
           </span>
@@ -245,9 +160,6 @@ export function PluginEditorView() {
         <div className="scripts-header-actions">
           <button className="scripts-btn" onClick={refreshTree} disabled={loading}>
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> {t(locale, 'pluginEditor.reload')}
-          </button>
-          <button className="scripts-btn scripts-btn-primary" onClick={saveActiveFile} disabled={readOnly || !dirty || loading || !activeFile}>
-            <Save size={14} /> {t(locale, 'pluginEditor.save')}
           </button>
         </div>
       </div>
@@ -283,114 +195,16 @@ export function PluginEditorView() {
             height="100%"
             language={languageForPath(activeFile)}
             value={content}
-            onChange={(value) => {
-              setContent(value ?? '')
-              setDirty(true)
-            }}
             options={{
               minimap: { enabled: false },
               fontSize: 13,
               wordWrap: 'off',
               scrollBeyondLastLine: false,
               automaticLayout: true,
-              readOnly,
+              readOnly: true,
             }}
           />
         </main>
-        <aside className="w-[min(320px,34vw)] shrink-0 flex flex-col overflow-hidden" style={{ borderLeft: '0.5px solid var(--color-border-tertiary)' }}>
-          <div className="h-10 px-3 flex items-center gap-2 shrink-0" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)', background: 'var(--color-background-secondary)' }}>
-            <span className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>{t(locale, 'pluginEditor.debug')}</span>
-            <button
-              data-testid="plugin-editor-run-button"
-              className="scripts-btn scripts-btn-primary ml-auto"
-              onClick={runDebug}
-              disabled={debugRunning}
-              style={{ height: 26, padding: '0 10px' }}
-            >
-              <Play size={12} /> {debugRunning ? t(locale, 'pluginEditor.running') : t(locale, 'pluginEditor.run')}
-            </button>
-          </div>
-
-          <div className="shrink-0 p-2.5 flex flex-col gap-2" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
-            <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--color-text-tertiary)' }}>{t(locale, 'pluginEditor.params')}</div>
-            {debugParamsDef.length === 0 ? (
-              <div className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>{t(locale, 'pluginEditor.unsupportedDebug')}</div>
-            ) : debugParamsDef.map((param) => {
-              const paramValue = debugParams[param.key] ?? param.default ?? (param.type === 'boolean' ? false : '')
-              return (
-                <label key={param.key} className="flex items-center gap-2 text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>
-                  <span className="w-[84px] shrink-0 truncate">{localized(param.label, param.labelI18n, locale)}</span>
-                  {param.type === 'boolean' ? (
-                    <input
-                      type="checkbox"
-                      checked={!!paramValue}
-                      onChange={(event) => setDebugParam(param.key, event.target.checked)}
-                    />
-                  ) : param.type === 'single-select' ? (
-                    <select
-                      className="flex-1 min-w-0 bg-transparent rounded px-1 py-0.5"
-                      style={{ border: '0.5px solid var(--color-border-secondary)', color: 'var(--color-text-primary)' }}
-                      value={String(paramValue)}
-                      onChange={(event) => setDebugParam(param.key, event.target.value)}
-                    >
-                      {(param.options ?? []).map((option) => {
-                        const normalized = typeof option === 'string' ? { label: option, value: option } : option
-                        return <option key={normalized.value} value={normalized.value}>{localized(normalized.label, normalized.labelI18n, locale)}</option>
-                      })}
-                    </select>
-                  ) : (
-                    <input
-                      className="flex-1 min-w-0 bg-transparent rounded px-1 py-0.5"
-                      style={{ border: '0.5px solid var(--color-border-secondary)', color: 'var(--color-text-primary)' }}
-                      value={String(paramValue)}
-                      onChange={(event) => setDebugParam(param.key, param.type === 'number' ? Number(event.target.value) : event.target.value)}
-                    />
-                  )}
-                </label>
-              )
-            })}
-          </div>
-
-          <div className="flex-1 min-h-0 flex flex-col" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
-            <div className="h-8 px-3 flex items-center shrink-0" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)', background: 'var(--color-background-secondary)' }}>
-              <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--color-text-tertiary)' }}>{t(locale, 'pluginEditor.input')}</span>
-            </div>
-            <textarea
-              data-testid="plugin-editor-debug-input"
-              className="flex-1 min-h-0 p-2.5 text-xs leading-5 resize-none bg-transparent border-none outline-none"
-              style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
-              value={debugInput}
-              onChange={(event) => setDebugInput(event.target.value)}
-              spellCheck={false}
-            />
-          </div>
-
-          <div className="flex-1 min-h-0 flex flex-col" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
-            <div className="h-8 px-3 flex items-center shrink-0" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)', background: 'var(--color-background-secondary)' }}>
-              <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--color-text-tertiary)' }}>{t(locale, 'pluginEditor.output')}</span>
-              <button
-                className="ml-auto w-6 h-6 rounded-md border-none bg-transparent cursor-pointer flex items-center justify-center"
-                title={t(locale, 'pluginEditor.copyOutput')}
-                style={{ color: 'var(--color-text-tertiary)' }}
-                onClick={() => { if (debugOutput) void navigator.clipboard.writeText(debugOutput) }}
-              >
-                <Copy size={12} />
-              </button>
-            </div>
-            <div data-testid="plugin-editor-debug-output" className="flex-1 min-h-0 p-2.5 text-xs leading-5 overflow-auto whitespace-pre-wrap" style={{ color: debugOutput ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)', fontFamily: 'var(--font-mono)' }}>
-              {debugOutput || t(locale, 'pluginEditor.runToSee')}
-            </div>
-          </div>
-
-          <div className="h-28 shrink-0 flex flex-col">
-            <div className="h-7 px-3 flex items-center shrink-0" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)', background: 'var(--color-background-secondary)' }}>
-              <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--color-text-tertiary)' }}>{t(locale, 'pluginEditor.console')}</span>
-            </div>
-            <div className="flex-1 p-2 text-[11px] leading-5 overflow-auto" style={{ color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-mono)' }}>
-              {debugLogs.map((log, index) => <div key={`${index}-${log}`}>{log}</div>)}
-            </div>
-          </div>
-        </aside>
       </div>
     </div>
   )

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { LayoutPanelLeft, Pin, Puzzle, Search, Settings, Terminal } from 'lucide-react'
+import { LayoutPanelLeft, Pin, Puzzle, Search, Settings } from 'lucide-react'
 import { localized, useAppStore, type ViewId } from '../store'
 import { t, type Locale } from '../i18n'
 import { resolveIcon } from '../utils/resolveIcon'
@@ -12,7 +12,6 @@ type LauncherItem =
 const viewItems: { id: ViewId; title: string; titleI18n: Partial<Record<Locale, string>>; icon: ReactNode }[] = [
   { id: 'editor', title: 'Editor', titleI18n: { zh: '编辑器' }, icon: <LayoutPanelLeft size={14} /> },
   { id: 'scripts', title: 'Plugins', titleI18n: { zh: '插件' }, icon: <Puzzle size={14} /> },
-  { id: 'debugger', title: 'Debugger', titleI18n: { zh: '调试器' }, icon: <Terminal size={14} /> },
   { id: 'settings', title: 'Settings', titleI18n: { zh: '设置' }, icon: <Settings size={14} /> },
 ]
 

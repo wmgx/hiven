@@ -878,3 +878,7 @@ export async function readPluginFile(path: string): Promise<string> {
 export async function savePluginFile(path: string, content: string): Promise<void> {
   await invokeCommand<void>('save_plugin_file', { path, content })
 }
+
+export async function openPluginDir(path: string): Promise<void> {
+  await invokeCommand<void>('open_plugin_dir', { path })
+}

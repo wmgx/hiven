@@ -23,10 +23,9 @@ const files = {
   pluginStore: read('src/workspace/pluginStore.ts'),
   pluginTypes: read('src/workspace/pluginTypes.ts'),
   configInit: read('src/configInit.ts'),
+  store: read('src/store.ts'),
   app: read('src/App.tsx'),
   tauriLib: read('src-tauri/src/lib.rs'),
-  debuggerView: read('src/views/DebuggerView.tsx'),
-  legacyScriptPlugin: readIfExists('src/workspace/legacyScriptPlugin.ts'),
   pluginEditorView: readIfExists('src/views/PluginEditorView.tsx'),
   pluginDebugRunner: readIfExists('src/workspace/pluginDebugRunner.ts'),
   pluginHostSdk: readIfExists('src/workspace/pluginHostSdk.ts'),
@@ -65,13 +64,10 @@ function assertTauriCommand(source, name) {
   )
 }
 
-check('DebuggerView imports every React hook it uses', () => {
-  assert.match(files.debuggerView, /\buseState\s*\(/, 'DebuggerView should still be checked when it uses useState')
-  assert.match(
-    files.debuggerView,
-    /import\s*\{[^}]*\buseState\b[^}]*\}\s*from\s*['"]react['"]/,
-    'DebuggerView should import useState from react so Plugins navigation cannot white-screen on that view error',
-  )
+check('In-app debugger view and editing are removed in favor of external IDE', () => {
+  assert.ok(!readIfExists('src/views/DebuggerView.tsx'), 'DebuggerView should be deleted')
+  assert.doesNotMatch(files.app, /DebuggerView/, 'App should not route to a debugger view')
+  assert.doesNotMatch(files.app, /case\s+['"]debugger['"]/, 'App should not keep a debugger route branch')
 })
 
 check('ScriptsView removes single-file import and raw script persistence', () => {
@@ -160,23 +156,16 @@ check('Generated directory packages do not advertise legacy migration capabiliti
   }
 })
 
-check('User scripts are released as ordinary installed plugin directories', () => {
-  assert.match(
-    files.configInit,
-    /export\s+async\s+function\s+releaseUserScriptPluginPackages\b/,
-    'configInit should expose releaseUserScriptPluginPackages rather than a migration API',
-  )
+check('Legacy defineAction script release is fully removed', () => {
   assert.doesNotMatch(
     files.configInit,
-    /migrateLegacyScriptsToPlugins|migrateLegacyScripts|legacyScriptsToPlugins/,
-    'user script release should not be named as a migration flow',
+    /releaseUserScriptPluginPackages|releaseBuiltinScriptPluginPackages/,
+    'configInit should no longer release defineAction scripts as plugin packages',
   )
-  assert.match(files.configInit, /const\s+installedDir\s*=\s*`\$\{configDir\}\/plugins\/installed`/, 'user script packages should be written under plugins/installed')
-  assert.match(files.configInit, /read_scripts_dir/, 'user script release may scan the old scripts directory as an input source')
-  assert.match(files.configInit, /manifest\.json/, 'user script release should write manifest.json')
-  assert.match(files.configInit, /index\.js/, 'user script release should write fixed index.js')
-  assert.match(files.configInit, /capabilities:\s*\[\s*['"]command['"]\s*\]/, 'released user scripts should be normal command plugins')
-  assert.doesNotMatch(files.configInit, /usePluginStore\.getState\(\)\.(?:markScriptsMigrated|setScriptsMigrated|recordScriptsMigration|installPlugin)/, 'configInit should not special-register released script packages in store')
+  assert.doesNotMatch(files.configInit, /createScriptPluginEntrySource|parseScriptToAction/, 'configInit should not depend on the legacy defineAction parser/wrapper')
+  assert.doesNotMatch(files.configInit, /read_scripts_dir/, 'configInit should not scan the legacy scripts directory anymore')
+  assert.ok(!readIfExists('src/workspace/legacyScriptPlugin.ts'), 'legacyScriptPlugin.ts should be deleted')
+  assert.doesNotMatch(files.store, /parseScriptToAction|defineAction/, 'store should no longer parse defineAction scripts')
 })
 
 check('Runtime resolves fixed index.* entry and rejects manifest entry', () => {
@@ -226,13 +215,10 @@ check('pluginRuntime exposes injected SDK helpers for plugin authors', () => {
   )
 })
 
-check('Builtin scripts and demo are released as ordinary builtin plugin directories', () => {
-  assert.match(files.configInit, /releaseBuiltinScriptPluginPackages/, 'configInit should release builtin scripts as package directories')
-  assert.match(files.configInit, /scripts\/builtin|scriptsBuiltinDir/, 'builtin package release should scan scripts/builtin as an input source')
-  assert.match(files.configInit, /pluginBuiltinDir[\s\S]*manifest\.json[\s\S]*index\.js/, 'builtin packages should get manifest.json and fixed index.js under plugins/builtin')
-  assert.match(files.configInit, /createScriptPluginEntrySource/, 'script-origin packages should be released through the standard command plugin wrapper')
-  assert.doesNotMatch(files.legacyScriptPlugin, /const legacySource|source:\s*legacySource/, 'generated plugin entries should not expose legacySource variables')
-  assert.match(files.configInit, /demo-text-plugin[\s\S]*DEMO_PLUGIN_SOURCE[\s\S]*DEMO_PLUGIN_README/, 'configInit should release a visible demo plugin package')
+check('Builtin packages are released purely from auto-discovered first-party plugin directories', () => {
+  assert.match(files.configInit, /releaseBuiltinPluginManifests/, 'configInit should release builtin plugin package directories')
+  assert.match(files.configInit, /pluginBuiltinDir[\s\S]*manifest\.json|BUILTIN_PLUGIN_PACKAGES/, 'builtin packages should be written under plugins/builtin from discovered packages')
+  assert.doesNotMatch(files.configInit, /DEMO_PLUGIN_SOURCE|DEMO_PLUGIN_README|demo-text-plugin/, 'configInit should not release a defineAction-based demo plugin')
 })
 
 check('Text Diff builtin directory includes the adaptive diff UI source files', () => {
@@ -289,40 +275,31 @@ check('Plugin main view includes builtin, installed, and dev package tabs', () =
   assert.match(files.scriptsView, /t\(locale,\s*['"]scripts\.tabDev['"]/, 'ScriptsView should localize dev tab')
 })
 
-check('Plugin cards expose directory editor entry for builtin, installed, and dev packages', () => {
+check('Plugin cards expose read-only source viewer and external-editor entry', () => {
   assert.match(
     files.scriptsView,
     /renderInstalled[\s\S]*openPluginEditor\(\{\s*pluginId:\s*plugin\.pluginId[\s\S]*source:\s*['"]installed['"]/,
-    'installed plugin cards should open the directory editor',
+    'installed plugin cards should open the read-only source viewer',
   )
   assert.match(
     files.scriptsView,
     /renderBuiltin[\s\S]*openPluginEditor\(\{\s*pluginId:\s*plugin\.pluginId[\s\S]*source:\s*['"]builtin['"][\s\S]*readOnly:\s*true/,
-    'builtin plugin cards should open the directory editor as a read-only reference',
+    'builtin plugin cards should open the read-only source viewer',
   )
   assert.match(
     files.scriptsView,
-    /renderDev[\s\S]*openPluginEditor\(\{\s*pluginId:\s*plugin\.pluginId[\s\S]*source:\s*['"]dev['"]/,
-    'dev plugin cards should open the directory editor',
-  )
-  assert.match(
-    files.pluginEditorView,
-    /readOnly[\s\S]*saveActiveFile[\s\S]*if \(!activeFile \|\| readOnly\) return[\s\S]*options=\{\{[\s\S]*readOnly/,
-    'PluginEditorView should enforce read-only reference mode for builtin plugins',
+    /renderDev[\s\S]*openPluginDir\(/,
+    'dev plugin cards should offer opening the package directory in an external editor',
   )
 })
 
-check('PluginEditorView includes directory tree, file switching, and runnable debug panel', () => {
+check('PluginEditorView is a read-only source viewer with directory tree and no debug/edit', () => {
   assert.ok(files.pluginEditorView, 'src/views/PluginEditorView.tsx should exist')
-  assert.ok(files.pluginDebugRunner, 'src/workspace/pluginDebugRunner.ts should exist')
-  assert.match(files.pluginEditorView + files.pluginRuntime, /list_plugin_files|PluginFileTree|activeFile|selectedFile/i, 'plugin editor should include directory tree/file switching')
-  assert.match(files.pluginEditorView + files.pluginRuntime, /read_plugin_file/, 'plugin editor should read selected plugin files')
-  assert.match(files.pluginEditorView + files.pluginRuntime, /save_plugin_file/, 'plugin editor should save selected plugin files')
-  assert.match(files.pluginEditorView + files.pluginDebugRunner, /parsePluginDefinitionSource/, 'PluginEditorView should run plugin command definitions for debugging')
-  assert.match(files.pluginEditorView + files.pluginDebugRunner, /runPluginDebugSource/, 'PluginEditorView should use the tested plugin debug runner')
-  assert.doesNotMatch(files.pluginEditorView, /legacySource|extractRunnableSource/, 'PluginEditorView should not extract legacySource from generated entries')
-  assert.match(files.pluginEditorView, /runDebug/, 'PluginEditorView should expose a debug run path')
-  assert.match(files.pluginEditorView, /debugInput[\s\S]*debugOutput[\s\S]*debugLogs/, 'PluginEditorView should include input, output, and console state')
+  assert.match(files.pluginEditorView + files.pluginRuntime, /list_plugin_files|PluginFileTree|activeFile/i, 'plugin viewer should include directory tree/file switching')
+  assert.match(files.pluginEditorView + files.pluginRuntime, /read_plugin_file/, 'plugin viewer should read selected plugin files')
+  assert.match(files.pluginEditorView, /readOnly:\s*true/, 'PluginEditorView should render the editor read-only')
+  assert.doesNotMatch(files.pluginEditorView, /saveActiveFile|save_plugin_file/, 'PluginEditorView should not save files anymore')
+  assert.doesNotMatch(files.pluginEditorView, /runDebug|runPluginDebugSource|debugOutput|debugLogs/, 'PluginEditorView should not include a debug panel anymore')
 })
 
 check('App protects menu navigation from plugin view render crashes', () => {

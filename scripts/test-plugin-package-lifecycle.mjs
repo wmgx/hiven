@@ -31,11 +31,9 @@ assertHas(files.pluginRuntime, /rootPath:\s*installedRoot/, 'uninstallPlugin sho
 assertHas(files.scriptsView, /await\s+uninstallPlugin\(plugin\.pluginId\)/, 'ScriptsView uninstall button should await physical uninstall')
 assertHas(files.scriptsView, /setUpdateStatus\(['"`]checking['"`]\)|setUpdateStatus\(['"`]done['"`]\)/, 'ScriptsView should refresh directory summaries after uninstall')
 
-assertHas(files.configInit, /read_plugin_file[\s\S]*manifest\.json[\s\S]*catch/, 'user script release should read an existing package manifest before writing')
-assertHas(files.configInit, /continue[\s\S]*createScriptPluginEntrySource|createScriptPluginEntrySource[\s\S]*continue/, 'user script release should skip existing packages instead of overwriting user edits')
-assertHas(files.configInit, /displayNameI18n:\s*action\?\.titleI18n/, 'builtin script package manifests should inherit titleI18n as displayNameI18n')
-assertHas(files.configInit, /displayNameI18n:\s*action\.titleI18n/, 'user script package manifests should inherit titleI18n as displayNameI18n')
-assertHas(files.configInit, /displayNameI18n:\s*\{\s*zh:\s*['"`]示例：大写并添加前缀['"`]\s*\}/, 'demo plugin manifest should expose a localized display name')
+assertNotHas(files.configInit, /createScriptPluginEntrySource|parseScriptToAction/, 'configInit should no longer use the legacy defineAction parser/wrapper')
+assertNotHas(files.configInit, /releaseUserScriptPluginPackages|releaseBuiltinScriptPluginPackages/, 'configInit should no longer release defineAction scripts as packages')
+assertNotHas(files.configInit, /DEMO_PLUGIN_SOURCE|demo-text-plugin/, 'configInit should no longer ship a defineAction demo plugin')
 
 assertHas(files.pluginTypes, /export\s+type\s+PluginDefinition[\s\S]*titleI18n\??\s*:/, 'PluginDefinition should support root titleI18n')
 assertHas(files.tauriLib, /display_name_i18n|displayNameI18n/, 'Tauri PluginDirSummary should include displayNameI18n')

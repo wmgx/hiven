@@ -1,13 +1,12 @@
 import { useAppStore } from '../store'
 import type { ViewId } from '../store'
-import { LayoutPanelLeft, Pin, Puzzle, Terminal, Settings } from 'lucide-react'
+import { LayoutPanelLeft, Pin, Puzzle, Settings } from 'lucide-react'
 import { t } from '../i18n'
 import { resolveIcon } from '../utils/resolveIcon'
 
-const navItems: { id: ViewId; icon: React.ReactNode; labelKey: 'nav.editor' | 'nav.scripts' | 'nav.debugger' }[] = [
+const navItems: { id: ViewId; icon: React.ReactNode; labelKey: 'nav.editor' | 'nav.scripts' }[] = [
   { id: 'editor', icon: <LayoutPanelLeft size={18} />, labelKey: 'nav.editor' },
   { id: 'scripts', icon: <Puzzle size={18} />, labelKey: 'nav.scripts' },
-  { id: 'debugger', icon: <Terminal size={18} />, labelKey: 'nav.debugger' },
 ]
 
 export function Sidebar() {
