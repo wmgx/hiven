@@ -102,8 +102,8 @@ export type TextReplaceEffect = {
 }
 
 export type PaneEffect =
-  | { type: 'pane.create'; pane: Partial<EditorPane>; focus?: boolean }
-  | { type: 'pane.close'; paneId: PaneId }
+  | { type: 'pane.create'; pane: Partial<EditorPane>; focus?: boolean; direction?: 'left' | 'right' | 'top' | 'bottom' }
+  | { type: 'pane.close'; paneId?: PaneId }
   | { type: 'pane.focus'; paneId: PaneId }
   | { type: 'pane.update'; paneId: PaneId; patch: Partial<EditorPane> }
 

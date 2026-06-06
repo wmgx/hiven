@@ -20,6 +20,7 @@ import type {
 } from './types'
 import { useWorkspaceStore } from './workspaceStore'
 import { runtimeRegistry } from './runtimeRegistry'
+import { useAppStore } from '../store'
 import {
   detectConflicts,
   resolveConflict,
@@ -275,10 +276,20 @@ function applyPaneEffect(effect: PaneEffect) {
         title: effect.pane.title,
         language: effect.pane.language,
         focus: effect.focus,
+        direction: effect.direction,
       })
       break
     case 'pane.close':
-      ws.closePane(effect.paneId)
+      if (effect.paneId) {
+        ws.closePane(effect.paneId)
+      } else {
+        ws.closeActiveSurfaceOrPane()
+        const newActivePaneId = useWorkspaceStore.getState().activePaneId
+        const editor = runtimeRegistry.getCodeEditor(newActivePaneId)
+        if (editor) {
+          useAppStore.getState().setEditorInstance(editor)
+        }
+      }
       break
     case 'pane.focus':
       ws.setActivePaneId(effect.paneId)

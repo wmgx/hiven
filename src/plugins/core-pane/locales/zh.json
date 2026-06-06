@@ -1,0 +1,12 @@
+{
+  "command.split.title": "分栏",
+  "command.split.description": "将工作区分栏为新面板",
+  "command.close.title": "关闭当前面板",
+  "command.close.description": "关闭当前面板",
+  "input.source.label": "面板",
+  "param.direction.label": "方向",
+  "param.direction.option.right.label": "向右",
+  "param.direction.option.left.label": "向左",
+  "param.direction.option.down.label": "向下",
+  "param.direction.option.up.label": "向上"
+}

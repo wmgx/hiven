@@ -1,0 +1,12 @@
+{
+  "command.split.title": "Split",
+  "command.split.description": "Split the workspace into a new pane",
+  "command.close.title": "Close Pane",
+  "command.close.description": "Close the active pane",
+  "input.source.label": "Pane",
+  "param.direction.label": "Direction",
+  "param.direction.option.right.label": "Right",
+  "param.direction.option.left.label": "Left",
+  "param.direction.option.down.label": "Down",
+  "param.direction.option.up.label": "Up"
+}

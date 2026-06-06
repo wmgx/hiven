@@ -16,8 +16,6 @@ import type { PaneInput } from './pluginTypes'
 import { LANGUAGE_COMMAND_OPTIONS, isEditorLanguage } from './languageOptions'
 import { detectEditorLanguage } from './languageDetector'
 import { useAppStore } from '../store'
-import { useWorkspaceStore } from './workspaceStore'
-import { runtimeRegistry } from './runtimeRegistry'
 
 const corePlugin = definePlugin({
   commands: [
@@ -98,56 +96,6 @@ const corePlugin = definePlugin({
             patch: { language, languageSource: 'manual' as const },
           }],
         }
-      },
-    },
-    {
-      id: 'core.split',
-      title: 'Split',
-      titleI18n: { zh: '分栏' },
-      description: 'Split the workspace into a new pane',
-      descriptionI18n: { zh: '将工作区分栏为新面板' },
-      icon: 'columns',
-      params: [
-        {
-          key: 'direction',
-          label: 'Direction',
-          labelI18n: { zh: '方向' },
-          type: 'single-select',
-          options: ['right', 'left', 'down', 'up'],
-          default: 'right',
-        },
-      ],
-      run(ctx) {
-        const ws = useWorkspaceStore.getState()
-        const activePane = ws.panes[ws.activePaneId]
-        const dirParam = ctx.params?.direction || 'right'
-        const direction: 'left' | 'right' | 'top' | 'bottom' =
-          dirParam === 'down' ? 'bottom' : dirParam === 'up' ? 'top' : dirParam === 'left' ? 'left' : 'right'
-        ws.createPane({
-          text: '',
-          language: activePane?.language || 'plaintext',
-          focus: true,
-          direction,
-        })
-        return { effects: [] }
-      },
-    },
-    {
-      id: 'core.close-pane',
-      title: 'Close Pane',
-      titleI18n: { zh: '关闭当前面板' },
-      description: 'Close the active pane',
-      descriptionI18n: { zh: '关闭当前面板' },
-      icon: 'x',
-      run() {
-        const ws = useWorkspaceStore.getState()
-        ws.closeActiveSurfaceOrPane()
-        const newActivePaneId = useWorkspaceStore.getState().activePaneId
-        const editor = runtimeRegistry.getCodeEditor(newActivePaneId)
-        if (editor) {
-          useAppStore.getState().setEditorInstance(editor)
-        }
-        return { effects: [] }
       },
     },
     {
