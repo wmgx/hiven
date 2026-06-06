@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const sortJsonPlugin = definePlugin({
-  id: 'sort-json',
-  title: 'Sort JSON Keys',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'sort-json.run',
@@ -16,7 +12,6 @@ export const sortJsonPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'ArrowUpNarrowWide',
       aliases: ['json-sort', 'sort-json-keys'],
-      tags: ['json', 'sort'],
       params: [],
       inputs: [
         { key: 'input', label: 'input.text.label', kind: 'text', required: true },

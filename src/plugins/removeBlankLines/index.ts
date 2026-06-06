@@ -7,16 +7,11 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const removeBlankLinesPlugin = definePlugin({
-  id: 'remove-blank-lines',
-  title: 'Remove Blank Lines',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'remove-blank-lines.run',
       title: 'command.run.title',
       description: 'command.run.description',
-      tags: ['text', 'cleanup'],
       icon: 'RemoveFormatting',
       inputs: [
         { key: 'input', label: 'input.text.label', kind: 'text', required: true },

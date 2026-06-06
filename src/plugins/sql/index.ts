@@ -6,10 +6,6 @@ import { definePlugin, type TextInput } from '@fluxtext/plugin'
 import { format } from 'sql-formatter'
 
 export const sqlPlugin = definePlugin({
-  id: 'sql',
-  title: 'SQL Formatter',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'sql.run',
@@ -17,7 +13,6 @@ export const sqlPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'Database',
       aliases: ['sql-format', 'sql-minify'],
-      tags: ['sql', 'format'],
       optionalParams: true,
       params: [
         {

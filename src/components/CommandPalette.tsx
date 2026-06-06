@@ -1,8 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useAppStore, localized } from '../store'
-import type { ActionDef, ActionParam } from '../store'
+import type { PaletteParamModel } from '../store'
 import { useWorkspaceStore } from '../workspace/workspaceStore'
-import { runLegacyAction } from '../workspace/commandAdapter'
 import { applyEffects } from '../workspace/effectRunner'
 import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
 import { resolvePluginInputs, buildPluginCommandContext } from '../workspace/pluginInputResolver'
@@ -14,7 +13,6 @@ import type { ResolvedInputs } from '../workspace/pluginTypes'
 import { Search, Check, Pin } from 'lucide-react'
 import { t, type Locale } from '../i18n'
 import { readText } from '@tauri-apps/plugin-clipboard-manager'
-import { loadCDN, loadDeps } from '../utils/cdnLoader'
 import { resolveIcon } from '../utils/resolveIcon'
 import { pinyin } from 'pinyin-pro'
 
@@ -23,15 +21,13 @@ type Step =
   | { type: 'search' }
   | { type: 'param'; paramIndex: number }
 
-type PaletteItem =
-  | { kind: 'legacy'; action: ActionDef }
-  | { kind: 'plugin'; entry: CommandEntry; isDev: boolean }
+type PaletteItem = { kind: 'plugin'; entry: CommandEntry; isDev: boolean }
 
 type SelectedPluginCommand = {
   entry: CommandEntry
   isDev: boolean
   inputs: ResolvedInputs
-  params: ActionParam[]
+  params: PaletteParamModel[]
   customizeParams: boolean
   inputSlots: InputSlot[]
   inputParamKeys: Record<string, string>
@@ -43,17 +39,10 @@ type SelectedPluginCommand = {
 export function CommandPalette() {
   const open = useAppStore((s) => s.commandPaletteOpen)
   const setOpen = useAppStore((s) => s.setCommandPaletteOpen)
-  const actions = useAppStore((s) => s.actions)
-  const disabledBuiltins = useAppStore((s) => s.settings.disabledBuiltins)
-  const disabledCustoms = useAppStore((s) => s.settings.disabledCustoms)
   const setLastCommandStatus = useAppStore((s) => s.setLastCommandStatus)
   const recentActionNames = useAppStore((s) => s.recentActionNames)
   const pushRecentAction = useAppStore((s) => s.pushRecentAction)
   const actionUsageCounts = useAppStore((s) => s.actionUsageCounts)
-  const persistParams = useAppStore((s) => s.settings.persistParams)
-  const savedActionParams = useAppStore((s) => s.savedActionParams)
-  const saveActionParams = useAppStore((s) => s.saveActionParams)
-  const pinAction = useAppStore((s) => s.pinAction)
   const pinPluginCommand = useAppStore((s) => s.pinPluginCommand)
   const locale = useAppStore((s) => s.locale)
   const shortcutMeta = useMemo(() => getPlatformShortcutMeta(), [])
@@ -61,7 +50,6 @@ export function CommandPalette() {
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [step, setStep] = useState<Step>({ type: 'search' })
-  const [selectedAction, setSelectedAction] = useState<ActionDef | null>(null)
   const [selectedPlugin, setSelectedPlugin] = useState<SelectedPluginCommand | null>(null)
   const [params, setParams] = useState<Record<string, unknown>>({})
   const [inputValue, setInputValue] = useState('')
@@ -81,7 +69,6 @@ export function CommandPalette() {
       setQuery('')
       setSelectedIndex(0)
       setStep({ type: 'search' })
-      setSelectedAction(null)
       setSelectedPlugin(null)
       setParams({})
       setInputValue('')
@@ -94,29 +81,16 @@ export function CommandPalette() {
     }
   }, [open])
 
-  // 统一过滤 + 排序：legacy 与 plugin 命令合并，支持缩写匹配和复合评分
+  // 过滤 + 排序：plugin 命令，支持缩写匹配和复合评分
   const allFiltered = useMemo<PaletteItem[]>(() => {
     void pluginRegistryVersion
 
-    // 去重收集 legacy items
-    const seen = new Set<string>()
-    const legacyItems: PaletteItem[] = actions
-      .filter((a) => {
-        if (seen.has(a.name)) return false
-        seen.add(a.name)
-        if (a.builtin) return !disabledBuiltins.includes(a.name)
-        return !disabledCustoms.includes(a.name)
-      })
-      .map((action) => ({ kind: 'legacy' as const, action }))
-
-    // 收集 plugin items
-    const pluginItems: PaletteItem[] = pluginRegistry.getAllCommands().map(({ contribution, meta, isDev }) => ({
+    const allItems: PaletteItem[] = pluginRegistry.getAllCommands().map(({ contribution, meta, isDev }) => ({
       kind: 'plugin' as const,
       entry: { contribution, meta },
       isDev,
     }))
 
-    const allItems = [...legacyItems, ...pluginItems]
     const q = query.trim().toLowerCase()
 
     // 过滤（含缩写匹配）
@@ -127,12 +101,12 @@ export function CommandPalette() {
       scorePaletteItem(b, q, locale, recentActionNames, actionUsageCounts) -
       scorePaletteItem(a, q, locale, recentActionNames, actionUsageCounts)
     )
-  }, [query, actions, recentActionNames, actionUsageCounts, disabledBuiltins, disabledCustoms, locale, pluginRegistryVersion])
+  }, [query, recentActionNames, actionUsageCounts, locale, pluginRegistryVersion])
 
   // 当前参数
-  const currentParam: ActionParam | null =
+  const currentParam: PaletteParamModel | null =
     step.type === 'param'
-      ? (selectedPlugin?.params ?? selectedAction?.params ?? [])[step.paramIndex] ?? null
+      ? (selectedPlugin?.params ?? [])[step.paramIndex] ?? null
       : null
 
   // 当前参数的选项列表（单选/多选模式）
@@ -175,83 +149,6 @@ export function CommandPalette() {
       return Math.min(index, visibleOptions.length - 1)
     })
   }, [isFilterableSelect, step.type, visibleOptions.length])
-
-  async function runAction(action: ActionDef, finalParams: Record<string, unknown>) {
-    pushRecentAction(action.name)
-    const commandTitle = localized(action.title, action.titleI18n, locale)
-    setLastCommandStatus({ title: commandTitle, status: 'running', updatedAt: Date.now() })
-
-    // 保存参数（仅保存 boolean/select 类型的值，跳过动态参数）
-    if (persistParams && action.params && action.params.length > 0) {
-      const toSave: Record<string, unknown> = {}
-      for (const param of action.params) {
-        if (param.optionsFn) continue // 动态选项不持久化
-        if (param.type === 'boolean' || param.type === 'single-select' || param.type === 'multi-select') {
-          toSave[param.key] = finalParams[param.key]
-        }
-      }
-      if (Object.keys(toSave).length > 0) {
-        saveActionParams(action.name, toSave)
-      }
-    }
-
-    // 获取 editor 实例，判断是否有选区
-    const editor = useAppStore.getState().editorInstance
-    const editorText = useWorkspaceStore.getState().getActivePaneText()
-    let inputText = editorText
-
-    if (editor) {
-      const sel = editor.getSelection()
-      if (sel && !sel.isEmpty()) {
-        inputText = editor.getModel()?.getValueInRange(sel) || editorText
-      }
-    }
-
-    // 加载脚本声明的 @deps 依赖并注入 ctx
-    let deps: Record<string, unknown>
-    try {
-      deps = action.source ? await loadDeps(action.source) : {}
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e)
-      setLastCommandStatus({ title: commandTitle, status: 'error', message, updatedAt: Date.now() })
-      setOpen(false)
-      return
-    }
-
-    const ctx = {
-      input: { text: inputText },
-      params: finalParams,
-      readClipboard: async () => {
-        try {
-          return (await readText()) ?? ''
-        } catch {
-          return ''
-        }
-      },
-      loadCDN,
-      deps,
-    }
-
-    try {
-      // Use command adapter + effect runner pipeline
-      const commandResult = await runLegacyAction(action, ctx)
-
-      if (commandResult.effects.length > 0) {
-        const runResult = applyEffects(commandResult.effects)
-        if (runResult.errors.length > 0) {
-          setLastCommandStatus({ title: commandTitle, status: 'error', message: runResult.errors[0], updatedAt: Date.now() })
-        } else {
-          setLastCommandStatus({ title: commandTitle, status: 'success', updatedAt: Date.now() })
-        }
-      } else {
-        setLastCommandStatus({ title: commandTitle, status: 'success', updatedAt: Date.now() })
-      }
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e)
-      setLastCommandStatus({ title: commandTitle, status: 'error', message, updatedAt: Date.now() })
-    }
-    setOpen(false)
-  }
 
   // Execute a plugin command with already-resolved inputs
   async function executePluginCommand(
@@ -306,10 +203,9 @@ export function CommandPalette() {
       inputSlots: [],
       inputParamKeys: {},
     }
-    setSelectedAction(null)
     setSelectedPlugin(pluginSelection)
     setParams(initialParams)
-    goToParam(null, pluginSelection, 0, initialParams)
+    goToParam(pluginSelection, 0, initialParams)
   }
 
   function startPluginInputParamFlow(
@@ -336,10 +232,9 @@ export function CommandPalette() {
       inputPairSlotKeys,
       clipboardText,
     }
-    setSelectedAction(null)
     setSelectedPlugin(pluginSelection)
     setParams(initialParams)
-    goToParam(null, pluginSelection, 0, initialParams)
+    goToParam(pluginSelection, 0, initialParams)
   }
 
   async function runPluginCommand(entry: CommandEntry, isDev: boolean, customizeParams: boolean) {
@@ -383,68 +278,28 @@ export function CommandPalette() {
   }
 
   function selectItem(item: PaletteItem, customizeParams = false) {
-    if (item.kind === 'legacy') {
-      selectAction(item.action, customizeParams)
-    } else {
-      runPluginCommand(item.entry, item.isDev, customizeParams)
-    }
+    runPluginCommand(item.entry, item.isDev, customizeParams)
   }
 
   function shouldCustomizeParams(metaKey: boolean, ctrlKey: boolean) {
     return shortcutMeta.modifier === 'meta' ? metaKey : ctrlKey
   }
 
-  function selectAction(action: ActionDef, customizeParams: boolean) {
-    setSelectedAction(action)
-    setSelectedPlugin(null)
-    // 初始化所有参数为默认值
-    const defaultParams = getDefaultActionParams(action.params || [])
-    const p = { ...defaultParams }
-    if (supportsDefaultParamRun(action, action.params || []) && !customizeParams) {
-      runAction(action, defaultParams)
-      return
-    }
-    // 如果开启了参数持久化，用上次保存的值覆盖默认值（仅覆盖 boolean 和 select 类型，跳过动态参数）
-    if (persistParams && savedActionParams[action.name]) {
-      const saved = savedActionParams[action.name]
-      for (const param of action.params || []) {
-        if (param.optionsFn) continue // 动态选项不恢复
-        if (param.key in saved && (param.type === 'boolean' || param.type === 'single-select' || param.type === 'multi-select')) {
-          p[param.key] = saved[param.key]
-        }
-      }
-    }
-    setParams(p)
-
-    if (!action.params || action.params.length === 0) {
-      // 无参数，直接执行
-      runAction(action, p)
-    } else {
-      // 进入第一个参数步骤
-      goToParam(action, null, 0, p)
-    }
-  }
-
   function goToParam(
-    action: ActionDef | null,
-    plugin: SelectedPluginCommand | null,
+    plugin: SelectedPluginCommand,
     index: number,
     currentParams: Record<string, unknown>
   ) {
-    const paramsList = action?.params || plugin?.params || []
+    const paramsList = plugin.params
     if (index >= paramsList.length) {
       // 所有参数配置完毕，执行
-      if (action) {
-        runAction(action, currentParams)
-      } else if (plugin) {
-        const { inputs, commandParams } = resolveSelectedPluginCommand(plugin, currentParams)
-        executePluginCommand(plugin.entry, plugin.isDev, inputs, commandParams)
-      }
+      const { inputs, commandParams } = resolveSelectedPluginCommand(plugin, currentParams)
+      executePluginCommand(plugin.entry, plugin.isDev, inputs, commandParams)
       return
     }
     const param = paramsList[index]
-    if (plugin && shouldSkipPluginCommandParam(plugin, param)) {
-      goToParam(action, plugin, index + 1, currentParams)
+    if (shouldSkipPluginCommandParam(plugin, param)) {
+      goToParam(plugin, index + 1, currentParams)
       return
     }
 
@@ -456,7 +311,7 @@ export function CommandPalette() {
         const allValues = dynamicOpts.map(o => o.value)
         const newParams = { ...currentParams, [param.key]: allValues }
         setParams(newParams)
-        goToParam(action, plugin, index + 1, newParams)
+        goToParam(plugin, index + 1, newParams)
         return
       }
     }
@@ -495,7 +350,7 @@ export function CommandPalette() {
   }
 
   function confirmCurrentParam(selectedIndexOverride?: number) {
-    if ((!selectedAction && !selectedPlugin) || !currentParam) return
+    if (!selectedPlugin || !currentParam) return
     const index = step.type === 'param' ? step.paramIndex : 0
     const newParams = { ...params }
     const optionIndex = selectedIndexOverride ?? selectedIndex
@@ -533,7 +388,7 @@ export function CommandPalette() {
     }
 
     setParams(newParams)
-    goToParam(selectedAction, selectedPlugin, index + 1, newParams)
+    goToParam(selectedPlugin, index + 1, newParams)
   }
 
   function toggleMultiWithAutoConfirm(val: string) {
@@ -571,11 +426,10 @@ export function CommandPalette() {
     // 参数步骤
     if (e.key === 'Escape') {
       // 返回上一步
-      if (step.type === 'param' && step.paramIndex > 0) {
-        goToParam(selectedAction, selectedPlugin, step.paramIndex - 1, params)
+      if (step.type === 'param' && step.paramIndex > 0 && selectedPlugin) {
+        goToParam(selectedPlugin, step.paramIndex - 1, params)
       } else {
         setStep({ type: 'search' })
-        setSelectedAction(null)
         setSelectedPlugin(null)
         setTimeout(() => inputRef.current?.focus(), 30)
       }
@@ -650,20 +504,16 @@ export function CommandPalette() {
             selectedIndex={selectedIndex}
             onSelectItem={(item, customizeParams) => selectItem(item, customizeParams)}
             onPinItem={(item) => {
-              if (item.kind === 'legacy') {
-                pinAction(item.action)
-              } else {
-                pinPluginCommand({
-                  kind: 'plugin-command',
-                  actionId: item.entry.contribution.id,
-                  pluginId: item.entry.meta.pluginId,
-                  title: item.entry.contribution.title || item.entry.contribution.id,
-                  titleI18n: item.entry.contribution.titleI18n,
-                  icon: item.entry.contribution.icon,
-                  isDev: item.isDev,
-                  live: item.entry.contribution.live,
-                })
-              }
+              pinPluginCommand({
+                kind: 'plugin-command',
+                actionId: item.entry.contribution.id,
+                pluginId: item.entry.meta.pluginId,
+                title: item.entry.contribution.title || item.entry.contribution.id,
+                titleI18n: item.entry.contribution.titleI18n,
+                icon: item.entry.contribution.icon,
+                isDev: item.isDev,
+                live: item.entry.contribution.live,
+              })
               setOpen(false)
             }}
             setSelectedIndex={setSelectedIndex}
@@ -677,10 +527,10 @@ export function CommandPalette() {
         {step.type === 'param' && currentParam && (
           <ParamStep
             inputRef={inputRef}
-            actionName={selectedPlugin ? getPluginDisplayTitle(selectedPlugin.entry, selectedPlugin.isDev, locale) : selectedAction?.name ?? ''}
+            actionName={selectedPlugin ? getPluginDisplayTitle(selectedPlugin.entry, selectedPlugin.isDev, locale) : ''}
             param={currentParam}
             paramIndex={step.paramIndex}
-            totalParams={(selectedPlugin?.params ?? selectedAction?.params ?? []).length}
+            totalParams={(selectedPlugin?.params ?? []).length}
             options={visibleOptions}
             selectedIndex={selectedIndex}
             isInputMode={isInputMode}
@@ -762,7 +612,7 @@ function ParamStep({
 }: {
   inputRef: React.RefObject<HTMLInputElement | null>
   actionName: string
-  param: ActionParam
+  param: PaletteParamModel
   paramIndex: number
   totalParams: number
   options: { label: string; value: string }[]
@@ -940,17 +790,12 @@ function ActionItem({ item, selected, onClick, onPin, onMouseEnter, shortcutMeta
     }
   }, [selected])
 
-  const isPlugin = item.kind === 'plugin'
-  const isDev = isPlugin && item.isDev
-  const name = isPlugin ? item.entry.contribution.id : item.action.name
-  const title = isPlugin ? getPluginDisplayTitle(item.entry, item.isDev, locale) : localized(item.action.title, item.action.titleI18n, locale)
-  const subtitle = isPlugin
-    ? localized(item.entry.contribution.description || item.entry.contribution.id, item.entry.contribution.descriptionI18n, locale)
-    : title
-  const icon = isPlugin ? item.entry.contribution.icon : item.action.icon
-  const canCustomizeParams = item.kind === 'plugin'
-    ? supportsDefaultParamRun(item.entry.contribution, normalizePluginParams(item.entry.contribution.params ?? []))
-    : supportsDefaultParamRun(item.action, item.action.params ?? [])
+  const isDev = item.isDev
+  const name = item.entry.contribution.id
+  const title = getPluginDisplayTitle(item.entry, item.isDev, locale)
+  const subtitle = localized(item.entry.contribution.description || item.entry.contribution.id, item.entry.contribution.descriptionI18n, locale)
+  const icon = item.entry.contribution.icon
+  const canCustomizeParams = supportsDefaultParamRun(item.entry.contribution, normalizePluginParams(item.entry.contribution.params ?? []))
 
   return (
     <div
@@ -975,7 +820,7 @@ function ActionItem({ item, selected, onClick, onPin, onMouseEnter, shortcutMeta
             <span className="text-[9px] px-1 py-0.5 rounded font-semibold shrink-0" style={{ background: 'var(--color-accent)', color: '#fff' }}>DEV</span>
           )}
           <div className="text-[13px] font-medium truncate" style={{ color: selected ? 'var(--color-accent-hover)' : 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>
-            {isPlugin ? title : name}
+            {title}
           </div>
         </div>
         <div className="text-[11px]" style={{ color: selected ? 'var(--color-accent)' : 'var(--color-text-tertiary)', marginTop: 1 }}>
@@ -1004,21 +849,19 @@ function ActionItem({ item, selected, onClick, onPin, onMouseEnter, shortcutMeta
           <span className="text-[10px] leading-none">{t(locale, 'palette.customizeParamsLabel')}</span>
         </div>
       )}
-      {(item.kind === 'legacy' || item.kind === 'plugin') && (
-        <button
-          data-testid="command-palette-pin-action"
-          className="w-6 h-6 rounded-md border-none bg-transparent cursor-pointer flex items-center justify-center shrink-0"
-          title={t(locale, 'palette.pinAction')}
-          style={{ color: selected ? 'var(--color-accent-hover)' : 'var(--color-text-tertiary)' }}
-          onClick={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            onPin()
-          }}
-        >
-          <Pin size={13} />
-        </button>
-      )}
+      <button
+        data-testid="command-palette-pin-action"
+        className="w-6 h-6 rounded-md border-none bg-transparent cursor-pointer flex items-center justify-center shrink-0"
+        title={t(locale, 'palette.pinAction')}
+        style={{ color: selected ? 'var(--color-accent-hover)' : 'var(--color-text-tertiary)' }}
+        onClick={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          onPin()
+        }}
+      >
+        <Pin size={13} />
+      </button>
       {selected && (
         <kbd className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--color-background-tertiary)', border: '0.5px solid var(--color-border-tertiary)', color: 'var(--color-text-secondary)' }}>↵</kbd>
       )}
@@ -1078,46 +921,37 @@ function isSearchableOptionValue(value: string): boolean {
 
 /** 检查 query 是否匹配某个 PaletteItem（含缩写匹配） */
 function paletteItemMatchesQuery(item: PaletteItem, q: string, locale: import('../i18n').Locale): boolean {
-  const id = item.kind === 'legacy' ? item.action.name : item.entry.contribution.id
+  const contribution = item.entry.contribution
+  const id = contribution.id
   const name = id.toLowerCase()
-  const title = (
-    item.kind === 'legacy'
-      ? localized(item.action.title, item.action.titleI18n, locale)
-      : localized(item.entry.contribution.title || id, item.entry.contribution.titleI18n, locale)
-  ).toLowerCase()
+  const title = localized(contribution.title || id, contribution.titleI18n, locale).toLowerCase()
 
   if (name.includes(q) || title.includes(q)) return true
 
-  const titleI18n = item.kind === 'legacy' ? item.action.titleI18n : item.entry.contribution.titleI18n
+  const titleI18n = contribution.titleI18n
   if (Object.values(titleI18n || {}).some((v) => v && v.toLowerCase().includes(q))) return true
 
-  const desc = item.kind === 'legacy' ? (item.action.description || '') : (item.entry.contribution.description || '')
+  const desc = contribution.description || ''
   if (desc.toLowerCase().includes(q)) return true
 
-  const descI18n = item.kind === 'legacy' ? item.action.descriptionI18n : item.entry.contribution.descriptionI18n
+  const descI18n = contribution.descriptionI18n
   if (Object.values(descI18n || {}).some((v) => v && v.toLowerCase().includes(q))) return true
 
-  const aliases = item.kind === 'legacy' ? (item.action.aliases || []) : (item.entry.contribution.aliases || [])
+  const aliases = contribution.aliases || []
   if (aliases.some((a) => a.toLowerCase().includes(q))) return true
-
-  const tags = item.kind === 'legacy' ? (item.action.tags || []) : (item.entry.contribution.tags || [])
-  if (tags.some((tag) => tag.toLowerCase().includes(q))) return true
 
   // 缩写匹配：从 id/name 算一遍，再从英文原始 title 算一遍
   // 例如 id="text-diff.compare" name 缩写是 "tdc"，但 title="Text Diff" 缩写是 "td" ✓
   const acronym = getAcronym(name)
   if (acronym.startsWith(q) || acronym === q) return true
 
-  const engTitle = (item.kind === 'legacy'
-    ? item.action.title
-    : (item.entry.contribution.title || id)
-  ).toLowerCase()
+  const engTitle = (contribution.title || id).toLowerCase()
   const titleAcronym = getAcronym(engTitle)
   if (titleAcronym.startsWith(q) || titleAcronym === q) return true
 
   // 拼音匹配：对所有中文文本字段检查全拼和首字母
-  const zhTitle = (item.kind === 'legacy' ? item.action.titleI18n?.zh : item.entry.contribution.titleI18n?.zh) ?? ''
-  const zhDesc = (item.kind === 'legacy' ? item.action.descriptionI18n?.zh : item.entry.contribution.descriptionI18n?.zh) ?? ''
+  const zhTitle = contribution.titleI18n?.zh ?? ''
+  const zhDesc = contribution.descriptionI18n?.zh ?? ''
   if (pinyinMatch(zhTitle || title, q)) return true
   if (zhDesc && pinyinMatch(zhDesc, q)) return true
 
@@ -1138,7 +972,8 @@ function scorePaletteItem(
   recentNames: string[],
   usageCounts: Record<string, number>
 ): number {
-  const id = item.kind === 'legacy' ? item.action.name : item.entry.contribution.id
+  const contribution = item.entry.contribution
+  const id = contribution.id
   const recentIdx = recentNames.indexOf(id)
   const recencyScore = recentIdx >= 0 ? 50 - recentIdx : 0
   const freq = usageCounts[id] ?? 0
@@ -1148,11 +983,7 @@ function scorePaletteItem(
   if (!q) return baseScore
 
   const name = id.toLowerCase()
-  const title = (
-    item.kind === 'legacy'
-      ? localized(item.action.title, item.action.titleI18n, locale)
-      : localized(item.entry.contribution.title || id, item.entry.contribution.titleI18n, locale)
-  ).toLowerCase()
+  const title = localized(contribution.title || id, contribution.titleI18n, locale).toLowerCase()
 
   let tier = 1 // 默认子串匹配层
   if (name === q || title === q) {
@@ -1195,7 +1026,7 @@ function isMacPlatform(): boolean {
   return /Mac|iPhone|iPad|iPod/i.test(`${platform} ${userAgentDataPlatform} ${userAgent}`)
 }
 
-function normalizePluginParams(pluginParams: CommandParam[]): ActionParam[] {
+function normalizePluginParams(pluginParams: CommandParam[]): PaletteParamModel[] {
   return pluginParams.map((param) => ({
     key: param.key,
     label: param.label,
@@ -1209,7 +1040,7 @@ function normalizePluginParams(pluginParams: CommandParam[]): ActionParam[] {
   }))
 }
 
-function getDefaultActionParams(paramList: ActionParam[]): Record<string, unknown> {
+function getDefaultActionParams(paramList: PaletteParamModel[]): Record<string, unknown> {
   const result: Record<string, unknown> = {}
   for (const param of paramList) {
     result[param.key] = param.default ?? getDefaultForType(param)
@@ -1223,23 +1054,23 @@ function getDefaultPluginParams(paramList: CommandParam[]): Record<string, unkno
 
 function supportsDefaultParamRun(
   command: { optionalParams?: boolean },
-  paramList: ActionParam[]
+  paramList: PaletteParamModel[]
 ): boolean {
   return command.optionalParams === true && hasExplicitDefaultParams(paramList)
 }
 
-function hasExplicitDefaultParams(paramList: ActionParam[]): boolean {
+function hasExplicitDefaultParams(paramList: PaletteParamModel[]): boolean {
   return paramList.length > 0 && paramList.every((param) => param.default !== undefined)
 }
 
-function shouldSkipPluginCommandParam(plugin: SelectedPluginCommand, param: ActionParam): boolean {
+function shouldSkipPluginCommandParam(plugin: SelectedPluginCommand, param: PaletteParamModel): boolean {
   if (plugin.customizeParams) return false
   const pluginParams = normalizePluginParams(plugin.entry.contribution.params ?? [])
   if (!supportsDefaultParamRun(plugin.entry.contribution, pluginParams)) return false
   return !Object.values(plugin.inputParamKeys).includes(param.key)
 }
 
-function getParamOptionValues(param: ActionParam): string[] {
+function getParamOptionValues(param: PaletteParamModel): string[] {
   if (param.optionsFn) return param.optionsFn().map((option) => option.value)
   return (param.options || []).map((option) => typeof option === 'string' ? option : option.value)
 }
@@ -1247,10 +1078,10 @@ function getParamOptionValues(param: ActionParam): string[] {
 function buildPluginInputParams(
   slots: InputSlot[],
   clipboardText?: string
-): { params: ActionParam[]; inputParamKeys: Record<string, string>; inputPairParamKey?: string; inputPairSlotKeys?: string[] } {
+): { params: PaletteParamModel[]; inputParamKeys: Record<string, string>; inputPairParamKey?: string; inputPairSlotKeys?: string[] } {
   const paneSlots = slots.filter((slot) => slot.kind === 'pane')
   const inputParamKeys: Record<string, string> = {}
-  const params: ActionParam[] = []
+  const params: PaletteParamModel[] = []
   const offerFallbacks = shouldOfferPaneFallbacks(slots)
 
   if (paneSlots.length === 2 && paneSlots.every((slot) => slot.required)) {
@@ -1454,7 +1285,7 @@ function getPluginDisplayTitle(entry: CommandEntry, isDev: boolean, locale: Loca
   return isDev ? `[DEV] ${title}` : title
 }
 
-function getDefaultForType(param: ActionParam): unknown {
+function getDefaultForType(param: PaletteParamModel): unknown {
   switch (param.type) {
     case 'boolean': return false
     case 'number': return 0

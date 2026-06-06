@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const countPlugin = definePlugin({
-  id: 'count',
-  title: 'Text Statistics',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'count.run',
@@ -16,7 +12,6 @@ export const countPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'BarChart',
       aliases: ['stats', 'wc'],
-      tags: ['text', 'stats'],
       live: { live: { enabled: true, trigger: 'on-input', sideEffects: 'none', debounceMs: 250 } },
       inputs: [
         { key: 'input', label: 'input.text.label', kind: 'text', required: true },

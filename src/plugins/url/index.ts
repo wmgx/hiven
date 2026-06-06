@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const urlPlugin = definePlugin({
-  id: 'url',
-  title: 'URL Encode/Decode',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'url.run',
@@ -16,7 +12,6 @@ export const urlPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'Link',
       aliases: ['urlencode', 'urldecode'],
-      tags: ['encode', 'decode', 'url'],
       live: { live: { enabled: true, trigger: 'on-input', sideEffects: 'none', debounceMs: 250 } },
       params: [
         {

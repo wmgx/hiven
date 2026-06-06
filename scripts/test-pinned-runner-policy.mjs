@@ -23,6 +23,7 @@ const files = {
   effectRunner: read('src/workspace/effectRunner.ts'),
   pinnedRuntime: read('src/workspace/pinnedActionRuntime.ts'),
   pinnedRunner: read('src/views/PinnedRunnerView.tsx'),
+  pinnedFactory: read('src/workspace/pinnedActionFactory.ts'),
 }
 
 assertHas(files.packageJson, /test:pinned-runner-policy/, 'package.json should expose pinned runner policy verifier')
@@ -30,7 +31,7 @@ assertHas(files.packageJson, /test:pinned-runner-policy/, 'package.json should e
 assertHas(files.pluginTypes, /export\s+type\s+LiveActionCapability/, 'pluginTypes should define LiveActionCapability')
 assertHas(files.pluginTypes, /sideEffects:\s*['"]none['"]\s*\|\s*['"]read-only['"]\s*\|\s*['"]writes['"]/, 'LiveActionCapability should classify side effects')
 assertHas(files.pluginTypes, /live\??\s*:\s*LiveActionCapability/, 'CommandContribution should expose live capability metadata')
-assertHas(files.store, /live\??\s*:\s*LiveActionCapability/, 'legacy ActionDef should expose live capability metadata')
+assertHas(files.store, /live\??\s*:\s*LiveActionCapability/, 'PinnedPluginCommandInput should carry live capability metadata')
 assertHas(files.workspaceTypes, /\|\s*\{\s*type:\s*['"]pinned-action['"];\s*pinnedId:\s*string\s*\}/, 'PanelScope should support pinned-action scope')
 assertHas(files.workspaceTypes, /type:\s*['"]panel\.openV2['"][\s\S]*scope\??\s*:\s*PanelScope/, 'panel.openV2 should carry panel scope')
 assertHas(files.workspaceTypes, /export\s+type\s+PanelInstanceV2[\s\S]*scope\??\s*:\s*PanelScope/, 'PanelInstanceV2 should preserve panel scope')
@@ -44,8 +45,8 @@ assertHas(files.pinnedRuntime, /outputSummary[\s\S]*stale|stale[\s\S]*outputSumm
 
 assertHas(files.app, /useEffect[\s\S]*prunePinnedRuntimes/, 'App should schedule idle runtime pruning outside the PinnedRunnerView lifecycle')
 assertNotHas(files.pinnedRunner, /setInterval\(\(\)\s*=>\s*prunePinnedRuntimes/, 'PinnedRunnerView should not own the root idle-prune scheduler')
-assertHas(files.store, /sideEffects\s*!==\s*['"]writes['"][\s\S]*trigger\s*!==\s*['"]manual['"]|trigger\s*!==\s*['"]manual['"][\s\S]*sideEffects\s*!==\s*['"]writes['"]/, 'writes side-effect commands should default to manual run')
-assertHas(files.store, /def\?\.live[\s\S]*autoRun:\s*shouldAutoRunLiveAction/, 'legacy actions should derive autoRun from live capability metadata')
+assertHas(files.pinnedFactory, /sideEffects\s*!==\s*['"]writes['"][\s\S]*trigger\s*!==\s*['"]manual['"]|trigger\s*!==\s*['"]manual['"][\s\S]*sideEffects\s*!==\s*['"]writes['"]/, 'writes side-effect commands should default to manual run')
+assertHas(files.pinnedFactory, /autoRun:\s*shouldAutoRunLiveAction\(command\.live\)/, 'pinned plugin commands should derive autoRun from live capability metadata')
 assertHas(files.store, /serializePinnedTombstones[\s\S]*tombstoneTtlDays[\s\S]*disposedAt/, 'persisted tombstones should be pruned by tombstoneTtlDays')
 assertHas(files.pinnedRunner, /liveTrigger[\s\S]*['"]on-blur['"]/, 'PinnedRunnerView should resolve live.trigger including on-blur')
 assertHas(files.pinnedRunner, /liveTrigger\s*===\s*['"]on-blur['"][\s\S]*return[\s\S]*window\.setTimeout|liveTrigger\s*!==\s*['"]on-blur['"][\s\S]*window\.setTimeout|window\.setTimeout[\s\S]*liveTrigger\s*!==\s*['"]on-blur['"]/, 'PinnedRunnerView should only debounce input changes for non on-blur triggers')
@@ -53,7 +54,7 @@ assertHas(files.pinnedRunner, /onDidBlurEditorWidget[\s\S]*runPinnedAction|runPi
 
 const restoredPreview = restorePinnedFromTombstone({
   id: 'pinned-1',
-  kind: 'legacy',
+  kind: 'plugin-command',
   actionId: 'demo',
   title: 'Demo',
   inputText: '',

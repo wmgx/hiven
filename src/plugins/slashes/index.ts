@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const slashesPlugin = definePlugin({
-  id: 'slashes',
-  title: 'Add/Remove Slashes',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'slashes.run',
@@ -16,7 +12,6 @@ export const slashesPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'Quote',
       aliases: ['escape', 'unescape', 'addslashes', 'stripslashes'],
-      tags: ['text', 'escape'],
       params: [
         {
           key: 'mode',

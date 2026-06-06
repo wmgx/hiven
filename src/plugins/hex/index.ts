@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const hexPlugin = definePlugin({
-  id: 'hex',
-  title: 'Number Base Convert',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'hex.run',
@@ -16,7 +12,6 @@ export const hexPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'Calculator',
       aliases: ['decimal', 'binary', 'octal', 'hex-convert'],
-      tags: ['number', 'convert'],
       params: [
         {
           key: 'mode',

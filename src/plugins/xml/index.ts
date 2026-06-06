@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const xmlPlugin = definePlugin({
-  id: 'xml',
-  title: 'XML Formatter',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'xml.run',
@@ -16,7 +12,6 @@ export const xmlPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'Code',
       aliases: ['xml-format', 'xml-minify', 'html-format'],
-      tags: ['xml', 'html', 'format'],
       params: [
         {
           key: 'mode',

@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const trimWhitespacePlugin = definePlugin({
-  id: 'trim-whitespace',
-  title: 'Trim Whitespace',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'trim-whitespace.run',
@@ -16,7 +12,6 @@ export const trimWhitespacePlugin = definePlugin({
       description: 'command.run.description',
       icon: 'Type',
       aliases: ['strip', 'clean'],
-      tags: ['text', 'cleanup'],
       inputs: [
         { key: 'input', label: 'input.text.label', kind: 'text', required: true },
       ],

@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const jwtPlugin = definePlugin({
-  id: 'jwt',
-  title: 'JWT Decode',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'jwt.run',
@@ -16,7 +12,6 @@ export const jwtPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'Key',
       aliases: ['jwt-decode', 'json-web-token'],
-      tags: ['jwt', 'decode', 'auth'],
       params: [],
       inputs: [
         { key: 'input', label: 'input.text.label', kind: 'text', required: true },

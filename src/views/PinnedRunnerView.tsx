@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Copy, Eraser, FilePlus, PanelRightOpen, PinOff, Play, RotateCcw, Send } from 'lucide-react'
 import Editor from '@monaco-editor/react'
-import { localized, useAppStore, type ActionContext, type ActionParam, type PinnedAction } from '../store'
+import { localized, useAppStore, type PaletteParamModel, type PinnedAction } from '../store'
 import type { Locale } from '../i18n'
 import { pluginRegistry } from '../workspace/pluginRegistry'
 import { applyEffects } from '../workspace/effectRunner'
@@ -9,7 +9,7 @@ import { runtimeRegistry } from '../workspace/runtimeRegistry'
 import { runPinnedPluginCommandToPatch } from '../workspace/pinnedPluginCommandRunner.ts'
 import type { CommandContribution, CommandParam } from '../workspace/pluginTypes'
 
-type ControlParam = ActionParam | CommandParam
+type ControlParam = PaletteParamModel | CommandParam
 
 function defaultParams(actionParams: { key: string; default?: unknown }[] | undefined): Record<string, unknown> {
   const params: Record<string, unknown> = {}
@@ -46,7 +46,6 @@ function markPinnedOutputStale(pinned: PinnedAction): Partial<PinnedAction> {
 export function PinnedRunnerView() {
   const activePinnedActionId = useAppStore((s) => s.activePinnedActionId)
   const pinnedActions = useAppStore((s) => s.pinnedActions)
-  const actions = useAppStore((s) => s.actions)
   const updatePinnedAction = useAppStore((s) => s.updatePinnedAction)
   const updatePinnedRuntime = useAppStore((s) => s.updatePinnedRuntime)
   const releasePinnedRuntime = useAppStore((s) => s.releasePinnedRuntime)
@@ -65,16 +64,13 @@ export function PinnedRunnerView() {
   }
 
   const pinned = pinnedActions.find((item) => item.id === activePinnedActionId)
-  const action = (pinned?.kind ?? 'legacy') === 'legacy'
-    ? actions.find((item) => item.name === pinned?.actionId)
-    : undefined
-  const pluginCommand = pinned?.kind === 'plugin-command'
+  const pluginCommand = pinned
     ? pluginRegistry.resolveCommand(pinned.actionId, pinned.isDev ? 'dev' : 'production')
     : undefined
   const commandContribution: CommandContribution | undefined = pluginCommand?.contribution
-  const actionParams = action?.params ?? commandContribution?.params ?? []
+  const actionParams = commandContribution?.params ?? []
   const customControls = commandContribution?.live?.controls
-  const liveTrigger = action?.live?.live?.trigger ?? commandContribution?.live?.live?.trigger ?? 'on-input'
+  const liveTrigger = commandContribution?.live?.live?.trigger ?? 'on-input'
   const params = useMemo(() => ({
     ...defaultParams(actionParams),
     ...(pinned?.params ?? {}),
@@ -89,39 +85,17 @@ export function PinnedRunnerView() {
     setRunning(true)
     updatePinnedRuntime(pinned.id, { pendingRunId: runId, status: 'active' })
     try {
-      let text = ''
-      let outputKind: 'text' | 'error' = 'text'
-      let nextPatch: Partial<PinnedAction> | null = null
-      if ((pinned.kind ?? 'legacy') === 'legacy') {
-        if (!action) throw new Error(`Pinned action "${pinned.actionId}" is not registered`)
-        const ctx: ActionContext = {
-          input: { text: pinned.inputText },
-          params,
-          readClipboard: async () => navigator.clipboard?.readText?.() ?? '',
-          loadCDN: async (url: string) => import(/* @vite-ignore */ url),
-          deps: {},
-        }
-        const result = await Promise.resolve(action.run(ctx))
-        text = result && 'text' in result ? result.text : ''
-      } else {
-        if (!commandContribution) throw new Error(`Pinned plugin command "${pinned.actionId}" is not registered`)
-        nextPatch = await runPinnedPluginCommandToPatch({
-          command: commandContribution,
-          pinned,
-          params,
-          ownerPluginId: pluginCommand?.meta.pluginId,
-          now: () => Date.now(),
-          elapsedMs: () => performance.now() - startedAt,
-        })
-      }
-      if (!isCurrentPinnedRun(pinned.id, runId)) return
-      updatePinnedAction(pinned.id, nextPatch ?? {
-        outputText: text,
-        outputKind,
-        lastRunAt: Date.now(),
-        lastDurationMs: Math.round(performance.now() - startedAt),
-        lastError: undefined,
+      if (!commandContribution) throw new Error(`Pinned plugin command "${pinned.actionId}" is not registered`)
+      const nextPatch = await runPinnedPluginCommandToPatch({
+        command: commandContribution,
+        pinned,
+        params,
+        ownerPluginId: pluginCommand?.meta.pluginId,
+        now: () => Date.now(),
+        elapsedMs: () => performance.now() - startedAt,
       })
+      if (!isCurrentPinnedRun(pinned.id, runId)) return
+      updatePinnedAction(pinned.id, nextPatch)
     } catch (error) {
       if (!isCurrentPinnedRun(pinned.id, runId)) return
       const message = error instanceof Error ? error.message : String(error)
@@ -241,7 +215,7 @@ export function PinnedRunnerView() {
             />
             Auto
           </label>
-          <button data-testid="pinned-runner-run-button" className="scripts-btn scripts-btn-primary" onClick={() => void runPinnedAction()} disabled={running || (!action && !commandContribution)} title="Run Now">
+          <button data-testid="pinned-runner-run-button" className="scripts-btn scripts-btn-primary" onClick={() => void runPinnedAction()} disabled={running || !commandContribution} title="Run Now">
             <Play size={14} />
             Run Now
           </button>

@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const htmlPlugin = definePlugin({
-  id: 'html',
-  title: 'HTML Encode/Decode',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'html.run',
@@ -16,7 +12,6 @@ export const htmlPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'FileCode',
       aliases: ['html-entities', 'html-escape'],
-      tags: ['html', 'encode', 'decode'],
       params: [
         {
           key: 'mode',

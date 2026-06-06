@@ -17,7 +17,9 @@ export function parsePluginDefinitionSource(source: string): PluginDefinition | 
       .replace(/export\s+default\s+definePlugin\s*\(/, 'return definePlugin(')
       .replace(/export\s+default\s+/, 'return ')
     const value = new Function('definePlugin', 'effects', 'ui', code)(definePlugin, effects, ui)
-    if (!value || typeof value !== 'object' || typeof value.id !== 'string') return null
+    if (!value || typeof value !== 'object') return null
+    const v = value as Record<string, unknown>
+    if (!Array.isArray(v.commands) && !Array.isArray(v.renderers) && !Array.isArray(v.panels)) return null
     return value as PluginDefinition
   } catch {
     return null

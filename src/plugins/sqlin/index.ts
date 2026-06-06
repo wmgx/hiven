@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const sqlinPlugin = definePlugin({
-  id: 'sqlin',
-  title: 'Lines to SQL IN',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'sqlin.run',
@@ -16,7 +12,6 @@ export const sqlinPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'Database',
       aliases: ['sql-in', 'lines-to-sql'],
-      tags: ['sql', 'convert'],
       optionalParams: true,
       params: [
         {

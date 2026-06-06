@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const dedupPlugin = definePlugin({
-  id: 'dedup',
-  title: 'Remove Duplicate Lines',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'dedup.run',
@@ -16,7 +12,6 @@ export const dedupPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'Copy',
       aliases: ['unique', 'distinct'],
-      tags: ['text', 'cleanup'],
       optionalParams: true,
       params: [
         {

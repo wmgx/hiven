@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const appendPlugin = definePlugin({
-  id: 'append',
-  title: 'Append to Lines',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'append.run',
@@ -16,7 +12,6 @@ export const appendPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'ArrowRightToLine',
       aliases: ['append-lines', 'suffix'],
-      tags: ['text', 'lines'],
       params: [
         {
           key: 'suffix',

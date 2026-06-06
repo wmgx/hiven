@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const hashPlugin = definePlugin({
-  id: 'hash',
-  title: 'Hash',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'hash.run',
@@ -16,7 +12,6 @@ export const hashPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'Hash',
       aliases: ['md5', 'sha1', 'sha256', 'sha512'],
-      tags: ['hash', 'crypto'],
       live: { live: { enabled: true, trigger: 'on-input', sideEffects: 'none', debounceMs: 250 } },
       optionalParams: true,
       params: [

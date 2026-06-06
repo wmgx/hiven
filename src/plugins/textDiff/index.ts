@@ -6,16 +6,11 @@ import { definePlugin, type PaneInput } from '@fluxtext/plugin'
 import { TextDiffRenderer } from './TextDiffRenderer'
 
 export const textDiffPlugin = definePlugin({
-  id: 'text-diff',
-  title: 'Text Diff',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'text-diff.compare',
       title: 'command.compare.title',
       description: 'command.compare.description',
-      tags: ['diff', 'text', 'compare'],
       icon: 'git-compare',
       inputs: [
         { key: 'original', label: 'input.original.label', kind: 'pane', required: true },

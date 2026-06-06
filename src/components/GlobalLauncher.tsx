@@ -3,6 +3,7 @@ import { LayoutPanelLeft, Pin, Puzzle, Search, Settings } from 'lucide-react'
 import { localized, useAppStore, type ViewId } from '../store'
 import { t, type Locale } from '../i18n'
 import { resolveIcon } from '../utils/resolveIcon'
+import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
 
 type LauncherItem =
   | { kind: 'pinned'; id: string; title: string; subtitle: string; icon?: string }
@@ -23,8 +24,8 @@ export function GlobalLauncher() {
   const openPinnedAction = useAppStore((s) => s.openPinnedAction)
   const pinnedActions = useAppStore((s) => s.pinnedActions)
   const recentActionNames = useAppStore((s) => s.recentActionNames)
-  const actions = useAppStore((s) => s.actions)
   const locale = useAppStore((s) => s.locale)
+  const pluginRegistryVersion = usePluginRegistryVersion()
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -37,7 +38,7 @@ export function GlobalLauncher() {
   }, [open])
 
   const items = useMemo<LauncherItem[]>(() => {
-    const actionByName = new Map(actions.map((action) => [action.name, action]))
+    void pluginRegistryVersion
     const pinnedLabel = t(locale, 'palette.globalPinned')
     const recentLabel = t(locale, 'palette.globalRecent')
     const viewsLabel = t(locale, 'palette.globalViews')
@@ -49,13 +50,13 @@ export function GlobalLauncher() {
       icon: item.icon,
     }))
     const recent = recentActionNames.slice(0, 8).map((name) => {
-      const action = actionByName.get(name)
+      const command = pluginRegistry.resolveCommand(name)?.contribution
       return {
         kind: 'recent' as const,
         id: name,
-        title: action ? localized(action.title, action.titleI18n, locale) : name,
+        title: command ? localized(command.title || name, command.titleI18n, locale) : name,
         subtitle: recentLabel,
-        icon: action?.icon,
+        icon: command?.icon,
       }
     })
     const views = viewItems.map((item) => ({
@@ -66,7 +67,7 @@ export function GlobalLauncher() {
       icon: item.icon,
     }))
     return [...pinned, ...recent, ...views]
-  }, [actions, locale, pinnedActions, recentActionNames])
+  }, [locale, pinnedActions, recentActionNames, pluginRegistryVersion])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()

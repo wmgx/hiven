@@ -16,12 +16,10 @@ import type { PaneInput } from './pluginTypes'
 import { LANGUAGE_COMMAND_OPTIONS, isEditorLanguage } from './languageOptions'
 import { detectEditorLanguage } from './languageDetector'
 import { useAppStore } from '../store'
+import { useWorkspaceStore } from './workspaceStore'
+import { runtimeRegistry } from './runtimeRegistry'
 
 const corePlugin = definePlugin({
-  id: 'core',
-  title: 'FluxText Core',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'core.toggle-sticky-scroll',
@@ -29,7 +27,6 @@ const corePlugin = definePlugin({
       titleI18n: { zh: '切换层级吸顶' },
       description: 'Enable or disable sticky scroll in editors',
       descriptionI18n: { zh: '开启或关闭编辑器的层级吸顶' },
-      tags: ['editor', 'sticky', 'scroll', 'monaco'],
       icon: 'panel-top',
       inputs: [
         { key: 'target', label: 'Pane', labelI18n: { zh: '面板' }, kind: 'pane', required: true },
@@ -64,7 +61,6 @@ const corePlugin = definePlugin({
       titleI18n: { zh: '设置语言' },
       description: 'Set syntax language for the active pane',
       descriptionI18n: { zh: '设置当前面板的语法语言' },
-      tags: ['language', 'syntax', 'highlight', 'editor'],
       icon: 'code-2',
       inputs: [
         { key: 'target', label: 'Pane', labelI18n: { zh: '面板' }, kind: 'pane', required: true },
@@ -105,12 +101,61 @@ const corePlugin = definePlugin({
       },
     },
     {
+      id: 'core.split',
+      title: 'Split',
+      titleI18n: { zh: '分栏' },
+      description: 'Split the workspace into a new pane',
+      descriptionI18n: { zh: '将工作区分栏为新面板' },
+      icon: 'columns',
+      params: [
+        {
+          key: 'direction',
+          label: 'Direction',
+          labelI18n: { zh: '方向' },
+          type: 'single-select',
+          options: ['right', 'left', 'down', 'up'],
+          default: 'right',
+        },
+      ],
+      run(ctx) {
+        const ws = useWorkspaceStore.getState()
+        const activePane = ws.panes[ws.activePaneId]
+        const dirParam = ctx.params?.direction || 'right'
+        const direction: 'left' | 'right' | 'top' | 'bottom' =
+          dirParam === 'down' ? 'bottom' : dirParam === 'up' ? 'top' : dirParam === 'left' ? 'left' : 'right'
+        ws.createPane({
+          text: '',
+          language: activePane?.language || 'plaintext',
+          focus: true,
+          direction,
+        })
+        return { effects: [] }
+      },
+    },
+    {
+      id: 'core.close-pane',
+      title: 'Close Pane',
+      titleI18n: { zh: '关闭当前面板' },
+      description: 'Close the active pane',
+      descriptionI18n: { zh: '关闭当前面板' },
+      icon: 'x',
+      run() {
+        const ws = useWorkspaceStore.getState()
+        ws.closeActiveSurfaceOrPane()
+        const newActivePaneId = useWorkspaceStore.getState().activePaneId
+        const editor = runtimeRegistry.getCodeEditor(newActivePaneId)
+        if (editor) {
+          useAppStore.getState().setEditorInstance(editor)
+        }
+        return { effects: [] }
+      },
+    },
+    {
       id: 'core.regex-tester',
       title: 'Regex Tester',
       titleI18n: { zh: '正则测试器' },
       description: 'Open regex tester panel',
       descriptionI18n: { zh: '打开正则测试面板' },
-      tags: ['regex', 'search', 'panel'],
       icon: 'regex',
       run() {
         return {

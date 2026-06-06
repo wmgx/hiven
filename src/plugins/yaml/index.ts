@@ -6,10 +6,6 @@ import { definePlugin, type TextInput } from '@fluxtext/plugin'
 import jsYaml from 'js-yaml'
 
 export const yamlPlugin = definePlugin({
-  id: 'yaml',
-  title: 'JSON ↔ YAML',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'yaml.run',
@@ -17,7 +13,6 @@ export const yamlPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'FileJson',
       aliases: ['json-yaml', 'yaml-json'],
-      tags: ['json', 'yaml', 'convert'],
       params: [
         {
           key: 'mode',

@@ -14,7 +14,6 @@ import { useWorkspaceStore } from './workspaceStore'
 import { applyEffects } from './effectRunner'
 import { monacoBridge, presentationApi } from './monacoBridge'
 import { runtimeRegistry } from './runtimeRegistry'
-import type { ActionDef } from '../store'
 
 // ─── Extension Context ──────────────────────────────────────────────────────
 
@@ -26,25 +25,6 @@ export interface ExtensionContext {
 export interface ExtensionContribution {
   id: string
   activate(ctx: ExtensionContext): Disposable | void
-}
-
-// ─── Register Command ───────────────────────────────────────────────────────
-
-/**
- * Register a command that will appear in the Command Palette.
- * The command's `run` function can produce effects or directly return text.
- */
-export function registerCommand(action: ActionDef): Disposable {
-  const { useAppStore } = require('../store')
-  useAppStore.getState().registerAction(action)
-
-  return {
-    dispose() {
-      const state = useAppStore.getState()
-      const filtered = state.actions.filter((a: ActionDef) => a.name !== action.name)
-      useAppStore.setState({ actions: filtered })
-    },
-  }
 }
 
 // ─── Register Panel ─────────────────────────────────────────────────────────

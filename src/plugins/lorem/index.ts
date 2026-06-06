@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const loremPlugin = definePlugin({
-  id: 'lorem',
-  title: 'Lorem Ipsum',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'lorem.run',
@@ -16,7 +12,6 @@ export const loremPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'FileText',
       aliases: ['placeholder', 'dummy-text'],
-      tags: ['generate'],
       params: [],
       inputs: [
         { key: 'input', label: 'input.text.label', kind: 'text', required: true },

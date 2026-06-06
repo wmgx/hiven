@@ -26,7 +26,7 @@ const files = {
 
 assertHas(files.packageJson, /test:pinned-plugin-command/, 'package.json should expose pinned plugin command verifier')
 
-assertHas(files.store, /PinnedActionKind\s*=\s*['"]legacy['"]\s*\|\s*['"]plugin-command['"]|PinnedActionKind\s*=\s*['"]plugin-command['"]\s*\|\s*['"]legacy['"]/, 'PinnedAction should distinguish legacy and plugin command sources')
+assertHas(files.store, /PinnedActionKind\s*=\s*['"]plugin-command['"]/, 'PinnedAction kind should be plugin-command')
 assertHas(files.store, /\bpinPluginCommand\s*:/, 'store should expose pinPluginCommand')
 assertHas(files.store, /pluginId\??\s*:\s*string/, 'PinnedAction should remember pluginId for plugin commands')
 assertHas(files.store, /isDev\??\s*:\s*boolean/, 'PinnedAction should remember dev/prod source for plugin commands')
@@ -38,11 +38,9 @@ assert.equal(samePinnedPluginCommandIdentity(pinnedCommand, { ...pinnedCommand, 
 assert.equal(samePinnedPluginCommandIdentity(pinnedCommand, { ...pinnedCommand, params: { mode: 'decode', flags: { trim: true, sort: 'asc' } } }), false, 'different plugin command params should create another pinned action')
 
 assertHas(files.commandPalette, /pinPluginCommand/, 'CommandPalette should pin plugin commands')
-assertNotHas(files.commandPalette, /if\s*\(\s*item\.kind\s*!==\s*['"]legacy['"]\s*\)\s*return/, 'CommandPalette pin handler should not ignore plugin items')
-assertHas(files.commandPalette, /\{item\.kind === ['"]legacy['"][\s\S]*<button[\s\S]*Pin|<button[\s\S]*Pin[\s\S]*\}/, 'ActionItem should render a pin button for plugin items too')
+assertHas(files.commandPalette, /data-testid="command-palette-pin-action"[\s\S]*<Pin/, 'ActionItem should render a pin button for plugin items')
 
 assertHas(files.pinnedRunner, /pluginRegistry\.resolveCommand/, 'PinnedRunnerView should resolve plugin commands from the plugin registry')
-assertHas(files.pinnedRunner, /pinned\?\.kind\s*===\s*['"]plugin-command['"]/, 'PinnedRunnerView should branch for plugin-command pinned actions')
 assertHas(files.pinnedRunner, /runPinnedPluginCommandToPatch[\s\S]*pinned,[\s\S]*params/, 'PinnedRunnerView should run plugin commands through the tested pinned command runner')
 assertHas(files.pinnedPluginCommandRunner, /runTextPluginCommand[\s\S]*inputText:\s*options\.pinned\.inputText/, 'pinned command runner should run plugin commands with the pinned input buffer')
 assertHas(files.pluginCommandRunner, /buildTextPluginInputs[\s\S]*kind:\s*['"]text['"][\s\S]*inputText/, 'plugin command runner should resolve pinned text input slots')

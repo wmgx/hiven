@@ -54,10 +54,10 @@ check('Milestone A models persistent pinned action definitions in the app store'
     assertSourceHas(files.store, new RegExp(`\\b${field}\\??\\s*:`), `PinnedAction should include ${field}`)
   }
   assertSourceHas(files.store, /\bpinnedActions\s*:\s*PinnedAction\[\]|\bpinnedActions\s*:\s*\[\]/, 'AppState should keep pinnedActions')
-  assertSourceHas(files.store, /\bpinAction\s*:/, 'AppState should expose pinAction')
+  assertSourceHas(files.store, /\bpinPluginCommand\s*:/, 'AppState should expose pinPluginCommand')
   assertSourceHas(files.store, /\bunpinAction\s*:/, 'AppState should expose unpinAction')
   assertSourceHas(files.store, /\breorderPinnedActions\s*:/, 'AppState should expose reorderPinnedActions')
-  assertSourceHas(files.store, /pinAction[\s\S]*(?:find|some)\([^)]*actionId|actionId[\s\S]*(?:find|some)\(/, 'pinAction should de-duplicate by actionId')
+  assertSourceHas(files.store, /pinPluginCommand[\s\S]*(?:find|some)\(|samePinnedPluginCommandIdentity/, 'pinPluginCommand should de-duplicate by command identity')
 })
 
 check('High-frequency builtin text tools declare live on-input capability', () => {

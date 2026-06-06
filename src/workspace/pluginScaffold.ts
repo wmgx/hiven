@@ -23,7 +23,7 @@ export function createPluginScaffoldFiles(options: PluginScaffoldOptions): Plugi
       version: '1.0.0',
       capabilities: ['command'],
     },
-    indexSource: pluginTemplate(pluginId, title),
+    indexSource: pluginTemplate(pluginId),
     readmeSource: `# ${title}
 
 This is a FluxText directory plugin.
@@ -53,18 +53,14 @@ This is a FluxText directory plugin.
   }
 }
 
-function pluginTemplate(pluginId: string, title: string) {
+function pluginTemplate(pluginId: string) {
   return `const { definePlugin, effects, ui } = globalThis.FluxTextPlugin
 
 export default definePlugin({
-  id: ${JSON.stringify(pluginId)},
-  title: ${JSON.stringify(title)},
-  version: '1.0.0',
   commands: [{
     id: ${JSON.stringify(`${pluginId}.run`)},
     title: 'command.run.title',
     description: 'command.run.description',
-    tags: ['text'],
     optionalParams: true,
     inputs: [{ key: 'input', label: 'input.text.label', kind: 'text', required: true }],
     inputResolution: { strategy: 'use-active', fallback: 'fail' },

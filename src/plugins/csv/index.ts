@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const csvPlugin = definePlugin({
-  id: 'csv',
-  title: 'CSV / TSV Convert',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'csv.run',
@@ -16,7 +12,6 @@ export const csvPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'Table',
       aliases: ['csv-json', 'tsv-json'],
-      tags: ['csv', 'tsv', 'json', 'convert'],
       params: [
         {
           key: 'mode',

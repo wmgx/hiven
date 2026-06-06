@@ -63,9 +63,6 @@ function readBundledPluginPackages(): BundledPluginPackage[] {
     if (!definition) {
       throw new Error(`Bundled plugin "${manifest.pluginId}" entry "${entry}" has no default export`)
     }
-    if (definition.id !== manifest.pluginId) {
-      throw new Error(`Bundled plugin id mismatch: manifest "${manifest.pluginId}", entry "${definition.id}"`)
-    }
 
     return { dir, manifest: { ...manifest, entry }, definition }
   })

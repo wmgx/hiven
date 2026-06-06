@@ -97,7 +97,6 @@ export type CommandContribution = {
   titleI18n?: Partial<Record<Locale, string>>
   description?: string
   descriptionI18n?: Partial<Record<Locale, string>>
-  tags?: string[]
   aliases?: string[]
   icon?: string
   inputs?: InputSlot[]
@@ -168,10 +167,6 @@ export type PanelContributionV2 = {
 
 /** The full plugin definition returned by definePlugin */
 export type PluginDefinition = {
-  id: string
-  title: string
-  titleI18n?: Partial<Record<Locale, string>>
-  version: string
   commands?: CommandContribution[]
   renderers?: RendererContribution[]
   panels?: PanelContributionV2[]

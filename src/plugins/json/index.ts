@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const jsonPlugin = definePlugin({
-  id: 'json',
-  title: 'JSON Formatter',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'json.run',
@@ -16,7 +12,6 @@ export const jsonPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'Braces',
       aliases: ['json-format', 'pretty-json'],
-      tags: ['json', 'format'],
       live: { live: { enabled: true, trigger: 'on-input', sideEffects: 'none', debounceMs: 250 } },
       optionalParams: true,
       params: [

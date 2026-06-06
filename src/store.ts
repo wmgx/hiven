@@ -1,9 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Locale } from './i18n'
-import { builtinActions } from './actions/builtins'
 import { useWorkspaceStore } from './workspace/workspaceStore'
-import { workspaceActions } from './commands/workspaceCommands'
 import {
   DEFAULT_PINNED_RUNTIME_CONFIG,
   activatePinnedRuntime,
@@ -15,12 +13,12 @@ import {
 import type { PinnedRuntimeConfig as WorkspacePinnedRuntimeConfig } from './workspace/pinnedActionRuntime'
 import type { LiveActionCapability } from './workspace/pluginTypes'
 import { samePinnedPluginCommandIdentity } from './workspace/pinnedActionIdentity'
-import { createPinnedPluginCommandAction, makePinnedId } from './workspace/pinnedActionFactory'
+import { createPinnedPluginCommandAction } from './workspace/pinnedActionFactory'
 
 export type ViewId = 'editor' | 'scripts' | 'plugin-editor' | 'pinned-runner' | 'settings'
 
 export type PinnedOutputKind = 'text' | 'error' | 'presentation' | 'stale'
-export type PinnedActionKind = 'legacy' | 'plugin-command'
+export type PinnedActionKind = 'plugin-command'
 
 export type PinnedPluginCommandInput = {
   kind: 'plugin-command'
@@ -78,7 +76,8 @@ export type PluginEditorState = {
   source?: 'builtin' | 'installed' | 'dev'
 }
 
-export interface ActionParam {
+/** UI model for a command-palette parameter form field (used to normalize plugin CommandParam for rendering). */
+export interface PaletteParamModel {
   key: string
   label: string
   labelI18n?: Partial<Record<Locale, string>>
@@ -96,38 +95,10 @@ export interface ActionParam {
   required?: boolean
 }
 
-export interface ActionDef {
-  name: string
-  title: string
-  titleI18n?: Partial<Record<Locale, string>>
-  icon?: string
-  aliases?: string[]
-  description?: string
-  descriptionI18n?: Partial<Record<Locale, string>>
-  tags?: string[]
-  params?: ActionParam[]
-  optionalParams?: boolean
-  live?: LiveActionCapability
-  run: (ctx: ActionContext) => { text: string } | Promise<{ text: string }> | void
-  builtin?: boolean
-  source?: string
-  error?: string
-}
-
 // 根据 locale 获取本地化文本，无翻译则返回默认值
 export function localized(text: string, i18nMap?: Partial<Record<Locale, string>>, locale?: Locale): string {
   if (i18nMap && locale && i18nMap[locale]) return i18nMap[locale]!
   return text
-}
-
-export interface ActionContext {
-  input: { text: string }
-  params: Record<string, any>
-  readClipboard: () => Promise<string>
-  /** 从 URL 加载远程模块，带本地持久缓存 */
-  loadCDN: (url: string) => Promise<any>
-  /** @deps 声明的依赖，系统自动加载后注入 */
-  deps: Record<string, any>
 }
 
 export interface ScriptItem {
@@ -167,7 +138,6 @@ interface AppState {
   pinnedRuntimes: Record<string, PinnedRuntime>
   pinnedTombstones: Record<string, PinnedTombstone>
   pinnedRuntimeConfig: PinnedRuntimeConfig
-  pinAction: (action: ActionDef | string) => string
   pinPluginCommand: (command: PinnedPluginCommandInput) => string
   unpinAction: (pinnedId: string) => void
   reorderPinnedActions: (orderedIds: string[]) => void
@@ -184,10 +154,6 @@ interface AppState {
   setEditorText: (text: string) => void
   editorInstance: any | null
   setEditorInstance: (editor: any) => void
-
-  // Action System
-  actions: ActionDef[]
-  registerAction: (action: ActionDef) => void
 
   // Command Palette
   commandPaletteOpen: boolean
@@ -231,37 +197,6 @@ interface AppState {
   setLocale: (locale: Locale) => void
 }
 
-function _makePinnedId(actionId: string): string {
-  return makePinnedId(actionId)
-}
-
-function shouldAutoRunLiveAction(live?: LiveActionCapability): boolean {
-  return live?.live?.enabled === true &&
-    live.live.sideEffects !== 'writes' &&
-    live.live.trigger !== 'manual'
-}
-
-function _actionToPinnedAction(action: ActionDef | string, actions: ActionDef[]): PinnedAction {
-  const actionId = typeof action === 'string' ? action : action.name
-  const def = typeof action === 'string' ? actions.find(a => a.name === action) : action
-  const live = def?.live
-  return {
-    id: _makePinnedId(actionId),
-    kind: 'legacy',
-    actionId,
-    title: def?.title ?? actionId,
-    titleI18n: def?.titleI18n,
-    icon: def?.icon,
-    inputText: '',
-    outputText: '',
-    outputKind: 'text',
-    params: {},
-    autoRun: shouldAutoRunLiveAction(live),
-    debounceMs: live?.live?.debounceMs ?? 250,
-    controlsOpen: live?.controls?.defaultOpen ?? false,
-  }
-}
-
 function serializePinnedTombstones(state: AppState): Record<string, PinnedTombstone> {
   const ttlMs = Math.max(0, state.settings.tombstoneTtlDays) * 24 * 60 * 60 * 1000
   const now = Date.now()
@@ -296,26 +231,6 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   pinnedRuntimes: {},
   pinnedTombstones: {},
   pinnedRuntimeConfig: DEFAULT_PINNED_RUNTIME_CONFIG,
-  pinAction: (action) => {
-    const current = useAppStore.getState()
-    const actionId = typeof action === 'string' ? action : action.name
-    const existing = current.pinnedActions.find((pinned) => (pinned.kind ?? 'legacy') === 'legacy' && pinned.actionId === actionId)
-    if (existing) {
-      current.activatePinnedAction(existing.id)
-      return existing.id
-    }
-    const pinned = _actionToPinnedAction(action, current.actions)
-    set((state) => ({
-      pinnedActions: [...state.pinnedActions, pinned],
-      activePinnedActionId: pinned.id,
-      activeView: 'pinned-runner',
-      pinnedRuntimes: {
-        ...state.pinnedRuntimes,
-        [pinned.id]: activatePinnedRuntime(pinned, state.pinnedRuntimes[pinned.id], state.pinnedTombstones[pinned.id]),
-      },
-    }))
-    return pinned.id
-  },
   pinPluginCommand: (command) => {
     const current = useAppStore.getState()
     const existing = current.pinnedActions.find((pinned) => samePinnedPluginCommandIdentity(pinned, command))
@@ -441,10 +356,6 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   editorInstance: null,
   setEditorInstance: (editor) => set({ editorInstance: editor }),
 
-  // Action System
-  actions: [...builtinActions, ...workspaceActions],
-  registerAction: (action) => set((state) => ({ actions: [...state.actions, action] })),
-
   // Command Palette
   commandPaletteOpen: false,
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
@@ -531,4 +442,17 @@ export const useAppStore = create<AppState>()(persist((set) => ({
       ? serializePinnedTombstones(state)
       : {},
   }),
+  merge: (persisted, current) => {
+    const merged = { ...current, ...(persisted as Partial<AppState>) }
+    // Drop pinned actions persisted from the removed legacy action system;
+    // only plugin-command pins remain valid.
+    if (Array.isArray(merged.pinnedActions)) {
+      const validPins = merged.pinnedActions.filter((pinned) => pinned.kind === 'plugin-command')
+      merged.pinnedActions = validPins
+      if (merged.activePinnedActionId && !validPins.some((p) => p.id === merged.activePinnedActionId)) {
+        merged.activePinnedActionId = validPins.length > 0 ? validPins[0].id : null
+      }
+    }
+    return merged
+  },
 }))

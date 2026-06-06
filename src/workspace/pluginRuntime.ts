@@ -217,11 +217,8 @@ async function loadPluginEntry(folderPath: string, entryFile: string, cacheBust 
   if (!definition) {
     throw new Error(`Plugin entry at "${entryPath}" has no default export`)
   }
-  if (!definition.id || typeof definition.id !== 'string') {
-    throw new Error(`Plugin entry at "${entryPath}" default export is missing id`)
-  }
-  if (!definition.version || typeof definition.version !== 'string') {
-    throw new Error(`Plugin entry at "${entryPath}" default export is missing version`)
+  if (!isPluginDefinition(definition)) {
+    throw new Error(`Plugin entry at "${entryPath}" default export is not a plugin definition (missing commands/renderers/panels)`)
   }
 
   return definition
@@ -236,11 +233,8 @@ async function loadDevPluginEntry(folderPath: string, entryFile: string): Promis
   if (!definition) {
     throw new Error(`Dev plugin entry at "${entryPath}" is not a runnable plugin definition`)
   }
-  if (!definition.id || typeof definition.id !== 'string') {
-    throw new Error(`Dev plugin entry at "${entryPath}" is missing id`)
-  }
-  if (!definition.version || typeof definition.version !== 'string') {
-    throw new Error(`Dev plugin entry at "${entryPath}" is missing version`)
+  if (!isPluginDefinition(definition)) {
+    throw new Error(`Dev plugin entry at "${entryPath}" is not a plugin definition (missing commands/renderers/panels)`)
   }
 
   return definition
@@ -249,14 +243,13 @@ async function loadDevPluginEntry(folderPath: string, entryFile: string): Promis
 // ─── Validation ───────────────────────────────────────────────────────────────
 
 /**
- * Validate that PluginDefinition.id matches manifest.pluginId.
+ * Determine whether a value is a plugin definition (declares at least one
+ * contribution kind). Package identity/metadata lives in manifest.json.
  */
-function validatePluginIdMatch(definition: PluginDefinition, manifest: PluginManifest): void {
-  if (definition.id !== manifest.pluginId) {
-    throw new Error(
-      `Plugin id mismatch: manifest says "${manifest.pluginId}", entry says "${definition.id}"`
-    )
-  }
+function isPluginDefinition(value: unknown): value is PluginDefinition {
+  if (!value || typeof value !== 'object') return false
+  const v = value as Record<string, unknown>
+  return Array.isArray(v.commands) || Array.isArray(v.renderers) || Array.isArray(v.panels)
 }
 
 /**
@@ -381,7 +374,6 @@ export async function enablePlugin(pluginId: string): Promise<void> {
 
   try {
     const definition = await loadPluginEntry(record.folderPath, record.entry)
-    validatePluginIdMatch(definition, { pluginId, displayName: record.displayName, version: record.version, entry: record.entry, capabilities: record.capabilities })
     validateContributionIds(definition, 'production')
 
     await loadAndRegisterPluginMessages(pluginId, record.folderPath)
@@ -452,7 +444,6 @@ export async function reloadPlugin(pluginId: string): Promise<void> {
     const newCapabilities = newManifest.capabilities ?? []
 
     const definition = await loadPluginEntry(record.folderPath, newManifest.entry, true /* cache bust */)
-    validatePluginIdMatch(definition, newManifest)
     validateContributionIds(definition, 'production', pluginId)
 
     await loadAndRegisterPluginMessages(pluginId, record.folderPath)
@@ -544,7 +535,6 @@ export async function sideloadDevPlugin(folderPath: string): Promise<DevPlugin> 
 
   try {
     const definition = await loadDevPluginEntry(folderPath, packageMeta.entry)
-    validatePluginIdMatch(definition, packageMeta)
 
     await loadAndRegisterPluginMessages(pluginId, folderPath)
     const localized = localizeContributions(pluginId, definition)
@@ -589,7 +579,6 @@ export async function reloadDevPlugin(pluginId: string): Promise<void> {
   try {
     const packageMeta = await loadManifest(record.folderPath)
     const definition = await loadDevPluginEntry(record.folderPath, packageMeta.entry)
-    validatePluginIdMatch(definition, packageMeta)
 
     await loadAndRegisterPluginMessages(pluginId, record.folderPath)
     const localized = localizeContributions(pluginId, definition)

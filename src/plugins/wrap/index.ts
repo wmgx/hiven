@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const wrapPlugin = definePlugin({
-  id: 'wrap',
-  title: 'Wrap Lines',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'wrap.run',
@@ -16,7 +12,6 @@ export const wrapPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'WrapText',
       aliases: ['wrap-lines', 'surround'],
-      tags: ['text', 'lines'],
       optionalParams: true,
       params: [
         {

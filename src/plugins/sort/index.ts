@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const sortPlugin = definePlugin({
-  id: 'sort',
-  title: 'Sort Lines',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'sort.run',
@@ -16,7 +12,6 @@ export const sortPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'ArrowUpDown',
       aliases: ['order'],
-      tags: ['text'],
       optionalParams: true,
       params: [
         {

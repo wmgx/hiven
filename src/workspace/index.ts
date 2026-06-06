@@ -1,24 +1,11 @@
 /**
  * FluxText Workspace Extension - Public API Entry
  * This is the single entry point for extension authors.
- * 
- * Example - Minimal Command:
- * ```ts
- * import { registerCommand } from 'fluxtext/workspace'
- * 
- * registerCommand({
- *   name: 'my-ext.hello',
- *   title: 'Hello World',
- *   tags: ['example'],
- *   builtin: false,
- *   run: (text) => `Hello, ${text}!`,
- * })
- * ```
- * 
+ *
  * Example - Panel Extension:
  * ```ts
- * import { registerPanel, registerCommand, executeEffects } from 'fluxtext/workspace'
- * 
+ * import { registerPanel, executeEffects } from 'fluxtext/workspace'
+ *
  * registerPanel({
  *   id: 'my-ext.inspector',
  *   title: 'Inspector',
@@ -26,28 +13,12 @@
  *   defaultScope: 'workspace',
  *   component: InspectorPanel,
  * })
- * 
- * registerCommand({
- *   name: 'my-ext.open-inspector',
- *   title: 'Open Inspector',
- *   tags: ['panel'],
- *   builtin: false,
- *   run: () => {
- *     executeEffects([{
- *       type: 'panel.open',
- *       panelId: 'my-ext.inspector',
- *       placement: 'bottom',
- *       title: 'Inspector',
- *     }])
- *     return undefined as any
- *   },
- * })
  * ```
- * 
+ *
  * Example - Presentation Renderer:
  * ```ts
  * import { registerPresentationRenderer } from 'fluxtext/workspace'
- * 
+ *
  * registerPresentationRenderer({
  *   id: 'my-ext.json-tree',
  *   title: 'JSON Tree',
@@ -61,7 +32,6 @@
 
 export {
   // Registration functions
-  registerCommand,
   registerPanel,
   registerPresentationRenderer,
 

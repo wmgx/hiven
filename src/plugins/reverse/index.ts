@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const reversePlugin = definePlugin({
-  id: 'reverse',
-  title: 'Reverse Lines',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'reverse.run',
@@ -16,7 +12,6 @@ export const reversePlugin = definePlugin({
       description: 'command.run.description',
       icon: 'ArrowDownUp',
       aliases: ['flip-lines'],
-      tags: ['text'],
       params: [],
       inputs: [
         { key: 'input', label: 'input.text.label', kind: 'text', required: true },

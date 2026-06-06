@@ -35,7 +35,6 @@ assertNotHas(files.configInit, /createScriptPluginEntrySource|parseScriptToActio
 assertNotHas(files.configInit, /releaseUserScriptPluginPackages|releaseBuiltinScriptPluginPackages/, 'configInit should no longer release defineAction scripts as packages')
 assertNotHas(files.configInit, /DEMO_PLUGIN_SOURCE|demo-text-plugin/, 'configInit should no longer ship a defineAction demo plugin')
 
-assertHas(files.pluginTypes, /export\s+type\s+PluginDefinition[\s\S]*titleI18n\??\s*:/, 'PluginDefinition should support root titleI18n')
 assertHas(files.tauriLib, /display_name_i18n|displayNameI18n/, 'Tauri PluginDirSummary should include displayNameI18n')
 assertHas(files.tauriLib, /get\("displayNameI18n"\)/, 'Tauri manifest summary should read displayNameI18n from manifest.json')
 assertHas(files.scriptsView, /displayNameI18n:\s*pkg\.displayNameI18n/, 'ScriptsView should preserve displayNameI18n when syncing scanned packages into store')

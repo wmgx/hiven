@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const mdquotePlugin = definePlugin({
-  id: 'mdquote',
-  title: 'Markdown Quote',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'mdquote.run',
@@ -16,7 +12,6 @@ export const mdquotePlugin = definePlugin({
       description: 'command.run.description',
       icon: 'MessageSquareQuote',
       aliases: ['blockquote', 'quote'],
-      tags: ['markdown', 'text'],
       optionalParams: true,
       params: [
         {

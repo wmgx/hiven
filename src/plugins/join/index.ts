@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const joinPlugin = definePlugin({
-  id: 'join',
-  title: 'Join Lines',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'join.run',
@@ -16,7 +12,6 @@ export const joinPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'Merge',
       aliases: ['merge-lines', 'concat-lines'],
-      tags: ['text'],
       params: [
         {
           key: 'separator',

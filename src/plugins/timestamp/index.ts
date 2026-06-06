@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const timestampPlugin = definePlugin({
-  id: 'timestamp',
-  title: 'Timestamp Convert',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'timestamp.run',
@@ -16,7 +12,6 @@ export const timestampPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'Clock',
       aliases: ['unix-time', 'epoch', 'date-convert'],
-      tags: ['time', 'convert'],
       live: { live: { enabled: true, trigger: 'on-input', sideEffects: 'none', debounceMs: 250 } },
       params: [
         {

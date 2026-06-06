@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const casePlugin = definePlugin({
-  id: 'case',
-  title: 'Case Convert',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'case.run',
@@ -16,7 +12,6 @@ export const casePlugin = definePlugin({
       description: 'command.run.description',
       icon: 'CaseSensitive',
       aliases: ['uppercase', 'lowercase', 'titlecase'],
-      tags: ['text', 'transform'],
       params: [
         {
           key: 'mode',

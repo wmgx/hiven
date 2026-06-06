@@ -6,10 +6,6 @@ import { definePlugin, type TextInput } from '@fluxtext/plugin'
 import BigNumber from 'bignumber.js'
 
 export const sumPlugin = definePlugin({
-  id: 'sum',
-  title: 'Sum',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'sum.run',
@@ -17,7 +13,6 @@ export const sumPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'Calculator',
       aliases: ['add', 'total'],
-      tags: ['math', 'number'],
       inputs: [
         { key: 'input', label: 'input.text.label', kind: 'text', required: true },
       ],

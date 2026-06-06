@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const prependPlugin = definePlugin({
-  id: 'prepend',
-  title: 'Prepend to Lines',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'prepend.run',
@@ -16,7 +12,6 @@ export const prependPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'ArrowLeftToLine',
       aliases: ['prepend-lines', 'prefix'],
-      tags: ['text', 'lines'],
       params: [
         {
           key: 'prefix',

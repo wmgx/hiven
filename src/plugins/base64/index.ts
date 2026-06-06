@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const base64Plugin = definePlugin({
-  id: 'base64',
-  title: 'Base64 Encode/Decode',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'base64.run',
@@ -16,7 +12,6 @@ export const base64Plugin = definePlugin({
       description: 'command.run.description',
       icon: 'Binary',
       aliases: ['encode', 'decode'],
-      tags: ['encode', 'decode'],
       live: { live: { enabled: true, trigger: 'on-input', sideEffects: 'none', debounceMs: 250 } },
       params: [
         {

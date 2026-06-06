@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const extractPlugin = definePlugin({
-  id: 'extract',
-  title: 'Extract Patterns',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'extract.run',
@@ -16,7 +12,6 @@ export const extractPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'Regex',
       aliases: ['grep', 'filter'],
-      tags: ['text', 'extract'],
       params: [
         {
           key: 'pattern',

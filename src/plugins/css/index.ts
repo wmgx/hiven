@@ -5,10 +5,6 @@
 import { definePlugin, type TextInput } from '@fluxtext/plugin'
 
 export const cssPlugin = definePlugin({
-  id: 'css',
-  title: 'CSS Formatter',
-  version: '1.0.0',
-
   commands: [
     {
       id: 'css.run',
@@ -16,7 +12,6 @@ export const cssPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'Paintbrush',
       aliases: ['css-format', 'css-minify'],
-      tags: ['css', 'format'],
       params: [
         {
           key: 'mode',
