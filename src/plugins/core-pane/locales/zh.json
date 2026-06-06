@@ -8,5 +8,6 @@
   "param.direction.option.right.label": "向右",
   "param.direction.option.left.label": "向左",
   "param.direction.option.down.label": "向下",
-  "param.direction.option.up.label": "向上"
+  "param.direction.option.up.label": "向上",
+  "toolbar.split.title": "向右分栏"
 }

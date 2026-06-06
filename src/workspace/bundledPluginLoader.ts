@@ -80,12 +80,14 @@ export function registerBundledPluginPackages() {
       commands: definition.commands,
       renderers: definition.renderers,
       panels: definition.panels,
+      toolbar: definition.toolbar,
     })
     pluginRegistry.registerProductionPlugin(
       manifest.pluginId,
       localized.commands,
       localized.renderers,
       localized.panels,
+      localized.toolbar,
     )
   }
 }

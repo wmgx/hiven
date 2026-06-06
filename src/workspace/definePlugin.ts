@@ -46,9 +46,10 @@ export function definePlugin(definition: PluginDefinition): PluginDefinition {
   const hasContributions =
     Array.isArray(definition.commands) ||
     Array.isArray(definition.renderers) ||
-    Array.isArray(definition.panels)
+    Array.isArray(definition.panels) ||
+    Array.isArray(definition.toolbar)
   if (!hasContributions) {
-    throw new Error('[definePlugin] Plugin must declare at least one of commands/renderers/panels')
+    throw new Error('[definePlugin] Plugin must declare at least one of commands/renderers/panels/toolbar')
   }
 
   return definition

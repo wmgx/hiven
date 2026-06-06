@@ -134,7 +134,8 @@ pluginRegistry.registerProductionPlugin(
   'core',
   corePlugin.commands ?? [],
   corePlugin.renderers ?? [],
-  corePlugin.panels ?? []
+  corePlugin.panels ?? [],
+  corePlugin.toolbar ?? []
 )
 
 export { corePlugin }

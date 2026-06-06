@@ -17,6 +17,7 @@ import type {
   CommandContribution,
   RendererContribution,
   PanelContributionV2,
+  ToolbarContribution,
   ContributionMeta,
   ContributionSource,
 } from './pluginTypes'
@@ -35,6 +36,11 @@ type RendererEntry = {
 
 type PanelEntry = {
   contribution: PanelContributionV2
+  meta: ContributionMeta
+}
+
+type ToolbarEntry = {
+  contribution: ToolbarContribution
   meta: ContributionMeta
 }
 
@@ -174,6 +180,33 @@ class ScopedPanelRegistry {
   }
 }
 
+class ScopedToolbarRegistry {
+  private items = new Map<string, ToolbarEntry>()
+
+  register(contribution: ToolbarContribution, pluginId: string, source: ContributionSource): void {
+    this.items.set(contribution.id, {
+      contribution,
+      meta: { pluginId, source },
+    })
+  }
+
+  getAll(): ToolbarEntry[] {
+    return Array.from(this.items.values())
+  }
+
+  unregisterByPlugin(pluginId: string): void {
+    for (const [id, entry] of this.items) {
+      if (entry.meta.pluginId === pluginId) {
+        this.items.delete(id)
+      }
+    }
+  }
+
+  clear(): void {
+    this.items.clear()
+  }
+}
+
 // ─── Combined Plugin Registry ─────────────────────────────────────────────────
 
 class PluginRegistryImpl {
@@ -184,6 +217,7 @@ class PluginRegistryImpl {
     commands: new ScopedCommandRegistry(),
     renderers: new ScopedRendererRegistry(),
     panels: new ScopedPanelRegistry(),
+    toolbar: new ScopedToolbarRegistry(),
   }
 
   subscribe(listener: () => void): () => void {
@@ -204,6 +238,7 @@ class PluginRegistryImpl {
     commands: new ScopedCommandRegistry(),
     renderers: new ScopedRendererRegistry(),
     panels: new ScopedPanelRegistry(),
+    toolbar: new ScopedToolbarRegistry(),
   }
 
   // ─── Production ────────────────────────────────────────────────────────────
@@ -212,7 +247,8 @@ class PluginRegistryImpl {
     pluginId: string,
     commands: CommandContribution[],
     renderers: RendererContribution[],
-    panels: PanelContributionV2[]
+    panels: PanelContributionV2[],
+    toolbar: ToolbarContribution[] = []
   ): void {
     for (const cmd of commands) {
       this.production.commands.register(cmd, pluginId, 'production')
@@ -223,6 +259,9 @@ class PluginRegistryImpl {
     for (const pnl of panels) {
       this.production.panels.register(pnl, pluginId, 'production')
     }
+    for (const tb of toolbar) {
+      this.production.toolbar.register(tb, pluginId, 'production')
+    }
     this.bumpVersion()
   }
 
@@ -230,6 +269,7 @@ class PluginRegistryImpl {
     this.production.commands.unregisterByPlugin(pluginId)
     this.production.renderers.unregisterByPlugin(pluginId)
     this.production.panels.unregisterByPlugin(pluginId)
+    this.production.toolbar.unregisterByPlugin(pluginId)
     this.bumpVersion()
   }
 
@@ -239,7 +279,8 @@ class PluginRegistryImpl {
     pluginId: string,
     commands: CommandContribution[],
     renderers: RendererContribution[],
-    panels: PanelContributionV2[]
+    panels: PanelContributionV2[],
+    toolbar: ToolbarContribution[] = []
   ): void {
     for (const cmd of commands) {
       this.dev.commands.register(cmd, pluginId, 'dev')
@@ -250,6 +291,9 @@ class PluginRegistryImpl {
     for (const pnl of panels) {
       this.dev.panels.register(pnl, pluginId, 'dev')
     }
+    for (const tb of toolbar) {
+      this.dev.toolbar.register(tb, pluginId, 'dev')
+    }
     this.bumpVersion()
   }
 
@@ -257,6 +301,7 @@ class PluginRegistryImpl {
     this.dev.commands.unregisterByPlugin(pluginId)
     this.dev.renderers.unregisterByPlugin(pluginId)
     this.dev.panels.unregisterByPlugin(pluginId)
+    this.dev.toolbar.unregisterByPlugin(pluginId)
     this.bumpVersion()
   }
 
@@ -264,6 +309,7 @@ class PluginRegistryImpl {
     this.dev.commands.clear()
     this.dev.renderers.clear()
     this.dev.panels.clear()
+    this.dev.toolbar.clear()
     this.bumpVersion()
   }
 
@@ -325,6 +371,18 @@ class PluginRegistryImpl {
     return result
   }
 
+  /** Get all toolbar items from all sources (for toolbar hosts) */
+  getAllToolbarItems(): Array<ToolbarEntry & { isDev: boolean }> {
+    const result: Array<ToolbarEntry & { isDev: boolean }> = []
+    for (const entry of this.production.toolbar.getAll()) {
+      result.push({ ...entry, isDev: false })
+    }
+    for (const entry of this.dev.toolbar.getAll()) {
+      result.push({ ...entry, isDev: true })
+    }
+    return result
+  }
+
   /** Get all renderer IDs owned by a plugin (both registries) */
   getPluginRendererIds(pluginId: string): string[] {
     return [
@@ -354,4 +412,4 @@ export function usePluginRegistryVersion(): number {
 }
 
 // Re-export types for convenience
-export type { CommandEntry, RendererEntry, PanelEntry }
+export type { CommandEntry, RendererEntry, PanelEntry, ToolbarEntry }

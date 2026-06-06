@@ -8,5 +8,6 @@
   "param.direction.option.right.label": "Right",
   "param.direction.option.left.label": "Left",
   "param.direction.option.down.label": "Down",
-  "param.direction.option.up.label": "Up"
+  "param.direction.option.up.label": "Up",
+  "toolbar.split.title": "Split Right"
 }

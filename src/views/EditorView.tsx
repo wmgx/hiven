@@ -1,19 +1,28 @@
 import { useEffect } from 'react'
-import { useAppStore } from '../store'
+import { useAppStore, localized } from '../store'
 import { useWorkspaceStore } from '../workspace/workspaceStore'
 import { WorkspaceShell } from '../components/workspace/WorkspaceShell'
 import { RenderStatusBar } from '../components/workspace/RenderStatusBar'
 import { PanelHost } from '../components/workspace/PanelHost'
 import { PanelHostV2 } from '../components/workspace/PanelHostV2'
 import { ToastContainer } from '../components/workspace/ToastContainer'
-import { Plus } from 'lucide-react'
+import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
+import { runToolbarCommand } from '../workspace/toolbarCommandRunner'
+import { resolveIcon } from '../utils/resolveIcon'
 import { t } from '../i18n'
 
 export function EditorView() {
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
   const locale = useAppStore((s) => s.locale)
-  const createPane = useWorkspaceStore((s) => s.createPane)
   const closeActiveSurfaceOrPane = useWorkspaceStore((s) => s.closeActiveSurfaceOrPane)
+  const pluginRegistryVersion = usePluginRegistryVersion()
+
+  // Toolbar buttons contributed by plugins (top-right region), sorted by order.
+  void pluginRegistryVersion
+  const toolbarItems = pluginRegistry
+    .getAllToolbarItems()
+    .filter((item) => (item.contribution.placement ?? 'editor-top-right') === 'editor-top-right')
+    .sort((a, b) => (a.contribution.order ?? 0) - (b.contribution.order ?? 0))
 
   // Cmd+W to close active pane
   useEffect(() => {
@@ -43,16 +52,22 @@ export function EditorView() {
           {t(locale, 'editor.ready')}
         </span>
 
-        {/* Right side: Split button + Run Action */}
+        {/* Right side: plugin toolbar buttons + Run Action */}
         <div className="ml-auto flex items-center gap-1.5">
-          <button
-            className="flex items-center justify-center w-[22px] h-[18px] rounded"
-            style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-tertiary)' }}
-            onClick={() => createPane({ text: '', language: 'plaintext', focus: true, direction: 'right' })}
-            title={locale === 'zh' ? '向右分栏' : 'Split Right'}
-          >
-            <Plus size={12} />
-          </button>
+          {toolbarItems.map((item) => {
+            const title = localized(item.contribution.title, item.contribution.titleI18n, locale)
+            return (
+              <button
+                key={item.contribution.id}
+                className="flex items-center justify-center w-[22px] h-[18px] rounded"
+                style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-tertiary)' }}
+                onClick={() => { void runToolbarCommand(item.contribution.commandId, item.isDev) }}
+                title={title}
+              >
+                {resolveIcon(item.contribution.icon, 12, item.contribution.id)}
+              </button>
+            )
+          })}
 
           <span
             className="text-[11px] cursor-pointer px-1.5 py-0.5 rounded"

@@ -249,7 +249,7 @@ async function loadDevPluginEntry(folderPath: string, entryFile: string): Promis
 function isPluginDefinition(value: unknown): value is PluginDefinition {
   if (!value || typeof value !== 'object') return false
   const v = value as Record<string, unknown>
-  return Array.isArray(v.commands) || Array.isArray(v.renderers) || Array.isArray(v.panels)
+  return Array.isArray(v.commands) || Array.isArray(v.renderers) || Array.isArray(v.panels) || Array.isArray(v.toolbar)
 }
 
 /**
@@ -382,7 +382,8 @@ export async function enablePlugin(pluginId: string): Promise<void> {
       pluginId,
       localized.commands,
       localized.renderers,
-      localized.panels
+      localized.panels,
+      localized.toolbar
     )
 
     updatePluginStatus(pluginId, 'enabled')
@@ -452,7 +453,8 @@ export async function reloadPlugin(pluginId: string): Promise<void> {
       pluginId,
       localized.commands,
       localized.renderers,
-      localized.panels
+      localized.panels,
+      localized.toolbar
     )
 
     // Update stored capabilities
@@ -542,7 +544,8 @@ export async function sideloadDevPlugin(folderPath: string): Promise<DevPlugin> 
       pluginId,
       localized.commands,
       localized.renderers,
-      localized.panels
+      localized.panels,
+      localized.toolbar
     )
 
     addDevPlugin(devRecord)
@@ -586,7 +589,8 @@ export async function reloadDevPlugin(pluginId: string): Promise<void> {
       pluginId,
       localized.commands,
       localized.renderers,
-      localized.panels
+      localized.panels,
+      localized.toolbar
     )
 
     updateDevPluginStatus(pluginId, 'active')

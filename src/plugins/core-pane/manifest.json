@@ -3,5 +3,5 @@
   "displayName": "Pane Controls",
   "displayNameI18n": { "zh": "面板控制" },
   "version": "1.0.0",
-  "capabilities": ["command"]
+  "capabilities": ["command", "toolbar"]
 }

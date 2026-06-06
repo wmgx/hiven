@@ -16,6 +16,7 @@ import type {
   InputSlot,
   PanelContributionV2,
   RendererContribution,
+  ToolbarContribution,
 } from '../workspace/pluginTypes'
 
 export type PluginMessages = Partial<Record<Locale, Record<string, string>>>
@@ -160,10 +161,17 @@ function localizePanel(messages: PluginMessages, panel: PanelContributionV2): Pa
   return { ...panel, title: title.text, titleI18n: { ...title.i18n, ...panel.titleI18n } }
 }
 
+function localizeToolbar(messages: PluginMessages, item: ToolbarContribution): ToolbarContribution {
+  const title = localizeKey(messages, item.title)
+  if (!title) return item
+  return { ...item, title: title.text, titleI18n: { ...title.i18n, ...item.titleI18n } }
+}
+
 export type LocalizedContributions = {
   commands: CommandContribution[]
   renderers: RendererContribution[]
   panels: PanelContributionV2[]
+  toolbar: ToolbarContribution[]
 }
 
 /**
@@ -177,6 +185,7 @@ export function localizeContributions(
     commands?: CommandContribution[]
     renderers?: RendererContribution[]
     panels?: PanelContributionV2[]
+    toolbar?: ToolbarContribution[]
   },
 ): LocalizedContributions {
   const messages = registry.get(pluginId) ?? {}
@@ -184,5 +193,6 @@ export function localizeContributions(
     commands: (contributions.commands ?? []).map((c) => localizeCommand(messages, c)),
     renderers: (contributions.renderers ?? []).map((r) => localizeRenderer(messages, r)),
     panels: (contributions.panels ?? []).map((p) => localizePanel(messages, p)),
+    toolbar: (contributions.toolbar ?? []).map((tb) => localizeToolbar(messages, tb)),
   }
 }

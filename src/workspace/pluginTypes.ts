@@ -163,6 +163,25 @@ export type PanelContributionV2 = {
   component: ComponentType<PanelPropsV2<unknown>>
 }
 
+// ─── Toolbar Contribution ─────────────────────────────────────────────────────
+
+/** Toolbar regions a plugin can contribute buttons to */
+export type ToolbarPlacement = 'editor-top-right'
+
+/** A toolbar button contributed by a plugin. Clicking runs an existing command. */
+export type ToolbarContribution = {
+  id: string
+  title: string
+  titleI18n?: Partial<Record<Locale, string>>
+  icon?: string
+  /** Id of the command to execute on click (with default params). */
+  commandId: string
+  /** Toolbar region this button belongs to. Defaults to editor-top-right. */
+  placement?: ToolbarPlacement
+  /** Sort weight within the region; smaller comes first. */
+  order?: number
+}
+
 // ─── Plugin Definition ────────────────────────────────────────────────────────
 
 /** The full plugin definition returned by definePlugin */
@@ -170,6 +189,7 @@ export type PluginDefinition = {
   commands?: CommandContribution[]
   renderers?: RendererContribution[]
   panels?: PanelContributionV2[]
+  toolbar?: ToolbarContribution[]
 }
 
 // ─── Plugin Manifest ──────────────────────────────────────────────────────────

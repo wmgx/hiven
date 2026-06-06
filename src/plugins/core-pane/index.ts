@@ -8,16 +8,7 @@
 
 import { definePlugin, type PaneInput } from '@fluxtext/plugin'
 
-type SplitDirection = 'right' | 'left' | 'down' | 'up'
-
-function toPaneDirection(value: unknown): 'left' | 'right' | 'top' | 'bottom' {
-  switch (value) {
-    case 'down': return 'bottom'
-    case 'up': return 'top'
-    case 'left': return 'left'
-    default: return 'right'
-  }
-}
+type SplitDirection = 'left' | 'right' | 'top' | 'bottom'
 
 export const corePanePlugin = definePlugin({
   commands: [
@@ -39,15 +30,15 @@ export const corePanePlugin = definePlugin({
           options: [
             { label: 'param.direction.option.right.label', value: 'right' },
             { label: 'param.direction.option.left.label', value: 'left' },
-            { label: 'param.direction.option.down.label', value: 'down' },
-            { label: 'param.direction.option.up.label', value: 'up' },
+            { label: 'param.direction.option.down.label', value: 'bottom' },
+            { label: 'param.direction.option.up.label', value: 'top' },
           ],
           default: 'right',
         },
       ],
       run(ctx) {
         const source = ctx.inputs.source as PaneInput | undefined
-        const direction = toPaneDirection(ctx.params.direction as SplitDirection)
+        const direction = (ctx.params.direction as SplitDirection) ?? 'right'
         return {
           effects: [{
             type: 'pane.create' as const,
@@ -69,6 +60,16 @@ export const corePanePlugin = definePlugin({
           effects: [{ type: 'pane.close' as const }],
         }
       },
+    },
+  ],
+  toolbar: [
+    {
+      id: 'core-pane.split-button',
+      title: 'toolbar.split.title',
+      icon: 'Plus',
+      commandId: 'core-pane.split',
+      placement: 'editor-top-right',
+      order: 0,
     },
   ],
 })
