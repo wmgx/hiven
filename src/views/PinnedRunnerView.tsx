@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Copy, Eraser, FilePlus, PanelRightOpen, PinOff, Play, RotateCcw, Send } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { ChevronDown, Check, Copy, Eraser, FilePlus, PanelRightOpen, PinOff, Play, RotateCcw, Send } from 'lucide-react'
 import Editor from '@monaco-editor/react'
+import * as monaco from 'monaco-editor'
 import { localized, useAppStore, type PaletteParamModel, type PinnedAction } from '../store'
-import type { Locale } from '../i18n'
+import { t, type Locale } from '../i18n'
 import { pluginRegistry } from '../workspace/pluginRegistry'
 import { applyEffects } from '../workspace/effectRunner'
-import { runtimeRegistry } from '../workspace/runtimeRegistry'
 import { runPinnedPluginCommandToPatch } from '../workspace/pinnedPluginCommandRunner.ts'
+import { detectEditorLanguage } from '../workspace/languageDetector'
 import type { CommandContribution, CommandParam } from '../workspace/pluginTypes'
 
 type ControlParam = PaletteParamModel | CommandParam
@@ -52,6 +53,7 @@ export function PinnedRunnerView() {
   const unpinAction = useAppStore((s) => s.unpinAction)
   const setActiveView = useAppStore((s) => s.setActiveView)
   const pinnedRuntime = useAppStore((s) => activePinnedActionId ? s.pinnedRuntimes[activePinnedActionId] : undefined)
+  const locale = useAppStore((s) => s.locale)
   const [running, setRunning] = useState(false)
   const runIdRef = useRef<string | null>(null)
 
@@ -139,11 +141,13 @@ export function PinnedRunnerView() {
   const applyOutputToActivePane = () => {
     if (!pinned || !canApplyOutput) return
     applyEffects([{ type: 'text.replace', target: 'active-input', text: pinned.outputText }])
+    setActiveView('editor')
   }
 
   const sendOutputToNewPane = () => {
     if (!pinned || !canApplyOutput) return
     applyEffects([{ type: 'pane.create', pane: { text: pinned.outputText, title: pinned.title }, focus: true }])
+    setActiveView('editor')
   }
 
   const toggleControls = () => {
@@ -182,72 +186,94 @@ export function PinnedRunnerView() {
   if (!pinned) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6" style={{ color: 'var(--color-text-tertiary)' }}>
-        <div className="scripts-title">Pinned Actions</div>
-        <button className="scripts-btn" onClick={() => setActiveView('editor')}>Back to Editor</button>
+        <div className="scripts-title">{t(locale, 'pinned.title')}</div>
+        <button className="scripts-btn" onClick={() => setActiveView('editor')}>{t(locale, 'pinned.backToEditor')}</button>
       </div>
     )
   }
 
   const statusText = running
-    ? 'Running'
+    ? t(locale, 'pinned.status.running')
     : pinned.lastError
-      ? `Error · ${pinned.lastDurationMs ?? 0}ms`
+      ? t(locale, 'pinned.status.error', { ms: String(pinned.lastDurationMs ?? 0) })
       : pinned.lastRunAt
-        ? `Ready · ${pinned.lastDurationMs ?? 0}ms`
-        : 'Ready'
+        ? t(locale, 'pinned.status.ready', { ms: String(pinned.lastDurationMs ?? 0) })
+        : t(locale, 'pinned.status.idle')
 
   return (
     <div className="flex-1 flex flex-col min-h-0" style={{ background: 'var(--color-background-primary)' }}>
+      {/* Header */}
       <div
-        className="h-12 flex items-center justify-between px-4 shrink-0"
-        style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}
+        className="flex items-center justify-between px-5 py-3 shrink-0"
+        style={{ borderBottom: '1px solid var(--color-border-tertiary)', background: 'var(--color-background-secondary)' }}
       >
-        <div className="min-w-0">
-          <div className="scripts-title truncate">{pinned.title}</div>
-          <div className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>{statusText}</div>
+        <div className="min-w-0 flex items-center gap-3">
+          <div className="scripts-title truncate text-[14px]">{pinned.title}</div>
+          <span
+            className="text-[11px] px-2 py-0.5 rounded-full"
+            style={{
+              background: running
+                ? 'var(--color-accent-light)'
+                : pinned.lastError
+                  ? 'var(--color-error-bg)'
+                  : pinned.lastRunAt
+                    ? 'var(--color-success-bg)'
+                    : 'var(--color-background-tertiary)',
+              color: running
+                ? 'var(--color-accent)'
+                : pinned.lastError
+                  ? 'var(--color-error-text)'
+                  : pinned.lastRunAt
+                    ? 'var(--color-success-text)'
+                    : 'var(--color-text-tertiary)',
+            }}
+          >
+            {statusText}
+          </span>
         </div>
-        <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>
+        <div className="flex items-center gap-1.5">
+          <label className="pinned-auto-toggle">
             <input
               type="checkbox"
               checked={pinned.autoRun}
               onChange={(event) => updatePinnedAction(pinned.id, { autoRun: event.target.checked })}
             />
-            Auto
+            <span>{t(locale, 'pinned.auto')}</span>
           </label>
-          <button data-testid="pinned-runner-run-button" className="scripts-btn scripts-btn-primary" onClick={() => void runPinnedAction()} disabled={running || !commandContribution} title="Run Now">
-            <Play size={14} />
-            Run Now
+          <button data-testid="pinned-runner-run-button" className="scripts-btn scripts-btn-primary" onClick={() => void runPinnedAction()} disabled={running || !commandContribution} title={t(locale, 'pinned.runNow')}>
+            <Play size={13} />
+            {t(locale, 'pinned.runNow')}
           </button>
-          <button className="scripts-btn" onClick={toggleControls} title="Open Controls">
+          <div className="pinned-btn-divider" />
+          <button className="pinned-labeled-btn" onClick={toggleControls} title={t(locale, 'pinned.controls')}>
             <PanelRightOpen size={14} />
-            Controls
+            <span>{t(locale, 'pinned.controls')}</span>
           </button>
-          <button className="scripts-btn" onClick={() => releasePinnedRuntime(pinned.id, 'manual')} title="Release runtime">
+          <button className="pinned-labeled-btn" onClick={() => releasePinnedRuntime(pinned.id, 'manual')} title={t(locale, 'pinned.releaseRuntime')}>
             <RotateCcw size={14} />
+            <span>{t(locale, 'pinned.releaseRuntime')}</span>
           </button>
-          <button className="scripts-btn" onClick={() => unpinAction(pinned.id)} title="Unpin">
-            <PinOff size={14} />
+          <button className="pinned-icon-btn pinned-icon-btn-danger" onClick={() => unpinAction(pinned.id)} title={t(locale, 'pinned.unpin')}>
+            <PinOff size={15} />
           </button>
         </div>
       </div>
 
+      {/* Input / Output Panels */}
       <div className="grid grid-cols-2 min-h-0 flex-1">
-        <section className="flex flex-col min-w-0 min-h-0" style={{ borderRight: '0.5px solid var(--color-border-tertiary)' }}>
-          <div className="h-9 flex items-center justify-between px-3 shrink-0" style={{ color: 'var(--color-text-secondary)' }}>
-            <span className="text-[12px]">Input</span>
-            <button data-testid="pinned-runner-clear-input" className="scripts-btn" onClick={() => updateInputText('')} title="Clear Input">
+        <section className="flex flex-col min-w-0 min-h-0" style={{ borderRight: '1px solid var(--color-border-tertiary)' }}>
+          <div className="pinned-panel-header">
+            <span className="pinned-panel-label">{t(locale, 'pinned.input')}</span>
+            <button data-testid="pinned-runner-clear-input" className="pinned-icon-btn" onClick={() => updateInputText('')} title={t(locale, 'pinned.clearInput')}>
               <Eraser size={14} />
-              Clear Input
             </button>
           </div>
           <div data-testid="pinned-runner-input-buffer" className="flex-1 min-h-0">
-            <PinnedMonacoBuffer
-              editorId={pinnedRuntime?.inputEditorId ?? `pinned-input-editor:${pinned.id}`}
-              modelId={pinnedRuntime?.inputModelId ?? `pinned-input:${pinned.id}`}
+            <PinnedMonacoEditor
+              pinnedId={pinned.id}
               value={pinned.inputText}
-              readOnly={false}
               onChange={updateInputText}
+              readOnly={false}
               onBlur={() => {
                 if (pinned.autoRun && pinned.inputText && liveTrigger === 'on-blur') void runPinnedAction()
               }}
@@ -256,45 +282,42 @@ export function PinnedRunnerView() {
         </section>
 
         <section className="flex flex-col min-w-0 min-h-0">
-          <div className="h-9 flex items-center justify-between px-3 shrink-0" style={{ color: 'var(--color-text-secondary)' }}>
-            <span className="text-[12px]">Output</span>
-            <div className="flex items-center gap-2">
-              <button data-testid="pinned-runner-copy-output" className="scripts-btn" onClick={() => { if (pinned.outputText) void navigator.clipboard.writeText(pinned.outputText) }} title="Copy Output">
+          <div className="pinned-panel-header">
+            <span className="pinned-panel-label">{t(locale, 'pinned.output')}</span>
+            <div className="flex items-center gap-1">
+              <button data-testid="pinned-runner-copy-output" className="pinned-icon-btn" onClick={() => { if (pinned.outputText) void navigator.clipboard.writeText(pinned.outputText) }} title={t(locale, 'pinned.copyOutput')}>
                 <Copy size={14} />
-                Copy Output
               </button>
-              <button data-testid="pinned-runner-clear-output" className="scripts-btn" onClick={() => updatePinnedAction(pinned.id, { outputText: '', outputKind: 'text', lastError: undefined })} title="Clear Output">
+              <button data-testid="pinned-runner-clear-output" className="pinned-icon-btn" onClick={() => updatePinnedAction(pinned.id, { outputText: '', outputKind: 'text', lastError: undefined })} title={t(locale, 'pinned.clearOutput')}>
                 <Eraser size={14} />
-                Clear Output
               </button>
-              <button className="scripts-btn" onClick={applyOutputToActivePane} disabled={!canApplyOutput} title="Apply Output to Active Pane">
-                <Send size={14} />
-                Apply
+              <button className="pinned-labeled-btn" onClick={applyOutputToActivePane} disabled={!canApplyOutput} title={t(locale, 'pinned.applyOutput')}>
+                <Send size={13} />
+                <span>{t(locale, 'pinned.applyOutput')}</span>
               </button>
-              <button className="scripts-btn" onClick={sendOutputToNewPane} disabled={!canApplyOutput} title="Send Output to New Pane">
-                <FilePlus size={14} />
-                Send New Pane
+              <button className="pinned-labeled-btn" onClick={sendOutputToNewPane} disabled={!canApplyOutput} title={t(locale, 'pinned.sendNewPane')}>
+                <FilePlus size={13} />
+                <span>{t(locale, 'pinned.sendNewPane')}</span>
               </button>
             </div>
           </div>
-          <div data-testid="pinned-runner-output-buffer" className="flex-1 min-h-0">
-            <PinnedMonacoBuffer
-              editorId={pinnedRuntime?.outputEditorId ?? `pinned-output-editor:${pinned.id}`}
-              modelId={pinnedRuntime?.outputModelId ?? `pinned-output:${pinned.id}`}
-              value={pinned.outputText}
+          <div data-testid="pinned-runner-output-buffer" className="flex-1 min-h-0 overflow-auto">
+            <PinnedMonacoEditor
+              pinnedId={pinned.id}
+              value={pinned.outputText || ''}
               readOnly={true}
-              outputKind={pinned.outputKind}
             />
           </div>
         </section>
       </div>
 
+      {/* Controls Panel */}
       {pinned.controlsOpen && !customControls?.panelId && (
         <PinnedActionControls
           pinned={pinned}
           params={params}
           actionParams={actionParams}
-          locale={useAppStore.getState().locale}
+          locale={locale}
           onChange={updateParams}
         />
       )}
@@ -302,83 +325,110 @@ export function PinnedRunnerView() {
   )
 }
 
-function PinnedMonacoBuffer({
-  editorId,
-  modelId,
-  value,
-  readOnly,
-  outputKind,
-  onChange,
-  onBlur,
-}: {
-  editorId: string
-  modelId: string
+/** Monaco-based editor for pinned input/output with auto language detection */
+function PinnedMonacoEditor({ pinnedId, value, onChange, readOnly, onBlur }: {
+  pinnedId: string
   value: string
-  readOnly: boolean
-  outputKind?: PinnedAction['outputKind']
   onChange?: (text: string) => void
+  readOnly: boolean
   onBlur?: () => void
 }) {
+  const editorRef = useRef<import('monaco-editor').editor.IStandaloneCodeEditor | null>(null)
+  const isLocalChange = useRef(false)
+  const prevPinnedIdRef = useRef(pinnedId)
   const settings = useAppStore((s) => s.settings)
-  const blurDisposableRef = useRef<{ dispose: () => void } | null>(null)
 
+  const detectedLang = useMemo(() => detectEditorLanguage(value, { allowShortStrongSignals: true }), [value])
+
+  // When switching pinned actions: force-set content and language immediately
   useEffect(() => {
-    return () => {
-      blurDisposableRef.current?.dispose()
-      blurDisposableRef.current = null
-      runtimeRegistry.unregisterCodeEditor(editorId)
+    const editor = editorRef.current
+    const model = editor?.getModel()
+    if (!model || !editor) return
+    if (prevPinnedIdRef.current !== pinnedId) {
+      prevPinnedIdRef.current = pinnedId
+      isLocalChange.current = false
+      // Force full content replacement
+      const currentValue = model.getValue()
+      if (currentValue !== value) {
+        model.setValue(value)
+      }
+      // Force language update
+      const lang = detectEditorLanguage(value, { allowShortStrongSignals: true })
+      if (model.getLanguageId() !== lang) {
+        monaco.editor.setModelLanguage(model, lang)
+      }
+      editor.setScrollPosition({ scrollTop: 0 })
+      return
     }
-  }, [editorId])
+  }, [pinnedId, value])
+
+  // Sync language when content changes (same pinned action)
+  useEffect(() => {
+    const editor = editorRef.current
+    const model = editor?.getModel()
+    if (!model) return
+    if (model.getLanguageId() !== detectedLang) {
+      monaco.editor.setModelLanguage(model, detectedLang)
+    }
+  }, [detectedLang])
+
+  // For writable (input) editor: sync external value changes while preserving cursor
+  useEffect(() => {
+    if (readOnly) return
+    if (prevPinnedIdRef.current !== pinnedId) return // handled by pinned switch effect
+    const editor = editorRef.current
+    if (!editor) return
+    if (isLocalChange.current) {
+      isLocalChange.current = false
+      return
+    }
+    const model = editor.getModel()
+    if (model && model.getValue() !== value) {
+      editor.executeEdits('external', [{
+        range: model.getFullModelRange(),
+        text: value,
+        forceMoveMarkers: false,
+      }])
+    }
+  }, [value, readOnly, pinnedId])
 
   return (
-    <div
-      className="flex-1 min-h-0"
-      style={{
-        background: readOnly ? 'var(--color-background-secondary)' : 'var(--color-background-primary)',
-        outline: outputKind === 'error'
-          ? '1px solid var(--color-error-border)'
-          : outputKind === 'stale'
-            ? '1px solid var(--color-warning)'
-            : undefined,
+    <Editor
+      height="100%"
+      defaultLanguage={detectedLang}
+      {...(readOnly ? { value } : { defaultValue: value })}
+      onChange={(v) => {
+        if (!onChange) return
+        isLocalChange.current = true
+        onChange(v || '')
       }}
-    >
-      <Editor
-        height="100%"
-        path={modelId}
-        language="plaintext"
-        value={value}
-        onChange={(nextValue) => {
-          if (!readOnly) onChange?.(nextValue ?? '')
-        }}
-        onMount={(editor) => {
-          runtimeRegistry.registerCodeEditor(editorId, editor)
-          blurDisposableRef.current?.dispose()
-          blurDisposableRef.current = !readOnly && onBlur
-            ? editor.onDidBlurEditorWidget(() => onBlur())
-            : null
-        }}
-        options={{
-          readOnly,
-          domReadOnly: readOnly,
-          fontSize: settings.fontSize,
-          lineNumbers: settings.lineNumbers ? 'on' : 'off',
-          wordWrap: settings.wordWrap ? 'on' : 'off',
-          minimap: { enabled: false },
-          scrollBeyondLastLine: false,
-          renderLineHighlight: readOnly ? 'none' : 'line',
-          overviewRulerLanes: 0,
-          hideCursorInOverviewRuler: true,
-          folding: false,
-          stickyScroll: { enabled: false },
-          glyphMargin: false,
-          lineDecorationsWidth: 12,
-          lineNumbersMinChars: 4,
-          padding: { top: 12 },
-          fontFamily: 'var(--font-mono)',
-        }}
-        theme="vs"
-      />
-    </div>
+      onMount={(editor) => {
+        editorRef.current = editor
+        if (onBlur) {
+          editor.onDidBlurEditorWidget(() => onBlur())
+        }
+      }}
+      options={{
+        readOnly,
+        fontSize: settings.fontSize,
+        lineNumbers: 'on',
+        wordWrap: 'on',
+        minimap: { enabled: false },
+        scrollBeyondLastLine: false,
+        renderLineHighlight: 'none',
+        overviewRulerLanes: 0,
+        hideCursorInOverviewRuler: true,
+        folding: detectedLang !== 'plaintext',
+        glyphMargin: false,
+        lineDecorationsWidth: 8,
+        lineNumbersMinChars: 3,
+        padding: { top: 8 },
+        fontFamily: 'var(--font-mono)',
+        domReadOnly: readOnly,
+      }}
+      theme="vs"
+    />
   )
 }
 
@@ -391,97 +441,187 @@ function PinnedActionControls({ pinned, params, actionParams, locale, onChange }
 
   if (visibleParams.length === 0) {
     return (
-      <div className="min-h-10 flex items-center px-4 text-[12px] shrink-0" style={{ borderTop: '0.5px solid var(--color-border-tertiary)', color: 'var(--color-text-tertiary)' }}>
-        No controls for {pinned.title}
+      <div className="pinned-controls-empty">
+        {t(locale, 'pinned.noControls', { title: pinned.title })}
       </div>
     )
   }
 
   return (
-    <div
-      className="flex flex-wrap items-center gap-3 px-4 py-2 text-[12px] shrink-0"
-      style={{ borderTop: '0.5px solid var(--color-border-tertiary)', color: 'var(--color-text-secondary)' }}
-    >
+    <div className="pinned-controls-bar">
       {visibleParams.map((param) => {
         const label = localized(param.label, param.labelI18n, locale)
         const value = params[param.key]
         if (param.type === 'boolean') {
           return (
-            <label key={param.key} className="flex items-center gap-1.5">
+            <label key={param.key} className="pinned-control-item">
               <input
                 type="checkbox"
                 checked={value === true}
                 onChange={(event) => updateParam(param.key, event.target.checked)}
               />
-              {label}
+              <span>{label}</span>
             </label>
           )
         }
         if (param.type === 'single-select') {
           return (
-            <label key={param.key} className="flex items-center gap-1.5">
-              {label}
-              <select
+            <div key={param.key} className="pinned-control-item">
+              <span className="pinned-control-label">{label}</span>
+              <PinnedDropdown
                 value={String(value ?? '')}
-                onChange={(event) => updateParam(param.key, event.target.value)}
-                className="scripts-input h-7"
-              >
-                {paramOptions(param).map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {localized(option.label, option.labelI18n, locale)}
-                  </option>
-                ))}
-              </select>
-            </label>
+                options={paramOptions(param)}
+                onChange={(v) => updateParam(param.key, v)}
+                locale={locale}
+              />
+            </div>
           )
         }
         if (param.type === 'multi-select') {
           const selected = Array.isArray(value) ? value.map(String) : []
           return (
-            <label key={param.key} className="flex items-center gap-1.5">
-              {label}
-              <select
-                multiple={true}
-                value={selected}
-                onChange={(event) => {
-                  updateParam(param.key, Array.from(event.currentTarget.selectedOptions).map((option) => option.value))
-                }}
-                className="scripts-input min-h-16"
-              >
-                {paramOptions(param).map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {localized(option.label, option.labelI18n, locale)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div key={param.key} className="pinned-control-item">
+              <span className="pinned-control-label">{label}</span>
+              <PinnedMultiSelect
+                selected={selected}
+                options={paramOptions(param)}
+                onChange={(v) => updateParam(param.key, v)}
+                locale={locale}
+              />
+            </div>
           )
         }
         if (param.type === 'number') {
           return (
-            <label key={param.key} className="flex items-center gap-1.5">
-              {label}
+            <label key={param.key} className="pinned-control-item">
+              <span className="pinned-control-label">{label}</span>
               <input
                 type="number"
                 value={value === undefined || value === null ? '' : String(value)}
                 onChange={(event) => updateParam(param.key, event.target.value === '' ? undefined : Number(event.target.value))}
-                className="scripts-input h-7 w-24"
+                className="pinned-input pinned-input-number"
               />
             </label>
           )
         }
         return (
-          <label key={param.key} className="flex items-center gap-1.5">
-            {label}
+          <label key={param.key} className="pinned-control-item">
+            <span className="pinned-control-label">{label}</span>
             <input
               type="text"
               value={value === undefined || value === null ? '' : String(value)}
               onChange={(event) => updateParam(param.key, event.target.value)}
-              className="scripts-input h-7 w-44"
+              className="pinned-input"
             />
           </label>
         )
       })}
+    </div>
+  )
+}
+
+/** Custom dropdown component to replace native <select> */
+function PinnedDropdown({ value, options, onChange, locale }: {
+  value: string
+  options: { label: string; value: string; labelI18n?: Partial<Record<Locale, string>> }[]
+  onChange: (value: string) => void
+  locale: Locale
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  const selectedLabel = options.find((o) => o.value === value)
+  const displayText = selectedLabel ? localized(selectedLabel.label, selectedLabel.labelI18n, locale) : value || '—'
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  return (
+    <div ref={ref} className="pinned-dropdown">
+      <button type="button" className="pinned-dropdown-trigger" onClick={() => setOpen(!open)}>
+        <span className="pinned-dropdown-value">{displayText}</span>
+        <ChevronDown size={12} className={`pinned-dropdown-chevron ${open ? 'pinned-dropdown-chevron-open' : ''}`} />
+      </button>
+      {open && (
+        <div className="pinned-dropdown-menu">
+          {options.map((option) => {
+            const label = localized(option.label, option.labelI18n, locale)
+            const isSelected = option.value === value
+            return (
+              <button
+                key={option.value}
+                type="button"
+                className={`pinned-dropdown-item ${isSelected ? 'pinned-dropdown-item-active' : ''}`}
+                onClick={() => { onChange(option.value); setOpen(false) }}
+              >
+                <span>{label}</span>
+                {isSelected && <Check size={12} />}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Custom multi-select with chip/tag UI */
+function PinnedMultiSelect({ selected, options, onChange, locale }: {
+  selected: string[]
+  options: { label: string; value: string; labelI18n?: Partial<Record<Locale, string>> }[]
+  onChange: (values: string[]) => void
+  locale: Locale
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const toggle = (val: string) => {
+    const next = selected.includes(val) ? selected.filter((v) => v !== val) : [...selected, val]
+    onChange(next)
+  }
+
+  return (
+    <div ref={ref} className="pinned-dropdown">
+      <button type="button" className="pinned-dropdown-trigger" onClick={() => setOpen(!open)}>
+        <span className="pinned-dropdown-value">
+          {selected.length === 0 ? '—' : `${selected.length} selected`}
+        </span>
+        <ChevronDown size={12} className={`pinned-dropdown-chevron ${open ? 'pinned-dropdown-chevron-open' : ''}`} />
+      </button>
+      {open && (
+        <div className="pinned-dropdown-menu">
+          {options.map((option) => {
+            const label = localized(option.label, option.labelI18n, locale)
+            const isSelected = selected.includes(option.value)
+            return (
+              <button
+                key={option.value}
+                type="button"
+                className={`pinned-dropdown-item ${isSelected ? 'pinned-dropdown-item-active' : ''}`}
+                onClick={() => toggle(option.value)}
+              >
+                <span>{label}</span>
+                {isSelected && <Check size={12} />}
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
