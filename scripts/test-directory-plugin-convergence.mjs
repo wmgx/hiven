@@ -31,6 +31,7 @@ const files = {
   pluginHostSdk: readIfExists('src/workspace/pluginHostSdk.ts'),
   pluginScaffold: readIfExists('src/workspace/pluginScaffold.ts'),
   bundledPluginLoader: readIfExists('src/workspace/bundledPluginLoader.ts'),
+  builtinPluginIndex: readIfExists('src/builtin-plugins/index.json'),
   directoryConventionDoc: readIfExists('doc/plugin-directory-convention.md'),
   directoryConvergencePlan: readIfExists('doc/plans/2026-06-03-directory-plugin-convergence.md'),
 }
@@ -194,12 +195,17 @@ check('Runtime resolves fixed index.* entry and rejects manifest entry', () => {
 check('pluginRuntime exposes directory, zip, GitHub directory, and single-file rejection APIs', () => {
   assertExports(files.pluginRuntime, ['installLocalPlugin'], 'pluginRuntime')
   assert.match(files.pluginRuntime, /installPluginZip|installZipPlugin|importPluginZip/, 'pluginRuntime should expose a zip import/install entry')
+  assert.match(files.pluginRuntime, /installPluginZipUrl|importPluginZipUrl/, 'pluginRuntime should expose a remote zip URL import/install entry')
   assert.match(files.pluginRuntime, /fetchGithubDirectory|importGithubDirectory|installGithubDirectory/, 'pluginRuntime should expose a GitHub directory import entry')
+  assert.match(files.pluginRuntime, /checkInstalledPluginUpdate|updateInstalledPlugin/, 'pluginRuntime should expose per-plugin update check and update APIs')
+  assert.match(files.pluginRuntime, /comparePluginVersions[\s\S]*latestVersion/, 'pluginRuntime should compare installed and remote plugin versions')
   assert.match(
     files.pluginRuntime,
     /rejectSingleFileRemoteImport|single-file plugin import is no longer supported|no longer supported[\s\S]*\.(?:js|ts)|\.(?:js|ts)[\s\S]*no longer supported/i,
     'pluginRuntime should reject remote single-file .js/.ts imports explicitly',
   )
+  assert.match(files.scriptsView, /importPluginZipUrl/, 'ScriptsView should import remote zip URLs directly')
+  assert.match(files.scriptsView, /checkInstalledPluginUpdate[\s\S]*updateInstalledPlugin|updateInstalledPlugin[\s\S]*checkInstalledPluginUpdate/, 'ScriptsView should expose installed GitHub plugin update check and one-click update actions')
 })
 
 check('pluginRuntime exposes injected SDK helpers for plugin authors', () => {
@@ -325,6 +331,7 @@ check('Tauri exposes plugin directory filesystem commands', () => {
     'save_plugin_file',
     'remove_plugin_dir',
     'install_plugin_zip',
+    'install_plugin_zip_url',
     'fetch_github_directory',
   ]) {
     assertTauriCommand(files.tauriLib, name)
@@ -369,6 +376,15 @@ check('Builtin plugin update check compares remote package metadata', () => {
   assert.match(files.configInit, /checkBuiltinPluginsUpdate/, 'configInit should expose builtin plugin package update checks')
   assert.match(files.configInit, /fetchWithFallback|remote|index|manifest|version|update metadata|updateMetadata/i, 'update check should fetch/read plugin package index or manifest version metadata')
   assert.match(files.configInit, /version[\s\S]*(?:>|!==|compare|semver|newer)|(?:>|!==|compare|semver|newer)[\s\S]*version/i, 'update check should compare installed and remote/index versions')
+  assert.match(files.configInit, /downloadRemoteBuiltinPackage|stageRemoteBuiltinPackage|REMOTE_BUILTIN_PLUGIN_SOURCE_BASE_URLS/, 'builtin plugin updates should download remote package files, not only the index')
+  assert.match(files.configInit, /replace_plugin_dir/, 'builtin plugin updates should replace whole plugin package directories')
+  assert.match(files.configInit, /validateStagedBuiltinPackage[\s\S]*manifest\.json[\s\S]*pluginId/, 'builtin plugin updates should validate staged package manifests before replacing directories')
+  assert.doesNotMatch(files.configInit, /if\s*\(\s*remoteVersion\s*>\s*localVersion\s*\)\s*\{\s*await\s+ensureTextFile\(\s*localIndexPath,\s*JSON\.stringify\(remoteIndex/s, 'builtin plugin updates must not only write the remote index when a newer version exists')
+  assert.match(files.tauriLib, /fn\s+replace_plugin_dir[\s\S]*backup[\s\S]*fs::rename/, 'Tauri should provide a replace_plugin_dir command with backup/rename replacement')
+  assert.match(files.tauriLib, /generate_handler!\[[\s\S]*replace_plugin_dir/, 'replace_plugin_dir should be registered as a Tauri command')
+  assert.ok(files.builtinPluginIndex, 'remote builtin plugin index should exist at src/builtin-plugins/index.json')
+  assert.match(files.builtinPluginIndex, /"version"\s*:\s*3/, 'remote builtin plugin index should carry the current package index version')
+  assert.match(files.builtinPluginIndex, /"pluginId"\s*:\s*"text-diff"[\s\S]*"TextDiffRenderer\.tsx"/, 'remote builtin plugin index should list package files needed for download')
 })
 
 check('Directory plugin convention document captures the new contract', () => {

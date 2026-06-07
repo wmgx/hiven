@@ -1,0 +1,215 @@
+{
+  "version": 3,
+  "packages": [
+    {
+      "pluginId": "append",
+      "dir": "append",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "base64",
+      "dir": "base64",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "case",
+      "dir": "case",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "core-pane",
+      "dir": "core-pane",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "count",
+      "dir": "count",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "css",
+      "dir": "css",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "csv",
+      "dir": "csv",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "dedup",
+      "dir": "dedup",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "extract",
+      "dir": "extract",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "hash",
+      "dir": "hash",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "hex",
+      "dir": "hex",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "html",
+      "dir": "html",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "join",
+      "dir": "join",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "js-filter",
+      "dir": "jsFilter",
+      "version": "1.0.0",
+      "files": ["index.tsx", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "json",
+      "dir": "json",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "jwt",
+      "dir": "jwt",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "lorem",
+      "dir": "lorem",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "mdquote",
+      "dir": "mdquote",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "prepend",
+      "dir": "prepend",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "query-string",
+      "dir": "queryString",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "remove-blank-lines",
+      "dir": "removeBlankLines",
+      "version": "1.0.0",
+      "files": ["README.md", "index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "reverse",
+      "dir": "reverse",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "slashes",
+      "dir": "slashes",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "sort",
+      "dir": "sort",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "sort-json",
+      "dir": "sortJson",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "sql",
+      "dir": "sql",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "sqlin",
+      "dir": "sqlin",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "sum",
+      "dir": "sum",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "text-diff",
+      "dir": "textDiff",
+      "version": "1.0.0",
+      "files": ["README.md", "TextDiffRenderer.tsx", "autoDiffMode.ts", "index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "timestamp",
+      "dir": "timestamp",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "trim-whitespace",
+      "dir": "trimWhitespace",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "url",
+      "dir": "url",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "wrap",
+      "dir": "wrap",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "xml",
+      "dir": "xml",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "yaml",
+      "dir": "yaml",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    }
+  ]
+}

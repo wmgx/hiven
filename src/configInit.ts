@@ -14,6 +14,11 @@ const REMOTE_BUILTIN_PLUGIN_INDEX_URLS = [
   'https://cdn.jsdelivr.net/gh/wmgx/flux_text@main/src/builtin-plugins/index.json',
   'https://raw.githubusercontent.com/wmgx/flux_text/main/src/builtin-plugins/index.json',
 ]
+const REMOTE_BUILTIN_PLUGIN_SOURCE_BASE_URLS = [
+  'https://proxy.flux.wmgx.top/raw/wmgx/flux_text/main/src/plugins',
+  'https://cdn.jsdelivr.net/gh/wmgx/flux_text@main/src/plugins',
+  'https://raw.githubusercontent.com/wmgx/flux_text/main/src/plugins',
+]
 
 // ─── First-party plugin package discovery ─────────────────────────────────────
 // First-party plugin packages live under `src/plugins/<id>/`. They are
@@ -23,11 +28,30 @@ const REMOTE_BUILTIN_PLUGIN_INDEX_URLS = [
 
 type DiscoveredBuiltinPackage = {
   pluginId: string
+  dir: string
   displayName: string
   displayNameI18n?: Record<string, string>
   version: string
   capabilities: string[]
   files: Record<string, string>
+}
+
+type BuiltinPluginIndexFile = string | {
+  path: string
+  url?: string
+}
+
+type BuiltinPluginIndexPackage = {
+  pluginId: string
+  dir?: string
+  version?: string
+  files?: BuiltinPluginIndexFile[]
+  baseUrl?: string
+}
+
+type BuiltinPluginIndex = {
+  version: number
+  packages: BuiltinPluginIndexPackage[]
 }
 
 const PLUGIN_MANIFEST_MODULES = import.meta.glob('./plugins/*/manifest.json', {
@@ -68,6 +92,7 @@ function discoverBuiltinPluginPackages(): DiscoveredBuiltinPackage[] {
     files['manifest.json'] = rawManifest
     packages.push({
       pluginId: manifest.pluginId,
+      dir,
       displayName: manifest.displayName || manifest.pluginId,
       displayNameI18n: manifest.displayNameI18n,
       version: manifest.version || '1.0.0',
@@ -105,20 +130,130 @@ async function fetchWithFallback(urls: string[]): Promise<string> {
   throw new Error(`All plugin package index mirrors failed. Last error: ${lastError}`)
 }
 
-async function releaseBuiltinPluginManifests(_configDir: string, pluginBuiltinDir: string) {
-  const embeddedIndex = {
-    version: 2,
-    packages: [...BUILTIN_PLUGIN_PACKAGES.map((pkg) => pkg.pluginId)],
+function buildEmbeddedBuiltinIndex(): BuiltinPluginIndex {
+  return {
+    version: 3,
+    packages: BUILTIN_PLUGIN_PACKAGES.map((pkg) => ({
+      pluginId: pkg.pluginId,
+      dir: pkg.dir,
+      version: pkg.version,
+      files: Object.keys(pkg.files).sort(),
+    })),
   }
+}
+
+function normalizeBuiltinPluginIndex(value: unknown): BuiltinPluginIndex {
+  const raw = value as { version?: unknown; packages?: unknown }
+  const packages = Array.isArray(raw.packages)
+    ? raw.packages.map((entry): BuiltinPluginIndexPackage => {
+        if (typeof entry === 'string') return { pluginId: entry, dir: entry, files: [] }
+        const pkg = entry as Partial<BuiltinPluginIndexPackage>
+        return {
+          pluginId: String(pkg.pluginId || ''),
+          dir: typeof pkg.dir === 'string' ? pkg.dir : undefined,
+          version: typeof pkg.version === 'string' ? pkg.version : undefined,
+          files: Array.isArray(pkg.files) ? pkg.files : [],
+          baseUrl: typeof pkg.baseUrl === 'string' ? pkg.baseUrl : undefined,
+        }
+      })
+    : []
+
+  return {
+    version: Number(raw.version ?? 0),
+    packages: packages.filter((pkg) => pkg.pluginId),
+  }
+}
+
+function validatePackageRelativePath(value: string, label: string): void {
+  const trimmed = value.trim()
+  const segments = trimmed.split('/')
+  if (
+    !trimmed ||
+    trimmed.includes('\\') ||
+    trimmed.includes('?') ||
+    trimmed.includes('#') ||
+    trimmed.startsWith('/') ||
+    /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed) ||
+    segments.some((segment) => !segment || segment === '.' || segment === '..')
+  ) {
+    throw new Error(`${label} must be a package-relative path`)
+  }
+}
+
+function validatePluginId(pluginId: string): void {
+  if (!/^[A-Za-z0-9_.-]+$/.test(pluginId) || pluginId === '.' || pluginId === '..') {
+    throw new Error(`Invalid builtin plugin id: ${pluginId}`)
+  }
+}
+
+function remoteFilePath(file: BuiltinPluginIndexFile): string {
+  return typeof file === 'string' ? file : file.path
+}
+
+function remoteFileUrl(file: BuiltinPluginIndexFile): string | undefined {
+  return typeof file === 'string' ? undefined : file.url
+}
+
+function remotePackageFileUrls(pkg: BuiltinPluginIndexPackage, file: BuiltinPluginIndexFile): string[] {
+  const path = remoteFilePath(file)
+  validatePackageRelativePath(path, 'Remote builtin plugin file')
+  const directUrl = remoteFileUrl(file)
+  if (directUrl) return [directUrl]
+
+  const packageDir = pkg.dir || pkg.pluginId
+  validatePackageRelativePath(packageDir, 'Remote builtin plugin directory')
+  const baseUrls = pkg.baseUrl ? [pkg.baseUrl] : REMOTE_BUILTIN_PLUGIN_SOURCE_BASE_URLS
+  return baseUrls.map((base) => `${base.replace(/\/$/, '')}/${packageDir}/${path}`)
+}
+
+async function validateStagedBuiltinPackage(folderPath: string, expectedPluginId: string): Promise<void> {
+  const manifestRaw = await invoke<string>('read_plugin_file', { path: `${folderPath}/manifest.json` })
+  const manifest = JSON.parse(manifestRaw) as { pluginId?: string }
+  if (manifest.pluginId !== expectedPluginId) {
+    throw new Error(`Remote builtin plugin manifest pluginId mismatch: expected ${expectedPluginId}, got ${manifest.pluginId || '<missing>'}`)
+  }
+
+  for (const entry of ['index.tsx', 'index.ts', 'index.jsx', 'index.js', 'index.mjs']) {
+    try {
+      await invoke<string>('read_plugin_file', { path: `${folderPath}/${entry}` })
+      return
+    } catch {
+      // Try the next fixed entry.
+    }
+  }
+  throw new Error(`Remote builtin plugin "${expectedPluginId}" does not include a fixed index.* entry`)
+}
+
+async function stageRemoteBuiltinPackage(
+  pkg: BuiltinPluginIndexPackage,
+  stagingRoot: string,
+): Promise<string> {
+  validatePluginId(pkg.pluginId)
+  if (!pkg.files || pkg.files.length === 0) {
+    throw new Error(`Remote builtin plugin "${pkg.pluginId}" does not declare downloadable files`)
+  }
+
+  const packageRoot = `${stagingRoot}/${pkg.pluginId}`
+  for (const file of pkg.files) {
+    const path = remoteFilePath(file)
+    const content = await fetchWithFallback(remotePackageFileUrls(pkg, file))
+    await ensureTextFile(`${packageRoot}/${path}`, content)
+  }
+  await validateStagedBuiltinPackage(packageRoot, pkg.pluginId)
+  return packageRoot
+}
+
+async function releaseBuiltinPluginManifests(_configDir: string, pluginBuiltinDir: string) {
+  const embeddedIndex = buildEmbeddedBuiltinIndex()
 
   // 读取本地已释放的 index，判断是否需要重新释放内置包。
   const currentIndex = await invoke<string>('read_plugin_file', { path: `${pluginBuiltinDir}/index.json` })
-    .then((raw) => JSON.parse(raw) as { version?: number; packages?: string[] })
-    .catch(() => ({ version: 0, packages: [] }))
-  const currentPackages = new Set(currentIndex.packages ?? [])
+    .then((raw) => normalizeBuiltinPluginIndex(JSON.parse(raw)))
+    .catch(() => ({ version: 0, packages: [] } satisfies BuiltinPluginIndex))
+  const currentPackages = new Set(currentIndex.packages.map((pkg) => pkg.pluginId))
   const packagesChanged =
     currentPackages.size !== embeddedIndex.packages.length ||
-    embeddedIndex.packages.some((pluginId) => !currentPackages.has(pluginId))
+    embeddedIndex.packages.some((pkg) => !currentPackages.has(pkg.pluginId))
   const versionChanged = Number(currentIndex.version ?? 0) < embeddedIndex.version
   const needsRelease = versionChanged || packagesChanged
 
@@ -138,7 +273,7 @@ async function releaseBuiltinPluginManifests(_configDir: string, pluginBuiltinDi
   }
 
   // 移除不再属于内置集合的历史包目录。
-  const expectedPackages = new Set(embeddedIndex.packages)
+  const expectedPackages = new Set(embeddedIndex.packages.map((pkg) => pkg.pluginId))
   const existingPackages = await invoke<{ pluginId: string }[]>('list_plugin_dirs', { path: pluginBuiltinDir }).catch(() => [])
   for (const plugin of existingPackages) {
     if (!expectedPackages.has(plugin.pluginId)) {
@@ -197,15 +332,48 @@ export async function checkBuiltinPluginsUpdate(): Promise<{
     const configDir = await initConfigDir()
     if (!configDir) return { updated: false, version: 0 }
 
+    const pluginBuiltinDir = `${configDir}/plugins/builtin`
     const localIndexPath = `${configDir}/plugins/builtin/index.json`
     const localIndexRaw = await invoke<string>('read_plugin_file', { path: localIndexPath }).catch(() => '{"version":0,"packages":[]}')
-    const localIndex = JSON.parse(localIndexRaw) as { version?: number }
+    const localIndex = normalizeBuiltinPluginIndex(JSON.parse(localIndexRaw))
     const remoteIndexRaw = await fetchWithFallback(REMOTE_BUILTIN_PLUGIN_INDEX_URLS)
-    const remoteIndex = JSON.parse(remoteIndexRaw) as { version?: number }
+    const remoteIndex = normalizeBuiltinPluginIndex(JSON.parse(remoteIndexRaw))
 
     const localVersion = Number(localIndex.version ?? 0)
     const remoteVersion = Number(remoteIndex.version ?? 0)
     if (remoteVersion > localVersion) {
+      const stagingRoot = `${pluginBuiltinDir}/.builtin-update-${Date.now()}`
+      const stagedPackages: BuiltinPluginIndexPackage[] = []
+      try {
+        for (const pkg of remoteIndex.packages) {
+          await stageRemoteBuiltinPackage(pkg, stagingRoot)
+          stagedPackages.push(pkg)
+        }
+
+        for (const pkg of stagedPackages) {
+          await invoke<void>('replace_plugin_dir', {
+            sourcePath: `${stagingRoot}/${pkg.pluginId}`,
+            rootPath: pluginBuiltinDir,
+            pluginId: pkg.pluginId,
+          })
+        }
+
+        const expectedPackages = new Set(remoteIndex.packages.map((pkg) => pkg.pluginId))
+        const existingPackages = await invoke<{ pluginId: string }[]>('list_plugin_dirs', { path: pluginBuiltinDir }).catch(() => [])
+        for (const plugin of existingPackages) {
+          if (!expectedPackages.has(plugin.pluginId) && !plugin.pluginId.startsWith('.')) {
+            await invoke<void>('remove_plugin_dir', {
+              rootPath: pluginBuiltinDir,
+              pluginId: plugin.pluginId,
+            }).catch(() => undefined)
+          }
+        }
+      } finally {
+        await invoke<void>('remove_plugin_dir', {
+          rootPath: pluginBuiltinDir,
+          pluginId: stagingRoot.slice(pluginBuiltinDir.length + 1),
+        }).catch(() => undefined)
+      }
       await ensureTextFile(localIndexPath, JSON.stringify(remoteIndex, null, 2))
       return { updated: true, version: remoteVersion }
     }

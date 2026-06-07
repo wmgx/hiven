@@ -56,6 +56,12 @@ type ResolvedPluginManifest = {
   capabilities: string[]
 }
 
+export type InstalledPluginUpdateResult = {
+  status: 'available' | 'up-to-date' | 'error'
+  latestVersion?: string
+  error?: string
+}
+
 /** Maps pluginId → watcher unlisten fn for dev plugins */
 const watcherCleanups = new Map<string, () => void>()
 
@@ -124,6 +130,39 @@ function validatePackageRelativePath(value: string, label: string): void {
   ) {
     throw new Error(`Invalid plugin ${label}: must be a package-relative path`)
   }
+}
+
+function isRemoteZipUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return /^https?:$/.test(parsed.protocol) && /\.zip(?:$|\?)/i.test(parsed.pathname)
+  } catch {
+    return false
+  }
+}
+
+export function isPluginZipUrl(url: string): boolean {
+  return isRemoteZipUrl(url)
+}
+
+function comparePluginVersions(left: string, right: string): number {
+  const normalize = (value: string) =>
+    value
+      .trim()
+      .split(/[^0-9A-Za-z]+/)
+      .filter(Boolean)
+      .map((part) => (/^\d+$/.test(part) ? Number(part) : part.toLowerCase()))
+  const a = normalize(left)
+  const b = normalize(right)
+  const length = Math.max(a.length, b.length)
+  for (let i = 0; i < length; i += 1) {
+    const x = a[i] ?? 0
+    const y = b[i] ?? 0
+    if (x === y) continue
+    if (typeof x === 'number' && typeof y === 'number') return x > y ? 1 : -1
+    return String(x) > String(y) ? 1 : -1
+  }
+  return 0
 }
 
 export const PLUGIN_ENTRY_CANDIDATES = ['index.tsx', 'index.ts', 'index.jsx', 'index.js', 'index.mjs'] as const
@@ -755,6 +794,21 @@ export async function installPluginZip(zipPath: string, destinationRoot?: string
 
 export const importPluginZip = installPluginZip
 
+export async function installPluginZipUrl(sourceUrl: string, destinationRoot?: string): Promise<InstalledPlugin> {
+  rejectSingleFileRemoteImport(sourceUrl)
+  if (!isRemoteZipUrl(sourceUrl)) {
+    throw new Error('Remote zip plugin import expects an http(s) .zip URL.')
+  }
+  const root = destinationRoot ?? await getInstalledPluginRoot()
+  const folderPath = await invokeCommand<string>('install_plugin_zip_url', {
+    url: sourceUrl,
+    destinationRoot: root,
+  })
+  return installLocalPlugin(folderPath, { source: 'zip', sourceUrl })
+}
+
+export const importPluginZipUrl = installPluginZipUrl
+
 export async function importLocalPluginDirectory(folderPath: string, destinationRoot?: string): Promise<InstalledPlugin> {
   const root = destinationRoot ?? await getInstalledPluginRoot()
   const installedFolderPath = await invokeCommand<string>('install_plugin_dir', {
@@ -803,6 +857,49 @@ function parseGithubDirectoryUrl(sourceUrl: string): {
   return { owner, repo, branch: branch || 'main', path: rest.join('/') }
 }
 
+function githubRawFileUrls(sourceUrl: string, filePath: string): string[] {
+  const target = parseGithubDirectoryUrl(sourceUrl)
+  validatePackageRelativePath(filePath, 'GitHub plugin file path')
+  const packagePath = [target.path, filePath].filter(Boolean).join('/')
+  const encodedPath = packagePath.split('/').map(encodeURIComponent).join('/')
+  const encodedRepoPath = [target.owner, target.repo, target.branch, encodedPath]
+    .filter(Boolean)
+    .map((part) => String(part).replace(/\/$/, ''))
+    .join('/')
+  return [
+    `https://raw.githubusercontent.com/${encodedRepoPath}`,
+    `https://cdn.jsdelivr.net/gh/${target.owner}/${target.repo}@${target.branch}/${encodedPath}`,
+  ]
+}
+
+async function fetchTextWithFallback(urls: string[]): Promise<string> {
+  let lastError = ''
+  for (const url of urls) {
+    try {
+      return await invokeCommand<string>('fetch_url', { url })
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error)
+    }
+  }
+  throw new Error(`All remote plugin metadata requests failed. Last error: ${lastError}`)
+}
+
+async function fetchGithubManifest(sourceUrl: string): Promise<ResolvedPluginManifest> {
+  const raw = await fetchTextWithFallback(githubRawFileUrls(sourceUrl, 'manifest.json'))
+  const manifest = JSON.parse(raw) as Partial<PluginManifest>
+  if (!manifest.pluginId) {
+    throw new Error('Remote GitHub plugin manifest is missing pluginId')
+  }
+  return {
+    pluginId: manifest.pluginId,
+    displayName: manifest.displayName || manifest.pluginId,
+    displayNameI18n: manifest.displayNameI18n,
+    version: typeof manifest.version === 'string' && manifest.version.trim() ? manifest.version : '1.0.0',
+    entry: 'index.*',
+    capabilities: manifest.capabilities || [],
+  }
+}
+
 export async function fetchGithubDirectory(sourceUrl: string, destinationRoot?: string): Promise<string> {
   const root = destinationRoot ?? await getInstalledPluginRoot()
   const target = parseGithubDirectoryUrl(sourceUrl)
@@ -818,6 +915,96 @@ export async function importGithubDirectory(sourceUrl: string, destinationRoot?:
 }
 
 export const installGithubDirectory = importGithubDirectory
+
+export async function checkInstalledPluginUpdate(pluginId: string): Promise<InstalledPluginUpdateResult> {
+  const { plugins, updatePluginMetadata } = usePluginStore.getState()
+  const record = plugins[pluginId]
+  if (!record) throw new Error(`Plugin "${pluginId}" is not installed`)
+  if (record.source !== 'github' || !record.sourceUrl) {
+    const result: InstalledPluginUpdateResult = { status: 'error', error: 'Only GitHub-installed plugins support update checks.' }
+    updatePluginMetadata(pluginId, { update: { ...result, status: 'error', checkedAt: Date.now() } })
+    return result
+  }
+
+  updatePluginMetadata(pluginId, { update: { status: 'checking', checkedAt: Date.now() } })
+  try {
+    const remote = await fetchGithubManifest(record.sourceUrl)
+    if (remote.pluginId !== pluginId) {
+      throw new Error(`Remote manifest pluginId mismatch: expected ${pluginId}, got ${remote.pluginId}`)
+    }
+    const hasUpdate = comparePluginVersions(remote.version, record.version) > 0
+    const result: InstalledPluginUpdateResult = {
+      status: hasUpdate ? 'available' : 'up-to-date',
+      latestVersion: remote.version,
+    }
+    updatePluginMetadata(pluginId, {
+      update: { status: result.status, latestVersion: remote.version, checkedAt: Date.now() },
+    })
+    return result
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    updatePluginMetadata(pluginId, {
+      update: { status: 'error', error: message, checkedAt: Date.now() },
+    })
+    return { status: 'error', error: message }
+  }
+}
+
+export async function updateInstalledPlugin(pluginId: string): Promise<InstalledPlugin> {
+  const { plugins, updatePluginMetadata, updatePluginVersion } = usePluginStore.getState()
+  const record = plugins[pluginId]
+  if (!record) throw new Error(`Plugin "${pluginId}" is not installed`)
+  if (record.source !== 'github' || !record.sourceUrl) {
+    throw new Error('Only GitHub-installed plugins support one-click updates.')
+  }
+
+  const wasEnabled = record.status === 'enabled'
+  const installedRoot = await getInstalledPluginRoot()
+  const stagingPluginId = `.plugin-update-${pluginId}-${Date.now()}`
+  const stagingRoot = joinPath(installedRoot, stagingPluginId)
+  updatePluginMetadata(pluginId, { update: { status: 'checking', checkedAt: Date.now() } })
+
+  try {
+    if (wasEnabled) disablePlugin(pluginId)
+    const stagedFolder = await fetchGithubDirectory(record.sourceUrl, stagingRoot)
+    const stagedSummary = await getPluginPackageSummary(stagedFolder)
+    if (stagedSummary.pluginId !== pluginId) {
+      throw new Error(`Remote manifest pluginId mismatch: expected ${pluginId}, got ${stagedSummary.pluginId}`)
+    }
+    await invokeCommand<void>('replace_plugin_dir', {
+      sourcePath: stagedFolder,
+      rootPath: installedRoot,
+      pluginId,
+    })
+    const nextFolderPath = joinPath(installedRoot, pluginId)
+    const nextSummary = await getPluginPackageSummary(nextFolderPath)
+    updatePluginVersion(pluginId, nextSummary.version, nextSummary.entry, nextSummary.capabilities)
+    updatePluginMetadata(pluginId, {
+      displayName: nextSummary.displayName,
+      displayNameI18n: nextSummary.displayNameI18n,
+      folderPath: nextFolderPath,
+      packagePath: nextFolderPath,
+      source: 'github',
+      sourceUrl: record.sourceUrl,
+      update: { status: 'up-to-date', latestVersion: nextSummary.version, checkedAt: Date.now() },
+    })
+    if (wasEnabled) await enablePlugin(pluginId)
+    showToast(`Plugin "${nextSummary.displayName}" updated`, 'success')
+    return usePluginStore.getState().plugins[pluginId]
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    updatePluginMetadata(pluginId, { update: { status: 'error', error: message, checkedAt: Date.now() } })
+    if (wasEnabled && usePluginStore.getState().plugins[pluginId]?.status !== 'enabled') {
+      await enablePlugin(pluginId).catch(() => undefined)
+    }
+    throw error
+  } finally {
+    await invokeCommand<void>('remove_plugin_dir', {
+      rootPath: installedRoot,
+      pluginId: stagingPluginId,
+    }).catch(() => undefined)
+  }
+}
 
 export async function createDevPluginScaffold(options: {
   pluginId?: string

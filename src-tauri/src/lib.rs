@@ -181,6 +181,70 @@ fn remove_plugin_dir(root_path: String, plugin_id: String) -> Result<(), String>
 }
 
 #[tauri::command]
+fn replace_plugin_dir(source_path: String, root_path: String, plugin_id: String) -> Result<(), String> {
+    validate_plugin_id(&plugin_id)?;
+    let source = ensure_existing_plugin_path(&expand_path(&source_path))?;
+    if !source.is_dir() {
+        return Err("Plugin replacement source is not a directory".to_string());
+    }
+    let summary = read_plugin_manifest_summary(&source)?;
+    if summary.plugin_id != plugin_id {
+        return Err("Plugin replacement source manifest does not match pluginId".to_string());
+    }
+
+    let root = ensure_existing_plugin_path(&expand_path(&root_path))?;
+    if !root.is_dir() {
+        return Err("Plugin root path is not a directory".to_string());
+    }
+    let destination = root.join(&plugin_id);
+    if !destination.starts_with(&root) || destination == root {
+        return Err("Plugin replacement target must stay inside the plugin root".to_string());
+    }
+
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis();
+    let backup = root.join(format!(".plugin-backup-{}-{}", plugin_id, millis));
+    if backup.exists() {
+        fs::remove_dir_all(&backup).map_err(|e| e.to_string())?;
+    }
+
+    let had_existing = destination.exists();
+    if had_existing {
+        fs::rename(&destination, &backup).map_err(|e| e.to_string())?;
+    }
+
+    let replace_result: Result<(), String> = match fs::rename(&source, &destination) {
+        Ok(()) => Ok(()),
+        Err(_) => {
+            copy_dir_all(&source, &destination)?;
+            fs::remove_dir_all(&source).map_err(|e| e.to_string())
+        }
+    };
+
+    match replace_result {
+        Ok(()) => {
+            if backup.exists() {
+                let _ = fs::remove_dir_all(&backup);
+            }
+            Ok(())
+        }
+        Err(error) => {
+            let _ = if destination.exists() {
+                fs::remove_dir_all(&destination)
+            } else {
+                Ok(())
+            };
+            if had_existing && backup.exists() {
+                let _ = fs::rename(&backup, &destination);
+            }
+            Err(error.to_string())
+        }
+    }
+}
+
+#[tauri::command]
 fn list_plugin_files(path: String) -> Result<Vec<PluginFileNode>, String> {
     let root = ensure_existing_plugin_path(&expand_path(&path))?;
     if !root.is_dir() {
@@ -249,6 +313,29 @@ fn install_plugin_zip(zip_path: String, destination_root: String) -> Result<Stri
     let destination_root = ensure_existing_plugin_path(&destination_root)?;
     let temp_dir = make_temp_dir(&destination_root)?;
     let result = extract_zip_to_dir(&zip_path, &temp_dir)
+        .and_then(|_| install_package_from_extracted_dir(&temp_dir, &destination_root));
+    let _ = fs::remove_dir_all(&temp_dir);
+    result
+}
+
+#[tauri::command]
+async fn install_plugin_zip_url(url: String, destination_root: String) -> Result<String, String> {
+    let parsed = reqwest::Url::parse(&url).map_err(|e| e.to_string())?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err("Plugin zip URL must use http or https".to_string());
+    }
+    let destination_root = expand_path(&destination_root);
+    ensure_plugin_path_for_write(&destination_root)?;
+    fs::create_dir_all(&destination_root).map_err(|e| e.to_string())?;
+    let destination_root = ensure_existing_plugin_path(&destination_root)?;
+    let bytes = reqwest::get(parsed)
+        .await
+        .map_err(|e| format!("Plugin zip download failed: {}", e))?
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read plugin zip response: {}", e))?;
+    let temp_dir = make_temp_dir(&destination_root)?;
+    let result = extract_zip_bytes_to_dir(bytes.as_ref(), &temp_dir)
         .and_then(|_| install_package_from_extracted_dir(&temp_dir, &destination_root));
     let _ = fs::remove_dir_all(&temp_dir);
     result
@@ -695,12 +782,14 @@ pub fn run() {
             fetch_url,
             list_plugin_dirs,
             remove_plugin_dir,
+            replace_plugin_dir,
             list_plugin_files,
             open_plugin_dir,
             read_plugin_file,
             save_plugin_file,
             install_plugin_dir,
             install_plugin_zip,
+            install_plugin_zip_url,
             fetch_github_directory,
         ])
         .run(tauri::generate_context!())

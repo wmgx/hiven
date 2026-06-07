@@ -8,12 +8,15 @@ import { checkBuiltinPluginsUpdate, getConfigDir } from '../configInit'
 import { usePluginStore } from '../workspace/pluginStore'
 import {
   createDevPluginScaffold,
+  checkInstalledPluginUpdate,
   disablePlugin,
   enablePlugin,
   importDevPluginDirectory,
   importGithubDirectory,
   importLocalPluginDirectory,
   importPluginZip,
+  importPluginZipUrl,
+  isPluginZipUrl,
   listPluginDirs,
   openPluginDir,
   pickLocalPluginFolder,
@@ -22,6 +25,7 @@ import {
   reloadDevPlugin,
   reloadPlugin,
   removeDevPlugin,
+  updateInstalledPlugin,
   uninstallPlugin,
   unwatchDevPlugin,
   watchDevPlugin,
@@ -126,8 +130,8 @@ export function ScriptsView() {
         status: pkg.error ? 'error' : 'disabled',
         error: pkg.error,
         update: { status: 'idle' },
-        installedAt: Date.now(),
-        updatedAt: Date.now(),
+        installedAt: 0,
+        updatedAt: 0,
       })
     }
     return Array.from(byId.values())
@@ -287,7 +291,11 @@ export function ScriptsView() {
     if (!url) return
     await runTask('_remote', async () => {
       rejectSingleFileRemoteImport(url)
-      await importGithubDirectory(url)
+      if (isPluginZipUrl(url)) {
+        await importPluginZipUrl(url)
+      } else {
+        await importGithubDirectory(url)
+      }
       setRemoteOpen(false)
       setRemoteUrl('')
       setActiveTab('installed')
@@ -319,7 +327,7 @@ export function ScriptsView() {
         folderPath={packagePath(plugin)}
         sourceUrl={plugin.sourceUrl}
         capabilities={capabilitiesOf(plugin)}
-        error={plugin.error || localError}
+          error={plugin.error || localError || plugin.update?.error}
         loading={loading}
         actions={
           <>
@@ -342,6 +350,22 @@ export function ScriptsView() {
             <IconButton title={t(locale, 'scripts.actionReload')} onClick={() => runTask(key, () => reloadPlugin(plugin.pluginId))}>
               <RefreshCw size={13} />
             </IconButton>
+              {plugin.source === 'github' && (
+                <IconButton
+                  title={t(locale, 'scripts.actionCheckPluginUpdate')}
+                  onClick={() => runTask(`${key}:check-update`, () => checkInstalledPluginUpdate(plugin.pluginId).then(() => undefined))}
+                >
+                  <Download size={13} />
+                </IconButton>
+              )}
+              {plugin.source === 'github' && plugin.update?.status === 'available' && (
+                <IconButton
+                  title={t(locale, 'scripts.actionUpdatePlugin').replace('{version}', plugin.update.latestVersion || '')}
+                  onClick={() => runTask(`${key}:update`, () => updateInstalledPlugin(plugin.pluginId).then(() => undefined))}
+                >
+                  <RefreshCw size={13} />
+                </IconButton>
+              )}
             <IconButton title={t(locale, 'scripts.actionUninstall')} onClick={() => runTask(key, async () => {
               await uninstallPlugin(plugin.pluginId)
               setUpdateStatus('checking')
@@ -541,13 +565,13 @@ export function ScriptsView() {
             <div className="modal-header">
               <div className="modal-title">
                 <Globe size={16} />
-                {t(locale, 'scripts.remoteImportDirectoryTitle')}
+                  {t(locale, 'scripts.remoteImportDirectoryTitle')}
               </div>
               <button onClick={() => setRemoteOpen(false)} className="modal-close">x</button>
             </div>
             <div className="modal-body">
               <div className="modal-desc">
-                {t(locale, 'scripts.remoteImportDirectoryDesc')}
+                  {t(locale, 'scripts.remoteImportDirectoryDesc')}
               </div>
               <div className="modal-url-row">
                 <input
@@ -559,7 +583,7 @@ export function ScriptsView() {
                     clearItemError('_remote')
                   }}
                   onKeyDown={(event) => { if (event.key === 'Enter' && !busy['_remote']) void handleRemoteInstall() }}
-                  placeholder="https://github.com/owner/repo/tree/main/plugin"
+                  placeholder="https://github.com/owner/repo/tree/main/plugin or https://example.com/plugin.zip"
                   autoFocus
                   disabled={busy['_remote']}
                 />
