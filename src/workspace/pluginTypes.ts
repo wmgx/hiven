@@ -159,7 +159,9 @@ export type PanelContributionV2 = {
   id: string
   title: string
   titleI18n?: Partial<Record<Locale, string>>
-  defaultPlacement?: 'bottom' | 'right' | 'left'
+  defaultPlacement?: 'bottom' | 'right' | 'left' | 'pane-bottom'
+  /** Custom height for bottom panels (e.g. '36px' for compact bars). Defaults to '240px'. */
+  height?: string
   component: ComponentType<PanelPropsV2<unknown>>
 }
 

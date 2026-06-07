@@ -52,9 +52,10 @@ function PanelV2Instance({ instance, placement, onClose }: PanelV2InstanceProps)
     dispatch: (effects) => applyEffects(stampDevEffects(effects, instance.isDevPanel)),
   }
 
+  const customHeight = panelEntry?.contribution.height
   const placementStyle: CSSProperties =
     placement === 'bottom'
-      ? { height: '240px', borderTop: '1px solid var(--color-border-tertiary)' }
+      ? { height: customHeight ?? '240px', borderTop: '1px solid var(--color-border-tertiary)' }
       : placement === 'right'
       ? { width: '300px', minWidth: '300px', borderLeft: '1px solid var(--color-border-tertiary)', height: '100%' }
       : { width: '300px', minWidth: '300px', borderRight: '1px solid var(--color-border-tertiary)', height: '100%' }

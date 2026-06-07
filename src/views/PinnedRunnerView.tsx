@@ -36,6 +36,9 @@ function normalizePanelV2Placement(placement?: string): 'bottom' | 'right' | 'le
   return 'right'
 }
 
+// Module-level map: tracks last auto-run input key per pinned action to avoid redundant runs on remount
+const lastAutoRunKeyMap = new Map<string, string>()
+
 function markPinnedOutputStale(pinned: PinnedAction): Partial<PinnedAction> {
   if (pinned.autoRun || !pinned.outputText || pinned.outputKind === 'error' || pinned.outputKind === 'stale') return {}
   return {
@@ -177,7 +180,10 @@ export function PinnedRunnerView() {
 
   useEffect(() => {
     if (!pinned || !pinned.autoRun || !pinned.inputText || liveTrigger === 'on-blur') return
+    const runKey = `${pinned.id}\0${pinned.inputText}\0${paramsFingerprint}`
+    if (lastAutoRunKeyMap.get(pinned.id) === runKey) return
     const timer = window.setTimeout(() => {
+      lastAutoRunKeyMap.set(pinned.id, runKey)
       void runPinnedAction()
     }, pinned.debounceMs)
     return () => window.clearTimeout(timer)

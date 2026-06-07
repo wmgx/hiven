@@ -370,7 +370,9 @@ body {
   background: none;
   color: var(--color-text-tertiary);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 .pinned-icon-btn:hover {
   background: var(--color-background-tertiary);
@@ -401,7 +403,11 @@ body {
   font-family: var(--font-mono);
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s,
+    opacity 0.15s;
 }
 .pinned-labeled-btn:hover {
   background: var(--color-background-tertiary);
@@ -437,7 +443,7 @@ body {
 .pinned-auto-toggle:hover {
   background: var(--color-background-tertiary);
 }
-.pinned-auto-toggle input[type="checkbox"] {
+.pinned-auto-toggle input[type='checkbox'] {
   width: 14px;
   height: 14px;
   accent-color: var(--color-accent);
@@ -489,14 +495,16 @@ body {
   color: var(--color-text-primary);
   font-family: var(--font-mono);
   border: none;
-  transition: background 0.2s, border-color 0.2s;
+  transition:
+    background 0.2s,
+    border-color 0.2s;
 }
-.pinned-output-pre[data-kind="error"] {
+.pinned-output-pre[data-kind='error'] {
   background: var(--color-error-bg);
   color: var(--color-error-text);
   border-left: 3px solid var(--color-error);
 }
-.pinned-output-pre[data-kind="stale"] {
+.pinned-output-pre[data-kind='stale'] {
   opacity: 0.55;
   border-left: 3px solid var(--color-warning);
 }
@@ -531,7 +539,7 @@ body {
   gap: 6px;
   cursor: pointer;
 }
-.pinned-control-item input[type="checkbox"] {
+.pinned-control-item input[type='checkbox'] {
   width: 14px;
   height: 14px;
   accent-color: var(--color-accent);
@@ -553,7 +561,9 @@ body {
   font-size: 12px;
   font-family: var(--font-mono);
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 .pinned-input:focus {
   border-color: var(--color-accent);
@@ -580,7 +590,9 @@ body {
   font-size: 12px;
   font-family: var(--font-mono);
   cursor: pointer;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 .pinned-dropdown-trigger:hover {
   border-color: var(--color-accent);
@@ -615,14 +627,22 @@ body {
   background: var(--color-background-primary);
   border: 1px solid var(--color-border-secondary);
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10), 0 1px 4px rgba(0, 0, 0, 0.06);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.1),
+    0 1px 4px rgba(0, 0, 0, 0.06);
   z-index: 100;
   padding: 4px;
   animation: pinned-dropdown-in 0.15s ease-out;
 }
 @keyframes pinned-dropdown-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .pinned-dropdown-item {
   width: 100%;
@@ -639,7 +659,9 @@ body {
   font-family: var(--font-mono);
   cursor: pointer;
   text-align: left;
-  transition: background 0.1s, color 0.1s;
+  transition:
+    background 0.1s,
+    color 0.1s;
 }
 .pinned-dropdown-item:hover {
   background: var(--color-background-tertiary);
@@ -994,6 +1016,13 @@ body {
 }
 
 /* ─── Monaco ─── */
+.monaco-hover-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  pointer-events: none;
+}
+
 .monaco-editor .margin {
   background: var(--color-background-secondary) !important;
 }
@@ -1006,4 +1035,13 @@ body {
 .monaco-editor .find-widget .button.toggle {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* tooltip 不阻挡鼠标点击 */
+.monaco-hover-overlay .context-view:has(.workbench-hover) {
+  pointer-events: none;
+}
+
+.monaco-editor .editor-widget.find-widget .monaco-inputbox .input {
+  font-family: var(--font-mono);
 }

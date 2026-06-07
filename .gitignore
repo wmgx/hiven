@@ -28,3 +28,6 @@ temp/
 
 # Worktrees
 .worktrees/
+
+# Local agent state
+.omc/

@@ -1,26 +1,13 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import App from './App.tsx'
-
-// Monaco 本地加载配置（消除 CDN 依赖）
-import * as monaco from 'monaco-editor'
-import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 import { loader } from '@monaco-editor/react'
-
-self.MonacoEnvironment = {
-  getWorker() {
-    return new editorWorker()
-  },
-}
-
-loader.config({ monaco })
 
 // 禁用浏览器右键菜单
 document.addEventListener('contextmenu', (e) => e.preventDefault())
 
 // Monaco 0.55+ 使用 globalThis._VSCODE_NLS_MESSAGES 进行本地化
-async function init() {
+async function loadMonacoNls() {
   try {
     const stored = JSON.parse(localStorage.getItem('fluxtext-settings') || '{}')
     const locale = stored?.state?.locale || stored?.state?.settings?.locale || 'en'
@@ -37,6 +24,25 @@ async function init() {
   } catch {
     // 加载失败时回退到英文
   }
+}
+
+async function init() {
+  await loadMonacoNls()
+
+  // Monaco 必须在 NLS 注入后加载，否则内置 tooltip 文案会固定为默认英文。
+  const [{ default: App }, monaco, { default: editorWorker }] = await Promise.all([
+    import('./App.tsx'),
+    import('monaco-editor'),
+    import('monaco-editor/esm/vs/editor/editor.worker?worker'),
+  ])
+
+  self.MonacoEnvironment = {
+    getWorker() {
+      return new editorWorker()
+    },
+  }
+
+  loader.config({ monaco })
 
   createRoot(document.getElementById('root')!).render(
     <StrictMode>

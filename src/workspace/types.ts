@@ -179,7 +179,7 @@ export type PanelV2Effect =
   | {
       type: 'panel.openV2'
       panelId: string
-      placement?: 'bottom' | 'right' | 'left'
+      placement?: 'bottom' | 'right' | 'left' | 'pane-bottom'
       inputs?: unknown
       title?: string
       ownerPluginId?: string
@@ -317,7 +317,7 @@ export type PaneRendererState = {
 
 export type PanelInstanceV2 = {
   panelId: string
-  placement: 'bottom' | 'right' | 'left'
+  placement: 'bottom' | 'right' | 'left' | 'pane-bottom'
   inputs: unknown
   scope?: PanelScope
   title?: string
