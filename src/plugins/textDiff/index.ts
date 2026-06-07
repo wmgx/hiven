@@ -12,6 +12,7 @@ export const textDiffPlugin = definePlugin({
       title: 'command.compare.title',
       description: 'command.compare.description',
       icon: 'git-compare',
+      live: { pinnable: false },
       inputs: [
         { key: 'original', label: 'input.original.label', kind: 'pane', required: true },
         { key: 'modified', label: 'input.modified.label', kind: 'pane', required: true },

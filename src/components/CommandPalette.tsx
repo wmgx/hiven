@@ -796,6 +796,7 @@ function ActionItem({ item, selected, onClick, onPin, onMouseEnter, shortcutMeta
   const subtitle = localized(item.entry.contribution.description || item.entry.contribution.id, item.entry.contribution.descriptionI18n, locale)
   const icon = item.entry.contribution.icon
   const canCustomizeParams = supportsDefaultParamRun(item.entry.contribution, normalizePluginParams(item.entry.contribution.params ?? []))
+  const canPin = isCommandPinnable(item)
 
   return (
     <div
@@ -849,19 +850,21 @@ function ActionItem({ item, selected, onClick, onPin, onMouseEnter, shortcutMeta
           <span className="text-[10px] leading-none">{t(locale, 'palette.customizeParamsLabel')}</span>
         </div>
       )}
-      <button
-        data-testid="command-palette-pin-action"
-        className="w-6 h-6 rounded-md border-none bg-transparent cursor-pointer flex items-center justify-center shrink-0"
-        title={t(locale, 'palette.pinAction')}
-        style={{ color: selected ? 'var(--color-accent-hover)' : 'var(--color-text-tertiary)' }}
-        onClick={(event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          onPin()
-        }}
-      >
-        <Pin size={13} />
-      </button>
+      {canPin && (
+        <button
+          data-testid="command-palette-pin-action"
+          className="w-6 h-6 rounded-md border-none bg-transparent cursor-pointer flex items-center justify-center shrink-0"
+          title={t(locale, 'palette.pinAction')}
+          style={{ color: selected ? 'var(--color-accent-hover)' : 'var(--color-text-tertiary)' }}
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            onPin()
+          }}
+        >
+          <Pin size={13} />
+        </button>
+      )}
       {selected && (
         <kbd className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--color-background-tertiary)', border: '0.5px solid var(--color-border-tertiary)', color: 'var(--color-text-secondary)' }}>↵</kbd>
       )}
@@ -917,6 +920,10 @@ function paramOptionMatchesQuery(option: { label: string; value: string }, query
 
 function isSearchableOptionValue(value: string): boolean {
   return !value.includes(':')
+}
+
+function isCommandPinnable(item: PaletteItem): boolean {
+  return item.entry.contribution.live?.pinnable !== false
 }
 
 /** 检查 query 是否匹配某个 PaletteItem（含缩写匹配） */

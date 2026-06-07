@@ -24,6 +24,16 @@ const files = {
   pinnedPluginCommandRunner: read('src/workspace/pinnedPluginCommandRunner.ts'),
 }
 
+const unsupportedPinnedEffectPattern = /type:\s*['"](pane\.setRenderer|panel\.openV2|panel\.closeV2|pane\.close)['"]/
+for (const pluginFile of fs.readdirSync('src/plugins')
+  .flatMap((dir) => [`src/plugins/${dir}/index.ts`, `src/plugins/${dir}/index.tsx`])
+  .filter((file) => fs.existsSync(file))) {
+  const source = read(pluginFile)
+  if (unsupportedPinnedEffectPattern.test(source)) {
+    assertHas(source, /live:\s*\{\s*pinnable:\s*false\s*\}/, `${pluginFile} emits workspace-only effects and should opt out of pinning`)
+  }
+}
+
 assertHas(files.packageJson, /test:pinned-plugin-command/, 'package.json should expose pinned plugin command verifier')
 
 assertHas(files.store, /PinnedActionKind\s*=\s*['"]plugin-command['"]/, 'PinnedAction kind should be plugin-command')
@@ -39,9 +49,10 @@ assert.equal(samePinnedPluginCommandIdentity(pinnedCommand, { ...pinnedCommand, 
 
 assertHas(files.commandPalette, /pinPluginCommand/, 'CommandPalette should pin plugin commands')
 assertHas(files.commandPalette, /data-testid="command-palette-pin-action"[\s\S]*<Pin/, 'ActionItem should render a pin button for plugin items')
-
+assertHas(files.commandPalette, /live\?\.pinnable\s*!==\s*false/, 'CommandPalette should hide the pin affordance when a plugin command opts out')
 assertHas(files.pinnedRunner, /pluginRegistry\.resolveCommand/, 'PinnedRunnerView should resolve plugin commands from the plugin registry')
 assertHas(files.pinnedRunner, /runPinnedPluginCommandToPatch[\s\S]*pinned,[\s\S]*params/, 'PinnedRunnerView should run plugin commands through the tested pinned command runner')
+
 assertHas(files.pinnedPluginCommandRunner, /runTextPluginCommand[\s\S]*inputText:\s*options\.pinned\.inputText/, 'pinned command runner should run plugin commands with the pinned input buffer')
 assertHas(files.pluginCommandRunner, /buildTextPluginInputs[\s\S]*kind:\s*['"]text['"][\s\S]*inputText/, 'plugin command runner should resolve pinned text input slots')
 assertHas(files.pluginCommandRunner, /text\.replace[\s\S]*textReplace\.text/, 'plugin command runner should map text.replace effects into runner output')

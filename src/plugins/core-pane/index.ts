@@ -18,6 +18,7 @@ export const corePanePlugin = definePlugin({
       description: 'command.split.description',
       icon: 'columns',
       aliases: ['split', 'split-pane'],
+      live: { pinnable: false },
       inputs: [
         { key: 'source', label: 'input.source.label', kind: 'pane', required: true },
       ],
@@ -55,6 +56,7 @@ export const corePanePlugin = definePlugin({
       description: 'command.close.description',
       icon: 'x',
       aliases: ['close-pane', 'close'],
+      live: { pinnable: false },
       run() {
         return {
           effects: [{ type: 'pane.close' as const }],

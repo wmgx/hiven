@@ -394,6 +394,7 @@ export const jsFilterPlugin = definePlugin({
       description: 'command.open.description',
       icon: 'Code2',
       aliases: ['js-filter', 'jq', 'json-filter', 'expression'],
+      live: { pinnable: false },
       inputs: [{ key: 'input', label: 'Input', kind: 'pane' as const, required: true }],
       inputResolution: { strategy: 'use-active', fallback: 'fail' },
       run(ctx) {
