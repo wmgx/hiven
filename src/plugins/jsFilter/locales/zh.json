@@ -1,0 +1,8 @@
+{
+  "command.open.title": "JS 过滤器",
+  "command.open.description": "切换 JS 表达式过滤栏",
+  "panel.placeholder": "JS 过滤; 示例 .key.subkey、[0][1]、.map(x=>x.val)",
+  "panel.execute": "执行",
+  "panel.error.notJson": "当前内容不是有效的 JSON",
+  "panel.error.expression": "表达式错误: {0}"
+}

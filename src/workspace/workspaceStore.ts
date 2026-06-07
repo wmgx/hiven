@@ -26,6 +26,73 @@ function generatePaneId(): PaneId {
   return `pane-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function normalizePane(id: PaneId, value: unknown, index: number): EditorPane {
+  const pane = isPlainObject(value) ? value : {}
+  const language = typeof pane.language === 'string' ? pane.language : 'plaintext'
+  const detectedLanguage = typeof pane.detectedLanguage === 'string' ? pane.detectedLanguage : language
+  const languageSource = pane.languageSource === 'manual' || pane.languageSource === 'auto'
+    ? pane.languageSource
+    : language !== 'plaintext' ? 'manual' : 'auto'
+
+  return {
+    id,
+    title: typeof pane.title === 'string' ? pane.title : `${index + 1}`,
+    text: typeof pane.text === 'string' ? pane.text : '',
+    language,
+    detectedLanguage,
+    languageSource,
+    stickyScroll: pane.stickyScroll === true,
+  }
+}
+
+function normalizePanes(panes: unknown, paneOrder: PaneId[]): Record<PaneId, EditorPane> {
+  const source = isPlainObject(panes) ? panes : {}
+  const ids = paneOrder.length > 0 ? paneOrder : Object.keys(source)
+  const normalized: Record<PaneId, EditorPane> = {}
+
+  for (let i = 0; i < ids.length; i++) {
+    const id = ids[i]
+    normalized[id] = normalizePane(id, source[id], i)
+  }
+
+  if (Object.keys(normalized).length === 0) {
+    normalized[DEFAULT_PANE_ID] = normalizePane(DEFAULT_PANE_ID, undefined, 0)
+  }
+
+  return normalized
+}
+
+function normalizeLayout(layout: unknown, paneOrder: PaneId[]): WorkspaceLayout {
+  const paneSet = new Set(paneOrder)
+
+  if (isPlainObject(layout)) {
+    if (layout.type === 'grid' && Array.isArray(layout.rows)) {
+      const rows = layout.rows
+        .filter(Array.isArray)
+        .map((row) => row.filter((id): id is PaneId => typeof id === 'string' && paneSet.has(id)))
+        .filter((row) => row.length > 0)
+      if (rows.length > 0) return { type: 'grid', rows }
+    }
+
+    if (
+      layout.type === 'split' &&
+      (layout.direction === 'horizontal' || layout.direction === 'vertical') &&
+      Array.isArray(layout.panes)
+    ) {
+      const panes = layout.panes.filter((id): id is PaneId => typeof id === 'string' && paneSet.has(id))
+      if (panes.length > 1) return { type: 'split', direction: layout.direction, panes }
+    }
+  }
+
+  return paneOrder.length === 1
+    ? { type: 'single', panes: [paneOrder[0]] }
+    : { type: 'split', direction: 'horizontal', panes: paneOrder }
+}
+
 /** Rename all panes sequentially: 1, 2, 3, 4... based on paneOrder */
 function renamePanesSequentially(panes: Record<PaneId, EditorPane>, paneOrder: PaneId[]): Record<PaneId, EditorPane> {
   const updated = { ...panes }
@@ -435,7 +502,7 @@ export const useWorkspaceStore = create<WorkspaceSlice>()(persist(
           {
             id: pane.id,
             title: pane.title,
-            text: pane.text,
+            text: pane.text ?? '',
             language: pane.language,
             detectedLanguage: pane.detectedLanguage,
             languageSource: pane.languageSource,
@@ -447,6 +514,26 @@ export const useWorkspaceStore = create<WorkspaceSlice>()(persist(
       activePaneId: state.activePaneId,
       layout: state.layout,
     }),
+    merge: (persistedState, currentState) => {
+      const persisted = isPlainObject(persistedState) ? persistedState : {}
+      const rawPaneOrder = Array.isArray(persisted.paneOrder) ? persisted.paneOrder : currentState.paneOrder
+      const paneOrder = rawPaneOrder.filter((id): id is PaneId => typeof id === 'string')
+      const panes = normalizePanes(persisted.panes, paneOrder)
+      const normalizedPaneOrder = paneOrder.filter((id) => panes[id])
+      const nextPaneOrder = normalizedPaneOrder.length > 0 ? normalizedPaneOrder : [DEFAULT_PANE_ID]
+      const activePaneId = typeof persisted.activePaneId === 'string' && panes[persisted.activePaneId]
+        ? persisted.activePaneId
+        : nextPaneOrder[0]
+
+      return {
+        ...currentState,
+        ...persisted,
+        panes: renamePanesSequentially(panes, nextPaneOrder),
+        paneOrder: nextPaneOrder,
+        activePaneId,
+        layout: normalizeLayout(persisted.layout, nextPaneOrder),
+      } as WorkspaceSlice
+    },
     // Migration from legacy editorText
     migrate: (persisted: unknown, version: number) => {
       if (version === 0 || !persisted) {

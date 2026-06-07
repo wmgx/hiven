@@ -9,6 +9,8 @@ import type { editor as MonacoEditor } from 'monaco-editor'
 import { t } from '../../i18n'
 import { detectEditorLanguage } from '../../workspace/languageDetector'
 import { getLanguageOptionLabel } from '../../workspace/languageOptions'
+import { PaneBottomPanels } from './PaneBottomPanels'
+import { installMonacoHoverOverlay } from '../../utils/monacoHoverOverlay'
 
 interface PaneEditorProps {
   paneId: string
@@ -28,6 +30,7 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
   const statusBarRef = useRef<HTMLDivElement | null>(null)
   const isLocalChange = useRef(false)
   const pasteDetectionRef = useRef<{ paneId: string; shouldDetect: boolean } | null>(null)
+  const paneText = pane?.text ?? ''
   const language = pane?.language || 'plaintext'
   const languageSource = pane?.languageSource ?? (pane?.language && pane.language !== 'plaintext' ? 'manual' : 'auto')
   const foldingEnabled = language !== 'plaintext'
@@ -46,16 +49,16 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
       return
     }
     const model = editor.getModel()
-    if (model && model.getValue() !== pane.text) {
+    if (model && model.getValue() !== paneText) {
       // Push edit without moving cursor
       const fullRange = model.getFullModelRange()
       editor.executeEdits('external', [{
         range: fullRange,
-        text: pane.text,
+        text: paneText,
         forceMoveMarkers: false,
       }])
     }
-  }, [pane])
+  }, [pane, paneText])
 
   const handleChange = useCallback((v: string | undefined) => {
     const nextText = v || ''
@@ -99,14 +102,14 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
   // If a plugin renderer is active, show RendererHost instead of Monaco
   if (rendererState) {
     return (
-      <div className="h-full" onPointerDownCapture={() => setActivePaneId(paneId)}>
+      <div className="h-full" onPointerDown={() => setActivePaneId(paneId)}>
         <RendererHost paneId={paneId} rendererState={rendererState} />
       </div>
     )
   }
 
-  const lines = pane.text.split('\n').length
-  const chars = pane.text.length
+  const lines = paneText.split('\n').length
+  const chars = paneText.length
   const showLineCount = statusWidth >= 240
   const showCharCount = statusWidth >= 320
   const showLanguage = statusWidth >= 160
@@ -116,14 +119,15 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
     : `${languageLabel} · ${t(locale, 'editor.autoLanguage')}`
 
   return (
-    <div className="flex flex-col h-full" onPointerDownCapture={() => setActivePaneId(paneId)}>
+    <div className="flex flex-col h-full" onPointerDown={() => setActivePaneId(paneId)}>
       <div className="flex-1 min-h-0">
         <Editor
           height="100%"
           defaultLanguage={language}
-          defaultValue={pane.text}
+          defaultValue={paneText}
           onChange={handleChange}
           onMount={(editor) => {
+            installMonacoHoverOverlay(editor)
             editorRef.current = editor
             runtimeRegistry.registerCodeEditor(paneId, editor)
             if (activePaneId === paneId) {
@@ -261,6 +265,9 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
           theme="vs"
         />
       </div>
+
+      {/* Plugin pane-bottom panels */}
+      <PaneBottomPanels paneId={paneId} />
 
       {/* Per-pane status bar */}
       <div
