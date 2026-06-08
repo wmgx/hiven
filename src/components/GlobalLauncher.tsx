@@ -18,6 +18,7 @@ const viewItems: { id: ViewId; title: string; titleI18n: Partial<Record<Locale, 
 
 export function GlobalLauncher() {
   const open = useAppStore((s) => s.globalLauncherOpen)
+  const mode = useAppStore((s) => s.globalLauncherMode)
   const setOpen = useAppStore((s) => s.setGlobalLauncherOpen)
   const setActiveView = useAppStore((s) => s.setActiveView)
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
@@ -32,16 +33,16 @@ export function GlobalLauncher() {
 
   useEffect(() => {
     if (!open) return
-    setQuery('')
-    setSelectedIndex(0)
-    setTimeout(() => inputRef.current?.focus(), 30)
+    requestAnimationFrame(() => {
+      setQuery('')
+      setSelectedIndex(0)
+      inputRef.current?.focus()
+    })
   }, [open])
 
   const items = useMemo<LauncherItem[]>(() => {
     void pluginRegistryVersion
     const pinnedLabel = t(locale, 'palette.globalPinned')
-    const recentLabel = t(locale, 'palette.globalRecent')
-    const viewsLabel = t(locale, 'palette.globalViews')
     const pinned = pinnedActions.map((item) => ({
       kind: 'pinned' as const,
       id: item.id,
@@ -49,6 +50,10 @@ export function GlobalLauncher() {
       subtitle: pinnedLabel,
       icon: item.icon,
     }))
+    if ('pinned-only' === mode) return pinned
+
+    const recentLabel = t(locale, 'palette.globalRecent')
+    const viewsLabel = t(locale, 'palette.globalViews')
     const recent = recentActionNames.slice(0, 8).map((name) => {
       const command = pluginRegistry.resolveCommand(name)?.contribution
       return {
@@ -67,7 +72,7 @@ export function GlobalLauncher() {
       icon: item.icon,
     }))
     return [...pinned, ...recent, ...views]
-  }, [locale, pinnedActions, recentActionNames, pluginRegistryVersion])
+  }, [locale, mode, pinnedActions, recentActionNames, pluginRegistryVersion])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -75,11 +80,8 @@ export function GlobalLauncher() {
     return items.filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(q))
   }, [items, query])
 
-  useEffect(() => {
-    setSelectedIndex((index) => Math.min(index, Math.max(0, filtered.length - 1)))
-  }, [filtered.length])
-
   if (!open) return null
+  const clampedSelectedIndex = Math.min(selectedIndex, Math.max(0, filtered.length - 1))
 
   const selectItem = (item: LauncherItem | undefined) => {
     if (!item) return
@@ -115,7 +117,7 @@ export function GlobalLauncher() {
           if (event.key === 'Escape') setOpen(false)
           if (event.key === 'ArrowDown') { event.preventDefault(); setSelectedIndex((index) => Math.min(index + 1, Math.max(0, filtered.length - 1))) }
           if (event.key === 'ArrowUp') { event.preventDefault(); setSelectedIndex((index) => Math.max(index - 1, 0)) }
-          if (event.key === 'Enter') { event.preventDefault(); selectItem(filtered[selectedIndex]) }
+          if (event.key === 'Enter') { event.preventDefault(); selectItem(filtered[clampedSelectedIndex]) }
         }}
       >
         <div className="flex items-center gap-2 px-3.5 py-2.5" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
@@ -132,24 +134,25 @@ export function GlobalLauncher() {
         <LauncherSection
           title={t(locale, 'palette.globalPinned')}
           items={filtered.filter((item) => item.kind === 'pinned')}
-          selected={filtered[selectedIndex]}
+          selected={filtered[clampedSelectedIndex]}
           onSelect={selectItem}
-          locale={locale}
         />
-        <LauncherSection
-          title={t(locale, 'palette.globalRecent')}
-          items={filtered.filter((item) => item.kind === 'recent')}
-          selected={filtered[selectedIndex]}
-          onSelect={selectItem}
-          locale={locale}
-        />
-        <LauncherSection
-          title={t(locale, 'palette.globalViews')}
-          items={filtered.filter((item) => item.kind === 'view')}
-          selected={filtered[selectedIndex]}
-          onSelect={selectItem}
-          locale={locale}
-        />
+        {mode === 'full' && (
+          <LauncherSection
+            title={t(locale, 'palette.globalRecent')}
+            items={filtered.filter((item) => item.kind === 'recent')}
+            selected={filtered[clampedSelectedIndex]}
+            onSelect={selectItem}
+          />
+        )}
+        {mode === 'full' && (
+          <LauncherSection
+            title={t(locale, 'palette.globalViews')}
+            items={filtered.filter((item) => item.kind === 'view')}
+            selected={filtered[clampedSelectedIndex]}
+            onSelect={selectItem}
+          />
+        )}
         <div className="flex gap-3 px-3.5 py-1.5" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
           <HintKey keys="↑↓" label={t(locale, 'palette.select')} />
           <HintKey keys="↵" label={t(locale, 'palette.confirm')} />
@@ -160,7 +163,7 @@ export function GlobalLauncher() {
   )
 }
 
-function LauncherSection({ title, items, selected, onSelect, locale }: { title: string; items: LauncherItem[]; selected?: LauncherItem; onSelect: (item: LauncherItem) => void; locale: Locale }) {
+function LauncherSection({ title, items, selected, onSelect }: { title: string; items: LauncherItem[]; selected?: LauncherItem; onSelect: (item: LauncherItem) => void }) {
   if (items.length === 0) return null
   return (
     <div className="py-1">
