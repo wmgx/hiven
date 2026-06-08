@@ -72,6 +72,10 @@ function ViewContent({ viewId }: { viewId: ViewId }) {
 }
 
 export default function App() {
+  return isLauncherWindow() ? <LauncherWindowApp /> : <MainApp />
+}
+
+function MainApp() {
   const activeView = useAppStore((s) => s.activeView)
   const fontSize = useAppStore((s) => s.settings.fontSize)
   const prunePinnedRuntimes = useAppStore((s) => s.prunePinnedRuntimes)
@@ -121,7 +125,10 @@ export default function App() {
     let unlisten: (() => void) | undefined
     import('@tauri-apps/api/event')
       .then(({ listen }) => listen('fluxtext://open-pinned-launcher', () => {
-        useAppStore.getState().openGlobalLauncher('pinned-only')
+        void (async () => {
+          const { invoke } = await import('@tauri-apps/api/core')
+          await invoke('show_launcher_window')
+        })()
       }))
       .then((cleanup) => {
         if (disposed) cleanup()
@@ -137,6 +144,31 @@ export default function App() {
   }, [])
 
   useEffect(() => installGlobalPinnedLauncherHotkeys(), [])
+
+  useEffect(() => {
+    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    import('@tauri-apps/api/event')
+      .then(({ listen }) => listen<{ id: string }>('fluxtext://run-pinned-action', (event) => {
+        void (async () => {
+          const { invoke } = await import('@tauri-apps/api/core')
+          await invoke('show_and_focus_window')
+          useAppStore.getState().openPinnedAction(event.payload.id)
+        })()
+      }))
+      .then((cleanup) => {
+        if (disposed) cleanup()
+        else unlisten = cleanup
+      })
+      .catch((error) => {
+        console.warn('[FluxText] Failed to listen for launcher action event:', error)
+      })
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [])
 
   useEffect(() => {
     const timer = window.setInterval(() => prunePinnedRuntimes(), 30_000)
@@ -170,16 +202,56 @@ export default function App() {
     prevViewRef.current = activeView
   }, [activeView])
 
+  const globalLauncherOverlay = useAppStore((s) => s.globalLauncherOverlay)
+
   return (
-    <div className="flex h-full w-full overflow-hidden" style={{ fontFamily: 'var(--font-mono)', fontSize }}>
-      <Sidebar />
-      <main className="flex-1 flex flex-col overflow-hidden view-container" ref={containerRef}>
-        <ViewErrorBoundary viewId={activeView}>
-          <ViewContent viewId={activeView} />
-        </ViewErrorBoundary>
-      </main>
-      <CommandPalette />
+    <div className="flex h-full w-full overflow-hidden" style={{ fontFamily: 'var(--font-mono)', fontSize, background: globalLauncherOverlay ? 'transparent' : undefined }}>
+      {!globalLauncherOverlay && <Sidebar />}
+      {!globalLauncherOverlay && (
+        <main className="flex-1 flex flex-col overflow-hidden view-container" ref={containerRef}>
+          <ViewErrorBoundary viewId={activeView}>
+            <ViewContent viewId={activeView} />
+          </ViewErrorBoundary>
+        </main>
+      )}
+      {!globalLauncherOverlay && <CommandPalette />}
       <GlobalLauncher />
     </div>
   )
+}
+
+function LauncherWindowApp() {
+  const fontSize = useAppStore((s) => s.settings.fontSize)
+
+  useEffect(() => {
+    const openLauncher = () => useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
+    openLauncher()
+
+    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    import('@tauri-apps/api/event')
+      .then(({ listen }) => listen('fluxtext://launcher-open', openLauncher))
+      .then((cleanup) => {
+        if (disposed) cleanup()
+        else unlisten = cleanup
+      })
+      .catch((error) => {
+        console.warn('[FluxText] Failed to listen for launcher open event:', error)
+      })
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [])
+
+  return (
+    <div className="flex h-full w-full overflow-hidden" style={{ fontFamily: 'var(--font-mono)', fontSize, background: 'transparent' }}>
+      <GlobalLauncher />
+    </div>
+  )
+}
+
+function isLauncherWindow() {
+  return new URLSearchParams(window.location.search).get('window') === 'launcher'
 }

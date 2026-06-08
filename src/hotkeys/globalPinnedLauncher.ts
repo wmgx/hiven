@@ -1,7 +1,6 @@
 import { useAppStore, type GlobalPinnedLauncherShortcut } from '../store'
 
 type GlobalShortcutApi = typeof import('@tauri-apps/plugin-global-shortcut')
-type TauriWindowApi = typeof import('@tauri-apps/api/window')
 type TauriCoreApi = typeof import('@tauri-apps/api/core')
 type TauriEventApi = typeof import('@tauri-apps/api/event')
 
@@ -90,8 +89,7 @@ async function registerAccelerator(
       if (event.state !== 'Pressed') return
       if (shortcutIdentity(useAppStore.getState().settings.globalPinnedLauncherShortcut) !== shortcutIdentity(shortcut)) return
       void (async () => {
-        await focusCurrentWindow()
-        useAppStore.getState().openGlobalLauncher('pinned-only')
+        await showLauncherWindow()
       })()
     })
     currentAccelerator = accelerator
@@ -150,15 +148,12 @@ async function unregisterDoubleCmd() {
   }
 }
 
-async function focusCurrentWindow() {
+async function showLauncherWindow() {
   try {
-    const { getCurrentWindow } = await loadTauriWindowApi()
-    const window = getCurrentWindow()
-    await window.show()
-    await window.unminimize()
-    await window.setFocus()
+    const { invoke } = await loadTauriCoreApi()
+    await invoke('show_launcher_window')
   } catch (error) {
-    console.warn('[FluxText] Failed to focus window from global shortcut:', error)
+    console.warn('[FluxText] Failed to show launcher window from global shortcut:', error)
   }
 }
 
@@ -196,10 +191,6 @@ function formatError(error: unknown) {
 
 function loadGlobalShortcutApi(): Promise<GlobalShortcutApi> {
   return import('@tauri-apps/plugin-global-shortcut')
-}
-
-function loadTauriWindowApi(): Promise<TauriWindowApi> {
-  return import('@tauri-apps/api/window')
 }
 
 function loadTauriCoreApi(): Promise<TauriCoreApi> {

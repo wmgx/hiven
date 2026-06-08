@@ -3,6 +3,10 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import { loader } from '@monaco-editor/react'
 
+if (new URLSearchParams(window.location.search).get('window') === 'launcher') {
+  document.documentElement.dataset.window = 'launcher'
+}
+
 // 禁用浏览器右键菜单
 document.addEventListener('contextmenu', (e) => e.preventDefault())
 

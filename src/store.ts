@@ -167,8 +167,10 @@ interface AppState {
   setCommandPaletteOpen: (open: boolean) => void
   globalLauncherOpen: boolean
   globalLauncherMode: GlobalLauncherMode
+  globalLauncherOverlay: boolean
   setGlobalLauncherOpen: (open: boolean, mode?: GlobalLauncherMode) => void
   openGlobalLauncher: (mode: GlobalLauncherMode) => void
+  openGlobalLauncherOverlay: (mode: GlobalLauncherMode) => void
 
   // Last command status
   lastCommandStatus: LastCommandStatus | null
@@ -377,11 +379,14 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
   globalLauncherOpen: false,
   globalLauncherMode: 'full',
+  globalLauncherOverlay: false,
   setGlobalLauncherOpen: (open, mode) => set((state) => ({
     globalLauncherOpen: open,
     globalLauncherMode: mode ?? (open ? state.globalLauncherMode : 'full'),
+    globalLauncherOverlay: open ? state.globalLauncherOverlay : false,
   })),
   openGlobalLauncher: (mode) => set({ globalLauncherOpen: true, globalLauncherMode: mode }),
+  openGlobalLauncherOverlay: (mode) => set({ globalLauncherOpen: true, globalLauncherMode: mode, globalLauncherOverlay: true }),
 
   // Last command status
   lastCommandStatus: null,
@@ -419,7 +424,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     locale: 'en' as Locale,
     disabledBuiltins: [],
     disabledCustoms: [],
-    globalPinnedLauncherShortcut: { kind: 'double-modifier', modifier: 'Command' },
+    globalPinnedLauncherShortcut: { kind: 'accelerator', accelerator: 'Shift+Cmd+Space' },
   },
   updateSetting: (key, value) =>
     set((state) => {
@@ -471,6 +476,10 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     const persistedState = persisted as Partial<AppState>
     const merged = { ...current, ...persistedState }
     merged.settings = { ...current.settings, ...persistedState.settings }
+    // Migrate: double-modifier is no longer reliable on macOS 15, force to accelerator
+    if (merged.settings.globalPinnedLauncherShortcut?.kind === 'double-modifier') {
+      merged.settings.globalPinnedLauncherShortcut = { kind: 'accelerator', accelerator: 'Shift+Cmd+Space' }
+    }
     merged.settings.globalPinnedLauncherShortcut = stripShortcutRuntimeStatus(
       merged.settings.globalPinnedLauncherShortcut ?? current.settings.globalPinnedLauncherShortcut
     )

@@ -10,8 +10,10 @@
     "beforeBuildCommand": "npm run build"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
+        "label": "main",
         "title": "FluxText",
         "width": 1100,
         "height": 720,
@@ -19,7 +21,25 @@
         "minHeight": 500,
         "resizable": true,
         "fullscreen": false,
-        "decorations": true
+        "decorations": true,
+        "transparent": true
+      },
+      {
+        "label": "launcher",
+        "title": "FluxText Launcher",
+        "url": "index.html?window=launcher",
+        "width": 660,
+        "height": 260,
+        "minWidth": 320,
+        "minHeight": 160,
+        "resizable": false,
+        "fullscreen": false,
+        "decorations": false,
+        "transparent": true,
+        "visible": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "focus": true
       }
     ],
     "security": {

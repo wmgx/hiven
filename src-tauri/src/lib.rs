@@ -2,10 +2,112 @@ use std::fs;
 use std::io::{Cursor, Read};
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::Emitter;
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
 use zip::ZipArchive;
 
 pub mod hotkeys;
+
+#[tauri::command]
+fn show_and_focus_window(app: tauri::AppHandle) {
+    use tauri::Manager;
+    #[cfg(target_os = "macos")]
+    {
+        let app_clone = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            // Activate the NSApplication to bring it to the foreground
+            unsafe {
+                let cls = objc2::runtime::AnyClass::get(c"NSApplication").unwrap();
+                let ns_app: *mut objc2::runtime::AnyObject = objc2::msg_send![cls, sharedApplication];
+                let _: () = objc2::msg_send![ns_app, activateIgnoringOtherApps: true];
+            }
+
+            if let Some(window) = app_clone.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.show();
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+    }
+}
+
+#[tauri::command]
+async fn show_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+
+    let app_clone = app.clone();
+    app.run_on_main_thread(move || {
+        activate_app();
+
+        let window = if let Some(window) = app_clone.get_webview_window("launcher") {
+            window
+        } else {
+            let Some(config) = app_clone
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|window| window.label == "launcher")
+                .cloned() else {
+                    eprintln!("[FluxText] Launcher window config not found");
+                    return;
+                };
+            match tauri::WebviewWindowBuilder::from_config(&app_clone, &config)
+                .and_then(|builder| builder.build())
+            {
+                Ok(window) => window,
+                Err(error) => {
+                    eprintln!("[FluxText] Failed to create launcher window: {}", error);
+                    return;
+                }
+            }
+        };
+
+        if let Err(error) = window.show() {
+            eprintln!("[FluxText] Failed to show launcher window: {}", error);
+            return;
+        }
+        let _ = window.unminimize();
+        let _ = window.center();
+        if let Err(error) = window.set_focus() {
+            eprintln!("[FluxText] Failed to focus launcher window: {}", error);
+        }
+        let _ = window.emit("fluxtext://launcher-open", ());
+    })
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn hide_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+
+    let app_clone = app.clone();
+    app.run_on_main_thread(move || {
+        if let Some(window) = app_clone.get_webview_window("launcher") {
+            if let Err(error) = window.hide() {
+                eprintln!("[FluxText] Failed to hide launcher window: {}", error);
+            }
+        }
+    })
+    .map_err(|error| error.to_string())
+}
+
+fn activate_app() {
+    #[cfg(target_os = "macos")]
+    unsafe {
+        let cls = objc2::runtime::AnyClass::get(c"NSApplication").unwrap();
+        let ns_app: *mut objc2::runtime::AnyObject = objc2::msg_send![cls, sharedApplication];
+        let _: () = objc2::msg_send![ns_app, activateIgnoringOtherApps: true];
+    }
+}
 
 /// 配置根目录: ~/.local/fluxtext
 fn config_dir() -> Result<PathBuf, String> {
@@ -796,6 +898,9 @@ pub fn run() {
             fetch_github_directory,
             hotkeys::register_double_cmd_hotkey,
             hotkeys::unregister_double_cmd_hotkey,
+            show_and_focus_window,
+              show_launcher_window,
+              hide_launcher_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

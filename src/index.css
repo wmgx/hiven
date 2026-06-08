@@ -39,6 +39,12 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+html[data-window='launcher'],
+html[data-window='launcher'] body,
+html[data-window='launcher'] #root {
+  background: transparent;
+}
+
 #root {
   width: 100vw;
   height: 100vh;

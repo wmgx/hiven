@@ -14,7 +14,11 @@ const files = {
   packageJson: read('package.json'),
   globalLauncher: read('src/components/GlobalLauncher.tsx'),
   app: read('src/App.tsx'),
+  main: read('src/main.tsx'),
+  indexCss: read('src/index.css'),
   store: read('src/store.ts'),
+  tauriConfig: read('src-tauri/tauri.conf.json'),
+  tauriCapabilities: read('src-tauri/capabilities/default.json'),
 }
 
 const failures = []
@@ -105,8 +109,38 @@ check('App listens for the Tauri open-pinned-launcher event', () => {
   )
   assertHas(
     files.app,
-    /openGlobalLauncher\(['"]pinned-only['"]\)|setGlobalLauncherMode\(['"]pinned-only['"]\)|setGlobalLauncherOpen\(\s*true\s*,\s*['"]pinned-only['"]\)/,
-    'Tauri event handler should open the launcher in pinned-only mode',
+    /show_launcher_window/,
+    'Tauri event handler should open the standalone launcher window',
+  )
+})
+
+check('Tauri config defines a standalone launcher window', () => {
+  const config = JSON.parse(files.tauriConfig)
+  const launcher = config.app?.windows?.find((window) => window.label === 'launcher')
+  assert.ok(launcher, 'tauri.conf.json should define a launcher window')
+  assert.equal(launcher.visible, false, 'launcher window should not open at startup')
+  assert.equal(launcher.decorations, false, 'launcher window should be undecorated')
+  assert.equal(launcher.transparent, true, 'launcher window should be transparent')
+})
+
+check('launcher window has IPC capability access', () => {
+  const capabilities = JSON.parse(files.tauriCapabilities)
+  assert.ok(
+    capabilities.windows?.includes('launcher'),
+    'default capability should include the launcher window',
+  )
+})
+
+check('launcher route clears the document background', () => {
+  assertHas(
+    files.main,
+    /document\.documentElement\.dataset\.window\s*=\s*['"]launcher['"]/,
+    'main.tsx should mark launcher windows on the document element',
+  )
+  assertHas(
+    files.indexCss,
+    /html\[data-window=['"]launcher['"]\][\s\S]{0,180}background:\s*transparent/,
+    'launcher window document background should be transparent',
   )
 })
 

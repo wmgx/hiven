@@ -4,8 +4,12 @@ import { localized, useAppStore, type ViewId } from '../store'
 import { t, type Locale } from '../i18n'
 import { resolveIcon } from '../utils/resolveIcon'
 import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
+import { applyEffects } from '../workspace/effectRunner'
+import { showToast } from '../workspace/toast'
+import type { InstantSuggestion } from '../workspace/pluginTypes'
 
 type LauncherItem =
+  | { kind: 'instant'; id: string; title: string; subtitle: string; icon?: string; suggestion: InstantSuggestion }
   | { kind: 'pinned'; id: string; title: string; subtitle: string; icon?: string }
   | { kind: 'recent'; id: string; title: string; subtitle: string; icon?: string }
   | { kind: 'view'; id: ViewId; title: string; subtitle: string; icon: ReactNode }
@@ -19,6 +23,7 @@ const viewItems: { id: ViewId; title: string; titleI18n: Partial<Record<Locale, 
 export function GlobalLauncher() {
   const open = useAppStore((s) => s.globalLauncherOpen)
   const mode = useAppStore((s) => s.globalLauncherMode)
+  const overlay = useAppStore((s) => s.globalLauncherOverlay)
   const setOpen = useAppStore((s) => s.setGlobalLauncherOpen)
   const setActiveView = useAppStore((s) => s.setActiveView)
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
@@ -30,6 +35,7 @@ export function GlobalLauncher() {
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+  const standaloneLauncher = isStandaloneLauncherWindow()
 
   useEffect(() => {
     if (!open) return
@@ -76,33 +82,134 @@ export function GlobalLauncher() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return items
-    return items.filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(q))
-  }, [items, query])
+    const base = q ? items.filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(q)) : items
+
+    // Compute instant suggestion when there's a query
+    if (q && q.length <= 500) {
+      const providers = pluginRegistry.getAllInstantSuggestionProviders()
+      const sorted = [...providers].sort(
+        (a, b) => (b.contribution.priority ?? 0) - (a.contribution.priority ?? 0)
+      )
+      for (const { contribution } of sorted) {
+        try {
+          const suggestion = contribution.suggest({ query: q, locale })
+          if (suggestion) {
+            const instantItem: LauncherItem = {
+              kind: 'instant',
+              id: suggestion.id,
+              title: localized(suggestion.title, suggestion.titleI18n, locale),
+              subtitle: localized(suggestion.subtitle ?? '', suggestion.subtitleI18n, locale),
+              icon: suggestion.icon,
+              suggestion,
+            }
+            return [instantItem, ...base]
+          }
+        } catch {
+          // Provider error should not break the launcher
+        }
+      }
+    }
+
+    return base
+  }, [items, query, locale, pluginRegistryVersion])
 
   if (!open) return null
   const clampedSelectedIndex = Math.min(selectedIndex, Math.max(0, filtered.length - 1))
 
+  const closeLauncher = () => {
+    const wasOverlay = overlay
+    if (standaloneLauncher) {
+      void (async () => {
+        try {
+          const { invoke } = await import('@tauri-apps/api/core')
+          await invoke('hide_launcher_window')
+        } catch (error) {
+          console.warn('[FluxText] Failed to hide launcher window:', error)
+        }
+        setOpen(false)
+      })()
+      return
+    }
+    if (wasOverlay) {
+      void (async () => {
+        try {
+          const { getCurrentWindow } = await import('@tauri-apps/api/window')
+          const win = getCurrentWindow()
+          await win.setDecorations(true)
+          await win.hide()
+        } catch (error) {
+          console.warn('[FluxText] Failed to restore launcher window:', error)
+        }
+        setOpen(false)
+      })()
+      return
+    }
+    setOpen(false)
+  }
+
   const selectItem = (item: LauncherItem | undefined) => {
     if (!item) return
-    setOpen(false)
-    if (item.kind === 'pinned') {
-      openPinnedAction(item.id)
+    if (item.kind === 'instant') {
+      void executeInstantSuggestion(item.suggestion, closeLauncher)
       return
     }
-    if (item.kind === 'view') {
-      setActiveView(item.id)
+    if (standaloneLauncher) {
+      void (async () => {
+        try {
+          const { emitTo } = await import('@tauri-apps/api/event')
+          const { invoke } = await import('@tauri-apps/api/core')
+          if (item.kind === 'pinned') {
+            await emitTo('main', 'fluxtext://run-pinned-action', { id: item.id })
+          }
+          await invoke('hide_launcher_window')
+        } catch (error) {
+          console.warn('[FluxText] Failed to select launcher item:', error)
+        }
+        setOpen(false)
+      })()
       return
     }
-    setActiveView('editor')
-    requestAnimationFrame(() => setCommandPaletteOpen(true))
+    if (overlay) {
+      void (async () => {
+        try {
+          const { getCurrentWindow } = await import('@tauri-apps/api/window')
+          const win = getCurrentWindow()
+          await win.setDecorations(true)
+        } catch (error) {
+          console.warn('[FluxText] Failed to restore launcher window:', error)
+        }
+        setOpen(false)
+        if (item.kind === 'pinned') {
+          openPinnedAction(item.id)
+          return
+        }
+        if (item.kind === 'view') {
+          setActiveView(item.id)
+          return
+        }
+        setActiveView('editor')
+        requestAnimationFrame(() => setCommandPaletteOpen(true))
+      })()
+    } else {
+      setOpen(false)
+      if (item.kind === 'pinned') {
+        openPinnedAction(item.id)
+        return
+      }
+      if (item.kind === 'view') {
+        setActiveView(item.id)
+        return
+      }
+      setActiveView('editor')
+      requestAnimationFrame(() => setCommandPaletteOpen(true))
+    }
   }
 
   return (
     <div
-      className="fixed inset-0 flex items-start justify-center pt-[70px] palette-overlay open"
-      style={{ pointerEvents: 'auto', visibility: 'visible', zIndex: 1100 }}
-      onClick={(event) => { if (event.target === event.currentTarget) setOpen(false) }}
+      className={`fixed inset-0 flex items-start justify-center palette-overlay open ${overlay ? 'pt-3' : 'pt-[70px]'}`}
+      style={{ pointerEvents: 'auto', visibility: 'visible', zIndex: 1100, background: overlay ? 'transparent' : undefined }}
+      onClick={(event) => { if (event.target === event.currentTarget) closeLauncher() }}
     >
       <div
         className="w-[min(630px,90vw)] overflow-hidden outline-none palette-panel"
@@ -114,7 +221,7 @@ export function GlobalLauncher() {
         }}
         tabIndex={-1}
         onKeyDown={(event) => {
-          if (event.key === 'Escape') setOpen(false)
+          if (event.key === 'Escape') closeLauncher()
           if (event.key === 'ArrowDown') { event.preventDefault(); setSelectedIndex((index) => Math.min(index + 1, Math.max(0, filtered.length - 1))) }
           if (event.key === 'ArrowUp') { event.preventDefault(); setSelectedIndex((index) => Math.max(index - 1, 0)) }
           if (event.key === 'Enter') { event.preventDefault(); selectItem(filtered[clampedSelectedIndex]) }
@@ -133,7 +240,7 @@ export function GlobalLauncher() {
         </div>
         <LauncherSection
           title={t(locale, 'palette.globalPinned')}
-          items={filtered.filter((item) => item.kind === 'pinned')}
+          items={filtered.filter((item) => item.kind === 'instant' || item.kind === 'pinned')}
           selected={filtered[clampedSelectedIndex]}
           onSelect={selectItem}
         />
@@ -161,6 +268,29 @@ export function GlobalLauncher() {
       </div>
     </div>
   )
+}
+
+async function executeInstantSuggestion(suggestion: InstantSuggestion, onDone: () => void) {
+  const action = suggestion.action
+  try {
+    if (action.type === 'copy') {
+      const { writeText } = await import('@tauri-apps/plugin-clipboard-manager')
+      await writeText(action.text)
+      showToast('Copied', 'success')
+    } else if (action.type === 'insert') {
+      applyEffects([{ type: 'text.replace', target: 'active-input', text: action.text } as never])
+    } else if (action.type === 'effects') {
+      applyEffects(action.effects)
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    showToast(msg, 'error')
+  }
+  onDone()
+}
+
+function isStandaloneLauncherWindow() {
+  return new URLSearchParams(window.location.search).get('window') === 'launcher'
 }
 
 function LauncherSection({ title, items, selected, onSelect }: { title: string; items: LauncherItem[]; selected?: LauncherItem; onSelect: (item: LauncherItem) => void }) {
@@ -192,7 +322,9 @@ function LauncherSection({ title, items, selected, onSelect }: { title: string; 
             >
               {item.kind === 'pinned'
                 ? resolveIcon(item.icon, 14, item.title) || <Pin size={14} />
-                : item.kind === 'view' ? item.icon : resolveIcon(item.icon, 14, item.title)}
+                : item.kind === 'instant'
+                  ? resolveIcon(item.icon, 14, item.title)
+                  : item.kind === 'view' ? item.icon : resolveIcon(item.icon, 14, item.title)}
             </span>
             <span className="min-w-0 flex-1">
               <span className="block text-[13px] font-medium truncate">{item.title}</span>

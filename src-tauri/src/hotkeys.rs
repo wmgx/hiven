@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
 
 const OPEN_PINNED_LAUNCHER_EVENT: &str = "fluxtext://open-pinned-launcher";
 const DOUBLE_CMD_HOTKEY_ERROR_EVENT: &str = "fluxtext://double-cmd-hotkey-error";
@@ -164,125 +164,124 @@ fn register_double_cmd_hotkey_impl(_app: tauri::AppHandle) -> Result<HotkeyRegis
 #[cfg(target_os = "macos")]
 fn start_double_cmd_listener(state: Arc<DoubleCmdHotkeyState>, app: tauri::AppHandle) {
     std::thread::spawn(move || {
+        use std::cell::RefCell;
+        use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop};
+        use core_graphics::event::{
+            CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType,
+            CGEventFlags,
+        };
+
         let callback_app = app.clone();
         let callback_state = Arc::clone(&state);
-        let mut runtime = DoubleCmdRuntime::new(
-            Duration::from_millis(DEFAULT_DOUBLE_CMD_THRESHOLD_MS),
-            Instant::now(),
-        );
-        let listen_result = rdev::listen(move |event| {
-            let enabled = callback_state.enabled.lock().map(|value| *value).unwrap_or(false);
-            if !enabled {
-                runtime.reset();
-                return;
-            }
-            if runtime.handle_rdev_event(event) {
-                open_pinned_launcher(&callback_app);
-            }
+
+        struct ListenerState {
+            detector: DoubleCmdDetector,
+            started_at: Instant,
+            meta_was_down: bool,
+        }
+
+        let listener_state = RefCell::new(ListenerState {
+            detector: DoubleCmdDetector::new(Duration::from_millis(DEFAULT_DOUBLE_CMD_THRESHOLD_MS)),
+            started_at: Instant::now(),
+            meta_was_down: false,
         });
-        if let Err(error) = listen_result {
-            if let Ok(mut listener_running) = state.listener_running.lock() {
-                *listener_running = false;
+
+        let tap = CGEventTap::new(
+            CGEventTapLocation::HID,
+            CGEventTapPlacement::HeadInsertEventTap,
+            CGEventTapOptions::ListenOnly,
+            vec![
+                CGEventType::KeyDown,
+                CGEventType::KeyUp,
+                CGEventType::FlagsChanged,
+            ],
+            move |_proxy, event_type, event| {
+                let enabled = callback_state.enabled.lock().map(|v| *v).unwrap_or(false);
+                let mut s = listener_state.borrow_mut();
+                if !enabled {
+                    s.detector.reset();
+                    s.meta_was_down = false;
+                    return None;
+                }
+
+                let timestamp = s.started_at.elapsed();
+
+                if matches!(event_type, CGEventType::FlagsChanged) {
+                    let flags = event.get_flags();
+                    let meta_now = flags.contains(CGEventFlags::CGEventFlagCommand);
+                    let has_other_modifiers = flags.intersects(
+                        CGEventFlags::CGEventFlagShift
+                        | CGEventFlags::CGEventFlagControl
+                        | CGEventFlags::CGEventFlagAlternate
+                    );
+
+                    if meta_now && !s.meta_was_down {
+                        let triggered = s.detector.handle_event(KeyEvent {
+                            key: Key::Meta,
+                            phase: KeyPhase::Down,
+                            timestamp,
+                            modifiers: Modifiers { meta: true, other: has_other_modifiers },
+                        });
+                        if triggered {
+                            open_pinned_launcher(&callback_app);
+                        }
+                    } else if !meta_now && s.meta_was_down {
+                        s.detector.handle_event(KeyEvent {
+                            key: Key::Meta,
+                            phase: KeyPhase::Up,
+                            timestamp,
+                            modifiers: Modifiers { meta: false, other: has_other_modifiers },
+                        });
+                    } else if !meta_now && !s.meta_was_down {
+                        // Another modifier changed while meta not held — treat as other key
+                        s.detector.handle_event(KeyEvent {
+                            key: Key::Other,
+                            phase: KeyPhase::Down,
+                            timestamp,
+                            modifiers: Modifiers { meta: false, other: true },
+                        });
+                    }
+                    s.meta_was_down = meta_now;
+                } else if matches!(event_type, CGEventType::KeyDown) {
+                    // A real key was pressed between Cmd taps — invalidate
+                    s.detector.reset();
+                }
+                None
+            },
+        );
+
+        match tap {
+            Ok(tap) => {
+                unsafe {
+                    let loop_source = tap.mach_port.create_runloop_source(0).expect("failed to create runloop source");
+                    let run_loop = CFRunLoop::get_current();
+                    run_loop.add_source(&loop_source, kCFRunLoopCommonModes);
+                    tap.enable();
+                    CFRunLoop::run_current();
+                }
+                if let Ok(mut listener_running) = state.listener_running.lock() {
+                    *listener_running = false;
+                }
             }
-            if let Ok(mut enabled) = state.enabled.lock() {
-                *enabled = false;
+            Err(_) => {
+                eprintln!("[FluxText] Failed to create CGEventTap! Check Accessibility permissions.");
+                if let Ok(mut listener_running) = state.listener_running.lock() {
+                    *listener_running = false;
+                }
+                if let Ok(mut enabled) = state.enabled.lock() {
+                    *enabled = false;
+                }
+                let _ = app.emit(
+                    DOUBLE_CMD_HOTKEY_ERROR_EVENT,
+                    serde_json::json!({ "error": "Failed to create CGEventTap. Check Accessibility permissions." }),
+                );
             }
-            let _ = app.emit(
-                DOUBLE_CMD_HOTKEY_ERROR_EVENT,
-                serde_json::json!({ "error": format!("{:?}", error) }),
-            );
         }
     });
 }
 
 #[cfg(target_os = "macos")]
-struct DoubleCmdRuntime {
-    detector: DoubleCmdDetector,
-    started_at: Instant,
-    other_keys_down: usize,
-}
-
-#[cfg(target_os = "macos")]
-impl DoubleCmdRuntime {
-    fn new(threshold: Duration, started_at: Instant) -> Self {
-        Self {
-            detector: DoubleCmdDetector::new(threshold),
-            started_at,
-            other_keys_down: 0,
-        }
-    }
-
-    fn handle_rdev_event(&mut self, event: rdev::Event) -> bool {
-        let timestamp = self.started_at.elapsed();
-        match event.event_type {
-            rdev::EventType::KeyPress(key) if is_meta_key(key) => {
-                self.detector.handle_event(KeyEvent {
-                    key: Key::Meta,
-                    phase: KeyPhase::Down,
-                    timestamp,
-                    modifiers: Modifiers {
-                        meta: true,
-                        other: self.other_keys_down > 0,
-                    },
-                })
-            }
-            rdev::EventType::KeyRelease(key) if is_meta_key(key) => {
-                self.detector.handle_event(KeyEvent {
-                    key: Key::Meta,
-                    phase: KeyPhase::Up,
-                    timestamp,
-                    modifiers: Modifiers {
-                        meta: false,
-                        other: self.other_keys_down > 0,
-                    },
-                })
-            }
-            rdev::EventType::KeyPress(_) => {
-                self.other_keys_down = self.other_keys_down.saturating_add(1);
-                self.detector.handle_event(KeyEvent {
-                    key: Key::Other,
-                    phase: KeyPhase::Down,
-                    timestamp,
-                    modifiers: Modifiers {
-                        meta: false,
-                        other: true,
-                    },
-                })
-            }
-            rdev::EventType::KeyRelease(_) => {
-                self.other_keys_down = self.other_keys_down.saturating_sub(1);
-                self.detector.handle_event(KeyEvent {
-                    key: Key::Other,
-                    phase: KeyPhase::Up,
-                    timestamp,
-                    modifiers: Modifiers {
-                        meta: false,
-                        other: self.other_keys_down > 0,
-                    },
-                })
-            }
-            _ => false,
-        }
-    }
-
-    fn reset(&mut self) {
-        self.detector.reset();
-        self.other_keys_down = 0;
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn is_meta_key(key: rdev::Key) -> bool {
-    matches!(key, rdev::Key::MetaLeft | rdev::Key::MetaRight)
-}
-
-#[cfg(target_os = "macos")]
 fn open_pinned_launcher(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
-    }
     let _ = app.emit(OPEN_PINNED_LAUNCHER_EVENT, ());
 }
 
