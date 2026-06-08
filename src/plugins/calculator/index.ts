@@ -175,8 +175,7 @@ const definition: PluginDefinition = {
   instantSuggestions: [
     {
       id: 'calculator.inline',
-      title: 'Calculator',
-      titleI18n: { zh: '计算器' },
+      title: 'provider.title',
       priority: 100,
       suggest(ctx: InstantSuggestionContext): InstantSuggestion | null {
         const expr = ctx.query.trim()
@@ -186,10 +185,10 @@ const definition: PluginDefinition = {
         return {
           id: `calculator:${expr}`,
           title: `${expr} = ${result}`,
-          subtitle: ctx.locale === 'zh' ? '计算器' : 'Calculator',
+          subtitle: ctx.t('provider.subtitle'),
           value: result,
           icon: 'Calculator',
-          actionLabel: ctx.locale === 'zh' ? '复制答案' : 'Copy Answer',
+          actionLabel: ctx.t('provider.actionLabel'),
           action: { type: 'copy', text: result },
         }
       },

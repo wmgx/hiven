@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { LayoutPanelLeft, Pin, Puzzle, Search, Settings } from 'lucide-react'
 import { localized, useAppStore, type ViewId } from '../store'
 import { t, type Locale } from '../i18n'
+import { makePluginT } from '../i18n/pluginI18nRegistry'
 import { resolveIcon } from '../utils/resolveIcon'
 import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
 import { applyEffects } from '../workspace/effectRunner'
@@ -90,9 +91,10 @@ export function GlobalLauncher() {
       const sorted = [...providers].sort(
         (a, b) => (b.contribution.priority ?? 0) - (a.contribution.priority ?? 0)
       )
-      for (const { contribution } of sorted) {
+      for (const { contribution, meta } of sorted) {
         try {
-          const suggestion = contribution.suggest({ query: q, locale })
+          const pluginT = makePluginT(meta.pluginId, locale)
+          const suggestion = contribution.suggest({ query: q, locale, t: pluginT })
           if (suggestion) {
             const instantItem: LauncherItem = {
               kind: 'instant',

@@ -1,7 +1,7 @@
 {
-  "dateTime.title": "Date & Time Assistant",
-  "dateTime.subtitle": "Date & Time Assistant",
-  "dateTime.copyDateTime": "Copy Date & Time",
-  "dateTime.copyDate": "Copy Date",
-  "dateTime.copyTimestamp": "Copy Timestamp"
+  "provider.title": "Date & Time Assistant",
+  "provider.subtitle": "Date & Time Assistant",
+  "action.copyDateTime": "Copy Date & Time",
+  "action.copyDate": "Copy Date",
+  "action.copyTimestamp": "Copy Timestamp"
 }

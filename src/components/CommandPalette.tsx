@@ -12,6 +12,7 @@ import type { CommandParam, InputSlot, PaneInput, InstantSuggestion, InstantSugg
 import type { ResolvedInputs } from '../workspace/pluginTypes'
 import { Search, Check, Pin } from 'lucide-react'
 import { t, type Locale } from '../i18n'
+import { makePluginT } from '../i18n/pluginI18nRegistry'
 import { readText } from '@tauri-apps/plugin-clipboard-manager'
 import { resolveIcon } from '../utils/resolveIcon'
 import { pinyin } from 'pinyin-pro'
@@ -976,9 +977,10 @@ function computeInstantSuggestion(query: string, locale: Locale): PaletteItem | 
     (a, b) => (b.contribution.priority ?? 0) - (a.contribution.priority ?? 0)
   )
 
-  for (const { contribution, isDev } of sorted) {
+  for (const { contribution, meta, isDev } of sorted) {
     try {
-      const suggestion = contribution.suggest({ query, locale })
+      const pluginT = makePluginT(meta.pluginId, locale)
+      const suggestion = contribution.suggest({ query, locale, t: pluginT })
       if (suggestion) {
         return {
           kind: 'instant',

@@ -14,6 +14,7 @@ import type {
   CommandContribution,
   CommandParam,
   InputSlot,
+  InstantSuggestionProvider,
   PanelContributionV2,
   RendererContribution,
   ToolbarContribution,
@@ -167,11 +168,22 @@ function localizeToolbar(messages: PluginMessages, item: ToolbarContribution): T
   return { ...item, title: title.text, titleI18n: { ...title.i18n, ...item.titleI18n } }
 }
 
+function localizeInstantSuggestion(messages: PluginMessages, provider: InstantSuggestionProvider): InstantSuggestionProvider {
+  const next: InstantSuggestionProvider = { ...provider }
+  const title = localizeKey(messages, provider.title)
+  if (title) {
+    next.title = title.text
+    next.titleI18n = { ...title.i18n, ...provider.titleI18n }
+  }
+  return next
+}
+
 export type LocalizedContributions = {
   commands: CommandContribution[]
   renderers: RendererContribution[]
   panels: PanelContributionV2[]
   toolbar: ToolbarContribution[]
+  instantSuggestions: InstantSuggestionProvider[]
 }
 
 /**
@@ -186,6 +198,7 @@ export function localizeContributions(
     renderers?: RendererContribution[]
     panels?: PanelContributionV2[]
     toolbar?: ToolbarContribution[]
+    instantSuggestions?: InstantSuggestionProvider[]
   },
 ): LocalizedContributions {
   const messages = registry.get(pluginId) ?? {}
@@ -194,5 +207,6 @@ export function localizeContributions(
     renderers: (contributions.renderers ?? []).map((r) => localizeRenderer(messages, r)),
     panels: (contributions.panels ?? []).map((p) => localizePanel(messages, p)),
     toolbar: (contributions.toolbar ?? []).map((tb) => localizeToolbar(messages, tb)),
+    instantSuggestions: (contributions.instantSuggestions ?? []).map((isp) => localizeInstantSuggestion(messages, isp)),
   }
 }

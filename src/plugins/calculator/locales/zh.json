@@ -1,5 +1,5 @@
 {
-  "calculator.title": "计算器",
-  "calculator.subtitle": "计算器",
-  "calculator.actionLabel": "复制答案"
+  "provider.title": "计算器",
+  "provider.subtitle": "计算器",
+  "provider.actionLabel": "复制答案"
 }

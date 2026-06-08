@@ -190,6 +190,8 @@ export type ToolbarContribution = {
 export type InstantSuggestionContext = {
   query: string
   locale: Locale
+  /** Plugin-scoped translate function. Resolves keys from the plugin's locales/ dictionaries. */
+  t: (key: string, vars?: Record<string, string | number>) => string
 }
 
 /** Action to perform when user selects an instant suggestion */

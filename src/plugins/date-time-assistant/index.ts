@@ -20,8 +20,7 @@ type ParsedResult = {
   kind: 'datetime' | 'date' | 'timestamp'
   display: string
   value: string
-  actionLabel: string
-  actionLabelI18n: { zh: string }
+  actionLabelKey: string
 }
 
 function parseDateTimeQuery(query: string, now: Date): ParsedResult | null {
@@ -33,8 +32,7 @@ function parseDateTimeQuery(query: string, now: Date): ParsedResult | null {
       kind: 'datetime',
       display: formatDateTime(now),
       value: formatDateTime(now),
-      actionLabel: 'Copy Date & Time',
-      actionLabelI18n: { zh: '复制日期时间' },
+      actionLabelKey: 'action.copyDateTime',
     }
   }
 
@@ -45,8 +43,7 @@ function parseDateTimeQuery(query: string, now: Date): ParsedResult | null {
       kind: 'timestamp',
       display: ts,
       value: ts,
-      actionLabel: 'Copy Timestamp',
-      actionLabelI18n: { zh: '复制时间戳' },
+      actionLabelKey: 'action.copyTimestamp',
     }
   }
 
@@ -65,8 +62,7 @@ function parseDateTimeQuery(query: string, now: Date): ParsedResult | null {
       kind: 'datetime',
       display: formatDateTime(tomorrow),
       value: formatDateTime(tomorrow),
-      actionLabel: 'Copy Date & Time',
-      actionLabelI18n: { zh: '复制日期时间' },
+      actionLabelKey: 'action.copyDateTime',
     }
   }
 
@@ -82,8 +78,7 @@ function parseDateTimeQuery(query: string, now: Date): ParsedResult | null {
       kind: 'date',
       display: formatDate(baseDate),
       value: formatDate(baseDate),
-      actionLabel: 'Copy Date',
-      actionLabelI18n: { zh: '复制日期' },
+      actionLabelKey: 'action.copyDate',
     }
   }
 
@@ -98,8 +93,7 @@ function parseDateTimeQuery(query: string, now: Date): ParsedResult | null {
         kind: 'datetime',
         display: formatDateTime(date),
         value: formatDateTime(date),
-        actionLabel: 'Copy Date & Time',
-        actionLabelI18n: { zh: '复制日期时间' },
+        actionLabelKey: 'action.copyDateTime',
       }
     }
     if (num.length === 13) {
@@ -109,8 +103,7 @@ function parseDateTimeQuery(query: string, now: Date): ParsedResult | null {
         kind: 'datetime',
         display: formatDateTime(date),
         value: formatDateTime(date),
-        actionLabel: 'Copy Date & Time',
-        actionLabelI18n: { zh: '复制日期时间' },
+        actionLabelKey: 'action.copyDateTime',
       }
     }
     // Invalid length for timestamp
@@ -128,8 +121,7 @@ function parseDateTimeQuery(query: string, now: Date): ParsedResult | null {
       kind: 'datetime',
       display: formatDateTime(date),
       value: formatDateTime(date),
-      actionLabel: 'Copy Date & Time',
-      actionLabelI18n: { zh: '复制日期时间' },
+      actionLabelKey: 'action.copyDateTime',
     }
   }
 
@@ -143,8 +135,7 @@ function parseDateTimeQuery(query: string, now: Date): ParsedResult | null {
       kind: 'datetime',
       display: formatDateTime(date),
       value: formatDateTime(date),
-      actionLabel: 'Copy Date & Time',
-      actionLabelI18n: { zh: '复制日期时间' },
+      actionLabelKey: 'action.copyDateTime',
     }
   }
 
@@ -157,8 +148,7 @@ const definition: PluginDefinition = {
   instantSuggestions: [
     {
       id: 'date-time.assistant',
-      title: 'Date & Time Assistant',
-      titleI18n: { zh: '时间助手' },
+      title: 'provider.title',
       priority: 95,
       suggest(ctx: InstantSuggestionContext): InstantSuggestion | null {
         const parsed = parseDateTimeQuery(ctx.query, new Date())
@@ -167,10 +157,10 @@ const definition: PluginDefinition = {
         return {
           id: `date-time:${parsed.kind}:${ctx.query.trim()}`,
           title: `${ctx.query.trim()} → ${parsed.display}`,
-          subtitle: ctx.locale === 'zh' ? '时间助手' : 'Date & Time Assistant',
+          subtitle: ctx.t('provider.subtitle'),
           value: parsed.value,
           icon: 'Clock',
-          actionLabel: ctx.locale === 'zh' ? parsed.actionLabelI18n.zh : parsed.actionLabel,
+          actionLabel: ctx.t(parsed.actionLabelKey),
           action: { type: 'copy', text: parsed.value },
         }
       },
