@@ -1,6 +1,6 @@
 {
   "pluginId": "sum",
-  "displayName": "Sum",
+  "displayName": "Sum Numbers",
   "displayNameI18n": { "zh": "求和" },
   "version": "1.0.0",
   "capabilities": ["command"]

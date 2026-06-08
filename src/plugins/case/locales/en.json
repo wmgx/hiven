@@ -1,5 +1,5 @@
 {
-  "command.run.title": "Case Convert",
+  "command.run.title": "Change Case",
   "command.run.description": "Convert text case",
   "input.text.label": "Input",
   "param.mode.label": "Convert To",

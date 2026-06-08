@@ -1,7 +1,7 @@
 {
   "pluginId": "extract",
-  "displayName": "Extract Patterns",
-  "displayNameI18n": { "zh": "提取模式" },
+  "displayName": "Regex Extract",
+  "displayNameI18n": { "zh": "正则提取" },
   "version": "1.0.0",
   "capabilities": ["command"]
 }

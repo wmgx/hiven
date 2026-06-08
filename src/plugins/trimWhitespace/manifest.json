@@ -1,7 +1,7 @@
 {
   "pluginId": "trim-whitespace",
   "displayName": "Trim Whitespace",
-  "displayNameI18n": { "zh": "去除空白" },
+  "displayNameI18n": { "zh": "去除首尾空白" },
   "version": "1.0.0",
   "capabilities": ["command"]
 }

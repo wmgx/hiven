@@ -1,5 +1,5 @@
 {
-  "command.run.title": "Number Base Convert",
+  "command.run.title": "Number Base Converter",
   "command.run.description": "Convert between number bases",
   "input.text.label": "Input",
   "param.mode.label": "Mode",

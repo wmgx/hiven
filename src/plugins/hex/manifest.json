@@ -1,6 +1,6 @@
 {
   "pluginId": "hex",
-  "displayName": "Number Base Convert",
+  "displayName": "Number Base Converter",
   "displayNameI18n": { "zh": "进制转换" },
   "version": "1.0.0",
   "capabilities": ["command"]

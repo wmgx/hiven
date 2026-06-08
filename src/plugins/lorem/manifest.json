@@ -1,7 +1,0 @@
-{
-  "pluginId": "lorem",
-  "displayName": "Lorem Ipsum",
-  "displayNameI18n": { "zh": "Lorem Ipsum" },
-  "version": "1.0.0",
-  "capabilities": ["command"]
-}

@@ -98,12 +98,6 @@
       "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
     },
     {
-      "pluginId": "lorem",
-      "dir": "lorem",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
-    },
-    {
       "pluginId": "mdquote",
       "dir": "mdquote",
       "version": "1.0.0",

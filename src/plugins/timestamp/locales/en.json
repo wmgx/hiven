@@ -1,5 +1,5 @@
 {
-  "command.run.title": "Timestamp Convert",
+  "command.run.title": "Timestamp Converter",
   "command.run.description": "Convert between timestamp and date",
   "input.text.label": "Input",
   "param.mode.label": "Mode",

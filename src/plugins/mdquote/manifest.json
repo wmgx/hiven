@@ -1,6 +1,6 @@
 {
   "pluginId": "mdquote",
-  "displayName": "Markdown Quote",
+  "displayName": "Markdown Blockquote",
   "displayNameI18n": { "zh": "Markdown 引用" },
   "version": "1.0.0",
   "capabilities": ["command"]

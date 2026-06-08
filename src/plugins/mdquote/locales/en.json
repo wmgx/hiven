@@ -1,6 +1,6 @@
 {
-  "command.run.title": "Markdown Quote",
-  "command.run.description": "Add or remove Markdown quote prefix",
+  "command.run.title": "Markdown Blockquote",
+  "command.run.description": "Add or remove Markdown blockquote prefix",
   "input.text.label": "Input",
   "param.mode.label": "Mode",
   "param.mode.option.add.label": "Add",

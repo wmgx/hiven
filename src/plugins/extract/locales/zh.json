@@ -1,5 +1,5 @@
 {
-  "command.run.title": "提取模式",
+  "command.run.title": "正则提取",
   "command.run.description": "提取匹配正则的行或内容",
   "input.text.label": "输入",
   "param.pattern.label": "正则表达式",

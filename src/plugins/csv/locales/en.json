@@ -1,5 +1,5 @@
 {
-  "command.run.title": "CSV / TSV Convert",
+  "command.run.title": "CSV / TSV Converter",
   "command.run.description": "Convert between CSV/TSV and JSON",
   "input.text.label": "Input",
   "param.mode.label": "Mode",

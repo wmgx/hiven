@@ -1,5 +1,5 @@
 {
-  "command.run.title": "Add/Remove Slashes",
+  "command.run.title": "Escape / Unescape",
   "command.run.description": "Escape or unescape special characters",
   "input.text.label": "Input",
   "param.mode.label": "Mode",

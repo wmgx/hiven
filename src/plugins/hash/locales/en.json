@@ -1,5 +1,5 @@
 {
-  "command.run.title": "Hash",
+  "command.run.title": "Hash Digest",
   "command.run.description": "Calculate hash digest",
   "input.text.label": "Input",
   "param.algorithm.label": "Algorithm",

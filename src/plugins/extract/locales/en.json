@@ -1,5 +1,5 @@
 {
-  "command.run.title": "Extract Patterns",
+  "command.run.title": "Regex Extract",
   "command.run.description": "Extract lines or patterns matching regex",
   "input.text.label": "Input",
   "param.pattern.label": "Regex Pattern",
