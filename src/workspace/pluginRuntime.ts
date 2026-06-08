@@ -288,7 +288,7 @@ async function loadDevPluginEntry(folderPath: string, entryFile: string): Promis
 function isPluginDefinition(value: unknown): value is PluginDefinition {
   if (!value || typeof value !== 'object') return false
   const v = value as Record<string, unknown>
-  return Array.isArray(v.commands) || Array.isArray(v.renderers) || Array.isArray(v.panels) || Array.isArray(v.toolbar)
+  return Array.isArray(v.commands) || Array.isArray(v.renderers) || Array.isArray(v.panels) || Array.isArray(v.toolbar) || Array.isArray(v.instantSuggestions)
 }
 
 /**
@@ -422,7 +422,8 @@ export async function enablePlugin(pluginId: string): Promise<void> {
       localized.commands,
       localized.renderers,
       localized.panels,
-      localized.toolbar
+      localized.toolbar,
+      definition.instantSuggestions ?? []
     )
 
     updatePluginStatus(pluginId, 'enabled')
@@ -493,7 +494,8 @@ export async function reloadPlugin(pluginId: string): Promise<void> {
       localized.commands,
       localized.renderers,
       localized.panels,
-      localized.toolbar
+      localized.toolbar,
+      definition.instantSuggestions ?? []
     )
 
     // Update stored capabilities
@@ -584,7 +586,8 @@ export async function sideloadDevPlugin(folderPath: string): Promise<DevPlugin> 
       localized.commands,
       localized.renderers,
       localized.panels,
-      localized.toolbar
+      localized.toolbar,
+      definition.instantSuggestions ?? []
     )
 
     addDevPlugin(devRecord)
@@ -629,7 +632,8 @@ export async function reloadDevPlugin(pluginId: string): Promise<void> {
       localized.commands,
       localized.renderers,
       localized.panels,
-      localized.toolbar
+      localized.toolbar,
+      definition.instantSuggestions ?? []
     )
 
     updateDevPluginStatus(pluginId, 'active')

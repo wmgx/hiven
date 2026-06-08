@@ -47,9 +47,10 @@ export function definePlugin(definition: PluginDefinition): PluginDefinition {
     Array.isArray(definition.commands) ||
     Array.isArray(definition.renderers) ||
     Array.isArray(definition.panels) ||
-    Array.isArray(definition.toolbar)
+    Array.isArray(definition.toolbar) ||
+    Array.isArray(definition.instantSuggestions)
   if (!hasContributions) {
-    throw new Error('[definePlugin] Plugin must declare at least one of commands/renderers/panels/toolbar')
+    throw new Error('[definePlugin] Plugin must declare at least one of commands/renderers/panels/toolbar/instantSuggestions')
   }
 
   return definition

@@ -184,6 +184,43 @@ export type ToolbarContribution = {
   order?: number
 }
 
+// ─── Instant Suggestion Contribution ─────────────────────────────────────────
+
+/** Context passed to an instant suggestion provider */
+export type InstantSuggestionContext = {
+  query: string
+  locale: Locale
+}
+
+/** Action to perform when user selects an instant suggestion */
+export type InstantSuggestionAction =
+  | { type: 'copy'; text: string }
+  | { type: 'insert'; text: string }
+  | { type: 'effects'; effects: FluxEffect[] }
+
+/** A single instant suggestion result */
+export type InstantSuggestion = {
+  id: string
+  title: string
+  titleI18n?: Partial<Record<Locale, string>>
+  subtitle?: string
+  subtitleI18n?: Partial<Record<Locale, string>>
+  value: string
+  icon?: string
+  actionLabel?: string
+  actionLabelI18n?: Partial<Record<Locale, string>>
+  action: InstantSuggestionAction
+}
+
+/** An instant suggestion provider contributed by a plugin */
+export type InstantSuggestionProvider = {
+  id: string
+  title: string
+  titleI18n?: Partial<Record<Locale, string>>
+  priority?: number
+  suggest(ctx: InstantSuggestionContext): InstantSuggestion | null
+}
+
 // ─── Plugin Definition ────────────────────────────────────────────────────────
 
 /** The full plugin definition returned by definePlugin */
@@ -192,6 +229,7 @@ export type PluginDefinition = {
   renderers?: RendererContribution[]
   panels?: PanelContributionV2[]
   toolbar?: ToolbarContribution[]
+  instantSuggestions?: InstantSuggestionProvider[]
 }
 
 // ─── Plugin Manifest ──────────────────────────────────────────────────────────
