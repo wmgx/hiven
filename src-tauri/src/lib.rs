@@ -5,6 +5,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
 use zip::ZipArchive;
 
+pub mod hotkeys;
+
 /// 配置根目录: ~/.local/fluxtext
 fn config_dir() -> Result<PathBuf, String> {
     dirs_next_home()
@@ -753,6 +755,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             // 构建 Edit 子菜单（macOS 需要原生 Edit 菜单才能让剪贴板快捷键生效）
             // 注意：不加 Undo/Redo，否则会拦截 Monaco 自己的撤销栈
@@ -791,6 +794,8 @@ pub fn run() {
             install_plugin_zip,
             install_plugin_zip_url,
             fetch_github_directory,
+            hotkeys::register_double_cmd_hotkey,
+            hotkeys::unregister_double_cmd_hotkey,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -12,6 +12,7 @@ import { CommandPalette } from './components/CommandPalette'
 import { GlobalLauncher } from './components/GlobalLauncher'
 import { loadInstalledPluginsFromStore } from './workspace/pluginRuntime'
 import { registerBundledPluginPackages } from './workspace/bundledPluginLoader'
+import { installGlobalPinnedLauncherHotkeys } from './hotkeys/globalPinnedLauncher'
 
 // Register built-in panels
 import './panels/register'
@@ -101,7 +102,7 @@ export default function App() {
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         e.stopPropagation()
-        useAppStore.getState().setGlobalLauncherOpen(true)
+        useAppStore.getState().openGlobalLauncher('full')
         return
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -113,6 +114,29 @@ export default function App() {
     window.addEventListener('keydown', handler, true)
     return () => window.removeEventListener('keydown', handler, true)
   }, [])
+
+  useEffect(() => {
+    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    import('@tauri-apps/api/event')
+      .then(({ listen }) => listen('fluxtext://open-pinned-launcher', () => {
+        useAppStore.getState().openGlobalLauncher('pinned-only')
+      }))
+      .then((cleanup) => {
+        if (disposed) cleanup()
+        else unlisten = cleanup
+      })
+      .catch((error) => {
+        console.warn('[FluxText] Failed to listen for pinned launcher event:', error)
+      })
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [])
+
+  useEffect(() => installGlobalPinnedLauncherHotkeys(), [])
 
   useEffect(() => {
     const timer = window.setInterval(() => prunePinnedRuntimes(), 30_000)

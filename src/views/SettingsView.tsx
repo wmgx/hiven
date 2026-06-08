@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { KeyboardEvent, ReactNode } from 'react'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { getVersion } from '@tauri-apps/api/app'
-import { Check, ChevronDown, Download, Info, Languages, Layout, Minus, Plug, Plus, RefreshCw, SlidersHorizontal } from 'lucide-react'
-import { useAppStore } from '../store'
+import { Check, ChevronDown, Download, Info, Keyboard, Languages, Layout, Minus, Plug, Plus, RefreshCw, SlidersHorizontal } from 'lucide-react'
+import { useAppStore, type GlobalPinnedLauncherShortcut } from '../store'
 import { t } from '../i18n'
 import { checkBuiltinPluginsUpdate } from '../configInit'
 
@@ -72,6 +72,14 @@ export function SettingsView() {
           <SettingRow label={t(locale, 'settings.persistPinnedTombstone')} info={t(locale, 'settings.persistPinnedTombstoneInfo')}>
             <Toggle value={settings.persistPinnedTombstone} onChange={(value) => updateSetting('persistPinnedTombstone', value)} />
           </SettingRow>
+        </SettingCard>
+
+        <SettingCard icon={<Keyboard size={16} />} title={t(locale, 'settings.hotkeys')}>
+          <HotkeySettings
+            shortcut={settings.globalPinnedLauncherShortcut ?? { kind: 'double-modifier', modifier: 'Command' }}
+            onChange={(value) => updateSetting('globalPinnedLauncherShortcut', value)}
+            locale={locale}
+          />
         </SettingCard>
 
         <SettingCard icon={<Download size={16} />} title={t(locale, 'update.title')}>
@@ -151,6 +159,129 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (value: boolean
       <div className="w-3 h-3 rounded-full bg-white absolute top-0.5 transition-[left] duration-150" style={{ left: value ? '14px' : '2px' }} />
     </div>
   )
+}
+
+function HotkeySettings({
+  shortcut,
+  onChange,
+  locale,
+}: {
+  shortcut: GlobalPinnedLauncherShortcut
+  onChange: (value: GlobalPinnedLauncherShortcut) => void
+  locale: 'zh' | 'en'
+}) {
+  const [isRecording, setIsRecording] = useState(false)
+  const [error, setError] = useState('')
+  const recorderRef = useRef<HTMLDivElement>(null)
+  const registrationStatus = shortcut.registrationError
+    ? `${t(locale, 'settings.hotkeyStatus')}: ${shortcut.registrationError}`
+    : shortcut.registrationStatus ?? t(locale, 'settings.hotkeyStatusPending')
+
+  const displayValue = () => {
+    if (shortcut.kind === 'accelerator') return shortcut.accelerator
+    if (shortcut.kind === 'double-modifier') return t(locale, 'settings.hotkeyDoubleCmd')
+    return t(locale, 'settings.hotkeyDisabled')
+  }
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!isRecording) return
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (event.key === 'Escape') {
+      setError('')
+      setIsRecording(false)
+      return
+    }
+
+    const accelerator = eventToAccelerator(event)
+    if (!accelerator) {
+      setError(isModifierKey(event.key) ? '' : t(locale, 'settings.hotkeyRecordError'))
+      return
+    }
+    setError('')
+    setIsRecording(false)
+    onChange({ kind: 'accelerator', accelerator })
+  }
+
+  useEffect(() => {
+    if (!isRecording) return
+    const timer = window.setTimeout(() => {
+      setIsRecording(false)
+      setError('')
+    }, 10_000)
+    return () => window.clearTimeout(timer)
+  }, [isRecording])
+
+  const startRecording = () => {
+    setError('')
+    setIsRecording(true)
+    requestAnimationFrame(() => recorderRef.current?.focus())
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <SettingRow label={t(locale, 'settings.globalPinnedLauncherShortcut')} info={t(locale, 'settings.globalPinnedLauncherShortcutInfo')}>
+        <div
+          ref={recorderRef}
+          tabIndex={0}
+          onKeyDown={handleKeyDown}
+          className="min-w-[170px] px-2.5 py-1 rounded-md text-right outline-none"
+          style={{
+            fontSize: '0.85em',
+            background: isRecording ? 'var(--color-accent-light)' : 'var(--color-background-tertiary)',
+            border: isRecording ? '0.5px solid var(--color-accent)' : '0.5px solid var(--color-border-tertiary)',
+            color: 'var(--color-text-primary)',
+          }}
+        >
+          {isRecording ? t(locale, 'settings.hotkeyRecording') : displayValue()}
+        </div>
+      </SettingRow>
+      <div className="flex flex-wrap gap-2 justify-end">
+        <button className="scripts-btn" onClick={startRecording}>{t(locale, 'settings.hotkeyRecord')}</button>
+        <button className="scripts-btn" onClick={() => { setError(''); setIsRecording(false); onChange({ kind: 'double-modifier', modifier: 'Command' }) }}>
+          {t(locale, 'settings.hotkeyDoubleCmd')}
+        </button>
+        <button className="scripts-btn" onClick={() => { setError(''); setIsRecording(false); onChange({ kind: 'disabled' }) }}>
+          {t(locale, 'settings.hotkeyDisabled')}
+        </button>
+      </div>
+      <span style={{ fontSize: '0.8em', color: error ? 'var(--color-error-text)' : 'var(--color-text-tertiary)' }}>
+        {error || registrationStatus}
+      </span>
+      {shortcut.kind === 'double-modifier' && (
+        <span style={{ fontSize: '0.78em', color: 'var(--color-text-tertiary)' }}>
+          {t(locale, 'settings.hotkeyAccessibilityHint')}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function eventToAccelerator(event: KeyboardEvent<HTMLDivElement>): string | null {
+  const key = normalizeKey(event.key)
+  const hasModifier = event.metaKey || event.ctrlKey || event.altKey || event.shiftKey
+  if (!key || !hasModifier) return null
+
+  const parts: string[] = []
+  if (event.metaKey) parts.push('Cmd')
+  if (event.ctrlKey) parts.push('Ctrl')
+  if (event.altKey) parts.push('Alt')
+  if (event.shiftKey) parts.push('Shift')
+  parts.push(key)
+  return parts.join('+')
+}
+
+function normalizeKey(key: string): string | null {
+  if (isModifierKey(key)) return null
+  if (key.length === 1) return key.toUpperCase()
+  if (key === ' ') return 'Space'
+  if (key.startsWith('Arrow')) return key.replace('Arrow', '')
+  return key
+}
+
+function isModifierKey(key: string): boolean {
+  return key === 'Meta' || key === 'Control' || key === 'Alt' || key === 'Shift'
 }
 
 function LocaleSelect({ options, value, onChange }: { options: { value: string; label: string }[]; value: string; onChange: (value: string) => void }) {

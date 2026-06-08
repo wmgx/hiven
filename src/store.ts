@@ -124,6 +124,13 @@ export type LastCommandStatus = {
   updatedAt: number
 }
 
+export type GlobalLauncherMode = 'full' | 'pinned-only'
+
+export type GlobalPinnedLauncherShortcut =
+  | { kind: 'accelerator'; accelerator: string; registrationStatus?: string; registrationError?: string }
+  | { kind: 'double-modifier'; modifier: 'Command'; registrationStatus?: string; registrationError?: string }
+  | { kind: 'disabled'; registrationStatus?: string; registrationError?: string }
+
 interface AppState {
   // Navigation
   activeView: ViewId
@@ -159,7 +166,9 @@ interface AppState {
   commandPaletteOpen: boolean
   setCommandPaletteOpen: (open: boolean) => void
   globalLauncherOpen: boolean
-  setGlobalLauncherOpen: (open: boolean) => void
+  globalLauncherMode: GlobalLauncherMode
+  setGlobalLauncherOpen: (open: boolean, mode?: GlobalLauncherMode) => void
+  openGlobalLauncher: (mode: GlobalLauncherMode) => void
 
   // Last command status
   lastCommandStatus: LastCommandStatus | null
@@ -189,6 +198,7 @@ interface AppState {
     locale: Locale
     disabledBuiltins: string[]
     disabledCustoms: string[]
+    globalPinnedLauncherShortcut: GlobalPinnedLauncherShortcut
   }
   updateSetting: (key: string, value: any) => void
   toggleBuiltinDisabled: (name: string) => void
@@ -215,6 +225,12 @@ function serializePinnedTombstones(state: AppState): Record<string, PinnedTombst
           : undefined,
       },
     ]))
+}
+
+function stripShortcutRuntimeStatus(shortcut: GlobalPinnedLauncherShortcut): GlobalPinnedLauncherShortcut {
+  if (shortcut.kind === 'accelerator') return { kind: 'accelerator', accelerator: shortcut.accelerator }
+  if (shortcut.kind === 'double-modifier') return { kind: 'double-modifier', modifier: shortcut.modifier }
+  return { kind: 'disabled' }
 }
 
 export const useAppStore = create<AppState>()(persist((set) => ({
@@ -360,7 +376,12 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   commandPaletteOpen: false,
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
   globalLauncherOpen: false,
-  setGlobalLauncherOpen: (open) => set({ globalLauncherOpen: open }),
+  globalLauncherMode: 'full',
+  setGlobalLauncherOpen: (open, mode) => set((state) => ({
+    globalLauncherOpen: open,
+    globalLauncherMode: mode ?? (open ? state.globalLauncherMode : 'full'),
+  })),
+  openGlobalLauncher: (mode) => set({ globalLauncherOpen: true, globalLauncherMode: mode }),
 
   // Last command status
   lastCommandStatus: null,
@@ -398,6 +419,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     locale: 'en' as Locale,
     disabledBuiltins: [],
     disabledCustoms: [],
+    globalPinnedLauncherShortcut: { kind: 'double-modifier', modifier: 'Command' },
   },
   updateSetting: (key, value) =>
     set((state) => {
@@ -425,7 +447,10 @@ export const useAppStore = create<AppState>()(persist((set) => ({
 }), {
   name: 'fluxtext-settings',
   partialize: (state) => ({
-    settings: state.settings,
+    settings: {
+      ...state.settings,
+      globalPinnedLauncherShortcut: stripShortcutRuntimeStatus(state.settings.globalPinnedLauncherShortcut),
+    },
     locale: state.locale,
     savedActionParams: state.savedActionParams,
     recentActionNames: state.recentActionNames,
@@ -443,7 +468,12 @@ export const useAppStore = create<AppState>()(persist((set) => ({
       : {},
   }),
   merge: (persisted, current) => {
-    const merged = { ...current, ...(persisted as Partial<AppState>) }
+    const persistedState = persisted as Partial<AppState>
+    const merged = { ...current, ...persistedState }
+    merged.settings = { ...current.settings, ...persistedState.settings }
+    merged.settings.globalPinnedLauncherShortcut = stripShortcutRuntimeStatus(
+      merged.settings.globalPinnedLauncherShortcut ?? current.settings.globalPinnedLauncherShortcut
+    )
     // Drop pinned actions persisted from the removed legacy action system;
     // only plugin-command pins remain valid.
     if (Array.isArray(merged.pinnedActions)) {
