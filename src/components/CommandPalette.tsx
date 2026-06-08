@@ -304,7 +304,7 @@ export function CommandPalette() {
       if (action.type === 'copy') {
         const { writeText } = await import('@tauri-apps/plugin-clipboard-manager')
         await writeText(action.text)
-        showToast(locale === 'zh' ? '已复制' : 'Copied', 'success')
+        showToast(t(locale, 'palette.copied'), 'success')
       } else if (action.type === 'insert') {
         applyEffects([{ type: 'text.replace', target: 'active-input', text: action.text } as never])
       } else if (action.type === 'effects') {

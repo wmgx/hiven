@@ -152,7 +152,7 @@ export function GlobalLauncher() {
   const selectItem = (item: LauncherItem | undefined) => {
     if (!item) return
     if (item.kind === 'instant') {
-      void executeInstantSuggestion(item.suggestion, closeLauncher)
+      void executeInstantSuggestion(item.suggestion, locale, closeLauncher)
       return
     }
     if (standaloneLauncher) {
@@ -272,13 +272,13 @@ export function GlobalLauncher() {
   )
 }
 
-async function executeInstantSuggestion(suggestion: InstantSuggestion, onDone: () => void) {
+async function executeInstantSuggestion(suggestion: InstantSuggestion, locale: Locale, onDone: () => void) {
   const action = suggestion.action
   try {
     if (action.type === 'copy') {
       const { writeText } = await import('@tauri-apps/plugin-clipboard-manager')
       await writeText(action.text)
-      showToast('Copied', 'success')
+      showToast(t(locale, 'palette.copied'), 'success')
     } else if (action.type === 'insert') {
       applyEffects([{ type: 'text.replace', target: 'active-input', text: action.text } as never])
     } else if (action.type === 'effects') {
