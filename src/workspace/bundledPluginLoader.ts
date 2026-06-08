@@ -88,6 +88,7 @@ export function registerBundledPluginPackages() {
       localized.renderers,
       localized.panels,
       localized.toolbar,
+      definition.instantSuggestions ?? [],
     )
   }
 }

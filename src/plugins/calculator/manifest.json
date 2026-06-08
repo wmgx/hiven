@@ -1,0 +1,7 @@
+{
+  "pluginId": "calculator",
+  "displayName": "Calculator",
+  "displayNameI18n": { "zh": "计算器" },
+  "version": "1.0.0",
+  "capabilities": ["instant-suggestion"]
+}
