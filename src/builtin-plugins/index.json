@@ -40,7 +40,7 @@
     {
       "pluginId": "date-time-assistant",
       "dir": "date-time-assistant",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
     },
     {
