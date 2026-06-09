@@ -10,27 +10,32 @@ pub mod hotkeys;
 
 #[tauri::command]
 fn show_and_focus_window(app: tauri::AppHandle) {
-    use tauri::Manager;
     #[cfg(target_os = "macos")]
     {
         let app_clone = app.clone();
         let _ = app.run_on_main_thread(move || {
-            activate_app();
-
-            if let Some(window) = app_clone.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            }
+            show_and_focus_main_window(&app_clone);
         });
     }
     #[cfg(not(target_os = "macos"))]
     {
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.show();
-            let _ = window.unminimize();
-            let _ = window.set_focus();
-        }
+        show_and_focus_main_window(&app);
+    }
+}
+
+fn show_and_focus_main_window(app: &tauri::AppHandle) {
+    use tauri::Manager;
+
+    if let Some(window) = app.get_webview_window("launcher") {
+        let _ = window.hide();
+    }
+
+    activate_app();
+
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
     }
 }
 
@@ -908,11 +913,17 @@ pub fn run() {
             hotkeys::register_double_modifier_hotkey,
             hotkeys::unregister_double_modifier_hotkey,
             show_and_focus_window,
-              show_launcher_window,
-              hide_launcher_window,
+            show_launcher_window,
+            hide_launcher_window,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                show_and_focus_main_window(app);
+            }
+        });
 }
 
 #[cfg(test)]
