@@ -49,7 +49,7 @@ export function EditorView() {
         }}
       >
         <span className="text-[11px] flex items-center gap-1.5" style={{ color: 'var(--color-text-tertiary)' }}>
-          <span className="w-1.5 h-1.5 rounded-full anim-pulse-dot" style={{ background: '#27C93F' }} />
+          <span className="w-1.5 h-1.5 rounded-full anim-pulse-dot" style={{ background: 'var(--color-success)' }} />
           {t('ready')}
         </span>
 
@@ -60,8 +60,7 @@ export function EditorView() {
             return (
               <button
                 key={item.contribution.id}
-                className="flex items-center justify-center w-[22px] h-[18px] rounded"
-                style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-tertiary)' }}
+                className="ft-btn-icon-sm"
                 onClick={() => { void runToolbarCommand(item.contribution.commandId, item.isDev) }}
                 title={title}
               >
@@ -71,10 +70,7 @@ export function EditorView() {
           })}
 
           <span
-            className="text-[11px] cursor-pointer px-1.5 py-0.5 rounded"
-            style={{ color: 'var(--color-text-tertiary)' }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-background-tertiary)')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            className="ft-btn ft-btn-ghost ft-btn-sm"
             onClick={() => setCommandPaletteOpen(true)}
           >
             {t('runAction')}

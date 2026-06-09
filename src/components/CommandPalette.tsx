@@ -526,7 +526,7 @@ export function CommandPalette() {
         style={{
           background: 'var(--color-background-primary)',
           border: '0.5px solid var(--color-border-secondary)',
-          borderRadius: '12px',
+          borderRadius: 'var(--radius-xl)',
           boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
         }}
         onKeyDown={handleKeyDown}

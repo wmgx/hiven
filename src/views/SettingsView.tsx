@@ -24,11 +24,11 @@ export function SettingsView() {
   return (
     <div className="flex-1 overflow-auto p-5">
       <div className="flex items-center justify-between mb-5">
-        <span className="font-medium" style={{ fontSize: '1.15em', color: 'var(--color-text-primary)' }}>{t('title')}</span>
-        <span className="px-1.5 py-0.5 rounded" style={{ fontSize: '0.75em', background: 'var(--color-accent-light)', color: 'var(--color-accent-hover)' }}>v{appVersion}</span>
+        <span className="font-medium" style={{ fontSize: 'var(--text-lg)', color: 'var(--color-text-primary)' }}>{t('title')}</span>
+        <span className="px-1.5 py-0.5 rounded" style={{ fontSize: 'var(--text-xs)', background: 'var(--color-accent-light)', color: 'var(--color-accent-hover)' }}>v{appVersion}</span>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
         <SettingCard icon={<Languages size={16} />} title={t('language')}>
           <SettingRow label={t('language')}>
             <LocaleSelect
@@ -51,7 +51,7 @@ export function SettingsView() {
               <button className="w-5 h-5 flex items-center justify-center rounded cursor-pointer" style={smallButtonStyle} onClick={() => updateSetting('fontSize', Math.max(10, settings.fontSize - 1))}>
                 <Minus size={10} />
               </button>
-              <span className="w-7 text-center" style={{ fontSize: '0.9em', color: 'var(--color-text-primary)' }}>{settings.fontSize}</span>
+              <span className="w-7 text-center" style={{ fontSize: 'var(--text-base)', color: 'var(--color-text-primary)' }}>{settings.fontSize}</span>
               <button className="w-5 h-5 flex items-center justify-center rounded cursor-pointer" style={smallButtonStyle} onClick={() => updateSetting('fontSize', Math.min(24, settings.fontSize + 1))}>
                 <Plus size={10} />
               </button>
@@ -90,7 +90,7 @@ export function SettingsView() {
 
         <SettingCard icon={<Plug size={16} />} title={tScripts('title')}>
           <div className="flex items-center justify-between py-1.5">
-            <span style={{ fontSize: '0.9em', color: 'var(--color-text-secondary)' }}>
+            <span style={{ fontSize: 'var(--text-base)', color: 'var(--color-text-secondary)' }}>
               {t('pluginsInfo')}
             </span>
             <button className="scripts-btn" onClick={() => setActiveView('scripts')}>{t('openPlugins')}</button>
@@ -105,12 +105,13 @@ const smallButtonStyle = {
   background: 'var(--color-background-tertiary)',
   border: '0.5px solid var(--color-border-tertiary)',
   color: 'var(--color-text-secondary)',
+  borderRadius: 'var(--radius-sm)',
 }
 
 function SettingCard({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
   return (
-    <div className="p-3.5 px-4 rounded-xl" style={{ border: '0.5px solid var(--color-border-tertiary)', background: 'var(--color-background-primary)' }}>
-      <div className="font-medium flex items-center gap-1.5 mb-3" style={{ fontSize: '1em', color: 'var(--color-text-primary)' }}>
+    <div className="p-3.5 px-4" style={{ border: '0.5px solid var(--color-border-tertiary)', background: 'var(--color-background-primary)', borderRadius: 'var(--radius-lg)' }}>
+      <div className="font-medium flex items-center gap-1.5 mb-3" style={{ fontSize: 'var(--text-md)', color: 'var(--color-text-primary)' }}>
         <span style={{ color: 'var(--color-accent)' }}>{icon}</span>
         {title}
       </div>
@@ -125,7 +126,7 @@ function SettingRow({ label, info, children }: { label: string; info?: string; c
 
   return (
     <div className="flex items-center justify-between py-1.5" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
-      <span className="flex items-center gap-1" style={{ fontSize: '0.9em', color: 'var(--color-text-secondary)' }}>
+      <span className="flex items-center gap-1" style={{ fontSize: 'var(--text-base)', color: 'var(--color-text-secondary)' }}>
         {label}
         {info && (
           <div className="relative inline-flex" ref={infoRef}>
@@ -137,12 +138,13 @@ function SettingRow({ label, info, children }: { label: string; info?: string; c
               onMouseLeave={() => setShowTooltip(false)}
             />
             {showTooltip && (
-              <div className="absolute left-1/2 bottom-full mb-1.5 -translate-x-1/2 px-2.5 py-1.5 rounded-md text-[11px] leading-relaxed whitespace-normal z-50 pointer-events-none" style={{
+              <div className="absolute left-1/2 bottom-full mb-1.5 -translate-x-1/2 px-2.5 py-1.5 text-[11px] leading-relaxed whitespace-normal z-50 pointer-events-none" style={{
                 background: 'var(--color-background-tertiary)',
                 color: 'var(--color-text-primary)',
                 border: '0.5px solid var(--color-border-secondary)',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
                 width: 'min(200px, 60vw)',
+                borderRadius: 'var(--radius-md)',
               }}>
                 {info}
               </div>
@@ -157,8 +159,8 @@ function SettingRow({ label, info, children }: { label: string; info?: string; c
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (value: boolean) => void }) {
   return (
-    <div className="w-7 h-4 rounded-full relative cursor-pointer shrink-0" style={{ background: value ? 'var(--color-accent)' : 'var(--color-border-tertiary)' }} onClick={() => onChange(!value)}>
-      <div className="w-3 h-3 rounded-full bg-white absolute top-0.5 transition-[left] duration-150" style={{ left: value ? '14px' : '2px' }} />
+    <div className="w-8 h-[18px] rounded-full relative cursor-pointer shrink-0" style={{ background: value ? 'var(--color-accent)' : 'var(--color-border-tertiary)' }} onClick={() => onChange(!value)}>
+      <div className="w-3.5 h-3.5 rounded-full bg-white absolute top-[2px] transition-[left] duration-150" style={{ left: value ? '15px' : '2px' }} />
     </div>
   )
 }
@@ -227,12 +229,13 @@ function HotkeySettings({
           ref={recorderRef}
           tabIndex={0}
           onKeyDown={handleKeyDown}
-          className="min-w-[170px] px-2.5 py-1 rounded-md text-right outline-none"
+          className="min-w-[170px] px-2.5 py-1 text-right outline-none"
           style={{
-            fontSize: '0.85em',
+            fontSize: 'var(--text-sm)',
             background: isRecording ? 'var(--color-accent-light)' : 'var(--color-background-tertiary)',
             border: isRecording ? '0.5px solid var(--color-accent)' : '0.5px solid var(--color-border-tertiary)',
             color: 'var(--color-text-primary)',
+            borderRadius: 'var(--radius-md)',
           }}
         >
           {isRecording ? t('hotkeyRecording') : displayValue()}
@@ -247,11 +250,11 @@ function HotkeySettings({
           {t('hotkeyDisabled')}
         </button>
       </div>
-      <span style={{ fontSize: '0.8em', color: error ? 'var(--color-error-text)' : 'var(--color-text-tertiary)' }}>
+      <span style={{ fontSize: 'var(--text-sm)', color: error ? 'var(--color-error-text)' : 'var(--color-text-tertiary)' }}>
         {error || registrationStatus}
       </span>
       {shortcut.kind === 'double-modifier' && (
-        <span style={{ fontSize: '0.78em', color: 'var(--color-text-tertiary)' }}>
+        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-tertiary)' }}>
           {t('hotkeyAccessibilityHint')}
         </span>
       )}
@@ -302,24 +305,26 @@ function LocaleSelect({ options, value, onChange }: { options: { value: string; 
 
   return (
     <div className="relative min-w-[100px]" ref={ref}>
-      <div className="flex items-center justify-between px-2.5 py-1 rounded-md cursor-pointer gap-2" style={{
-        fontSize: '0.85em',
+      <div className="flex items-center justify-between px-2.5 py-1 cursor-pointer gap-2" style={{
+        fontSize: 'var(--text-sm)',
         background: 'var(--color-background-primary)',
         border: open ? '0.5px solid var(--color-accent)' : '0.5px solid var(--color-border-secondary)',
         color: 'var(--color-text-primary)',
+        borderRadius: 'var(--radius-md)',
       }} onClick={() => setOpen(!open)}>
         <span>{selected?.label ?? value}</span>
         <ChevronDown size={12} style={{ color: 'var(--color-text-tertiary)', flexShrink: 0, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }} />
       </div>
       {open && (
-        <div className="absolute left-0 right-0 top-full mt-1 rounded-md overflow-hidden z-50 anim-dropdown" style={{
+        <div className="absolute left-0 right-0 top-full mt-1 overflow-hidden z-50 anim-dropdown" style={{
           background: 'var(--color-background-primary)',
           border: '0.5px solid var(--color-border-secondary)',
           boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          borderRadius: 'var(--radius-md)',
         }}>
           {options.map((option) => (
             <div key={option.value} className="flex items-center gap-2 px-2.5 py-1.5 cursor-pointer transition-colors" style={{
-              fontSize: '0.85em',
+              fontSize: 'var(--text-sm)',
               background: value === option.value ? 'var(--color-accent-light)' : 'transparent',
               color: 'var(--color-text-primary)',
             }} onClick={() => { onChange(option.value); setOpen(false) }}>
@@ -405,7 +410,7 @@ function UpdateChecker() {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span style={{ fontSize: '0.9em', color: 'var(--color-text-secondary)' }}>{t('checkUpdate')}</span>
+        <span style={{ fontSize: 'var(--text-base)', color: 'var(--color-text-secondary)' }}>{t('checkUpdate')}</span>
         <div className="flex items-center gap-2">
           {status === 'available' && <button className="scripts-btn" onClick={handleDownloadAndInstall}><Download size={11} /> {version}</button>}
           {status === 'ready' && <button className="scripts-btn scripts-btn-primary" onClick={() => relaunch()}>{t('restart')}</button>}
@@ -413,19 +418,19 @@ function UpdateChecker() {
             <button className="scripts-btn" onClick={handleCheck}><RefreshCw size={11} /> {t('checkUpdate')}</button>
           )}
           {(status === 'checking' || status === 'downloading') && (
-            <span className="flex items-center gap-1 px-2.5 py-1" style={{ fontSize: '0.8em', color: 'var(--color-text-tertiary)' }}>
+            <span className="flex items-center gap-1 px-2.5 py-1" style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-tertiary)' }}>
               <RefreshCw size={11} className="animate-spin" /> {statusText()}
             </span>
           )}
         </div>
       </div>
       {status !== 'idle' && status !== 'checking' && status !== 'downloading' && (
-        <span style={{ fontSize: '0.8em', color: status === 'error' ? 'var(--color-error-text)' : status === 'no-update' ? 'var(--color-text-tertiary)' : 'var(--color-success-text)' }}>
+        <span style={{ fontSize: 'var(--text-sm)', color: status === 'error' ? 'var(--color-error-text)' : status === 'no-update' ? 'var(--color-text-tertiary)' : 'var(--color-success-text)' }}>
           {statusText()}
         </span>
       )}
       {pluginStatus !== 'idle' && pluginStatus !== 'checking' && (
-        <span style={{ fontSize: '0.8em', color: pluginStatus === 'updated' ? 'var(--color-success-text)' : pluginStatus === 'error' ? 'var(--color-error-text)' : 'var(--color-text-tertiary)' }}>
+        <span style={{ fontSize: 'var(--text-sm)', color: pluginStatus === 'updated' ? 'var(--color-success-text)' : pluginStatus === 'error' ? 'var(--color-error-text)' : 'var(--color-text-tertiary)' }}>
           {pluginStatus === 'updated'
             ? t('pluginsUpdated', { version: String(pluginVersion) })
             : pluginStatus === 'up-to-date'

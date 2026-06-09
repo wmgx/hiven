@@ -4,6 +4,29 @@
 :root {
   --font-mono:
     'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+  /* ─── Type Scale ─── */
+  --text-xs: 10px;
+  --text-sm: 11px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+
+  /* ─── Radius Scale ─── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+
+  /* ─── Spacing Scale (4px base) ─── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+
+  /* ─── Colors ─── */
   --color-background-primary: #ffffff;
   --color-background-secondary: #f8f8fa;
   --color-background-tertiary: #f0f0f2;
@@ -15,9 +38,9 @@
   --color-accent: #534ab7;
   --color-accent-hover: #3c3489;
   --color-accent-light: #eeedfe;
-  --color-success: #1d9e75;
-  --color-success-bg: #eaf3de;
-  --color-success-text: #3b6d11;
+  --color-success: #22c55e;
+  --color-success-bg: #f0fdf4;
+  --color-success-text: #16a34a;
   --color-warning: #ba7517;
   --color-warning-bg: #faeeda;
   --color-error: #e24b4a;
@@ -75,25 +98,25 @@ html[data-window='launcher'] #root {
 
 .view-enter {
   opacity: 0;
-  transform: translateY(20px) scale(0.98);
+  transform: translateY(12px);
 }
 .view-enter-active {
   opacity: 1;
-  transform: translateY(0) scale(1);
+  transform: translateY(0);
   transition:
-    opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-    transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .view-enter-up {
   opacity: 0;
-  transform: translateY(-20px) scale(0.98);
+  transform: translateY(-12px);
 }
 .view-enter-up-active {
   opacity: 1;
-  transform: translateY(0) scale(1);
+  transform: translateY(0);
   transition:
-    opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-    transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ─── Sidebar Button ─── */
@@ -106,7 +129,7 @@ html[data-window='launcher'] #root {
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--color-accent-light);
   transform: scale(0);
   opacity: 0;
@@ -135,7 +158,7 @@ html[data-window='launcher'] #root {
   }
   50% {
     opacity: 0.5;
-    box-shadow: 0 0 6px rgba(39, 201, 63, 0.4);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--color-success) 40%, transparent);
   }
 }
 
@@ -334,12 +357,12 @@ html[data-window='launcher'] #root {
 .scripts-btn {
   height: 32px;
   padding: 0 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   gap: 6px;
   cursor: pointer;
-  font-size: 0.9em;
+  font-size: var(--text-base);
   font-family: var(--font-mono);
   border: 0.5px solid var(--color-border-secondary);
   background: none;
@@ -371,7 +394,7 @@ html[data-window='launcher'] #root {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   border: none;
   background: none;
   color: var(--color-text-tertiary);
@@ -401,11 +424,11 @@ html[data-window='launcher'] #root {
   display: flex;
   align-items: center;
   gap: 5px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--color-border-tertiary);
   background: var(--color-background-primary);
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-sm);
   font-family: var(--font-mono);
   cursor: pointer;
   white-space: nowrap;
@@ -438,11 +461,11 @@ html[data-window='launcher'] #root {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 11px;
+  font-size: var(--text-sm);
   color: var(--color-text-secondary);
   cursor: pointer;
   padding: 4px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   margin-right: 4px;
   transition: background 0.15s;
 }
@@ -466,7 +489,7 @@ html[data-window='launcher'] #root {
   border-bottom: 1px solid var(--color-border-tertiary);
 }
 .pinned-panel-label {
-  font-size: 11px;
+  font-size: var(--text-sm);
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -560,7 +583,7 @@ html[data-window='launcher'] #root {
   height: 28px;
   width: 160px;
   padding: 0 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--color-border-secondary);
   background: var(--color-background-primary);
   color: var(--color-text-primary);
@@ -589,7 +612,7 @@ html[data-window='launcher'] #root {
   display: flex;
   align-items: center;
   gap: 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--color-border-secondary);
   background: var(--color-background-primary);
   color: var(--color-text-primary);
@@ -632,7 +655,7 @@ html[data-window='launcher'] #root {
   overflow-y: auto;
   background: var(--color-background-primary);
   border: 1px solid var(--color-border-secondary);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   box-shadow:
     0 4px 16px rgba(0, 0, 0, 0.1),
     0 1px 4px rgba(0, 0, 0, 0.06);
@@ -658,7 +681,7 @@ html[data-window='launcher'] #root {
   gap: 8px;
   padding: 6px 10px;
   border: none;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: none;
   color: var(--color-text-secondary);
   font-size: 12px;
@@ -690,7 +713,7 @@ html[data-window='launcher'] #root {
   padding: 0 14px;
   height: 40px;
   border: 0.5px solid var(--color-border-tertiary);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--color-background-secondary);
   margin-bottom: 12px;
   transition: border-color 0.2s;
@@ -715,9 +738,9 @@ html[data-window='launcher'] #root {
   color: var(--color-text-tertiary);
 }
 .scripts-search-count {
-  font-size: 11px;
+  font-size: var(--text-sm);
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--color-background-tertiary);
   color: var(--color-text-tertiary);
   flex-shrink: 0;
@@ -765,9 +788,9 @@ html[data-window='launcher'] #root {
   color: var(--color-text-secondary);
 }
 .scripts-tab-count {
-  font-size: 11px;
+  font-size: var(--text-sm);
   padding: 1px 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--color-background-tertiary);
   color: var(--color-text-tertiary);
   transition:
@@ -809,7 +832,7 @@ html[data-window='launcher'] #root {
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   border: 0.5px solid var(--color-border-tertiary);
   background: var(--color-background-primary);
   margin-bottom: 8px;
@@ -827,7 +850,7 @@ html[data-window='launcher'] #root {
 .script-icon {
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -858,9 +881,9 @@ html[data-window='launcher'] #root {
   margin-top: 2px;
 }
 .script-badge {
-  font-size: 0.75em;
+  font-size: var(--text-xs);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--color-background-secondary);
   color: var(--color-text-tertiary);
   flex-shrink: 0;
@@ -868,7 +891,7 @@ html[data-window='launcher'] #root {
 .script-action-btn {
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: none;
   background: transparent;
   cursor: pointer;
@@ -931,7 +954,7 @@ html[data-window='launcher'] #root {
   width: min(480px, 90vw);
   background: var(--color-background-primary);
   border: 0.5px solid var(--color-border-secondary);
-  border-radius: 14px;
+  border-radius: var(--radius-xl);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.18);
   transform: scale(0.92) translateY(10px);
   opacity: 0;
@@ -965,7 +988,7 @@ html[data-window='launcher'] #root {
 .modal-close {
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: none;
   background: transparent;
   cursor: pointer;
@@ -998,7 +1021,7 @@ html[data-window='launcher'] #root {
   flex: 1;
   height: 36px;
   border: 0.5px solid var(--color-border-secondary);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 0 12px;
   font-size: 12px;
   font-family: var(--font-mono);
@@ -1019,6 +1042,130 @@ html[data-window='launcher'] #root {
   justify-content: flex-end;
   gap: 8px;
   border-top: 0.5px solid var(--color-border-tertiary);
+}
+
+/* ─── Unified Button System ─── */
+.ft-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s,
+    transform 0.1s,
+    box-shadow 0.15s;
+}
+.ft-btn:active {
+  transform: scale(0.96);
+}
+.ft-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Sizes */
+.ft-btn-sm {
+  height: 24px;
+  padding: 0 10px;
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+}
+.ft-btn-md {
+  height: 32px;
+  padding: 0 14px;
+  font-size: var(--text-base);
+  border-radius: var(--radius-md);
+}
+
+/* Solid (primary) */
+.ft-btn-solid {
+  background: var(--color-accent);
+  color: white;
+}
+.ft-btn-solid:hover {
+  background: var(--color-accent-hover);
+}
+
+/* Outline (secondary) */
+.ft-btn-outline {
+  background: none;
+  border: 0.5px solid var(--color-border-secondary);
+  color: var(--color-text-secondary);
+}
+.ft-btn-outline:hover {
+  background: var(--color-background-secondary);
+  border-color: var(--color-border-secondary);
+  color: var(--color-text-primary);
+}
+
+/* Ghost (tertiary / toolbar) */
+.ft-btn-ghost {
+  background: transparent;
+  color: var(--color-text-tertiary);
+}
+.ft-btn-ghost:hover {
+  background: var(--color-background-tertiary);
+  color: var(--color-text-secondary);
+}
+
+/* Icon button (square) */
+.ft-btn-icon {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.ft-btn-icon:hover {
+  background: var(--color-background-tertiary);
+  color: var(--color-text-secondary);
+}
+.ft-btn-icon:active {
+  transform: scale(0.93);
+}
+.ft-btn-icon-sm {
+  width: 22px;
+  height: 18px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-background-tertiary);
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.ft-btn-icon-sm:hover {
+  background: var(--color-border-tertiary);
+  color: var(--color-text-secondary);
+}
+
+/* Danger variant (composable) */
+.ft-btn-danger:hover {
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
 }
 
 /* ─── Monaco ─── */

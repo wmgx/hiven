@@ -510,14 +510,14 @@ export function ScriptsView() {
       </div>
 
       <div className="flex items-center justify-between mb-2 px-1">
-        <span style={{ fontSize: '0.75em', color: 'var(--color-text-tertiary)' }}>
+        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-tertiary)' }}>
           {activeTab === 'builtin'
             ? t(locale, 'scripts.sectionBuiltin')
             : activeTab === 'installed'
               ? t(locale, 'scripts.sectionInstalled')
               : t(locale, 'scripts.sectionDev')}
         </span>
-        <button onClick={handlePackageUpdateCheck} className="scripts-btn" style={{ fontSize: '0.75em', padding: '2px 8px' }}>
+        <button onClick={handlePackageUpdateCheck} className="scripts-btn" style={{ fontSize: 'var(--text-xs)', padding: '2px 8px' }}>
           {updateStatus === 'checking' ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
           {t(locale, 'scripts.checkPackageUpdates')}
         </button>
@@ -553,7 +553,7 @@ export function ScriptsView() {
       </div>
 
       {(errors['_install-folder'] || errors['_install-zip'] || errors['_dev-folder'] || errors['_new-plugin']) && (
-        <div className="mt-2 flex items-center gap-1" style={{ fontSize: '0.85em', color: 'var(--color-error-text)' }}>
+        <div className="mt-2 flex items-center gap-1" style={{ fontSize: 'var(--text-sm)', color: 'var(--color-error-text)' }}>
           <AlertTriangle size={12} />
           {errors['_install-folder'] || errors['_install-zip'] || errors['_dev-folder'] || errors['_new-plugin']}
         </div>
@@ -592,7 +592,7 @@ export function ScriptsView() {
                 </button>
               </div>
               {errors['_remote'] && (
-                <div className="mt-2 flex items-center gap-1" style={{ fontSize: '0.85em', color: 'var(--color-error-text)' }}>
+                <div className="mt-2 flex items-center gap-1" style={{ fontSize: 'var(--text-sm)', color: 'var(--color-error-text)' }}>
                   <AlertTriangle size={12} /> {errors['_remote']}
                 </div>
               )}
@@ -659,7 +659,7 @@ function PluginCard({
           </div>
         )}
         {error && (
-          <div className="flex items-center gap-1 mt-1" style={{ color: 'var(--color-error-text)', fontSize: '0.8em' }}>
+          <div className="flex items-center gap-1 mt-1" style={{ color: 'var(--color-error-text)', fontSize: 'var(--text-sm)' }}>
             <AlertTriangle size={12} /> {error}
           </div>
         )}

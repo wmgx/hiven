@@ -25,9 +25,6 @@ export function RenderStatusBar() {
   const hasOccupancies = Object.keys(occupancies).length > 0
   const activeRenderer = paneRenderers[activePaneId] ?? Object.values(paneRenderers).find((renderer) => rendererInputReferencesPane(renderer.rendererInputs, activePaneId))
 
-  // Only show when multiple panes or active presentations/panels
-  if (paneOrder.length <= 1 && !hasPresentations && !hasPanels && !hasPaneRenderers && !hasPanelInstancesV2 && !lastCommandStatus) return null
-
   const commandStatusLabel = lastCommandStatus
     ? t(lastCommandStatus.status === 'running'
       ? 'status.commandRunning'

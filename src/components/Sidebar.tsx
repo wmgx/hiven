@@ -30,9 +30,10 @@ export function Sidebar() {
           key={item.id}
           title={t(item.labelKey)}
           onClick={() => setActiveView(item.id)}
-          className={`sidebar-btn w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer border-none bg-transparent ${activeView === item.id ? 'active' : ''}`}
+          className={`sidebar-btn w-8 h-8 flex items-center justify-center cursor-pointer border-none bg-transparent ${activeView === item.id ? 'active' : ''}`}
           style={{
             color: activeView === item.id ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
+            borderRadius: 'var(--radius-md)',
           }}
         >
           <span className="flex items-center justify-center">{item.icon}</span>
@@ -49,9 +50,10 @@ export function Sidebar() {
               key={pinned.id}
               title={`Pinned · ${pinned.title}`}
               onClick={() => openPinnedAction(pinned.id)}
-              className={`sidebar-btn w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer border-none bg-transparent ${activeView === 'pinned-runner' && activePinnedActionId === pinned.id ? 'active' : ''}`}
+              className={`sidebar-btn w-8 h-8 flex items-center justify-center cursor-pointer border-none bg-transparent ${activeView === 'pinned-runner' && activePinnedActionId === pinned.id ? 'active' : ''}`}
               style={{
                 color: activeView === 'pinned-runner' && activePinnedActionId === pinned.id ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
+                borderRadius: 'var(--radius-md)',
               }}
             >
               <span className="flex items-center justify-center">
@@ -65,9 +67,10 @@ export function Sidebar() {
         <button
           title={t('settings')}
           onClick={() => setActiveView('settings')}
-          className={`sidebar-btn w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer border-none bg-transparent ${activeView === 'settings' ? 'active' : ''}`}
+          className={`sidebar-btn w-8 h-8 flex items-center justify-center cursor-pointer border-none bg-transparent ${activeView === 'settings' ? 'active' : ''}`}
           style={{
             color: activeView === 'settings' ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
+            borderRadius: 'var(--radius-md)',
           }}
         >
           <span className="flex items-center justify-center"><Settings size={18} /></span>
