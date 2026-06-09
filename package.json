@@ -17,6 +17,7 @@
     "test:pinned-plugin-command": "node scripts/test-pinned-plugin-command.mjs",
     "test:pinned-persistence-settings": "node scripts/test-pinned-persistence-settings.mjs",
     "test:pinned-runner-policy": "node scripts/test-pinned-runner-policy.mjs",
+    "test:pinned-tombstone-lifecycle": "node scripts/test-pinned-tombstone-lifecycle.mjs",
     "test:plugin-package-lifecycle": "node scripts/test-plugin-package-lifecycle.mjs",
     "test:plugin-merge-groups": "node scripts/test-plugin-merge-groups.mjs",
     "test:plugin-selection-input-resolution": "node scripts/test-plugin-selection-input-resolution.mjs",

@@ -5,6 +5,7 @@ import { useWorkspaceStore } from './workspace/workspaceStore'
 import {
   DEFAULT_PINNED_RUNTIME_CONFIG,
   activatePinnedRuntime,
+  discardPinnedTombstoneAfterPatch,
   disposePinnedRuntime,
   pruneIdlePinnedRuntimes,
   restorePinnedFromTombstone,
@@ -307,22 +308,31 @@ export const useAppStore = create<AppState>()(persist((set) => ({
       nextRuntimes[id] = id === pinnedId ? runtime : { ...runtime, status: runtime.status === 'active' ? 'idle' : runtime.status }
     }
     nextRuntimes[pinnedId] = activatePinnedRuntime(restoredPinned, nextRuntimes[pinnedId], state.pinnedTombstones[pinnedId])
+    const { [pinnedId]: _restoredTombstone, ...nextTombstones } = state.pinnedTombstones
     return {
       pinnedActions: state.pinnedActions.map((item) => item.id === pinnedId ? restoredPinned : item),
       activePinnedActionId: pinnedId,
       activeView: 'pinned-runner',
       pinnedRuntimes: nextRuntimes,
+      pinnedTombstones: nextTombstones,
       commandPaletteOpen: false,
     }
   }),
   openPinnedAction: (pinnedId) => {
     useAppStore.getState().activatePinnedAction(pinnedId)
   },
-  updatePinnedAction: (pinnedId, patch) => set((state) => ({
-    pinnedActions: state.pinnedActions.map((pinned) => (
-      pinned.id === pinnedId ? { ...pinned, ...patch } : pinned
-    )),
-  })),
+  updatePinnedAction: (pinnedId, patch) => set((state) => {
+    const shouldDiscardTombstone = discardPinnedTombstoneAfterPatch(patch)
+    const nextTombstones = shouldDiscardTombstone && state.pinnedTombstones[pinnedId]
+      ? Object.fromEntries(Object.entries(state.pinnedTombstones).filter(([id]) => id !== pinnedId))
+      : state.pinnedTombstones
+    return {
+      pinnedActions: state.pinnedActions.map((pinned) => (
+        pinned.id === pinnedId ? { ...pinned, ...patch } : pinned
+      )),
+      pinnedTombstones: nextTombstones,
+    }
+  }),
   updatePinnedRuntime: (pinnedId, patch) => set((state) => {
     const current = state.pinnedRuntimes[pinnedId]
     if (!current) return {}

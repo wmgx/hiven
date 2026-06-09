@@ -81,6 +81,7 @@ export function PinnedRunnerView() {
     ...(pinned?.params ?? {}),
   }), [actionParams, pinned?.params])
   const paramsFingerprint = useMemo(() => JSON.stringify(params), [params])
+  const activationRunKey = pinnedRuntime?.lastActivatedAt ?? 0
 
   const runPinnedAction = async () => {
     if (!pinned) return
@@ -180,14 +181,14 @@ export function PinnedRunnerView() {
 
   useEffect(() => {
     if (!pinned || !pinned.autoRun || !pinned.inputText || liveTrigger === 'on-blur') return
-    const runKey = `${pinned.id}\0${pinned.inputText}\0${paramsFingerprint}`
+    const runKey = `${pinned.id}\0${pinned.inputText}\0${paramsFingerprint}\0${activationRunKey}`
     if (lastAutoRunKeyMap.get(pinned.id) === runKey) return
     const timer = window.setTimeout(() => {
       lastAutoRunKeyMap.set(pinned.id, runKey)
       void runPinnedAction()
     }, pinned.debounceMs)
     return () => window.clearTimeout(timer)
-  }, [pinned?.id, pinned?.inputText, pinned?.autoRun, pinned?.debounceMs, paramsFingerprint, liveTrigger])
+  }, [pinned?.id, pinned?.inputText, pinned?.autoRun, pinned?.debounceMs, paramsFingerprint, liveTrigger, activationRunKey])
 
   if (!pinned) {
     return (

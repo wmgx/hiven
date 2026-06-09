@@ -92,6 +92,7 @@ export function activatePinnedRuntime(
 
 export function restorePinnedFromTombstone(pinned: PinnedAction, tombstone?: PinnedTombstone): PinnedAction {
   if (!tombstone) return pinned
+  if (pinned.outputText && pinned.outputKind !== 'stale') return pinned
   const stalePreview = tombstone.outputSummary?.preview
   return {
     ...pinned,
@@ -106,6 +107,15 @@ export function restorePinnedFromTombstone(pinned: PinnedAction, tombstone?: Pin
     lastDurationMs: tombstone.lastDurationMs,
     lastError: tombstone.lastError,
   }
+}
+
+export function discardPinnedTombstoneAfterPatch(patch: Partial<PinnedAction>): boolean {
+  return 'inputText' in patch ||
+    'params' in patch ||
+    'outputText' in patch ||
+    'outputKind' in patch ||
+    'lastRunAt' in patch ||
+    'lastError' in patch
 }
 
 export function disposePinnedRuntime(runtime: PinnedRuntime): PinnedRuntime {
