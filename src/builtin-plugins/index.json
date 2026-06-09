@@ -1,209 +1,180 @@
 {
-  "version": 4,
+  "version": 5,
   "packages": [
     {
       "pluginId": "append",
       "dir": "append",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "base64",
       "dir": "base64",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
+    },
+    {
+      "pluginId": "calculator",
+      "dir": "calculator",
+      "version": "1.0.0"
     },
     {
       "pluginId": "case",
       "dir": "case",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "core-pane",
       "dir": "core-pane",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "count",
       "dir": "count",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "css",
       "dir": "css",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "date-time-assistant",
       "dir": "date-time-assistant",
-      "version": "1.1.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.1.0"
     },
     {
       "pluginId": "csv",
       "dir": "csv",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "dedup",
       "dir": "dedup",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "extract",
       "dir": "extract",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "hash",
       "dir": "hash",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "hex",
       "dir": "hex",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "html",
       "dir": "html",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "join",
       "dir": "join",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "js-filter",
       "dir": "jsFilter",
-      "version": "1.0.0",
-      "files": ["index.tsx", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "json",
       "dir": "json",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "jwt",
       "dir": "jwt",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "mdquote",
       "dir": "mdquote",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "prepend",
       "dir": "prepend",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "query-string",
       "dir": "queryString",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "remove-blank-lines",
       "dir": "removeBlankLines",
-      "version": "1.0.0",
-      "files": ["README.md", "index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "reverse",
       "dir": "reverse",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "slashes",
       "dir": "slashes",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "sort",
       "dir": "sort",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "sort-json",
       "dir": "sortJson",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "sql",
       "dir": "sql",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "sqlin",
       "dir": "sqlin",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "sum",
       "dir": "sum",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "text-diff",
       "dir": "textDiff",
-      "version": "1.0.0",
-      "files": ["README.md", "TextDiffRenderer.tsx", "autoDiffMode.ts", "index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "trim-whitespace",
       "dir": "trimWhitespace",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "url",
       "dir": "url",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "wrap",
       "dir": "wrap",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "xml",
       "dir": "xml",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     },
     {
       "pluginId": "yaml",
       "dir": "yaml",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+      "version": "1.0.0"
     }
   ]
 }

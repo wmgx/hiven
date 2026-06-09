@@ -19,6 +19,10 @@ const REMOTE_BUILTIN_PLUGIN_SOURCE_BASE_URLS = [
   'https://cdn.jsdelivr.net/gh/wmgx/flux_text@main/src/plugins',
   'https://raw.githubusercontent.com/wmgx/flux_text/main/src/plugins',
 ]
+const REMOTE_BUILTIN_PLUGIN_TREE_URLS = [
+  'https://api.github.com/repos/wmgx/flux_text/git/trees/main?recursive=1',
+]
+const DOWNLOADABLE_PLUGIN_FILE_PATTERN = /\.(?:ts|tsx|js|jsx|mjs|json|md)$/i
 
 // ─── First-party plugin package discovery ─────────────────────────────────────
 // First-party plugin packages live under `src/plugins/<id>/`. They are
@@ -36,22 +40,21 @@ type DiscoveredBuiltinPackage = {
   files: Record<string, string>
 }
 
-type BuiltinPluginIndexFile = string | {
-  path: string
-  url?: string
-}
-
 type BuiltinPluginIndexPackage = {
   pluginId: string
   dir?: string
   version?: string
-  files?: BuiltinPluginIndexFile[]
   baseUrl?: string
 }
 
 type BuiltinPluginIndex = {
   version: number
   packages: BuiltinPluginIndexPackage[]
+}
+
+type RemoteBuiltinTreeItem = {
+  path?: unknown
+  type?: unknown
 }
 
 const PLUGIN_MANIFEST_MODULES = import.meta.glob('./plugins/*/manifest.json', {
@@ -132,12 +135,11 @@ async function fetchWithFallback(urls: string[]): Promise<string> {
 
 function buildEmbeddedBuiltinIndex(): BuiltinPluginIndex {
   return {
-    version: 3,
+    version: 5,
     packages: BUILTIN_PLUGIN_PACKAGES.map((pkg) => ({
       pluginId: pkg.pluginId,
       dir: pkg.dir,
       version: pkg.version,
-      files: Object.keys(pkg.files).sort(),
     })),
   }
 }
@@ -146,13 +148,12 @@ function normalizeBuiltinPluginIndex(value: unknown): BuiltinPluginIndex {
   const raw = value as { version?: unknown; packages?: unknown }
   const packages = Array.isArray(raw.packages)
     ? raw.packages.map((entry): BuiltinPluginIndexPackage => {
-        if (typeof entry === 'string') return { pluginId: entry, dir: entry, files: [] }
+        if (typeof entry === 'string') return { pluginId: entry, dir: entry }
         const pkg = entry as Partial<BuiltinPluginIndexPackage>
         return {
           pluginId: String(pkg.pluginId || ''),
           dir: typeof pkg.dir === 'string' ? pkg.dir : undefined,
           version: typeof pkg.version === 'string' ? pkg.version : undefined,
-          files: Array.isArray(pkg.files) ? pkg.files : [],
           baseUrl: typeof pkg.baseUrl === 'string' ? pkg.baseUrl : undefined,
         }
       })
@@ -186,19 +187,46 @@ function validatePluginId(pluginId: string): void {
   }
 }
 
-function remoteFilePath(file: BuiltinPluginIndexFile): string {
-  return typeof file === 'string' ? file : file.path
+let remoteBuiltinTreePaths: Promise<string[]> | null = null
+
+async function fetchRemoteBuiltinTreePaths(): Promise<string[]> {
+  if (remoteBuiltinTreePaths) return remoteBuiltinTreePaths
+  remoteBuiltinTreePaths = fetchWithFallback(REMOTE_BUILTIN_PLUGIN_TREE_URLS).then((raw) => {
+    const parsed = JSON.parse(raw) as { tree?: RemoteBuiltinTreeItem[]; truncated?: boolean }
+    if (!Array.isArray(parsed.tree)) {
+      throw new Error('Remote builtin plugin GitHub tree response is invalid')
+    }
+    if (parsed.truncated) {
+      throw new Error('Remote builtin plugin GitHub tree response is truncated')
+    }
+    return parsed.tree
+      .filter((item) => item.type === 'blob' && typeof item.path === 'string')
+      .map((item) => item.path as string)
+  })
+  return remoteBuiltinTreePaths
 }
 
-function remoteFileUrl(file: BuiltinPluginIndexFile): string | undefined {
-  return typeof file === 'string' ? undefined : file.url
+async function discoverRemoteBuiltinPackageFiles(pkg: BuiltinPluginIndexPackage): Promise<string[]> {
+  const packageDir = pkg.dir || pkg.pluginId
+  validatePackageRelativePath(packageDir, 'Remote builtin plugin directory')
+
+  const prefix = `src/plugins/${packageDir}/`
+  const files = (await fetchRemoteBuiltinTreePaths())
+    .filter((path) => path.startsWith(prefix) && DOWNLOADABLE_PLUGIN_FILE_PATTERN.test(path))
+    .map((path) => path.slice(prefix.length))
+    .sort()
+
+  for (const file of files) {
+    validatePackageRelativePath(file, 'Remote builtin plugin file')
+  }
+  if (!files.includes('manifest.json')) {
+    throw new Error(`Remote builtin plugin "${pkg.pluginId}" does not include manifest.json in the GitHub tree`)
+  }
+  return files
 }
 
-function remotePackageFileUrls(pkg: BuiltinPluginIndexPackage, file: BuiltinPluginIndexFile): string[] {
-  const path = remoteFilePath(file)
+function remotePackageFileUrls(pkg: BuiltinPluginIndexPackage, path: string): string[] {
   validatePackageRelativePath(path, 'Remote builtin plugin file')
-  const directUrl = remoteFileUrl(file)
-  if (directUrl) return [directUrl]
 
   const packageDir = pkg.dir || pkg.pluginId
   validatePackageRelativePath(packageDir, 'Remote builtin plugin directory')
@@ -229,14 +257,11 @@ async function stageRemoteBuiltinPackage(
   stagingRoot: string,
 ): Promise<string> {
   validatePluginId(pkg.pluginId)
-  if (!pkg.files || pkg.files.length === 0) {
-    throw new Error(`Remote builtin plugin "${pkg.pluginId}" does not declare downloadable files`)
-  }
+  const files = await discoverRemoteBuiltinPackageFiles(pkg)
 
   const packageRoot = `${stagingRoot}/${pkg.pluginId}`
-  for (const file of pkg.files) {
-    const path = remoteFilePath(file)
-    const content = await fetchWithFallback(remotePackageFileUrls(pkg, file))
+  for (const path of files) {
+    const content = await fetchWithFallback(remotePackageFileUrls(pkg, path))
     await ensureTextFile(`${packageRoot}/${path}`, content)
   }
   await validateStagedBuiltinPackage(packageRoot, pkg.pluginId)

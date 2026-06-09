@@ -155,4 +155,4 @@ The Plugins page provides **New Plugin**. It creates a dev package under `plugin
 
 ## Update Detection / 更新检测
 
-更新检测 operates on plugin package indexes, not old script indexes. The builtin package index records package ids and index version. Future per-package update checks should compare package metadata such as `pluginId`, `version`, `source`, and `sourceUrl`, then update or replace the whole directory package.
+更新检测 operates on plugin package indexes, not old script indexes. The builtin package index records package ids, package directories, package versions, and index version only. It does not list package files: the directory is the plugin package, and file discovery is an internal release/update concern. Future per-package update checks should compare package metadata such as `pluginId`, `version`, `source`, and `sourceUrl`, then update or replace the whole directory package.
