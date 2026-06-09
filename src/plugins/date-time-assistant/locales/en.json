@@ -1,4 +1,13 @@
 {
+  "command.timestamp.title": "Timestamp Converter",
+  "command.timestamp.description": "Convert between timestamp and date",
+  "input.text.label": "Input",
+  "param.unit.label": "Timestamp unit",
+  "param.unit.option.ms.label": "Milliseconds (ms)",
+  "param.unit.option.s.label": "Seconds (s)",
+  "param.overwrite.label": "Output mode",
+  "param.overwrite.option.yes.label": "Replace",
+  "param.overwrite.option.no.label": "Keep original",
   "provider.title": "Date & Time Assistant",
   "provider.subtitle": "Date & Time Assistant",
   "action.copyDateTime": "Copy Date & Time",

@@ -32,6 +32,9 @@ const files = {
   pluginScaffold: readIfExists('src/workspace/pluginScaffold.ts'),
   bundledPluginLoader: readIfExists('src/workspace/bundledPluginLoader.ts'),
   builtinPluginIndex: readIfExists('src/builtin-plugins/index.json'),
+  timestampManifest: readIfExists('src/plugins/timestamp/manifest.json'),
+  dateTimeAssistantPlugin: readIfExists('src/plugins/date-time-assistant/index.ts'),
+  dateTimeAssistantManifest: readIfExists('src/plugins/date-time-assistant/manifest.json'),
   directoryConventionDoc: readIfExists('doc/plugin-directory-convention.md'),
   directoryConvergencePlan: readIfExists('doc/plans/2026-06-03-directory-plugin-convergence.md'),
 }
@@ -264,6 +267,18 @@ check('Built-in release packages should not include internal core', () => {
   )
 })
 
+check('Time utilities ship as one first-party plugin package', () => {
+  assert.ok(files.dateTimeAssistantManifest, 'date-time-assistant plugin manifest should exist')
+  assert.ok(files.dateTimeAssistantPlugin, 'date-time-assistant plugin entry should exist')
+  assert.ok(!files.timestampManifest, 'timestamp should be merged into date-time-assistant instead of shipping as a separate plugin package')
+
+  const manifest = JSON.parse(files.dateTimeAssistantManifest)
+  assert.deepEqual(manifest.capabilities?.sort(), ['command', 'instant-suggestion'], 'date-time-assistant should advertise both command and instant-suggestion capabilities')
+  assert.match(files.dateTimeAssistantPlugin, /\bcommands\s*:/, 'date-time-assistant should include the timestamp conversion command')
+  assert.match(files.dateTimeAssistantPlugin, /\binstantSuggestions\s*:/, 'date-time-assistant should keep date/time instant suggestions')
+  assert.match(files.dateTimeAssistantPlugin, /tomorrow\s+/, 'date-time-assistant instant suggestions should preserve natural date query support')
+})
+
 check('First-party diff registration goes through bundled plugin package loader', () => {
   assert.ok(files.bundledPluginLoader, 'src/workspace/bundledPluginLoader.ts should exist')
   assert.match(files.bundledPluginLoader, /import\.meta\.glob\(['"]\.\.\/plugins\/\*\/manifest\.json['"]/, 'bundled loader should discover plugin package manifests')
@@ -383,7 +398,7 @@ check('Builtin plugin update check compares remote package metadata', () => {
   assert.match(files.tauriLib, /fn\s+replace_plugin_dir[\s\S]*backup[\s\S]*fs::rename/, 'Tauri should provide a replace_plugin_dir command with backup/rename replacement')
   assert.match(files.tauriLib, /generate_handler!\[[\s\S]*replace_plugin_dir/, 'replace_plugin_dir should be registered as a Tauri command')
   assert.ok(files.builtinPluginIndex, 'remote builtin plugin index should exist at src/builtin-plugins/index.json')
-  assert.match(files.builtinPluginIndex, /"version"\s*:\s*3/, 'remote builtin plugin index should carry the current package index version')
+  assert.match(files.builtinPluginIndex, /"version"\s*:\s*4/, 'remote builtin plugin index should carry the current package index version')
   assert.match(files.builtinPluginIndex, /"pluginId"\s*:\s*"text-diff"[\s\S]*"TextDiffRenderer\.tsx"/, 'remote builtin plugin index should list package files needed for download')
 })
 

@@ -1,9 +1,0 @@
-{
-  "command.run.title": "时间戳转换",
-  "command.run.description": "时间戳与日期互转",
-  "input.text.label": "输入",
-  "param.mode.label": "模式",
-  "param.mode.option.to-date.label": "时间戳 → 日期",
-  "param.mode.option.to-ts.label": "日期 → 时间戳",
-  "param.mode.option.now.label": "当前时间"
-}

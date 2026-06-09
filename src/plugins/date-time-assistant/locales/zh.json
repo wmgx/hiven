@@ -1,4 +1,13 @@
 {
+  "command.timestamp.title": "时间戳转换",
+  "command.timestamp.description": "时间戳与日期互转",
+  "input.text.label": "输入",
+  "param.unit.label": "时间戳单位",
+  "param.unit.option.ms.label": "毫秒 (ms)",
+  "param.unit.option.s.label": "秒 (s)",
+  "param.overwrite.label": "输出模式",
+  "param.overwrite.option.yes.label": "覆盖",
+  "param.overwrite.option.no.label": "保留原值",
   "provider.title": "时间助手",
   "provider.subtitle": "时间助手",
   "action.copyDateTime": "复制日期时间",

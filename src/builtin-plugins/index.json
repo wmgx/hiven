@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "packages": [
     {
       "pluginId": "append",
@@ -34,6 +34,12 @@
     {
       "pluginId": "css",
       "dir": "css",
+      "version": "1.0.0",
+      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
+    },
+    {
+      "pluginId": "date-time-assistant",
+      "dir": "date-time-assistant",
       "version": "1.0.0",
       "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
     },
@@ -168,12 +174,6 @@
       "dir": "textDiff",
       "version": "1.0.0",
       "files": ["README.md", "TextDiffRenderer.tsx", "autoDiffMode.ts", "index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
-    },
-    {
-      "pluginId": "timestamp",
-      "dir": "timestamp",
-      "version": "1.0.0",
-      "files": ["index.ts", "locales/en.json", "locales/zh.json", "manifest.json"]
     },
     {
       "pluginId": "trim-whitespace",

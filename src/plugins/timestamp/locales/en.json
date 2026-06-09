@@ -1,9 +1,0 @@
-{
-  "command.run.title": "Timestamp Converter",
-  "command.run.description": "Convert between timestamp and date",
-  "input.text.label": "Input",
-  "param.mode.label": "Mode",
-  "param.mode.option.to-date.label": "Timestamp → Date",
-  "param.mode.option.to-ts.label": "Date → Timestamp",
-  "param.mode.option.now.label": "Now"
-}

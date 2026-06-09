@@ -1,20 +1,53 @@
-import type { PluginDefinition, InstantSuggestionContext, InstantSuggestion } from '../../workspace/pluginTypes'
-
-// ─── Date/Time Helpers ───────────────────────────────────────────────────────
+import { definePlugin, type TextInput } from '@fluxtext/plugin'
+import type { InstantSuggestion, InstantSuggestionContext } from '../../workspace/pluginTypes'
 
 function pad(n: number, width = 2): string {
   return String(n).padStart(width, '0')
 }
 
-function formatDateTime(date: Date): string {
+function formatLocalDateTime(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
-function formatDate(date: Date): string {
+function formatLocalDate(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
-// ─── Query Parser ────────────────────────────────────────────────────────────
+function formatOffsetDateTime(date: Date, offsetMinutes?: number): string {
+  const off = offsetMinutes !== undefined ? offsetMinutes : -date.getTimezoneOffset()
+  const shifted = new Date(date.getTime() + off * 60000)
+  const iso = shifted.toISOString().replace(/\.\d{3}Z$/, '')
+  const sign = off >= 0 ? '+' : '-'
+  const absOff = Math.abs(off)
+  const h = String(Math.floor(absOff / 60)).padStart(2, '0')
+  const m = String(absOff % 60).padStart(2, '0')
+  return `${iso.replace('T', ' ')}${sign}${h}:${m}`
+}
+
+function parseTzSuffix(str: string): { body: string; offsetMinutes: number | undefined } {
+  const match = str.match(/\s*([+-])(\d{1,2})(?::?(\d{2}))?\s*$/)
+  if (!match) {
+    const bare = str.match(/\s*[+-]\s*$/)
+    if (bare) return { body: str.slice(0, bare.index!).trim(), offsetMinutes: -(new Date().getTimezoneOffset()) }
+    return { body: str, offsetMinutes: undefined }
+  }
+
+  const body = str.slice(0, match.index!).trim()
+  const sign = match[1] === '+' ? 1 : -1
+  const hours = parseInt(match[2], 10)
+  const mins = parseInt(match[3] || '0', 10)
+  return { body, offsetMinutes: sign * (hours * 60 + mins) }
+}
+
+function tryParseTimestamp(value: string): number {
+  const n = Number(value)
+  if (Number.isNaN(n) || !Number.isFinite(n) || value.length === 0) return NaN
+  return n < 1e12 ? n * 1000 : n
+}
+
+function formatTimestamp(date: Date, unit: 's' | 'ms'): string {
+  return unit === 's' ? `${Math.floor(date.getTime() / 1000)}` : `${date.getTime()}`
+}
 
 type ParsedResult = {
   kind: 'datetime' | 'date' | 'timestamp'
@@ -26,17 +59,15 @@ type ParsedResult = {
 function parseDateTimeQuery(query: string, now: Date): ParsedResult | null {
   const q = query.trim().toLowerCase()
 
-  // "now" → current local time
   if (q === 'now') {
     return {
       kind: 'datetime',
-      display: formatDateTime(now),
-      value: formatDateTime(now),
+      display: formatLocalDateTime(now),
+      value: formatLocalDateTime(now),
       actionLabelKey: 'action.copyDateTime',
     }
   }
 
-  // "timestamp" / "unix time" / "now timestamp" → current unix timestamp (seconds)
   if (q === 'timestamp' || q === 'unix time' || q === 'now timestamp') {
     const ts = Math.floor(now.getTime() / 1000).toString()
     return {
@@ -47,7 +78,6 @@ function parseDateTimeQuery(query: string, now: Date): ParsedResult | null {
     }
   }
 
-  // "tomorrow 10am" / "tomorrow 3pm" etc.
   const tomorrowMatch = q.match(/^tomorrow\s+(\d{1,2})\s*(am|pm)?$/)
   if (tomorrowMatch) {
     let hour = parseInt(tomorrowMatch[1], 10)
@@ -60,91 +90,144 @@ function parseDateTimeQuery(query: string, now: Date): ParsedResult | null {
     tomorrow.setHours(hour, 0, 0, 0)
     return {
       kind: 'datetime',
-      display: formatDateTime(tomorrow),
-      value: formatDateTime(tomorrow),
+      display: formatLocalDateTime(tomorrow),
+      value: formatLocalDateTime(tomorrow),
       actionLabelKey: 'action.copyDateTime',
     }
   }
 
-  // "YYYY-MM-DD + N days" / "YYYY-MM-DD - N days"
   const dateOffsetMatch = q.match(/^(\d{4}-\d{2}-\d{2})\s*([+-])\s*(\d+)\s*days?$/)
   if (dateOffsetMatch) {
     const baseDate = new Date(dateOffsetMatch[1] + 'T00:00:00')
-    if (isNaN(baseDate.getTime())) return null
+    if (Number.isNaN(baseDate.getTime())) return null
     const sign = dateOffsetMatch[2] === '+' ? 1 : -1
     const days = parseInt(dateOffsetMatch[3], 10)
     baseDate.setDate(baseDate.getDate() + sign * days)
     return {
       kind: 'date',
-      display: formatDate(baseDate),
-      value: formatDate(baseDate),
+      display: formatLocalDate(baseDate),
+      value: formatLocalDate(baseDate),
       actionLabelKey: 'action.copyDate',
     }
   }
 
-  // Explicit "timestamp NNNN" → parse as timestamp
   const explicitTsMatch = q.match(/^timestamp\s+(\d+)$/)
   if (explicitTsMatch) {
-    const num = explicitTsMatch[1]
-    if (num.length === 10) {
-      const date = new Date(parseInt(num, 10) * 1000)
-      if (isNaN(date.getTime())) return null
-      return {
-        kind: 'datetime',
-        display: formatDateTime(date),
-        value: formatDateTime(date),
-        actionLabelKey: 'action.copyDateTime',
-      }
-    }
-    if (num.length === 13) {
-      const date = new Date(parseInt(num, 10))
-      if (isNaN(date.getTime())) return null
-      return {
-        kind: 'datetime',
-        display: formatDateTime(date),
-        value: formatDateTime(date),
-        actionLabelKey: 'action.copyDateTime',
-      }
-    }
-    // Invalid length for timestamp
-    return null
+    const parsed = parseTimestampForSuggestion(explicitTsMatch[1])
+    if (!parsed) return null
+    return parsed
   }
 
-  // Pure 10-digit number → seconds timestamp
-  if (/^\d{10}$/.test(q)) {
-    const date = new Date(parseInt(q, 10) * 1000)
-    if (isNaN(date.getTime())) return null
-    // Sanity check: between year 2000 and 2100
-    const year = date.getFullYear()
-    if (year < 2000 || year > 2100) return null
-    return {
-      kind: 'datetime',
-      display: formatDateTime(date),
-      value: formatDateTime(date),
-      actionLabelKey: 'action.copyDateTime',
-    }
-  }
-
-  // Pure 13-digit number → milliseconds timestamp
-  if (/^\d{13}$/.test(q)) {
-    const date = new Date(parseInt(q, 10))
-    if (isNaN(date.getTime())) return null
-    const year = date.getFullYear()
-    if (year < 2000 || year > 2100) return null
-    return {
-      kind: 'datetime',
-      display: formatDateTime(date),
-      value: formatDateTime(date),
-      actionLabelKey: 'action.copyDateTime',
-    }
+  if (/^\d{10}$/.test(q) || /^\d{13}$/.test(q)) {
+    return parseTimestampForSuggestion(q)
   }
 
   return null
 }
 
-// ─── Plugin Definition ───────────────────────────────────────────────────────
+function parseTimestampForSuggestion(value: string): ParsedResult | null {
+  const date = value.length === 10
+    ? new Date(parseInt(value, 10) * 1000)
+    : value.length === 13
+      ? new Date(parseInt(value, 10))
+      : null
+  if (!date || Number.isNaN(date.getTime())) return null
+  const year = date.getFullYear()
+  if (year < 2000 || year > 2100) return null
+  return {
+    kind: 'datetime',
+    display: formatLocalDateTime(date),
+    value: formatLocalDateTime(date),
+    actionLabelKey: 'action.copyDateTime',
+  }
+}
 
-const definition: PluginDefinition = {
+export const dateTimeAssistantPlugin = definePlugin({
+  commands: [
+    {
+      id: 'timestamp.run',
+      title: 'command.timestamp.title',
+      description: 'command.timestamp.description',
+      icon: 'Clock',
+      aliases: ['unix-time', 'epoch', 'date-convert'],
+      live: { live: { enabled: true, trigger: 'on-input', sideEffects: 'none', debounceMs: 250 } },
+      optionalParams: true,
+      params: [
+        {
+          key: 'unit',
+          label: 'param.unit.label',
+          type: 'single-select',
+          options: [
+            { label: 'param.unit.option.ms.label', value: 'ms' },
+            { label: 'param.unit.option.s.label', value: 's' },
+          ],
+          default: 'ms',
+        },
+        {
+          key: 'overwrite',
+          label: 'param.overwrite.label',
+          type: 'single-select',
+          options: [
+            { label: 'param.overwrite.option.yes.label', value: 'yes' },
+            { label: 'param.overwrite.option.no.label', value: 'no' },
+          ],
+          default: 'yes',
+        },
+      ],
+      inputs: [
+        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
+      ],
+      inputResolution: { strategy: 'use-active', fallback: 'fail' },
+      run(ctx) {
+        const input = ctx.inputs.input as TextInput
+        const text = input?.kind === 'text' ? input.text : ''
+        const inPlace = !!input?.paneId
+        const overwrite = ctx.params.overwrite !== 'no'
+        const showOriginal = inPlace && !overwrite
+        const unit = (ctx.params.unit as 's' | 'ms') || 'ms'
+        const target = input?.paneId ? { paneId: input.paneId } : 'active-input'
+        const reply = (result: string) => ({ effects: [{ type: 'text.replace' as const, target, text: result }] })
+
+        const results = text.split(/\r?\n/).map((line) => {
+          const trimmed = line.trim()
+          if (!trimmed) return ''
+
+          const lowerTrimmed = trimmed.toLowerCase()
+          if (lowerTrimmed === 'now' || lowerTrimmed.startsWith('now+') || lowerTrimmed.startsWith('now-')) {
+            const now = new Date()
+            const tzPart = trimmed.slice(3)
+            const tz = tzPart ? parseTzSuffix(tzPart).offsetMinutes : undefined
+            const result = `${formatTimestamp(now, unit)} | ${formatOffsetDateTime(now, tz)}`
+            return showOriginal ? `${trimmed} -> ${result}` : result
+          }
+
+          const { body, offsetMinutes } = parseTzSuffix(trimmed)
+          const tsMs = tryParseTimestamp(body)
+
+          try {
+            if (!Number.isNaN(tsMs)) {
+              const result = formatOffsetDateTime(new Date(tsMs), offsetMinutes)
+              return showOriginal ? `${trimmed} -> ${result}` : result
+            }
+
+            let date = new Date(body)
+            if (Number.isNaN(date.getTime())) date = new Date(trimmed)
+            if (Number.isNaN(date.getTime())) return `Error: Invalid date "${trimmed}"`
+            if (offsetMinutes !== undefined) {
+              const utcMs = date.getTime() - offsetMinutes * 60000 + date.getTimezoneOffset() * 60000
+              date = new Date(utcMs)
+            }
+            const result = formatTimestamp(date, unit)
+            return showOriginal ? `${trimmed} -> ${result}` : result
+          } catch (error: unknown) {
+            return `Error: ${error instanceof Error ? error.message : String(error)}`
+          }
+        })
+
+        return reply(results.join('\n'))
+      },
+    },
+  ],
   instantSuggestions: [
     {
       id: 'date-time.assistant',
@@ -152,11 +235,11 @@ const definition: PluginDefinition = {
       priority: 95,
       suggest(ctx: InstantSuggestionContext): InstantSuggestion | null {
         const parsed = parseDateTimeQuery(ctx.query, new Date())
-        if (parsed === null) return null
+        if (!parsed) return null
 
         return {
           id: `date-time:${parsed.kind}:${ctx.query.trim()}`,
-          title: `${ctx.query.trim()} → ${parsed.display}`,
+          title: `${ctx.query.trim()} -> ${parsed.display}`,
           subtitle: ctx.t('provider.subtitle'),
           value: parsed.value,
           icon: 'Clock',
@@ -166,6 +249,6 @@ const definition: PluginDefinition = {
       },
     },
   ],
-}
+})
 
-export default definition
+export default dateTimeAssistantPlugin
