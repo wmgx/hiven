@@ -66,13 +66,26 @@ check('pinned-only mode only builds pinned action items', () => {
   )
   assertHas(
     files.globalLauncher,
-    /(?:mode|globalLauncherMode|launcherMode)[\s\S]{0,240}pinnedActions\.map|pinnedActions\.map[\s\S]{0,240}(?:mode|globalLauncherMode|launcherMode)/,
+    /(?:mode|globalLauncherMode|launcherMode)[\s\S]{0,620}pinnedActions\.map|pinnedActions\.map[\s\S]{0,620}(?:mode|globalLauncherMode|launcherMode)/,
     'pinned-only branch should derive items from pinnedActions',
   )
   assertHas(
     files.globalLauncher,
     /(?:mode|globalLauncherMode|launcherMode)[\s\S]{0,360}(?:recentActionNames|viewItems)|(?:recentActionNames|viewItems)[\s\S]{0,360}(?:mode|globalLauncherMode|launcherMode)/,
     'recent commands and workspace views should be gated by full mode',
+  )
+})
+
+check('pinned launcher command titles follow current locale', () => {
+  assertHas(
+    files.globalLauncher,
+    /pinnedActions\.map[\s\S]{0,420}localized\([\s\S]{0,120}titleI18n[\s\S]{0,80}locale/,
+    'pinned launcher items should localize command titles from titleI18n instead of rendering the persisted title verbatim',
+  )
+  assertHas(
+    files.globalLauncher,
+    /pluginRegistry\.resolveCommand\([\s\S]{0,160}item\.actionId/,
+    'pinned launcher items should refresh command metadata from the plugin registry when available',
   )
 })
 

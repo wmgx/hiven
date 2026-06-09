@@ -50,13 +50,16 @@ export function GlobalLauncher() {
   const items = useMemo<LauncherItem[]>(() => {
     void pluginRegistryVersion
     const pinnedLabel = t(locale, 'palette.globalPinned')
-    const pinned = pinnedActions.map((item) => ({
-      kind: 'pinned' as const,
-      id: item.id,
-      title: item.title,
-      subtitle: pinnedLabel,
-      icon: item.icon,
-    }))
+    const pinned = pinnedActions.map((item) => {
+      const command = pluginRegistry.resolveCommand(item.actionId, item.isDev ? 'dev' : 'production')?.contribution
+      return {
+        kind: 'pinned' as const,
+        id: item.id,
+        title: localized(command?.title ?? item.title, command?.titleI18n ?? item.titleI18n, locale),
+        subtitle: pinnedLabel,
+        icon: command?.icon ?? item.icon,
+      }
+    })
     if ('pinned-only' === mode) return pinned
 
     const recentLabel = t(locale, 'palette.globalRecent')
