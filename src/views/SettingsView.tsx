@@ -4,7 +4,7 @@ import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { getVersion } from '@tauri-apps/api/app'
 import { Check, ChevronDown, Download, Info, Keyboard, Languages, Layout, Minus, Plug, Plus, RefreshCw, SlidersHorizontal } from 'lucide-react'
-import { useAppStore, type GlobalPinnedLauncherShortcut } from '../store'
+import { useAppStore, type GlobalPinnedLauncherDoubleModifier, type GlobalPinnedLauncherShortcut } from '../store'
 import { useT } from '../i18n'
 import { checkBuiltinPluginsUpdate } from '../configInit'
 
@@ -175,6 +175,7 @@ function HotkeySettings({
   const t = useT('settings')
   const [isRecording, setIsRecording] = useState(false)
   const [error, setError] = useState('')
+  const lastModifierTapRef = useRef<{ modifier: GlobalPinnedLauncherDoubleModifier; time: number } | null>(null)
   const recorderRef = useRef<HTMLDivElement>(null)
   const registrationStatus = shortcut.registrationError
     ? `${t('hotkeyStatus')}: ${shortcut.registrationError}`
@@ -182,7 +183,7 @@ function HotkeySettings({
 
   const displayValue = () => {
     if (shortcut.kind === 'accelerator') return shortcut.accelerator
-    if (shortcut.kind === 'double-modifier') return t('hotkeyDoubleCmd')
+    if (shortcut.kind === 'double-modifier') return doubleModifierLabel(shortcut.modifier, t)
     return t('hotkeyDisabled')
   }
 
@@ -197,29 +198,41 @@ function HotkeySettings({
       return
     }
 
-    const accelerator = eventToAccelerator(event)
-    if (!accelerator) {
+    const recordedShortcut = eventToGlobalPinnedLauncherShortcut(event, lastModifierTapRef.current)
+    lastModifierTapRef.current = recordedShortcut.lastModifierTap
+    if (!recordedShortcut.shortcut) {
       setError(isModifierKey(event.key) ? '' : t('hotkeyRecordError'))
       return
     }
     setError('')
     setIsRecording(false)
-    onChange({ kind: 'accelerator', accelerator })
+    onChange(recordedShortcut.shortcut)
   }
 
   useEffect(() => {
     if (!isRecording) return
+    ;(window as unknown as { __FLUXTEXT_HOTKEY_RECORDING__?: boolean }).__FLUXTEXT_HOTKEY_RECORDING__ = true
     const timer = window.setTimeout(() => {
       setIsRecording(false)
       setError('')
     }, 10_000)
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      ;(window as unknown as { __FLUXTEXT_HOTKEY_RECORDING__?: boolean }).__FLUXTEXT_HOTKEY_RECORDING__ = false
+    }
   }, [isRecording])
 
   const startRecording = () => {
     setError('')
+    lastModifierTapRef.current = null
     setIsRecording(true)
     requestAnimationFrame(() => recorderRef.current?.focus())
+  }
+
+  const chooseDoubleModifier = (modifier: GlobalPinnedLauncherDoubleModifier) => {
+    setError('')
+    setIsRecording(false)
+    onChange({ kind: 'double-modifier', modifier })
   }
 
   return (
@@ -243,8 +256,14 @@ function HotkeySettings({
       </SettingRow>
       <div className="flex flex-wrap gap-2 justify-end">
         <button className="scripts-btn" onClick={startRecording}>{t('hotkeyRecord')}</button>
-        <button className="scripts-btn" onClick={() => { setError(''); setIsRecording(false); onChange({ kind: 'double-modifier', modifier: 'Command' }) }}>
+        <button className="scripts-btn" onClick={() => chooseDoubleModifier('Command')}>
           {t('hotkeyDoubleCmd')}
+        </button>
+        <button className="scripts-btn" onClick={() => chooseDoubleModifier('Shift')}>
+          {t('hotkeyDoubleShift')}
+        </button>
+        <button className="scripts-btn" onClick={() => chooseDoubleModifier('Option')}>
+          {t('hotkeyDoubleOption')}
         </button>
         <button className="scripts-btn" onClick={() => { setError(''); setIsRecording(false); onChange({ kind: 'disabled' }) }}>
           {t('hotkeyDisabled')}
@@ -255,14 +274,44 @@ function HotkeySettings({
       </span>
       {shortcut.kind === 'double-modifier' && (
         <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-tertiary)' }}>
-          {t('hotkeyAccessibilityHint')}
+          {t('hotkeyAccessibilityHint', { modifier: doubleModifierLabel(shortcut.modifier, t) })}
         </span>
       )}
     </div>
   )
 }
 
-function eventToAccelerator(event: KeyboardEvent<HTMLDivElement>): string | null {
+function eventToGlobalPinnedLauncherShortcut(
+  event: KeyboardEvent<HTMLDivElement>,
+  lastModifierTap: { modifier: GlobalPinnedLauncherDoubleModifier; time: number } | null,
+): { shortcut: GlobalPinnedLauncherShortcut | null; lastModifierTap: { modifier: GlobalPinnedLauncherDoubleModifier; time: number } | null } {
+  const now = Date.now()
+  if (isModifierKey(event.key)) {
+    const modifier =
+      event.key === 'Meta' ? 'Command' :
+      event.key === 'Shift' ? 'Shift' :
+      event.key === 'Alt' ? 'Option' :
+      null
+    if (!modifier || event.repeat) return { shortcut: null, lastModifierTap }
+    if (lastModifierTap?.modifier === modifier && now - lastModifierTap.time <= 500) {
+      return {
+        shortcut: { kind: 'double-modifier', modifier },
+        lastModifierTap: null,
+      }
+    }
+    return {
+      shortcut: null,
+      lastModifierTap: { modifier, time: now },
+    }
+  }
+
+  return {
+    shortcut: eventToAccelerator(event),
+    lastModifierTap: null,
+  }
+}
+
+function eventToAccelerator(event: KeyboardEvent<HTMLDivElement>): GlobalPinnedLauncherShortcut | null {
   const key = normalizeKey(event.key)
   const hasModifier = event.metaKey || event.ctrlKey || event.altKey || event.shiftKey
   if (!key || !hasModifier) return null
@@ -273,7 +322,7 @@ function eventToAccelerator(event: KeyboardEvent<HTMLDivElement>): string | null
   if (event.altKey) parts.push('Alt')
   if (event.shiftKey) parts.push('Shift')
   parts.push(key)
-  return parts.join('+')
+  return { kind: 'accelerator', accelerator: parts.join('+') }
 }
 
 function normalizeKey(key: string): string | null {
@@ -286,6 +335,12 @@ function normalizeKey(key: string): string | null {
 
 function isModifierKey(key: string): boolean {
   return key === 'Meta' || key === 'Control' || key === 'Alt' || key === 'Shift'
+}
+
+function doubleModifierLabel(modifier: GlobalPinnedLauncherDoubleModifier, t: ReturnType<typeof useT>): string {
+  if (modifier === 'Shift') return t('hotkeyDoubleShift')
+  if (modifier === 'Option') return t('hotkeyDoubleOption')
+  return t('hotkeyDoubleCmd')
 }
 
 function LocaleSelect({ options, value, onChange }: { options: { value: string; label: string }[]; value: string; onChange: (value: string) => void }) {

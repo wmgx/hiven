@@ -25,6 +25,9 @@ const files = {
   defaultCapability: read('src-tauri/capabilities/default.json'),
   store: read('src/store.ts'),
   settingsView: read('src/views/SettingsView.tsx'),
+  app: read('src/App.tsx'),
+  globalPinnedLauncherHotkeys: read('src/hotkeys/globalPinnedLauncher.ts'),
+  tauriHotkeys: read('src-tauri/src/hotkeys.rs'),
   i18n: readI18n(),
 }
 
@@ -40,6 +43,10 @@ function check(name, fn) {
 
 function assertHas(source, pattern, message) {
   assert.match(source, pattern, message)
+}
+
+function assertDoesNotHave(source, pattern, message) {
+  assert.doesNotMatch(source, pattern, message)
 }
 
 check('package.json exposes the global hotkey settings verifier', () => {
@@ -73,7 +80,7 @@ check('Tauri app registers the global shortcut plugin', () => {
   )
 })
 
-check('default capability allows global shortcut register and unregister', () => {
+check('default capability allows global shortcut register, unregister, and unregister_all', () => {
   const capability = JSON.parse(files.defaultCapability)
   assert.ok(
     capability.permissions?.includes('global-shortcut:allow-register'),
@@ -82,6 +89,10 @@ check('default capability allows global shortcut register and unregister', () =>
   assert.ok(
     capability.permissions?.includes('global-shortcut:allow-unregister'),
     'src-tauri/capabilities/default.json should allow global shortcut unregister',
+  )
+  assert.ok(
+    capability.permissions?.includes('global-shortcut:allow-unregister-all'),
+    'src-tauri/capabilities/default.json should allow global shortcut unregister_all so reload/HMR stale registrations can be cleared',
   )
 })
 
@@ -105,7 +116,7 @@ check('store settings include a single global pinned launcher shortcut config', 
   )
 })
 
-check('shortcut config supports accelerator, double-modifier, and disabled variants', () => {
+check('shortcut config supports accelerator, double-modifier, disabled, and all supported double modifiers', () => {
   for (const kind of ['accelerator', 'double-modifier', 'disabled']) {
     assertHas(
       files.store,
@@ -118,17 +129,27 @@ check('shortcut config supports accelerator, double-modifier, and disabled varia
     /accelerator\s*:\s*string|value\s*:\s*string|shortcut\s*:\s*string/,
     'accelerator variant should carry the configured shortcut string',
   )
-  assertHas(
+  assertDoesNotHave(
     files.store,
-    /modifier\s*:\s*['"](?:Meta|Command|Cmd)['"]|doubleModifier\s*:\s*['"](?:Meta|Command|Cmd)['"]/,
-    'double-modifier variant should identify the Command modifier',
+    /globalPinnedLauncherShortcut\?\.kind\s*===\s*['"]double-modifier['"][\s\S]{0,220}kind:\s*['"]accelerator['"]/,
+    'persisted double-modifier shortcuts should not be migrated away from double-modifier support',
   )
 })
+
+for (const modifier of ['Command', 'Shift', 'Option']) {
+  check(`store double-modifier shortcut supports ${modifier}`, () => {
+    assertHas(
+      files.store,
+      new RegExp(`['"]${modifier}['"]`),
+      `double-modifier variant should support ${modifier}`,
+    )
+  })
+}
 
 check('SettingsView renders a Hotkeys UI for the global pinned launcher shortcut', () => {
   assertHas(
     files.settingsView,
-    /settings\.hotkeys|Hotkeys|快捷键/,
+    /t\(['"]hotkeys['"]\)|settings\.hotkeys|Hotkeys|快捷键/,
     'SettingsView should render a Hotkeys card',
   )
   assertHas(
@@ -143,16 +164,11 @@ check('SettingsView renders a Hotkeys UI for the global pinned launcher shortcut
   )
 })
 
-check('SettingsView supports recording, Double Cmd, disabled, and status display', () => {
+check('SettingsView supports recording, disabled, and status display', () => {
   assertHas(
     files.settingsView,
     /recordingShortcut|recordShortcut|isRecording|onKeyDown[\s\S]{0,240}accelerator/,
     'SettingsView should support recording an accelerator',
-  )
-  assertHas(
-    files.settingsView,
-    /Double Cmd|Double Command|double-modifier|双击\s*(?:Cmd|Command|⌘)/,
-    'SettingsView should expose a Double Cmd option',
   )
   assertHas(
     files.settingsView,
@@ -166,16 +182,90 @@ check('SettingsView supports recording, Double Cmd, disabled, and status display
   )
 })
 
+for (const modifier of ['Command', 'Shift', 'Option']) {
+  check(`SettingsView exposes a Double ${modifier} option`, () => {
+    assertHas(
+      files.settingsView,
+      new RegExp(`kind:\\s*['"]double-modifier['"][\\s\\S]{0,180}modifier:\\s*['"]${modifier}['"]|modifier:\\s*['"]${modifier}['"][\\s\\S]{0,180}kind:\\s*['"]double-modifier['"]|chooseDoubleModifier\\(\\s*['"]${modifier}['"]\\s*\\)`),
+      `SettingsView should expose a Double ${modifier} option`,
+    )
+  })
+}
+
+check('Settings recording path can identify modifier-only double-modifier shortcuts', () => {
+  assertHas(
+    files.settingsView,
+    /eventTo(?:GlobalPinnedLauncherShortcut|Shortcut|DoubleModifierShortcut|RecordedShortcut)\s*\(/,
+    'recording should route key events through a testable shortcut helper, not only a private accelerator formatter',
+  )
+  assertHas(
+    files.settingsView,
+    /event\.key\s*===\s*['"](?:Meta|Shift|Alt|Option)['"][\s\S]{0,420}kind:\s*['"]double-modifier['"]|kind:\s*['"]double-modifier['"][\s\S]{0,420}event\.key\s*===\s*['"](?:Meta|Shift|Alt|Option)['"]|isModifierKey\(event\.key\)[\s\S]{0,640}kind:\s*['"]double-modifier['"]/,
+    'recording should convert modifier-only key events into double-modifier shortcut configs',
+  )
+  assertHas(
+    files.settingsView,
+    /onChange\(\s*(?:recordedShortcut(?:\.shortcut)?|shortcut|nextShortcut)\s*\)/,
+    'recording handler should pass the recorded accelerator or double-modifier shortcut through onChange',
+  )
+})
+
+check('native double-modifier hotkey layer supports Command, Shift, and Option', () => {
+  assertHas(
+    files.tauriHotkeys,
+    /register_double_modifier_hotkey/,
+    'native hotkey command should accept a modifier argument instead of only registering Double Cmd',
+  )
+  for (const modifier of ['Command', 'Shift', 'Option']) {
+    assertHas(
+      files.tauriHotkeys,
+      new RegExp(`['"]${modifier}['"]|\\b${modifier}\\b`),
+      `native double-modifier detector should model ${modifier}`,
+    )
+  }
+  assertDoesNotHave(
+    files.tauriHotkeys,
+    /start_double_cmd_listener|DoubleCmdHotkeyState|Key::Meta|meta_was_down|Modifiers\s*\{\s*meta:/,
+    'native double-modifier listener should not retain Cmd-only detector symbols after adding Shift and Option',
+  )
+})
+
+check('App global keydown handler ignores shortcut recorder events', () => {
+  assertHas(
+    files.app,
+    /is(?:Global)?ShortcutRecordingEvent|isHotkeyRecordingEvent|data-(?:shortcut|hotkey)-recorder|__FLUXTEXT_HOTKEY_RECORDING__/,
+    'App should be able to identify active Settings shortcut recording events',
+  )
+  assertHas(
+    files.app,
+    /if\s*\([^)]*(?:is(?:Global)?ShortcutRecordingEvent|isHotkeyRecordingEvent|data-(?:shortcut|hotkey)-recorder|__FLUXTEXT_HOTKEY_RECORDING__)[\s\S]{0,160}return/,
+    'App keydown capture handler should return before opening launchers/palette while Settings is recording',
+  )
+})
+
+check('global shortcut sync clears stale registrations before startup registration', () => {
+  assertHas(
+    files.globalPinnedLauncherHotkeys,
+    /unregisterAll\s*\(/,
+    'global hotkey sync should call unregisterAll to clear stale registrations from reload/HMR',
+  )
+  assertHas(
+    files.globalPinnedLauncherHotkeys,
+    /syncShortcutNow[\s\S]{0,520}unregisterAll\s*\([\s\S]{0,900}(?:registerAccelerator|register\s*\()/,
+    'sync startup should unregister all stale global shortcuts before registering the configured accelerator',
+  )
+})
+
 check('i18n includes English and Chinese copy for the hotkey settings', () => {
   for (const key of [
-    'settings.globalPinnedLauncherShortcut',
-    'settings.globalPinnedLauncherShortcutInfo',
-    'settings.hotkeyRecord',
-    'settings.hotkeyDoubleCmd',
-    'settings.hotkeyDisabled',
-    'settings.hotkeyStatus',
+    'globalPinnedLauncherShortcut',
+    'globalPinnedLauncherShortcutInfo',
+    'hotkeyRecord',
+    'hotkeyDoubleCmd',
+    'hotkeyDisabled',
+    'hotkeyStatus',
   ]) {
-    assertHas(files.i18n, new RegExp(key.replaceAll('.', '\\.')), `i18n should include ${key}`)
+    assertHas(files.i18n, new RegExp(`['"]${key}['"]`), `i18n should include ${key}`)
   }
   assertHas(
     files.i18n,
@@ -188,6 +278,12 @@ check('i18n includes English and Chinese copy for the hotkey settings', () => {
     'Chinese i18n should describe the global pinned launcher shortcut',
   )
 })
+
+for (const key of ['hotkeyDoubleShift', 'hotkeyDoubleOption']) {
+  check(`i18n includes ${key}`, () => {
+    assertHas(files.i18n, new RegExp(`['"]${key}['"]`), `i18n should include ${key}`)
+  })
+}
 
 if (failures.length > 0) {
   console.error(`global hotkey settings checks failed (${failures.length}):`)

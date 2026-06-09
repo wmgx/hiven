@@ -6,7 +6,7 @@ type TauriEventApi = typeof import('@tauri-apps/api/event')
 
 let installed = false
 let unsubscribeStore: (() => void) | null = null
-let unsubscribeDoubleCmdError: (() => void) | null = null
+let unsubscribeDoubleModifierError: (() => void) | null = null
 let currentAccelerator: string | null = null
 let syncGeneration = 0
 let syncQueue: Promise<void> = Promise.resolve()
@@ -16,7 +16,7 @@ export function installGlobalPinnedLauncherHotkeys() {
   installed = true
 
   void syncShortcut(useAppStore.getState().settings.globalPinnedLauncherShortcut)
-  void listenForDoubleCmdErrors()
+  void listenForDoubleModifierErrors()
   unsubscribeStore = useAppStore.subscribe((state, previousState) => {
     const next = state.settings.globalPinnedLauncherShortcut
     const previous = previousState.settings.globalPinnedLauncherShortcut
@@ -30,24 +30,24 @@ export function installGlobalPinnedLauncherHotkeys() {
     syncGeneration += 1
     unsubscribeStore?.()
     unsubscribeStore = null
-    unsubscribeDoubleCmdError?.()
-    unsubscribeDoubleCmdError = null
+    unsubscribeDoubleModifierError?.()
+    unsubscribeDoubleModifierError = null
     void unregisterCurrentAccelerator()
-    void unregisterDoubleCmd()
+    void unregisterDoubleModifier()
   }
 }
 
-async function listenForDoubleCmdErrors() {
-  if (!isTauriRuntime() || unsubscribeDoubleCmdError) return
+async function listenForDoubleModifierErrors() {
+  if (!isTauriRuntime() || unsubscribeDoubleModifierError) return
   try {
     const { listen } = await loadTauriEventApi()
-    unsubscribeDoubleCmdError = await listen<{ error?: string }>('fluxtext://double-cmd-hotkey-error', (event) => {
+    unsubscribeDoubleModifierError = await listen<{ error?: string }>('fluxtext://double-modifier-hotkey-error', (event) => {
       const shortcut = useAppStore.getState().settings.globalPinnedLauncherShortcut
       if (shortcut.kind !== 'double-modifier') return
-      updateShortcutStatus(shortcut, 'Registration failed', event.payload?.error ?? 'Double Cmd listener failed')
+      updateShortcutStatus(shortcut, 'Registration failed', event.payload?.error ?? 'Double modifier listener failed')
     })
   } catch (error) {
-    console.warn('[FluxText] Failed to listen for Double Cmd errors:', error)
+    console.warn('[FluxText] Failed to listen for double modifier errors:', error)
   }
 }
 
@@ -62,7 +62,14 @@ async function syncShortcutNow(shortcut: GlobalPinnedLauncherShortcut, generatio
   if (!isTauriRuntime()) return
 
   await unregisterCurrentAccelerator()
-  await unregisterDoubleCmd()
+  await unregisterDoubleModifier()
+  try {
+    const { unregisterAll } = await loadGlobalShortcutApi()
+    await unregisterAll()
+    currentAccelerator = null
+  } catch (error) {
+    console.warn('[FluxText] Failed to clear stale global shortcuts:', error)
+  }
   if (generation !== syncGeneration) return
 
   if (shortcut.kind === 'disabled') {
@@ -71,7 +78,7 @@ async function syncShortcutNow(shortcut: GlobalPinnedLauncherShortcut, generatio
   }
 
   if (shortcut.kind === 'double-modifier') {
-    await registerDoubleCmd(shortcut, generation)
+    await registerDoubleModifier(shortcut, generation)
     return
   }
 
@@ -106,13 +113,14 @@ async function registerAccelerator(
   }
 }
 
-async function registerDoubleCmd(shortcut: GlobalPinnedLauncherShortcut, generation: number) {
+async function registerDoubleModifier(shortcut: GlobalPinnedLauncherShortcut, generation: number) {
   try {
     const { invoke } = await loadTauriCoreApi()
-    const result = await invoke<{ status: string }>('register_double_cmd_hotkey')
+    const modifier = shortcut.kind === 'double-modifier' ? shortcut.modifier : 'Command'
+    const result = await invoke<{ status: string }>('register_double_modifier_hotkey', { modifier })
     if (generation !== syncGeneration) {
       if (shortcutIdentity(useAppStore.getState().settings.globalPinnedLauncherShortcut) !== shortcutIdentity(shortcut)) {
-        await unregisterDoubleCmd()
+        await unregisterDoubleModifier()
       }
       return
     }
@@ -138,13 +146,13 @@ async function unregisterAccelerator(accelerator: string) {
   await unregister(accelerator)
 }
 
-async function unregisterDoubleCmd() {
+async function unregisterDoubleModifier() {
   if (!isTauriRuntime()) return
   try {
     const { invoke } = await loadTauriCoreApi()
-    await invoke('unregister_double_cmd_hotkey')
+    await invoke('unregister_double_modifier_hotkey')
   } catch (error) {
-    console.warn('[FluxText] Failed to unregister Double Cmd hook:', error)
+    console.warn('[FluxText] Failed to unregister double modifier hook:', error)
   }
 }
 

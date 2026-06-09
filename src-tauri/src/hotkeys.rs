@@ -3,25 +3,42 @@ use std::time::{Duration, Instant};
 
 use tauri::Emitter;
 
-const OPEN_PINNED_LAUNCHER_EVENT: &str = "fluxtext://open-pinned-launcher";
-const DOUBLE_CMD_HOTKEY_ERROR_EVENT: &str = "fluxtext://double-cmd-hotkey-error";
-const DEFAULT_DOUBLE_CMD_THRESHOLD_MS: u64 = 300;
+const DOUBLE_MODIFIER_HOTKEY_ERROR_EVENT: &str = "fluxtext://double-modifier-hotkey-error";
+const DEFAULT_DOUBLE_MODIFIER_THRESHOLD_MS: u64 = 300;
 
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct HotkeyRegistrationStatus {
     pub status: String,
 }
 
-struct DoubleCmdHotkeyState {
+struct DoubleModifierHotkeyState {
     enabled: Mutex<bool>,
     listener_running: Mutex<bool>,
+    modifier: Mutex<DoubleModifier>,
 }
 
-static DOUBLE_CMD_HOTKEY_STATE: OnceLock<Arc<DoubleCmdHotkeyState>> = OnceLock::new();
+static DOUBLE_MODIFIER_HOTKEY_STATE: OnceLock<Arc<DoubleModifierHotkeyState>> = OnceLock::new();
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+pub enum DoubleModifier {
+    Command,
+    Shift,
+    Option,
+}
+
+impl DoubleModifier {
+    fn label(self) -> &'static str {
+        match self {
+            DoubleModifier::Command => "Cmd",
+            DoubleModifier::Shift => "Shift",
+            DoubleModifier::Option => "Option",
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Key {
-    Meta,
+    Modifier,
     Other,
 }
 
@@ -33,7 +50,6 @@ pub enum KeyPhase {
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Modifiers {
-    pub meta: bool,
     pub other: bool,
 }
 
@@ -56,25 +72,25 @@ impl KeyEvent {
     }
 }
 
-pub struct DoubleCmdDetector {
+pub struct DoubleModifierDetector {
     threshold: Duration,
-    last_meta_up: Option<Duration>,
-    current_meta_press_valid: bool,
+    last_modifier_up: Option<Duration>,
+    current_modifier_press_valid: bool,
 }
 
-impl DoubleCmdDetector {
+impl DoubleModifierDetector {
     pub fn new(threshold: Duration) -> Self {
         Self {
             threshold,
-            last_meta_up: None,
-            current_meta_press_valid: false,
+            last_modifier_up: None,
+            current_modifier_press_valid: false,
         }
     }
 
     pub fn handle_event(&mut self, event: KeyEvent) -> bool {
         match (event.key, event.phase) {
-            (Key::Meta, KeyPhase::Down) => self.handle_meta_down(event),
-            (Key::Meta, KeyPhase::Up) => self.handle_meta_up(event),
+            (Key::Modifier, KeyPhase::Down) => self.handle_modifier_down(event),
+            (Key::Modifier, KeyPhase::Up) => self.handle_modifier_up(event),
             (Key::Other, _) => {
                 self.reset();
                 false
@@ -82,108 +98,122 @@ impl DoubleCmdDetector {
         }
     }
 
-    fn handle_meta_down(&mut self, event: KeyEvent) -> bool {
+    fn handle_modifier_down(&mut self, event: KeyEvent) -> bool {
         if event.modifiers.other {
             self.reset();
             return false;
         }
 
-        self.current_meta_press_valid = true;
-        let Some(last_meta_up) = self.last_meta_up else {
+        self.current_modifier_press_valid = true;
+        let Some(last_modifier_up) = self.last_modifier_up else {
             return false;
         };
 
-        let within_threshold =
-            event.timestamp >= last_meta_up && event.timestamp - last_meta_up <= self.threshold;
+        let within_threshold = event.timestamp >= last_modifier_up
+            && event.timestamp - last_modifier_up <= self.threshold;
         if within_threshold {
-            self.last_meta_up = None;
+            self.last_modifier_up = None;
             true
         } else {
-            self.last_meta_up = None;
+            self.last_modifier_up = None;
             false
         }
     }
 
-    fn handle_meta_up(&mut self, event: KeyEvent) -> bool {
-        if self.current_meta_press_valid && !event.modifiers.other {
-            self.last_meta_up = Some(event.timestamp);
+    fn handle_modifier_up(&mut self, event: KeyEvent) -> bool {
+        if self.current_modifier_press_valid && !event.modifiers.other {
+            self.last_modifier_up = Some(event.timestamp);
         } else {
-            self.last_meta_up = None;
+            self.last_modifier_up = None;
         }
-        self.current_meta_press_valid = false;
+        self.current_modifier_press_valid = false;
         false
     }
 
     pub fn reset(&mut self) {
-        self.last_meta_up = None;
-        self.current_meta_press_valid = false;
+        self.last_modifier_up = None;
+        self.current_modifier_press_valid = false;
     }
 }
 
 #[tauri::command]
-pub fn register_double_cmd_hotkey(app: tauri::AppHandle) -> Result<HotkeyRegistrationStatus, String> {
-    register_double_cmd_hotkey_impl(app)
+pub fn register_double_modifier_hotkey(
+    app: tauri::AppHandle,
+    modifier: DoubleModifier,
+) -> Result<HotkeyRegistrationStatus, String> {
+    register_double_modifier_hotkey_impl(app, modifier)
 }
 
 #[tauri::command]
-pub fn unregister_double_cmd_hotkey() -> Result<HotkeyRegistrationStatus, String> {
-    if let Some(state) = DOUBLE_CMD_HOTKEY_STATE.get() {
+pub fn unregister_double_modifier_hotkey() -> Result<HotkeyRegistrationStatus, String> {
+    if let Some(state) = DOUBLE_MODIFIER_HOTKEY_STATE.get() {
         *state.enabled.lock().map_err(|e| e.to_string())? = false;
     }
     Ok(HotkeyRegistrationStatus {
-        status: "Double Cmd detector unregistered".to_string(),
+        status: "Double modifier detector unregistered".to_string(),
     })
 }
 
 #[cfg(target_os = "macos")]
-fn register_double_cmd_hotkey_impl(app: tauri::AppHandle) -> Result<HotkeyRegistrationStatus, String> {
-    let state = DOUBLE_CMD_HOTKEY_STATE
+fn register_double_modifier_hotkey_impl(
+    app: tauri::AppHandle,
+    modifier: DoubleModifier,
+) -> Result<HotkeyRegistrationStatus, String> {
+    let state = DOUBLE_MODIFIER_HOTKEY_STATE
         .get_or_init(|| {
-            Arc::new(DoubleCmdHotkeyState {
+            Arc::new(DoubleModifierHotkeyState {
                 enabled: Mutex::new(false),
                 listener_running: Mutex::new(false),
+                modifier: Mutex::new(DoubleModifier::Command),
             })
         })
         .clone();
     *state.enabled.lock().map_err(|e| e.to_string())? = true;
+    *state.modifier.lock().map_err(|e| e.to_string())? = modifier;
     let mut listener_running = state.listener_running.lock().map_err(|e| e.to_string())?;
     if !*listener_running {
         *listener_running = true;
-        start_double_cmd_listener(Arc::clone(&state), app);
+        start_double_modifier_listener(Arc::clone(&state), app);
     }
     Ok(HotkeyRegistrationStatus {
-        status: "Double Cmd registered".to_string(),
+        status: format!("Double {} registered", modifier.label()),
     })
 }
 
 #[cfg(not(target_os = "macos"))]
-fn register_double_cmd_hotkey_impl(_app: tauri::AppHandle) -> Result<HotkeyRegistrationStatus, String> {
-    Err("Double Cmd global hotkey is only available on macOS".to_string())
+fn register_double_modifier_hotkey_impl(
+    _app: tauri::AppHandle,
+    _modifier: DoubleModifier,
+) -> Result<HotkeyRegistrationStatus, String> {
+    Err("Double modifier global hotkey is only available on macOS".to_string())
 }
 
 #[cfg(target_os = "macos")]
-fn start_double_cmd_listener(state: Arc<DoubleCmdHotkeyState>, app: tauri::AppHandle) {
+fn start_double_modifier_listener(state: Arc<DoubleModifierHotkeyState>, app: tauri::AppHandle) {
     std::thread::spawn(move || {
-        use std::cell::RefCell;
         use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop};
         use core_graphics::event::{
             CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType,
-            CGEventFlags,
         };
+        use std::cell::RefCell;
 
         let callback_app = app.clone();
         let callback_state = Arc::clone(&state);
 
         struct ListenerState {
-            detector: DoubleCmdDetector,
+            detector: DoubleModifierDetector,
             started_at: Instant,
-            meta_was_down: bool,
+            modifier: DoubleModifier,
+            modifier_was_down: bool,
         }
 
         let listener_state = RefCell::new(ListenerState {
-            detector: DoubleCmdDetector::new(Duration::from_millis(DEFAULT_DOUBLE_CMD_THRESHOLD_MS)),
+            detector: DoubleModifierDetector::new(Duration::from_millis(
+                DEFAULT_DOUBLE_MODIFIER_THRESHOLD_MS,
+            )),
             started_at: Instant::now(),
-            meta_was_down: false,
+            modifier: DoubleModifier::Command,
+            modifier_was_down: false,
         });
 
         let tap = CGEventTap::new(
@@ -200,7 +230,7 @@ fn start_double_cmd_listener(state: Arc<DoubleCmdHotkeyState>, app: tauri::AppHa
                 let mut s = listener_state.borrow_mut();
                 if !enabled {
                     s.detector.reset();
-                    s.meta_was_down = false;
+                    s.modifier_was_down = false;
                     return None;
                 }
 
@@ -208,42 +238,54 @@ fn start_double_cmd_listener(state: Arc<DoubleCmdHotkeyState>, app: tauri::AppHa
 
                 if matches!(event_type, CGEventType::FlagsChanged) {
                     let flags = event.get_flags();
-                    let meta_now = flags.contains(CGEventFlags::CGEventFlagCommand);
-                    let has_other_modifiers = flags.intersects(
-                        CGEventFlags::CGEventFlagShift
-                        | CGEventFlags::CGEventFlagControl
-                        | CGEventFlags::CGEventFlagAlternate
-                    );
+                    let modifier = callback_state
+                        .modifier
+                        .lock()
+                        .map(|value| *value)
+                        .unwrap_or(DoubleModifier::Command);
+                    if modifier != s.modifier {
+                        s.detector.reset();
+                        s.modifier = modifier;
+                        s.modifier_was_down = modifier_flag_is_down(flags, modifier);
+                        return None;
+                    }
 
-                    if meta_now && !s.meta_was_down {
+                    let modifier_now = modifier_flag_is_down(flags, modifier);
+                    let has_other_modifiers = has_other_modifier_flags(flags, modifier);
+
+                    if modifier_now && !s.modifier_was_down {
                         let triggered = s.detector.handle_event(KeyEvent {
-                            key: Key::Meta,
+                            key: Key::Modifier,
                             phase: KeyPhase::Down,
                             timestamp,
-                            modifiers: Modifiers { meta: true, other: has_other_modifiers },
+                            modifiers: Modifiers {
+                                other: has_other_modifiers,
+                            },
                         });
                         if triggered {
                             open_pinned_launcher(&callback_app);
                         }
-                    } else if !meta_now && s.meta_was_down {
+                    } else if !modifier_now && s.modifier_was_down {
                         s.detector.handle_event(KeyEvent {
-                            key: Key::Meta,
+                            key: Key::Modifier,
                             phase: KeyPhase::Up,
                             timestamp,
-                            modifiers: Modifiers { meta: false, other: has_other_modifiers },
+                            modifiers: Modifiers {
+                                other: has_other_modifiers,
+                            },
                         });
-                    } else if !meta_now && !s.meta_was_down {
-                        // Another modifier changed while meta not held — treat as other key
+                    } else if !modifier_now && !s.modifier_was_down && has_other_modifiers {
+                        // Another modifier changed while the configured modifier is not held.
                         s.detector.handle_event(KeyEvent {
                             key: Key::Other,
                             phase: KeyPhase::Down,
                             timestamp,
-                            modifiers: Modifiers { meta: false, other: true },
+                            modifiers: Modifiers { other: true },
                         });
                     }
-                    s.meta_was_down = meta_now;
+                    s.modifier_was_down = modifier_now;
                 } else if matches!(event_type, CGEventType::KeyDown) {
-                    // A real key was pressed between Cmd taps — invalidate
+                    // A real key was pressed between modifier taps — invalidate
                     s.detector.reset();
                 }
                 None
@@ -253,7 +295,10 @@ fn start_double_cmd_listener(state: Arc<DoubleCmdHotkeyState>, app: tauri::AppHa
         match tap {
             Ok(tap) => {
                 unsafe {
-                    let loop_source = tap.mach_port.create_runloop_source(0).expect("failed to create runloop source");
+                    let loop_source = tap
+                        .mach_port
+                        .create_runloop_source(0)
+                        .expect("failed to create runloop source");
                     let run_loop = CFRunLoop::get_current();
                     run_loop.add_source(&loop_source, kCFRunLoopCommonModes);
                     tap.enable();
@@ -264,7 +309,9 @@ fn start_double_cmd_listener(state: Arc<DoubleCmdHotkeyState>, app: tauri::AppHa
                 }
             }
             Err(_) => {
-                eprintln!("[FluxText] Failed to create CGEventTap! Check Accessibility permissions.");
+                eprintln!(
+                    "[FluxText] Failed to create CGEventTap! Check Accessibility permissions."
+                );
                 if let Ok(mut listener_running) = state.listener_running.lock() {
                     *listener_running = false;
                 }
@@ -272,7 +319,7 @@ fn start_double_cmd_listener(state: Arc<DoubleCmdHotkeyState>, app: tauri::AppHa
                     *enabled = false;
                 }
                 let _ = app.emit(
-                    DOUBLE_CMD_HOTKEY_ERROR_EVENT,
+                    DOUBLE_MODIFIER_HOTKEY_ERROR_EVENT,
                     serde_json::json!({ "error": "Failed to create CGEventTap. Check Accessibility permissions." }),
                 );
             }
@@ -282,38 +329,64 @@ fn start_double_cmd_listener(state: Arc<DoubleCmdHotkeyState>, app: tauri::AppHa
 
 #[cfg(target_os = "macos")]
 fn open_pinned_launcher(app: &tauri::AppHandle) {
-    let _ = app.emit(OPEN_PINNED_LAUNCHER_EVENT, ());
+    let _ = crate::show_launcher_window_for_hotkey(app.clone());
+}
+
+#[cfg(target_os = "macos")]
+fn modifier_flag_is_down(
+    flags: core_graphics::event::CGEventFlags,
+    modifier: DoubleModifier,
+) -> bool {
+    use core_graphics::event::CGEventFlags;
+    match modifier {
+        DoubleModifier::Command => flags.contains(CGEventFlags::CGEventFlagCommand),
+        DoubleModifier::Shift => flags.contains(CGEventFlags::CGEventFlagShift),
+        DoubleModifier::Option => flags.contains(CGEventFlags::CGEventFlagAlternate),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn has_other_modifier_flags(
+    flags: core_graphics::event::CGEventFlags,
+    modifier: DoubleModifier,
+) -> bool {
+    use core_graphics::event::CGEventFlags;
+    let mut other_flags = CGEventFlags::CGEventFlagControl;
+    if modifier != DoubleModifier::Command {
+        other_flags |= CGEventFlags::CGEventFlagCommand;
+    }
+    if modifier != DoubleModifier::Shift {
+        other_flags |= CGEventFlags::CGEventFlagShift;
+    }
+    if modifier != DoubleModifier::Option {
+        other_flags |= CGEventFlags::CGEventFlagAlternate;
+    }
+    flags.intersects(other_flags)
 }
 
 #[cfg(test)]
-mod double_cmd_tests {
+mod double_modifier_tests {
     use super::*;
 
-    fn detector() -> DoubleCmdDetector {
-        DoubleCmdDetector::new(Duration::from_millis(300))
+    fn detector() -> DoubleModifierDetector {
+        DoubleModifierDetector::new(Duration::from_millis(300))
     }
 
-    fn meta_down(timestamp_ms: u64) -> KeyEvent {
+    fn modifier_down(timestamp_ms: u64) -> KeyEvent {
         KeyEvent::new(
-            Key::Meta,
+            Key::Modifier,
             KeyPhase::Down,
             timestamp_ms,
-            Modifiers {
-                meta: true,
-                other: false,
-            },
+            Modifiers { other: false },
         )
     }
 
-    fn meta_up(timestamp_ms: u64) -> KeyEvent {
+    fn modifier_up(timestamp_ms: u64) -> KeyEvent {
         KeyEvent::new(
-            Key::Meta,
+            Key::Modifier,
             KeyPhase::Up,
             timestamp_ms,
-            Modifiers {
-                meta: false,
-                other: false,
-            },
+            Modifiers { other: false },
         )
     }
 
@@ -322,59 +395,53 @@ mod double_cmd_tests {
             Key::Other,
             KeyPhase::Down,
             timestamp_ms,
-            Modifiers {
-                meta: false,
-                other: true,
-            },
+            Modifiers { other: true },
         )
     }
 
-    fn meta_combo_down(timestamp_ms: u64) -> KeyEvent {
+    fn modifier_combo_down(timestamp_ms: u64) -> KeyEvent {
         KeyEvent::new(
-            Key::Meta,
+            Key::Modifier,
             KeyPhase::Down,
             timestamp_ms,
-            Modifiers {
-                meta: true,
-                other: true,
-            },
+            Modifiers { other: true },
         )
     }
 
     #[test]
-    fn double_cmd_within_threshold_triggers() {
+    fn double_modifier_within_threshold_triggers() {
         let mut detector = detector();
 
-        assert!(!detector.handle_event(meta_down(0)));
-        assert!(!detector.handle_event(meta_up(20)));
-        assert!(detector.handle_event(meta_down(140)));
+        assert!(!detector.handle_event(modifier_down(0)));
+        assert!(!detector.handle_event(modifier_up(20)));
+        assert!(detector.handle_event(modifier_down(140)));
     }
 
     #[test]
-    fn double_cmd_after_threshold_does_not_trigger() {
+    fn double_modifier_after_threshold_does_not_trigger() {
         let mut detector = detector();
 
-        assert!(!detector.handle_event(meta_down(0)));
-        assert!(!detector.handle_event(meta_up(20)));
-        assert!(!detector.handle_event(meta_down(380)));
+        assert!(!detector.handle_event(modifier_down(0)));
+        assert!(!detector.handle_event(modifier_up(20)));
+        assert!(!detector.handle_event(modifier_down(380)));
     }
 
     #[test]
-    fn double_cmd_with_interleaved_other_key_does_not_trigger() {
+    fn double_modifier_with_interleaved_other_key_does_not_trigger() {
         let mut detector = detector();
 
-        assert!(!detector.handle_event(meta_down(0)));
-        assert!(!detector.handle_event(meta_up(20)));
+        assert!(!detector.handle_event(modifier_down(0)));
+        assert!(!detector.handle_event(modifier_up(20)));
         assert!(!detector.handle_event(other_down(80)));
-        assert!(!detector.handle_event(meta_down(140)));
+        assert!(!detector.handle_event(modifier_down(140)));
     }
 
     #[test]
-    fn double_cmd_with_key_combo_does_not_trigger() {
+    fn double_modifier_with_key_combo_does_not_trigger() {
         let mut detector = detector();
 
-        assert!(!detector.handle_event(meta_combo_down(0)));
-        assert!(!detector.handle_event(meta_up(20)));
-        assert!(!detector.handle_event(meta_down(140)));
+        assert!(!detector.handle_event(modifier_combo_down(0)));
+        assert!(!detector.handle_event(modifier_up(20)));
+        assert!(!detector.handle_event(modifier_down(140)));
     }
 }

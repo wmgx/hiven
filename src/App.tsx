@@ -103,6 +103,7 @@ function MainApp() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if ((window as unknown as { __FLUXTEXT_HOTKEY_RECORDING__?: boolean }).__FLUXTEXT_HOTKEY_RECORDING__) return
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         e.stopPropagation()

@@ -41,6 +41,10 @@ fn show_and_focus_window(app: tauri::AppHandle) {
 
 #[tauri::command]
 async fn show_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
+    show_launcher_window_for_hotkey(app)
+}
+
+pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(), String> {
     use tauri::Manager;
 
     let app_clone = app.clone();
@@ -896,8 +900,8 @@ pub fn run() {
             install_plugin_zip,
             install_plugin_zip_url,
             fetch_github_directory,
-            hotkeys::register_double_cmd_hotkey,
-            hotkeys::unregister_double_cmd_hotkey,
+            hotkeys::register_double_modifier_hotkey,
+            hotkeys::unregister_double_modifier_hotkey,
             show_and_focus_window,
               show_launcher_window,
               hide_launcher_window,

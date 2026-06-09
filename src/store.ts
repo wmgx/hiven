@@ -125,10 +125,11 @@ export type LastCommandStatus = {
 }
 
 export type GlobalLauncherMode = 'full' | 'pinned-only'
+export type GlobalPinnedLauncherDoubleModifier = 'Command' | 'Shift' | 'Option'
 
 export type GlobalPinnedLauncherShortcut =
   | { kind: 'accelerator'; accelerator: string; registrationStatus?: string; registrationError?: string }
-  | { kind: 'double-modifier'; modifier: 'Command'; registrationStatus?: string; registrationError?: string }
+  | { kind: 'double-modifier'; modifier: GlobalPinnedLauncherDoubleModifier; registrationStatus?: string; registrationError?: string }
   | { kind: 'disabled'; registrationStatus?: string; registrationError?: string }
 
 interface AppState {
@@ -485,10 +486,6 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     const persistedState = persisted as Partial<AppState>
     const merged = { ...current, ...persistedState }
     merged.settings = { ...current.settings, ...persistedState.settings }
-    // Migrate: double-modifier is no longer reliable on macOS 15, force to accelerator
-    if (merged.settings.globalPinnedLauncherShortcut?.kind === 'double-modifier') {
-      merged.settings.globalPinnedLauncherShortcut = { kind: 'accelerator', accelerator: 'Shift+Cmd+Space' }
-    }
     merged.settings.globalPinnedLauncherShortcut = stripShortcutRuntimeStatus(
       merged.settings.globalPinnedLauncherShortcut ?? current.settings.globalPinnedLauncherShortcut
     )
