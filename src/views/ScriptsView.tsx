@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AlertTriangle, Archive, Download, ExternalLink, FolderOpen, Globe, Loader2, Package, Plus, Power, RefreshCw, Search, Trash2, Upload } from 'lucide-react'
 import { useT, t } from '../i18n'
 import type { Locale } from '../i18n'
 import { localized, useAppStore } from '../store'
 import { checkBuiltinPluginsUpdate, getConfigDir } from '../configInit'
+import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../utils/imeKeyboard'
 import { usePluginStore } from '../workspace/pluginStore'
 import {
   createDevPluginScaffold,
@@ -92,6 +93,7 @@ export function ScriptsView() {
   const [remoteUrl, setRemoteUrl] = useState('')
   const [remoteOpen, setRemoteOpen] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'done' | 'error'>('idle')
+  const isImeComposingRef = useRef(false)
 
   const installedList = useMemo(() => {
     const byId = new Map<string, InstalledPlugin>()
@@ -300,6 +302,14 @@ export function ScriptsView() {
       setRemoteUrl('')
       setActiveTab('installed')
     })
+  }
+
+  function handleCompositionStart() {
+    startImeComposition(isImeComposingRef)
+  }
+
+  function handleCompositionEnd() {
+    finishImeComposition(isImeComposingRef)
   }
 
   async function handlePackageUpdateCheck() {
@@ -582,7 +592,12 @@ export function ScriptsView() {
                     setRemoteUrl(event.target.value)
                     clearItemError('_remote')
                   }}
-                  onKeyDown={(event) => { if (event.key === 'Enter' && !busy['_remote']) void handleRemoteInstall() }}
+                  onKeyDown={(event) => {
+                    if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
+                    if (event.key === 'Enter' && !busy['_remote']) void handleRemoteInstall()
+                  }}
+                  onCompositionStart={handleCompositionStart}
+                  onCompositionEnd={handleCompositionEnd}
                   placeholder="https://github.com/owner/repo/tree/main/plugin or https://example.com/plugin.zip"
                   autoFocus
                   disabled={busy['_remote']}

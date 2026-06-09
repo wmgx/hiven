@@ -15,6 +15,7 @@ import { t, type Locale } from '../i18n'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
 import { readText } from '@tauri-apps/plugin-clipboard-manager'
 import { resolveIcon } from '../utils/resolveIcon'
+import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../utils/imeKeyboard'
 import { pinyin } from 'pinyin-pro'
 
 // 步骤类型
@@ -61,6 +62,7 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const isKeyboardNavRef = useRef(false)
+  const isImeComposingRef = useRef(false)
 
   const pluginRegistryVersion = usePluginRegistryVersion()
 
@@ -444,7 +446,7 @@ export function CommandPalette() {
 
   function handleKeyDown(e: React.KeyboardEvent) {
     // 忽略 IME 组合输入中的按键（中文输入法回车上屏等）
-    if (e.nativeEvent.isComposing || e.keyCode === 229) return
+    if (shouldIgnoreImeKeyDown(e, isImeComposingRef)) return
 
     // 搜索步骤
     if (step.type === 'search') {
@@ -509,6 +511,14 @@ export function CommandPalette() {
 
   if (!open) return null
 
+  function handleCompositionStart() {
+    startImeComposition(isImeComposingRef)
+  }
+
+  function handleCompositionEnd() {
+    finishImeComposition(isImeComposingRef)
+  }
+
   return (
     <div
       className={`fixed inset-0 flex items-start justify-center pt-[70px] z-50 palette-overlay ${open ? 'open' : ''}`}
@@ -529,6 +539,8 @@ export function CommandPalette() {
           borderRadius: 'var(--radius-xl)',
         }}
         onKeyDown={handleKeyDown}
+        onCompositionStart={handleCompositionStart}
+        onCompositionEnd={handleCompositionEnd}
       >
         {step.type === 'search' && (
           <SearchStep

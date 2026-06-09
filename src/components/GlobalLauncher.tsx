@@ -8,6 +8,7 @@ import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginReg
 import { applyEffects } from '../workspace/effectRunner'
 import { showToast } from '../workspace/toast'
 import type { InstantSuggestion } from '../workspace/pluginTypes'
+import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../utils/imeKeyboard'
 
 type LauncherItem =
   | { kind: 'instant'; id: string; title: string; subtitle: string; icon?: string; suggestion: InstantSuggestion }
@@ -36,6 +37,7 @@ export function GlobalLauncher() {
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+  const isImeComposingRef = useRef(false)
   const standaloneLauncher = isStandaloneLauncherWindow()
 
   useEffect(() => {
@@ -234,6 +236,14 @@ export function GlobalLauncher() {
     }
   }
 
+  function handleCompositionStart() {
+    startImeComposition(isImeComposingRef)
+  }
+
+  function handleCompositionEnd() {
+    finishImeComposition(isImeComposingRef)
+  }
+
   return (
     <div
       className={`fixed inset-0 flex items-start justify-center palette-overlay open ${overlay ? 'transparent pt-3' : 'pt-[70px]'}`}
@@ -249,6 +259,7 @@ export function GlobalLauncher() {
         }}
         tabIndex={-1}
         onKeyDown={(event) => {
+          if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
           if (event.key === 'Escape') {
             event.preventDefault()
             event.stopPropagation()
@@ -259,6 +270,8 @@ export function GlobalLauncher() {
           if (event.key === 'ArrowUp') { event.preventDefault(); setSelectedIndex((index) => Math.max(index - 1, 0)) }
           if (event.key === 'Enter') { event.preventDefault(); selectItem(filtered[clampedSelectedIndex]) }
         }}
+        onCompositionStart={handleCompositionStart}
+        onCompositionEnd={handleCompositionEnd}
       >
         <div className="flex items-center gap-2 px-3.5 py-2.5" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
           <Search size={16} style={{ color: 'var(--color-text-tertiary)' }} />
