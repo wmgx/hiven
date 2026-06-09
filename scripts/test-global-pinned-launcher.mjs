@@ -17,6 +17,7 @@ const files = {
   main: read('src/main.tsx'),
   indexCss: read('src/index.css'),
   store: read('src/store.ts'),
+  tauriLib: read('src-tauri/src/lib.rs'),
   tauriConfig: read('src-tauri/tauri.conf.json'),
   tauriCapabilities: read('src-tauri/capabilities/default.json'),
 }
@@ -141,6 +142,54 @@ check('launcher route clears the document background', () => {
     files.indexCss,
     /html\[data-window=['"]launcher['"]\][\s\S]{0,180}background:\s*transparent/,
     'launcher window document background should be transparent',
+  )
+})
+
+check('standalone launcher closes on Escape without bubbling to the app', () => {
+  assertHas(
+    files.globalLauncher,
+    /event\.key\s*===\s*['"]Escape['"][\s\S]{0,180}event\.preventDefault\(\)[\s\S]{0,180}event\.stopPropagation\(\)[\s\S]{0,180}closeLauncher\(\)/,
+    'Escape should only close the global launcher and stop app-level key handlers',
+  )
+  assertHas(
+    files.globalLauncher,
+    /invoke\(\s*['"]hide_launcher_window['"]\s*\)/,
+    'canceling the standalone launcher should only hide the launcher window',
+  )
+  assert.doesNotMatch(
+    files.globalLauncher,
+    /hideApp:\s*true/,
+    'canceling the standalone launcher should not hide/unhide the whole app because that flashes and can restore the main window',
+  )
+})
+
+check('standalone launcher closes when its window loses focus', () => {
+  assertHas(
+    files.globalLauncher,
+    /onFocusChanged\([\s\S]{0,220}payload:\s*focused[\s\S]{0,160}if\s*\(!focused\)\s*closeLauncher\(\)/,
+    'standalone launcher should hide itself when the launcher window loses focus',
+  )
+})
+
+check('native launcher show path does not activate the full app window stack', () => {
+  const launcherFn = files.tauriLib.match(/pub\(crate\)\s+fn\s+show_launcher_window_for_hotkey[\s\S]*?\n}\n\n#\[tauri::command\]/)?.[0] ?? ''
+  assert.ok(launcherFn, 'src-tauri/src/lib.rs should expose show_launcher_window_for_hotkey')
+  assert.doesNotMatch(
+    launcherFn,
+    /activate_app\s*\(/,
+    'show_launcher_window_for_hotkey should not activate the whole app, which can bring the main window forward',
+  )
+})
+
+check('native launcher show path hides the main window before focusing launcher', () => {
+  const launcherFn = files.tauriLib.match(/pub\(crate\)\s+fn\s+show_launcher_window_for_hotkey[\s\S]*?\n}\n\n#\[tauri::command\]/)?.[0] ?? ''
+  const hideMainIndex = launcherFn.indexOf('hide_main_window_before_launcher(&app_clone)')
+  const focusIndex = launcherFn.indexOf('window.set_focus()')
+  assert.ok(hideMainIndex >= 0, 'show_launcher_window_for_hotkey should hide main before showing launcher')
+  assert.ok(focusIndex >= 0, 'show_launcher_window_for_hotkey should still focus launcher for keyboard input')
+  assert.ok(
+    hideMainIndex < focusIndex,
+    'show_launcher_window_for_hotkey should hide main before focusing launcher, because set_focus activates the macOS app',
   )
 })
 

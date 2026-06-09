@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { LayoutPanelLeft, Pin, Puzzle, Search, Settings } from 'lucide-react'
 import { localized, useAppStore, type ViewId } from '../store'
 import { t, type Locale } from '../i18n'
@@ -116,10 +116,7 @@ export function GlobalLauncher() {
     return base
   }, [items, query, locale, pluginRegistryVersion])
 
-  if (!open) return null
-  const clampedSelectedIndex = Math.min(selectedIndex, Math.max(0, filtered.length - 1))
-
-  const closeLauncher = () => {
+  const closeLauncher = useCallback(() => {
     const wasOverlay = overlay
     if (standaloneLauncher) {
       void (async () => {
@@ -148,7 +145,33 @@ export function GlobalLauncher() {
       return
     }
     setOpen(false)
-  }
+  }, [overlay, setOpen, standaloneLauncher])
+
+  useEffect(() => {
+    if (!open || !standaloneLauncher) return
+    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    import('@tauri-apps/api/window')
+      .then(({ getCurrentWindow }) => getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+        if (!focused) closeLauncher()
+      }))
+      .then((cleanup) => {
+        if (disposed) cleanup()
+        else unlisten = cleanup
+      })
+      .catch((error) => {
+        console.warn('[FluxText] Failed to listen for launcher focus changes:', error)
+      })
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [closeLauncher, open, standaloneLauncher])
+
+  if (!open) return null
+  const clampedSelectedIndex = Math.min(selectedIndex, Math.max(0, filtered.length - 1))
 
   const selectItem = (item: LauncherItem | undefined) => {
     if (!item) return
@@ -223,7 +246,12 @@ export function GlobalLauncher() {
         }}
         tabIndex={-1}
         onKeyDown={(event) => {
-          if (event.key === 'Escape') closeLauncher()
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            event.stopPropagation()
+            closeLauncher()
+            return
+          }
           if (event.key === 'ArrowDown') { event.preventDefault(); setSelectedIndex((index) => Math.min(index + 1, Math.max(0, filtered.length - 1))) }
           if (event.key === 'ArrowUp') { event.preventDefault(); setSelectedIndex((index) => Math.max(index - 1, 0)) }
           if (event.key === 'Enter') { event.preventDefault(); selectItem(filtered[clampedSelectedIndex]) }

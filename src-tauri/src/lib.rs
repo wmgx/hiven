@@ -15,12 +15,7 @@ fn show_and_focus_window(app: tauri::AppHandle) {
     {
         let app_clone = app.clone();
         let _ = app.run_on_main_thread(move || {
-            // Activate the NSApplication to bring it to the foreground
-            unsafe {
-                let cls = objc2::runtime::AnyClass::get(c"NSApplication").unwrap();
-                let ns_app: *mut objc2::runtime::AnyObject = objc2::msg_send![cls, sharedApplication];
-                let _: () = objc2::msg_send![ns_app, activateIgnoringOtherApps: true];
-            }
+            activate_app();
 
             if let Some(window) = app_clone.get_webview_window("main") {
                 let _ = window.show();
@@ -49,7 +44,7 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
 
     let app_clone = app.clone();
     app.run_on_main_thread(move || {
-        activate_app();
+        hide_main_window_before_launcher(&app_clone);
 
         let window = if let Some(window) = app_clone.get_webview_window("launcher") {
             window
@@ -102,6 +97,16 @@ async fn hide_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
         }
     })
     .map_err(|error| error.to_string())
+}
+
+fn hide_main_window_before_launcher(app: &tauri::AppHandle) {
+    #[cfg(target_os = "macos")]
+    {
+        use tauri::Manager;
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.hide();
+        }
+    }
 }
 
 fn activate_app() {
