@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "check:architecture": "node scripts/check-architecture.mjs",
+    "test:calculator-command-mode": "node scripts/test-calculator-command-mode.mjs",
     "test:date-time-assistant": "node scripts/test-date-time-assistant.mjs",
     "test:directory-plugin-convergence": "node scripts/test-directory-plugin-convergence.mjs",
     "test:instant-suggestion-multiple-results": "node scripts/test-instant-suggestion-multiple-results.mjs",

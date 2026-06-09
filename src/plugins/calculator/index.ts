@@ -1,4 +1,4 @@
-import type { PluginDefinition, InstantSuggestionContext, InstantSuggestion } from '../../workspace/pluginTypes'
+import type { PluginDefinition, InstantSuggestionContext, InstantSuggestion, TextInput } from '../../workspace/pluginTypes'
 
 // ─── Safe Math Parser ────────────────────────────────────────────────────────
 // A simple recursive descent parser for arithmetic expressions.
@@ -169,9 +169,65 @@ function safeCalculate(expr: string): string | null {
   return formatted
 }
 
+function calculateFormulaLines(text: string): string {
+  const lines = text.split(/\r?\n/)
+  const results: string[] = []
+  let stopped = false
+
+  for (const line of lines) {
+    if (stopped) {
+      results.push(line)
+      continue
+    }
+
+    const trimmed = line.trim()
+    if (trimmed.includes('=')) {
+      results.push(line)
+      continue
+    }
+
+    const result = safeCalculate(trimmed)
+    if (result === null) {
+      stopped = true
+      results.push(line)
+      continue
+    }
+
+    results.push(`${line} = ${result}`)
+  }
+
+  return results.join('\n')
+}
+
 // ─── Plugin Definition ───────────────────────────────────────────────────────
 
 const definition: PluginDefinition = {
+  commands: [
+    {
+      id: 'calculator.run',
+      title: 'command.run.title',
+      description: 'command.run.description',
+      icon: 'Calculator',
+      aliases: ['calc', 'formula'],
+      live: { live: { enabled: true, trigger: 'on-input', sideEffects: 'none', debounceMs: 250 } },
+      inputs: [
+        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
+      ],
+      inputResolution: { strategy: 'use-active', fallback: 'fail' },
+      run(ctx) {
+        const input = ctx.inputs.input as TextInput
+        const text = input?.kind === 'text' ? input.text : ''
+        const target = input?.paneId ? { paneId: input.paneId } : 'active-input'
+        return {
+          effects: [{
+            type: 'text.replace' as const,
+            target,
+            text: calculateFormulaLines(text),
+          }],
+        }
+      },
+    },
+  ],
   instantSuggestions: [
     {
       id: 'calculator.inline',

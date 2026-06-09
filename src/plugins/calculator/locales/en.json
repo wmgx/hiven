@@ -1,4 +1,6 @@
 {
+  "command.run.title": "Calculate Formulas",
+  "command.run.description": "Calculate formula lines until the first non-formula.",
   "provider.title": "Calculator",
   "provider.subtitle": "Calculator",
   "provider.actionLabel": "Copy Answer"

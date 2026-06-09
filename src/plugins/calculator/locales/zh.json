@@ -1,4 +1,6 @@
 {
+  "command.run.title": "批量计算公式",
+  "command.run.description": "逐行计算公式，遇到第一行非公式时停止。",
   "provider.title": "计算器",
   "provider.subtitle": "计算器",
   "provider.actionLabel": "复制答案"
