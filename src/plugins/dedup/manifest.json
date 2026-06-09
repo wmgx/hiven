@@ -1,7 +1,0 @@
-{
-  "pluginId": "dedup",
-  "displayName": "Remove Duplicate Lines",
-  "displayNameI18n": { "zh": "去除重复行" },
-  "version": "1.0.0",
-  "capabilities": ["command"]
-}

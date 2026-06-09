@@ -1,6 +1,0 @@
-{
-  "command.run.title": "Join Lines",
-  "command.run.description": "Join lines with a separator",
-  "input.text.label": "Input",
-  "param.separator.label": "Separator"
-}

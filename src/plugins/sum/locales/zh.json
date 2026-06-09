@@ -1,5 +1,0 @@
-{
-  "command.run.title": "求和",
-  "command.run.description": "对所有数字求和（BigNumber 高精度）",
-  "input.text.label": "输入"
-}

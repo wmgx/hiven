@@ -1,7 +1,0 @@
-{
-  "pluginId": "prepend",
-  "displayName": "Prepend to Lines",
-  "displayNameI18n": { "zh": "前缀插入每行" },
-  "version": "1.0.0",
-  "capabilities": ["command"]
-}

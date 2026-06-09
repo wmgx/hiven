@@ -1,11 +1,6 @@
 {
-  "version": 5,
+  "version": 7,
   "packages": [
-    {
-      "pluginId": "append",
-      "dir": "append",
-      "version": "1.0.0"
-    },
     {
       "pluginId": "base64",
       "dir": "base64",
@@ -14,7 +9,7 @@
     {
       "pluginId": "calculator",
       "dir": "calculator",
-      "version": "1.0.0"
+      "version": "1.2.0"
     },
     {
       "pluginId": "case",
@@ -47,11 +42,6 @@
       "version": "1.0.0"
     },
     {
-      "pluginId": "dedup",
-      "dir": "dedup",
-      "version": "1.0.0"
-    },
-    {
       "pluginId": "extract",
       "dir": "extract",
       "version": "1.0.0"
@@ -62,18 +52,18 @@
       "version": "1.0.0"
     },
     {
-      "pluginId": "hex",
-      "dir": "hex",
-      "version": "1.0.0"
-    },
-    {
       "pluginId": "html",
       "dir": "html",
       "version": "1.0.0"
     },
     {
-      "pluginId": "join",
-      "dir": "join",
+      "pluginId": "line-affix",
+      "dir": "lineAffix",
+      "version": "1.0.0"
+    },
+    {
+      "pluginId": "line-tools",
+      "dir": "lineTools",
       "version": "1.0.0"
     },
     {
@@ -97,33 +87,13 @@
       "version": "1.0.0"
     },
     {
-      "pluginId": "prepend",
-      "dir": "prepend",
-      "version": "1.0.0"
-    },
-    {
       "pluginId": "query-string",
       "dir": "queryString",
       "version": "1.0.0"
     },
     {
-      "pluginId": "remove-blank-lines",
-      "dir": "removeBlankLines",
-      "version": "1.0.0"
-    },
-    {
-      "pluginId": "reverse",
-      "dir": "reverse",
-      "version": "1.0.0"
-    },
-    {
       "pluginId": "slashes",
       "dir": "slashes",
-      "version": "1.0.0"
-    },
-    {
-      "pluginId": "sort",
-      "dir": "sort",
       "version": "1.0.0"
     },
     {
@@ -142,28 +112,13 @@
       "version": "1.0.0"
     },
     {
-      "pluginId": "sum",
-      "dir": "sum",
-      "version": "1.0.0"
-    },
-    {
       "pluginId": "text-diff",
       "dir": "textDiff",
       "version": "1.0.0"
     },
     {
-      "pluginId": "trim-whitespace",
-      "dir": "trimWhitespace",
-      "version": "1.0.0"
-    },
-    {
       "pluginId": "url",
       "dir": "url",
-      "version": "1.0.0"
-    },
-    {
-      "pluginId": "wrap",
-      "dir": "wrap",
       "version": "1.0.0"
     },
     {

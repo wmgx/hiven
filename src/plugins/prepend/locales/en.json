@@ -1,6 +1,0 @@
-{
-  "command.run.title": "Prepend to Lines",
-  "command.run.description": "Prepend a prefix to the beginning of each line",
-  "input.text.label": "Input",
-  "param.prefix.label": "Prefix"
-}

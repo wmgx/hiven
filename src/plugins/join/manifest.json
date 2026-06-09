@@ -1,7 +1,0 @@
-{
-  "pluginId": "join",
-  "displayName": "Join Lines",
-  "displayNameI18n": { "zh": "合并行" },
-  "version": "1.0.0",
-  "capabilities": ["command"]
-}

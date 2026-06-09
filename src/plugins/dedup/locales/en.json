@@ -1,6 +1,0 @@
-{
-  "command.run.title": "Remove Duplicate Lines",
-  "command.run.description": "Remove duplicate lines from text",
-  "input.text.label": "Input",
-  "param.ignoreCase.label": "Ignore Case"
-}

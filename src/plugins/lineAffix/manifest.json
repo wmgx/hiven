@@ -1,0 +1,7 @@
+{
+  "pluginId": "line-affix",
+  "displayName": "Line Affix",
+  "displayNameI18n": { "zh": "行前后缀" },
+  "version": "1.0.0",
+  "capabilities": ["command"]
+}

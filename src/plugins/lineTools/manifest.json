@@ -1,0 +1,7 @@
+{
+  "pluginId": "line-tools",
+  "displayName": "Line Tools",
+  "displayNameI18n": { "zh": "行工具" },
+  "version": "1.0.0",
+  "capabilities": ["command"]
+}

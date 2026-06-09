@@ -1,6 +1,0 @@
-{
-  "command.run.title": "Append to Lines",
-  "command.run.description": "Append a suffix to the end of each line",
-  "input.text.label": "Input",
-  "param.suffix.label": "Suffix"
-}

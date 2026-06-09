@@ -1,0 +1,20 @@
+{
+  "command.sort.title": "Sort Lines",
+  "command.sort.description": "Sort lines alphabetically",
+  "command.dedup.title": "Remove Duplicate Lines",
+  "command.dedup.description": "Remove duplicate lines from text",
+  "command.reverse.title": "Reverse Lines",
+  "command.reverse.description": "Reverse the order of lines",
+  "command.removeBlankLines.title": "Remove Blank Lines",
+  "command.removeBlankLines.description": "Remove blank or whitespace-only lines from text",
+  "command.trimWhitespace.title": "Trim Whitespace",
+  "command.trimWhitespace.description": "Strip leading/trailing whitespace from each line",
+  "command.join.title": "Join Lines",
+  "command.join.description": "Join lines with a separator",
+  "input.text.label": "Input",
+  "param.direction.label": "Direction",
+  "param.direction.option.asc.label": "Ascending",
+  "param.direction.option.desc.label": "Descending",
+  "param.ignoreCase.label": "Ignore Case",
+  "param.separator.label": "Separator"
+}

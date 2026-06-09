@@ -1,7 +1,0 @@
-{
-  "pluginId": "wrap",
-  "displayName": "Wrap Lines",
-  "displayNameI18n": { "zh": "包裹每行" },
-  "version": "1.0.0",
-  "capabilities": ["command"]
-}

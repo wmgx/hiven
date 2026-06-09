@@ -1,0 +1,13 @@
+{
+  "command.prepend.title": "Prepend to Lines",
+  "command.prepend.description": "Prepend a prefix to the beginning of each line",
+  "command.append.title": "Append to Lines",
+  "command.append.description": "Append a suffix to the end of each line",
+  "command.wrap.title": "Wrap Lines",
+  "command.wrap.description": "Wrap each line with prefix and suffix",
+  "input.text.label": "Input",
+  "param.prefix.label": "Prefix",
+  "param.suffix.label": "Suffix",
+  "param.left.label": "Left",
+  "param.right.label": "Right"
+}

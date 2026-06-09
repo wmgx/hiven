@@ -1,3 +1,4 @@
+import BigNumber from 'bignumber.js'
 import type { PluginDefinition, InstantSuggestionContext, InstantSuggestion, TextInput } from '../../workspace/pluginTypes'
 
 // ─── Safe Math Parser ────────────────────────────────────────────────────────
@@ -5,7 +6,7 @@ import type { PluginDefinition, InstantSuggestionContext, InstantSuggestion, Tex
 // Supports: numbers, decimals, parentheses, +, -, *, /, unary +/-, %
 
 type Token =
-  | { type: 'number'; value: number }
+  | { type: 'number'; value: BigNumber }
   | { type: 'op'; value: string }
   | { type: 'paren'; value: '(' | ')' }
   | { type: 'percent' }
@@ -39,8 +40,8 @@ function tokenize(expr: string): Token[] | null {
       if (!match) return null
       const numStr = match[0]
       i += numStr.length
-      const num = Number(numStr.replaceAll(',', ''))
-      if (isNaN(num)) return null
+      const num = new BigNumber(numStr.replaceAll(',', ''))
+      if (num.isNaN()) return null
       tokens.push({ type: 'number', value: num })
       continue
     }
@@ -55,7 +56,7 @@ function tokenize(expr: string): Token[] | null {
 // unary → (+|-) unary | factor
 // factor → NUMBER %? | '(' expr ')' %?
 
-function parse(tokens: Token[]): number | null {
+function parse(tokens: Token[]): BigNumber | null {
   let pos = 0
 
   function peek(): Token | undefined {
@@ -66,19 +67,19 @@ function parse(tokens: Token[]): number | null {
     return tokens[pos++]
   }
 
-  function parseExpr(): number | null {
+  function parseExpr(): BigNumber | null {
     let left = parseTerm()
     if (left === null) return null
     while (peek()?.type === 'op' && (peek()!.value === '+' || peek()!.value === '-')) {
       const op = consume().value as string
       const right = parseTerm()
       if (right === null) return null
-      left = op === '+' ? left + right : left - right
+      left = op === '+' ? left.plus(right) : left.minus(right)
     }
     return left
   }
 
-  function parseTerm(): number | null {
+  function parseTerm(): BigNumber | null {
     let left = parseUnary()
     if (left === null) return null
     while (peek()?.type === 'op' && (peek()!.value === '*' || peek()!.value === '/')) {
@@ -86,27 +87,27 @@ function parse(tokens: Token[]): number | null {
       const right = parseUnary()
       if (right === null) return null
       if (op === '/') {
-        if (right === 0) return null // division by zero
-        left = left / right
+        if (right.isZero()) return null // division by zero
+        left = left.div(right)
       } else {
-        left = left * right
+        left = left.times(right)
       }
     }
     return left
   }
 
-  function parseUnary(): number | null {
+  function parseUnary(): BigNumber | null {
     const t = peek()
     if (t?.type === 'op' && (t.value === '+' || t.value === '-')) {
       consume()
       const val = parseUnary()
       if (val === null) return null
-      return t.value === '-' ? -val : val
+      return t.value === '-' ? val.negated() : val
     }
     return parseFactor()
   }
 
-  function parseFactor(): number | null {
+  function parseFactor(): BigNumber | null {
     const t = peek()
     if (!t) return null
 
@@ -116,7 +117,7 @@ function parse(tokens: Token[]): number | null {
       // Check for trailing percent
       if (peek()?.type === 'percent') {
         consume()
-        value = value / 100
+        value = value.div(100)
       }
       return value
     }
@@ -132,7 +133,7 @@ function parse(tokens: Token[]): number | null {
       let result = val
       if (peek()?.type === 'percent') {
         consume()
-        result = result / 100
+        result = result.div(100)
       }
       return result
     }
@@ -143,6 +144,15 @@ function parse(tokens: Token[]): number | null {
   const result = parseExpr()
   if (result === null || pos !== tokens.length) return null
   return result
+}
+
+function formatBigNumber(value: BigNumber): string {
+  if (value.isZero()) return '0'
+  return value
+    .decimalPlaces(10)
+    .toFixed()
+    .replace(/(\.\d*?)0+$/, '$1')
+    .replace(/\.$/, '')
 }
 
 function safeCalculate(expr: string): string | null {
@@ -159,11 +169,10 @@ function safeCalculate(expr: string): string | null {
   if (!tokens) return null
 
   const result = parse(tokens)
-  if (result === null || !isFinite(result)) return null
+  if (result === null || !result.isFinite()) return null
 
   // Format: remove trailing zeros from decimals, max 10 decimal places
-  const formatted = Number(result.toFixed(10)).toString()
-  return formatted
+  return formatBigNumber(result)
 }
 
 function calculateFormulaLines(text: string): string {
@@ -198,6 +207,67 @@ function calculateFormulaLines(text: string): string {
   return results.join('\n')
 }
 
+function replaceText(input: TextInput | undefined, text: string) {
+  return {
+    effects: [{
+      type: 'text.replace' as const,
+      target: input?.paneId ? { paneId: input.paneId } : 'active-input' as const,
+      text,
+    }],
+  }
+}
+
+function sumNumericTokens(text: string): string {
+  const tokens = text.match(/(?<![\w.])-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?![\w.])/g) ?? []
+  const nums = tokens
+    .map((token: string) => new BigNumber(token.replaceAll(',', '')))
+    .filter((num: BigNumber) => !num.isNaN())
+
+  if (nums.length === 0) return '0'
+  return nums.reduce((acc: BigNumber, num: BigNumber) => acc.plus(num), new BigNumber(0)).toFixed()
+}
+
+type BaseConversionMode = 'dec2hex' | 'hex2dec' | 'dec2bin' | 'bin2dec'
+
+function parseSignedBaseInteger(raw: string, radix: 2 | 10 | 16): bigint {
+  const trimmed = raw.trim()
+  const sign = trimmed.startsWith('-') ? -1n : 1n
+  const unsigned = trimmed.replace(/^[+-]/, '')
+  if (!unsigned) throw new Error('Missing number')
+
+  if (radix === 10) {
+    if (!/^\d+$/.test(unsigned)) throw new Error(`Invalid decimal number: ${raw}`)
+    return sign * BigInt(unsigned)
+  }
+
+  if (radix === 16) {
+    const digits = unsigned.replace(/^0x/i, '')
+    if (!/^[0-9a-f]+$/i.test(digits)) throw new Error(`Invalid hex number: ${raw}`)
+    return sign * BigInt(`0x${digits}`)
+  }
+
+  const digits = unsigned.replace(/^0b/i, '')
+  if (!/^[01]+$/i.test(digits)) throw new Error(`Invalid binary number: ${raw}`)
+  return sign * BigInt(`0b${digits}`)
+}
+
+function convertBaseValue(value: string, mode: BaseConversionMode): string {
+  switch (mode) {
+    case 'dec2hex':
+      return parseSignedBaseInteger(value, 10).toString(16).toUpperCase()
+    case 'hex2dec':
+      return parseSignedBaseInteger(value, 16).toString(10)
+    case 'dec2bin':
+      return parseSignedBaseInteger(value, 10).toString(2)
+    case 'bin2dec':
+      return parseSignedBaseInteger(value, 2).toString(10)
+  }
+}
+
+function convertBaseLines(text: string, mode: BaseConversionMode): string {
+  return text.trim().split('\n').map((line) => convertBaseValue(line, mode)).join('\n')
+}
+
 // ─── Plugin Definition ───────────────────────────────────────────────────────
 
 const definition: PluginDefinition = {
@@ -216,13 +286,56 @@ const definition: PluginDefinition = {
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
-        const target = input?.paneId ? { paneId: input.paneId } : 'active-input'
-        return {
-          effects: [{
-            type: 'text.replace' as const,
-            target,
-            text: calculateFormulaLines(text),
-          }],
+        return replaceText(input, calculateFormulaLines(text))
+      },
+    },
+    {
+      id: 'calculator.sum',
+      title: 'command.sum.title',
+      description: 'command.sum.description',
+      icon: 'Calculator',
+      aliases: ['sum', 'add', 'total'],
+      inputs: [
+        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
+      ],
+      inputResolution: { strategy: 'use-active', fallback: 'fail' },
+      run(ctx) {
+        const input = ctx.inputs.input as TextInput
+        const text = input?.kind === 'text' ? input.text : ''
+        return replaceText(input, sumNumericTokens(text))
+      },
+    },
+    {
+      id: 'calculator.base',
+      title: 'command.base.title',
+      description: 'command.base.description',
+      icon: 'Binary',
+      aliases: ['decimal', 'binary', 'hex', 'hex-convert'],
+      params: [
+        {
+          key: 'mode',
+          label: 'param.base.mode.label',
+          type: 'single-select',
+          options: [
+            { label: 'param.base.mode.option.dec2hex.label', value: 'dec2hex' },
+            { label: 'param.base.mode.option.hex2dec.label', value: 'hex2dec' },
+            { label: 'param.base.mode.option.dec2bin.label', value: 'dec2bin' },
+            { label: 'param.base.mode.option.bin2dec.label', value: 'bin2dec' },
+          ],
+          default: 'dec2hex',
+        },
+      ],
+      inputs: [
+        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
+      ],
+      inputResolution: { strategy: 'use-active', fallback: 'fail' },
+      run(ctx) {
+        const input = ctx.inputs.input as TextInput
+        const text = input?.kind === 'text' ? input.text : ''
+        try {
+          return replaceText(input, convertBaseLines(text, (ctx.params.mode ?? 'dec2hex') as BaseConversionMode))
+        } catch (error: any) {
+          return replaceText(input, `Error: ${error.message}`)
         }
       },
     },

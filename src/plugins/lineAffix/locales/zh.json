@@ -1,0 +1,13 @@
+{
+  "command.prepend.title": "前缀插入每行",
+  "command.prepend.description": "在每行开头插入指定文本",
+  "command.append.title": "追加到每行",
+  "command.append.description": "在每行末尾追加指定文本",
+  "command.wrap.title": "包裹每行",
+  "command.wrap.description": "在每行两端添加指定文本",
+  "input.text.label": "输入",
+  "param.prefix.label": "前缀",
+  "param.suffix.label": "后缀",
+  "param.left.label": "左侧",
+  "param.right.label": "右侧"
+}

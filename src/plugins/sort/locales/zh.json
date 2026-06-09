@@ -1,9 +1,0 @@
-{
-  "command.run.title": "行排序",
-  "command.run.description": "按字母顺序排列行",
-  "input.text.label": "输入",
-  "param.direction.label": "方向",
-  "param.direction.option.asc.label": "升序",
-  "param.direction.option.desc.label": "降序",
-  "param.ignoreCase.label": "忽略大小写"
-}

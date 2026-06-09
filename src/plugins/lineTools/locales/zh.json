@@ -1,0 +1,20 @@
+{
+  "command.sort.title": "行排序",
+  "command.sort.description": "按字母顺序排列行",
+  "command.dedup.title": "去除重复行",
+  "command.dedup.description": "移除文本中的重复行",
+  "command.reverse.title": "反转行",
+  "command.reverse.description": "反转行顺序",
+  "command.removeBlankLines.title": "去除空白行",
+  "command.removeBlankLines.description": "移除文本中的空白行",
+  "command.trimWhitespace.title": "去除首尾空白",
+  "command.trimWhitespace.description": "去除每行首尾空白字符",
+  "command.join.title": "合并行",
+  "command.join.description": "用分隔符合并行",
+  "input.text.label": "输入",
+  "param.direction.label": "方向",
+  "param.direction.option.asc.label": "升序",
+  "param.direction.option.desc.label": "降序",
+  "param.ignoreCase.label": "忽略大小写",
+  "param.separator.label": "分隔符"
+}

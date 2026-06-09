@@ -1,6 +1,0 @@
-{
-  "command.run.title": "合并行",
-  "command.run.description": "用分隔符合并行",
-  "input.text.label": "输入",
-  "param.separator.label": "分隔符"
-}

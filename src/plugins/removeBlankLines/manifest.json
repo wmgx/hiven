@@ -1,7 +1,0 @@
-{
-  "pluginId": "remove-blank-lines",
-  "displayName": "Remove Blank Lines",
-  "displayNameI18n": { "zh": "去除空白行" },
-  "version": "1.0.0",
-  "capabilities": ["command"]
-}

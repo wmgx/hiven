@@ -1,6 +1,0 @@
-{
-  "command.run.title": "前缀插入每行",
-  "command.run.description": "在每行开头插入指定文本",
-  "input.text.label": "输入",
-  "param.prefix.label": "前缀"
-}

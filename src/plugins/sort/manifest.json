@@ -1,7 +1,0 @@
-{
-  "pluginId": "sort",
-  "displayName": "Sort Lines",
-  "displayNameI18n": { "zh": "行排序" },
-  "version": "1.0.0",
-  "capabilities": ["command"]
-}

@@ -1,5 +1,0 @@
-{
-  "command.run.title": "Trim Whitespace",
-  "command.run.description": "Strip leading/trailing whitespace from each line",
-  "input.text.label": "Input"
-}

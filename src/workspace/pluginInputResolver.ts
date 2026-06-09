@@ -79,15 +79,18 @@ function resolveUseActive(
       // Try to get selected text first, then fall back to whole pane
       const editor = runtimeRegistry.getCodeEditor(activePaneId)
       let text = activePane?.text || ''
+      let hasSelection = false
 
       if (editor) {
         const sel = editor.getSelection()
         if (sel && !sel.isEmpty()) {
-          text = editor.getModel()?.getValueInRange(sel) || text
+          const selectedText = editor.getModel()?.getValueInRange(sel) || ''
+          text = selectedText || text
+          hasSelection = selectedText.length > 0
         }
       }
 
-      const textInput: TextInput = { kind: 'text', text, paneId: activePaneId }
+      const textInput: TextInput = { kind: 'text', text, paneId: hasSelection ? undefined : activePaneId }
       inputs[slot.key] = textInput
     } else if (slot.kind === 'pane') {
       if (!activePane) {

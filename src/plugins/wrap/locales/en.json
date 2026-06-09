@@ -1,7 +1,0 @@
-{
-  "command.run.title": "Wrap Lines",
-  "command.run.description": "Wrap each line with prefix and suffix",
-  "input.text.label": "Input",
-  "param.left.label": "Left",
-  "param.right.label": "Right"
-}
