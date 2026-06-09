@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
@@ -177,13 +177,14 @@ function HotkeySettings({
   const [error, setError] = useState('')
   const lastModifierTapRef = useRef<{ modifier: GlobalPinnedLauncherDoubleModifier; time: number } | null>(null)
   const recorderRef = useRef<HTMLDivElement>(null)
+  const platformLabels = useMemo(() => getHotkeyPlatformLabels(), [])
   const registrationStatus = shortcut.registrationError
-    ? `${t('hotkeyStatus')}: ${shortcut.registrationError}`
-    : shortcut.registrationStatus ?? t('hotkeyStatusPending')
+    ? t('hotkeyRegistrationFailed', { message: localizeHotkeyStatus(shortcut.registrationError, t, platformLabels) })
+    : formatHotkeyRegistrationStatus(shortcut.registrationStatus, t, platformLabels)
 
   const displayValue = () => {
-    if (shortcut.kind === 'accelerator') return shortcut.accelerator
-    if (shortcut.kind === 'double-modifier') return doubleModifierLabel(shortcut.modifier, t)
+    if (shortcut.kind === 'accelerator') return formatAcceleratorLabel(shortcut.accelerator, platformLabels)
+    if (shortcut.kind === 'double-modifier') return doubleModifierLabel(shortcut.modifier, t, platformLabels)
     return t('hotkeyDisabled')
   }
 
@@ -257,13 +258,13 @@ function HotkeySettings({
       <div className="flex flex-wrap gap-2 justify-end">
         <button className="scripts-btn" onClick={startRecording}>{t('hotkeyRecord')}</button>
         <button className="scripts-btn" onClick={() => chooseDoubleModifier('Command')}>
-          {t('hotkeyDoubleCmd')}
+          {doubleModifierLabel('Command', t, platformLabels)}
         </button>
         <button className="scripts-btn" onClick={() => chooseDoubleModifier('Shift')}>
-          {t('hotkeyDoubleShift')}
+          {doubleModifierLabel('Shift', t, platformLabels)}
         </button>
         <button className="scripts-btn" onClick={() => chooseDoubleModifier('Option')}>
-          {t('hotkeyDoubleOption')}
+          {doubleModifierLabel('Option', t, platformLabels)}
         </button>
         <button className="scripts-btn" onClick={() => { setError(''); setIsRecording(false); onChange({ kind: 'disabled' }) }}>
           {t('hotkeyDisabled')}
@@ -274,7 +275,9 @@ function HotkeySettings({
       </span>
       {shortcut.kind === 'double-modifier' && (
         <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-tertiary)' }}>
-          {t('hotkeyAccessibilityHint', { modifier: doubleModifierLabel(shortcut.modifier, t) })}
+          {platformLabels.isMac
+            ? t('hotkeyAccessibilityHint', { modifier: doubleModifierLabel(shortcut.modifier, t, platformLabels) })
+            : t('hotkeyDoubleModifierUnsupported')}
         </span>
       )}
     </div>
@@ -289,6 +292,7 @@ function eventToGlobalPinnedLauncherShortcut(
   if (isModifierKey(event.key)) {
     const modifier =
       event.key === 'Meta' ? 'Command' :
+      event.key === 'Control' && !isMacPlatform() ? 'Command' :
       event.key === 'Shift' ? 'Shift' :
       event.key === 'Alt' ? 'Option' :
       null
@@ -337,10 +341,95 @@ function isModifierKey(key: string): boolean {
   return key === 'Meta' || key === 'Control' || key === 'Alt' || key === 'Shift'
 }
 
-function doubleModifierLabel(modifier: GlobalPinnedLauncherDoubleModifier, t: ReturnType<typeof useT>): string {
-  if (modifier === 'Shift') return t('hotkeyDoubleShift')
-  if (modifier === 'Option') return t('hotkeyDoubleOption')
-  return t('hotkeyDoubleCmd')
+type HotkeyPlatformLabels = {
+  isMac: boolean
+  command: string
+  option: string
+}
+
+function getHotkeyPlatformLabels(): HotkeyPlatformLabels {
+  const isMac = isMacPlatform()
+  return {
+    isMac,
+    command: isMac ? 'Cmd' : 'Ctrl',
+    option: isMac ? 'Option' : 'Alt',
+  }
+}
+
+function isMacPlatform(): boolean {
+  const nav = typeof navigator === 'undefined' ? undefined : navigator
+  const platform = nav?.platform || ''
+  const userAgent = nav?.userAgent || ''
+  const userAgentDataPlatform = (nav as Navigator & { userAgentData?: { platform?: string } } | undefined)?.userAgentData?.platform || ''
+  return /Mac|iPhone|iPad|iPod/i.test(`${platform} ${userAgentDataPlatform} ${userAgent}`)
+}
+
+function doubleModifierLabel(
+  modifier: GlobalPinnedLauncherDoubleModifier,
+  t: ReturnType<typeof useT>,
+  platformLabels: HotkeyPlatformLabels,
+): string {
+  return t('hotkeyDoubleModifier', { modifier: modifierLabel(modifier, platformLabels) })
+}
+
+function modifierLabel(modifier: GlobalPinnedLauncherDoubleModifier, platformLabels: HotkeyPlatformLabels): string {
+  if (modifier === 'Shift') return 'Shift'
+  if (modifier === 'Option') return platformLabels.option
+  return platformLabels.command
+}
+
+function formatAcceleratorLabel(accelerator: string, platformLabels: HotkeyPlatformLabels): string {
+  if (platformLabels.isMac) return accelerator
+  return accelerator.replace(/\bCmd\b/g, platformLabels.command).replace(/\bOption\b/g, platformLabels.option)
+}
+
+function formatHotkeyRegistrationStatus(
+  status: string | undefined,
+  t: ReturnType<typeof useT>,
+  platformLabels: HotkeyPlatformLabels,
+): string {
+  if (!status) return t('hotkeyStatusPending')
+  return localizeHotkeyStatus(status, t, platformLabels)
+}
+
+function localizeHotkeyStatus(
+  status: string,
+  t: ReturnType<typeof useT>,
+  platformLabels: HotkeyPlatformLabels,
+): string {
+  if (status === 'Registered') return t('hotkeyStatusRegistered')
+  if (status === 'Registration pending') return t('hotkeyStatusPending')
+  if (status === 'Disabled') return t('hotkeyStatusDisabled')
+  if (status === 'Double modifier detector unregistered') return t('hotkeyStatusUnregistered')
+
+  const doubleRegistered = status.match(/^Double (Cmd|Shift|Option) registered$/)
+  if (doubleRegistered) {
+    return t('hotkeyStatusDoubleRegistered', {
+      modifier: nativeModifierLabel(doubleRegistered[1], platformLabels),
+    })
+  }
+
+  const failed = status.match(/^Registration failed(?::\s*)?(.*)$/)
+  if (failed) {
+    return t('hotkeyRegistrationFailed', {
+      message: localizeHotkeyStatusDetail(failed[1] || '', t),
+    })
+  }
+
+  return t('hotkeyStatusDetail', { status })
+}
+
+function nativeModifierLabel(nativeModifier: string, platformLabels: HotkeyPlatformLabels): string {
+  if (nativeModifier === 'Option') return platformLabels.option
+  if (nativeModifier === 'Cmd') return platformLabels.command
+  return nativeModifier
+}
+
+function localizeHotkeyStatusDetail(detail: string, t: ReturnType<typeof useT>): string {
+  if (/Double modifier global hotkey is only available on macOS/i.test(detail)) {
+    return t('hotkeyDoubleModifierUnsupported')
+  }
+  return detail || t('hotkeyStatusUnknownError')
 }
 
 function LocaleSelect({ options, value, onChange }: { options: { value: string; label: string }[]; value: string; onChange: (value: string) => void }) {

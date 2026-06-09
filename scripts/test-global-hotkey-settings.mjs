@@ -180,6 +180,16 @@ check('SettingsView supports recording, disabled, and status display', () => {
     /registrationStatus|registerStatus|statusText|settings\.hotkeyStatus/,
     'SettingsView should show registration status or error text',
   )
+  assertDoesNotHave(
+    files.settingsView,
+    /shortcut\.registrationStatus\s*\?\?\s*t\(['"]hotkeyStatusPending['"]\)/,
+    'SettingsView should not render native registration status strings without i18n formatting',
+  )
+  assertHas(
+    files.settingsView,
+    /formatHotkeyRegistrationStatus/,
+    'SettingsView should localize native registration status strings before rendering',
+  )
 })
 
 for (const modifier of ['Command', 'Shift', 'Option']) {
@@ -207,6 +217,29 @@ check('Settings recording path can identify modifier-only double-modifier shortc
     files.settingsView,
     /onChange\(\s*(?:recordedShortcut(?:\.shortcut)?|shortcut|nextShortcut)\s*\)/,
     'recording handler should pass the recorded accelerator or double-modifier shortcut through onChange',
+  )
+})
+
+check('Settings double-modifier labels adapt to the current platform', () => {
+  assertHas(
+    files.settingsView,
+    /getHotkeyPlatformLabels/,
+    'SettingsView should derive platform-specific hotkey labels',
+  )
+  assertHas(
+    files.settingsView,
+    /command:\s*isMac\s*\?\s*['"]Cmd['"]\s*:\s*['"]Ctrl['"]/,
+    'SettingsView should display Ctrl instead of Cmd on non-macOS platforms',
+  )
+  assertHas(
+    files.settingsView,
+    /option:\s*isMac\s*\?\s*['"]Option['"]\s*:\s*['"]Alt['"]/,
+    'SettingsView should display Alt instead of Option on non-macOS platforms',
+  )
+  assertHas(
+    files.settingsView,
+    /event\.key\s*===\s*['"]Control['"][\s\S]{0,120}!isMacPlatform\(\)[\s\S]{0,120}['"]Command['"]/,
+    'SettingsView should allow double Ctrl recording to use the primary double-modifier slot on non-macOS platforms',
   )
 })
 
@@ -264,6 +297,10 @@ check('i18n includes English and Chinese copy for the hotkey settings', () => {
     'hotkeyDoubleCmd',
     'hotkeyDisabled',
     'hotkeyStatus',
+    'hotkeyDoubleModifier',
+    'hotkeyStatusDoubleRegistered',
+    'hotkeyRegistrationFailed',
+    'hotkeyDoubleModifierUnsupported',
   ]) {
     assertHas(files.i18n, new RegExp(`['"]${key}['"]`), `i18n should include ${key}`)
   }
