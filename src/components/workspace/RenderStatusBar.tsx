@@ -3,7 +3,7 @@ import { useAppStore } from '../../store'
 import { useWorkspaceStore } from '../../workspace/workspaceStore'
 import { applyEffects } from '../../workspace/effectRunner'
 import { X, ChevronDown } from 'lucide-react'
-import { t } from '../../i18n'
+import { useT } from '../../i18n'
 
 export function RenderStatusBar() {
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
@@ -14,8 +14,8 @@ export function RenderStatusBar() {
   const paneRenderers = useWorkspaceStore((s) => s.paneRenderers)
   const panelInstancesV2 = useWorkspaceStore((s) => s.panelInstancesV2)
   const occupancies = useWorkspaceStore((s) => s.occupancies)
-  const locale = useAppStore((s) => s.locale)
   const lastCommandStatus = useAppStore((s) => s.lastCommandStatus)
+  const t = useT('workspace')
   const [menuOpen, setMenuOpen] = useState(false)
 
   const hasPresentations = Object.keys(presentations).length > 0
@@ -29,7 +29,7 @@ export function RenderStatusBar() {
   if (paneOrder.length <= 1 && !hasPresentations && !hasPanels && !hasPaneRenderers && !hasPanelInstancesV2 && !lastCommandStatus) return null
 
   const commandStatusLabel = lastCommandStatus
-    ? t(locale, lastCommandStatus.status === 'running'
+    ? t(lastCommandStatus.status === 'running'
       ? 'status.commandRunning'
       : lastCommandStatus.status === 'success'
         ? 'status.commandSuccess'
@@ -51,12 +51,12 @@ export function RenderStatusBar() {
     >
       {/* Active Pane */}
       <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
-        {t(locale, 'status.active')}: {pane?.title || activePaneId}
+        {t('status.active')}: {pane?.title || activePaneId}
       </span>
 
       {/* Renderer */}
       <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
-        {t(locale, 'status.renderer')}: {activeRenderer?.rendererId ?? t(locale, 'status.code')}
+        {t('status.renderer')}: {activeRenderer?.rendererId ?? t('status.code')}
       </span>
 
       {/* Presentations */}
@@ -77,13 +77,13 @@ export function RenderStatusBar() {
       {/* Panels */}
       {hasPanels && Object.values(panels).map((panel) => (
         <span key={panel.id} className="text-[10px]" style={{ color: 'var(--color-text-secondary)' }}>
-          {t(locale, 'status.panel')}: {panel.title}
+          {t('status.panel')}: {panel.title}
         </span>
       ))}
 
       {hasPanelInstancesV2 && Object.values(panelInstancesV2).map((panel) => (
         <span key={panel.panelId} className="text-[10px]" style={{ color: 'var(--color-text-secondary)' }}>
-          {t(locale, 'status.panel')}: {panel.title ?? panel.panelId}
+          {t('status.panel')}: {panel.title ?? panel.panelId}
         </span>
       ))}
 
@@ -94,7 +94,7 @@ export function RenderStatusBar() {
           style={{ color: 'var(--color-text-tertiary)' }}
           onClick={() => setMenuOpen(!menuOpen)}
         >
-          {t(locale, 'status.status')} <ChevronDown size={10} />
+          {t('status.status')} <ChevronDown size={10} />
         </button>
       )}
 
@@ -104,7 +104,7 @@ export function RenderStatusBar() {
           style={{ color: commandStatusColor }}
           title={lastCommandStatus.message ? `${lastCommandStatus.title}: ${lastCommandStatus.message}` : lastCommandStatus.title}
         >
-          {t(locale, 'status.lastCommand')}: {lastCommandStatus.title} · {commandStatusLabel}
+          {t('status.lastCommand')}: {lastCommandStatus.title} · {commandStatusLabel}
         </span>
       )}
 
@@ -118,35 +118,35 @@ export function RenderStatusBar() {
           }}
         >
           <div className="px-3 py-1 text-[10px] font-medium" style={{ color: 'var(--color-text-tertiary)' }}>
-            {t(locale, 'status.rendering')}
+            {t('status.rendering')}
           </div>
           <div className="px-3 py-1 text-[11px]" style={{ color: 'var(--color-text-primary)' }}>
-            {t(locale, 'status.main')}: {t(locale, 'status.codeEditor')}
+            {t('status.main')}: {t('status.codeEditor')}
           </div>
           {Object.values(presentations).map((session) => (
             <div key={session.id} className="px-3 py-1 text-[11px]" style={{ color: 'var(--color-text-primary)' }}>
-              {t(locale, 'status.presentation')}: {session.renderer}
+              {t('status.presentation')}: {session.renderer}
             </div>
           ))}
           {Object.values(panels).map((panel) => (
             <div key={panel.id} className="px-3 py-1 text-[11px]" style={{ color: 'var(--color-text-primary)' }}>
-              {t(locale, 'status.panel')}: {panel.title}
+              {t('status.panel')}: {panel.title}
             </div>
           ))}
           {Object.entries(paneRenderers).map(([paneId, renderer]) => (
             <div key={paneId} className="px-3 py-1 text-[11px]" style={{ color: 'var(--color-text-primary)' }}>
-              {t(locale, 'status.pane')} {paneId}: {renderer.rendererId}
+              {t('status.pane')} {paneId}: {renderer.rendererId}
             </div>
           ))}
           {Object.values(panelInstancesV2).map((panel) => (
             <div key={panel.panelId} className="px-3 py-1 text-[11px]" style={{ color: 'var(--color-text-primary)' }}>
-              {t(locale, 'status.panel')}: {panel.title ?? panel.panelId}
+              {t('status.panel')}: {panel.title ?? panel.panelId}
             </div>
           ))}
 
           <div className="my-1" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }} />
           <div className="px-3 py-1 text-[10px] font-medium" style={{ color: 'var(--color-text-tertiary)' }}>
-            {t(locale, 'status.actions')}
+            {t('status.actions')}
           </div>
           {Object.values(occupancies).map((occ) => (
             <button
@@ -164,7 +164,7 @@ export function RenderStatusBar() {
                 setMenuOpen(false)
               }}
             >
-              {t(locale, 'status.exit')} {occ.title}
+              {t('status.exit')} {occ.title}
             </button>
           ))}
           <button
@@ -172,7 +172,7 @@ export function RenderStatusBar() {
             style={{ color: 'var(--color-text-secondary)' }}
             onClick={() => setMenuOpen(false)}
           >
-            {t(locale, 'status.closeMenu')}
+            {t('status.closeMenu')}
           </button>
         </div>
       )}

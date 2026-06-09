@@ -1,12 +1,12 @@
 import { useAppStore } from '../store'
 import type { ViewId } from '../store'
 import { LayoutPanelLeft, Pin, Puzzle, Settings } from 'lucide-react'
-import { t } from '../i18n'
+import { useT } from '../i18n'
 import { resolveIcon } from '../utils/resolveIcon'
 
-const navItems: { id: ViewId; icon: React.ReactNode; labelKey: 'nav.editor' | 'nav.scripts' }[] = [
-  { id: 'editor', icon: <LayoutPanelLeft size={18} />, labelKey: 'nav.editor' },
-  { id: 'scripts', icon: <Puzzle size={18} />, labelKey: 'nav.scripts' },
+const navItems: { id: ViewId; icon: React.ReactNode; labelKey: string }[] = [
+  { id: 'editor', icon: <LayoutPanelLeft size={18} />, labelKey: 'editor' },
+  { id: 'scripts', icon: <Puzzle size={18} />, labelKey: 'scripts' },
 ]
 
 export function Sidebar() {
@@ -15,7 +15,7 @@ export function Sidebar() {
   const pinnedActions = useAppStore((s) => s.pinnedActions)
   const activePinnedActionId = useAppStore((s) => s.activePinnedActionId)
   const openPinnedAction = useAppStore((s) => s.openPinnedAction)
-  const locale = useAppStore((s) => s.locale)
+  const t = useT('nav')
 
   return (
     <div
@@ -28,7 +28,7 @@ export function Sidebar() {
       {navItems.map((item) => (
         <button
           key={item.id}
-          title={t(locale, item.labelKey)}
+          title={t(item.labelKey)}
           onClick={() => setActiveView(item.id)}
           className={`sidebar-btn w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer border-none bg-transparent ${activeView === item.id ? 'active' : ''}`}
           style={{
@@ -63,7 +63,7 @@ export function Sidebar() {
       )}
       <div className="mt-auto">
         <button
-          title={t(locale, 'nav.settings')}
+          title={t('settings')}
           onClick={() => setActiveView('settings')}
           className={`sidebar-btn w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer border-none bg-transparent ${activeView === 'settings' ? 'active' : ''}`}
           style={{

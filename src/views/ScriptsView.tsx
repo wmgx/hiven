@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AlertTriangle, Archive, Download, ExternalLink, FolderOpen, Globe, Loader2, Package, Plus, Power, RefreshCw, Search, Trash2, Upload } from 'lucide-react'
-import { t } from '../i18n'
+import { useT, t } from '../i18n'
 import type { Locale } from '../i18n'
 import { localized, useAppStore } from '../store'
 import { checkBuiltinPluginsUpdate, getConfigDir } from '../configInit'

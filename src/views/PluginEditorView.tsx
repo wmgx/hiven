@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import Editor from '@monaco-editor/react'
 import { ArrowLeft, FileText, Folder, FolderTree, RefreshCw } from 'lucide-react'
 import { useAppStore } from '../store'
-import { t } from '../i18n'
+import { useT } from '../i18n'
 import { listPluginFiles, readPluginFile } from '../workspace/pluginRuntime'
 import type { PluginFileTree } from '../workspace/pluginTypes'
 
@@ -91,6 +91,7 @@ export function PluginEditorView() {
   const pluginEditor = useAppStore((s) => s.pluginEditor)
   const closePluginEditor = useAppStore((s) => s.closePluginEditor)
   const locale = useAppStore((s) => s.locale)
+  const t = useT('pluginEditor')
   const [fileTree, setFileTree] = useState<PluginFileTree[]>([])
   const [activeFile, setActiveFile] = useState('')
   const [content, setContent] = useState('')
@@ -138,8 +139,8 @@ export function PluginEditorView() {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3" style={{ color: 'var(--color-text-tertiary)' }}>
         <FolderTree size={36} strokeWidth={1.5} />
-        <span>{t(locale, 'pluginEditor.noSelection')}</span>
-        <button className="scripts-btn" onClick={closePluginEditor}>{t(locale, 'pluginEditor.backToPlugins')}</button>
+        <span>{t('noSelection')}</span>
+        <button className="scripts-btn" onClick={closePluginEditor}>{t('backToPlugins')}</button>
       </div>
     )
   }
@@ -148,18 +149,18 @@ export function PluginEditorView() {
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="scripts-header px-4 py-3" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
         <div className="flex items-center gap-2 min-w-0">
-          <button className="script-action-btn" title={t(locale, 'pluginEditor.back')} onClick={closePluginEditor}>
+          <button className="script-action-btn" title={t('back')} onClick={closePluginEditor}>
             <ArrowLeft size={14} />
           </button>
-          <span className="scripts-title">{t(locale, 'pluginEditor.title')}</span>
-          <span className="script-badge">{t(locale, 'pluginEditor.readOnly')}</span>
+          <span className="scripts-title">{t('title')}</span>
+          <span className="script-badge">{t('readOnly')}</span>
           <span className="truncate" style={{ color: 'var(--color-text-tertiary)', fontSize: '0.8em' }}>
             {pluginEditor.pluginId} · {pluginEditor.folderPath}
           </span>
         </div>
         <div className="scripts-header-actions">
           <button className="scripts-btn" onClick={refreshTree} disabled={loading}>
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> {t(locale, 'pluginEditor.reload')}
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> {t('reload')}
           </button>
         </div>
       </div>
@@ -173,11 +174,11 @@ export function PluginEditorView() {
       <div className="flex-1 min-h-0 flex">
         <aside className="w-64 shrink-0 overflow-auto p-2" style={{ borderRight: '0.5px solid var(--color-border-tertiary)', background: 'var(--color-background-secondary)' }}>
           <div className="flex items-center gap-1 mb-2 px-1" style={{ color: 'var(--color-text-tertiary)', fontSize: '0.75em' }}>
-            <FolderTree size={12} /> {t(locale, 'pluginEditor.fileTree')}
+            <FolderTree size={12} /> {t('fileTree')}
           </div>
           {fileTree.length === 0 && !loading ? (
             <div className="px-2 py-1.5" style={{ color: 'var(--color-text-tertiary)', fontSize: '0.8em' }}>
-              {t(locale, 'pluginEditor.noFiles')}
+              {t('noFiles')}
             </div>
           ) : (
             fileTree.map((node) => (

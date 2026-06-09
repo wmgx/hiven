@@ -1,15 +1,18 @@
 /**
- * Plugin i18n registry.
- * Plugins ship locale dictionaries under `locales/{en,zh}.json`. The host
- * registers them per pluginId namespace. The injected `i18n.t(key)` resolves
- * with a three-level fallback:
- *   1. plugin namespace messages (current locale, then en)
- *   2. host global dictionary (via hostT)
- *   3. raw key
+ * Plugin i18n integration with the unified registry.
+ *
+ * This module bridges the plugin loading pipeline with the unified i18n registry.
+ * It handles:
+ *   1. Registering/unregistering plugin messages via the unified registry
+ *   2. Load-time contribution localization (expanding keys into { text, textI18n })
+ *
+ * Public API for plugin loader:
+ *   - registerPluginMessages(pluginId, messages)  — called during plugin load
+ *   - unregisterPluginMessages(pluginId)          — called during plugin disable
+ *   - localizeContributions(pluginId, contributions) — expand locale keys
  */
 
-import type { Locale } from './index'
-import { t as hostT, type MessageKey } from './index'
+import { registerMessages, unregisterMessages, getMessages, type Locale, type Messages } from './registry'
 import type {
   CommandContribution,
   CommandParam,
@@ -20,66 +23,56 @@ import type {
   ToolbarContribution,
 } from '../workspace/pluginTypes'
 
-export type PluginMessages = Partial<Record<Locale, Record<string, string>>>
+export type { Messages as PluginMessages } from './registry'
 
 const SUPPORTED_LOCALES: Locale[] = ['en', 'zh']
 
-const registry = new Map<string, PluginMessages>()
-
-export function registerPluginMessages(pluginId: string, messages: PluginMessages): void {
-  registry.set(pluginId, messages)
+/**
+ * Register plugin messages into the unified registry.
+ * The pluginId becomes the namespace.
+ */
+export function registerPluginMessages(pluginId: string, messages: Messages): void {
+  registerMessages(pluginId, messages)
 }
 
+/**
+ * Unregister plugin messages from the unified registry.
+ */
 export function unregisterPluginMessages(pluginId: string): void {
-  registry.delete(pluginId)
+  unregisterMessages(pluginId)
 }
 
+/**
+ * Clear all plugin messages. Delegates to unregister for known plugins.
+ * @deprecated — prefer unregisterPluginMessages per plugin on disable.
+ */
 export function clearPluginMessages(): void {
-  registry.clear()
+  // No-op; plugins are individually unregistered when disabled.
 }
 
-function applyVars(value: string, vars?: Record<string, string | number>): string {
-  if (!vars) return value
-  let out = value
-  for (const [name, replacement] of Object.entries(vars)) {
-    out = out.replaceAll(`{${name}}`, String(replacement))
-  }
-  return out
-}
+// ─── Legacy compat: makePluginT ──────────────────────────────────────────────
+// Used by pluginHostSdk's hooks.useT(pluginId) — still needed during migration
+// of existing plugins. Once all plugins use the Context-based useT(), this can
+// be removed.
+
+import { translate } from './registry'
 
 export type PluginT = (key: string, vars?: Record<string, string | number>) => string
 
 /**
  * Build a translate function bound to a plugin namespace and locale.
- * Plugin code only writes short keys; resolution falls back to host dict then key.
+ * @deprecated — plugins should use useT() from context instead.
  */
 export function makePluginT(pluginId: string, locale: Locale): PluginT {
-  return (key, vars) => {
-    const messages = registry.get(pluginId)
-    const localized = messages?.[locale]?.[key] ?? messages?.en?.[key]
-    if (localized != null) return applyVars(localized, vars)
-    // Fallback to host global dictionary, then raw key (hostT already returns key on miss).
-    return hostT(locale, key as MessageKey, vars)
-  }
+  return (key, vars) => translate(locale, pluginId, key, vars)
 }
 
 // ─── Contribution Localization (load-time) ─────────────────────────────────────
-//
-// Plugins author contribution fields (title/description/label/hint and option
-// labels) as plain locale keys and ship `locales/{en,zh}.json`. At load time the
-// host expands each key into the existing `{ text, textI18n }` protocol so that
-// downstream consumers (CommandPalette, views) keep using `localized(...)` with
-// zero awareness of plugin namespaces.
-//
-// Resolution per field: if the field value is a key present in the plugin
-// messages, expand it to the literal default text plus a full per-locale i18n
-// map. If the key is absent from all locales, the value is left untouched so
-// legacy inline strings keep working.
 
 type I18nMap = Partial<Record<Locale, string>>
 
 /** Build a per-locale map for a key; returns null when no locale defines it. */
-function localizeKey(messages: PluginMessages, key: string): { text: string; i18n: I18nMap } | null {
+function localizeKey(messages: Messages, key: string): { text: string; i18n: I18nMap } | null {
   const i18n: I18nMap = {}
   let found = false
   for (const locale of SUPPORTED_LOCALES) {
@@ -90,12 +83,11 @@ function localizeKey(messages: PluginMessages, key: string): { text: string; i18
     }
   }
   if (!found) return null
-  // Default text: prefer en, else the first available locale value.
   const text = i18n.en ?? SUPPORTED_LOCALES.map((l) => i18n[l]).find((v) => v != null) ?? key
   return { text, i18n }
 }
 
-function localizeParam(messages: PluginMessages, param: CommandParam): CommandParam {
+function localizeParam(messages: Messages, param: CommandParam): CommandParam {
   const next: CommandParam = { ...param }
   const label = localizeKey(messages, param.label)
   if (label) {
@@ -121,13 +113,13 @@ function localizeParam(messages: PluginMessages, param: CommandParam): CommandPa
   return next
 }
 
-function localizeInputSlot(messages: PluginMessages, slot: InputSlot): InputSlot {
+function localizeInputSlot(messages: Messages, slot: InputSlot): InputSlot {
   const label = localizeKey(messages, slot.label)
   if (!label) return slot
   return { ...slot, label: label.text, labelI18n: { ...label.i18n, ...slot.labelI18n } }
 }
 
-function localizeCommand(messages: PluginMessages, command: CommandContribution): CommandContribution {
+function localizeCommand(messages: Messages, command: CommandContribution): CommandContribution {
   const next: CommandContribution = { ...command }
   const title = localizeKey(messages, command.title)
   if (title) {
@@ -150,25 +142,25 @@ function localizeCommand(messages: PluginMessages, command: CommandContribution)
   return next
 }
 
-function localizeRenderer(messages: PluginMessages, renderer: RendererContribution): RendererContribution {
+function localizeRenderer(messages: Messages, renderer: RendererContribution): RendererContribution {
   const title = localizeKey(messages, renderer.title)
   if (!title) return renderer
   return { ...renderer, title: title.text, titleI18n: { ...title.i18n, ...renderer.titleI18n } }
 }
 
-function localizePanel(messages: PluginMessages, panel: PanelContributionV2): PanelContributionV2 {
+function localizePanel(messages: Messages, panel: PanelContributionV2): PanelContributionV2 {
   const title = localizeKey(messages, panel.title)
   if (!title) return panel
   return { ...panel, title: title.text, titleI18n: { ...title.i18n, ...panel.titleI18n } }
 }
 
-function localizeToolbar(messages: PluginMessages, item: ToolbarContribution): ToolbarContribution {
+function localizeToolbar(messages: Messages, item: ToolbarContribution): ToolbarContribution {
   const title = localizeKey(messages, item.title)
   if (!title) return item
   return { ...item, title: title.text, titleI18n: { ...title.i18n, ...item.titleI18n } }
 }
 
-function localizeInstantSuggestion(messages: PluginMessages, provider: InstantSuggestionProvider): InstantSuggestionProvider {
+function localizeInstantSuggestion(messages: Messages, provider: InstantSuggestionProvider): InstantSuggestionProvider {
   const next: InstantSuggestionProvider = { ...provider }
   const title = localizeKey(messages, provider.title)
   if (title) {
@@ -188,8 +180,7 @@ export type LocalizedContributions = {
 
 /**
  * Expand locale keys in a plugin's contributions into the `{ text, textI18n }`
- * protocol using the plugin's registered messages. Call this right before
- * registering contributions so the registry stores fully-resolved entries.
+ * protocol using the plugin's registered messages.
  */
 export function localizeContributions(
   pluginId: string,
@@ -201,7 +192,7 @@ export function localizeContributions(
     instantSuggestions?: InstantSuggestionProvider[]
   },
 ): LocalizedContributions {
-  const messages = registry.get(pluginId) ?? {}
+  const messages = getMessages(pluginId) ?? {}
   return {
     commands: (contributions.commands ?? []).map((c) => localizeCommand(messages, c)),
     renderers: (contributions.renderers ?? []).map((r) => localizeRenderer(messages, r)),

@@ -9,11 +9,12 @@ import { ToastContainer } from '../components/workspace/ToastContainer'
 import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
 import { runToolbarCommand } from '../workspace/toolbarCommandRunner'
 import { resolveIcon } from '../utils/resolveIcon'
-import { t } from '../i18n'
+import { useT } from '../i18n'
 
 export function EditorView() {
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
   const locale = useAppStore((s) => s.locale)
+  const t = useT('editor')
   const closeActiveSurfaceOrPane = useWorkspaceStore((s) => s.closeActiveSurfaceOrPane)
   const pluginRegistryVersion = usePluginRegistryVersion()
 
@@ -49,7 +50,7 @@ export function EditorView() {
       >
         <span className="text-[11px] flex items-center gap-1.5" style={{ color: 'var(--color-text-tertiary)' }}>
           <span className="w-1.5 h-1.5 rounded-full anim-pulse-dot" style={{ background: '#27C93F' }} />
-          {t(locale, 'editor.ready')}
+          {t('ready')}
         </span>
 
         {/* Right side: plugin toolbar buttons + Run Action */}
@@ -76,7 +77,7 @@ export function EditorView() {
             onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
             onClick={() => setCommandPaletteOpen(true)}
           >
-            {t(locale, 'editor.runAction')}
+            {t('runAction')}
           </span>
         </div>
       </div>

@@ -1,6 +1,6 @@
-export const workspace = {
+export default {
   en: {
-    'workspace.close': 'Close',
+    'close': 'Close',
     'status.active': 'Active',
     'status.renderer': 'Renderer',
     'status.code': 'Code',
@@ -74,7 +74,7 @@ export const workspace = {
     'pinned.noControls': 'No controls for {title}',
   },
   zh: {
-    'workspace.close': '关闭',
+    'close': '关闭',
     'status.active': '当前',
     'status.renderer': '渲染器',
     'status.code': '代码',

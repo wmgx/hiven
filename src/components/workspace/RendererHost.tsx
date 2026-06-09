@@ -11,12 +11,11 @@
 
 import { useMemo } from 'react'
 import { useWorkspaceStore } from '../../workspace/workspaceStore'
-import { useAppStore } from '../../store'
 import { pluginRegistry } from '../../workspace/pluginRegistry'
 import { applyEffects } from '../../workspace/effectRunner'
 import type { FluxEffect, PaneRendererState, PaneId } from '../../workspace/types'
 import type { RendererHostApi, PaneInput } from '../../workspace/pluginTypes'
-import { t } from '../../i18n'
+import { useT, I18nNamespaceProvider } from '../../i18n'
 
 interface RendererHostProps {
   paneId: PaneId
@@ -28,7 +27,7 @@ export function RendererHost({ paneId, rendererState }: RendererHostProps) {
   const clearPaneRenderer = useWorkspaceStore((s) => s.clearPaneRenderer)
   const setActivePaneId = useWorkspaceStore((s) => s.setActivePaneId)
   const setPaneText = useWorkspaceStore((s) => s.setPaneText)
-  const locale = useAppStore((s) => s.locale)
+  const t = useT('workspace')
 
   // Resolve renderer from registry (prefer dev if it's a dev renderer)
   const rendererEntry = pluginRegistry.resolveRenderer(
@@ -67,7 +66,7 @@ export function RendererHost({ paneId, rendererState }: RendererHostProps) {
           className="text-[12px]"
           style={{ color: 'var(--color-text-tertiary)' }}
         >
-          {t(locale, 'renderer.notFound')}: {rendererState.rendererId}
+          {t('renderer.notFound')}: {rendererState.rendererId}
         </span>
         <button
           className="text-[11px] px-2 py-1 rounded cursor-pointer"
@@ -78,7 +77,7 @@ export function RendererHost({ paneId, rendererState }: RendererHostProps) {
           }}
           onClick={() => clearPaneRenderer(paneId)}
         >
-          {t(locale, 'workspace.close')}
+          {t('close')}
         </button>
       </div>
     )
@@ -86,15 +85,18 @@ export function RendererHost({ paneId, rendererState }: RendererHostProps) {
 
   const RendererComponent = rendererEntry.contribution.component
   const surfaceId = `pane:${paneId}:renderer`
+  const pluginId = rendererEntry.meta.pluginId
 
   return (
-    <div className="flex-1 overflow-hidden h-full">
-      <RendererComponent
-        inputs={resolvedInputs}
-        surfaceId={surfaceId}
-        host={host}
-      />
-    </div>
+    <I18nNamespaceProvider value={pluginId}>
+      <div className="flex-1 overflow-hidden h-full">
+        <RendererComponent
+          inputs={resolvedInputs}
+          surfaceId={surfaceId}
+          host={host}
+        />
+      </div>
+    </I18nNamespaceProvider>
   )
 }
 

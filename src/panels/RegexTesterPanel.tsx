@@ -6,10 +6,9 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useWorkspaceStore } from '../workspace/workspaceStore'
-import { useAppStore } from '../store'
 import { runtimeRegistry } from '../workspace/runtimeRegistry'
 import type { PanelComponentProps } from '../workspace/panelRegistry'
-import { t } from '../i18n'
+import { useT } from '../i18n'
 
 interface MatchResult {
   index: number
@@ -26,7 +25,7 @@ export function RegexTesterPanel({ activePaneId, onClose }: PanelComponentProps)
   const [matches, setMatches] = useState<MatchResult[]>([])
   const [pinned, setPinned] = useState(false)
   const [pinnedPaneId, setPinnedPaneId] = useState<string | null>(null)
-  const locale = useAppStore((s) => s.locale)
+  const t = useT('workspace')
   const decorationIdsRef = useRef<string[]>([])
 
   const targetPaneId = pinned && pinnedPaneId ? pinnedPaneId : activePaneId
@@ -173,7 +172,7 @@ export function RegexTesterPanel({ activePaneId, onClose }: PanelComponentProps)
         style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}
       >
         <span className="text-[11px] font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-          {t(locale, 'core.regexTester.title')}
+          {t('core.regexTester.title')}
         </span>
         <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
           · {paneTitle}
@@ -186,14 +185,14 @@ export function RegexTesterPanel({ activePaneId, onClose }: PanelComponentProps)
           }}
           onClick={handlePin}
         >
-          {pinned ? t(locale, 'regex.pinned') : t(locale, 'regex.pin')}
+          {pinned ? t('regex.pinned') : t('regex.pin')}
         </button>
         <button
           className="ml-auto text-[10px] px-1.5 py-0.5 rounded hover:opacity-80"
           style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-secondary)' }}
           onClick={onClose}
         >
-          {t(locale, 'workspace.close')}
+          {t('close')}
         </button>
       </div>
 
@@ -203,7 +202,7 @@ export function RegexTesterPanel({ activePaneId, onClose }: PanelComponentProps)
         <input
           className="flex-1 text-[12px] bg-transparent outline-none"
           style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
-          placeholder={t(locale, 'regex.pattern')}
+          placeholder={t('regex.pattern')}
           value={pattern}
           onChange={(e) => setPattern(e.target.value)}
           autoFocus
@@ -212,7 +211,7 @@ export function RegexTesterPanel({ activePaneId, onClose }: PanelComponentProps)
         <input
           className="w-[40px] text-[12px] bg-transparent outline-none text-center"
           style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
-          placeholder={t(locale, 'regex.flags')}
+          placeholder={t('regex.flags')}
           value={flags}
           onChange={(e) => setFlags(e.target.value)}
         />
@@ -228,7 +227,7 @@ export function RegexTesterPanel({ activePaneId, onClose }: PanelComponentProps)
         {!error && matches.length > 0 && (
           <div className="text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>
             <span style={{ color: 'var(--color-success-text)' }}>
-              {t(locale, matches.length === 1 ? 'regex.match' : 'regex.matches', { count: matches.length })}
+              {t(matches.length === 1 ? 'regex.match' : 'regex.matches', { count: matches.length })}
             </span>
             {matches.slice(0, 20).map((m, i) => (
               <div key={i} className="flex gap-2 py-0.5" style={{ color: 'var(--color-text-tertiary)' }}>
@@ -245,14 +244,14 @@ export function RegexTesterPanel({ activePaneId, onClose }: PanelComponentProps)
             ))}
             {matches.length > 20 && (
               <div className="py-0.5" style={{ color: 'var(--color-text-tertiary)' }}>
-                {t(locale, 'regex.more', { count: matches.length - 20 })}
+                {t('regex.more', { count: matches.length - 20 })}
               </div>
             )}
           </div>
         )}
         {!error && pattern && matches.length === 0 && (
           <div className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
-            {t(locale, 'regex.noMatches')}
+            {t('regex.noMatches')}
           </div>
         )}
       </div>

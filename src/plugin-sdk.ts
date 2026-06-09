@@ -1,6 +1,7 @@
 export { definePlugin } from './workspace/definePlugin'
 export { detectExternalEditorLanguage } from './workspace/languageDetector'
 export { getPluginHostSdk, createPluginHostSdk } from './pluginHostSdk'
+export { useT } from './i18n'
 export type {
   PluginHostSdk,
   PluginHostUi,
@@ -9,6 +10,7 @@ export type {
   PluginHostI18n,
 } from './pluginHostSdk'
 export type { Locale } from './i18n'
+export type { TranslateFunction } from './i18n'
 export type { PluginT } from './i18n/pluginI18nRegistry'
 export type { JsonArrayCompareMode } from './kits/diff/jsonSemanticDiff'
 export type {

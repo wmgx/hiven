@@ -9,6 +9,7 @@ import { pluginRegistry } from '../../workspace/pluginRegistry'
 import { applyEffects } from '../../workspace/effectRunner'
 import type { FluxEffect, PanelInstanceV2 } from '../../workspace/types'
 import type { PanelHostApi } from '../../workspace/pluginTypes'
+import { I18nNamespaceProvider } from '../../i18n'
 
 export function PaneBottomPanels({ paneId }: { paneId: string }) {
   const panelInstancesV2 = useWorkspaceStore((s) => s.panelInstancesV2)
@@ -47,14 +48,17 @@ function PaneBottomPanelInstance({ instance }: { instance: PanelInstanceV2 }) {
   }
 
   const PanelComponent = panelEntry.contribution.component
+  const pluginId = panelEntry.meta.pluginId
 
   return (
-    <div style={style}>
-      <PanelComponent
-        inputs={instance.inputs}
-        panelId={instance.panelId}
-        host={host}
-      />
-    </div>
+    <I18nNamespaceProvider value={pluginId}>
+      <div style={style}>
+        <PanelComponent
+          inputs={instance.inputs}
+          panelId={instance.panelId}
+          host={host}
+        />
+      </div>
+    </I18nNamespaceProvider>
   )
 }

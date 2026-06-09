@@ -4,18 +4,17 @@
  * Registered as 'core.regex-tester' in the production plugin registry.
  */
 import { useWorkspaceStore } from '../workspace/workspaceStore'
-import { useAppStore } from '../store'
 import { RegexTesterPanel } from './RegexTesterPanel'
 import type { PanelPropsV2 } from '../workspace/pluginTypes'
-import { t } from '../i18n'
+import { useT } from '../i18n'
 
 export function CoreRegexPanel({ panelId, host }: PanelPropsV2<unknown>) {
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
-  const locale = useAppStore((s) => s.locale)
+  const t = useT('workspace')
   return (
     <RegexTesterPanel
       instanceId={panelId}
-      title={t(locale, 'core.regexTester.title')}
+      title={t('core.regexTester.title')}
       placement="bottom"
       props={{}}
       activePaneId={activePaneId}

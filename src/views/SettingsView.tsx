@@ -5,13 +5,16 @@ import { relaunch } from '@tauri-apps/plugin-process'
 import { getVersion } from '@tauri-apps/api/app'
 import { Check, ChevronDown, Download, Info, Keyboard, Languages, Layout, Minus, Plug, Plus, RefreshCw, SlidersHorizontal } from 'lucide-react'
 import { useAppStore, type GlobalPinnedLauncherShortcut } from '../store'
-import { t } from '../i18n'
+import { useT } from '../i18n'
 import { checkBuiltinPluginsUpdate } from '../configInit'
 
 export function SettingsView() {
   const { settings, updateSetting } = useAppStore()
   const setActiveView = useAppStore((s) => s.setActiveView)
   const locale = useAppStore((s) => s.locale)
+  const t = useT('settings')
+  const tUpdate = useT('update')
+  const tScripts = useT('scripts')
   const [appVersion, setAppVersion] = useState('')
 
   useEffect(() => {
@@ -21,18 +24,18 @@ export function SettingsView() {
   return (
     <div className="flex-1 overflow-auto p-5">
       <div className="flex items-center justify-between mb-5">
-        <span className="font-medium" style={{ fontSize: '1.15em', color: 'var(--color-text-primary)' }}>{t(locale, 'settings.title')}</span>
+        <span className="font-medium" style={{ fontSize: '1.15em', color: 'var(--color-text-primary)' }}>{t('title')}</span>
         <span className="px-1.5 py-0.5 rounded" style={{ fontSize: '0.75em', background: 'var(--color-accent-light)', color: 'var(--color-accent-hover)' }}>v{appVersion}</span>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <SettingCard icon={<Languages size={16} />} title={t(locale, 'settings.language')}>
-          <SettingRow label={t(locale, 'settings.language')}>
+        <SettingCard icon={<Languages size={16} />} title={t('language')}>
+          <SettingRow label={t('language')}>
             <LocaleSelect
               value={locale}
               options={[
-                { value: 'en', label: t(locale, 'settings.langEn') },
-                { value: 'zh', label: t(locale, 'settings.langZh') },
+                { value: 'en', label: t('langEn') },
+                { value: 'zh', label: t('langZh') },
               ]}
               onChange={(value) => {
                 updateSetting('locale', value)
@@ -42,8 +45,8 @@ export function SettingsView() {
           </SettingRow>
         </SettingCard>
 
-        <SettingCard icon={<Layout size={16} />} title={t(locale, 'settings.editor')}>
-          <SettingRow label={t(locale, 'settings.fontSize')}>
+        <SettingCard icon={<Layout size={16} />} title={t('editor')}>
+          <SettingRow label={t('fontSize')}>
             <div className="flex items-center gap-1.5">
               <button className="w-5 h-5 flex items-center justify-center rounded cursor-pointer" style={smallButtonStyle} onClick={() => updateSetting('fontSize', Math.max(10, settings.fontSize - 1))}>
                 <Minus size={10} />
@@ -54,44 +57,43 @@ export function SettingsView() {
               </button>
             </div>
           </SettingRow>
-          <SettingRow label={t(locale, 'settings.wordWrap')}>
+          <SettingRow label={t('wordWrap')}>
             <Toggle value={settings.wordWrap} onChange={(value) => updateSetting('wordWrap', value)} />
           </SettingRow>
-          <SettingRow label={t(locale, 'settings.lineNumbers')}>
+          <SettingRow label={t('lineNumbers')}>
             <Toggle value={settings.lineNumbers} onChange={(value) => updateSetting('lineNumbers', value)} />
           </SettingRow>
         </SettingCard>
 
-        <SettingCard icon={<SlidersHorizontal size={16} />} title={t(locale, 'settings.behavior')}>
-          <SettingRow label={t(locale, 'settings.persistParams')} info={t(locale, 'settings.persistParamsInfo')}>
+        <SettingCard icon={<SlidersHorizontal size={16} />} title={t('behavior')}>
+          <SettingRow label={t('persistParams')} info={t('persistParamsInfo')}>
             <Toggle value={settings.persistParams} onChange={(value) => updateSetting('persistParams', value)} />
           </SettingRow>
-          <SettingRow label={t(locale, 'settings.persistPinnedInput')} info={t(locale, 'settings.persistPinnedInputInfo')}>
+          <SettingRow label={t('persistPinnedInput')} info={t('persistPinnedInputInfo')}>
             <Toggle value={settings.persistPinnedInput} onChange={(value) => updateSetting('persistPinnedInput', value)} />
           </SettingRow>
-          <SettingRow label={t(locale, 'settings.persistPinnedTombstone')} info={t(locale, 'settings.persistPinnedTombstoneInfo')}>
+          <SettingRow label={t('persistPinnedTombstone')} info={t('persistPinnedTombstoneInfo')}>
             <Toggle value={settings.persistPinnedTombstone} onChange={(value) => updateSetting('persistPinnedTombstone', value)} />
           </SettingRow>
         </SettingCard>
 
-        <SettingCard icon={<Keyboard size={16} />} title={t(locale, 'settings.hotkeys')}>
+        <SettingCard icon={<Keyboard size={16} />} title={t('hotkeys')}>
           <HotkeySettings
             shortcut={settings.globalPinnedLauncherShortcut ?? { kind: 'double-modifier', modifier: 'Command' }}
             onChange={(value) => updateSetting('globalPinnedLauncherShortcut', value)}
-            locale={locale}
           />
         </SettingCard>
 
-        <SettingCard icon={<Download size={16} />} title={t(locale, 'update.title')}>
-          <UpdateChecker locale={locale} />
+        <SettingCard icon={<Download size={16} />} title={tUpdate('title')}>
+          <UpdateChecker />
         </SettingCard>
 
-        <SettingCard icon={<Plug size={16} />} title={t(locale, 'scripts.title')}>
+        <SettingCard icon={<Plug size={16} />} title={tScripts('title')}>
           <div className="flex items-center justify-between py-1.5">
             <span style={{ fontSize: '0.9em', color: 'var(--color-text-secondary)' }}>
-              {t(locale, 'settings.pluginsInfo')}
+              {t('pluginsInfo')}
             </span>
-            <button className="scripts-btn" onClick={() => setActiveView('scripts')}>{t(locale, 'settings.openPlugins')}</button>
+            <button className="scripts-btn" onClick={() => setActiveView('scripts')}>{t('openPlugins')}</button>
           </div>
         </SettingCard>
       </div>
@@ -164,23 +166,22 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (value: boolean
 function HotkeySettings({
   shortcut,
   onChange,
-  locale,
 }: {
   shortcut: GlobalPinnedLauncherShortcut
   onChange: (value: GlobalPinnedLauncherShortcut) => void
-  locale: 'zh' | 'en'
 }) {
+  const t = useT('settings')
   const [isRecording, setIsRecording] = useState(false)
   const [error, setError] = useState('')
   const recorderRef = useRef<HTMLDivElement>(null)
   const registrationStatus = shortcut.registrationError
-    ? `${t(locale, 'settings.hotkeyStatus')}: ${shortcut.registrationError}`
-    : shortcut.registrationStatus ?? t(locale, 'settings.hotkeyStatusPending')
+    ? `${t('hotkeyStatus')}: ${shortcut.registrationError}`
+    : shortcut.registrationStatus ?? t('hotkeyStatusPending')
 
   const displayValue = () => {
     if (shortcut.kind === 'accelerator') return shortcut.accelerator
-    if (shortcut.kind === 'double-modifier') return t(locale, 'settings.hotkeyDoubleCmd')
-    return t(locale, 'settings.hotkeyDisabled')
+    if (shortcut.kind === 'double-modifier') return t('hotkeyDoubleCmd')
+    return t('hotkeyDisabled')
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -196,7 +197,7 @@ function HotkeySettings({
 
     const accelerator = eventToAccelerator(event)
     if (!accelerator) {
-      setError(isModifierKey(event.key) ? '' : t(locale, 'settings.hotkeyRecordError'))
+      setError(isModifierKey(event.key) ? '' : t('hotkeyRecordError'))
       return
     }
     setError('')
@@ -221,7 +222,7 @@ function HotkeySettings({
 
   return (
     <div className="flex flex-col gap-2">
-      <SettingRow label={t(locale, 'settings.globalPinnedLauncherShortcut')} info={t(locale, 'settings.globalPinnedLauncherShortcutInfo')}>
+      <SettingRow label={t('globalPinnedLauncherShortcut')} info={t('globalPinnedLauncherShortcutInfo')}>
         <div
           ref={recorderRef}
           tabIndex={0}
@@ -234,16 +235,16 @@ function HotkeySettings({
             color: 'var(--color-text-primary)',
           }}
         >
-          {isRecording ? t(locale, 'settings.hotkeyRecording') : displayValue()}
+          {isRecording ? t('hotkeyRecording') : displayValue()}
         </div>
       </SettingRow>
       <div className="flex flex-wrap gap-2 justify-end">
-        <button className="scripts-btn" onClick={startRecording}>{t(locale, 'settings.hotkeyRecord')}</button>
+        <button className="scripts-btn" onClick={startRecording}>{t('hotkeyRecord')}</button>
         <button className="scripts-btn" onClick={() => { setError(''); setIsRecording(false); onChange({ kind: 'double-modifier', modifier: 'Command' }) }}>
-          {t(locale, 'settings.hotkeyDoubleCmd')}
+          {t('hotkeyDoubleCmd')}
         </button>
         <button className="scripts-btn" onClick={() => { setError(''); setIsRecording(false); onChange({ kind: 'disabled' }) }}>
-          {t(locale, 'settings.hotkeyDisabled')}
+          {t('hotkeyDisabled')}
         </button>
       </div>
       <span style={{ fontSize: '0.8em', color: error ? 'var(--color-error-text)' : 'var(--color-text-tertiary)' }}>
@@ -251,7 +252,7 @@ function HotkeySettings({
       </span>
       {shortcut.kind === 'double-modifier' && (
         <span style={{ fontSize: '0.78em', color: 'var(--color-text-tertiary)' }}>
-          {t(locale, 'settings.hotkeyAccessibilityHint')}
+          {t('hotkeyAccessibilityHint')}
         </span>
       )}
     </div>
@@ -336,7 +337,8 @@ function LocaleSelect({ options, value, onChange }: { options: { value: string; 
 
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'no-update' | 'downloading' | 'ready' | 'error'
 
-function UpdateChecker({ locale }: { locale: 'zh' | 'en' }) {
+function UpdateChecker() {
+  const t = useT('update')
   const [status, setStatus] = useState<UpdateStatus>('idle')
   const [version, setVersion] = useState('')
   const [error, setError] = useState('')
@@ -390,12 +392,12 @@ function UpdateChecker({ locale }: { locale: 'zh' | 'en' }) {
 
   const statusText = () => {
     switch (status) {
-      case 'checking': return t(locale, 'update.checking')
-      case 'available': return t(locale, 'update.available').replace('{version}', version)
-      case 'no-update': return t(locale, 'update.noUpdate')
-      case 'downloading': return t(locale, 'update.downloading')
-      case 'ready': return t(locale, 'update.readyRestart')
-      case 'error': return `${t(locale, 'update.error')}: ${error}`
+      case 'checking': return t('checking')
+      case 'available': return t('available', { version })
+      case 'no-update': return t('noUpdate')
+      case 'downloading': return t('downloading')
+      case 'ready': return t('readyRestart')
+      case 'error': return `${t('error')}: ${error}`
       default: return ''
     }
   }
@@ -403,12 +405,12 @@ function UpdateChecker({ locale }: { locale: 'zh' | 'en' }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span style={{ fontSize: '0.9em', color: 'var(--color-text-secondary)' }}>{t(locale, 'update.checkUpdate')}</span>
+        <span style={{ fontSize: '0.9em', color: 'var(--color-text-secondary)' }}>{t('checkUpdate')}</span>
         <div className="flex items-center gap-2">
           {status === 'available' && <button className="scripts-btn" onClick={handleDownloadAndInstall}><Download size={11} /> {version}</button>}
-          {status === 'ready' && <button className="scripts-btn scripts-btn-primary" onClick={() => relaunch()}>{t(locale, 'update.restart')}</button>}
+          {status === 'ready' && <button className="scripts-btn scripts-btn-primary" onClick={() => relaunch()}>{t('restart')}</button>}
           {(status === 'idle' || status === 'no-update' || status === 'error') && (
-            <button className="scripts-btn" onClick={handleCheck}><RefreshCw size={11} /> {t(locale, 'update.checkUpdate')}</button>
+            <button className="scripts-btn" onClick={handleCheck}><RefreshCw size={11} /> {t('checkUpdate')}</button>
           )}
           {(status === 'checking' || status === 'downloading') && (
             <span className="flex items-center gap-1 px-2.5 py-1" style={{ fontSize: '0.8em', color: 'var(--color-text-tertiary)' }}>
@@ -425,10 +427,10 @@ function UpdateChecker({ locale }: { locale: 'zh' | 'en' }) {
       {pluginStatus !== 'idle' && pluginStatus !== 'checking' && (
         <span style={{ fontSize: '0.8em', color: pluginStatus === 'updated' ? 'var(--color-success-text)' : pluginStatus === 'error' ? 'var(--color-error-text)' : 'var(--color-text-tertiary)' }}>
           {pluginStatus === 'updated'
-            ? t(locale, 'update.pluginsUpdated').replace('{version}', String(pluginVersion))
+            ? t('pluginsUpdated', { version: String(pluginVersion) })
             : pluginStatus === 'up-to-date'
-              ? t(locale, 'update.pluginsUpToDate')
-              : t(locale, 'update.pluginsUpdateError')}
+              ? t('pluginsUpToDate')
+              : t('pluginsUpdateError')}
         </span>
       )}
     </div>

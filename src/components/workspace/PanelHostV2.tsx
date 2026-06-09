@@ -6,12 +6,11 @@
 
 import type { CSSProperties } from 'react'
 import { useWorkspaceStore } from '../../workspace/workspaceStore'
-import { useAppStore } from '../../store'
 import { pluginRegistry } from '../../workspace/pluginRegistry'
 import { applyEffects } from '../../workspace/effectRunner'
 import type { FluxEffect, PanelInstanceV2 } from '../../workspace/types'
 import type { PanelHostApi } from '../../workspace/pluginTypes'
-import { t } from '../../i18n'
+import { useT, I18nNamespaceProvider } from '../../i18n'
 
 export function PanelHostV2({ placement }: { placement: 'bottom' | 'right' | 'left' }) {
   const panelInstancesV2 = useWorkspaceStore((s) => s.panelInstancesV2)
@@ -45,7 +44,7 @@ interface PanelV2InstanceProps {
 
 function PanelV2Instance({ instance, placement, onClose }: PanelV2InstanceProps) {
   const panelEntry = pluginRegistry.resolvePanel(instance.panelId, instance.isDevPanel)
-  const locale = useAppStore((s) => s.locale)
+  const t = useT('workspace')
 
   const host: PanelHostApi = {
     close: onClose,
@@ -67,22 +66,25 @@ function PanelV2Instance({ instance, placement, onClose }: PanelV2InstanceProps)
         style={placementStyle}
       >
         <span className="text-[12px]" style={{ color: 'var(--color-text-tertiary)' }}>
-          {t(locale, 'panel.notFound')}: {instance.panelId}
+          {t('panel.notFound')}: {instance.panelId}
         </span>
       </div>
     )
   }
 
   const PanelComponent = panelEntry.contribution.component
+  const pluginId = panelEntry.meta.pluginId
 
   return (
-    <div className="shrink-0 overflow-hidden" style={placementStyle}>
-      <PanelComponent
-        inputs={instance.inputs}
-        panelId={instance.panelId}
-        host={host}
-      />
-    </div>
+    <I18nNamespaceProvider value={pluginId}>
+      <div className="shrink-0 overflow-hidden" style={placementStyle}>
+        <PanelComponent
+          inputs={instance.inputs}
+          panelId={instance.panelId}
+          host={host}
+        />
+      </div>
+    </I18nNamespaceProvider>
   )
 }
 

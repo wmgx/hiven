@@ -6,7 +6,7 @@ import { RendererHost } from './RendererHost'
 import Editor from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import type { editor as MonacoEditor } from 'monaco-editor'
-import { t } from '../../i18n'
+import { useT } from '../../i18n'
 import { detectEditorLanguage } from '../../workspace/languageDetector'
 import { getLanguageOptionLabel } from '../../workspace/languageOptions'
 import { PaneBottomPanels } from './PaneBottomPanels'
@@ -25,6 +25,7 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
   const settings = useAppStore((s) => s.settings)
   const locale = useAppStore((s) => s.locale)
+  const t = useT('editor')
   const rendererState = useWorkspaceStore((s) => s.paneRenderers[paneId])
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
   const statusBarRef = useRef<HTMLDivElement | null>(null)
@@ -116,7 +117,7 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
   const languageLabel = getLanguageOptionLabel(language, locale)
   const languageStatus = languageSource === 'manual'
     ? languageLabel
-    : `${languageLabel} · ${t(locale, 'editor.autoLanguage')}`
+    : `${languageLabel} · ${t('autoLanguage')}`
 
   return (
     <div className="flex flex-col h-full" onPointerDown={() => setActivePaneId(paneId)}>
@@ -280,21 +281,21 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
         }}
       >
         <span className="shrink-0">
-          {t(locale, 'editor.line')} {cursorInfo.line}, {t(locale, 'editor.column')} {cursorInfo.col}
+          {t('line')} {cursorInfo.line}, {t('column')} {cursorInfo.col}
         </span>
         {showLineCount && (
           <span className="shrink-0">
-            {lines} {t(locale, 'editor.lines')}
+            {lines} {t('lines')}
           </span>
         )}
         {showCharCount && (
           <span className="shrink-0">
-            {chars} {t(locale, 'editor.chars')}
+            {chars} {t('chars')}
           </span>
         )}
         {selectedCharCount > 0 && (
           <span className="shrink-0">
-            {selectedCharCount} {t(locale, 'editor.selectedChars')}
+            {selectedCharCount} {t('selectedChars')}
           </span>
         )}
         {showLanguage && (

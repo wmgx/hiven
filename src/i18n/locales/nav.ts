@@ -1,12 +1,12 @@
-export const nav = {
+export default {
   en: {
-    'nav.editor': 'Editor',
-    'nav.scripts': 'Plugins',
-    'nav.settings': 'Settings',
+    'editor': 'Editor',
+    'scripts': 'Plugins',
+    'settings': 'Settings',
   },
   zh: {
-    'nav.editor': '编辑器',
-    'nav.scripts': '插件',
-    'nav.settings': '设置',
+    'editor': '编辑器',
+    'scripts': '插件',
+    'settings': '设置',
   },
 }

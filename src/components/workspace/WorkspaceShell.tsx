@@ -4,7 +4,7 @@ import { PaneEditor } from './PaneEditor'
 import { PresentationHost } from './PresentationHost'
 import { RendererHost } from './RendererHost'
 import { X } from 'lucide-react'
-import { t } from '../../i18n'
+import { useT } from '../../i18n'
 import type { PaneId, PaneRendererState } from '../../workspace/types'
 import { pluginRegistry, usePluginRegistryVersion } from '../../workspace/pluginRegistry'
 
@@ -17,6 +17,7 @@ export function WorkspaceShell() {
   const closePane = useWorkspaceStore((s) => s.closePane)
   const setActivePaneId = useWorkspaceStore((s) => s.setActivePaneId)
   const locale = useAppStore((s) => s.locale)
+  const t = useT('workspace')
   const registryVersion = usePluginRegistryVersion()
   const workspaceRenderer = findWorkspaceRenderer(activePaneId, paneRenderers, registryVersion)
 
@@ -107,7 +108,7 @@ export function WorkspaceShell() {
                       e.stopPropagation()
                       closePane(paneId)
                     }}
-                    title={t(locale, 'workspace.close')}
+                    title={t('close')}
                   >
                     <X size={10} />
                   </span>
