@@ -35,14 +35,11 @@ function tokenize(expr: string): Token[] | null {
       continue
     }
     if (/[0-9.]/.test(ch)) {
-      let numStr = ''
-      let hasDot = false
-      while (i < expr.length && (/[0-9]/.test(expr[i]) || (expr[i] === '.' && !hasDot))) {
-        if (expr[i] === '.') hasDot = true
-        numStr += expr[i]
-        i++
-      }
-      const num = Number(numStr)
+      const match = expr.slice(i).match(/^(?:(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d*)?|\.\d+)/)
+      if (!match) return null
+      const numStr = match[0]
+      i += numStr.length
+      const num = Number(numStr.replaceAll(',', ''))
       if (isNaN(num)) return null
       tokens.push({ type: 'number', value: num })
       continue
@@ -181,19 +178,21 @@ function calculateFormulaLines(text: string): string {
     }
 
     const trimmed = line.trim()
-    if (trimmed.includes('=')) {
+    const hasTrailingEquals = trimmed.endsWith('=')
+    if (trimmed.includes('=') && !hasTrailingEquals) {
       results.push(line)
       continue
     }
 
-    const result = safeCalculate(trimmed)
+    const formulaText = hasTrailingEquals ? line.slice(0, line.lastIndexOf('=')).trimEnd() : line
+    const result = safeCalculate(formulaText.trim())
     if (result === null) {
       stopped = true
       results.push(line)
       continue
     }
 
-    results.push(`${line} = ${result}`)
+    results.push(`${formulaText} = ${result}`)
   }
 
   return results.join('\n')

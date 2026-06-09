@@ -70,4 +70,22 @@ assert.equal(
   'calculator command should batch calculate formulas, skip lines with "=", and stop at the first non-math formula',
 )
 
+assert.equal(
+  await runCalculatorCommand([
+    '1 + 2 =',
+    '1,000 + 2,500',
+    '2,500 * 2 =',
+    '3 + 4 = 7',
+    '4 + 4',
+  ].join('\n')),
+  [
+    '1 + 2 = 3',
+    '1,000 + 2,500 = 3500',
+    '2,500 * 2 = 5000',
+    '3 + 4 = 7',
+    '4 + 4 = 8',
+  ].join('\n'),
+  'calculator command should calculate lines ending with "=" and ignore thousands separators inside numbers',
+)
+
 console.log('calculator command mode checks passed')
