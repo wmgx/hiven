@@ -235,13 +235,17 @@ function stripShortcutRuntimeStatus(shortcut: GlobalPinnedLauncherShortcut): Glo
   return { kind: 'disabled' }
 }
 
+function shouldAllowCommandPaletteOpen(state: AppState): boolean {
+  return state.activeView === 'editor'
+}
+
 export const useAppStore = create<AppState>()(persist((set) => ({
   // Navigation
   activeView: 'editor',
-  setActiveView: (view) => set({ activeView: view }),
+  setActiveView: (view) => set(view === 'editor' ? { activeView: view } : { activeView: view, commandPaletteOpen: false }),
   pluginEditor: null,
-  openPluginEditor: (plugin) => set({ pluginEditor: plugin, activeView: 'plugin-editor' }),
-  closePluginEditor: () => set({ pluginEditor: null, activeView: 'scripts' }),
+  openPluginEditor: (plugin) => set({ pluginEditor: plugin, activeView: 'plugin-editor', commandPaletteOpen: false }),
+  closePluginEditor: () => set({ pluginEditor: null, activeView: 'scripts', commandPaletteOpen: false }),
 
   // Pinned Action / Live Runner
   pinnedActions: [],
@@ -272,12 +276,14 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     const { [pinnedId]: _runtime, ...pinnedRuntimes } = state.pinnedRuntimes
     const { [pinnedId]: _tombstone, ...pinnedTombstones } = state.pinnedTombstones
     const remaining = state.pinnedActions.filter((pinned) => pinned.id !== pinnedId)
+    const nextActiveView = state.activePinnedActionId === pinnedId && remaining.length === 0 ? 'editor' : state.activeView
     return {
       pinnedActions: remaining,
       pinnedRuntimes,
       pinnedTombstones,
       activePinnedActionId: state.activePinnedActionId === pinnedId ? remaining[0]?.id ?? null : state.activePinnedActionId,
-      activeView: state.activePinnedActionId === pinnedId && remaining.length === 0 ? 'editor' : state.activeView,
+      activeView: nextActiveView,
+      commandPaletteOpen: nextActiveView === 'editor' ? state.commandPaletteOpen : false,
     }
   }),
   reorderPinnedActions: (orderedIds) => set((state) => {
@@ -305,6 +311,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
       activePinnedActionId: pinnedId,
       activeView: 'pinned-runner',
       pinnedRuntimes: nextRuntimes,
+      commandPaletteOpen: false,
     }
   }),
   openPinnedAction: (pinnedId) => {
@@ -376,7 +383,9 @@ export const useAppStore = create<AppState>()(persist((set) => ({
 
   // Command Palette
   commandPaletteOpen: false,
-  setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
+  setCommandPaletteOpen: (open) => set((state) => ({
+    commandPaletteOpen: open ? shouldAllowCommandPaletteOpen(state) : false,
+  })),
   globalLauncherOpen: false,
   globalLauncherMode: 'full',
   globalLauncherOverlay: false,

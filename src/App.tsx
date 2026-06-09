@@ -110,9 +110,11 @@ function MainApp() {
         return
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        const state = useAppStore.getState()
+        if (state.activeView !== 'editor') return
         e.preventDefault()
         e.stopPropagation()
-        useAppStore.getState().setCommandPaletteOpen(true)
+        state.setCommandPaletteOpen(true)
       }
     }
     window.addEventListener('keydown', handler, true)
@@ -214,7 +216,7 @@ function MainApp() {
           </ViewErrorBoundary>
         </main>
       )}
-      {!globalLauncherOverlay && <CommandPalette />}
+      {!globalLauncherOverlay && activeView === 'editor' && <CommandPalette />}
       <GlobalLauncher />
     </div>
   )
