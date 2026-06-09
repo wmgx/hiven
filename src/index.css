@@ -150,6 +150,45 @@ html[data-window='launcher'] #root {
   z-index: 1;
 }
 
+.sidebar-tooltip {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  z-index: 80;
+  max-width: 220px;
+  padding: 5px 8px;
+  border-radius: var(--radius-md);
+  border: 0.5px solid var(--color-border-secondary);
+  background: var(--color-text-primary);
+  color: var(--color-background-primary);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+  font-size: var(--text-sm);
+  line-height: 1.25;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(2px, -50%);
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease;
+  white-space: nowrap;
+}
+
+.sidebar-tooltip::before {
+  content: '';
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  border: 5px solid transparent;
+  border-right-color: var(--color-text-primary);
+  transform: translateY(-50%);
+}
+
+.sidebar-nav-item:hover .sidebar-tooltip,
+.sidebar-nav-item:focus-within .sidebar-tooltip {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
 /* ─── Keyframes ─── */
 @keyframes pulse-dot {
   0%,
