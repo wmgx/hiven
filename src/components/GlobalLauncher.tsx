@@ -210,8 +210,8 @@ export function GlobalLauncher() {
 
   return (
     <div
-      className={`fixed inset-0 flex items-start justify-center palette-overlay open ${overlay ? 'pt-3' : 'pt-[70px]'}`}
-      style={{ pointerEvents: 'auto', visibility: 'visible', zIndex: 1100, background: overlay ? 'transparent' : undefined }}
+      className={`fixed inset-0 flex items-start justify-center palette-overlay open ${overlay ? 'transparent pt-3' : 'pt-[70px]'}`}
+      style={{ pointerEvents: 'auto', visibility: 'visible', zIndex: 1100 }}
       onClick={(event) => { if (event.target === event.currentTarget) closeLauncher() }}
     >
       <div
@@ -220,7 +220,6 @@ export function GlobalLauncher() {
           background: 'var(--color-background-primary)',
           border: '0.5px solid var(--color-border-secondary)',
           borderRadius: 'var(--radius-xl)',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
         }}
         tabIndex={-1}
         onKeyDown={(event) => {
