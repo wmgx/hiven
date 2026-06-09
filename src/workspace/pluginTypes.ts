@@ -220,7 +220,7 @@ export type InstantSuggestionProvider = {
   title: string
   titleI18n?: Partial<Record<Locale, string>>
   priority?: number
-  suggest(ctx: InstantSuggestionContext): InstantSuggestion | null
+  suggest(ctx: InstantSuggestionContext): InstantSuggestion | InstantSuggestion[] | null
 }
 
 // ─── Plugin Definition ────────────────────────────────────────────────────────

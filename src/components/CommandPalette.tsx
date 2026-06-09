@@ -105,11 +105,11 @@ export function CommandPalette() {
       scorePaletteItem(a, q, locale, recentActionNames, actionUsageCounts)
     )
 
-    // 计算最高优先级 instant suggestion 并置顶
+    // 计算 instant suggestions 并置顶
     if (q && q.length <= 500) {
-      const instantSuggestion = computeInstantSuggestion(q, locale)
-      if (instantSuggestion) {
-        return [instantSuggestion, ...sorted]
+      const instantSuggestions = computeInstantSuggestions(q, locale)
+      if (instantSuggestions.length > 0) {
+        return [...instantSuggestions, ...sorted]
       }
     }
 
@@ -968,33 +968,39 @@ function HintKey({ keys, label }: { keys: string; label: string }) {
 
 // ── 推荐算法辅助函数 ───────────────────────────────────────────────────────────
 
-/** Compute the highest-priority instant suggestion for the given query */
-function computeInstantSuggestion(query: string, locale: Locale): PaletteItem | null {
+function normalizeInstantSuggestions(suggestion: InstantSuggestion | InstantSuggestion[] | null): InstantSuggestion[] {
+  if (!suggestion) return []
+  return Array.isArray(suggestion) ? suggestion : [suggestion]
+}
+
+/** Compute instant suggestions for the given query */
+function computeInstantSuggestions(query: string, locale: Locale): PaletteItem[] {
   const providers = pluginRegistry.getAllInstantSuggestionProviders()
-  if (providers.length === 0) return null
+  if (providers.length === 0) return []
 
   const sorted = [...providers].sort(
     (a, b) => (b.contribution.priority ?? 0) - (a.contribution.priority ?? 0)
   )
 
+  const items: PaletteItem[] = []
   for (const { contribution, meta, isDev } of sorted) {
     try {
       const pluginT = makePluginT(meta.pluginId, locale)
-      const suggestion = contribution.suggest({ query, locale, t: pluginT })
-      if (suggestion) {
-        return {
+      const suggestions = normalizeInstantSuggestions(contribution.suggest({ query, locale, t: pluginT }))
+      for (const suggestion of suggestions) {
+        items.push({
           kind: 'instant',
           provider: contribution,
           suggestion,
           isDev,
-        }
+        })
       }
     } catch {
       // Single provider error should not break the palette
     }
   }
 
-  return null
+  return items
 }
 
 /** 将命令 id/name 转为首字母缩写，例如 "json-format" → "jf" */

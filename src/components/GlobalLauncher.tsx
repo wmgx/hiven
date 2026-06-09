@@ -85,31 +85,32 @@ export function GlobalLauncher() {
     const q = query.trim().toLowerCase()
     const base = q ? items.filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(q)) : items
 
-    // Compute instant suggestion when there's a query
+    // Compute instant suggestions when there's a query
     if (q && q.length <= 500) {
       const providers = pluginRegistry.getAllInstantSuggestionProviders()
       const sorted = [...providers].sort(
         (a, b) => (b.contribution.priority ?? 0) - (a.contribution.priority ?? 0)
       )
+      const instantItems: LauncherItem[] = []
       for (const { contribution, meta } of sorted) {
         try {
           const pluginT = makePluginT(meta.pluginId, locale)
-          const suggestion = contribution.suggest({ query: q, locale, t: pluginT })
-          if (suggestion) {
-            const instantItem: LauncherItem = {
+          const suggestions = normalizeInstantSuggestions(contribution.suggest({ query: q, locale, t: pluginT }))
+          for (const suggestion of suggestions) {
+            instantItems.push({
               kind: 'instant',
               id: suggestion.id,
               title: localized(suggestion.title, suggestion.titleI18n, locale),
               subtitle: localized(suggestion.subtitle ?? '', suggestion.subtitleI18n, locale),
               icon: suggestion.icon,
               suggestion,
-            }
-            return [instantItem, ...base]
+            })
           }
         } catch {
           // Provider error should not break the launcher
         }
       }
+      if (instantItems.length > 0) return [...instantItems, ...base]
     }
 
     return base
@@ -293,6 +294,11 @@ async function executeInstantSuggestion(suggestion: InstantSuggestion, locale: L
 
 function isStandaloneLauncherWindow() {
   return new URLSearchParams(window.location.search).get('window') === 'launcher'
+}
+
+function normalizeInstantSuggestions(suggestion: InstantSuggestion | InstantSuggestion[] | null): InstantSuggestion[] {
+  if (!suggestion) return []
+  return Array.isArray(suggestion) ? suggestion : [suggestion]
 }
 
 function LauncherSection({ title, items, selected, onSelect }: { title: string; items: LauncherItem[]; selected?: LauncherItem; onSelect: (item: LauncherItem) => void }) {

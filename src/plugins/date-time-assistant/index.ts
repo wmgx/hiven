@@ -49,6 +49,31 @@ function formatTimestamp(date: Date, unit: 's' | 'ms'): string {
   return unit === 's' ? `${Math.floor(date.getTime() / 1000)}` : `${date.getTime()}`
 }
 
+function formatNowResult(date: Date, offsetMinutes?: number): string {
+  const formattedDate = offsetMinutes === undefined
+    ? formatLocalDateTime(date)
+    : formatOffsetDateTime(date, offsetMinutes)
+  return `${date.getTime()} | ${formattedDate}`
+}
+
+function parseUtcOffset(value: string): number | null {
+  const match = value.match(/^utc\s*([+-])\s*(\d{1,2})(?::?(\d{2}))?$/i)
+  if (!match) return null
+  const sign = match[1] === '+' ? 1 : -1
+  const hours = parseInt(match[2], 10)
+  const minutes = parseInt(match[3] || '0', 10)
+  if (hours > 14 || minutes > 59) return null
+  return sign * (hours * 60 + minutes)
+}
+
+function parseNowOffset(value: string): { amount: number; unit: 'day' | 'hour' } | null {
+  const match = value.match(/^now\s*\+\s*(\d+)\s*(d|day|days|h|hour|hours)$/i)
+  if (!match) return null
+  const amount = parseInt(match[1], 10)
+  const unit = match[2].toLowerCase().startsWith('h') ? 'hour' : 'day'
+  return { amount, unit }
+}
+
 type ParsedResult = {
   kind: 'datetime' | 'date' | 'timestamp'
   display: string
@@ -56,17 +81,54 @@ type ParsedResult = {
   actionLabelKey: string
 }
 
-function parseDateTimeQuery(query: string, now: Date): ParsedResult | null {
+function nowResult(date: Date, offsetMinutes?: number): ParsedResult {
+  const value = formatNowResult(date, offsetMinutes)
+  return {
+    kind: 'datetime',
+    display: value,
+    value,
+    actionLabelKey: 'action.copyDateTime',
+  }
+}
+
+function parseNowExpression(query: string, now: Date): ParsedResult | null {
   const q = query.trim().toLowerCase()
 
   if (q === 'now') {
-    return {
-      kind: 'datetime',
-      display: formatLocalDateTime(now),
-      value: formatLocalDateTime(now),
-      actionLabelKey: 'action.copyDateTime',
+    return nowResult(now)
+  }
+
+  const nowOffset = parseNowOffset(q)
+  if (nowOffset) {
+    const date = new Date(now)
+    if (nowOffset.unit === 'day') {
+      date.setDate(date.getDate() + nowOffset.amount)
+    } else {
+      date.setHours(date.getHours() + nowOffset.amount)
+    }
+    return nowResult(date)
+  }
+
+  const utcOffsetMatch = q.match(/^now\s+(.+)$/)
+  if (utcOffsetMatch) {
+    const offsetMinutes = parseUtcOffset(utcOffsetMatch[1])
+    if (offsetMinutes !== null) {
+      return nowResult(now, offsetMinutes)
     }
   }
+
+  if (/^now\s*[+-]\s*\d{1,2}(?::?\d{2})?$/.test(q)) {
+    const offsetMinutes = parseTzSuffix(q.slice(3)).offsetMinutes
+    if (offsetMinutes !== undefined) return nowResult(now, offsetMinutes)
+  }
+
+  return null
+}
+
+function parseDateTimeQuery(query: string, now: Date): ParsedResult | null {
+  const q = query.trim().toLowerCase()
+  const nowParsed = parseNowExpression(query, now)
+  if (nowParsed) return nowParsed
 
   if (q === 'timestamp' || q === 'unix time' || q === 'now timestamp') {
     const ts = Math.floor(now.getTime() / 1000).toString()
@@ -123,6 +185,47 @@ function parseDateTimeQuery(query: string, now: Date): ParsedResult | null {
   }
 
   return null
+}
+
+function instantSuggestion(query: string, parsed: ParsedResult, subtitle: string, actionLabel: string): InstantSuggestion {
+  return {
+    id: `date-time:${parsed.kind}:${query.trim()}`,
+    title: `${query.trim()} -> ${parsed.display}`,
+    subtitle,
+    value: parsed.value,
+    icon: 'Clock',
+    actionLabel,
+    action: { type: 'copy', text: parsed.value },
+  }
+}
+
+function nowInstantSuggestions(query: string, parsed: ParsedResult, ctx: InstantSuggestionContext): InstantSuggestion[] | null {
+  const separatorIndex = parsed.value.indexOf(' | ')
+  if (separatorIndex < 0) return null
+  const timestampValue = parsed.value.slice(0, separatorIndex)
+  const dateTimeValue = parsed.value.slice(separatorIndex + 3)
+  const trimmed = query.trim()
+  const subtitle = ctx.t('provider.subtitle')
+  return [
+    {
+      id: `date-time:timestamp:${trimmed}`,
+      title: `${trimmed} -> ${timestampValue}`,
+      subtitle,
+      value: timestampValue,
+      icon: 'Clock',
+      actionLabel: ctx.t('action.copyTimestamp'),
+      action: { type: 'copy', text: timestampValue },
+    },
+    {
+      id: `date-time:datetime:${trimmed}`,
+      title: `${trimmed} -> ${dateTimeValue}`,
+      subtitle,
+      value: dateTimeValue,
+      icon: 'Clock',
+      actionLabel: ctx.t('action.copyDateTime'),
+      action: { type: 'copy', text: dateTimeValue },
+    },
+  ]
 }
 
 function parseTimestampForSuggestion(value: string): ParsedResult | null {
@@ -193,12 +296,11 @@ export const dateTimeAssistantPlugin = definePlugin({
           if (!trimmed) return ''
 
           const lowerTrimmed = trimmed.toLowerCase()
-          if (lowerTrimmed === 'now' || lowerTrimmed.startsWith('now+') || lowerTrimmed.startsWith('now-')) {
-            const now = new Date()
-            const tzPart = trimmed.slice(3)
-            const tz = tzPart ? parseTzSuffix(tzPart).offsetMinutes : undefined
-            const result = `${formatTimestamp(now, unit)} | ${formatOffsetDateTime(now, tz)}`
-            return showOriginal ? `${trimmed} -> ${result}` : result
+          if (lowerTrimmed === 'now' || lowerTrimmed.startsWith('now+') || lowerTrimmed.startsWith('now-') || lowerTrimmed.startsWith('now utc')) {
+            const parsed = parseNowExpression(trimmed, new Date())
+            if (parsed) {
+              return showOriginal ? `${trimmed} -> ${parsed.value}` : parsed.value
+            }
           }
 
           const { body, offsetMinutes } = parseTzSuffix(trimmed)
@@ -233,19 +335,16 @@ export const dateTimeAssistantPlugin = definePlugin({
       id: 'date-time.assistant',
       title: 'provider.title',
       priority: 95,
-      suggest(ctx: InstantSuggestionContext): InstantSuggestion | null {
+      suggest(ctx: InstantSuggestionContext): InstantSuggestion | InstantSuggestion[] | null {
         const parsed = parseDateTimeQuery(ctx.query, new Date())
         if (!parsed) return null
 
-        return {
-          id: `date-time:${parsed.kind}:${ctx.query.trim()}`,
-          title: `${ctx.query.trim()} -> ${parsed.display}`,
-          subtitle: ctx.t('provider.subtitle'),
-          value: parsed.value,
-          icon: 'Clock',
-          actionLabel: ctx.t(parsed.actionLabelKey),
-          action: { type: 'copy', text: parsed.value },
-        }
+        const nowSuggestions = parseNowExpression(ctx.query, new Date())
+          ? nowInstantSuggestions(ctx.query, parsed, ctx)
+          : null
+        if (nowSuggestions) return nowSuggestions
+
+        return instantSuggestion(ctx.query, parsed, ctx.t('provider.subtitle'), ctx.t(parsed.actionLabelKey))
       },
     },
   ],
