@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FluxText - GPT-5.5 Spatial UI Mockup</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --glass-bg: rgba(20, 20, 25, 0.45);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --glass-highlight: rgba(255, 255, 255, 0.12);
+      --text-primary: rgba(255, 255, 255, 0.95);
+      --text-secondary: rgba(255, 255, 255, 0.65);
+      --text-tertiary: rgba(255, 255, 255, 0.4);
+      --accent: #8b5cf6;
+      --accent-glow: rgba(139, 92, 246, 0.5);
+      --success: #10b981;
+      
+      --font-sans: 'Inter', system-ui, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: #0f0f13;
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      perspective: 1000px;
+    }
+
+    /* Ambient Background */
+    .ambient-bg {
+      position: absolute;
+      inset: -50%;
+      z-index: 0;
+      background: #0f0f13;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    .orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.6;
+      animation: float 20s infinite ease-in-out alternate;
+    }
+
+    .orb-1 {
+      width: 40vw; height: 40vw;
+      background: radial-gradient(circle, rgba(139,92,246,0.4) 0%, transparent 70%);
+      top: 20%; left: 20%;
+    }
+
+    .orb-2 {
+      width: 50vw; height: 50vw;
+      background: radial-gradient(circle, rgba(56,189,248,0.3) 0%, transparent 70%);
+      bottom: 10%; right: 10%;
+      animation-delay: -5s;
+    }
+
+    .orb-3 {
+      width: 30vw; height: 30vw;
+      background: radial-gradient(circle, rgba(236,72,153,0.3) 0%, transparent 70%);
+      top: 40%; right: 30%;
+      animation-delay: -10s;
+    }
+
+    @keyframes float {
+      0% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(5%, 5%) scale(1.1); }
+      100% { transform: translate(-5%, -5%) scale(0.9); }
+    }
+
+    /* Spatial Container */
+    .spatial-container {
+      position: relative;
+      z-index: 1;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      gap: 24px;
+      padding: 32px;
+      padding-left: 24px;
+    }
+
+    /* Glassmorphism utility */
+    .glass {
+      background: var(--glass-bg);
+      backdrop-filter: blur(32px);
+      -webkit-backdrop-filter: blur(32px);
+      border: 1px solid var(--glass-border);
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      border-radius: 24px;
+    }
+
+    /* Floating Sidebar (Dock) */
+    .sidebar {
+      width: 64px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      padding: 24px 0;
+      border-radius: 32px;
+      transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .sidebar:hover {
+      transform: translateZ(20px);
+    }
+
+    .nav-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 22px;
+      display: grid;
+      place-items: center;
+      color: var(--text-secondary);
+      font-weight: 600;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .nav-btn:hover {
+      background: var(--glass-highlight);
+      color: var(--text-primary);
+    }
+
+    .nav-btn.active {
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      box-shadow: 0 0 16px var(--accent-glow);
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+
+    .nav-btn.active::before {
+      content: '';
+      position: absolute;
+      left: -6px;
+      width: 4px;
+      height: 20px;
+      background: var(--accent);
+      border-radius: 4px;
+      box-shadow: 0 0 8px var(--accent);
+    }
+
+    .nav-sep {
+      width: 32px;
+      height: 1px;
+      background: var(--glass-border);
+    }
+
+    /* Main Workspace */
+    .workspace {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      border-radius: 32px;
+      overflow: hidden;
+    }
+
+    /* Floating Topbar */
+    .topbar {
+      height: 56px;
+      border-radius: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      flex-shrink: 0;
+      transition: transform 0.3s ease;
+    }
+    
+    .topbar:hover {
+      transform: translateZ(10px);
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+    }
+
+    .topbar-right {
+      display: flex;
+      gap: 12px;
+    }
+
+    .glass-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--glass-border);
+      color: var(--text-primary);
+      padding: 8px 16px;
+      border-radius: 16px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .glass-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      transform: translateY(-1px);
+    }
+
+    kbd {
+      background: rgba(0,0,0,0.3);
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    /* Editor Area */
+    .editor-container {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      min-height: 0;
+    }
+
+    .editor-pane {
+      display: flex;
+      flex-direction: column;
+      border-radius: 24px;
+      overflow: hidden;
+      position: relative;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .editor-pane:hover {
+      transform: translateY(-2px) translateZ(15px);
+      box-shadow: 0 32px 64px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }
+
+    .pane-header {
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      background: rgba(0,0,0,0.2);
+      border-bottom: 1px solid var(--glass-border);
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .pane-header .title {
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .pane-content {
+      flex: 1;
+      display: flex;
+      font-family: var(--font-mono);
+      font-size: 14px;
+      line-height: 1.6;
+      padding: 16px 0;
+      overflow: hidden;
+    }
+
+    .gutter {
+      width: 48px;
+      text-align: right;
+      padding-right: 16px;
+      color: var(--text-tertiary);
+      user-select: none;
+    }
+
+    .code {
+      flex: 1;
+      color: var(--text-primary);
+      outline: none;
+      white-space: pre;
+      overflow: auto;
+    }
+
+    .keyword { color: #c678dd; }
+    .string { color: #98c379; }
+    .function { color: #61afef; }
+    .comment { color: #5c6370; font-style: italic; }
+
+    /* Spatial Command Palette */
+    .command-palette {
+      position: absolute;
+      top: 20%;
+      left: 50%;
+      transform: translateX(-50%) translateZ(50px);
+      width: 600px;
+      border-radius: 28px;
+      overflow: hidden;
+      z-index: 100;
+      box-shadow: 0 40px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      animation: popIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes popIn {
+      0% { opacity: 0; transform: translateX(-50%) translateY(20px) scale(0.95) translateZ(0); }
+      100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1) translateZ(50px); }
+    }
+
+    .search-input {
+      width: 100%;
+      background: transparent;
+      border: none;
+      padding: 24px;
+      font-size: 24px;
+      color: #fff;
+      font-family: var(--font-sans);
+      font-weight: 300;
+      outline: none;
+      border-bottom: 1px solid var(--glass-border);
+    }
+
+    .search-input::placeholder {
+      color: var(--text-tertiary);
+    }
+
+    .cmd-list {
+      padding: 12px;
+      max-height: 340px;
+      overflow-y: auto;
+    }
+
+    .cmd-item {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px;
+      border-radius: 16px;
+      transition: background 0.2s, transform 0.2s;
+      cursor: pointer;
+    }
+
+    .cmd-item:hover, .cmd-item.active {
+      background: rgba(255,255,255,0.08);
+    }
+
+    .cmd-item:hover {
+      transform: translateX(4px);
+    }
+
+    .cmd-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.05);
+      display: grid;
+      place-items: center;
+      font-weight: 600;
+      color: var(--accent);
+      border: 1px solid var(--glass-border);
+      transition: all 0.2s;
+    }
+
+    .cmd-item.active .cmd-icon {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 0 16px var(--accent-glow);
+    }
+
+    .cmd-details {
+      flex: 1;
+    }
+
+    .cmd-title {
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .cmd-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .cmd-shortcut {
+      display: flex;
+      gap: 4px;
+    }
+
+    /* Floating Widget (e.g. Diff or Plugin config) */
+    .floating-widget {
+      position: absolute;
+      right: 50px;
+      bottom: 50px;
+      width: 320px;
+      border-radius: 24px;
+      padding: 20px;
+      transform: translateZ(40px);
+      transition: transform 0.3s ease;
+      cursor: default;
+    }
+
+    .floating-widget:hover {
+      transform: translateZ(50px) translateY(-5px);
+    }
+
+    .widget-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: var(--text-primary);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .widget-badge {
+      background: var(--accent);
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+
+    .widget-content {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+  </style>
+</head>
+<body>
+
+  <div class="ambient-bg">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+
+  <div class="spatial-container">
+    
+    <!-- Dock / Sidebar -->
+    <nav class="sidebar glass">
+      <div class="nav-btn active" title="Editor">E</div>
+      <div class="nav-btn" title="Plugins">P</div>
+      <div class="nav-sep"></div>
+      <div class="nav-btn" style="font-size: 12px;" title="Pinned">Diff</div>
+      <div style="flex: 1;"></div>
+      <div class="nav-btn" title="Settings">S</div>
+    </nav>
+
+    <!-- Workspace -->
+    <main class="workspace">
+      
+      <!-- Topbar -->
+      <header class="topbar glass">
+        <div class="topbar-left">
+          <div class="status-dot"></div>
+          <span>Workspace Ready</span>
+        </div>
+        <div class="topbar-right">
+          <button class="glass-btn">
+            Split View
+          </button>
+          <button class="glass-btn">
+            <kbd>⌘</kbd> <kbd>K</kbd> Actions
+          </button>
+        </div>
+      </header>
+
+      <!-- Editor Grid -->
+      <div class="editor-container">
+        <!-- Pane 1 -->
+        <div class="editor-pane glass">
+          <div class="pane-header">
+            <span class="title">main.ts</span>
+            <span>TypeScript</span>
+          </div>
+          <div class="pane-content">
+            <div class="gutter">
+              1<br>2<br>3<br>4<br>5<br>6<br>7
+            </div>
+            <div class="code"><span class="keyword">import</span> { App } <span class="keyword">from</span> <span class="string">'@flux/core'</span>;
+
+<span class="comment">// Initialize Spatial Engine</span>
+<span class="keyword">const</span> app = <span class="keyword">new</span> <span class="function">App</span>({
+  spatial: <span class="keyword">true</span>,
+  glassmorphism: <span class="keyword">true</span>
+});</div>
+          </div>
+        </div>
+
+        <!-- Pane 2 -->
+        <div class="editor-pane glass">
+          <div class="pane-header">
+            <span class="title">styles.css</span>
+            <span>CSS</span>
+          </div>
+          <div class="pane-content">
+            <div class="gutter">
+              1<br>2<br>3<br>4<br>5
+            </div>
+            <div class="code"><span class="keyword">.glass</span> {
+  <span class="function">backdrop-filter</span>: <span class="string">blur(32px)</span>;
+  <span class="function">border-radius</span>: <span class="string">24px</span>;
+  <span class="function">box-shadow</span>: <span class="string">0 24px 48px rgba(0,0,0,0.3)</span>;
+}</div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Spatial Command Palette (Overlay) -->
+    <div class="command-palette glass">
+      <input type="text" class="search-input" placeholder="What do you want to do?">
+      <div class="cmd-list">
+        
+        <div class="cmd-item active">
+          <div class="cmd-icon">CO</div>
+          <div class="cmd-details">
+            <div class="cmd-title">Toggle Spatial UI Mode</div>
+            <div class="cmd-desc">Switch between 2D flat and 3D spatial rendering</div>
+          </div>
+          <div class="cmd-shortcut"><kbd>⌘</kbd><kbd>⇧</kbd><kbd>S</kbd></div>
+        </div>
+
+        <div class="cmd-item">
+          <div class="cmd-icon">TE</div>
+          <div class="cmd-details">
+            <div class="cmd-title">Text Diff</div>
+            <div class="cmd-desc">Compare two text panes with semantic highlighting</div>
+          </div>
+          <div class="cmd-shortcut"><kbd>↵</kbd></div>
+        </div>
+
+        <div class="cmd-item">
+          <div class="cmd-icon">JS</div>
+          <div class="cmd-details">
+            <div class="cmd-title">Run JS Filter</div>
+            <div class="cmd-desc">Apply JavaScript transformation to current buffer</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Floating Mini Widget -->
+    <div class="floating-widget glass">
+      <div class="widget-title">
+        Live Diff Status
+        <span class="widget-badge">Active</span>
+      </div>
+      <div class="widget-content">
+        2 panes synchronized. 12 additions, 4 deletions detected in real-time.
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>

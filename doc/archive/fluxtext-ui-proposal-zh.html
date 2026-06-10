@@ -1,0 +1,2342 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FluxText — UI 设计提案</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+    /* ═══════════════════════════════════════════════════
+       DESIGN SYSTEM TOKENS
+       ═══════════════════════════════════════════════════ */
+    :root {
+      --font: 'JetBrains Mono','SF Mono','Cascadia Code',monospace;
+
+      /* Type scale */
+      --t2xs: 9px; --txs: 10px; --tsm: 11px;
+      --tbase: 12.5px; --tmd: 13.5px; --tlg: 15px;
+      --txl: 18px; --t2xl: 22px;
+
+      /* Spacing */
+      --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:20px; --s6:24px;
+
+      /* Radii */
+      --rxs:3px; --rsm:5px; --rmd:8px; --rlg:12px; --rxl:16px;
+
+      /* ── Dark chrome surfaces ── */
+      --ch0: #0c0c13;   /* deepest — sidebar, statusbar              */
+      --ch1: #131320;   /* chrome surface — topbar, panel headers     */
+      --ch2: #1b1b2c;   /* chrome raised — hover/input bg             */
+      --ch3: #222236;   /* chrome highlight — active bg               */
+      --cb0: #262640;   /* chrome border subtle                       */
+      --cb1: #34344e;   /* chrome border strong                       */
+
+      /* ── Light canvas surfaces ── */
+      --cv0: #fdfcff;   /* editor canvas bg                           */
+      --cv1: #f2f2f7;   /* canvas surface — gutters, pane-tabs        */
+      --cvb: #e0e0ec;   /* canvas border                              */
+
+      /* ── Text on chrome ── */
+      --tc0: #deded8;   /* primary                                    */
+      --tc1: #7878a0;   /* secondary                                  */
+      --tc2: #46466a;   /* tertiary / muted                           */
+
+      /* ── Text on canvas ── */
+      --tv0: #18181e;   /* primary                                    */
+      --tv1: #42425a;   /* secondary                                  */
+      --tv2: #8888a4;   /* tertiary / muted                           */
+
+      /* ── Accent — violet-indigo ── */
+      --a:    #7c6ef0;
+      --ah:   #5e50de;
+      --as:   rgba(124,110,240,.15);
+      --ag:   rgba(124,110,240,.32);
+      --ab:   rgba(124,110,240,.55);
+
+      /* ── Status ── */
+      --ok:  #28d0a0; --oks: rgba(40,208,160,.12);
+      --err: #f06060; --errs: rgba(240,96,96,.12);
+      --wrn: #f0a030; --wrns: rgba(240,160,48,.12);
+
+      /* ── Shadows ── */
+      --sh-panel: 0 28px 72px rgba(0,0,0,.75), 0 4px 20px rgba(0,0,0,.55);
+      --sh-float: 0 8px 28px rgba(0,0,0,.5);
+      --sh-sm: 0 2px 8px rgba(0,0,0,.4);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    /* ═══════════════════════════════════════════════════
+       BOARD META-SHELL  (design-board presentation layer)
+       ═══════════════════════════════════════════════════ */
+    body {
+      font-family: var(--font);
+      font-size: var(--tbase);
+      background: #e8e8f0;
+      color: #18182a;
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.5;
+    }
+
+    .board {
+      max-width: 1520px;
+      margin: 0 auto;
+      padding: 28px 24px 60px;
+    }
+
+    /* Board header */
+    .brd-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 16px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #c8c8dc;
+      margin-bottom: 22px;
+    }
+
+    .brd-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: #10101e;
+      letter-spacing: -.01em;
+    }
+
+    .brd-sub {
+      margin-top: 6px;
+      font-size: var(--tsm);
+      color: #6868888;
+      line-height: 1.6;
+      max-width: 820px;
+      color: #666680;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      height: 22px;
+      padding: 0 10px;
+      border: 1px solid #c8c8dc;
+      border-radius: 99px;
+      font-size: var(--txs);
+      color: #8888a8;
+      background: #f0f0f8;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    /* Section header */
+    .sec-head {
+      font-size: var(--txs);
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: #8888a0;
+      margin-bottom: 12px;
+      padding-bottom: 7px;
+      border-bottom: 1px solid #d0d0e0;
+    }
+
+    /* Panel wrapper (meta-container for each mockup) */
+    .pw {
+      border: 1px solid #c8c8dc;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #f4f4fa;
+    }
+
+    .pw-h {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 30px;
+      padding: 0 14px;
+      border-bottom: 1px solid #c8c8dc;
+      background: #ececf4;
+    }
+
+    .pw-title { font-size: var(--tsm); font-weight: 700; color: #3a3a56; }
+    .pw-note  { font-size: var(--txs); color: #8888a8; }
+
+    .pw-body { padding: 14px; }
+
+    /* Board layout helpers */
+    .g2 {
+      display: grid;
+      grid-template-columns: 1.25fr 0.75fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .stack { display: flex; flex-direction: column; gap: 16px; }
+
+    /* ═══════════════════════════════════════════════════
+       TOKEN SWATCH SECTION
+       ═══════════════════════════════════════════════════ */
+    .tok-section {
+      background: #f4f4fa;
+      border: 1px solid #c8c8dc;
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-bottom: 22px;
+    }
+
+    .tok-row { display: flex; gap: 32px; flex-wrap: wrap; align-items: flex-start; }
+
+    .tok-group { display: flex; flex-direction: column; gap: 5px; }
+
+    .tok-label {
+      font-size: var(--txs);
+      color: #8888a8;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: 2px;
+    }
+
+    .sw-row { display: flex; gap: 4px; flex-wrap: wrap; }
+
+    .sw {
+      width: 30px; height: 30px;
+      border-radius: 5px;
+      border: 1px solid rgba(0,0,0,.15);
+      position: relative;
+    }
+
+    .sw-lg {
+      width: 44px; height: 30px;
+      border-radius: 5px;
+      border: 1px solid rgba(0,0,0,.15);
+    }
+
+    .type-col { display: flex; flex-direction: column; gap: 2px; }
+
+    .ts {
+      font-family: var(--font);
+      color: #1a1a2a;
+      line-height: 1.4;
+    }
+
+    /* ═══════════════════════════════════════════════════
+       DIAGNOSIS CARDS
+       ═══════════════════════════════════════════════════ */
+    .diag-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 22px;
+    }
+
+    .diag-card {
+      padding: 12px;
+      background: #fdf4f2;
+      border: 1px solid #e8c8c0;
+      border-radius: 8px;
+      border-left: 3px solid #d07060;
+    }
+
+    .diag-lbl {
+      font-size: var(--txs);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: #a04030;
+      margin-bottom: 5px;
+    }
+
+    .diag-txt {
+      font-size: var(--txs);
+      color: #3a3a50;
+      line-height: 1.6;
+    }
+
+    /* ═══════════════════════════════════════════════════
+       APP SHELL
+       ═══════════════════════════════════════════════════ */
+    .app-shell {
+      height: 470px;
+      display: grid;
+      grid-template-columns: 44px 1fr;
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--ch0);
+      position: relative;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 8px 6px;
+      gap: 3px;
+      background: var(--ch0);
+      border-right: 1px solid var(--cb0);
+      z-index: 2;
+    }
+
+    .si {
+      width: 32px; height: 32px;
+      display: grid; place-items: center;
+      border-radius: var(--rsm);
+      font-size: var(--txs);
+      font-weight: 700;
+      color: var(--tc2);
+      cursor: pointer;
+      position: relative;
+    }
+
+    .si::before {
+      content: '';
+      position: absolute;
+      left: -6px; top: 7px; bottom: 7px;
+      width: 2px; border-radius: 0 2px 2px 0;
+      background: transparent;
+    }
+
+    .si.active { color: var(--a); background: var(--as); }
+    .si.active::before { background: var(--a); }
+
+    .si.pinned {
+      color: var(--tc2);
+      background: var(--ch2);
+      border: 1px solid var(--cb0);
+    }
+
+    .si-sep { width: 20px; height: 1px; background: var(--cb0); margin: 3px 0; }
+    .si-spacer { flex: 1; }
+
+    /* Workspace */
+    .workspace {
+      display: grid;
+      grid-template-rows: 30px 1fr 24px;
+      min-width: 0;
+    }
+
+    /* Topbar */
+    .topbar {
+      display: flex; align-items: center;
+      padding: 0 12px; gap: 10px;
+      border-bottom: 1px solid var(--cb0);
+      background: var(--ch1);
+    }
+
+    .tb-view {
+      display: flex; align-items: center; gap: 6px;
+      font-size: var(--txs); font-weight: 600;
+      color: var(--tc0);
+    }
+
+    .ready-dot {
+      width: 5px; height: 5px; border-radius: 50%;
+      background: var(--ok);
+      box-shadow: 0 0 4px var(--ok);
+    }
+
+    .tb-sep { width: 1px; height: 12px; background: var(--cb0); }
+
+    .tb-renderer {
+      font-size: var(--txs);
+      color: var(--tc1);
+    }
+
+    .tb-actions {
+      margin-left: auto;
+      display: flex; align-items: center; gap: 4px;
+    }
+
+    .tb-btn {
+      height: 20px; padding: 0 8px;
+      border: 1px solid var(--cb1);
+      border-radius: var(--rxs);
+      background: transparent;
+      color: var(--tc1);
+      font: var(--txs)/1 var(--font);
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+
+    .tb-hint {
+      font-size: var(--txs);
+      color: var(--tc2);
+      opacity: .7;
+    }
+
+    /* Pane grid */
+    .pane-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 1px;
+      background: var(--cb0);
+      min-height: 0;
+    }
+
+    .pane {
+      display: grid;
+      grid-template-rows: 26px 1fr 22px;
+      background: var(--cv0);
+      min-height: 0; min-width: 0;
+    }
+
+    .pane.focused {
+      outline: 1.5px solid var(--a);
+      outline-offset: -1.5px;
+      position: relative; z-index: 1;
+    }
+
+    .pane-tab {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      background: var(--cv1);
+      border-bottom: 1px solid var(--cvb);
+      font-size: var(--t2xs);
+      color: var(--tv2);
+    }
+
+    .pane.focused .pane-tab {
+      background: var(--ch3);
+      border-bottom: 1.5px solid var(--a);
+    }
+
+    .pane-tab-l {
+      display: flex; align-items: center; gap: 5px;
+      color: var(--tv2);
+    }
+
+    .pane.focused .pane-tab-l { color: var(--a); }
+
+    .pane-num { font-weight: 600; }
+
+    .editor-area {
+      display: grid;
+      grid-template-columns: 32px 1fr;
+      min-height: 0; overflow: hidden;
+    }
+
+    .gut {
+      padding: 6px 7px 6px 0;
+      text-align: right;
+      font-size: var(--t2xs);
+      color: var(--tv2);
+      background: var(--cv1);
+      border-right: 1px solid var(--cvb);
+      line-height: 19px;
+    }
+
+    .ed-body {
+      padding: 6px 10px;
+      font-size: var(--txs);
+      line-height: 19px;
+      color: var(--tv0);
+      overflow: hidden;
+    }
+
+    .pane-status {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      padding: 0 8px;
+      border-top: 1px solid var(--cvb);
+      font-size: var(--t2xs);
+      color: var(--tv2);
+      background: var(--cv1);
+    }
+
+    .statusbar {
+      display: flex; align-items: center;
+      gap: 14px; padding: 0 10px;
+      border-top: 1px solid var(--cb0);
+      background: var(--ch0);
+      font-size: var(--t2xs);
+      color: var(--tc2);
+    }
+
+    .sb-accent { color: var(--a); }
+
+    /* ═══════════════════════════════════════════════════
+       COMMAND PALETTE overlay
+       ═══════════════════════════════════════════════════ */
+    .pal-overlay {
+      position: absolute; inset: 0;
+      background: rgba(8,8,16,.5);
+      backdrop-filter: blur(2px);
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 56px;
+      z-index: 20;
+    }
+
+    .palette {
+      width: min(540px, 90%);
+      border: 1px solid var(--cb1);
+      border-radius: var(--rlg);
+      background: var(--ch1);
+      box-shadow: var(--sh-panel);
+      overflow: hidden;
+    }
+
+    .pal-search {
+      display: flex; align-items: center;
+      height: 46px; padding: 0 14px; gap: 10px;
+      border-bottom: 1px solid var(--cb0);
+    }
+
+    .pal-search-lbl { font-size: var(--tsm); color: var(--tc2); }
+
+    .pal-search-val {
+      flex: 1;
+      font-size: var(--tmd); color: var(--tc0);
+    }
+
+    .pal-cursor {
+      display: inline-block;
+      width: 1.5px; height: 14px;
+      background: var(--a);
+      animation: blink 1s step-start infinite;
+      vertical-align: middle;
+      margin-left: 1px;
+    }
+
+    @keyframes blink { 50% { opacity: 0; } }
+
+    .pal-list { padding: 4px 0; }
+
+    .pal-sec-lbl {
+      padding: 6px 14px 3px;
+      font-size: var(--txs);
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--tc2);
+    }
+
+    .pal-item {
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      align-items: center;
+      gap: 10px; padding: 7px 14px;
+    }
+
+    .pal-item.sel { background: var(--ch2); }
+
+    .pi-icon {
+      width: 26px; height: 26px;
+      border-radius: var(--rsm);
+      display: grid; place-items: center;
+      background: var(--ch3);
+      color: var(--tc1);
+      font-size: var(--t2xs);
+      font-weight: 700;
+    }
+
+    .pal-item.sel .pi-icon { background: var(--a); color: #fff; }
+
+    .pi-icon.plug { background: var(--as); color: var(--a); }
+    .pal-item.sel .pi-icon.plug { background: var(--a); color: #fff; }
+
+    .pi-text { min-width: 0; }
+
+    .pi-name {
+      font-size: var(--tbase);
+      font-weight: 500;
+      color: var(--tc0);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .pi-sub {
+      font-size: var(--txs);
+      color: var(--tc1);
+      margin-top: 1px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .pi-action { font-size: var(--txs); color: var(--tc2); white-space: nowrap; }
+
+    .pi-pin-badge {
+      font-size: var(--t2xs);
+      color: var(--a);
+      border: 1px solid var(--ab);
+      border-radius: var(--rxs);
+      padding: 1px 6px;
+    }
+
+    /* Calculator instant suggestion row */
+    .pal-calc {
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      align-items: center;
+      gap: 10px; padding: 9px 14px;
+      background: var(--as);
+      border-left: 2px solid var(--a);
+    }
+
+    .calc-icon {
+      width: 26px; height: 26px;
+      border-radius: var(--rsm);
+      display: grid; place-items: center;
+      background: var(--a); color: #fff;
+      font-size: var(--t2xs); font-weight: 700;
+    }
+
+    .calc-answer {
+      font-size: var(--tbase);
+      font-weight: 600; color: var(--a);
+    }
+
+    .calc-from {
+      font-size: var(--txs); color: var(--tc1); margin-top: 1px;
+    }
+
+    .copy-chip {
+      height: 20px; padding: 0 8px;
+      border: 1px solid var(--ab);
+      border-radius: var(--rxs);
+      font-size: var(--txs); color: var(--a);
+      display: inline-flex; align-items: center;
+    }
+
+    .pal-footer {
+      display: flex; gap: 14px; flex-wrap: wrap;
+      padding: 7px 14px;
+      border-top: 1px solid var(--cb0);
+      font-size: var(--txs); color: var(--tc2);
+    }
+
+    kbd {
+      display: inline-flex; align-items: center;
+      height: 15px; padding: 0 5px;
+      border: 1px solid var(--cb1);
+      border-radius: var(--rxs);
+      background: var(--ch2); color: var(--tc1);
+      font: var(--txs)/1 var(--font);
+    }
+
+    /* ═══════════════════════════════════════════════════
+       GLOBAL LAUNCHER  (standalone panel)
+       ═══════════════════════════════════════════════════ */
+    .launcher {
+      border: 1px solid var(--cb1);
+      border-radius: var(--rlg);
+      background: var(--ch1);
+      box-shadow: var(--sh-float);
+      overflow: hidden;
+    }
+
+    .lnch-sec { margin: 3px 0; }
+
+    .lnch-sec-lbl {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 14px 3px;
+      font-size: var(--txs); font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase;
+      color: var(--tc2);
+    }
+
+    .lnch-sec-lbl::before {
+      content: '';
+      width: 2px; height: 9px;
+      border-radius: 1px;
+      background: var(--a); opacity: .6;
+    }
+
+    .lnch-item {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 10px; align-items: center;
+      padding: 6px 14px;
+    }
+
+    .lnch-item.sel { background: var(--ch2); }
+    .lnch-item.sel .pi-icon { background: var(--a); color: #fff; }
+
+    .lnch-name {
+      font-size: var(--tbase); font-weight: 500;
+      color: var(--tc0);
+    }
+
+    .lnch-sub { font-size: var(--txs); color: var(--tc1); margin-top: 1px; }
+
+    /* ═══════════════════════════════════════════════════
+       PLUGINS VIEW
+       ═══════════════════════════════════════════════════ */
+    .plg-view {
+      background: var(--ch1);
+      border-radius: var(--rmd);
+      overflow: hidden;
+    }
+
+    .scr-hdr {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--cb0);
+      gap: 12px;
+    }
+
+    .scr-title {
+      font-size: var(--tlg);
+      font-weight: 700; color: var(--tc0);
+    }
+
+    .btn-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+    .btn {
+      height: 28px; padding: 0 11px;
+      border: 1px solid var(--cb1);
+      border-radius: var(--rsm);
+      background: transparent;
+      color: var(--tc1);
+      font: var(--tsm)/1 var(--font);
+      display: inline-flex; align-items: center; gap: 5px;
+      white-space: nowrap;
+    }
+
+    .btn.prim { background: var(--a); border-color: var(--a); color: #fff; }
+    .btn.sm   { height: 22px; padding: 0 8px; font-size: var(--txs); }
+
+    .plg-search {
+      display: flex; align-items: center; gap: 8px;
+      margin: 12px 16px 0;
+      height: 34px; padding: 0 12px;
+      border: 1px solid var(--cb0);
+      border-radius: var(--rmd);
+      background: var(--ch2);
+      color: var(--tc2); font-size: var(--tbase);
+      font-family: var(--font);
+    }
+
+    .plg-search-ph { flex: 1; color: var(--tc2); }
+
+    .count-badge {
+      font-size: var(--txs); color: var(--tc2);
+      background: var(--ch3);
+      border-radius: var(--rxs);
+      padding: 1px 6px;
+    }
+
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--cb0);
+      padding: 0 14px; gap: 0; margin-top: 10px;
+    }
+
+    .tab {
+      display: flex; align-items: center; gap: 5px;
+      padding: 7px 14px;
+      font-size: var(--tsm); font-weight: 500;
+      color: var(--tc1);
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+
+    .tab.act { color: var(--a); border-bottom-color: var(--a); }
+
+    .plg-list { padding: 12px 16px; }
+
+    .plg-subhdr {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .plg-subhdr-lbl { font-size: var(--txs); color: var(--tc2); }
+
+    .plg-card {
+      display: grid;
+      grid-template-columns: 36px 1fr auto;
+      gap: 12px; align-items: start;
+      padding: 11px 12px 11px 15px;
+      border: 1px solid var(--cb0);
+      border-radius: var(--rmd);
+      background: var(--ch2);
+      margin-bottom: 8px;
+      position: relative; overflow: hidden;
+    }
+
+    .plg-card::before {
+      content: '';
+      position: absolute; left: 0; top: 0; bottom: 0;
+      width: 3px;
+    }
+
+    .plg-card.ok::before   { background: var(--ok); }
+    .plg-card.err          { border-color: var(--err); }
+    .plg-card.err::before  { background: var(--err); }
+    .plg-card.inactive::before { background: var(--cb1); }
+
+    .pkg-icon {
+      width: 36px; height: 36px;
+      border-radius: var(--rsm);
+      background: var(--ch3);
+      display: grid; place-items: center;
+      color: var(--tc1);
+      font-size: var(--txs); font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .plg-name-row {
+      display: flex; align-items: center; gap: 6px;
+      min-width: 0;
+    }
+
+    .plg-name {
+      font-size: var(--tbase); font-weight: 600;
+      color: var(--tc0);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .badge {
+      display: inline-flex; align-items: center;
+      height: 16px; padding: 0 6px;
+      border-radius: var(--rxs);
+      font-size: var(--t2xs); font-weight: 700;
+      white-space: nowrap; flex-shrink: 0;
+    }
+
+    .badge.n  { background: var(--ch3); color: var(--tc1); }
+    .badge.ok { background: var(--oks); color: var(--ok); }
+    .badge.er { background: var(--errs); color: var(--err); }
+    .badge.ac { background: var(--as); color: var(--a); }
+
+    .plg-meta {
+      margin-top: 3px; font-size: var(--txs);
+      color: var(--tc2);
+    }
+
+    .plg-err-msg {
+      margin-top: 5px; font-size: var(--txs);
+      color: var(--err);
+    }
+
+    .caps-row {
+      display: flex; gap: 4px; flex-wrap: wrap;
+      margin-top: 7px;
+    }
+
+    .cap {
+      height: 15px; padding: 0 6px;
+      border: 1px solid var(--cb1);
+      border-radius: var(--rxs);
+      font-size: var(--t2xs); color: var(--tc2);
+      display: inline-flex; align-items: center;
+    }
+
+    .icon-acts { display: flex; gap: 2px; }
+
+    .ic-btn {
+      width: 28px; height: 28px;
+      border-radius: var(--rxs);
+      display: grid; place-items: center;
+      color: var(--tc2); font-size: 10px;
+    }
+
+    .ic-btn:hover { background: var(--ch3); color: var(--tc0); }
+    .ic-btn.dng:hover { background: var(--errs); color: var(--err); }
+
+    /* ═══════════════════════════════════════════════════
+       PLUGIN SOURCE VIEWER
+       ═══════════════════════════════════════════════════ */
+    .src-view {
+      background: var(--ch1);
+      border-radius: var(--rmd);
+      overflow: hidden;
+    }
+
+    .src-hdr {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      height: 38px; padding: 0 14px;
+      border-bottom: 1px solid var(--cb0);
+      background: var(--ch1);
+    }
+
+    .src-hdr-l {
+      display: flex; align-items: center; gap: 7px;
+    }
+
+    .back-btn {
+      font-size: var(--tsm);
+      color: var(--tc1);
+    }
+
+    .src-hdr-sep { color: var(--tc2); font-size: var(--tsm); }
+
+    .src-title {
+      font-size: var(--tsm); font-weight: 700;
+      color: var(--tc0);
+    }
+
+    .src-path { font-size: var(--txs); color: var(--tc2); }
+
+    .src-body {
+      display: grid;
+      grid-template-columns: 190px 1fr;
+      height: 265px;
+    }
+
+    .file-tree {
+      background: var(--ch0);
+      border-right: 1px solid var(--cb0);
+      padding: 8px 6px;
+      overflow: hidden;
+    }
+
+    .tree-lbl {
+      font-size: var(--txs); color: var(--tc2);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      padding: 0 6px; margin-bottom: 7px;
+    }
+
+    .tn {
+      display: flex; align-items: center; gap: 5px;
+      padding: 3px 8px;
+      border-radius: var(--rxs);
+      font-size: var(--txs); color: var(--tc1);
+      min-height: 24px;
+    }
+
+    .tn.fold { color: var(--tc0); font-weight: 600; }
+    .tn.ind  { padding-left: 20px; }
+    .tn.act  { background: var(--as); color: var(--a); }
+
+    .tn-chevron { font-size: 9px; }
+    .tn-dot { font-size: 7px; opacity: .5; }
+
+    .monaco-pane {
+      background: var(--cv0);
+      display: grid;
+      grid-template-columns: 36px 1fr;
+    }
+
+    .m-gut {
+      background: var(--cv1);
+      border-right: 1px solid var(--cvb);
+      padding: 8px 6px 8px 0;
+      text-align: right;
+      font-size: var(--t2xs); line-height: 19px;
+      color: var(--tv2);
+    }
+
+    .m-code {
+      padding: 8px 12px;
+      font-size: var(--txs); line-height: 19px;
+      color: var(--tv0);
+      white-space: pre;
+    }
+
+    .mk { color: #9b7ff0; }      /* keyword */
+    .ms { color: #48a882; }      /* string */
+    .mf { color: #6aabde; }      /* function/id */
+    .mc { color: var(--tv2); font-style: italic; } /* comment */
+
+    /* ═══════════════════════════════════════════════════
+       PINNED RUNNER
+       ═══════════════════════════════════════════════════ */
+    .run-view {
+      background: var(--ch1);
+      border-radius: var(--rmd);
+      overflow: hidden;
+    }
+
+    .run-hdr {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      height: 44px; padding: 0 14px;
+      border-bottom: 1px solid var(--cb0);
+      background: var(--ch1); gap: 12px;
+    }
+
+    .run-hdr-l {
+      display: flex; align-items: center; gap: 10px;
+      min-width: 0;
+    }
+
+    .run-title {
+      font-size: var(--tbase); font-weight: 700;
+      color: var(--tc0);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .run-hdr-r {
+      display: flex; align-items: center;
+      gap: 5px; flex-shrink: 0;
+    }
+
+    .run-btn {
+      height: 26px; padding: 0 14px;
+      border-radius: var(--rsm);
+      background: var(--a); border: 1px solid var(--ah);
+      color: #fff;
+      font: 600 var(--tsm)/1 var(--font);
+      display: inline-flex; align-items: center; gap: 5px;
+    }
+
+    .run-group {
+      display: flex;
+    }
+
+    .run-group .btn:first-child {
+      border-radius: var(--rsm) 0 0 var(--rsm);
+      border-right-width: 0;
+    }
+
+    .run-group .btn:last-child {
+      border-radius: 0 var(--rsm) var(--rsm) 0;
+    }
+
+    .run-panes {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      height: 185px;
+    }
+
+    .run-pane {
+      display: grid;
+      grid-template-rows: 28px 1fr;
+    }
+
+    .run-pane:first-child { border-right: 1px solid var(--cb0); }
+
+    .run-ph {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      border-bottom: 1px solid var(--cb0);
+      background: var(--ch1);
+    }
+
+    .run-ph-lbl {
+      font-size: var(--txs); font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase;
+      color: var(--tc2);
+    }
+
+    .run-ph-acts {
+      display: flex; gap: 8px;
+      font-size: var(--txs); color: var(--tc2);
+    }
+
+    .run-ph-acts span { cursor: pointer; }
+    .run-ph-acts span:hover { color: var(--tc0); }
+
+    .run-pane-ed {
+      display: grid;
+      grid-template-columns: 30px 1fr;
+      background: var(--cv0);
+    }
+
+    .run-ctrl-bar {
+      display: flex; align-items: center;
+      gap: 10px; padding: 0 14px;
+      height: 38px;
+      border-top: 1px solid var(--cb0);
+      background: var(--ch0);
+      font-size: var(--txs); color: var(--tc2);
+      overflow-x: auto;
+    }
+
+    .ctrl-w {
+      display: inline-flex; align-items: center; gap: 5px;
+      height: 20px; padding: 0 8px;
+      border: 1px solid var(--cb1);
+      border-radius: var(--rxs);
+      font-size: var(--txs); color: var(--tc1);
+      white-space: nowrap; flex-shrink: 0;
+    }
+
+    /* ═══════════════════════════════════════════════════
+       SETTINGS
+       ═══════════════════════════════════════════════════ */
+    .set-view {
+      background: var(--ch1);
+      border-radius: var(--rmd);
+      overflow: hidden;
+    }
+
+    .set-body { padding: 14px; }
+
+    .set-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 9px;
+    }
+
+    .set-card {
+      padding: 12px 14px;
+      border: 1px solid var(--cb0);
+      border-radius: var(--rmd);
+      background: var(--ch2);
+    }
+
+    .set-ctitle {
+      font-size: var(--tsm); font-weight: 700;
+      color: var(--tc0); margin-bottom: 9px;
+      display: flex; align-items: center; gap: 6px;
+    }
+
+    .set-ctitle-ac { color: var(--a); }
+
+    .set-row {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      padding: 4px 0;
+      border-bottom: 1px solid var(--cb0);
+      gap: 10px; min-height: 26px;
+    }
+
+    .set-row:last-child { border-bottom: none; }
+
+    .set-lbl {
+      font-size: var(--txs); color: var(--tc1);
+    }
+
+    .tgl {
+      width: 28px; height: 15px;
+      border-radius: 99px;
+      background: var(--a);
+      position: relative; flex-shrink: 0;
+    }
+
+    .tgl::after {
+      content: '';
+      position: absolute;
+      width: 11px; height: 11px; top: 2px; left: 15px;
+      border-radius: 50%; background: #fff;
+    }
+
+    .tgl.off { background: var(--cb1); }
+    .tgl.off::after { left: 2px; }
+
+    .sel-ctrl {
+      height: 20px; padding: 0 7px;
+      border: 1px solid var(--cb1);
+      border-radius: var(--rxs);
+      background: var(--ch0); color: var(--tc1);
+      font: var(--txs)/1 var(--font);
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+
+    .step {
+      display: flex; align-items: center;
+      gap: 4px; font-size: var(--txs); color: var(--tc1);
+    }
+
+    .step-btn {
+      width: 16px; height: 16px;
+      border: 1px solid var(--cb1);
+      border-radius: var(--rxs);
+      background: var(--ch0); color: var(--tc1);
+      display: grid; place-items: center; font-size: 10px;
+    }
+
+    .hotkey-ctrl {
+      height: 20px; padding: 0 7px;
+      border: 1px solid var(--cb1);
+      border-radius: var(--rxs);
+      background: var(--ch0); color: var(--tc1);
+      font: var(--txs)/1 var(--font);
+      display: inline-flex; align-items: center;
+    }
+
+    /* ═══════════════════════════════════════════════════
+       TEXT DIFF RENDERER  (plugin-owned)
+       ═══════════════════════════════════════════════════ */
+    .diff-view {
+      background: var(--ch1);
+      border-radius: var(--rmd);
+      overflow: hidden;
+    }
+
+    .diff-hdr {
+      display: flex; align-items: center; gap: 7px;
+      padding: 0 14px; height: 32px;
+      border-bottom: 1px solid var(--cb0);
+      background: var(--ch1);
+      font-size: var(--txs);
+    }
+
+    .diff-ttl {
+      font-size: var(--tsm); font-weight: 700;
+      color: var(--tc0); margin-right: 2px;
+    }
+
+    .dchip {
+      height: 18px; padding: 0 8px;
+      border-radius: var(--rxs);
+      background: var(--ch3); color: var(--tc1);
+      font-size: var(--t2xs);
+      display: inline-flex; align-items: center;
+    }
+
+    .dchip.act { background: var(--as); color: var(--a); }
+    .dchip.cnt { background: var(--wrns); color: var(--wrn); }
+
+    .diff-exit { margin-left: auto; }
+
+    .diff-arr-hdr {
+      display: flex; align-items: center; gap: 7px;
+      padding: 0 14px; height: 24px;
+      border-bottom: 1px solid var(--cb0);
+      background: var(--ch0); font-size: var(--txs);
+      color: var(--tc2);
+    }
+
+    .diff-panes {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px; background: var(--cb0);
+      height: 160px;
+    }
+
+    .diff-pane {
+      background: var(--cv0);
+      display: grid;
+      grid-template-columns: 36px 1fr;
+      overflow: hidden;
+    }
+
+    .hl-chg { background: #fff4e0; }
+    .hl-add { background: #eafaf2; }
+
+    /* ═══════════════════════════════════════════════════
+       DOC SECTIONS (migration, boundaries, checklists)
+       ═══════════════════════════════════════════════════ */
+    .doc-sec { margin-top: 28px; }
+
+    .doc-sec-title {
+      font-size: var(--tmd); font-weight: 700;
+      color: #10101e; margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #c8c8dc;
+    }
+
+    .doc-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: var(--txs);
+    }
+
+    .doc-table th {
+      text-align: left;
+      padding: 7px 12px;
+      background: #ececf6;
+      border: 1px solid #c8c8dc;
+      font-weight: 700; color: #3a3a56;
+    }
+
+    .doc-table td {
+      padding: 6px 12px;
+      border: 1px solid #c8c8dc;
+      color: #3a3a50;
+      line-height: 1.55;
+      vertical-align: top;
+    }
+
+    .doc-table tr:nth-child(even) td { background: #f6f6fc; }
+
+    .doc-table code {
+      font-family: var(--font);
+      font-size: var(--t2xs);
+      background: rgba(0,0,0,.065);
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+
+    .boundary-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .bc {
+      padding: 14px;
+      border-radius: 8px;
+      border: 1px solid;
+    }
+
+    .bc.fw { background: #f0f4ff; border-color: #b8c4f0; }
+    .bc.pl { background: #f0fff8; border-color: #a8e0cc; }
+
+    .bc-title {
+      font-size: var(--tsm); font-weight: 700;
+      margin-bottom: 9px;
+    }
+
+    .bc.fw .bc-title { color: #2c3ea0; }
+    .bc.pl .bc-title { color: #1a6a50; }
+
+    .bc-list {
+      list-style: none;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+
+    .bc-list li {
+      font-size: var(--txs); color: #3a3a50;
+      line-height: 1.55;
+      display: flex; align-items: flex-start; gap: 6px;
+    }
+
+    .bc-list li::before { content: '·'; opacity: .5; }
+
+    .check-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+    }
+
+    .chk {
+      display: flex; align-items: flex-start;
+      gap: 8px; padding: 7px 10px;
+      border: 1px solid #c8c8dc;
+      border-radius: 6px;
+      background: #f4f4fa;
+      font-size: var(--txs); color: #3a3a50;
+      line-height: 1.5;
+    }
+
+    .chk::before {
+      content: '□';
+      color: #9090b0; flex-shrink: 0; margin-top: 1px;
+    }
+
+    .note-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .note-card {
+      padding: 12px;
+      border: 1px solid #c8c8dc;
+      border-radius: 8px;
+      background: #f6f6fc;
+    }
+
+    .note-card-title {
+      font-size: var(--tsm); font-weight: 700;
+      color: #2a2a46; margin-bottom: 7px;
+    }
+
+    .note-card-body {
+      font-size: var(--txs);
+      color: #56566c; line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+<div class="board">
+
+  <!-- ── BOARD HEADER ── -->
+  <header class="brd-head">
+    <div>
+      <div class="brd-title">FluxText — UI 设计提案</div>
+      <div class="brd-sub">
+        基于源码一致的现状 V2 版本进行的彻底重设计。
+        新方向：深色框架 + 白色 Monaco 画布。保留所有框架和插件界面。
+        没有凭空捏造的功能，没有营销文案，没有过度简化的结构。
+      </div>
+    </div>
+    <div class="pill">提案 / 2026-06-10</div>
+  </header>
+
+  <!-- ── DIAGNOSIS ── -->
+  <section style="margin-bottom:22px;">
+    <div class="sec-head">1 · 现状问题诊断</div>
+    <div class="diag-grid">
+      <div class="diag-card">
+        <div class="diag-lbl">层级坍塌</div>
+        <div class="diag-txt">顶部栏 (26px)、窗格标签 (24px)、窗格状态 (25px) 和状态栏 (24px) 视觉比重完全相同。缺少清晰的框架与内容区分。</div>
+      </div>
+      <div class="diag-card">
+        <div class="diag-lbl">侧边栏辨识度</div>
+        <div class="diag-txt">字母缩写 (E, P, S) 只有背景填充的激活状态。没有左侧高亮条。固定操作槽不可预测地打破了导航/设置的垂直节奏。</div>
+      </div>
+      <div class="diag-card">
+        <div class="diag-lbl">窗格辨识度</div>
+        <div class="diag-txt">窗格标签仅显示数字和关闭按钮。活动窗格无法一眼分辨。窗格类型（纯文本、渲染器等）被隐藏在状态栏中。</div>
+      </div>
+      <div class="diag-card">
+        <div class="diag-lbl">面板项比重</div>
+        <div class="diag-txt">框架命令和插件命令使用完全相同的图标处理。除非仔细阅读副标题，否则无法看出命令是来自插件的。</div>
+      </div>
+      <div class="diag-card">
+        <div class="diag-lbl">插件卡片扁平化</div>
+        <div class="diag-txt">无论状态如何（激活、错误、禁用），所有插件卡片的视觉比重都一样。错误卡片只能通过边框颜色变化来区分；状态信号很弱。</div>
+      </div>
+      <div class="diag-card">
+        <div class="diag-lbl">运行器头部拥挤</div>
+        <div class="diag-txt">Auto 徽章、运行、控件、重置和取消固定都在一行中具有相同的视觉比重。主要操作（运行）在视觉上不占主导地位。</div>
+      </div>
+      <div class="diag-card">
+        <div class="diag-lbl">设置双列未对齐</div>
+        <div class="diag-txt">卡片高度根据包含的行数而变化，产生参差不齐的垂直节奏。每个卡片标题的突出首字母感觉像装饰，没有增加导航价值。</div>
+      </div>
+      <div class="diag-card">
+        <div class="diag-lbl">亮色模式视觉疲劳</div>
+        <div class="diag-txt">全白 + 极浅灰色的配色在框架和编辑器画布之间没有提供深度提示。在没有区分的白色界面上长时间工作容易疲劳。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── DESIGN TOKENS ── -->
+  <section style="margin-bottom:22px;">
+    <div class="sec-head">2 · 设计 Tokens</div>
+    <div class="tok-section">
+      <div class="tok-row">
+
+        <div class="tok-group">
+          <div class="tok-label">Dark Chrome</div>
+          <div class="sw-row">
+            <div title="#0c0c13 — ch0 deepest"    class="sw" style="background:#0c0c13"></div>
+            <div title="#131320 — ch1 surface"     class="sw" style="background:#131320"></div>
+            <div title="#1b1b2c — ch2 raised"      class="sw" style="background:#1b1b2c"></div>
+            <div title="#222236 — ch3 highlight"   class="sw" style="background:#222236"></div>
+            <div title="#262640 — cb0 border"      class="sw" style="background:#262640;border-color:#444"></div>
+            <div title="#34344e — cb1 border-str"  class="sw" style="background:#34344e;border-color:#555"></div>
+          </div>
+        </div>
+
+        <div class="tok-group">
+          <div class="tok-label">Light Canvas</div>
+          <div class="sw-row">
+            <div title="#fdfcff — cv0 canvas"    class="sw" style="background:#fdfcff"></div>
+            <div title="#f2f2f7 — cv1 surface"    class="sw" style="background:#f2f2f7"></div>
+            <div title="#e0e0ec — cvb border"     class="sw" style="background:#e0e0ec"></div>
+          </div>
+        </div>
+
+        <div class="tok-group">
+          <div class="tok-label">Accent</div>
+          <div class="sw-row">
+            <div title="#7c6ef0 — accent"         class="sw" style="background:#7c6ef0"></div>
+            <div title="#5e50de — accent hover"    class="sw" style="background:#5e50de"></div>
+            <div title="accent surface"            class="sw" style="background:rgba(124,110,240,.15);border:1px solid #7c6ef0"></div>
+          </div>
+        </div>
+
+        <div class="tok-group">
+          <div class="tok-label">Status</div>
+          <div class="sw-row">
+            <div title="#28d0a0 — success"        class="sw" style="background:#28d0a0"></div>
+            <div title="#f06060 — error"           class="sw" style="background:#f06060"></div>
+            <div title="#f0a030 — warning"         class="sw" style="background:#f0a030"></div>
+          </div>
+        </div>
+
+        <div class="tok-group">
+          <div class="tok-label">Text on Chrome</div>
+          <div class="sw-row">
+            <div title="#deded8 — tc0 primary"    class="sw" style="background:#deded8"></div>
+            <div title="#7878a0 — tc1 secondary"  class="sw" style="background:#7878a0"></div>
+            <div title="#46466a — tc2 muted"      class="sw" style="background:#46466a"></div>
+          </div>
+        </div>
+
+        <div class="tok-group">
+          <div class="tok-label">Text on Canvas</div>
+          <div class="sw-row">
+            <div title="#18181e — tv0 primary"    class="sw" style="background:#18181e"></div>
+            <div title="#42425a — tv1 secondary"  class="sw" style="background:#42425a"></div>
+            <div title="#8888a4 — tv2 muted"      class="sw" style="background:#8888a4"></div>
+          </div>
+        </div>
+
+        <div class="tok-group">
+          <div class="tok-label">Type Scale</div>
+          <div class="type-col">
+            <div class="ts" style="font-size:9px">9px · 2xs · labels, meta</div>
+            <div class="ts" style="font-size:10px">10px · xs · captions, badges</div>
+            <div class="ts" style="font-size:11px">11px · sm · secondary text</div>
+            <div class="ts" style="font-size:12.5px">12.5px · base · body, code</div>
+            <div class="ts" style="font-size:13.5px">13.5px · md · emphasized body</div>
+            <div class="ts" style="font-size:15px; font-weight:600">15px · lg · screen titles</div>
+            <div class="ts" style="font-size:18px; font-weight:700">18px · xl · section heads</div>
+          </div>
+        </div>
+
+        <div class="tok-group">
+          <div class="tok-label">Radii · Spacing</div>
+          <div class="sw-row" style="gap:6px;flex-wrap:wrap;align-items:center">
+            <div style="width:12px;height:12px;border-radius:3px;border:1.5px solid #8888a8;background:transparent" title="rxs 3px"></div>
+            <div style="width:18px;height:18px;border-radius:5px;border:1.5px solid #8888a8;background:transparent" title="rsm 5px"></div>
+            <div style="width:24px;height:24px;border-radius:8px;border:1.5px solid #8888a8;background:transparent" title="rmd 8px"></div>
+            <div style="width:30px;height:30px;border-radius:12px;border:1.5px solid #8888a8;background:transparent" title="rlg 12px"></div>
+            <div style="width:36px;height:36px;border-radius:16px;border:1.5px solid #8888a8;background:transparent" title="rxl 16px"></div>
+          </div>
+          <div style="font-size:9px;color:#8888a8;margin-top:5px">
+            Spacing: 4 · 8 · 12 · 16 · 20 · 24px
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── MOCKUP GRID ── -->
+  <section style="margin-bottom:28px;">
+    <div class="sec-head">3 · 组件 Mockups</div>
+    <div class="g2">
+
+      <!-- LEFT COLUMN -->
+      <div class="stack">
+
+        <!-- APP SHELL -->
+        <div class="pw">
+          <div class="pw-h">
+            <span class="pw-title">主编辑器外壳 — 带有命令面板浮层</span>
+            <span class="pw-note">特征：焦点窗格强调边框 · 深色框架 + 白色画布</span>
+          </div>
+          <div class="pw-body">
+            <div class="app-shell">
+
+              <!-- Sidebar -->
+              <aside class="sidebar">
+                <div class="si active" title="Editor">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                    <rect x="1" y="1" width="12" height="12" rx="2"/>
+                    <line x1="4" y1="5" x2="10" y2="5"/>
+                    <line x1="4" y1="7.5" x2="8" y2="7.5"/>
+                    <line x1="4" y1="10" x2="6" y2="10"/>
+                  </svg>
+                </div>
+                <div class="si" title="Plugins">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                    <rect x="1" y="1" width="5.5" height="5.5" rx="1.5"/>
+                    <rect x="7.5" y="1" width="5.5" height="5.5" rx="1.5"/>
+                    <rect x="1" y="7.5" width="5.5" height="5.5" rx="1.5"/>
+                    <rect x="7.5" y="7.5" width="5.5" height="5.5" rx="1.5"/>
+                  </svg>
+                </div>
+                <div class="si-sep"></div>
+                <!-- pinned action slot -->
+                <div class="si pinned" title="Pinned tool">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M5 2L10 7M7.5 1.5L10.5 4.5M2.5 9.5L4.5 7.5M8 3.5C8 3.5 6.5 5 5.5 7L4.5 7.5L2.5 9.5"/>
+                  </svg>
+                </div>
+                <div class="si-spacer"></div>
+                <div class="si" title="设置">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="7" cy="7" r="2"/>
+                    <path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.6 2.6l1 1M10.4 10.4l1 1M11.4 2.6l-1 1M3.6 10.4l-1 1"/>
+                  </svg>
+                </div>
+              </aside>
+
+              <!-- Workspace -->
+              <section class="workspace">
+                <div class="topbar">
+                  <div class="tb-view">
+                    <div class="ready-dot"></div>
+                    Editor
+                  </div>
+                  <div class="tb-sep"></div>
+                  <div class="tb-renderer">Pane 1 · Plain Text</div>
+                  <div class="tb-actions">
+                    <div class="tb-btn">+ Pane</div>
+                    <div class="tb-btn">Split Right</div>
+                    <div class="tb-hint">⌘K · run action</div>
+                  </div>
+                </div>
+
+                <!-- 2×2 pane grid -->
+                <div class="pane-grid">
+
+                  <!-- Pane 1 — FOCUSED -->
+                  <div class="pane focused">
+                    <div class="pane-tab">
+                      <div class="pane-tab-l">
+                        <span class="pane-num">1</span>
+                        <span style="opacity:.4">·</span>
+                        <span class="pane-type">纯文本</span>
+                      </div>
+                      <span style="opacity:.35">✕</span>
+                    </div>
+                    <div class="editor-area">
+                      <div class="gut">1<br>2<br>3<br>4<br>5</div>
+                      <div class="ed-body">Hello, FluxText<br>Second line here<br><br>// editable Monaco<br>cursor active</div>
+                    </div>
+                    <div class="pane-status">
+                      <span>Ln 1, Col 1</span>
+                      <span>Plain Text · Auto</span>
+                    </div>
+                  </div>
+
+                  <!-- Pane 2 -->
+                  <div class="pane">
+                    <div class="pane-tab">
+                      <div class="pane-tab-l">
+                        <span class="pane-num">2</span>
+                        <span style="opacity:.3">·</span>
+                        <span class="pane-type">纯文本</span>
+                      </div>
+                      <span style="opacity:.25">✕</span>
+                    </div>
+                    <div class="editor-area">
+                      <div class="gut">1</div>
+                      <div class="ed-body"></div>
+                    </div>
+                    <div class="pane-status">
+                      <span>Ln 1, Col 1</span>
+                      <span>Plain Text · Auto</span>
+                    </div>
+                  </div>
+
+                  <!-- Pane 3 -->
+                  <div class="pane">
+                    <div class="pane-tab">
+                      <div class="pane-tab-l">
+                        <span class="pane-num">3</span>
+                        <span style="opacity:.3">·</span>
+                        <span class="pane-type">纯文本</span>
+                      </div>
+                      <span style="opacity:.25">✕</span>
+                    </div>
+                    <div class="editor-area">
+                      <div class="gut">1</div>
+                      <div class="ed-body"></div>
+                    </div>
+                    <div class="pane-status">
+                      <span>Ln 1, Col 1</span>
+                      <span>Plain Text · Auto</span>
+                    </div>
+                  </div>
+
+                  <!-- Pane 4 -->
+                  <div class="pane">
+                    <div class="pane-tab">
+                      <div class="pane-tab-l">
+                        <span class="pane-num">4</span>
+                        <span style="opacity:.3">·</span>
+                        <span class="pane-type">纯文本</span>
+                      </div>
+                      <span style="opacity:.25">✕</span>
+                    </div>
+                    <div class="editor-area">
+                      <div class="gut">1</div>
+                      <div class="ed-body"></div>
+                    </div>
+                    <div class="pane-status">
+                      <span>Ln 1, Col 1</span>
+                      <span>Plain Text · Auto</span>
+                    </div>
+                  </div>
+
+                </div><!-- /pane-grid -->
+
+                <div class="statusbar">
+                  <span class="sb-accent">Active: 1</span>
+                  <span>渲染器：代码</span>
+                  <span style="margin-left:auto">4 panes</span>
+                </div>
+              </section>
+
+              <!-- 命令面板 overlay -->
+              <div class="pal-overlay">
+                <div class="palette">
+                  <div class="pal-search">
+                    <span class="pal-search-lbl">搜索</span>
+                    <span class="pal-search-val">1+2*3<span class="pal-cursor"></span></span>
+                  </div>
+                  <!-- Calculator instant suggestion -->
+                  <div class="pal-calc">
+                    <div class="calc-icon">CA</div>
+                    <div>
+                      <div class="calc-answer">1+2*3 = 7</div>
+                      <div class="calc-from">计算器 · 即时结果</div>
+                    </div>
+                    <div class="copy-chip">复制答案</div>
+                  </div>
+                  <div class="pal-list">
+                    <div class="pal-sec-lbl">插件命令</div>
+                    <div class="pal-item sel">
+                      <div class="pi-icon plug">TE</div>
+                      <div class="pi-text">
+                        <div class="pi-name">文本对比</div>
+                        <div class="pi-sub">对比两个文本窗格 · text-diff</div>
+                      </div>
+                      <div class="pi-pin-badge">固定</div>
+                    </div>
+                    <div class="pal-item">
+                      <div class="pi-icon plug">RX</div>
+                      <div class="pi-text">
+                        <div class="pi-name">正则测试器</div>
+                        <div class="pi-sub">打开正则测试器面板 · regex-tester</div>
+                      </div>
+                      <div class="pi-action">固定操作</div>
+                    </div>
+                    <div class="pal-item">
+                      <div class="pi-icon plug">JS</div>
+                      <div class="pi-text">
+                        <div class="pi-name">JS 过滤器</div>
+                        <div class="pi-sub">切换 JS 表达式过滤器栏</div>
+                      </div>
+                      <div class="pi-action"></div>
+                    </div>
+                    <div class="pal-sec-lbl">框架</div>
+                    <div class="pal-item">
+                      <div class="pi-icon">SC</div>
+                      <div class="pi-text">
+                        <div class="pi-name">切换粘性滚动</div>
+                        <div class="pi-sub">在编辑器中启用或禁用粘性滚动</div>
+                      </div>
+                      <div class="pi-action">固定操作</div>
+                    </div>
+                    <div class="pal-item">
+                      <div class="pi-icon plug">YA</div>
+                      <div class="pi-text">
+                        <div class="pi-name">JSON ↔ YAML</div>
+                        <div class="pi-sub">在 JSON 和 YAML 之间转换</div>
+                      </div>
+                      <div class="pi-action">固定操作</div>
+                    </div>
+                  </div>
+                  <div class="pal-footer">
+                    <span><kbd>↑↓</kbd> 导航</span>
+                    <span><kbd>↵</kbd> 运行</span>
+                    <span><kbd>Tab</kbd> 固定</span>
+                    <span><kbd>Esc</kbd> 关闭</span>
+                  </div>
+                </div>
+              </div><!-- /pal-overlay -->
+
+            </div><!-- /app-shell -->
+          </div>
+        </div><!-- /App Shell pw -->
+
+        <!-- PLUGINS VIEW -->
+        <div class="pw">
+          <div class="pw-h">
+            <span class="pw-title">Plugins View</span>
+            <span class="pw-note">内置 · 已安装 · 开发 · 格式错误包卡片可见</span>
+          </div>
+          <div class="pw-body">
+            <div class="plg-view">
+              <div class="scr-hdr">
+                <div class="scr-title">Plugins</div>
+                <div class="btn-row">
+                  <div class="btn prim">+ New plugin</div>
+                  <div class="btn">
+                    <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 1v7M3 5l3 3 3-3M1 9v1a1 1 0 001 1h8a1 1 0 001-1V9"/></svg>
+                    Install
+                  </div>
+                  <div class="btn prim sm">开发模式</div>
+                </div>
+              </div>
+
+              <div class="plg-search">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="5" r="3.5"/><line x1="8" y1="8" x2="11" y2="11"/></svg>
+                <span class="plg-search-ph">搜索插件…</span>
+                <span class="count-badge">2</span>
+              </div>
+
+              <div class="tabs">
+                <div class="tab act">Builtin <span class="badge n" style="margin-left:4px">1</span></div>
+                <div class="tab">Installed <span class="badge n" style="margin-left:4px">0</span></div>
+                <div class="tab">Dev <span class="badge n" style="margin-left:4px">1</span></div>
+              </div>
+
+              <div class="plg-list">
+                <div class="plg-subhdr">
+                  <span class="plg-subhdr-lbl">内置目录包</span>
+                  <div class="btn sm">检查更新</div>
+                </div>
+
+                <!-- Normal plugin card -->
+                <div class="plg-card ok">
+                  <div class="pkg-icon">TD</div>
+                  <div class="plg-info">
+                    <div class="plg-name-row">
+                      <span class="plg-name">文本对比</span>
+                      <span class="badge n">内置</span>
+                      <span class="badge ok">可用</span>
+                    </div>
+                    <div class="plg-meta">v1.0.0 · text-diff · .../plugins/textDiff</div>
+                    <div class="caps-row">
+                      <span class="cap">命令</span>
+                      <span class="cap">渲染器</span>
+                      <span class="cap">只读源码</span>
+                    </div>
+                  </div>
+                  <div class="icon-acts">
+                    <div class="ic-btn" title="查看源码">
+                      <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 6s2-4 5-4 5 4 5 4-2 4-5 4-5-4-5-4z"/><circle cx="6" cy="6" r="1.5"/></svg>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Error plugin card -->
+                <div class="plg-card err">
+                  <div class="pkg-icon" style="background:var(--errs);color:var(--err)">!</div>
+                  <div class="plg-info">
+                    <div class="plg-name-row">
+                      <span class="plg-name">格式错误的包</span>
+                      <span class="badge n">本地</span>
+                      <span class="badge er">错误</span>
+                    </div>
+                    <div class="plg-meta">v0.0.0 · package id from directory summary</div>
+                    <div class="plg-err-msg">
+                      ⚠ Runtime / package error text remains visible here. Missing manifest field: "commands".
+                    </div>
+                  </div>
+                  <div class="icon-acts">
+                    <div class="ic-btn" title="查看源码">
+                      <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 6s2-4 5-4 5 4 5 4-2 4-5 4-5-4-5-4z"/><circle cx="6" cy="6" r="1.5"/></svg>
+                    </div>
+                    <div class="ic-btn" title=\"切换\">
+                      <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="5"/><line x1="6" y1="3" x2="6" y2="6"/><circle cx="6" cy="8.5" r=".5" fill="currentColor"/></svg>
+                    </div>
+                    <div class="ic-btn" title=\"重新加载\">
+                      <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 6a5 5 0 015-5c1.6 0 3 .7 4 1.8L11 4"/><path d="M11 1v3H8"/><path d="M11 6a5 5 0 01-5 5c-1.6 0-3-.7-4-1.8L1 8"/></svg>
+                    </div>
+                    <div class="ic-btn dng" title=\"移除\">
+                      <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h8M4 3V2h4v1M5 5v4M7 5v4M3 3l.5 7h5l.5-7"/></svg>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TEXT DIFF RENDERER -->
+        <div class="pw">
+          <div class="pw-h">
+            <span class="pw-title">文本差异渲染器</span>
+            <span class="pw-note">插件拥有的工作区界面 — 可编辑的 Monaco 窗格</span>
+          </div>
+          <div class="pw-body">
+            <div class="diff-view">
+              <div class="diff-hdr">
+                <span class="diff-ttl">Text Diff: Pane 1 ↔ Pane 2</span>
+                <span class="dchip">JSON 语义差异</span>
+                <span class="dchip cnt">2 处更改</span>
+                <span class="dchip act">语义</span>
+                <span class="dchip diff-exit">退出差异对比</span>
+              </div>
+              <div class="diff-arr-hdr">
+                <span>数组：</span>
+                <span class="dchip act" style="font-size:9px;height:16px">按索引</span>
+                <span class="dchip" style="font-size:9px;height:16px">无序标量</span>
+                <span class="dchip" style="font-size:9px;height:16px">按键</span>
+                <span class="dchip" style="font-size:9px;height:16px">键</span>
+                <span style="margin-left:auto;font-size:var(--txs);color:var(--tc2)">Esc 也可以退出</span>
+              </div>
+              <div class="diff-panes">
+                <div class="diff-pane">
+                  <div class="m-gut" style="font-size:var(--txs);line-height:19px;padding:6px 5px 6px 0">1<br>2<br>3<br>4</div>
+                  <div class="m-code" style="font-size:var(--txs);line-height:19px;padding:6px 10px">{<br>  "name": "FluxText",<br><span class="hl-chg">  "mode": "text"</span><br>}</div>
+                </div>
+                <div class="diff-pane">
+                  <div class="m-gut" style="font-size:var(--txs);line-height:19px;padding:6px 5px 6px 0">1<br>2<br>3<br>4</div>
+                  <div class="m-code" style="font-size:var(--txs);line-height:19px;padding:6px 10px">{<br>  "name": "FluxText",<br><span class="hl-add">  "mode": "plugin"</span><br>}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /left column -->
+
+      <!-- RIGHT COLUMN -->
+      <div class="stack">
+
+        <!-- GLOBAL LAUNCHER (standalone) -->
+        <div class="pw">
+          <div class="pw-h">
+            <span class="pw-title">全局启动器</span>
+            <span class="pw-note">无全局 chip · 工作区视图部分</span>
+          </div>
+          <div class="pw-body">
+            <div class="launcher">
+              <div class="pal-search" style="height:44px">
+                <span class="pal-search-lbl">搜索</span>
+                <span class="pal-search-val" style="color:var(--tc2)">固定操作、最近命令、工作区视图…</span>
+              </div>
+              <div class="lnch-sec">
+                <div class="lnch-sec-lbl">固定操作</div>
+                <div class="lnch-item sel">
+                  <div class="pi-icon plug">P</div>
+                  <div>
+                    <div class="lnch-name">固定命令标题</div>
+                    <div class="lnch-sub">固定操作</div>
+                  </div>
+                </div>
+              </div>
+              <div class="lnch-sec">
+                <div class="lnch-sec-lbl">最近命令</div>
+                <div class="lnch-item">
+                  <div class="pi-icon plug">TE</div>
+                  <div>
+                    <div class="lnch-name">文本对比</div>
+                    <div class="lnch-sub">最近命令</div>
+                  </div>
+                </div>
+              </div>
+              <div class="lnch-sec">
+                <div class="lnch-sec-lbl">工作区视图</div>
+                <div class="lnch-item">
+                  <div class="pi-icon">
+                    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="4.5" height="10" rx="1"/><rect x="6.5" y="1" width="4.5" height="10" rx="1"/></svg>
+                  </div>
+                  <div><div class="lnch-name">编辑器</div><div class="lnch-sub">工作区视图</div></div>
+                </div>
+                <div class="lnch-item">
+                  <div class="pi-icon">
+                    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="4.5" height="4.5" rx="1"/><rect x="6.5" y="1" width="4.5" height="4.5" rx="1"/><rect x="1" y="6.5" width="4.5" height="4.5" rx="1"/><rect x="6.5" y="6.5" width="4.5" height="4.5" rx="1"/></svg>
+                  </div>
+                  <div><div class="lnch-name">Plugins</div><div class="lnch-sub">工作区视图</div></div>
+                </div>
+                <div class="lnch-item">
+                  <div class="pi-icon">
+                    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="2"/><path d="M6 1v1M6 10v1M1 6h1M10 6h1M2.5 2.5l.7.7M8.8 8.8l.7.7M9.5 2.5l-.7.7M3.2 8.8l-.7.7"/></svg>
+                  </div>
+                  <div><div class="lnch-name">设置</div><div class="lnch-sub">工作区视图</div></div>
+                </div>
+              </div>
+              <div class="pal-footer">
+                <span><kbd>↑↓</kbd> 选择</span>
+                <span><kbd>↵</kbd> 确认</span>
+                <span><kbd>Esc</kbd> 返回</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PINNED RUNNER -->
+        <div class="pw">
+          <div class="pw-h">
+            <span class="pw-title">固定的运行器</span>
+            <span class="pw-note">实时插件命令界面 · 可编辑输入 / 只读输出</span>
+          </div>
+          <div class="pw-body">
+            <div class="run-view">
+              <div class="run-hdr">
+                <div class="run-hdr-l">
+                  <span class="run-title">固定工具标题</span>
+                  <span class="badge ok">就绪</span>
+                  <span class="badge n">自动</span>
+                </div>
+                <div class="run-hdr-r">
+                  <div class="run-btn">▶ 运行</div>
+                  <div class="run-group">
+                    <div class="btn">控件</div>
+                    <div class="btn">重置</div>
+                  </div>
+                  <div class="btn" title="Unpin">
+                    <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/></svg>
+                  </div>
+                </div>
+              </div>
+
+              <div class="run-panes">
+                <div class="run-pane">
+                  <div class="run-ph">
+                    <span class="run-ph-lbl">输入</span>
+                    <div class="run-ph-acts"><span>清除</span></div>
+                  </div>
+                  <div class="run-pane-ed">
+                    <div class="m-gut" style="font-size:var(--t2xs);line-height:19px;padding:5px 5px 5px 0">1</div>
+                    <div class="m-code" style="font-size:var(--txs);line-height:19px;padding:5px 10px;color:var(--tv0)">可编辑的 Monaco 输入</div>
+                  </div>
+                </div>
+                <div class="run-pane">
+                  <div class="run-ph">
+                    <span class="run-ph-lbl">输出</span>
+                    <div class="run-ph-acts">
+                      <span>复制</span>
+                      <span>清除</span>
+                      <span>应用</span>
+                      <span>新窗格</span>
+                    </div>
+                  </div>
+                  <div class="run-pane-ed">
+                    <div class="m-gut" style="font-size:var(--t2xs);line-height:19px;padding:5px 5px 5px 0">1</div>
+                    <div class="m-code" style="font-size:var(--txs);line-height:19px;padding:5px 10px;color:var(--tv1)">只读的 Monaco 输出</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="run-ctrl-bar">
+                <span style="color:var(--tc2);flex-shrink:0">没有自定义面板时的控件：</span>
+                <span class="ctrl-w">
+                  <span style="width:10px;height:10px;border:1.5px solid var(--cb1);border-radius:2px;display:inline-block;flex-shrink:0"></span>
+                  复选框
+                </span>
+                <span class="ctrl-w">下拉框 ▾</span>
+                <span class="ctrl-w">多选</span>
+                <span class="ctrl-w">数字 / 文本</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SETTINGS -->
+        <div class="pw">
+          <div class="pw-h">
+            <span class="pw-title">设置</span>
+            <span class="pw-note">卡片网格 · 语言 · 编辑器 · 行为 · 快捷键 · 更新 · 插件</span>
+          </div>
+          <div class="pw-body">
+            <div class="set-view">
+              <div class="scr-hdr" style="padding:10px 14px">
+                <div class="scr-title" style="font-size:var(--tlg)">设置</div>
+                <span class="badge ac">vdev</span>
+              </div>
+              <div class="set-body">
+                <div class="set-grid">
+
+                  <div class="set-card">
+                    <div class="set-ctitle"><span class="set-ctitle-ac">L</span> Language</div>
+                    <div class="set-row">
+                      <span class="set-lbl">语言</span>
+                      <div class="sel-ctrl">英语 ▾</div>
+                    </div>
+                  </div>
+
+                  <div class="set-card">
+                    <div class="set-ctitle"><span class="set-ctitle-ac">E</span> Editor</div>
+                    <div class="set-row">
+                      <span class="set-lbl">字体大小</span>
+                      <div class="step">
+                        <div class="step-btn">−</div>
+                        <span>13</span>
+                        <div class="step-btn">+</div>
+                      </div>
+                    </div>
+                    <div class="set-row">
+                      <span class="set-lbl">自动换行</span>
+                      <div class="tgl"></div>
+                    </div>
+                    <div class="set-row">
+                      <span class="set-lbl">行号</span>
+                      <div class="tgl"></div>
+                    </div>
+                  </div>
+
+                  <div class="set-card">
+                    <div class="set-ctitle"><span class="set-ctitle-ac">B</span> Behavior</div>
+                    <div class="set-row">
+                      <span class="set-lbl">持久化参数</span>
+                      <div class="tgl off"></div>
+                    </div>
+                    <div class="set-row">
+                      <span class="set-lbl">记住固定的输入</span>
+                      <div class="tgl"></div>
+                    </div>
+                    <div class="set-row">
+                      <span class="set-lbl">记住固定的休眠状态</span>
+                      <div class="tgl off"></div>
+                    </div>
+                  </div>
+
+                  <div class="set-card">
+                    <div class="set-ctitle"><span class="set-ctitle-ac">K</span> Hotkeys</div>
+                    <div class="set-row">
+                      <span class="set-lbl">全局固定启动器</span>
+                      <div class="hotkey-ctrl">⇧⌘Space</div>
+                    </div>
+                    <div class="set-row" style="flex-wrap:wrap;gap:5px;padding-top:6px">
+                      <div class="btn sm">录制快捷键</div>
+                      <div class="btn sm">双击 Cmd</div>
+                      <div class="btn sm">已禁用</div>
+                    </div>
+                  </div>
+
+                  <div class="set-card">
+                    <div class="set-ctitle"><span class="set-ctitle-ac">U</span> Update</div>
+                    <div class="set-row">
+                      <span class="set-lbl">检查更新</span>
+                      <div class="btn sm">立即检查</div>
+                    </div>
+                  </div>
+
+                  <div class="set-card">
+                    <div class="set-ctitle"><span class="set-ctitle-ac">P</span> Plugins</div>
+                    <div class="set-row">
+                      <span class="set-lbl">从主插件视图管理插件包。</span>
+                    </div>
+                    <div style="padding-top:6px">
+                      <div class="btn sm prim">打开插件</div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PLUGIN SOURCE VIEWER -->
+        <div class="pw">
+          <div class="pw-h">
+            <span class="pw-title">插件源码查看器</span>
+            <span class="pw-note">文件树 + 只读 Monaco · 不是编辑器</span>
+          </div>
+          <div class="pw-body">
+            <div class="src-view">
+              <div class="src-hdr">
+                <div class="src-hdr-l">
+                  <span class="back-btn">← 返回</span>
+                  <span class="src-hdr-sep">/</span>
+                  <span class="src-title">插件源码</span>
+                  <span class="badge n">只读</span>
+                  <span class="src-path">text-diff · .../plugins/textDiff</span>
+                </div>
+                <div class="btn sm">Reload</div>
+              </div>
+              <div class="src-body">
+                <div class="file-tree">
+                  <div class="tree-lbl">文件</div>
+                  <div class="tn fold"><span class="tn-chevron">▾</span> textDiff</div>
+                  <div class="tn ind act">
+                    <span class="tn-dot">●</span>
+                    TextDiffRenderer.tsx
+                  </div>
+                  <div class="tn ind"><span class="tn-dot">·</span> autoDiffMode.ts</div>
+                  <div class="tn ind"><span class="tn-dot">·</span> index.ts</div>
+                  <div class="tn ind"><span class="tn-dot">·</span> manifest.json</div>
+                </div>
+                <div class="monaco-pane">
+                  <div class="m-gut">1<br>2<br>3<br>4<br>5<br>6<br>7</div>
+                  <div class="m-code"><span class="mk">import</span> <span class="ms">{ TextDiffRenderer }</span> <span class="mk">from</span> <span class="ms">'./TextDiffRenderer'</span>
+<span class="mc">// Plugin entry point</span>
+<span class="mk">export const</span> <span class="mf">textDiffPlugin</span> = <span class="mf">definePlugin</span>({
+  commands: [...],
+  renderers: [...]
+})
+<span class="mc">// Owned: diff surface, toolbar</span>
+<span class="mc">// Not owned: framework pane API</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PLUGIN INFLUENCE MAP -->
+        <div class="pw">
+          <div class="pw-h">
+            <span class="pw-title">插件 UI 影响映射</span>
+            <span class="pw-note">插件触及哪些界面 · 仅限当前</span>
+          </div>
+          <div class="pw-body">
+            <div class="note-grid" style="grid-template-columns:1fr 1fr">
+              <div class="note-card">
+                <div class="note-card-title">命令面板</div>
+                <div class="note-card-body">所有命令都是插件入口。行暴露了固定、参数、输入回退和最近使用情况。插件命令获得带有强调色色调的图标（与框架命令在视觉上区分开来）。</div>
+              </div>
+              <div class="note-card">
+                <div class="note-card-title">即时建议</div>
+                <div class="note-card-body">计算器提供带有复制操作的实时结果行（例如 <code>1+2*3 = 7</code>）。显示在常规命令上方，带有强调色的左侧栏。</div>
+              </div>
+              <div class="note-card">
+                <div class="note-card-title">工作区渲染器</div>
+                <div class="note-card-body">Text Diff 拥有并排的 Monaco 渲染器和 JSON 语义工具栏。框架承载界面；插件提供内容和工具栏行。</div>
+              </div>
+              <div class="note-card">
+                <div class="note-card-title">面板 / 工具栏</div>
+                <div class="note-card-body">插件提供右上角工具栏按钮和 V2 面板。正则测试器和 JS 过滤器显示为插件命令界面，而不是默认的框架界面。</div>
+              </div>
+              <div class="note-card">
+                <div class="note-card-title">固定的运行器</div>
+                <div class="note-card-body">Pinnable commands become sidebar pinned-action slots and open the Input/Output runner. Controls bar uses plugin-contributed widgets when no custom panel is registered.</div>
+              </div>
+              <div class="note-card">
+                <div class="note-card-title">包管理器</div>
+                <div class="note-card-body">插件生命周期卡片显示内置 · 已安装 · 开发状态栏，能力，源码查看器操作，切换，重新加载和删除。可见的格式错误包错误以及错误栏。</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /right column -->
+    </div><!-- /g2 mockup grid -->
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════
+       MIGRATION RECOMMENDATIONS
+       ═══════════════════════════════════════════════════ -->
+  <div class="doc-sec">
+    <div class="doc-sec-title">4 · 迁移建议 — 逐个界面</div>
+    <table class="doc-table">
+      <thead>
+        <tr>
+          <th style="width:160px">Surface</th>
+          <th>当前状态</th>
+          <th>提议的变更</th>
+          <th style="width:120px">风险</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>应用外壳 / 侧边栏</strong></td>
+          <td>白色背景 (#f8f8fa)，字母缩写 (E/P/S)，仅背景填充激活状态，固定槽打断导航流</td>
+          <td>深色框架侧边栏 (#0c0c13)。SVG 图标字形代替字母缩写。活动项：2px 左侧强调色栏 + <code>as</code> 背景。固定槽通过分隔线和稍微不同的背景处理在视觉上与主导航分离。底部的设置图标保留。</td>
+          <td>低 — 仅对 CSS 变量和图标资源进行结构性更改；无 React API 界面更改</td>
+        </tr>
+        <tr>
+          <td><strong>Topbar</strong></td>
+          <td>26px，白色/浅色背景，“Ready · Split Right · ⌘K”具有同等视觉权重</td>
+          <td>30px 深色框架。左侧：状态圆点 + 当前视图标签 + 分隔符 + 活动渲染器标签。右侧：操作按钮（+ 窗格，向右拆分）+ 降低不透明度的幽灵 ⌘K 提示。更清晰的层级结构。</td>
+          <td>低 — 仅 CSS 和标记；无状态更改</td>
+        </tr>
+        <tr>
+          <td><strong>窗格标签 \+ 网格</strong></td>
+          <td>24px，浅色背景，仅窗格编号 + 关闭按钮。无焦点窗格视觉效果</td>
+          <td>26px。标签显示：窗格编号 + 类型标签。仅在悬停时显示关闭。<strong>焦点窗格</strong>：1.5px 强调色轮廓 + 深色框架标签带有强调色底边框 — “发光框架”特征。窗格网格间隙保持 1px。</td>
+          <td>低 — 仅 CSS；轮廓方法需要在焦点窗格上使用 <code>position:relative;z-index:1</code></td>
+        </tr>
+        <tr>
+          <td><strong>命令面板</strong></td>
+          <td>浅色面板 (#fff)，背景填充选择，所有命令图标相同</td>
+          <td>深色面板 (<code>ch1</code>)。插件命令：<code>as</code> 背景 + <code>a</code> 颜色图标 (<code>.plug</code>)。框架命令：中性 <code>ch3</code> 图标。计算器结果：专用的 <code>pal-calc</code> 行，带有强调色左侧栏 — 没有部分标签，位于列表上方。覆盖层有背景模糊效果。</td>
+          <td>低至中 — 新的 CSS 类；需要在现有 CommandPalette 组件中注意计算器行的定位</td>
+        </tr>
+        <tr>
+          <td><strong>全局启动器</strong></td>
+          <td>浅色面板，部分标签作为纯文本行</td>
+          <td>Dark panel (same dark system). Section labels gain 2px accent left-bar via <code>::before</code>. No structural change; no global chip invented. 工作区视图 section kept as-is.</td>
+          <td>低 — 仅 CSS</td>
+        </tr>
+        <tr>
+          <td><strong>插件页面</strong></td>
+          <td>浅色背景，所有卡片权重相同，安装为 4 个独立按钮（GitHub / Zip / 文件夹 / 开发）</td>
+          <td>深色面板。插件卡片：3px 左侧状态栏（ok=<code>#28d0a0</code>, err=<code>#f06060</code>, inactive=<code>cb1</code>）。错误卡片保留红色边框 + 错误文本。安装折叠为一个“安装 ▾”菜单按钮 + 独立的“新建插件”主按钮 + “开发模式”小按钮。能力标签样式化为轮廓筹码。</td>
+          <td>中 — 安装分组需要一个下拉组件（或拆分按钮）。卡片状态栏仅需 CSS。</td>
+        </tr>
+        <tr>
+          <td><strong>插件源码查看器</strong></td>
+          <td>浅色背景，文件树为 256px，纯文本树节点</td>
+          <td>深色面板。文件树位于更深的深色背景 (<code>ch0</code>, 190px)。带有折叠/展开的文件夹指示器，点文件指示器。活动文件：<code>as</code> 背景 + <code>a</code> 颜色。Monaco 窗格保持白色画布。头部：返回 / 标题 / 只读徽章 / 路径 / 重新加载在同一行对齐。</td>
+          <td>低 — 仅 CSS; tree width reduced from 256→190px</td>
+        </tr>
+        <tr>
+          <td><strong>固定的运行器</strong></td>
+          <td>50px 头部，带有 5 个权重相同的控件，大写的 INPUT/OUTPUT 标签</td>
+          <td>44px 头部。左侧：标题 + 就绪徽章 + 自动徽章。右侧：运行（强调色主按钮）+ 分组的控件/重置（共享边框）+ 取消固定图标。输入/输出窗格头部：左侧大写标签，右侧操作链接。控制栏在深色背景上带有轮廓筹码小部件。</td>
+          <td>低 — CSS 和标记重新排序；无状态/属性更改</td>
+        </tr>
+        <tr>
+          <td><strong>设置</strong></td>
+          <td>浅色背景，2 列网格，可变卡片高度，首字母强调色装饰</td>
+          <td>深色面板。2 列网格（针对更宽的视口提供 3 列）。卡片具有同等的视觉节奏。首字母强调色作为有用的扫描目标保留。切换、步进、选择、快捷键控件重新着色为深色系统。头部带有版本徽章。</td>
+          <td>低 — 仅 CSS</td>
+        </tr>
+        <tr>
+          <td><strong>文本差异（插件）</strong></td>
+          <td>浅色背景，两个高度相近的工具栏行，白色画布上的高亮颜色</td>
+          <td>深色面板头部 + 甚至更暗的背景 (<code>ch0</code>) 上的数组子头部，创建 3 级视觉层级：主工具栏 (ch1) → 数组栏 (ch0) → Monaco 画布 (白色)。高亮颜色针对白色画布进行了调整：<code>#fff4e0</code> 更改，<code>#eafaf2</code> 添加。工具栏筹码重新着色为深色系统。</td>
+          <td>低 — 仅 CSS; plugin still owns all toolbar state</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       PLUGIN BOUNDARY NOTES
+       ═══════════════════════════════════════════════════ -->
+  <div class="doc-sec">
+    <div class="doc-sec-title">5 · 插件边界说明</div>
+    <div class="boundary-grid">
+      <div class="bc fw">
+        <div class="bc-title">框架拥有 — 不要提取到插件中</div>
+        <ul class="bc-list">
+          <li>插件注册表、命令注册表、渲染器注册表、面板注册表</li>
+          <li>渲染器生命周期（挂载 / 卸载 / 焦点移交）</li>
+          <li>工作区状态：窗格布局、活动窗格、拆分模式</li>
+          <li>窗格文本读/写 API、选择、Monaco 实例生命周期、装饰桥接</li>
+          <li>编辑器原语和侧边槽渲染</li>
+          <li>设置 store and context provider</li>
+          <li>副作用运行器，表面占用跟踪器</li>
+          <li>应用外壳、侧边栏、顶部栏、状态栏、窗格网格、窗格标签 — 所有框架组件</li>
+          <li>命令面板 host, 全局启动器 host</li>
+          <li>固定的运行器 host (framework provides the Input/Output shell; plugin provides the command)</li>
+        </ul>
+      </div>
+      <div class="bc pl">
+        <div class="bc-title">插件拥有 — 绝不能移入框架</div>
+        <ul class="bc-list">
+          <li>差异 API 和比较 API — 完全由插件拥有</li>
+          <li><code>DiffSurface</code>、<code>CompareRenderer</code>、<code>TextDiffRenderer</code> — 插件组件</li>
+          <li>并排差异布局、Monaco 差异实例 — 插件布局关注点</li>
+          <li>语义差异切换、JSON 语义状态、数组比较控件</li>
+          <li>Esc / 退出差异对比 handling — plugin keyboard contract</li>
+          <li>计算器即时建议逻辑和结果行内容</li>
+          <li>正则测试器面板和工具栏贡献</li>
+          <li>JS 过滤器表达式栏</li>
+          <li>JSON ↔ YAML 转换逻辑</li>
+          <li>插件特定的回退文本、显示文案、功能元数据</li>
+          <li>在右上角工具栏贡献槽中呈现的插件工具栏按钮</li>
+        </ul>
+      </div>
+    </div>
+    <div style="margin-top:12px;padding:10px 14px;border:1px solid #c8d4f0;border-radius:8px;background:#f4f8ff;font-size:var(--txs);color:#3a3a60;line-height:1.6">
+      <strong>差异 Monaco 窗格必须保持可编辑。</strong>
+      Text Diff 插件通过框架的宿主窗格更新 API 读取和写入窗格内容。不要将 Monaco 差异窗格转换为静态视觉预览。在将窗格状态传递给差异渲染器时，必须保留左右窗格上的 <code>editable: true</code> 标志。
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       IMPLEMENTATION CHECKLIST
+       ═══════════════════════════════════════════════════ -->
+  <div class="doc-sec">
+    <div class="doc-sec-title">6 · 实施清单</div>
+    <div class="check-grid">
+      <div class="chk"><strong>tokens.css / globals.css</strong> — 添加所有新的 CSS 自定义属性 (<code>--ch0</code>–<code>--cb1</code>, <code>--cv0</code>–<code>--cvb</code>, <code>--tc0</code>–<code>--tv2</code>, <code>--a</code>, status vars). Remove or alias old <code>--color-*</code> tokens.</div>
+      <div class="chk"><strong>Sidebar.tsx</strong> — 将字母 span 替换为 SVG 图标组件。 Add <code>::before</code> left-rail via CSS. Add distinct CSS class for pinned action slot. Keep active/hover state logic.</div>
+      <div class="chk"><strong>Topbar.tsx</strong> — 将高度增加到 30px。 Add renderer label slot (reads from workspace context). Reduce ⌘K hint opacity. Recolor to <code>ch1</code> bg.</div>
+      <div class="chk"><strong>Pane.tsx / PaneTab.tsx</strong> — 在窗格编号旁添加窗格类型标签。 Show close on hover only. Pass <code>focused</code> prop for accent outline. Apply <code>ch3</code> bg to focused tab.</div>
+      <div class="chk"><strong>CommandPalette.tsx</strong> — 将 <code>data-plugin</code> 布尔值添加到命令项。 Render <code>.plug</code> icon class for plugin commands. Create separate <code>CalcResultRow</code> component with accent left-rail. Add backdrop blur to overlay.</div>
+      <div class="chk"><strong>GlobalLauncher.tsx</strong> — 在部分标签组件上添加 <code>::before</code> 强调栏。 No structural or API change needed.</div>
+      <div class="chk"><strong>PluginCard.tsx</strong> — 通过绝对定位的 <code>::before</code> div 添加状态栏，带有条件颜色。 Error card keeps existing <code>错误</code> class. Capability badges restyled to outlined chips.</div>
+      <div class="chk"><strong>PluginsPage.tsx</strong> — 将 4 按钮安装行替换为拆分按钮或下拉组件。 Keep "New plugin" as separate primary button. Dev mode toggle as small button.</div>
+      <div class="chk"><strong>SourceViewer.tsx</strong> — 将文件树宽度从 256px 减小到 190px。 Add <code>▾/▸</code> chevron to folder nodes. Add <code>●/·</code> dot to file nodes. Active file uses <code>as</code>/<code>a</code> accent. Reduce Monaco pane header height.</div>
+      <div class="chk"><strong>PinnedRunner.tsx</strong> — 重组头部：标题+徽章在左侧，运行（强调色）+ 分组控件/重置 + 取消固定在右侧。 Add <code>run-group</code> shared-border treatment. Lower header to 44px.</div>
+      <div class="chk"><strong>ControlsBar.tsx</strong> — 将控件部件重新设计为轮廓卡片 (<code>.ctrl-w</code>)。 Dark bg behind bar. Horizontal scroll for overflow.</div>
+      <div class="chk"><strong>设置.tsx</strong> — Recolor card backgrounds to <code>ch2</code>. Restyle toggle, stepper, select, hotkey controls to dark system. Keep 2-col grid; add responsive 3-col breakpoint.</div>
+      <div class="chk"><strong>TextDiffRenderer.tsx (插件)</strong> — 将工具栏重新着色为 <code>ch1</code>，数组栏为 <code>ch0</code>。 Keep all state and event handlers. Adjust highlight colors for white canvas. Do not change Monaco editability.</div>
+      <div class="chk"><strong>图标系统</strong> — 在 <code>src/icons/</code> 中创建 SVG 图标组件： Editor, Plugins, Pin, 设置, Search, Chevron, Dot, Back, Close, Eye, Reload, Trash, Power, Run. Replace all letter fallbacks.</div>
+      <div class="chk"><strong>Storybook / 视觉快照</strong> — 更新所有更改组件的基线快照。 Add snapshot for <code>pane.focused</code> state and <code>PluginCard.error</code> state.</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       VALIDATION CHECKLIST
+       ═══════════════════════════════════════════════════ -->
+  <div class="doc-sec">
+    <div class="doc-sec-title">7 · 验证清单</div>
+    <div style="margin-bottom:10px;font-size:var(--txs);color:#6868808;font-weight:600;text-transform:uppercase;letter-spacing:.06em">浏览器渲染检查</div>
+    <div class="check-grid" style="margin-bottom:16px">
+      <div class="chk">应用外壳在 1280×800 下渲染且没有水平滚动；侧边栏不会被压缩</div>
+      <div class="chk">焦点窗格强调边框可见，并且不会导致布局偏移或裁剪</div>
+      <div class="chk">命令面板 overlay backdrop blur renders at ≥60fps on target macOS hardware</div>
+      <div class="chk">插件命令图标（强调色）和框架命令图标（中性色）一眼即可在视觉上区分</div>
+      <div class="chk">计算器即时结果行出现在常规命令列表上方，而不是其中</div>
+      <div class="chk">全局启动器 section labels show accent left-bar; "工作区视图" section present with Editor/Plugins/设置</div>
+      <div class="chk">插件卡片正常栏（绿色）和错误栏（红色）在 100% 和 150% 缩放时可见</div>
+      <div class="chk">错误卡片的错误文本和格式错误包描述在暗色卡片背景上易于阅读</div>
+      <div class="chk">源码查看器：文件树节点、活动文件高亮和只读 Monaco 窗格能够正确并排渲染</div>
+      <div class="chk">固定的运行器 Run button is visually dominant; Controls and Reset clearly secondary; controls bar scrolls horizontally on overflow</div>
+      <div class="chk">设置 cards align in 2-col grid; all control types (toggle, stepper, select, hotkey, btn) rendered</div>
+      <div class="chk">文本差异的三级工具栏层级 (ch1 → ch0 → 画布) 可见，并且没有塌陷成相同的权重</div>
+    </div>
+    <div style="margin-bottom:10px;font-size:var(--txs);color:#6868808;font-weight:600;text-transform:uppercase;letter-spacing:.06em">插件边界检查</div>
+    <div class="check-grid">
+      <div class="chk">在主题化后，Text Diff Monaco 窗格仍然可编辑；框架未引入 <code>readOnly: true</code></div>
+      <div class="chk">迁移后框架代码中没有出现 diff API、compare API 或 DiffSurface 的引用</div>
+      <div class="chk">计算器结果行内容（表达式、答案、复制操作）来自插件，而不是硬编码在命令面板宿主中</div>
+      <div class="chk">正则测试器面板在应用加载时不会自动打开；除非命令激活，否则不会渲染默认的右侧面板</div>
+      <div class="chk">在图标系统更改后，插件工具栏贡献（右上角按钮）仍然可以正确挂载到框架插槽中</div>
+      <div class="chk">固定的运行器 controls bar widget content comes from plugin manifest, not from framework defaults</div>
+      <div class="chk">插件源码查看器是只读的 — 在查看器窗格上没有绑定 Monaco <code>onChange</code> 处理程序</div>
+      <div class="chk">格式错误的包 error text reads from runtime error object, not from a hardcoded string in PluginCard</div>
+    </div>
+  </div>
+
+</div><!-- /board -->
+</body>
+</html>

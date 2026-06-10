@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FluxText — GPT-5.5 Spatial 可交互工作台 Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════
+   DESIGN TOKENS
+   ═══════════════════════════════════════════════ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --font-sans:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+  --font-mono:'JetBrains Mono','SF Mono',monospace;
+  --text-xs:clamp(10px,0.8vw,11px);
+  --text-sm:clamp(11px,0.9vw,13px);
+  --text-base:clamp(13px,1vw,14px);
+  --text-md:clamp(14px,1.1vw,16px);
+  --text-lg:clamp(16px,1.2vw,18px);
+  --radius-sm:6px;--radius-md:10px;--radius-lg:16px;--radius-xl:24px;
+  --ease-out-expo:cubic-bezier(.16,1,.3,1);
+  --sidebar-w:44px;
+  --titlebar-h:32px;
+  --statusbar-h:28px;
+}
+
+/* ── Dark (default) ── */
+body[data-theme="dark"]{
+  --bg-page:#0a0a0f;
+  --bg-gradient:radial-gradient(ellipse 80% 60% at 50% -10%,rgba(99,102,241,0.15),transparent),
+                radial-gradient(ellipse 60% 50% at 80% 50%,rgba(79,70,229,0.08),transparent),
+                radial-gradient(ellipse 50% 40% at 10% 80%,rgba(139,92,246,0.06),transparent);
+  --color-accent:#6366f1;--color-accent-hover:#818cf8;
+  --color-accent-light:rgba(99,102,241,0.2);
+  --color-accent-glow:rgba(99,102,241,0.35);
+  --color-success:#10b981;--color-warning:#f59e0b;--color-error:#ef4444;--color-info:#3b82f6;
+  --glass-border:rgba(255,255,255,0.08);
+  --glass-bg:rgba(20,20,25,0.35);
+  --dialog-bg:rgba(20,20,30,0.82);
+  --glass-shine:inset 0 1px 1px rgba(255,255,255,0.15),inset 0 0 0 1px rgba(255,255,255,0.05);
+  --text-primary:rgba(255,255,255,0.85);--text-secondary:rgba(255,255,255,0.5);
+  --text-tertiary:rgba(255,255,255,0.3);
+  --shadow-panel:0 24px 48px -12px rgba(0,0,0,0.5),0 12px 24px -8px rgba(0,0,0,0.4);
+  --shadow-sm:0 2px 8px rgba(0,0,0,0.3);
+  --overlay-bg:rgba(0,0,0,0.6);
+  --code-keyword:#c4b5fd;--code-string:#67e8f9;--code-comment:rgba(255,255,255,0.3);
+  --code-number:#fbbf24;--code-func:#a78bfa;--code-type:#f9a8d4;
+  --diff-add:rgba(16,185,129,0.12);--diff-add-border:#10b981;
+  --diff-del:rgba(239,68,68,0.12);--diff-del-border:#ef4444;
+  --diff-mod:rgba(245,158,11,0.12);--diff-mod-border:#f59e0b;
+  --input-bg:rgba(255,255,255,0.05);
+  --btn-ghost-hover:rgba(255,255,255,0.08);
+  --divider:rgba(255,255,255,0.06);
+  --scrollbar-thumb:rgba(255,255,255,0.12);
+}
+
+/* ── Light ── */
+body[data-theme="light"]{
+  --bg-page:#f5f5f7;
+  --bg-gradient:radial-gradient(ellipse 80% 60% at 50% -10%,rgba(199,210,254,0.4),transparent),
+                radial-gradient(ellipse 60% 50% at 80% 50%,rgba(224,231,255,0.3),transparent),
+                radial-gradient(ellipse 50% 40% at 10% 80%,rgba(237,233,254,0.25),transparent);
+  --color-accent:#4f46e5;--color-accent-hover:#6366f1;
+  --color-accent-light:rgba(79,70,229,0.1);
+  --color-accent-glow:rgba(79,70,229,0.2);
+  --color-success:#059669;--color-warning:#d97706;--color-error:#dc2626;--color-info:#2563eb;
+  --glass-border:rgba(255,255,255,0.6);
+  --glass-bg:rgba(255,255,255,0.65);
+  --dialog-bg:rgba(255,255,255,0.92);
+  --glass-shine:inset 0 1px 1px rgba(255,255,255,0.8),inset 0 0 0 1px rgba(255,255,255,0.4);
+  --text-primary:#111113;--text-secondary:#52525b;
+  --text-tertiary:#71717a;
+  --shadow-panel:0 24px 48px -12px rgba(0,0,0,0.08),0 12px 24px -8px rgba(0,0,0,0.05);
+  --shadow-sm:0 2px 8px rgba(0,0,0,0.06);
+  --overlay-bg:rgba(0,0,0,0.3);
+  --code-keyword:#7c3aed;--code-string:#0891b2;--code-comment:#6b7280;
+  --code-number:#d97706;--code-func:#7c3aed;--code-type:#db2777;
+  --diff-add:rgba(5,150,105,0.08);--diff-add-border:#059669;
+  --diff-del:rgba(220,38,38,0.08);--diff-del-border:#dc2626;
+  --diff-mod:rgba(217,119,6,0.08);--diff-mod-border:#d97706;
+  --input-bg:rgba(0,0,0,0.03);
+  --btn-ghost-hover:rgba(0,0,0,0.05);
+  --divider:rgba(0,0,0,0.06);
+  --scrollbar-thumb:rgba(0,0,0,0.12);
+}
+
+/* ═══════════════════════════════════════════════
+   BASE
+   ═══════════════════════════════════════════════ */
+html,body{height:100%;overflow:hidden}
+body{
+  font-family:var(--font-sans);font-size:var(--text-base);color:var(--text-primary);
+  background:var(--bg-gradient),var(--bg-page);
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+  display:flex;flex-direction:column;user-select:none;
+}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--scrollbar-thumb);border-radius:3px}
+
+/* ── GLASS PANEL ── */
+.glass{
+  background:var(--glass-bg);
+  backdrop-filter:blur(24px) saturate(1.4);
+  -webkit-backdrop-filter:blur(24px) saturate(1.4);
+  border:1px solid var(--glass-border);
+  box-shadow:var(--glass-shine);
+}
+
+/* ═══════════════════════════════════════════════
+   TITLEBAR
+   ═══════════════════════════════════════════════ */
+#titlebar{
+  height:var(--titlebar-h);display:flex;align-items:center;
+  padding:0 12px;gap:10px;border-bottom:1px solid var(--glass-border);
+  background:var(--glass-bg);backdrop-filter:blur(20px);
+  -webkit-backdrop-filter:blur(20px);
+  -webkit-app-region:drag;z-index:100;flex-shrink:0;
+}
+#titlebar .logo{font-weight:700;font-size:var(--text-sm);letter-spacing:-0.02em;display:flex;align-items:center;gap:5px}
+#titlebar .logo svg{width:14px;height:14px}
+#titlebar .spacer{flex:1}
+.tb-btn{
+  -webkit-app-region:no-drag;cursor:pointer;
+  width:26px;height:22px;display:flex;align-items:center;justify-content:center;
+  border-radius:var(--radius-sm);border:none;background:transparent;
+  color:var(--text-secondary);transition:all .15s ease;
+}
+.tb-btn:hover{background:var(--btn-ghost-hover);color:var(--text-primary)}
+.tb-btn svg{width:14px;height:14px}
+.kbd-hint{
+  font-size:var(--text-xs);color:var(--text-tertiary);
+  padding:2px 6px;border-radius:4px;border:1px solid var(--glass-border);
+  font-family:var(--font-sans);-webkit-app-region:no-drag;cursor:pointer;
+}
+.kbd-hint:hover{border-color:var(--color-accent);color:var(--text-secondary)}
+
+/* ═══════════════════════════════════════════════
+   MAIN LAYOUT
+   ═══════════════════════════════════════════════ */
+#app{display:flex;flex:1;overflow:hidden}
+
+/* ── SIDEBAR ── */
+#sidebar{
+  width:var(--sidebar-w);display:flex;flex-direction:column;align-items:center;
+  padding:8px 0;gap:4px;border-right:1px solid var(--glass-border);
+  background:var(--glass-bg);backdrop-filter:blur(20px);
+  -webkit-backdrop-filter:blur(20px);flex-shrink:0;
+}
+.sb-sep{width:24px;height:1px;background:var(--divider);margin:4px 0}
+.sb-btn{
+  width:32px;height:32px;display:flex;align-items:center;justify-content:center;
+  border-radius:var(--radius-sm);border:none;background:transparent;
+  color:var(--text-secondary);cursor:pointer;transition:all .2s var(--ease-out-expo);
+  position:relative;
+}
+.sb-btn svg{width:18px;height:18px;transition:color .15s}
+.sb-btn:hover{background:var(--btn-ghost-hover);color:var(--text-primary)}
+.sb-btn.active{
+  background:linear-gradient(135deg,var(--color-accent),var(--color-accent-hover));
+  color:#fff;box-shadow:0 0 12px var(--color-accent-glow);
+}
+.sb-spacer{flex:1}
+
+/* ── CONTENT AREA ── */
+#content{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.view{display:none;flex:1;overflow:hidden;flex-direction:column}
+.view.active{display:flex}
+
+/* ── STATUSBAR ── */
+#statusbar{
+  height:var(--statusbar-h);display:flex;align-items:center;
+  padding:0 12px;gap:12px;border-top:1px solid var(--glass-border);
+  background:var(--glass-bg);backdrop-filter:blur(20px);
+  -webkit-backdrop-filter:blur(20px);
+  font-size:var(--text-xs);color:var(--text-secondary);flex-shrink:0;
+}
+#statusbar .dot{width:7px;height:7px;border-radius:50%;background:var(--color-success);
+  animation:pulse 2s infinite;flex-shrink:0}
+@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(16,185,129,0.4)}50%{opacity:.7;box-shadow:0 0 0 4px rgba(16,185,129,0)}}
+
+/* ═══════════════════════════════════════════════
+   BUTTONS / CONTROLS
+   ═══════════════════════════════════════════════ */
+.btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:6px 14px;border-radius:var(--radius-sm);border:1px solid var(--glass-border);
+  font-family:var(--font-sans);font-size:var(--text-sm);font-weight:500;
+  cursor:pointer;transition:all .2s var(--ease-out-expo);
+  background:var(--glass-bg);color:var(--text-primary);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+}
+.btn:hover{border-color:var(--color-accent);background:var(--color-accent-light)}
+.btn-primary{
+  background:linear-gradient(135deg,var(--color-accent),var(--color-accent-hover));
+  color:#fff;border-color:transparent;
+}
+.btn-primary:hover{filter:brightness(1.12);box-shadow:0 0 16px var(--color-accent-glow)}
+.btn-danger{background:var(--color-error);color:#fff;border-color:transparent}
+.btn-danger:hover{filter:brightness(1.15)}
+.btn-sm{padding:4px 10px;font-size:var(--text-xs)}
+.btn-ghost{background:transparent;border-color:transparent}
+.btn-ghost:hover{background:var(--btn-ghost-hover)}
+
+/* ── TOGGLE ── */
+.toggle{
+  width:36px;height:20px;border-radius:10px;cursor:pointer;position:relative;
+  background:var(--text-tertiary);transition:background .25s var(--ease-out-expo);
+  border:none;flex-shrink:0;
+}
+.toggle::after{
+  content:'';position:absolute;left:2px;top:2px;width:16px;height:16px;
+  border-radius:50%;background:#fff;transition:transform .25s var(--ease-out-expo);
+  box-shadow:0 1px 3px rgba(0,0,0,0.3);
+}
+.toggle.on{background:var(--color-accent)}
+.toggle.on::after{transform:translateX(16px)}
+
+/* ── SELECT ── */
+.sel{
+  padding:4px 8px;border-radius:var(--radius-sm);border:1px solid var(--glass-border);
+  background:var(--input-bg);color:var(--text-primary);font-size:var(--text-sm);
+  font-family:var(--font-sans);cursor:pointer;outline:none;
+  -webkit-appearance:none;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239ca3af' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 6px center;padding-right:22px;
+}
+.sel:focus{border-color:var(--color-accent)}
+
+/* ── NUMBER INPUT ── */
+.num-input{
+  width:52px;padding:4px 6px;border-radius:var(--radius-sm);border:1px solid var(--glass-border);
+  background:var(--input-bg);color:var(--text-primary);font-size:var(--text-sm);
+  font-family:var(--font-mono);text-align:center;outline:none;
+}
+.num-input:focus{border-color:var(--color-accent)}
+
+/* ═══════════════════════════════════════════════
+   VIEW: EDITOR
+   ═══════════════════════════════════════════════ */
+.editor-topbar{
+  height:36px;display:flex;align-items:center;padding:0 12px;gap:10px;
+  border-bottom:1px solid var(--glass-border);flex-shrink:0;
+}
+.editor-topbar .dot{width:7px;height:7px;border-radius:50%;background:var(--color-success);animation:pulse 2s infinite}
+.editor-topbar .info{font-size:var(--text-sm);color:var(--text-secondary)}
+.editor-topbar .spacer{flex:1}
+
+.pane-grid{
+  flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;
+  gap:1px;background:var(--glass-border);overflow:hidden;
+}
+.pane{
+  display:flex;flex-direction:column;background:var(--bg-page);
+  position:relative;cursor:pointer;transition:box-shadow .2s;
+}
+.pane.focused{box-shadow:inset 0 0 0 2px var(--color-accent),0 0 20px var(--color-accent-glow)}
+.pane-tab{
+  height:28px;display:flex;align-items:center;padding:0 10px;gap:6px;
+  border-bottom:1px solid var(--glass-border);font-size:var(--text-xs);
+  color:var(--text-secondary);flex-shrink:0;
+}
+.pane-tab .tab-name{color:var(--text-primary);font-weight:500}
+.pane-tab .tab-dot{width:5px;height:5px;border-radius:50%;background:var(--color-accent);opacity:.6}
+.pane-body{flex:1;display:flex;overflow:auto;position:relative}
+.pane-gutter{
+  width:32px;text-align:right;padding:4px 6px 4px 0;font-family:var(--font-mono);
+  font-size:var(--text-xs);line-height:1.65;color:var(--text-tertiary);
+  flex-shrink:0;user-select:none;
+}
+.pane-code{
+  flex:1;padding:4px 8px;font-family:var(--font-mono);font-size:var(--text-xs);
+  line-height:1.65;color:var(--text-primary);white-space:pre;overflow:auto;
+}
+.pane-status{
+  height:26px;display:flex;align-items:center;padding:0 10px;gap:8px;
+  border-top:1px solid var(--glass-border);font-size:var(--text-xs);
+  color:var(--text-tertiary);flex-shrink:0;
+}
+
+/* ═══════════════════════════════════════════════
+   VIEW: PLUGINS
+   ═══════════════════════════════════════════════ */
+.plugins-header{
+  padding:16px 20px 0;display:flex;align-items:center;gap:12px;
+}
+.plugins-header h2{font-size:var(--text-lg);font-weight:600;flex:1}
+.tab-bar{
+  display:flex;gap:0;border-bottom:1px solid var(--glass-border);
+  padding:0 20px;margin-top:12px;
+}
+.tab-item{
+  padding:8px 16px;font-size:var(--text-sm);color:var(--text-secondary);
+  cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;
+  font-weight:500;
+}
+.tab-item:hover{color:var(--text-primary)}
+.tab-item.active{color:var(--color-accent);border-bottom-color:var(--color-accent)}
+.plugin-list{padding:12px 20px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;flex:1}
+.plugin-card{
+  display:flex;align-items:center;gap:12px;padding:12px;border-radius:var(--radius-md);
+  border:1px solid var(--glass-border);transition:all .2s;
+}
+.plugin-card:hover{border-color:var(--color-accent-light);background:var(--color-accent-light)}
+.plugin-card.has-error{border-color:var(--color-error)}
+.plugin-icon{
+  width:44px;height:44px;border-radius:var(--radius-md);
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:var(--text-md);color:#fff;flex-shrink:0;
+  background:linear-gradient(135deg,var(--color-accent),var(--color-accent-hover));
+}
+.plugin-icon.err-icon{background:linear-gradient(135deg,var(--color-error),#f87171)}
+.plugin-info{flex:1;min-width:0}
+.plugin-info .name{font-weight:600;font-size:var(--text-sm);display:flex;align-items:center;gap:8px}
+.plugin-info .ver{color:var(--text-tertiary);font-weight:400;font-size:var(--text-xs)}
+.plugin-info .desc{color:var(--text-secondary);font-size:var(--text-xs);margin-top:2px}
+.plugin-info .err-msg{color:var(--color-error);font-size:var(--text-xs);margin-top:4px;font-family:var(--font-mono)}
+.badge{
+  font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;
+  padding:2px 6px;border-radius:4px;
+}
+.badge-builtin{background:var(--text-tertiary);color:var(--bg-page)}
+.badge-loaded{background:rgba(16,185,129,0.15);color:var(--color-success)}
+.badge-error{background:rgba(239,68,68,0.15);color:var(--color-error)}
+.plugin-actions{display:flex;gap:6px;flex-shrink:0}
+
+/* ═══════════════════════════════════════════════
+   VIEW: DEBUGGER
+   ═══════════════════════════════════════════════ */
+.dbg-grid{
+  flex:1;display:grid;grid-template-columns:3fr 2fr;grid-template-rows:3fr 2fr;
+  gap:1px;background:var(--glass-border);overflow:hidden;
+}
+.dbg-pane{display:flex;flex-direction:column;background:var(--bg-page);overflow:hidden}
+.dbg-header{
+  height:32px;display:flex;align-items:center;padding:0 10px;gap:8px;
+  border-bottom:1px solid var(--glass-border);flex-shrink:0;
+}
+.dbg-header .label{font-size:var(--text-xs);font-weight:600;text-transform:uppercase;
+  letter-spacing:.5px;color:var(--text-tertiary)}
+.dbg-header .fname{font-size:var(--text-sm);font-weight:500;color:var(--text-primary);font-family:var(--font-mono)}
+.dbg-header .spacer{flex:1}
+.dbg-body{flex:1;overflow:auto;display:flex}
+.dbg-body-col{flex:1;overflow:auto;padding:8px 10px}
+
+/* ── Params panel ── */
+.param-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:6px 0;border-bottom:1px solid var(--divider);
+}
+.param-label{font-size:var(--text-sm);color:var(--text-secondary)}
+.param-snap{
+  margin-top:8px;padding:8px;border-radius:var(--radius-sm);
+  background:var(--input-bg);font-family:var(--font-mono);
+  font-size:var(--text-xs);color:var(--text-secondary);line-height:1.5;
+  white-space:pre;
+}
+
+/* ── Console ── */
+.console-body{
+  padding:8px 10px;font-family:var(--font-mono);font-size:var(--text-xs);
+  line-height:1.8;overflow-y:auto;flex:1;
+}
+.log-line{display:flex;gap:8px}
+.log-ts{color:var(--text-tertiary);flex-shrink:0}
+.log-ok{color:var(--color-success)}
+.log-err{color:var(--color-error)}
+
+/* ── IO panels ── */
+.io-area{
+  width:100%;height:100%;padding:8px;resize:none;border:none;
+  background:transparent;font-family:var(--font-mono);font-size:var(--text-xs);
+  color:var(--text-primary);line-height:1.6;outline:none;
+}
+.io-area:read-only{color:var(--text-secondary)}
+
+/* ═══════════════════════════════════════════════
+   VIEW: SETTINGS
+   ═══════════════════════════════════════════════ */
+.settings-wrap{padding:20px;overflow-y:auto;flex:1}
+.settings-wrap h2{font-size:var(--text-lg);font-weight:600;margin-bottom:16px}
+.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.setting-card{
+  padding:16px;border-radius:var(--radius-md);
+  border:1px solid var(--glass-border);
+  background:var(--glass-bg);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  box-shadow:var(--glass-shine);
+}
+.setting-card h3{font-size:var(--text-sm);font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.setting-card h3 svg{width:14px;height:14px;color:var(--color-accent)}
+.setting-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:6px 0;font-size:var(--text-sm);color:var(--text-secondary);
+}
+.hotkey-box{
+  display:inline-flex;gap:4px;
+}
+.hotkey-box kbd{
+  padding:2px 7px;border-radius:4px;border:1px solid var(--glass-border);
+  font-family:var(--font-mono);font-size:var(--text-xs);color:var(--text-secondary);
+  background:var(--input-bg);
+}
+.about-info{font-size:var(--text-sm);color:var(--text-secondary);line-height:1.8}
+.about-info strong{color:var(--text-primary)}
+
+/* ═══════════════════════════════════════════════
+   VIEW: PINNED RUNNER
+   ═══════════════════════════════════════════════ */
+.pinned-header{
+  height:56px;display:flex;align-items:center;padding:0 20px;gap:10px;
+  border-bottom:1px solid var(--glass-border);flex-shrink:0;
+}
+.pinned-header .pin-icon{font-size:18px}
+.pinned-header h2{font-size:var(--text-md);font-weight:600;flex:1}
+.pinned-cols{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--glass-border);overflow:hidden}
+.pinned-col{display:flex;flex-direction:column;background:var(--bg-page)}
+.pinned-col-header{
+  height:28px;display:flex;align-items:center;padding:0 10px;
+  border-bottom:1px solid var(--glass-border);font-size:var(--text-xs);
+  font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-tertiary);
+  flex-shrink:0;
+}
+.pinned-col textarea,.pinned-col .pinned-output{
+  flex:1;padding:10px;font-family:var(--font-mono);font-size:var(--text-xs);
+  line-height:1.65;border:none;background:transparent;color:var(--text-primary);
+  resize:none;outline:none;overflow:auto;
+}
+.pinned-col .pinned-output{color:var(--text-secondary)}
+.pinned-footer{
+  height:48px;display:flex;align-items:center;padding:0 20px;gap:16px;
+  border-top:1px solid var(--glass-border);flex-shrink:0;
+}
+.pinned-footer label{display:flex;align-items:center;gap:6px;font-size:var(--text-sm);color:var(--text-secondary);cursor:pointer}
+.pinned-footer input[type=checkbox]{accent-color:var(--color-accent)}
+
+/* ═══════════════════════════════════════════════
+   VIEW: DIFF
+   ═══════════════════════════════════════════════ */
+.diff-toolbar{
+  height:38px;display:flex;align-items:center;padding:0 12px;gap:12px;
+  border-bottom:1px solid var(--glass-border);flex-shrink:0;
+}
+.diff-seg{display:flex;align-items:center;gap:2px;padding:2px;border-radius:var(--radius-sm);background:var(--input-bg)}
+.diff-seg .seg-item{
+  padding:3px 10px;border-radius:4px;font-size:var(--text-xs);font-weight:500;
+  color:var(--text-secondary);cursor:pointer;transition:all .15s;border:none;background:none;
+}
+.diff-seg .seg-item.active{background:rgba(255,255,255,0.12);color:var(--text-primary);box-shadow:0 1px 3px rgba(0,0,0,0.3),inset 0 1px 0 rgba(255,255,255,0.08)}
+body[data-theme="light"] .diff-seg .seg-item.active{background:rgba(255,255,255,0.9);color:var(--text-primary);box-shadow:0 1px 3px rgba(0,0,0,0.1)}
+.diff-seg .seg-item:hover:not(.active){color:var(--text-primary)}
+.diff-sep{width:1px;height:16px;background:var(--divider)}
+.btn-group{display:flex;gap:0}
+.btn-group .btn{border-radius:0;margin-left:-1px}
+.btn-group .btn:first-child{border-radius:var(--radius-sm) 0 0 var(--radius-sm)}
+.btn-group .btn:last-child{border-radius:0 var(--radius-sm) var(--radius-sm) 0}
+.btn-group .btn.active{background:var(--color-accent-light);color:var(--color-accent);border-color:var(--color-accent);font-weight:600}
+.diff-cols{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--glass-border);overflow:hidden}
+.diff-col{display:flex;flex-direction:column;background:var(--bg-page);overflow:auto}
+.diff-col-header{
+  height:28px;display:flex;align-items:center;padding:0 10px;
+  border-bottom:1px solid var(--glass-border);font-size:var(--text-xs);
+  font-weight:600;color:var(--text-tertiary);flex-shrink:0;
+}
+.diff-line{display:flex;font-family:var(--font-mono);font-size:var(--text-xs);line-height:1.65}
+.diff-ln{width:32px;text-align:right;padding:0 6px;color:var(--text-tertiary);flex-shrink:0;user-select:none}
+.diff-code{flex:1;padding:0 8px;white-space:pre}
+.diff-line.add{background:var(--diff-add)}.diff-line.add .diff-ln{color:var(--diff-add-border)}
+.diff-line.del{background:var(--diff-del)}.diff-line.del .diff-ln{color:var(--diff-del-border)}
+.diff-line.mod{background:var(--diff-mod)}.diff-line.mod .diff-ln{color:var(--diff-mod-border)}
+
+/* ═══════════════════════════════════════════════
+   VIEW: EMPTY / WELCOME
+   ═══════════════════════════════════════════════ */
+.welcome-view{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;
+}
+.welcome-logo{
+  font-size:42px;font-weight:800;letter-spacing:-0.03em;
+  background:linear-gradient(135deg,var(--color-accent),var(--color-accent-hover),#a78bfa);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+}
+.welcome-sub{color:var(--text-secondary);font-size:var(--text-md)}
+.welcome-cards{display:flex;gap:12px;margin-top:8px}
+.welcome-card{
+  padding:16px 20px;border-radius:var(--radius-md);
+  border:1px solid var(--glass-border);background:var(--glass-bg);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  cursor:pointer;transition:all .2s;text-align:center;min-width:140px;
+}
+.welcome-card:hover{border-color:var(--color-accent);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.15)}
+.welcome-card .wc-icon{font-size:22px;margin-bottom:6px}
+.welcome-card .wc-title{font-size:var(--text-sm);font-weight:600;margin-bottom:2px}
+.welcome-card .wc-desc{font-size:var(--text-xs);color:var(--text-secondary)}
+
+/* ═══════════════════════════════════════════════
+   OVERLAYS
+   ═══════════════════════════════════════════════ */
+/* ── Backdrop ── */
+.overlay-backdrop{
+  position:fixed;inset:0;background:var(--overlay-bg);z-index:500;
+  opacity:0;transition:opacity .2s;pointer-events:none;
+}
+.overlay-backdrop.show{opacity:1;pointer-events:all}
+
+/* ── Command Palette ── */
+#cmdPalette{
+  position:fixed;top:15%;left:50%;transform:translateX(-50%) translateY(-12px) scale(.97);
+  width:min(630px,90vw);max-height:65vh;z-index:510;
+  border-radius:var(--radius-lg);overflow:hidden;
+  display:flex;flex-direction:column;
+  background:var(--glass-bg);backdrop-filter:blur(32px) saturate(1.5);
+  -webkit-backdrop-filter:blur(32px) saturate(1.5);
+  border:1px solid var(--glass-border);
+  box-shadow:var(--shadow-panel),0 0 80px rgba(99,102,241,0.08);
+  opacity:0;pointer-events:none;
+  transition:all .25s var(--ease-out-expo);
+}
+#cmdPalette.show{opacity:1;pointer-events:all;transform:translateX(-50%) translateY(0) scale(1)}
+.cmd-search{
+  display:flex;align-items:center;gap:10px;padding:0 16px;
+  height:52px;border-bottom:1px solid var(--glass-border);flex-shrink:0;
+}
+.cmd-search svg{width:16px;height:16px;color:var(--text-tertiary);flex-shrink:0}
+.cmd-search input{
+  flex:1;border:none;background:transparent;font-size:var(--text-md);
+  color:var(--text-primary);font-family:var(--font-sans);outline:none;
+}
+.cmd-search input::placeholder{color:var(--text-tertiary)}
+.cmd-list{overflow-y:auto;padding:6px}
+.cmd-group{padding:4px 10px;font-size:9px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.8px;color:var(--text-tertiary);margin-top:4px}
+.cmd-item{
+  display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius-sm);
+  cursor:pointer;transition:background .12s;
+}
+.cmd-item:hover,.cmd-item.highlight{background:var(--color-accent-light)}
+.cmd-item svg{width:16px;height:16px;color:var(--text-tertiary);flex-shrink:0}
+.cmd-item .cmd-title{font-size:var(--text-sm);font-weight:500;flex:1}
+.cmd-item .cmd-desc{font-size:var(--text-xs);color:var(--text-tertiary);flex:1;text-align:right;margin-right:4px}
+.cmd-item .cmd-kbd{font-size:var(--text-xs);color:var(--text-tertiary);font-family:var(--font-mono);flex-shrink:0}
+.cmd-footer{
+  height:32px;display:flex;align-items:center;justify-content:center;gap:16px;
+  border-top:1px solid var(--glass-border);font-size:var(--text-xs);color:var(--text-tertiary);
+  flex-shrink:0;
+}
+.cmd-footer kbd{padding:1px 5px;border-radius:3px;border:1px solid var(--glass-border);font-family:var(--font-mono);font-size:9px}
+
+/* ── Toast ── */
+#toastContainer{
+  position:fixed;top:44px;right:16px;z-index:600;
+  display:flex;flex-direction:column;gap:8px;pointer-events:none;
+}
+.toast{
+  display:flex;align-items:center;gap:8px;padding:10px 14px;
+  border-radius:var(--radius-md);min-width:260px;max-width:380px;
+  border:1px solid var(--glass-border);
+  background:var(--glass-bg);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  box-shadow:var(--shadow-sm);pointer-events:all;
+  animation:slideIn .3s var(--ease-out-expo);
+  font-size:var(--text-sm);color:var(--text-primary);
+}
+.toast .toast-icon{font-size:16px;flex-shrink:0}
+.toast .toast-msg{flex:1}
+.toast .toast-close{
+  width:18px;height:18px;display:flex;align-items:center;justify-content:center;
+  border:none;background:transparent;color:var(--text-tertiary);cursor:pointer;
+  border-radius:50%;transition:background .15s;
+}
+.toast .toast-close:hover{background:var(--btn-ghost-hover)}
+.toast-success .toast-icon{color:var(--color-success)}
+.toast-error .toast-icon{color:var(--color-error)}
+.toast-warning .toast-icon{color:var(--color-warning)}
+.toast-info .toast-icon{color:var(--color-info)}
+@keyframes slideIn{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:translateX(0)}}
+@keyframes slideOut{from{opacity:1;transform:translateX(0)}to{opacity:0;transform:translateX(30px)}}
+
+/* ── Confirmation Dialog ── */
+#confirmDialog{
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(.95);
+  width:min(420px,90vw);z-index:520;
+  border-radius:var(--radius-lg);padding:24px;
+  background:var(--dialog-bg);backdrop-filter:blur(48px) saturate(1.8);
+  -webkit-backdrop-filter:blur(48px) saturate(1.8);
+  border:1px solid var(--glass-border);box-shadow:var(--shadow-panel),0 0 0 1px rgba(255,255,255,0.08);
+  opacity:0;pointer-events:none;
+  transition:all .2s var(--ease-out-expo);
+}
+#confirmDialog.show{opacity:1;pointer-events:all;transform:translate(-50%,-50%) scale(1)}
+#confirmDialog h3{font-size:var(--text-md);font-weight:600;margin-bottom:8px}
+#confirmDialog p{font-size:var(--text-sm);color:var(--text-secondary);line-height:1.6;margin-bottom:20px}
+.dialog-btns{display:flex;justify-content:flex-end;gap:8px}
+
+/* ── Context Menu ── */
+#ctxMenu{
+  position:fixed;z-index:550;min-width:200px;
+  border-radius:var(--radius-md);padding:4px;overflow:hidden;
+  background:var(--glass-bg);backdrop-filter:blur(24px) saturate(1.5);
+  -webkit-backdrop-filter:blur(24px) saturate(1.5);
+  border:1px solid var(--glass-border);box-shadow:var(--shadow-panel);
+  opacity:0;pointer-events:none;
+  transform:scale(.95);transition:all .12s var(--ease-out-expo);
+}
+#ctxMenu.show{opacity:1;pointer-events:all;transform:scale(1)}
+.ctx-item{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:6px 12px;border-radius:var(--radius-sm);cursor:pointer;
+  font-size:var(--text-sm);color:var(--text-primary);transition:background .1s;
+}
+.ctx-item:hover{background:var(--color-accent);color:#fff}
+.ctx-item .ctx-kbd{font-size:var(--text-xs);color:var(--text-tertiary);font-family:var(--font-mono)}
+.ctx-item:hover .ctx-kbd{color:rgba(255,255,255,0.7)}
+.ctx-sep{height:1px;margin:3px 8px;background:var(--divider)}
+
+/* ═══════════════════════════════════════════════
+   ANIMATIONS & REDUCED MOTION
+   ═══════════════════════════════════════════════ */
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
+</style>
+</head>
+<body data-theme="dark">
+
+<!-- ═══════════════ TITLEBAR ═══════════════ -->
+<header id="titlebar">
+  <div class="logo">
+    <svg viewBox="0 0 16 16" fill="none"><rect x="1" y="1" width="6" height="6" rx="1.5" fill="currentColor" opacity=".8"/><rect x="9" y="1" width="6" height="6" rx="1.5" fill="currentColor" opacity=".5"/><rect x="1" y="9" width="6" height="6" rx="1.5" fill="currentColor" opacity=".5"/><rect x="9" y="9" width="6" height="6" rx="1.5" fill="currentColor" opacity=".3"/></svg>
+    FluxText
+  </div>
+  <span style="font-size:var(--text-xs);color:var(--text-tertiary)">v0.1.0</span>
+  <div class="spacer"></div>
+  <button class="tb-btn" id="themeToggle" title="切换主题">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="3.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg>
+  </button>
+  <span class="kbd-hint" id="cmdKHint">⌘K</span>
+</header>
+
+<!-- ═══════════════ MAIN APP ═══════════════ -->
+<div id="app">
+
+  <!-- ── SIDEBAR ── -->
+  <nav id="sidebar">
+    <button class="sb-btn active" data-view="editor" title="Editor">
+      <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 3h5v12H2zM9 3h7v5H9zM9 10h7v5H9z" rx="1"/></svg>
+    </button>
+    <button class="sb-btn" data-view="plugins" title="Scripts / Plugins">
+      <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M7 2H4a2 2 0 00-2 2v3m0 4v3a2 2 0 002 2h3m4 0h3a2 2 0 002-2v-3m0-4V4a2 2 0 00-2-2h-3"/><circle cx="9" cy="9" r="2.5"/></svg>
+    </button>
+    <div class="sb-sep"></div>
+    <!-- 动态 Pinned Actions -->
+    <button class="sb-btn" data-view="pinned" title="JSON Formatter (Pinned)">
+      <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3c-1.5 0-2 1-2 2s1 1.5 1 2.5S3 9 3 9s1-.5 1-1.5S5 6 5 5s-.5-2-2-2zM13 3c1.5 0 2 1 2 2s-1 1.5-1 2.5S15 9 15 9s-1-.5-1-1.5-1-1.5-1-2.5.5-2 2-2zM5 15c-1.5 0-2-1-2-2s1-1.5 1-2.5S3 9 3 9s1 .5 1 1.5S5 12 5 13s-.5 2-2 2zM13 15c1.5 0 2-1 2-2s-1-1.5-1-2.5S15 9 15 9s-1 .5-1 1.5-1 1.5-1 2.5.5 2 2 2z"/></svg>
+    </button>
+    <button class="sb-btn" data-view="diff" title="Text Diff (Pinned)">
+      <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.5" y="2" width="6" height="14" rx="1.5"/><rect x="10.5" y="2" width="6" height="14" rx="1.5"/><path d="M4.5 6h0M4.5 9h0M4.5 12h0M13.5 6h0M13.5 9h0M13.5 12h0" stroke-linecap="round" stroke-width="2"/></svg>
+    </button>
+    <div class="sb-spacer"></div>
+    <button class="sb-btn" data-view="settings" title="Settings">
+      <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="9" cy="9" r="2.5"/><path d="M9 1.5v2M9 14.5v2M1.5 9h2M14.5 9h2M3.6 3.6l1.4 1.4M13 13l1.4 1.4M3.6 14.4l1.4-1.4M13 5l1.4-1.4"/></svg>
+    </button>
+  </nav>
+
+  <!-- ── CONTENT ── -->
+  <main id="content">
+
+    <!-- ════════ VIEW: WELCOME ════════ -->
+    <section class="view" data-view="welcome">
+      <div class="welcome-view">
+        <div class="welcome-logo">FluxText</div>
+        <div class="welcome-sub">欢迎使用 FluxText · 文本处理工作台</div>
+        <div class="welcome-cards">
+          <div class="welcome-card" onclick="openPalette()">
+            <div class="wc-icon">⌘</div>
+            <div class="wc-title">命令面板</div>
+            <div class="wc-desc">⌘K 快速导航</div>
+          </div>
+          <div class="welcome-card" onclick="switchView('editor')">
+            <div class="wc-icon">📄</div>
+            <div class="wc-title">拖拽文件</div>
+            <div class="wc-desc">打开编辑器</div>
+          </div>
+          <div class="welcome-card" onclick="switchView('plugins')">
+            <div class="wc-icon">🧩</div>
+            <div class="wc-title">浏览插件</div>
+            <div class="wc-desc">发现更多功能</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════ VIEW: EDITOR ════════ -->
+    <section class="view active" data-view="editor">
+      <div class="editor-topbar">
+        <div class="dot"></div>
+        <span class="info">Ready</span>
+        <span class="info" style="color:var(--text-tertiary)">·</span>
+        <span class="info">12 lines · 243 chars</span>
+        <div class="spacer"></div>
+        <button class="btn btn-sm" title="Plugin toolbar">📐 Ruler</button>
+        <button class="btn btn-sm" title="Quick stats">📊 Stats</button>
+        <button class="btn btn-primary btn-sm" onclick="showToast('Action executed','success')">▶ Run Action</button>
+      </div>
+      <div class="pane-grid" id="paneGrid">
+        <!-- Pane 1: input.json -->
+        <div class="pane focused" data-pane="0">
+          <div class="pane-tab"><span class="tab-dot"></span><span class="tab-name">input.json</span></div>
+          <div class="pane-body">
+            <div class="pane-gutter">1
+2
+3
+4
+5
+6
+7</div>
+            <div class="pane-code"><span style="color:var(--code-keyword)">{</span>
+  <span style="color:var(--code-string)">"name"</span>: <span style="color:var(--code-string)">"FluxText"</span>,
+  <span style="color:var(--code-string)">"version"</span>: <span style="color:var(--code-string)">"0.1.0"</span>,
+  <span style="color:var(--code-string)">"engine"</span>: <span style="color:var(--code-string)">"tauri-2.0"</span>,
+  <span style="color:var(--code-string)">"plugins"</span>: <span style="color:var(--code-number)">4</span>,
+  <span style="color:var(--code-string)">"ready"</span>: <span style="color:var(--code-keyword)">true</span>
+<span style="color:var(--code-keyword)">}</span></div>
+          </div>
+          <div class="pane-status"><span>JSON</span><span>·</span><span>UTF-8</span><span>·</span><span>7 行</span></div>
+        </div>
+        <!-- Pane 2: output.txt -->
+        <div class="pane" data-pane="1">
+          <div class="pane-tab"><span class="tab-dot"></span><span class="tab-name">output.txt</span></div>
+          <div class="pane-body">
+            <div class="pane-gutter">1
+2
+3
+4
+5
+6</div>
+            <div class="pane-code"><span style="color:var(--code-comment)">// 处理结果</span>
+<span style="color:var(--code-keyword)">name</span>    = FluxText
+<span style="color:var(--code-keyword)">version</span> = 0.1.0
+<span style="color:var(--code-keyword)">engine</span>  = tauri-2.0
+<span style="color:var(--code-keyword)">plugins</span> = 4
+<span style="color:var(--code-keyword)">ready</span>   = true</div>
+          </div>
+          <div class="pane-status"><span>Plain Text</span><span>·</span><span>UTF-8</span><span>·</span><span>6 行</span></div>
+        </div>
+        <!-- Pane 3: notes.md -->
+        <div class="pane" data-pane="2">
+          <div class="pane-tab"><span class="tab-dot"></span><span class="tab-name">notes.md</span></div>
+          <div class="pane-body">
+            <div class="pane-gutter">1
+2
+3
+4
+5
+6
+7
+8</div>
+            <div class="pane-code"><span style="color:var(--code-keyword)"># FluxText 开发笔记</span>
+
+<span style="color:var(--code-comment)">## 架构概述</span>
+Tauri 2.0 + React 前端，插件系统基于
+动态加载的 ES Module 方式运行。
+
+<span style="color:var(--code-comment)">## TODO</span>
+<span style="color:var(--code-string)">- [ ] 完成 Diff 视图</span></div>
+          </div>
+          <div class="pane-status"><span>Markdown</span><span>·</span><span>UTF-8</span><span>·</span><span>8 行</span></div>
+        </div>
+        <!-- Pane 4: console -->
+        <div class="pane" data-pane="3">
+          <div class="pane-tab"><span class="tab-dot"></span><span class="tab-name">console</span></div>
+          <div class="pane-body">
+            <div class="pane-gutter">1
+2
+3
+4
+5
+6</div>
+            <div class="pane-code"><span style="color:var(--text-tertiary)">[09:41:02]</span> <span style="color:var(--color-success)">✓</span> Workspace initialized
+<span style="color:var(--text-tertiary)">[09:41:02]</span> <span style="color:var(--color-success)">✓</span> Loaded 4 plugins
+<span style="color:var(--text-tertiary)">[09:41:03]</span> <span style="color:var(--color-success)">✓</span> input.json → parsed
+<span style="color:var(--text-tertiary)">[09:41:03]</span> <span style="color:var(--color-success)">✓</span> Transform complete (12ms)
+<span style="color:var(--text-tertiary)">[09:41:04]</span> <span style="color:var(--color-info)">ℹ</span> Watching for changes...
+<span style="color:var(--text-tertiary)">[09:41:05]</span> <span style="color:var(--color-warning)">⚠</span> csv-parser has errors</div>
+          </div>
+          <div class="pane-status"><span>Console</span><span>·</span><span>6 行</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════ VIEW: PLUGINS ════════ -->
+    <section class="view" data-view="plugins">
+      <div class="plugins-header">
+        <h2>Scripts / Plugins</h2>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm">New</button>
+          <button class="btn btn-ghost btn-sm">GitHub</button>
+          <button class="btn btn-ghost btn-sm">Folder</button>
+          <button class="btn btn-primary btn-sm">Dev</button>
+        </div>
+      </div>
+      <div class="tab-bar" id="pluginTabs">
+        <div class="tab-item active" data-tab="all">Built-in (27)</div>
+        <div class="tab-item" data-tab="installed">Installed (3)</div>
+        <div class="tab-item" data-tab="errors">Dev (1)</div>
+      </div>
+      <div class="plugin-list" id="pluginList">
+        <div class="plugin-card" data-plugin-status="installed">
+          <div class="plugin-icon">TD</div>
+          <div class="plugin-info">
+            <div class="name">text-diff <span class="ver">v1.2.0</span> <span class="badge badge-builtin">built-in</span></div>
+            <div class="desc">Text comparison & merge</div>
+          </div>
+          <div class="plugin-actions">
+            <button class="btn btn-ghost btn-sm">Source</button>
+          </div>
+        </div>
+        <div class="plugin-card" data-plugin-status="installed">
+          <div class="plugin-icon">JT</div>
+          <div class="plugin-info">
+            <div class="name">json-tools <span class="ver">v0.8.1</span> <span class="badge badge-loaded">loaded</span></div>
+            <div class="desc">JSON format & validate</div>
+          </div>
+          <div class="plugin-actions">
+            <button class="btn btn-ghost btn-sm">Source</button>
+            <button class="btn btn-ghost btn-sm" onclick="showDeleteDialog('json-tools')">Delete</button>
+          </div>
+        </div>
+        <div class="plugin-card" data-plugin-status="installed">
+          <div class="plugin-icon">RT</div>
+          <div class="plugin-info">
+            <div class="name">regex-toolkit <span class="ver">v1.0.0</span> <span class="badge badge-loaded">loaded</span></div>
+            <div class="desc">Regex test & extract</div>
+          </div>
+          <div class="plugin-actions">
+            <button class="btn btn-ghost btn-sm">Source</button>
+            <button class="btn btn-ghost btn-sm" onclick="showDeleteDialog('regex-toolkit')">Delete</button>
+          </div>
+        </div>
+        <div class="plugin-card has-error" data-plugin-status="error">
+          <div class="plugin-icon err-icon">CP</div>
+          <div class="plugin-info">
+            <div class="name">csv-parser <span class="ver">v0.3.0</span> <span class="badge badge-error">error</span></div>
+            <div class="desc">Parse CSV files</div>
+            <div class="err-msg">SyntaxError: line 12</div>
+          </div>
+          <div class="plugin-actions">
+            <button class="btn btn-ghost btn-sm">Source</button>
+            <button class="btn btn-ghost btn-sm" onclick="showDeleteDialog('csv-parser')">Delete</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════ VIEW: PLUGIN EDITOR (Source Viewer) ════════ -->
+    <section class="view" data-view="plugin-editor">
+      <div class="dbg-grid" style="grid-template-columns:220px 1fr;grid-template-rows:1fr">
+        <!-- File Tree -->
+        <div class="dbg-pane" style="overflow:auto">
+          <div class="dbg-header"><span class="label">text-diff</span></div>
+          <div style="padding:6px 8px;font-family:var(--font-mono);font-size:var(--text-xs);line-height:2.2">
+            <div style="color:var(--text-secondary)">📁 src/</div>
+            <div style="padding-left:16px;color:var(--color-accent);background:var(--color-accent-light);border-radius:4px;padding:2px 8px 2px 16px">📄 index.ts</div>
+            <div style="padding-left:16px;color:var(--text-secondary)">📄 renderer.tsx</div>
+            <div style="padding-left:16px;color:var(--text-secondary)">📄 diffUtils.ts</div>
+            <div style="color:var(--text-secondary)">📁 tests/</div>
+            <div style="padding-left:16px;color:var(--text-secondary)">📄 diff.test.ts</div>
+            <div style="color:var(--text-secondary)">📄 manifest.json</div>
+          </div>
+        </div>
+        <!-- Code Viewer (Read-only) -->
+        <div class="dbg-pane">
+          <div class="dbg-header">
+            <span class="fname">src/index.ts</span>
+            <span style="font-size:var(--text-xs);color:var(--text-tertiary);margin-left:8px">read-only</span>
+          </div>
+          <div class="dbg-body">
+            <div class="pane-gutter"> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15</div>
+            <div class="pane-code"><span style="color:var(--code-keyword)">import</span> { definePlugin } <span style="color:var(--code-keyword)">from</span> <span style="color:var(--code-string)">'flux:sdk'</span>;
+<span style="color:var(--code-keyword)">import</span> { TextDiffRenderer } <span style="color:var(--code-keyword)">from</span> <span style="color:var(--code-string)">'./renderer'</span>;
+
+<span style="color:var(--code-keyword)">export default</span> <span style="color:var(--code-func)">definePlugin</span>({
+  id: <span style="color:var(--code-string)">'text-diff'</span>,
+  name: <span style="color:var(--code-string)">'Text Diff'</span>,
+  version: <span style="color:var(--code-string)">'1.2.0'</span>,
+
+  commands: [{
+    id: <span style="color:var(--code-string)">'compare'</span>,
+    title: <span style="color:var(--code-string)">'Compare Two Texts'</span>,
+    <span style="color:var(--code-func)">run</span>(ctx) {
+      ctx.<span style="color:var(--code-func)">present</span>(<span style="color:var(--code-string)">'text-diff.renderer'</span>);
+    }
+  }],
+});</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════ VIEW: SETTINGS ════════ -->
+    <section class="view" data-view="settings">
+      <div class="settings-wrap">
+        <h2>Settings</h2>
+        <div class="settings-grid">
+          <!-- Language -->
+          <div class="setting-card">
+            <h3><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c-2 2-2 6 0 6s2-4 0-6M8 14c2-2 2-6 0-6s-2 4 0 6"/></svg> Language</h3>
+            <div class="setting-row"><span>UI Language</span><select class="sel"><option>English</option><option>中文</option></select></div>
+          </div>
+          <!-- Editor -->
+          <div class="setting-card">
+            <h3><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 6h6M5 9h4"/></svg> Editor</h3>
+            <div class="setting-row"><span>Font size</span><input type="number" class="num-input" value="13" min="10" max="24"></div>
+            <div class="setting-row"><span>Word wrap</span><button class="toggle" onclick="this.classList.toggle('on')"></button></div>
+            <div class="setting-row"><span>Line numbers</span><button class="toggle on" onclick="this.classList.toggle('on')"></button></div>
+          </div>
+          <!-- Behavior -->
+          <div class="setting-card">
+            <h3><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 4h4v4H2zM10 4h4v4h-4zM6 8h4v4H6z"/></svg> Behavior</h3>
+            <div class="setting-row"><span>Persist params</span><button class="toggle on" onclick="this.classList.toggle('on')"></button></div>
+            <div class="setting-row"><span>Persist pinned input</span><button class="toggle on" onclick="this.classList.toggle('on')"></button></div>
+            <div class="setting-row"><span>Persist tombstone</span><button class="toggle" onclick="this.classList.toggle('on')"></button></div>
+          </div>
+          <!-- Hotkeys -->
+          <div class="setting-card">
+            <h3><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="4" width="14" height="8" rx="2"/><path d="M4 7h1M7 7h2M11 7h1M4 10h8"/></svg> Hotkeys</h3>
+            <div class="setting-row"><span>Global Launcher</span><div class="hotkey-box"><kbd>⇧</kbd><kbd>⌘</kbd><kbd>Space</kbd></div></div>
+            <div class="setting-row"><span style="font-size:var(--text-xs);color:var(--text-tertiary)">or Double-press ⌘</span></div>
+          </div>
+          <!-- Update -->
+          <div class="setting-card">
+            <h3><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M8 2v8M5 7l3 3 3-3M3 12h10" stroke-linecap="round"/></svg> Update</h3>
+            <div class="about-info">
+              <strong>FluxText</strong> v0.1.0 · Tauri 2.0<br>
+              <span style="color:var(--color-success)">✓ Up to date</span>
+            </div>
+            <div style="margin-top:10px;display:flex;gap:6px">
+              <button class="btn btn-sm">Check App Update</button>
+              <button class="btn btn-sm">Update Plugins</button>
+            </div>
+          </div>
+          <!-- Plugins -->
+          <div class="setting-card">
+            <h3><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M7 2H4a2 2 0 00-2 2v3m0 2v3a2 2 0 002 2h3m2 0h3a2 2 0 002-2v-3m0-2V4a2 2 0 00-2-2H9"/><circle cx="8" cy="8" r="2"/></svg> Plugins</h3>
+            <div class="setting-row"><span>Manage plugins</span><button class="btn btn-sm" onclick="switchView('plugins')">Open →</button></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════ VIEW: PINNED RUNNER ════════ -->
+    <section class="view" data-view="pinned">
+      <div class="pinned-header">
+        <span class="pin-icon">📌</span>
+        <h2>JSON Formatter</h2>
+        <div style="display:flex;align-items:center;gap:6px">
+          <label style="display:flex;align-items:center;gap:4px;font-size:var(--text-sm);color:var(--text-secondary);cursor:pointer"><input type="checkbox" style="accent-color:var(--color-accent)"> Auto</label>
+          <button class="btn btn-primary btn-sm" id="pinnedRunBtn" onclick="runPinned()">▶ Run</button>
+          <button class="btn btn-sm" title="Controls">⚙</button>
+          <button class="btn btn-sm" title="Release Runtime" style="color:var(--color-warning)">⏏</button>
+          <button class="btn btn-sm" title="Unpin" onclick="switchView('editor')">✕</button>
+        </div>
+      </div>
+      <div class="pinned-cols">
+        <div class="pinned-col">
+          <div class="pinned-col-header">Input</div>
+          <textarea class="io-area" id="pinnedInput">{"name":"FluxText","version":"0.1.0","config":{"theme":"dark","fontSize":13,"plugins":["json","csv","regex","diff"],"autoSave":true}}</textarea>
+        </div>
+        <div class="pinned-col">
+          <div class="pinned-col-header">Output</div>
+          <pre class="pinned-output" id="pinnedOutput">{
+  "name": "FluxText",
+  "version": "0.1.0",
+  "config": {
+    "theme": "dark",
+    "fontSize": 13,
+    "plugins": [
+      "json",
+      "csv",
+      "regex",
+      "diff"
+    ],
+    "autoSave": true
+  }
+}</pre>
+        </div>
+      </div>
+      <div class="pinned-footer">
+        <label><input type="checkbox" checked> Pretty Print</label>
+        <label>Indent Size
+          <select class="sel" style="margin-left:6px">
+            <option value="2" selected>2</option>
+            <option value="4">4</option>
+            <option value="8">8</option>
+          </select>
+        </label>
+      </div>
+    </section>
+
+    <!-- ════════ VIEW: DIFF ════════ -->
+    <section class="view" data-view="diff">
+      <div class="diff-toolbar">
+        <div class="diff-seg">
+          <button class="seg-item active">Side-by-side</button>
+          <button class="seg-item">Inline</button>
+        </div>
+        <div class="diff-sep"></div>
+        <div class="diff-seg">
+          <button class="seg-item active">JSON Diff</button>
+          <button class="seg-item">Smart</button>
+          <button class="seg-item">Raw</button>
+        </div>
+        <div style="flex:1"></div>
+        <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:var(--text-secondary);cursor:pointer">
+          <button class="toggle on" onclick="this.classList.toggle('on')"></button> Semantic
+        </label>
+        <button class="btn btn-ghost btn-sm">⤢</button>
+      </div>
+      <div class="diff-cols">
+        <!-- Left -->
+        <div class="diff-col">
+          <div class="diff-col-header">Original · config.json</div>
+          <div>
+            <div class="diff-line"><div class="diff-ln">1</div><div class="diff-code">{</div></div>
+            <div class="diff-line"><div class="diff-ln">2</div><div class="diff-code">  "appName": "FluxText",</div></div>
+            <div class="diff-line del"><div class="diff-ln">3</div><div class="diff-code">  "version": "0.0.9",</div></div>
+            <div class="diff-line"><div class="diff-ln">4</div><div class="diff-code">  "settings": {</div></div>
+            <div class="diff-line del"><div class="diff-ln">5</div><div class="diff-code">    "theme": "light",</div></div>
+            <div class="diff-line"><div class="diff-ln">6</div><div class="diff-code">    "fontSize": 13,</div></div>
+            <div class="diff-line del"><div class="diff-ln">7</div><div class="diff-code">    "wordWrap": false,</div></div>
+            <div class="diff-line"><div class="diff-ln">8</div><div class="diff-code">    "autoSave": true</div></div>
+            <div class="diff-line"><div class="diff-ln">9</div><div class="diff-code">  },</div></div>
+            <div class="diff-line"><div class="diff-ln">10</div><div class="diff-code">  "plugins": [</div></div>
+            <div class="diff-line"><div class="diff-ln">11</div><div class="diff-code">    "json",</div></div>
+            <div class="diff-line del"><div class="diff-ln">12</div><div class="diff-code">    "csv"</div></div>
+            <div class="diff-line"><div class="diff-ln">13</div><div class="diff-code">  ]</div></div>
+            <div class="diff-line"><div class="diff-ln">14</div><div class="diff-code">}</div></div>
+          </div>
+        </div>
+        <!-- Right -->
+        <div class="diff-col">
+          <div class="diff-col-header">Modified · config.json</div>
+          <div>
+            <div class="diff-line"><div class="diff-ln">1</div><div class="diff-code">{</div></div>
+            <div class="diff-line"><div class="diff-ln">2</div><div class="diff-code">  "appName": "FluxText",</div></div>
+            <div class="diff-line add"><div class="diff-ln">3</div><div class="diff-code">  "version": "0.1.0",</div></div>
+            <div class="diff-line"><div class="diff-ln">4</div><div class="diff-code">  "settings": {</div></div>
+            <div class="diff-line mod"><div class="diff-ln">5</div><div class="diff-code">    "theme": "dark",</div></div>
+            <div class="diff-line"><div class="diff-ln">6</div><div class="diff-code">    "fontSize": 13,</div></div>
+            <div class="diff-line add"><div class="diff-ln">7</div><div class="diff-code">    "wordWrap": true,</div></div>
+            <div class="diff-line"><div class="diff-ln">8</div><div class="diff-code">    "autoSave": true</div></div>
+            <div class="diff-line"><div class="diff-ln">9</div><div class="diff-code">  },</div></div>
+            <div class="diff-line"><div class="diff-ln">10</div><div class="diff-code">  "plugins": [</div></div>
+            <div class="diff-line"><div class="diff-ln">11</div><div class="diff-code">    "json",</div></div>
+            <div class="diff-line add"><div class="diff-ln">12</div><div class="diff-code">    "csv",</div></div>
+            <div class="diff-line add"><div class="diff-ln">13</div><div class="diff-code">    "regex",</div></div>
+            <div class="diff-line add"><div class="diff-ln">14</div><div class="diff-code">    "diff"</div></div>
+            <div class="diff-line"><div class="diff-ln">15</div><div class="diff-code">  ]</div></div>
+            <div class="diff-line"><div class="diff-ln">16</div><div class="diff-code">}</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ═══════════════ STATUSBAR ═══════════════ -->
+<footer id="statusbar">
+  <div class="dot"></div>
+  <span id="sbView">Editor</span>
+  <span>·</span>
+  <span>4 panes</span>
+  <div style="flex:1"></div>
+  <span>UTF-8</span>
+  <span>·</span>
+  <span>FluxText v0.1.0</span>
+</footer>
+
+<!-- ═══════════════ OVERLAYS ═══════════════ -->
+
+<!-- Backdrop -->
+<div class="overlay-backdrop" id="overlayBackdrop" onclick="closeAllOverlays()"></div>
+
+<!-- Command Palette -->
+<div id="cmdPalette">
+  <div class="cmd-search">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14" stroke-linecap="round"/></svg>
+    <input type="text" placeholder="搜索命令…" id="cmdInput" autocomplete="off" spellcheck="false">
+  </div>
+  <div class="cmd-list" id="cmdList">
+    <div class="cmd-group">PINNED</div>
+    <div class="cmd-item" data-cmd="JSON Formatter" onclick="execCmd('pinned')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M4 2v3a2 2 0 01-2 2 2 2 0 012 2v3M12 2v3a2 2 0 002 2 2 2 0 00-2 2v3"/></svg>
+      <span class="cmd-title">JSON Formatter</span>
+      <span class="cmd-desc">格式化 JSON</span>
+      <span class="cmd-kbd"></span>
+    </div>
+    <div class="cmd-item" data-cmd="Extract Emails" onclick="execCmd('plugin-editor')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="3" width="14" height="10" rx="2"/><path d="M1 5l7 4 7-4"/></svg>
+      <span class="cmd-title">Extract Emails</span>
+      <span class="cmd-desc">提取邮箱地址</span>
+      <span class="cmd-kbd"></span>
+    </div>
+    <div class="cmd-group">RECENT</div>
+    <div class="cmd-item" data-cmd="Text Diff" onclick="execCmd('diff')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="2" width="6" height="12" rx="1.5"/><rect x="9" y="2" width="6" height="12" rx="1.5"/></svg>
+      <span class="cmd-title">Text Diff</span>
+      <span class="cmd-desc">文本对比</span>
+      <span class="cmd-kbd"></span>
+    </div>
+    <div class="cmd-item" data-cmd="Regex Toolkit" onclick="execCmd('plugins')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 8h10M8 3v10M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>
+      <span class="cmd-title">Regex Toolkit</span>
+      <span class="cmd-desc">正则测试</span>
+      <span class="cmd-kbd"></span>
+    </div>
+    <div class="cmd-group">ALL</div>
+    <div class="cmd-item" data-cmd="Toggle Theme" onclick="toggleTheme();closePalette()">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="5"/><path d="M8 3a5 5 0 000 10" fill="currentColor" opacity=".3"/></svg>
+      <span class="cmd-title">Toggle Theme</span>
+      <span class="cmd-desc">切换主题</span>
+      <span class="cmd-kbd">⌘T</span>
+    </div>
+    <div class="cmd-item" data-cmd="Open Settings" onclick="execCmd('settings')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2"/></svg>
+      <span class="cmd-title">Open Settings</span>
+      <span class="cmd-desc">打开设置</span>
+      <span class="cmd-kbd">⌘,</span>
+    </div>
+    <div class="cmd-item" data-cmd="Re-run Script" onclick="closePalette();showToast('info','脚本已重新运行')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 8a6 6 0 1112 0 6 6 0 01-12 0z"/><path d="M8 5v3l2 1.5"/></svg>
+      <span class="cmd-title">Re-run Script</span>
+      <span class="cmd-desc">重新运行</span>
+      <span class="cmd-kbd">⌘⇧R</span>
+    </div>
+    <div class="cmd-item" data-cmd="Plugin Manager" onclick="execCmd('plugins')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M7 2H4a2 2 0 00-2 2v3m0 4v3a2 2 0 002 2h3m4 0h3a2 2 0 002-2v-3m0-4V4a2 2 0 00-2-2h-3"/></svg>
+      <span class="cmd-title">Plugin Manager</span>
+      <span class="cmd-desc">管理插件</span>
+      <span class="cmd-kbd">⌘P</span>
+    </div>
+  </div>
+  <div class="cmd-footer">
+    <span><kbd>↑↓</kbd> 导航</span>
+    <span><kbd>↵</kbd> 执行</span>
+    <span><kbd>esc</kbd> 关闭</span>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div id="toastContainer"></div>
+
+<!-- Confirm Dialog -->
+<div id="confirmDialog">
+  <h3 id="dialogTitle">确认删除</h3>
+  <p id="dialogDesc">确定要删除此插件吗？此操作无法撤销。</p>
+  <div class="dialog-btns">
+    <button class="btn btn-sm" onclick="closeDialog()">取消</button>
+    <button class="btn btn-danger btn-sm" onclick="confirmDelete()">删除</button>
+  </div>
+</div>
+
+<!-- Context Menu -->
+<div id="ctxMenu">
+  <div class="ctx-item" onclick="closeCtxMenu()">Copy<span class="ctx-kbd">⌘C</span></div>
+  <div class="ctx-item" onclick="closeCtxMenu()">Paste<span class="ctx-kbd">⌘V</span></div>
+  <div class="ctx-item" onclick="closeCtxMenu()">Select All<span class="ctx-kbd">⌘A</span></div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" onclick="closeCtxMenu()">Format Document</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" onclick="closeCtxMenu();openPalette()">Command Palette<span class="ctx-kbd">⌘K</span></div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════
+   INTERACTIVE JS
+   ═══════════════════════════════════════════════ */
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+
+// ── View switching ──
+const viewLabels = { editor:'Editor', plugins:'Plugins', 'plugin-editor':'Plugin Editor', settings:'Settings', pinned:'Pinned Runner', diff:'Diff View', welcome:'Welcome' };
+
+function switchView(name) {
+  $$('.view').forEach(v => v.classList.remove('active'));
+  $$('.sb-btn').forEach(b => b.classList.remove('active'));
+  const view = $(`.view[data-view="${name}"]`);
+  const btn = $(`.sb-btn[data-view="${name}"]`);
+  if (view) view.classList.add('active');
+  if (btn) btn.classList.add('active');
+  $('#sbView').textContent = viewLabels[name] || name;
+}
+
+$$('.sb-btn[data-view]').forEach(btn => {
+  btn.addEventListener('click', () => switchView(btn.dataset.view));
+});
+
+// ── Theme toggle ──
+function toggleTheme() {
+  const t = document.body.dataset.theme === 'dark' ? 'light' : 'dark';
+  setTheme(t);
+}
+function setTheme(t) {
+  document.body.dataset.theme = t;
+  const sel = $('#settingsTheme');
+  if (sel) sel.value = t;
+}
+$('#themeToggle').addEventListener('click', toggleTheme);
+
+// ── Command Palette ──
+function openPalette() {
+  $('#overlayBackdrop').classList.add('show');
+  $('#cmdPalette').classList.add('show');
+  const input = $('#cmdInput');
+  input.value = '';
+  input.focus();
+  filterCommands('');
+}
+function closePalette() {
+  $('#overlayBackdrop').classList.remove('show');
+  $('#cmdPalette').classList.remove('show');
+}
+$('#cmdKHint').addEventListener('click', openPalette);
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openPalette(); }
+  if (e.key === 'Escape') closeAllOverlays();
+});
+
+// Search filter
+$('#cmdInput').addEventListener('input', e => filterCommands(e.target.value));
+function filterCommands(query) {
+  const q = query.toLowerCase().trim();
+  $$('.cmd-item').forEach(item => {
+    const cmd = (item.dataset.cmd || '').toLowerCase();
+    const title = item.querySelector('.cmd-title')?.textContent.toLowerCase() || '';
+    item.style.display = (q === '' || cmd.includes(q) || title.includes(q)) ? 'flex' : 'none';
+  });
+  $$('.cmd-group').forEach(g => {
+    let next = g.nextElementSibling;
+    let hasVisible = false;
+    while (next && !next.classList.contains('cmd-group')) {
+      if (next.style.display !== 'none') hasVisible = true;
+      next = next.nextElementSibling;
+    }
+    g.style.display = hasVisible ? 'block' : 'none';
+  });
+}
+
+function execCmd(view) {
+  closePalette();
+  switchView(view);
+}
+
+// ── Pane focus ──
+$$('.pane[data-pane]').forEach(p => {
+  p.addEventListener('click', () => {
+    $$('.pane').forEach(pp => pp.classList.remove('focused'));
+    p.classList.add('focused');
+  });
+});
+
+// ── Plugin tabs ──
+$$('#pluginTabs .tab-item').forEach(tab => {
+  tab.addEventListener('click', () => {
+    $$('#pluginTabs .tab-item').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const filter = tab.dataset.tab;
+    $$('.plugin-card').forEach(card => {
+      const status = card.dataset.pluginStatus;
+      if (filter === 'all') card.style.display = 'flex';
+      else if (filter === 'installed') card.style.display = (status === 'installed') ? 'flex' : 'none';
+      else if (filter === 'errors') card.style.display = (status === 'error') ? 'flex' : 'none';
+    });
+  });
+});
+
+// ── Debugger Run ──
+function runDebugger() {
+  const btn = $('#dbgRunBtn');
+  const consoleEl = $('#dbgConsole');
+  const outputEl = $('#dbgOutput');
+  const inputVal = $('#dbgInput').value;
+  const dedup = $('#paramDedup').classList.contains('on');
+  const fmt = $('#paramFmt').value;
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Running...';
+  btn.style.background = 'var(--color-warning)';
+
+  const emails = inputVal.match(/[\w.-]+@[\w.-]+\.\w{2,}/g) || [];
+  let result = dedup ? [...new Set(emails)] : emails;
+  const sep = fmt === 'comma' ? ', ' : fmt === 'json' ? '' : '\n';
+
+  const logs = [
+    { ts: now(), msg: '✓ Script started', cls: 'log-ok' },
+    { ts: now(), msg: `✓ Found ${emails.length} matches`, cls: 'log-ok' },
+    { ts: now(), msg: dedup ? `✓ Deduplicated → ${result.length} unique` : 'ℹ Dedup disabled', cls: dedup ? 'log-ok' : '' },
+    { ts: now(), msg: `✓ Output formatted (${fmt})`, cls: 'log-ok' },
+  ];
+
+  let i = 0;
+  const iv = setInterval(() => {
+    if (i >= logs.length) {
+      clearInterval(iv);
+      const output = fmt === 'json' ? JSON.stringify(result, null, 2) : result.join(sep);
+      outputEl.textContent = output;
+      btn.disabled = false;
+      btn.textContent = '▶ Run';
+      btn.style.background = '';
+      return;
+    }
+    const l = logs[i++];
+    consoleEl.innerHTML += `<div class="log-line"><span class="log-ts">${l.ts}</span><span class="${l.cls}">${l.msg}</span></div>`;
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+  }, 250);
+}
+
+function updateParamSnap() {
+  const dedup = $('#paramDedup').classList.contains('on');
+  const fmt = $('#paramFmt').value;
+  $('#paramSnap').textContent = JSON.stringify({ deduplicate: dedup, outputFormat: fmt }, null, 2);
+}
+
+function now() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+}
+
+// ── Pinned Runner ──
+function runPinned() {
+  const btn = $('#pinnedRunBtn');
+  const input = $('#pinnedInput').value;
+  const output = $('#pinnedOutput');
+  const indent = parseInt($('.pinned-footer select').value) || 2;
+
+  btn.textContent = '⏳ Running...';
+  btn.style.background = 'var(--color-warning)';
+  btn.disabled = true;
+
+  setTimeout(() => {
+    try {
+      const parsed = JSON.parse(input);
+      output.textContent = JSON.stringify(parsed, null, indent);
+      showToast('success', 'JSON 格式化完成');
+    } catch (e) {
+      output.textContent = `Error: ${e.message}`;
+      showToast('error', `解析失败：${e.message}`);
+    }
+    btn.textContent = '▶ Run';
+    btn.style.background = '';
+    btn.disabled = false;
+  }, 800);
+}
+
+// ── Toast ──
+const toastIcons = { success: '✓', error: '✗', warning: '⚠', info: 'ℹ' };
+function showToast(type, msg) {
+  const container = $('#toastContainer');
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.innerHTML = `<span class="toast-icon">${toastIcons[type]||'ℹ'}</span><span class="toast-msg">${msg}</span><button class="toast-close" onclick="dismissToast(this.parentElement)">✕</button>`;
+  container.appendChild(el);
+  setTimeout(() => dismissToast(el), 3000);
+}
+function dismissToast(el) {
+  if (!el || !el.parentElement) return;
+  el.style.animation = 'slideOut .25s var(--ease-out-expo) forwards';
+  setTimeout(() => el.remove(), 250);
+}
+
+// ── Confirmation Dialog ──
+let pendingDeleteName = '';
+function showDeleteDialog(name) {
+  pendingDeleteName = name;
+  $('#dialogTitle').textContent = '确认删除';
+  $('#dialogDesc').textContent = `确定要删除插件「${name}」吗？此操作无法撤销。`;
+  $('#overlayBackdrop').classList.add('show');
+  $('#confirmDialog').classList.add('show');
+}
+function closeDialog() {
+  $('#overlayBackdrop').classList.remove('show');
+  $('#confirmDialog').classList.remove('show');
+}
+function confirmDelete() {
+  closeDialog();
+  showToast('success', `已删除插件「${pendingDeleteName}」`);
+}
+
+// ── Context Menu ──
+document.addEventListener('contextmenu', e => {
+  const editorView = $(`.view[data-view="editor"]`);
+  if (!editorView || !editorView.classList.contains('active')) return;
+  if (!editorView.contains(e.target)) return;
+  e.preventDefault();
+  const menu = $('#ctxMenu');
+  menu.style.left = Math.min(e.clientX, window.innerWidth - 220) + 'px';
+  menu.style.top = Math.min(e.clientY, window.innerHeight - 200) + 'px';
+  menu.classList.add('show');
+});
+function closeCtxMenu() { $('#ctxMenu').classList.remove('show'); }
+document.addEventListener('click', e => {
+  if (!$('#ctxMenu').contains(e.target)) closeCtxMenu();
+});
+
+// ── Segmented controls ──
+$$('.diff-seg').forEach(seg => {
+  seg.querySelectorAll('.seg-item').forEach(item => {
+    item.addEventListener('click', () => {
+      seg.querySelectorAll('.seg-item').forEach(s => s.classList.remove('active'));
+      item.classList.add('active');
+    });
+  });
+});
+
+// ── Close all overlays ──
+function closeAllOverlays() {
+  closePalette();
+  closeDialog();
+  closeCtxMenu();
+}
+
+// ── Welcome flash → Editor ──
+// Uncomment below for the welcome-then-editor transition:
+// switchView('welcome'); setTimeout(() => switchView('editor'), 800);
+</script>
+</body>
+</html>

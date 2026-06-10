@@ -1,0 +1,1111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FluxText — Impeccable Atelier UI</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+    :root {
+      --font: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      --text-2xs: 9px;
+      --text-xs: 10px;
+      --text-sm: 11px;
+      --text-base: 12.5px;
+      --text-md: 13.5px;
+      --text-lg: 15px;
+      --text-xl: 18px;
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 20px;
+      --space-6: 24px;
+      --radius-xs: 3px;
+      --radius-sm: 5px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --radius-xl: 16px;
+      --ease: cubic-bezier(.2, .9, .2, 1);
+    }
+
+    .theme {
+      --app: #f3f5fb;
+      --shell: #f8f9fd;
+      --shell-2: #ffffff;
+      --shell-3: #eef1f8;
+      --shell-soft: rgba(20, 24, 38, .045);
+      --canvas: #fbfbfe;
+      --canvas-2: #f2f3f8;
+      --canvas-3: #e8eaf2;
+      --canvas-ink: #141620;
+      --canvas-muted: #505466;
+      --canvas-faint: #878ca0;
+      --chrome-ink: #171923;
+      --chrome-muted: #596174;
+      --chrome-faint: #8b92a5;
+      --border: rgba(12, 15, 28, .14);
+      --border-strong: rgba(12, 15, 28, .22);
+      --chrome-border: rgba(20, 24, 38, .12);
+      --accent: #6759e8;
+      --accent-2: #16a3a8;
+      --accent-soft: rgba(103, 89, 232, .13);
+      --accent-strong: rgba(103, 89, 232, .28);
+      --ok: #12906f;
+      --ok-soft: rgba(18, 144, 111, .12);
+      --warn: #a46512;
+      --warn-soft: rgba(164, 101, 18, .14);
+      --err: #cb3f45;
+      --err-soft: rgba(203, 63, 69, .12);
+      --shadow-panel: 0 18px 48px rgba(24, 27, 38, .16);
+      --shadow-float: 0 24px 58px rgba(38, 44, 62, .18);
+      --shadow-tight: 0 6px 14px rgba(12, 15, 28, .12);
+      --line: linear-gradient(90deg, rgba(103,89,232,.55), rgba(22,163,168,.38));
+    }
+
+    .theme[data-theme="dark"] {
+      --app: #151924;
+      --shell: #1b2030;
+      --shell-2: #202638;
+      --shell-3: #2c3449;
+      --shell-soft: rgba(255, 255, 255, .06);
+      --canvas: #f9f9fc;
+      --canvas-2: #eff1f6;
+      --canvas-3: #dfe3ed;
+      --canvas-ink: #141620;
+      --canvas-muted: #4f5364;
+      --canvas-faint: #858b9f;
+      --chrome-ink: #f4f5fb;
+      --chrome-muted: #aeb6ca;
+      --chrome-faint: #6f778b;
+      --border: rgba(255, 255, 255, .08);
+      --border-strong: rgba(255, 255, 255, .14);
+      --chrome-border: rgba(255, 255, 255, .12);
+      --accent: #8a7cff;
+      --accent-2: #2ed3c5;
+      --accent-soft: rgba(138, 124, 255, .15);
+      --accent-strong: rgba(138, 124, 255, .32);
+      --ok: #32d39b;
+      --ok-soft: rgba(50, 211, 155, .14);
+      --warn: #f0b560;
+      --warn-soft: rgba(240, 181, 96, .15);
+      --err: #ff7378;
+      --err-soft: rgba(255, 115, 120, .14);
+      --shadow-panel: 0 18px 48px rgba(0, 0, 0, .32);
+      --shadow-float: 0 30px 72px rgba(0, 0, 0, .44);
+      --shadow-tight: 0 8px 20px rgba(0, 0, 0, .24);
+      --line: linear-gradient(90deg, rgba(138,124,255,.72), rgba(46,211,197,.48));
+    }
+
+    * { box-sizing: border-box; }
+    html { color-scheme: light dark; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      font-size: var(--text-base);
+      color: #171923;
+      background: #e8ebf2;
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.5;
+    }
+
+    .board {
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 26px 24px 60px;
+    }
+
+    .board-head {
+      display: flex;
+      justify-content: space-between;
+      gap: var(--space-4);
+      align-items: end;
+      margin-bottom: 18px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid rgba(20, 24, 38, .16);
+    }
+
+    .board-title {
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: -.02em;
+      color: #11131d;
+    }
+
+    .board-copy {
+      max-width: 850px;
+      margin-top: 6px;
+      color: #52596a;
+      font-size: var(--text-sm);
+    }
+
+    .board-pill {
+      padding: 5px 10px;
+      border: 1px solid rgba(20, 24, 38, .16);
+      border-radius: 999px;
+      color: #5c6376;
+      background: rgba(255,255,255,.52);
+      white-space: nowrap;
+      font-size: var(--text-xs);
+    }
+
+    .theme {
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-xl);
+      background:
+        linear-gradient(135deg, color-mix(in srgb, var(--app), white 16%), var(--app)),
+        var(--app);
+      box-shadow: var(--shadow-panel);
+      overflow: hidden;
+    }
+
+    .theme-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      padding: 12px 14px;
+      background: color-mix(in srgb, var(--app), white 12%);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .theme[data-theme="dark"] .theme-toolbar {
+      background: color-mix(in srgb, var(--app), white 3%);
+    }
+
+    .theme-name {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      color: var(--canvas-ink);
+      font-size: var(--text-sm);
+      font-weight: 700;
+    }
+
+    .theme[data-theme="dark"] .theme-name { color: var(--chrome-ink); }
+
+    .signal {
+      width: 26px;
+      height: 20px;
+      border-radius: 999px;
+      background: var(--line);
+      box-shadow: 0 0 0 1px rgba(255,255,255,.24) inset;
+    }
+
+    .theme-switch {
+      display: inline-flex;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: rgba(255,255,255,.36);
+    }
+
+    .theme[data-theme="dark"] .theme-switch { background: rgba(255,255,255,.04); }
+
+    .theme-btn {
+      border: 0;
+      border-radius: 999px;
+      padding: 5px 10px;
+      font: inherit;
+      font-size: var(--text-xs);
+      cursor: pointer;
+      color: var(--canvas-muted);
+      background: transparent;
+      transition: background .18s var(--ease), color .18s var(--ease);
+    }
+
+    .theme[data-theme="dark"] .theme-btn { color: var(--chrome-muted); }
+    .theme[data-theme="light"] .theme-btn[data-set="light"],
+    .theme[data-theme="dark"] .theme-btn[data-set="dark"] {
+      color: white;
+      background: var(--accent);
+    }
+
+    .caption-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      background: var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .caption {
+      padding: 12px 14px;
+      background: color-mix(in srgb, var(--app), white 12%);
+      min-height: 78px;
+    }
+
+    .theme[data-theme="dark"] .caption {
+      background: color-mix(in srgb, var(--shell), white 2%);
+    }
+
+    .cap-label {
+      color: var(--canvas-faint);
+      font-size: var(--text-2xs);
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .theme[data-theme="dark"] .cap-label { color: var(--chrome-faint); }
+
+    .cap-text {
+      color: var(--canvas-ink);
+      font-size: var(--text-xs);
+    }
+
+    .theme[data-theme="dark"] .cap-text { color: var(--chrome-muted); }
+
+    .stage {
+      padding: 18px;
+    }
+
+    .app-shell {
+      min-height: 820px;
+      display: grid;
+      grid-template-columns: 46px minmax(0, 1fr);
+      border: 1px solid var(--chrome-border);
+      border-radius: var(--radius-lg);
+      background: var(--shell);
+      overflow: hidden;
+      box-shadow: var(--shadow-float);
+    }
+
+    .rail {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 0;
+      background: var(--shell);
+      border-right: 1px solid var(--chrome-border);
+    }
+
+    .rail-mark {
+      width: 24px;
+      height: 24px;
+      display: grid;
+      place-items: center;
+      border-radius: var(--radius-md);
+      color: white;
+      background: var(--line);
+      font-size: var(--text-xs);
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .rail-btn {
+      position: relative;
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border-radius: var(--radius-md);
+      color: var(--chrome-faint);
+      font-size: var(--text-sm);
+      border: 1px solid transparent;
+    }
+
+    .rail-btn.active {
+      color: var(--chrome-ink);
+      background: var(--shell-3);
+      border-color: var(--chrome-border);
+      box-shadow: 0 0 0 1px rgba(255,255,255,.03) inset;
+    }
+
+    .rail-btn.active::after {
+      content: "";
+      position: absolute;
+      inset: auto 7px 4px;
+      height: 2px;
+      border-radius: 999px;
+      background: var(--accent-2);
+    }
+
+    .rail-spacer { flex: 1; }
+
+    .workspace {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: 36px minmax(0, 1fr) 28px;
+      background: var(--shell-2);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--chrome-border);
+      color: var(--chrome-muted);
+      background: var(--shell-2);
+      font-size: var(--text-xs);
+    }
+
+    .crumbs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 99px;
+      background: var(--ok);
+      box-shadow: 0 0 12px color-mix(in srgb, var(--ok), transparent 20%);
+    }
+
+    .top-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .key {
+      height: 20px;
+      min-width: 22px;
+      display: inline-grid;
+      place-items: center;
+      padding: 0 6px;
+      color: var(--chrome-ink);
+      background: var(--shell-3);
+      border: 1px solid var(--chrome-border);
+      border-radius: var(--radius-sm);
+      box-shadow: 0 1px 0 rgba(255,255,255,.05) inset;
+    }
+
+    .main-grid {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 330px;
+      gap: 1px;
+      background: var(--chrome-border);
+    }
+
+    .editor-zone {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: 34px minmax(0, 1fr);
+      background: var(--shell-2);
+    }
+
+    .pane-tabs {
+      display: flex;
+      align-items: end;
+      gap: 6px;
+      padding: 0 10px;
+      border-bottom: 1px solid var(--chrome-border);
+      background: var(--shell-2);
+    }
+
+    .pane-tab {
+      height: 27px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 0 10px;
+      color: var(--chrome-faint);
+      background: transparent;
+      border: 1px solid transparent;
+      border-bottom: 0;
+      border-radius: 7px 7px 0 0;
+      font-size: var(--text-xs);
+    }
+
+    .pane-tab.active {
+      color: var(--chrome-ink);
+      background: var(--shell-3);
+      border-color: var(--chrome-border);
+    }
+
+    .pane-type {
+      color: var(--accent-2);
+      font-size: var(--text-2xs);
+    }
+
+    .pane-stack {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 1px;
+      background: var(--chrome-border);
+    }
+
+    .pane {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 28px minmax(0, 1fr) 24px;
+      background: var(--canvas);
+      color: var(--canvas-ink);
+    }
+
+    .pane.focused {
+      outline: 1px solid var(--accent);
+      outline-offset: -1px;
+    }
+
+    .pane-head,
+    .pane-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 9px;
+      background: var(--canvas-2);
+      color: var(--canvas-muted);
+      font-size: var(--text-xs);
+      border-bottom: 1px solid var(--canvas-3);
+    }
+
+    .pane-foot {
+      border-top: 1px solid var(--canvas-3);
+      border-bottom: 0;
+      color: var(--canvas-faint);
+    }
+
+    .editor {
+      display: grid;
+      grid-template-columns: 38px minmax(0, 1fr);
+      min-height: 0;
+      overflow: hidden;
+      font-size: 12px;
+    }
+
+    .gutter {
+      padding: 8px 8px 0 0;
+      text-align: right;
+      color: var(--canvas-faint);
+      background: var(--canvas-2);
+      border-right: 1px solid var(--canvas-3);
+      user-select: none;
+    }
+
+    .code {
+      padding: 8px 12px;
+      white-space: pre;
+      color: var(--canvas-ink);
+    }
+
+    .code .kw { color: var(--accent); font-weight: 600; }
+    .code .str { color: #0f7a69; }
+    .code .mut { color: var(--canvas-faint); }
+
+    .side-stack {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: 290px 1fr;
+      gap: 1px;
+      background: var(--chrome-border);
+    }
+
+    .palette {
+      margin: 14px;
+      align-self: start;
+      background: color-mix(in srgb, var(--shell-2), transparent 4%);
+      border: 1px solid var(--chrome-border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-tight);
+    }
+
+    .palette-search {
+      height: 46px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 13px;
+      color: var(--chrome-muted);
+      border-bottom: 1px solid var(--chrome-border);
+      background: var(--shell);
+    }
+
+    .palette-input {
+      color: var(--chrome-ink);
+      font-size: var(--text-md);
+      flex: 1;
+    }
+
+    .result-row {
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 9px 12px;
+      color: var(--chrome-muted);
+      border-bottom: 1px solid rgba(255,255,255,.055);
+    }
+
+    .result-row.selected {
+      background: var(--accent-soft);
+      color: var(--chrome-ink);
+    }
+
+    .result-icon {
+      width: 24px;
+      height: 24px;
+      display: grid;
+      place-items: center;
+      border-radius: var(--radius-sm);
+      color: white;
+      background: var(--accent);
+      font-size: var(--text-xs);
+      font-weight: 700;
+    }
+
+    .result-title { font-size: var(--text-xs); font-weight: 700; color: var(--chrome-ink); }
+    .result-sub { margin-top: 1px; font-size: var(--text-2xs); color: var(--chrome-faint); }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      height: 20px;
+      padding: 0 7px;
+      border: 1px solid var(--chrome-border);
+      border-radius: 999px;
+      color: var(--chrome-muted);
+      background: var(--shell-soft);
+      font-size: var(--text-2xs);
+      white-space: nowrap;
+    }
+
+    .panel {
+      min-width: 0;
+      background: var(--shell-2);
+      color: var(--chrome-muted);
+      overflow: hidden;
+    }
+
+    .panel-head {
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      color: var(--chrome-ink);
+      border-bottom: 1px solid var(--chrome-border);
+      background: var(--shell);
+      font-size: var(--text-xs);
+      font-weight: 700;
+    }
+
+    .runner-body {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      height: calc(100% - 34px);
+      background: var(--chrome-border);
+    }
+
+    .runner-pane {
+      display: grid;
+      grid-template-rows: 28px minmax(0, 1fr);
+      min-width: 0;
+      background: var(--canvas);
+      color: var(--canvas-ink);
+    }
+
+    .mini-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 9px;
+      color: var(--canvas-muted);
+      background: var(--canvas-2);
+      border-bottom: 1px solid var(--canvas-3);
+      font-size: var(--text-2xs);
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .runner-text {
+      padding: 10px;
+      color: var(--canvas-muted);
+      white-space: pre-wrap;
+      font-size: var(--text-xs);
+    }
+
+    .run-btn {
+      height: 23px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 9px;
+      border-radius: var(--radius-sm);
+      border: 0;
+      color: white;
+      background: var(--accent);
+      font: inherit;
+      font-size: var(--text-xs);
+      font-weight: 700;
+    }
+
+    .statusbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      color: var(--chrome-faint);
+      background: var(--shell);
+      border-top: 1px solid var(--chrome-border);
+      font-size: var(--text-2xs);
+    }
+
+    .surfaces {
+      display: grid;
+      grid-template-columns: 1.08fr .92fr;
+      gap: 14px;
+      padding: 18px;
+      background: color-mix(in srgb, var(--app), white 7%);
+      border-top: 1px solid var(--border);
+    }
+
+    .theme[data-theme="dark"] .surfaces {
+      background: color-mix(in srgb, var(--app), white 1.5%);
+    }
+
+    .surface-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: color-mix(in srgb, var(--canvas), transparent 4%);
+      overflow: hidden;
+      box-shadow: var(--shadow-tight);
+    }
+
+    .surface-card.dark {
+      background: var(--shell-2);
+      border-color: var(--chrome-border);
+    }
+
+    .surface-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 34px;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--canvas-ink);
+      font-size: var(--text-xs);
+      font-weight: 700;
+    }
+
+    .surface-card.dark .surface-head {
+      color: var(--chrome-ink);
+      border-bottom-color: var(--chrome-border);
+      background: var(--shell);
+    }
+
+    .plugin-list,
+    .settings-grid {
+      display: grid;
+      gap: 9px;
+      padding: 12px;
+    }
+
+    .plugin-card {
+      display: grid;
+      grid-template-columns: 36px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--canvas);
+    }
+
+    .plugin-card.error {
+      border-color: color-mix(in srgb, var(--err), transparent 55%);
+      background: color-mix(in srgb, var(--err-soft), var(--canvas) 78%);
+    }
+
+    .plug-icon {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border-radius: var(--radius-md);
+      color: white;
+      background: var(--accent);
+      font-size: var(--text-xs);
+      font-weight: 800;
+    }
+
+    .plug-title { color: var(--canvas-ink); font-weight: 700; font-size: var(--text-xs); }
+    .plug-sub { color: var(--canvas-faint); font-size: var(--text-2xs); margin-top: 2px; }
+
+    .source-viewer {
+      display: grid;
+      grid-template-columns: 172px minmax(0, 1fr);
+      min-height: 255px;
+    }
+
+    .tree {
+      padding: 9px;
+      background: var(--shell);
+      color: var(--chrome-muted);
+      border-right: 1px solid var(--chrome-border);
+      font-size: var(--text-xs);
+    }
+
+    .tree-row {
+      padding: 5px 7px;
+      border-radius: var(--radius-sm);
+      color: var(--chrome-faint);
+    }
+
+    .tree-row.active {
+      color: var(--chrome-ink);
+      background: var(--shell-3);
+    }
+
+    .source-code {
+      display: grid;
+      grid-template-rows: 30px minmax(0, 1fr);
+      background: var(--canvas);
+      color: var(--canvas-ink);
+    }
+
+    .source-path {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      background: var(--canvas-2);
+      border-bottom: 1px solid var(--canvas-3);
+      color: var(--canvas-muted);
+      font-size: var(--text-2xs);
+    }
+
+    .settings-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .setting {
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--canvas);
+    }
+
+    .setting-title {
+      color: var(--canvas-ink);
+      font-size: var(--text-xs);
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .setting-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--canvas-muted);
+      font-size: var(--text-2xs);
+      padding: 5px 0;
+      border-top: 1px solid var(--canvas-3);
+    }
+
+    .toggle {
+      width: 30px;
+      height: 16px;
+      border-radius: 999px;
+      background: var(--accent);
+      position: relative;
+    }
+
+    .toggle::after {
+      content: "";
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      top: 2px;
+      right: 2px;
+      border-radius: 99px;
+      background: #fff;
+    }
+
+    .diff {
+      display: grid;
+      grid-template-rows: 34px 28px minmax(0, 1fr);
+      min-height: 270px;
+      background: var(--shell-2);
+      border: 1px solid var(--chrome-border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .diff-toolbar,
+    .array-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      color: var(--chrome-muted);
+      border-bottom: 1px solid var(--chrome-border);
+      font-size: var(--text-xs);
+    }
+
+    .diff-toolbar { background: var(--shell); color: var(--chrome-ink); font-weight: 700; }
+    .array-toolbar { background: var(--shell-2); }
+
+    .diff-body {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: var(--canvas-3);
+    }
+
+    .diff-pane {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      background: var(--canvas);
+      color: var(--canvas-ink);
+      overflow: hidden;
+      font-size: var(--text-xs);
+    }
+
+    .add { background: color-mix(in srgb, var(--ok-soft), var(--canvas) 68%); }
+    .change { background: color-mix(in srgb, var(--warn-soft), var(--canvas) 68%); }
+
+    .notes {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .note {
+      padding: 14px;
+      border: 1px solid rgba(20, 24, 38, .14);
+      border-radius: var(--radius-lg);
+      background: rgba(255,255,255,.46);
+      color: #33394a;
+      box-shadow: 0 8px 18px rgba(20,24,38,.06);
+    }
+
+    .note-title {
+      color: #171923;
+      font-size: var(--text-xs);
+      font-weight: 800;
+      margin-bottom: 7px;
+    }
+
+    .note p {
+      margin: 0;
+      font-size: var(--text-xs);
+      color: #555d70;
+    }
+
+    @media (max-width: 1100px) {
+      .caption-grid,
+      .surfaces,
+      .notes { grid-template-columns: 1fr; }
+      .main-grid { grid-template-columns: 1fr; }
+      .side-stack { grid-template-rows: auto auto; }
+      .app-shell { min-height: 1100px; }
+    }
+
+    @media (max-width: 760px) {
+      .board { padding: 18px 12px 36px; }
+      .board-head { align-items: start; flex-direction: column; }
+      .pane-stack,
+      .runner-body,
+      .settings-grid,
+      .diff-body { grid-template-columns: 1fr; }
+      .source-viewer { grid-template-columns: 1fr; }
+      .app-shell { grid-template-columns: 40px minmax(0, 1fr); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="board">
+    <header class="board-head">
+      <div>
+        <div class="board-title">FluxText — Impeccable Atelier UI</div>
+        <div class="board-copy">场景句：开发者在夜间或白天的桌面窗口中处理敏感文本、运行插件、比对内容、查看源码；界面需要像专业工作室里的精密仪器，而不是营销页或普通后台。</div>
+      </div>
+      <div class="board-pill">impeccable · 双主题 · product register</div>
+    </header>
+
+    <section class="theme" id="atelier" data-theme="light">
+      <div class="theme-toolbar">
+        <div class="theme-name"><span class="signal"></span>Impeccable Atelier / 高端创作型文本工作台</div>
+        <div class="theme-switch" aria-label="主题切换">
+          <button class="theme-btn" data-set="light" type="button">亮色</button>
+          <button class="theme-btn" data-set="dark" type="button">暗色</button>
+        </div>
+      </div>
+
+      <div class="caption-grid">
+        <div class="caption">
+          <div class="cap-label">策略</div>
+          <div class="cap-text">Restrained + Crafted：保留高密度工具感，用材质层级和状态语言提升高级感。</div>
+        </div>
+        <div class="caption">
+          <div class="cap-label">主题</div>
+          <div class="cap-text">暗色用于长时沉浸，亮色用于日间清晰；两套主题共享结构和组件语法。</div>
+        </div>
+        <div class="caption">
+          <div class="cap-label">边界</div>
+          <div class="cap-text">框架只负责 chrome、pane、registry、host；Text Diff 与插件行为保持插件拥有。</div>
+        </div>
+        <div class="caption">
+          <div class="cap-label">触感</div>
+          <div class="cap-text">短边框、低噪声阴影、精准焦点态、清楚的 plugin provenance。</div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="app-shell">
+          <nav class="rail">
+            <div class="rail-mark">F</div>
+            <div class="rail-btn active" title="编辑器">E</div>
+            <div class="rail-btn" title="插件">P</div>
+            <div class="rail-btn" title="源码">S</div>
+            <div class="rail-btn" title="运行器">R</div>
+            <div class="rail-spacer"></div>
+            <div class="rail-btn" title="设置">⚙</div>
+          </nav>
+
+          <main class="workspace">
+            <div class="topbar">
+              <div class="crumbs"><span class="dot"></span><span>Workspace</span><span>›</span><span>4 panes</span><span>›</span><span>plugin runtime ready</span></div>
+              <div class="top-actions"><span class="key">⌘K</span><span class="key">⇧⌘K</span><span class="chip">local only</span></div>
+            </div>
+
+            <div class="main-grid">
+              <section class="editor-zone">
+                <div class="pane-tabs">
+                  <div class="pane-tab active">Pane 1 <span class="pane-type">Plain Text</span></div>
+                  <div class="pane-tab">Pane 2 <span class="pane-type">Renderer</span></div>
+                  <div class="pane-tab">Pane 3 <span class="pane-type">Diff</span></div>
+                </div>
+
+                <div class="pane-stack">
+                  <div class="pane focused">
+                    <div class="pane-head"><span>Pane 1 · editable</span><span>JSON</span></div>
+                    <div class="editor"><div class="gutter">1<br>2<br>3<br>4<br>5</div><div class="code">{<br>  <span class="str">"plugin"</span>: <span class="str">"calculator"</span>,<br>  <span class="str">"input"</span>: <span class="str">"1+2*3"</span>,<br>  <span class="str">"mode"</span>: <span class="kw">"instant"</span><br>}</div></div>
+                    <div class="pane-foot"><span>Ln 5, Col 2</span><span>UTF-8</span></div>
+                  </div>
+                  <div class="pane">
+                    <div class="pane-head"><span>Pane 2 · output</span><span>Result</span></div>
+                    <div class="editor"><div class="gutter">1<br>2<br>3</div><div class="code"><span class="kw">Calculator</span><br><span class="mut">expression</span> 1+2*3<br><span class="str">answer</span> 7</div></div>
+                    <div class="pane-foot"><span>from plugin</span><span>copy ready</span></div>
+                  </div>
+                  <div class="pane">
+                    <div class="pane-head"><span>Pane 3 · source</span><span>readonly</span></div>
+                    <div class="editor"><div class="gutter">1<br>2<br>3</div><div class="code"><span class="kw">export</span> const command = {<br>  name: <span class="str">'Format JSON'</span><br>}</div></div>
+                    <div class="pane-foot"><span>Plugin Source Viewer</span><span>monaco</span></div>
+                  </div>
+                  <div class="pane">
+                    <div class="pane-head"><span>Pane 4 · notes</span><span>Text</span></div>
+                    <div class="editor"><div class="gutter">1<br>2<br>3</div><div class="code">Pinned tools stay live.<br>Diff remains editable.<br>Settings keep real structure.</div></div>
+                    <div class="pane-foot"><span>3 lines</span><span>Plain Text</span></div>
+                  </div>
+                </div>
+              </section>
+
+              <aside class="side-stack">
+                <div class="palette">
+                  <div class="palette-search"><span>⌕</span><span class="palette-input">1+2*3</span><span class="key">↵</span></div>
+                  <div class="result-row selected"><div class="result-icon">=</div><div><div class="result-title">1+2*3 = 7</div><div class="result-sub">Calculator · instant suggestion · copy action</div></div><span class="chip">Copy</span></div>
+                  <div class="result-row"><div class="result-icon">Δ</div><div><div class="result-title">Text Diff</div><div class="result-sub">Compare two editable text panes · text-diff</div></div><span class="chip">plugin</span></div>
+                  <div class="result-row"><div class="result-icon">F</div><div><div class="result-title">Format JSON</div><div class="result-sub">Builtin text command · json</div></div><span class="chip">builtin</span></div>
+                  <div class="result-row"><div class="result-icon">⚙</div><div><div class="result-title">Settings</div><div class="result-sub">Workspace View · framework</div></div><span class="chip">view</span></div>
+                </div>
+
+                <div class="panel">
+                  <div class="panel-head"><span>Pinned Runner · URL Encode</span><button class="run-btn">Run</button></div>
+                  <div class="runner-body">
+                    <div class="runner-pane"><div class="mini-title"><span>Input</span><span>editable</span></div><div class="runner-text">https://fluxtext.dev/?q=plugin runtime</div></div>
+                    <div class="runner-pane"><div class="mini-title"><span>Output</span><span>live</span></div><div class="runner-text">https%3A%2F%2Ffluxtext.dev%2F%3Fq%3Dplugin%20runtime</div></div>
+                  </div>
+                </div>
+              </aside>
+            </div>
+
+            <div class="statusbar"><span>renderer lifecycle · pane focus · plugin panels · global launcher</span><span>FluxText 0.2.0</span></div>
+          </main>
+        </div>
+      </div>
+
+      <div class="surfaces">
+        <div class="surface-card">
+          <div class="surface-head"><span>Plugins / Package Manager</span><span class="chip">builtin · installed · dev</span></div>
+          <div class="plugin-list">
+            <div class="plugin-card"><div class="plug-icon">J</div><div><div class="plug-title">JSON Tools</div><div class="plug-sub">commands · renderer · capabilities · package source</div></div><span class="chip">OK</span></div>
+            <div class="plugin-card"><div class="plug-icon">Δ</div><div><div class="plug-title">Text Diff</div><div class="plug-sub">side-by-side editable Monaco diff · semantic toggle</div></div><span class="chip">plugin-owned</span></div>
+            <div class="plugin-card error"><div class="plug-icon">!</div><div><div class="plug-title">malformed-package</div><div class="plug-sub">runtime error text stays visible, not hidden behind generic cards</div></div><span class="chip">error</span></div>
+          </div>
+        </div>
+
+        <div class="surface-card dark">
+          <div class="surface-head"><span>Plugin Source Viewer</span><span class="chip">readonly Monaco</span></div>
+          <div class="source-viewer">
+            <div class="tree">
+              <div class="tree-row">▾ package</div>
+              <div class="tree-row active">index.ts</div>
+              <div class="tree-row">manifest.json</div>
+              <div class="tree-row">renderer.tsx</div>
+              <div class="tree-row">README.md</div>
+            </div>
+            <div class="source-code">
+              <div class="source-path"><span>plugins/textDiff/index.ts</span><span>Reload</span></div>
+              <div class="editor"><div class="gutter">1<br>2<br>3<br>4<br>5<br>6</div><div class="code"><span class="kw">definePlugin</span>({<br>  id: <span class="str">'text-diff'</span>,<br>  renderer: <span class="str">'TextDiffRenderer'</span>,<br>  editable: <span class="kw">true</span><br>})</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="surface-card">
+          <div class="surface-head"><span>Settings</span><span class="chip">real card grid</span></div>
+          <div class="settings-grid">
+            <div class="setting"><div class="setting-title">Editor</div><div class="setting-row"><span>Font size</span><span>13</span></div><div class="setting-row"><span>Sticky scroll</span><span class="toggle"></span></div></div>
+            <div class="setting"><div class="setting-title">Plugins</div><div class="setting-row"><span>Watch directory</span><span>enabled</span></div><div class="setting-row"><span>Dev mode</span><span class="toggle"></span></div></div>
+            <div class="setting"><div class="setting-title">Hotkeys</div><div class="setting-row"><span>Command Palette</span><span>⌘K</span></div><div class="setting-row"><span>Global Launcher</span><span>⇧⌘K</span></div></div>
+            <div class="setting"><div class="setting-title">Updates</div><div class="setting-row"><span>Channel</span><span>stable</span></div><div class="setting-row"><span>Auto check</span><span class="toggle"></span></div></div>
+          </div>
+        </div>
+
+        <div class="diff">
+          <div class="diff-toolbar"><span>Text Diff · plugin renderer</span><span>Esc · Exit diff</span></div>
+          <div class="array-toolbar"><span>Semantic JSON · Array compare controls</span><span class="chip">plugin state</span></div>
+          <div class="diff-body">
+            <div class="diff-pane"><div class="gutter">1<br>2<br>3<br>4</div><div class="code">{<br>  <span class="str">"name"</span>: <span class="str">"FluxText"</span>,<br>  <span class="change">"version": "0.1"</span><br>}</div></div>
+            <div class="diff-pane"><div class="gutter">1<br>2<br>3<br>4</div><div class="code">{<br>  <span class="str">"name"</span>: <span class="str">"FluxText"</span>,<br>  <span class="add">"version": "0.2"</span><br>}</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="notes">
+      <div class="note"><div class="note-title">迁移重点</div><p>优先重构全局 token、sidebar、pane tabs、Command Palette、PluginCard、SourceViewer、PinnedRunner 和 TextDiff toolbar；避免新增框架级 diff API。</p></div>
+      <div class="note"><div class="note-title">验证重点</div><p>检查 1280×800 无横向滚动、亮暗主题对比、焦点态、插件来源、错误卡可读性、Monaco diff 仍可编辑。</p></div>
+      <div class="note"><div class="note-title">为什么高级</div><p>高级感来自密度控制、边界清晰、状态可见、材质克制和插件信息架构，而不是靠大渐变、巨型 hero 或装饰玻璃卡片。</p></div>
+    </div>
+  </div>
+
+  <script>
+    const root = document.getElementById('atelier');
+    document.querySelectorAll('[data-set]').forEach((button) => {
+      button.addEventListener('click', () => {
+        root.dataset.theme = button.dataset.set;
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,1635 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FluxText Next UI Direction Proposal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        /* Typography */
+        --font-sans:
+          'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          Helvetica, Arial, sans-serif;
+        --font-mono:
+          'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+        --text-xs: 11px;
+        --text-sm: 13px;
+        --text-base: 14px;
+        --text-md: 15px;
+        --text-lg: 18px;
+
+        /* Scale & Spacing */
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+
+        /* Radii */
+        --radius-sm: 4px;
+        --radius-md: 6px;
+        --radius-lg: 10px;
+        --radius-xl: 14px;
+
+        /* Linear / Raycast inspired Dark Theme */
+        --color-bg-app: #0a0a0a;
+        --color-bg-surface: #141414;
+        --color-bg-subtle: #1c1c1c;
+        --color-bg-hover: #262626;
+        --color-bg-active: #333333;
+
+        --color-border-subtle: rgba(255, 255, 255, 0.04);
+        --color-border-default: rgba(255, 255, 255, 0.08);
+        --color-border-strong: rgba(255, 255, 255, 0.12);
+
+        --color-text-primary: #eeeeee;
+        --color-text-secondary: #a0a0a0;
+        --color-text-tertiary: #666666;
+
+        --color-accent-base: #5e6ad2;
+        --color-accent-hover: #6b79e4;
+        --color-accent-subtle: rgba(94, 106, 210, 0.15);
+        --color-accent-text: #9ca6f9;
+
+        --color-success-base: #28a745;
+        --color-success-subtle: rgba(40, 167, 69, 0.15);
+        --color-success-text: #4ade80;
+
+        --color-warning-base: #ffc107;
+        --color-warning-subtle: rgba(255, 193, 7, 0.15);
+        --color-warning-text: #fbbf24;
+
+        --color-error-base: #dc3545;
+        --color-error-subtle: rgba(220, 53, 69, 0.15);
+        --color-error-text: #f87171;
+
+        /* Shadows for Elevation */
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+        --shadow-md:
+          0 4px 12px rgba(0, 0, 0, 0.5),
+          0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+        --shadow-lg:
+          0 12px 32px rgba(0, 0, 0, 0.6),
+          0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+        --shadow-float:
+          0 24px 48px rgba(0, 0, 0, 0.8),
+          0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+
+        /* Focus */
+        --focus-ring: 0 0 0 2px rgba(255, 255, 255, 0.15);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--color-bg-app);
+        color: var(--color-text-primary);
+        font-family: var(--font-sans);
+        font-size: var(--text-base);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        line-height: 1.5;
+        letter-spacing: -0.01em;
+      }
+
+      .board {
+        width: min(1440px, 100vw);
+        margin: 0 auto;
+        padding: var(--space-6);
+      }
+
+      .board-header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: var(--space-4);
+        padding-bottom: var(--space-4);
+        border-bottom: 1px solid var(--color-border-strong);
+        margin-bottom: var(--space-6);
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 24px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        color: var(--color-text-primary);
+      }
+
+      .subtitle {
+        margin-top: var(--space-2);
+        color: var(--color-text-secondary);
+        font-size: var(--text-sm);
+        max-width: 980px;
+        line-height: 1.6;
+      }
+
+      .source-pill {
+        display: inline-flex;
+        align-items: center;
+        height: 24px;
+        padding: 0 var(--space-3);
+        border-radius: var(--radius-xl);
+        color: var(--color-accent-text);
+        background: var(--color-accent-subtle);
+        border: 1px solid rgba(94, 106, 210, 0.3);
+        font-size: var(--text-xs);
+        font-weight: 500;
+        white-space: nowrap;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: var(--space-6);
+        align-items: start;
+      }
+
+      .stack {
+        display: grid;
+        gap: var(--space-6);
+      }
+
+      .surface {
+        background: var(--color-bg-surface);
+        border: 1px solid var(--color-border-default);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-md);
+        overflow: hidden;
+        position: relative;
+      }
+
+      .surface::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: linear-gradient(
+          90deg,
+          rgba(255, 255, 255, 0),
+          rgba(255, 255, 255, 0.05),
+          rgba(255, 255, 255, 0)
+        );
+        pointer-events: none;
+      }
+
+      .surface-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--space-3) var(--space-4);
+        background: var(--color-bg-subtle);
+        border-bottom: 1px solid var(--color-border-default);
+      }
+
+      .surface-title {
+        font-size: var(--text-sm);
+        font-weight: 600;
+        color: var(--color-text-primary);
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+      }
+
+      .surface-note {
+        font-size: var(--text-xs);
+        color: var(--color-text-tertiary);
+      }
+
+      .surface-body {
+        padding: var(--space-4);
+        background: var(--color-bg-app);
+      }
+
+      /* Common Buttons */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-2);
+        height: 28px;
+        padding: 0 var(--space-3);
+        border-radius: var(--radius-md);
+        font-size: var(--text-sm);
+        font-weight: 500;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: all 0.15s ease;
+        font-family: var(--font-sans);
+      }
+
+      .btn-outline {
+        background: transparent;
+        border: 1px solid var(--color-border-strong);
+        color: var(--color-text-primary);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+      }
+      .btn-outline:hover {
+        background: var(--color-bg-hover);
+        border-color: rgba(255, 255, 255, 0.2);
+      }
+
+      .btn-primary {
+        background: var(--color-accent-base);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #fff;
+        box-shadow:
+          0 1px 2px rgba(0, 0, 0, 0.4),
+          inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+      }
+      .btn-primary:hover {
+        background: var(--color-accent-hover);
+      }
+
+      .btn-ghost {
+        background: transparent;
+        border: 1px solid transparent;
+        color: var(--color-text-secondary);
+        height: 24px;
+        padding: 0 var(--space-2);
+        font-size: var(--text-xs);
+        font-family: var(--font-sans);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      .btn-ghost:hover {
+        background: var(--color-bg-hover);
+        color: var(--color-text-primary);
+      }
+
+      .btn-ghost.active {
+        background: var(--color-bg-active);
+        color: var(--color-text-primary);
+        box-shadow:
+          0 1px 2px rgba(0, 0, 0, 0.2),
+          inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      }
+
+      /* Badges */
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        height: 20px;
+        padding: 0 var(--space-2);
+        border-radius: var(--radius-sm);
+        background: var(--color-bg-hover);
+        color: var(--color-text-secondary);
+        font-size: var(--text-xs);
+        font-family: var(--font-mono);
+        white-space: nowrap;
+        border: 1px solid var(--color-border-subtle);
+      }
+      .badge.success {
+        background: var(--color-success-subtle);
+        color: var(--color-success-text);
+        border-color: rgba(40, 167, 69, 0.2);
+      }
+      .badge.error {
+        background: var(--color-error-subtle);
+        color: var(--color-error-text);
+        border-color: rgba(220, 53, 69, 0.2);
+      }
+
+      /* Icons */
+      .icon-box {
+        width: 24px;
+        height: 24px;
+        display: grid;
+        place-items: center;
+        border-radius: var(--radius-sm);
+        background: var(--color-bg-hover);
+        color: var(--color-text-secondary);
+        font-size: 10px;
+        font-weight: 600;
+        border: 1px solid var(--color-border-default);
+        box-shadow: var(--shadow-sm);
+      }
+
+      /* APP SHELL */
+      .app-shell {
+        display: grid;
+        grid-template-columns: 48px minmax(0, 1fr);
+        height: 480px;
+        background: var(--color-bg-surface);
+        border: 1px solid var(--color-border-default);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        box-shadow: var(--shadow-lg);
+      }
+
+      .sidebar {
+        background: var(--color-bg-subtle);
+        border-right: 1px solid var(--color-border-default);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: var(--space-3) 0;
+        gap: var(--space-2);
+      }
+
+      .sidebar-btn {
+        width: 32px;
+        height: 32px;
+        display: grid;
+        place-items: center;
+        border-radius: var(--radius-md);
+        color: var(--color-text-tertiary);
+        font-size: 14px;
+        font-weight: 600;
+        transition: all 0.15s ease;
+        cursor: pointer;
+      }
+      .sidebar-btn:hover {
+        color: var(--color-text-secondary);
+        background: var(--color-bg-hover);
+      }
+      .sidebar-btn.active {
+        color: var(--color-text-primary);
+        background: var(--color-bg-active);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.05),
+          0 1px 2px rgba(0, 0, 0, 0.2);
+      }
+
+      .sidebar-sep {
+        width: 20px;
+        height: 1px;
+        background: var(--color-border-default);
+        margin: var(--space-1) 0;
+      }
+
+      .workspace {
+        display: grid;
+        grid-template-rows: 40px minmax(0, 1fr) 28px;
+        min-width: 0;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 var(--space-3);
+        border-bottom: 1px solid var(--color-border-default);
+        font-size: var(--text-sm);
+        color: var(--color-text-secondary);
+        background: var(--color-bg-surface);
+      }
+
+      .status-ready {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .status-ready::before {
+        content: '';
+        display: block;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--color-success-text);
+        box-shadow: 0 0 8px var(--color-success-text);
+      }
+
+      .top-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--space-1);
+      }
+
+      .pane-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 1fr 1fr;
+        gap: 1px;
+        background: var(--color-border-default);
+      }
+
+      .pane {
+        background: var(--color-bg-app);
+        display: grid;
+        grid-template-rows: 32px minmax(0, 1fr) 28px;
+        min-width: 0;
+        min-height: 0;
+      }
+
+      .pane-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 var(--space-3);
+        background: var(--color-bg-surface);
+        border-bottom: 1px solid var(--color-border-subtle);
+        font-size: var(--text-xs);
+        color: var(--color-text-secondary);
+      }
+
+      .editor-body {
+        display: grid;
+        grid-template-columns: 40px minmax(0, 1fr);
+        min-height: 0;
+        font-family: var(--font-mono);
+        font-size: 13px;
+      }
+
+      .editor-gutter {
+        background: var(--color-bg-surface);
+        border-right: 1px solid var(--color-border-subtle);
+        padding-top: var(--space-2);
+        text-align: right;
+        padding-right: var(--space-2);
+        color: var(--color-text-tertiary);
+        user-select: none;
+      }
+
+      .editor-content {
+        padding: var(--space-2) var(--space-3);
+        color: var(--color-text-primary);
+        white-space: pre;
+        overflow: hidden;
+      }
+
+      .pane-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 var(--space-3);
+        border-top: 1px solid var(--color-border-subtle);
+        font-size: var(--text-xs);
+        color: var(--color-text-tertiary);
+        background: var(--color-bg-surface);
+      }
+
+      .statusbar {
+        display: flex;
+        align-items: center;
+        gap: var(--space-4);
+        padding: 0 var(--space-3);
+        background: var(--color-bg-subtle);
+        border-top: 1px solid var(--color-border-default);
+        font-size: var(--text-xs);
+        color: var(--color-text-secondary);
+      }
+
+      /* PALETTE */
+      .palette {
+        background: rgba(22, 22, 22, 0.7);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid var(--color-border-strong);
+        border-radius: var(--radius-xl);
+        box-shadow: var(--shadow-float);
+        overflow: hidden;
+        width: 100%;
+      }
+
+      .palette-search {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        padding: 0 var(--space-4);
+        height: 56px;
+        border-bottom: 1px solid var(--color-border-default);
+        color: var(--color-text-tertiary);
+        font-size: var(--text-md);
+      }
+      .palette-search span:first-child {
+        color: var(--color-text-tertiary);
+        font-size: 12px;
+      }
+      .palette-search .input-text {
+        color: var(--color-text-primary);
+        flex: 1;
+        font-size: 16px;
+      }
+
+      .palette-list {
+        max-height: 280px;
+        overflow-y: auto;
+        padding: var(--space-2) 0;
+      }
+
+      .palette-item {
+        display: grid;
+        grid-template-columns: 28px minmax(0, 1fr) auto;
+        gap: var(--space-3);
+        align-items: center;
+        padding: var(--space-2) var(--space-4);
+        cursor: pointer;
+        border-left: 2px solid transparent;
+      }
+      .palette-item.selected {
+        background: var(--color-bg-hover);
+        border-left-color: var(--color-accent-base);
+      }
+      .palette-item.selected .icon-box {
+        background: var(--color-accent-base);
+        border-color: var(--color-accent-hover);
+        color: #fff;
+        box-shadow: 0 2px 8px rgba(94, 106, 210, 0.4);
+      }
+
+      .item-body {
+        min-width: 0;
+      }
+      .item-title {
+        font-weight: 500;
+        color: var(--color-text-primary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-size: var(--text-sm);
+      }
+      .item-sub {
+        font-size: var(--text-xs);
+        color: var(--color-text-tertiary);
+        margin-top: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .item-meta {
+        font-size: var(--text-xs);
+        color: var(--color-text-tertiary);
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+      }
+
+      kbd {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 22px;
+        height: 22px;
+        padding: 0 4px;
+        border: 1px solid var(--color-border-strong);
+        border-radius: var(--radius-sm);
+        background: var(--color-bg-active);
+        color: var(--color-text-primary);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        box-shadow:
+          0 2px 0 rgba(0, 0, 0, 0.2),
+          inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      }
+
+      .palette-footer {
+        display: flex;
+        gap: var(--space-4);
+        padding: var(--space-3) var(--space-4);
+        border-top: 1px solid var(--color-border-default);
+        background: var(--color-bg-subtle);
+        font-size: var(--text-xs);
+        color: var(--color-text-tertiary);
+      }
+
+      .section-label {
+        padding: var(--space-2) var(--space-4) var(--space-1);
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--color-text-tertiary);
+      }
+
+      /* PLUGINS VIEW */
+      .plugins-screen {
+        background: var(--color-bg-surface);
+        border: 1px solid var(--color-border-default);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-md);
+        overflow: hidden;
+      }
+
+      .screen-header {
+        padding: var(--space-4);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--color-border-default);
+        background: var(--color-bg-subtle);
+      }
+
+      .screen-title {
+        font-size: var(--text-md);
+        font-weight: 600;
+        color: var(--color-text-primary);
+      }
+
+      .search-bar {
+        margin: var(--space-4);
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        padding: 0 var(--space-3);
+        height: 36px;
+        background: var(--color-bg-app);
+        border: 1px solid var(--color-border-strong);
+        border-radius: var(--radius-md);
+        color: var(--color-text-secondary);
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+        font-size: var(--text-sm);
+      }
+      .search-bar:focus-within {
+        border-color: var(--color-accent-base);
+        box-shadow: var(--focus-ring);
+      }
+
+      .tabs {
+        display: flex;
+        border-bottom: 1px solid var(--color-border-default);
+        padding: 0 var(--space-4);
+        gap: var(--space-4);
+      }
+
+      .tab {
+        padding: var(--space-2) 0;
+        font-size: var(--text-sm);
+        font-weight: 500;
+        color: var(--color-text-tertiary);
+        cursor: pointer;
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+      }
+      .tab.active {
+        color: var(--color-text-primary);
+      }
+      .tab.active::after {
+        content: '';
+        position: absolute;
+        bottom: -1px;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: var(--color-accent-base);
+        border-radius: 2px 2px 0 0;
+        box-shadow: 0 -2px 8px rgba(94, 106, 210, 0.5);
+      }
+
+      .plugin-list {
+        padding: var(--space-4);
+        display: grid;
+        gap: var(--space-3);
+        background: var(--color-bg-app);
+      }
+
+      .plugin-card {
+        display: grid;
+        grid-template-columns: 44px minmax(0, 1fr) auto;
+        gap: var(--space-4);
+        align-items: center;
+        padding: var(--space-3);
+        border: 1px solid var(--color-border-default);
+        border-radius: var(--radius-md);
+        background: var(--color-bg-surface);
+        transition: all 0.15s;
+        box-shadow: var(--shadow-sm);
+      }
+      .plugin-card:hover {
+        border-color: var(--color-border-strong);
+        background: var(--color-bg-hover);
+      }
+      .plugin-card.error {
+        border-color: var(--color-error-subtle);
+        background: rgba(220, 53, 69, 0.05);
+      }
+
+      .plugin-icon {
+        width: 44px;
+        height: 44px;
+        display: grid;
+        place-items: center;
+        border-radius: var(--radius-md);
+        background: var(--color-bg-subtle);
+        color: var(--color-text-primary);
+        font-weight: 600;
+        border: 1px solid var(--color-border-default);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      }
+
+      .plugin-info {
+        min-width: 0;
+      }
+      .plugin-title-row {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        margin-bottom: var(--space-1);
+      }
+      .plugin-name {
+        font-weight: 600;
+        color: var(--color-text-primary);
+        font-size: var(--text-sm);
+      }
+      .plugin-desc {
+        font-size: var(--text-xs);
+        color: var(--color-text-secondary);
+        margin-bottom: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-family: var(--font-mono);
+      }
+      .plugin-meta {
+        display: flex;
+        gap: var(--space-2);
+        margin-top: var(--space-2);
+      }
+
+      /* SETTINGS */
+      .settings-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: var(--space-4);
+        padding: var(--space-4);
+        background: var(--color-bg-app);
+      }
+
+      .setting-card {
+        background: var(--color-bg-surface);
+        border: 1px solid var(--color-border-default);
+        border-radius: var(--radius-md);
+        padding: var(--space-4);
+        box-shadow: var(--shadow-sm);
+      }
+
+      .setting-title {
+        font-weight: 600;
+        color: var(--color-text-primary);
+        margin-bottom: var(--space-3);
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        font-size: var(--text-sm);
+      }
+      .setting-title .accent {
+        color: var(--color-accent-text);
+        font-family: var(--font-mono);
+        background: var(--color-bg-active);
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px solid var(--color-border-default);
+      }
+
+      .setting-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--space-2) 0;
+        border-bottom: 1px solid var(--color-border-subtle);
+        font-size: var(--text-sm);
+        color: var(--color-text-secondary);
+      }
+      .setting-row:last-child {
+        border-bottom: none;
+        padding-bottom: 0;
+      }
+
+      .toggle {
+        width: 36px;
+        height: 20px;
+        border-radius: 10px;
+        background: var(--color-accent-base);
+        position: relative;
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+        cursor: pointer;
+      }
+      .toggle::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 18px;
+        width: 16px;
+        height: 16px;
+        background: #fff;
+        border-radius: 50%;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        transition: all 0.2s ease;
+      }
+
+      /* DIFF RENDERER */
+      .diff-screen {
+        background: var(--color-bg-surface);
+        border: 1px solid var(--color-border-default);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-md);
+        overflow: hidden;
+        display: grid;
+        grid-template-rows: auto auto minmax(0, 1fr);
+        height: 380px;
+      }
+
+      .diff-toolbar {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: var(--space-2) var(--space-3);
+        background: var(--color-bg-subtle);
+        border-bottom: 1px solid var(--color-border-default);
+      }
+
+      .diff-title {
+        font-weight: 600;
+        font-size: var(--text-sm);
+        color: var(--color-text-primary);
+        margin-right: var(--space-2);
+      }
+
+      .diff-editors {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1px;
+        background: var(--color-border-default);
+        min-height: 0;
+      }
+
+      .diff-side {
+        background: var(--color-bg-app);
+        display: grid;
+        grid-template-columns: 40px minmax(0, 1fr);
+        font-family: var(--font-mono);
+        font-size: 13px;
+      }
+
+      .hl-add {
+        background: rgba(40, 167, 69, 0.2);
+        color: var(--color-success-text);
+      }
+      .hl-change {
+        background: rgba(255, 193, 7, 0.15);
+        color: var(--color-warning-text);
+      }
+
+      /* SOURCE VIEWER */
+      .source-screen {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        height: 340px;
+        border: 1px solid var(--color-border-default);
+        border-radius: var(--radius-lg);
+        background: var(--color-bg-surface);
+        overflow: hidden;
+        box-shadow: var(--shadow-md);
+      }
+
+      .source-main {
+        display: grid;
+        grid-template-columns: 240px minmax(0, 1fr);
+        min-height: 0;
+      }
+
+      .file-tree {
+        background: var(--color-bg-subtle);
+        border-right: 1px solid var(--color-border-default);
+        padding: var(--space-2);
+        overflow-y: auto;
+      }
+
+      .tree-node {
+        padding: var(--space-1) var(--space-2);
+        border-radius: var(--radius-sm);
+        font-size: var(--text-sm);
+        color: var(--color-text-secondary);
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        cursor: pointer;
+        transition: all 0.1s ease;
+      }
+      .tree-node:hover {
+        background: var(--color-bg-hover);
+        color: var(--color-text-primary);
+      }
+      .tree-node.active {
+        background: var(--color-bg-active);
+        color: var(--color-text-primary);
+        font-weight: 500;
+        border: 1px solid var(--color-border-default);
+      }
+
+      /* PINNED RUNNER */
+      .pinned-screen {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        height: 340px;
+        border: 1px solid var(--color-border-default);
+        border-radius: var(--radius-lg);
+        background: var(--color-bg-surface);
+        overflow: hidden;
+        box-shadow: var(--shadow-md);
+      }
+
+      .pinned-panels {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1px;
+        background: var(--color-border-default);
+        min-height: 0;
+      }
+
+      .pinned-half {
+        background: var(--color-bg-app);
+        display: grid;
+        grid-template-rows: 36px minmax(0, 1fr);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="board">
+      <header class="board-header">
+        <div>
+          <h1>FluxText Next UI Direction Proposal</h1>
+          <p class="subtitle">
+            A grounded, concrete redesign focusing on structural hierarchy,
+            rhythm, and clarity while preserving the dense desktop text-tool
+            feel. Designed with accurate source data.
+          </p>
+        </div>
+        <div class="source-pill">v3 proposal</div>
+      </header>
+
+      <main class="layout">
+        <section class="stack">
+          <!-- App Shell -->
+          <div class="surface">
+            <div class="surface-header">
+              <div class="surface-title">Main Editor Shell</div>
+              <div class="surface-note">
+                Refined hierarchy, clear boundaries
+              </div>
+            </div>
+            <div class="surface-body">
+              <div class="app-shell">
+                <aside class="sidebar">
+                  <div class="sidebar-btn active">E</div>
+                  <div class="sidebar-btn">P</div>
+                  <div class="sidebar-sep"></div>
+                  <div class="sidebar-btn" title="dynamic pinned action slot">
+                    pin
+                  </div>
+                  <div style="flex: 1"></div>
+                  <div class="sidebar-btn">S</div>
+                </aside>
+                <section class="workspace">
+                  <div class="topbar">
+                    <span class="status-ready">Ready</span>
+                    <div class="top-actions">
+                      <button class="btn-ghost">+</button>
+                      <button class="btn-ghost">Split Right</button>
+                      <button class="btn-ghost">⌘K to run action</button>
+                    </div>
+                  </div>
+                  <div class="pane-grid">
+                    <div class="pane">
+                      <div class="pane-header">
+                        <span>1</span><button class="btn-ghost">Close</button>
+                      </div>
+                      <div class="editor-body">
+                        <div class="editor-gutter">1</div>
+                        <div class="editor-content"></div>
+                      </div>
+                      <div class="pane-footer">
+                        <span>Ln 1, Col 1</span><span>Plain Text · Auto</span>
+                      </div>
+                    </div>
+                    <div class="pane">
+                      <div class="pane-header">
+                        <span>2</span><button class="btn-ghost">Close</button>
+                      </div>
+                      <div class="editor-body">
+                        <div class="editor-gutter">1</div>
+                        <div class="editor-content"></div>
+                      </div>
+                      <div class="pane-footer">
+                        <span>Ln 1, Col 1</span><span>Plain Text · Auto</span>
+                      </div>
+                    </div>
+                    <div class="pane">
+                      <div class="pane-header">
+                        <span>3</span><button class="btn-ghost">Close</button>
+                      </div>
+                      <div class="editor-body">
+                        <div class="editor-gutter">1</div>
+                        <div class="editor-content"></div>
+                      </div>
+                      <div class="pane-footer">
+                        <span>Ln 1, Col 1</span><span>Plain Text · Auto</span>
+                      </div>
+                    </div>
+                    <div class="pane">
+                      <div class="pane-header">
+                        <span>4</span><button class="btn-ghost">Close</button>
+                      </div>
+                      <div class="editor-body">
+                        <div class="editor-gutter">1</div>
+                        <div class="editor-content"></div>
+                      </div>
+                      <div class="pane-footer">
+                        <span>Ln 1, Col 1</span><span>Plain Text · Auto</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="statusbar">
+                    <span>Active: 2</span>
+                    <span>Renderer: Code</span>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
+
+          <!-- Plugins View -->
+          <div class="surface">
+            <div class="surface-header">
+              <div class="surface-title">Plugins View</div>
+              <div class="surface-note">
+                Clearer card hierarchy, elevated actions
+              </div>
+            </div>
+            <div class="surface-body">
+              <div class="plugins-screen">
+                <div class="screen-header">
+                  <div class="screen-title">Plugins</div>
+                  <div class="top-actions">
+                    <button class="btn btn-primary">+ New plugin</button>
+                    <button class="btn btn-outline">GitHub</button>
+                    <button class="btn btn-outline">Zip</button>
+                    <button class="btn btn-outline">Folder</button>
+                    <button class="btn btn-primary">Dev</button>
+                  </div>
+                </div>
+                <div class="search-bar">
+                  <span>Search</span>
+                  <span style="flex: 1">Search plugins...</span>
+                  <span class="badge">0</span>
+                </div>
+                <div class="tabs">
+                  <div class="tab active">
+                    Builtin <span class="badge">0</span>
+                  </div>
+                  <div class="tab">Installed <span class="badge">0</span></div>
+                  <div class="tab">Dev <span class="badge">0</span></div>
+                </div>
+                <div class="plugin-list">
+                  <div
+                    style="
+                      display: flex;
+                      justify-content: space-between;
+                      align-items: center;
+                      font-size: var(--text-xs);
+                      color: var(--color-text-secondary);
+                    "
+                  >
+                    <span>Builtin directory plugin packages</span>
+                    <button class="btn-ghost">Check package updates</button>
+                  </div>
+                  <div class="plugin-card">
+                    <div class="plugin-icon">PK</div>
+                    <div class="plugin-info">
+                      <div class="plugin-title-row">
+                        <span class="plugin-name">Text Diff</span>
+                        <span class="badge">builtin</span>
+                        <span class="badge success">available</span>
+                      </div>
+                      <div class="plugin-desc">v1.0.0 · text-diff</div>
+                      <div class="plugin-desc">.../plugins/textDiff</div>
+                      <div class="plugin-meta">
+                        <span class="badge">command</span
+                        ><span class="badge">renderer</span
+                        ><span class="badge">read-only</span>
+                      </div>
+                    </div>
+                    <div><button class="btn-ghost">open</button></div>
+                  </div>
+
+                  <div class="plugin-card error">
+                    <div
+                      class="plugin-icon"
+                      style="
+                        background: var(--color-error-subtle);
+                        color: var(--color-error-text);
+                      "
+                    >
+                      PK
+                    </div>
+                    <div class="plugin-info">
+                      <div class="plugin-title-row">
+                        <span class="plugin-name">Malformed package</span>
+                        <span class="badge">local</span>
+                        <span class="badge error">error</span>
+                      </div>
+                      <div class="plugin-desc">
+                        v0.0.0 · package id from directory summary
+                      </div>
+                      <div
+                        class="plugin-desc"
+                        style="
+                          color: var(--color-error-text);
+                          margin-top: var(--space-1);
+                        "
+                      >
+                        Alert icon + runtime/package error text remains visible
+                        here
+                      </div>
+                    </div>
+                    <div style="display: flex; gap: 4px">
+                      <button class="btn-ghost">open</button>
+                      <button class="btn-ghost">power</button>
+                      <button class="btn-ghost">reload</button>
+                      <button class="btn-ghost">trash</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Text Diff -->
+          <div class="surface">
+            <div class="surface-header">
+              <div class="surface-title">Text Diff Renderer</div>
+              <div class="surface-note">Plugin-owned workspace surface</div>
+            </div>
+            <div class="surface-body">
+              <div class="diff-screen">
+                <div class="diff-toolbar">
+                  <span class="diff-title">Text Diff: Pane 1 ↔ Pane 2</span>
+                  <button class="btn-ghost">JSON semantic diff</button>
+                  <button class="btn-ghost">2 changes</button>
+                  <button class="btn-ghost active">Semantic</button>
+                  <div style="flex: 1"></div>
+                  <button class="btn-ghost">Exit diff</button>
+                </div>
+                <div
+                  class="diff-toolbar"
+                  style="border-top: none; background: var(--color-bg-surface)"
+                >
+                  <span
+                    style="
+                      font-size: var(--text-xs);
+                      color: var(--color-text-secondary);
+                      margin-right: var(--space-2);
+                    "
+                    >Array:</span
+                  >
+                  <button class="btn-ghost active">By index</button>
+                  <button class="btn-ghost">Unordered scalar</button>
+                  <button class="btn-ghost">By key</button>
+                  <button class="btn-ghost">key</button>
+                  <div style="flex: 1"></div>
+                  <span
+                    style="
+                      font-size: var(--text-xs);
+                      color: var(--color-text-tertiary);
+                    "
+                    >Esc also exits</span
+                  >
+                </div>
+                <div class="diff-editors">
+                  <div class="diff-side">
+                    <div class="editor-gutter">1<br />2<br />3<br />4</div>
+                    <div class="editor-content">
+                      {<br />
+                      "name": "FluxText",<br /><span class="hl-change">
+                        "mode": "text"</span
+                      ><br />}
+                    </div>
+                  </div>
+                  <div class="diff-side">
+                    <div class="editor-gutter">1<br />2<br />3<br />4</div>
+                    <div class="editor-content">
+                      {<br />
+                      "name": "FluxText",<br /><span class="hl-add">
+                        "mode": "plugin"</span
+                      ><br />}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <aside class="stack">
+          <!-- Palette / Launcher -->
+          <div
+            class="surface"
+            style="background: transparent; border: none; box-shadow: none"
+          >
+            <div
+              class="surface-header"
+              style="border-radius: var(--radius-lg) var(--radius-lg) 0 0"
+            >
+              <div class="surface-title">Global Launcher & Palette</div>
+              <div class="surface-note">Floating elevation, active states</div>
+            </div>
+            <div class="surface-body" style="padding-top: var(--space-4)">
+              <div class="palette" style="margin-bottom: var(--space-4)">
+                <div class="palette-search">
+                  <span>Search</span
+                  ><span class="input-text"
+                    >Pinned actions, recent commands, workspace views</span
+                  >
+                </div>
+                <div class="palette-list">
+                  <div class="section-label">Pinned Actions</div>
+                  <div class="palette-item selected">
+                    <div class="icon-box">P</div>
+                    <div class="item-body">
+                      <div class="item-title">Pinned command title</div>
+                      <div class="item-sub">Pinned Actions</div>
+                    </div>
+                  </div>
+                  <div class="section-label">Recent Commands</div>
+                  <div class="palette-item">
+                    <div class="icon-box">TE</div>
+                    <div class="item-body">
+                      <div class="item-title">Text Diff</div>
+                      <div class="item-sub">Recent Commands</div>
+                    </div>
+                  </div>
+                  <div class="section-label">Workspace Views</div>
+                  <div class="palette-item">
+                    <div class="icon-box">E</div>
+                    <div class="item-body">
+                      <div class="item-title">Editor</div>
+                      <div class="item-sub">Workspace Views</div>
+                    </div>
+                  </div>
+                  <div class="palette-item">
+                    <div class="icon-box">P</div>
+                    <div class="item-body">
+                      <div class="item-title">Plugins</div>
+                      <div class="item-sub">Workspace Views</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="palette-footer">
+                  <span><kbd>↑</kbd><kbd>↓</kbd> select</span>
+                  <span><kbd>↵</kbd> confirm</span>
+                  <span><kbd>esc</kbd> back</span>
+                </div>
+              </div>
+
+              <!-- Instant Suggestion snippet -->
+              <div class="palette">
+                <div class="palette-search">
+                  <span>Search</span><span class="input-text">1+2*3</span>
+                </div>
+                <div class="palette-list">
+                  <div class="palette-item selected">
+                    <div class="icon-box">CA</div>
+                    <div class="item-body">
+                      <div class="item-title">1+2*3 = 7</div>
+                      <div class="item-sub">Calculator</div>
+                    </div>
+                    <div class="item-meta">Copy Answer</div>
+                  </div>
+                </div>
+                <div class="palette-footer">
+                  <span><kbd>↵</kbd> copy result</span>
+                  <span>action copies 7</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pinned Runner -->
+          <div class="surface">
+            <div class="surface-header">
+              <div class="surface-title">Pinned Runner</div>
+            </div>
+            <div class="surface-body">
+              <div class="pinned-screen">
+                <div
+                  class="screen-header"
+                  style="padding: var(--space-3) var(--space-4)"
+                >
+                  <div
+                    style="
+                      display: flex;
+                      align-items: center;
+                      gap: var(--space-2);
+                    "
+                  >
+                    <span class="screen-title" style="font-size: var(--text-md)"
+                      >Pinned tool title</span
+                    >
+                    <span class="badge">Ready</span>
+                  </div>
+                  <div class="top-actions">
+                    <span class="badge">Auto</span>
+                    <button class="btn btn-primary">Run</button>
+                    <button class="btn btn-outline">Controls</button>
+                    <button class="btn btn-outline">Reset</button>
+                    <button class="btn-ghost">pin-off</button>
+                  </div>
+                </div>
+                <div class="pinned-panels">
+                  <div class="pinned-half">
+                    <div class="pane-header">
+                      <span>Input</span><button class="btn-ghost">clear</button>
+                    </div>
+                    <div class="editor-body">
+                      <div class="editor-gutter">1</div>
+                      <div class="editor-content">editable Monaco input</div>
+                    </div>
+                  </div>
+                  <div class="pinned-half">
+                    <div class="pane-header">
+                      <span>Output</span>
+                      <div>
+                        <button class="btn-ghost">copy</button
+                        ><button class="btn-ghost">clear</button
+                        ><button class="btn-ghost">apply new pane</button>
+                      </div>
+                    </div>
+                    <div class="editor-body">
+                      <div class="editor-gutter">1</div>
+                      <div class="editor-content">read-only Monaco output</div>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  class="diff-toolbar"
+                  style="background: var(--color-bg-subtle)"
+                >
+                  <span
+                    style="
+                      color: var(--color-text-secondary);
+                      margin-right: var(--space-2);
+                    "
+                    >Controls bar when no custom panel owns controls</span
+                  >
+                  <span class="badge">checkbox</span
+                  ><span class="badge">dropdown</span
+                  ><span class="badge">multi-select</span
+                  ><span class="badge">number/text</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Settings -->
+          <div class="surface">
+            <div class="surface-header">
+              <div class="surface-title">Settings</div>
+            </div>
+            <div class="surface-body">
+              <div class="plugins-screen">
+                <div class="screen-header">
+                  <div class="screen-title">Settings</div>
+                  <span
+                    class="badge"
+                    style="
+                      background: var(--color-accent-subtle);
+                      color: var(--color-accent-text);
+                    "
+                    >vdev</span
+                  >
+                </div>
+                <div class="settings-grid">
+                  <div class="setting-card">
+                    <div class="setting-title">
+                      <span class="accent">L</span>Language
+                    </div>
+                    <div class="setting-row">
+                      <span>Language</span
+                      ><button
+                        class="btn-outline"
+                        style="height: 24px; padding: 0 8px; font-size: 11px"
+                      >
+                        English v
+                      </button>
+                    </div>
+                  </div>
+                  <div class="setting-card">
+                    <div class="setting-title">
+                      <span class="accent">E</span>Editor
+                    </div>
+                    <div class="setting-row">
+                      <span>Font size</span><span>- 13 +</span>
+                    </div>
+                    <div class="setting-row">
+                      <span>Word wrap</span>
+                      <div class="toggle"></div>
+                    </div>
+                    <div class="setting-row">
+                      <span>Line numbers</span>
+                      <div class="toggle"></div>
+                    </div>
+                  </div>
+                  <div class="setting-card">
+                    <div class="setting-title">
+                      <span class="accent">B</span>Behavior
+                    </div>
+                    <div class="setting-row">
+                      <span>Persist params</span>
+                      <div class="toggle"></div>
+                    </div>
+                    <div class="setting-row">
+                      <span>Remember pinned input</span>
+                      <div class="toggle"></div>
+                    </div>
+                    <div class="setting-row">
+                      <span>Remember pinned sleeping state</span>
+                      <div class="toggle"></div>
+                    </div>
+                  </div>
+                  <div class="setting-card">
+                    <div class="setting-title">
+                      <span class="accent">K</span>Hotkeys
+                    </div>
+                    <div class="setting-row">
+                      <span>Global pinned launcher</span>
+                      <button
+                        class="btn-outline"
+                        style="
+                          height: 24px;
+                          padding: 0 8px;
+                          font-size: 11px;
+                          background: var(--color-bg-app);
+                        "
+                      >
+                        Shift+Cmd+Space
+                      </button>
+                    </div>
+                    <div
+                      style="
+                        display: flex;
+                        gap: 4px;
+                        margin-top: var(--space-3);
+                      "
+                    >
+                      <button
+                        class="btn-outline"
+                        style="height: 24px; padding: 0 8px; font-size: 11px"
+                      >
+                        Record shortcut
+                      </button>
+                      <button
+                        class="btn-outline"
+                        style="height: 24px; padding: 0 8px; font-size: 11px"
+                      >
+                        Double Cmd
+                      </button>
+                      <button
+                        class="btn-outline"
+                        style="height: 24px; padding: 0 8px; font-size: 11px"
+                      >
+                        Disabled
+                      </button>
+                    </div>
+                  </div>
+                  <div class="setting-card">
+                    <div class="setting-title">
+                      <span class="accent">U</span>Update
+                    </div>
+                    <div class="setting-row">
+                      <span>Check for updates</span
+                      ><button
+                        class="btn-outline"
+                        style="height: 24px; padding: 0 8px; font-size: 11px"
+                      >
+                        Check for updates
+                      </button>
+                    </div>
+                  </div>
+                  <div class="setting-card">
+                    <div class="setting-title">
+                      <span class="accent">P</span>Plugins
+                    </div>
+                    <div class="setting-row">
+                      <span
+                        style="
+                          font-size: var(--text-xs);
+                          line-height: 1.4;
+                          max-width: 140px;
+                        "
+                        >Manage plugin packages from the primary Plugins
+                        view.</span
+                      >
+                      <button
+                        class="btn-outline"
+                        style="height: 24px; padding: 0 8px; font-size: 11px"
+                      >
+                        Open Plugins
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Plugin Source Viewer -->
+          <div class="surface">
+            <div class="surface-header">
+              <div class="surface-title">Plugin Source Viewer</div>
+            </div>
+            <div class="surface-body">
+              <div class="source-screen">
+                <div
+                  class="screen-header"
+                  style="
+                    padding: var(--space-2) var(--space-3);
+                    border-bottom: 1px solid var(--color-border-default);
+                  "
+                >
+                  <div
+                    style="
+                      display: flex;
+                      align-items: center;
+                      gap: var(--space-2);
+                    "
+                  >
+                    <button class="btn-ghost">back</button>
+                    <span class="screen-title" style="font-size: var(--text-md)"
+                      >Plugin Source</span
+                    >
+                    <span class="badge">read-only</span>
+                    <span
+                      style="
+                        font-size: var(--text-xs);
+                        color: var(--color-text-secondary);
+                      "
+                      >text-diff · .../plugins/textDiff</span
+                    >
+                  </div>
+                  <button class="btn-outline" style="height: 26px">
+                    Reload
+                  </button>
+                </div>
+                <div class="source-main">
+                  <aside class="file-tree">
+                    <div
+                      style="
+                        font-size: 10px;
+                        font-weight: 600;
+                        color: var(--color-text-tertiary);
+                        text-transform: uppercase;
+                        margin-bottom: var(--space-2);
+                        padding: 0 var(--space-2);
+                      "
+                    >
+                      file tree
+                    </div>
+                    <div class="tree-node">folder textDiff</div>
+                    <div class="tree-node active" style="padding-left: 20px">
+                      TextDiffRenderer.tsx
+                    </div>
+                    <div class="tree-node" style="padding-left: 20px">
+                      autoDiffMode.ts
+                    </div>
+                    <div class="tree-node" style="padding-left: 20px">
+                      index.ts
+                    </div>
+                    <div class="tree-node" style="padding-left: 20px">
+                      manifest.json
+                    </div>
+                  </aside>
+                  <div class="editor-body">
+                    <div class="editor-gutter">
+                      1<br />2<br />3<br />4<br />5<br />6
+                    </div>
+                    <div class="editor-content">
+                      import { TextDiffRenderer } from './TextDiffRenderer'<br /><br />export
+                      const textDiffPlugin = definePlugin({<br />
+                      commands: [...],<br />
+                      renderers: [...]<br />})
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </main>
+    </div>
+  </body>
+</html>

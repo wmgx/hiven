@@ -1,0 +1,955 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FluxText — Spatial Theme Fusion</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+    :root {
+      --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+      --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+      --text-xs: 10px;
+      --text-sm: 11px;
+      --text-md: 12px;
+      --text-lg: 14px;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+      --radius-xl: 20px;
+      --ease: cubic-bezier(.16, 1, .3, 1);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font-ui);
+      font-size: var(--text-md);
+      color: var(--ink);
+      background: var(--page);
+      -webkit-font-smoothing: antialiased;
+      transition: background .22s var(--ease), color .22s var(--ease);
+    }
+
+    body[data-theme="dark"] {
+      --page: #070a14;
+      --page-glow-a: rgba(113, 96, 255, .38);
+      --page-glow-b: rgba(40, 190, 255, .24);
+      --page-glow-c: rgba(182, 74, 255, .12);
+      --surface: rgba(22, 24, 36, .58);
+      --surface-2: rgba(18, 22, 36, .68);
+      --surface-3: rgba(255, 255, 255, .06);
+      --canvas: rgba(10, 13, 24, .82);
+      --canvas-2: rgba(16, 20, 34, .72);
+      --canvas-3: rgba(255, 255, 255, .07);
+      --ink: #f7f8ff;
+      --muted: #b4bad0;
+      --faint: #79829d;
+      --line: rgba(255, 255, 255, .075);
+      --line-strong: rgba(255, 255, 255, .13);
+      --accent: #8c7cff;
+      --accent-2: #39d8e8;
+      --accent-soft: rgba(140, 124, 255, .18);
+      --ok: #3fe0a5;
+      --warn: #f0b65f;
+      --err: #ff6f83;
+      --shadow:
+        0 34px 76px -24px rgba(0, 0, 0, .76),
+        0 18px 34px -18px rgba(0, 0, 0, .62),
+        0 0 0 1px rgba(255, 255, 255, .045);
+      --shadow-soft:
+        0 18px 42px -22px rgba(0, 0, 0, .72),
+        0 0 0 1px rgba(255, 255, 255, .035);
+      --shine: inset 0 1px 0 rgba(255, 255, 255, .16), inset 0 -1px 0 rgba(255, 255, 255, .035);
+      --material: linear-gradient(145deg, rgba(34, 37, 54, .62), rgba(10, 13, 24, .54));
+    }
+
+    body[data-theme="light"] {
+      --page: #e7edf8;
+      --page-glow-a: rgba(126, 103, 255, .24);
+      --page-glow-b: rgba(42, 193, 211, .18);
+      --page-glow-c: rgba(255, 255, 255, .62);
+      --surface: rgba(255, 255, 255, .66);
+      --surface-2: rgba(248, 251, 255, .72);
+      --surface-3: rgba(255, 255, 255, .68);
+      --canvas: #ffffff;
+      --canvas-2: rgba(247, 249, 253, .9);
+      --canvas-3: rgba(51, 64, 95, .10);
+      --ink: #161b29;
+      --muted: #596478;
+      --faint: #8893a7;
+      --line: rgba(22, 27, 41, .095);
+      --line-strong: rgba(255, 255, 255, .78);
+      --accent: #5f55df;
+      --accent-2: #119ca8;
+      --accent-soft: rgba(95, 85, 223, .12);
+      --ok: #128568;
+      --warn: #a56b18;
+      --err: #c8445a;
+      --shadow:
+        0 30px 70px -30px rgba(36, 47, 77, .36),
+        0 14px 28px -18px rgba(36, 47, 77, .22),
+        0 0 0 1px rgba(255, 255, 255, .68);
+      --shadow-soft:
+        0 18px 38px -24px rgba(36, 47, 77, .26),
+        0 0 0 1px rgba(255, 255, 255, .62);
+      --shine: inset 0 1px 0 rgba(255, 255, 255, .86), inset 0 -1px 0 rgba(255, 255, 255, .48);
+      --material: linear-gradient(145deg, rgba(255, 255, 255, .78), rgba(244, 248, 255, .54));
+    }
+
+    .scene {
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 12% -8%, var(--page-glow-a), transparent 36%),
+        radial-gradient(circle at 88% -4%, var(--page-glow-b), transparent 34%),
+        radial-gradient(circle at 74% 76%, var(--page-glow-c), transparent 44%),
+        linear-gradient(180deg, color-mix(in srgb, var(--page), white 4%), var(--page));
+      padding: 24px;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    .scene::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(90deg, transparent, rgba(255, 255, 255, .045), transparent),
+        radial-gradient(circle at 50% 0%, rgba(255, 255, 255, .075), transparent 48%);
+      mask-image: linear-gradient(to bottom, black, transparent 78%);
+    }
+
+    .board {
+      width: min(1480px, 100%);
+      margin: 0 auto;
+      display: grid;
+      gap: 18px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: end;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h1, h2, h3, p { margin: 0; }
+
+    h1 {
+      font-size: 23px;
+      line-height: 1.2;
+      letter-spacing: -.025em;
+      color: var(--ink);
+    }
+
+    .subtitle {
+      max-width: 880px;
+      margin-top: 8px;
+      color: var(--muted);
+      line-height: 1.65;
+      font-size: var(--text-md);
+    }
+
+    .theme-switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      background: var(--material);
+      box-shadow: var(--shadow-soft);
+      backdrop-filter: blur(24px) saturate(135%);
+      -webkit-backdrop-filter: blur(24px) saturate(135%);
+      position: relative;
+      z-index: 1;
+    }
+
+    .theme-switch button {
+      height: 30px;
+      border: 0;
+      border-radius: 999px;
+      padding: 0 14px;
+      color: var(--muted);
+      background: transparent;
+      font: inherit;
+      font-size: var(--text-md);
+      font-weight: 700;
+      cursor: pointer;
+      transition: background .18s var(--ease), color .18s var(--ease), transform .18s var(--ease);
+    }
+
+    .theme-switch button:hover { color: var(--ink); }
+
+    .theme-switch button.active {
+      color: white;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      transform: translateY(-1px);
+      box-shadow:
+        0 10px 24px color-mix(in srgb, var(--accent), transparent 62%),
+        inset 0 1px 0 rgba(255, 255, 255, .34);
+    }
+
+    body[data-theme="light"] .theme-switch button.active { color: white; }
+
+    .principles {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .principle {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: var(--material);
+      padding: 13px 14px;
+      box-shadow: var(--shadow-soft), var(--shine);
+      backdrop-filter: blur(26px) saturate(132%);
+      -webkit-backdrop-filter: blur(26px) saturate(132%);
+    }
+
+    .principle b {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--ink);
+      font-size: var(--text-md);
+    }
+
+    .principle span {
+      color: var(--muted);
+      font-size: var(--text-sm);
+      line-height: 1.55;
+    }
+
+    .workbench {
+      min-height: 650px;
+      display: grid;
+      grid-template-columns: 50px minmax(0, 1fr);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-xl);
+      background: var(--material);
+      box-shadow: var(--shadow), var(--shine);
+      overflow: hidden;
+      position: relative;
+      backdrop-filter: blur(34px) saturate(138%);
+      -webkit-backdrop-filter: blur(34px) saturate(138%);
+    }
+
+    .workbench::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, .10), transparent 16%),
+        radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--accent), transparent 72%), transparent 34%),
+        radial-gradient(circle at 90% 12%, color-mix(in srgb, var(--accent-2), transparent 80%), transparent 28%);
+      opacity: .7;
+      z-index: 2;
+    }
+
+    .workbench > * {
+      position: relative;
+      z-index: 3;
+    }
+
+    .rail {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 0;
+      border-right: 1px solid var(--line);
+      background: color-mix(in srgb, var(--surface-2), transparent 12%);
+    }
+
+    .logo, .nav, .tool-icon, .plugin-icon {
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+    }
+
+    .logo {
+      width: 30px;
+      height: 30px;
+      border-radius: var(--radius-md);
+      color: white;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow:
+        0 12px 28px color-mix(in srgb, var(--accent), transparent 55%),
+        inset 0 1px 0 rgba(255, 255, 255, .35);
+    }
+
+    .nav {
+      width: 32px;
+      height: 32px;
+      border: 1px solid transparent;
+      border-radius: var(--radius-md);
+      color: var(--faint);
+      font-size: var(--text-lg);
+    }
+
+    .nav.active {
+      color: white;
+      background: linear-gradient(135deg, color-mix(in srgb, var(--accent), transparent 8%), color-mix(in srgb, var(--accent-2), transparent 18%));
+      border-color: color-mix(in srgb, var(--accent), transparent 68%);
+      box-shadow:
+        0 10px 24px color-mix(in srgb, var(--accent), transparent 72%),
+        inset 0 1px 0 rgba(255, 255, 255, .28);
+    }
+
+    .rail-line {
+      width: 22px;
+      height: 1px;
+      margin: 4px 0;
+      background: var(--line);
+    }
+
+    .rail-spacer { flex: 1; }
+
+    .workspace {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: 40px minmax(0, 1fr) 30px;
+      background: color-mix(in srgb, var(--surface-2), transparent 8%);
+    }
+
+    .topbar, .statusbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 14px;
+      color: var(--muted);
+      font-size: var(--text-sm);
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--surface-2), transparent 10%);
+    }
+
+    .statusbar {
+      border-top: 1px solid var(--line);
+      border-bottom: 0;
+      color: var(--faint);
+    }
+
+    .crumbs, .actions, .inline {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .ready-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--ok);
+      box-shadow: 0 0 13px color-mix(in srgb, var(--ok), transparent 25%);
+    }
+
+    .key, .pill {
+      display: inline-grid;
+      place-items: center;
+      height: 21px;
+      padding: 0 8px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--surface-3);
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      white-space: nowrap;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .07);
+    }
+
+    .pill {
+      border-radius: 999px;
+      font-family: var(--font-ui);
+      font-weight: 700;
+    }
+
+    .main {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 330px;
+      gap: 1px;
+      background: color-mix(in srgb, var(--line), transparent 12%);
+    }
+
+    .editors {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: 36px minmax(0, 1fr);
+      background: color-mix(in srgb, var(--surface-2), transparent 6%);
+    }
+
+    .tabs {
+      display: flex;
+      align-items: end;
+      gap: 6px;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--surface), transparent 8%), transparent);
+    }
+
+    .tab {
+      height: 29px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 0 11px;
+      border: 1px solid transparent;
+      border-bottom: 0;
+      border-radius: 8px 8px 0 0;
+      color: var(--faint);
+      font-size: var(--text-sm);
+      font-weight: 700;
+    }
+
+    .tab.active {
+      color: var(--ink);
+      background: var(--canvas);
+      border-color: var(--line);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .10);
+    }
+
+    .kind {
+      color: var(--accent-2);
+      font-family: var(--font-mono);
+      font-size: 9px;
+    }
+
+    .panes {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 1px;
+      background: color-mix(in srgb, var(--line), transparent 8%);
+    }
+
+    .pane, .mini-panel {
+      min-width: 0;
+      min-height: 0;
+      background: var(--canvas);
+      color: var(--ink);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035);
+    }
+
+    .pane {
+      display: grid;
+      grid-template-rows: 30px minmax(0, 1fr) 25px;
+    }
+
+    .pane.focus {
+      outline: 1px solid color-mix(in srgb, var(--accent), transparent 18%);
+      outline-offset: -1px;
+      box-shadow:
+        inset 0 0 0 1px color-mix(in srgb, var(--accent), transparent 38%),
+        0 0 32px color-mix(in srgb, var(--accent), transparent 82%);
+    }
+
+    .pane-head, .pane-foot, .mini-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 0 10px;
+      color: var(--muted);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--canvas-2), white 2%), var(--canvas-2));
+      border-bottom: 1px solid var(--canvas-3);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+    }
+
+    .pane-foot {
+      border-top: 1px solid var(--canvas-3);
+      border-bottom: 0;
+      color: var(--faint);
+    }
+
+    .editor {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr);
+      overflow: hidden;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.75;
+    }
+
+    .gutter {
+      padding: 10px 9px 0 0;
+      text-align: right;
+      color: var(--faint);
+      background: color-mix(in srgb, var(--canvas-2), transparent 6%);
+      border-right: 1px solid var(--canvas-3);
+      user-select: none;
+    }
+
+    .code {
+      padding: 10px 12px;
+      white-space: pre;
+      overflow: hidden;
+    }
+
+    .kw { color: var(--accent); font-weight: 700; }
+    .str { color: var(--accent-2); }
+    .mut { color: var(--faint); }
+    .err { color: var(--err); }
+    .ok { color: var(--ok); }
+
+    .side {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: 258px 1fr;
+      gap: 1px;
+      background: color-mix(in srgb, var(--line), transparent 8%);
+    }
+
+    .palette, .inspector {
+      min-width: 0;
+      background: var(--material);
+      color: var(--muted);
+      backdrop-filter: blur(26px) saturate(130%);
+      -webkit-backdrop-filter: blur(26px) saturate(130%);
+    }
+
+    .palette {
+      margin: 14px;
+      align-self: start;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-soft), var(--shine);
+      overflow: hidden;
+    }
+
+    .search {
+      height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 13px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255, 255, 255, .055), transparent);
+    }
+
+    .search b {
+      color: var(--ink);
+      font-size: var(--text-lg);
+    }
+
+    .palette-section {
+      padding: 8px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .palette-label {
+      padding: 0 13px 7px;
+      color: var(--faint);
+      font-size: var(--text-xs);
+      font-weight: 800;
+      letter-spacing: .04em;
+    }
+
+    .command {
+      display: grid;
+      grid-template-columns: 26px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      min-height: 42px;
+      padding: 0 13px;
+      border-radius: var(--radius-sm);
+      margin: 0 7px;
+    }
+
+    .command.selected {
+      background:
+        radial-gradient(circle at 8% 50%, color-mix(in srgb, var(--accent), transparent 72%), transparent 56%),
+        var(--accent-soft);
+      box-shadow:
+        inset 0 0 0 1px color-mix(in srgb, var(--accent), transparent 62%),
+        0 10px 24px color-mix(in srgb, var(--accent), transparent 86%);
+    }
+
+    .tool-icon, .plugin-icon {
+      width: 26px;
+      height: 26px;
+      border-radius: var(--radius-sm);
+      color: white;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      font-size: var(--text-xs);
+      box-shadow:
+        0 8px 18px color-mix(in srgb, var(--accent), transparent 68%),
+        inset 0 1px 0 rgba(255, 255, 255, .32);
+    }
+
+    .command-title {
+      color: var(--ink);
+      font-weight: 800;
+      font-size: var(--text-sm);
+    }
+
+    .command-sub {
+      margin-top: 2px;
+      color: var(--faint);
+      font-size: var(--text-xs);
+    }
+
+    .inspector {
+      display: grid;
+      grid-template-rows: 38px minmax(0, 1fr);
+    }
+
+    .inspector-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 13px;
+      border-bottom: 1px solid var(--line);
+      color: var(--ink);
+      font-size: var(--text-sm);
+      font-weight: 800;
+    }
+
+    .run-button {
+      height: 24px;
+      border: 0;
+      border-radius: var(--radius-sm);
+      padding: 0 10px;
+      color: white;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      font: inherit;
+      font-size: var(--text-xs);
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow:
+        0 10px 22px color-mix(in srgb, var(--accent), transparent 70%),
+        inset 0 1px 0 rgba(255, 255, 255, .32);
+    }
+
+    .inspector-body {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 130px 1fr;
+      gap: 1px;
+      background: color-mix(in srgb, var(--line), transparent 8%);
+    }
+
+    .runner-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      min-height: 0;
+      background: color-mix(in srgb, var(--line), transparent 8%);
+    }
+
+    .mini-panel {
+      display: grid;
+      grid-template-rows: 28px minmax(0, 1fr);
+    }
+
+    .mini-code {
+      padding: 10px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      line-height: 1.7;
+      overflow: hidden;
+      white-space: pre-wrap;
+    }
+
+    .source-list {
+      min-height: 0;
+      background: color-mix(in srgb, var(--surface), transparent 6%);
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+      align-content: start;
+    }
+
+    .source-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: color-mix(in srgb, var(--surface-2), transparent 6%);
+      padding: 10px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .055);
+    }
+
+    .source-card b {
+      display: block;
+      color: var(--ink);
+      margin-bottom: 4px;
+      font-size: var(--text-sm);
+    }
+
+    .source-card span {
+      display: block;
+      color: var(--muted);
+      font-size: var(--text-xs);
+      line-height: 1.55;
+    }
+
+    .status-chips {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 1100px) {
+      .principles { grid-template-columns: 1fr; }
+      .main { grid-template-columns: 1fr; }
+      .side { grid-template-rows: auto auto; }
+      .palette { margin-bottom: 0; }
+      .workbench { min-height: 980px; }
+    }
+
+    @media (max-width: 760px) {
+      .scene { padding: 16px; }
+      .hero { grid-template-columns: 1fr; align-items: start; }
+      .workbench { grid-template-columns: 1fr; }
+      .rail { display: none; }
+      .panes { grid-template-columns: 1fr; grid-template-rows: repeat(4, 260px); }
+      .actions { display: none; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        transition-duration: .01ms !important;
+        animation-duration: .01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
+</head>
+<body data-theme="dark">
+  <div class="scene">
+    <main class="board">
+      <header class="hero">
+        <div>
+          <h1>FluxText Spatial Theme Fusion</h1>
+          <p class="subtitle">融合 Theme Set 的清晰工作台结构与 GPT-5.5 Spatial 的暗色空间质感。布局保持稳定，主题只改变环境光、材质深度和对比节奏。</p>
+        </div>
+        <div class="theme-switch" aria-label="主题切换">
+          <button class="active" type="button" data-theme-target="dark">Dark</button>
+          <button type="button" data-theme-target="light">Light</button>
+        </div>
+      </header>
+
+      <section class="principles" aria-label="设计原则">
+        <article class="principle">
+          <b>结构来自 Theme Set</b>
+          <span>左侧 rail、中央四 pane、右侧 palette / runner / source inspection，信息分区清楚且适合真实文本处理。</span>
+        </article>
+        <article class="principle">
+          <b>质感来自 Spatial</b>
+          <span>暗色版使用深蓝黑底、紫蓝环境光和轻层叠阴影；亮色版保留同一空间层次但降低饱和度。</span>
+        </article>
+        <article class="principle">
+          <b>落地优先</b>
+          <span>没有营销 hero 和装饰卡片，重点放在 Monaco、命令、插件来源、Pinned Runner 与 Diff 的可读性。</span>
+        </article>
+      </section>
+
+      <section class="workbench" aria-label="FluxText 工作台预览">
+        <aside class="rail" aria-label="主导航">
+          <div class="logo">F</div>
+          <div class="nav active">E</div>
+          <div class="nav">P</div>
+          <div class="rail-line"></div>
+          <div class="nav">pin</div>
+          <div class="rail-spacer"></div>
+          <div class="nav">?</div>
+        </aside>
+
+        <div class="workspace">
+          <div class="topbar">
+            <div class="crumbs">
+              <span class="ready-dot"></span>
+              <strong>Workspace</strong>
+              <span>›</span>
+              <span>4 panes</span>
+              <span>›</span>
+              <span>plugin runtime ready</span>
+            </div>
+            <div class="actions">
+              <span class="key">⌘K</span>
+              <span class="key">⇧⌘K</span>
+              <span class="pill">local only</span>
+            </div>
+          </div>
+
+          <div class="main">
+            <section class="editors" aria-label="编辑器区域">
+              <div class="tabs">
+                <div class="tab active">Pane 1 <span class="kind">Plain</span></div>
+                <div class="tab">Pane 2 <span class="kind">Renderer</span></div>
+                <div class="tab">Pane 3 <span class="kind">Diff</span></div>
+              </div>
+
+              <div class="panes">
+                <article class="pane focus">
+                  <div class="pane-head"><span>Pane 1 · editable</span><span>JSON</span></div>
+                  <div class="editor">
+                    <div class="gutter">1<br>2<br>3<br>4<br>5</div>
+                    <pre class="code"><span class="kw">{</span>
+  <span class="str">"command"</span>: <span class="str">"Text Diff"</span>,
+  <span class="str">"source"</span>: <span class="str">"plugin://core/diff"</span>,
+  <span class="str">"mode"</span>: <span class="str">"side-by-side"</span>
+<span class="kw">}</span></pre>
+                  </div>
+                  <div class="pane-foot"><span>Ln 5, Col 1</span><span>Plain Text · Auto</span></div>
+                </article>
+
+                <article class="pane">
+                  <div class="pane-head"><span>Pane 2 · output</span><span>Result</span></div>
+                  <div class="editor">
+                    <div class="gutter">1<br>2<br>3<br>4</div>
+                    <pre class="code"><span class="ok">Ready</span>
+renderer resolved
+capability: transform
+latency: 18ms</pre>
+                  </div>
+                  <div class="pane-foot"><span>4 lines</span><span>Renderer</span></div>
+                </article>
+
+                <article class="pane">
+                  <div class="pane-head"><span>Pane 3 · source</span><span>Plugin</span></div>
+                  <div class="editor">
+                    <div class="gutter">1<br>2<br>3<br>4</div>
+                    <pre class="code"><span class="kw">export</span> <span class="kw">default</span> definePlugin({
+  command: <span class="str">'text.diff'</span>,
+  panel: <span class="str">'DiffViewer'</span>
+})</pre>
+                  </div>
+                  <div class="pane-foot"><span>plugin.ts</span><span>Source Viewer</span></div>
+                </article>
+
+                <article class="pane">
+                  <div class="pane-head"><span>Pane 4 · diagnostics</span><span>Status</span></div>
+                  <div class="editor">
+                    <div class="gutter">1<br>2<br>3<br>4</div>
+                    <pre class="code"><span class="ok">✓</span> command registered
+<span class="ok">✓</span> renderer mounted
+<span class="warn">!</span> no persisted pin
+<span class="mut">·</span> sandbox isolated</pre>
+                  </div>
+                  <div class="pane-foot"><span>0 errors</span><span>Runtime</span></div>
+                </article>
+              </div>
+            </section>
+
+            <aside class="side" aria-label="命令和插件区域">
+              <section class="palette" aria-label="命令面板">
+                <div class="search">
+                  <span class="key">⌘K</span>
+                  <b>Run command or inspect plugin</b>
+                </div>
+                <div class="palette-section">
+                  <div class="palette-label">PINNED ACTIONS</div>
+                  <div class="command selected">
+                    <div class="tool-icon">D</div>
+                    <div>
+                      <div class="command-title">Text Diff</div>
+                      <div class="command-sub">Compare selected panes</div>
+                    </div>
+                    <span class="key">↵</span>
+                  </div>
+                </div>
+                <div class="palette-section">
+                  <div class="palette-label">RECENT COMMANDS</div>
+                  <div class="command">
+                    <div class="tool-icon">T</div>
+                    <div>
+                      <div class="command-title">Transform JSON</div>
+                      <div class="command-sub">Format, sort, compact</div>
+                    </div>
+                    <span class="key">⌘1</span>
+                  </div>
+                  <div class="command">
+                    <div class="tool-icon">S</div>
+                    <div>
+                      <div class="command-title">Source Viewer</div>
+                      <div class="command-sub">Open plugin module</div>
+                    </div>
+                    <span class="key">⌘2</span>
+                  </div>
+                </div>
+              </section>
+
+              <section class="inspector" aria-label="Pinned Runner 和来源">
+                <div class="inspector-head">
+                  <span>Pinned Runner</span>
+                  <button class="run-button" type="button">Run</button>
+                </div>
+                <div class="inspector-body">
+                  <div class="runner-grid">
+                    <article class="mini-panel">
+                      <div class="mini-head"><span>Input</span><span>Pane 1</span></div>
+                      <pre class="mini-code">left: selected text
+right: rendered result
+mode: semantic diff</pre>
+                    </article>
+                    <article class="mini-panel">
+                      <div class="mini-head"><span>Output</span><span>Preview</span></div>
+                      <pre class="mini-code"><span class="ok">+ renderer mounted</span>
+<span class="err">- stale draft</span>
+<span class="mut"> unchanged source</span></pre>
+                    </article>
+                  </div>
+                  <div class="source-list">
+                    <article class="source-card">
+                      <b>Plugin provenance</b>
+                      <span>core/diff/plugin.ts · renderer capability · sandboxed local execution</span>
+                    </article>
+                    <article class="source-card">
+                      <b>Source Viewer</b>
+                      <span>显示 command、panel、renderer 和 runtime error，不把插件简化成普通设置项。</span>
+                    </article>
+                    <article class="source-card">
+                      <b>Text Diff boundary</b>
+                      <span>框架只承载 pane 和 lifecycle，Diff 行为保持插件拥有。</span>
+                    </article>
+                  </div>
+                </div>
+              </section>
+            </aside>
+          </div>
+
+          <div class="statusbar">
+            <div class="status-chips">
+              <span>theme fusion</span>
+              <span>·</span>
+              <span>Monaco surfaces</span>
+              <span>·</span>
+              <span>plugin runtime</span>
+            </div>
+            <div class="inline">
+              <span class="pill">AA contrast target</span>
+              <span class="pill">reduced motion safe</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const themeButtons = document.querySelectorAll('[data-theme-target]');
+    themeButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const theme = button.dataset.themeTarget;
+        document.body.dataset.theme = theme;
+        themeButtons.forEach((item) => item.classList.toggle('active', item === button));
+      });
+    });
+  </script>
+</body>
+</html>

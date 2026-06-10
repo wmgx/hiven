@@ -31,3 +31,5 @@ temp/
 
 # Local agent state
 .omc/
+.agents/
+.claude/

@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FluxText — GPT-5.5 Spatial Combined</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #11131d;
+      color: #f8f8ff;
+    }
+
+    .frame {
+      height: 100%;
+      display: grid;
+      grid-template-rows: 48px minmax(0, 1fr);
+      background:
+        radial-gradient(circle at 20% 0%, rgba(139, 124, 255, .2), transparent 34%),
+        radial-gradient(circle at 76% -10%, rgba(69, 196, 255, .16), transparent 32%),
+        #11131d;
+    }
+
+    .bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 18px;
+      border-bottom: 1px solid rgba(255, 255, 255, .12);
+      background: rgba(18, 20, 32, .78);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      box-shadow: 0 10px 30px rgba(0,0,0,.22);
+      z-index: 5;
+    }
+
+    .title {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .title strong {
+      font-size: 13px;
+      letter-spacing: -.01em;
+    }
+
+    .title span {
+      color: #b6bad0;
+      font-size: 11px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .switch {
+      display: inline-flex;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 999px;
+      background: rgba(255,255,255,.08);
+      flex: 0 0 auto;
+    }
+
+    button {
+      height: 28px;
+      border: 0;
+      border-radius: 999px;
+      padding: 0 13px;
+      color: #c3c8da;
+      background: transparent;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: color .18s ease, background .18s ease;
+    }
+
+    button.active {
+      color: #121420;
+      background: #f7f8ff;
+      box-shadow: 0 4px 16px rgba(0,0,0,.22);
+    }
+
+    .stage {
+      position: relative;
+      min-height: 0;
+      background: #11131d;
+    }
+
+    iframe {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      opacity: 0;
+      pointer-events: none;
+      background: #fff;
+      transition: opacity .18s ease;
+    }
+
+    iframe.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      iframe,
+      button {
+        transition: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <header class="bar">
+      <div class="title">
+        <strong>GPT-5.5 Spatial</strong>
+        <span>合并版：同一个入口内切换 Spatial 暗色 / 亮色。</span>
+      </div>
+      <div class="switch" aria-label="GPT-5.5 Spatial 主题切换">
+        <button class="active" type="button" data-target="dark">Dark</button>
+        <button type="button" data-target="light">Light</button>
+      </div>
+    </header>
+
+    <main class="stage">
+      <iframe class="active" data-view="dark" src="flux-ui-mockup-gpt5-strict.html"></iframe>
+      <iframe data-view="light" src="flux-ui-mockup-gpt5-strict-light.html"></iframe>
+    </main>
+  </div>
+
+  <script>
+    const buttons = document.querySelectorAll('[data-target]');
+    const views = document.querySelectorAll('[data-view]');
+    buttons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const target = button.dataset.target;
+        buttons.forEach((item) => item.classList.toggle('active', item === button));
+        views.forEach((view) => view.classList.toggle('active', view.dataset.view === target));
+      });
+    });
+  </script>
+</body>
+</html>

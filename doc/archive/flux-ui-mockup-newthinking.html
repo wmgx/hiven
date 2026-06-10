@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FluxText - NextGen IDE Paradigm</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+    :root {
+      --bg-color: #08080a;
+      --glass-bg: rgba(20, 20, 25, 0.45);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --glass-shadow: 0 24px 48px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      --accent-primary: #8a2be2;
+      --accent-secondary: #00d2ff;
+      --text-main: #f0f0f0;
+      --text-muted: #888899;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      font-family: var(--font-mono);
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      perspective: 1000px;
+    }
+
+    /* Infinite Canvas Background */
+    .canvas-bg {
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: 
+        radial-gradient(circle at 50% 50%, rgba(138, 43, 226, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 80% 20%, rgba(0, 210, 255, 0.05) 0%, transparent 30%);
+      z-index: 0;
+    }
+
+    .canvas-grid {
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background-image: 
+        linear-gradient(var(--glass-border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--glass-border) 1px, transparent 1px);
+      background-size: 50px 50px;
+      z-index: 0;
+      transform: rotateX(60deg) scale(1.5);
+      transform-origin: center center;
+      animation: panGrid 20s linear infinite;
+      opacity: 0.3;
+    }
+
+    @keyframes panGrid {
+      0% { transform: rotateX(60deg) scale(1.5) translateY(0); }
+      100% { transform: rotateX(60deg) scale(1.5) translateY(50px); }
+    }
+
+    /* Floating Dock */
+    .dock {
+      position: absolute;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 16px;
+      padding: 12px 24px;
+      background: rgba(10, 10, 15, 0.6);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: 32px;
+      z-index: 10;
+      box-shadow: var(--glass-shadow);
+    }
+
+    .dock-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-muted);
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: 1px solid transparent;
+    }
+
+    .dock-icon:hover, .dock-icon.active {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-5px);
+      box-shadow: 0 10px 20px rgba(0, 210, 255, 0.2);
+    }
+
+    .dock-icon.active {
+      background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+      border-color: transparent;
+      box-shadow: 0 10px 20px rgba(138, 43, 226, 0.4);
+    }
+
+    /* Floating Islands */
+    .island {
+      position: absolute;
+      background: var(--glass-bg);
+      backdrop-filter: blur(24px);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      box-shadow: var(--glass-shadow);
+      z-index: 5;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      animation: float 6s ease-in-out infinite;
+    }
+
+    .island:hover {
+      transform: translateY(-5px) scale(1.02);
+      box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      z-index: 6;
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    @keyframes float {
+      0% { transform: translateY(0px); }
+      50% { transform: translateY(-10px); }
+      100% { transform: translateY(0px); }
+    }
+
+    /* Animation delays to desync floating */
+    .island:nth-child(1) { animation-delay: 0s; }
+    .island:nth-child(2) { animation-delay: -2s; }
+    .island:nth-child(3) { animation-delay: -4s; }
+    .island:nth-child(4) { animation-delay: -1s; }
+
+    .island-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      background: rgba(0, 0, 0, 0.2);
+      border-bottom: 1px solid var(--glass-border);
+      cursor: move;
+    }
+
+    .island-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .island-title::before {
+      content: '';
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-secondary);
+      box-shadow: 0 0 8px var(--accent-secondary);
+    }
+
+    .island-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #444;
+    }
+
+    .dot.red { background: #ff5f56; }
+    .dot.yellow { background: #ffbd2e; }
+    .dot.green { background: #27c93f; }
+
+    .island-content {
+      padding: 20px;
+      flex: 1;
+      overflow: auto;
+    }
+
+    /* Editor Specific */
+    .editor-code {
+      font-size: 14px;
+      line-height: 1.6;
+      color: #d4d4d4;
+    }
+    .keyword { color: #c586c0; }
+    .function { color: #dcdcaa; }
+    .string { color: #ce9178; }
+    .comment { color: #6a9955; font-style: italic; }
+
+    /* Nexus Command Palette */
+    .nexus-input {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 12px 16px;
+      color: #fff;
+      font-family: var(--font-mono);
+      font-size: 14px;
+      outline: none;
+      margin-bottom: 16px;
+      transition: border-color 0.2s;
+    }
+
+    .nexus-input:focus {
+      border-color: var(--accent-primary);
+      box-shadow: 0 0 15px rgba(138, 43, 226, 0.3);
+    }
+
+    .nexus-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border-radius: 8px;
+      margin-bottom: 4px;
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .nexus-item:hover, .nexus-item.active {
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+    }
+
+    .nexus-item.active {
+      border-left: 3px solid var(--accent-secondary);
+      background: linear-gradient(90deg, rgba(0, 210, 255, 0.1) 0%, transparent 100%);
+    }
+
+    .badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      color: #aaa;
+    }
+
+    .badge.ai {
+      background: rgba(138, 43, 226, 0.2);
+      color: #d896ff;
+      border: 1px solid rgba(138, 43, 226, 0.4);
+    }
+
+    /* Bento Box Grid */
+    .bento-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto auto;
+      gap: 12px;
+      padding: 16px;
+      height: 100%;
+    }
+
+    .bento-item {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .bento-item.wide {
+      grid-column: span 2;
+    }
+
+    .bento-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      text-transform: uppercase;
+    }
+
+    .bento-value {
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    /* Graph Nodes */
+    .graph-view {
+      position: relative;
+      height: 100%;
+      min-height: 180px;
+    }
+
+    .node {
+      position: absolute;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 2px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+    }
+
+    .node.active {
+      border-color: var(--accent-secondary);
+      box-shadow: 0 0 20px rgba(0, 210, 255, 0.4);
+      background: rgba(0, 210, 255, 0.1);
+      color: #fff;
+    }
+
+    .edge {
+      position: absolute;
+      height: 2px;
+      background: rgba(255, 255, 255, 0.1);
+      transform-origin: 0 50%;
+      z-index: -1;
+    }
+
+    .edge.active {
+      background: linear-gradient(90deg, rgba(255, 255, 255, 0.1), var(--accent-secondary));
+    }
+
+  </style>
+</head>
+<body>
+  <div class="canvas-bg"></div>
+  <div class="canvas-grid"></div>
+
+  <!-- Island 1: Main Editor -->
+  <div class="island" style="top: 15%; left: 10%; width: 550px; height: 380px;">
+    <div class="island-header">
+      <div class="island-title">Editor / NeoParadigm.ts</div>
+      <div class="island-actions">
+        <span class="dot red"></span>
+        <span class="dot yellow"></span>
+        <span class="dot green"></span>
+      </div>
+    </div>
+    <div class="island-content">
+      <div class="editor-code">
+        <span class="comment">// Radically rethinking the IDE experience</span><br><br>
+        <span class="keyword">export</span> <span class="keyword">class</span> <span class="function">FluxWorkspace</span> {<br>
+        &nbsp;&nbsp;<span class="keyword">private</span> layout: <span class="string">"infinite-canvas"</span>;<br><br>
+        &nbsp;&nbsp;<span class="keyword">constructor</span>() {<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span class="keyword">this</span>.layout = <span class="string">"infinite-canvas"</span>;<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span class="keyword">this</span>.<span class="function">abandonLegacySidebars</span>();<br>
+        &nbsp;&nbsp;}<br><br>
+        &nbsp;&nbsp;<span class="keyword">async</span> <span class="function">renderFloatingIslands</span>(context: UIContext) {<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span class="keyword">return</span> <span class="keyword">await</span> context.<span class="function">spawnNode</span>({<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;type: <span class="string">'bento-box'</span>,<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;glassmorphism: <span class="keyword">true</span>,<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;spatialZIndex: <span class="string">'dynamic'</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;});<br>
+        &nbsp;&nbsp;}<br>
+        }
+      </div>
+    </div>
+  </div>
+
+  <!-- Island 2: Command Nexus -->
+  <div class="island" style="top: 10%; left: 60%; width: 380px; height: auto;">
+    <div class="island-header">
+      <div class="island-title" style="color: var(--accent-primary);">✦ AI Command Nexus</div>
+    </div>
+    <div class="island-content">
+      <input type="text" class="nexus-input" placeholder="Ask AI or run command...">
+      <div class="nexus-list">
+        <div class="nexus-item active">
+          Refactor to Floating Nodes <span class="badge ai">AI Agent</span>
+        </div>
+        <div class="nexus-item">
+          Generate Unit Tests <span class="badge ai">AI Agent</span>
+        </div>
+        <div class="nexus-item">
+          Toggle Semantic Diff <span class="badge">Plugin</span>
+        </div>
+        <div class="nexus-item">
+          Deploy to Production <span class="badge">Cmd</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Island 3: Visual Graph / Diff -->
+  <div class="island" style="top: 55%; left: 55%; width: 420px; height: 260px;">
+    <div class="island-header">
+      <div class="island-title" style="color: var(--accent-secondary);">⎈ Context Graph</div>
+    </div>
+    <div class="island-content">
+      <div class="graph-view">
+        <!-- Edges -->
+        <div class="edge" style="width: 100px; top: 44px; left: 60px; transform: rotate(20deg);"></div>
+        <div class="edge active" style="width: 140px; top: 80px; left: 140px; transform: rotate(-15deg);"></div>
+        
+        <!-- Nodes -->
+        <div class="node" style="top: 20px; left: 20px;">main</div>
+        <div class="node" style="top: 60px; left: 120px;">feat</div>
+        <div class="node active" style="top: 30px; left: 250px;">diff</div>
+        
+        <div style="position: absolute; bottom: 0; left: 0; right: 0; font-size: 11px; color: var(--text-muted); padding-top: 10px; border-top: 1px dashed rgba(255,255,255,0.1);">
+          Visual Semantic Diff active. 2 files modified.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Island 4: Bento Box Stats -->
+  <div class="island" style="top: 65%; left: 15%; width: 340px; height: 220px;">
+    <div class="island-header" style="padding: 10px 16px;">
+      <div class="island-title">⊞ Telemetry Bento</div>
+    </div>
+    <div class="bento-grid">
+      <div class="bento-item">
+        <div class="bento-label">Memory</div>
+        <div class="bento-value">124 MB</div>
+      </div>
+      <div class="bento-item">
+        <div class="bento-label">Plugins</div>
+        <div class="bento-value">8 Actv</div>
+      </div>
+      <div class="bento-item wide" style="background: linear-gradient(135deg, rgba(138, 43, 226, 0.1), rgba(0, 210, 255, 0.1)); border-color: rgba(0, 210, 255, 0.2);">
+        <div class="bento-label" style="color: var(--accent-secondary);">Current Action</div>
+        <div class="bento-value" style="font-size: 14px; font-weight: normal; margin-top: 4px;">
+          Applying "Radical Rethink" pattern...
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Dock -->
+  <div class="dock">
+    <div class="dock-icon">✦</div>
+    <div class="dock-icon active">{"}</div>
+    <div class="dock-icon">⎈</div>
+    <div class="dock-icon">⊞</div>
+    <div class="dock-icon">⚙</div>
+  </div>
+
+</body>
+</html>
