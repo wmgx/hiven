@@ -45,6 +45,7 @@ const files = {
   workspaceShell: read('src/components/workspace/WorkspaceShell.tsx'),
   renderStatusBar: read('src/components/workspace/RenderStatusBar.tsx'),
   tauriConfig: read('src-tauri/tauri.conf.json'),
+  defaultCapability: read('src-tauri/capabilities/default.json'),
 }
 
 has(files.packageJson, /"test:spatial-ui-contract":\s*"node scripts\/test-spatial-ui-contract\.mjs"/, 'package.json should expose the spatial UI contract test')
@@ -52,6 +53,7 @@ has(files.packageJson, /"test:spatial-ui-contract":\s*"node scripts\/test-spatia
 has(files.store, /theme:\s*['"]dark['"]\s*\|\s*['"]light['"]/, 'settings should type a persisted dark/light theme')
 has(files.store, /theme:\s*['"]dark['"]/, 'default settings should include a dark theme')
 has(files.app, /data-theme=\{settings\.theme\}/, 'App should apply persisted theme through data-theme')
+has(files.app, /setTheme\(settings\.theme\)/, 'App should sync the native Tauri window theme with the persisted theme')
 notHas(files.app, /<FluxTitlebar\b|function FluxTitlebar|className=["']flux-titlebar/, 'App should not render a custom top titlebar')
 has(files.editor, /updateSetting\(['"]theme['"]/, 'Editor toolbar should provide the in-app theme toggle')
 has(files.editor, /\{t\(['"]runAction['"]\)\}[\s\S]{0,640}theme === ['"]dark['"] \? <Sun/, 'Theme toggle should sit after the run action in the editor toolbar')
@@ -119,7 +121,16 @@ has(files.css, /\.margin-view-overlays \.current-line[\s\S]{0,100}background:\s*
   const main = config.app?.windows?.find((window) => window.label === 'main')
   const launcher = config.app?.windows?.find((window) => window.label === 'launcher')
   assert.equal(main?.transparent, false, 'main window should be opaque so the native titlebar area follows app color')
+  assert.equal(main?.theme, 'Dark', 'main native titlebar should start in dark mode with the default app theme')
   assert.equal(launcher?.transparent, true, 'launcher window should be transparent around the opaque rounded panel')
+}
+
+{
+  const capability = JSON.parse(files.defaultCapability)
+  assert.ok(
+    capability.permissions?.includes('core:app:allow-set-app-theme'),
+    'default Tauri capability should allow runtime app theme sync',
+  )
 }
 
 notHas(files.app, /fontFamily:\s*['"]var\(--font-mono\)['"]/s, 'The app shell should rely on global spatial typography instead of forcing mono everywhere')

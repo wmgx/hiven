@@ -179,6 +179,22 @@ function MainApp() {
     return () => window.clearInterval(timer)
   }, [prunePinnedRuntimes])
 
+  useEffect(() => {
+    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+    let disposed = false
+    import('@tauri-apps/api/app')
+      .then(async ({ setTheme }) => {
+        if (disposed) return
+        await setTheme(settings.theme)
+      })
+      .catch((error) => {
+        console.warn('[FluxText] Failed to sync native window theme:', error)
+      })
+    return () => {
+      disposed = true
+    }
+  }, [settings.theme])
+
   // Direction-aware view transition
   useEffect(() => {
     const el = containerRef.current?.firstElementChild as HTMLElement | null
