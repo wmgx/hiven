@@ -634,7 +634,7 @@ function SearchStep({
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
-      <div className="max-h-[300px] overflow-y-auto py-1" onMouseMove={() => { isKeyboardNavRef.current = false }}>
+      <div className="command-palette-results py-1" onMouseMove={() => { isKeyboardNavRef.current = false }}>
         {filteredItems.map((item, i) => (
           <ActionItem key={i} item={item} selected={selectedIndex === i} onClick={(event) => onSelectItem(item, shouldCustomizeParams(event.metaKey, event.ctrlKey))} onPin={() => onPinItem(item)} onMouseEnter={() => { if (!isKeyboardNavRef.current) setSelectedIndex(i) }} shortcutMeta={shortcutMeta} locale={locale} />
         ))}

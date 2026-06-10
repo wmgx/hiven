@@ -80,7 +80,6 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
             return;
         }
         let _ = window.unminimize();
-        let _ = window.center();
         if let Err(error) = window.set_focus() {
             eprintln!("[FluxText] Failed to focus launcher window: {}", error);
         }

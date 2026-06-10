@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { LayoutPanelLeft, Pin, Puzzle, Search, Settings } from 'lucide-react'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { localized, useAppStore, type ViewId } from '../store'
 import { t, type Locale } from '../i18n'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
@@ -259,27 +260,17 @@ export function GlobalLauncher() {
 
   const beginDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return
-    if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, button')) return
+    if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, button, a, [role="button"], [data-no-drag]')) return
     if (standaloneLauncher && (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
       event.preventDefault()
       event.stopPropagation()
-      void (async () => {
-        try {
-          const { getCurrentWindow } = await import('@tauri-apps/api/window')
-          const win = getCurrentWindow()
-          await win.startDragging()
-          window.setTimeout(async () => {
-            try {
-              const position = await win.outerPosition()
-              const scaleFactor = await win.scaleFactor()
-              const logicalPosition = position.toLogical(scaleFactor)
-              updateSetting('globalLauncherWindowPosition', { x: logicalPosition.x, y: logicalPosition.y })
-            } catch {}
-          }, 400)
-        } catch (error) {
+      try {
+        void getCurrentWindow().startDragging().catch((error) => {
           console.warn('[FluxText] Failed to drag launcher window:', error)
-        }
-      })()
+        })
+      } catch (error) {
+        console.warn('[FluxText] Failed to drag launcher window:', error)
+      }
       return
     }
     const panel = panelRef.current
@@ -322,7 +313,7 @@ export function GlobalLauncher() {
     window.addEventListener('pointercancel', finish)
   }, [standaloneLauncher, updateSetting])
 
-  const currentPosition = dragPosition ?? launcherPosition
+  const currentPosition = standaloneLauncher ? undefined : (dragPosition ?? launcherPosition)
   const panelStyle: CSSProperties = {
     background: 'var(--color-background-primary)',
     border: '0.5px solid var(--color-border-secondary)',
@@ -345,6 +336,11 @@ export function GlobalLauncher() {
         className="global-launcher-panel overflow-hidden outline-none palette-panel"
         style={panelStyle}
         tabIndex={-1}
+        onPointerDown={beginDrag}
+        onContextMenu={(event) => {
+          if (event.target instanceof HTMLElement && event.target.closest('input, textarea')) return
+          event.preventDefault()
+        }}
         onKeyDown={(event) => {
           if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
           if (event.key === 'Escape') {
@@ -360,7 +356,7 @@ export function GlobalLauncher() {
         onCompositionStart={handleCompositionStart}
         onCompositionEnd={handleCompositionEnd}
       >
-        <div className="global-launcher-header flex items-center gap-2 px-3.5 py-2.5" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }} onPointerDown={beginDrag}>
+        <div className="global-launcher-header flex items-center gap-2 px-3.5 py-2.5" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
           <Search size={16} style={{ color: 'var(--color-text-tertiary)' }} />
           <input
             ref={inputRef}

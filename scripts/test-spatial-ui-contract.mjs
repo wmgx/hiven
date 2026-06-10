@@ -75,7 +75,7 @@ has(files.globalLauncher, /global-launcher-panel/, 'Global launcher should use a
 has(files.globalLauncher, /startDragging\(\)/, 'Standalone global launcher should drag the native window instead of moving inside its own bounds')
 has(files.store, /globalLauncherWindowPosition\??:\s*GlobalLauncherPosition/, 'Global launcher should persist its dragged native window position separately from in-app panel position')
 has(files.globalLauncher, /onPointerDown=\{beginDrag\}/, 'Global launcher should expose a drag handle')
-has(files.css, /\.global-launcher-panel[\s\S]{0,260}max-height:\s*min\(520px,\s*calc\(100vh - 24px\)\)/, 'Global launcher panel should be constrained within the viewport')
+has(files.css, /\.global-launcher-panel[\s\S]{0,260}max-height:\s*min\(var\(--command-palette-panel-max-height\),\s*calc\(100vh - 24px\)\)/, 'Global launcher panel should be constrained within the viewport')
 has(files.css, /\.global-launcher-body[\s\S]{0,120}overflow-y:\s*auto/, 'Global launcher body should scroll instead of clipping the footer')
 has(files.workspaceShell, /pane-tab/, 'Workspace split panes should use spec pane tab classes')
 has(files.renderStatusBar, /statusbar/, 'Renderer status should use the demo statusbar component')

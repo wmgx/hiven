@@ -249,6 +249,13 @@ function LauncherWindowApp() {
           } catch (error) {
             console.warn('[FluxText] Failed to restore launcher window position:', error)
           }
+        } else if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
+          try {
+            const { getCurrentWindow } = await import('@tauri-apps/api/window')
+            await getCurrentWindow().center()
+          } catch (error) {
+            console.warn('[FluxText] Failed to center launcher window:', error)
+          }
         }
       })()
     }
@@ -272,11 +279,66 @@ function LauncherWindowApp() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    import('@tauri-apps/api/window')
+      .then(async ({ getCurrentWindow }) => {
+        const win = getCurrentWindow()
+        return win.onMoved(async ({ payload: position }) => {
+          try {
+            const scaleFactor = await win.scaleFactor()
+            const logicalPosition = position.toLogical(scaleFactor)
+            useAppStore.getState().updateSetting('globalLauncherWindowPosition', { x: logicalPosition.x, y: logicalPosition.y })
+          } catch (error) {
+            console.warn('[FluxText] Failed to persist launcher window position:', error)
+          }
+        })
+      })
+      .then((cleanup) => {
+        if (disposed) cleanup()
+        else unlisten = cleanup
+      })
+      .catch((error) => {
+        console.warn('[FluxText] Failed to listen for launcher movement:', error)
+      })
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleLauncherWheel = (event: WheelEvent) => {
+      if (shouldAllowLauncherListWheel(event)) {
+        event.stopPropagation()
+        return
+      }
+      event.preventDefault()
+      event.stopPropagation()
+    }
+
+    window.addEventListener('wheel', handleLauncherWheel, { passive: false, capture: true })
+    return () => window.removeEventListener('wheel', handleLauncherWheel, true)
+  }, [])
+
   return (
     <div className="flux-spatial-shell launcher-window-shell" data-theme={theme} data-launcher-position={launcherWindowPosition ? 'stored' : 'default'} style={{ fontSize }}>
       <GlobalLauncher />
     </div>
   )
+}
+
+function shouldAllowLauncherListWheel(event: WheelEvent) {
+  if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return false
+  const target = event.target instanceof Element ? event.target : null
+  const scroller = target?.closest('.global-launcher-body') as HTMLElement | null
+  if (!scroller) return false
+  if (scroller.scrollHeight <= scroller.clientHeight) return false
+  if (event.deltaY < 0) return scroller.scrollTop > 0
+  if (event.deltaY > 0) return scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight - 1
+  return true
 }
 
 async function rehydratePersistedAppState() {
