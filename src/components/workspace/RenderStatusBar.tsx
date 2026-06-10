@@ -40,11 +40,7 @@ export function RenderStatusBar() {
 
   return (
     <div
-      className="h-[22px] flex items-center px-3 gap-3 shrink-0 relative"
-      style={{
-        borderTop: '0.5px solid var(--color-border-tertiary)',
-        background: 'var(--color-background-secondary)',
-      }}
+      className="statusbar shrink-0 relative"
     >
       {/* Active Pane */}
       <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>

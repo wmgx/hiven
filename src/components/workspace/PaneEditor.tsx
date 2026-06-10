@@ -12,6 +12,7 @@ import { getLanguageOptionLabel } from '../../workspace/languageOptions'
 import { PaneBottomPanels } from './PaneBottomPanels'
 import { installMonacoHoverOverlay } from '../../utils/monacoHoverOverlay'
 import { createMonacoDisposableBucket } from '../../utils/monacoDisposables'
+import { getFluxMonacoTheme, registerFluxMonacoThemes } from '../../utils/monacoTheme'
 
 interface PaneEditorProps {
   paneId: string
@@ -132,8 +133,10 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
           height="100%"
           defaultLanguage={language}
           defaultValue={paneText}
+          beforeMount={registerFluxMonacoThemes}
           onChange={handleChange}
           onMount={(editor) => {
+            registerFluxMonacoThemes(monaco)
             monacoDisposablesRef.current?.dispose()
             const disposables = createMonacoDisposableBucket()
             monacoDisposablesRef.current = disposables
@@ -268,18 +271,18 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
             wordWrap: settings.wordWrap ? 'on' : 'off',
             minimap: { enabled: false },
             scrollBeyondLastLine: false,
-            renderLineHighlight: 'none',
+            renderLineHighlight: 'line',
             overviewRulerLanes: 0,
             hideCursorInOverviewRuler: true,
             folding: foldingEnabled,
             stickyScroll: { enabled: pane.stickyScroll === true },
             glyphMargin: false,
-            lineDecorationsWidth: 12,
-            lineNumbersMinChars: 4,
-            padding: { top: 12 },
+            lineDecorationsWidth: 8,
+            lineNumbersMinChars: 3,
+            padding: { top: 12, left: 8 },
             fontFamily: 'var(--font-mono)',
           }}
-          theme="vs"
+          theme={getFluxMonacoTheme(settings.theme)}
         />
       </div>
 

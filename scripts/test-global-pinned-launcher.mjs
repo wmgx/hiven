@@ -134,7 +134,7 @@ check('Tauri config defines a standalone launcher window', () => {
   assert.ok(launcher, 'tauri.conf.json should define a launcher window')
   assert.equal(launcher.visible, false, 'launcher window should not open at startup')
   assert.equal(launcher.decorations, false, 'launcher window should be undecorated')
-  assert.equal(launcher.transparent, true, 'launcher window should be transparent')
+  assert.equal(launcher.transparent, true, 'launcher window should be transparent around the opaque panel')
 })
 
 check('launcher window has IPC capability access', () => {
@@ -145,7 +145,7 @@ check('launcher window has IPC capability access', () => {
   )
 })
 
-check('launcher route clears the document background', () => {
+check('launcher route clears the document background outside the panel', () => {
   assertHas(
     files.main,
     /document\.documentElement\.dataset\.window\s*=\s*['"]launcher['"]/,
@@ -154,7 +154,25 @@ check('launcher route clears the document background', () => {
   assertHas(
     files.indexCss,
     /html\[data-window=['"]launcher['"]\][\s\S]{0,180}background:\s*transparent/,
-    'launcher window document background should be transparent',
+    'launcher window document background should be transparent outside the rounded panel',
+  )
+})
+
+check('launcher panel drags the native launcher window and persists its position', () => {
+  assertHas(
+    files.store,
+    /globalLauncherWindowPosition\??:\s*GlobalLauncherPosition/,
+    'settings should persist the native global launcher window position',
+  )
+  assertHas(
+    files.globalLauncher,
+    /startDragging\(\)/,
+    'GlobalLauncher should move the native launcher window instead of moving inside its own window',
+  )
+  assertHas(
+    files.globalLauncher,
+    /updateSetting\(['"]globalLauncherWindowPosition['"]/,
+    'GlobalLauncher should save the dragged native window position through persisted settings',
   )
 })
 

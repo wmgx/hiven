@@ -1,4 +1,4 @@
-import { Component, type ReactNode, useEffect, useRef } from 'react'
+import { Component, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useRef } from 'react'
 import { useAppStore } from './store'
 import type { ViewId } from './store'
 import { initConfigDir } from './configInit'
@@ -13,6 +13,7 @@ import { GlobalLauncher } from './components/GlobalLauncher'
 import { loadInstalledPluginsFromStore } from './workspace/pluginRuntime'
 import { registerBundledPluginPackages } from './workspace/bundledPluginLoader'
 import { installGlobalPinnedLauncherHotkeys } from './hotkeys/globalPinnedLauncher'
+import { Command, Moon, Search, Sun } from 'lucide-react'
 
 // Register built-in panels
 import './panels/register'
@@ -78,6 +79,8 @@ export default function App() {
 function MainApp() {
   const activeView = useAppStore((s) => s.activeView)
   const fontSize = useAppStore((s) => s.settings.fontSize)
+  const settings = useAppStore((s) => s.settings)
+  const updateSetting = useAppStore((s) => s.updateSetting)
   const prunePinnedRuntimes = useAppStore((s) => s.prunePinnedRuntimes)
   const prevViewRef = useRef<ViewId>(activeView)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -208,26 +211,116 @@ function MainApp() {
   const globalLauncherOverlay = useAppStore((s) => s.globalLauncherOverlay)
 
   return (
-    <div className="flex h-full w-full overflow-hidden" style={{ fontFamily: 'var(--font-mono)', fontSize, background: globalLauncherOverlay ? 'transparent' : undefined }}>
-      {!globalLauncherOverlay && <Sidebar />}
+    <div
+      className="flux-spatial-shell"
+      data-theme={settings.theme}
+      style={{ fontSize }}
+    >
       {!globalLauncherOverlay && (
-        <main className="flex-1 flex flex-col overflow-hidden view-container" ref={containerRef}>
-          <ViewErrorBoundary viewId={activeView}>
-            <ViewContent viewId={activeView} />
-          </ViewErrorBoundary>
-        </main>
+        <FluxTitlebar
+          theme={settings.theme}
+          onOpenLauncher={() => useAppStore.getState().openGlobalLauncher('full')}
+          onToggleTheme={() => updateSetting('theme', settings.theme === 'dark' ? 'light' : 'dark')}
+        />
       )}
+      <div className="flux-main">
+        {!globalLauncherOverlay && <Sidebar />}
+        {!globalLauncherOverlay && (
+          <main className="flux-content view-container" ref={containerRef}>
+            <ViewErrorBoundary viewId={activeView}>
+              <ViewContent viewId={activeView} />
+            </ViewErrorBoundary>
+          </main>
+        )}
+      </div>
       {!globalLauncherOverlay && activeView === 'editor' && <CommandPalette />}
       <GlobalLauncher />
     </div>
   )
 }
 
-function LauncherWindowApp() {
-  const fontSize = useAppStore((s) => s.settings.fontSize)
+function FluxTitlebar({
+  theme,
+  onOpenLauncher,
+  onToggleTheme,
+}: {
+  theme: 'dark' | 'light'
+  onOpenLauncher: () => void
+  onToggleTheme: () => void
+}) {
+  const launcherButtonRef = useRef<HTMLButtonElement>(null)
+  const handleOpenLauncher = (event: ReactPointerEvent<HTMLButtonElement> | ReactMouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    onOpenLauncher()
+  }
 
   useEffect(() => {
-    const openLauncher = () => useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
+    const button = launcherButtonRef.current
+    if (!button) return
+    const handleNativeOpen = (event: globalThis.PointerEvent | MouseEvent) => {
+      event.preventDefault()
+      event.stopPropagation()
+      onOpenLauncher()
+    }
+    button.addEventListener('pointerdown', handleNativeOpen)
+    button.addEventListener('mousedown', handleNativeOpen)
+    return () => {
+      button.removeEventListener('pointerdown', handleNativeOpen)
+      button.removeEventListener('mousedown', handleNativeOpen)
+    }
+  }, [onOpenLauncher])
+
+  return (
+    <header className="flux-titlebar glass">
+      <div className="flux-titlebar-logo">
+        <Command size={14} />
+        <span>FluxText</span>
+      </div>
+      <button
+        ref={launcherButtonRef}
+        className="flux-titlebar-kbd"
+        onPointerDown={handleOpenLauncher}
+        onMouseDown={handleOpenLauncher}
+        onClick={onOpenLauncher}
+      >
+        <Search size={12} />
+        <span>Cmd Shift K</span>
+      </button>
+      <div className="flux-titlebar-spacer" />
+      <button
+        className="tb-btn"
+        onClick={onToggleTheme}
+        title={theme === 'dark' ? '切换亮色主题' : '切换暗色主题'}
+        aria-label={theme === 'dark' ? '切换亮色主题' : '切换暗色主题'}
+      >
+        {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+      </button>
+    </header>
+  )
+}
+
+function LauncherWindowApp() {
+  const fontSize = useAppStore((s) => s.settings.fontSize)
+  const theme = useAppStore((s) => s.settings.theme)
+  const launcherWindowPosition = useAppStore((s) => s.settings.globalLauncherWindowPosition)
+
+  useEffect(() => {
+    const openLauncher = () => {
+      const position = useAppStore.getState().settings.globalLauncherWindowPosition
+      useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
+      if (position && (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
+        void (async () => {
+          try {
+            const { LogicalPosition } = await import('@tauri-apps/api/dpi')
+            const { getCurrentWindow } = await import('@tauri-apps/api/window')
+            await getCurrentWindow().setPosition(new LogicalPosition(position.x, position.y))
+          } catch (error) {
+            console.warn('[FluxText] Failed to restore launcher window position:', error)
+          }
+        })()
+      }
+    }
     openLauncher()
 
     if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
@@ -249,7 +342,7 @@ function LauncherWindowApp() {
   }, [])
 
   return (
-    <div className="flex h-full w-full overflow-hidden" style={{ fontFamily: 'var(--font-mono)', fontSize, background: 'transparent' }}>
+    <div className="flux-spatial-shell launcher-window-shell" data-theme={theme} data-launcher-position={launcherWindowPosition ? 'stored' : 'default'} style={{ fontSize }}>
       <GlobalLauncher />
     </div>
   )

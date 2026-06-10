@@ -9,6 +9,7 @@ import { Editor } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import type { editor as MonacoEditor } from 'monaco-editor'
 import { createMonacoDisposableBucket, disposeAllMonacoDisposables, type MonacoDisposable } from '../../utils/monacoDisposables'
+import { registerFluxMonacoThemes } from '../../utils/monacoTheme'
 
 let cssInjected = false
 function ensureCss() {
@@ -38,6 +39,7 @@ export function DualEditorView({
   fontSize,
   lineNumbers,
   wordWrap,
+  monacoTheme = 'flux-vscode-light',
   leftStickyScrollEnabled,
   rightStickyScrollEnabled,
 }: {
@@ -54,6 +56,7 @@ export function DualEditorView({
   fontSize: number
   lineNumbers: boolean
   wordWrap: boolean
+  monacoTheme?: string
   leftStickyScrollEnabled: boolean
   rightStickyScrollEnabled: boolean
 }) {
@@ -148,15 +151,16 @@ export function DualEditorView({
     renderLineHighlight: 'none',
     folding: foldingEnabled,
     glyphMargin: false,
-    lineDecorationsWidth: 12,
-    lineNumbersMinChars: 4,
-    padding: { top: 12 },
+    lineDecorationsWidth: 8,
+    lineNumbersMinChars: 3,
+    padding: { top: 12, left: 8 },
     fontFamily: 'var(--font-mono)',
     overviewRulerLanes: 3,
   }
 
   const handleLeftMount = useCallback((editor: MonacoEditor.IStandaloneCodeEditor) => {
     ensureCss()
+    registerFluxMonacoThemes(monaco)
     disposeAllMonacoDisposables(leftDisposablesRef.current)
     leftDecIds.current = []
     const disposables = createMonacoDisposableBucket()
@@ -188,6 +192,7 @@ export function DualEditorView({
 
   const handleRightMount = useCallback((editor: MonacoEditor.IStandaloneCodeEditor) => {
     ensureCss()
+    registerFluxMonacoThemes(monaco)
     disposeAllMonacoDisposables(rightDisposablesRef.current)
     rightDecIds.current = []
     const disposables = createMonacoDisposableBucket()
@@ -239,11 +244,11 @@ export function DualEditorView({
       <div style={{ display: 'flex', height: '100%' }}>
         <div style={{ flex: 1, overflow: 'hidden', borderRight: border }}>
           <Editor height="100%" defaultValue={leftText} defaultLanguage={language}
-            onMount={handleLeftMount} options={{ ...editorOptions, stickyScroll: { enabled: leftStickyScrollEnabled } }} theme="vs" />
+            beforeMount={registerFluxMonacoThemes} onMount={handleLeftMount} options={{ ...editorOptions, stickyScroll: { enabled: leftStickyScrollEnabled } }} theme={monacoTheme} />
         </div>
         <div style={{ flex: 1, overflow: 'hidden' }}>
           <Editor height="100%" defaultValue={rightText} defaultLanguage={language}
-            onMount={handleRightMount} options={{ ...editorOptions, stickyScroll: { enabled: rightStickyScrollEnabled } }} theme="vs" />
+            beforeMount={registerFluxMonacoThemes} onMount={handleRightMount} options={{ ...editorOptions, stickyScroll: { enabled: rightStickyScrollEnabled } }} theme={monacoTheme} />
         </div>
       </div>
     )
@@ -253,11 +258,11 @@ export function DualEditorView({
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ flex: 1, overflow: 'hidden', borderBottom: border }}>
         <Editor height="100%" defaultValue={leftText} defaultLanguage={language}
-          onMount={handleLeftMount} options={{ ...editorOptions, stickyScroll: { enabled: leftStickyScrollEnabled } }} theme="vs" />
+          beforeMount={registerFluxMonacoThemes} onMount={handleLeftMount} options={{ ...editorOptions, stickyScroll: { enabled: leftStickyScrollEnabled } }} theme={monacoTheme} />
       </div>
       <div style={{ flex: 1, overflow: 'hidden' }}>
         <Editor height="100%" defaultValue={rightText} defaultLanguage={language}
-          onMount={handleRightMount} options={{ ...editorOptions, stickyScroll: { enabled: rightStickyScrollEnabled } }} theme="vs" />
+          beforeMount={registerFluxMonacoThemes} onMount={handleRightMount} options={{ ...editorOptions, stickyScroll: { enabled: rightStickyScrollEnabled } }} theme={monacoTheme} />
       </div>
     </div>
   )

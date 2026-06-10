@@ -26,11 +26,7 @@ function SidebarButton({
       <button
         aria-label={label}
         onClick={onClick}
-        className={`sidebar-btn w-8 h-8 flex items-center justify-center cursor-pointer border-none bg-transparent ${active ? 'active' : ''}`}
-        style={{
-          color: active ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
-          borderRadius: 'var(--radius-md)',
-        }}
+        className={`sidebar-btn ${active ? 'active' : ''}`}
       >
         <span className="flex items-center justify-center">{children}</span>
       </button>
@@ -52,11 +48,7 @@ export function Sidebar() {
 
   return (
     <div
-      className="w-[44px] flex flex-col items-center py-2 gap-1 shrink-0"
-      style={{
-        borderRight: '0.5px solid var(--color-border-tertiary)',
-        background: 'var(--color-background-secondary)',
-      }}
+      className="flux-sidebar"
     >
       {navItems.map((item) => (
         <SidebarButton
@@ -70,7 +62,7 @@ export function Sidebar() {
       ))}
       <div
         className="w-5 my-1"
-        style={{ height: '0.5px', background: 'var(--color-border-tertiary)' }}
+        style={{ height: '1px', background: 'var(--color-divider)' }}
       />
       {pinnedActions.length > 0 && (
         <div className="flex flex-col items-center gap-1" aria-label="Pinned">

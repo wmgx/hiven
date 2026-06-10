@@ -847,7 +847,7 @@ function ActionItem({ item, selected, onClick, onPin, onMouseEnter, shortcutMeta
     return (
       <div
         ref={ref}
-        className="flex items-center px-3.5 py-1.5 cursor-pointer gap-2.5"
+        className={`cmd-item ${selected ? 'selected' : ''}`}
         style={{ background: selected ? 'var(--color-accent-light)' : 'transparent' }}
         onClick={onClick}
         onMouseEnter={onMouseEnter}
@@ -897,7 +897,7 @@ function ActionItem({ item, selected, onClick, onPin, onMouseEnter, shortcutMeta
   return (
     <div
       ref={ref}
-      className="flex items-center px-3.5 py-1.5 cursor-pointer gap-2.5"
+      className={`cmd-item ${selected ? 'selected' : ''}`}
       style={{ background: selected ? 'var(--color-accent-light)' : 'transparent' }}
       onClick={onClick}
       onMouseEnter={onMouseEnter}

@@ -42,14 +42,13 @@ export function EditorView() {
     <div className="flex flex-col flex-1 overflow-hidden">
       {/* Top bar */}
       <div
-        className="h-[26px] flex items-center px-3.5 gap-3.5 shrink-0"
+        className="h-9 flex items-center px-3 gap-3 shrink-0 glass"
         style={{
-          borderBottom: '0.5px solid var(--color-border-tertiary)',
-          background: 'var(--color-background-secondary)',
+          borderWidth: '0 0 1px',
         }}
       >
-        <span className="text-[11px] flex items-center gap-1.5" style={{ color: 'var(--color-text-tertiary)' }}>
-          <span className="w-1.5 h-1.5 rounded-full anim-pulse-dot" style={{ background: 'var(--color-success)' }} />
+        <span className="text-[11px] flex items-center gap-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+          <span className="status-dot ready" />
           {t('ready')}
         </span>
 
@@ -60,7 +59,7 @@ export function EditorView() {
             return (
               <button
                 key={item.contribution.id}
-                className="ft-btn-icon-sm"
+                className="ft-btn-icon-sm btn-ghost"
                 onClick={() => { void runToolbarCommand(item.contribution.commandId, item.isDev) }}
                 title={title}
               >
@@ -70,7 +69,7 @@ export function EditorView() {
           })}
 
           <span
-            className="ft-btn ft-btn-ghost ft-btn-sm"
+            className="btn btn-ghost btn-sm ft-btn ft-btn-ghost ft-btn-sm"
             onClick={() => setCommandPaletteOpen(true)}
           >
             {t('runAction')}

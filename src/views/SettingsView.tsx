@@ -3,7 +3,7 @@ import type { KeyboardEvent, ReactNode } from 'react'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { getVersion } from '@tauri-apps/api/app'
-import { Check, ChevronDown, Download, Info, Keyboard, Languages, Layout, Minus, Plug, Plus, RefreshCw, SlidersHorizontal } from 'lucide-react'
+import { Check, ChevronDown, Download, Info, Keyboard, Languages, Layout, Minus, Moon, Plug, Plus, RefreshCw, SlidersHorizontal, Sun } from 'lucide-react'
 import { useAppStore, type GlobalPinnedLauncherDoubleModifier, type GlobalPinnedLauncherShortcut } from '../store'
 import { useT } from '../i18n'
 import { checkBuiltinPluginsUpdate } from '../configInit'
@@ -44,6 +44,8 @@ export function SettingsView() {
             />
           </SettingRow>
         </SettingCard>
+
+        <ThemeSettings />
 
         <SettingCard icon={<Layout size={16} />} title={t('editor')}>
           <SettingRow label={t('fontSize')}>
@@ -110,13 +112,28 @@ const smallButtonStyle = {
 
 function SettingCard({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
   return (
-    <div className="p-3.5 px-4" style={{ border: '0.5px solid var(--color-border-tertiary)', background: 'var(--color-background-primary)', borderRadius: 'var(--radius-lg)' }}>
+    <div className="setting-card card p-3.5 px-4">
       <div className="font-medium flex items-center gap-1.5 mb-3" style={{ fontSize: 'var(--text-md)', color: 'var(--color-text-primary)' }}>
         <span style={{ color: 'var(--color-accent)' }}>{icon}</span>
         {title}
       </div>
       <div className="flex flex-col">{children}</div>
     </div>
+  )
+}
+
+function ThemeSettings() {
+  const { settings, updateSetting, locale } = useAppStore()
+  const isDark = settings.theme === 'dark'
+  const title = locale === 'zh' ? '外观' : 'Appearance'
+  const label = locale === 'zh' ? '暗色主题' : 'Dark theme'
+
+  return (
+    <SettingCard icon={isDark ? <Moon size={16} /> : <Sun size={16} />} title={title}>
+      <SettingRow label={label}>
+        <Toggle value={isDark} onChange={(value) => updateSetting('theme', value ? 'dark' : 'light')} />
+      </SettingRow>
+    </SettingCard>
   )
 }
 
@@ -159,9 +176,12 @@ function SettingRow({ label, info, children }: { label: string; info?: string; c
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (value: boolean) => void }) {
   return (
-    <div className="w-8 h-[18px] rounded-full relative cursor-pointer shrink-0" style={{ background: value ? 'var(--color-accent)' : 'var(--color-border-tertiary)' }} onClick={() => onChange(!value)}>
-      <div className="w-3.5 h-3.5 rounded-full bg-white absolute top-[2px] transition-[left] duration-150" style={{ left: value ? '15px' : '2px' }} />
-    </div>
+    <button
+      type="button"
+      className={`toggle ${value ? 'on' : ''}`}
+      aria-pressed={value}
+      onClick={() => onChange(!value)}
+    />
   )
 }
 

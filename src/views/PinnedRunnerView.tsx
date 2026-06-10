@@ -9,6 +9,7 @@ import { applyEffects } from '../workspace/effectRunner'
 import { runPinnedPluginCommandToPatch } from '../workspace/pinnedPluginCommandRunner.ts'
 import { detectEditorLanguage } from '../workspace/languageDetector'
 import type { CommandContribution, CommandParam } from '../workspace/pluginTypes'
+import { getFluxMonacoTheme, registerFluxMonacoThemes } from '../utils/monacoTheme'
 
 type ControlParam = PaletteParamModel | CommandParam
 
@@ -211,8 +212,8 @@ export function PinnedRunnerView() {
     <div className="flex-1 flex flex-col min-h-0" style={{ background: 'var(--color-background-primary)' }}>
       {/* Header */}
       <div
-        className="flex items-center justify-between px-5 py-3 shrink-0"
-        style={{ borderBottom: '1px solid var(--color-border-tertiary)', background: 'var(--color-background-secondary)' }}
+        className="pinned-header glass flex items-center justify-between px-5 py-3 shrink-0"
+        style={{ borderWidth: '0 0 1px' }}
       >
         <div className="min-w-0 flex items-center gap-3">
           <div className="scripts-title truncate text-[14px]">{pinned.title}</div>
@@ -267,8 +268,8 @@ export function PinnedRunnerView() {
       </div>
 
       {/* Input / Output Panels */}
-      <div className="grid grid-cols-2 min-h-0 flex-1">
-        <section className="flex flex-col min-w-0 min-h-0" style={{ borderRight: '1px solid var(--color-border-tertiary)' }}>
+      <div className="pinned-cols grid grid-cols-2 min-h-0 flex-1">
+        <section className="pinned-col flex flex-col min-w-0 min-h-0" style={{ borderRight: '1px solid var(--color-border-tertiary)' }}>
           <div className="pinned-panel-header">
             <span className="pinned-panel-label">{t(locale, 'pinned.input')}</span>
             <button data-testid="pinned-runner-clear-input" className="pinned-icon-btn" onClick={() => updateInputText('')} title={t(locale, 'pinned.clearInput')}>
@@ -288,7 +289,7 @@ export function PinnedRunnerView() {
           </div>
         </section>
 
-        <section className="flex flex-col min-w-0 min-h-0">
+        <section className="pinned-col flex flex-col min-w-0 min-h-0">
           <div className="pinned-panel-header">
             <span className="pinned-panel-label">{t(locale, 'pinned.output')}</span>
             <div className="flex items-center gap-1">
@@ -405,12 +406,14 @@ function PinnedMonacoEditor({ pinnedId, value, onChange, readOnly, onBlur }: {
       height="100%"
       defaultLanguage={detectedLang}
       {...(readOnly ? { value } : { defaultValue: value })}
+      beforeMount={registerFluxMonacoThemes}
       onChange={(v) => {
         if (!onChange) return
         isLocalChange.current = true
         onChange(v || '')
       }}
       onMount={(editor) => {
+        registerFluxMonacoThemes(monaco)
         editorRef.current = editor
         if (onBlur) {
           editor.onDidBlurEditorWidget(() => onBlur())
@@ -423,18 +426,18 @@ function PinnedMonacoEditor({ pinnedId, value, onChange, readOnly, onBlur }: {
         wordWrap: 'on',
         minimap: { enabled: false },
         scrollBeyondLastLine: false,
-        renderLineHighlight: 'none',
+        renderLineHighlight: 'line',
         overviewRulerLanes: 0,
         hideCursorInOverviewRuler: true,
         folding: detectedLang !== 'plaintext',
         glyphMargin: false,
         lineDecorationsWidth: 8,
         lineNumbersMinChars: 3,
-        padding: { top: 8 },
+        padding: { top: 8, left: 8 },
         fontFamily: 'var(--font-mono)',
         domReadOnly: readOnly,
       }}
-      theme="vs"
+      theme={getFluxMonacoTheme(settings.theme)}
     />
   )
 }

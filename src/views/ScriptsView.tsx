@@ -504,16 +504,16 @@ export function ScriptsView() {
         <span className={`scripts-search-count ${query ? 'has-query' : ''}`}>{totalCount}</span>
       </div>
 
-      <div className="scripts-tabs">
-        <button className={`scripts-tab ${activeTab === 'builtin' ? 'active' : ''}`} onClick={() => setActiveTab('builtin')}>
+      <div className="scripts-tabs seg-control sm">
+        <button className={`scripts-tab seg-item ${activeTab === 'builtin' ? 'active' : ''}`} onClick={() => setActiveTab('builtin')}>
           {t(locale, 'scripts.tabBuiltin')}
           <span className={`scripts-tab-count ${activeTab === 'builtin' ? 'active' : ''}`}>{builtinPlugins.length}</span>
         </button>
-        <button className={`scripts-tab ${activeTab === 'installed' ? 'active' : ''}`} onClick={() => setActiveTab('installed')}>
+        <button className={`scripts-tab seg-item ${activeTab === 'installed' ? 'active' : ''}`} onClick={() => setActiveTab('installed')}>
           {t(locale, 'scripts.tabInstalled')}
           <span className={`scripts-tab-count ${activeTab === 'installed' ? 'active' : ''}`}>{installedList.length}</span>
         </button>
-        <button className={`scripts-tab ${activeTab === 'dev' ? 'active' : ''}`} onClick={() => setActiveTab('dev')}>
+        <button className={`scripts-tab seg-item ${activeTab === 'dev' ? 'active' : ''}`} onClick={() => setActiveTab('dev')}>
           {t(locale, 'scripts.tabDev')}
           <span className={`scripts-tab-count ${activeTab === 'dev' ? 'active' : ''}`}>{devList.length}</span>
         </button>
@@ -653,7 +653,7 @@ function PluginCard({
   actions: ReactNode
 }) {
   return (
-    <div className="script-card anim-card-in" style={{ borderColor: error ? 'var(--color-error)' : undefined }}>
+    <div className={`card script-card anim-card-in ${error ? 'has-error' : ''}`} style={{ borderColor: error ? 'var(--color-error)' : undefined }}>
       <div className="script-icon">
         {loading ? <Loader2 size={16} className="animate-spin" /> : <Package size={16} />}
       </div>

@@ -88,7 +88,7 @@ export function WorkspaceShell() {
               {/* Pane title tab */}
               {layout.panes.length > 1 && (
                 <div
-                  className="h-[24px] flex items-center px-2 text-[10px] shrink-0 justify-between"
+                  className="pane-tab h-[24px] flex items-center px-2 text-[10px] shrink-0 justify-between"
                   style={{
                     background: activePaneId === paneId
                       ? 'var(--color-background-primary)'

@@ -218,6 +218,7 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
           fontSize={settings.fontSize}
           lineNumbers={settings.lineNumbers}
           wordWrap={settings.wordWrap}
+          monacoTheme={settings.theme === 'dark' ? 'flux-vscode-dark' : 'flux-vscode-light'}
           leftStickyScrollEnabled={originalPane.stickyScroll === true}
           rightStickyScrollEnabled={modifiedPane.stickyScroll === true}
         />

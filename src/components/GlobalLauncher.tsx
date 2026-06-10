@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { LayoutPanelLeft, Pin, Puzzle, Search, Settings } from 'lucide-react'
 import { localized, useAppStore, type ViewId } from '../store'
 import { t, type Locale } from '../i18n'
@@ -32,13 +32,27 @@ export function GlobalLauncher() {
   const openPinnedAction = useAppStore((s) => s.openPinnedAction)
   const pinnedActions = useAppStore((s) => s.pinnedActions)
   const recentActionNames = useAppStore((s) => s.recentActionNames)
+  const launcherPosition = useAppStore((s) => s.settings.globalLauncherPosition)
+  const updateSetting = useAppStore((s) => s.updateSetting)
   const locale = useAppStore((s) => s.locale)
   const pluginRegistryVersion = usePluginRegistryVersion()
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
+  const [dragPosition, setDragPosition] = useState(launcherPosition)
   const inputRef = useRef<HTMLInputElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
   const isImeComposingRef = useRef(false)
+  const dragRef = useRef<{
+    offsetX: number
+    offsetY: number
+    position: { x: number; y: number }
+  } | null>(null)
   const standaloneLauncher = isStandaloneLauncherWindow()
+
+  useEffect(() => {
+    if (dragRef.current) return
+    setDragPosition(launcherPosition)
+  }, [launcherPosition])
 
   useEffect(() => {
     if (!open) return
@@ -175,7 +189,6 @@ export function GlobalLauncher() {
     }
   }, [closeLauncher, open, standaloneLauncher])
 
-  if (!open) return null
   const clampedSelectedIndex = Math.min(selectedIndex, Math.max(0, filtered.length - 1))
 
   const selectItem = (item: LauncherItem | undefined) => {
@@ -244,19 +257,93 @@ export function GlobalLauncher() {
     finishImeComposition(isImeComposingRef)
   }
 
+  const beginDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return
+    if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, button')) return
+    if (standaloneLauncher && (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
+      event.preventDefault()
+      event.stopPropagation()
+      void (async () => {
+        try {
+          const { getCurrentWindow } = await import('@tauri-apps/api/window')
+          const win = getCurrentWindow()
+          await win.startDragging()
+          window.setTimeout(async () => {
+            try {
+              const position = await win.outerPosition()
+              const scaleFactor = await win.scaleFactor()
+              const logicalPosition = position.toLogical(scaleFactor)
+              updateSetting('globalLauncherWindowPosition', { x: logicalPosition.x, y: logicalPosition.y })
+            } catch {}
+          }, 400)
+        } catch (error) {
+          console.warn('[FluxText] Failed to drag launcher window:', error)
+        }
+      })()
+      return
+    }
+    const panel = panelRef.current
+    if (!panel) return
+    const rect = panel.getBoundingClientRect()
+    const initialPosition = { x: rect.left, y: rect.top }
+    dragRef.current = {
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+      position: initialPosition,
+    }
+    setDragPosition(initialPosition)
+    event.preventDefault()
+
+    const move = (moveEvent: PointerEvent) => {
+      const currentPanel = panelRef.current
+      const drag = dragRef.current
+      if (!currentPanel || !drag) return
+      const width = currentPanel.offsetWidth
+      const height = currentPanel.offsetHeight
+      const next = {
+        x: clamp(moveEvent.clientX - drag.offsetX, 8, Math.max(8, window.innerWidth - width - 8)),
+        y: clamp(moveEvent.clientY - drag.offsetY, 8, Math.max(8, window.innerHeight - height - 8)),
+      }
+      drag.position = next
+      setDragPosition(next)
+    }
+
+    const finish = () => {
+      const position = dragRef.current?.position
+      dragRef.current = null
+      if (position) updateSetting('globalLauncherPosition', position)
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', finish)
+      window.removeEventListener('pointercancel', finish)
+    }
+
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', finish)
+    window.addEventListener('pointercancel', finish)
+  }, [standaloneLauncher, updateSetting])
+
+  const currentPosition = dragPosition ?? launcherPosition
+  const panelStyle: CSSProperties = {
+    background: 'var(--color-background-primary)',
+    border: '0.5px solid var(--color-border-secondary)',
+    borderRadius: 'var(--radius-xl)',
+    left: currentPosition ? currentPosition.x : '50%',
+    top: currentPosition ? currentPosition.y : overlay ? 12 : 70,
+    transform: currentPosition ? undefined : 'translateX(-50%)',
+  }
+
+  if (!open) return null
+
   return (
     <div
-      className={`fixed inset-0 flex items-start justify-center palette-overlay open ${overlay ? 'transparent pt-3' : 'pt-[70px]'}`}
+      className="fixed inset-0 palette-overlay global-launcher-overlay open"
       style={{ pointerEvents: 'auto', visibility: 'visible', zIndex: 1100 }}
       onClick={(event) => { if (event.target === event.currentTarget) closeLauncher() }}
     >
       <div
-        className="w-[min(630px,90vw)] overflow-hidden outline-none palette-panel"
-        style={{
-          background: 'var(--color-background-primary)',
-          border: '0.5px solid var(--color-border-secondary)',
-          borderRadius: 'var(--radius-xl)',
-        }}
+        ref={panelRef}
+        className="global-launcher-panel overflow-hidden outline-none palette-panel"
+        style={panelStyle}
         tabIndex={-1}
         onKeyDown={(event) => {
           if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
@@ -273,7 +360,7 @@ export function GlobalLauncher() {
         onCompositionStart={handleCompositionStart}
         onCompositionEnd={handleCompositionEnd}
       >
-        <div className="flex items-center gap-2 px-3.5 py-2.5" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
+        <div className="global-launcher-header flex items-center gap-2 px-3.5 py-2.5" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }} onPointerDown={beginDrag}>
           <Search size={16} style={{ color: 'var(--color-text-tertiary)' }} />
           <input
             ref={inputRef}
@@ -284,29 +371,31 @@ export function GlobalLauncher() {
             style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
           />
         </div>
-        <LauncherSection
-          title={t(locale, 'palette.globalPinned')}
-          items={filtered.filter((item) => item.kind === 'instant' || item.kind === 'pinned')}
-          selected={filtered[clampedSelectedIndex]}
-          onSelect={selectItem}
-        />
-        {mode === 'full' && (
+        <div className="global-launcher-body">
           <LauncherSection
-            title={t(locale, 'palette.globalRecent')}
-            items={filtered.filter((item) => item.kind === 'recent')}
+            title={t(locale, 'palette.globalPinned')}
+            items={filtered.filter((item) => item.kind === 'instant' || item.kind === 'pinned')}
             selected={filtered[clampedSelectedIndex]}
             onSelect={selectItem}
           />
-        )}
-        {mode === 'full' && (
-          <LauncherSection
-            title={t(locale, 'palette.globalViews')}
-            items={filtered.filter((item) => item.kind === 'view')}
-            selected={filtered[clampedSelectedIndex]}
-            onSelect={selectItem}
-          />
-        )}
-        <div className="flex gap-3 px-3.5 py-1.5" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
+          {mode === 'full' && (
+            <LauncherSection
+              title={t(locale, 'palette.globalRecent')}
+              items={filtered.filter((item) => item.kind === 'recent')}
+              selected={filtered[clampedSelectedIndex]}
+              onSelect={selectItem}
+            />
+          )}
+          {mode === 'full' && (
+            <LauncherSection
+              title={t(locale, 'palette.globalViews')}
+              items={filtered.filter((item) => item.kind === 'view')}
+              selected={filtered[clampedSelectedIndex]}
+              onSelect={selectItem}
+            />
+          )}
+        </div>
+        <div className="flex shrink-0 gap-3 px-3.5 py-1.5" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
           <HintKey keys="↑↓" label={t(locale, 'palette.select')} />
           <HintKey keys="↵" label={t(locale, 'palette.confirm')} />
           <HintKey keys="esc" label={t(locale, 'palette.back')} />
@@ -314,6 +403,10 @@ export function GlobalLauncher() {
       </div>
     </div>
   )
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max)
 }
 
 async function executeInstantSuggestion(suggestion: InstantSuggestion, locale: Locale, onDone: () => void) {
@@ -356,7 +449,7 @@ function LauncherSection({ title, items, selected, onSelect }: { title: string; 
         return (
           <button
             key={`${item.kind}:${item.id}`}
-            className="w-full flex items-center gap-2.5 px-3.5 py-1.5 border-none text-left cursor-pointer"
+            className={`cmd-item w-full border-none text-left ${isSelected ? 'selected' : ''}`}
             style={{
               background: isSelected ? 'var(--color-accent-light)' : 'transparent',
               color: 'var(--color-text-primary)',

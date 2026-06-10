@@ -5,6 +5,7 @@ import { useAppStore } from '../store'
 import { useT } from '../i18n'
 import { listPluginFiles, readPluginFile } from '../workspace/pluginRuntime'
 import type { PluginFileTree } from '../workspace/pluginTypes'
+import { getFluxMonacoTheme, registerFluxMonacoThemes } from '../utils/monacoTheme'
 
 function flattenFileTree(nodes: PluginFileTree[]): PluginFileTree[] {
   const result: PluginFileTree[] = []
@@ -47,7 +48,7 @@ function TreeNode({
     return (
       <div>
         <div
-          className="flex items-center gap-2 rounded-md px-2 py-1.5"
+          className="tree-node flex items-center gap-2 rounded-md px-2 py-1.5"
           style={{
             paddingLeft: 8 + depth * 12,
             color: 'var(--color-text-tertiary)',
@@ -72,7 +73,7 @@ function TreeNode({
 
   return (
     <button
-      className="w-full flex items-center gap-2 text-left rounded-md px-2 py-1.5"
+      className={`tree-node w-full flex items-center gap-2 text-left rounded-md px-2 py-1.5 ${activeFile === node.path ? 'active' : ''}`}
       style={{
         paddingLeft: 8 + depth * 12,
         color: activeFile === node.path ? 'var(--color-accent)' : 'var(--color-text-secondary)',
@@ -91,6 +92,7 @@ export function PluginEditorView() {
   const pluginEditor = useAppStore((s) => s.pluginEditor)
   const closePluginEditor = useAppStore((s) => s.closePluginEditor)
   const locale = useAppStore((s) => s.locale)
+  const theme = useAppStore((s) => s.settings.theme)
   const t = useT('pluginEditor')
   const [fileTree, setFileTree] = useState<PluginFileTree[]>([])
   const [activeFile, setActiveFile] = useState('')
@@ -172,7 +174,7 @@ export function PluginEditorView() {
       )}
 
       <div className="flex-1 min-h-0 flex">
-        <aside className="w-64 shrink-0 overflow-auto p-2" style={{ borderRight: '0.5px solid var(--color-border-tertiary)', background: 'var(--color-background-secondary)' }}>
+        <aside className="file-tree w-64 shrink-0 overflow-auto p-2" style={{ borderRight: '0.5px solid var(--color-border-tertiary)', background: 'var(--color-background-secondary)' }}>
           <div className="flex items-center gap-1 mb-2 px-1" style={{ color: 'var(--color-text-tertiary)', fontSize: '0.75em' }}>
             <FolderTree size={12} /> {t('fileTree')}
           </div>
@@ -196,6 +198,7 @@ export function PluginEditorView() {
             height="100%"
             language={languageForPath(activeFile)}
             value={content}
+            beforeMount={registerFluxMonacoThemes}
             options={{
               minimap: { enabled: false },
               fontSize: 13,
@@ -203,7 +206,14 @@ export function PluginEditorView() {
               scrollBeyondLastLine: false,
               automaticLayout: true,
               readOnly: true,
+              renderLineHighlight: 'line',
+              glyphMargin: false,
+              lineDecorationsWidth: 8,
+              lineNumbersMinChars: 3,
+              padding: { top: 12, left: 8 },
+              fontFamily: 'var(--font-mono)',
             }}
+            theme={getFluxMonacoTheme(theme)}
           />
         </main>
       </div>

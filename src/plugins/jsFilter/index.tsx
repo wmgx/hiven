@@ -202,6 +202,7 @@ function toMonacoSuggestions(
 function JsFilterPanel({ host }: PanelPropsV2) {
   const { hooks, effects } = getPluginHostSdk()
   const t = hooks.useT(PLUGIN_ID)
+  const settings = hooks.useSettings()
   const [expression, setExpression] = useState('')
   const [editorHeight, setEditorHeight] = useState(EDITOR_MIN_HEIGHT)
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
@@ -357,7 +358,7 @@ function JsFilterPanel({ host }: PanelPropsV2) {
             tabCompletion: 'on',
             contextmenu: false,
           }}
-          theme="vs"
+          theme={settings.theme === 'dark' ? 'vs-dark' : 'vs'}
         />
         </div>
       <button

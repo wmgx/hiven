@@ -125,8 +125,10 @@ export type LastCommandStatus = {
   updatedAt: number
 }
 
+export type AppTheme = 'dark' | 'light'
 export type GlobalLauncherMode = 'full' | 'pinned-only'
 export type GlobalPinnedLauncherDoubleModifier = 'Command' | 'Shift' | 'Option'
+export type GlobalLauncherPosition = { x: number; y: number }
 
 export type GlobalPinnedLauncherShortcut =
   | { kind: 'accelerator'; accelerator: string; registrationStatus?: string; registrationError?: string }
@@ -199,10 +201,13 @@ interface AppState {
     persistPinnedTombstone: boolean
     outputPreviewLimit: number
     tombstoneTtlDays: number
+    theme: 'dark' | 'light'
     locale: Locale
     disabledBuiltins: string[]
     disabledCustoms: string[]
     globalPinnedLauncherShortcut: GlobalPinnedLauncherShortcut
+    globalLauncherPosition?: GlobalLauncherPosition
+    globalLauncherWindowPosition?: GlobalLauncherPosition
   }
   updateSetting: (key: string, value: any) => void
   toggleBuiltinDisabled: (name: string) => void
@@ -441,10 +446,13 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     persistPinnedTombstone: true,
     outputPreviewLimit: 2048,
     tombstoneTtlDays: 30,
+    theme: 'dark',
     locale: 'en' as Locale,
     disabledBuiltins: [],
     disabledCustoms: [],
     globalPinnedLauncherShortcut: { kind: 'accelerator', accelerator: 'Shift+Cmd+Space' },
+    globalLauncherPosition: undefined,
+    globalLauncherWindowPosition: undefined,
   },
   updateSetting: (key, value) =>
     set((state) => {
