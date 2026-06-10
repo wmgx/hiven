@@ -13,6 +13,19 @@ function notHas(source, pattern, message) {
   assert.doesNotMatch(source, pattern, message)
 }
 
+function cssColor(source, token) {
+  const escaped = token.replaceAll('.', String.raw`\.`)
+  const match = source.match(new RegExp(`${escaped}['"]:\\s*['"]([^'"]+)['"]`))
+  assert.ok(match, `Expected Monaco theme color "${token}" to be defined`)
+  return match[1]
+}
+
+function hasTokenRule(source, token, color, message) {
+  const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)
+  const pattern = new RegExp(`token:\\s*['"]${escapedToken}['"][\\s\\S]{0,80}foreground:\\s*['"]${color}['"]`)
+  assert.match(source, pattern, message)
+}
+
 const files = {
   packageJson: read('package.json'),
   app: read('src/App.tsx'),
@@ -85,9 +98,19 @@ has(files.paneEditor, /lineNumbersMinChars:\s*3/, 'Primary editor should use a f
 has(files.paneEditor, /padding:\s*\{\s*top:\s*12,\s*left:\s*8\s*\}/, 'Primary editor should add breathing room after the gutter')
 has(files.paneEditor, /renderLineHighlight:\s*['"]line['"]/, 'Primary editor should use VS Code-like current line highlighting')
 has(files.dualEditor, /padding:\s*\{\s*top:\s*12,\s*left:\s*8\s*\}/, 'Dual editor panes should match the primary editor padding')
-has(files.monacoTheme, /editorGutter\.background['"]:\s*['"]#0f1012['"]/, 'Dark Monaco gutter should match the editor background')
+assert.equal(
+  cssColor(files.monacoTheme, 'editorGutter.background'),
+  cssColor(files.monacoTheme, 'editor.background'),
+  'Dark Monaco gutter should match the editor background',
+)
 has(files.monacoTheme, /editorGutter\.background['"]:\s*['"]#ffffff['"]/, 'Light Monaco gutter should match the editor background')
 has(files.monacoTheme, /editor\.lineHighlightBackground/, 'Monaco theme should define a VS Code-like current line highlight')
+hasTokenRule(files.monacoTheme, 'keyword', 'c792ea', 'Dark Monaco theme should align keyword highlighting with the FluxText dark palette')
+hasTokenRule(files.monacoTheme, 'string', '7dd3a8', 'Dark Monaco theme should align string highlighting with the FluxText dark palette')
+hasTokenRule(files.monacoTheme, 'comment', '748095', 'Dark Monaco theme should keep comments readable on the raised dark background')
+assert.equal(cssColor(files.monacoTheme, 'editorBracketHighlight.foreground1'), '#95a0b2', 'Dark Monaco bracket pair color 1 should avoid the default saturated yellow')
+assert.equal(cssColor(files.monacoTheme, 'editorBracketHighlight.foreground2'), '#8b93ff', 'Dark Monaco bracket pair color 2 should align with the FluxText accent')
+assert.equal(cssColor(files.monacoTheme, 'editorBracketHighlight.foreground3'), '#7fc7ff', 'Dark Monaco bracket pair color 3 should stay readable without clashing with syntax tokens')
 has(files.css, /\.monaco-editor \.margin[\s\S]{0,100}background:\s*var\(--vscode-editor-background\)/, 'Monaco line-number margin should use the editor background')
 has(files.css, /\.margin-view-overlays \.current-line[\s\S]{0,100}background:\s*transparent/, 'Monaco current line highlight should not paint a separate gutter block')
 

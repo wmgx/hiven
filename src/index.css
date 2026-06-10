@@ -37,15 +37,15 @@
 body,
 body[data-theme='dark'],
 .flux-spatial-shell[data-theme='dark'] {
-  --bg-page: #0a0a0f;
+  --bg-page: #0d0f14;
   --bg-gradient:
-    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(99, 102, 241, 0.15), transparent),
-    radial-gradient(ellipse 60% 50% at 80% 50%, rgba(79, 70, 229, 0.08), transparent),
-    radial-gradient(ellipse 50% 40% at 10% 80%, rgba(139, 92, 246, 0.06), transparent);
-  --color-accent: #6366f1;
-  --color-accent-hover: #818cf8;
-  --color-accent-light: rgba(99, 102, 241, 0.2);
-  --color-accent-glow: rgba(99, 102, 241, 0.35);
+    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(99, 102, 241, 0.12), transparent),
+    radial-gradient(ellipse 60% 50% at 80% 50%, rgba(79, 70, 229, 0.06), transparent),
+    radial-gradient(ellipse 50% 40% at 10% 80%, rgba(139, 92, 246, 0.04), transparent);
+  --color-accent: #8b93ff;
+  --color-accent-hover: #a6adff;
+  --color-accent-light: rgba(139, 147, 255, 0.24);
+  --color-accent-glow: rgba(139, 147, 255, 0.32);
   --color-success: #10b981;
   --color-success-bg: rgba(16, 185, 129, 0.15);
   --color-success-text: #34d399;
@@ -54,37 +54,38 @@ body[data-theme='dark'],
   --color-error: #ef4444;
   --color-error-bg: rgba(239, 68, 68, 0.15);
   --color-error-text: #fca5a5;
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-bg: rgba(20, 20, 25, 0.35);
-  --glass-bg-solid: rgba(20, 20, 25, 0.85);
+  --glass-border: rgba(223, 230, 246, 0.16);
+  --glass-bg: rgba(22, 25, 33, 0.72);
+  --glass-bg-solid: rgba(22, 25, 33, 0.96);
   --glass-shine:
-    inset 0 1px 1px rgba(255, 255, 255, 0.15),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    inset 0 1px 1px rgba(255, 255, 255, 0.1),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
   --shadow-panel:
-    0 24px 48px -12px rgba(0, 0, 0, 0.5),
-    0 12px 24px -8px rgba(0, 0, 0, 0.4),
-    0 0 0 1px rgba(255, 255, 255, 0.06);
+    0 24px 48px -12px rgba(0, 0, 0, 0.62),
+    0 12px 24px -8px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(223, 230, 246, 0.12);
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
-  --color-bg: #0a0a0f;
-  --color-text: rgba(255, 255, 255, 0.85);
-  --color-text-muted: rgba(255, 255, 255, 0.5);
-  --color-text-faint: rgba(255, 255, 255, 0.3);
-  --color-surface: rgba(255, 255, 255, 0.04);
-  --color-surface-hover: rgba(255, 255, 255, 0.08);
-  --color-divider: rgba(255, 255, 255, 0.06);
-  --input-bg: rgba(255, 255, 255, 0.05);
-  --btn-ghost-hover: rgba(255, 255, 255, 0.08);
-  --scrollbar-thumb: rgba(255, 255, 255, 0.12);
+  --color-bg: var(--bg-page);
+  --color-text: #f4f7fb;
+  --color-text-muted: #c3c8d2;
+  --color-text-faint: #8d96a3;
+  --color-surface: rgba(223, 230, 246, 0.08);
+  --color-surface-hover: rgba(223, 230, 246, 0.14);
+  --color-divider: rgba(223, 230, 246, 0.12);
+  --input-bg: rgba(223, 230, 246, 0.1);
+  --btn-ghost-hover: rgba(223, 230, 246, 0.12);
+  --scrollbar-thumb: rgba(223, 230, 246, 0.22);
 
   --color-background-primary: var(--bg-page);
-  --color-background-secondary: rgba(255, 255, 255, 0.04);
-  --color-background-tertiary: rgba(255, 255, 255, 0.08);
+  --color-background-secondary: rgba(223, 230, 246, 0.08);
+  --color-background-tertiary: rgba(223, 230, 246, 0.14);
   --color-text-primary: var(--color-text);
   --color-text-secondary: var(--color-text-muted);
   --color-text-tertiary: var(--color-text-faint);
-  --color-border-secondary: rgba(255, 255, 255, 0.12);
+  --color-border-secondary: rgba(223, 230, 246, 0.22);
   --color-border-tertiary: var(--color-divider);
+  --color-accent-bg: var(--color-accent-light);
 }
 
 body[data-theme='light'],
