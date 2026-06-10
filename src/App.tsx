@@ -1,4 +1,4 @@
-import { Component, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useRef } from 'react'
+import { Component, type ReactNode, useEffect, useRef } from 'react'
 import { useAppStore } from './store'
 import type { ViewId } from './store'
 import { initConfigDir } from './configInit'
@@ -13,7 +13,6 @@ import { GlobalLauncher } from './components/GlobalLauncher'
 import { loadInstalledPluginsFromStore } from './workspace/pluginRuntime'
 import { registerBundledPluginPackages } from './workspace/bundledPluginLoader'
 import { installGlobalPinnedLauncherHotkeys } from './hotkeys/globalPinnedLauncher'
-import { Command, Moon, Search, Sun } from 'lucide-react'
 
 // Register built-in panels
 import './panels/register'
@@ -80,7 +79,6 @@ function MainApp() {
   const activeView = useAppStore((s) => s.activeView)
   const fontSize = useAppStore((s) => s.settings.fontSize)
   const settings = useAppStore((s) => s.settings)
-  const updateSetting = useAppStore((s) => s.updateSetting)
   const prunePinnedRuntimes = useAppStore((s) => s.prunePinnedRuntimes)
   const prevViewRef = useRef<ViewId>(activeView)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -216,13 +214,6 @@ function MainApp() {
       data-theme={settings.theme}
       style={{ fontSize }}
     >
-      {!globalLauncherOverlay && (
-        <FluxTitlebar
-          theme={settings.theme}
-          onOpenLauncher={() => useAppStore.getState().openGlobalLauncher('full')}
-          onToggleTheme={() => updateSetting('theme', settings.theme === 'dark' ? 'light' : 'dark')}
-        />
-      )}
       <div className="flux-main">
         {!globalLauncherOverlay && <Sidebar />}
         {!globalLauncherOverlay && (
@@ -236,67 +227,6 @@ function MainApp() {
       {!globalLauncherOverlay && activeView === 'editor' && <CommandPalette />}
       <GlobalLauncher />
     </div>
-  )
-}
-
-function FluxTitlebar({
-  theme,
-  onOpenLauncher,
-  onToggleTheme,
-}: {
-  theme: 'dark' | 'light'
-  onOpenLauncher: () => void
-  onToggleTheme: () => void
-}) {
-  const launcherButtonRef = useRef<HTMLButtonElement>(null)
-  const handleOpenLauncher = (event: ReactPointerEvent<HTMLButtonElement> | ReactMouseEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-    onOpenLauncher()
-  }
-
-  useEffect(() => {
-    const button = launcherButtonRef.current
-    if (!button) return
-    const handleNativeOpen = (event: globalThis.PointerEvent | MouseEvent) => {
-      event.preventDefault()
-      event.stopPropagation()
-      onOpenLauncher()
-    }
-    button.addEventListener('pointerdown', handleNativeOpen)
-    button.addEventListener('mousedown', handleNativeOpen)
-    return () => {
-      button.removeEventListener('pointerdown', handleNativeOpen)
-      button.removeEventListener('mousedown', handleNativeOpen)
-    }
-  }, [onOpenLauncher])
-
-  return (
-    <header className="flux-titlebar glass">
-      <div className="flux-titlebar-logo">
-        <Command size={14} />
-        <span>FluxText</span>
-      </div>
-      <button
-        ref={launcherButtonRef}
-        className="flux-titlebar-kbd"
-        onPointerDown={handleOpenLauncher}
-        onMouseDown={handleOpenLauncher}
-        onClick={onOpenLauncher}
-      >
-        <Search size={12} />
-        <span>Cmd Shift K</span>
-      </button>
-      <div className="flux-titlebar-spacer" />
-      <button
-        className="tb-btn"
-        onClick={onToggleTheme}
-        title={theme === 'dark' ? '切换亮色主题' : '切换暗色主题'}
-        aria-label={theme === 'dark' ? '切换亮色主题' : '切换暗色主题'}
-      >
-        {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
-      </button>
-    </header>
   )
 }
 
