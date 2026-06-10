@@ -11,6 +11,7 @@ import { detectEditorLanguage } from '../../workspace/languageDetector'
 import { getLanguageOptionLabel } from '../../workspace/languageOptions'
 import { PaneBottomPanels } from './PaneBottomPanels'
 import { installMonacoHoverOverlay } from '../../utils/monacoHoverOverlay'
+import { createMonacoDisposableBucket } from '../../utils/monacoDisposables'
 
 interface PaneEditorProps {
   paneId: string
@@ -28,6 +29,7 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
   const t = useT('editor')
   const rendererState = useWorkspaceStore((s) => s.paneRenderers[paneId])
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
+  const monacoDisposablesRef = useRef<ReturnType<typeof createMonacoDisposableBucket> | null>(null)
   const statusBarRef = useRef<HTMLDivElement | null>(null)
   const isLocalChange = useRef(false)
   const pasteDetectionRef = useRef<{ paneId: string; shouldDetect: boolean } | null>(null)
@@ -69,6 +71,10 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
 
   useEffect(() => {
     return () => {
+      monacoDisposablesRef.current?.dispose()
+      monacoDisposablesRef.current = null
+      editorRef.current = null
+      pasteDetectionRef.current = null
       runtimeRegistry.unregisterCodeEditor(paneId)
       if (activePaneId === paneId) {
         setEditorInstance(null)
@@ -128,6 +134,9 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
           defaultValue={paneText}
           onChange={handleChange}
           onMount={(editor) => {
+            monacoDisposablesRef.current?.dispose()
+            const disposables = createMonacoDisposableBucket()
+            monacoDisposablesRef.current = disposables
             installMonacoHoverOverlay(editor)
             editorRef.current = editor
             runtimeRegistry.registerCodeEditor(paneId, editor)
@@ -135,15 +144,15 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
               setEditorInstance(editor)
             }
             // Track focus
-            editor.onDidFocusEditorText(() => {
+            disposables.add(editor.onDidFocusEditorText(() => {
               setActivePaneId(paneId)
               setEditorInstance(editor)
-            })
+            }))
             // Track cursor position
-            editor.onDidChangeCursorPosition((e: MonacoEditor.ICursorPositionChangedEvent) => {
+            disposables.add(editor.onDidChangeCursorPosition((e: MonacoEditor.ICursorPositionChangedEvent) => {
               setCursorInfo({ line: e.position.lineNumber, col: e.position.column })
-            })
-            editor.onDidChangeCursorSelection(() => {
+            }))
+            disposables.add(editor.onDidChangeCursorSelection(() => {
               const model = editor.getModel()
               const selections = editor.getSelections() ?? []
               const selectedLength = model
@@ -162,7 +171,7 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
                     endColumn: selection.endColumn,
                   }
                 : null)
-            })
+            }))
             const rememberPasteDetection = () => {
               if (!editor.hasTextFocus()) return
               const model = editor.getModel()
@@ -192,7 +201,13 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
             }
             window.addEventListener('paste', handlePasteCapture, true)
             window.addEventListener('keydown', handlePasteKeydownCapture, true)
-            editor.onDidPaste(() => {
+            disposables.add({
+              dispose() {
+                window.removeEventListener('paste', handlePasteCapture, true)
+                window.removeEventListener('keydown', handlePasteKeydownCapture, true)
+              },
+            })
+            disposables.add(editor.onDidPaste(() => {
               const pasteDetection = pasteDetectionRef.current
               pasteDetectionRef.current = null
               if (!pasteDetection?.shouldDetect) return
@@ -209,9 +224,9 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
                   detectEditorLanguage(text, { allowShortStrongSignals: true })
                 )
               }, 0)
-            })
+            }))
             // Override Cmd+F
-            editor.addAction({
+            disposables.add(editor.addAction({
               id: 'find-and-replace',
               label: 'Find and Replace',
               keybindings: [
@@ -222,29 +237,30 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
               run: (ed: MonacoEditor.IStandaloneCodeEditor) => {
                 ed.getAction('editor.action.startFindReplaceAction')?.run()
               },
-            })
+            }))
             // Cmd+K → open command palette (ensures it works after HMR)
-            editor.addAction({
+            disposables.add(editor.addAction({
               id: 'open-command-palette',
               label: 'Open Command Palette',
               keybindings: [2048 | 41], // CtrlCmd + KeyK
               run: () => {
                 useAppStore.getState().setCommandPaletteOpen(true)
               },
-            })
+            }))
             // Cmd+W → close pane
-            editor.addAction({
+            disposables.add(editor.addAction({
               id: 'close-pane',
               label: 'Close Pane',
               keybindings: [2048 | 53], // CtrlCmd + KeyW
               run: () => {
                 useWorkspaceStore.getState().closeActiveSurfaceOrPane()
               },
-            })
-            editor.onDidDispose(() => {
-              window.removeEventListener('paste', handlePasteCapture, true)
-              window.removeEventListener('keydown', handlePasteKeydownCapture, true)
-            })
+            }))
+            disposables.add(editor.onDidDispose(() => {
+              if (editorRef.current === editor) editorRef.current = null
+              if (monacoDisposablesRef.current === disposables) monacoDisposablesRef.current = null
+              disposables.dispose()
+            }))
           }}
           options={{
             fontSize: settings.fontSize,

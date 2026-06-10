@@ -8,6 +8,7 @@ import { useRef, useEffect, useCallback } from 'react'
 import { Editor } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import type { editor as MonacoEditor } from 'monaco-editor'
+import { createMonacoDisposableBucket, disposeAllMonacoDisposables, type MonacoDisposable } from '../../utils/monacoDisposables'
 
 let cssInjected = false
 function ensureCss() {
@@ -58,6 +59,8 @@ export function DualEditorView({
 }) {
   const leftRef  = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
   const rightRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
+  const leftDisposablesRef = useRef<MonacoDisposable[]>([])
+  const rightDisposablesRef = useRef<MonacoDisposable[]>([])
   const leftDecIds  = useRef<DecId>([])
   const rightDecIds = useRef<DecId>([])
   const isApplying  = useRef(false)
@@ -154,47 +157,80 @@ export function DualEditorView({
 
   const handleLeftMount = useCallback((editor: MonacoEditor.IStandaloneCodeEditor) => {
     ensureCss()
+    disposeAllMonacoDisposables(leftDisposablesRef.current)
+    leftDecIds.current = []
+    const disposables = createMonacoDisposableBucket()
+    leftDisposablesRef.current = [disposables]
     leftRef.current = editor
-    editor.onDidFocusEditorText(() => {
+    disposables.add(editor.onDidFocusEditorText(() => {
       onLeftFocus?.()
-    })
-    editor.onDidChangeModelContent(() => {
+    }))
+    disposables.add(editor.onDidChangeModelContent(() => {
       if (isApplying.current) return
       skipNextLeftSync.current = true
       onLeftChange?.(editor.getModel()?.getValue() ?? '')
-    })
-    editor.onDidScrollChange((e) => {
+    }))
+    disposables.add(editor.onDidScrollChange((e) => {
       if (isSyncing.current) return
       const right = rightRef.current; if (!right) return
       isSyncing.current = true
       right.setScrollPosition({ scrollTop: e.scrollTop, scrollLeft: e.scrollLeft })
       isSyncing.current = false
-    })
+    }))
+    disposables.add(editor.onDidDispose(() => {
+      if (leftRef.current === editor) leftRef.current = null
+      leftDecIds.current = []
+      disposables.dispose()
+    }))
     applyLanguage(editor)
     applyDecs(editor, leftDecIds, leftHighlights, 'ft-left-change-line')
   }, [onLeftFocus, onLeftChange, applyDecs, applyLanguage, leftHighlights])
 
   const handleRightMount = useCallback((editor: MonacoEditor.IStandaloneCodeEditor) => {
     ensureCss()
+    disposeAllMonacoDisposables(rightDisposablesRef.current)
+    rightDecIds.current = []
+    const disposables = createMonacoDisposableBucket()
+    rightDisposablesRef.current = [disposables]
     rightRef.current = editor
-    editor.onDidFocusEditorText(() => {
+    disposables.add(editor.onDidFocusEditorText(() => {
       onRightFocus?.()
-    })
-    editor.onDidChangeModelContent(() => {
+    }))
+    disposables.add(editor.onDidChangeModelContent(() => {
       if (isApplying.current) return
       skipNextRightSync.current = true
       onRightChange?.(editor.getModel()?.getValue() ?? '')
-    })
-    editor.onDidScrollChange((e) => {
+    }))
+    disposables.add(editor.onDidScrollChange((e) => {
       if (isSyncing.current) return
       const left = leftRef.current; if (!left) return
       isSyncing.current = true
       left.setScrollPosition({ scrollTop: e.scrollTop, scrollLeft: e.scrollLeft })
       isSyncing.current = false
-    })
+    }))
+    disposables.add(editor.onDidDispose(() => {
+      if (rightRef.current === editor) rightRef.current = null
+      rightDecIds.current = []
+      disposables.dispose()
+    }))
     applyLanguage(editor)
     applyDecs(editor, rightDecIds, rightHighlights, 'ft-right-change-line')
   }, [onRightFocus, onRightChange, applyDecs, applyLanguage, rightHighlights])
+
+  useEffect(() => () => {
+    try {
+      leftRef.current?.deltaDecorations(leftDecIds.current, [])
+    } catch {}
+    try {
+      rightRef.current?.deltaDecorations(rightDecIds.current, [])
+    } catch {}
+    disposeAllMonacoDisposables(leftDisposablesRef.current)
+    disposeAllMonacoDisposables(rightDisposablesRef.current)
+    leftRef.current = null
+    rightRef.current = null
+    leftDecIds.current = []
+    rightDecIds.current = []
+  }, [])
 
   const border = '1px solid var(--color-border-tertiary)'
 

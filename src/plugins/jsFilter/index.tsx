@@ -10,6 +10,7 @@ import Editor from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import { definePlugin, getPluginHostSdk, type PanelPropsV2, type PaneInput } from '@fluxtext/plugin'
 import { useWorkspaceStore } from '../../workspace/workspaceStore'
+import { createMonacoDisposableBucket, disposeAllMonacoDisposables, type MonacoDisposable } from '../../utils/monacoDisposables'
 
 const PLUGIN_ID = 'js-filter'
 const PANEL_ID = 'js-filter.panel'
@@ -204,6 +205,7 @@ function JsFilterPanel({ host }: PanelPropsV2) {
   const [expression, setExpression] = useState('')
   const [editorHeight, setEditorHeight] = useState(EDITOR_MIN_HEIGHT)
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
+  const editorDisposablesRef = useRef<MonacoDisposable[]>([])
   const parsedJsonRef = useRef<unknown | null>(null)
   const executeRef = useRef<() => void>(() => {})
   const completionDisposableRef = useRef<ReturnType<typeof monaco.languages.registerCompletionItemProvider> | null>(null)
@@ -218,6 +220,8 @@ function JsFilterPanel({ host }: PanelPropsV2) {
 
   useEffect(() => {
     return () => {
+      disposeAllMonacoDisposables(editorDisposablesRef.current)
+      editorRef.current = null
       completionDisposableRef.current?.dispose()
       completionDisposableRef.current = null
     }
@@ -288,6 +292,9 @@ function JsFilterPanel({ host }: PanelPropsV2) {
           path="js-filter://expression.js"
           onChange={(value) => setExpression(value ?? '')}
           onMount={(editor) => {
+            disposeAllMonacoDisposables(editorDisposablesRef.current)
+            const disposables = createMonacoDisposableBucket()
+            editorDisposablesRef.current = [disposables]
             editorRef.current = editor
             completionDisposableRef.current?.dispose()
             completionDisposableRef.current = monaco.languages.registerCompletionItemProvider('javascript', {
@@ -307,18 +314,22 @@ function JsFilterPanel({ host }: PanelPropsV2) {
                 return { suggestions: toMonacoSuggestions(model, position, items) }
               },
             })
-            editor.onKeyDown((event) => {
+            disposables.add(editor.onKeyDown((event) => {
               if (event.keyCode !== monaco.KeyCode.Enter || (!event.ctrlKey && !event.metaKey)) return
               event.preventDefault()
               event.stopPropagation()
               executeRef.current()
-            })
-            editor.onDidContentSizeChange((event) => {
+            }))
+            disposables.add(editor.onDidContentSizeChange((event) => {
               setEditorHeight(Math.max(
                 EDITOR_MIN_HEIGHT,
                 Math.min(EDITOR_MAX_HEIGHT, event.contentHeight),
               ))
-            })
+            }))
+            disposables.add(editor.onDidDispose(() => {
+              if (editorRef.current === editor) editorRef.current = null
+              disposables.dispose()
+            }))
           }}
           options={{
             fontSize: 12,

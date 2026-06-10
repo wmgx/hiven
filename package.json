@@ -25,6 +25,7 @@
     "test:plugin-goal-suite": "node scripts/test-plugin-goal-suite.mjs",
     "test:command-palette-page-policy": "node scripts/test-command-palette-page-policy.mjs",
     "test:ime-enter-confirmation": "node scripts/test-ime-enter-confirmation.mjs",
+    "test:monaco-disposable-lifecycle": "node scripts/test-monaco-disposable-lifecycle.mjs",
     "test:global-pinned-launcher": "node scripts/test-global-pinned-launcher.mjs",
     "test:global-hotkey-settings": "node scripts/test-global-hotkey-settings.mjs",
     "preview": "vite preview",
