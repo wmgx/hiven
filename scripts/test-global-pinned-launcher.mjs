@@ -158,6 +158,24 @@ check('launcher route clears the document background outside the panel', () => {
   )
 })
 
+check('standalone launcher rehydrates persisted settings before opening', () => {
+  assertHas(
+    files.app,
+    /useAppStore\.persist\.rehydrate\(\)/,
+    'LauncherWindowApp should rehydrate persisted settings so theme changes from the main window are fresh',
+  )
+  const launcherOpen = files.app.match(/const\s+openLauncher\s*=\s*[^=]*=>\s*\{[\s\S]*?\n\s*\}/)?.[0] ?? ''
+  assert.ok(launcherOpen, 'LauncherWindowApp should define an openLauncher handler')
+  const rehydrateIndex = launcherOpen.indexOf('rehydrate')
+  const openIndex = launcherOpen.indexOf('openGlobalLauncherOverlay')
+  assert.ok(rehydrateIndex >= 0, 'openLauncher should rehydrate persisted settings')
+  assert.ok(openIndex >= 0, 'openLauncher should open the launcher overlay')
+  assert.ok(
+    rehydrateIndex < openIndex,
+    'openLauncher should rehydrate persisted settings before opening the launcher overlay',
+  )
+})
+
 check('launcher panel drags the native launcher window and persists its position', () => {
   assertHas(
     files.store,

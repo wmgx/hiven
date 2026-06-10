@@ -237,10 +237,11 @@ function LauncherWindowApp() {
 
   useEffect(() => {
     const openLauncher = () => {
-      const position = useAppStore.getState().settings.globalLauncherWindowPosition
-      useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
-      if (position && (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
-        void (async () => {
+      void (async () => {
+        await rehydratePersistedAppState()
+        const position = useAppStore.getState().settings.globalLauncherWindowPosition
+        useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
+        if (position && (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
           try {
             const { LogicalPosition } = await import('@tauri-apps/api/dpi')
             const { getCurrentWindow } = await import('@tauri-apps/api/window')
@@ -248,8 +249,8 @@ function LauncherWindowApp() {
           } catch (error) {
             console.warn('[FluxText] Failed to restore launcher window position:', error)
           }
-        })()
-      }
+        }
+      })()
     }
     openLauncher()
 
@@ -276,6 +277,14 @@ function LauncherWindowApp() {
       <GlobalLauncher />
     </div>
   )
+}
+
+async function rehydratePersistedAppState() {
+  try {
+    await useAppStore.persist.rehydrate()
+  } catch (error) {
+    console.warn('[FluxText] Failed to rehydrate persisted settings:', error)
+  }
 }
 
 function isLauncherWindow() {
