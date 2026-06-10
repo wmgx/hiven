@@ -38,6 +38,8 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
   const language = pane?.language || 'plaintext'
   const languageSource = pane?.languageSource ?? (pane?.language && pane.language !== 'plaintext' ? 'manual' : 'auto')
   const foldingEnabled = language !== 'plaintext'
+  // Monaco adds 16px for folding controls, so plaintext panes reserve it manually.
+  const lineDecorationsWidth = foldingEnabled ? 8 : 24
 
   // Per-pane cursor position state
   const [cursorInfo, setCursorInfo] = useState({ line: 1, col: 1 })
@@ -90,8 +92,12 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
     if (model.getLanguageId() !== language) {
       monaco.editor.setModelLanguage(model, language)
     }
-    editor.updateOptions({ folding: foldingEnabled, stickyScroll: { enabled: pane.stickyScroll === true } })
-  }, [language, foldingEnabled, pane])
+    editor.updateOptions({
+      folding: foldingEnabled,
+      lineDecorationsWidth,
+      stickyScroll: { enabled: pane.stickyScroll === true },
+    })
+  }, [language, foldingEnabled, lineDecorationsWidth, pane])
 
   useEffect(() => {
     const node = statusBarRef.current
@@ -277,7 +283,7 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
             folding: foldingEnabled,
             stickyScroll: { enabled: pane.stickyScroll === true },
             glyphMargin: false,
-            lineDecorationsWidth: 8,
+            lineDecorationsWidth,
             lineNumbersMinChars: 3,
             padding: { top: 12, left: 8 },
             fontFamily: 'var(--font-mono)',

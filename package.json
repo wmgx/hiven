@@ -27,6 +27,7 @@
     "test:ime-enter-confirmation": "node scripts/test-ime-enter-confirmation.mjs",
     "test:spatial-ui-contract": "node scripts/test-spatial-ui-contract.mjs",
     "test:monaco-disposable-lifecycle": "node scripts/test-monaco-disposable-lifecycle.mjs",
+    "test:monaco-gutter-width": "node scripts/test-monaco-gutter-width.mjs",
     "test:global-pinned-launcher": "node scripts/test-global-pinned-launcher.mjs",
     "test:global-hotkey-settings": "node scripts/test-global-hotkey-settings.mjs",
     "preview": "vite preview",
