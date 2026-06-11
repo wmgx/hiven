@@ -58,7 +58,7 @@ check('GlobalLauncher models full and pinned-only modes', () => {
   )
 })
 
-check('pinned-only mode only builds pinned action items', () => {
+check('pinned-only mode builds launcher commands and pinned action items', () => {
   assertHas(
     files.globalLauncher,
     /(?:mode|globalLauncherMode|launcherMode)\s*={0,2}\s*['"]pinned-only['"]|['"]pinned-only['"]\s*===\s*(?:mode|globalLauncherMode|launcherMode)/,
@@ -66,8 +66,13 @@ check('pinned-only mode only builds pinned action items', () => {
   )
   assertHas(
     files.globalLauncher,
-    /(?:mode|globalLauncherMode|launcherMode)[\s\S]{0,620}pinnedActions\.map|pinnedActions\.map[\s\S]{0,620}(?:mode|globalLauncherMode|launcherMode)/,
-    'pinned-only branch should derive items from pinnedActions',
+    /['"]pinned-only['"]\s*===\s*(?:mode|globalLauncherMode|launcherMode)[\s\S]{0,220}\.\.\.pinned[\s\S]{0,120}\.\.\.launcherCommands/,
+    'pinned-only branch should include launcher system commands and pinned actions',
+  )
+  assertHas(
+    files.globalLauncher,
+    /pinnedActions\.map/,
+    'pinned-only branch should still derive pinned action items from pinnedActions',
   )
   assertHas(
     files.globalLauncher,

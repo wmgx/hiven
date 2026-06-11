@@ -8,11 +8,13 @@ import { resolveIcon } from '../utils/resolveIcon'
 import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
 import { applyEffects } from '../workspace/effectRunner'
 import { showToast } from '../workspace/toast'
+import { runPluginCommandById } from '../workspace/pluginCommandExecutor'
 import type { InstantSuggestion } from '../workspace/pluginTypes'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../utils/imeKeyboard'
 
 type LauncherItem =
   | { kind: 'instant'; id: string; title: string; subtitle: string; icon?: string; suggestion: InstantSuggestion }
+  | { kind: 'command'; id: string; title: string; subtitle: string; icon?: string; isDev?: boolean }
   | { kind: 'pinned'; id: string; title: string; subtitle: string; icon?: string }
   | { kind: 'recent'; id: string; title: string; subtitle: string; icon?: string }
   | { kind: 'view'; id: ViewId; title: string; subtitle: string; icon: ReactNode }
@@ -73,6 +75,7 @@ export function GlobalLauncher() {
   const items = useMemo<LauncherItem[]>(() => {
     void pluginRegistryVersion
     const pinnedLabel = t(locale, 'palette.globalPinned')
+    const commandsLabel = t(locale, 'palette.globalCommands')
     const pinned = pinnedActions.map((item) => {
       const command = pluginRegistry.resolveCommand(item.actionId, item.isDev ? 'dev' : 'production')?.contribution
       return {
@@ -83,7 +86,16 @@ export function GlobalLauncher() {
         icon: command?.icon ?? item.icon,
       }
     })
-    if ('pinned-only' === mode) return pinned
+    const mainPanelCommand = pluginRegistry.resolveCommand('core.show-main-panel')
+    const launcherCommands: LauncherItem[] = mainPanelCommand ? [{
+      kind: 'command',
+      id: mainPanelCommand.contribution.id,
+      title: localized(mainPanelCommand.contribution.title, mainPanelCommand.contribution.titleI18n, locale),
+      subtitle: commandsLabel,
+      icon: mainPanelCommand.contribution.icon,
+      isDev: false,
+    }] : []
+    if ('pinned-only' === mode) return [...pinned, ...launcherCommands]
 
     const recentLabel = t(locale, 'palette.globalRecent')
     const viewsLabel = t(locale, 'palette.globalViews')
@@ -104,7 +116,7 @@ export function GlobalLauncher() {
       subtitle: viewsLabel,
       icon: item.icon,
     }))
-    return [...pinned, ...recent, ...views]
+    return [...pinned, ...launcherCommands, ...recent, ...views]
   }, [locale, mode, pinnedActions, recentActionNames, pluginRegistryVersion])
 
   const filtered = useMemo(() => {
@@ -235,6 +247,9 @@ export function GlobalLauncher() {
           if (item.kind === 'pinned') {
             await emitTo('main', 'hiven://run-pinned-action', { id: item.id })
           }
+          if (item.kind === 'command') {
+            await emitTo('main', 'hiven://run-plugin-command', { id: item.id, isDev: item.isDev === true })
+          }
           await invoke('hide_launcher_window')
         } catch (error) {
           console.warn('[hiven] Failed to select launcher item:', error)
@@ -257,6 +272,10 @@ export function GlobalLauncher() {
           openPinnedAction(item.id)
           return
         }
+        if (item.kind === 'command') {
+          void runPluginCommandById(item.id, { isDev: item.isDev })
+          return
+        }
         if (item.kind === 'view') {
           setActiveView(item.id)
           return
@@ -268,6 +287,10 @@ export function GlobalLauncher() {
       setOpen(false)
       if (item.kind === 'pinned') {
         openPinnedAction(item.id)
+        return
+      }
+      if (item.kind === 'command') {
+        void runPluginCommandById(item.id, { isDev: item.isDev })
         return
       }
       if (item.kind === 'view') {
@@ -403,6 +426,12 @@ export function GlobalLauncher() {
             selected={filtered[clampedSelectedIndex]}
             onSelect={selectItem}
           />
+          <LauncherSection
+            title={t(locale, 'palette.globalCommands')}
+            items={filtered.filter((item) => item.kind === 'command')}
+            selected={filtered[clampedSelectedIndex]}
+            onSelect={selectItem}
+          />
           {mode === 'full' && (
             <LauncherSection
               title={t(locale, 'palette.globalRecent')}
@@ -508,6 +537,8 @@ function LauncherSection({ title, items, selected, onSelect }: { title: string; 
                 ? resolveIcon(item.icon, 14, item.title) || <Pin size={14} />
                 : item.kind === 'instant'
                   ? resolveIcon(item.icon, 14, item.title)
+                  : item.kind === 'command'
+                    ? resolveIcon(item.icon, 14, item.title)
                   : item.kind === 'view' ? item.icon : resolveIcon(item.icon, 14, item.title)}
             </span>
             <span className="min-w-0 flex-1">
