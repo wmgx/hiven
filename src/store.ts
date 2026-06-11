@@ -211,6 +211,7 @@ interface AppState {
     globalPinnedLauncherShortcut: GlobalPinnedLauncherShortcut
     globalLauncherPosition?: GlobalLauncherPosition
     globalLauncherWindowPosition?: GlobalLauncherPosition
+    globalLauncherWindowPositionSource?: 'user'
   }
   updateSetting: (key: string, value: any) => void
   toggleBuiltinDisabled: (name: string) => void
@@ -456,6 +457,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     globalPinnedLauncherShortcut: { kind: 'accelerator', accelerator: 'Shift+Cmd+Space' },
     globalLauncherPosition: undefined,
     globalLauncherWindowPosition: undefined,
+    globalLauncherWindowPositionSource: undefined,
   },
   updateSetting: (key, value) =>
     set((state) => {

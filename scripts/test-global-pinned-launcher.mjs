@@ -233,7 +233,7 @@ check('launcher panel drags the native launcher window and persists moved positi
   )
   assertHas(
     files.app,
-    /onMoved\([\s\S]{0,420}updateSetting\(['"]globalLauncherWindowPosition['"]/,
+    /onMoved\([\s\S]{0,760}updateSetting\(['"]globalLauncherWindowPosition['"]/,
     'LauncherWindowApp should persist native launcher movement from the Tauri window moved event',
   )
   assertHas(
@@ -264,13 +264,33 @@ check('standalone launcher sizes the transparent window to the panel', () => {
   )
   assertHas(
     files.globalLauncher,
-    /getBoundingClientRect\(\)\.height\s*\+\s*STANDALONE_LAUNCHER_VERTICAL_PADDING/,
-    'standalone launcher should include only a small transparent margin around the panel',
+    /measureStandaloneLauncherPanelHeight\(panel\)[\s\S]{0,180}STANDALONE_LAUNCHER_VERTICAL_PADDING/,
+    'standalone launcher should include only a small transparent margin around the measured panel content',
+  )
+  assertHas(
+    files.globalLauncher,
+    /body\.scrollHeight/,
+    'standalone launcher should measure the intrinsic list height instead of the height clipped by the current compact window',
+  )
+  assertHas(
+    files.globalLauncher,
+    /\.global-launcher-header[\s\S]{0,180}\.global-launcher-body[\s\S]{0,180}\.global-launcher-footer/,
+    'standalone launcher sizing should account for header, scrollable body, and footer separately',
+  )
+  assertHas(
+    files.globalLauncher,
+    /className=["'][^"']*global-launcher-footer/,
+    'GlobalLauncher should expose a footer marker for standalone sizing',
   )
   assertHas(
     files.globalLauncher,
     /STANDALONE_LAUNCHER_MAX_HEIGHT\s*=\s*390/,
     'standalone launcher should keep the existing max height for long result lists',
+  )
+  assertHas(
+    files.indexCss,
+    /\.global-launcher-body[\s\S]{0,80}flex:\s*1/,
+    'global launcher body should flex inside the bounded panel so the footer stays outside the scroll area',
   )
 })
 
@@ -360,6 +380,47 @@ check('native launcher opens centered only when there is no persisted window pos
   assert.ok(
     positionIndex < restoreIndex && restoreIndex < centerIndex,
     'openLauncher should prefer the persisted position before falling back to center()',
+  )
+})
+
+check('legacy launcher positions are not trusted unless they came from a user drag', () => {
+  assertHas(
+    files.store,
+    /globalLauncherWindowPositionSource\??:\s*['"]user['"]/,
+    'settings should mark whether a launcher window position was produced by a user drag',
+  )
+  assertHas(
+    files.app,
+    /globalLauncherWindowPositionSource\s*===\s*['"]user['"][\s\S]{0,160}globalLauncherWindowPosition/,
+    'LauncherWindowApp should only restore persisted positions that came from a user drag',
+  )
+  assertHas(
+    files.app,
+    /updateSetting\(['"]globalLauncherWindowPosition['"][\s\S]{0,260}updateSetting\(['"]globalLauncherWindowPositionSource['"],\s*['"]user['"]\)/,
+    'LauncherWindowApp should mark positions saved from native moved events as user positions',
+  )
+})
+
+check('programmatic launcher positioning is not persisted as a user drag', () => {
+  assertHas(
+    files.app,
+    /launcherProgrammaticMoveRef\s*=\s*useRef\(false\)/,
+    'LauncherWindowApp should track programmatic launcher moves separately from user drags',
+  )
+  assertHas(
+    files.app,
+    /suppressNextLauncherMovePersistence\(\)[\s\S]{0,220}setPosition\(new LogicalPosition\(position\.x,\s*position\.y\)\)/,
+    'restoring a saved launcher position should suppress the resulting programmatic move event',
+  )
+  assertHas(
+    files.app,
+    /suppressNextLauncherMovePersistence\(\)[\s\S]{0,220}\.center\(\)/,
+    'centering the launcher should suppress the resulting programmatic move event',
+  )
+  assertHas(
+    files.app,
+    /onMoved\([\s\S]{0,520}launcherProgrammaticMoveRef\.current[\s\S]{0,420}return/,
+    'launcher movement persistence should ignore programmatic positioning events',
   )
 })
 

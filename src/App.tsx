@@ -254,17 +254,40 @@ function LauncherWindowApp() {
   const fontSize = useAppStore((s) => s.settings.fontSize)
   const theme = useAppStore((s) => s.settings.theme)
   const launcherWindowPosition = useAppStore((s) => s.settings.globalLauncherWindowPosition)
+  const launcherProgrammaticMoveRef = useRef(false)
+  const launcherProgrammaticMoveResetRef = useRef<number | undefined>(undefined)
+
+  const suppressNextLauncherMovePersistence = () => {
+    launcherProgrammaticMoveRef.current = true
+    if (launcherProgrammaticMoveResetRef.current !== undefined) {
+      window.clearTimeout(launcherProgrammaticMoveResetRef.current)
+    }
+    launcherProgrammaticMoveResetRef.current = window.setTimeout(() => {
+      launcherProgrammaticMoveRef.current = false
+      launcherProgrammaticMoveResetRef.current = undefined
+    }, 600)
+  }
+
+  useEffect(() => () => {
+    if (launcherProgrammaticMoveResetRef.current !== undefined) {
+      window.clearTimeout(launcherProgrammaticMoveResetRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     const openLauncher = () => {
       void (async () => {
         await rehydratePersistedAppState()
-        const position = useAppStore.getState().settings.globalLauncherWindowPosition
+        const settings = useAppStore.getState().settings
+        const position = settings.globalLauncherWindowPositionSource === 'user'
+          ? settings.globalLauncherWindowPosition
+          : undefined
         useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
         if (position && (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
           try {
             const { LogicalPosition } = await import('@tauri-apps/api/dpi')
             const { getCurrentWindow } = await import('@tauri-apps/api/window')
+            suppressNextLauncherMovePersistence()
             await getCurrentWindow().setPosition(new LogicalPosition(position.x, position.y))
           } catch (error) {
             console.warn('[hiven] Failed to restore launcher window position:', error)
@@ -272,6 +295,7 @@ function LauncherWindowApp() {
         } else if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
           try {
             const { getCurrentWindow } = await import('@tauri-apps/api/window')
+            suppressNextLauncherMovePersistence()
             await getCurrentWindow().center()
           } catch (error) {
             console.warn('[hiven] Failed to center launcher window:', error)
@@ -308,9 +332,18 @@ function LauncherWindowApp() {
         const win = getCurrentWindow()
         return win.onMoved(async ({ payload: position }) => {
           try {
+            if (launcherProgrammaticMoveRef.current) {
+              launcherProgrammaticMoveRef.current = false
+              if (launcherProgrammaticMoveResetRef.current !== undefined) {
+                window.clearTimeout(launcherProgrammaticMoveResetRef.current)
+                launcherProgrammaticMoveResetRef.current = undefined
+              }
+              return
+            }
             const scaleFactor = await win.scaleFactor()
             const logicalPosition = position.toLogical(scaleFactor)
             useAppStore.getState().updateSetting('globalLauncherWindowPosition', { x: logicalPosition.x, y: logicalPosition.y })
+            useAppStore.getState().updateSetting('globalLauncherWindowPositionSource', 'user')
           } catch (error) {
             console.warn('[hiven] Failed to persist launcher window position:', error)
           }

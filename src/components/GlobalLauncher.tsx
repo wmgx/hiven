@@ -27,6 +27,7 @@ const STANDALONE_LAUNCHER_WIDTH = 660
 const STANDALONE_LAUNCHER_MIN_HEIGHT = 160
 const STANDALONE_LAUNCHER_MAX_HEIGHT = 390
 const STANDALONE_LAUNCHER_VERTICAL_PADDING = 24
+const STANDALONE_LAUNCHER_LIST_MAX_HEIGHT = 300
 
 export function GlobalLauncher() {
   const open = useAppStore((s) => s.globalLauncherOpen)
@@ -204,8 +205,9 @@ export function GlobalLauncher() {
     const frame = window.requestAnimationFrame(() => {
       const panel = panelRef.current
       if (!panel) return
+      const desiredPanelHeight = measureStandaloneLauncherPanelHeight(panel)
       const nextHeight = clamp(
-        Math.ceil(panel.getBoundingClientRect().height + STANDALONE_LAUNCHER_VERTICAL_PADDING),
+        Math.ceil(desiredPanelHeight + STANDALONE_LAUNCHER_VERTICAL_PADDING),
         STANDALONE_LAUNCHER_MIN_HEIGHT,
         STANDALONE_LAUNCHER_MAX_HEIGHT,
       )
@@ -418,7 +420,7 @@ export function GlobalLauncher() {
             />
           )}
         </div>
-        <div className="flex shrink-0 gap-3 px-3.5 py-1.5" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
+        <div className="global-launcher-footer flex shrink-0 gap-3 px-3.5 py-1.5" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
           <HintKey keys="↑↓" label={t(locale, 'palette.select')} />
           <HintKey keys="↵" label={t(locale, 'palette.confirm')} />
           <HintKey keys="esc" label={t(locale, 'palette.back')} />
@@ -430,6 +432,21 @@ export function GlobalLauncher() {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
+}
+
+function measureStandaloneLauncherPanelHeight(panel: HTMLElement) {
+  const header = panel.querySelector<HTMLElement>('.global-launcher-header')
+  const body = panel.querySelector<HTMLElement>('.global-launcher-body')
+  const footer = panel.querySelector<HTMLElement>('.global-launcher-footer')
+  if (!header || !body || !footer) return panel.getBoundingClientRect().height
+
+  const bodyMaxHeight = readCssPixelValue(getComputedStyle(body).maxHeight, STANDALONE_LAUNCHER_LIST_MAX_HEIGHT)
+  return header.offsetHeight + Math.min(body.scrollHeight, bodyMaxHeight) + footer.offsetHeight
+}
+
+function readCssPixelValue(value: string, fallback: number) {
+  const parsed = Number.parseFloat(value)
+  return Number.isFinite(parsed) ? parsed : fallback
 }
 
 async function executeInstantSuggestion(suggestion: InstantSuggestion, locale: Locale, onDone: () => void) {
