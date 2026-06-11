@@ -13,6 +13,19 @@ type SplitDirection = 'left' | 'right' | 'top' | 'bottom'
 export const corePanePlugin = definePlugin({
   commands: [
     {
+      id: 'core-pane.show-main-panel',
+      title: 'command.showMainPanel.title',
+      description: 'command.showMainPanel.description',
+      icon: 'PanelTopOpen',
+      aliases: ['main', 'home', 'editor', 'main-panel', '主面板'],
+      live: { pinnable: false },
+      run() {
+        return {
+          effects: [{ type: 'app.showMainPanel' as const }],
+        }
+      },
+    },
+    {
       id: 'core-pane.split',
       title: 'command.split.title',
       description: 'command.split.description',

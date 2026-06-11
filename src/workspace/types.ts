@@ -89,6 +89,7 @@ export type FluxEffect =
   | PaneEffect
   | PaneRendererEffect
   | WorkspaceLayoutEffect
+  | AppEffect
   | PresentationEffect
   | PanelEffect
   | PanelV2Effect
@@ -126,6 +127,9 @@ export type PaneRendererEffect =
 export type WorkspaceLayoutEffect =
   | { type: 'workspace.layout'; layout: WorkspaceLayout }
   | { type: 'workspace.split'; direction: 'horizontal' | 'vertical'; sourcePaneId?: PaneId }
+
+export type AppEffect =
+  | { type: 'app.showMainPanel' }
 
 export type PresentationEffect =
   | {

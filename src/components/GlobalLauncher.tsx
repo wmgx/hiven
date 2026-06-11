@@ -86,7 +86,7 @@ export function GlobalLauncher() {
         icon: command?.icon ?? item.icon,
       }
     })
-    const mainPanelCommand = pluginRegistry.resolveCommand('core.show-main-panel')
+    const mainPanelCommand = pluginRegistry.resolveCommand('core-pane.show-main-panel')
     const launcherCommands: LauncherItem[] = mainPanelCommand ? [{
       kind: 'command',
       id: mainPanelCommand.contribution.id,

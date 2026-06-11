@@ -13,6 +13,10 @@ function read(path) {
 const files = {
   packageJson: read('package.json'),
   globalLauncher: read('src/components/GlobalLauncher.tsx'),
+  corePlugin: read('src/workspace/corePlugin.ts'),
+  corePanePlugin: read('src/plugins/core-pane/index.ts'),
+  corePaneManifest: read('src/plugins/core-pane/manifest.json'),
+  builtinIndex: read('src/builtin-plugins/index.json'),
   app: read('src/App.tsx'),
   main: read('src/main.tsx'),
   indexCss: read('src/index.css'),
@@ -79,6 +83,29 @@ check('pinned-only mode builds launcher commands and pinned action items', () =>
     /(?:mode|globalLauncherMode|launcherMode)[\s\S]{0,360}(?:recentActionNames|viewItems)|(?:recentActionNames|viewItems)[\s\S]{0,360}(?:mode|globalLauncherMode|launcherMode)/,
     'recent commands and workspace views should be gated by full mode',
   )
+})
+
+check('main panel launcher command is contributed by the external core-pane plugin', () => {
+  assert.doesNotMatch(
+    files.corePlugin,
+    /core\.show-main-panel|show-main-panel[\s\S]{0,220}setActiveView/,
+    'main panel command should not live in the internal core plugin',
+  )
+  assertHas(
+    files.corePanePlugin,
+    /id:\s*['"]core-pane\.show-main-panel['"][\s\S]{0,420}app\.showMainPanel/,
+    'core-pane plugin should contribute the main panel command through a host effect',
+  )
+  assertHas(
+    files.globalLauncher,
+    /resolveCommand\(['"]core-pane\.show-main-panel['"]\)/,
+    'global launcher should resolve the external core-pane command',
+  )
+  const manifest = JSON.parse(files.corePaneManifest)
+  const builtinIndex = JSON.parse(files.builtinIndex)
+  const corePaneEntry = builtinIndex.packages?.find((entry) => entry.pluginId === 'core-pane')
+  assert.equal(manifest.version, '1.1.0', 'core-pane manifest version should be bumped for the new command')
+  assert.equal(corePaneEntry?.version, '1.1.0', 'builtin plugin index should publish the bumped core-pane version')
 })
 
 check('pinned launcher command titles follow current locale', () => {

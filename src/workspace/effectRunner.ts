@@ -11,6 +11,7 @@ import type {
   PaneEffect,
   PaneRendererEffect,
   WorkspaceLayoutEffect,
+  AppEffect,
   PresentationEffect,
   PanelEffect,
   PanelV2Effect,
@@ -110,6 +111,10 @@ export function applyEffects(
         case 'workspace.layout':
         case 'workspace.split':
           applyWorkspaceEffect(effect)
+          result.applied.push(effect)
+          break
+        case 'app.showMainPanel':
+          applyAppEffect(effect)
           result.applied.push(effect)
           break
         case 'status.message':
@@ -253,6 +258,17 @@ function applyTextReplace(effect: TextReplaceEffect) {
     } else {
       state.setPaneText(paneId, effect.text)
     }
+  }
+}
+
+function applyAppEffect(effect: AppEffect) {
+  const app = useAppStore.getState()
+  switch (effect.type) {
+    case 'app.showMainPanel':
+      app.setActiveView('editor')
+      app.setCommandPaletteOpen(false)
+      app.setGlobalLauncherOpen(false)
+      break
   }
 }
 

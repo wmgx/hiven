@@ -20,23 +20,6 @@ import { useAppStore } from '../store'
 const corePlugin = definePlugin({
   commands: [
     {
-      id: 'core.show-main-panel',
-      title: 'Show Main Panel',
-      titleI18n: { zh: '显示主面板' },
-      description: 'Show hiven and return to the main editor panel',
-      descriptionI18n: { zh: '唤起 hiven 并回到主编辑面板' },
-      aliases: ['main', 'home', 'editor', '主面板'],
-      icon: 'PanelTopOpen',
-      live: { pinnable: false },
-      run() {
-        const state = useAppStore.getState()
-        state.setActiveView('editor')
-        state.setCommandPaletteOpen(false)
-        state.setGlobalLauncherOpen(false)
-        return { effects: [] }
-      },
-    },
-    {
       id: 'core.toggle-sticky-scroll',
       title: 'Toggle Sticky Scroll',
       titleI18n: { zh: '切换层级吸顶' },

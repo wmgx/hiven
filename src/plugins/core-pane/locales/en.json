@@ -1,4 +1,6 @@
 {
+  "command.showMainPanel.title": "Show Main Panel",
+  "command.showMainPanel.description": "Show hiven and return to the main editor panel",
   "command.split.title": "Split",
   "command.split.description": "Split the workspace into a new pane",
   "command.close.title": "Close Pane",

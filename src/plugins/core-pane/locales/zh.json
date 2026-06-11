@@ -1,4 +1,6 @@
 {
+  "command.showMainPanel.title": "显示主面板",
+  "command.showMainPanel.description": "唤起 hiven 并回到主编辑面板",
   "command.split.title": "分栏",
   "command.split.description": "将工作区分栏为新面板",
   "command.close.title": "关闭当前面板",
