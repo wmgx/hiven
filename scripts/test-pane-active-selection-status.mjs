@@ -40,12 +40,12 @@ assert(
 
 assert(
   /selectedCharCount\s*>\s*0/.test(paneEditor) &&
-  /editor\.selectedChars/.test(paneEditor),
+  /t\(['"`]selectedChars['"`]\)/.test(paneEditor),
   'PaneEditor status bar should render selected character count when a selection exists',
 )
 
 assert(
-  /editor\.selectedChars/.test(i18n),
+  /['"`]selectedChars['"`]\s*:/.test(i18n),
   'i18n should include a selected character count label',
 )
 

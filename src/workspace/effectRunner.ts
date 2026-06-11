@@ -249,16 +249,6 @@ function applyTextReplace(effect: TextReplaceEffect) {
       const newText = editor.getModel()?.getValue() || ''
       state.setPaneText(paneId, newText)
     } else if (editor) {
-      editor.pushUndoStop()
-      const model = editor.getModel()
-      if (model) {
-        const fullRange = model.getFullModelRange()
-        editor.executeEdits('effect-runner', [{
-          range: fullRange,
-          text: effect.text,
-        }])
-      }
-      editor.pushUndoStop()
       state.setPaneText(paneId, effect.text)
     } else {
       state.setPaneText(paneId, effect.text)
