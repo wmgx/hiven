@@ -50,11 +50,11 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
   useEffect(() => {
     const editor = editorRef.current
     if (!editor || !pane) return
+    const model = editor.getModel()
     if (isLocalChange.current) {
       isLocalChange.current = false
-      return
+      if (model?.getValue() === paneText) return
     }
-    const model = editor.getModel()
     if (model && model.getValue() !== paneText) {
       // Push edit without moving cursor
       const fullRange = model.getFullModelRange()
@@ -79,11 +79,11 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
       editorRef.current = null
       pasteDetectionRef.current = null
       runtimeRegistry.unregisterCodeEditor(paneId)
-      if (activePaneId === paneId) {
-        setEditorInstance(null)
+      if (useWorkspaceStore.getState().activePaneId === paneId) {
+        useAppStore.getState().setEditorInstance(null)
       }
     }
-  }, [paneId, activePaneId, setEditorInstance])
+  }, [paneId])
 
   useEffect(() => {
     const editor = editorRef.current
