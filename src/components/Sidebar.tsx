@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { localized, useAppStore } from '../store'
 import type { ViewId } from '../store'
 import { LayoutPanelLeft, Pin, Puzzle, Settings } from 'lucide-react'
@@ -21,8 +22,22 @@ function SidebarButton({
   onClick: () => void
   children: ReactNode
 }) {
+  const theme = useAppStore((s) => s.settings.theme)
+  const [tooltipTop, setTooltipTop] = useState<number | null>(null)
+  const showTooltip = (target: HTMLElement) => {
+    const rect = target.getBoundingClientRect()
+    setTooltipTop(rect.top + rect.height / 2)
+  }
+  const hideTooltip = () => setTooltipTop(null)
+
   return (
-    <div className="sidebar-nav-item relative">
+    <div
+      className="sidebar-nav-item relative"
+      onPointerEnter={(event) => showTooltip(event.currentTarget)}
+      onPointerLeave={hideTooltip}
+      onFocus={(event) => showTooltip(event.currentTarget)}
+      onBlur={hideTooltip}
+    >
       <button
         aria-label={label}
         onClick={onClick}
@@ -30,9 +45,17 @@ function SidebarButton({
       >
         <span className="flex items-center justify-center">{children}</span>
       </button>
-      <span className="sidebar-tooltip" role="tooltip">
-        {label}
-      </span>
+      {tooltipTop !== null && createPortal(
+        <span
+          className="sidebar-tooltip visible"
+          data-theme={theme}
+          role="tooltip"
+          style={{ top: tooltipTop }}
+        >
+          {label}
+        </span>,
+        document.body,
+      )}
     </div>
   )
 }
