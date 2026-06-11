@@ -90,15 +90,15 @@ body[data-theme='dark'],
 
 body[data-theme='light'],
 .flux-spatial-shell[data-theme='light'] {
-  --bg-page: #f5f5f7;
+  --bg-page: #f7f8fb;
   --bg-gradient:
-    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(199, 210, 254, 0.4), transparent),
-    radial-gradient(ellipse 60% 50% at 80% 50%, rgba(224, 231, 255, 0.3), transparent),
-    radial-gradient(ellipse 50% 40% at 10% 80%, rgba(237, 233, 254, 0.25), transparent);
+    radial-gradient(ellipse 80% 55% at 50% -18%, rgba(99, 102, 241, 0.08), transparent),
+    radial-gradient(ellipse 58% 45% at 100% 12%, rgba(14, 165, 233, 0.035), transparent),
+    linear-gradient(180deg, #f8f9fc 0%, #f3f5f9 100%);
   --color-accent: #4f46e5;
-  --color-accent-hover: #6366f1;
-  --color-accent-light: rgba(79, 70, 229, 0.1);
-  --color-accent-glow: rgba(79, 70, 229, 0.2);
+  --color-accent-hover: #4338ca;
+  --color-accent-light: rgba(79, 70, 229, 0.09);
+  --color-accent-glow: rgba(79, 70, 229, 0.14);
   --color-success: #059669;
   --color-success-bg: rgba(5, 150, 105, 0.1);
   --color-success-text: #047857;
@@ -107,37 +107,38 @@ body[data-theme='light'],
   --color-error: #dc2626;
   --color-error-bg: rgba(220, 38, 38, 0.1);
   --color-error-text: #b91c1c;
-  --glass-border: rgba(255, 255, 255, 0.6);
-  --glass-bg: rgba(255, 255, 255, 0.65);
-  --glass-bg-solid: rgba(255, 255, 255, 0.92);
+  --glass-border: rgba(15, 23, 42, 0.08);
+  --glass-bg: rgba(255, 255, 255, 0.78);
+  --glass-bg-solid: rgba(255, 255, 255, 0.96);
   --glass-shine:
     inset 0 1px 1px rgba(255, 255, 255, 0.8),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+    inset 0 0 0 1px rgba(255, 255, 255, 0.55);
   --shadow-panel:
-    0 24px 48px -12px rgba(0, 0, 0, 0.08),
-    0 12px 24px -8px rgba(0, 0, 0, 0.05),
-    0 0 0 1px rgba(0, 0, 0, 0.05);
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.1);
-  --color-bg: #f5f5f7;
+    0 20px 42px -20px rgba(15, 23, 42, 0.18),
+    0 10px 24px -18px rgba(15, 23, 42, 0.12),
+    0 0 0 1px rgba(15, 23, 42, 0.06);
+  --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 10px 22px rgba(15, 23, 42, 0.08);
+  --color-bg: var(--bg-page);
   --color-text: #111113;
-  --color-text-muted: #52525b;
-  --color-text-faint: #71717a;
-  --color-surface: rgba(0, 0, 0, 0.03);
-  --color-surface-hover: rgba(0, 0, 0, 0.06);
-  --color-divider: rgba(0, 0, 0, 0.08);
-  --input-bg: rgba(0, 0, 0, 0.03);
-  --btn-ghost-hover: rgba(0, 0, 0, 0.05);
-  --scrollbar-thumb: rgba(0, 0, 0, 0.12);
+  --color-text-muted: #4b5563;
+  --color-text-faint: #6b7280;
+  --color-surface: rgba(15, 23, 42, 0.025);
+  --color-surface-hover: rgba(255, 255, 255, 0.92);
+  --color-divider: rgba(15, 23, 42, 0.08);
+  --input-bg: rgba(15, 23, 42, 0.04);
+  --btn-ghost-hover: rgba(15, 23, 42, 0.055);
+  --scrollbar-thumb: rgba(15, 23, 42, 0.14);
 
   --color-background-primary: var(--bg-page);
-  --color-background-secondary: rgba(255, 255, 255, 0.7);
-  --color-background-tertiary: rgba(0, 0, 0, 0.05);
+  --color-background-secondary: rgba(255, 255, 255, 0.78);
+  --color-background-tertiary: rgba(15, 23, 42, 0.055);
   --color-text-primary: var(--color-text);
   --color-text-secondary: var(--color-text-muted);
   --color-text-tertiary: var(--color-text-faint);
-  --color-border-secondary: rgba(0, 0, 0, 0.12);
+  --color-border-secondary: rgba(15, 23, 42, 0.14);
   --color-border-tertiary: var(--color-divider);
+  --color-accent-bg: var(--color-accent-light);
 }
 
 * {
@@ -1761,15 +1762,41 @@ html[data-window='launcher'] .global-launcher-panel :is(input, textarea, select,
   font-family: var(--font-sans);
 }
 
-.scripts-btn:hover {
+.flux-spatial-shell[data-theme='light'] .scripts-btn:hover {
   border-color: var(--color-accent);
-  background: var(--color-accent-light);
+  background: color-mix(in srgb, var(--color-accent) 12%, #fff);
+  color: var(--color-accent-hover);
+  box-shadow:
+    0 8px 18px -14px rgba(79, 70, 229, 0.42),
+    0 0 0 1px rgba(79, 70, 229, 0.08);
+  transform: translateY(-1px);
+}
+
+.flux-spatial-shell[data-theme='dark'] .scripts-btn:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, var(--glass-border));
+  background: var(--btn-ghost-hover);
+  color: var(--color-text-primary);
+  box-shadow:
+    0 8px 18px -16px rgba(0, 0, 0, 0.8),
+    0 0 0 1px rgba(139, 147, 255, 0.08);
+  transform: translateY(-1px);
 }
 
 .scripts-btn-primary {
   border-color: transparent;
-  background: linear-gradient(135deg, var(--color-accent), var(--color-accent-hover));
+  background: var(--color-accent);
   color: #fff;
+}
+
+.scripts-btn-primary:hover {
+  border-color: transparent;
+  background: var(--color-accent-hover);
+  color: #fff;
+  filter: none;
+  box-shadow:
+    0 10px 22px -14px rgba(79, 70, 229, 0.62),
+    0 0 0 1px rgba(255, 255, 255, 0.2) inset;
+  transform: translateY(-1px);
 }
 
 .scripts-search-bar,
@@ -1804,6 +1831,36 @@ html[data-window='launcher'] .global-launcher-panel :is(input, textarea, select,
 .script-card {
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
+}
+
+.flux-spatial-shell[data-theme='light'] .script-card:hover {
+  background: #fff;
+  border-color: rgba(79, 70, 229, 0.22);
+  box-shadow:
+    0 14px 30px -22px rgba(15, 23, 42, 0.28),
+    0 0 0 1px rgba(79, 70, 229, 0.05);
+  transform: translateY(-2px);
+}
+
+.flux-spatial-shell[data-theme='light'] .script-card:hover .script-icon,
+.flux-spatial-shell[data-theme='light'] .script-card:hover .plugin-icon {
+  background: color-mix(in srgb, var(--color-accent) 13%, #fff);
+  color: var(--color-accent-hover);
+}
+
+.flux-spatial-shell[data-theme='dark'] .script-card:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-secondary);
+  box-shadow:
+    0 8px 18px -14px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(139, 147, 255, 0.08);
+  transform: translateY(-1px);
+}
+
+.flux-spatial-shell[data-theme='dark'] .script-card:hover .script-icon,
+.flux-spatial-shell[data-theme='dark'] .script-card:hover .plugin-icon {
+  background: var(--color-accent-light);
+  color: var(--color-accent-hover);
 }
 
 .script-icon,

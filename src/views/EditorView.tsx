@@ -10,12 +10,9 @@ import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginReg
 import { runToolbarCommand } from '../workspace/toolbarCommandRunner'
 import { resolveIcon } from '../utils/resolveIcon'
 import { useT } from '../i18n'
-import { Moon, Sun } from 'lucide-react'
 
 export function EditorView() {
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
-  const settings = useAppStore((s) => s.settings)
-  const updateSetting = useAppStore((s) => s.updateSetting)
   const locale = useAppStore((s) => s.locale)
   const t = useT('editor')
   const closeActiveSurfaceOrPane = useWorkspaceStore((s) => s.closeActiveSurfaceOrPane)
@@ -77,14 +74,6 @@ export function EditorView() {
           >
             {t('runAction')}
           </span>
-          <button
-            className="ft-btn-icon-sm btn-ghost"
-            onClick={() => updateSetting('theme', settings.theme === 'dark' ? 'light' : 'dark')}
-            title={settings.theme === 'dark' ? '切换亮色主题' : '切换暗色主题'}
-            aria-label={settings.theme === 'dark' ? '切换亮色主题' : '切换暗色主题'}
-          >
-            {settings.theme === 'dark' ? <Sun size={12} /> : <Moon size={12} />}
-          </button>
         </div>
       </div>
 

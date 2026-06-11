@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { localized, useAppStore } from '../store'
 import type { ViewId } from '../store'
-import { LayoutPanelLeft, Pin, Puzzle, Settings } from 'lucide-react'
+import { LayoutPanelLeft, Moon, Pin, Puzzle, Settings, Sun } from 'lucide-react'
 import { useT } from '../i18n'
 import { resolveIcon } from '../utils/resolveIcon'
 
@@ -63,11 +63,17 @@ function SidebarButton({
 export function Sidebar() {
   const activeView = useAppStore((s) => s.activeView)
   const setActiveView = useAppStore((s) => s.setActiveView)
+  const theme = useAppStore((s) => s.settings.theme)
+  const updateSetting = useAppStore((s) => s.updateSetting)
   const pinnedActions = useAppStore((s) => s.pinnedActions)
   const activePinnedActionId = useAppStore((s) => s.activePinnedActionId)
   const openPinnedAction = useAppStore((s) => s.openPinnedAction)
   const locale = useAppStore((s) => s.locale)
   const t = useT('nav')
+  const isDark = theme === 'dark'
+  const themeLabel = isDark
+    ? (locale === 'zh' ? '切换亮色主题' : 'Switch to light theme')
+    : (locale === 'zh' ? '切换暗色主题' : 'Switch to dark theme')
 
   return (
     <div
@@ -104,7 +110,14 @@ export function Sidebar() {
           })}
         </div>
       )}
-      <div className="mt-auto">
+      <div className="mt-auto flex flex-col items-center gap-1">
+        <SidebarButton
+          label={themeLabel}
+          active={false}
+          onClick={() => updateSetting('theme', isDark ? 'light' : 'dark')}
+        >
+          {isDark ? <Sun size={18} /> : <Moon size={18} />}
+        </SidebarButton>
         <SidebarButton
           label={t('settings')}
           active={activeView === 'settings'}

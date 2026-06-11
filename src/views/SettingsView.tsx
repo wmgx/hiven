@@ -3,18 +3,16 @@ import type { KeyboardEvent, ReactNode } from 'react'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { getVersion } from '@tauri-apps/api/app'
-import { Check, ChevronDown, Download, Info, Keyboard, Languages, Layout, Minus, Moon, Plug, Plus, RefreshCw, SlidersHorizontal, Sun } from 'lucide-react'
+import { Check, ChevronDown, Download, Info, Keyboard, Languages, Layout, Minus, Moon, Plus, RefreshCw, SlidersHorizontal, Sun } from 'lucide-react'
 import { useAppStore, type GlobalPinnedLauncherDoubleModifier, type GlobalPinnedLauncherShortcut } from '../store'
 import { useT } from '../i18n'
 import { checkBuiltinPluginsUpdate } from '../configInit'
 
 export function SettingsView() {
   const { settings, updateSetting } = useAppStore()
-  const setActiveView = useAppStore((s) => s.setActiveView)
   const locale = useAppStore((s) => s.locale)
   const t = useT('settings')
   const tUpdate = useT('update')
-  const tScripts = useT('scripts')
   const [appVersion, setAppVersion] = useState('')
 
   useEffect(() => {
@@ -88,15 +86,6 @@ export function SettingsView() {
 
         <SettingCard icon={<Download size={16} />} title={tUpdate('title')}>
           <UpdateChecker />
-        </SettingCard>
-
-        <SettingCard icon={<Plug size={16} />} title={tScripts('title')}>
-          <div className="flex items-center justify-between py-1.5">
-            <span style={{ fontSize: 'var(--text-base)', color: 'var(--color-text-secondary)' }}>
-              {t('pluginsInfo')}
-            </span>
-            <button className="scripts-btn" onClick={() => setActiveView('scripts')}>{t('openPlugins')}</button>
-          </div>
         </SettingCard>
       </div>
     </div>

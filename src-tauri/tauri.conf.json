@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "hiven",
+  "productName": "Hiven",
   "version": "0.2.0",
   "identifier": "com.hiven.app",
   "build": {
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "hiven",
+        "title": "Hiven",
         "width": 1100,
         "height": 720,
         "minWidth": 800,
@@ -27,7 +27,7 @@
       },
       {
         "label": "launcher",
-        "title": "hiven Launcher",
+        "title": "Hiven Launcher",
         "url": "index.html?window=launcher",
         "width": 660,
         "height": 390,
