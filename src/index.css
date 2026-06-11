@@ -1939,6 +1939,34 @@ html[data-window='launcher'] .global-launcher-panel :is(input, textarea, select,
   -webkit-backdrop-filter: none;
 }
 
+.flux-spatial-shell[data-theme='light'] .global-launcher-overlay.open {
+  background: rgba(248, 249, 252, 0.1);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+html[data-window='launcher'] .global-launcher-overlay,
+html[data-window='launcher'] .global-launcher-overlay.open,
+html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-launcher-overlay.open {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.flux-spatial-shell[data-theme='light'] .global-launcher-panel.palette-panel {
+  border-color: rgba(17, 24, 39, 0.13) !important;
+  background: #ffffff !important;
+  box-shadow:
+    0 18px 44px rgba(17, 24, 39, 0.14),
+    0 3px 10px rgba(17, 24, 39, 0.08);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-launcher-panel.palette-panel {
+  box-shadow: 0 0 0 1px rgba(17, 24, 39, 0.1);
+}
+
 .cmd-item {
   border: none;
   background: transparent;

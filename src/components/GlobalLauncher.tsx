@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { LayoutPanelLeft, Pin, Puzzle, Search, Settings } from 'lucide-react'
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
 import { localized, useAppStore, type ViewId } from '../store'
 import { t, type Locale } from '../i18n'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
@@ -22,6 +22,11 @@ const viewItems: { id: ViewId; title: string; titleI18n: Partial<Record<Locale, 
   { id: 'scripts', title: 'Plugins', titleI18n: { zh: '插件' }, icon: <Puzzle size={14} /> },
   { id: 'settings', title: 'Settings', titleI18n: { zh: '设置' }, icon: <Settings size={14} /> },
 ]
+
+const STANDALONE_LAUNCHER_WIDTH = 660
+const STANDALONE_LAUNCHER_MIN_HEIGHT = 160
+const STANDALONE_LAUNCHER_MAX_HEIGHT = 390
+const STANDALONE_LAUNCHER_VERTICAL_PADDING = 24
 
 export function GlobalLauncher() {
   const open = useAppStore((s) => s.globalLauncherOpen)
@@ -191,6 +196,28 @@ export function GlobalLauncher() {
   }, [closeLauncher, open, standaloneLauncher])
 
   const clampedSelectedIndex = Math.min(selectedIndex, Math.max(0, filtered.length - 1))
+
+  useLayoutEffect(() => {
+    if (!open || !standaloneLauncher) return
+    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+
+    const frame = window.requestAnimationFrame(() => {
+      const panel = panelRef.current
+      if (!panel) return
+      const nextHeight = clamp(
+        Math.ceil(panel.getBoundingClientRect().height + STANDALONE_LAUNCHER_VERTICAL_PADDING),
+        STANDALONE_LAUNCHER_MIN_HEIGHT,
+        STANDALONE_LAUNCHER_MAX_HEIGHT,
+      )
+      void getCurrentWindow()
+        .setSize(new LogicalSize(STANDALONE_LAUNCHER_WIDTH, nextHeight))
+        .catch((error) => {
+          console.warn('[hiven] Failed to resize launcher window:', error)
+        })
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [filtered.length, mode, open, standaloneLauncher])
 
   const selectItem = (item: LauncherItem | undefined) => {
     if (!item) return

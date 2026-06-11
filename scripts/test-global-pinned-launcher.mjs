@@ -140,6 +140,7 @@ check('Tauri config defines a standalone launcher window', () => {
   assert.equal(launcher.visible, false, 'launcher window should not open at startup')
   assert.equal(launcher.decorations, false, 'launcher window should be undecorated')
   assert.equal(launcher.transparent, true, 'launcher window should be transparent around the opaque panel')
+  assert.equal(launcher.shadow, false, 'launcher window should not draw a native rectangular shadow around transparent content')
 })
 
 check('launcher window has IPC capability access', () => {
@@ -159,6 +160,10 @@ check('launcher window has native window movement permissions', () => {
   assert.ok(
     capabilities.permissions?.includes('core:window:allow-set-position'),
     'launcher capability should allow restoring persisted window positions',
+  )
+  assert.ok(
+    capabilities.permissions?.includes('core:window:allow-set-size'),
+    'launcher capability should allow sizing the transparent launcher window to its panel',
   )
   assert.ok(
     capabilities.permissions?.includes('core:window:allow-center'),
@@ -246,6 +251,29 @@ check('standalone launcher ignores in-app panel drag coordinates', () => {
   )
 })
 
+check('standalone launcher sizes the transparent window to the panel', () => {
+  assertHas(
+    files.tauriLib,
+    /set_size\(LogicalSize::new\(\s*LAUNCHER_COMPACT_WIDTH,\s*LAUNCHER_COMPACT_HEIGHT,\s*\)\)/,
+    'native launcher show path should compact the transparent window before it is shown',
+  )
+  assertHas(
+    files.globalLauncher,
+    /new LogicalSize\(STANDALONE_LAUNCHER_WIDTH,\s*nextHeight\)/,
+    'standalone launcher should resize the native window using the measured panel height',
+  )
+  assertHas(
+    files.globalLauncher,
+    /getBoundingClientRect\(\)\.height\s*\+\s*STANDALONE_LAUNCHER_VERTICAL_PADDING/,
+    'standalone launcher should include only a small transparent margin around the panel',
+  )
+  assertHas(
+    files.globalLauncher,
+    /STANDALONE_LAUNCHER_MAX_HEIGHT\s*=\s*390/,
+    'standalone launcher should keep the existing max height for long result lists',
+  )
+})
+
 check('standalone launcher exposes the whole non-interactive panel as a drag surface', () => {
   assertHas(
     files.globalLauncher,
@@ -259,7 +287,7 @@ check('standalone launcher exposes the whole non-interactive panel as a drag sur
   )
   assertHas(
     files.globalLauncher,
-    /import\s*\{\s*getCurrentWindow\s*\}\s*from\s*['"]@tauri-apps\/api\/window['"]/,
+    /import\s*\{[\s\S]{0,80}getCurrentWindow[\s\S]{0,80}\}\s*from\s*['"]@tauri-apps\/api\/window['"]/,
     'GlobalLauncher should import getCurrentWindow up front so native dragging starts during the pointerdown turn',
   )
   assertHas(

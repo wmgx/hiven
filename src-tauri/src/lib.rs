@@ -4,9 +4,13 @@ use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
+use tauri::LogicalSize;
 use zip::ZipArchive;
 
 pub mod hotkeys;
+
+const LAUNCHER_COMPACT_WIDTH: f64 = 660.0;
+const LAUNCHER_COMPACT_HEIGHT: f64 = 160.0;
 
 #[tauri::command]
 fn show_and_focus_window(app: tauri::AppHandle) {
@@ -75,6 +79,12 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
             }
         };
 
+        if let Err(error) = window.set_size(LogicalSize::new(
+            LAUNCHER_COMPACT_WIDTH,
+            LAUNCHER_COMPACT_HEIGHT,
+        )) {
+            eprintln!("[hiven] Failed to compact launcher window before show: {}", error);
+        }
         if let Err(error) = window.show() {
             eprintln!("[hiven] Failed to show launcher window: {}", error);
             return;
