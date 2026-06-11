@@ -2,7 +2,7 @@
  * First-party JSON ↔ YAML plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@fluxtext/plugin'
+import { definePlugin, type TextInput } from '@hiven/plugin'
 import jsYaml from 'js-yaml'
 
 export const yamlPlugin = definePlugin({

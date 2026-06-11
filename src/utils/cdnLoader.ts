@@ -11,7 +11,8 @@ const LOCAL_REGISTRY: Record<string, () => Promise<any>> = {
   'https://esm.sh/bignumber.js@9?bundle': () => import('bignumber.js'),
 }
 
-const DB_NAME = 'fluxtext-cdn-cache'
+const DB_NAME = 'hiven-cdn-cache'
+const LEGACY_DB_NAME = 'fluxtext-cdn-cache'
 const DB_VERSION = 1
 const STORE_NAME = 'modules'
 const memoryCache = new Map<string, any>()
@@ -21,34 +22,65 @@ const memoryCache = new Map<string, any>()
 // 单例 DB 连接，避免每次操作都打开新连接导致内存泄漏
 let _dbInstance: IDBDatabase | null = null
 
-function openDB(): Promise<IDBDatabase> {
-  if (_dbInstance) return Promise.resolve(_dbInstance)
+function openNamedDB(name: string): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION)
+    const req = indexedDB.open(name, DB_VERSION)
     req.onupgradeneeded = () => {
       const db = req.result
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME)
       }
     }
-    req.onsuccess = () => {
-      _dbInstance = req.result
-      _dbInstance.onclose = () => { _dbInstance = null }
-      resolve(_dbInstance)
-    }
+    req.onsuccess = () => resolve(req.result)
     req.onerror = () => reject(req.error)
   })
 }
 
+function openDB(): Promise<IDBDatabase> {
+  if (_dbInstance) return Promise.resolve(_dbInstance)
+  return openNamedDB(DB_NAME).then((db) => {
+    _dbInstance = db
+    _dbInstance.onclose = () => { _dbInstance = null }
+    return _dbInstance
+  })
+}
+
+async function getCachedFromDB(name: string, key: string): Promise<string | null> {
+  const db = await openNamedDB(name)
+  return new Promise((resolve) => {
+    const tx = db.transaction(STORE_NAME, 'readonly')
+    const req = tx.objectStore(STORE_NAME).get(key)
+    req.onsuccess = () => {
+      db.close()
+      resolve(req.result ?? null)
+    }
+    req.onerror = () => {
+      db.close()
+      resolve(null)
+    }
+  })
+}
+
 async function getCached(key: string): Promise<string | null> {
+  let cached: string | null = null
   try {
     const db = await openDB()
-    return new Promise((resolve) => {
+    cached = await new Promise<string | null>((resolve) => {
       const tx = db.transaction(STORE_NAME, 'readonly')
       const req = tx.objectStore(STORE_NAME).get(key)
       req.onsuccess = () => resolve(req.result ?? null)
       req.onerror = () => resolve(null)
     })
+  } catch {
+    // fall through to legacy cache lookup
+  }
+  if (cached !== null) return cached
+  try {
+    const legacy = await getCachedFromDB(LEGACY_DB_NAME, key)
+    if (legacy !== null) {
+      await setCache(key, legacy)
+    }
+    return legacy
   } catch {
     return null
   }

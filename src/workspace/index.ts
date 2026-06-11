@@ -1,10 +1,10 @@
 /**
- * FluxText Workspace Extension - Public API Entry
+ * hiven Workspace Extension - Public API Entry
  * This is the single entry point for extension authors.
  *
  * Example - Panel Extension:
  * ```ts
- * import { registerPanel, executeEffects } from 'fluxtext/workspace'
+ * import { registerPanel, executeEffects } from 'hiven/workspace'
  *
  * registerPanel({
  *   id: 'my-ext.inspector',
@@ -17,7 +17,7 @@
  *
  * Example - Presentation Renderer:
  * ```ts
- * import { registerPresentationRenderer } from 'fluxtext/workspace'
+ * import { registerPresentationRenderer } from 'hiven/workspace'
  *
  * registerPresentationRenderer({
  *   id: 'my-ext.json-tree',

@@ -1,8 +1,8 @@
 [package]
-name = "fluxtext"
+name = "hiven"
 version = "0.2.0"
-description = "FluxText — A command-driven text processing workbench"
-authors = ["FluxText"]
+description = "hiven — A command-driven text processing workbench"
+authors = ["hiven"]
 license = "MIT"
 edition = "2021"
 rust-version = "1.77.2"

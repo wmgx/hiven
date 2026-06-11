@@ -25,7 +25,7 @@ function loadPlugin(path) {
     String,
     console,
     require(id) {
-      if (id === '@fluxtext/plugin') return { definePlugin: (definition) => definition }
+      if (id === '@hiven/plugin') return { definePlugin: (definition) => definition }
       return require(id)
     },
     module,

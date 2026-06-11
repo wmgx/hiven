@@ -3,7 +3,7 @@
  * Groups line-level transforms that reorder, filter, normalize, or join lines.
  */
 
-import { definePlugin, type TextInput } from '@fluxtext/plugin'
+import { definePlugin, type TextInput } from '@hiven/plugin'
 
 function replaceText(input: TextInput | undefined, text: string) {
   return {

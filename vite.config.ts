@@ -7,6 +7,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
+      '@hiven/plugin': fileURLToPath(new URL('./src/plugin-sdk.ts', import.meta.url)),
       '@fluxtext/plugin': fileURLToPath(new URL('./src/plugin-sdk.ts', import.meta.url)),
     },
   },

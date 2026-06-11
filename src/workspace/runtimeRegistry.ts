@@ -1,5 +1,5 @@
 /**
- * FluxText Workspace Extension - Runtime Registry
+ * hiven Workspace Extension - Runtime Registry
  * Holds Monaco instances, disposables, decoration owners, etc.
  * These are NOT persisted - they are recreated on mount.
  */

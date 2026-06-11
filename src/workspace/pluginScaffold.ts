@@ -26,11 +26,11 @@ export function createPluginScaffoldFiles(options: PluginScaffoldOptions): Plugi
     indexSource: pluginTemplate(pluginId),
     readmeSource: `# ${title}
 
-This is a FluxText directory plugin.
+This is a hiven directory plugin.
 
 - \`manifest.json\` contains package metadata only.
 - \`index.js\` is the fixed entry.
-- Runtime helpers are injected as \`globalThis.FluxTextPlugin\`; no relative framework import is needed.
+- Runtime helpers are injected as \`globalThis.HivenPlugin\`; no relative framework import is needed.
 - Host UI primitives are injected as \`ui.Button\`, \`ui.TextInput\`, \`ui.Select\`, \`ui.Checkbox\`, \`ui.Stack\`, \`ui.Text\`, \`ui.CodeBlock\`, and \`ui.EmptyState\`.
 - Reusable rendering kits are injected as \`kits.DualEditorView\` and \`kits.diff.*\`.
 - Read-only store hooks are injected as \`hooks.useSettings\`, \`hooks.useLocale\`, \`hooks.usePaneText\`, and \`hooks.useT(pluginId)\`.
@@ -54,7 +54,7 @@ This is a FluxText directory plugin.
 }
 
 function pluginTemplate(pluginId: string) {
-  return `const { definePlugin, effects, ui } = globalThis.FluxTextPlugin
+  return `const { definePlugin, effects, ui } = globalThis.HivenPlugin
 
 export default definePlugin({
   commands: [{

@@ -2,7 +2,7 @@
  * First-party Extract Patterns plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@fluxtext/plugin'
+import { definePlugin, type TextInput } from '@hiven/plugin'
 
 export const extractPlugin = definePlugin({
   commands: [

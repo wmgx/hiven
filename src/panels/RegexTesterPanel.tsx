@@ -1,5 +1,5 @@
 /**
- * FluxText - Regex Tester Panel
+ * hiven - Regex Tester Panel
  * Tests regex patterns against active pane text with live highlighting.
  */
 /* eslint-disable react-hooks/set-state-in-effect */

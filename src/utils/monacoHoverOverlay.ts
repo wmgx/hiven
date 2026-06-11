@@ -1,8 +1,8 @@
 import { StandaloneServices } from 'monaco-editor/esm/vs/editor/standalone/browser/standaloneServices.js'
 import { IHoverService } from 'monaco-editor/esm/vs/platform/hover/browser/hover.js'
 
-const OVERLAY_ID = 'fluxtext-monaco-hover-overlay'
-const PATCH_MARKER = Symbol.for('fluxtext.monacoHoverOverlayPatched')
+const OVERLAY_ID = 'hiven-monaco-hover-overlay'
+const PATCH_MARKER = Symbol.for('hiven.monacoHoverOverlayPatched')
 
 type HoverOptions = {
   container?: HTMLElement

@@ -1,5 +1,5 @@
 /**
- * FluxText - JSON Object Diff
+ * hiven - JSON Object Diff
  * Provides JSON normalization, stable stringify, and semantic diff algorithm.
  */
 

@@ -1,5 +1,5 @@
 /**
- * FluxText Plugin System - definePlugin
+ * hiven Plugin System - definePlugin
  * The public API for plugin authors to declare their plugin.
  *
  * Package identity/metadata (pluginId, displayName, version) live in

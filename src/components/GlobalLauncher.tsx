@@ -144,7 +144,7 @@ export function GlobalLauncher() {
           const { invoke } = await import('@tauri-apps/api/core')
           await invoke('hide_launcher_window')
         } catch (error) {
-          console.warn('[FluxText] Failed to hide launcher window:', error)
+          console.warn('[hiven] Failed to hide launcher window:', error)
         }
         setOpen(false)
       })()
@@ -158,7 +158,7 @@ export function GlobalLauncher() {
           await win.setDecorations(true)
           await win.hide()
         } catch (error) {
-          console.warn('[FluxText] Failed to restore launcher window:', error)
+          console.warn('[hiven] Failed to restore launcher window:', error)
         }
         setOpen(false)
       })()
@@ -182,7 +182,7 @@ export function GlobalLauncher() {
         else unlisten = cleanup
       })
       .catch((error) => {
-        console.warn('[FluxText] Failed to listen for launcher focus changes:', error)
+        console.warn('[hiven] Failed to listen for launcher focus changes:', error)
       })
     return () => {
       disposed = true
@@ -204,11 +204,11 @@ export function GlobalLauncher() {
           const { emitTo } = await import('@tauri-apps/api/event')
           const { invoke } = await import('@tauri-apps/api/core')
           if (item.kind === 'pinned') {
-            await emitTo('main', 'fluxtext://run-pinned-action', { id: item.id })
+            await emitTo('main', 'hiven://run-pinned-action', { id: item.id })
           }
           await invoke('hide_launcher_window')
         } catch (error) {
-          console.warn('[FluxText] Failed to select launcher item:', error)
+          console.warn('[hiven] Failed to select launcher item:', error)
         }
         setOpen(false)
       })()
@@ -221,7 +221,7 @@ export function GlobalLauncher() {
           const win = getCurrentWindow()
           await win.setDecorations(true)
         } catch (error) {
-          console.warn('[FluxText] Failed to restore launcher window:', error)
+          console.warn('[hiven] Failed to restore launcher window:', error)
         }
         setOpen(false)
         if (item.kind === 'pinned') {
@@ -266,10 +266,10 @@ export function GlobalLauncher() {
       event.stopPropagation()
       try {
         void getCurrentWindow().startDragging().catch((error) => {
-          console.warn('[FluxText] Failed to drag launcher window:', error)
+          console.warn('[hiven] Failed to drag launcher window:', error)
         })
       } catch (error) {
-        console.warn('[FluxText] Failed to drag launcher window:', error)
+        console.warn('[hiven] Failed to drag launcher window:', error)
       }
       return
     }

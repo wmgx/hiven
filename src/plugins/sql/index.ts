@@ -2,7 +2,7 @@
  * First-party SQL Formatter plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@fluxtext/plugin'
+import { definePlugin, type TextInput } from '@hiven/plugin'
 import { format } from 'sql-formatter'
 
 export const sqlPlugin = definePlugin({

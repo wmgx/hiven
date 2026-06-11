@@ -1,4 +1,4 @@
-# FluxText
+# hiven
 
 一款受 [Boop](https://boop.okat.best/) 启发的跨平台文本处理工具，在其基础上进行了能力扩展。
 
@@ -14,7 +14,7 @@
 
 ## 相比 Boop 的扩展
 
-| 能力 | Boop | FluxText |
+| 能力 | Boop | hiven |
 |------|------|----------|
 | 平台 | macOS only | macOS / Windows / Linux |
 | 编辑器 | 自定义 | Monaco Editor |

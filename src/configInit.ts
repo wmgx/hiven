@@ -1,26 +1,26 @@
 /**
  * 应用配置目录初始化 & 目录插件包管理
  *
- * FluxText framework 现在只管理目录插件包：
- *   ~/.local/fluxtext/plugins/builtin
- *   ~/.local/fluxtext/plugins/installed
- *   ~/.local/fluxtext/plugins/dev
+ * hiven framework 现在只管理目录插件包：
+ *   ~/.local/hiven/plugins/builtin
+ *   ~/.local/hiven/plugins/installed
+ *   ~/.local/hiven/plugins/dev
  *
  * 旧 scripts/ 目录只作为兼容释放来源；启动时不再把裸 .js/.ts 文件注册为能力。
  */
 
 const REMOTE_BUILTIN_PLUGIN_INDEX_URLS = [
-  'https://proxy.flux.wmgx.top/raw/wmgx/flux_text/main/src/builtin-plugins/index.json',
-  'https://cdn.jsdelivr.net/gh/wmgx/flux_text@main/src/builtin-plugins/index.json',
-  'https://raw.githubusercontent.com/wmgx/flux_text/main/src/builtin-plugins/index.json',
+  'https://proxy.github.wmgx.top/raw/wmgx/hiven/main/src/builtin-plugins/index.json',
+  'https://cdn.jsdelivr.net/gh/wmgx/hiven@main/src/builtin-plugins/index.json',
+  'https://raw.githubusercontent.com/wmgx/hiven/main/src/builtin-plugins/index.json',
 ]
 const REMOTE_BUILTIN_PLUGIN_SOURCE_BASE_URLS = [
-  'https://proxy.flux.wmgx.top/raw/wmgx/flux_text/main/src/plugins',
-  'https://cdn.jsdelivr.net/gh/wmgx/flux_text@main/src/plugins',
-  'https://raw.githubusercontent.com/wmgx/flux_text/main/src/plugins',
+  'https://proxy.github.wmgx.top/raw/wmgx/hiven/main/src/plugins',
+  'https://cdn.jsdelivr.net/gh/wmgx/hiven@main/src/plugins',
+  'https://raw.githubusercontent.com/wmgx/hiven/main/src/plugins',
 ]
 const REMOTE_BUILTIN_PLUGIN_TREE_URLS = [
-  'https://api.github.com/repos/wmgx/flux_text/git/trees/main?recursive=1',
+  'https://api.github.com/repos/wmgx/hiven/git/trees/main?recursive=1',
 ]
 const DOWNLOADABLE_PLUGIN_FILE_PATTERN = /\.(?:ts|tsx|js|jsx|mjs|json|md)$/i
 
@@ -135,7 +135,7 @@ async function fetchWithFallback(urls: string[]): Promise<string> {
 
 function buildEmbeddedBuiltinIndex(): BuiltinPluginIndex {
   return {
-    version: 5,
+    version: 7,
     packages: BUILTIN_PLUGIN_PACKAGES.map((pkg) => ({
       pluginId: pkg.pluginId,
       dir: pkg.dir,
@@ -335,7 +335,7 @@ export async function initConfigDir(): Promise<string | null> {
 
     return configDir
   } catch (error) {
-    console.error('[FluxText] Failed to init config dir:', error)
+    console.error('[hiven] Failed to init config dir:', error)
     return null
   }
 }

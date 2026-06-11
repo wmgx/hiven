@@ -1,5 +1,5 @@
 /**
- * FluxText - Panel Host
+ * hiven - Panel Host
  * Renders open panel instances in their designated placement areas.
  */
 

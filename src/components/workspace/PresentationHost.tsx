@@ -1,5 +1,5 @@
 /**
- * FluxText - Presentation Host
+ * hiven - Presentation Host
  * Renders the active presentation session using the registered renderer.
  * Replaces the normal pane editor(s) when a presentation is active.
  */

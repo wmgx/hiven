@@ -1,5 +1,5 @@
 /**
- * FluxText Workspace Extension - Effect Runner
+ * hiven Workspace Extension - Effect Runner
  * Applies effects produced by commands to the workspace.
  * Handles surface conflict checking and transactional effect application.
  */
@@ -315,7 +315,7 @@ function applyWorkspaceEffect(effect: WorkspaceLayoutEffect) {
 }
 
 function applyStatus(effect: StatusEffect) {
-  console.log(`[FluxText ${effect.level}] ${effect.message}`)
+  console.log(`[hiven ${effect.level}] ${effect.message}`)
   const defaultDuration = effect.level === 'error' ? 5000 : effect.level === 'warning' ? 4000 : 3000
   showToast(effect.message, effect.level, {
     persistent: effect.persistent,

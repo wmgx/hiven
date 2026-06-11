@@ -1,5 +1,5 @@
 /**
- * FluxText Workspace Extension - Monaco Bridge
+ * hiven Workspace Extension - Monaco Bridge
  * Exposes Monaco Editor capabilities to the workspace extension system.
  * Full implementation: code editors, decorations, viewZones, widgets, options.
  */

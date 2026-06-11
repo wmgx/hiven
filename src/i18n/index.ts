@@ -1,5 +1,5 @@
 /**
- * FluxText Unified i18n System — Public API
+ * hiven Unified i18n System — Public API
  *
  * Auto-registers all system locale modules on first import.
  * Plugins are registered automatically by the plugin loading pipeline.

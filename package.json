@@ -1,5 +1,5 @@
 {
-  "name": "fluxtext-app",
+  "name": "hiven-app",
   "private": true,
   "version": "0.2.0",
   "type": "module",
@@ -30,6 +30,7 @@
     "test:monaco-gutter-width": "node scripts/test-monaco-gutter-width.mjs",
     "test:global-pinned-launcher": "node scripts/test-global-pinned-launcher.mjs",
     "test:global-hotkey-settings": "node scripts/test-global-hotkey-settings.mjs",
+    "test:hiven-brand-migration": "node scripts/test-hiven-brand-migration.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },

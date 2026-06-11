@@ -11,7 +11,7 @@ import {
   type PaneInput,
   type RendererProps,
   type JsonArrayCompareMode,
-} from '@fluxtext/plugin'
+} from '@hiven/plugin'
 import {
   canUseSemanticJsonDiff,
   decideAutoDiffMode,

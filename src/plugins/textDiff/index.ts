@@ -2,7 +2,7 @@
  * First-party Text Diff plugin.
  */
 
-import { definePlugin, type PaneInput } from '@fluxtext/plugin'
+import { definePlugin, type PaneInput } from '@hiven/plugin'
 import { TextDiffRenderer } from './TextDiffRenderer'
 
 export const textDiffPlugin = definePlugin({

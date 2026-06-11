@@ -2,7 +2,7 @@
  * First-party Case Convert plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@fluxtext/plugin'
+import { definePlugin, type TextInput } from '@hiven/plugin'
 
 export const casePlugin = definePlugin({
   commands: [

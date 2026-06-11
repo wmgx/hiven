@@ -2,17 +2,22 @@ import type { PluginDefinition } from './pluginTypes'
 import { createPluginHostCoreSdk, type PluginHostCoreSdk } from '../pluginHostCore.ts'
 
 declare global {
+  var HivenPlugin: PluginHostCoreSdk | undefined
   var FluxTextPlugin: PluginHostCoreSdk | undefined
 }
 
 export function parsePluginDefinitionSource(source: string): PluginDefinition | null {
-  const previousSdk = globalThis.FluxTextPlugin
-  globalThis.FluxTextPlugin = createPluginHostCoreSdk()
+  const previousHivenSdk = globalThis.HivenPlugin
+  const previousFluxTextSdk = globalThis.FluxTextPlugin
+  const sdk = createPluginHostCoreSdk()
+  globalThis.HivenPlugin = sdk
+  globalThis.FluxTextPlugin = sdk
   try {
     const definePlugin = (definition: PluginDefinition) => definition
-    const { effects, ui } = globalThis.FluxTextPlugin
+    const { effects, ui } = globalThis.HivenPlugin
     const code = source
       .replace(/^\s*import\s+.*?['"].*?['"]\s*;?\s*$/gm, '')
+      .replace(/^\s*const\s+\{[^}]*\}\s*=\s*globalThis\.HivenPlugin\s*;?\s*$/gm, '')
       .replace(/^\s*const\s+\{[^}]*\}\s*=\s*globalThis\.FluxTextPlugin\s*;?\s*$/gm, '')
       .replace(/export\s+default\s+definePlugin\s*\(/, 'return definePlugin(')
       .replace(/export\s+default\s+/, 'return ')
@@ -24,10 +29,15 @@ export function parsePluginDefinitionSource(source: string): PluginDefinition | 
   } catch {
     return null
   } finally {
-    if (previousSdk === undefined) {
+    if (previousHivenSdk === undefined) {
+      delete globalThis.HivenPlugin
+    } else {
+      globalThis.HivenPlugin = previousHivenSdk
+    }
+    if (previousFluxTextSdk === undefined) {
       delete globalThis.FluxTextPlugin
     } else {
-      globalThis.FluxTextPlugin = previousSdk
+      globalThis.FluxTextPlugin = previousFluxTextSdk
     }
   }
 }

@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Editor from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
-import { definePlugin, getPluginHostSdk, type PanelPropsV2, type PaneInput } from '@fluxtext/plugin'
+import { definePlugin, getPluginHostSdk, type PanelPropsV2, type PaneInput } from '@hiven/plugin'
 import { useWorkspaceStore } from '../../workspace/workspaceStore'
 import { createMonacoDisposableBucket, disposeAllMonacoDisposables, type MonacoDisposable } from '../../utils/monacoDisposables'
 

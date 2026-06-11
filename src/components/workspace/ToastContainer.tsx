@@ -1,5 +1,5 @@
 /**
- * FluxText - Toast Container
+ * hiven - Toast Container
  * Renders ephemeral toast notifications at the bottom-right.
  */
 

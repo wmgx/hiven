@@ -10,7 +10,9 @@
     /* Bundler mode */
     "moduleResolution": "bundler",
     "paths": {
-      "fluxtext": ["./src/fluxtext.d.ts"],
+      "hiven": ["./src/hiven.d.ts"],
+      "fluxtext": ["./src/hiven.d.ts"],
+      "@hiven/plugin": ["./src/plugin-sdk.ts"],
       "@fluxtext/plugin": ["./src/plugin-sdk.ts"]
     },
     "allowImportingTsExtensions": true,

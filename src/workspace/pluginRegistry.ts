@@ -1,5 +1,5 @@
 /**
- * FluxText Plugin System - Plugin Registry
+ * hiven Plugin System - Plugin Registry
  * Manages registered contributions from plugins.
  * 
  * Architecture:

@@ -2,7 +2,7 @@
  * First-party Sort JSON Keys plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@fluxtext/plugin'
+import { definePlugin, type TextInput } from '@hiven/plugin'
 
 export const sortJsonPlugin = definePlugin({
   commands: [

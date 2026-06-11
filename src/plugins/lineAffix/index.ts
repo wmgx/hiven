@@ -3,7 +3,7 @@
  * Groups prefix, suffix, and wrap transforms for line-oriented text editing.
  */
 
-import { definePlugin, type TextInput } from '@fluxtext/plugin'
+import { definePlugin, type TextInput } from '@hiven/plugin'
 
 function replaceText(input: TextInput | undefined, text: string) {
   return {

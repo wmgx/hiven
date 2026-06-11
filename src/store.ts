@@ -15,6 +15,9 @@ import type { PinnedRuntimeConfig as WorkspacePinnedRuntimeConfig } from './work
 import type { LiveActionCapability } from './workspace/pluginTypes'
 import { samePinnedPluginCommandIdentity } from './workspace/pinnedActionIdentity'
 import { createPinnedPluginCommandAction } from './workspace/pinnedActionFactory'
+import { migrateLocalStorageKey } from './utils/persistMigration'
+
+migrateLocalStorageKey('fluxtext-settings', 'hiven-settings')
 
 export type ViewId = 'editor' | 'scripts' | 'plugin-editor' | 'pinned-runner' | 'settings'
 
@@ -437,7 +440,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
 
   // Settings
   settings: {
-    watchDirectory: '~/.local/fluxtext/scripts',
+    watchDirectory: '~/.local/hiven/plugins/installed',
     fontSize: 13,
     wordWrap: false,
     lineNumbers: true,
@@ -478,7 +481,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   setLocale: (locale) =>
     set((state) => ({ locale, settings: { ...state.settings, locale } })),
 }), {
-  name: 'fluxtext-settings',
+  name: 'hiven-settings',
   partialize: (state) => ({
     settings: {
       ...state.settings,

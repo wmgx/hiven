@@ -1,5 +1,5 @@
 /**
- * FluxText Plugin System - Plugin Input Resolver
+ * hiven Plugin System - Plugin Input Resolver
  * Resolves CommandContribution inputs based on InputResolution strategy.
  *
  * Strategies:

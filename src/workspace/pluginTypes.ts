@@ -1,5 +1,5 @@
 /**
- * FluxText Plugin System - Type Definitions
+ * hiven Plugin System - Type Definitions
  * Defines types for the plugin system: CommandContribution, RendererContribution,
  * PanelContribution, PluginDefinition, and related types.
  */

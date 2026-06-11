@@ -1,5 +1,5 @@
 /**
- * FluxText Workspace Extension - Core Types
+ * hiven Workspace Extension - Core Types
  * Milestone 0: Type definitions for Pane, Layout, Command, Effect, Presentation, Panel, Surface
  */
 

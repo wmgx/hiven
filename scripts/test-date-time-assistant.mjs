@@ -37,7 +37,7 @@ const context = vm.createContext({
   module,
   exports: module.exports,
   require(specifier) {
-    if (specifier === '@fluxtext/plugin') {
+    if (specifier === '@hiven/plugin') {
       return { definePlugin: (definition) => definition }
     }
     throw new Error(`Unexpected require: ${specifier}`)

@@ -118,8 +118,8 @@ check('App listens for the Tauri open-pinned-launcher event', () => {
   )
   assertHas(
     files.app,
-    /listen\([\s\S]{0,120}fluxtext:\/\/open-pinned-launcher|fluxtext:\/\/open-pinned-launcher[\s\S]{0,120}listen\(/,
-    'App should listen for the fluxtext://open-pinned-launcher event',
+    /listen\([\s\S]{0,120}hiven:\/\/open-pinned-launcher|hiven:\/\/open-pinned-launcher[\s\S]{0,120}listen\(/,
+    'App should listen for the hiven://open-pinned-launcher event',
   )
   assertHas(
     files.app,

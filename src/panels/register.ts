@@ -1,5 +1,5 @@
 /**
- * FluxText - Register built-in panels
+ * hiven - Register built-in panels
  * Import this module at app startup to register all built-in panels.
  */
 

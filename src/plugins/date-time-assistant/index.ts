@@ -1,4 +1,4 @@
-import { definePlugin, type TextInput } from '@fluxtext/plugin'
+import { definePlugin, type TextInput } from '@hiven/plugin'
 import type { InstantSuggestion, InstantSuggestionContext } from '../../workspace/pluginTypes'
 
 function pad(n: number, width = 2): string {

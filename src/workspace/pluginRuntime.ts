@@ -1,5 +1,5 @@
 /**
- * FluxText Plugin System - Plugin Runtime
+ * hiven Plugin System - Plugin Runtime
  * Handles loading, installing, enabling, disabling, and side-loading plugins.
  *
  * Spike validations this module assumes:
@@ -32,6 +32,7 @@ import type {
 
 declare global {
   interface Window {
+    HivenPlugin?: PluginHostSdk
     FluxTextPlugin?: PluginHostSdk
   }
 }
@@ -67,7 +68,9 @@ const watcherCleanups = new Map<string, () => void>()
 
 function installPluginGlobals(): void {
   if (typeof window === 'undefined') return
-  window.FluxTextPlugin = createPluginHostSdk()
+  const sdk = createPluginHostSdk()
+  window.HivenPlugin = sdk
+  window.FluxTextPlugin = sdk
 }
 
 // ─── Tauri Helpers ────────────────────────────────────────────────────────────
@@ -671,7 +674,7 @@ export async function watchDevPlugin(pluginId: string): Promise<void> {
         try {
           await reloadDevPlugin(pluginId)
         } catch (err: unknown) {
-          console.error(`[FluxText] Watch auto-reload failed for "${pluginId}":`, err)
+          console.error(`[hiven] Watch auto-reload failed for "${pluginId}":`, err)
         }
       }, 300)
     },

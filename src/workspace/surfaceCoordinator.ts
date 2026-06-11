@@ -1,5 +1,5 @@
 /**
- * FluxText Workspace Extension - Surface Coordinator
+ * hiven Workspace Extension - Surface Coordinator
  * Manages surface occupancy, conflict detection, and exit policies.
  */
 

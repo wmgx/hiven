@@ -13,7 +13,7 @@ document.addEventListener('contextmenu', (e) => e.preventDefault())
 // Monaco 0.55+ 使用 globalThis._VSCODE_NLS_MESSAGES 进行本地化
 async function loadMonacoNls() {
   try {
-    const stored = JSON.parse(localStorage.getItem('fluxtext-settings') || '{}')
+    const stored = JSON.parse(localStorage.getItem('hiven-settings') || localStorage.getItem('fluxtext-settings') || '{}')
     const locale = stored?.state?.locale || stored?.state?.settings?.locale || 'en'
 
     if (locale === 'zh') {

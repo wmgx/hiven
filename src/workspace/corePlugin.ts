@@ -1,5 +1,5 @@
 /**
- * FluxText Core Plugin
+ * hiven Core Plugin
  * Registers framework-owned core capabilities into the production plugin
  * registry using the standard plugin system.
  *

@@ -6,7 +6,7 @@
  * only emit effects; the effect runner performs the actual workspace mutations.
  */
 
-import { definePlugin, type PaneInput } from '@fluxtext/plugin'
+import { definePlugin, type PaneInput } from '@hiven/plugin'
 
 type SplitDirection = 'left' | 'right' | 'top' | 'bottom'
 

@@ -2,7 +2,7 @@
  * First-party JSON Formatter plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@fluxtext/plugin'
+import { definePlugin, type TextInput } from '@hiven/plugin'
 
 export const jsonPlugin = definePlugin({
   commands: [

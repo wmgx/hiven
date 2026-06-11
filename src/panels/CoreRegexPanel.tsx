@@ -1,5 +1,5 @@
 /**
- * FluxText Core - Core Regex Tester Panel
+ * hiven Core - Core Regex Tester Panel
  * Wraps RegexTesterPanel for the new PanelPropsV2 interface.
  * Registered as 'core.regex-tester' in the production plugin registry.
  */

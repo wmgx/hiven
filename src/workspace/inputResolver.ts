@@ -1,5 +1,5 @@
 /**
- * FluxText Workspace Extension - Input Resolver
+ * hiven Workspace Extension - Input Resolver
  * Resolves CommandInput based on active pane, selection, and InputPolicy.
  */
 

@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use tauri::Emitter;
 
-const DOUBLE_MODIFIER_HOTKEY_ERROR_EVENT: &str = "fluxtext://double-modifier-hotkey-error";
+const DOUBLE_MODIFIER_HOTKEY_ERROR_EVENT: &str = "hiven://double-modifier-hotkey-error";
 const DEFAULT_DOUBLE_MODIFIER_THRESHOLD_MS: u64 = 300;
 
 #[derive(Clone, Debug, serde::Serialize)]
@@ -310,7 +310,7 @@ fn start_double_modifier_listener(state: Arc<DoubleModifierHotkeyState>, app: ta
             }
             Err(_) => {
                 eprintln!(
-                    "[FluxText] Failed to create CGEventTap! Check Accessibility permissions."
+                    "[hiven] Failed to create CGEventTap! Check Accessibility permissions."
                 );
                 if let Ok(mut listener_running) = state.listener_running.lock() {
                     *listener_running = false;

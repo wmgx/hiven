@@ -1,6 +1,6 @@
-# FluxText Directory Plugin Convention
+# hiven Directory Plugin Convention
 
-FluxText framework is a plugin host. It owns registry, command, renderer, panel, workspace, pane IO, editor primitives, settings, context, and effect dispatch. Product-specific capabilities such as diff, compare, JSON, Markdown, AST, or code semantics belong to plugins or kits, not framework runtime.
+hiven framework is a plugin host. It owns registry, command, renderer, panel, workspace, pane IO, editor primitives, settings, context, and effect dispatch. Product-specific capabilities such as diff, compare, JSON, Markdown, AST, or code semantics belong to plugins or kits, not framework runtime.
 
 ## Directory Roots
 
@@ -32,7 +32,7 @@ The directory is the plugin package:
 
 The entry file exports the plugin definition. Plugin name customization lives in `manifest.displayName` and `manifest.displayNameI18n` for package lists, and in `definePlugin({ title, titleI18n })` plus contribution `title/titleI18n` for runtime UI. Parameters are declared on command contributions through `params`, using `boolean`, `text`, `number`, `single-select`, or `multi-select`, with `labelI18n`, `default`, `required`, and option labels.
 
-New plugins should use injected host helpers instead of relative framework imports. The host SDK is available as `globalThis.FluxTextPlugin` (and, for first-party bundled plugins, via `getPluginHostSdk()` from `@fluxtext/plugin`). It currently exposes:
+New plugins should use injected host helpers instead of relative framework imports. The host SDK is available as `globalThis.HivenPlugin` (with deprecated `globalThis.FluxTextPlugin` compatibility during migration) and, for first-party bundled plugins, via `getPluginHostSdk()` from `@hiven/plugin`. It currently exposes:
 
 - `definePlugin` for the plugin definition.
 - `react` — the shared host React instance (plugins must not bundle their own).
@@ -42,10 +42,10 @@ New plugins should use injected host helpers instead of relative framework impor
 - `hooks` for read-only store access: `hooks.useSettings`, `hooks.useLocale`, `hooks.usePaneText`, and `hooks.useT(pluginId)`.
 - `i18n.makeT(pluginId, locale)` for building a namespaced translate function outside React.
 
-> IMPORTANT: never destructure the SDK at module top level. Bundled first-party plugins are evaluated before the host globals are installed, so always call `getPluginHostSdk()` (or read `globalThis.FluxTextPlugin`) inside a component body or `run()`.
+> IMPORTANT: never destructure the SDK at module top level. Bundled first-party plugins are evaluated before the host globals are installed, so always call `getPluginHostSdk()` (or read `globalThis.HivenPlugin`) inside a component body or `run()`.
 
 ```js
-const { definePlugin, effects, ui } = globalThis.FluxTextPlugin;
+const { definePlugin, effects, ui } = globalThis.HivenPlugin;
 
 export default definePlugin({
   id: 'my-plugin',
@@ -93,7 +93,7 @@ export default definePlugin({
 
 `live.pinnable` controls whether the command can appear as a pinned runner. Text-in/text-out commands can omit it or set `true`; commands that open panels, set renderers, or mutate workspace layout should set `live: { pinnable: false }`.
 
-Framework internals such as `../workspace/*` are not part of the plugin author contract. First-party source may still live in the repository, but public plugin examples and generated packages should use the injected SDK shape. First-party renderers consume the SDK through `getPluginHostSdk()` (imported from the `@fluxtext/plugin` alias), never via `../../workspace`, `../../store`, `../../i18n`, or `../../kits` deep paths.
+Framework internals such as `../workspace/*` are not part of the plugin author contract. First-party source may still live in the repository, but public plugin examples and generated packages should use the injected SDK shape. First-party renderers consume the SDK through `getPluginHostSdk()` (imported from the `@hiven/plugin` alias), never via `../../workspace`, `../../store`, `../../i18n`, or `../../kits` deep paths.
 
 ## i18n Convention
 
@@ -151,7 +151,7 @@ The in-app plugin view is **read-only**: it opens a package directory, shows a f
 
 ## Creating A Plugin
 
-The Plugins page provides **New Plugin**. It creates a dev package under `plugins/dev/<plugin-id>/`, writes `manifest.json`, `index.js`, and `README.md`, side-loads it, and opens the package directory in an external editor (VS Code → system file manager). The generated `index.js` uses `globalThis.FluxTextPlugin`, so authors can run the command immediately without installing SDK packages or importing from framework paths. Saving in the external editor triggers Watch-based hot reload back in the app.
+The Plugins page provides **New Plugin**. It creates a dev package under `plugins/dev/<plugin-id>/`, writes `manifest.json`, `index.js`, and `README.md`, side-loads it, and opens the package directory in an external editor (VS Code → system file manager). The generated `index.js` uses `globalThis.HivenPlugin`, so authors can run the command immediately without installing SDK packages or importing from framework paths. Saving in the external editor triggers Watch-based hot reload back in the app.
 
 ## Update Detection / 更新检测
 

@@ -1,11 +1,14 @@
 /**
- * FluxText Plugin System - Plugin Store
+ * hiven Plugin System - Plugin Store
  * Zustand store for installed plugin state (persisted) and dev plugin state (session-only).
  */
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { migrateLocalStorageKey } from '../utils/persistMigration'
 import type { InstalledPlugin, DevPlugin, InstalledPluginStatus } from './pluginTypes'
+
+migrateLocalStorageKey('fluxtext-plugins', 'hiven-plugins')
 
 // ─── Store Interface ──────────────────────────────────────────────────────────
 
@@ -128,7 +131,7 @@ export const usePluginStore = create<PluginStoreState>()(
       clearAllDevPlugins: () => set({ devPlugins: {} }),
     }),
     {
-      name: 'fluxtext-plugins',
+      name: 'hiven-plugins',
       // Only persist production plugins, not dev plugins
       partialize: (state) => ({ plugins: state.plugins }),
     }

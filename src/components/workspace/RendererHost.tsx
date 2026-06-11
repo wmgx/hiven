@@ -1,5 +1,5 @@
 /**
- * FluxText - RendererHost
+ * hiven - RendererHost
  * Mounts plugin renderer contributions into panes.
  *
  * Architecture (Push model):

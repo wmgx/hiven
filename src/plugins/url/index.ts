@@ -2,7 +2,7 @@
  * First-party URL Encode/Decode plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@fluxtext/plugin'
+import { definePlugin, type TextInput } from '@hiven/plugin'
 
 export const urlPlugin = definePlugin({
   commands: [

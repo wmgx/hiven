@@ -42,7 +42,7 @@ class ViewErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error) {
-    console.error('[FluxText] View render failed:', error)
+    console.error('[hiven] View render failed:', error)
   }
 
   render() {
@@ -88,7 +88,11 @@ function MainApp() {
       if (dir) {
         const pluginDir = `${dir}/plugins/installed`
         const current = useAppStore.getState().settings.watchDirectory
-        if (current === '~/FluxText/actions' || current === '~/.local/fluxtext/scripts') {
+        if (
+          current === '~/FluxText/actions' ||
+          current === '~/.local/fluxtext/scripts' ||
+          current === '~/.local/hiven/scripts'
+        ) {
           useAppStore.getState().updateSetting('watchDirectory', pluginDir)
         }
       }
@@ -96,7 +100,7 @@ function MainApp() {
         try {
           await loadInstalledPluginsFromStore()
         } catch (e) {
-          console.error('[FluxText] Failed to load plugins:', e)
+          console.error('[hiven] Failed to load plugins:', e)
         }
       }
     })
@@ -128,7 +132,7 @@ function MainApp() {
     let disposed = false
     let unlisten: (() => void) | undefined
     import('@tauri-apps/api/event')
-      .then(({ listen }) => listen('fluxtext://open-pinned-launcher', () => {
+      .then(({ listen }) => listen('hiven://open-pinned-launcher', () => {
         void (async () => {
           const { invoke } = await import('@tauri-apps/api/core')
           await invoke('show_launcher_window')
@@ -139,7 +143,7 @@ function MainApp() {
         else unlisten = cleanup
       })
       .catch((error) => {
-        console.warn('[FluxText] Failed to listen for pinned launcher event:', error)
+        console.warn('[hiven] Failed to listen for pinned launcher event:', error)
       })
     return () => {
       disposed = true
@@ -154,7 +158,7 @@ function MainApp() {
     let disposed = false
     let unlisten: (() => void) | undefined
     import('@tauri-apps/api/event')
-      .then(({ listen }) => listen<{ id: string }>('fluxtext://run-pinned-action', (event) => {
+      .then(({ listen }) => listen<{ id: string }>('hiven://run-pinned-action', (event) => {
         void (async () => {
           const { invoke } = await import('@tauri-apps/api/core')
           await invoke('show_and_focus_window')
@@ -166,7 +170,7 @@ function MainApp() {
         else unlisten = cleanup
       })
       .catch((error) => {
-        console.warn('[FluxText] Failed to listen for launcher action event:', error)
+        console.warn('[hiven] Failed to listen for launcher action event:', error)
       })
     return () => {
       disposed = true
@@ -188,7 +192,7 @@ function MainApp() {
         await setTheme(settings.theme)
       })
       .catch((error) => {
-        console.warn('[FluxText] Failed to sync native window theme:', error)
+        console.warn('[hiven] Failed to sync native window theme:', error)
       })
     return () => {
       disposed = true
@@ -263,14 +267,14 @@ function LauncherWindowApp() {
             const { getCurrentWindow } = await import('@tauri-apps/api/window')
             await getCurrentWindow().setPosition(new LogicalPosition(position.x, position.y))
           } catch (error) {
-            console.warn('[FluxText] Failed to restore launcher window position:', error)
+            console.warn('[hiven] Failed to restore launcher window position:', error)
           }
         } else if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
           try {
             const { getCurrentWindow } = await import('@tauri-apps/api/window')
             await getCurrentWindow().center()
           } catch (error) {
-            console.warn('[FluxText] Failed to center launcher window:', error)
+            console.warn('[hiven] Failed to center launcher window:', error)
           }
         }
       })()
@@ -281,13 +285,13 @@ function LauncherWindowApp() {
     let disposed = false
     let unlisten: (() => void) | undefined
     import('@tauri-apps/api/event')
-      .then(({ listen }) => listen('fluxtext://launcher-open', openLauncher))
+      .then(({ listen }) => listen('hiven://launcher-open', openLauncher))
       .then((cleanup) => {
         if (disposed) cleanup()
         else unlisten = cleanup
       })
       .catch((error) => {
-        console.warn('[FluxText] Failed to listen for launcher open event:', error)
+        console.warn('[hiven] Failed to listen for launcher open event:', error)
       })
     return () => {
       disposed = true
@@ -308,7 +312,7 @@ function LauncherWindowApp() {
             const logicalPosition = position.toLogical(scaleFactor)
             useAppStore.getState().updateSetting('globalLauncherWindowPosition', { x: logicalPosition.x, y: logicalPosition.y })
           } catch (error) {
-            console.warn('[FluxText] Failed to persist launcher window position:', error)
+            console.warn('[hiven] Failed to persist launcher window position:', error)
           }
         })
       })
@@ -317,7 +321,7 @@ function LauncherWindowApp() {
         else unlisten = cleanup
       })
       .catch((error) => {
-        console.warn('[FluxText] Failed to listen for launcher movement:', error)
+        console.warn('[hiven] Failed to listen for launcher movement:', error)
       })
     return () => {
       disposed = true
@@ -361,7 +365,7 @@ async function rehydratePersistedAppState() {
   try {
     await useAppStore.persist.rehydrate()
   } catch (error) {
-    console.warn('[FluxText] Failed to rehydrate persisted settings:', error)
+    console.warn('[hiven] Failed to rehydrate persisted settings:', error)
   }
 }
 

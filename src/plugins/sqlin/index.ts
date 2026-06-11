@@ -2,7 +2,7 @@
  * First-party Lines to SQL IN plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@fluxtext/plugin'
+import { definePlugin, type TextInput } from '@hiven/plugin'
 
 export const sqlinPlugin = definePlugin({
   commands: [

@@ -41,13 +41,13 @@ async function listenForDoubleModifierErrors() {
   if (!isTauriRuntime() || unsubscribeDoubleModifierError) return
   try {
     const { listen } = await loadTauriEventApi()
-    unsubscribeDoubleModifierError = await listen<{ error?: string }>('fluxtext://double-modifier-hotkey-error', (event) => {
+    unsubscribeDoubleModifierError = await listen<{ error?: string }>('hiven://double-modifier-hotkey-error', (event) => {
       const shortcut = useAppStore.getState().settings.globalPinnedLauncherShortcut
       if (shortcut.kind !== 'double-modifier') return
       updateShortcutStatus(shortcut, 'Registration failed', event.payload?.error ?? 'Double modifier listener failed')
     })
   } catch (error) {
-    console.warn('[FluxText] Failed to listen for double modifier errors:', error)
+    console.warn('[hiven] Failed to listen for double modifier errors:', error)
   }
 }
 
@@ -68,7 +68,7 @@ async function syncShortcutNow(shortcut: GlobalPinnedLauncherShortcut, generatio
     await unregisterAll()
     currentAccelerator = null
   } catch (error) {
-    console.warn('[FluxText] Failed to clear stale global shortcuts:', error)
+    console.warn('[hiven] Failed to clear stale global shortcuts:', error)
   }
   if (generation !== syncGeneration) return
 
@@ -137,7 +137,7 @@ async function unregisterCurrentAccelerator() {
     await unregisterAccelerator(accelerator)
     if (currentAccelerator === accelerator) currentAccelerator = null
   } catch (error) {
-    console.warn('[FluxText] Failed to unregister global shortcut:', error)
+    console.warn('[hiven] Failed to unregister global shortcut:', error)
   }
 }
 
@@ -152,7 +152,7 @@ async function unregisterDoubleModifier() {
     const { invoke } = await loadTauriCoreApi()
     await invoke('unregister_double_modifier_hotkey')
   } catch (error) {
-    console.warn('[FluxText] Failed to unregister double modifier hook:', error)
+    console.warn('[hiven] Failed to unregister double modifier hook:', error)
   }
 }
 
@@ -161,7 +161,7 @@ async function showLauncherWindow() {
     const { invoke } = await loadTauriCoreApi()
     await invoke('show_launcher_window')
   } catch (error) {
-    console.warn('[FluxText] Failed to show launcher window from global shortcut:', error)
+    console.warn('[hiven] Failed to show launcher window from global shortcut:', error)
   }
 }
 

@@ -1,10 +1,11 @@
 /**
- * FluxText Workspace Extension - Workspace Store
+ * hiven Workspace Extension - Workspace Store
  * Zustand slice for workspace state. Only serializable state lives here.
  */
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { migrateLocalStorageKey } from '../utils/persistMigration'
 import type {
   PaneId,
   EditorPane,
@@ -21,6 +22,8 @@ import type {
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const DEFAULT_PANE_ID = 'pane-main'
+
+migrateLocalStorageKey('fluxtext-workspace', 'hiven-workspace')
 
 function generatePaneId(): PaneId {
   return `pane-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
@@ -494,7 +497,7 @@ export const useWorkspaceStore = create<WorkspaceSlice>()(persist(
     },
   }),
   {
-    name: 'fluxtext-workspace',
+    name: 'hiven-workspace',
     partialize: (state) => ({
       panes: Object.fromEntries(
         Object.entries(state.panes).map(([id, pane]) => [

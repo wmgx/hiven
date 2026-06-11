@@ -1,5 +1,5 @@
 /**
- * FluxText Workspace Extension - Plugin API
+ * hiven Workspace Extension - Plugin API
  * Stable public API for extensions to register commands, panels, renderers.
  * 
  * Usage:

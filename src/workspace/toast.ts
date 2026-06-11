@@ -1,5 +1,5 @@
 /**
- * FluxText - Toast Notification System
+ * hiven - Toast Notification System
  * Simple global toast for showing ephemeral messages.
  */
 

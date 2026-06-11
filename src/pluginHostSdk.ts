@@ -59,6 +59,13 @@ export type PluginHostSdk = {
   i18n: PluginHostI18n
 }
 
+declare global {
+  interface Window {
+    HivenPlugin?: PluginHostSdk
+    FluxTextPlugin?: PluginHostSdk
+  }
+}
+
 export function createPluginHostSdk(): PluginHostSdk {
   const core = createPluginHostCoreSdk()
   return {
@@ -74,7 +81,7 @@ export function createPluginHostSdk(): PluginHostSdk {
 
 /**
  * Stable SDK accessor for both load-time models:
- *   - Runtime/external plugins: `window.FluxTextPlugin` already injected by the host.
+ *   - Runtime/external plugins: `window.HivenPlugin` already injected by the host.
  *   - Bundled first-party plugins: globals may not be installed yet at module eval,
  *     so build (and cache) the SDK on first access.
  *
@@ -82,9 +89,13 @@ export function createPluginHostSdk(): PluginHostSdk {
  * component bodies or `run()` so the host globals are guaranteed available.
  */
 export function getPluginHostSdk(): PluginHostSdk {
+  if (typeof window !== 'undefined' && window.HivenPlugin) return window.HivenPlugin
   if (typeof window !== 'undefined' && window.FluxTextPlugin) return window.FluxTextPlugin
   const sdk = createPluginHostSdk()
-  if (typeof window !== 'undefined') window.FluxTextPlugin = sdk
+  if (typeof window !== 'undefined') {
+    window.HivenPlugin = sdk
+    window.FluxTextPlugin = sdk
+  }
   return sdk
 }
 

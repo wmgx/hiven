@@ -1,5 +1,5 @@
 /**
- * FluxText Workspace Extension - Panel Registry
+ * hiven Workspace Extension - Panel Registry
  * Registry for panel contributions (like Regex Tester, Find Replace).
  */
 

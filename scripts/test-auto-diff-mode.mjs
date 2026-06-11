@@ -25,7 +25,7 @@ const compiled = ts.transpileModule(source, {
   fileName: seamPath,
 })
 
-const tempDir = mkdtempSync(join(tmpdir(), 'fluxtext-auto-diff-mode-'))
+const tempDir = mkdtempSync(join(tmpdir(), 'hiven-auto-diff-mode-'))
 const compiledPath = join(tempDir, 'autoDiffMode.mjs')
 writeFileSync(compiledPath, compiled.outputText)
 
@@ -45,8 +45,8 @@ try {
 
   assert.equal(
     decide({
-      leftText: '{"name":"FluxText","count":1}',
-      rightText: '{\n  "count": 2,\n  "name": "FluxText"\n}',
+      leftText: '{"name":"hiven","count":1}',
+      rightText: '{\n  "count": 2,\n  "name": "hiven"\n}',
       semanticEnabled: true,
     }),
     'json-semantic',
@@ -55,8 +55,8 @@ try {
 
   assert.equal(
     decide({
-      leftText: '{"name":"FluxText","count":1}',
-      rightText: '{"name":"FluxText","count":2}',
+      leftText: '{"name":"hiven","count":1}',
+      rightText: '{"name":"hiven","count":2}',
       semanticEnabled: false,
     }),
     'text',
@@ -65,8 +65,8 @@ try {
 
   assert.equal(
     decide({
-      leftText: '{"name":"FluxText",',
-      rightText: '{"name":"FluxText","count":2}',
+      leftText: '{"name":"hiven",',
+      rightText: '{"name":"hiven","count":2}',
       semanticEnabled: true,
     }),
     'text',

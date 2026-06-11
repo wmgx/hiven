@@ -1,5 +1,5 @@
 /**
- * FluxText - Pane Bottom Panels
+ * hiven - Pane Bottom Panels
  * Renders V2 panels with placement 'pane-bottom' scoped to a specific pane.
  */
 

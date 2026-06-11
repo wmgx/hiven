@@ -2,7 +2,7 @@
  * First-party CSV / TSV Convert plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@fluxtext/plugin'
+import { definePlugin, type TextInput } from '@hiven/plugin'
 
 export const csvPlugin = definePlugin({
   commands: [

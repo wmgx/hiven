@@ -1,4 +1,4 @@
-# FluxText 项目指令
+# hiven 项目指令
 
 本文件补充全局 AGENTS.md，适用于 `/Users/bytedance/flux_text`。
 
@@ -10,7 +10,7 @@
 
 ## 插件系统边界
 
-FluxText framework 是 plugin host，不是具体工具能力集合。
+hiven framework 是 plugin host，不是具体工具能力集合。
 
 Framework 只负责：
 
@@ -78,7 +78,7 @@ kits -> 不依赖 workspace/framework，也不依赖 plugins
 doc/diff-plugin-boundary-decision.md
 ```
 
-## FluxText Diff/UI 历史偏好
+## hiven Diff/UI 历史偏好
 
 - Diff 在产品上首先是文本工具，不是代码审查工具，也不是 code diff。
 - 如果需要自建 UI，可以由插件自建；不要因此把双栏 diff 体验吸收到 framework。

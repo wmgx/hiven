@@ -1,5 +1,5 @@
 /**
- * FluxText - Panel Host V2
+ * hiven - Panel Host V2
  * Renders open panel instances using the new plugin panel system (single-instance model).
  * Supports bottom/right/left placement.
  */

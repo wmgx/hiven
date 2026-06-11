@@ -1,5 +1,5 @@
 /**
- * FluxText Plugin System - Toolbar Command Runner
+ * hiven Plugin System - Toolbar Command Runner
  *
  * Executes a plugin command referenced by a toolbar button using default
  * parameters and use-active input resolution. Toolbar buttons are "one-click

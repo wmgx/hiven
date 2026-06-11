@@ -28,7 +28,7 @@ const files = {
   tauriLib: read('src-tauri/src/lib.rs'),
   pluginEditorView: readIfExists('src/views/PluginEditorView.tsx'),
   pluginDebugRunner: readIfExists('src/workspace/pluginDebugRunner.ts'),
-  pluginHostSdk: readIfExists('src/workspace/pluginHostSdk.ts'),
+  pluginHostSdk: readIfExists('src/pluginHostSdk.ts'),
   pluginScaffold: readIfExists('src/workspace/pluginScaffold.ts'),
   bundledPluginLoader: readIfExists('src/workspace/bundledPluginLoader.ts'),
   builtinPluginIndex: readIfExists('src/builtin-plugins/index.json'),
@@ -214,12 +214,13 @@ check('pluginRuntime exposes directory, zip, GitHub directory, and single-file r
 check('pluginRuntime exposes injected SDK helpers for plugin authors', () => {
   assert.match(
     files.pluginRuntime + files.pluginHostSdk,
-    /window\.FluxTextPlugin[\s\S]*createPluginHostSdk|createPluginHostSdk[\s\S]*definePlugin[\s\S]*effects[\s\S]*ui/,
+    /createPluginHostSdk[\s\S]*definePlugin[\s\S]*effects[\s\S]*ui/,
     'pluginRuntime should inject definePlugin/effects/ui helpers',
   )
+  assert.match(files.pluginRuntime, /window\.HivenPlugin\s*=\s*sdk/, 'pluginRuntime should install the hiven SDK global')
   assert.match(
     files.pluginRuntime + files.pluginScaffold,
-    /createDevPluginScaffold[\s\S]*index\.js[\s\S]*createPluginScaffoldFiles|createPluginScaffoldFiles[\s\S]*indexSource[\s\S]*globalThis\.FluxTextPlugin[\s\S]*ui/,
+    /createDevPluginScaffold[\s\S]*index\.js[\s\S]*createPluginScaffoldFiles|createPluginScaffoldFiles[\s\S]*indexSource[\s\S]*globalThis\.HivenPlugin[\s\S]*ui/,
     'new plugin scaffolds should use injected SDK with UI helpers and fixed index.js',
   )
 })
@@ -398,7 +399,7 @@ check('Builtin plugin update check compares remote package metadata', () => {
   assert.match(files.tauriLib, /fn\s+replace_plugin_dir[\s\S]*backup[\s\S]*fs::rename/, 'Tauri should provide a replace_plugin_dir command with backup/rename replacement')
   assert.match(files.tauriLib, /generate_handler!\[[\s\S]*replace_plugin_dir/, 'replace_plugin_dir should be registered as a Tauri command')
   assert.ok(files.builtinPluginIndex, 'remote builtin plugin index should exist at src/builtin-plugins/index.json')
-  assert.match(files.builtinPluginIndex, /"version"\s*:\s*5/, 'remote builtin plugin index should carry the current package index version')
+  assert.match(files.builtinPluginIndex, /"version"\s*:\s*7/, 'remote builtin plugin index should carry the current package index version')
   assert.doesNotMatch(files.builtinPluginIndex, /"files"\s*:/, 'remote builtin plugin index should not expose file lists as part of the plugin package contract')
   assert.doesNotMatch(files.configInit, /declare downloadable files/, 'builtin plugin updates should not reject package indexes that omit explicit file lists')
   assert.match(files.configInit, /fetchRemoteBuiltinPackageIndex|GitHub tree|recursive|tree API/i, 'builtin plugin updates should discover package files from the directory instead of requiring explicit file lists')
@@ -415,7 +416,7 @@ check('Directory plugin convention document captures the new contract', () => {
     'pluginId',
     'displayNameI18n',
     'params',
-    'globalThis.FluxTextPlugin',
+    'globalThis.HivenPlugin',
     'GitHub',
     'zip',
     'local',

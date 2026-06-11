@@ -61,7 +61,7 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
                 .iter()
                 .find(|window| window.label == "launcher")
                 .cloned() else {
-                    eprintln!("[FluxText] Launcher window config not found");
+                    eprintln!("[hiven] Launcher window config not found");
                     return;
                 };
             match tauri::WebviewWindowBuilder::from_config(&app_clone, &config)
@@ -69,21 +69,21 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
             {
                 Ok(window) => window,
                 Err(error) => {
-                    eprintln!("[FluxText] Failed to create launcher window: {}", error);
+                    eprintln!("[hiven] Failed to create launcher window: {}", error);
                     return;
                 }
             }
         };
 
         if let Err(error) = window.show() {
-            eprintln!("[FluxText] Failed to show launcher window: {}", error);
+            eprintln!("[hiven] Failed to show launcher window: {}", error);
             return;
         }
         let _ = window.unminimize();
         if let Err(error) = window.set_focus() {
-            eprintln!("[FluxText] Failed to focus launcher window: {}", error);
+            eprintln!("[hiven] Failed to focus launcher window: {}", error);
         }
-        let _ = window.emit("fluxtext://launcher-open", ());
+        let _ = window.emit("hiven://launcher-open", ());
     })
     .map_err(|error| error.to_string())
 }
@@ -96,7 +96,7 @@ async fn hide_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
     app.run_on_main_thread(move || {
         if let Some(window) = app_clone.get_webview_window("launcher") {
             if let Err(error) = window.hide() {
-                eprintln!("[FluxText] Failed to hide launcher window: {}", error);
+                eprintln!("[hiven] Failed to hide launcher window: {}", error);
             }
         }
     })
@@ -122,11 +122,56 @@ fn activate_app() {
     }
 }
 
-/// 配置根目录: ~/.local/fluxtext
+/// 配置根目录: ~/.local/hiven
 fn config_dir() -> Result<PathBuf, String> {
+    dirs_next_home()
+        .map(|h| h.join(".local").join("hiven"))
+        .ok_or_else(|| "Cannot resolve home directory".to_string())
+}
+
+fn legacy_config_dir() -> Result<PathBuf, String> {
     dirs_next_home()
         .map(|h| h.join(".local").join("fluxtext"))
         .ok_or_else(|| "Cannot resolve home directory".to_string())
+}
+
+fn copy_dir_contents_if_missing(source: &Path, target: &Path) -> Result<(), String> {
+    fs::create_dir_all(target).map_err(|e| e.to_string())?;
+    for entry in fs::read_dir(source).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let source_path = entry.path();
+        let metadata = fs::symlink_metadata(&source_path).map_err(|e| e.to_string())?;
+        if metadata.file_type().is_symlink() {
+            continue;
+        }
+        let target_path = target.join(entry.file_name());
+        if target_path.exists() {
+            continue;
+        }
+        if metadata.is_dir() {
+            copy_dir_contents_if_missing(&source_path, &target_path)?;
+        } else if metadata.is_file() {
+            fs::copy(&source_path, &target_path).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+fn migrate_legacy_config_dir(target: &Path) -> Result<(), String> {
+    let legacy = legacy_config_dir()?;
+    if !legacy.exists() || legacy == target {
+        return Ok(());
+    }
+    if !target.exists() {
+        match fs::rename(&legacy, target) {
+            Ok(()) => return Ok(()),
+            Err(_) => {
+                copy_dir_contents_if_missing(&legacy, target)?;
+                return Ok(());
+            }
+        }
+    }
+    copy_dir_contents_if_missing(&legacy, target)
 }
 
 #[tauri::command]
@@ -137,6 +182,7 @@ fn get_config_dir() -> Result<String, String> {
 #[tauri::command]
 fn init_config_dir() -> Result<String, String> {
     let base = config_dir()?;
+    migrate_legacy_config_dir(&base)?;
     let scripts_dir = base.join("scripts");
     let builtin_dir = scripts_dir.join("builtin");
     let plugins_dir = base.join("plugins");
@@ -705,7 +751,7 @@ fn ensure_existing_plugin_path(path: &Path) -> Result<PathBuf, String> {
     if canonical.starts_with(&root) {
         Ok(canonical)
     } else {
-        Err("Plugin file access is restricted to the FluxText plugins directory".to_string())
+        Err("Plugin file access is restricted to the hiven plugins directory".to_string())
     }
 }
 
@@ -731,7 +777,7 @@ fn ensure_plugin_path_for_write(path: &Path) -> Result<(), String> {
     if canonical_parent.starts_with(&root) {
         Ok(())
     } else {
-        Err("Plugin file writes are restricted to the FluxText plugins directory".to_string())
+        Err("Plugin file writes are restricted to the hiven plugins directory".to_string())
     }
 }
 
@@ -935,7 +981,7 @@ mod plugin_dir_command_tests {
             .duration_since(UNIX_EPOCH)
             .expect("test clock should be after epoch")
             .as_millis();
-        env::temp_dir().join(format!("fluxtext-{}-{}-{}", label, std::process::id(), millis))
+        env::temp_dir().join(format!("hiven-{}-{}-{}", label, std::process::id(), millis))
     }
 
     fn with_isolated_home<T>(label: &str, test: impl FnOnce(PathBuf) -> T) -> T {
@@ -951,6 +997,33 @@ mod plugin_dir_command_tests {
         }
         let _ = fs::remove_dir_all(home);
         result
+    }
+
+    #[test]
+    fn init_config_dir_migrates_legacy_fluxtext_config() {
+        with_isolated_home("config-migration", |home| {
+            let legacy = home.join(".local").join("fluxtext");
+            let legacy_plugin = legacy
+                .join("plugins")
+                .join("installed")
+                .join("legacy-plugin");
+            fs::create_dir_all(&legacy_plugin).expect("legacy plugin dir should be created");
+            fs::write(legacy_plugin.join("manifest.json"), r#"{"pluginId":"legacy-plugin"}"#)
+                .expect("legacy plugin manifest should be written");
+
+            let config = PathBuf::from(init_config_dir().expect("config dir should initialize"));
+
+            assert_eq!(config, home.join(".local").join("hiven"));
+            assert!(
+                config
+                    .join("plugins")
+                    .join("installed")
+                    .join("legacy-plugin")
+                    .join("manifest.json")
+                    .exists(),
+                "legacy installed plugin should exist under hiven config root",
+            );
+        });
     }
 
     #[test]
