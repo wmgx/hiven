@@ -36,6 +36,7 @@
     "test:core-plugin-externalization": "node scripts/test-core-plugin-externalization.mjs",
     "test:launcher-identity": "node scripts/test-launcher-identity.mjs",
     "test:launcher-usage": "node scripts/test-launcher-usage.mjs",
+    "test:launcher-ranking": "node scripts/test-launcher-ranking.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },
