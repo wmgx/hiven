@@ -505,6 +505,26 @@ class PluginRegistryImpl {
     }
     return result
   }
+
+  /** Get all plugin definitions with their pluginId and source (both registries). */
+  getAllPluginDefinitions(): Array<{
+    definition: PluginDefinition<unknown>
+    pluginId: string
+    source: ContributionSource
+  }> {
+    const result: Array<{
+      definition: PluginDefinition<unknown>
+      pluginId: string
+      source: ContributionSource
+    }> = []
+    for (const [pluginId, definition] of this.productionDefinitions) {
+      result.push({ definition, pluginId, source: 'production' })
+    }
+    for (const [pluginId, definition] of this.devDefinitions) {
+      result.push({ definition, pluginId, source: 'dev' })
+    }
+    return result
+  }
 }
 
 /** Singleton plugin registry - the central source of truth for all plugin contributions */
