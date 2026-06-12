@@ -1,0 +1,18 @@
+{
+  "pluginTitle": "网页快开",
+  "settingsTitle": "网页快开设置",
+  "entryTitle": "网页搜索",
+  "addEntry": "添加",
+  "removeEntry": "移除",
+  "title": "标题",
+  "aliases": "别名（逗号分隔）",
+  "placeholder": "占位文本",
+  "urlTemplate": "URL 模板",
+  "encodeQuery": "编码查询参数",
+  "emptyQueryBlock": "要求输入",
+  "emptyQueryOpen": "允许为空",
+  "emptyQueryBehavior": "空输入行为",
+  "testOpen": "测试打开",
+  "defaultBaiduTitle": "百度搜索",
+  "defaultBaiduPlaceholder": "输入搜索关键词"
+}

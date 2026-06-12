@@ -21,6 +21,8 @@ import type {
   InstantSuggestionProvider,
   ContributionMeta,
   ContributionSource,
+  PluginDefinition,
+  LauncherQuickEntryProvider,
 } from './pluginTypes'
 
 // ─── Registry Entry ───────────────────────────────────────────────────────────
@@ -245,6 +247,8 @@ class ScopedInstantSuggestionRegistry {
 class PluginRegistryImpl {
   private version = 0
   private listeners = new Set<() => void>()
+  private productionDefinitions = new Map<string, PluginDefinition<unknown>>()
+  private devDefinitions = new Map<string, PluginDefinition<unknown>>()
 
   readonly production = {
     commands: new ScopedCommandRegistry(),
@@ -284,7 +288,8 @@ class PluginRegistryImpl {
     renderers: RendererContribution[],
     panels: PanelContributionV2[],
     toolbar: ToolbarContribution[] = [],
-    instantSuggestions: InstantSuggestionProvider[] = []
+    instantSuggestions: InstantSuggestionProvider[] = [],
+    definition?: PluginDefinition<unknown>
   ): void {
     for (const cmd of commands) {
       this.production.commands.register(cmd, pluginId, 'production')
@@ -301,6 +306,9 @@ class PluginRegistryImpl {
     for (const isp of instantSuggestions) {
       this.production.instantSuggestions.register(isp, pluginId, 'production')
     }
+    if (definition) {
+      this.productionDefinitions.set(pluginId, definition)
+    }
     this.bumpVersion()
   }
 
@@ -310,6 +318,7 @@ class PluginRegistryImpl {
     this.production.panels.unregisterByPlugin(pluginId)
     this.production.toolbar.unregisterByPlugin(pluginId)
     this.production.instantSuggestions.unregisterByPlugin(pluginId)
+    this.productionDefinitions.delete(pluginId)
     this.bumpVersion()
   }
 
@@ -321,7 +330,8 @@ class PluginRegistryImpl {
     renderers: RendererContribution[],
     panels: PanelContributionV2[],
     toolbar: ToolbarContribution[] = [],
-    instantSuggestions: InstantSuggestionProvider[] = []
+    instantSuggestions: InstantSuggestionProvider[] = [],
+    definition?: PluginDefinition<unknown>
   ): void {
     for (const cmd of commands) {
       this.dev.commands.register(cmd, pluginId, 'dev')
@@ -338,6 +348,9 @@ class PluginRegistryImpl {
     for (const isp of instantSuggestions) {
       this.dev.instantSuggestions.register(isp, pluginId, 'dev')
     }
+    if (definition) {
+      this.devDefinitions.set(pluginId, definition)
+    }
     this.bumpVersion()
   }
 
@@ -347,6 +360,7 @@ class PluginRegistryImpl {
     this.dev.panels.unregisterByPlugin(pluginId)
     this.dev.toolbar.unregisterByPlugin(pluginId)
     this.dev.instantSuggestions.unregisterByPlugin(pluginId)
+    this.devDefinitions.delete(pluginId)
     this.bumpVersion()
   }
 
@@ -356,6 +370,7 @@ class PluginRegistryImpl {
     this.dev.panels.clear()
     this.dev.toolbar.clear()
     this.dev.instantSuggestions.clear()
+    this.devDefinitions.clear()
     this.bumpVersion()
   }
 
@@ -453,6 +468,40 @@ class PluginRegistryImpl {
     }
     for (const entry of this.dev.instantSuggestions.getAll()) {
       result.push({ ...entry, isDev: true })
+    }
+    return result
+  }
+
+  // ─── Plugin Definitions ─────────────────────────────────────────────────────
+
+  /** Get the full plugin definition by pluginId and source */
+  getPluginDefinition(pluginId: string, source: ContributionSource | 'builtin' | 'installed'): PluginDefinition<unknown> | undefined {
+    if (source === 'dev') {
+      return this.devDefinitions.get(pluginId)
+    }
+    return this.productionDefinitions.get(pluginId)
+  }
+
+  /** Get all launcher quick entry providers from all sources */
+  getAllLauncherQuickEntryProviders(): Array<{
+    provider: LauncherQuickEntryProvider
+    pluginId: string
+    source: ContributionSource
+  }> {
+    const result: Array<{
+      provider: LauncherQuickEntryProvider
+      pluginId: string
+      source: ContributionSource
+    }> = []
+    for (const [pluginId, def] of this.productionDefinitions) {
+      if (def.launcherQuickEntries) {
+        result.push({ provider: def.launcherQuickEntries, pluginId, source: 'production' })
+      }
+    }
+    for (const [pluginId, def] of this.devDefinitions) {
+      if (def.launcherQuickEntries) {
+        result.push({ provider: def.launcherQuickEntries, pluginId, source: 'dev' })
+      }
     }
     return result
   }

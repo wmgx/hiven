@@ -114,6 +114,7 @@ export function applyEffects(
           result.applied.push(effect)
           break
         case 'app.showMainPanel':
+        case 'app.openExternal':
           applyAppEffect(effect)
           result.applied.push(effect)
           break
@@ -269,6 +270,20 @@ function applyAppEffect(effect: AppEffect) {
       app.setCommandPaletteOpen(false)
       app.setGlobalLauncherOpen(false)
       break
+    case 'app.openExternal':
+      void openExternalUrl(effect.url)
+      break
+  }
+}
+
+export async function openExternalUrl(url: string): Promise<void> {
+  try {
+    const { open } = await import('@tauri-apps/plugin-shell')
+    await open(url)
+  } catch (error) {
+    console.warn('[hiven] Failed to open external URL:', error)
+    // Fallback to window.open for non-Tauri environments
+    window.open(url, '_blank')
   }
 }
 

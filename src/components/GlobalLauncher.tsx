@@ -9,13 +9,15 @@ import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginReg
 import { applyEffects } from '../workspace/effectRunner'
 import { showToast } from '../workspace/toast'
 import { runPluginCommandById } from '../workspace/pluginCommandExecutor'
-import type { InstantSuggestion } from '../workspace/pluginTypes'
+import type { InstantSuggestion, LauncherQuickEntry } from '../workspace/pluginTypes'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../utils/imeKeyboard'
 import { isQuickTextCommand, runQuickTextCommand } from '../workspace/quickTextCommand'
+import { usePluginSettingsStore, resolvePluginSettings } from '../workspace/pluginSettingsStore'
 import { pinyin } from 'pinyin-pro'
 
 type LauncherItem =
   | { kind: 'quick-command'; id: string; title: string; subtitle: string; icon?: string; commandId: string; isDev: boolean }
+  | { kind: 'quick-entry'; id: string; title: string; subtitle: string; icon?: string; entry: LauncherQuickEntry; pluginId: string; source: 'builtin' | 'installed' | 'dev'; aliases: string[] }
   | { kind: 'instant'; id: string; title: string; subtitle: string; icon?: string; suggestion: InstantSuggestion }
   | { kind: 'command'; id: string; title: string; subtitle: string; icon?: string; isDev?: boolean }
   | { kind: 'pinned'; id: string; title: string; subtitle: string; icon?: string }
@@ -48,6 +50,7 @@ export function GlobalLauncher() {
   const updateSetting = useAppStore((s) => s.updateSetting)
   const locale = useAppStore((s) => s.locale)
   const pluginRegistryVersion = usePluginRegistryVersion()
+  const pluginSettingsData = usePluginSettingsStore((s) => s.pluginSettings)
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [dragPosition, setDragPosition] = useState(launcherPosition)
@@ -61,6 +64,14 @@ export function GlobalLauncher() {
     outputKind: 'text' | 'error'
     running: boolean
     error?: string
+  } | null>(null)
+  const [activeQuickEntry, setActiveQuickEntry] = useState<{
+    entry: LauncherQuickEntry
+    pluginId: string
+    source: 'builtin' | 'installed' | 'dev'
+    inputText: string
+    error?: string
+    running: boolean
   } | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -83,12 +94,14 @@ export function GlobalLauncher() {
       setQuery('')
       setSelectedIndex(0)
       setQuickTextSession(null)
+      setActiveQuickEntry(null)
       inputRef.current?.focus()
     })
   }, [open])
 
   const items = useMemo<LauncherItem[]>(() => {
     void pluginRegistryVersion
+    void pluginSettingsData
     const pinnedLabel = t(locale, 'palette.globalPinned')
     const commandsLabel = t(locale, 'palette.globalCommands')
     const quickTextLabel = t(locale, 'palette.quickText')
@@ -133,7 +146,40 @@ export function GlobalLauncher() {
       }
     }
 
-    if ('pinned-only' === mode) return [...pinned, ...launcherCommands, ...quickCommands]
+    // Add launcher quick entries from plugins
+    const quickEntryLabel = t(locale, 'palette.quickEntry')
+    const quickEntryItems: LauncherItem[] = []
+    const providers = pluginRegistry.getAllLauncherQuickEntryProviders()
+    for (const { provider, pluginId, source } of providers) {
+      try {
+        const def = pluginRegistry.getPluginDefinition(pluginId, source)
+        const settingsContribution = def?.settings
+        const resolvedSettings = settingsContribution
+          ? resolvePluginSettings(source === 'dev' ? 'dev' : 'builtin', pluginId, settingsContribution).value
+          : undefined
+        const entries = provider.getEntries({ settings: resolvedSettings, locale })
+        const entrySource = source === 'dev' ? 'dev' : 'builtin' as const
+        for (const entry of entries) {
+          const entryTitle = entry.titleI18n?.[locale] ?? entry.title
+          const entrySubtitle = entry.subtitleI18n?.[locale] ?? entry.subtitle ?? quickEntryLabel
+          quickEntryItems.push({
+            kind: 'quick-entry',
+            id: `qe:${pluginId}:${entry.id}`,
+            title: entryTitle,
+            subtitle: entrySubtitle,
+            icon: entry.icon,
+            entry,
+            pluginId,
+            source: entrySource,
+            aliases: entry.aliases,
+          })
+        }
+      } catch {
+        // Provider error should not break the launcher
+      }
+    }
+
+    if ('pinned-only' === mode) return [...pinned, ...launcherCommands, ...quickCommands, ...quickEntryItems]
 
     const recentLabel = t(locale, 'palette.globalRecent')
     const viewsLabel = t(locale, 'palette.globalViews')
@@ -154,8 +200,8 @@ export function GlobalLauncher() {
       subtitle: viewsLabel,
       icon: item.icon,
     }))
-    return [...pinned, ...launcherCommands, ...quickCommands, ...recent, ...views]
-  }, [locale, mode, pinnedActions, recentActionNames, pluginRegistryVersion])
+    return [...pinned, ...launcherCommands, ...quickCommands, ...quickEntryItems, ...recent, ...views]
+  }, [locale, mode, pinnedActions, recentActionNames, pluginRegistryVersion, pluginSettingsData])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -318,6 +364,8 @@ export function GlobalLauncher() {
     filtered.length,
     mode,
     open,
+    activeQuickEntry?.inputText.length,
+    activeQuickEntry?.error,
     quickTextSession?.inputText.length,
     quickTextSession?.outputText.length,
     quickTextSession?.running,
@@ -352,6 +400,20 @@ export function GlobalLauncher() {
         inputText: '',
         outputText: '',
         outputKind: 'text',
+        running: false,
+      })
+      setQuery('')
+      setSelectedIndex(0)
+      requestAnimationFrame(() => inputRef.current?.focus())
+      return
+    }
+    if (item.kind === 'quick-entry') {
+      setActiveQuickEntry({
+        entry: item.entry,
+        pluginId: item.pluginId,
+        source: item.source,
+        inputText: '',
+        error: undefined,
         running: false,
       })
       setQuery('')
@@ -515,6 +577,29 @@ export function GlobalLauncher() {
         }}
         onKeyDown={(event) => {
           if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
+          if (activeQuickEntry && event.key === 'Escape') {
+            event.preventDefault()
+            event.stopPropagation()
+            setActiveQuickEntry(null)
+            setQuery('')
+            setSelectedIndex(0)
+            requestAnimationFrame(() => inputRef.current?.focus())
+            return
+          }
+          if (activeQuickEntry && event.key === 'Backspace' && !activeQuickEntry.inputText) {
+            event.preventDefault()
+            event.stopPropagation()
+            setActiveQuickEntry(null)
+            setQuery('')
+            setSelectedIndex(0)
+            requestAnimationFrame(() => inputRef.current?.focus())
+            return
+          }
+          if (activeQuickEntry && event.key === 'Enter') {
+            event.preventDefault()
+            void executeQuickEntry(activeQuickEntry, setActiveQuickEntry, closeLauncher)
+            return
+          }
           if (quickTextSession && event.key === 'Escape') {
             event.preventDefault()
             event.stopPropagation()
@@ -542,7 +627,34 @@ export function GlobalLauncher() {
         onCompositionStart={handleCompositionStart}
         onCompositionEnd={handleCompositionEnd}
       >
-        {quickTextSession ? (
+        {activeQuickEntry ? (
+          <>
+            <div className="global-launcher-header flex items-center gap-2 px-3.5 py-2.5" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
+              {resolveIcon(activeQuickEntry.entry.icon, 16, activeQuickEntry.entry.title)}
+              <input
+                ref={inputRef}
+                value={activeQuickEntry.inputText}
+                onChange={(event) => setActiveQuickEntry((s) => s ? { ...s, inputText: event.target.value, error: undefined } : s)}
+                placeholder={localized(
+                  activeQuickEntry.entry.placeholder ?? '',
+                  activeQuickEntry.entry.placeholderI18n,
+                  locale
+                ) || t(locale, 'palette.quickEntryPlaceholder', { placeholder: activeQuickEntry.entry.title })}
+                className="flex-1 outline-none border-none bg-transparent text-[14px]"
+                style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
+              />
+            </div>
+            {activeQuickEntry.error && (
+              <div className="px-3.5 py-2 text-[12px]" style={{ color: 'var(--color-error)' }}>
+                {activeQuickEntry.error}
+              </div>
+            )}
+            <div className="global-launcher-footer flex shrink-0 gap-3 px-3.5 py-1.5" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
+              <HintKey keys="↵" label={t(locale, 'palette.quickEntryRun')} />
+              <HintKey keys="esc" label={t(locale, 'palette.back')} />
+            </div>
+          </>
+        ) : quickTextSession ? (
           <>
             <div className="global-launcher-header flex items-center gap-2 px-3.5 py-2.5" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
               {resolveIcon(quickTextSession.icon, 16, quickTextSession.title)}
@@ -603,7 +715,7 @@ export function GlobalLauncher() {
               />
               <LauncherSection
                 title={t(locale, 'palette.quickText')}
-                items={filtered.filter((item) => item.kind === 'quick-command')}
+                items={filtered.filter((item) => item.kind === 'quick-command' || item.kind === 'quick-entry')}
                 selected={filtered[clampedSelectedIndex]}
                 onSelect={selectItem}
               />
@@ -680,6 +792,54 @@ async function executeInstantSuggestion(suggestion: InstantSuggestion, locale: L
   onDone()
 }
 
+async function executeQuickEntry(
+  session: {
+    entry: LauncherQuickEntry
+    pluginId: string
+    source: 'builtin' | 'installed' | 'dev'
+    inputText: string
+  },
+  setSession: (fn: (s: typeof session & { error?: string; running: boolean } | null) => typeof session & { error?: string; running: boolean } | null) => void,
+  onDone: () => void
+) {
+  const { entry, pluginId, source, inputText } = session
+
+  // Check empty input
+  if (!inputText.trim() && entry.allowEmptyInput === false) {
+    const msg = entry.emptyInputMessageI18n
+      ? Object.values(entry.emptyInputMessageI18n)[0] ?? entry.emptyInputMessage ?? ''
+      : entry.emptyInputMessage ?? ''
+    setSession((s) => s ? { ...s, error: msg || 'Please enter content' } : s)
+    return
+  }
+
+  setSession((s) => s ? { ...s, running: true, error: undefined } : s)
+
+  try {
+    const result = await entry.run(inputText, {
+      pluginId,
+      source,
+      locale: 'zh',
+      settings: undefined,
+    })
+
+    // Apply effects
+    if (result.effects && result.effects.length > 0) {
+      const effectResult = applyEffects(result.effects)
+      if (effectResult.errors.length > 0) {
+        setSession((s) => s ? { ...s, running: false, error: effectResult.errors[0] } : s)
+        return
+      }
+    }
+
+    // Success — close launcher
+    onDone()
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    setSession((s) => s ? { ...s, running: false, error: msg } : s)
+  }
+}
+
 function isStandaloneLauncherWindow() {
   return new URLSearchParams(window.location.search).get('window') === 'launcher'
 }
@@ -720,7 +880,7 @@ function LauncherSection({ title, items, selected, onSelect }: { title: string; 
                 ? resolveIcon(item.icon, 14, item.title) || <Pin size={14} />
                 : item.kind === 'instant'
                   ? resolveIcon(item.icon, 14, item.title)
-                  : item.kind === 'command' || item.kind === 'quick-command'
+                  : item.kind === 'command' || item.kind === 'quick-command' || item.kind === 'quick-entry'
                     ? resolveIcon(item.icon, 14, item.title)
                   : item.kind === 'view' ? item.icon : resolveIcon(item.icon, 14, item.title)}
             </span>
@@ -764,6 +924,17 @@ function launcherPinyinMatch(text: string, query: string): boolean {
 }
 
 function launcherItemMatchesQuery(item: LauncherItem, q: string): boolean {
+  // Quick entry: match by alias (exact/prefix/includes), title, subtitle, pinyin
+  if (item.kind === 'quick-entry') {
+    for (const alias of item.aliases) {
+      if (alias.toLowerCase() === q) return true
+      if (alias.toLowerCase().startsWith(q)) return true
+      if (alias.toLowerCase().includes(q)) return true
+    }
+    const text = `${item.title} ${item.subtitle}`.toLowerCase()
+    if (text.includes(q)) return true
+    return launcherPinyinMatch(item.title, q)
+  }
   const text = `${item.title} ${item.subtitle}`.toLowerCase()
   if (text.includes(q)) return true
   return launcherPinyinMatch(item.title, q)

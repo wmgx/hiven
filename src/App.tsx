@@ -10,6 +10,7 @@ import { PinnedRunnerView } from './views/PinnedRunnerView'
 import { SettingsView } from './views/SettingsView'
 import { CommandPalette } from './components/CommandPalette'
 import { GlobalLauncher } from './components/GlobalLauncher'
+import { PluginSettingsDialog } from './components/PluginSettingsDialog'
 import { loadInstalledPluginsFromStore } from './workspace/pluginRuntime'
 import { registerBundledPluginPackages } from './workspace/bundledPluginLoader'
 import { installGlobalPinnedLauncherHotkeys } from './hotkeys/globalPinnedLauncher'
@@ -270,6 +271,7 @@ function MainApp() {
       </div>
       {!globalLauncherOverlay && activeView === 'editor' && <CommandPalette />}
       <GlobalLauncher />
+      <PluginSettingsDialog />
     </div>
   )
 }

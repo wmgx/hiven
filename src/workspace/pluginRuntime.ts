@@ -426,7 +426,8 @@ export async function enablePlugin(pluginId: string): Promise<void> {
       localized.renderers,
       localized.panels,
       localized.toolbar,
-      localized.instantSuggestions
+      localized.instantSuggestions,
+      definition
     )
 
     updatePluginStatus(pluginId, 'enabled')
@@ -498,7 +499,8 @@ export async function reloadPlugin(pluginId: string): Promise<void> {
       localized.renderers,
       localized.panels,
       localized.toolbar,
-      localized.instantSuggestions
+      localized.instantSuggestions,
+      definition
     )
 
     // Update stored capabilities
@@ -590,7 +592,8 @@ export async function sideloadDevPlugin(folderPath: string): Promise<DevPlugin> 
       localized.renderers,
       localized.panels,
       localized.toolbar,
-      localized.instantSuggestions
+      localized.instantSuggestions,
+      definition
     )
 
     addDevPlugin(devRecord)
@@ -636,7 +639,8 @@ export async function reloadDevPlugin(pluginId: string): Promise<void> {
       localized.renderers,
       localized.panels,
       localized.toolbar,
-      localized.instantSuggestions
+      localized.instantSuggestions,
+      definition
     )
 
     updateDevPluginStatus(pluginId, 'active')

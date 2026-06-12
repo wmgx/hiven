@@ -35,6 +35,11 @@ export default {
     'quickTextPlaceholder': 'Text for {title}',
     'preview': 'Preview',
     'running': 'Running...',
+    'quickEntry': 'Quick Open',
+    'quickEntryPlaceholder': '{placeholder}',
+    'quickEntryEmptyInput': 'Please enter content',
+    'quickEntryError': 'Execution failed',
+    'quickEntryRun': 'run',
   },
   zh: {
     'search': '搜索操作...',
@@ -72,5 +77,10 @@ export default {
     'quickTextPlaceholder': '输入要用 {title} 处理的文本',
     'preview': '预览',
     'running': '处理中...',
+    'quickEntry': '快速打开',
+    'quickEntryPlaceholder': '{placeholder}',
+    'quickEntryEmptyInput': '请输入内容',
+    'quickEntryError': '执行失败',
+    'quickEntryRun': '执行',
   },
 }

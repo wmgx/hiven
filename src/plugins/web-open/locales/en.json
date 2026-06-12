@@ -1,0 +1,18 @@
+{
+  "pluginTitle": "Web Quick Open",
+  "settingsTitle": "Web Quick Open Settings",
+  "entryTitle": "Web Search",
+  "addEntry": "Add",
+  "removeEntry": "Remove",
+  "title": "Title",
+  "aliases": "Aliases (comma separated)",
+  "placeholder": "Placeholder",
+  "urlTemplate": "URL Template",
+  "encodeQuery": "Encode query",
+  "emptyQueryBlock": "Require input",
+  "emptyQueryOpen": "Allow empty",
+  "emptyQueryBehavior": "Empty input behavior",
+  "testOpen": "Test open",
+  "defaultBaiduTitle": "Baidu Search",
+  "defaultBaiduPlaceholder": "Enter search keywords"
+}

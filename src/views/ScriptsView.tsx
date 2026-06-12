@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { AlertTriangle, Archive, Download, ExternalLink, FolderOpen, Globe, Loader2, Package, Plus, Power, RefreshCw, Search, Trash2, Upload } from 'lucide-react'
+import { AlertTriangle, Archive, Download, ExternalLink, FolderOpen, Globe, Loader2, Package, Plus, Power, RefreshCw, Search, Settings, Trash2, Upload } from 'lucide-react'
 import { useT, t } from '../i18n'
 import type { Locale } from '../i18n'
 import { localized, useAppStore } from '../store'
 import { checkBuiltinPluginsUpdate, getConfigDir } from '../configInit'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../utils/imeKeyboard'
 import { usePluginStore } from '../workspace/pluginStore'
+import { usePluginSettingsStore } from '../workspace/pluginSettingsStore'
+import { pluginRegistry } from '../workspace/pluginRegistry'
 import {
   createDevPluginScaffold,
   checkInstalledPluginUpdate,
@@ -326,6 +328,7 @@ export function ScriptsView() {
     const key = plugin.pluginId
     const loading = !!busy[key]
     const localError = errors[key]
+    const hasSettings = !!pluginRegistry.getPluginDefinition(plugin.pluginId, 'production')?.settings
     return (
       <PluginCard
         key={plugin.pluginId}
@@ -341,6 +344,14 @@ export function ScriptsView() {
         loading={loading}
         actions={
           <>
+            {hasSettings && (
+              <IconButton
+                title={t(locale, 'scripts.settings')}
+                onClick={() => usePluginSettingsStore.getState().openSettingsDialog({ pluginId: plugin.pluginId, source: 'installed' })}
+              >
+                <Settings size={13} />
+              </IconButton>
+            )}
             <IconButton
               title={t(locale, 'scripts.actionOpenEditor')}
               onClick={() => openPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'installed' })}
@@ -391,6 +402,7 @@ export function ScriptsView() {
 
   function renderDev(plugin: DevPlugin) {
     const key = `dev:${plugin.pluginId}`
+    const hasSettings = !!pluginRegistry.getPluginDefinition(plugin.pluginId, 'dev')?.settings
     return (
       <PluginCard
         key={plugin.pluginId}
@@ -406,6 +418,14 @@ export function ScriptsView() {
         loading={!!busy[key]}
         actions={
           <>
+            {hasSettings && (
+              <IconButton
+                title={t(locale, 'scripts.settings')}
+                onClick={() => usePluginSettingsStore.getState().openSettingsDialog({ pluginId: plugin.pluginId, source: 'dev' })}
+              >
+                <Settings size={13} />
+              </IconButton>
+            )}
             <IconButton
               title={t(locale, 'scripts.actionOpenEditor')}
               onClick={() => openPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'dev' })}
@@ -440,6 +460,7 @@ export function ScriptsView() {
   }
 
   function renderBuiltin(plugin: PluginPackageSummary) {
+    const hasSettings = !!pluginRegistry.getPluginDefinition(plugin.pluginId, 'production')?.settings
     return (
       <PluginCard
         key={plugin.pluginId}
@@ -453,6 +474,14 @@ export function ScriptsView() {
         error={plugin.error}
         actions={
           <>
+            {hasSettings && (
+              <IconButton
+                title={t(locale, 'scripts.settings')}
+                onClick={() => usePluginSettingsStore.getState().openSettingsDialog({ pluginId: plugin.pluginId, source: 'builtin' })}
+              >
+                <Settings size={13} />
+              </IconButton>
+            )}
             <IconButton
               title={t(locale, 'scripts.actionOpenEditor')}
               onClick={() => openPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'builtin', readOnly: true })}

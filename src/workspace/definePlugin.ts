@@ -21,9 +21,16 @@ import type { PluginDefinition } from './pluginTypes'
  * This function mainly exists to provide TypeScript type checking
  * and serves as a marker for plugin entry points.
  *
+ * The TSettings generic connects settings.defaultValue, settings.component props,
+ * and launcherQuickEntries.getEntries() ctx.settings to the same type.
+ *
  * Example:
  * ```ts
- * export default definePlugin({
+ * export default definePlugin<{ entries: WebQuickOpenEntry[] }>({
+ *   settings: {
+ *     defaultValue: { entries: [] },
+ *     component: MySettingsBody,
+ *   },
  *   commands: [{
  *     id: 'trim.run',
  *     title: 'Trim Whitespace',
@@ -42,15 +49,19 @@ import type { PluginDefinition } from './pluginTypes'
  * })
  * ```
  */
-export function definePlugin(definition: PluginDefinition): PluginDefinition {
+export function definePlugin<TSettings = unknown>(
+  definition: PluginDefinition<TSettings>
+): PluginDefinition<TSettings> {
   const hasContributions =
     Array.isArray(definition.commands) ||
     Array.isArray(definition.renderers) ||
     Array.isArray(definition.panels) ||
     Array.isArray(definition.toolbar) ||
-    Array.isArray(definition.instantSuggestions)
+    Array.isArray(definition.instantSuggestions) ||
+    definition.settings != null ||
+    definition.launcherQuickEntries != null
   if (!hasContributions) {
-    throw new Error('[definePlugin] Plugin must declare at least one of commands/renderers/panels/toolbar/instantSuggestions')
+    throw new Error('[definePlugin] Plugin must declare at least one of commands/renderers/panels/toolbar/instantSuggestions/settings/launcherQuickEntries')
   }
 
   return definition

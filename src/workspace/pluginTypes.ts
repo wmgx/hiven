@@ -68,6 +68,7 @@ export type CommandParam = {
 export type PluginCommandContext = {
   inputs: ResolvedInputs
   params: Record<string, unknown>
+  settings?: unknown
 }
 
 // ─── Command Output Types ────────────────────────────────────────────────────
@@ -248,15 +249,68 @@ export type InstantSuggestionProvider = {
   suggest(ctx: InstantSuggestionContext): InstantSuggestion | InstantSuggestion[] | null
 }
 
+// ─── Plugin Settings ─────────────────────────────────────────────────────────
+
+export type PluginSettingsBodyProps<TSettings = unknown> = {
+  pluginId: string
+  source: 'builtin' | 'installed' | 'dev'
+  value: TSettings
+  defaultValue: TSettings
+  setValue: (next: TSettings) => void
+  updateValue: (patch: Partial<TSettings>) => void
+  resetValue: () => void
+  openExternal: (url: string) => Promise<void>
+}
+
+export type PluginSettingsContribution<TSettings = unknown> = {
+  title?: string
+  titleI18n?: Partial<Record<Locale, string>>
+  version?: number
+  defaultValue: TSettings
+  migrate?: (stored: unknown, fromVersion: number) => TSettings
+  component: ComponentType<PluginSettingsBodyProps<TSettings>>
+}
+
+// ─── Launcher Quick Entry ────────────────────────────────────────────────────
+
+export type LauncherQuickEntryContext = {
+  pluginId: string
+  source: 'builtin' | 'installed' | 'dev'
+  locale: Locale
+  settings: unknown
+}
+
+export type LauncherQuickEntry = {
+  id: string
+  title: string
+  titleI18n?: Partial<Record<Locale, string>>
+  subtitle?: string
+  subtitleI18n?: Partial<Record<Locale, string>>
+  icon?: string
+  aliases: string[]
+  placeholder?: string
+  placeholderI18n?: Partial<Record<Locale, string>>
+  allowEmptyInput?: boolean
+  emptyInputMessage?: string
+  emptyInputMessageI18n?: Partial<Record<Locale, string>>
+  run(input: string, ctx: LauncherQuickEntryContext): PluginCommandResult | Promise<PluginCommandResult>
+}
+
+export type LauncherQuickEntryProvider = {
+  getEntries(ctx: { settings: unknown; locale: Locale }): LauncherQuickEntry[]
+}
+
 // ─── Plugin Definition ────────────────────────────────────────────────────────
 
 /** The full plugin definition returned by definePlugin */
-export type PluginDefinition = {
+export type PluginDefinition<TSettings = unknown> = {
   commands?: CommandContribution[]
   renderers?: RendererContribution[]
   panels?: PanelContributionV2[]
   toolbar?: ToolbarContribution[]
   instantSuggestions?: InstantSuggestionProvider[]
+  settings?: PluginSettingsContribution<TSettings>
+  launcherQuickEntries?: LauncherQuickEntryProvider
 }
 
 // ─── Plugin Manifest ──────────────────────────────────────────────────────────
