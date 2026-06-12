@@ -48,7 +48,7 @@ export async function runPluginCommandEntry(
         ...(options.params ?? {}),
       },
     })
-    const effects = stampPluginCommandEffects(result.effects, {
+    const effects = stampPluginCommandEffects(result.effects ?? [], {
       isDev: options.isDev,
       ownerPluginId: entry.meta.pluginId,
     })

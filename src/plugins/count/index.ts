@@ -2,7 +2,7 @@
  * First-party Text Statistics plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@hiven/plugin'
+import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
 
 export const countPlugin = definePlugin({
   commands: [
@@ -20,12 +20,11 @@ export const countPlugin = definePlugin({
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
-        const reply = (t: string) => ({ effects: [{ type: 'text.replace' as const, target: input?.paneId ? { paneId: input.paneId } : 'active-input' as const, text: t }] })
         const lines = text.split('\n').length
         const words = text.split(/\s+/).filter((w) => w.length > 0).length
         const chars = text.length
         const charsNoSpace = text.replace(/\s/g, '').length
-        return reply(`Lines: ${lines}\nWords: ${words}\nCharacters: ${chars}\nCharacters (no spaces): ${charsNoSpace}`)
+        return textOutput(`Lines: ${lines}\nWords: ${words}\nCharacters: ${chars}\nCharacters (no spaces): ${charsNoSpace}`)
       },
     },
   ],

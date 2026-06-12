@@ -2,7 +2,7 @@
  * First-party HTML Encode/Decode plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@hiven/plugin'
+import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
 
 export const htmlPlugin = definePlugin({
   commands: [
@@ -31,16 +31,15 @@ export const htmlPlugin = definePlugin({
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
-        const reply = (t: string) => ({ effects: [{ type: 'text.replace' as const, target: input?.paneId ? { paneId: input.paneId } : 'active-input' as const, text: t }] })
         if (ctx.params.mode === 'encode') {
-          return reply(text
+          return textOutput(text
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;'))
         }
-        return reply(text
+        return textOutput(text
           .replace(/&#39;/g, "'")
           .replace(/&quot;/g, '"')
           .replace(/&gt;/g, '>')

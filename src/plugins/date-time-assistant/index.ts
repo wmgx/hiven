@@ -1,4 +1,4 @@
-import { definePlugin, type TextInput } from '@hiven/plugin'
+import { definePlugin, textOutput, type TextInput } from '@hiven/plugin'
 import type { InstantSuggestion, InstantSuggestionContext } from '../../workspace/pluginTypes'
 
 function pad(n: number, width = 2): string {
@@ -288,9 +288,6 @@ export const dateTimeAssistantPlugin = definePlugin({
         const overwrite = ctx.params.overwrite !== 'no'
         const showOriginal = inPlace && !overwrite
         const unit = (ctx.params.unit as 's' | 'ms') || 'ms'
-        const target = input?.paneId ? { paneId: input.paneId } : 'active-input'
-        const reply = (result: string) => ({ effects: [{ type: 'text.replace' as const, target, text: result }] })
-
         const results = text.split(/\r?\n/).map((line) => {
           const trimmed = line.trim()
           if (!trimmed) return ''
@@ -326,7 +323,7 @@ export const dateTimeAssistantPlugin = definePlugin({
           }
         })
 
-        return reply(results.join('\n'))
+        return textOutput(results.join('\n'))
       },
     },
   ],

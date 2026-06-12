@@ -31,6 +31,10 @@ export default {
     'globalCommands': 'System Commands',
     'globalRecent': 'Recent Commands',
     'globalViews': 'Workspace Views',
+    'quickText': 'Quick Text',
+    'quickTextPlaceholder': 'Text for {title}',
+    'preview': 'Preview',
+    'running': 'Running...',
   },
   zh: {
     'search': '搜索操作...',
@@ -64,5 +68,9 @@ export default {
     'globalCommands': '系统命令',
     'globalRecent': '最近命令',
     'globalViews': '工作区视图',
+    'quickText': '快速处理',
+    'quickTextPlaceholder': '输入要用 {title} 处理的文本',
+    'preview': '预览',
+    'running': '处理中...',
   },
 }

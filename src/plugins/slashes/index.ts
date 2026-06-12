@@ -2,7 +2,7 @@
  * First-party Add/Remove Slashes plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@hiven/plugin'
+import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
 
 export const slashesPlugin = definePlugin({
   commands: [
@@ -31,9 +31,8 @@ export const slashesPlugin = definePlugin({
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
-        const reply = (t: string) => ({ effects: [{ type: 'text.replace' as const, target: input?.paneId ? { paneId: input.paneId } : 'active-input' as const, text: t }] })
         if (ctx.params.mode === 'escape') {
-          return reply(text
+          return textOutput(text
             .replace(/\\/g, '\\\\')
             .replace(/'/g, "\\'")
             .replace(/"/g, '\\"')
@@ -41,7 +40,7 @@ export const slashesPlugin = definePlugin({
             .replace(/\r/g, '\\r')
             .replace(/\t/g, '\\t'))
         }
-        return reply(text
+        return textOutput(text
           .replace(/\\t/g, '\t')
           .replace(/\\r/g, '\r')
           .replace(/\\n/g, '\n')

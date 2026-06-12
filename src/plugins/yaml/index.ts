@@ -2,7 +2,7 @@
  * First-party JSON ↔ YAML plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@hiven/plugin'
+import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
 import jsYaml from 'js-yaml'
 
 export const yamlPlugin = definePlugin({
@@ -32,13 +32,12 @@ export const yamlPlugin = definePlugin({
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
-        const reply = (t: string) => ({ effects: [{ type: 'text.replace' as const, target: input?.paneId ? { paneId: input.paneId } : 'active-input' as const, text: t }] })
         if (ctx.params.mode === 'json2yaml') {
           const obj = JSON.parse(text)
-          return reply(jsYaml.dump(obj))
+          return textOutput(jsYaml.dump(obj))
         }
         const obj = jsYaml.load(text)
-        return reply(JSON.stringify(obj, null, 2))
+        return textOutput(JSON.stringify(obj, null, 2))
       },
     },
   ],

@@ -2,7 +2,7 @@
  * First-party JSON ↔ Query String plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@hiven/plugin'
+import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
 
 export const queryStringPlugin = definePlugin({
   commands: [
@@ -31,7 +31,6 @@ export const queryStringPlugin = definePlugin({
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
-        const reply = (t: string) => ({ effects: [{ type: 'text.replace' as const, target: input?.paneId ? { paneId: input.paneId } : 'active-input' as const, text: t }] })
         try {
           if (ctx.params.mode === 'json2qs') {
             const obj = JSON.parse(text)
@@ -39,16 +38,16 @@ export const queryStringPlugin = definePlugin({
             for (const [k, v] of Object.entries(obj)) {
               params.set(k, String(v))
             }
-            return reply(params.toString())
+            return textOutput(params.toString())
           }
           let qs = text.trim()
           if (qs.startsWith('?')) qs = qs.slice(1)
           const params = new URLSearchParams(qs)
           const obj: Record<string, string> = {}
           params.forEach((v, k) => { obj[k] = v })
-          return reply(JSON.stringify(obj, null, 2))
+          return textOutput(JSON.stringify(obj, null, 2))
         } catch (e: any) {
-          return reply(`Error: ${e.message}`)
+          return textError(`Error: ${e.message}`)
         }
       },
     },

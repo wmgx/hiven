@@ -2,7 +2,7 @@
  * First-party Base64 Encode/Decode plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@hiven/plugin'
+import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
 
 export const base64Plugin = definePlugin({
   commands: [
@@ -32,14 +32,13 @@ export const base64Plugin = definePlugin({
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
-        const reply = (t: string) => ({ effects: [{ type: 'text.replace' as const, target: input?.paneId ? { paneId: input.paneId } : 'active-input' as const, text: t }] })
         try {
           if (ctx.params.mode === 'encode') {
-            return reply(btoa(unescape(encodeURIComponent(text))))
+            return textOutput(btoa(unescape(encodeURIComponent(text))))
           }
-          return reply(decodeURIComponent(escape(atob(text.trim()))))
+          return textOutput(decodeURIComponent(escape(atob(text.trim()))))
         } catch (e: any) {
-          return reply(`Error: ${e.message}`)
+          return textError(`Error: ${e.message}`)
         }
       },
     },

@@ -25,7 +25,11 @@ function loadPlugin(path) {
     String,
     console,
     require(id) {
-      if (id === '@hiven/plugin') return { definePlugin: (definition) => definition }
+      if (id === '@hiven/plugin') return {
+        definePlugin: (definition) => definition,
+        textOutput: (text) => ({ output: { kind: 'text', text } }),
+        textError: (text) => ({ output: { kind: 'error', text } }),
+      }
       return require(id)
     },
     module,
@@ -42,9 +46,9 @@ async function runTextCommand(plugin, id, text, params = {}) {
     inputs: { input: { kind: 'text', text, paneId: 'pane-test' } },
     params,
   })
+  if (result.output) return result.output.text
   const replace = result.effects?.find((effect) => effect.type === 'text.replace')
-  assert.ok(replace, `${id} should replace text`)
-  assert.equal(replace.target?.paneId, 'pane-test', `${id} should write back to the source pane`)
+  assert.ok(replace, `${id} should return text output or legacy text.replace`)
   return replace.text
 }
 

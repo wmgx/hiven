@@ -3,17 +3,7 @@
  * Groups prefix, suffix, and wrap transforms for line-oriented text editing.
  */
 
-import { definePlugin, type TextInput } from '@hiven/plugin'
-
-function replaceText(input: TextInput | undefined, text: string) {
-  return {
-    effects: [{
-      type: 'text.replace' as const,
-      target: input?.paneId ? { paneId: input.paneId } : 'active-input' as const,
-      text,
-    }],
-  }
-}
+import { definePlugin, textOutput, type TextInput } from '@hiven/plugin'
 
 function inputText(input: TextInput | undefined): string {
   return input?.kind === 'text' ? input.text : ''
@@ -42,7 +32,7 @@ export const lineAffixPlugin = definePlugin({
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const prefix = (ctx.params.prefix ?? '- ') as string
-        return replaceText(input, inputText(input).split('\n').map((line) => prefix + line).join('\n'))
+        return textOutput(inputText(input).split('\n').map((line) => prefix + line).join('\n'))
       },
     },
     {
@@ -66,7 +56,7 @@ export const lineAffixPlugin = definePlugin({
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const suffix = (ctx.params.suffix ?? ',') as string
-        return replaceText(input, inputText(input).split('\n').map((line) => line + suffix).join('\n'))
+        return textOutput(inputText(input).split('\n').map((line) => line + suffix).join('\n'))
       },
     },
     {
@@ -98,7 +88,7 @@ export const lineAffixPlugin = definePlugin({
         const input = ctx.inputs.input as TextInput
         const left = (ctx.params.left ?? '"') as string
         const right = (ctx.params.right ?? '"') as string
-        return replaceText(input, inputText(input).split('\n').map((line) => left + line + right).join('\n'))
+        return textOutput(inputText(input).split('\n').map((line) => left + line + right).join('\n'))
       },
     },
   ],

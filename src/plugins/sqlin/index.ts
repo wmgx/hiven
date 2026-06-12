@@ -2,7 +2,7 @@
  * First-party Lines to SQL IN plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@hiven/plugin'
+import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
 
 export const sqlinPlugin = definePlugin({
   commands: [
@@ -32,14 +32,13 @@ export const sqlinPlugin = definePlugin({
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
-        const reply = (t: string) => ({ effects: [{ type: 'text.replace' as const, target: input?.paneId ? { paneId: input.paneId } : 'active-input' as const, text: t }] })
         const lines = text.split('\n').filter(l => l.trim() !== '')
         if (ctx.params.mode === 'number') {
           const values = lines.map(l => l.trim())
-          return reply('(' + values.join(',') + ')')
+          return textOutput('(' + values.join(',') + ')')
         }
         const values = lines.map(l => "'" + l.trim().replace(/'/g, "''") + "'")
-        return reply('(' + values.join(',') + ')')
+        return textOutput('(' + values.join(',') + ')')
       },
     },
   ],

@@ -2,7 +2,7 @@
  * First-party Case Convert plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@hiven/plugin'
+import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
 
 export const casePlugin = definePlugin({
   commands: [
@@ -34,14 +34,13 @@ export const casePlugin = definePlugin({
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
-        const reply = (t: string) => ({ effects: [{ type: 'text.replace' as const, target: input?.paneId ? { paneId: input.paneId } : 'active-input' as const, text: t }] })
         switch (ctx.params.mode) {
-          case 'upper': return reply(text.toUpperCase())
-          case 'lower': return reply(text.toLowerCase())
-          case 'title': return reply(text.replace(/\b\w/g, c => c.toUpperCase()))
-          case 'camel': return reply(text.replace(/[-_\s]+(.)?/g, (_, c) => c ? c.toUpperCase() : ''))
-          case 'snake': return reply(text.replace(/[\s-]+/g, '_').replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase())
-          default: return reply(text)
+          case 'upper': return textOutput(text.toUpperCase())
+          case 'lower': return textOutput(text.toLowerCase())
+          case 'title': return textOutput(text.replace(/\b\w/g, c => c.toUpperCase()))
+          case 'camel': return textOutput(text.replace(/[-_\s]+(.)?/g, (_, c) => c ? c.toUpperCase() : ''))
+          case 'snake': return textOutput(text.replace(/[\s-]+/g, '_').replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase())
+          default: return textOutput(text)
         }
       },
     },

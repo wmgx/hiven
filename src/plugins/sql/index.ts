@@ -2,7 +2,7 @@
  * First-party SQL Formatter plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@hiven/plugin'
+import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
 import { format } from 'sql-formatter'
 
 export const sqlPlugin = definePlugin({
@@ -33,11 +33,10 @@ export const sqlPlugin = definePlugin({
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
-        const reply = (t: string) => ({ effects: [{ type: 'text.replace' as const, target: input?.paneId ? { paneId: input.paneId } : 'active-input' as const, text: t }] })
         if (ctx.params.mode === 'compact') {
-          return reply(text.replace(/--[^\n]*/g, '').replace(/\s+/g, ' ').trim())
+          return textOutput(text.replace(/--[^\n]*/g, '').replace(/\s+/g, ' ').trim())
         }
-        return reply(format(text))
+        return textOutput(format(text))
       },
     },
   ],

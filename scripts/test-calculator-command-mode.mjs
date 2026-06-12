@@ -24,7 +24,14 @@ const context = vm.createContext({
   RegExp,
   isFinite,
   isNaN,
-  require,
+  require(id) {
+    if (id === '@hiven/plugin') return {
+      definePlugin: (definition) => definition,
+      textOutput: (text) => ({ output: { kind: 'text', text } }),
+      textError: (text) => ({ output: { kind: 'error', text } }),
+    }
+    return require(id)
+  },
   module,
   exports: module.exports,
 })
@@ -49,9 +56,9 @@ async function runCalculatorCommand(text) {
     inputs: { input: { kind: 'text', text, paneId: 'pane-test' } },
     params: {},
   })
+  if (result.output) return result.output.text
   const replace = result.effects?.find((effect) => effect.type === 'text.replace')
-  assert.ok(replace, 'calculator command should replace the editor text')
-  assert.equal(replace.target?.paneId, 'pane-test', 'calculator command should write back to the source pane')
+  assert.ok(replace, 'calculator command should return text output or legacy text.replace')
   return replace.text
 }
 
@@ -60,9 +67,9 @@ async function runSumCommand(text) {
     inputs: { input: { kind: 'text', text, paneId: 'pane-test' } },
     params: {},
   })
+  if (result.output) return result.output.text
   const replace = result.effects?.find((effect) => effect.type === 'text.replace')
-  assert.ok(replace, 'calculator sum command should replace the editor text')
-  assert.equal(replace.target?.paneId, 'pane-test', 'calculator sum command should write back to the source pane')
+  assert.ok(replace, 'calculator sum command should return text output or legacy text.replace')
   return replace.text
 }
 

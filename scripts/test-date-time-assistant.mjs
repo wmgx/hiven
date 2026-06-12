@@ -38,7 +38,11 @@ const context = vm.createContext({
   exports: module.exports,
   require(specifier) {
     if (specifier === '@hiven/plugin') {
-      return { definePlugin: (definition) => definition }
+      return {
+        definePlugin: (definition) => definition,
+        textOutput: (text) => ({ output: { kind: 'text', text } }),
+        textError: (text) => ({ output: { kind: 'error', text } }),
+      }
     }
     throw new Error(`Unexpected require: ${specifier}`)
   },
@@ -86,6 +90,7 @@ function runTimestampCommand(text) {
     inputs: { input: { kind: 'text', text, paneId: 'pane-test' } },
     params: { unit: 'ms', overwrite: 'yes' },
   })
+  if (result.output) return result.output.text
   return result.effects?.[0]?.text
 }
 

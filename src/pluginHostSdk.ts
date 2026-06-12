@@ -17,9 +17,13 @@ import {
   createPluginHostCoreSdk,
   type PluginHostEffects,
   type PluginHostUi,
+  type TextCommandDefinition,
+  textOutput,
+  textError,
+  defineTextCommand,
 } from './pluginHostCore.ts'
 
-export type { PluginHostUi, PluginHostEffects } from './pluginHostCore.ts'
+export type { PluginHostUi, PluginHostEffects, TextCommandDefinition } from './pluginHostCore.ts'
 
 type HostSettings = ReturnType<typeof useAppStore.getState>['settings']
 
@@ -57,6 +61,9 @@ export type PluginHostSdk = {
   kits: PluginHostKits
   hooks: PluginHostHooks
   i18n: PluginHostI18n
+  textOutput: typeof textOutput
+  textError: typeof textError
+  defineTextCommand: typeof defineTextCommand
 }
 
 declare global {
@@ -76,6 +83,9 @@ export function createPluginHostSdk(): PluginHostSdk {
     kits: createPluginHostKits(),
     hooks: createPluginHostHooks(),
     i18n: { makeT: makePluginT },
+    textOutput: core.textOutput,
+    textError: core.textError,
+    defineTextCommand: core.defineTextCommand,
   }
 }
 

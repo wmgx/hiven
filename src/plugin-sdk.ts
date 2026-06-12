@@ -2,12 +2,18 @@ export { definePlugin } from './workspace/definePlugin'
 export { detectExternalEditorLanguage } from './workspace/languageDetector'
 export { getPluginHostSdk, createPluginHostSdk } from './pluginHostSdk'
 export { useT } from './i18n'
+export {
+  textOutput,
+  textError,
+  defineTextCommand,
+} from './pluginHostCore'
 export type {
   PluginHostSdk,
   PluginHostUi,
   PluginHostKits,
   PluginHostHooks,
   PluginHostI18n,
+  TextCommandDefinition,
 } from './pluginHostSdk'
 export type { Locale } from './i18n'
 export type { TranslateFunction } from './i18n'
@@ -22,16 +28,21 @@ export type {
   PanelHostApi,
   PanelPropsV2,
   PluginCommandContext,
+  PluginCommandErrorOutput,
+  PluginCommandOutput,
   PluginCommandResult,
+  PluginCommandTextOutput,
   PluginDefinition,
   RendererContribution,
   RendererHostApi,
   RendererProps,
   ResolvedInputs,
+  TextCommandSurfaces,
   TextInput,
 } from './workspace/pluginTypes'
 export type {
   FluxEffect,
+  AppEffect,
   PaneEffect,
   PaneId,
   PanelScope,

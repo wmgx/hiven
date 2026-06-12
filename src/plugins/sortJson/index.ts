@@ -2,7 +2,7 @@
  * First-party Sort JSON Keys plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@hiven/plugin'
+import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
 
 export const sortJsonPlugin = definePlugin({
   commands: [
@@ -20,7 +20,6 @@ export const sortJsonPlugin = definePlugin({
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
-        const reply = (t: string) => ({ effects: [{ type: 'text.replace' as const, target: input?.paneId ? { paneId: input.paneId } : 'active-input' as const, text: t }] })
         try {
           const sortKeys = (obj: any): any => {
             if (Array.isArray(obj)) return obj.map(sortKeys)
@@ -32,9 +31,9 @@ export const sortJsonPlugin = definePlugin({
             }
             return obj
           }
-          return reply(JSON.stringify(sortKeys(JSON.parse(text)), null, 2))
+          return textOutput(JSON.stringify(sortKeys(JSON.parse(text)), null, 2))
         } catch (e: any) {
-          return reply(`Error: ${e.message}`)
+          return textError(`Error: ${e.message}`)
         }
       },
     },

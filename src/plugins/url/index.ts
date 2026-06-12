@@ -2,7 +2,7 @@
  * First-party URL Encode/Decode plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@hiven/plugin'
+import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
 
 export const urlPlugin = definePlugin({
   commands: [
@@ -32,14 +32,13 @@ export const urlPlugin = definePlugin({
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
-        const reply = (t: string) => ({ effects: [{ type: 'text.replace' as const, target: input?.paneId ? { paneId: input.paneId } : 'active-input' as const, text: t }] })
         try {
           if (ctx.params.mode === 'encode') {
-            return reply(encodeURIComponent(text))
+            return textOutput(encodeURIComponent(text))
           }
-          return reply(decodeURIComponent(text.trim()))
+          return textOutput(decodeURIComponent(text.trim()))
         } catch (e: any) {
-          return reply(`Error: ${e.message}`)
+          return textError(`Error: ${e.message}`)
         }
       },
     },

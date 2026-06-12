@@ -178,7 +178,7 @@ export function CommandPalette() {
     try {
       const result = await entry.contribution.run(ctx)
       // Stamp plugin-owned surface effects so dev commands resolve dev renderers/panels.
-      const effects = stampPluginCommandEffects(result.effects, { isDev, ownerPluginId: entry.meta.pluginId })
+      const effects = stampPluginCommandEffects(result.effects ?? [], { isDev, ownerPluginId: entry.meta.pluginId })
       if (effects.length > 0) {
         const runResult = applyEffects(effects)
         if (runResult.errors.length > 0) {

@@ -2,7 +2,7 @@
  * First-party CSS Formatter plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@hiven/plugin'
+import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
 
 export const cssPlugin = definePlugin({
   commands: [
@@ -31,9 +31,8 @@ export const cssPlugin = definePlugin({
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
-        const reply = (t: string) => ({ effects: [{ type: 'text.replace' as const, target: input?.paneId ? { paneId: input.paneId } : 'active-input' as const, text: t }] })
         if (ctx.params.mode === 'compact') {
-          return reply(text
+          return textOutput(text
             .replace(/\/\*[\s\S]*?\*\//g, '')
             .replace(/\s+/g, ' ')
             .replace(/\s*([{}:;,])\s*/g, '$1')
@@ -47,7 +46,7 @@ export const cssPlugin = definePlugin({
           .replace(/ {2}\n\}/g, '\n}')
           .replace(/\n{3,}/g, '\n\n')
           .trim()
-        return reply(result)
+        return textOutput(result)
       },
     },
   ],

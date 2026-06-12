@@ -3,17 +3,7 @@
  * Groups line-level transforms that reorder, filter, normalize, or join lines.
  */
 
-import { definePlugin, type TextInput } from '@hiven/plugin'
-
-function replaceText(input: TextInput | undefined, text: string) {
-  return {
-    effects: [{
-      type: 'text.replace' as const,
-      target: input?.paneId ? { paneId: input.paneId } : 'active-input' as const,
-      text,
-    }],
-  }
-}
+import { definePlugin, textOutput, type TextInput } from '@hiven/plugin'
 
 function inputText(input: TextInput | undefined): string {
   return input?.kind === 'text' ? input.text : ''
@@ -58,7 +48,7 @@ export const lineToolsPlugin = definePlugin({
           const y = ctx.params.ignoreCase ? b.toLowerCase() : b
           return ctx.params.direction === 'desc' ? y.localeCompare(x) : x.localeCompare(y)
         })
-        return replaceText(input, lines.join('\n'))
+        return textOutput(lines.join('\n'))
       },
     },
     {
@@ -91,7 +81,7 @@ export const lineToolsPlugin = definePlugin({
             result.push(line)
           }
         }
-        return replaceText(input, result.join('\n'))
+        return textOutput(result.join('\n'))
       },
     },
     {
@@ -106,7 +96,7 @@ export const lineToolsPlugin = definePlugin({
       inputResolution: { strategy: 'use-active', fallback: 'fail' },
       run(ctx) {
         const input = ctx.inputs.input as TextInput
-        return replaceText(input, inputText(input).split('\n').reverse().join('\n'))
+        return textOutput(inputText(input).split('\n').reverse().join('\n'))
       },
     },
     {
@@ -121,7 +111,7 @@ export const lineToolsPlugin = definePlugin({
       inputResolution: { strategy: 'use-active', fallback: 'fail' },
       run(ctx) {
         const input = ctx.inputs.input as TextInput
-        return replaceText(input, inputText(input).split('\n').filter((line) => line.trim() !== '').join('\n'))
+        return textOutput(inputText(input).split('\n').filter((line) => line.trim() !== '').join('\n'))
       },
     },
     {
@@ -136,7 +126,7 @@ export const lineToolsPlugin = definePlugin({
       inputResolution: { strategy: 'use-active', fallback: 'fail' },
       run(ctx) {
         const input = ctx.inputs.input as TextInput
-        return replaceText(input, inputText(input).split('\n').map((line) => line.trim()).join('\n'))
+        return textOutput(inputText(input).split('\n').map((line) => line.trim()).join('\n'))
       },
     },
     {
@@ -162,7 +152,7 @@ export const lineToolsPlugin = definePlugin({
         const sep = ((ctx.params.separator ?? ',') as string)
           .replace(/\\n/g, '\n')
           .replace(/\\t/g, '\t')
-        return replaceText(input, inputText(input).split('\n').join(sep))
+        return textOutput(inputText(input).split('\n').join(sep))
       },
     },
   ],

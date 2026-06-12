@@ -44,7 +44,8 @@ export async function runTextPluginCommand(
       ...(options.params ?? {}),
     },
   }))
-  return textOutputFromPluginEffects({
+  return textOutputFromPluginResult({
+    output: result.output,
     effects: stampPluginCommandEffects(result.effects ?? [], {
       isDev: options.isDev,
       ownerPluginId: options.ownerPluginId,
@@ -68,7 +69,11 @@ export function stampPluginCommandEffects(
   })
 }
 
-export function textOutputFromPluginEffects(result: PluginCommandResult): TextPluginCommandOutput {
+export function textOutputFromPluginResult(result: PluginCommandResult): TextPluginCommandOutput {
+  if (result.output) {
+    return { text: result.output.text, kind: result.output.kind }
+  }
+
   const effects = result.effects ?? []
   const textReplace = effects.find((effect): effect is Extract<FluxEffect, { type: 'text.replace' }> => effect.type === 'text.replace')
   if (textReplace) return { text: textReplace.text, kind: 'text' }

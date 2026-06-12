@@ -2,7 +2,7 @@
  * First-party CSV / TSV Convert plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@hiven/plugin'
+import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
 
 export const csvPlugin = definePlugin({
   commands: [
@@ -33,13 +33,12 @@ export const csvPlugin = definePlugin({
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
-        const reply = (t: string) => ({ effects: [{ type: 'text.replace' as const, target: input?.paneId ? { paneId: input.paneId } : 'active-input' as const, text: t }] })
         const mode = ctx.params.mode
         try {
           if (mode === 'csv2json' || mode === 'tsv2json') {
             const sep = mode === 'tsv2json' ? '\t' : ','
             const lines = text.trim().split('\n')
-            if (lines.length < 2) return reply('[]')
+            if (lines.length < 2) return textOutput('[]')
             const headers = lines[0].split(sep).map((h: string) => h.trim())
             const result = lines.slice(1).map(line => {
               const vals = line.split(sep)
@@ -47,20 +46,20 @@ export const csvPlugin = definePlugin({
               headers.forEach((h: string, i: number) => { obj[h] = (vals[i] || '').trim() })
               return obj
             })
-            return reply(JSON.stringify(result, null, 2))
+            return textOutput(JSON.stringify(result, null, 2))
           } else {
             const sep = mode === 'json2tsv' ? '\t' : ','
             const arr = JSON.parse(text)
-            if (!Array.isArray(arr) || arr.length === 0) return reply('')
+            if (!Array.isArray(arr) || arr.length === 0) return textOutput('')
             const headers = Object.keys(arr[0])
             const lines = [headers.join(sep)]
             for (const row of arr) {
               lines.push(headers.map((h: string) => String(row[h] ?? '')).join(sep))
             }
-            return reply(lines.join('\n'))
+            return textOutput(lines.join('\n'))
           }
         } catch (e: any) {
-          return reply(`Error: ${e.message}`)
+          return textError(`Error: ${e.message}`)
         }
       },
     },

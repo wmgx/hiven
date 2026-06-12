@@ -2,7 +2,7 @@
  * First-party Markdown Quote plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@hiven/plugin'
+import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
 
 export const mdquotePlugin = definePlugin({
   commands: [
@@ -32,12 +32,11 @@ export const mdquotePlugin = definePlugin({
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
-        const reply = (t: string) => ({ effects: [{ type: 'text.replace' as const, target: input?.paneId ? { paneId: input.paneId } : 'active-input' as const, text: t }] })
         const lines = text.split('\n')
         if (ctx.params.mode === 'remove') {
-          return reply(lines.map(l => l.replace(/^>\s?/, '')).join('\n'))
+          return textOutput(lines.map(l => l.replace(/^>\s?/, '')).join('\n'))
         }
-        return reply(lines.map(l => '> ' + l).join('\n'))
+        return textOutput(lines.map(l => '> ' + l).join('\n'))
       },
     },
   ],

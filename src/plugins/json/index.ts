@@ -2,7 +2,7 @@
  * First-party JSON Formatter plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@hiven/plugin'
+import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
 
 export const jsonPlugin = definePlugin({
   commands: [
@@ -33,15 +33,14 @@ export const jsonPlugin = definePlugin({
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
-        const reply = (t: string) => ({ effects: [{ type: 'text.replace' as const, target: input?.paneId ? { paneId: input.paneId } : 'active-input' as const, text: t }] })
         try {
           const obj = JSON.parse(text)
           if (ctx.params.mode === 'compact') {
-            return reply(JSON.stringify(obj))
+            return textOutput(JSON.stringify(obj))
           }
-          return reply(JSON.stringify(obj, null, 2))
+          return textOutput(JSON.stringify(obj, null, 2))
         } catch (e: any) {
-          return reply(`Error: ${e.message}`)
+          return textError(`Error: ${e.message}`)
         }
       },
     },

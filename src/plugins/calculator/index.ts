@@ -1,5 +1,6 @@
 import BigNumber from 'bignumber.js'
 import type { PluginDefinition, InstantSuggestionContext, InstantSuggestion, TextInput } from '../../workspace/pluginTypes'
+import { textOutput, textError } from '@hiven/plugin'
 
 // ─── Safe Math Parser ────────────────────────────────────────────────────────
 // A simple recursive descent parser for arithmetic expressions.
@@ -207,16 +208,6 @@ function calculateFormulaLines(text: string): string {
   return results.join('\n')
 }
 
-function replaceText(input: TextInput | undefined, text: string) {
-  return {
-    effects: [{
-      type: 'text.replace' as const,
-      target: input?.paneId ? { paneId: input.paneId } : 'active-input' as const,
-      text,
-    }],
-  }
-}
-
 function sumNumericTokens(text: string): string {
   const tokens = text.match(/(?<![\w.])-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?![\w.])/g) ?? []
   const nums = tokens
@@ -286,7 +277,7 @@ const definition: PluginDefinition = {
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
-        return replaceText(input, calculateFormulaLines(text))
+        return textOutput(calculateFormulaLines(text))
       },
     },
     {
@@ -302,7 +293,7 @@ const definition: PluginDefinition = {
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
-        return replaceText(input, sumNumericTokens(text))
+        return textOutput(sumNumericTokens(text))
       },
     },
     {
@@ -333,9 +324,9 @@ const definition: PluginDefinition = {
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
         try {
-          return replaceText(input, convertBaseLines(text, (ctx.params.mode ?? 'dec2hex') as BaseConversionMode))
+          return textOutput(convertBaseLines(text, (ctx.params.mode ?? 'dec2hex') as BaseConversionMode))
         } catch (error: any) {
-          return replaceText(input, `Error: ${error.message}`)
+          return textError(`Error: ${error.message}`)
         }
       },
     },

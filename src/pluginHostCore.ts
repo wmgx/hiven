@@ -1,6 +1,7 @@
 import { createElement } from 'react'
 import type { ComponentPropsWithoutRef, CSSProperties, ReactNode } from 'react'
 import { definePlugin } from './workspace/definePlugin.ts'
+import type { CommandContribution, PluginCommandResult } from './workspace/pluginTypes.ts'
 
 type HostElementProps = {
   children?: ReactNode
@@ -27,6 +28,7 @@ export type PluginHostUi = {
 export type PluginHostEffects = {
   replaceActiveText: (text: string) => { type: 'text.replace'; target: 'active-input'; text: string }
   createPane: (text: string, title?: string) => { type: 'pane.create'; pane: { text: string; title?: string }; focus: boolean }
+  showMainPanel: () => { type: 'app.showMainPanel' }
   status: (message: string, level?: 'info' | 'success' | 'warning' | 'error') => { type: 'status.message'; level: 'info' | 'success' | 'warning' | 'error'; message: string }
 }
 
@@ -35,6 +37,9 @@ export type PluginHostCoreSdk = {
   definePlugin: typeof definePlugin
   effects: PluginHostEffects
   ui: PluginHostUi
+  textOutput: typeof textOutput
+  textError: typeof textError
+  defineTextCommand: typeof defineTextCommand
 }
 
 export function createPluginHostCoreSdk(): PluginHostCoreSdk {
@@ -43,9 +48,13 @@ export function createPluginHostCoreSdk(): PluginHostCoreSdk {
     effects: {
       replaceActiveText: (text) => ({ type: 'text.replace' as const, target: 'active-input' as const, text }),
       createPane: (text, title) => ({ type: 'pane.create' as const, pane: { text, title }, focus: true }),
+      showMainPanel: () => ({ type: 'app.showMainPanel' as const }),
       status: (message, level = 'info') => ({ type: 'status.message' as const, level, message }),
     },
     ui: createPluginHostUi(),
+    textOutput,
+    textError,
+    defineTextCommand,
   }
 }
 
@@ -103,5 +112,42 @@ export function createPluginHostUi(): PluginHostUi {
       className: ['flex items-center justify-center p-4 text-[12px]', className].filter(Boolean).join(' '),
       style: { color: 'var(--color-text-tertiary)', ...style },
     }, children),
+  }
+}
+
+// ─── Text Command Helpers ────────────────────────────────────────────────────
+
+export type TextCommandDefinition = Omit<CommandContribution, 'run' | 'inputs' | 'inputResolution' | 'live'> & {
+  inputs?: CommandContribution['inputs']
+  inputResolution?: CommandContribution['inputResolution']
+  live?: CommandContribution['live']
+  transform: (input: string, params: Record<string, unknown>) => string | Promise<string>
+}
+
+export function textOutput(text: string): PluginCommandResult {
+  return { output: { kind: 'text', text } }
+}
+
+export function textError(text: string): PluginCommandResult {
+  return { output: { kind: 'error', text } }
+}
+
+export function defineTextCommand(command: TextCommandDefinition): CommandContribution {
+  const { transform, ...rest } = command
+  return {
+    ...rest,
+    inputs: command.inputs ?? [{ key: 'input', label: 'Input', kind: 'text' as const, required: true }],
+    inputResolution: command.inputResolution ?? { strategy: 'use-active' as const, fallback: 'fail' as const },
+    live: command.live ?? { live: { enabled: true, trigger: 'on-input' as const, sideEffects: 'none' as const, debounceMs: 250 } },
+    async run(ctx) {
+      const input = ctx.inputs.input
+      const text = input?.kind === 'text' ? input.text : ''
+      try {
+        return textOutput(await transform(text, ctx.params))
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error)
+        return textError(`Error: ${message}`)
+      }
+    },
   }
 }

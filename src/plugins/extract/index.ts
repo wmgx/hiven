@@ -2,7 +2,7 @@
  * First-party Extract Patterns plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@hiven/plugin'
+import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
 
 export const extractPlugin = definePlugin({
   commands: [
@@ -34,19 +34,18 @@ export const extractPlugin = definePlugin({
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
-        const reply = (t: string) => ({ effects: [{ type: 'text.replace' as const, target: input?.paneId ? { paneId: input.paneId } : 'active-input' as const, text: t }] })
         const { pattern, matchOnly } = ctx.params
-        if (!pattern) return reply(text)
+        if (!pattern) return textOutput(text)
         try {
           const re = new RegExp(pattern as string, 'gim')
           if (matchOnly) {
             const matches = text.match(re) || []
-            return reply(matches.join('\n'))
+            return textOutput(matches.join('\n'))
           }
           const lines = text.split('\n').filter(l => re.test(l))
-          return reply(lines.join('\n'))
+          return textOutput(lines.join('\n'))
         } catch (e: any) {
-          return reply(`Error: ${e.message}`)
+          return textError(`Error: ${e.message}`)
         }
       },
     },

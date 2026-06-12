@@ -2,7 +2,7 @@
  * First-party XML Formatter plugin (migrated from legacy builtin action).
  */
 
-import { definePlugin, type TextInput } from '@hiven/plugin'
+import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
 
 export const xmlPlugin = definePlugin({
   commands: [
@@ -31,9 +31,8 @@ export const xmlPlugin = definePlugin({
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
-        const reply = (t: string) => ({ effects: [{ type: 'text.replace' as const, target: input?.paneId ? { paneId: input.paneId } : 'active-input' as const, text: t }] })
         if (ctx.params.mode === 'compact') {
-          return reply(text.replace(/>\s+</g, '><').replace(/\s+/g, ' ').trim())
+          return textOutput(text.replace(/>\s+</g, '><').replace(/\s+/g, ' ').trim())
         }
         let formatted = ''
         let indent = 0
@@ -43,7 +42,7 @@ export const xmlPlugin = definePlugin({
           formatted += '  '.repeat(Math.max(indent, 0)) + node.trim() + '\n'
           if (node.match(/^<\w[^>]*[^/]>$/)) indent++
         }
-        return reply(formatted.trim())
+        return textOutput(formatted.trim())
       },
     },
   ],

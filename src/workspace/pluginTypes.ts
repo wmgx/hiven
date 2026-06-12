@@ -70,9 +70,33 @@ export type PluginCommandContext = {
   params: Record<string, unknown>
 }
 
+// ─── Command Output Types ────────────────────────────────────────────────────
+
+export type PluginCommandTextOutput = {
+  kind: 'text'
+  text: string
+}
+
+export type PluginCommandErrorOutput = {
+  kind: 'error'
+  text: string
+}
+
+export type PluginCommandOutput = PluginCommandTextOutput | PluginCommandErrorOutput
+
 /** Result returned by command.run */
 export type PluginCommandResult = {
-  effects: FluxEffect[]
+  output?: PluginCommandOutput
+  effects?: FluxEffect[]
+}
+
+export type TextCommandSurfaces = {
+  quickText?: false | {
+    enabled?: boolean
+    trigger?: 'on-input' | 'manual'
+    debounceMs?: number
+    defaultParams?: Record<string, unknown>
+  }
 }
 
 export type LiveActionCapability = {
@@ -104,6 +128,7 @@ export type CommandContribution = {
   params?: CommandParam[]
   optionalParams?: boolean
   live?: LiveActionCapability
+  surfaces?: TextCommandSurfaces
   run(ctx: PluginCommandContext): PluginCommandResult | Promise<PluginCommandResult>
 }
 
