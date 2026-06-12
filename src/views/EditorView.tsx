@@ -8,8 +8,14 @@ import { PanelHostV2 } from '../components/workspace/PanelHostV2'
 import { ToastContainer } from '../components/workspace/ToastContainer'
 import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
 import { runToolbarCommand } from '../workspace/toolbarCommandRunner'
+import { runtimeRegistry } from '../workspace/runtimeRegistry'
 import { resolveIcon } from '../utils/resolveIcon'
 import { useT } from '../i18n'
+
+function isEditableSelectAllTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false
+  return Boolean(target.closest(".monaco-editor, input, textarea, select, [contenteditable='true']"))
+}
 
 export function EditorView() {
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
@@ -25,10 +31,25 @@ export function EditorView() {
     .filter((item) => (item.contribution.placement ?? 'editor-top-right') === 'editor-top-right')
     .sort((a, b) => (a.contribution.order ?? 0) - (b.contribution.order ?? 0))
 
-  // Cmd+W to close active pane
+  // Route shell shortcuts before the browser document can consume them.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
+      const hasPrimaryModifier = e.metaKey || e.ctrlKey
+      const key = e.key.toLowerCase()
+      if (hasPrimaryModifier && key === 'a') {
+        if (isEditableSelectAllTarget(e.target)) return
+        const workspace = useWorkspaceStore.getState()
+        const editor = workspace.activePaneId
+          ? runtimeRegistry.getCodeEditor(workspace.activePaneId)
+          : useAppStore.getState().editorInstance
+        if (!editor) return
+        e.preventDefault()
+        e.stopPropagation()
+        editor.focus?.()
+        editor.getAction('editor.action.selectAll')?.run()
+        return
+      }
+      if (hasPrimaryModifier && key === 'w') {
         e.preventDefault()
         e.stopPropagation()
         closeActiveSurfaceOrPane()

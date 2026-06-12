@@ -181,10 +181,27 @@ html[data-window='launcher'] #root {
   color: var(--color-text-primary);
   background: var(--bg-gradient), var(--bg-page);
   font-family: var(--font-sans);
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .launcher-window-shell {
   background: transparent;
+}
+
+.flux-spatial-shell :is(input, textarea, select, [contenteditable='true']) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.flux-spatial-shell .monaco-editor,
+.flux-spatial-shell .monaco-editor textarea,
+.flux-spatial-shell .monaco-editor .view-lines,
+.flux-spatial-shell .monaco-editor .view-line,
+.flux-spatial-shell .monaco-hover-overlay,
+.flux-spatial-shell .monaco-hover-overlay * {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .flux-main {
