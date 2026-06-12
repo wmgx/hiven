@@ -44,9 +44,9 @@ export function CommandPalette() {
   const open = useAppStore((s) => s.commandPaletteOpen)
   const setOpen = useAppStore((s) => s.setCommandPaletteOpen)
   const setLastCommandStatus = useAppStore((s) => s.setLastCommandStatus)
-  const recentActionNames = useAppStore((s) => s.recentActionNames)
+  const recentActionNames = useAppStore((s) => s.actionUsageBySource['command-palette'].recentActionNames)
   const pushRecentAction = useAppStore((s) => s.pushRecentAction)
-  const actionUsageCounts = useAppStore((s) => s.actionUsageCounts)
+  const actionUsageCounts = useAppStore((s) => s.actionUsageBySource['command-palette'].actionUsageCounts)
   const pinPluginCommand = useAppStore((s) => s.pinPluginCommand)
   const locale = useAppStore((s) => s.locale)
   const shortcutMeta = useMemo(() => getPlatformShortcutMeta(), [])
@@ -252,7 +252,7 @@ export function CommandPalette() {
   }
 
   async function runPluginCommand(entry: CommandEntry, isDev: boolean, customizeParams: boolean) {
-    pushRecentAction(entry.contribution.id)
+    pushRecentAction(entry.contribution.id, 'command-palette')
     const slots = entry.contribution.inputs ?? []
     const resolution = entry.contribution.inputResolution ?? { strategy: 'use-active' as const, fallback: 'fail' as const }
 

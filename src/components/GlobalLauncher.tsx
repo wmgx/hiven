@@ -21,7 +21,6 @@ type LauncherItem =
   | { kind: 'instant'; id: string; title: string; subtitle: string; icon?: string; suggestion: InstantSuggestion }
   | { kind: 'command'; id: string; title: string; subtitle: string; icon?: string; isDev?: boolean }
   | { kind: 'pinned'; id: string; title: string; subtitle: string; icon?: string; actionId: string }
-  | { kind: 'recent'; id: string; title: string; subtitle: string; icon?: string }
   | { kind: 'view'; id: ViewId; title: string; subtitle: string; icon: ReactNode }
 
 const viewItems: { id: ViewId; title: string; titleI18n: Partial<Record<Locale, string>>; icon: ReactNode }[] = [
@@ -45,8 +44,9 @@ export function GlobalLauncher() {
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
   const openPinnedAction = useAppStore((s) => s.openPinnedAction)
   const pinnedActions = useAppStore((s) => s.pinnedActions)
-  const recentActionNames = useAppStore((s) => s.recentActionNames)
-  const actionUsageCounts = useAppStore((s) => s.actionUsageCounts)
+  const recentActionNames = useAppStore((s) => s.actionUsageBySource['global-launcher'].recentActionNames)
+  const actionUsageCounts = useAppStore((s) => s.actionUsageBySource['global-launcher'].actionUsageCounts)
+  const pushRecentAction = useAppStore((s) => s.pushRecentAction)
   const launcherPosition = useAppStore((s) => s.settings.globalLauncherPosition)
   const updateSetting = useAppStore((s) => s.updateSetting)
   const locale = useAppStore((s) => s.locale)
@@ -185,16 +185,22 @@ export function GlobalLauncher() {
 
     const recentLabel = t(locale, 'palette.globalRecent')
     const viewsLabel = t(locale, 'palette.globalViews')
-    const recent = recentActionNames.slice(0, 8).map((name) => {
-      const command = pluginRegistry.resolveCommand(name)?.contribution
-      return {
-        kind: 'recent' as const,
-        id: name,
-        title: command ? localized(command.title || name, command.titleI18n, locale) : name,
+    const recent: LauncherItem[] = []
+    for (const name of recentActionNames) {
+      if (recent.length >= 8) break
+      if (name.startsWith('launcher-entry:')) continue
+      const resolved = pluginRegistry.resolveCommand(name)
+      if (!resolved) continue
+      const command = resolved.contribution
+      recent.push({
+        kind: 'command' as const,
+        id: command.id,
+        title: localized(command.title || name, command.titleI18n, locale),
         subtitle: recentLabel,
-        icon: command?.icon,
-      }
-    })
+        icon: command.icon,
+        isDev: resolved.meta.source === 'dev',
+      })
+    }
     const views = viewItems.map((item) => ({
       kind: 'view' as const,
       id: item.id,
@@ -385,6 +391,7 @@ export function GlobalLauncher() {
     try {
       const { writeText } = await import('@tauri-apps/plugin-clipboard-manager')
       await writeText(session.outputText)
+      pushRecentAction(session.commandId, 'global-launcher')
       showToast(t(locale, 'palette.copied'), 'success')
       closeLauncher()
     } catch (error: unknown) {
@@ -416,6 +423,7 @@ export function GlobalLauncher() {
       return
     }
     if (item.kind === 'quick-entry') {
+      pushRecentAction(`launcher-entry:${item.pluginId}:${item.entry.id}`, 'global-launcher')
       setActiveQuickEntry({
         entry: item.entry,
         pluginId: item.pluginId,
@@ -428,6 +436,10 @@ export function GlobalLauncher() {
       setSelectedIndex(0)
       requestAnimationFrame(() => inputRef.current?.focus())
       return
+    }
+    // Record usage for global-launcher before executing
+    if (item.kind === 'command') {
+      pushRecentAction(item.id, 'global-launcher')
     }
     if (standaloneLauncher) {
       void (async () => {
@@ -915,5 +927,6 @@ function launcherItemSearchId(item: LauncherItem): string {
 function launcherItemUsageKey(item: LauncherItem): string {
   if (item.kind === 'pinned') return item.actionId
   if (item.kind === 'quick-command') return item.commandId
+  if (item.kind === 'quick-entry') return `launcher-entry:${item.pluginId}:${item.entry.id}`
   return item.id
 }

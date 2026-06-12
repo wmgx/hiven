@@ -21,6 +21,16 @@ migrateLocalStorageKey('fluxtext-settings', 'hiven-settings')
 
 export type ViewId = 'editor' | 'scripts' | 'plugin-editor' | 'pinned-runner' | 'settings'
 
+export type ActionUsageSource =
+  | 'command-palette'
+  | 'global-launcher'
+  | 'pinned-runner'
+
+export type ActionUsageBucket = {
+  recentActionNames: string[]
+  actionUsageCounts: Record<string, number>
+}
+
 export type PinnedOutputKind = 'text' | 'error' | 'presentation' | 'stale'
 export type PinnedActionKind = 'plugin-command'
 
@@ -183,11 +193,9 @@ interface AppState {
   lastCommandStatus: LastCommandStatus | null
   setLastCommandStatus: (status: LastCommandStatus | null) => void
 
-  // Recent actions (most recent first)
-  recentActionNames: string[]
-  pushRecentAction: (name: string) => void
-  // Usage frequency per action (cumulative count)
-  actionUsageCounts: Record<string, number>
+  // Source-scoped usage (per surface)
+  actionUsageBySource: Record<ActionUsageSource, ActionUsageBucket>
+  pushRecentAction: (name: string, source?: ActionUsageSource) => void
 
   // Saved params per action (for persistParams feature)
   savedActionParams: Record<string, Record<string, any>>
@@ -421,17 +429,23 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   lastCommandStatus: null,
   setLastCommandStatus: (status) => set({ lastCommandStatus: status }),
 
-  // Recent actions
-  recentActionNames: [],
-  pushRecentAction: (name) => set((state) => {
-    const filtered = state.recentActionNames.filter((n) => n !== name)
-    const newCounts = { ...state.actionUsageCounts, [name]: (state.actionUsageCounts[name] ?? 0) + 1 }
-    return {
+  // Source-scoped usage
+  actionUsageBySource: {
+    'command-palette': { recentActionNames: [], actionUsageCounts: {} },
+    'global-launcher': { recentActionNames: [], actionUsageCounts: {} },
+    'pinned-runner': { recentActionNames: [], actionUsageCounts: {} },
+  },
+  pushRecentAction: (name, source = 'command-palette') => set((state) => {
+    const bucket = state.actionUsageBySource[source]
+    const filtered = bucket.recentActionNames.filter((n) => n !== name)
+    const newBucket: ActionUsageBucket = {
       recentActionNames: [name, ...filtered].slice(0, 50),
-      actionUsageCounts: newCounts,
+      actionUsageCounts: { ...bucket.actionUsageCounts, [name]: (bucket.actionUsageCounts[name] ?? 0) + 1 },
+    }
+    return {
+      actionUsageBySource: { ...state.actionUsageBySource, [source]: newBucket },
     }
   }),
-  actionUsageCounts: {},
 
   // Saved params per action
   savedActionParams: {},
@@ -491,8 +505,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     },
     locale: state.locale,
     savedActionParams: state.savedActionParams,
-    recentActionNames: state.recentActionNames,
-    actionUsageCounts: state.actionUsageCounts,
+    actionUsageBySource: state.actionUsageBySource,
     pinnedActions: state.pinnedActions.map(({ outputText: _outputText, lastError: _lastError, lastDurationMs: _lastDurationMs, controlPanelInstanceId: _controlPanelInstanceId, ...pinned }) => ({
       ...pinned,
       inputText: state.settings.persistPinnedInput ? pinned.inputText : '',
@@ -506,12 +519,31 @@ export const useAppStore = create<AppState>()(persist((set) => ({
       : {},
   }),
   merge: (persisted, current) => {
-    const persistedState = persisted as Partial<AppState>
+    const persistedState = persisted as Partial<AppState> & {
+      recentActionNames?: string[]
+      actionUsageCounts?: Record<string, number>
+    }
     const merged = { ...current, ...persistedState }
     merged.settings = { ...current.settings, ...persistedState.settings }
     merged.settings.globalPinnedLauncherShortcut = stripShortcutRuntimeStatus(
       merged.settings.globalPinnedLauncherShortcut ?? current.settings.globalPinnedLauncherShortcut
     )
+    // Migrate legacy top-level recentActionNames/actionUsageCounts into command-palette bucket
+    if (!persistedState.actionUsageBySource && (persistedState.recentActionNames || persistedState.actionUsageCounts)) {
+      merged.actionUsageBySource = {
+        'command-palette': {
+          recentActionNames: persistedState.recentActionNames ?? [],
+          actionUsageCounts: persistedState.actionUsageCounts ?? {},
+        },
+        'global-launcher': { recentActionNames: [], actionUsageCounts: {} },
+        'pinned-runner': { recentActionNames: [], actionUsageCounts: {} },
+      }
+    } else if (persistedState.actionUsageBySource) {
+      merged.actionUsageBySource = {
+        ...current.actionUsageBySource,
+        ...persistedState.actionUsageBySource,
+      }
+    }
     // Drop pinned actions persisted from the removed legacy action system;
     // only plugin-command pins remain valid.
     if (Array.isArray(merged.pinnedActions)) {
