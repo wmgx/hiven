@@ -16,5 +16,6 @@
   "param.direction.option.asc.label": "升序",
   "param.direction.option.desc.label": "降序",
   "param.ignoreCase.label": "忽略大小写",
-  "param.separator.label": "分隔符"
+  "param.separator.label": "分隔符",
+  "tool.reverse.title": "反转行"
 }

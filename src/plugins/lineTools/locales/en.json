@@ -16,5 +16,6 @@
   "param.direction.option.asc.label": "Ascending",
   "param.direction.option.desc.label": "Descending",
   "param.ignoreCase.label": "Ignore Case",
-  "param.separator.label": "Separator"
+  "param.separator.label": "Separator",
+  "tool.reverse.title": "Reverse Lines"
 }

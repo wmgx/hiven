@@ -9,7 +9,26 @@ function inputText(input: TextInput | undefined): string {
   return input?.kind === 'text' ? input.text : ''
 }
 
+/** Pure function: reverse the order of lines in text. */
+export function reverseLines(text: string): string {
+  return text.split('\n').reverse().join('\n')
+}
+
 export const lineToolsPlugin = definePlugin({
+  tools: [
+    {
+      id: 'reverse',
+      title: 'tool.reverse.title',
+      titleI18n: { zh: '反转行' },
+      icon: 'ArrowDownUp',
+      aliases: ['flip-lines', 'reverse-lines'],
+      inputPolicy: { mode: 'auto' },
+      async run(ctx) {
+        return ctx.output.text(reverseLines(ctx.input.text))
+      },
+      surfaces: { launcher: true, panel: true, pinnable: true },
+    },
+  ],
   commands: [
     {
       id: 'line-tools.sort',
@@ -96,7 +115,7 @@ export const lineToolsPlugin = definePlugin({
       inputResolution: { strategy: 'use-active', fallback: 'fail' },
       run(ctx) {
         const input = ctx.inputs.input as TextInput
-        return textOutput(inputText(input).split('\n').reverse().join('\n'))
+        return textOutput(reverseLines(inputText(input)))
       },
     },
     {

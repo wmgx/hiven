@@ -1,4 +1,4 @@
-import { definePlugin, textOutput, type InstantSuggestion, type InstantSuggestionContext, type TextInput } from '@hiven/plugin'
+import { definePlugin, textOutput, type InstantSuggestion, type InstantSuggestionContext, type TextInput, type LauncherDynamicContext, type LauncherItemContribution } from '@hiven/plugin'
 
 function pad(n: number, width = 2): string {
   return String(n).padStart(width, '0')
@@ -326,6 +326,56 @@ export const dateTimeAssistantPlugin = definePlugin({
       },
     },
   ],
+  launcher: {
+    dynamicItems(ctx: LauncherDynamicContext): LauncherItemContribution[] {
+      const now = new Date()
+      const parsed = parseDateTimeQuery(ctx.query, now)
+      if (!parsed) return []
+
+      // "now" expressions produce multiple items (timestamp + datetime)
+      const nowParsed = parseNowExpression(ctx.query, now)
+      if (nowParsed) {
+        const separatorIndex = parsed.value.indexOf(' | ')
+        if (separatorIndex >= 0) {
+          const timestampValue = parsed.value.slice(0, separatorIndex)
+          const dateTimeValue = parsed.value.slice(separatorIndex + 3)
+          const trimmed = ctx.query.trim()
+          return [
+            {
+              id: 'dt-now-timestamp',
+              display: { title: `${trimmed} -> ${timestampValue}`, subtitle: 'Timestamp', icon: 'Clock' },
+              behavior: { type: 'perform' },
+              async execute(ctx2) {
+                await ctx2.api.copyText(timestampValue)
+                return { ok: true, output: { choices: [{ id: 'copy', title: timestampValue, primaryAction: async () => { await ctx2.api.copyText(timestampValue) } }] } }
+              },
+            },
+            {
+              id: 'dt-now-datetime',
+              display: { title: `${trimmed} -> ${dateTimeValue}`, subtitle: 'DateTime', icon: 'Clock' },
+              behavior: { type: 'perform' },
+              async execute(ctx2) {
+                await ctx2.api.copyText(dateTimeValue)
+                return { ok: true, output: { choices: [{ id: 'copy', title: dateTimeValue, primaryAction: async () => { await ctx2.api.copyText(dateTimeValue) } }] } }
+              },
+            },
+          ]
+        }
+      }
+
+      // Single result (timestamp conversion, date offset, tomorrow, etc.)
+      const trimmed = ctx.query.trim()
+      return [{
+        id: 'dt-result',
+        display: { title: `${trimmed} -> ${parsed.display}`, subtitle: parsed.kind, icon: 'Clock' },
+        behavior: { type: 'perform' },
+        async execute(ctx2) {
+          await ctx2.api.copyText(parsed.value)
+          return { ok: true, output: { choices: [{ id: 'copy', title: parsed.value, primaryAction: async () => { await ctx2.api.copyText(parsed.value) } }] } }
+        },
+      }]
+    },
+  },
   instantSuggestions: [
     {
       id: 'date-time.assistant',

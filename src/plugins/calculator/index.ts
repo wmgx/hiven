@@ -1,5 +1,5 @@
 import BigNumber from 'bignumber.js'
-import { textOutput, textError, type PluginDefinition, type InstantSuggestionContext, type InstantSuggestion, type TextInput } from '@hiven/plugin'
+import { textOutput, textError, type PluginDefinition, type InstantSuggestionContext, type InstantSuggestion, type TextInput, type LauncherDynamicContext, type LauncherItemContribution } from '@hiven/plugin'
 
 // ─── Safe Math Parser ────────────────────────────────────────────────────────
 // A simple recursive descent parser for arithmetic expressions.
@@ -330,6 +330,21 @@ const definition: PluginDefinition = {
       },
     },
   ],
+  launcher: {
+    dynamicItems(ctx: LauncherDynamicContext): LauncherItemContribution[] {
+      const result = safeCalculate(ctx.query)
+      if (result === null) return []
+      return [{
+        id: 'calc-result',
+        display: { title: `${ctx.query.trim()} = ${result}`, subtitle: ctx.query, icon: 'Calculator' },
+        behavior: { type: 'perform' },
+        async execute(ctx2) {
+          await ctx2.api.copyText(result)
+          return { ok: true, output: { choices: [{ id: 'copy', title: result, primaryAction: async () => { await ctx2.api.copyText(result) } }] } }
+        },
+      }]
+    },
+  },
   instantSuggestions: [
     {
       id: 'calculator.inline',
