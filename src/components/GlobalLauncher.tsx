@@ -12,6 +12,7 @@ import { runPluginCommandById } from '../workspace/pluginCommandExecutor'
 import type { InstantSuggestion } from '../workspace/pluginTypes'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../utils/imeKeyboard'
 import { isQuickTextCommand, runQuickTextCommand } from '../workspace/quickTextCommand'
+import { pinyin } from 'pinyin-pro'
 
 type LauncherItem =
   | { kind: 'quick-command'; id: string; title: string; subtitle: string; icon?: string; commandId: string; isDev: boolean }
@@ -158,7 +159,7 @@ export function GlobalLauncher() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    const base = q ? items.filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(q)) : items
+    const base = q ? items.filter((item) => launcherItemMatchesQuery(item, q)) : items
 
     // Compute instant suggestions when there's a query
     if (q && q.length <= 500) {
@@ -741,4 +742,29 @@ function HintKey({ keys, label }: { keys: string; label: string }) {
       {label}
     </span>
   )
+}
+
+// ─── Pinyin Search ───────────────────────────────────────────────────────────
+
+const _launcherPinyinCache = new Map<string, { full: string; initials: string }>()
+
+function launcherPinyinMatch(text: string, query: string): boolean {
+  if (!text || !query) return false
+  if (!/^[a-z]+$/.test(query)) return false
+
+  let cached = _launcherPinyinCache.get(text)
+  if (!cached) {
+    const full = pinyin(text, { toneType: 'none', separator: '' }).toLowerCase()
+    const initials = pinyin(text, { pattern: 'initial', toneType: 'none', separator: '' }).toLowerCase()
+    cached = { full, initials }
+    _launcherPinyinCache.set(text, cached)
+  }
+
+  return cached.full.includes(query) || cached.initials.startsWith(query)
+}
+
+function launcherItemMatchesQuery(item: LauncherItem, q: string): boolean {
+  const text = `${item.title} ${item.subtitle}`.toLowerCase()
+  if (text.includes(q)) return true
+  return launcherPinyinMatch(item.title, q)
 }
