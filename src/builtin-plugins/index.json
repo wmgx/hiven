@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 9,
   "packages": [
     {
       "pluginId": "base64",
@@ -19,7 +19,7 @@
     {
       "pluginId": "core-pane",
       "dir": "core-pane",
-      "version": "1.1.0"
+      "version": "1.2.0"
     },
     {
       "pluginId": "count",

@@ -10,6 +10,29 @@ import { definePlugin, type PaneInput } from '@hiven/plugin'
 
 type SplitDirection = 'left' | 'right' | 'top' | 'bottom'
 
+const LANGUAGE_OPTIONS = [
+  { label: 'param.language.option.auto.label', value: 'auto' },
+  { label: 'param.language.option.plaintext.label', value: 'plaintext' },
+  { label: 'JSON', value: 'json' },
+  { label: 'JavaScript', value: 'javascript' },
+  { label: 'TypeScript', value: 'typescript' },
+  { label: 'HTML', value: 'html' },
+  { label: 'CSS', value: 'css' },
+  { label: 'Markdown', value: 'markdown' },
+  { label: 'YAML', value: 'yaml' },
+  { label: 'XML', value: 'xml' },
+  { label: 'SQL', value: 'sql' },
+  { label: 'Python', value: 'python' },
+  { label: 'Shell', value: 'shell' },
+  { label: 'Go', value: 'go' },
+  { label: 'Rust', value: 'rust' },
+  { label: 'Java', value: 'java' },
+  { label: 'C#', value: 'csharp' },
+  { label: 'C++', value: 'cpp' },
+]
+
+const EDITOR_LANGUAGE_VALUES = new Set(LANGUAGE_OPTIONS.map((option) => option.value).filter((value) => value !== 'auto'))
+
 export const corePanePlugin = definePlugin({
   commands: [
     {
@@ -73,6 +96,83 @@ export const corePanePlugin = definePlugin({
       run() {
         return {
           effects: [{ type: 'pane.close' as const }],
+        }
+      },
+    },
+    {
+      id: 'core-pane.toggle-sticky-scroll',
+      title: 'command.toggleStickyScroll.title',
+      description: 'command.toggleStickyScroll.description',
+      icon: 'panel-top',
+      aliases: ['sticky-scroll', 'toggle-sticky-scroll'],
+      live: { pinnable: false },
+      inputs: [
+        { key: 'target', label: 'input.target.label', kind: 'pane', required: true },
+      ],
+      inputResolution: { strategy: 'use-active', fallback: 'fail' },
+      run(ctx) {
+        const target = ctx.inputs.target as PaneInput | undefined
+        if (!target?.paneId) return { effects: [] }
+        const stickyScrollEnabled = target.stickyScroll === true
+        return {
+          effects: [
+            {
+              type: 'pane.update' as const,
+              paneId: target.paneId,
+              patch: { stickyScroll: !stickyScrollEnabled },
+            },
+            {
+              type: 'status.message' as const,
+              level: 'info' as const,
+              message: stickyScrollEnabled
+                ? 'Current pane sticky scroll disabled'
+                : 'Current pane sticky scroll enabled',
+            },
+          ],
+        }
+      },
+    },
+    {
+      id: 'core-pane.set-language',
+      title: 'command.setLanguage.title',
+      description: 'command.setLanguage.description',
+      icon: 'code-2',
+      aliases: ['language', 'set-language'],
+      live: { pinnable: false },
+      inputs: [
+        { key: 'target', label: 'input.target.label', kind: 'pane', required: true },
+      ],
+      inputResolution: { strategy: 'use-active', fallback: 'fail' },
+      params: [
+        {
+          key: 'language',
+          label: 'param.language.label',
+          type: 'single-select',
+          options: LANGUAGE_OPTIONS,
+          default: 'auto',
+          required: true,
+        },
+      ],
+      run(ctx) {
+        const target = ctx.inputs.target as PaneInput | undefined
+        if (!target?.paneId) return { effects: [] }
+        const requested = String(ctx.params.language ?? 'auto')
+        if (requested === 'auto') {
+          return {
+            effects: [{
+              type: 'pane.update' as const,
+              paneId: target.paneId,
+              patch: { detectedLanguage: undefined, languageSource: 'auto' as const },
+            }],
+          }
+        }
+        const language = EDITOR_LANGUAGE_VALUES.has(requested) ? requested : 'plaintext'
+        return {
+          effects: [{
+            type: 'pane.update' as const,
+            paneId: target.paneId,
+            patch: { language, languageSource: 'manual' as const },
+          }],
         }
       },
     },
