@@ -13,14 +13,14 @@ import type { InstantSuggestion, LauncherQuickEntry } from '../workspace/pluginT
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../utils/imeKeyboard'
 import { isQuickTextCommand, runQuickTextCommand } from '../workspace/quickTextCommand'
 import { usePluginSettingsStore, resolvePluginSettings } from '../workspace/pluginSettingsStore'
-import { pinyin } from 'pinyin-pro'
+import { scoreSearchableFields, searchableFieldsMatch, type SearchableFields } from '../workspace/searchRanking'
 
 type LauncherItem =
   | { kind: 'quick-command'; id: string; title: string; subtitle: string; icon?: string; commandId: string; isDev: boolean }
   | { kind: 'quick-entry'; id: string; title: string; subtitle: string; icon?: string; entry: LauncherQuickEntry; pluginId: string; source: 'builtin' | 'installed' | 'dev'; aliases: string[] }
   | { kind: 'instant'; id: string; title: string; subtitle: string; icon?: string; suggestion: InstantSuggestion }
   | { kind: 'command'; id: string; title: string; subtitle: string; icon?: string; isDev?: boolean }
-  | { kind: 'pinned'; id: string; title: string; subtitle: string; icon?: string }
+  | { kind: 'pinned'; id: string; title: string; subtitle: string; icon?: string; actionId: string }
   | { kind: 'recent'; id: string; title: string; subtitle: string; icon?: string }
   | { kind: 'view'; id: ViewId; title: string; subtitle: string; icon: ReactNode }
 
@@ -46,6 +46,7 @@ export function GlobalLauncher() {
   const openPinnedAction = useAppStore((s) => s.openPinnedAction)
   const pinnedActions = useAppStore((s) => s.pinnedActions)
   const recentActionNames = useAppStore((s) => s.recentActionNames)
+  const actionUsageCounts = useAppStore((s) => s.actionUsageCounts)
   const launcherPosition = useAppStore((s) => s.settings.globalLauncherPosition)
   const updateSetting = useAppStore((s) => s.updateSetting)
   const locale = useAppStore((s) => s.locale)
@@ -113,6 +114,7 @@ export function GlobalLauncher() {
         title: localized(command?.title ?? item.title, command?.titleI18n ?? item.titleI18n, locale),
         subtitle: pinnedLabel,
         icon: command?.icon ?? item.icon,
+        actionId: item.actionId,
       }
     })
     const mainPanelCommand = pluginRegistry.resolveCommand('core-pane.show-main-panel')
@@ -204,8 +206,13 @@ export function GlobalLauncher() {
   }, [locale, mode, pinnedActions, recentActionNames, pluginRegistryVersion, pluginSettingsData])
 
   const filtered = useMemo(() => {
+    void pluginRegistryVersion
     const q = query.trim().toLowerCase()
-    const base = q ? items.filter((item) => launcherItemMatchesQuery(item, q)) : items
+    const base = q ? items.filter((item) => launcherItemMatchesQuery(item, q, locale)) : items
+    const sortedBase = [...base].sort((a, b) =>
+      scoreLauncherItem(b, q, locale, recentActionNames, actionUsageCounts) -
+      scoreLauncherItem(a, q, locale, recentActionNames, actionUsageCounts)
+    )
 
     // Compute instant suggestions when there's a query
     if (q && q.length <= 500) {
@@ -232,11 +239,11 @@ export function GlobalLauncher() {
           // Provider error should not break the launcher
         }
       }
-      if (instantItems.length > 0) return [...instantItems, ...base]
+      if (instantItems.length > 0) return [...instantItems, ...sortedBase]
     }
 
-    return base
-  }, [items, query, locale, pluginRegistryVersion])
+    return sortedBase
+  }, [items, query, locale, pluginRegistryVersion, recentActionNames, actionUsageCounts])
 
   const closeLauncher = useCallback(() => {
     const wasOverlay = overlay
@@ -293,6 +300,7 @@ export function GlobalLauncher() {
   }, [closeLauncher, open, standaloneLauncher])
 
   const clampedSelectedIndex = Math.min(selectedIndex, Math.max(0, filtered.length - 1))
+  const selectedItem = filtered.length === 1 ? filtered[0] : filtered[clampedSelectedIndex]
 
   // Quick text preview effect
   useEffect(() => {
@@ -622,7 +630,7 @@ export function GlobalLauncher() {
           }
           if (event.key === 'ArrowDown') { event.preventDefault(); setSelectedIndex((index) => Math.min(index + 1, Math.max(0, filtered.length - 1))) }
           if (event.key === 'ArrowUp') { event.preventDefault(); setSelectedIndex((index) => Math.max(index - 1, 0)) }
-          if (event.key === 'Enter') { event.preventDefault(); selectItem(filtered[clampedSelectedIndex]) }
+          if (event.key === 'Enter') { event.preventDefault(); selectItem(selectedItem) }
         }}
         onCompositionStart={handleCompositionStart}
         onCompositionEnd={handleCompositionEnd}
@@ -701,40 +709,11 @@ export function GlobalLauncher() {
               />
             </div>
             <div className="global-launcher-body">
-              <LauncherSection
-                title={t(locale, 'palette.globalPinned')}
-                items={filtered.filter((item) => item.kind === 'instant' || item.kind === 'pinned')}
-                selected={filtered[clampedSelectedIndex]}
+              <LauncherList
+                items={filtered}
+                selected={selectedItem}
                 onSelect={selectItem}
               />
-              <LauncherSection
-                title={t(locale, 'palette.globalCommands')}
-                items={filtered.filter((item) => item.kind === 'command')}
-                selected={filtered[clampedSelectedIndex]}
-                onSelect={selectItem}
-              />
-              <LauncherSection
-                title={t(locale, 'palette.quickText')}
-                items={filtered.filter((item) => item.kind === 'quick-command' || item.kind === 'quick-entry')}
-                selected={filtered[clampedSelectedIndex]}
-                onSelect={selectItem}
-              />
-              {mode === 'full' && (
-                <LauncherSection
-                  title={t(locale, 'palette.globalRecent')}
-                  items={filtered.filter((item) => item.kind === 'recent')}
-                  selected={filtered[clampedSelectedIndex]}
-                  onSelect={selectItem}
-                />
-              )}
-              {mode === 'full' && (
-                <LauncherSection
-                  title={t(locale, 'palette.globalViews')}
-                  items={filtered.filter((item) => item.kind === 'view')}
-                  selected={filtered[clampedSelectedIndex]}
-                  onSelect={selectItem}
-                />
-              )}
             </div>
             <div className="global-launcher-footer flex shrink-0 gap-3 px-3.5 py-1.5" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
               <HintKey keys="↑↓" label={t(locale, 'palette.select')} />
@@ -849,13 +828,10 @@ function normalizeInstantSuggestions(suggestion: InstantSuggestion | InstantSugg
   return Array.isArray(suggestion) ? suggestion : [suggestion]
 }
 
-function LauncherSection({ title, items, selected, onSelect }: { title: string; items: LauncherItem[]; selected?: LauncherItem; onSelect: (item: LauncherItem) => void }) {
+function LauncherList({ items, selected, onSelect }: { items: LauncherItem[]; selected?: LauncherItem; onSelect: (item: LauncherItem) => void }) {
   if (items.length === 0) return null
   return (
     <div className="py-1">
-      <div className="px-3.5 py-1 text-[10px] uppercase tracking-[0.08em]" style={{ color: 'var(--color-text-tertiary)' }}>
-        {title}
-      </div>
       {items.map((item) => {
         const isSelected = selected?.kind === item.kind && selected.id === item.id
         return (
@@ -904,38 +880,40 @@ function HintKey({ keys, label }: { keys: string; label: string }) {
   )
 }
 
-// ─── Pinyin Search ───────────────────────────────────────────────────────────
-
-const _launcherPinyinCache = new Map<string, { full: string; initials: string }>()
-
-function launcherPinyinMatch(text: string, query: string): boolean {
-  if (!text || !query) return false
-  if (!/^[a-z]+$/.test(query)) return false
-
-  let cached = _launcherPinyinCache.get(text)
-  if (!cached) {
-    const full = pinyin(text, { toneType: 'none', separator: '' }).toLowerCase()
-    const initials = pinyin(text, { pattern: 'initial', toneType: 'none', separator: '' }).toLowerCase()
-    cached = { full, initials }
-    _launcherPinyinCache.set(text, cached)
-  }
-
-  return cached.full.includes(query) || cached.initials.startsWith(query)
+function launcherItemMatchesQuery(item: LauncherItem, q: string, locale: Locale): boolean {
+  return searchableFieldsMatch(launcherItemSearchFields(item), q, locale)
 }
 
-function launcherItemMatchesQuery(item: LauncherItem, q: string): boolean {
-  // Quick entry: match by alias (exact/prefix/includes), title, subtitle, pinyin
-  if (item.kind === 'quick-entry') {
-    for (const alias of item.aliases) {
-      if (alias.toLowerCase() === q) return true
-      if (alias.toLowerCase().startsWith(q)) return true
-      if (alias.toLowerCase().includes(q)) return true
-    }
-    const text = `${item.title} ${item.subtitle}`.toLowerCase()
-    if (text.includes(q)) return true
-    return launcherPinyinMatch(item.title, q)
+function scoreLauncherItem(
+  item: LauncherItem,
+  q: string,
+  locale: Locale,
+  recentNames: string[],
+  usageCounts: Record<string, number>,
+): number {
+  if (item.kind === 'instant') return Number.MAX_SAFE_INTEGER
+  return scoreSearchableFields(launcherItemSearchFields(item), q, locale, recentNames, usageCounts)
+}
+
+function launcherItemSearchFields(item: LauncherItem): SearchableFields {
+  return {
+    id: launcherItemSearchId(item),
+    title: item.title,
+    description: item.subtitle,
+    aliases: item.kind === 'quick-entry' ? item.aliases : undefined,
+    usageKey: launcherItemUsageKey(item),
   }
-  const text = `${item.title} ${item.subtitle}`.toLowerCase()
-  if (text.includes(q)) return true
-  return launcherPinyinMatch(item.title, q)
+}
+
+function launcherItemSearchId(item: LauncherItem): string {
+  if (item.kind === 'pinned') return item.actionId
+  if (item.kind === 'quick-command') return item.commandId
+  if (item.kind === 'view') return `view:${item.id}`
+  return item.id
+}
+
+function launcherItemUsageKey(item: LauncherItem): string {
+  if (item.kind === 'pinned') return item.actionId
+  if (item.kind === 'quick-command') return item.commandId
+  return item.id
 }

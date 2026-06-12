@@ -31,6 +31,8 @@ const files = {
   indexCss: read('src/index.css'),
   store: read('src/store.ts'),
   tauriLib: read('src-tauri/src/lib.rs'),
+  tauriHotkeys: read('src-tauri/src/hotkeys.rs'),
+  searchRanking: read('src/workspace/searchRanking.ts'),
   tauriConfig: read('src-tauri/tauri.conf.json'),
   tauriCapabilities: read('src-tauri/capabilities/default.json'),
 }
@@ -130,16 +132,44 @@ check('pinned launcher command titles follow current locale', () => {
   )
 })
 
-check('pinned-only render path does not show Recent or Views sections', () => {
-  assertHas(
+check('global launcher renders a single ranked list without category sections', () => {
+  assert.doesNotMatch(
     files.globalLauncher,
-    /(?:mode|globalLauncherMode|launcherMode)[\s\S]{0,260}palette\.globalRecent|palette\.globalRecent[\s\S]{0,260}(?:mode|globalLauncherMode|launcherMode)/,
-    'Recent section should be conditional on full mode',
+    /function\s+LauncherSection|<LauncherSection/,
+    'GlobalLauncher should not render category sections',
   )
   assertHas(
     files.globalLauncher,
-    /(?:mode|globalLauncherMode|launcherMode)[\s\S]{0,260}palette\.globalViews|palette\.globalViews[\s\S]{0,260}(?:mode|globalLauncherMode|launcherMode)/,
-    'Views section should be conditional on full mode',
+    /<LauncherList[\s\S]{0,120}items=\{filtered\}/,
+    'GlobalLauncher should render the ranked filtered list directly',
+  )
+})
+
+check('global launcher reuses shared search ranking logic', () => {
+  assertHas(
+    files.globalLauncher,
+    /scoreSearchableFields|searchableFieldsMatch/,
+    'GlobalLauncher should use shared search ranking helpers instead of local ranking logic',
+  )
+  assertHas(
+    files.searchRanking,
+    /recentNames\.indexOf\(usageKey\)/,
+    'shared search ranking should include recency',
+  )
+  assertHas(
+    files.searchRanking,
+    /Math\.log1p\(usageCounts\[usageKey\]/,
+    'shared search ranking should include usage frequency',
+  )
+  assertHas(
+    files.searchRanking,
+    /tier\s*\*\s*1000\s*\+\s*baseScore/,
+    'shared search ranking should combine match quality with recent usage',
+  )
+  assertHas(
+    files.globalLauncher,
+    /filtered\.length\s*===\s*1\s*\?\s*filtered\[0\]\s*:\s*filtered\[clampedSelectedIndex\]/,
+    'GlobalLauncher should select the only result directly when a query narrows to one item',
   )
 })
 
@@ -295,8 +325,8 @@ check('standalone launcher ignores in-app panel drag coordinates', () => {
 check('standalone launcher sizes the transparent window to the panel', () => {
   assertHas(
     files.tauriLib,
-    /set_size\(LogicalSize::new\(\s*LAUNCHER_COMPACT_WIDTH,\s*LAUNCHER_COMPACT_HEIGHT,\s*\)\)/,
-    'native launcher show path should compact the transparent window before it is shown',
+    /if\s+!was_visible[\s\S]{0,260}set_size\(LogicalSize::new\(\s*LAUNCHER_COMPACT_WIDTH,\s*LAUNCHER_COMPACT_HEIGHT,\s*\)\)/,
+    'native launcher show path should compact the transparent window only before first show',
   )
   assertHas(
     files.globalLauncher,
@@ -518,6 +548,29 @@ check('native launcher show path hides the main window before focusing launcher'
   assert.ok(
     hideMainIndex < focusIndex,
     'show_launcher_window_for_hotkey should hide main before focusing launcher, because set_focus activates the macOS app',
+  )
+  assertHas(
+    launcherFn,
+    /was_visible[\s\S]{0,180}if\s+!was_visible[\s\S]{0,120}hide_main_window_before_launcher/,
+    'show_launcher_window_for_hotkey should not reset or hide window state when the launcher is already visible',
+  )
+})
+
+check('double modifier detection is based on two quick down events', () => {
+  assertHas(
+    files.tauriHotkeys,
+    /last_modifier_down/,
+    'double modifier detector should track the first down event, not only key-up timing',
+  )
+  assertHas(
+    files.tauriHotkeys,
+    /current_modifier_down[\s\S]{0,360}was_short_press/,
+    'double modifier detector should discard a first press that was held too long',
+  )
+  assertHas(
+    files.tauriHotkeys,
+    /long_modifier_hold_then_second_down_does_not_trigger/,
+    'double modifier tests should cover long hold followed by another press',
   )
 })
 

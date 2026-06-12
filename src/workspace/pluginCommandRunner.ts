@@ -69,6 +69,20 @@ export function stampPluginCommandEffects(
   })
 }
 
+export function effectsFromPluginCommandResult(
+  result: PluginCommandResult,
+  options: { isDev?: boolean; ownerPluginId?: string } = {},
+): FluxEffect[] {
+  const effects = stampPluginCommandEffects(result.effects ?? [], options)
+  if (!result.output) return effects
+
+  const outputEffect: FluxEffect = result.output.kind === 'error'
+    ? { type: 'status.message', level: 'error', message: result.output.text }
+    : { type: 'text.replace', target: 'active-input', text: result.output.text }
+
+  return [outputEffect, ...effects]
+}
+
 export function textOutputFromPluginResult(result: PluginCommandResult): TextPluginCommandOutput {
   if (result.output) {
     return { text: result.output.text, kind: result.output.kind }

@@ -74,7 +74,8 @@ impl KeyEvent {
 
 pub struct DoubleModifierDetector {
     threshold: Duration,
-    last_modifier_up: Option<Duration>,
+    last_modifier_down: Option<Duration>,
+    current_modifier_down: Option<Duration>,
     current_modifier_press_valid: bool,
 }
 
@@ -82,7 +83,8 @@ impl DoubleModifierDetector {
     pub fn new(threshold: Duration) -> Self {
         Self {
             threshold,
-            last_modifier_up: None,
+            last_modifier_down: None,
+            current_modifier_down: None,
             current_modifier_press_valid: false,
         }
     }
@@ -105,33 +107,43 @@ impl DoubleModifierDetector {
         }
 
         self.current_modifier_press_valid = true;
-        let Some(last_modifier_up) = self.last_modifier_up else {
+        self.current_modifier_down = Some(event.timestamp);
+        let Some(last_modifier_down) = self.last_modifier_down else {
             return false;
         };
 
-        let within_threshold = event.timestamp >= last_modifier_up
-            && event.timestamp - last_modifier_up <= self.threshold;
+        let within_threshold = event.timestamp >= last_modifier_down
+            && event.timestamp - last_modifier_down <= self.threshold;
         if within_threshold {
-            self.last_modifier_up = None;
+            self.last_modifier_down = None;
+            self.current_modifier_down = None;
             true
         } else {
-            self.last_modifier_up = None;
+            self.last_modifier_down = None;
             false
         }
     }
 
     fn handle_modifier_up(&mut self, event: KeyEvent) -> bool {
         if self.current_modifier_press_valid && !event.modifiers.other {
-            self.last_modifier_up = Some(event.timestamp);
+            if let Some(current_modifier_down) = self.current_modifier_down {
+                let was_short_press = event.timestamp >= current_modifier_down
+                    && event.timestamp - current_modifier_down <= self.threshold;
+                self.last_modifier_down = was_short_press.then_some(current_modifier_down);
+            } else {
+                self.last_modifier_down = None;
+            }
         } else {
-            self.last_modifier_up = None;
+            self.last_modifier_down = None;
         }
+        self.current_modifier_down = None;
         self.current_modifier_press_valid = false;
         false
     }
 
     pub fn reset(&mut self) {
-        self.last_modifier_up = None;
+        self.last_modifier_down = None;
+        self.current_modifier_down = None;
         self.current_modifier_press_valid = false;
     }
 }
@@ -443,5 +455,14 @@ mod double_modifier_tests {
         assert!(!detector.handle_event(modifier_combo_down(0)));
         assert!(!detector.handle_event(modifier_up(20)));
         assert!(!detector.handle_event(modifier_down(140)));
+    }
+
+    #[test]
+    fn long_modifier_hold_then_second_down_does_not_trigger() {
+        let mut detector = detector();
+
+        assert!(!detector.handle_event(modifier_down(0)));
+        assert!(!detector.handle_event(modifier_up(900)));
+        assert!(!detector.handle_event(modifier_down(980)));
     }
 }

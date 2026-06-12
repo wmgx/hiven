@@ -8,11 +8,11 @@
 import { Component, useCallback, useMemo, type ErrorInfo, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { t } from '../i18n'
+import { makePluginT } from '../i18n/pluginI18nRegistry'
 import { useAppStore } from '../store'
 import { pluginRegistry } from '../workspace/pluginRegistry'
 import {
   usePluginSettingsStore,
-  resolvePluginSettings,
   type PluginSettingsSource,
 } from '../workspace/pluginSettingsStore'
 import { openExternalUrl } from '../workspace/effectRunner'
@@ -212,6 +212,7 @@ function SettingsDialogBody({
   }, [])
 
   const title = contribution.titleI18n?.[locale] ?? contribution.title ?? t(locale, 'scripts.settingsDialogTitle')
+  const pluginT = useMemo(() => makePluginT(pluginId, locale), [pluginId, locale])
 
   const SettingsComponent = contribution.component
 
@@ -259,6 +260,8 @@ function SettingsDialogBody({
           <SettingsComponent
             pluginId={pluginId}
             source={source}
+            locale={locale}
+            t={pluginT}
             value={value}
             defaultValue={contribution.defaultValue}
             setValue={setValue}

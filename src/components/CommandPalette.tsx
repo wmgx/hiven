@@ -5,7 +5,7 @@ import { useWorkspaceStore } from '../workspace/workspaceStore'
 import { applyEffects } from '../workspace/effectRunner'
 import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
 import { resolvePluginInputs, buildPluginCommandContext } from '../workspace/pluginInputResolver'
-import { stampPluginCommandEffects } from '../workspace/pluginCommandRunner'
+import { effectsFromPluginCommandResult } from '../workspace/pluginCommandRunner'
 import { showToast } from '../workspace/toast'
 import type { CommandEntry } from '../workspace/pluginRegistry'
 import type { CommandParam, InputSlot, PaneInput, InstantSuggestion, InstantSuggestionProvider } from '../workspace/pluginTypes'
@@ -16,7 +16,7 @@ import { makePluginT } from '../i18n/pluginI18nRegistry'
 import { readText } from '@tauri-apps/plugin-clipboard-manager'
 import { resolveIcon } from '../utils/resolveIcon'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../utils/imeKeyboard'
-import { pinyin } from 'pinyin-pro'
+import { pinyinMatch, scoreSearchableFields, searchableFieldsMatch } from '../workspace/searchRanking'
 
 // 步骤类型
 type Step =
@@ -177,8 +177,7 @@ export function CommandPalette() {
     const ctx = buildPluginCommandContext(inputs, finalParams ?? getDefaultPluginParams(entry.contribution.params ?? []))
     try {
       const result = await entry.contribution.run(ctx)
-      // Stamp plugin-owned surface effects so dev commands resolve dev renderers/panels.
-      const effects = stampPluginCommandEffects(result.effects ?? [], { isDev, ownerPluginId: entry.meta.pluginId })
+      const effects = effectsFromPluginCommandResult(result, { isDev, ownerPluginId: entry.meta.pluginId })
       if (effects.length > 0) {
         const runResult = applyEffects(effects)
         if (runResult.errors.length > 0) {
@@ -1014,35 +1013,6 @@ function computeInstantSuggestions(query: string, locale: Locale): PaletteItem[]
   return items
 }
 
-/** 将命令 id/name 转为首字母缩写，例如 "json-format" → "jf" */
-function getAcronym(name: string): string {
-  return name.split(/[-_\s]+/).filter(Boolean).map((w) => w[0]).join('')
-}
-
-// 拼音转换缓存（避免在同一次渲染中重复计算）
-const _pinyinCache = new Map<string, { full: string; initials: string }>()
-
-/**
- * 拼音匹配：
- *   - 全拼包含：query "geshihua" 可匹配 "格式化"
- *   - 首字母前缀：query "gsh" 可匹配 "格式化"（声母 g-sh-h 的首字母）
- * 只对纯 ASCII 字母 query 生效，避免误触发。
- */
-function pinyinMatch(text: string, query: string): boolean {
-  if (!text || !query) return false
-  if (!/^[a-z]+$/.test(query)) return false
-
-  let cached = _pinyinCache.get(text)
-  if (!cached) {
-    const full = pinyin(text, { toneType: 'none', separator: '' }).toLowerCase()
-    const initials = pinyin(text, { pattern: 'initial', toneType: 'none', separator: '' }).toLowerCase()
-    cached = { full, initials }
-    _pinyinCache.set(text, cached)
-  }
-
-  return cached.full.includes(query) || cached.initials.startsWith(query)
-}
-
 function paramOptionMatchesQuery(option: { label: string; value: string }, query: string): boolean {
   const label = option.label.toLowerCase()
   const value = option.value.toLowerCase()
@@ -1062,40 +1032,14 @@ function isCommandPinnable(item: PaletteItem): boolean {
 function paletteItemMatchesQuery(item: PaletteItem, q: string, locale: import('../i18n').Locale): boolean {
   if (item.kind !== 'plugin') return false
   const contribution = item.entry.contribution
-  const id = contribution.id
-  const name = id.toLowerCase()
-  const title = localized(contribution.title || id, contribution.titleI18n, locale).toLowerCase()
-
-  if (name.includes(q) || title.includes(q)) return true
-
-  const titleI18n = contribution.titleI18n
-  if (Object.values(titleI18n || {}).some((v) => v && v.toLowerCase().includes(q))) return true
-
-  const desc = contribution.description || ''
-  if (desc.toLowerCase().includes(q)) return true
-
-  const descI18n = contribution.descriptionI18n
-  if (Object.values(descI18n || {}).some((v) => v && v.toLowerCase().includes(q))) return true
-
-  const aliases = contribution.aliases || []
-  if (aliases.some((a) => a.toLowerCase().includes(q))) return true
-
-  // 缩写匹配：从 id/name 算一遍，再从英文原始 title 算一遍
-  // 例如 id="text-diff.compare" name 缩写是 "tdc"，但 title="Text Diff" 缩写是 "td" ✓
-  const acronym = getAcronym(name)
-  if (acronym.startsWith(q) || acronym === q) return true
-
-  const engTitle = (contribution.title || id).toLowerCase()
-  const titleAcronym = getAcronym(engTitle)
-  if (titleAcronym.startsWith(q) || titleAcronym === q) return true
-
-  // 拼音匹配：对所有中文文本字段检查全拼和首字母
-  const zhTitle = contribution.titleI18n?.zh ?? ''
-  const zhDesc = contribution.descriptionI18n?.zh ?? ''
-  if (pinyinMatch(zhTitle || title, q)) return true
-  if (zhDesc && pinyinMatch(zhDesc, q)) return true
-
-  return false
+  return searchableFieldsMatch({
+    id: contribution.id,
+    title: contribution.title,
+    titleI18n: contribution.titleI18n,
+    description: contribution.description,
+    descriptionI18n: contribution.descriptionI18n,
+    aliases: contribution.aliases,
+  }, q, locale)
 }
 
 /**
@@ -1114,38 +1058,14 @@ function scorePaletteItem(
 ): number {
   if (item.kind !== 'plugin') return 0
   const contribution = item.entry.contribution
-  const id = contribution.id
-  const recentIdx = recentNames.indexOf(id)
-  const recencyScore = recentIdx >= 0 ? 50 - recentIdx : 0
-  const freq = usageCounts[id] ?? 0
-  const freqScore = Math.log1p(freq) * 5
-  const baseScore = recencyScore + freqScore
-
-  if (!q) return baseScore
-
-  const name = id.toLowerCase()
-  const title = localized(contribution.title || id, contribution.titleI18n, locale).toLowerCase()
-
-  let tier = 1 // 默认子串匹配层
-  if (name === q || title === q) {
-    tier = 6
-  } else if (name.startsWith(q)) {
-    tier = 5
-  } else if (title.startsWith(q)) {
-    tier = 4
-  } else {
-    // 词边界：name 或 title 按分隔符拆词后，有词以 q 开头
-    const nameWords = name.split(/[-_\s]+/).filter(Boolean)
-    const titleWords = title.split(/[-_\s]+/).filter(Boolean)
-    if (nameWords.some((w) => w.startsWith(q)) || titleWords.some((w) => w.startsWith(q))) {
-      tier = 3
-    } else if (getAcronym(name).startsWith(q)) {
-      // 缩写匹配
-      tier = 2
-    }
-  }
-
-  return tier * 1000 + baseScore
+  return scoreSearchableFields({
+    id: contribution.id,
+    title: contribution.title,
+    titleI18n: contribution.titleI18n,
+    description: contribution.description,
+    descriptionI18n: contribution.descriptionI18n,
+    aliases: contribution.aliases,
+  }, q, locale, recentNames, usageCounts)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

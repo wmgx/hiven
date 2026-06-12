@@ -1,6 +1,5 @@
 import BigNumber from 'bignumber.js'
-import type { PluginDefinition, InstantSuggestionContext, InstantSuggestion, TextInput } from '../../workspace/pluginTypes'
-import { textOutput, textError } from '@hiven/plugin'
+import { textOutput, textError, type PluginDefinition, type InstantSuggestionContext, type InstantSuggestion, type TextInput } from '@hiven/plugin'
 
 // ─── Safe Math Parser ────────────────────────────────────────────────────────
 // A simple recursive descent parser for arithmetic expressions.

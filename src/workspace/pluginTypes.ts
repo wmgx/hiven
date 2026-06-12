@@ -254,6 +254,8 @@ export type InstantSuggestionProvider = {
 export type PluginSettingsBodyProps<TSettings = unknown> = {
   pluginId: string
   source: 'builtin' | 'installed' | 'dev'
+  locale: Locale
+  t: (key: string, vars?: Record<string, string | number>) => string
   value: TSettings
   defaultValue: TSettings
   setValue: (next: TSettings) => void

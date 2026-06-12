@@ -53,9 +53,17 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
 
     let app_clone = app.clone();
     app.run_on_main_thread(move || {
-        hide_main_window_before_launcher(&app_clone);
+        let existing_launcher = app_clone.get_webview_window("launcher");
+        let was_visible = existing_launcher
+            .as_ref()
+            .and_then(|window| window.is_visible().ok())
+            .unwrap_or(false);
 
-        let window = if let Some(window) = app_clone.get_webview_window("launcher") {
+        if !was_visible {
+            hide_main_window_before_launcher(&app_clone);
+        }
+
+        let window = if let Some(window) = existing_launcher {
             window
         } else {
             let Some(config) = app_clone
@@ -79,11 +87,13 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
             }
         };
 
-        if let Err(error) = window.set_size(LogicalSize::new(
-            LAUNCHER_COMPACT_WIDTH,
-            LAUNCHER_COMPACT_HEIGHT,
-        )) {
-            eprintln!("[hiven] Failed to compact launcher window before show: {}", error);
+        if !was_visible {
+            if let Err(error) = window.set_size(LogicalSize::new(
+                LAUNCHER_COMPACT_WIDTH,
+                LAUNCHER_COMPACT_HEIGHT,
+            )) {
+                eprintln!("[hiven] Failed to compact launcher window before show: {}", error);
+            }
         }
         if let Err(error) = window.show() {
             eprintln!("[hiven] Failed to show launcher window: {}", error);
@@ -93,7 +103,9 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
         if let Err(error) = window.set_focus() {
             eprintln!("[hiven] Failed to focus launcher window: {}", error);
         }
-        let _ = window.emit("hiven://launcher-open", ());
+        if !was_visible {
+            let _ = window.emit("hiven://launcher-open", ());
+        }
     })
     .map_err(|error| error.to_string())
 }

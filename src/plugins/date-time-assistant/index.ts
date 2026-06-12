@@ -1,5 +1,4 @@
-import { definePlugin, textOutput, type TextInput } from '@hiven/plugin'
-import type { InstantSuggestion, InstantSuggestionContext } from '../../workspace/pluginTypes'
+import { definePlugin, textOutput, type InstantSuggestion, type InstantSuggestionContext, type TextInput } from '@hiven/plugin'
 
 function pad(n: number, width = 2): string {
   return String(n).padStart(width, '0')

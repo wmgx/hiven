@@ -1,7 +1,7 @@
 import { localized, useAppStore } from '../store'
 import { applyEffects } from './effectRunner'
 import { pluginRegistry, type CommandEntry } from './pluginRegistry'
-import { defaultPluginCommandParams, stampPluginCommandEffects } from './pluginCommandRunner'
+import { defaultPluginCommandParams, effectsFromPluginCommandResult } from './pluginCommandRunner'
 import type { ResolvedInputs } from './pluginTypes'
 
 export async function runPluginCommandById(
@@ -48,7 +48,7 @@ export async function runPluginCommandEntry(
         ...(options.params ?? {}),
       },
     })
-    const effects = stampPluginCommandEffects(result.effects ?? [], {
+    const effects = effectsFromPluginCommandResult(result, {
       isDev: options.isDev,
       ownerPluginId: entry.meta.pluginId,
     })
