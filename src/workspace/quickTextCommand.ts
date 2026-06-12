@@ -26,6 +26,8 @@ export function effectiveQuickTextParams(command: CommandContribution): Record<s
   for (const param of command.params ?? []) {
     if (param.default === undefined && quickTextDefaults[param.key] === undefined) return null
     const value = quickTextDefaults[param.key] ?? param.default
+    // A required param with empty-string default is useless in quick mode (user can't configure it)
+    if (param.required && value === '') return null
     params[param.key] = value
   }
   return params
