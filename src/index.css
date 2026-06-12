@@ -1994,6 +1994,7 @@ html[data-window='launcher'] .global-launcher-panel :is(input, textarea, select,
 }
 
 .global-launcher-panel.palette-panel {
+  border-radius: 8px !important;
   background: var(--color-background-primary) !important;
   box-shadow: 0 0 0 1px var(--color-border-secondary);
   backdrop-filter: none;
