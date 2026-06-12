@@ -10,10 +10,19 @@ function read(path) {
   return readFileSync(join(root, path), 'utf8')
 }
 
+function readOptional(path) {
+  try {
+    return readFileSync(join(root, path), 'utf8')
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return ''
+    throw error
+  }
+}
+
 const files = {
   packageJson: read('package.json'),
   globalLauncher: read('src/components/GlobalLauncher.tsx'),
-  corePlugin: read('src/workspace/corePlugin.ts'),
+  corePlugin: readOptional('src/workspace/corePlugin.ts'),
   corePanePlugin: read('src/plugins/core-pane/index.ts'),
   corePaneManifest: read('src/plugins/core-pane/manifest.json'),
   builtinIndex: read('src/builtin-plugins/index.json'),

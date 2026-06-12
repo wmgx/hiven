@@ -1,5 +1,5 @@
 {
-  "version": 9,
+  "version": 10,
   "packages": [
     {
       "pluginId": "base64",
@@ -89,6 +89,11 @@
     {
       "pluginId": "query-string",
       "dir": "queryString",
+      "version": "1.0.0"
+    },
+    {
+      "pluginId": "regex-tester",
+      "dir": "regex-tester",
       "version": "1.0.0"
     },
     {

@@ -18,9 +18,7 @@ import { runPluginCommandById } from './workspace/pluginCommandExecutor'
 // Register built-in panels
 import './panels/register'
 
-// Register core plugin and first-party product plugin packages
-import './workspace/corePlugin'
-
+// Register first-party product plugin packages
 registerBundledPluginPackages()
 
 const VIEW_INDEX: Record<ViewId, number> = { editor: 0, scripts: 1, 'plugin-editor': 2, 'pinned-runner': 3, settings: 4 }
