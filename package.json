@@ -38,6 +38,7 @@
     "test:launcher-usage": "node scripts/test-launcher-usage.mjs",
     "test:launcher-ranking": "node scripts/test-launcher-ranking.mjs",
     "test:launcher-registry": "node scripts/test-launcher-registry.mjs",
+    "test:launcher-controller": "node scripts/test-launcher-controller.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },
