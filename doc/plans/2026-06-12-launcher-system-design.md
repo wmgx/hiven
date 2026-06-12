@@ -753,6 +753,137 @@ Expected behavior checks:
 - Dynamic item errors are isolated.
 - Launcher already open plus double Command only focuses; it does not shrink.
 
+## Regression Guardrails
+
+These are failure modes found during review of an attempted migration. Treat each item as a hard implementation constraint.
+
+### Pinned Must Not Become A Launcher Item
+
+Do not create first-level launcher candidates such as `host:pinned:<id>`.
+
+Pinned is a shortcut reference to an existing launcher item or plugin capability, not a separate searchable item and not a usage-training source.
+
+Required behavior:
+
+- Pinned execution must not call `recordLauncherSelection`.
+- Pinned click must not update `launcherUsageBySurface`.
+- Pinned boost must apply to the referenced original item, not to a duplicated pinned item.
+- A dangling pinned ref should render as unavailable and removable.
+- Pinned UI may offer quick access outside the ranked launcher list, but it must not create another usage identity.
+
+### Dynamic Items Must Preserve Existing Instant Suggestion Behavior
+
+If replacing old `instantSuggestions`, migrate existing providers before deleting the old path.
+
+Known existing providers include calculator and date/time assistant. Expressions, `now`, and date/time queries must keep appearing in both launcher surfaces.
+
+Required behavior:
+
+- Bridge or migrate old instant suggestion providers into new dynamic launcher items.
+- Dynamic items do not write long-term usage.
+- Dynamic items cannot be pinned in the first version.
+- Provider errors and timeouts must be isolated.
+- Dynamic item actions must preserve existing copy/insert/effects behavior.
+
+### Collect Input Must Submit Exactly Once
+
+Do not let both the input component and the parent launcher panel handle the same Enter key.
+
+Required behavior:
+
+- Enter in collect-input mode submits once.
+- IME composition must not submit.
+- If the child input handles Enter, it must `preventDefault()` and `stopPropagation()`.
+- Prefer one owner for Enter handling per mode.
+- Add a focused test or script check that fails if collect-input execute is called twice.
+
+### Legacy Command Flow Cannot Be Silently Removed
+
+During migration, CommandPalette must not lose existing command capabilities unless the command has already been explicitly migrated to a launcher item/tool flow.
+
+Do not replace prompt/parameter/input flows with `not yet supported`.
+
+Existing behavior to preserve or explicitly migrate:
+
+- Pane/input resolution, including prompt fallback.
+- Pair input selection where commands require two inputs.
+- Parameter selection and default/custom parameter flow.
+- Clipboard/active input fallback behavior already defined by command input policy.
+- Commands such as diff compare that rely on prompt-style input selection.
+
+Acceptable migration strategies:
+
+- Keep the legacy state machine as an adapter until all affected commands are migrated.
+- Or migrate each affected command to a new launcher item/tool with equivalent collect-input/result flow before removing legacy flow.
+
+### Pinnable Opt-Out Must Be Respected
+
+Do not infer pinnability only from item key shape.
+
+Required behavior:
+
+- Resolve the underlying command/tool/launcher item metadata.
+- Respect `live.pinnable === false` and future equivalent opt-out fields.
+- Existing commands that opted out of pinning must not show a pin affordance after migration.
+- Tests must assert at least one explicit opt-out command remains unpinnable.
+
+### Launcher-Only Plugins Must Load
+
+If `PluginDefinition.launcher` is public API, plugin definition validation must treat it as a valid contribution.
+
+Required behavior:
+
+- `definePlugin(...)` accepts plugins that only contribute `launcher.items` or `launcher.dynamicItems`.
+- Runtime plugin validation accepts launcher-only plugins.
+- Registry/localization/settings paths keep enough plugin metadata to execute launcher-only contributions.
+
+### Installed Plugin Settings Must Use Real Source
+
+Do not collapse every non-dev launcher item to `builtin` when resolving settings.
+
+Required behavior:
+
+- Preserve actual plugin source: `builtin`, `installed`, or `dev`.
+- Resolve `ctx.settings` with the real source.
+- Installed plugins with settings must not read builtin defaults or another plugin's settings.
+- Launcher execution context must expose only the current plugin's settings.
+
+### Output Choices Must Keep Launcher Open
+
+If an item returns output choices, launcher must stay open and enter result choice mode.
+
+Required behavior:
+
+- Success without output may close.
+- Success with output must not close immediately.
+- Failure must keep the launcher open and show the error.
+- Global launcher overlay and standalone paths must follow the same rule.
+
+### Legacy Usage Must Migrate Into The New Usage Store
+
+If the implementation introduces `launcherUsageBySurface`, migrate old usage data into it.
+
+Required behavior:
+
+- Map legacy command ids to the new system item keys for command-backed items.
+- Preserve at least command-palette usage history.
+- Preserve global-launcher usage history if it already exists.
+- New ranking must read from the migrated store, not from stale legacy buckets.
+
+### Tests Must Cover Behavior, Not Only Strings
+
+String-check scripts are useful as architecture smoke tests, but they are not enough for this migration.
+
+Required behavioral checks:
+
+- Selecting pinned does not mutate launcher usage.
+- Dynamic suggestion still appears for calculator/date-time sample queries.
+- Collect-input Enter calls execute once.
+- A prompt/fallback command still reaches an interactive path.
+- A `live.pinnable === false` command has no pin affordance.
+- Launcher output choices keep the launcher open.
+- Legacy usage changes ranking after migration.
+
 ## Non-Goals For This Pass
 
 - No workflow system.

@@ -1,0 +1,345 @@
+/**
+ * Launcher Domain Types
+ *
+ * The launcher is a host/workspace domain centered on `LauncherItem`, shared by
+ * CommandPalette and GlobalLauncher. Plugins contribute launcher items (or tools
+ * that the host adapts into launcher items); the host owns identity, ranking,
+ * usage, and the execution lifecycle.
+ *
+ * Design rules enforced by these types:
+ *  - Plugins cannot expose `systemKey`, `usageKey`, or `staticPriority`.
+ *  - Plugins cannot define custom surfaces (only the host enum is allowed).
+ *  - Plugins cannot reference commands from launcher items.
+ *  - Plugin execute handlers receive a controlled `PluginLauncherApi`, never
+ *    workspace internals.
+ */
+
+import type { ComponentType } from 'react'
+import type { Locale } from '../../i18n'
+
+// ─── System Surfaces ───────────────────────────────────────────────────────
+
+/** The two system launcher surfaces in the first version. */
+export type LauncherSurfaceId = 'command-palette' | 'global-launcher'
+
+export const LAUNCHER_SURFACE_IDS: readonly LauncherSurfaceId[] = [
+  'command-palette',
+  'global-launcher',
+] as const
+
+export function isLauncherSurfaceId(value: unknown): value is LauncherSurfaceId {
+  return value === 'command-palette' || value === 'global-launcher'
+}
+
+// ─── System Identity ───────────────────────────────────────────────────────
+
+/**
+ * System-generated identity for a launcher item. The host generates this; it is
+ * never exposed to plugins. Examples:
+ *   plugin:${pluginId}:launcher:${itemId}
+ *   host:view:${viewId}
+ *   host:action:${actionId}
+ */
+export type SystemLauncherItemKey = string
+
+// ─── Text Input Policy ─────────────────────────────────────────────────────
+
+export type TextInputMode = 'auto' | 'all' | 'selection'
+
+export type TextInputPolicy = {
+  mode?: TextInputMode
+}
+
+export type TextRange = {
+  startLineNumber: number
+  startColumn: number
+  endLineNumber: number
+  endColumn: number
+}
+
+export type ResolvedTextInput = {
+  kind: 'text'
+  text: string
+  mode: TextInputMode
+  source: 'selection' | 'all' | 'empty'
+  range?: TextRange
+  paneId?: string
+  panelId?: string
+}
+
+// ─── Display ───────────────────────────────────────────────────────────────
+
+export type IconRef = string
+
+export type LauncherItemDisplay = {
+  title: string
+  titleI18n?: Partial<Record<Locale, string>>
+  subtitle?: string
+  subtitleI18n?: Partial<Record<Locale, string>>
+  icon?: IconRef
+  /** Extra search terms (aliases) used by ranking but not shown as primary. */
+  aliases?: string[]
+}
+
+// ─── Behavior (lifecycle types) ──────────────────────────────────────────────
+
+export type LauncherInputSpec = {
+  placeholder?: string
+  placeholderI18n?: Partial<Record<Locale, string>>
+  /** When true an empty submit is allowed; otherwise the host blocks submit. */
+  allowEmptyInput?: boolean
+  emptyInputMessage?: string
+  emptyInputMessageI18n?: Partial<Record<Locale, string>>
+}
+
+/**
+ * Behavior types are lifecycle types, not product features.
+ *  - `perform`       : direct action.
+ *  - `collect-input` : two-step action (e.g. web quick open).
+ */
+export type LauncherBehavior =
+  | { type: 'perform' }
+  | { type: 'collect-input'; input: LauncherInputSpec }
+
+// ─── Output (result choices) ─────────────────────────────────────────────────
+
+/** Action handler for a result choice. May return more output (multi-level). */
+export type LauncherResultActionHandler = () =>
+  | LauncherExecuteResult
+  | Promise<LauncherExecuteResult>
+  | void
+  | Promise<void>
+
+export type LauncherResultAction = {
+  id: string
+  title: string
+  titleI18n?: Partial<Record<Locale, string>>
+  run: LauncherResultActionHandler
+}
+
+export type LauncherResultChoice = {
+  id: string
+  title: string
+  titleI18n?: Partial<Record<Locale, string>>
+  subtitle?: string
+  subtitleI18n?: Partial<Record<Locale, string>>
+  preview?: string
+  primaryAction: LauncherResultActionHandler
+  secondaryActions?: LauncherResultAction[]
+}
+
+export type LauncherOutput = {
+  choices: LauncherResultChoice[]
+}
+
+export type LauncherExecuteResult =
+  | { ok: true; output?: LauncherOutput }
+  | { ok: false; message: string }
+
+// ─── Plugin Launcher API (controlled) ────────────────────────────────────────
+
+/**
+ * The controlled API passed to plugin launcher execute handlers. Plugins cannot
+ * import workspace stores, effect runner, i18n registry, or Monaco utilities.
+ * They can only use what is exposed here.
+ */
+export type PluginLauncherApi = {
+  getActiveText(): string
+  getSelectionText(): string
+  getClipboardText(): Promise<string>
+  replaceActiveText(text: string): Promise<void>
+  insertText(text: string): Promise<void>
+  copyText(text: string): Promise<void>
+  openUrl(url: string): Promise<void>
+  showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
+}
+
+// ─── Execution Context ───────────────────────────────────────────────────────
+
+export type LauncherExecutionContext<TSettings = unknown> = {
+  /** Present only for `collect-input` behaviors. */
+  input?: { text: string }
+  settings: TSettings
+  locale: Locale
+  api: PluginLauncherApi
+  /** Plugin-scoped translate function. */
+  t: (key: string, vars?: Record<string, string | number>) => string
+}
+
+export type LauncherExecuteHandler<TSettings = unknown> = (
+  ctx: LauncherExecutionContext<TSettings>,
+) => Promise<LauncherExecuteResult> | LauncherExecuteResult
+
+// ─── Plugin Contribution (authoring API) ─────────────────────────────────────
+
+/**
+ * What a plugin author declares for a launcher item.
+ *
+ * NOTE: this is intentionally narrow. There is no `usageKey`, no
+ * `staticPriority`, no `systemKey`, and no command reference. `surfaces` may
+ * only contain values from {@link LauncherSurfaceId}; unknown values are
+ * rejected at runtime by the registry.
+ */
+export type LauncherItemContribution<TSettings = unknown> = {
+  id: string
+  display: LauncherItemDisplay
+  behavior?: LauncherBehavior
+  /** Restrict where the item appears. Missing = both main surfaces. */
+  surfaces?: LauncherSurfaceId[]
+  /** Whether this item can be pinned. Defaults to true for static items. */
+  pinnable?: boolean
+  inputPolicy?: TextInputPolicy
+  execute: LauncherExecuteHandler<TSettings>
+}
+
+// ─── Dynamic Items ───────────────────────────────────────────────────────────
+
+export type LauncherDynamicContext = {
+  query: string
+  locale: Locale
+  settings: unknown
+}
+
+export type LauncherDynamicItemProvider = (
+  ctx: LauncherDynamicContext,
+) => Promise<LauncherItemContribution[]> | LauncherItemContribution[]
+
+// ─── System Launcher Item (host-owned, resolved) ─────────────────────────────
+
+export type LauncherItemContributionKind = 'plugin' | 'host' | 'dynamic'
+
+/**
+ * The fully-resolved, system-owned launcher item. The host generates `systemKey`
+ * and may set `staticPriority` for a small number of host-owned items. Plugins
+ * never construct this directly.
+ */
+export type LauncherItem = {
+  systemKey: SystemLauncherItemKey
+  kind: LauncherItemContributionKind
+  pluginId?: string
+  source?: 'builtin' | 'installed' | 'dev'
+  display: LauncherItemDisplay
+  behavior: LauncherBehavior
+  surfaces?: LauncherSurfaceId[]
+  pinnable: boolean
+  inputPolicy?: TextInputPolicy
+  /** Host-only ranking nudge for a small number of host-owned items. */
+  staticPriority?: number
+  execute: LauncherExecuteHandler
+}
+
+// ─── Pinned Reference ─────────────────────────────────────────────────────────
+
+/** Pinned entries reference launcher items; they are not searchable items. */
+export type PinnedLauncherRef = {
+  itemKey: SystemLauncherItemKey
+}
+
+// ─── Usage ─────────────────────────────────────────────────────────────────
+
+export type LauncherUsageRecord = {
+  count: number
+  lastSelectedAt: number
+}
+
+export type LauncherUsageBucket = Record<SystemLauncherItemKey, LauncherUsageRecord>
+
+export type LauncherUsageBySurface = Record<LauncherSurfaceId, LauncherUsageBucket>
+
+// ─── Tool-First API (preferred plugin authoring layer) ───────────────────────
+
+export type ToolLauncherOptions = {
+  surfaces?: LauncherSurfaceId[]
+  pinnable?: boolean
+}
+
+export type ToolPanelOptions = {
+  placement?: 'bottom' | 'right' | 'left' | 'pane-bottom'
+}
+
+export type PluginToolSurfaces = {
+  launcher?: boolean | ToolLauncherOptions
+  panel?: boolean | ToolPanelOptions
+  pinnable?: boolean
+}
+
+export type PluginToolOutput = {
+  /** Default text output: shown as a result choice, Enter copies. */
+  text(value: string): LauncherExecuteResult
+  /** Explicit replace-active-text primary action. */
+  replaceActiveText(value: string): LauncherExecuteResult
+  /** Explicit error result. */
+  error(message: string): LauncherExecuteResult
+  /** Raw output choices for advanced flows. */
+  choices(choices: LauncherResultChoice[]): LauncherExecuteResult
+}
+
+export type PluginToolContext<TSettings = unknown> = {
+  input: ResolvedTextInput
+  settings: TSettings
+  locale: Locale
+  api: PluginLauncherApi
+  t: (key: string, vars?: Record<string, string | number>) => string
+  output: PluginToolOutput
+}
+
+export type PluginToolResult = LauncherExecuteResult
+
+export type PluginToolContribution<TSettings = unknown> = {
+  id: string
+  title: string
+  titleI18n?: Partial<Record<Locale, string>>
+  subtitle?: string
+  subtitleI18n?: Partial<Record<Locale, string>>
+  icon?: IconRef
+  aliases?: string[]
+  inputPolicy?: TextInputPolicy
+  run(ctx: PluginToolContext<TSettings>): Promise<PluginToolResult> | PluginToolResult
+  surfaces?: PluginToolSurfaces
+}
+
+// ─── Panel Action Model (separate surface) ───────────────────────────────────
+
+export type PanelInputPolicy = TextInputPolicy
+
+export type ResolvedPanelInput = ResolvedTextInput
+
+export type PanelActionApi = {
+  getClipboardText(): Promise<string>
+  copyText(text: string): Promise<void>
+  replaceInputText(text: string, range?: TextRange): Promise<void>
+  insertText(text: string): Promise<void>
+  showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
+}
+
+export type PanelActionContext<TSettings = unknown> = {
+  panelId: string
+  paneId?: string
+  settings: TSettings
+  locale: Locale
+  input: ResolvedPanelInput
+  api: PanelActionApi
+}
+
+export type PanelActionResult =
+  | { ok: true }
+  | { ok: false; message: string }
+
+export type PanelActionContribution<TSettings = unknown> = {
+  id: string
+  title: string
+  titleI18n?: Partial<Record<Locale, string>>
+  icon?: IconRef
+  inputPolicy?: PanelInputPolicy
+  run(ctx: PanelActionContext<TSettings>): Promise<PanelActionResult> | PanelActionResult
+}
+
+// ─── Settings body props (re-exported for plugin-local settings UIs) ─────────
+
+export type LauncherSettingsContext = {
+  pluginId: string
+  source: 'builtin' | 'installed' | 'dev'
+  locale: Locale
+}
+
+export type { ComponentType }

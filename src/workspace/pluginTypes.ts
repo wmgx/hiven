@@ -7,6 +7,12 @@
 import type { ComponentType } from 'react'
 import type { Locale } from '../i18n'
 import type { FluxEffect, PaneId } from './types'
+import type {
+  LauncherItemContribution,
+  LauncherDynamicItemProvider,
+  PluginToolContribution,
+  PanelActionContribution,
+} from './launcher/types'
 
 // ─── Input Types ─────────────────────────────────────────────────────────────
 
@@ -306,12 +312,25 @@ export type LauncherQuickEntryProvider = {
 
 /** The full plugin definition returned by definePlugin */
 export type PluginDefinition<TSettings = unknown> = {
+  /** Preferred tool-first authoring API (host adapts into launcher items + panel actions). */
+  tools?: PluginToolContribution<TSettings>[]
+  /** Launcher contributions (custom launcher lifecycle/output UX). */
+  launcher?: {
+    items?: LauncherItemContribution<TSettings>[]
+    dynamicItems?: LauncherDynamicItemProvider
+  }
+  /** Panel-only actions (separate surface from launcher). */
+  panel?: {
+    actions?: PanelActionContribution<TSettings>[]
+  }
   commands?: CommandContribution[]
   renderers?: RendererContribution[]
   panels?: PanelContributionV2[]
   toolbar?: ToolbarContribution[]
+  /** @deprecated Migrated to launcher.dynamicItems. Kept until all providers move over. */
   instantSuggestions?: InstantSuggestionProvider[]
   settings?: PluginSettingsContribution<TSettings>
+  /** @deprecated Migrated to launcher.items. Kept until all entries move over. */
   launcherQuickEntries?: LauncherQuickEntryProvider
 }
 
@@ -405,3 +424,37 @@ export type InstalledPluginIndex = {
 
 // Re-export surface state types from types.ts for convenience
 export type { PaneRendererState, PanelInstanceV2 } from './types'
+
+// Re-export launcher domain types for convenience
+export type {
+  LauncherSurfaceId,
+  SystemLauncherItemKey,
+  LauncherItemDisplay,
+  LauncherBehavior,
+  LauncherInputSpec,
+  LauncherItemContribution,
+  LauncherDynamicContext,
+  LauncherDynamicItemProvider,
+  LauncherExecutionContext,
+  LauncherExecuteHandler,
+  LauncherExecuteResult,
+  LauncherOutput,
+  LauncherResultChoice,
+  LauncherResultAction,
+  LauncherResultActionHandler,
+  PluginLauncherApi,
+  PluginToolContribution,
+  PluginToolContext,
+  PluginToolResult,
+  PluginToolSurfaces,
+  PluginToolOutput,
+  PanelActionContribution,
+  PanelActionContext,
+  PanelActionResult,
+  PanelActionApi,
+  TextInputMode,
+  TextInputPolicy,
+  ResolvedTextInput,
+  TextRange,
+  IconRef,
+} from './launcher/types'
