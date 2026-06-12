@@ -16,6 +16,15 @@ import type { LiveActionCapability } from './workspace/pluginTypes'
 import { samePinnedPluginCommandIdentity } from './workspace/pinnedActionIdentity'
 import { createPinnedPluginCommandAction } from './workspace/pinnedActionFactory'
 import { migrateLocalStorageKey } from './utils/persistMigration'
+import type {
+  LauncherSurfaceId,
+  LauncherUsageBySurface,
+  SystemLauncherItemKey,
+} from './workspace/launcher/types'
+import {
+  emptyUsageBySurface,
+  recordSelection as recordSelectionPure,
+} from './workspace/launcher/usage'
 
 migrateLocalStorageKey('fluxtext-settings', 'hiven-settings')
 
@@ -196,6 +205,10 @@ interface AppState {
   // Source-scoped usage (per surface)
   actionUsageBySource: Record<ActionUsageSource, ActionUsageBucket>
   pushRecentAction: (name: string, source?: ActionUsageSource) => void
+
+  // Launcher usage (per surface, scoped by system launcher item key)
+  launcherUsageBySurface: LauncherUsageBySurface
+  recordLauncherSelection: (surfaceId: LauncherSurfaceId, itemKey: SystemLauncherItemKey) => void
 
   // Saved params per action (for persistParams feature)
   savedActionParams: Record<string, Record<string, any>>
@@ -447,6 +460,12 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     }
   }),
 
+  // Launcher usage (per surface, scoped by system launcher item key)
+  launcherUsageBySurface: emptyUsageBySurface(),
+  recordLauncherSelection: (surfaceId: LauncherSurfaceId, itemKey: SystemLauncherItemKey) => set((state) => ({
+    launcherUsageBySurface: recordSelectionPure(state.launcherUsageBySurface, surfaceId, itemKey, Date.now()),
+  })),
+
   // Saved params per action
   savedActionParams: {},
   saveActionParams: (actionName, params) => set((state) => ({
@@ -506,6 +525,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     locale: state.locale,
     savedActionParams: state.savedActionParams,
     actionUsageBySource: state.actionUsageBySource,
+    launcherUsageBySurface: state.launcherUsageBySurface,
     pinnedActions: state.pinnedActions.map(({ outputText: _outputText, lastError: _lastError, lastDurationMs: _lastDurationMs, controlPanelInstanceId: _controlPanelInstanceId, ...pinned }) => ({
       ...pinned,
       inputText: state.settings.persistPinnedInput ? pinned.inputText : '',
@@ -522,6 +542,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     const persistedState = persisted as Partial<AppState> & {
       recentActionNames?: string[]
       actionUsageCounts?: Record<string, number>
+      launcherUsageBySurface?: LauncherUsageBySurface
     }
     const merged = { ...current, ...persistedState }
     merged.settings = { ...current.settings, ...persistedState.settings }
@@ -543,6 +564,11 @@ export const useAppStore = create<AppState>()(persist((set) => ({
         ...current.actionUsageBySource,
         ...persistedState.actionUsageBySource,
       }
+    }
+    // Restore persisted launcher usage; ensure both surfaces exist.
+    merged.launcherUsageBySurface = {
+      ...emptyUsageBySurface(),
+      ...(persistedState.launcherUsageBySurface ?? {}),
     }
     // Drop pinned actions persisted from the removed legacy action system;
     // only plugin-command pins remain valid.

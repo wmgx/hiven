@@ -225,6 +225,12 @@ export type LauncherItem = {
   inputPolicy?: TextInputPolicy
   /** Host-only ranking nudge for a small number of host-owned items. */
   staticPriority?: number
+  /**
+   * Host-only legacy usage keys (e.g. the backing command id) consulted as a
+   * fallback by ranking so pre-migration usage history is preserved. Never
+   * exposed to plugins.
+   */
+  legacyUsageKeys?: string[]
   execute: LauncherExecuteHandler
 }
 
