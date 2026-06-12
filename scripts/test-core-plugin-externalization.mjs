@@ -45,4 +45,8 @@ assert.match(regexPlugin, /id:\s*['"]regex-tester\.panel['"]/, 'regex tester plu
 assert.equal(regexManifest.version, '1.0.0', 'regex tester plugin starts at version 1.0.0')
 assert.equal(regexEntry?.version, '1.0.0', 'builtin index should publish regex tester plugin')
 
+// --- Final Guardrails ---
+assert.doesNotMatch(corePlugin, /definePlugin\(\{\s*commands:/, 'internal corePlugin should not register user-facing commands')
+assert.doesNotMatch(corePlugin, /registerProductionPlugin\(\s*['"]core['"]/, 'internal corePlugin should not register a production plugin')
+
 console.log('core plugin externalization checks passed')
