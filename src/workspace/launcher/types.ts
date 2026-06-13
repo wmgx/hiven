@@ -148,8 +148,21 @@ export type LauncherResultChoice = {
   secondaryActions?: LauncherResultAction[]
 }
 
+export type LauncherResultSelection = {
+  type: 'multi'
+  min: number
+  max: number
+  submitTitle?: string
+  submit: (choices: LauncherResultChoice[]) =>
+    | LauncherExecuteResult
+    | Promise<LauncherExecuteResult>
+    | void
+    | Promise<void>
+}
+
 export type LauncherOutput = {
   choices: LauncherResultChoice[]
+  selection?: LauncherResultSelection
 }
 
 export type LauncherExecuteResult =
@@ -170,7 +183,7 @@ export type PluginLauncherApi = {
     activePaneId: string
     previousActivePaneId?: string
     paneIds: string[]
-    panes: Record<string, { language?: string; stickyScroll?: boolean }>
+    panes: Record<string, { title?: string; language?: string; stickyScroll?: boolean }>
     renderers: Record<string, {
       rendererId: string
       ownerPluginId?: string
@@ -184,6 +197,7 @@ export type PluginLauncherApi = {
   copyText(text: string): Promise<void>
   openUrl(url: string): Promise<void>
   showMainPanel(): Promise<void>
+  createPane(options?: { text?: string; title?: string; language?: string; focus?: boolean; direction?: 'left' | 'right' | 'top' | 'bottom' }): string
   dispatchEffects(effects: FluxEffect[]): EffectRunnerResult
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
 }

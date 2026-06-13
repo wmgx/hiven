@@ -80,7 +80,7 @@ function assertLauncherToolsHaveSubtitles() {
 
 function assertBuiltinVersionsMatchManifests() {
   const index = JSON.parse(read('src/builtin-plugins/index.json'))
-  assert.equal(index.version, 12, 'builtin plugin index version should be bumped for launcher migration')
+  assert.equal(index.version, 13, 'builtin plugin index version should be bumped for launcher migration')
   for (const pkg of index.packages) {
     const manifest = JSON.parse(read(`src/plugins/${pkg.dir}/manifest.json`))
     assert.equal(pkg.version, manifest.version, `${pkg.pluginId} builtin index version should match manifest version`)
@@ -93,6 +93,46 @@ function assertTextDiffCanBeFoundAndFailureIsVisible() {
     textDiff,
     /id:\s*['"]text-diff\.compare['"][\s\S]*aliases:\s*\[[\s\S]*['"]diff['"]/,
     'text-diff launcher item should be searchable by the English diff query in Chinese locale',
+  )
+  assert.match(
+    textDiff,
+    /if \(snapshot\.paneIds\.length === 2\)[\s\S]*runTextDiff\(ctx, snapshot, snapshot\.paneIds\[0\], snapshot\.paneIds\[1\]\)/,
+    'text-diff launcher item should directly compare when exactly two panes are open',
+  )
+  assert.match(
+    textDiff,
+    /selection:\s*\{[\s\S]*type:\s*['"]multi['"][\s\S]*min:\s*2[\s\S]*max:\s*2/,
+    'text-diff source picker should use the launcher multi-select result structure',
+  )
+  assert.match(
+    textDiff,
+    /submit:\s*\(choices\)[\s\S]*runTextDiffForSources\(ctx, selected\[0\], selected\[1\]\)/,
+    'text-diff source picker should compare the two selected sources on submit',
+  )
+  assert.match(
+    textDiff,
+    /if \(snapshot\.paneIds\.length === 1\) return \[\.\.\.paneSources, \{ kind: ['"]clipboard['"] \}, \{ kind: ['"]empty['"] \}\]/,
+    'text-diff source picker should only offer clipboard and empty pane when exactly one pane is open',
+  )
+  assert.match(
+    textDiff,
+    /ctx\.api\.getClipboardText\(\)/,
+    'text-diff source picker should read clipboard through the plugin launcher API',
+  )
+  assert.match(
+    textDiff,
+    /ctx\.api\.createPane\([\s\S]*direction:\s*['"]right['"]/,
+    'text-diff launcher item should create an empty right pane through the plugin launcher API',
+  )
+  assert.doesNotMatch(
+    textDiff,
+    /duplicate/i,
+    'text-diff source picker should not include duplicate-current-pane behavior',
+  )
+  assert.doesNotMatch(
+    textDiff,
+    /pairPaneSources|choice\.comparePair|buildFirstSourceOutput|buildSecondSelectionOutput|pickFirst|pickSecond|selectSecondSource|originalSource|useAsOriginal/,
+    'text-diff source picker should not expose pair-combination or two-step source/target oriented flows',
   )
 
   const effectRunner = read('src/workspace/effectRunner.ts')
@@ -108,8 +148,82 @@ function assertTextDiffCanBeFoundAndFailureIsVisible() {
   )
 }
 
+function assertLauncherApiExposesPaneCreation() {
+  assert.match(
+    read('src/workspace/launcher/types.ts'),
+    /createPane\(options\?:\s*\{[\s\S]*direction\?:\s*['"]left['"]\s*\|\s*['"]right['"]\s*\|\s*['"]top['"]\s*\|\s*['"]bottom['"][\s\S]*\}\):\s*string/,
+    'PluginLauncherApi should expose generic pane creation for plugin-owned launcher flows',
+  )
+  assert.match(
+    read('src/workspace/launcher/pluginApi.ts'),
+    /createPane:\s*\(options\)\s*=>\s*useWorkspaceStore\.getState\(\)\.createPane\(options\)/,
+    'PluginLauncherApi createPane should delegate to the workspace API',
+  )
+}
+
+function assertLauncherParamsAreLocalized() {
+  const i18nRegistry = read('src/i18n/pluginI18nRegistry.ts')
+  assert.match(
+    i18nRegistry,
+    /function localizeTool[\s\S]*tool\.params[\s\S]*localizeParam\(messages, param\)/,
+    'tool params should be localized before they are adapted into launcher items',
+  )
+  assert.match(
+    i18nRegistry,
+    /function localizeLauncherItem[\s\S]*item\.params[\s\S]*localizeParam\(messages, param\)/,
+    'launcher item params should be localized, including labels and select options',
+  )
+
+  const corePaneZh = JSON.parse(read('src/plugins/core-pane/locales/zh.json'))
+  const corePane = read('src/plugins/core-pane/index.ts')
+  for (const key of [
+    'param.direction.label',
+    'param.direction.option.right.label',
+    'param.direction.option.left.label',
+    'param.direction.option.down.label',
+    'param.direction.option.up.label',
+    'param.language.label',
+    'param.language.option.auto.label',
+    'param.language.option.plaintext.label',
+    'param.language.option.javascript.label',
+    'param.language.option.shell.label',
+    'message.stickyScroll.enabled',
+    'message.stickyScroll.disabled',
+  ]) {
+    assert.equal(typeof corePaneZh[key], 'string', `core-pane zh locale should define ${key}`)
+    assert.notEqual(corePaneZh[key], key, `core-pane zh locale should translate ${key}`)
+  }
+  assert.doesNotMatch(
+    corePane,
+    /\{\s*label:\s*['"](JSON|JavaScript|TypeScript|Markdown|Shell)['"],\s*value:/,
+    'core-pane language options should be declared through locale keys, not raw English labels',
+  )
+}
+
+function assertLauncherSystemMessagesAreLocalized() {
+  const output = read('src/workspace/launcher/output.ts')
+  assert.match(output, /translate\(locale,\s*['"]palette['"],\s*key\)/, 'launcher output should resolve labels through palette i18n')
+  assert.match(output, /showMessage\(palette\(locale,\s*['"]copied['"]\)/, 'launcher copy message should use palette i18n')
+  assert.match(output, /palette\(locale,\s*['"]replaceActiveText['"]\)/, 'launcher replace action should use palette i18n')
+  assert.match(output, /palette\(locale,\s*['"]insert['"]\)/, 'launcher insert action should use palette i18n')
+  assert.match(output, /palette\(locale,\s*['"]copy['"]\)/, 'launcher copy action should use palette i18n')
+  assert.doesNotMatch(output, /showMessage\(['"]Copied['"]|title:\s*['"]Replace active text['"]|title:\s*['"]Insert['"]|title:\s*['"]Copy['"]/, 'launcher output should not hardcode English action text')
+
+  const controller = read('src/workspace/launcher/controller.ts')
+  assert.match(controller, /fieldRequiredWithLabel/, 'launcher required-param validation should use localized palette message')
+  assert.match(controller, /inputRequired/, 'launcher empty-input validation should use localized palette message')
+  assert.doesNotMatch(controller, /is required|Input required/, 'launcher controller should not hardcode English validation text')
+
+  const dateTime = read('src/plugins/date-time-assistant/index.ts')
+  assert.match(dateTime, /resultKindLabel\(parsed\.kind,\s*ctx\.locale\)/, 'date-time dynamic subtitles should be locale-aware')
+  assert.doesNotMatch(dateTime, /subtitle:\s*['"](Timestamp|DateTime)['"]|subtitle:\s*parsed\.kind/, 'date-time dynamic subtitles should not hardcode English labels')
+}
+
 assertLauncherToolsHaveSubtitles()
 assertBuiltinVersionsMatchManifests()
 assertTextDiffCanBeFoundAndFailureIsVisible()
+assertLauncherApiExposesPaneCreation()
+assertLauncherParamsAreLocalized()
+assertLauncherSystemMessagesAreLocalized()
 
 console.log('launcher plugin contract checks passed')

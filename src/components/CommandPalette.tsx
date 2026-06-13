@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type MutableRefObject, type RefObject } from 'react'
-import { ChevronLeft, Pin, Search } from 'lucide-react'
+import { Check, ChevronLeft, Pin, Search } from 'lucide-react'
 import { useAppStore } from '../store'
 import { t } from '../i18n'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
@@ -250,6 +250,7 @@ export function CommandPalette() {
             busy={controllerState?.busy ?? false}
             onActivateChoice={(choice) => controllerRef.current?.activateChoice(choice)}
             onActivateSecondary={(choice, actionId) => controllerRef.current?.activateSecondary(choice, actionId)}
+            onSubmitSelection={(choices) => controllerRef.current?.submitResultSelection(choices)}
             onBack={() => { controllerRef.current?.back() }}
             locale={locale}
           />
@@ -490,29 +491,61 @@ function CollectInputStep({ frame, error, busy, onInputChange, onSubmit, onBack,
   )
 }
 
-function ResultStep({ frame, error, busy, onActivateChoice, onActivateSecondary, onBack, locale }: {
+function ResultStep({ frame, error, busy, onActivateChoice, onActivateSecondary, onSubmitSelection, onBack, locale }: {
   frame: ResultFrame
   error: string | null
   busy: boolean
   onActivateChoice: (choice: LauncherResultChoice) => void
   onActivateSecondary: (choice: LauncherResultChoice, actionId: string) => void
+  onSubmitSelection: (choices: LauncherResultChoice[]) => void
   onBack: () => void
   locale: import('../i18n').Locale
 }) {
   const [selectedChoiceIndex, setSelectedChoiceIndex] = useState(0)
+  const [selectedChoiceIds, setSelectedChoiceIds] = useState<string[]>([])
   const choices = frame.output.choices ?? []
+  const selection = frame.output.selection?.type === 'multi' ? frame.output.selection : null
+  const selectedChoices = choices.filter((choice) => selectedChoiceIds.includes(choice.id))
+  const canSubmitSelection = selection
+    ? selectedChoices.length >= selection.min && selectedChoices.length <= selection.max
+    : false
 
   useEffect(() => {
     setSelectedChoiceIndex(0)
+    setSelectedChoiceIds([])
   }, [frame])
+
+  function toggleChoice(choice: LauncherResultChoice) {
+    if (!selection || busy) return
+    setSelectedChoiceIds((current) => {
+      if (current.includes(choice.id)) return current.filter((id) => id !== choice.id)
+      if (current.length >= selection.max) return current
+      return [...current, choice.id]
+    })
+  }
+
+  function submitSelection() {
+    if (!selection || !canSubmitSelection || busy) return
+    onSubmitSelection(selectedChoices)
+  }
 
   useEffect(() => {
     function handleKeyDown(event: globalThis.KeyboardEvent) {
       if (event.key === 'ArrowDown') { event.preventDefault(); setSelectedChoiceIndex((index) => Math.min(index + 1, choices.length - 1)) }
       if (event.key === 'ArrowUp') { event.preventDefault(); setSelectedChoiceIndex((index) => Math.max(index - 1, 0)) }
+      if (selection && event.key === ' ') {
+        event.preventDefault()
+        event.stopPropagation()
+        const choice = choices[selectedChoiceIndex]
+        if (choice) toggleChoice(choice)
+      }
       if (event.key === 'Enter' && !busy) {
         event.preventDefault()
         event.stopPropagation()
+        if (selection) {
+          submitSelection()
+          return
+        }
         const choice = choices[selectedChoiceIndex]
         if (choice) onActivateChoice(choice)
       }
@@ -524,7 +557,7 @@ function ResultStep({ frame, error, busy, onActivateChoice, onActivateSecondary,
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [choices, selectedChoiceIndex, busy, onActivateChoice, onBack])
+  }, [choices, selectedChoiceIndex, busy, onActivateChoice, onBack, selection, selectedChoices, canSubmitSelection])
 
   return (
     <>
@@ -539,14 +572,26 @@ function ResultStep({ frame, error, busy, onActivateChoice, onActivateSecondary,
       <div className="command-palette-results py-1">
         {choices.map((choice, index) => {
           const isSelected = selectedChoiceIndex === index
+          const isChecked = selectedChoiceIds.includes(choice.id)
           return (
             <div
               key={choice.id}
               className={`cmd-item ${isSelected ? 'selected' : ''}`}
               style={{ background: isSelected ? 'var(--color-accent-light)' : 'transparent' }}
-              onClick={() => onActivateChoice(choice)}
+              onClick={() => selection ? toggleChoice(choice) : onActivateChoice(choice)}
               onMouseEnter={() => setSelectedChoiceIndex(index)}
             >
+              {selection && (
+                <div
+                  className="w-[22px] h-[22px] rounded-md flex items-center justify-center shrink-0"
+                  style={{
+                    background: isChecked ? 'var(--color-accent)' : 'var(--color-background-tertiary)',
+                    color: isChecked ? 'white' : 'var(--color-text-tertiary)',
+                  }}
+                >
+                  {isChecked && <Check size={13} />}
+                </div>
+              )}
               <div className="flex-1 min-w-0">
                 <div className="text-[13px] font-medium truncate" style={{ color: isSelected ? 'var(--color-accent-hover)' : 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>
                   {choice.title}
@@ -579,7 +624,7 @@ function ResultStep({ frame, error, busy, onActivateChoice, onActivateSecondary,
                   ))}
                 </div>
               )}
-              {isSelected && (
+              {isSelected && !selection && (
                 <kbd className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--color-background-tertiary)', border: '0.5px solid var(--color-border-tertiary)', color: 'var(--color-text-secondary)' }}>↵</kbd>
               )}
             </div>
@@ -594,7 +639,13 @@ function ResultStep({ frame, error, busy, onActivateChoice, onActivateSecondary,
       )}
       <div className="flex gap-3 px-3.5 py-1.5" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
         <HintKey keys="↑↓" label={t(locale, 'palette.navigate')} />
-        <HintKey keys="↵" label={t(locale, 'palette.select')} />
+        {selection && <HintKey keys="space" label={t(locale, 'palette.toggle')} />}
+        <HintKey keys="↵" label={selection?.submitTitle ?? t(locale, 'palette.select')} />
+        {selection && (
+          <span className="text-[11px]" style={{ color: canSubmitSelection ? 'var(--color-accent)' : 'var(--color-text-tertiary)' }}>
+            {selectedChoices.length}/{selection.max}
+          </span>
+        )}
         <HintKey keys="esc" label={t(locale, 'palette.back')} />
       </div>
     </>

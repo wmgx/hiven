@@ -27,9 +27,34 @@ function loadModule(path, { stripImports = [], globals = {} } = {}) {
 const stripTypeImports = [
   /import\s+type\s*\{[\s\S]*?\}\s*from\s*'[^']*'\s*;?\s*\n?/g,
 ]
+const stripI18nImport = /import\s*\{\s*translate,\s*type\s+Locale\s*\}\s*from\s*'[^']*\/i18n'\s*;?\s*\n?/
+const translate = (locale, namespace, key, vars = {}) => {
+  const messages = {
+    palette: {
+      en: {
+        copied: 'Copied',
+        copy: 'Copy',
+        insert: 'Insert',
+        replaceActiveText: 'Replace active text',
+      },
+      zh: {
+        copied: '已复制',
+        copy: '复制',
+        insert: '插入',
+        replaceActiveText: '替换当前文本',
+      },
+    },
+  }
+  let value = messages[namespace]?.[locale]?.[key] ?? messages[namespace]?.en?.[key] ?? key
+  for (const [name, replacement] of Object.entries(vars)) value = value.replaceAll(`{${name}}`, String(replacement))
+  return value
+}
 
 // output.ts (only depends on types)
-const output = loadModule('src/workspace/launcher/output.ts', { stripImports: stripTypeImports })
+const output = loadModule('src/workspace/launcher/output.ts', {
+  stripImports: [...stripTypeImports, stripI18nImport],
+  globals: { translate },
+})
 
 // toolAdapter.ts depends on ./output + types
 const toolAdapter = loadModule('src/workspace/launcher/toolAdapter.ts', {

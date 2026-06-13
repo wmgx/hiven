@@ -80,6 +80,17 @@ type ParsedResult = {
   actionLabelKey: string
 }
 
+function resultKindLabel(kind: ParsedResult['kind'], locale: LauncherDynamicContext['locale']): string {
+  if (locale === 'zh') {
+    if (kind === 'timestamp') return '时间戳'
+    if (kind === 'date') return '日期'
+    return '日期时间'
+  }
+  if (kind === 'timestamp') return 'Timestamp'
+  if (kind === 'date') return 'Date'
+  return 'DateTime'
+}
+
 function nowResult(date: Date, offsetMinutes?: number): ParsedResult {
   const value = formatNowResult(date, offsetMinutes)
   return {
@@ -320,7 +331,7 @@ export const dateTimeAssistantPlugin = definePlugin({
           return [
             {
               id: 'dt-now-timestamp',
-              display: { title: `${trimmed} -> ${timestampValue}`, subtitle: 'Timestamp', icon: 'Clock' },
+              display: { title: `${trimmed} -> ${timestampValue}`, subtitle: resultKindLabel('timestamp', ctx.locale), icon: 'Clock' },
               behavior: { type: 'perform' },
               async execute(ctx2) {
                 await ctx2.api.copyText(timestampValue)
@@ -329,7 +340,7 @@ export const dateTimeAssistantPlugin = definePlugin({
             },
             {
               id: 'dt-now-datetime',
-              display: { title: `${trimmed} -> ${dateTimeValue}`, subtitle: 'DateTime', icon: 'Clock' },
+              display: { title: `${trimmed} -> ${dateTimeValue}`, subtitle: resultKindLabel('datetime', ctx.locale), icon: 'Clock' },
               behavior: { type: 'perform' },
               async execute(ctx2) {
                 await ctx2.api.copyText(dateTimeValue)
@@ -344,7 +355,7 @@ export const dateTimeAssistantPlugin = definePlugin({
       const trimmed = ctx.query.trim()
       return [{
         id: 'dt-result',
-        display: { title: `${trimmed} -> ${parsed.display}`, subtitle: parsed.kind, icon: 'Clock' },
+        display: { title: `${trimmed} -> ${parsed.display}`, subtitle: resultKindLabel(parsed.kind, ctx.locale), icon: 'Clock' },
         behavior: { type: 'perform' },
         async execute(ctx2) {
           await ctx2.api.copyText(parsed.value)

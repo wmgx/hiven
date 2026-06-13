@@ -2,13 +2,18 @@
  * First-party Text Diff plugin.
  */
 
-import { definePlugin, type PaneInput } from '@hiven/plugin'
+import { definePlugin, type LauncherExecutionContext, type PaneInput } from '@hiven/plugin'
 import { TextDiffRenderer } from './TextDiffRenderer'
 
 type PaneSnapshot = {
   activePaneId: string
   previousActivePaneId?: string
   paneIds: string[]
+  panes: Record<string, {
+    title?: string
+    language?: string
+    stickyScroll?: boolean
+  }>
   renderers?: Record<string, {
     rendererId: string
     ownerPluginId?: string
@@ -16,16 +21,12 @@ type PaneSnapshot = {
   }>
 }
 
-function resolvePanePair(snapshot: PaneSnapshot): { originalPaneId: string; modifiedPaneId: string } | null {
-  const { activePaneId, previousActivePaneId, paneIds } = snapshot
-  if (paneIds.length < 2) return null
-  if (previousActivePaneId && previousActivePaneId !== activePaneId && paneIds.includes(previousActivePaneId)) {
-    return { originalPaneId: previousActivePaneId, modifiedPaneId: activePaneId }
-  }
-  const originalPaneId = paneIds.includes(activePaneId) ? activePaneId : paneIds[0]
-  const modifiedPaneId = paneIds.find((paneId) => paneId !== originalPaneId)
-  return modifiedPaneId ? { originalPaneId, modifiedPaneId } : null
-}
+type TextDiffLauncherContext = LauncherExecutionContext
+
+type DiffSource =
+  | { kind: 'pane'; paneId: string }
+  | { kind: 'clipboard' }
+  | { kind: 'empty' }
 
 function textDiffEffects(originalPaneId: string, modifiedPaneId: string) {
   return [{
@@ -47,6 +48,99 @@ function clearExistingTextDiffEffects(snapshot: PaneSnapshot) {
     .map(([paneId]) => ({ type: 'pane.clearRenderer' as const, paneId }))
 }
 
+function runTextDiff(ctx: TextDiffLauncherContext, snapshot: PaneSnapshot, originalPaneId: string, modifiedPaneId: string) {
+  const result = ctx.api.dispatchEffects([
+    ...clearExistingTextDiffEffects(snapshot),
+    ...textDiffEffects(originalPaneId, modifiedPaneId),
+  ])
+  if (result.errors.length > 0) return { ok: false as const, message: result.errors[0] }
+  return { ok: true as const }
+}
+
+function paneLabel(snapshot: PaneSnapshot, paneId: string): string {
+  const index = snapshot.paneIds.indexOf(paneId)
+  return snapshot.panes[paneId]?.title || `Pane ${index >= 0 ? index + 1 : paneId}`
+}
+
+function activePaneId(snapshot: PaneSnapshot): string | null {
+  return snapshot.paneIds.includes(snapshot.activePaneId) ? snapshot.activePaneId : snapshot.paneIds[0] ?? null
+}
+
+function sourceId(source: DiffSource): string {
+  return source.kind === 'pane' ? `pane:${source.paneId}` : source.kind
+}
+
+function sourceLanguage(snapshot: PaneSnapshot, source: DiffSource): string | undefined {
+  return source.kind === 'pane' ? snapshot.panes[source.paneId]?.language : undefined
+}
+
+async function materializeSourcePane(
+  ctx: TextDiffLauncherContext,
+  source: DiffSource,
+  language: string,
+): Promise<string> {
+  if (source.kind === 'pane') return source.paneId
+  if (source.kind === 'clipboard') {
+    const text = await ctx.api.getClipboardText()
+    return ctx.api.createPane({ text, language, focus: true, direction: 'right' })
+  }
+  return ctx.api.createPane({ text: '', language, focus: true, direction: 'right' })
+}
+
+async function runTextDiffForSources(ctx: TextDiffLauncherContext, original: DiffSource, modified: DiffSource) {
+  let snapshot = ctx.api.getPaneSnapshot()
+  const originalLanguage = sourceLanguage(snapshot, original) || 'plaintext'
+  const originalPaneId = await materializeSourcePane(ctx, original, originalLanguage)
+  snapshot = ctx.api.getPaneSnapshot()
+  const modifiedLanguage = sourceLanguage(snapshot, modified) || snapshot.panes[originalPaneId]?.language || originalLanguage
+  const modifiedPaneId = await materializeSourcePane(ctx, modified, modifiedLanguage)
+  return runTextDiff(ctx, ctx.api.getPaneSnapshot(), originalPaneId, modifiedPaneId)
+}
+
+function buildSourceChoiceOutput(ctx: TextDiffLauncherContext, snapshot: PaneSnapshot) {
+  if (snapshot.paneIds.length === 2) {
+    return runTextDiff(ctx, snapshot, snapshot.paneIds[0], snapshot.paneIds[1])
+  }
+  const sources = selectableSources(snapshot)
+  if (sources.length < 2) return { ok: false as const, message: ctx.t('choice.needTwoSources') }
+  const sourceById = new Map(sources.map((source) => [sourceId(source), source]))
+  return {
+    ok: true as const,
+    output: {
+      choices: sources.map((source) => ({
+        id: sourceId(source),
+        title: sourceLabel(ctx, snapshot, source),
+        primaryAction: () => ({ ok: false as const, message: ctx.t('choice.needTwoSources') }),
+      })),
+      selection: {
+        type: 'multi' as const,
+        min: 2,
+        max: 2,
+        submitTitle: ctx.t('choice.compareSelected'),
+        submit: (choices) => {
+          const selected = choices
+            .map((choice) => sourceById.get(choice.id))
+            .filter((source): source is DiffSource => Boolean(source))
+          if (selected.length !== 2) return { ok: false as const, message: ctx.t('choice.needTwoSources') }
+          return runTextDiffForSources(ctx, selected[0], selected[1])
+        },
+      },
+    },
+  }
+}
+
+function selectableSources(snapshot: PaneSnapshot): DiffSource[] {
+  const paneSources = snapshot.paneIds.map((paneId) => ({ kind: 'pane' as const, paneId }))
+  if (snapshot.paneIds.length === 1) return [...paneSources, { kind: 'clipboard' }, { kind: 'empty' }]
+  return paneSources
+}
+
+function sourceLabel(ctx: TextDiffLauncherContext, snapshot: PaneSnapshot, source: DiffSource): string {
+  if (source.kind === 'pane') return paneLabel(snapshot, source.paneId)
+  if (source.kind === 'clipboard') return ctx.t('choice.clipboard')
+  return ctx.t('choice.createEmptyPane')
+}
+
 export const textDiffPlugin = definePlugin({
   launcher: {
     items: [
@@ -62,14 +156,7 @@ export const textDiffPlugin = definePlugin({
         pinnable: false,
         execute(ctx) {
           const snapshot = ctx.api.getPaneSnapshot()
-          const pair = resolvePanePair(snapshot)
-          if (!pair) return { ok: false, message: 'Need 2 panes for this command. Please open another pane first.' }
-          const result = ctx.api.dispatchEffects([
-            ...clearExistingTextDiffEffects(snapshot),
-            ...textDiffEffects(pair.originalPaneId, pair.modifiedPaneId),
-          ])
-          if (result.errors.length > 0) return { ok: false, message: result.errors[0] }
-          return { ok: true }
+          return buildSourceChoiceOutput(ctx, snapshot)
         },
       },
     ],

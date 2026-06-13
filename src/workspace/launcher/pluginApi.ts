@@ -106,6 +106,7 @@ export function createPluginLauncherApi(): PluginLauncherApi {
           state.paneOrder.map((paneId) => [
             paneId,
             {
+              title: state.panes[paneId]?.title,
               language: state.panes[paneId]?.language,
               stickyScroll: state.panes[paneId]?.stickyScroll === true,
             },
@@ -162,6 +163,7 @@ export function createPluginLauncherApi(): PluginLauncherApi {
       await openExternalUrl(url)
     },
     showMainPanel,
+    createPane: (options) => useWorkspaceStore.getState().createPane(options),
     dispatchEffects: (effects: FluxEffect[]) => applyEffects(effects),
     showMessage: (message: string, level = 'info') => {
       useAppStore.getState().setLastCommandStatus({

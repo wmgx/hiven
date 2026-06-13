@@ -16,34 +16,39 @@ import type {
   LauncherResultChoice,
   PluginLauncherApi,
 } from './types'
+import { translate, type Locale } from '../../i18n'
 
 export const TEXT_OUTPUT_CHOICE_ID = 'launcher.text-output'
 export const REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID = 'launcher.replace-active-text-output'
+
+function palette(locale: Locale, key: string): string {
+  return translate(locale, 'palette', key)
+}
 
 /**
  * Build a default text-output result. Shown as one choice; Enter copies the text.
  * `api` is captured so the copy action can run without re-plumbing.
  */
-export function textResult(text: string, api: PluginLauncherApi): LauncherExecuteResult {
+export function textResult(text: string, api: PluginLauncherApi, locale: Locale = 'en'): LauncherExecuteResult {
   const choice: LauncherResultChoice = {
     id: TEXT_OUTPUT_CHOICE_ID,
     title: text,
     preview: text,
     primaryAction: async () => {
       await api.copyText(text)
-      api.showMessage('Copied', 'success')
+      api.showMessage(palette(locale, 'copied'), 'success')
     },
     secondaryActions: [
       {
         id: 'replace-active',
-        title: 'Replace active text',
+        title: palette(locale, 'replaceActiveText'),
         run: async () => {
           await api.replaceActiveText(text)
         },
       },
       {
         id: 'insert',
-        title: 'Insert',
+        title: palette(locale, 'insert'),
         run: async () => {
           await api.insertText(text)
         },
@@ -57,7 +62,7 @@ export function textResult(text: string, api: PluginLauncherApi): LauncherExecut
  * Text output whose primary (Enter) action replaces the active text instead of
  * copying. Still shows the value as the choice title/preview.
  */
-export function replaceActiveTextResult(text: string, api: PluginLauncherApi): LauncherExecuteResult {
+export function replaceActiveTextResult(text: string, api: PluginLauncherApi, locale: Locale = 'en'): LauncherExecuteResult {
   const choice: LauncherResultChoice = {
     id: REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID,
     title: text,
@@ -68,10 +73,10 @@ export function replaceActiveTextResult(text: string, api: PluginLauncherApi): L
     secondaryActions: [
       {
         id: 'copy',
-        title: 'Copy',
+        title: palette(locale, 'copy'),
         run: async () => {
           await api.copyText(text)
-          api.showMessage('Copied', 'success')
+          api.showMessage(palette(locale, 'copied'), 'success')
         },
       },
     ],

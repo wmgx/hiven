@@ -27,6 +27,7 @@ import type {
   PluginLauncherApi,
 } from './types'
 import { isOutputResult } from './output'
+import { translate, type Locale } from '../../i18n'
 
 // ─── Frames ──────────────────────────────────────────────────────────────────
 
@@ -261,8 +262,8 @@ export class LauncherController {
   private validateParam(param: LauncherParamSpec, params: Record<string, unknown>): string | null {
     const value = params[param.key]
     if (!param.required) return null
-    if (value === undefined || value === null || value === '') return `${param.label} is required`
-    if (Array.isArray(value) && value.length === 0) return `${param.label} is required`
+    if (value === undefined || value === null || value === '') return translate(this.deps.locale as Locale, 'palette', 'fieldRequiredWithLabel', { label: param.label })
+    if (Array.isArray(value) && value.length === 0) return translate(this.deps.locale as Locale, 'palette', 'fieldRequiredWithLabel', { label: param.label })
     return null
   }
 
@@ -344,7 +345,7 @@ export class LauncherController {
 
     const spec = item.behavior.type === 'collect-input' ? item.behavior.input : undefined
     if (!inputText.trim() && !spec?.allowEmptyInput) {
-      this.setState({ error: spec?.emptyInputMessage ?? 'Input required' })
+      this.setState({ error: spec?.emptyInputMessage ?? translate(this.deps.locale as Locale, 'palette', 'inputRequired') })
       return
     }
 
@@ -364,6 +365,13 @@ export class LauncherController {
     const action = choice.secondaryActions?.find((a) => a.id === actionId)
     if (!action) return
     await this.runChoiceAction(() => action.run(), action.title)
+  }
+
+  /** Submit a multi-select result frame. */
+  async submitResultSelection(choices: LauncherResultChoice[]): Promise<void> {
+    const top = this.topFrame()
+    if (top.kind !== 'result' || top.output.selection?.type !== 'multi') return
+    await this.runChoiceAction(() => top.output.selection?.submit(choices), top.sourceTitle ?? '')
   }
 
   /**

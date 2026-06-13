@@ -13,22 +13,22 @@ type SplitDirection = 'left' | 'right' | 'top' | 'bottom'
 const LANGUAGE_OPTIONS = [
   { label: 'param.language.option.auto.label', value: 'auto' },
   { label: 'param.language.option.plaintext.label', value: 'plaintext' },
-  { label: 'JSON', value: 'json' },
-  { label: 'JavaScript', value: 'javascript' },
-  { label: 'TypeScript', value: 'typescript' },
-  { label: 'HTML', value: 'html' },
-  { label: 'CSS', value: 'css' },
-  { label: 'Markdown', value: 'markdown' },
-  { label: 'YAML', value: 'yaml' },
-  { label: 'XML', value: 'xml' },
-  { label: 'SQL', value: 'sql' },
-  { label: 'Python', value: 'python' },
-  { label: 'Shell', value: 'shell' },
-  { label: 'Go', value: 'go' },
-  { label: 'Rust', value: 'rust' },
-  { label: 'Java', value: 'java' },
-  { label: 'C#', value: 'csharp' },
-  { label: 'C++', value: 'cpp' },
+  { label: 'param.language.option.json.label', value: 'json' },
+  { label: 'param.language.option.javascript.label', value: 'javascript' },
+  { label: 'param.language.option.typescript.label', value: 'typescript' },
+  { label: 'param.language.option.html.label', value: 'html' },
+  { label: 'param.language.option.css.label', value: 'css' },
+  { label: 'param.language.option.markdown.label', value: 'markdown' },
+  { label: 'param.language.option.yaml.label', value: 'yaml' },
+  { label: 'param.language.option.xml.label', value: 'xml' },
+  { label: 'param.language.option.sql.label', value: 'sql' },
+  { label: 'param.language.option.python.label', value: 'python' },
+  { label: 'param.language.option.shell.label', value: 'shell' },
+  { label: 'param.language.option.go.label', value: 'go' },
+  { label: 'param.language.option.rust.label', value: 'rust' },
+  { label: 'param.language.option.java.label', value: 'java' },
+  { label: 'param.language.option.csharp.label', value: 'csharp' },
+  { label: 'param.language.option.cpp.label', value: 'cpp' },
 ]
 
 const EDITOR_LANGUAGE_VALUES = new Set(LANGUAGE_OPTIONS.map((option) => option.value).filter((value) => value !== 'auto'))
@@ -137,8 +137,8 @@ export const corePanePlugin = definePlugin({
               type: 'status.message' as const,
               level: 'info' as const,
               message: stickyScrollEnabled
-                ? 'Current pane sticky scroll disabled'
-                : 'Current pane sticky scroll enabled',
+                ? ctx.t('message.stickyScroll.disabled')
+                : ctx.t('message.stickyScroll.enabled'),
             },
           ]))
         },
@@ -277,13 +277,6 @@ export const corePanePlugin = definePlugin({
               type: 'pane.update' as const,
               paneId: target.paneId,
               patch: { stickyScroll: !stickyScrollEnabled },
-            },
-            {
-              type: 'status.message' as const,
-              level: 'info' as const,
-              message: stickyScrollEnabled
-                ? 'Current pane sticky scroll disabled'
-                : 'Current pane sticky scroll enabled',
             },
           ],
         }

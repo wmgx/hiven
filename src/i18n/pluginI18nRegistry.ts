@@ -79,6 +79,14 @@ export function makePluginT(pluginId: string, locale: Locale): PluginT {
 
 type I18nMap = Partial<Record<Locale, string>>
 
+type LocalizableParam = {
+  label: string
+  labelI18n?: I18nMap
+  hint?: string
+  hintI18n?: I18nMap
+  options?: Array<string | { label: string; value: string; labelI18n?: I18nMap }>
+}
+
 /** Build a per-locale map for a key; returns null when no locale defines it. */
 function localizeKey(messages: Messages, key: string): { text: string; i18n: I18nMap } | null {
   const i18n: I18nMap = {}
@@ -95,8 +103,8 @@ function localizeKey(messages: Messages, key: string): { text: string; i18n: I18
   return { text, i18n }
 }
 
-function localizeParam(messages: Messages, param: CommandParam): CommandParam {
-  const next: CommandParam = { ...param }
+function localizeParam<TParam extends LocalizableParam>(messages: Messages, param: TParam): TParam {
+  const next: TParam = { ...param }
   const label = localizeKey(messages, param.label)
   if (label) {
     next.label = label.text
@@ -110,13 +118,12 @@ function localizeParam(messages: Messages, param: CommandParam): CommandParam {
     }
   }
   if (Array.isArray(param.options)) {
-    const options = param.options as Array<string | { label: string; value: string; labelI18n?: I18nMap }>
-    next.options = options.map((option) => {
+    next.options = param.options.map((option) => {
       if (typeof option === 'string') return option
       const optLabel = localizeKey(messages, option.label)
       if (!optLabel) return option
       return { ...option, label: optLabel.text, labelI18n: { ...optLabel.i18n, ...option.labelI18n } }
-    }) as CommandParam['options']
+    }) as TParam['options']
   }
   return next
 }
@@ -199,6 +206,9 @@ function localizeTool<TSettings>(messages: Messages, tool: PluginToolContributio
       next.subtitleI18n = { ...subtitle.i18n, ...tool.subtitleI18n }
     }
   }
+  if (tool.params) {
+    next.params = tool.params.map((param) => localizeParam(messages, param))
+  }
   return next
 }
 
@@ -234,6 +244,9 @@ function localizeLauncherItem<TSettings>(
       ...item.behavior,
       input: localizeLauncherInputSpec(messages, item.behavior.input),
     }
+  }
+  if (item.params) {
+    next.params = item.params.map((param) => localizeParam(messages, param))
   }
   return next
 }

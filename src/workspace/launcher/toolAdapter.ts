@@ -25,6 +25,7 @@ import type {
   TextInputMode,
 } from './types'
 import { emptyResult, textResult, replaceActiveTextResult, errorResult, choicesResult, REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID } from './output'
+import type { Locale } from '../../i18n'
 
 export type ToolAdaptOptions = {
   pluginId: string
@@ -49,10 +50,10 @@ function resolveTextInput(api: PluginLauncherApi, mode: TextInputMode): Resolved
   return { kind: 'text', text: all, mode, source: all ? 'all' : 'empty' }
 }
 
-function makeOutput(api: PluginLauncherApi): PluginToolOutput {
+function makeOutput(api: PluginLauncherApi, locale: Locale): PluginToolOutput {
   return {
-    text: (value: string) => textResult(value, api),
-    replaceActiveText: (value: string) => replaceActiveTextResult(value, api),
+    text: (value: string) => textResult(value, api, locale),
+    replaceActiveText: (value: string) => replaceActiveTextResult(value, api, locale),
     error: (message: string) => errorResult(message),
     choices: (choices) => choicesResult(choices),
   }
@@ -97,7 +98,7 @@ export function adaptToolToLauncherItem(
         locale: ctx.locale,
         api: ctx.api,
         t: ctx.t,
-        output: makeOutput(ctx.api),
+        output: makeOutput(ctx.api, ctx.locale),
       }),
     )
     if (
