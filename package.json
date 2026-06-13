@@ -19,6 +19,7 @@
     "test:pinned-runner-policy": "node scripts/test-pinned-runner-policy.mjs",
     "test:pinned-tombstone-lifecycle": "node scripts/test-pinned-tombstone-lifecycle.mjs",
     "test:plugin-package-lifecycle": "node scripts/test-plugin-package-lifecycle.mjs",
+    "test:plugin-i18n-localization": "node scripts/test-plugin-i18n-localization.mjs",
     "test:plugin-merge-groups": "node scripts/test-plugin-merge-groups.mjs",
     "test:plugin-selection-input-resolution": "node scripts/test-plugin-selection-input-resolution.mjs",
     "test:tauri-plugin-dir-commands": "cargo test --manifest-path src-tauri/Cargo.toml plugin_dir_command_tests -- --test-threads=1",

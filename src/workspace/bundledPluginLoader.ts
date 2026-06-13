@@ -76,19 +76,14 @@ export function registerBundledPluginPackages() {
 
   for (const { dir, manifest, definition } of readBundledPluginPackages()) {
     registerPluginMessages(manifest.pluginId, readBundledPluginMessages(dir))
-    const localized = localizeContributions(manifest.pluginId, {
-      commands: definition.commands,
-      renderers: definition.renderers,
-      panels: definition.panels,
-      toolbar: definition.toolbar,
-    })
+    const localized = localizeContributions(manifest.pluginId, definition)
     pluginRegistry.registerProductionPlugin(
       manifest.pluginId,
       localized.commands,
       localized.renderers,
       localized.panels,
       localized.toolbar,
-      definition,
+      localized.definition,
     )
   }
 }
