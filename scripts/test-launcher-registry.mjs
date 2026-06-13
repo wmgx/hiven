@@ -55,17 +55,35 @@ const toolAdapter = loadModule('src/workspace/launcher/toolAdapter.ts', {
 const commandAdapter = loadModule('src/workspace/launcher/commandAdapter.ts', {
   stripImports: [
     ...stripTypeImports,
+    /import\s*\{[^}]*\}\s*from\s*'\.\.\/effectRunner'\s*;?\s*\n?/,
+    /import\s*\{[^}]*\}\s*from\s*'\.\.\/pluginInputResolver'\s*;?\s*\n?/,
     /import\s*\{[^}]*\}\s*from\s*'\.\.\/pluginCommandRunner'\s*;?\s*\n?/,
     /import\s*\{[^}]*\}\s*from\s*'\.\/output'\s*;?\s*\n?/,
   ],
   globals: {
+    applyEffects: (effects) => {
+      commandAdapterAppliedEffects.push(...effects)
+      return { errors: [] }
+    },
+    buildPluginCommandContext: (inputs, params) => ({ inputs, params }),
+    resolvePluginInputs: (slots, resolution) => {
+      commandAdapterResolvedSlots = { slots, resolution }
+      const inputs = {}
+      for (const slot of slots) {
+        if (slot.kind === 'pane') inputs[slot.key] = { kind: 'pane', paneId: `pane-${slot.key}` }
+      }
+      return { ok: true, inputs }
+    },
     defaultPluginCommandParams: pluginCommandRunner.defaultPluginCommandParams,
+    effectsFromPluginCommandResult: pluginCommandRunner.effectsFromPluginCommandResult,
     runTextPluginCommand: pluginCommandRunner.runTextPluginCommand,
     emptyResult: output.emptyResult,
     errorResult: output.errorResult,
     replaceActiveTextResult: output.replaceActiveTextResult,
   },
 })
+let commandAdapterAppliedEffects = []
+let commandAdapterResolvedSlots = null
 
 // identity.ts (standalone with surface stub injected as a prelude)
 const identityWithStub = (() => {
@@ -132,7 +150,7 @@ const noSelApi = { ...api, getSelectionText: () => '' }
 const selRes = await selItem.execute({ settings: {}, locale: 'en', api: noSelApi, t: (k) => k })
 assert.equal(selRes.output.choices[0].title, '', "'selection' with no selection → empty text")
 
-// --- Command adapter: safe text commands only, Enter replaces active text ---
+// --- Command adapter: safe text commands + controlled workspace/effect commands ---
 const textCommand = {
   id: 'demo.upper',
   title: 'Uppercase',
@@ -190,9 +208,10 @@ assert.equal(
     ...textCommand,
     id: 'demo.pane',
     inputs: [{ key: 'source', label: 'Source', kind: 'pane', required: true }],
+    live: { pinnable: false },
   }),
-  false,
-  'pane commands are skipped',
+  true,
+  'workspace pane commands are adaptable through the controlled effect path',
 )
 assert.equal(
   commandAdapter.canAdaptCommandToLauncher({
@@ -210,9 +229,33 @@ assert.equal(
     live: { pinnable: false },
     run() { return { effects: [{ type: 'panel.openV2', panelId: 'demo.panel' }] } },
   }),
-  false,
-  'workspace/panel-style commands that opt out of pinning are skipped',
+  true,
+  'workspace/panel-style commands that opt out of pinning are exposed but not pinnable',
 )
+commandAdapterAppliedEffects = []
+const workspaceCommand = {
+  id: 'demo.diff',
+  title: 'Compare',
+  description: 'Compare panes',
+  icon: 'GitCompare',
+  live: { pinnable: false },
+  inputs: [{ key: 'original', label: 'Original', kind: 'pane', required: true }],
+  inputResolution: { strategy: 'use-active', fallback: 'fail' },
+  run(ctx) {
+    return { effects: [{ type: 'pane.setRenderer', paneId: ctx.inputs.original.paneId, renderer: 'demo.renderer' }] }
+  },
+}
+const workspaceItem = commandAdapter.adaptCommandToLauncherItem(workspaceCommand, {
+  pluginId: 'demo',
+  source: 'builtin',
+  systemKey: identityWithStub.getPluginCommandAdapterItemKey('demo', 'demo.diff'),
+})
+assert.equal(workspaceItem.pinnable, false, 'workspace command adapter preserves non-pinnable command metadata')
+assert.equal(workspaceItem.surfaces?.join(','), 'command-palette', 'workspace command adapter stays inside the in-app launcher')
+const workspaceRes = await workspaceItem.execute({ surfaceId: 'command-palette', settings: {}, locale: 'en', api, t: (k) => k })
+assert.equal(workspaceRes.output, undefined, 'workspace command adapter closes the launcher after effects')
+assert.equal(commandAdapterResolvedSlots.slots[0].key, 'original', 'workspace command adapter resolves declared inputs')
+assert.equal(commandAdapterAppliedEffects[0].type, 'pane.setRenderer', 'workspace command adapter applies command effects')
 
 // --- output helpers contract ---
 assert.equal(output.emptyResult().ok, true)

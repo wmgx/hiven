@@ -114,6 +114,11 @@ check('main panel launcher command is contributed by the external core-pane plug
     'core-pane plugin should expose the main panel action as a launcher item',
   )
   assertHas(
+    files.corePanePlugin,
+    /id:\s*['"]show-main-panel['"][\s\S]{0,360}surfaces:\s*\[\s*['"]global-launcher['"]\s*\]/,
+    'main panel launcher action should only appear in the standalone global launcher',
+  )
+  assertHas(
     files.app,
     /listen\(['"]hiven:\/\/show-main-panel['"][\s\S]{0,260}setActiveView\(['"]editor['"]\)/,
     'main window should handle show-main-panel requests from the standalone launcher',
@@ -223,7 +228,7 @@ check('standalone domain launcher items stay on the launcher controller path', (
   )
   assertHas(
     files.globalLauncher,
-    /item\.kind\s*===\s*['"]domain['"][\s\S]{0,640}controller\.selectItem\(item\.domainItem\)/,
+    /item\.kind\s*===\s*['"]domain['"][\s\S]{0,740}controller\.selectItem\(item\.domainItem(?:,\s*\{[\s\S]{0,80}\})?\)/,
     'domain launcher items should execute through LauncherController so output keeps the launcher open',
   )
 })

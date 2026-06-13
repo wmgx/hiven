@@ -5,11 +5,11 @@
  * system-owned `LauncherItem`s:
  *   1. Host-owned launcher items (views/actions).
  *   2. Plugin static items — from `launcher.items`, adapted from `tools`, and
- *      conservatively adapted text commands.
+ *      conservatively adapted command contributions.
  *   3. Plugin dynamic items — from `launcher.dynamicItems` and tool-less
  *      dynamic providers, guarded by query rules + per-provider error isolation.
  *
- * CommandPalette / GlobalLauncher never scan commands directly. Existing text
+ * CommandPalette / GlobalLauncher never scan commands directly. Existing
  * commands are exposed only through the host-owned command adapter here.
  */
 

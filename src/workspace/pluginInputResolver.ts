@@ -213,8 +213,7 @@ function resolveAutoFill(
         language: panes[activePaneId]!.language,
         stickyScroll: panes[activePaneId]!.stickyScroll === true,
       }
-      // 3+ panes: filled from previous+active, but prompt to confirm
-      return { ok: false, reason: 'prompt', slots }
+      return { ok: true, inputs }
     }
 
     return handleFallback(resolution, slots, 'Please select 2 panes to compare')

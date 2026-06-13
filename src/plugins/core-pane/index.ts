@@ -44,6 +44,7 @@ export const corePanePlugin = definePlugin({
           icon: 'PanelTopOpen',
           aliases: ['main', 'home', 'editor', 'main-panel', '主面板'],
         },
+        surfaces: ['global-launcher'],
         pinnable: false,
         async execute(ctx) {
           await ctx.api.showMainPanel()
