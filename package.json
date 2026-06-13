@@ -22,6 +22,7 @@
     "test:plugin-i18n-localization": "node scripts/test-plugin-i18n-localization.mjs",
     "test:plugin-merge-groups": "node scripts/test-plugin-merge-groups.mjs",
     "test:plugin-selection-input-resolution": "node scripts/test-plugin-selection-input-resolution.mjs",
+    "test:web-open-dynamic-items": "node scripts/test-web-open-dynamic-items.mjs",
     "test:tauri-plugin-dir-commands": "cargo test --manifest-path src-tauri/Cargo.toml plugin_dir_command_tests -- --test-threads=1",
     "test:plugin-goal-suite": "node scripts/test-plugin-goal-suite.mjs",
     "test:command-palette-page-policy": "node scripts/test-command-palette-page-policy.mjs",

@@ -6,6 +6,7 @@
 
 import {
   definePlugin,
+  type LauncherDynamicContext,
   type LauncherItemContribution,
 } from '@hiven/plugin'
 import { WebQuickOpenSettingsBody } from './settings/WebQuickOpenSettingsBody'
@@ -15,22 +16,17 @@ import {
   type WebQuickOpenSettings,
 } from './settings/model'
 
-/**
- * Build launcher items from the default web search entries.
- * Static items are based on DEFAULT settings; the execute handler reads runtime
- * settings via ctx.settings so URL templates/encode options reflect user changes.
- *
- * Note: User-added entries beyond defaults require a settings-reactive mechanism
- * (future enhancement). For now, only default entries are statically registered.
- */
-function buildLauncherItems(): LauncherItemContribution<WebQuickOpenSettings>[] {
-  const entries = DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries
-
-  return entries.map((entry) => ({
+function buildEntryLauncherItem(entry: WebQuickOpenSettings['entries'][number]): LauncherItemContribution<WebQuickOpenSettings> {
+  const aliases = Array.isArray(entry.aliases) ? entry.aliases : []
+  return {
     id: entry.id,
     display: {
-      title: entry.title,
-      aliases: entry.aliases,
+      title: entry.title || entry.urlTemplate,
+      aliases: [
+        ...aliases,
+        entry.placeholder,
+        entry.urlTemplate,
+      ].filter(Boolean),
     },
     behavior: {
       type: 'collect-input' as const,
@@ -44,13 +40,50 @@ function buildLauncherItems(): LauncherItemContribution<WebQuickOpenSettings>[] 
       },
     },
     async execute(ctx) {
-      // Resolve entry from runtime settings (user may have changed URL template)
-      const runtimeEntry = ctx.settings?.entries?.find((e) => e.id === entry.id) ?? entry
+      const runtimeEntry = ctx.settings?.entries?.find((candidate) => candidate.id === entry.id) ?? entry
       const url = buildWebQuickOpenUrl(runtimeEntry.urlTemplate, ctx.input?.text ?? '', runtimeEntry.encodeQuery)
       await ctx.api.openUrl(url)
       return { ok: true }
     },
-  }))
+  }
+}
+
+function buildLauncherItems(): LauncherItemContribution<WebQuickOpenSettings>[] {
+  return DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries.map(buildEntryLauncherItem)
+}
+
+function entryMatchesQuery(entry: WebQuickOpenSettings['entries'][number], query: string): boolean {
+  const q = query.trim().toLowerCase()
+  if (!q) return false
+  const aliases = Array.isArray(entry.aliases) ? entry.aliases : []
+  return [
+    entry.title,
+    entry.placeholder,
+    entry.urlTemplate,
+    ...aliases,
+  ].some((value) => String(value ?? '').toLowerCase().includes(q))
+}
+
+function isUnchangedDefaultEntry(entry: WebQuickOpenSettings['entries'][number]): boolean {
+  const defaultEntry = DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries.find((candidate) => candidate.id === entry.id)
+  if (!defaultEntry) return false
+  return (
+    entry.title === defaultEntry.title &&
+    entry.placeholder === defaultEntry.placeholder &&
+    entry.urlTemplate === defaultEntry.urlTemplate &&
+    entry.encodeQuery === defaultEntry.encodeQuery &&
+    entry.emptyQueryBehavior === defaultEntry.emptyQueryBehavior &&
+    (Array.isArray(entry.aliases) ? entry.aliases : []).join('\n') === defaultEntry.aliases.join('\n')
+  )
+}
+
+function buildDynamicLauncherItems(ctx: LauncherDynamicContext): LauncherItemContribution<WebQuickOpenSettings>[] {
+  const settings = ctx.settings as WebQuickOpenSettings | undefined
+  const entries = settings?.entries ?? DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries
+  return entries
+    .filter((entry) => !isUnchangedDefaultEntry(entry))
+    .filter((entry) => entryMatchesQuery(entry, ctx.query))
+    .map(buildEntryLauncherItem)
 }
 
 export default definePlugin<WebQuickOpenSettings>({
@@ -64,5 +97,6 @@ export default definePlugin<WebQuickOpenSettings>({
 
   launcher: {
     items: buildLauncherItems(),
+    dynamicItems: buildDynamicLauncherItems,
   },
 })
