@@ -17,7 +17,7 @@ import type {
   LauncherItemDisplay,
   PluginLauncherApi,
 } from './types'
-import { errorResult, replaceActiveTextResult } from './output'
+import { emptyResult, errorResult, replaceActiveTextResult } from './output'
 
 export type CommandAdaptOptions = {
   pluginId: string
@@ -73,6 +73,10 @@ export function adaptCommandToLauncherItem(
     })
 
     if (output.kind === 'error') return errorResult(output.text)
+    if (ctx.surfaceId === 'command-palette') {
+      await ctx.api.replaceActiveText(output.text)
+      return emptyResult()
+    }
     return replaceActiveTextResult(output.text, ctx.api)
   }
   const defaultParams = defaultPluginCommandParams(command.params)

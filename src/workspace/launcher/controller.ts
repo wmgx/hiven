@@ -131,6 +131,7 @@ export class LauncherController {
    */
   private buildExecutionContext(item: LauncherItem, inputText?: string) {
     return {
+      surfaceId: this.deps.surfaceId,
       input: inputText !== undefined ? { text: inputText } : undefined,
       settings: this.deps.getSettings(item),
       locale: this.deps.locale as never,

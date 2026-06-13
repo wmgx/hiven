@@ -176,6 +176,7 @@ export type PluginLauncherApi = {
 // ─── Execution Context ───────────────────────────────────────────────────────
 
 export type LauncherExecutionContext<TSettings = unknown> = {
+  surfaceId: LauncherSurfaceId
   /** Present only for `collect-input` behaviors. */
   input?: { text: string }
   settings: TSettings

@@ -61,6 +61,7 @@ const commandAdapter = loadModule('src/workspace/launcher/commandAdapter.ts', {
   globals: {
     defaultPluginCommandParams: pluginCommandRunner.defaultPluginCommandParams,
     runTextPluginCommand: pluginCommandRunner.runTextPluginCommand,
+    emptyResult: output.emptyResult,
     errorResult: output.errorResult,
     replaceActiveTextResult: output.replaceActiveTextResult,
   },
@@ -164,15 +165,18 @@ const commandApi = {
   replaceActiveText: async (t) => { replaced = t },
   copyText: async (t) => { commandCopied = t },
 }
-const commandRes = await commandItem.execute({ settings: {}, locale: 'en', api: commandApi, t: (k) => k })
+const commandRes = await commandItem.execute({ surfaceId: 'command-palette', settings: {}, locale: 'en', api: commandApi, t: (k) => k })
 assert.equal(commandRes.ok, true)
-assert.equal(commandRes.output.choices[0].title, 'ABC!', 'command adapter uses selection before whole text')
-await commandRes.output.choices[0].primaryAction()
-assert.equal(replaced, 'ABC!', 'command adapter primary action replaces active text')
-assert.equal(commandCopied, null, 'command adapter primary action should not copy by default')
+assert.equal(commandRes.output, undefined, 'command-palette command adapter writes directly without showing result panel')
+assert.equal(replaced, 'ABC!', 'command-palette command adapter replaces active text immediately')
+assert.equal(commandCopied, null, 'command-palette command adapter should not copy by default')
 
-const customizedRes = await commandItem.executeWithParams({ settings: {}, locale: 'en', api: commandApi, t: (k) => k }, { suffix: '?' })
-assert.equal(customizedRes.output.choices[0].title, 'ABC?', 'command adapter executes with customized params')
+const customizedRes = await commandItem.executeWithParams({ surfaceId: 'command-palette', settings: {}, locale: 'en', api: commandApi, t: (k) => k }, { suffix: '?' })
+assert.equal(customizedRes.output, undefined, 'command-palette customized params write directly without showing result panel')
+assert.equal(replaced, 'ABC?', 'command-palette customized params replace active text immediately')
+
+const globalRes = await commandItem.executeWithParams({ surfaceId: 'global-launcher', settings: {}, locale: 'en', api: commandApi, t: (k) => k }, { suffix: '~' })
+assert.equal(globalRes.output.choices[0].title, 'ABC~', 'global-launcher command adapter keeps result in launcher')
 
 const optionalCommandItem = commandAdapter.adaptCommandToLauncherItem({ ...textCommand, optionalParams: true }, {
   pluginId: 'demo',
