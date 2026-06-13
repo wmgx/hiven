@@ -14,7 +14,6 @@ import { PluginSettingsDialog } from './components/PluginSettingsDialog'
 import { loadInstalledPluginsFromStore } from './workspace/pluginRuntime'
 import { registerBundledPluginPackages } from './workspace/bundledPluginLoader'
 import { installGlobalPinnedLauncherHotkeys } from './hotkeys/globalPinnedLauncher'
-import { runPluginCommandById } from './workspace/pluginCommandExecutor'
 
 // Register built-in panels
 import './panels/register'
@@ -171,31 +170,6 @@ function MainApp() {
       })
       .catch((error) => {
         console.warn('[hiven] Failed to listen for launcher action event:', error)
-      })
-    return () => {
-      disposed = true
-      unlisten?.()
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
-    let disposed = false
-    let unlisten: (() => void) | undefined
-    import('@tauri-apps/api/event')
-      .then(({ listen }) => listen<{ id: string; isDev?: boolean }>('hiven://run-plugin-command', (event) => {
-        void (async () => {
-          const { invoke } = await import('@tauri-apps/api/core')
-          await invoke('show_and_focus_window')
-          await runPluginCommandById(event.payload.id, { isDev: event.payload.isDev === true })
-        })()
-      }))
-      .then((cleanup) => {
-        if (disposed) cleanup()
-        else unlisten = cleanup
-      })
-      .catch((error) => {
-        console.warn('[hiven] Failed to listen for launcher command event:', error)
       })
     return () => {
       disposed = true

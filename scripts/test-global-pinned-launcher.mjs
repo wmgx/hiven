@@ -82,8 +82,8 @@ check('pinned-only mode builds launcher commands and pinned action items', () =>
   )
   assertHas(
     files.globalLauncher,
-    /['"]pinned-only['"]\s*===\s*(?:mode|globalLauncherMode|launcherMode)[\s\S]{0,220}\.\.\.pinned[\s\S]{0,120}\.\.\.launcherCommands/,
-    'pinned-only branch should include launcher system commands and pinned actions',
+    /['"]pinned-only['"]\s*===\s*(?:mode|globalLauncherMode|launcherMode)[\s\S]{0,160}return\s+pinned/,
+    'pinned-only branch should keep pinned shortcuts local while domain launcher items are merged separately',
   )
   assertHas(
     files.globalLauncher,
@@ -92,8 +92,8 @@ check('pinned-only mode builds launcher commands and pinned action items', () =>
   )
   assertHas(
     files.globalLauncher,
-    /(?:mode|globalLauncherMode|launcherMode)[\s\S]{0,360}(?:recentActionNames|viewItems)|(?:recentActionNames|viewItems)[\s\S]{0,360}(?:mode|globalLauncherMode|launcherMode)/,
-    'recent commands and workspace views should be gated by full mode',
+    /(?:mode|globalLauncherMode|launcherMode)[\s\S]{0,360}viewItems|viewItems[\s\S]{0,360}(?:mode|globalLauncherMode|launcherMode)/,
+    'workspace views should be gated by full mode',
   )
 })
 
@@ -108,10 +108,10 @@ check('main panel launcher command is contributed by the external core-pane plug
     /id:\s*['"]core-pane\.show-main-panel['"][\s\S]{0,420}app\.showMainPanel/,
     'core-pane plugin should contribute the main panel command through a host effect',
   )
-  assertHas(
+  assert.doesNotMatch(
     files.globalLauncher,
     /resolveCommand\(['"]core-pane\.show-main-panel['"]\)/,
-    'global launcher should resolve the external core-pane command',
+    'global launcher should not hard-code the main panel command as a launcher item',
   )
   const manifest = JSON.parse(files.corePaneManifest)
   const builtinIndex = JSON.parse(files.builtinIndex)
@@ -123,13 +123,13 @@ check('main panel launcher command is contributed by the external core-pane plug
 check('pinned launcher command titles follow current locale', () => {
   assertHas(
     files.globalLauncher,
-    /pinnedActions\.map[\s\S]{0,420}localized\([\s\S]{0,120}titleI18n[\s\S]{0,80}locale/,
-    'pinned launcher items should localize command titles from titleI18n instead of rendering the persisted title verbatim',
+    /pinnedActions\.map[\s\S]{0,260}localized\(item\.title,\s*item\.titleI18n,\s*locale\)/,
+    'pinned launcher items should localize their persisted launcher shortcut title',
   )
-  assertHas(
+  assert.doesNotMatch(
     files.globalLauncher,
     /pluginRegistry\.resolveCommand\([\s\S]{0,160}item\.actionId/,
-    'pinned launcher items should refresh command metadata from the plugin registry when available',
+    'pinned launcher items should not refresh launcher display by resolving old command ids',
   )
 })
 
@@ -143,6 +143,29 @@ check('global launcher renders a single ranked list without category sections', 
     files.globalLauncher,
     /<LauncherList[\s\S]{0,120}items=\{filtered\}/,
     'GlobalLauncher should render the ranked filtered list directly',
+  )
+})
+
+check('launcher surfaces do not auto-discover legacy plugin commands', () => {
+  assert.doesNotMatch(
+    files.globalLauncher,
+    /pluginRegistry\.getAllCommands\(\)/,
+    'GlobalLauncher should not auto-discover plugin commands; commands must be exposed as launcher items or tools',
+  )
+  assert.doesNotMatch(
+    files.commandPalette,
+    /pluginRegistry\.getAllCommands\(\)/,
+    'CommandPalette should not auto-discover plugin commands; commands must be exposed as launcher items or tools',
+  )
+  assert.doesNotMatch(
+    files.globalLauncher,
+    /hiven:\/\/run-plugin-command|runPluginCommandById/,
+    'GlobalLauncher should not execute legacy plugin commands outside LauncherController',
+  )
+  assert.doesNotMatch(
+    files.app,
+    /hiven:\/\/run-plugin-command|runPluginCommandById/,
+    'App should not keep a cross-window legacy plugin command execution protocol for launcher selections',
   )
 })
 
@@ -190,7 +213,7 @@ check('standalone domain launcher items stay on the launcher controller path', (
   )
   assertHas(
     files.globalLauncher,
-    /domainItem[\s\S]{0,520}controller\.selectItem\(domainItem\)/,
+    /item\.kind\s*===\s*['"]domain['"][\s\S]{0,640}controller\.selectItem\(item\.domainItem\)/,
     'domain launcher items should execute through LauncherController so output keeps the launcher open',
   )
 })

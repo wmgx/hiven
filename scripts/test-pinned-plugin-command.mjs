@@ -48,12 +48,16 @@ assert.equal(samePinnedPluginCommandIdentity(pinnedCommand, { ...pinnedCommand, 
 assert.equal(samePinnedPluginCommandIdentity(pinnedCommand, { ...pinnedCommand, params: { mode: 'decode', flags: { trim: true, sort: 'asc' } } }), false, 'different plugin command params should create another pinned action')
 
 assertHas(files.commandPalette, /pinPluginCommand/, 'CommandPalette should pin plugin commands')
-assertHas(files.commandPalette, /data-testid="command-palette-pin-action"[\s\S]*<Pin/, 'ActionItem should render a pin button for plugin items')
-assertHas(files.commandPalette, /live\?\.pinnable\s*!==\s*false/, 'CommandPalette should hide the pin affordance when a plugin command opts out')
+assertHas(files.commandPalette, /data-testid="launcher-item-pin-action"[\s\S]*<Pin/, 'LauncherActionItem should render a pin button for pinnable launcher items')
+assertHas(files.commandPalette, /item\.pinnable\s*!==\s*false/, 'CommandPalette should hide the pin affordance when a launcher item opts out')
 assertHas(files.pinnedRunner, /pluginRegistry\.resolveCommand/, 'PinnedRunnerView should resolve plugin commands from the plugin registry')
 assertHas(files.pinnedRunner, /runPinnedPluginCommandToPatch[\s\S]*pinned,[\s\S]*params/, 'PinnedRunnerView should run plugin commands through the tested pinned command runner')
+assertHas(files.pinnedRunner, /collectStaticCandidates[\s\S]*pinned\.actionId/, 'PinnedRunnerView should resolve pinned launcher item keys when no legacy command exists')
+assertHas(files.pinnedRunner, /runPinnedLauncherItemToPatch/, 'PinnedRunnerView should run pinned launcher items through the launcher item runner')
 
 assertHas(files.pinnedPluginCommandRunner, /runTextPluginCommand[\s\S]*inputText:\s*options\.pinned\.inputText/, 'pinned command runner should run plugin commands with the pinned input buffer')
+assertHas(files.pinnedPluginCommandRunner, /createPinnedLauncherApi[\s\S]*getActiveText:\s*\(\)\s*=>\s*inputText/, 'pinned launcher item runner should expose the pinned input buffer as launcher input')
+assertHas(files.pinnedPluginCommandRunner, /firstChoice\?\.preview\s*\?\?\s*firstChoice\?\.title/, 'pinned launcher item runner should persist output choices as pinned output text')
 assertHas(files.pluginCommandRunner, /buildTextPluginInputs[\s\S]*kind:\s*['"]text['"][\s\S]*inputText/, 'plugin command runner should resolve pinned text input slots')
 assertHas(files.pluginCommandRunner, /text\.replace[\s\S]*textReplace\.text/, 'plugin command runner should map text.replace effects into runner output')
 assertNotHas(files.pinnedRunner, /disabled=\{running\s*\|\|\s*!action\}/, 'Run Now should not disable plugin-command pinned actions')

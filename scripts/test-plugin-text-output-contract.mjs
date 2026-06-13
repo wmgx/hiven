@@ -34,7 +34,8 @@ assert.match(pluginCommandRunner, /textOutputFromPluginResult/, 'runner should n
 assert.match(pluginCommandRunner, /effectsFromPluginCommandResult/, 'runner should expose command-result effects normalization')
 assert.match(pluginCommandRunner, /type:\s*['"]text\.replace['"][\s\S]*result\.output\.text/, 'runner should map text output to active text replacement')
 assert.match(pluginCommandRunner, /text\.replace/, 'runner should keep legacy text.replace output compatibility during migration')
-assert.match(commandPalette, /effectsFromPluginCommandResult/, 'command palette should apply host-neutral text output')
+assert.match(commandPalette, /LauncherController/, 'command palette should delegate launcher text output to LauncherController')
+assert.match(commandPalette, /createPluginLauncherApi/, 'command palette should use the shared launcher API for host-neutral text output actions')
 assert.match(pluginCommandExecutor, /effectsFromPluginCommandResult/, 'direct plugin command executor should apply host-neutral text output')
 
 console.log('plugin text output contract checks passed')

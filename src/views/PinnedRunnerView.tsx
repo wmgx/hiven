@@ -4,11 +4,15 @@ import Editor from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import { localized, useAppStore, type PaletteParamModel, type PinnedAction } from '../store'
 import { t, type Locale } from '../i18n'
-import { pluginRegistry } from '../workspace/pluginRegistry'
+import { makePluginT } from '../i18n/pluginI18nRegistry'
+import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
 import { applyEffects } from '../workspace/effectRunner'
-import { runPinnedPluginCommandToPatch } from '../workspace/pinnedPluginCommandRunner.ts'
+import { runPinnedLauncherItemToPatch, runPinnedPluginCommandToPatch } from '../workspace/pinnedPluginCommandRunner.ts'
 import { detectEditorLanguage } from '../workspace/languageDetector'
 import type { CommandContribution, CommandParam } from '../workspace/pluginTypes'
+import { collectStaticCandidates } from '../workspace/launcher/registry'
+import { resolvePluginSettingsSource } from '../workspace/launcher/pluginSource'
+import { resolvePluginSettings } from '../workspace/pluginSettingsStore'
 import { getFluxMonacoTheme, registerFluxMonacoThemes } from '../utils/monacoTheme'
 
 type ControlParam = PaletteParamModel | CommandParam
@@ -58,6 +62,7 @@ export function PinnedRunnerView() {
   const setActiveView = useAppStore((s) => s.setActiveView)
   const pinnedRuntime = useAppStore((s) => activePinnedActionId ? s.pinnedRuntimes[activePinnedActionId] : undefined)
   const locale = useAppStore((s) => s.locale)
+  const pluginRegistryVersion = usePluginRegistryVersion()
   const [running, setRunning] = useState(false)
   const runIdRef = useRef<string | null>(null)
 
@@ -73,6 +78,20 @@ export function PinnedRunnerView() {
   const pluginCommand = pinned
     ? pluginRegistry.resolveCommand(pinned.actionId, pinned.isDev ? 'dev' : 'production')
     : undefined
+  const pinnedLauncherItem = useMemo(() => {
+    if (!pinned || pluginCommand) return undefined
+    void pluginRegistryVersion
+    return collectStaticCandidates('command-palette').find((item) => item.systemKey === pinned.actionId)
+      ?? collectStaticCandidates('global-launcher').find((item) => item.systemKey === pinned.actionId)
+  }, [pinned?.actionId, pluginCommand, pluginRegistryVersion])
+  const pinnedLauncherSettings = useMemo(() => {
+    if (!pinnedLauncherItem?.pluginId || !pinnedLauncherItem.source) return undefined
+    const settingsSource = resolvePluginSettingsSource(pinnedLauncherItem.pluginId, pinnedLauncherItem.source)
+    const def = pluginRegistry.getPluginDefinition(pinnedLauncherItem.pluginId, settingsSource)
+    const settingsContribution = def?.settings
+    if (!settingsContribution) return undefined
+    return resolvePluginSettings(settingsSource, pinnedLauncherItem.pluginId, settingsContribution).value
+  }, [pinnedLauncherItem, pluginRegistryVersion])
   const commandContribution: CommandContribution | undefined = pluginCommand?.contribution
   const actionParams = commandContribution?.params ?? []
   const customControls = commandContribution?.live?.controls
@@ -92,15 +111,27 @@ export function PinnedRunnerView() {
     setRunning(true)
     updatePinnedRuntime(pinned.id, { pendingRunId: runId, status: 'active' })
     try {
-      if (!commandContribution) throw new Error(`Pinned plugin command "${pinned.actionId}" is not registered`)
-      const nextPatch = await runPinnedPluginCommandToPatch({
-        command: commandContribution,
-        pinned,
-        params,
-        ownerPluginId: pluginCommand?.meta.pluginId,
-        now: () => Date.now(),
-        elapsedMs: () => performance.now() - startedAt,
-      })
+      const nextPatch = commandContribution
+        ? await runPinnedPluginCommandToPatch({
+            command: commandContribution,
+            pinned,
+            params,
+            ownerPluginId: pluginCommand?.meta.pluginId,
+            now: () => Date.now(),
+            elapsedMs: () => performance.now() - startedAt,
+          })
+        : pinnedLauncherItem
+          ? await runPinnedLauncherItemToPatch({
+              item: pinnedLauncherItem,
+              pinned,
+              settings: pinnedLauncherSettings,
+              locale,
+              t: makePluginT(pinnedLauncherItem.pluginId ?? '', locale),
+              now: () => Date.now(),
+              elapsedMs: () => performance.now() - startedAt,
+            })
+          : undefined
+      if (!nextPatch) throw new Error(`Pinned launcher item "${pinned.actionId}" is not registered`)
       if (!isCurrentPinnedRun(pinned.id, runId)) return
       updatePinnedAction(pinned.id, nextPatch)
     } catch (error) {
@@ -248,7 +279,7 @@ export function PinnedRunnerView() {
             />
             <span>{t(locale, 'pinned.auto')}</span>
           </label>
-          <button data-testid="pinned-runner-run-button" className="scripts-btn scripts-btn-primary" onClick={() => void runPinnedAction()} disabled={running || !commandContribution} title={t(locale, 'pinned.runNow')}>
+          <button data-testid="pinned-runner-run-button" className="scripts-btn scripts-btn-primary" onClick={() => void runPinnedAction()} disabled={running || (!commandContribution && !pinnedLauncherItem)} title={t(locale, 'pinned.runNow')}>
             <Play size={13} />
             {t(locale, 'pinned.runNow')}
           </button>

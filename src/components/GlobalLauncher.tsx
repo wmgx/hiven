@@ -6,11 +6,8 @@ import { t, type Locale } from '../i18n'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
 import { resolveIcon } from '../utils/resolveIcon'
 import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
-import { showToast } from '../workspace/toast'
-import { runPluginCommandById } from '../workspace/pluginCommandExecutor'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../utils/imeKeyboard'
-import { isQuickTextCommand, runQuickTextCommand } from '../workspace/quickTextCommand'
-import { usePluginSettingsStore, resolvePluginSettings } from '../workspace/pluginSettingsStore'
+import { resolvePluginSettings } from '../workspace/pluginSettingsStore'
 import { scoreSearchableFields, searchableFieldsMatch, type SearchableFields } from '../workspace/searchRanking'
 import { LauncherController } from '../workspace/launcher/controller'
 import type { LauncherControllerState, CollectInputFrame, ResultFrame } from '../workspace/launcher/controller'
@@ -23,8 +20,7 @@ import { resolvePluginSettingsSource } from '../workspace/launcher/pluginSource'
 import type { ContributionSource } from '../workspace/pluginTypes'
 
 type LauncherItem =
-  | { kind: 'quick-command'; id: string; title: string; subtitle: string; icon?: string; commandId: string; isDev: boolean }
-  | { kind: 'command'; id: string; title: string; subtitle: string; icon?: string; isDev?: boolean }
+  | { kind: 'domain'; id: string; title: string; subtitle: string; icon?: string; domainItem: DomainLauncherItem }
   | { kind: 'pinned'; id: string; title: string; subtitle: string; icon?: string; actionId: string }
   | { kind: 'view'; id: ViewId; title: string; subtitle: string; icon: ReactNode }
 
@@ -46,17 +42,14 @@ export function GlobalLauncher() {
   const overlay = useAppStore((s) => s.globalLauncherOverlay)
   const setOpen = useAppStore((s) => s.setGlobalLauncherOpen)
   const setActiveView = useAppStore((s) => s.setActiveView)
-  const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
   const openPinnedAction = useAppStore((s) => s.openPinnedAction)
   const pinnedActions = useAppStore((s) => s.pinnedActions)
   const recentActionNames = useAppStore((s) => s.actionUsageBySource['global-launcher'].recentActionNames)
   const actionUsageCounts = useAppStore((s) => s.actionUsageBySource['global-launcher'].actionUsageCounts)
-  const pushRecentAction = useAppStore((s) => s.pushRecentAction)
   const launcherPosition = useAppStore((s) => s.settings.globalLauncherPosition)
   const updateSetting = useAppStore((s) => s.updateSetting)
   const locale = useAppStore((s) => s.locale)
   const pluginRegistryVersion = usePluginRegistryVersion()
-  const pluginSettingsData = usePluginSettingsStore((s) => s.pluginSettings)
   const launcherUsageBySurface = useAppStore((s) => s.launcherUsageBySurface)
   const recordLauncherSelection = useAppStore((s) => s.recordLauncherSelection)
   const [controllerState, setControllerState] = useState<LauncherControllerState | null>(null)
@@ -66,17 +59,6 @@ export function GlobalLauncher() {
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [dragPosition, setDragPosition] = useState(launcherPosition)
-  const [quickTextSession, setQuickTextSession] = useState<{
-    commandId: string
-    isDev: boolean
-    title: string
-    icon?: string
-    inputText: string
-    outputText: string
-    outputKind: 'text' | 'error'
-    running: boolean
-    error?: string
-  } | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const isImeComposingRef = useRef(false)
@@ -97,7 +79,6 @@ export function GlobalLauncher() {
     requestAnimationFrame(() => {
       setQuery('')
       setSelectedIndex(0)
-      setQuickTextSession(null)
       inputRef.current?.focus()
     })
   }, [open])
@@ -171,82 +152,19 @@ export function GlobalLauncher() {
   }, [query, locale, pluginRegistryVersion, dynamicItems, launcherUsageBySurface])
 
   const items = useMemo<LauncherItem[]>(() => {
-    void pluginRegistryVersion
-    void pluginSettingsData
     const pinnedLabel = t(locale, 'palette.globalPinned')
-    const commandsLabel = t(locale, 'palette.globalCommands')
-    const quickTextLabel = t(locale, 'palette.quickText')
-    const pinned = pinnedActions.map((item) => {
-      const command = pluginRegistry.resolveCommand(item.actionId, item.isDev ? 'dev' : 'production')?.contribution
-      return {
-        kind: 'pinned' as const,
-        id: item.id,
-        title: localized(command?.title ?? item.title, command?.titleI18n ?? item.titleI18n, locale),
-        subtitle: pinnedLabel,
-        icon: command?.icon ?? item.icon,
-        actionId: item.actionId,
-      }
-    })
-    const mainPanelCommand = pluginRegistry.resolveCommand('core-pane.show-main-panel')
-    const launcherCommands: LauncherItem[] = mainPanelCommand ? [{
-      kind: 'command',
-      id: mainPanelCommand.contribution.id,
-      title: localized(mainPanelCommand.contribution.title, mainPanelCommand.contribution.titleI18n, locale),
-      subtitle: commandsLabel,
-      icon: mainPanelCommand.contribution.icon,
-      isDev: false,
-    }] : []
+    const pinned = pinnedActions.map((item) => ({
+      kind: 'pinned' as const,
+      id: item.id,
+      title: localized(item.title, item.titleI18n, locale),
+      subtitle: pinnedLabel,
+      icon: item.icon,
+      actionId: item.actionId,
+    }))
 
-    // Add quick text commands (always available regardless of mode)
-    // Skip commands already covered by launcher tools (avoid duplicate entries)
-    const staticItems = collectStaticCandidates('global-launcher')
-    const coveredByLauncher = new Set<string>()
-    for (const item of staticItems) {
-      if (item.legacyUsageKeys) {
-        for (const key of item.legacyUsageKeys) coveredByLauncher.add(key)
-      }
-    }
-    const quickCommands: LauncherItem[] = []
-    const allCommands = pluginRegistry.getAllCommands()
-    for (const { contribution, meta } of allCommands) {
-      if (coveredByLauncher.has(contribution.id)) continue
-      if (isQuickTextCommand(contribution)) {
-        const pluginT = makePluginT(meta.pluginId, locale)
-        const title = contribution.titleI18n
-          ? localized(contribution.title, contribution.titleI18n, locale)
-          : pluginT(contribution.title)
-        quickCommands.push({
-          kind: 'quick-command',
-          id: `quick:${contribution.id}`,
-          title,
-          subtitle: quickTextLabel,
-          icon: contribution.icon,
-          commandId: contribution.id,
-          isDev: meta.source === 'dev',
-        })
-      }
-    }
+    if ('pinned-only' === mode) return pinned
 
-    if ('pinned-only' === mode) return [...pinned, ...launcherCommands, ...quickCommands]
-
-    const recentLabel = t(locale, 'palette.globalRecent')
     const viewsLabel = t(locale, 'palette.globalViews')
-    const recent: LauncherItem[] = []
-    for (const name of recentActionNames) {
-      if (recent.length >= 8) break
-      if (name.startsWith('launcher-entry:')) continue
-      const resolved = pluginRegistry.resolveCommand(name)
-      if (!resolved) continue
-      const command = resolved.contribution
-      recent.push({
-        kind: 'command' as const,
-        id: command.id,
-        title: localized(command.title || name, command.titleI18n, locale),
-        subtitle: recentLabel,
-        icon: command.icon,
-        isDev: resolved.meta.source === 'dev',
-      })
-    }
     const views = viewItems.map((item) => ({
       kind: 'view' as const,
       id: item.id,
@@ -254,8 +172,8 @@ export function GlobalLauncher() {
       subtitle: viewsLabel,
       icon: item.icon,
     }))
-    return [...pinned, ...launcherCommands, ...quickCommands, ...recent, ...views]
-  }, [locale, mode, pinnedActions, recentActionNames, pluginRegistryVersion, pluginSettingsData])
+    return [...pinned, ...views]
+  }, [locale, mode, pinnedActions])
 
   const filtered = useMemo(() => {
     void pluginRegistryVersion
@@ -266,28 +184,16 @@ export function GlobalLauncher() {
       scoreLauncherItem(a, q, locale, recentActionNames, actionUsageCounts)
     )
 
-    // Merge domain ranked items alongside legacy — single sorted list (constraint 1)
-    // Dedup: legacy items whose command id is already covered by a domain item are skipped
-    const domainCoveredIds = new Set<string>()
-    for (const domainItem of rankedLauncherItems) {
-      domainCoveredIds.add(domainItem.systemKey)
-      if (domainItem.legacyUsageKeys) {
-        for (const key of domainItem.legacyUsageKeys) domainCoveredIds.add(key)
-      }
-    }
-    const dedupedBase = sortedBase.filter((item) => !domainCoveredIds.has(item.id))
-
-    const domainAsLegacy: LauncherItem[] = rankedLauncherItems.map((domainItem) => ({
-      kind: 'command' as const,
+    const domainItems: LauncherItem[] = rankedLauncherItems.map((domainItem) => ({
+      kind: 'domain' as const,
       id: domainItem.systemKey,
       title: resolveDisplayTitle(domainItem.display, locale),
       subtitle: resolveDisplaySubtitle(domainItem.display, locale) ?? '',
       icon: domainItem.display.icon,
-      isDev: domainItem.source === 'dev',
-      __domainItem: domainItem,
-    } as LauncherItem & { __domainItem: DomainLauncherItem }))
+      domainItem,
+    }))
 
-    return [...domainAsLegacy, ...dedupedBase]
+    return [...domainItems, ...sortedBase]
   }, [items, query, locale, pluginRegistryVersion, recentActionNames, actionUsageCounts, rankedLauncherItems])
 
   const closeLauncher = useCallback(() => {
@@ -347,51 +253,6 @@ export function GlobalLauncher() {
   const clampedSelectedIndex = Math.min(selectedIndex, Math.max(0, filtered.length - 1))
   const selectedItem = filtered.length === 1 ? filtered[0] : filtered[clampedSelectedIndex]
 
-  // Quick text preview effect
-  useEffect(() => {
-    if (!quickTextSession) return
-    const entry = pluginRegistry.resolveCommand(quickTextSession.commandId, quickTextSession.isDev ? 'dev' : 'production')
-    if (!entry) return
-    if (!quickTextSession.inputText) {
-      setQuickTextSession((session) => session ? { ...session, outputText: '', outputKind: 'text', running: false, error: undefined } : session)
-      return
-    }
-
-    let cancelled = false
-    setQuickTextSession((session) => session ? { ...session, running: true, error: undefined } : session)
-    const timer = window.setTimeout(() => {
-      void runQuickTextCommand(entry.contribution, {
-        inputText: quickTextSession.inputText,
-        isDev: quickTextSession.isDev,
-        ownerPluginId: entry.meta.pluginId,
-      }).then((output) => {
-        if (cancelled) return
-        setQuickTextSession((session) => session ? {
-          ...session,
-          outputText: output.text,
-          outputKind: output.kind,
-          running: false,
-          error: undefined,
-        } : session)
-      }).catch((error) => {
-        if (cancelled) return
-        const message = error instanceof Error ? error.message : String(error)
-        setQuickTextSession((session) => session ? {
-          ...session,
-          outputText: message,
-          outputKind: 'error',
-          running: false,
-          error: message,
-        } : session)
-      })
-    }, 200)
-
-    return () => {
-      cancelled = true
-      window.clearTimeout(timer)
-    }
-  }, [quickTextSession?.commandId, quickTextSession?.isDev, quickTextSession?.inputText])
-
   useLayoutEffect(() => {
     if (!open || !standaloneLauncher) return
     if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
@@ -417,62 +278,23 @@ export function GlobalLauncher() {
     filtered.length,
     mode,
     open,
-    quickTextSession?.inputText.length,
-    quickTextSession?.outputText.length,
-    quickTextSession?.running,
     controllerState,
     standaloneLauncher,
   ])
 
-  async function copyQuickTextOutput(session: NonNullable<typeof quickTextSession>) {
-    if (!session.outputText || session.outputKind === 'error') return
-    try {
-      const { writeText } = await import('@tauri-apps/plugin-clipboard-manager')
-      await writeText(session.outputText)
-      pushRecentAction(session.commandId, 'global-launcher')
-      showToast(t(locale, 'palette.copied'), 'success')
-      closeLauncher()
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error)
-      showToast(message, 'error')
-    }
-  }
-
   const selectItem = (item: LauncherItem | undefined) => {
     if (!item) return
 
-    // Domain item path (new launcher system via controller)
-    const domainItem = (item as LauncherItem & { __domainItem?: DomainLauncherItem }).__domainItem
-    if (domainItem) {
+    if (item.kind === 'domain') {
       const controller = controllerRef.current
       if (!controller) {
-        console.warn('[hiven] Cannot select domain launcher item before controller is ready:', domainItem.systemKey)
+        console.warn('[hiven] Cannot select domain launcher item before controller is ready:', item.domainItem.systemKey)
         return
       }
-      void controller.selectItem(domainItem)
+      void controller.selectItem(item.domainItem)
       return
     }
 
-    if (item.kind === 'quick-command') {
-      setQuickTextSession({
-        commandId: item.commandId,
-        isDev: item.isDev,
-        title: item.title,
-        icon: item.icon,
-        inputText: '',
-        outputText: '',
-        outputKind: 'text',
-        running: false,
-      })
-      setQuery('')
-      setSelectedIndex(0)
-      requestAnimationFrame(() => inputRef.current?.focus())
-      return
-    }
-    // Record usage for global-launcher before executing
-    if (item.kind === 'command') {
-      pushRecentAction(item.id, 'global-launcher')
-    }
     if (standaloneLauncher) {
       void (async () => {
         try {
@@ -480,9 +302,6 @@ export function GlobalLauncher() {
           const { invoke } = await import('@tauri-apps/api/core')
           if (item.kind === 'pinned') {
             await emitTo('main', 'hiven://run-pinned-action', { id: item.id })
-          }
-          if (item.kind === 'command') {
-            await emitTo('main', 'hiven://run-plugin-command', { id: item.id, isDev: item.isDev === true })
           }
           await invoke('hide_launcher_window')
         } catch (error) {
@@ -506,16 +325,10 @@ export function GlobalLauncher() {
           openPinnedAction(item.id)
           return
         }
-        if (item.kind === 'command') {
-          void runPluginCommandById(item.id, { isDev: item.isDev })
-          return
-        }
         if (item.kind === 'view') {
           setActiveView(item.id)
           return
         }
-        setActiveView('editor')
-        requestAnimationFrame(() => setCommandPaletteOpen(true))
       })()
     } else {
       setOpen(false)
@@ -523,16 +336,10 @@ export function GlobalLauncher() {
         openPinnedAction(item.id)
         return
       }
-      if (item.kind === 'command') {
-        void runPluginCommandById(item.id, { isDev: item.isDev })
-        return
-      }
       if (item.kind === 'view') {
         setActiveView(item.id)
         return
       }
-      setActiveView('editor')
-      requestAnimationFrame(() => setCommandPaletteOpen(true))
     }
   }
 
@@ -629,20 +436,6 @@ export function GlobalLauncher() {
         }}
         onKeyDown={(event) => {
           if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
-          if (quickTextSession && event.key === 'Escape') {
-            event.preventDefault()
-            event.stopPropagation()
-            setQuickTextSession(null)
-            setQuery('')
-            setSelectedIndex(0)
-            requestAnimationFrame(() => inputRef.current?.focus())
-            return
-          }
-          if (quickTextSession && event.key === 'Enter') {
-            event.preventDefault()
-            void copyQuickTextOutput(quickTextSession)
-            return
-          }
           // Controller frame key handling (collect-input / result)
           if (controllerState && controllerState.frames.length > 1) {
             const topFrame = controllerState.frames[controllerState.frames.length - 1]
@@ -700,40 +493,7 @@ export function GlobalLauncher() {
         onCompositionStart={handleCompositionStart}
         onCompositionEnd={handleCompositionEnd}
       >
-        {quickTextSession ? (
-          <>
-            <div className="global-launcher-header flex items-center gap-2 px-3.5 py-2.5" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
-              {resolveIcon(quickTextSession.icon, 16, quickTextSession.title)}
-              <input
-                ref={inputRef}
-                value={quickTextSession.inputText}
-                onChange={(event) => setQuickTextSession((session) => session ? { ...session, inputText: event.target.value } : session)}
-                placeholder={t(locale, 'palette.quickTextPlaceholder', { title: quickTextSession.title })}
-                className="flex-1 outline-none border-none bg-transparent text-[14px]"
-                style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
-              />
-            </div>
-            <div className="global-launcher-quick-preview px-3.5 py-2">
-              <div className="global-launcher-quick-preview-label text-[10px] uppercase tracking-[0.08em] mb-1" style={{ color: 'var(--color-text-tertiary)' }}>
-                {quickTextSession.running ? t(locale, 'palette.running') : t(locale, 'palette.preview')}
-              </div>
-              <pre
-                className="max-h-[200px] overflow-auto whitespace-pre-wrap break-words text-[13px] m-0 p-2 rounded-md"
-                style={{
-                  background: 'var(--color-background-secondary)',
-                  color: quickTextSession.outputKind === 'error' ? 'var(--color-error)' : 'var(--color-text-primary)',
-                  fontFamily: 'var(--font-mono)',
-                }}
-              >
-                {quickTextSession.outputText}
-              </pre>
-            </div>
-            <div className="global-launcher-footer flex shrink-0 gap-3 px-3.5 py-1.5" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
-              <HintKey keys="↵" label={t(locale, 'palette.confirm')} />
-              <HintKey keys="esc" label={t(locale, 'palette.back')} />
-            </div>
-          </>
-        ) : controllerState && controllerState.frames.length > 1 && controllerState.frames[controllerState.frames.length - 1].kind === 'collect-input' ? (() => {
+        {controllerState && controllerState.frames.length > 1 && controllerState.frames[controllerState.frames.length - 1].kind === 'collect-input' ? (() => {
           const frame = controllerState.frames[controllerState.frames.length - 1] as CollectInputFrame
           const placeholder = frame.item.behavior.type === 'collect-input'
             ? (frame.item.behavior.input.placeholder ?? '')
@@ -839,13 +599,8 @@ function clamp(value: number, min: number, max: number) {
 function measureStandaloneLauncherPanelHeight(panel: HTMLElement) {
   const header = panel.querySelector<HTMLElement>('.global-launcher-header')
   const body = panel.querySelector<HTMLElement>('.global-launcher-body')
-  const preview = panel.querySelector<HTMLElement>('.global-launcher-quick-preview')
   const footer = panel.querySelector<HTMLElement>('.global-launcher-footer')
   if (!header || !footer) return panel.getBoundingClientRect().height
-
-  if (preview) {
-    return header.offsetHeight + preview.offsetHeight + footer.offsetHeight
-  }
 
   if (!body) return panel.getBoundingClientRect().height
   const bodyMaxHeight = readCssPixelValue(getComputedStyle(body).maxHeight, STANDALONE_LAUNCHER_LIST_MAX_HEIGHT)
@@ -887,7 +642,9 @@ function LauncherList({ items, selected, onSelect }: { items: LauncherItem[]; se
                 color: isSelected ? 'white' : 'var(--color-text-secondary)',
               }}
             >
-              {item.kind === 'pinned'
+              {item.kind === 'domain'
+                ? resolveIcon(item.icon, 14, item.title)
+                : item.kind === 'pinned'
                 ? resolveIcon(item.icon, 14, item.title) || <Pin size={14} />
                 : item.kind === 'view' ? item.icon : resolveIcon(item.icon, 14, item.title)}
             </span>
@@ -936,13 +693,11 @@ function launcherItemSearchFields(item: LauncherItem): SearchableFields {
 
 function launcherItemSearchId(item: LauncherItem): string {
   if (item.kind === 'pinned') return item.actionId
-  if (item.kind === 'quick-command') return item.commandId
   if (item.kind === 'view') return `view:${item.id}`
   return item.id
 }
 
 function launcherItemUsageKey(item: LauncherItem): string {
   if (item.kind === 'pinned') return item.actionId
-  if (item.kind === 'quick-command') return item.commandId
   return item.id
 }
