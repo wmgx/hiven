@@ -38,9 +38,11 @@ export function CommandPalette() {
   const dynamicQueryRef = useRef('')
   const isKeyboardNavRef = useRef(false)
   const isImeComposingRef = useRef(false)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     if (!open) return
+    previousFocusRef.current = document.activeElement as HTMLElement | null
     let cancelled = false
     queueMicrotask(() => {
       if (cancelled) return
@@ -65,7 +67,7 @@ export function CommandPalette() {
           recordSelection: (surfaceId, item) => {
             recordLauncherSelection(surfaceId, item.systemKey)
           },
-          requestClose: () => setOpen(false),
+          requestClose: () => closePalette(),
           onChange: (state) => setControllerState({ ...state }),
         })
       }
@@ -121,6 +123,15 @@ export function CommandPalette() {
   const topFrame = controllerState?.frames[controllerState.frames.length - 1]
   const inControllerFrame = topFrame && topFrame.kind !== 'list'
 
+  function closePalette() {
+    setOpen(false)
+    const el = previousFocusRef.current
+    if (el && typeof el.focus === 'function') {
+      requestAnimationFrame(() => el.focus())
+    }
+    previousFocusRef.current = null
+  }
+
   function focusSearchInputAfterBack() {
     requestAnimationFrame(() => inputRef.current?.focus())
   }
@@ -146,7 +157,7 @@ export function CommandPalette() {
       isDev: item.source === 'dev',
       live: { pinnable: true },
     })
-    setOpen(false)
+    closePalette()
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -155,7 +166,7 @@ export function CommandPalette() {
 
     if (event.key === 'Escape') {
       event.preventDefault()
-      setOpen(false)
+      closePalette()
       return
     }
     if (event.key === 'ArrowDown') {
@@ -190,7 +201,7 @@ export function CommandPalette() {
     <div
       className={`fixed inset-0 flex items-start justify-center pt-[70px] z-50 palette-overlay ${open ? 'open' : ''}`}
       style={{ pointerEvents: 'auto', visibility: 'visible', zIndex: 1000 }}
-      onClick={(event) => { if (event.target === event.currentTarget) setOpen(false) }}
+      onClick={(event) => { if (event.target === event.currentTarget) closePalette() }}
     >
       <div
         ref={panelRef}

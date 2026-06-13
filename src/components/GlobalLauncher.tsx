@@ -65,6 +65,7 @@ export function GlobalLauncher() {
   const inputRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const isImeComposingRef = useRef(false)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
   const dragRef = useRef<{
     offsetX: number
     offsetY: number
@@ -79,6 +80,7 @@ export function GlobalLauncher() {
 
   useEffect(() => {
     if (!open) return
+    previousFocusRef.current = document.activeElement as HTMLElement | null
     requestAnimationFrame(() => {
       setQuery('')
       setSelectedIndex(0)
@@ -199,6 +201,14 @@ export function GlobalLauncher() {
     return [...domainItems, ...sortedBase]
   }, [items, query, locale, pluginRegistryVersion, recentActionNames, actionUsageCounts, rankedLauncherItems])
 
+  const restoreFocus = useCallback(() => {
+    const el = previousFocusRef.current
+    if (el && typeof el.focus === 'function') {
+      requestAnimationFrame(() => el.focus())
+    }
+    previousFocusRef.current = null
+  }, [])
+
   const closeLauncher = useCallback(() => {
     const wasOverlay = overlay
     if (standaloneLauncher) {
@@ -210,6 +220,7 @@ export function GlobalLauncher() {
           console.warn('[hiven] Failed to hide launcher window:', error)
         }
         setOpen(false)
+        restoreFocus()
       })()
       return
     }
@@ -224,11 +235,13 @@ export function GlobalLauncher() {
           console.warn('[hiven] Failed to restore launcher window:', error)
         }
         setOpen(false)
+        restoreFocus()
       })()
       return
     }
     setOpen(false)
-  }, [overlay, setOpen, standaloneLauncher])
+    restoreFocus()
+  }, [overlay, setOpen, standaloneLauncher, restoreFocus])
 
   // Close launcher after a command has been executed (don't hide the main window)
   const closeLauncherAfterAction = useCallback(() => {
@@ -241,6 +254,7 @@ export function GlobalLauncher() {
           console.warn('[hiven] Failed to hide launcher window:', error)
         }
         setOpen(false)
+        restoreFocus()
       })()
       return
     }
@@ -254,11 +268,13 @@ export function GlobalLauncher() {
           console.warn('[hiven] Failed to restore launcher window:', error)
         }
         setOpen(false)
+        restoreFocus()
       })()
       return
     }
     setOpen(false)
-  }, [overlay, setOpen, standaloneLauncher])
+    restoreFocus()
+  }, [overlay, setOpen, standaloneLauncher, restoreFocus])
 
   closeAfterActionRef.current = closeLauncherAfterAction
 
@@ -291,6 +307,14 @@ export function GlobalLauncher() {
   function focusSearchInputAfterBack() {
     requestAnimationFrame(() => inputRef.current?.focus())
   }
+
+  // Focus input when entering collect-input frame
+  useEffect(() => {
+    if (!open || !controllerState || controllerState.frames.length <= 1) return
+    const topFrame = controllerState.frames[controllerState.frames.length - 1]
+    if (topFrame.kind !== 'collect-input') return
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }, [open, controllerState])
 
   useEffect(() => {
     if (!open || !controllerState || controllerState.frames.length <= 1) return
@@ -364,6 +388,7 @@ export function GlobalLauncher() {
           console.warn('[hiven] Failed to select launcher item:', error)
         }
         setOpen(false)
+        restoreFocus()
       })()
       return
     }
@@ -377,6 +402,7 @@ export function GlobalLauncher() {
           console.warn('[hiven] Failed to restore launcher window:', error)
         }
         setOpen(false)
+        restoreFocus()
         if (item.kind === 'pinned') {
           openPinnedAction(item.id)
           return
@@ -388,6 +414,7 @@ export function GlobalLauncher() {
       })()
     } else {
       setOpen(false)
+      restoreFocus()
       if (item.kind === 'pinned') {
         openPinnedAction(item.id)
         return

@@ -67,7 +67,8 @@ export function LauncherParamStep({
   const selectedIndex = Math.min(frame.selectedIndex, Math.max(0, options.length - 1))
 
   useEffect(() => {
-    inputRef.current?.focus()
+    // Focus input when entering a new param step or when param index advances
+    requestAnimationFrame(() => inputRef.current?.focus())
   }, [frame.paramIndex])
 
   function commitTextParam() {
