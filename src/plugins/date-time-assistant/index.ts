@@ -24,6 +24,14 @@ function formatOffsetDateTime(date: Date, offsetMinutes?: number): string {
 }
 
 function parseTzSuffix(str: string): { body: string; offsetMinutes: number | undefined } {
+  const namedMatch = str.match(/\s+((?:utc|gmt)\s*(?:[+-]\s*\d{1,2}(?::?\d{2})?)?|z)\s*$/i)
+  if (namedMatch) {
+    const offset = parseTimezoneToken(namedMatch[1])
+    if (offset !== null) {
+      return { body: str.slice(0, namedMatch.index!).trim(), offsetMinutes: offset }
+    }
+  }
+
   const match = str.match(/\s*([+-])(\d{1,2})(?::?(\d{2}))?\s*$/)
   if (!match) {
     const bare = str.match(/\s*[+-]\s*$/)
@@ -31,11 +39,14 @@ function parseTzSuffix(str: string): { body: string; offsetMinutes: number | und
     return { body: str, offsetMinutes: undefined }
   }
 
-  const body = str.slice(0, match.index!).trim()
-  const sign = match[1] === '+' ? 1 : -1
-  const hours = parseInt(match[2], 10)
-  const mins = parseInt(match[3] || '0', 10)
-  return { body, offsetMinutes: sign * (hours * 60 + mins) }
+  const signIndex = str.indexOf(match[1], match.index)
+  const body = str.slice(0, signIndex).trim()
+  const previousChar = signIndex > 0 ? str[signIndex - 1] : ''
+  if (previousChar && !/\s/.test(previousChar) && !/[Tt:]/.test(body)) {
+    return { body: str, offsetMinutes: undefined }
+  }
+  const offset = parseOffsetValue(match[1], match[2], match[3])
+  return { body, offsetMinutes: offset ?? undefined }
 }
 
 function tryParseTimestamp(value: string): number {
@@ -48,6 +59,23 @@ function formatTimestamp(date: Date, unit: 's' | 'ms'): string {
   return unit === 's' ? `${Math.floor(date.getTime() / 1000)}` : `${date.getTime()}`
 }
 
+function parseOffsetValue(sign: string, hoursText: string, minutesText?: string): number | null {
+  const hours = parseInt(hoursText, 10)
+  const minutes = parseInt(minutesText || '0', 10)
+  if (hours > 14 || minutes > 59) return null
+  return (sign === '+' ? 1 : -1) * (hours * 60 + minutes)
+}
+
+function parseTimezoneToken(value: string): number | null {
+  const normalized = value.trim()
+  if (/^(?:z|utc|gmt)$/i.test(normalized)) return 0
+  const named = normalized.match(/^(?:utc|gmt)\s*([+-])\s*(\d{1,2})(?::?(\d{2}))?$/i)
+  if (named) return parseOffsetValue(named[1], named[2], named[3])
+  const numeric = normalized.match(/^([+-])\s*(\d{1,2})(?::?(\d{2}))?$/)
+  if (numeric) return parseOffsetValue(numeric[1], numeric[2], numeric[3])
+  return null
+}
+
 function formatNowResult(date: Date, offsetMinutes?: number): string {
   const formattedDate = offsetMinutes === undefined
     ? formatLocalDateTime(date)
@@ -56,13 +84,8 @@ function formatNowResult(date: Date, offsetMinutes?: number): string {
 }
 
 function parseUtcOffset(value: string): number | null {
-  const match = value.match(/^utc\s*([+-])\s*(\d{1,2})(?::?(\d{2}))?$/i)
-  if (!match) return null
-  const sign = match[1] === '+' ? 1 : -1
-  const hours = parseInt(match[2], 10)
-  const minutes = parseInt(match[3] || '0', 10)
-  if (hours > 14 || minutes > 59) return null
-  return sign * (hours * 60 + minutes)
+  const offset = parseTimezoneToken(value)
+  return offset === null ? null : offset
 }
 
 function parseNowOffset(value: string): { amount: number; unit: 'day' | 'hour' } | null {
@@ -197,6 +220,39 @@ function parseDateTimeQuery(query: string, now: Date): ParsedResult | null {
   return null
 }
 
+function parseDateForTimestampSuggestions(value: string): ParsedResult[] {
+  const trimmed = value.trim()
+  if (!/\d{4}-\d{1,2}-\d{1,2}/.test(trimmed)) return []
+
+  const { body, offsetMinutes } = parseTzSuffix(trimmed)
+  let date = new Date(body)
+  if (Number.isNaN(date.getTime())) date = new Date(trimmed)
+  if (Number.isNaN(date.getTime())) return []
+  if (offsetMinutes !== undefined) {
+    const localOffsetMinutes = -date.getTimezoneOffset()
+    const utcMs = date.getTime() + (localOffsetMinutes - offsetMinutes) * 60000
+    date = new Date(utcMs)
+  }
+
+  const year = date.getFullYear()
+  if (year < 2000 || year > 2100) return []
+
+  return [
+    {
+      kind: 'timestamp',
+      display: `${formatTimestamp(date, 'ms')} ms`,
+      value: formatTimestamp(date, 'ms'),
+      actionLabelKey: 'action.copyTimestamp',
+    },
+    {
+      kind: 'timestamp',
+      display: `${formatTimestamp(date, 's')} s`,
+      value: formatTimestamp(date, 's'),
+      actionLabelKey: 'action.copyTimestamp',
+    },
+  ]
+}
+
 function parseTimestampForSuggestion(value: string): ParsedResult | null {
   const date = value.length === 10
     ? new Date(parseInt(value, 10) * 1000)
@@ -243,7 +299,8 @@ function convertTimestampText(text: string, params: Record<string, unknown>, inP
       if (Number.isNaN(date.getTime())) date = new Date(trimmed)
       if (Number.isNaN(date.getTime())) return `Error: Invalid date "${trimmed}"`
       if (offsetMinutes !== undefined) {
-        const utcMs = date.getTime() - offsetMinutes * 60000 + date.getTimezoneOffset() * 60000
+        const localOffsetMinutes = -date.getTimezoneOffset()
+        const utcMs = date.getTime() + (localOffsetMinutes - offsetMinutes) * 60000
         date = new Date(utcMs)
       }
       const result = formatTimestamp(date, unit)
@@ -318,7 +375,8 @@ export const dateTimeAssistantPlugin = definePlugin({
     dynamicItems(ctx: LauncherDynamicContext): LauncherItemContribution[] {
       const now = new Date()
       const parsed = parseDateTimeQuery(ctx.query, now)
-      if (!parsed) return []
+      const dateTimestampResults = parseDateForTimestampSuggestions(ctx.query)
+      if (!parsed && dateTimestampResults.length === 0) return []
 
       // "now" expressions produce multiple items (timestamp + datetime)
       const nowParsed = parseNowExpression(ctx.query, now)
@@ -349,6 +407,19 @@ export const dateTimeAssistantPlugin = definePlugin({
             },
           ]
         }
+      }
+
+      if (dateTimestampResults.length > 0) {
+        const trimmed = ctx.query.trim()
+        return dateTimestampResults.map((result, index) => ({
+          id: `dt-date-timestamp-${index}`,
+          display: { title: `${trimmed} -> ${result.display}`, subtitle: resultKindLabel(result.kind, ctx.locale), icon: 'Clock' },
+          behavior: { type: 'perform' },
+          async execute(ctx2) {
+            await ctx2.api.copyText(result.value)
+            return { ok: true, output: { choices: [{ id: 'copy', title: result.value, primaryAction: async () => { await ctx2.api.copyText(result.value) } }] } }
+          },
+        }))
       }
 
       // Single result (timestamp conversion, date offset, tomorrow, etc.)

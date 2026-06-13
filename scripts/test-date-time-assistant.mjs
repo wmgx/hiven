@@ -88,6 +88,31 @@ assert.equal(
   JSON.stringify(['1781064306000', '2026-06-10 12:05:06+08:00']),
   'now UTC+8 should offer separate timestamp and timezone datetime suggestions',
 )
+assert.equal(
+  JSON.stringify(await values('2026-06-10 12:05:06+08:00')),
+  JSON.stringify(['1781064306000', '1781064306']),
+  'timezone datetime query should directly offer millisecond and second timestamp suggestions',
+)
+assert.equal(
+  JSON.stringify(await values('2026-06-10 12:05:06 UTC+8')),
+  JSON.stringify(['1781064306000', '1781064306']),
+  'UTC+8 datetime query should directly offer millisecond and second timestamp suggestions',
+)
+assert.equal(
+  JSON.stringify(await values('2026-06-10 12:05:06 UTC+08:00')),
+  JSON.stringify(['1781064306000', '1781064306']),
+  'UTC+08:00 datetime query should match UTC+8',
+)
+assert.equal(
+  JSON.stringify(await values('2026-06-10 12:05:06 GMT+8')),
+  JSON.stringify(['1781064306000', '1781064306']),
+  'GMT+8 datetime query should match UTC+8',
+)
+assert.equal(
+  JSON.stringify(await values('2026-06-10 12:05:06 +8')),
+  JSON.stringify(['1781064306000', '1781064306']),
+  'bare +8 datetime query should match UTC+8',
+)
 function runTimestampCommand(text) {
   const result = timestampCommand.run({
     inputs: { input: { kind: 'text', text, paneId: 'pane-test' } },
@@ -106,6 +131,11 @@ assert.equal(
     '1781064306000 | 2026-06-10 12:05:06+08:00',
   ].join('\n'),
   'timestamp command should share now expression handling with instant suggestions',
+)
+assert.equal(
+  runTimestampCommand('2026-06-10 12:05:06 UTC+8'),
+  '1781064306000',
+  'timestamp command should parse UTC+8 datetime suffixes',
 )
 
 console.log('date time assistant checks passed')
