@@ -104,10 +104,15 @@ export function applyEffects(
           result.applied.push(effect)
           break
         case 'pane.setRenderer':
-        case 'pane.clearRenderer':
-          applyPaneRendererEffect(effect)
+        case 'pane.clearRenderer': {
+          const error = applyPaneRendererEffect(effect)
+          if (error) {
+            result.errors.push(error)
+            break
+          }
           result.applied.push(effect)
           break
+        }
         case 'workspace.layout':
         case 'workspace.split':
           applyWorkspaceEffect(effect)
@@ -356,16 +361,16 @@ function applyStatus(effect: StatusEffect) {
 
 // ─── Plugin Effect Handlers ──────────────────────────────────────────────────
 
-function applyPaneRendererEffect(effect: PaneRendererEffect) {
+function applyPaneRendererEffect(effect: PaneRendererEffect): string | null {
   const ws = useWorkspaceStore.getState()
 
   if (effect.type === 'pane.setRenderer') {
     // Validate renderer exists — prefer dev registry if effect was dispatched from a dev command
     const rendererEntry = pluginRegistry.resolveRenderer(effect.renderer, effect._isDev)
     if (!rendererEntry) {
-      // Emit status warning, do not throw
-      showToast(`Renderer "${effect.renderer}" not found`, 'warning')
-      return
+      const message = `Renderer "${effect.renderer}" not found`
+      showToast(message, 'warning')
+      return message
     }
 
     ws.setPaneRenderer(effect.paneId, {
@@ -378,6 +383,7 @@ function applyPaneRendererEffect(effect: PaneRendererEffect) {
   } else if (effect.type === 'pane.clearRenderer') {
     ws.clearPaneRenderer(effect.paneId)
   }
+  return null
 }
 
 function applyPanelV2Effect(effect: PanelV2Effect) {

@@ -56,6 +56,7 @@ export const textDiffPlugin = definePlugin({
           title: 'command.compare.title',
           subtitle: 'command.compare.description',
           icon: 'git-compare',
+          aliases: ['diff', 'compare', 'text diff', 'text-diff', 'duibi', 'wenben duibi'],
         },
         surfaces: ['command-palette'],
         pinnable: false,

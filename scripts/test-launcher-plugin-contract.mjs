@@ -80,14 +80,36 @@ function assertLauncherToolsHaveSubtitles() {
 
 function assertBuiltinVersionsMatchManifests() {
   const index = JSON.parse(read('src/builtin-plugins/index.json'))
-  assert.equal(index.version, 11, 'builtin plugin index version should be bumped for launcher migration')
+  assert.equal(index.version, 12, 'builtin plugin index version should be bumped for launcher migration')
   for (const pkg of index.packages) {
     const manifest = JSON.parse(read(`src/plugins/${pkg.dir}/manifest.json`))
     assert.equal(pkg.version, manifest.version, `${pkg.pluginId} builtin index version should match manifest version`)
   }
 }
 
+function assertTextDiffCanBeFoundAndFailureIsVisible() {
+  const textDiff = read('src/plugins/textDiff/index.ts')
+  assert.match(
+    textDiff,
+    /id:\s*['"]text-diff\.compare['"][\s\S]*aliases:\s*\[[\s\S]*['"]diff['"]/,
+    'text-diff launcher item should be searchable by the English diff query in Chinese locale',
+  )
+
+  const effectRunner = read('src/workspace/effectRunner.ts')
+  assert.match(
+    effectRunner,
+    /Renderer "\$\{effect\.renderer\}" not found[\s\S]*return message/,
+    'missing pane renderers should be returned through EffectRunnerResult.errors',
+  )
+  assert.match(
+    effectRunner,
+    /const error = applyPaneRendererEffect\(effect\)[\s\S]*result\.errors\.push\(error\)/,
+    'pane renderer effect errors should not be swallowed as successful launcher execution',
+  )
+}
+
 assertLauncherToolsHaveSubtitles()
 assertBuiltinVersionsMatchManifests()
+assertTextDiffCanBeFoundAndFailureIsVisible()
 
 console.log('launcher plugin contract checks passed')
