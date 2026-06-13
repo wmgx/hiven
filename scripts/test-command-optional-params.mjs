@@ -35,6 +35,7 @@ assert(/return\s+shortcutMeta\.modifier === 'meta' \? metaKey : ctrlKey/.test(co
 assert(/supportsDefaultParamRun/.test(commandPalette), 'CommandPalette should gate default runs behind explicit default support')
 assert(/hasExplicitDefaultParams/.test(commandPalette), 'CommandPalette should require explicit defaults for optional params')
 assert(/customize-shortcut-chip/.test(commandPalette), 'CommandPalette should render optional params as a compact shortcut chip')
+assert(/supportsParamCustomization\(items\[selectedIndex\]\)/.test(commandPalette), 'CommandPalette footer should show the parameter shortcut for the selected optional-param item')
 
 function pluginIndex(dir) {
   const p = join(root, 'src/plugins', dir, 'index.ts')

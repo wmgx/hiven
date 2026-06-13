@@ -47,8 +47,8 @@ function supportsDefaultParamRun(item: DomainLauncherItem): boolean {
   return !item.params?.length || hasExplicitDefaultParams(item)
 }
 
-function supportsParamCustomization(item: DomainLauncherItem): boolean {
-  return Boolean(item.executeWithParams && item.params && item.params.length > 0)
+function supportsParamCustomization(item: DomainLauncherItem | undefined): boolean {
+  return Boolean(item?.params && item.params.length > 0)
 }
 
 export function CommandPalette() {
@@ -345,6 +345,9 @@ function SearchStep({
       <div className="flex gap-3 px-3.5 py-1.5" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
         <HintKey keys="↑↓" label={t(locale, 'palette.navigate')} />
         <HintKey keys="↵" label={t(locale, 'palette.select')} />
+        {supportsParamCustomization(items[selectedIndex]) && (
+          <HintKey keys={`${getPlatformShortcutMeta().label}↵`} label={t(locale, 'palette.customizeParamsLabel')} />
+        )}
         <HintKey keys="esc" label={t(locale, 'palette.close')} />
       </div>
     </>
