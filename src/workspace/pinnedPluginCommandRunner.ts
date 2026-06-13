@@ -49,6 +49,7 @@ function createPinnedLauncherApi(inputText: string): PluginLauncherApi {
     insertText: async () => {},
     copyText: async () => {},
     openUrl: async () => {},
+    showMainPanel: async () => {},
     showMessage: () => {},
   }
 }

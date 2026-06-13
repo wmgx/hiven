@@ -151,6 +151,7 @@ export type PluginLauncherApi = {
   insertText(text: string): Promise<void>
   copyText(text: string): Promise<void>
   openUrl(url: string): Promise<void>
+  showMainPanel(): Promise<void>
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
 }
 

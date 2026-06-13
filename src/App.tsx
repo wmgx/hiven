@@ -150,6 +150,30 @@ function MainApp() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    import('@tauri-apps/api/event')
+      .then(({ listen }) => listen('hiven://show-main-panel', () => {
+        const state = useAppStore.getState()
+        state.setActiveView('editor')
+        state.setCommandPaletteOpen(false)
+        state.setGlobalLauncherOpen(false)
+      }))
+      .then((cleanup) => {
+        if (disposed) cleanup()
+        else unlisten = cleanup
+      })
+      .catch((error) => {
+        console.warn('[hiven] Failed to listen for show main panel event:', error)
+      })
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [])
+
   useEffect(() => installGlobalPinnedLauncherHotkeys(), [])
 
   useEffect(() => {

@@ -70,6 +70,24 @@ async function writeClipboard(text: string): Promise<void> {
   }
 }
 
+async function showMainPanel(): Promise<void> {
+  const effects: FluxEffect[] = [{ type: 'app.showMainPanel' }]
+  if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
+    try {
+      const [{ emitTo }, { invoke }] = await Promise.all([
+        import('@tauri-apps/api/event'),
+        import('@tauri-apps/api/core'),
+      ])
+      await emitTo('main', 'hiven://show-main-panel')
+      await invoke('show_and_focus_window')
+      return
+    } catch (error) {
+      console.warn('[launcher] failed to show main panel via Tauri:', error)
+    }
+  }
+  applyEffects(effects)
+}
+
 /**
  * Build a PluginLauncherApi. The host owns the implementation, so plugins get a
  * stable, narrow surface. All text targets resolve against the active pane.
@@ -111,6 +129,7 @@ export function createPluginLauncherApi(): PluginLauncherApi {
     openUrl: async (url: string) => {
       await openExternalUrl(url)
     },
+    showMainPanel,
     showMessage: (message: string, level = 'info') => {
       useAppStore.getState().setLastCommandStatus({
         title: message,

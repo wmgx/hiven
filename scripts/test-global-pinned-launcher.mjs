@@ -108,6 +108,16 @@ check('main panel launcher command is contributed by the external core-pane plug
     /id:\s*['"]core-pane\.show-main-panel['"][\s\S]{0,420}app\.showMainPanel/,
     'core-pane plugin should contribute the main panel command through a host effect',
   )
+  assertHas(
+    files.corePanePlugin,
+    /launcher:\s*\{[\s\S]{0,180}items:\s*\[[\s\S]{0,260}id:\s*['"]show-main-panel['"][\s\S]{0,360}ctx\.api\.showMainPanel\(\)/,
+    'core-pane plugin should expose the main panel action as a launcher item',
+  )
+  assertHas(
+    files.app,
+    /listen\(['"]hiven:\/\/show-main-panel['"][\s\S]{0,260}setActiveView\(['"]editor['"]\)/,
+    'main window should handle show-main-panel requests from the standalone launcher',
+  )
   assert.doesNotMatch(
     files.globalLauncher,
     /resolveCommand\(['"]core-pane\.show-main-panel['"]\)/,

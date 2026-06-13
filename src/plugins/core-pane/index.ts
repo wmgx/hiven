@@ -34,6 +34,24 @@ const LANGUAGE_OPTIONS = [
 const EDITOR_LANGUAGE_VALUES = new Set(LANGUAGE_OPTIONS.map((option) => option.value).filter((value) => value !== 'auto'))
 
 export const corePanePlugin = definePlugin({
+  launcher: {
+    items: [
+      {
+        id: 'show-main-panel',
+        display: {
+          title: 'command.showMainPanel.title',
+          subtitle: 'command.showMainPanel.description',
+          icon: 'PanelTopOpen',
+          aliases: ['main', 'home', 'editor', 'main-panel', '主面板'],
+        },
+        pinnable: false,
+        async execute(ctx) {
+          await ctx.api.showMainPanel()
+          return { ok: true }
+        },
+      },
+    ],
+  },
   commands: [
     {
       id: 'core-pane.show-main-panel',
