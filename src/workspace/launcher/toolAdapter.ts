@@ -50,10 +50,16 @@ function resolveTextInput(api: PluginLauncherApi, mode: TextInputMode): Resolved
   return { kind: 'text', text: all, mode, source: all ? 'all' : 'empty' }
 }
 
-function makeOutput(api: PluginLauncherApi, locale: Locale): PluginToolOutput {
+function manualTextInput(text: string, mode: TextInputMode): ResolvedTextInput {
+  return { kind: 'text', text, mode, source: text ? 'manual' : 'empty' }
+}
+
+function makeOutput(api: PluginLauncherApi, locale: Locale, copyReplaceOutput = false): PluginToolOutput {
   return {
     text: (value: string) => textResult(value, api, locale),
-    replaceActiveText: (value: string) => replaceActiveTextResult(value, api, locale),
+    replaceActiveText: (value: string) => copyReplaceOutput
+      ? textResult(value, api, locale)
+      : replaceActiveTextResult(value, api, locale),
     error: (message: string) => errorResult(message),
     choices: (choices) => choicesResult(choices),
   }
@@ -89,7 +95,10 @@ export function adaptToolToLauncherItem(
     ctx: Parameters<LauncherExecuteHandler>[0],
     params: Record<string, unknown>,
   ): Promise<LauncherExecuteResult> => {
-    const input = resolveTextInput(ctx.api, mode)
+    const hasManualInput = ctx.input?.text !== undefined
+    const input = hasManualInput
+      ? manualTextInput(ctx.input?.text ?? '', mode)
+      : resolveTextInput(ctx.api, mode)
     const result = await Promise.resolve(
       tool.run({
         input,
@@ -98,7 +107,7 @@ export function adaptToolToLauncherItem(
         locale: ctx.locale,
         api: ctx.api,
         t: ctx.t,
-        output: makeOutput(ctx.api, ctx.locale),
+        output: makeOutput(ctx.api, ctx.locale, hasManualInput && ctx.surfaceId === 'global-launcher'),
       }),
     )
     if (

@@ -259,6 +259,19 @@ export function GlobalLauncher() {
     requestAnimationFrame(() => inputRef.current?.focus())
   }
 
+  useEffect(() => {
+    if (!open || !controllerState || controllerState.frames.length <= 1) return
+    if (controllerState.busy) return
+    const topFrame = controllerState.frames[controllerState.frames.length - 1]
+    if (topFrame.kind !== 'collect-input') return
+    if (topFrame.item.behavior.type !== 'perform' || topFrame.item.inputPolicy == null) return
+    if (topFrame.previewInputText === topFrame.inputText) return
+    const timer = window.setTimeout(() => {
+      void controllerRef.current?.previewInput()
+    }, 180)
+    return () => window.clearTimeout(timer)
+  }, [controllerState, open])
+
   useLayoutEffect(() => {
     if (!open || !standaloneLauncher) return
     if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
@@ -531,9 +544,8 @@ export function GlobalLauncher() {
           )
         })() : controllerState && controllerState.frames.length > 1 && controllerState.frames[controllerState.frames.length - 1].kind === 'collect-input' ? (() => {
           const frame = controllerState.frames[controllerState.frames.length - 1] as CollectInputFrame
-          const placeholder = frame.item.behavior.type === 'collect-input'
-            ? (frame.item.behavior.input.placeholder ?? '')
-            : ''
+          const placeholder = frame.input.placeholder ?? ''
+          const previewChoice = frame.previewOutput?.choices[0]
           return (
             <>
               <div className="global-launcher-header flex items-center gap-2 px-3.5 py-2.5" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
@@ -546,14 +558,35 @@ export function GlobalLauncher() {
                   className="flex-1 outline-none border-none bg-transparent text-[14px]"
                   style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
                 />
+                {controllerState.busy && (
+                  <span className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>...</span>
+                )}
               </div>
               {controllerState.error && (
                 <div className="px-3.5 py-2 text-[12px]" style={{ color: 'var(--color-error)' }}>
                   {controllerState.error}
                 </div>
               )}
+              {previewChoice && (
+                <div className="global-launcher-body">
+                  <button
+                    className="w-full flex items-center gap-2 px-3.5 py-2 text-left text-[13px] bg-[var(--color-background-secondary)] hover:bg-[var(--color-background-secondary)]"
+                    style={{ color: 'var(--color-text-primary)' }}
+                    onClick={() => void controllerRef.current?.activateChoice(previewChoice)}
+                  >
+                    <span className="flex-1 truncate">{previewChoice.title}</span>
+                    {previewChoice.subtitle && (
+                      <span className="text-[11px] truncate" style={{ color: 'var(--color-text-tertiary)' }}>
+                        {previewChoice.subtitle}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              )}
               <div className="global-launcher-footer flex shrink-0 gap-3 px-3.5 py-1.5" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
-                <HintKey keys="↵" label={t(locale, 'palette.quickEntryRun')} />
+                {previewChoice
+                  ? <HintText label={t(locale, 'palette.enterToCopy')} />
+                  : <HintKey keys="↵" label={t(locale, 'palette.quickEntryRun')} />}
                 <HintKey keys="esc" label={t(locale, 'palette.back')} />
               </div>
             </>
@@ -707,6 +740,14 @@ function HintKey({ keys, label }: { keys: string; label: string }) {
   return (
     <span className="text-[11px] flex items-center gap-1" style={{ color: 'var(--color-text-tertiary)' }}>
       <kbd className="text-[10px] px-1 py-0.5 rounded" style={{ background: 'var(--color-background-tertiary)', border: '0.5px solid var(--color-border-tertiary)' }}>{keys}</kbd>
+      {label}
+    </span>
+  )
+}
+
+function HintText({ label }: { label: string }) {
+  return (
+    <span className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
       {label}
     </span>
   )

@@ -33,6 +33,7 @@ const translate = (locale, namespace, key, vars = {}) => {
         replaceActiveText: 'Replace active text',
         fieldRequiredWithLabel: '{label} is required',
         inputRequired: 'Input required',
+        quickTextPlaceholder: 'Text for {title}',
       },
       zh: {
         copied: '已复制',
@@ -41,6 +42,7 @@ const translate = (locale, namespace, key, vars = {}) => {
         replaceActiveText: '替换当前文本',
         fieldRequiredWithLabel: '{label} 为必填',
         inputRequired: '请输入内容',
+        quickTextPlaceholder: '输入要用 {title} 处理的文本',
       },
     },
   }
@@ -280,6 +282,100 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.equal(paramFrame.selectedIndex, 1, 'boolean false default selects the No option')
   await ctrl.commitCurrentParam(false)
   assert.deepEqual(order, ['record', 'execute:pretty:false'])
+}
+
+// --- 13. global launcher text tools collect manual input instead of reading the pane immediately ---
+{
+  const order = []
+  const { ctrl } = makeController({
+    surfaceId: 'global-launcher',
+    recordSelection: () => order.push('record'),
+  })
+  const item = {
+    ...performItem('plugin:p:tool:manual', async (ctx) => {
+      order.push('execute:' + ctx.input.text)
+      return { ok: true }
+    }),
+    inputPolicy: { mode: 'auto' },
+  }
+  await ctrl.selectItem(item)
+  assert.deepEqual(order, ['record'], 'global text tool records usage before entering manual input')
+  let frame = ctrl.getState().frames[ctrl.getState().frames.length - 1]
+  assert.equal(frame.kind, 'collect-input', 'global text tool enters manual input frame')
+  assert.equal(frame.input.placeholder, 'Text for plugin:p:tool:manual', 'manual input frame gets the quick text placeholder')
+  ctrl.setInputText('manual text')
+  await ctrl.submitInput()
+  assert.deepEqual(order, ['record', 'execute:manual text'], 'manual input is passed into execution')
+}
+
+// --- 14. global launcher param tools collect manual input after params are confirmed ---
+{
+  const order = []
+  const { ctrl } = makeController({
+    surfaceId: 'global-launcher',
+    recordSelection: () => order.push('record'),
+  })
+  const item = {
+    ...performItem('plugin:p:tool:param-manual', async () => { order.push('default'); return { ok: true } }),
+    inputPolicy: { mode: 'auto' },
+    params: [{ key: 'mode', label: 'Mode', type: 'single-select', options: ['upper', 'lower'], default: 'upper' }],
+    defaultParams: { mode: 'upper' },
+    executeWithParams: async (ctx, params) => {
+      order.push(`execute:${ctx.input.text}:${params.mode}`)
+      return { ok: true }
+    },
+  }
+  await ctrl.selectItem(item, { customizeParams: true })
+  assert.equal(ctrl.getState().frames[ctrl.getState().frames.length - 1].kind, 'param-input')
+  await ctrl.commitCurrentParam('lower')
+  const frame = ctrl.getState().frames[ctrl.getState().frames.length - 1]
+  assert.equal(frame.kind, 'collect-input', 'param confirmation advances to manual input frame')
+  ctrl.setInputText('Abc')
+  await ctrl.submitInput()
+  assert.deepEqual(order, ['record', 'execute:Abc:lower'], 'manual input and chosen params are submitted together')
+}
+
+// --- 15. global manual input tools can preview output while typing ---
+{
+  const cap = makeApi()
+  const { ctrl } = makeController({
+    surfaceId: 'global-launcher',
+    api: cap.api,
+  })
+  const item = {
+    ...performItem('plugin:p:tool:live-manual', async (ctx) => output.textResult(ctx.input.text.toUpperCase(), ctx.api)),
+    inputPolicy: { mode: 'auto' },
+  }
+  await ctrl.selectItem(item)
+  ctrl.setInputText('live')
+  await ctrl.previewInput()
+  const frame = ctrl.getState().frames[ctrl.getState().frames.length - 1]
+  assert.equal(frame.kind, 'collect-input')
+  assert.equal(frame.previewOutput.choices[0].title, 'LIVE', 'live preview output updates in the input frame')
+}
+
+// --- 16. submitting a live preview copies the preview output and closes without re-running ---
+{
+  const cap = makeApi()
+  let executeCount = 0
+  const { ctrl, getClosed } = makeController({
+    surfaceId: 'global-launcher',
+    api: cap.api,
+  })
+  const item = {
+    ...performItem('plugin:p:tool:live-submit', async (ctx) => {
+      executeCount++
+      return output.textResult(`${ctx.input.text}:${executeCount}`, ctx.api)
+    }),
+    inputPolicy: { mode: 'auto' },
+  }
+  await ctrl.selectItem(item)
+  ctrl.setInputText('copy')
+  await ctrl.previewInput()
+  await ctrl.submitInput()
+  assert.equal(executeCount, 1, 'submit should use the current preview instead of re-running the transform')
+  assert.deepEqual(cap.calls.copied, ['copy:1'], 'submit copies current preview result')
+  assert.equal(getClosed(), 1, 'submit closes after copying current preview')
 }
 
 console.log('✓ test-launcher-controller passed')

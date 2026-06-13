@@ -19,6 +19,7 @@
 
 import type {
   LauncherExecuteResult,
+  LauncherInputSpec,
   LauncherItem,
   LauncherOutput,
   LauncherParamSpec,
@@ -39,6 +40,10 @@ export type CollectInputFrame = {
   kind: 'collect-input'
   item: LauncherItem
   inputText: string
+  input: LauncherInputSpec
+  params?: Record<string, unknown>
+  previewOutput?: LauncherOutput
+  previewInputText?: string
 }
 
 export type ParamInputFrame = {
@@ -98,6 +103,7 @@ export type SelectOptions = {
 export class LauncherController {
   private state: LauncherControllerState
   private deps: LauncherControllerDeps
+  private previewRunId = 0
 
   constructor(deps: LauncherControllerDeps) {
     this.deps = deps
@@ -192,6 +198,32 @@ export class LauncherController {
     return Boolean(item.executeWithParams && item.params && item.params.length > 0)
   }
 
+  private shouldCollectTextInput(item: LauncherItem): boolean {
+    return this.deps.surfaceId === 'global-launcher' &&
+      item.behavior.type === 'perform' &&
+      item.inputPolicy != null
+  }
+
+  private shouldPreviewInput(frame: CollectInputFrame): boolean {
+    return this.shouldCollectTextInput(frame.item)
+  }
+
+  private collectInputFrameFor(item: LauncherItem, params?: Record<string, unknown>): CollectInputFrame {
+    const input = item.behavior.type === 'collect-input'
+      ? item.behavior.input
+      : {
+          placeholder: translate(this.deps.locale as Locale, 'palette', 'quickTextPlaceholder', { title: this.itemTitle(item) }),
+          emptyInputMessage: translate(this.deps.locale as Locale, 'palette', 'inputRequired'),
+        }
+    return {
+      kind: 'collect-input',
+      item,
+      inputText: '',
+      input,
+      params,
+    }
+  }
+
   /**
    * Select a first-level launcher item.
    *  - collect-input: record usage now, enter input frame.
@@ -215,7 +247,17 @@ export class LauncherController {
         this.deps.recordSelection(this.deps.surfaceId, item)
       }
       this.setState({
-        frames: [...this.state.frames, { kind: 'collect-input', item, inputText: '' }],
+        frames: [...this.state.frames, this.collectInputFrameFor(item)],
+      })
+      return
+    }
+
+    if (this.shouldCollectTextInput(item)) {
+      if (this.shouldRecord(item, options)) {
+        this.deps.recordSelection(this.deps.surfaceId, item)
+      }
+      this.setState({
+        frames: [...this.state.frames, this.collectInputFrameFor(item)],
       })
       return
     }
@@ -319,6 +361,13 @@ export class LauncherController {
       return
     }
 
+    if (this.shouldCollectTextInput(top.item)) {
+      const frames = this.state.frames.slice(0, -1)
+      frames.push(this.collectInputFrameFor(top.item, top.params))
+      this.setState({ frames, error: null })
+      return
+    }
+
     await this.runAndHandle(
       () => Promise.resolve(top.item.executeWithParams?.(this.buildExecutionContext(top.item), top.params) ?? top.item.execute(this.buildExecutionContext(top.item))),
       this.itemTitle(top.item),
@@ -330,8 +379,70 @@ export class LauncherController {
     const top = this.topFrame()
     if (top.kind !== 'collect-input') return
     const frames = this.state.frames.slice(0, -1)
-    frames.push({ ...top, inputText: text })
-    this.setState({ frames })
+    frames.push({ ...top, inputText: text, previewOutput: undefined, previewInputText: undefined })
+    this.setState({ frames, error: null })
+  }
+
+  async previewInput(): Promise<void> {
+    const top = this.topFrame()
+    if (top.kind !== 'collect-input' || !this.shouldPreviewInput(top)) return
+
+    const { item, inputText } = top
+    if (!inputText.trim() && !top.input.allowEmptyInput) {
+      this.clearCollectInputPreview(top)
+      return
+    }
+
+    const runId = ++this.previewRunId
+    this.setState({ busy: true, error: null })
+
+    let result: LauncherExecuteResult
+    try {
+      result = await Promise.resolve(
+        top.params && item.executeWithParams
+          ? item.executeWithParams(this.buildExecutionContext(item, inputText), top.params)
+          : item.execute(this.buildExecutionContext(item, inputText)),
+      )
+    } catch (error) {
+      if (runId !== this.previewRunId) return
+      this.setState({ busy: false, error: error instanceof Error ? error.message : String(error) })
+      return
+    }
+
+    if (runId !== this.previewRunId) return
+    const latestTop = this.topFrame()
+    if (latestTop.kind !== 'collect-input' || latestTop.item.systemKey !== item.systemKey || latestTop.inputText !== inputText) {
+      this.setState({ busy: false })
+      return
+    }
+
+    if (!result.ok) {
+      this.clearCollectInputPreview(latestTop, result.message)
+      return
+    }
+    if (!isOutputResult(result)) {
+      this.clearCollectInputPreview(latestTop)
+      return
+    }
+
+    const frames = this.state.frames.slice(0, -1)
+    frames.push({
+      ...latestTop,
+      previewOutput: result.output,
+      previewInputText: inputText,
+    })
+    this.setState({ frames, busy: false, error: null })
+  }
+
+  private clearCollectInputPreview(frame: CollectInputFrame, error: string | null = null): void {
+    const top = this.topFrame()
+    if (top.kind !== 'collect-input' || top.item.systemKey !== frame.item.systemKey) {
+      this.setState({ busy: false, error })
+      return
+    }
+    const frames = this.state.frames.slice(0, -1)
+    frames.push({ ...top, previewOutput: undefined, previewInputText: undefined })
+    this.setState({ frames, busy: false, error })
   }
 
   /**
@@ -344,13 +455,26 @@ export class LauncherController {
     const { item, inputText } = top
 
     const spec = item.behavior.type === 'collect-input' ? item.behavior.input : undefined
-    if (!inputText.trim() && !spec?.allowEmptyInput) {
-      this.setState({ error: spec?.emptyInputMessage ?? translate(this.deps.locale as Locale, 'palette', 'inputRequired') })
+    const inputSpec = top.input ?? spec
+    if (!inputText.trim() && !inputSpec?.allowEmptyInput) {
+      this.setState({ error: inputSpec?.emptyInputMessage ?? translate(this.deps.locale as Locale, 'palette', 'inputRequired') })
+      return
+    }
+
+    const firstPreviewChoice = top.previewInputText === inputText
+      ? top.previewOutput?.choices[0]
+      : undefined
+    if (firstPreviewChoice && this.shouldPreviewInput(top)) {
+      await this.runChoiceAction(() => firstPreviewChoice.primaryAction(), firstPreviewChoice.title)
       return
     }
 
     await this.runAndHandle(
-      () => Promise.resolve(item.execute(this.buildExecutionContext(item, inputText))),
+      () => Promise.resolve(
+        top.params && item.executeWithParams
+          ? item.executeWithParams(this.buildExecutionContext(item, inputText), top.params)
+          : item.execute(this.buildExecutionContext(item, inputText)),
+      ),
       this.itemTitle(item),
     )
   }

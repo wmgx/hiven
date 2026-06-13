@@ -63,7 +63,7 @@ export type ResolvedTextInput = {
   kind: 'text'
   text: string
   mode: TextInputMode
-  source: 'selection' | 'all' | 'empty'
+  source: 'selection' | 'all' | 'manual' | 'empty'
   range?: TextRange
   paneId?: string
   panelId?: string
