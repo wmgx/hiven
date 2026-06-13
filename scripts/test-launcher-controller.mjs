@@ -196,4 +196,25 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.equal(st.frames.length, 3, 'choice returning output pushes another result frame')
 }
 
+// --- 11. Cmd/Ctrl+Enter customization enters param frame and executes with supplied params ---
+{
+  const order = []
+  const { ctrl } = makeController({ recordSelection: () => order.push('record') })
+  const item = {
+    ...performItem('plugin:p:command:upper', async () => { order.push('default'); return { ok: true } }),
+    params: [{ key: 'suffix', label: 'Suffix', type: 'text', default: '!' }],
+    defaultParams: { suffix: '!' },
+    executeWithParams: async (_ctx, params) => {
+      order.push('execute:' + params.suffix)
+      return { ok: true }
+    },
+  }
+  await ctrl.selectItem(item, { customizeParams: true })
+  assert.deepEqual(order, ['record'], 'usage recorded when entering param mode, before submit')
+  assert.equal(ctrl.getState().frames[ctrl.getState().frames.length - 1].kind, 'param-input')
+  ctrl.setParamValue('suffix', '?')
+  await ctrl.submitParams()
+  assert.deepEqual(order, ['record', 'execute:?'], 'param submit executes with edited params')
+}
+
 console.log('✓ test-launcher-controller passed')

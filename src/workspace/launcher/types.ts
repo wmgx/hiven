@@ -92,6 +92,24 @@ export type LauncherInputSpec = {
   emptyInputMessageI18n?: Partial<Record<Locale, string>>
 }
 
+export type LauncherParamType = 'boolean' | 'text' | 'number' | 'single-select' | 'multi-select'
+
+export type LauncherParamOption =
+  | string
+  | { label: string; value: string; labelI18n?: Partial<Record<Locale, string>> }
+
+export type LauncherParamSpec = {
+  key: string
+  label: string
+  labelI18n?: Partial<Record<Locale, string>>
+  type: LauncherParamType
+  options?: LauncherParamOption[]
+  default?: unknown
+  required?: boolean
+  hint?: string
+  hintI18n?: Partial<Record<Locale, string>>
+}
+
 /**
  * Behavior types are lifecycle types, not product features.
  *  - `perform`       : direct action.
@@ -171,6 +189,11 @@ export type LauncherExecuteHandler<TSettings = unknown> = (
   ctx: LauncherExecutionContext<TSettings>,
 ) => Promise<LauncherExecuteResult> | LauncherExecuteResult
 
+export type LauncherExecuteWithParamsHandler<TSettings = unknown> = (
+  ctx: LauncherExecutionContext<TSettings>,
+  params: Record<string, unknown>,
+) => Promise<LauncherExecuteResult> | LauncherExecuteResult
+
 // ─── Plugin Contribution (authoring API) ─────────────────────────────────────
 
 /**
@@ -232,7 +255,12 @@ export type LauncherItem = {
    * exposed to plugins.
    */
   legacyUsageKeys?: string[]
+  /** Host-owned parameter schema for system adapters that support Cmd/Ctrl+Enter customization. */
+  params?: LauncherParamSpec[]
+  /** Explicit default values used when entering the parameter form. */
+  defaultParams?: Record<string, unknown>
   execute: LauncherExecuteHandler
+  executeWithParams?: LauncherExecuteWithParamsHandler
 }
 
 // ─── Pinned Reference ─────────────────────────────────────────────────────────

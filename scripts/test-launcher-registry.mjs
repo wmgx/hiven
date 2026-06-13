@@ -153,6 +153,7 @@ const commandItem = commandAdapter.adaptCommandToLauncherItem(textCommand, {
 })
 assert.equal(commandItem.systemKey, 'plugin:demo:command:demo.upper', 'command adapter uses host-generated command key')
 assert.equal(commandItem.legacyUsageKeys?.join(','), 'demo.upper', 'command adapter preserves old command usage key')
+assert.equal(commandItem.params, undefined, 'non-optional command params stay default-only')
 let replaced = null
 let commandCopied = null
 const commandApi = {
@@ -168,6 +169,16 @@ assert.equal(commandRes.output.choices[0].title, 'ABC!', 'command adapter uses s
 await commandRes.output.choices[0].primaryAction()
 assert.equal(replaced, 'ABC!', 'command adapter primary action replaces active text')
 assert.equal(commandCopied, null, 'command adapter primary action should not copy by default')
+
+const optionalCommandItem = commandAdapter.adaptCommandToLauncherItem({ ...textCommand, optionalParams: true }, {
+  pluginId: 'demo',
+  source: 'builtin',
+  systemKey: identityWithStub.getPluginCommandAdapterItemKey('demo', 'demo.upper.optional'),
+})
+assert.equal(optionalCommandItem.params?.[0].key, 'suffix', 'optional command exposes system-owned param schema')
+assert.equal(optionalCommandItem.defaultParams?.suffix, '!', 'optional command exposes explicit default params')
+const optionalRes = await optionalCommandItem.executeWithParams({ settings: {}, locale: 'en', api: commandApi, t: (k) => k }, { suffix: '?' })
+assert.equal(optionalRes.output.choices[0].title, 'ABC?', 'optional command adapter executes with customized params')
 
 assert.equal(
   commandAdapter.canAdaptCommandToLauncher({

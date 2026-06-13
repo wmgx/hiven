@@ -12,6 +12,7 @@ import type {
   IconRef,
   LauncherExecuteHandler,
   LauncherExecuteResult,
+  LauncherExecuteWithParamsHandler,
   LauncherItem,
   LauncherItemDisplay,
   PluginLauncherApi,
@@ -60,10 +61,13 @@ export function adaptCommandToLauncherItem(
   command: CommandContribution,
   options: CommandAdaptOptions,
 ): LauncherItem {
-  const execute: LauncherExecuteHandler = async (ctx): Promise<LauncherExecuteResult> => {
+  const runWithParams = async (
+    ctx: Parameters<LauncherExecuteHandler>[0],
+    params: Record<string, unknown>,
+  ): Promise<LauncherExecuteResult> => {
     const output = await runTextPluginCommand(command, {
       inputText: resolveAutoTextInput(ctx.api),
-      params: defaultPluginCommandParams(command.params),
+      params,
       isDev: options.source === 'dev',
       ownerPluginId: options.pluginId,
     })
@@ -71,6 +75,12 @@ export function adaptCommandToLauncherItem(
     if (output.kind === 'error') return errorResult(output.text)
     return replaceActiveTextResult(output.text, ctx.api)
   }
+  const defaultParams = defaultPluginCommandParams(command.params)
+  const execute: LauncherExecuteHandler = (ctx) => runWithParams(ctx, defaultParams)
+  const executeWithParams: LauncherExecuteWithParamsHandler = (ctx, params) => runWithParams(ctx, {
+    ...defaultParams,
+    ...params,
+  })
 
   return {
     systemKey: options.systemKey,
@@ -81,6 +91,9 @@ export function adaptCommandToLauncherItem(
     behavior: { type: 'perform' },
     pinnable: command.live?.pinnable ?? true,
     legacyUsageKeys: [command.id],
+    params: command.optionalParams ? command.params : undefined,
+    defaultParams: command.optionalParams ? defaultParams : undefined,
     execute,
+    executeWithParams: command.optionalParams ? executeWithParams : undefined,
   }
 }

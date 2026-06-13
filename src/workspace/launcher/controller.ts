@@ -39,6 +39,12 @@ export type CollectInputFrame = {
   inputText: string
 }
 
+export type ParamInputFrame = {
+  kind: 'param-input'
+  item: LauncherItem
+  params: Record<string, unknown>
+}
+
 export type ResultFrame = {
   kind: 'result'
   output: LauncherOutput
@@ -46,7 +52,7 @@ export type ResultFrame = {
   sourceTitle?: string
 }
 
-export type LauncherFrame = ListFrame | CollectInputFrame | ResultFrame
+export type LauncherFrame = ListFrame | CollectInputFrame | ParamInputFrame | ResultFrame
 
 // ─── State ─────────────────────────────────────────────────────────────────
 
@@ -78,6 +84,8 @@ export type LauncherControllerDeps = {
 export type SelectOptions = {
   /** When false (pinned execution), usage is not recorded. */
   recordUsage?: boolean
+  /** Enter a system-owned parameter form instead of running default params. */
+  customizeParams?: boolean
 }
 
 // ─── Controller ───────────────────────────────────────────────────────────
@@ -134,6 +142,20 @@ export class LauncherController {
     return true
   }
 
+  private defaultParamsFor(item: LauncherItem): Record<string, unknown> {
+    const params: Record<string, unknown> = { ...(item.defaultParams ?? {}) }
+    for (const param of item.params ?? []) {
+      if (params[param.key] === undefined && param.default !== undefined) {
+        params[param.key] = param.default
+      }
+    }
+    return params
+  }
+
+  private hasCustomizableParams(item: LauncherItem): boolean {
+    return Boolean(item.executeWithParams && item.params && item.params.length > 0)
+  }
+
   /**
    * Select a first-level launcher item.
    *  - collect-input: record usage now, enter input frame.
@@ -141,6 +163,16 @@ export class LauncherController {
    */
   async selectItem(item: LauncherItem, options: SelectOptions = {}): Promise<void> {
     this.setState({ error: null })
+
+    if (options.customizeParams && this.hasCustomizableParams(item)) {
+      if (this.shouldRecord(item, options)) {
+        this.deps.recordSelection(this.deps.surfaceId, item)
+      }
+      this.setState({
+        frames: [...this.state.frames, { kind: 'param-input', item, params: this.defaultParamsFor(item) }],
+      })
+      return
+    }
 
     if (item.behavior.type === 'collect-input') {
       if (this.shouldRecord(item, options)) {
@@ -159,6 +191,42 @@ export class LauncherController {
     await this.runAndHandle(
       () => Promise.resolve(item.execute(this.buildExecutionContext(item))),
       this.itemTitle(item),
+    )
+  }
+
+  /** Update a parameter in the active parameter input frame. */
+  setParamValue(key: string, value: unknown): void {
+    const top = this.topFrame()
+    if (top.kind !== 'param-input') return
+    const frames = this.state.frames.slice(0, -1)
+    frames.push({ ...top, params: { ...top.params, [key]: value } })
+    this.setState({ frames })
+  }
+
+  private validateParams(item: LauncherItem, params: Record<string, unknown>): string | null {
+    for (const param of item.params ?? []) {
+      const value = params[param.key]
+      if (!param.required) continue
+      if (value === undefined || value === null || value === '') return `${param.label} is required`
+      if (Array.isArray(value) && value.length === 0) return `${param.label} is required`
+    }
+    return null
+  }
+
+  /** Submit the active parameter input frame. */
+  async submitParams(): Promise<void> {
+    const top = this.topFrame()
+    if (top.kind !== 'param-input' || !top.item.executeWithParams) return
+
+    const error = this.validateParams(top.item, top.params)
+    if (error) {
+      this.setState({ error })
+      return
+    }
+
+    await this.runAndHandle(
+      () => Promise.resolve(top.item.executeWithParams?.(this.buildExecutionContext(top.item), top.params) ?? top.item.execute(this.buildExecutionContext(top.item))),
+      this.itemTitle(top.item),
     )
   }
 

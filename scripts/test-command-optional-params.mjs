@@ -24,7 +24,7 @@ const pluginTypes = read('src/workspace/pluginTypes.ts')
 const i18n = readI18n()
 
 assert(/optionalParams\?:\s*boolean/.test(pluginTypes), 'CommandContribution should expose optionalParams')
-assert(/palette\.customizeParamsLabel/.test(i18n), 'i18n should include the compact customize params label')
+assert(/customizeParamsLabel/.test(i18n), 'i18n should include the compact customize params label')
 assert(!/Hold Command to customize parameters|按住 Command 键自定义参数/.test(i18n), 'i18n should not use the old long customize hint')
 assert(/getPlatformShortcutMeta/.test(commandPalette), 'CommandPalette should expose platform shortcut metadata')
 assert(/isMacPlatform/.test(commandPalette), 'CommandPalette should detect macOS for Command shortcuts')

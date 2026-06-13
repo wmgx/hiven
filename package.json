@@ -26,6 +26,7 @@
     "test:tauri-plugin-dir-commands": "cargo test --manifest-path src-tauri/Cargo.toml plugin_dir_command_tests -- --test-threads=1",
     "test:plugin-goal-suite": "node scripts/test-plugin-goal-suite.mjs",
     "test:command-palette-page-policy": "node scripts/test-command-palette-page-policy.mjs",
+    "test:command-optional-params": "node scripts/test-command-optional-params.mjs",
     "test:ime-enter-confirmation": "node scripts/test-ime-enter-confirmation.mjs",
     "test:spatial-ui-contract": "node scripts/test-spatial-ui-contract.mjs",
     "test:monaco-disposable-lifecycle": "node scripts/test-monaco-disposable-lifecycle.mjs",

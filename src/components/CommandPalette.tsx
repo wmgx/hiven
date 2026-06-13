@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MutableRefObject, type RefObject } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type MutableRefObject, type RefObject } from 'react'
 import { ChevronLeft, Pin, Search } from 'lucide-react'
-import { useAppStore } from '../store'
+import { localized, useAppStore } from '../store'
 import { t } from '../i18n'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
 import { resolveIcon } from '../utils/resolveIcon'
@@ -8,14 +8,48 @@ import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } fro
 import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
 import { resolvePluginSettings } from '../workspace/pluginSettingsStore'
 import { LauncherController } from '../workspace/launcher/controller'
-import type { CollectInputFrame, LauncherControllerState, ResultFrame } from '../workspace/launcher/controller'
+import type { CollectInputFrame, LauncherControllerState, ParamInputFrame, ResultFrame } from '../workspace/launcher/controller'
 import { createPluginLauncherApi } from '../workspace/launcher/pluginApi'
 import { collectDynamicItems, collectStaticCandidates, filterDynamicForSurface } from '../workspace/launcher/registry'
 import { rankLauncherItems } from '../workspace/launcher/ranking'
 import { resolveDisplaySubtitle, resolveDisplayTitle } from '../workspace/launcher/display'
 import { resolvePluginSettingsSource } from '../workspace/launcher/pluginSource'
 import type { ContributionSource } from '../workspace/pluginTypes'
-import type { LauncherItem as DomainLauncherItem, LauncherResultChoice, LauncherSurfaceId } from '../workspace/launcher/types'
+import type { LauncherItem as DomainLauncherItem, LauncherParamSpec, LauncherResultChoice, LauncherSurfaceId } from '../workspace/launcher/types'
+import type { Locale } from '../i18n'
+
+type ShortcutMeta = {
+  modifier: 'meta' | 'ctrl'
+  label: string
+}
+
+function isMacPlatform(): boolean {
+  if (typeof navigator === 'undefined') return true
+  const platform = navigator.platform || ''
+  const userAgent = navigator.userAgent || ''
+  return /Mac|iPhone|iPad|iPod/.test(platform) || /Mac OS X/.test(userAgent)
+}
+
+function getPlatformShortcutMeta(): ShortcutMeta {
+  return isMacPlatform() ? { modifier: 'meta', label: '⌘' } : { modifier: 'ctrl', label: 'Ctrl' }
+}
+
+function shouldCustomizeParams(metaKey: boolean, ctrlKey: boolean): boolean {
+  const shortcutMeta = getPlatformShortcutMeta()
+  return shortcutMeta.modifier === 'meta' ? metaKey : ctrlKey
+}
+
+function hasExplicitDefaultParams(item: DomainLauncherItem): boolean {
+  return (item.params ?? []).every((param) => param.default !== undefined || item.defaultParams?.[param.key] !== undefined)
+}
+
+function supportsDefaultParamRun(item: DomainLauncherItem): boolean {
+  return !item.params?.length || hasExplicitDefaultParams(item)
+}
+
+function supportsParamCustomization(item: DomainLauncherItem): boolean {
+  return Boolean(item.executeWithParams && item.params && item.params.length > 0)
+}
 
 export function CommandPalette() {
   const open = useAppStore((s) => s.commandPaletteOpen)
@@ -119,9 +153,13 @@ export function CommandPalette() {
   const topFrame = controllerState?.frames[controllerState.frames.length - 1]
   const inControllerFrame = topFrame && topFrame.kind !== 'list'
 
-  function selectLauncherItem(item: DomainLauncherItem | undefined) {
+  function selectItem(item: DomainLauncherItem | undefined, customizeParams = false) {
     if (!item) return
-    void controllerRef.current?.selectItem(item)
+    if (!customizeParams && !supportsDefaultParamRun(item)) {
+      void controllerRef.current?.selectItem(item, { customizeParams: true })
+      return
+    }
+    void controllerRef.current?.selectItem(item, { customizeParams })
   }
 
   function pinLauncherItem(item: DomainLauncherItem) {
@@ -162,7 +200,7 @@ export function CommandPalette() {
     }
     if (event.key === 'Enter') {
       event.preventDefault()
-      selectLauncherItem(rankedLauncherItems[selectedIndex])
+      selectItem(rankedLauncherItems[selectedIndex], shouldCustomizeParams(event.metaKey, event.ctrlKey))
     }
   }
 
@@ -202,7 +240,7 @@ export function CommandPalette() {
             setQuery={(value) => { setQuery(value); setSelectedIndex(0) }}
             items={rankedLauncherItems}
             selectedIndex={selectedIndex}
-            onSelectItem={selectLauncherItem}
+            selectItem={selectItem}
             onPinItem={pinLauncherItem}
             setSelectedIndex={setSelectedIndex}
             isKeyboardNavRef={isKeyboardNavRef}
@@ -217,6 +255,18 @@ export function CommandPalette() {
             busy={controllerState?.busy ?? false}
             onInputChange={(text) => controllerRef.current?.setInputText(text)}
             onSubmit={() => controllerRef.current?.submitInput()}
+            onBack={() => { controllerRef.current?.back() }}
+            locale={locale}
+          />
+        )}
+
+        {topFrame?.kind === 'param-input' && (
+          <ParamInputStep
+            frame={topFrame as ParamInputFrame}
+            error={controllerState?.error ?? null}
+            busy={controllerState?.busy ?? false}
+            onParamChange={(key, value) => controllerRef.current?.setParamValue(key, value)}
+            onSubmit={() => controllerRef.current?.submitParams()}
             onBack={() => { controllerRef.current?.back() }}
             locale={locale}
           />
@@ -244,7 +294,7 @@ function SearchStep({
   setQuery,
   items,
   selectedIndex,
-  onSelectItem,
+  selectItem,
   onPinItem,
   setSelectedIndex,
   isKeyboardNavRef,
@@ -255,7 +305,7 @@ function SearchStep({
   setQuery: (value: string) => void
   items: DomainLauncherItem[]
   selectedIndex: number
-  onSelectItem: (item: DomainLauncherItem) => void
+  selectItem: (item: DomainLauncherItem, customizeParams?: boolean) => void
   onPinItem: (item: DomainLauncherItem) => void
   setSelectedIndex: (index: number) => void
   isKeyboardNavRef: MutableRefObject<boolean>
@@ -280,7 +330,7 @@ function SearchStep({
             key={item.systemKey}
             item={item}
             selected={selectedIndex === index}
-            onClick={() => onSelectItem(item)}
+            onClick={(e) => selectItem(item, shouldCustomizeParams(e.metaKey, e.ctrlKey))}
             onPin={() => onPinItem(item)}
             onMouseEnter={() => { if (!isKeyboardNavRef.current) setSelectedIndex(index) }}
             locale={locale}
@@ -304,7 +354,7 @@ function SearchStep({
 function LauncherActionItem({ item, selected, onClick, onPin, onMouseEnter, locale }: {
   item: DomainLauncherItem
   selected: boolean
-  onClick: () => void
+  onClick: (event: MouseEvent<HTMLDivElement>) => void
   onPin: () => void
   onMouseEnter: () => void
   locale: import('../i18n').Locale
@@ -313,6 +363,8 @@ function LauncherActionItem({ item, selected, onClick, onPin, onMouseEnter, loca
   const title = resolveDisplayTitle(item.display, locale)
   const subtitle = resolveDisplaySubtitle(item.display, locale)
   const canPin = item.pinnable !== false
+  const shortcutMeta = getPlatformShortcutMeta()
+  const showParamShortcut = supportsParamCustomization(item)
 
   useEffect(() => {
     if (selected) ref.current?.scrollIntoView({ block: 'nearest' })
@@ -353,6 +405,11 @@ function LauncherActionItem({ item, selected, onClick, onPin, onMouseEnter, loca
       {item.behavior.type === 'collect-input' && (
         <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0" style={{ background: 'var(--color-background-secondary)', border: '0.5px solid var(--color-border-tertiary)', color: selected ? 'var(--color-accent-hover)' : 'var(--color-text-tertiary)' }}>
           {t(locale, 'palette.hasInput')}
+        </span>
+      )}
+      {showParamShortcut && (
+        <span className="customize-shortcut-chip text-[10px] px-1.5 py-0.5 rounded shrink-0" style={{ background: 'var(--color-background-secondary)', border: '0.5px solid var(--color-border-tertiary)', color: selected ? 'var(--color-accent-hover)' : 'var(--color-text-tertiary)' }}>
+          {shortcutMeta.label}↵ {t(locale, 'palette.customizeParamsLabel')}
         </span>
       )}
       {canPin && (
@@ -439,6 +496,119 @@ function CollectInputStep({ frame, error, busy, onInputChange, onSubmit, onBack,
           <div className="text-[11px] mt-1.5 px-1" style={{ color: 'var(--color-error)' }}>{error}</div>
         )}
       </div>
+      <div className="flex gap-3 px-3.5 py-1.5" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
+        <HintKey keys="↵" label={t(locale, 'palette.submit')} />
+        <HintKey keys="esc" label={t(locale, 'palette.back')} />
+      </div>
+    </>
+  )
+}
+
+function paramOptions(param: LauncherParamSpec): { label: string; value: string; labelI18n?: Partial<Record<Locale, string>> }[] {
+  return (param.options ?? []).map((option) => typeof option === 'string' ? { label: option, value: option } : option)
+}
+
+function ParamInputStep({ frame, error, busy, onParamChange, onSubmit, onBack, locale }: {
+  frame: ParamInputFrame
+  error: string | null
+  busy: boolean
+  onParamChange: (key: string, value: unknown) => void
+  onSubmit: () => void
+  onBack: () => void
+  locale: Locale
+}) {
+  const firstInputRef = useRef<HTMLInputElement | HTMLSelectElement>(null)
+  const title = resolveDisplayTitle(frame.item.display, locale)
+  const params = frame.item.params ?? []
+
+  useEffect(() => {
+    firstInputRef.current?.focus()
+  }, [])
+
+  return (
+    <>
+      <div className="flex items-center px-3.5 gap-2 h-[44px]" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
+        <button className="w-6 h-6 rounded-md border-none bg-transparent cursor-pointer flex items-center justify-center shrink-0" style={{ color: 'var(--color-text-secondary)' }} onClick={onBack}>
+          <ChevronLeft size={16} />
+        </button>
+        <span className="text-[13px] font-medium" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>{title}</span>
+      </div>
+      <form
+        className="px-3.5 py-3 flex flex-col gap-2"
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (!busy) onSubmit()
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            event.stopPropagation()
+            onBack()
+          }
+        }}
+      >
+        {params.map((param, index) => {
+          const value = frame.params[param.key]
+          const label = localized(param.label, param.labelI18n, locale)
+          const inputRef = index === 0 ? firstInputRef : undefined
+          return (
+            <label key={param.key} className="flex items-center gap-2 text-[12px]" style={{ color: 'var(--color-text-secondary)' }}>
+              <span className="w-[120px] shrink-0 truncate">{label}</span>
+              {param.type === 'boolean' ? (
+                <input
+                  ref={inputRef as RefObject<HTMLInputElement>}
+                  type="checkbox"
+                  checked={value === true}
+                  onChange={(event) => onParamChange(param.key, event.target.checked)}
+                  disabled={busy}
+                />
+              ) : param.type === 'single-select' ? (
+                <select
+                  ref={inputRef as RefObject<HTMLSelectElement>}
+                  className="flex-1 min-w-0 rounded-md px-2 py-1.5 text-sm outline-none"
+                  style={{ background: 'var(--color-background-secondary)', border: '0.5px solid var(--color-border-tertiary)', color: 'var(--color-text-primary)' }}
+                  value={value === undefined || value === null ? '' : String(value)}
+                  onChange={(event) => onParamChange(param.key, event.target.value)}
+                  disabled={busy}
+                >
+                  {paramOptions(param).map((option) => (
+                    <option key={option.value} value={option.value}>{localized(option.label, option.labelI18n, locale)}</option>
+                  ))}
+                </select>
+              ) : param.type === 'multi-select' ? (
+                <select
+                  ref={inputRef as RefObject<HTMLSelectElement>}
+                  multiple
+                  className="flex-1 min-w-0 rounded-md px-2 py-1.5 text-sm outline-none"
+                  style={{ background: 'var(--color-background-secondary)', border: '0.5px solid var(--color-border-tertiary)', color: 'var(--color-text-primary)' }}
+                  value={Array.isArray(value) ? value.map(String) : []}
+                  onChange={(event) => onParamChange(param.key, Array.from(event.currentTarget.selectedOptions).map((option) => option.value))}
+                  disabled={busy}
+                >
+                  {paramOptions(param).map((option) => (
+                    <option key={option.value} value={option.value}>{localized(option.label, option.labelI18n, locale)}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  ref={inputRef as RefObject<HTMLInputElement>}
+                  className="flex-1 min-w-0 rounded-md px-2 py-1.5 text-sm outline-none"
+                  style={{ background: 'var(--color-background-secondary)', border: '0.5px solid var(--color-border-tertiary)', color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
+                  type={param.type === 'number' ? 'number' : 'text'}
+                  value={value === undefined || value === null ? '' : String(value)}
+                  placeholder={param.type === 'number' ? t(locale, 'palette.inputNumber') : t(locale, 'palette.inputText')}
+                  onChange={(event) => onParamChange(param.key, param.type === 'number' ? (event.target.value === '' ? undefined : Number(event.target.value)) : event.target.value)}
+                  disabled={busy}
+                />
+              )}
+            </label>
+          )
+        })}
+        {error && (
+          <div className="text-[11px] px-1" style={{ color: 'var(--color-error)' }}>{error}</div>
+        )}
+        <button type="submit" className="hidden" disabled={busy} aria-hidden="true" />
+      </form>
       <div className="flex gap-3 px-3.5 py-1.5" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
         <HintKey keys="↵" label={t(locale, 'palette.submit')} />
         <HintKey keys="esc" label={t(locale, 'palette.back')} />
