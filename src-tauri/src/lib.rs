@@ -1,6 +1,7 @@
 use std::fs;
 use std::io::{Cursor, Read};
 use std::path::{Component, Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
@@ -11,6 +12,7 @@ pub mod hotkeys;
 
 const LAUNCHER_COMPACT_WIDTH: f64 = 660.0;
 const LAUNCHER_COMPACT_HEIGHT: f64 = 160.0;
+static PREVIOUS_FOREGROUND_PROCESS_ID: OnceLock<Mutex<Option<u32>>> = OnceLock::new();
 
 #[tauri::command]
 fn show_and_focus_window(app: tauri::AppHandle) {
@@ -58,9 +60,8 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
             .as_ref()
             .and_then(|window| window.is_visible().ok())
             .unwrap_or(false);
-
         if !was_visible {
-            hide_main_window_before_launcher(&app_clone);
+            remember_previous_foreground_app();
         }
 
         let window = if let Some(window) = existing_launcher {
@@ -95,13 +96,9 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
                 eprintln!("[hiven] Failed to compact launcher window before show: {}", error);
             }
         }
-        if let Err(error) = window.show() {
+        if let Err(error) = show_launcher_window_without_app_activation(&window) {
             eprintln!("[hiven] Failed to show launcher window: {}", error);
             return;
-        }
-        let _ = window.unminimize();
-        if let Err(error) = window.set_focus() {
-            eprintln!("[hiven] Failed to focus launcher window: {}", error);
         }
         if !was_visible {
             let _ = window.emit("hiven://launcher-open", ());
@@ -117,6 +114,7 @@ async fn hide_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
     let app_clone = app.clone();
     app.run_on_main_thread(move || {
         if let Some(window) = app_clone.get_webview_window("launcher") {
+            restore_previous_foreground_app();
             if let Err(error) = window.hide() {
                 eprintln!("[hiven] Failed to hide launcher window: {}", error);
             }
@@ -125,15 +123,219 @@ async fn hide_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
     .map_err(|error| error.to_string())
 }
 
-fn hide_main_window_before_launcher(app: &tauri::AppHandle) {
-    #[cfg(target_os = "macos")]
-    {
-        use tauri::Manager;
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.hide();
-        }
+fn previous_foreground_process_id() -> &'static Mutex<Option<u32>> {
+    PREVIOUS_FOREGROUND_PROCESS_ID.get_or_init(|| Mutex::new(None))
+}
+
+fn remember_previous_foreground_app() {
+    let previous = current_foreground_process_id()
+        .filter(|pid| *pid != std::process::id());
+    if let Ok(mut stored) = previous_foreground_process_id().lock() {
+        *stored = previous;
     }
 }
+
+fn restore_previous_foreground_app() {
+    let previous = previous_foreground_process_id()
+        .lock()
+        .ok()
+        .and_then(|mut stored| stored.take());
+    if let Some(pid) = previous {
+        activate_process(pid);
+    }
+}
+
+fn show_launcher_window_without_app_activation(
+    window: &tauri::WebviewWindow,
+) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        show_launcher_window_without_app_activation_macos(window)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        window.show().map_err(|error| error.to_string())?;
+        let _ = window.unminimize();
+        window.set_focus().map_err(|error| error.to_string())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn show_launcher_window_without_app_activation_macos(
+    window: &tauri::WebviewWindow,
+) -> Result<(), String> {
+    let ns_window = window.ns_window().map_err(|error| error.to_string())?;
+    let ns_view = window.ns_view().map_err(|error| error.to_string())?;
+    if ns_window.is_null() {
+        return Err("launcher NSWindow is null".to_string());
+    }
+    if ns_view.is_null() {
+        return Err("launcher NSView is null".to_string());
+    }
+    promote_window_to_nonactivating_panel(ns_window);
+    unsafe {
+        let ns_window = ns_window as *mut objc2::runtime::AnyObject;
+        let ns_view = ns_view as *mut objc2::runtime::AnyObject;
+        let _: () = objc2::msg_send![ns_window, orderFrontRegardless];
+        let _: () = objc2::msg_send![ns_window, makeKeyWindow];
+        let _: bool = objc2::msg_send![ns_window, makeFirstResponder: ns_view];
+    }
+    Ok(())
+}
+
+/// Convert the Tauri-created NSWindow into a custom NSPanel subclass at
+/// runtime, then apply the nonactivating style mask. This is the only way to
+/// get true non-activating behavior on macOS — the style mask bit (1 << 7)
+/// is ignored by plain NSWindow instances; only NSPanel respects it.
+///
+/// We use a custom subclass ("HivenKeyablePanel") instead of plain NSPanel
+/// because a borderless NSPanel returns NO from `canBecomeKeyWindow` by
+/// default, which prevents keyboard input. Our subclass overrides it to YES.
+///
+/// Safety: NSPanel is a direct behavioral subclass of NSWindow with an
+/// identical ivar layout (no added instance variables), so `object_setClass`
+/// is safe here. We guard against double-promotion by checking the current
+/// class before swizzling.
+#[cfg(target_os = "macos")]
+fn promote_window_to_nonactivating_panel(ns_window: *mut std::ffi::c_void) {
+    const NS_WINDOW_STYLE_MASK_NONACTIVATING_PANEL: usize = 1usize << 7;
+    unsafe {
+        let ns_window = ns_window as *mut objc2::runtime::AnyObject;
+
+        // Get or register our custom NSPanel subclass that can become key
+        let target_class = get_or_register_keyable_panel_class();
+
+        // Promote NSWindow → HivenKeyablePanel (only once per window lifetime)
+        let current_class: *const objc2::runtime::AnyClass = objc2::msg_send![ns_window, class];
+        if !std::ptr::eq(current_class, target_class) {
+            objc2::ffi::object_setClass(
+                (ns_window as *mut objc2::runtime::AnyObject).cast(),
+                (target_class as *const objc2::runtime::AnyClass).cast(),
+            );
+        }
+
+        // Apply nonactivating panel style mask
+        let style_mask: usize = objc2::msg_send![ns_window, styleMask];
+        let _: () = objc2::msg_send![
+            ns_window,
+            setStyleMask: style_mask | NS_WINDOW_STYLE_MASK_NONACTIVATING_PANEL
+        ];
+
+        // NSPanel-specific configuration for non-activating behavior
+        let _: () = objc2::msg_send![ns_window, setFloatingPanel: true];
+        let _: () = objc2::msg_send![ns_window, setHidesOnDeactivate: false];
+        let _: () = objc2::msg_send![ns_window, setBecomesKeyOnlyIfNeeded: false];
+
+        // Allow the panel to appear on all Spaces (follows user across desktops)
+        let behavior: usize = objc2::msg_send![ns_window, collectionBehavior];
+        const NS_WINDOW_COLLECTION_BEHAVIOR_CAN_JOIN_ALL_SPACES: usize = 1 << 0;
+        const NS_WINDOW_COLLECTION_BEHAVIOR_FULL_SCREEN_AUXILIARY: usize = 1 << 8;
+        let _: () = objc2::msg_send![
+            ns_window,
+            setCollectionBehavior: behavior
+                | NS_WINDOW_COLLECTION_BEHAVIOR_CAN_JOIN_ALL_SPACES
+                | NS_WINDOW_COLLECTION_BEHAVIOR_FULL_SCREEN_AUXILIARY
+        ];
+    }
+}
+
+/// Register a one-off "HivenKeyablePanel" subclass of NSPanel that overrides
+/// `canBecomeKeyWindow` → YES. A borderless NSPanel returns NO by default,
+/// which blocks all keyboard input. This subclass fixes that.
+#[cfg(target_os = "macos")]
+fn get_or_register_keyable_panel_class() -> *const objc2::runtime::AnyClass {
+    use std::sync::Once;
+    static REGISTER: Once = Once::new();
+    static mut CLASS_PTR: *const objc2::runtime::AnyClass = std::ptr::null();
+
+    REGISTER.call_once(|| {
+        // If the class already exists (e.g. hot-reload), just reuse it
+        if let Some(existing) = objc2::runtime::AnyClass::get(c"HivenKeyablePanel") {
+            unsafe { CLASS_PTR = existing; }
+            return;
+        }
+        let panel_cls = objc2::runtime::AnyClass::get(c"NSPanel")
+            .expect("NSPanel class must exist on macOS");
+
+        unsafe {
+            let new_class = objc2::ffi::objc_allocateClassPair(
+                panel_cls,
+                c"HivenKeyablePanel".as_ptr(),
+                0,
+            );
+            assert!(!new_class.is_null(), "Failed to allocate HivenKeyablePanel class");
+
+            // Override canBecomeKeyWindow to return YES
+            unsafe extern "C-unwind" fn can_become_key_window(
+                _this: *mut objc2::runtime::AnyObject,
+                _sel: *const std::ffi::c_void,
+            ) -> objc2::runtime::Bool {
+                objc2::runtime::Bool::YES
+            }
+
+            let sel = objc2::ffi::sel_registerName(c"canBecomeKeyWindow".as_ptr())
+                .expect("canBecomeKeyWindow selector must be registerable");
+            let imp: objc2::runtime::Imp = std::mem::transmute(
+                can_become_key_window as unsafe extern "C-unwind" fn(*mut objc2::runtime::AnyObject, *const std::ffi::c_void) -> objc2::runtime::Bool,
+            );
+            let success = objc2::ffi::class_addMethod(
+                new_class,
+                sel,
+                imp,
+                c"B@:".as_ptr(),
+            );
+            assert!(success.as_bool(), "Failed to add canBecomeKeyWindow to HivenKeyablePanel");
+
+            objc2::ffi::objc_registerClassPair(new_class);
+            CLASS_PTR = new_class as *const objc2::runtime::AnyClass;
+        }
+    });
+
+    unsafe { CLASS_PTR }
+}
+
+#[cfg(target_os = "macos")]
+fn current_foreground_process_id() -> Option<u32> {
+    unsafe {
+        let workspace_cls = objc2::runtime::AnyClass::get(c"NSWorkspace")?;
+        let workspace: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![workspace_cls, sharedWorkspace];
+        if workspace.is_null() {
+            return None;
+        }
+        let app: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![workspace, frontmostApplication];
+        if app.is_null() {
+            return None;
+        }
+        let pid: i32 = objc2::msg_send![app, processIdentifier];
+        u32::try_from(pid).ok()
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn current_foreground_process_id() -> Option<u32> {
+    None
+}
+
+#[cfg(target_os = "macos")]
+fn activate_process(pid: u32) {
+    unsafe {
+        let app_cls = match objc2::runtime::AnyClass::get(c"NSRunningApplication") {
+            Some(cls) => cls,
+            None => return,
+        };
+        let app: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![app_cls, runningApplicationWithProcessIdentifier: pid as i32];
+        if app.is_null() {
+            return;
+        }
+        let _: bool = objc2::msg_send![app, activateWithOptions: 2usize];
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn activate_process(_pid: u32) {}
 
 fn activate_app() {
     #[cfg(target_os = "macos")]
