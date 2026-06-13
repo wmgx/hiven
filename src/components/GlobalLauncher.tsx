@@ -17,7 +17,7 @@ import { rankLauncherItems } from '../workspace/launcher/ranking'
 import { resolveDisplayTitle, resolveDisplaySubtitle } from '../workspace/launcher/display'
 import type { LauncherItem as DomainLauncherItem, LauncherSurfaceId } from '../workspace/launcher/types'
 import { resolvePluginSettingsSource } from '../workspace/launcher/pluginSource'
-import { LauncherParamStep } from './launcher/LauncherParamStep'
+import { LauncherParamStep, resolveParamValueLabel } from './launcher/LauncherParamStep'
 import { getPlatformShortcutMeta, shouldCustomizeParams, supportsDefaultParamRun, supportsParamCustomization } from './launcher/launcherParamShortcuts'
 import type { ContributionSource } from '../workspace/pluginTypes'
 
@@ -606,16 +606,40 @@ export function GlobalLauncher() {
           const frame = controllerState.frames[controllerState.frames.length - 1] as CollectInputFrame
           const placeholder = frame.input.placeholder ?? ''
           const previewChoice = frame.previewOutput?.choices[0]
+          const paramChips: { label: string; value: string }[] = []
+          if (frame.params && frame.item.params) {
+            for (const p of frame.item.params) {
+              const val = frame.params[p.key]
+              if (val !== undefined && val !== null) {
+                paramChips.push({ label: localized(p.label, p.labelI18n, locale), value: resolveParamValueLabel(p, val, locale) })
+              }
+            }
+          }
           return (
             <>
               <div className="global-launcher-header flex items-center gap-2 px-3.5 py-2.5" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
                 {resolveIcon(frame.item.display.icon, 16, resolveDisplayTitle(frame.item.display, locale))}
+                {paramChips.map((chip, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center text-[11px] px-1.5 py-0.5 rounded shrink-0 max-w-[100px] truncate"
+                    style={{
+                      background: 'var(--color-background-tertiary)',
+                      border: '0.5px solid var(--color-border-tertiary)',
+                      color: 'var(--color-text-secondary)',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                    title={`${chip.label}: ${chip.value}`}
+                  >
+                    {chip.value}
+                  </span>
+                ))}
                 <input
                   ref={inputRef}
                   value={frame.inputText}
                   onChange={(event) => controllerRef.current?.setInputText(event.target.value)}
                   placeholder={placeholder}
-                  className="flex-1 outline-none border-none bg-transparent text-[14px]"
+                  className="flex-1 min-w-0 outline-none border-none bg-transparent text-[14px]"
                   style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
                 />
                 {controllerState.busy && (

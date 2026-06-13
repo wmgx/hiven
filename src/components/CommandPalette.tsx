@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type MutableRefObject, type RefObject } from 'react'
 import { Check, ChevronLeft, Pin, Search } from 'lucide-react'
-import { useAppStore } from '../store'
+import { localized, useAppStore } from '../store'
 import { t } from '../i18n'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
 import { resolveIcon } from '../utils/resolveIcon'
@@ -14,7 +14,7 @@ import { collectDynamicItems, collectStaticCandidates, filterDynamicForSurface }
 import { rankLauncherItems } from '../workspace/launcher/ranking'
 import { resolveDisplaySubtitle, resolveDisplayTitle } from '../workspace/launcher/display'
 import { resolvePluginSettingsSource } from '../workspace/launcher/pluginSource'
-import { LauncherParamStep } from './launcher/LauncherParamStep'
+import { LauncherParamStep, resolveParamValueLabel } from './launcher/LauncherParamStep'
 import { getPlatformShortcutMeta, shouldCustomizeParams, supportsDefaultParamRun, supportsParamCustomization } from './launcher/launcherParamShortcuts'
 import type { ContributionSource } from '../workspace/pluginTypes'
 import type { LauncherItem as DomainLauncherItem, LauncherResultChoice, LauncherSurfaceId } from '../workspace/launcher/types'
@@ -461,6 +461,16 @@ function CollectInputStep({ frame, error, busy, onInputChange, onSubmit, onBack,
     ? (frame.item.behavior.input?.placeholder ?? '')
     : ''
 
+  const paramChips: { label: string; value: string }[] = []
+  if (frame.params && frame.item.params) {
+    for (const p of frame.item.params) {
+      const val = frame.params[p.key]
+      if (val !== undefined && val !== null) {
+        paramChips.push({ label: localized(p.label, p.labelI18n, locale), value: resolveParamValueLabel(p, val, locale) })
+      }
+    }
+  }
+
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
@@ -471,7 +481,22 @@ function CollectInputStep({ frame, error, busy, onInputChange, onSubmit, onBack,
         <button className="w-6 h-6 rounded-md border-none bg-transparent cursor-pointer flex items-center justify-center shrink-0" style={{ color: 'var(--color-text-secondary)' }} onClick={onBack}>
           <ChevronLeft size={16} />
         </button>
-        <span className="text-[13px] font-medium" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>{title}</span>
+        <span className="text-[13px] font-medium shrink-0" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>{title}</span>
+        {paramChips.map((chip, i) => (
+          <span
+            key={i}
+            className="inline-flex items-center text-[11px] px-1.5 py-0.5 rounded shrink-0 max-w-[100px] truncate"
+            style={{
+              background: 'var(--color-background-tertiary)',
+              border: '0.5px solid var(--color-border-tertiary)',
+              color: 'var(--color-text-secondary)',
+              fontFamily: 'var(--font-mono)',
+            }}
+            title={`${chip.label}: ${chip.value}`}
+          >
+            {chip.value}
+          </span>
+        ))}
       </div>
       <div className="px-3.5 py-3">
         <input

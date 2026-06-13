@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react'
 import { ChevronLeft, Search } from 'lucide-react'
 import { localized } from '../../store'
 import { t, type Locale } from '../../i18n'
-import { resolveDisplayTitle } from '../../workspace/launcher/display'
 import type { ParamInputFrame } from '../../workspace/launcher/controller'
 import type { LauncherParamSpec } from '../../workspace/launcher/types'
 
@@ -28,14 +27,25 @@ type ParamOption = {
 function paramOptions(param: LauncherParamSpec, locale: Locale): ParamOption[] {
   if (param.type === 'boolean') {
     return [
-      { label: locale === 'zh' ? '是' : 'Yes', value: true },
-      { label: locale === 'zh' ? '否' : 'No', value: false },
+      { label: t(locale, 'palette.boolYes'), value: true },
+      { label: t(locale, 'palette.boolNo'), value: false },
     ]
   }
   return (param.options ?? []).map((option) => {
     if (typeof option === 'string') return { label: option, value: option }
     return { label: localized(option.label, option.labelI18n, locale), value: option.value }
   })
+}
+
+/** Resolve a committed param value back to a short display label. */
+export function resolveParamValueLabel(param: LauncherParamSpec, value: unknown, locale: Locale): string {
+  if (value === undefined || value === null) return '—'
+  if (param.type === 'boolean') return value ? t(locale, 'palette.boolYes') : t(locale, 'palette.boolNo')
+  const options = paramOptions(param, locale)
+  const match = options.find((o) => o.value === value)
+  if (match) return match.label
+  const str = String(value)
+  return str.length > 12 ? `${str.slice(0, 11)}…` : str
 }
 
 function filterParamOptions(options: ParamOption[], query: string) {
@@ -58,7 +68,6 @@ export function LauncherParamStep({
   onBack,
 }: LauncherParamStepProps) {
   const inputRef = useRef<HTMLInputElement>(null)
-  const title = resolveDisplayTitle(frame.item.display, locale)
   const params = frame.item.params ?? []
   const param = params[frame.paramIndex]
   const label = param ? localized(param.label, param.labelI18n, locale) : ''
@@ -81,10 +90,19 @@ export function LauncherParamStep({
     onCommit(value)
   }
 
+  // Build breadcrumb chips for previously committed params
+  const breadcrumbChips: { label: string; value: string }[] = []
+  for (let i = 0; i < frame.paramIndex; i++) {
+    const p = params[i]
+    if (!p) break
+    const val = frame.params[p.key]
+    breadcrumbChips.push({ label: localized(p.label, p.labelI18n, locale), value: resolveParamValueLabel(p, val, locale) })
+  }
+
   if (!param) return null
   const placeholder = isTextParam
-    ? `${title} ${label} · ${param.type === 'number' ? t(locale, 'palette.inputNumber') : t(locale, 'palette.inputText')}`
-    : `${title} ${label} · ${t(locale, 'palette.filterOptions')}`
+    ? `${label} · ${param.type === 'number' ? t(locale, 'palette.inputNumber') : t(locale, 'palette.inputText')}`
+    : `${label} · ${t(locale, 'palette.filterOptions')}`
 
   return (
     <>
@@ -92,10 +110,25 @@ export function LauncherParamStep({
         <button className="w-6 h-6 rounded-md border-none bg-transparent cursor-pointer flex items-center justify-center shrink-0" style={{ color: 'var(--color-text-secondary)' }} onClick={onBack}>
           <ChevronLeft size={16} />
         </button>
-        {!isTextParam && <Search size={16} style={{ color: 'var(--color-text-tertiary)' }} />}
+        {breadcrumbChips.map((chip, i) => (
+          <span
+            key={i}
+            className="inline-flex items-center gap-0.5 text-[11px] px-1.5 py-0.5 rounded shrink-0 max-w-[100px] truncate"
+            style={{
+              background: 'var(--color-background-tertiary)',
+              border: '0.5px solid var(--color-border-tertiary)',
+              color: 'var(--color-text-secondary)',
+              fontFamily: 'var(--font-mono)',
+            }}
+            title={`${chip.label}: ${chip.value}`}
+          >
+            {chip.value}
+          </span>
+        ))}
+        {!isTextParam && <Search size={14} style={{ color: 'var(--color-text-tertiary)', flexShrink: 0 }} />}
         <input
           ref={inputRef}
-          className="flex-1 border-none outline-none text-sm bg-transparent"
+          className="flex-1 min-w-0 border-none outline-none text-sm bg-transparent"
           style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
           placeholder={placeholder}
           value={frame.query}

@@ -48,6 +48,8 @@ export default {
     'quickEntryRun': 'run',
     'submit': 'submit',
     'hasInput': 'input',
+    'boolYes': 'Yes',
+    'boolNo': 'No',
   },
   zh: {
     'search': '搜索操作...',
@@ -98,5 +100,7 @@ export default {
     'quickEntryRun': '执行',
     'submit': '提交',
     'hasInput': '输入',
+    'boolYes': '是',
+    'boolNo': '否',
   },
 }
