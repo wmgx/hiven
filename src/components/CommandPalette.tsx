@@ -121,6 +121,10 @@ export function CommandPalette() {
   const topFrame = controllerState?.frames[controllerState.frames.length - 1]
   const inControllerFrame = topFrame && topFrame.kind !== 'list'
 
+  function focusSearchInputAfterBack() {
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }
+
   function selectItem(item: DomainLauncherItem | undefined, customizeParams = false) {
     if (!item) return
     if (!customizeParams && !supportsDefaultParamRun(item)) {
@@ -225,7 +229,10 @@ export function CommandPalette() {
             busy={controllerState?.busy ?? false}
             onInputChange={(text) => controllerRef.current?.setInputText(text)}
             onSubmit={() => controllerRef.current?.submitInput()}
-            onBack={() => { controllerRef.current?.back() }}
+            onBack={() => {
+              controllerRef.current?.back()
+              focusSearchInputAfterBack()
+            }}
             locale={locale}
           />
         )}
@@ -239,7 +246,10 @@ export function CommandPalette() {
             onQueryChange={(value) => controllerRef.current?.setParamQuery(value)}
             onSelectedIndexChange={(index) => controllerRef.current?.setParamSelectedIndex(index)}
             onCommit={(value) => { void controllerRef.current?.commitCurrentParam(value) }}
-            onBack={() => { controllerRef.current?.back() }}
+            onBack={() => {
+              controllerRef.current?.back()
+              focusSearchInputAfterBack()
+            }}
           />
         )}
 
@@ -251,7 +261,10 @@ export function CommandPalette() {
             onActivateChoice={(choice) => controllerRef.current?.activateChoice(choice)}
             onActivateSecondary={(choice, actionId) => controllerRef.current?.activateSecondary(choice, actionId)}
             onSubmitSelection={(choices) => controllerRef.current?.submitResultSelection(choices)}
-            onBack={() => { controllerRef.current?.back() }}
+            onBack={() => {
+              controllerRef.current?.back()
+              focusSearchInputAfterBack()
+            }}
             locale={locale}
           />
         )}

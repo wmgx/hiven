@@ -42,6 +42,7 @@
     "test:launcher-ranking": "node scripts/test-launcher-ranking.mjs",
     "test:launcher-registry": "node scripts/test-launcher-registry.mjs",
     "test:launcher-controller": "node scripts/test-launcher-controller.mjs",
+    "test:launcher-back-focus": "node scripts/test-launcher-back-focus.mjs",
     "test:launcher-plugin-contract": "node scripts/test-launcher-plugin-contract.mjs",
     "preview": "vite preview",
     "tauri": "tauri"

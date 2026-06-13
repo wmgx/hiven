@@ -255,6 +255,10 @@ export function GlobalLauncher() {
   const clampedSelectedIndex = Math.min(selectedIndex, Math.max(0, filtered.length - 1))
   const selectedItem = filtered.length === 1 ? filtered[0] : filtered[clampedSelectedIndex]
 
+  function focusSearchInputAfterBack() {
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }
+
   useLayoutEffect(() => {
     if (!open || !standaloneLauncher) return
     if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
@@ -458,14 +462,14 @@ export function GlobalLauncher() {
                 event.preventDefault()
                 event.stopPropagation()
                 controllerRef.current?.back()
-                requestAnimationFrame(() => inputRef.current?.focus())
+                focusSearchInputAfterBack()
                 return
               }
               if (event.key === 'Backspace' && !(topFrame as CollectInputFrame).inputText) {
                 event.preventDefault()
                 event.stopPropagation()
                 controllerRef.current?.back()
-                requestAnimationFrame(() => inputRef.current?.focus())
+                focusSearchInputAfterBack()
                 return
               }
               return // other keys pass to input naturally
@@ -483,7 +487,7 @@ export function GlobalLauncher() {
                 event.preventDefault()
                 event.stopPropagation()
                 controllerRef.current?.back()
-                requestAnimationFrame(() => inputRef.current?.focus())
+                focusSearchInputAfterBack()
                 return
               }
               return
@@ -521,7 +525,7 @@ export function GlobalLauncher() {
               onCommit={(value) => { void controllerRef.current?.commitCurrentParam(value) }}
               onBack={() => {
                 controllerRef.current?.back()
-                requestAnimationFrame(() => inputRef.current?.focus())
+                focusSearchInputAfterBack()
               }}
             />
           )
