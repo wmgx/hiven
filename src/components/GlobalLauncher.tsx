@@ -605,6 +605,11 @@ export function GlobalLauncher() {
                 style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
               />
             </div>
+            {controllerState?.error && (
+              <div className="px-3.5 py-1.5 text-[12px]" style={{ color: 'var(--color-error)', borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
+                {controllerState.error}
+              </div>
+            )}
             <div className="global-launcher-body">
               <LauncherList
                 items={filtered}

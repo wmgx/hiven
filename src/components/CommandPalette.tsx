@@ -213,6 +213,8 @@ export function CommandPalette() {
             setSelectedIndex={setSelectedIndex}
             isKeyboardNavRef={isKeyboardNavRef}
             locale={locale}
+            error={controllerState?.error ?? null}
+            busy={controllerState?.busy ?? false}
           />
         )}
 
@@ -268,6 +270,8 @@ function SearchStep({
   setSelectedIndex,
   isKeyboardNavRef,
   locale,
+  error,
+  busy,
 }: {
   inputRef: RefObject<HTMLInputElement | null>
   query: string
@@ -279,6 +283,8 @@ function SearchStep({
   setSelectedIndex: (index: number) => void
   isKeyboardNavRef: MutableRefObject<boolean>
   locale: import('../i18n').Locale
+  error: string | null
+  busy: boolean
 }) {
   return (
     <>
@@ -292,7 +298,15 @@ function SearchStep({
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
+        {busy && (
+          <span className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>…</span>
+        )}
       </div>
+      {error && (
+        <div className="px-3.5 py-1.5 text-[11px]" style={{ color: 'var(--color-error)', borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
+          {error}
+        </div>
+      )}
       <div className="command-palette-results py-1" onMouseMove={() => { isKeyboardNavRef.current = false }}>
         {items.map((item, index) => (
           <LauncherActionItem
