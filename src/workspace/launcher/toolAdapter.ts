@@ -15,6 +15,7 @@ import type {
   IconRef,
   LauncherExecuteHandler,
   LauncherExecuteResult,
+  LauncherExecuteWithParamsHandler,
   LauncherItem,
   LauncherItemDisplay,
   PluginLauncherApi,
@@ -23,7 +24,7 @@ import type {
   ResolvedTextInput,
   TextInputMode,
 } from './types'
-import { textResult, replaceActiveTextResult, errorResult, choicesResult } from './output'
+import { emptyResult, textResult, replaceActiveTextResult, errorResult, choicesResult, REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID } from './output'
 
 export type ToolAdaptOptions = {
   pluginId: string
@@ -76,12 +77,22 @@ export function adaptToolToLauncherItem(
   const launcherOptions = typeof launcherOpt === 'object' ? launcherOpt : undefined
   const pinnable = launcherOptions?.pinnable ?? tool.surfaces?.pinnable ?? true
   const mode: TextInputMode = tool.inputPolicy?.mode ?? 'auto'
+  const defaultParams = { ...(tool.defaultParams ?? {}) }
+  for (const param of tool.params ?? []) {
+    if (defaultParams[param.key] === undefined && param.default !== undefined) {
+      defaultParams[param.key] = param.default
+    }
+  }
 
-  const execute: LauncherExecuteHandler = async (ctx): Promise<LauncherExecuteResult> => {
+  const runWithParams = async (
+    ctx: Parameters<LauncherExecuteHandler>[0],
+    params: Record<string, unknown>,
+  ): Promise<LauncherExecuteResult> => {
     const input = resolveTextInput(ctx.api, mode)
     const result = await Promise.resolve(
       tool.run({
         input,
+        params,
         settings: ctx.settings,
         locale: ctx.locale,
         api: ctx.api,
@@ -89,8 +100,22 @@ export function adaptToolToLauncherItem(
         output: makeOutput(ctx.api),
       }),
     )
+    if (
+      ctx.surfaceId === 'command-palette' &&
+      result.ok &&
+      result.output?.choices.length === 1 &&
+      result.output.choices[0]?.id === REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID
+    ) {
+      await result.output.choices[0].primaryAction()
+      return emptyResult()
+    }
     return result
   }
+  const execute: LauncherExecuteHandler = (ctx) => runWithParams(ctx, defaultParams)
+  const executeWithParams: LauncherExecuteWithParamsHandler = (ctx, params) => runWithParams(ctx, {
+    ...defaultParams,
+    ...params,
+  })
 
   return {
     systemKey: options.systemKey,
@@ -102,8 +127,11 @@ export function adaptToolToLauncherItem(
     surfaces: launcherOptions?.surfaces,
     pinnable,
     inputPolicy: tool.inputPolicy,
+    params: tool.params,
+    defaultParams,
     // Legacy usage keys: the tool id may match a command id used in old usage data
     legacyUsageKeys: [tool.id],
     execute,
+    executeWithParams: tool.params && tool.params.length > 0 ? executeWithParams : undefined,
   }
 }

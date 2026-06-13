@@ -2,9 +2,8 @@
 /**
  * test-launcher-registry.mjs
  * Verifies launcher registry candidate collection: surface filtering, tool
- * adaptation, command adaptation, dynamic query guards, and error isolation.
- * Launcher UI never scans commands directly; safe text commands enter through
- * the registry-owned command adapter.
+ * adaptation, dynamic query guards, and error isolation. Launcher UI never
+ * scans commands directly; launcher entries must be tools or launcher.items.
  */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -32,11 +31,6 @@ const stripTypeImports = [
 // output.ts (only depends on types)
 const output = loadModule('src/workspace/launcher/output.ts', { stripImports: stripTypeImports })
 
-// pluginCommandRunner.ts (standalone after type imports are stripped)
-const pluginCommandRunner = loadModule('src/workspace/pluginCommandRunner.ts', {
-  stripImports: stripTypeImports,
-})
-
 // toolAdapter.ts depends on ./output + types
 const toolAdapter = loadModule('src/workspace/launcher/toolAdapter.ts', {
   stripImports: [
@@ -50,40 +44,6 @@ const toolAdapter = loadModule('src/workspace/launcher/toolAdapter.ts', {
     choicesResult: output.choicesResult,
   },
 })
-
-// commandAdapter.ts depends on pluginCommandRunner + ./output + types
-const commandAdapter = loadModule('src/workspace/launcher/commandAdapter.ts', {
-  stripImports: [
-    ...stripTypeImports,
-    /import\s*\{[^}]*\}\s*from\s*'\.\.\/effectRunner'\s*;?\s*\n?/,
-    /import\s*\{[^}]*\}\s*from\s*'\.\.\/pluginInputResolver'\s*;?\s*\n?/,
-    /import\s*\{[^}]*\}\s*from\s*'\.\.\/pluginCommandRunner'\s*;?\s*\n?/,
-    /import\s*\{[^}]*\}\s*from\s*'\.\/output'\s*;?\s*\n?/,
-  ],
-  globals: {
-    applyEffects: (effects) => {
-      commandAdapterAppliedEffects.push(...effects)
-      return { errors: [] }
-    },
-    buildPluginCommandContext: (inputs, params) => ({ inputs, params }),
-    resolvePluginInputs: (slots, resolution) => {
-      commandAdapterResolvedSlots = { slots, resolution }
-      const inputs = {}
-      for (const slot of slots) {
-        if (slot.kind === 'pane') inputs[slot.key] = { kind: 'pane', paneId: `pane-${slot.key}` }
-      }
-      return { ok: true, inputs }
-    },
-    defaultPluginCommandParams: pluginCommandRunner.defaultPluginCommandParams,
-    effectsFromPluginCommandResult: pluginCommandRunner.effectsFromPluginCommandResult,
-    runTextPluginCommand: pluginCommandRunner.runTextPluginCommand,
-    emptyResult: output.emptyResult,
-    errorResult: output.errorResult,
-    replaceActiveTextResult: output.replaceActiveTextResult,
-  },
-})
-let commandAdapterAppliedEffects = []
-let commandAdapterResolvedSlots = null
 
 // identity.ts (standalone with surface stub injected as a prelude)
 const identityWithStub = (() => {
@@ -150,118 +110,32 @@ const noSelApi = { ...api, getSelectionText: () => '' }
 const selRes = await selItem.execute({ settings: {}, locale: 'en', api: noSelApi, t: (k) => k })
 assert.equal(selRes.output.choices[0].title, '', "'selection' with no selection → empty text")
 
-// --- Command adapter: safe text commands + controlled workspace/effect commands ---
-const textCommand = {
-  id: 'demo.upper',
-  title: 'Uppercase',
-  description: 'Uppercase text',
-  icon: 'CaseUpper',
-  aliases: ['caps'],
-  inputs: [{ key: 'input', label: 'Input', kind: 'text', required: true }],
+// --- Tool adapter: parameter customization stays on explicit tools ---
+const paramTool = {
+  ...reverseTool,
+  id: 'upper-with-suffix',
   params: [{ key: 'suffix', label: 'Suffix', type: 'text', default: '!' }],
-  run(ctx) {
-    const input = ctx.inputs.input
-    return { output: { kind: 'text', text: `${input.text.toUpperCase()}${ctx.params.suffix}` } }
-  },
+  run: async (ctx) => ctx.output.text(`${ctx.input.text.toUpperCase()}${ctx.params.suffix}`),
 }
-assert.equal(commandAdapter.canAdaptCommandToLauncher(textCommand), true, 'text command with default params is adaptable')
-const commandItem = commandAdapter.adaptCommandToLauncherItem(textCommand, {
+const paramItem = toolAdapter.adaptToolToLauncherItem(paramTool, {
   pluginId: 'demo',
   source: 'builtin',
-  systemKey: identityWithStub.getPluginCommandAdapterItemKey('demo', 'demo.upper'),
+  systemKey: identityWithStub.getPluginToolItemKey('demo', 'upper-with-suffix'),
 })
-assert.equal(commandItem.systemKey, 'plugin:demo:command:demo.upper', 'command adapter uses host-generated command key')
-assert.equal(commandItem.legacyUsageKeys?.join(','), 'demo.upper', 'command adapter preserves old command usage key')
-assert.equal(commandItem.params?.[0].key, 'suffix', 'command adapter exposes param schema when defaults exist')
-assert.equal(commandItem.defaultParams?.suffix, '!', 'command adapter exposes explicit default params')
-let replaced = null
-let commandCopied = null
-const commandApi = {
-  ...api,
-  getActiveText: () => 'whole',
-  getSelectionText: () => 'abc',
-  replaceActiveText: async (t) => { replaced = t },
-  copyText: async (t) => { commandCopied = t },
-}
-const commandRes = await commandItem.execute({ surfaceId: 'command-palette', settings: {}, locale: 'en', api: commandApi, t: (k) => k })
-assert.equal(commandRes.ok, true)
-assert.equal(commandRes.output, undefined, 'command-palette command adapter writes directly without showing result panel')
-assert.equal(replaced, 'ABC!', 'command-palette command adapter replaces active text immediately')
-assert.equal(commandCopied, null, 'command-palette command adapter should not copy by default')
-
-const customizedRes = await commandItem.executeWithParams({ surfaceId: 'command-palette', settings: {}, locale: 'en', api: commandApi, t: (k) => k }, { suffix: '?' })
-assert.equal(customizedRes.output, undefined, 'command-palette customized params write directly without showing result panel')
-assert.equal(replaced, 'ABC?', 'command-palette customized params replace active text immediately')
-
-const globalRes = await commandItem.executeWithParams({ surfaceId: 'global-launcher', settings: {}, locale: 'en', api: commandApi, t: (k) => k }, { suffix: '~' })
-assert.equal(globalRes.output.choices[0].title, 'ABC~', 'global-launcher command adapter keeps result in launcher')
-
-const optionalCommandItem = commandAdapter.adaptCommandToLauncherItem({ ...textCommand, optionalParams: true }, {
-  pluginId: 'demo',
-  source: 'builtin',
-  systemKey: identityWithStub.getPluginCommandAdapterItemKey('demo', 'demo.upper.optional'),
-})
-assert.equal(optionalCommandItem.params?.[0].key, 'suffix', 'deprecated optionalParams remains compatible')
-
-assert.equal(
-  commandAdapter.canAdaptCommandToLauncher({
-    ...textCommand,
-    id: 'demo.pane',
-    inputs: [{ key: 'source', label: 'Source', kind: 'pane', required: true }],
-    live: { pinnable: false },
-  }),
-  true,
-  'workspace pane commands are adaptable through the controlled effect path',
-)
-assert.equal(
-  commandAdapter.canAdaptCommandToLauncher({
-    ...textCommand,
-    id: 'demo.missing-default',
-    params: [{ key: 'mode', label: 'Mode', type: 'single-select', options: ['a', 'b'], required: true }],
-  }),
-  false,
-  'commands with params lacking defaults are skipped',
-)
-assert.equal(
-  commandAdapter.canAdaptCommandToLauncher({
-    id: 'demo.panel',
-    title: 'Open Panel',
-    live: { pinnable: false },
-    run() { return { effects: [{ type: 'panel.openV2', panelId: 'demo.panel' }] } },
-  }),
-  true,
-  'workspace/panel-style commands that opt out of pinning are exposed but not pinnable',
-)
-commandAdapterAppliedEffects = []
-const workspaceCommand = {
-  id: 'demo.diff',
-  title: 'Compare',
-  description: 'Compare panes',
-  icon: 'GitCompare',
-  live: { pinnable: false },
-  inputs: [{ key: 'original', label: 'Original', kind: 'pane', required: true }],
-  inputResolution: { strategy: 'use-active', fallback: 'fail' },
-  run(ctx) {
-    return { effects: [{ type: 'pane.setRenderer', paneId: ctx.inputs.original.paneId, renderer: 'demo.renderer' }] }
-  },
-}
-const workspaceItem = commandAdapter.adaptCommandToLauncherItem(workspaceCommand, {
-  pluginId: 'demo',
-  source: 'builtin',
-  systemKey: identityWithStub.getPluginCommandAdapterItemKey('demo', 'demo.diff'),
-})
-assert.equal(workspaceItem.pinnable, false, 'workspace command adapter preserves non-pinnable command metadata')
-assert.equal(workspaceItem.surfaces?.join(','), 'command-palette', 'workspace command adapter stays inside the in-app launcher')
-const workspaceRes = await workspaceItem.execute({ surfaceId: 'command-palette', settings: {}, locale: 'en', api, t: (k) => k })
-assert.equal(workspaceRes.output, undefined, 'workspace command adapter closes the launcher after effects')
-assert.equal(commandAdapterResolvedSlots.slots[0].key, 'original', 'workspace command adapter resolves declared inputs')
-assert.equal(commandAdapterAppliedEffects[0].type, 'pane.setRenderer', 'workspace command adapter applies command effects')
+assert.equal(paramItem.params?.[0].key, 'suffix', 'tool adapter exposes explicit param schema')
+assert.equal(paramItem.defaultParams?.suffix, '!', 'tool adapter derives default params')
+const paramDefaultRes = await paramItem.execute({ settings: {}, locale: 'en', api, t: (k) => k })
+assert.equal(paramDefaultRes.output.choices[0].title, 'ABC!', 'tool adapter runs with default params')
+const paramCustomRes = await paramItem.executeWithParams({ settings: {}, locale: 'en', api, t: (k) => k }, { suffix: '?' })
+assert.equal(paramCustomRes.output.choices[0].title, 'ABC?', 'tool adapter runs with customized params')
 
 // --- output helpers contract ---
 assert.equal(output.emptyResult().ok, true)
 assert.equal(output.emptyResult().output, undefined, 'empty result has no output (launcher closes)')
 assert.equal(output.errorResult('boom').ok, false)
 assert.equal(output.isOutputResult(output.textResult('x', api)), true)
+assert.equal(output.textResult('x', api).output.choices[0].id, output.TEXT_OUTPUT_CHOICE_ID, 'default text output keeps copy-primary id')
+assert.equal(output.replaceActiveTextResult('x', api).output.choices[0].id, output.REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID, 'replace output has replace-primary id')
 assert.equal(output.isOutputResult(output.emptyResult()), false)
 
 // --- identity-based key uniqueness for tools vs launcher items ---
@@ -269,11 +143,6 @@ assert.notEqual(
   identityWithStub.getPluginToolItemKey('p', 'x'),
   identityWithStub.getPluginLauncherItemKey('p', 'x'),
   'tool key and launcher-item key differ even for same id',
-)
-assert.notEqual(
-  identityWithStub.getPluginCommandAdapterItemKey('p', 'x'),
-  identityWithStub.getPluginToolItemKey('p', 'x'),
-  'command adapter key and tool key differ even for same id',
 )
 
 console.log('✓ test-launcher-registry passed')

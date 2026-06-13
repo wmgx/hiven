@@ -33,6 +33,11 @@ const LANGUAGE_OPTIONS = [
 
 const EDITOR_LANGUAGE_VALUES = new Set(LANGUAGE_OPTIONS.map((option) => option.value).filter((value) => value !== 'auto'))
 
+function effectResult(result: { errors: string[] }) {
+  if (result.errors.length > 0) return { ok: false as const, message: result.errors[0] }
+  return { ok: true as const }
+}
+
 export const corePanePlugin = definePlugin({
   launcher: {
     items: [
@@ -49,6 +54,139 @@ export const corePanePlugin = definePlugin({
         async execute(ctx) {
           await ctx.api.showMainPanel()
           return { ok: true }
+        },
+      },
+      {
+        id: 'core-pane.split',
+        display: {
+          title: 'command.split.title',
+          subtitle: 'command.split.description',
+          icon: 'columns',
+          aliases: ['split', 'split-pane'],
+        },
+        surfaces: ['command-palette'],
+        pinnable: false,
+        params: [
+          {
+            key: 'direction',
+            label: 'param.direction.label',
+            type: 'single-select',
+            options: [
+              { label: 'param.direction.option.right.label', value: 'right' },
+              { label: 'param.direction.option.left.label', value: 'left' },
+              { label: 'param.direction.option.down.label', value: 'bottom' },
+              { label: 'param.direction.option.up.label', value: 'top' },
+            ],
+            default: 'right',
+          },
+        ],
+        execute(ctx) {
+          const snapshot = ctx.api.getPaneSnapshot()
+          return effectResult(ctx.api.dispatchEffects([{
+            type: 'pane.create' as const,
+            pane: { text: '', language: snapshot.panes[snapshot.activePaneId]?.language || 'plaintext' },
+            focus: true,
+            direction: 'right' as const,
+          }]))
+        },
+        executeWithParams(ctx, params) {
+          const direction = (params.direction as SplitDirection) ?? 'right'
+          const snapshot = ctx.api.getPaneSnapshot()
+          return effectResult(ctx.api.dispatchEffects([{
+            type: 'pane.create' as const,
+            pane: { text: '', language: snapshot.panes[snapshot.activePaneId]?.language || 'plaintext' },
+            focus: true,
+            direction,
+          }]))
+        },
+      },
+      {
+        id: 'core-pane.close',
+        display: {
+          title: 'command.close.title',
+          subtitle: 'command.close.description',
+          icon: 'x',
+          aliases: ['close-pane', 'close'],
+        },
+        surfaces: ['command-palette'],
+        pinnable: false,
+        execute(ctx) {
+          return effectResult(ctx.api.dispatchEffects([{ type: 'pane.close' as const }]))
+        },
+      },
+      {
+        id: 'core-pane.toggle-sticky-scroll',
+        display: {
+          title: 'command.toggleStickyScroll.title',
+          subtitle: 'command.toggleStickyScroll.description',
+          icon: 'panel-top',
+          aliases: ['sticky-scroll', 'toggle-sticky-scroll'],
+        },
+        surfaces: ['command-palette'],
+        pinnable: false,
+        execute(ctx) {
+          const snapshot = ctx.api.getPaneSnapshot()
+          const stickyScrollEnabled = snapshot.panes[snapshot.activePaneId]?.stickyScroll === true
+          return effectResult(ctx.api.dispatchEffects([
+            {
+              type: 'pane.update' as const,
+              paneId: snapshot.activePaneId,
+              patch: { stickyScroll: !stickyScrollEnabled },
+            },
+            {
+              type: 'status.message' as const,
+              level: 'info' as const,
+              message: stickyScrollEnabled
+                ? 'Current pane sticky scroll disabled'
+                : 'Current pane sticky scroll enabled',
+            },
+          ]))
+        },
+      },
+      {
+        id: 'core-pane.set-language',
+        display: {
+          title: 'command.setLanguage.title',
+          subtitle: 'command.setLanguage.description',
+          icon: 'code-2',
+          aliases: ['language', 'set-language'],
+        },
+        surfaces: ['command-palette'],
+        pinnable: false,
+        params: [
+          {
+            key: 'language',
+            label: 'param.language.label',
+            type: 'single-select',
+            options: LANGUAGE_OPTIONS,
+            default: 'auto',
+            required: true,
+          },
+        ],
+        execute(ctx) {
+          const snapshot = ctx.api.getPaneSnapshot()
+          return effectResult(ctx.api.dispatchEffects([{
+            type: 'pane.update' as const,
+            paneId: snapshot.activePaneId,
+            patch: { detectedLanguage: undefined, languageSource: 'auto' as const },
+          }]))
+        },
+        executeWithParams(ctx, params) {
+          const snapshot = ctx.api.getPaneSnapshot()
+          const requested = String(params.language ?? 'auto')
+          if (requested === 'auto') {
+            return effectResult(ctx.api.dispatchEffects([{
+              type: 'pane.update' as const,
+              paneId: snapshot.activePaneId,
+              patch: { detectedLanguage: undefined, languageSource: 'auto' as const },
+            }]))
+          }
+          const language = EDITOR_LANGUAGE_VALUES.has(requested) ? requested : 'plaintext'
+          return effectResult(ctx.api.dispatchEffects([{
+            type: 'pane.update' as const,
+            paneId: snapshot.activePaneId,
+            patch: { language, languageSource: 'manual' as const },
+          }]))
         },
       },
     ],

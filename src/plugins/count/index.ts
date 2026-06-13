@@ -4,7 +4,28 @@
 
 import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
 
+function runCount(text: string): string {
+  const lines = text.split('\n').length
+  const words = text.split(/\s+/).filter((w) => w.length > 0).length
+  const chars = text.length
+  const charsNoSpace = text.replace(/\s/g, '').length
+  return `Lines: ${lines}\nWords: ${words}\nCharacters: ${chars}\nCharacters (no spaces): ${charsNoSpace}`
+}
+
 export const countPlugin = definePlugin({
+  tools: [
+    {
+      id: 'count.run',
+      title: 'command.run.title',
+      icon: 'BarChart',
+      aliases: ['stats', 'wc'],
+      inputPolicy: { mode: 'auto' },
+      run(ctx) {
+        return ctx.output.text(runCount(ctx.input.text))
+      },
+      surfaces: { launcher: true, panel: true, pinnable: true },
+    },
+  ],
   commands: [
     {
       id: 'count.run',
@@ -20,11 +41,7 @@ export const countPlugin = definePlugin({
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
-        const lines = text.split('\n').length
-        const words = text.split(/\s+/).filter((w) => w.length > 0).length
-        const chars = text.length
-        const charsNoSpace = text.replace(/\s/g, '').length
-        return textOutput(`Lines: ${lines}\nWords: ${words}\nCharacters: ${chars}\nCharacters (no spaces): ${charsNoSpace}`)
+        return textOutput(runCount(text))
       },
     },
   ],

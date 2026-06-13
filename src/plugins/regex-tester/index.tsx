@@ -25,6 +25,31 @@ function RegexTesterPluginPanel({ panelId, host }: PanelPropsV2<unknown>) {
 }
 
 export const regexTesterPlugin = definePlugin({
+  launcher: {
+    items: [
+      {
+        id: 'regex-tester.open',
+        display: {
+          title: 'command.open.title',
+          subtitle: 'command.open.description',
+          icon: 'regex',
+          aliases: ['regex', 'regexp', '正则'],
+        },
+        surfaces: ['command-palette'],
+        pinnable: false,
+        execute(ctx) {
+          const result = ctx.api.dispatchEffects([{
+            type: 'panel.openV2' as const,
+            panelId: 'regex-tester.panel',
+            placement: 'bottom' as const,
+            ownerPluginId: 'regex-tester',
+          }])
+          if (result.errors.length > 0) return { ok: false, message: result.errors[0] }
+          return { ok: true }
+        },
+      },
+    ],
+  },
   commands: [
     {
       id: 'regex-tester.open',

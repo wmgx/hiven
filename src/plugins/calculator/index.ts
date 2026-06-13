@@ -261,6 +261,62 @@ function convertBaseLines(text: string, mode: BaseConversionMode): string {
 // ─── Plugin Definition ───────────────────────────────────────────────────────
 
 const definition: PluginDefinition = {
+  tools: [
+    {
+      id: 'calculator.run',
+      title: 'command.run.title',
+      icon: 'Calculator',
+      aliases: ['calc', 'formula'],
+      inputPolicy: { mode: 'auto' },
+      run(ctx) {
+        return ctx.output.replaceActiveText(calculateFormulaLines(ctx.input.text))
+      },
+      surfaces: { launcher: true, panel: true, pinnable: true },
+    },
+    {
+      id: 'calculator.sum',
+      title: 'command.sum.title',
+      icon: 'Calculator',
+      aliases: ['sum', 'add', 'total'],
+      inputPolicy: { mode: 'auto' },
+      run(ctx) {
+        return ctx.output.replaceActiveText(sumNumericTokens(ctx.input.text))
+      },
+      surfaces: { launcher: true, panel: true, pinnable: true },
+    },
+    {
+      id: 'calculator.base',
+      title: 'command.base.title',
+      icon: 'Binary',
+      aliases: ['decimal', 'binary', 'hex', 'hex-convert'],
+      inputPolicy: { mode: 'auto' },
+      params: [
+        {
+          key: 'mode',
+          label: 'param.base.mode.label',
+          type: 'single-select',
+          options: [
+            { label: 'param.base.mode.option.dec2hex.label', value: 'dec2hex' },
+            { label: 'param.base.mode.option.hex2dec.label', value: 'hex2dec' },
+            { label: 'param.base.mode.option.dec2bin.label', value: 'dec2bin' },
+            { label: 'param.base.mode.option.bin2dec.label', value: 'bin2dec' },
+          ],
+          default: 'dec2hex',
+        },
+      ],
+      run(ctx) {
+        try {
+          return ctx.output.replaceActiveText(convertBaseLines(
+            ctx.input.text,
+            (ctx.params.mode ?? 'dec2hex') as BaseConversionMode,
+          ))
+        } catch (error: any) {
+          return ctx.output.error(`Error: ${error.message}`)
+        }
+      },
+      surfaces: { launcher: true, panel: true, pinnable: true },
+    },
+  ],
   commands: [
     {
       id: 'calculator.run',

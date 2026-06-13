@@ -203,7 +203,85 @@ function parseTimestampForSuggestion(value: string): ParsedResult | null {
   }
 }
 
+function convertTimestampText(text: string, params: Record<string, unknown>, inPlace: boolean): string {
+  const overwrite = params.overwrite !== 'no'
+  const showOriginal = inPlace && !overwrite
+  const unit = (params.unit as 's' | 'ms') || 'ms'
+  return text.split(/\r?\n/).map((line) => {
+    const trimmed = line.trim()
+    if (!trimmed) return ''
+
+    const lowerTrimmed = trimmed.toLowerCase()
+    if (lowerTrimmed === 'now' || lowerTrimmed.startsWith('now+') || lowerTrimmed.startsWith('now-') || lowerTrimmed.startsWith('now utc')) {
+      const parsed = parseNowExpression(trimmed, new Date())
+      if (parsed) {
+        return showOriginal ? `${trimmed} -> ${parsed.value}` : parsed.value
+      }
+    }
+
+    const { body, offsetMinutes } = parseTzSuffix(trimmed)
+    const tsMs = tryParseTimestamp(body)
+
+    try {
+      if (!Number.isNaN(tsMs)) {
+        const result = formatOffsetDateTime(new Date(tsMs), offsetMinutes)
+        return showOriginal ? `${trimmed} -> ${result}` : result
+      }
+
+      let date = new Date(body)
+      if (Number.isNaN(date.getTime())) date = new Date(trimmed)
+      if (Number.isNaN(date.getTime())) return `Error: Invalid date "${trimmed}"`
+      if (offsetMinutes !== undefined) {
+        const utcMs = date.getTime() - offsetMinutes * 60000 + date.getTimezoneOffset() * 60000
+        date = new Date(utcMs)
+      }
+      const result = formatTimestamp(date, unit)
+      return showOriginal ? `${trimmed} -> ${result}` : result
+    } catch (error: unknown) {
+      return `Error: ${error instanceof Error ? error.message : String(error)}`
+    }
+  }).join('\n')
+}
+
+const TIMESTAMP_PARAMS = [
+  {
+    key: 'unit',
+    label: 'param.unit.label',
+    type: 'single-select' as const,
+    options: [
+      { label: 'param.unit.option.ms.label', value: 'ms' },
+      { label: 'param.unit.option.s.label', value: 's' },
+    ],
+    default: 'ms',
+  },
+  {
+    key: 'overwrite',
+    label: 'param.overwrite.label',
+    type: 'single-select' as const,
+    options: [
+      { label: 'param.overwrite.option.yes.label', value: 'yes' },
+      { label: 'param.overwrite.option.no.label', value: 'no' },
+    ],
+    default: 'yes',
+  },
+]
+
 export const dateTimeAssistantPlugin = definePlugin({
+  tools: [
+    {
+      id: 'timestamp.run',
+      title: 'command.timestamp.title',
+      subtitle: 'command.timestamp.description',
+      icon: 'Clock',
+      aliases: ['unix-time', 'epoch', 'date-convert'],
+      inputPolicy: { mode: 'auto' },
+      params: TIMESTAMP_PARAMS,
+      run(ctx) {
+        return ctx.output.replaceActiveText(convertTimestampText(ctx.input.text, ctx.params, ctx.input.source === 'all'))
+      },
+      surfaces: { launcher: true, panel: true, pinnable: true },
+    },
+  ],
   commands: [
     {
       id: 'timestamp.run',
@@ -212,28 +290,7 @@ export const dateTimeAssistantPlugin = definePlugin({
       icon: 'Clock',
       aliases: ['unix-time', 'epoch', 'date-convert'],
       live: { live: { enabled: true, trigger: 'on-input', sideEffects: 'none', debounceMs: 250 } },
-      params: [
-        {
-          key: 'unit',
-          label: 'param.unit.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.unit.option.ms.label', value: 'ms' },
-            { label: 'param.unit.option.s.label', value: 's' },
-          ],
-          default: 'ms',
-        },
-        {
-          key: 'overwrite',
-          label: 'param.overwrite.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.overwrite.option.yes.label', value: 'yes' },
-            { label: 'param.overwrite.option.no.label', value: 'no' },
-          ],
-          default: 'yes',
-        },
-      ],
+      params: TIMESTAMP_PARAMS,
       inputs: [
         { key: 'input', label: 'input.text.label', kind: 'text', required: true },
       ],
@@ -242,45 +299,7 @@ export const dateTimeAssistantPlugin = definePlugin({
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
         const inPlace = !!input?.paneId
-        const overwrite = ctx.params.overwrite !== 'no'
-        const showOriginal = inPlace && !overwrite
-        const unit = (ctx.params.unit as 's' | 'ms') || 'ms'
-        const results = text.split(/\r?\n/).map((line) => {
-          const trimmed = line.trim()
-          if (!trimmed) return ''
-
-          const lowerTrimmed = trimmed.toLowerCase()
-          if (lowerTrimmed === 'now' || lowerTrimmed.startsWith('now+') || lowerTrimmed.startsWith('now-') || lowerTrimmed.startsWith('now utc')) {
-            const parsed = parseNowExpression(trimmed, new Date())
-            if (parsed) {
-              return showOriginal ? `${trimmed} -> ${parsed.value}` : parsed.value
-            }
-          }
-
-          const { body, offsetMinutes } = parseTzSuffix(trimmed)
-          const tsMs = tryParseTimestamp(body)
-
-          try {
-            if (!Number.isNaN(tsMs)) {
-              const result = formatOffsetDateTime(new Date(tsMs), offsetMinutes)
-              return showOriginal ? `${trimmed} -> ${result}` : result
-            }
-
-            let date = new Date(body)
-            if (Number.isNaN(date.getTime())) date = new Date(trimmed)
-            if (Number.isNaN(date.getTime())) return `Error: Invalid date "${trimmed}"`
-            if (offsetMinutes !== undefined) {
-              const utcMs = date.getTime() - offsetMinutes * 60000 + date.getTimezoneOffset() * 60000
-              date = new Date(utcMs)
-            }
-            const result = formatTimestamp(date, unit)
-            return showOriginal ? `${trimmed} -> ${result}` : result
-          } catch (error: unknown) {
-            return `Error: ${error instanceof Error ? error.message : String(error)}`
-          }
-        })
-
-        return textOutput(results.join('\n'))
+        return textOutput(convertTimestampText(text, ctx.params, inPlace))
       },
     },
   ],

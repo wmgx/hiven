@@ -18,6 +18,7 @@ import type {
 } from './types'
 
 export const TEXT_OUTPUT_CHOICE_ID = 'launcher.text-output'
+export const REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID = 'launcher.replace-active-text-output'
 
 /**
  * Build a default text-output result. Shown as one choice; Enter copies the text.
@@ -58,7 +59,7 @@ export function textResult(text: string, api: PluginLauncherApi): LauncherExecut
  */
 export function replaceActiveTextResult(text: string, api: PluginLauncherApi): LauncherExecuteResult {
   const choice: LauncherResultChoice = {
-    id: TEXT_OUTPUT_CHOICE_ID,
+    id: REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID,
     title: text,
     preview: text,
     primaryAction: async () => {

@@ -13,7 +13,7 @@ const src = readFileSync('src/workspace/launcher/identity.ts', 'utf8')
 
 // ─── Structural contract checks ──────────────────────────────────────────────
 assert.match(src, /export function getPluginLauncherItemKey/, 'exports getPluginLauncherItemKey')
-assert.match(src, /export function getPluginCommandAdapterItemKey/, 'exports getPluginCommandAdapterItemKey')
+assert.doesNotMatch(src, /getPluginCommandAdapterItemKey|plugin-command-adapter|tail\.startsWith\(['"]command:/, 'command-adapter identity should be removed')
 assert.match(src, /export function getHostViewItemKey/, 'exports getHostViewItemKey')
 assert.match(src, /export function getHostActionItemKey/, 'exports getHostActionItemKey')
 assert.match(src, /export function validateLauncherItemIds/, 'exports validateLauncherItemIds')
@@ -53,7 +53,6 @@ assert.equal(
   'same inputs → same key',
 )
 assert.equal(mod.getPluginLauncherItemKey('web-open', 'baidu'), 'plugin:web-open:launcher:baidu')
-assert.equal(mod.getPluginCommandAdapterItemKey('line-tools', 'line-tools.reverse'), 'plugin:line-tools:command:line-tools.reverse')
 assert.equal(mod.getHostViewItemKey('settings'), 'host:view:settings')
 assert.equal(mod.getHostActionItemKey('reload'), 'host:action:reload')
 
@@ -63,9 +62,7 @@ assert.equal(parsed.kind, 'plugin-launcher')
 assert.equal(parsed.pluginId, 'web-open')
 assert.equal(parsed.itemId, 'baidu')
 const parsedCommand = mod.parseLauncherItemKey('plugin:line-tools:command:line-tools.reverse')
-assert.equal(parsedCommand.kind, 'plugin-command-adapter')
-assert.equal(parsedCommand.pluginId, 'line-tools')
-assert.equal(parsedCommand.itemId, 'line-tools.reverse')
+assert.equal(parsedCommand.kind, 'unknown', 'old command-adapter keys are not launcher item identities')
 
 // Duplicate ids rejected
 const dupErrors = mod.validateLauncherItemIds(['a', 'b', 'a'])

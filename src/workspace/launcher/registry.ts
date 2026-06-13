@@ -4,13 +4,12 @@
  * Collects launcher candidates from three sources and resolves them into
  * system-owned `LauncherItem`s:
  *   1. Host-owned launcher items (views/actions).
- *   2. Plugin static items — from `launcher.items`, adapted from `tools`, and
- *      conservatively adapted command contributions.
+ *   2. Plugin static items — from `launcher.items` and adapted from `tools`.
  *   3. Plugin dynamic items — from `launcher.dynamicItems` and tool-less
  *      dynamic providers, guarded by query rules + per-provider error isolation.
  *
- * CommandPalette / GlobalLauncher never scan commands directly. Existing
- * commands are exposed only through the host-owned command adapter here.
+ * CommandPalette / GlobalLauncher never scan commands directly. Launcher
+ * entries must be declared as `launcher.items` or `tools`.
  */
 
 import type { Locale } from '../../i18n'
@@ -24,7 +23,6 @@ import type {
   PluginToolContribution,
 } from './types'
 import {
-  getPluginCommandAdapterItemKey,
   getPluginLauncherItemKey,
   getPluginToolItemKey,
   getPluginDynamicItemKey,
@@ -34,7 +32,6 @@ import {
 } from './identity'
 import { resolvePluginSettingsSource } from './pluginSource'
 import { adaptToolToLauncherItem } from './toolAdapter'
-import { adaptCommandToLauncherItem, canAdaptCommandToLauncher } from './commandAdapter'
 
 const DYNAMIC_QUERY_MAX_LENGTH = 500
 const DYNAMIC_PROVIDER_TIMEOUT_MS = 1000
@@ -82,7 +79,11 @@ function resolveStaticItemFromContribution(
     surfaces: sanitizeSurfaces(contribution.surfaces),
     pinnable: contribution.pinnable ?? true,
     inputPolicy: contribution.inputPolicy,
-    // Legacy usage keys: item id may match a command id from old usage data
+    params: contribution.params,
+    defaultParams: contribution.defaultParams,
+    executeWithParams: contribution.executeWithParams,
+    // Legacy usage keys: item id may match a command id from old usage data.
+    // Prefer matching launcher item ids to old command ids during migration.
     legacyUsageKeys: [contribution.id],
     execute: contribution.execute,
   }
@@ -102,11 +103,6 @@ function resolveToolItem(
   })
 }
 
-function addCoveredCommandAliases(covered: Set<string>, pluginId: string, itemId: string): void {
-  covered.add(itemId)
-  covered.add(`${pluginId}.${itemId}`)
-}
-
 /**
  * Collect all static plugin launcher items (from launcher.items + tools),
  * validating ids per plugin. Duplicate/invalid ids are skipped with a warning.
@@ -115,7 +111,6 @@ export function collectStaticPluginItems(): LauncherItem[] {
   const items: LauncherItem[] = []
   for (const { definition, pluginId, source } of pluginRegistry.getAllPluginDefinitions()) {
     const def = definition as PluginDefinition<unknown>
-    const coveredCommandIds = new Set<string>()
 
     // launcher.items
     const contributions = def.launcher?.items ?? []
@@ -130,7 +125,6 @@ export function collectStaticPluginItems(): LauncherItem[] {
       const item = resolveStaticItemFromContribution(contribution, pluginId, source)
       if (item) {
         items.push(item)
-        addCoveredCommandAliases(coveredCommandIds, pluginId, contribution.id)
       }
     }
 
@@ -147,27 +141,7 @@ export function collectStaticPluginItems(): LauncherItem[] {
       const item = resolveToolItem(tool, pluginId, source)
       if (item) {
         items.push(item)
-        addCoveredCommandAliases(coveredCommandIds, pluginId, tool.id)
       }
-    }
-
-    // safe text commands (compat adapter)
-    const commands = def.commands ?? []
-    const commandIds = commands.map((c) => c.id)
-    const commandIdErrors = validateLauncherItemIds(commandIds)
-    const badCommandIds = new Set(commandIdErrors.map((e) => e.itemId))
-    for (const error of commandIdErrors) {
-      console.warn(`[launcher] plugin "${pluginId}" command id "${error.itemId}": ${error.reason}`)
-    }
-    for (const command of commands) {
-      if (badCommandIds.has(command.id)) continue
-      if (coveredCommandIds.has(command.id)) continue
-      if (!canAdaptCommandToLauncher(command)) continue
-      items.push(adaptCommandToLauncherItem(command, {
-        pluginId,
-        source: resolvePluginSettingsSource(pluginId, source),
-        systemKey: getPluginCommandAdapterItemKey(pluginId, command.id),
-      }))
     }
   }
   return items

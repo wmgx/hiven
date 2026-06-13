@@ -16,6 +16,8 @@
 
 import type { ComponentType } from 'react'
 import type { Locale } from '../../i18n'
+import type { FluxEffect } from '../types'
+import type { EffectRunnerResult } from '../effectRunner'
 
 // ─── System Surfaces ───────────────────────────────────────────────────────
 
@@ -164,12 +166,20 @@ export type LauncherExecuteResult =
 export type PluginLauncherApi = {
   getActiveText(): string
   getSelectionText(): string
+  getPaneSnapshot(): {
+    activePaneId: string
+    previousActivePaneId?: string
+    paneIds: string[]
+    panes: Record<string, { language?: string; stickyScroll?: boolean }>
+  }
+  isPanePanelOpen(panelId: string): boolean
   getClipboardText(): Promise<string>
   replaceActiveText(text: string): Promise<void>
   insertText(text: string): Promise<void>
   copyText(text: string): Promise<void>
   openUrl(url: string): Promise<void>
   showMainPanel(): Promise<void>
+  dispatchEffects(effects: FluxEffect[]): EffectRunnerResult
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
 }
 
@@ -214,7 +224,10 @@ export type LauncherItemContribution<TSettings = unknown> = {
   /** Whether this item can be pinned. Defaults to true for static items. */
   pinnable?: boolean
   inputPolicy?: TextInputPolicy
+  params?: LauncherParamSpec[]
+  defaultParams?: Record<string, unknown>
   execute: LauncherExecuteHandler<TSettings>
+  executeWithParams?: LauncherExecuteWithParamsHandler<TSettings>
 }
 
 // ─── Dynamic Items ───────────────────────────────────────────────────────────
@@ -312,6 +325,7 @@ export type PluginToolOutput = {
 
 export type PluginToolContext<TSettings = unknown> = {
   input: ResolvedTextInput
+  params: Record<string, unknown>
   settings: TSettings
   locale: Locale
   api: PluginLauncherApi
@@ -330,6 +344,8 @@ export type PluginToolContribution<TSettings = unknown> = {
   icon?: IconRef
   aliases?: string[]
   inputPolicy?: TextInputPolicy
+  params?: LauncherParamSpec[]
+  defaultParams?: Record<string, unknown>
   run(ctx: PluginToolContext<TSettings>): Promise<PluginToolResult> | PluginToolResult
   surfaces?: PluginToolSurfaces
 }

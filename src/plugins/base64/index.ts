@@ -4,7 +4,43 @@
 
 import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
 
+function runBase64(text: string, mode: unknown): string {
+  if (mode === 'encode') {
+    return btoa(unescape(encodeURIComponent(text)))
+  }
+  return decodeURIComponent(escape(atob(text.trim())))
+}
+
 export const base64Plugin = definePlugin({
+  tools: [
+    {
+      id: 'base64.run',
+      title: 'command.run.title',
+      icon: 'Binary',
+      aliases: ['encode', 'decode'],
+      inputPolicy: { mode: 'auto' },
+      params: [
+        {
+          key: 'mode',
+          label: 'param.mode.label',
+          type: 'single-select',
+          options: [
+            { label: 'param.mode.option.encode.label', value: 'encode' },
+            { label: 'param.mode.option.decode.label', value: 'decode' },
+          ],
+          default: 'encode',
+        },
+      ],
+      run(ctx) {
+        try {
+          return ctx.output.replaceActiveText(runBase64(ctx.input.text, ctx.params.mode))
+        } catch (e: any) {
+          return ctx.output.error(`Error: ${e.message}`)
+        }
+      },
+      surfaces: { launcher: true, panel: true, pinnable: true },
+    },
+  ],
   commands: [
     {
       id: 'base64.run',
@@ -33,10 +69,7 @@ export const base64Plugin = definePlugin({
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
         try {
-          if (ctx.params.mode === 'encode') {
-            return textOutput(btoa(unescape(encodeURIComponent(text))))
-          }
-          return textOutput(decodeURIComponent(escape(atob(text.trim()))))
+          return textOutput(runBase64(text, ctx.params.mode))
         } catch (e: any) {
           return textError(`Error: ${e.message}`)
         }

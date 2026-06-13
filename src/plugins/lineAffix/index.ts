@@ -9,7 +9,88 @@ function inputText(input: TextInput | undefined): string {
   return input?.kind === 'text' ? input.text : ''
 }
 
+function prependLines(text: string, prefix: string): string {
+  return text.split('\n').map((line) => prefix + line).join('\n')
+}
+
+function appendLines(text: string, suffix: string): string {
+  return text.split('\n').map((line) => line + suffix).join('\n')
+}
+
+function wrapLines(text: string, left: string, right: string): string {
+  return text.split('\n').map((line) => left + line + right).join('\n')
+}
+
 export const lineAffixPlugin = definePlugin({
+  tools: [
+    {
+      id: 'line-affix.prepend',
+      title: 'command.prepend.title',
+      icon: 'ArrowLeftToLine',
+      aliases: ['prepend-lines', 'prefix'],
+      inputPolicy: { mode: 'auto' },
+      params: [
+        {
+          key: 'prefix',
+          label: 'param.prefix.label',
+          type: 'text',
+          default: '- ',
+        },
+      ],
+      run(ctx) {
+        return ctx.output.replaceActiveText(prependLines(ctx.input.text, (ctx.params.prefix ?? '- ') as string))
+      },
+      surfaces: { launcher: true, panel: true, pinnable: true },
+    },
+    {
+      id: 'line-affix.append',
+      title: 'command.append.title',
+      icon: 'ArrowRightToLine',
+      aliases: ['append-lines', 'suffix'],
+      inputPolicy: { mode: 'auto' },
+      params: [
+        {
+          key: 'suffix',
+          label: 'param.suffix.label',
+          type: 'text',
+          default: ',',
+        },
+      ],
+      run(ctx) {
+        return ctx.output.replaceActiveText(appendLines(ctx.input.text, (ctx.params.suffix ?? ',') as string))
+      },
+      surfaces: { launcher: true, panel: true, pinnable: true },
+    },
+    {
+      id: 'line-affix.wrap',
+      title: 'command.wrap.title',
+      icon: 'WrapText',
+      aliases: ['wrap-lines', 'surround'],
+      inputPolicy: { mode: 'auto' },
+      params: [
+        {
+          key: 'left',
+          label: 'param.left.label',
+          type: 'text',
+          default: '"',
+        },
+        {
+          key: 'right',
+          label: 'param.right.label',
+          type: 'text',
+          default: '"',
+        },
+      ],
+      run(ctx) {
+        return ctx.output.replaceActiveText(wrapLines(
+          ctx.input.text,
+          (ctx.params.left ?? '"') as string,
+          (ctx.params.right ?? '"') as string,
+        ))
+      },
+      surfaces: { launcher: true, panel: true, pinnable: true },
+    },
+  ],
   commands: [
     {
       id: 'line-affix.prepend',
@@ -32,7 +113,7 @@ export const lineAffixPlugin = definePlugin({
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const prefix = (ctx.params.prefix ?? '- ') as string
-        return textOutput(inputText(input).split('\n').map((line) => prefix + line).join('\n'))
+        return textOutput(prependLines(inputText(input), prefix))
       },
     },
     {
@@ -56,7 +137,7 @@ export const lineAffixPlugin = definePlugin({
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         const suffix = (ctx.params.suffix ?? ',') as string
-        return textOutput(inputText(input).split('\n').map((line) => line + suffix).join('\n'))
+        return textOutput(appendLines(inputText(input), suffix))
       },
     },
     {
@@ -87,7 +168,7 @@ export const lineAffixPlugin = definePlugin({
         const input = ctx.inputs.input as TextInput
         const left = (ctx.params.left ?? '"') as string
         const right = (ctx.params.right ?? '"') as string
-        return textOutput(inputText(input).split('\n').map((line) => left + line + right).join('\n'))
+        return textOutput(wrapLines(inputText(input), left, right))
       },
     },
   ],

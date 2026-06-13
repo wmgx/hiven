@@ -96,6 +96,28 @@ export function createPluginLauncherApi(): PluginLauncherApi {
   return {
     getActiveText: () => readActiveText(),
     getSelectionText: () => readSelectionText(),
+    getPaneSnapshot: () => {
+      const state = useWorkspaceStore.getState()
+      return {
+        activePaneId: state.activePaneId,
+        previousActivePaneId: state.previousActivePaneId,
+        paneIds: state.paneOrder,
+        panes: Object.fromEntries(
+          state.paneOrder.map((paneId) => [
+            paneId,
+            {
+              language: state.panes[paneId]?.language,
+              stickyScroll: state.panes[paneId]?.stickyScroll === true,
+            },
+          ]),
+        ),
+      }
+    },
+    isPanePanelOpen: (panelId: string) => {
+      const state = useWorkspaceStore.getState()
+      const existing = state.panelInstancesV2[panelId]
+      return existing?.scope?.type === 'pane' && existing.scope.paneId === state.activePaneId
+    },
     getClipboardText: () => readClipboard(),
     replaceActiveText: async (text: string) => {
       const range = activeSelectionRange()
@@ -130,6 +152,7 @@ export function createPluginLauncherApi(): PluginLauncherApi {
       await openExternalUrl(url)
     },
     showMainPanel,
+    dispatchEffects: (effects: FluxEffect[]) => applyEffects(effects),
     showMessage: (message: string, level = 'info') => {
       useAppStore.getState().setLastCommandStatus({
         title: message,

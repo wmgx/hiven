@@ -399,6 +399,34 @@ function JsFilterPanel({ host }: PanelPropsV2) {
 }
 
 export const jsFilterPlugin = definePlugin({
+  launcher: {
+    items: [
+      {
+        id: 'js-filter.toggle',
+        display: {
+          title: 'command.open.title',
+          subtitle: 'command.open.description',
+          icon: 'Code2',
+          aliases: ['js-filter', 'jq', 'json-filter', 'expression'],
+        },
+        surfaces: ['command-palette'],
+        pinnable: false,
+        execute(ctx) {
+          const paneId = ctx.api.getPaneSnapshot().activePaneId
+          const result = ctx.api.dispatchEffects(ctx.api.isPanePanelOpen(PANEL_ID)
+            ? [{ type: 'panel.closeV2' as const, panelId: PANEL_ID }]
+            : [{
+                type: 'panel.openV2' as const,
+                panelId: PANEL_ID,
+                placement: 'pane-bottom' as const,
+                scope: { type: 'pane' as const, paneId },
+              }])
+          if (result.errors.length > 0) return { ok: false, message: result.errors[0] }
+          return { ok: true }
+        },
+      },
+    ],
+  },
   commands: [
     {
       id: 'js-filter.toggle',

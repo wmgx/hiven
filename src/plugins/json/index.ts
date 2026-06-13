@@ -4,7 +4,44 @@
 
 import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
 
+function runJson(text: string, mode: unknown): string {
+  const obj = JSON.parse(text)
+  if (mode === 'compact') {
+    return JSON.stringify(obj)
+  }
+  return JSON.stringify(obj, null, 2)
+}
+
 export const jsonPlugin = definePlugin({
+  tools: [
+    {
+      id: 'json.run',
+      title: 'command.run.title',
+      icon: 'Braces',
+      aliases: ['json-format', 'pretty-json'],
+      inputPolicy: { mode: 'auto' },
+      params: [
+        {
+          key: 'mode',
+          label: 'param.mode.label',
+          type: 'single-select',
+          options: [
+            { label: 'param.mode.option.pretty.label', value: 'pretty' },
+            { label: 'param.mode.option.compact.label', value: 'compact' },
+          ],
+          default: 'pretty',
+        },
+      ],
+      run(ctx) {
+        try {
+          return ctx.output.replaceActiveText(runJson(ctx.input.text, ctx.params.mode))
+        } catch (e: any) {
+          return ctx.output.error(`Error: ${e.message}`)
+        }
+      },
+      surfaces: { launcher: true, panel: true, pinnable: true },
+    },
+  ],
   commands: [
     {
       id: 'json.run',
@@ -33,11 +70,7 @@ export const jsonPlugin = definePlugin({
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
         try {
-          const obj = JSON.parse(text)
-          if (ctx.params.mode === 'compact') {
-            return textOutput(JSON.stringify(obj))
-          }
-          return textOutput(JSON.stringify(obj, null, 2))
+          return textOutput(runJson(text, ctx.params.mode))
         } catch (e: any) {
           return textError(`Error: ${e.message}`)
         }

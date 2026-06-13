@@ -4,7 +4,39 @@
 
 import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
 
+function sortKeys(obj: any): any {
+  if (Array.isArray(obj)) return obj.map(sortKeys)
+  if (obj && typeof obj === 'object') {
+    return Object.keys(obj).sort().reduce((acc: any, key: string) => {
+      acc[key] = sortKeys(obj[key])
+      return acc
+    }, {})
+  }
+  return obj
+}
+
+function runSortJson(text: string): string {
+  return JSON.stringify(sortKeys(JSON.parse(text)), null, 2)
+}
+
 export const sortJsonPlugin = definePlugin({
+  tools: [
+    {
+      id: 'sort-json.run',
+      title: 'command.run.title',
+      icon: 'ArrowUpNarrowWide',
+      aliases: ['json-sort', 'sort-json-keys'],
+      inputPolicy: { mode: 'auto' },
+      run(ctx) {
+        try {
+          return ctx.output.replaceActiveText(runSortJson(ctx.input.text))
+        } catch (e: any) {
+          return ctx.output.error(`Error: ${e.message}`)
+        }
+      },
+      surfaces: { launcher: true, panel: true, pinnable: true },
+    },
+  ],
   commands: [
     {
       id: 'sort-json.run',
@@ -21,17 +53,7 @@ export const sortJsonPlugin = definePlugin({
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
         try {
-          const sortKeys = (obj: any): any => {
-            if (Array.isArray(obj)) return obj.map(sortKeys)
-            if (obj && typeof obj === 'object') {
-              return Object.keys(obj).sort().reduce((acc: any, key: string) => {
-                acc[key] = sortKeys(obj[key])
-                return acc
-              }, {})
-            }
-            return obj
-          }
-          return textOutput(JSON.stringify(sortKeys(JSON.parse(text)), null, 2))
+          return textOutput(runSortJson(text))
         } catch (e: any) {
           return textError(`Error: ${e.message}`)
         }

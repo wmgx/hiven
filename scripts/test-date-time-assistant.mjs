@@ -51,37 +51,40 @@ const context = vm.createContext({
 vm.runInContext(transpiled, context, { filename: 'date-time-assistant.js' })
 
 const plugin = module.exports.default
-const provider = plugin.instantSuggestions?.find((item) => item.id === 'date-time.assistant')
-assert.ok(provider, 'date-time assistant should expose the instant suggestion provider')
+const provider = plugin.launcher?.dynamicItems
+assert.ok(provider, 'date-time assistant should expose the launcher dynamic item provider')
 const timestampCommand = plugin.commands?.find((item) => item.id === 'timestamp.run')
 assert.ok(timestampCommand, 'date-time assistant should expose the timestamp conversion command')
 
-function suggest(query) {
-  return provider.suggest({ query, t: (key) => key })
-}
-
-function values(query) {
-  const result = suggest(query)
-  return Array.isArray(result) ? result.map((item) => item.value) : [result?.value]
+async function values(query) {
+  const items = await provider({ query, locale: 'en', settings: {} })
+  const copied = []
+  const api = {
+    copyText: async (text) => { copied.push(text) },
+  }
+  for (const item of items) {
+    await item.execute({ api, locale: 'en', settings: {}, t: (key) => key })
+  }
+  return copied
 }
 
 assert.equal(
-  JSON.stringify(values('now')),
+  JSON.stringify(await values('now')),
   JSON.stringify(['1781064306000', '2026-06-10 12:05:06']),
   'now should offer separate timestamp and datetime suggestions',
 )
 assert.equal(
-  JSON.stringify(values('now+1day')),
+  JSON.stringify(await values('now+1day')),
   JSON.stringify(['1781150706000', '2026-06-11 12:05:06']),
   'now+1day should offer separate adjusted timestamp and datetime suggestions',
 )
 assert.equal(
-  JSON.stringify(values('now+12h')),
+  JSON.stringify(await values('now+12h')),
   JSON.stringify(['1781107506000', '2026-06-11 00:05:06']),
   'now+12h should offer separate adjusted timestamp and datetime suggestions',
 )
 assert.equal(
-  JSON.stringify(values('now UTC+8')),
+  JSON.stringify(await values('now UTC+8')),
   JSON.stringify(['1781064306000', '2026-06-10 12:05:06+08:00']),
   'now UTC+8 should offer separate timestamp and timezone datetime suggestions',
 )
