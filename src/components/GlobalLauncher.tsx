@@ -274,9 +274,6 @@ export function GlobalLauncher() {
       if (domainItem.legacyUsageKeys) {
         for (const key of domainItem.legacyUsageKeys) domainCoveredIds.add(key)
       }
-      // tool/launcher items: extract the item-id suffix as the backing command id
-      const parsed = domainItem.systemKey.split(':')
-      if (parsed.length >= 4) domainCoveredIds.add(parsed.slice(3).join(':'))
     }
     const dedupedBase = sortedBase.filter((item) => !domainCoveredIds.has(item.id))
 
@@ -446,25 +443,13 @@ export function GlobalLauncher() {
 
     // Domain item path (new launcher system via controller)
     const domainItem = (item as LauncherItem & { __domainItem?: DomainLauncherItem }).__domainItem
-    if (domainItem && controllerRef.current) {
-      if (standaloneLauncher) {
-        // Constraint 3: record selection BEFORE bridge execution
-        recordLauncherSelection('global-launcher', domainItem.systemKey)
-        void (async () => {
-          try {
-            const { emitTo } = await import('@tauri-apps/api/event')
-            const { invoke } = await import('@tauri-apps/api/core')
-            await emitTo('main', 'hiven://run-plugin-command', { id: domainItem.systemKey, isDev: domainItem.source === 'dev' })
-            await invoke('hide_launcher_window')
-          } catch (error) {
-            console.warn('[hiven] Failed to select domain launcher item:', error)
-          }
-          setOpen(false)
-        })()
+    if (domainItem) {
+      const controller = controllerRef.current
+      if (!controller) {
+        console.warn('[hiven] Cannot select domain launcher item before controller is ready:', domainItem.systemKey)
         return
       }
-      // Non-standalone: controller handles record + execute + lifecycle (output/collect-input frames)
-      void controllerRef.current.selectItem(domainItem)
+      void controller.selectItem(domainItem)
       return
     }
 

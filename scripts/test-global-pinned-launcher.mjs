@@ -22,6 +22,7 @@ function readOptional(path) {
 const files = {
   packageJson: read('package.json'),
   globalLauncher: read('src/components/GlobalLauncher.tsx'),
+  commandPalette: read('src/components/CommandPalette.tsx'),
   corePlugin: readOptional('src/workspace/corePlugin.ts'),
   corePanePlugin: read('src/plugins/core-pane/index.ts'),
   corePaneManifest: read('src/plugins/core-pane/manifest.json'),
@@ -178,6 +179,32 @@ check('selecting a pinned item still opens the pinned action', () => {
     files.globalLauncher,
     /item\.kind\s*===\s*['"]pinned['"][\s\S]{0,180}openPinnedAction\(item\.id\)|openPinnedAction\(item\.id\)[\s\S]{0,180}item\.kind\s*===\s*['"]pinned['"]/,
     'selecting a pinned launcher item should call openPinnedAction(item.id)',
+  )
+})
+
+check('standalone domain launcher items stay on the launcher controller path', () => {
+  assert.doesNotMatch(
+    files.globalLauncher,
+    /hiven:\/\/run-plugin-command[\s\S]{0,240}domainItem\.systemKey|domainItem\.systemKey[\s\S]{0,240}hiven:\/\/run-plugin-command/,
+    'standalone domain launcher items must not emit systemKey to hiven://run-plugin-command',
+  )
+  assertHas(
+    files.globalLauncher,
+    /domainItem[\s\S]{0,520}controller\.selectItem\(domainItem\)/,
+    'domain launcher items should execute through LauncherController so output keeps the launcher open',
+  )
+})
+
+check('launcher UI business logic does not parse systemKey for legacy command ids', () => {
+  assert.doesNotMatch(
+    files.globalLauncher,
+    /systemKey\.split\(/,
+    'GlobalLauncher should use explicit legacyUsageKeys instead of parsing systemKey',
+  )
+  assert.doesNotMatch(
+    files.commandPalette,
+    /systemKey\.split\(/,
+    'CommandPalette should use explicit legacyUsageKeys instead of parsing systemKey',
   )
 })
 

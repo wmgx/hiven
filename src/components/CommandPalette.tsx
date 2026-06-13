@@ -184,11 +184,6 @@ export function CommandPalette() {
       if (item.legacyUsageKeys) {
         for (const key of item.legacyUsageKeys) coveredCommandIds.add(key)
       }
-      // tool/launcher items with a pluginId: their backing command id is the item id suffix
-      if (item.pluginId && item.systemKey) {
-        const parsed = item.systemKey.split(':')
-        if (parsed.length >= 4) coveredCommandIds.add(parsed.slice(3).join(':'))
-      }
     }
 
     const allItems: PaletteItem[] = pluginRegistry.getAllCommands()
