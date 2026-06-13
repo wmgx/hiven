@@ -82,7 +82,7 @@ export const lineToolsPlugin = definePlugin({
       run(ctx) {
         return ctx.output.replaceActiveText(sortLines(ctx.input.text, ctx.params))
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: { surfaces: ['command-palette'] }, panel: true, pinnable: true },
     },
     {
       id: 'line-tools.dedup',
@@ -102,7 +102,7 @@ export const lineToolsPlugin = definePlugin({
       run(ctx) {
         return ctx.output.replaceActiveText(dedupLines(ctx.input.text, ctx.params.ignoreCase))
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: { surfaces: ['command-palette'] }, panel: true, pinnable: true },
     },
     {
       id: 'line-tools.reverse',
@@ -115,7 +115,7 @@ export const lineToolsPlugin = definePlugin({
       async run(ctx) {
         return ctx.output.replaceActiveText(reverseLines(ctx.input.text))
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: { surfaces: ['command-palette'] }, panel: true, pinnable: true },
     },
     {
       id: 'line-tools.remove-blank-lines',
@@ -127,7 +127,7 @@ export const lineToolsPlugin = definePlugin({
       run(ctx) {
         return ctx.output.replaceActiveText(removeBlankLines(ctx.input.text))
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: { surfaces: ['command-palette'] }, panel: true, pinnable: true },
     },
     {
       id: 'line-tools.trim-whitespace',
@@ -139,7 +139,7 @@ export const lineToolsPlugin = definePlugin({
       run(ctx) {
         return ctx.output.replaceActiveText(trimLineWhitespace(ctx.input.text))
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: { surfaces: ['command-palette'] }, panel: true, pinnable: true },
     },
     {
       id: 'line-tools.join',
@@ -159,7 +159,7 @@ export const lineToolsPlugin = definePlugin({
       run(ctx) {
         return ctx.output.replaceActiveText(joinLines(ctx.input.text, ctx.params.separator))
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: { surfaces: ['command-palette'] }, panel: true, pinnable: true },
     },
   ],
   commands: [

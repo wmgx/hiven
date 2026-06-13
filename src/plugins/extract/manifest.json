@@ -1,7 +1,0 @@
-{
-  "pluginId": "extract",
-  "displayName": "Regex Extract",
-  "displayNameI18n": { "zh": "正则提取" },
-  "version": "1.0.1",
-  "capabilities": ["command"]
-}
