@@ -81,6 +81,7 @@ function resolveStaticItemFromContribution(
     inputPolicy: contribution.inputPolicy,
     params: contribution.params,
     defaultParams: contribution.defaultParams,
+    requireParamSelection: contribution.requireParamSelection,
     executeWithParams: contribution.executeWithParams,
     // Legacy usage keys: item id may match a command id from old usage data.
     // Prefer matching launcher item ids to old command ids during migration.

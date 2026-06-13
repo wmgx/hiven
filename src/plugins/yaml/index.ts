@@ -23,6 +23,7 @@ export const yamlPlugin = definePlugin({
       icon: 'FileJson',
       aliases: ['json-yaml', 'yaml-json'],
       inputPolicy: { mode: 'auto' },
+      requireParamSelection: true,
       params: [
         {
           key: 'mode',

@@ -38,6 +38,7 @@ export const csvPlugin = definePlugin({
       icon: 'Table',
       aliases: ['csv-json', 'tsv-json'],
       inputPolicy: { mode: 'auto' },
+      requireParamSelection: true,
       params: [
         {
           key: 'mode',

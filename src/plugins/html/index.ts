@@ -30,6 +30,7 @@ export const htmlPlugin = definePlugin({
       icon: 'FileCode',
       aliases: ['html-entities', 'html-escape'],
       inputPolicy: { mode: 'auto' },
+      requireParamSelection: true,
       params: [
         {
           key: 'mode',

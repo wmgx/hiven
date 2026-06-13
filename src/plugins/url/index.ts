@@ -20,6 +20,7 @@ export const urlPlugin = definePlugin({
       icon: 'Link',
       aliases: ['urlencode', 'urldecode'],
       inputPolicy: { mode: 'auto' },
+      requireParamSelection: true,
       params: [
         {
           key: 'mode',

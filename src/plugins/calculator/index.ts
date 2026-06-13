@@ -293,6 +293,7 @@ const definition: PluginDefinition = {
       icon: 'Binary',
       aliases: ['decimal', 'binary', 'hex', 'hex-convert'],
       inputPolicy: { mode: 'auto' },
+      requireParamSelection: true,
       params: [
         {
           key: 'mode',

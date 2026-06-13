@@ -245,6 +245,8 @@ export type LauncherItemContribution<TSettings = unknown> = {
   inputPolicy?: TextInputPolicy
   params?: LauncherParamSpec[]
   defaultParams?: Record<string, unknown>
+  /** When true, selecting the item always opens the parameter flow before execution. */
+  requireParamSelection?: boolean
   execute: LauncherExecuteHandler<TSettings>
   executeWithParams?: LauncherExecuteWithParamsHandler<TSettings>
 }
@@ -292,6 +294,8 @@ export type LauncherItem = {
   params?: LauncherParamSpec[]
   /** Explicit default values used when entering the parameter form. */
   defaultParams?: Record<string, unknown>
+  /** Host-owned execution policy: defaults can prefill UI but must not skip parameter selection. */
+  requireParamSelection?: boolean
   execute: LauncherExecuteHandler
   executeWithParams?: LauncherExecuteWithParamsHandler
 }
@@ -365,6 +369,8 @@ export type PluginToolContribution<TSettings = unknown> = {
   inputPolicy?: TextInputPolicy
   params?: LauncherParamSpec[]
   defaultParams?: Record<string, unknown>
+  /** When true, launcher selection prompts for params even when defaults exist. */
+  requireParamSelection?: boolean
   run(ctx: PluginToolContext<TSettings>): Promise<PluginToolResult> | PluginToolResult
   surfaces?: PluginToolSurfaces
 }

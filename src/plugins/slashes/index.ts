@@ -32,6 +32,7 @@ export const slashesPlugin = definePlugin({
       icon: 'Quote',
       aliases: ['escape', 'unescape', 'addslashes', 'stripslashes'],
       inputPolicy: { mode: 'auto' },
+      requireParamSelection: true,
       params: [
         {
           key: 'mode',

@@ -26,9 +26,10 @@ export function hasExplicitDefaultParams(item: LauncherItem): boolean {
 }
 
 export function supportsDefaultParamRun(item: LauncherItem): boolean {
+  if (item.requireParamSelection) return false
   return !item.params?.length || hasExplicitDefaultParams(item)
 }
 
 export function supportsParamCustomization(item: LauncherItem | undefined): boolean {
-  return Boolean(item?.executeWithParams && item.params && item.params.length > 0)
+  return Boolean(item?.executeWithParams && item.params && item.params.length > 0 && supportsDefaultParamRun(item))
 }

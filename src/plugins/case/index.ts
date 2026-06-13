@@ -24,6 +24,7 @@ export const casePlugin = definePlugin({
       icon: 'CaseSensitive',
       aliases: ['uppercase', 'lowercase', 'titlecase'],
       inputPolicy: { mode: 'auto' },
+      requireParamSelection: true,
       params: [
         {
           key: 'mode',

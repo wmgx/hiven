@@ -30,6 +30,8 @@ const i18n = readI18n()
 
 assert(/@deprecated Launcher parameter customization is inferred/.test(pluginTypes), 'CommandContribution optionalParams should be deprecated compatibility metadata')
 assert(/tool\.params && tool\.params\.length > 0/.test(toolAdapter), 'tool adapter should infer parameter customization from declared tool params')
+assert(/requireParamSelection\?:\s*boolean/.test(read('src/workspace/launcher/types.ts')), 'launcher tool and item types should expose explicit parameter-selection policy')
+assert(/requireParamSelection:\s*tool\.requireParamSelection/.test(toolAdapter), 'tool adapter should preserve explicit parameter-selection policy')
 assert(!/optionalParams/.test(toolAdapter), 'tool adapter must not depend on deprecated optionalParams')
 assert(!/optionalParams:\s*true/.test(pluginScaffold), 'plugin scaffold should not teach deprecated optionalParams')
 assert(/customizeParamsLabel/.test(i18n), 'i18n should include the compact customize params label')
@@ -41,6 +43,8 @@ assert(/shouldCustomizeParams/.test(launcherParamShortcuts), 'launcher should ce
 assert(/selectItem\(item,\s*shouldCustomizeParams\(e\.metaKey,\s*e\.ctrlKey\)\)/.test(commandPalette), 'CommandPalette should support platform-aware Enter selection intent')
 assert(/return\s+shortcutMeta\.modifier === 'meta' \? metaKey : ctrlKey/.test(launcherParamShortcuts), 'launcher should customize based on the platform modifier at selection time')
 assert(/supportsDefaultParamRun/.test(launcherParamShortcuts), 'launcher should gate default runs behind explicit default support')
+assert(/item\.requireParamSelection/.test(launcherParamShortcuts), 'launcher should block default runs for explicit parameter-selection tools')
+assert(/supportsDefaultParamRun\(item\)/.test(launcherParamShortcuts), 'launcher should show the parameter shortcut only when Enter can still default-run')
 assert(/hasExplicitDefaultParams/.test(launcherParamShortcuts), 'launcher should require explicit defaults for optional params')
 assert(/customize-shortcut-chip/.test(commandPalette), 'CommandPalette should render optional params as a compact shortcut chip')
 assert(/supportsParamCustomization\(items\[selectedIndex\]\)/.test(commandPalette), 'CommandPalette footer should show the parameter shortcut for the selected optional-param item')
@@ -91,6 +95,44 @@ for (const name of parameterizedPlugins) {
   assert(!/optionalParams:\s*true/.test(src), `${name} plugin should not use deprecated optionalParams`)
   assert(/params:\s*(?:\[|[A-Z_]*PARAMS)/.test(src), `${name} plugin should declare params`)
   assert(/default:/.test(src), `${name} plugin params should provide explicit defaults for launcher parameter flow`)
+}
+
+const promptBeforeRunPlugins = [
+  'base64',
+  'calculator',
+  'case',
+  'csv',
+  'html',
+  'mdquote',
+  'queryString',
+  'slashes',
+  'url',
+  'yaml',
+]
+
+for (const name of promptBeforeRunPlugins) {
+  const src = pluginIndex(name)
+  assert(src, `${name} should exist as a first-party plugin package`)
+  assert(/requireParamSelection:\s*true/.test(src), `${name} should prompt for mode/direction instead of default-running from launcher`)
+}
+
+const defaultRunPlugins = [
+  'css',
+  'date-time-assistant',
+  'extract',
+  'hash',
+  'json',
+  'lineAffix',
+  'lineTools',
+  'sql',
+  'sqlin',
+  'xml',
+]
+
+for (const name of defaultRunPlugins) {
+  const src = pluginIndex(name)
+  assert(src, `${name} should exist as a first-party plugin package`)
+  assert(!/requireParamSelection:\s*true/.test(src), `${name} should keep default-run launcher behavior`)
 }
 
 console.log('command optional params checks passed')

@@ -30,6 +30,7 @@ export const queryStringPlugin = definePlugin({
       icon: 'Search',
       aliases: ['query-json', 'json-query', 'qs'],
       inputPolicy: { mode: 'auto' },
+      requireParamSelection: true,
       params: [
         {
           key: 'mode',

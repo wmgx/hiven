@@ -21,6 +21,7 @@ export const mdquotePlugin = definePlugin({
       icon: 'MessageSquareQuote',
       aliases: ['blockquote', 'quote'],
       inputPolicy: { mode: 'auto' },
+      requireParamSelection: true,
       params: [
         {
           key: 'mode',

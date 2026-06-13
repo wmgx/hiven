@@ -144,6 +144,7 @@ const paramTool = {
   ...reverseTool,
   id: 'upper-with-suffix',
   params: [{ key: 'suffix', label: 'Suffix', type: 'text', default: '!' }],
+  requireParamSelection: true,
   run: async (ctx) => ctx.output.text(`${ctx.input.text.toUpperCase()}${ctx.params.suffix}`),
 }
 const paramItem = toolAdapter.adaptToolToLauncherItem(paramTool, {
@@ -153,6 +154,7 @@ const paramItem = toolAdapter.adaptToolToLauncherItem(paramTool, {
 })
 assert.equal(paramItem.params?.[0].key, 'suffix', 'tool adapter exposes explicit param schema')
 assert.equal(paramItem.defaultParams?.suffix, '!', 'tool adapter derives default params')
+assert.equal(paramItem.requireParamSelection, true, 'tool adapter preserves explicit parameter-selection policy')
 const paramDefaultRes = await paramItem.execute({ settings: {}, locale: 'en', api, t: (k) => k })
 assert.equal(paramDefaultRes.output.choices[0].title, 'ABC!', 'tool adapter runs with default params')
 const paramCustomRes = await paramItem.executeWithParams({ settings: {}, locale: 'en', api, t: (k) => k }, { suffix: '?' })
