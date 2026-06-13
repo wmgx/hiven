@@ -32,6 +32,12 @@ fn show_and_focus_window(app: tauri::AppHandle) {
 fn show_and_focus_main_window(app: &tauri::AppHandle) {
     use tauri::Manager;
 
+    // Clear saved foreground app so that a subsequent hide_launcher_window
+    // won't restore focus away from the main window we're about to show.
+    if let Ok(mut stored) = previous_foreground_process_id().lock() {
+        *stored = None;
+    }
+
     if let Some(window) = app.get_webview_window("launcher") {
         let _ = window.hide();
     }

@@ -56,6 +56,7 @@ export function GlobalLauncher() {
   const recordLauncherSelection = useAppStore((s) => s.recordLauncherSelection)
   const [controllerState, setControllerState] = useState<LauncherControllerState | null>(null)
   const controllerRef = useRef<LauncherController | null>(null)
+  const closeAfterActionRef = useRef<() => void>(() => {})
   const [dynamicItems, setDynamicItems] = useState<DomainLauncherItem[]>([])
   const dynamicQueryRef = useRef('')
   const [query, setQuery] = useState('')
@@ -109,7 +110,7 @@ export function GlobalLauncher() {
           recordSelection: (surfaceId, item) => {
             recordLauncherSelection(surfaceId, item.systemKey)
           },
-          requestClose: () => closeLauncher(),
+          requestClose: () => closeAfterActionRef.current(),
           onChange: (state) => setControllerState({ ...state }),
         })
         controllerRef.current = controller
@@ -228,6 +229,38 @@ export function GlobalLauncher() {
     }
     setOpen(false)
   }, [overlay, setOpen, standaloneLauncher])
+
+  // Close launcher after a command has been executed (don't hide the main window)
+  const closeLauncherAfterAction = useCallback(() => {
+    if (standaloneLauncher) {
+      void (async () => {
+        try {
+          const { invoke } = await import('@tauri-apps/api/core')
+          await invoke('hide_launcher_window')
+        } catch (error) {
+          console.warn('[hiven] Failed to hide launcher window:', error)
+        }
+        setOpen(false)
+      })()
+      return
+    }
+    if (overlay) {
+      void (async () => {
+        try {
+          const { getCurrentWindow } = await import('@tauri-apps/api/window')
+          const win = getCurrentWindow()
+          await win.setDecorations(true)
+        } catch (error) {
+          console.warn('[hiven] Failed to restore launcher window:', error)
+        }
+        setOpen(false)
+      })()
+      return
+    }
+    setOpen(false)
+  }, [overlay, setOpen, standaloneLauncher])
+
+  closeAfterActionRef.current = closeLauncherAfterAction
 
   useEffect(() => {
     if (!open || !standaloneLauncher) return
