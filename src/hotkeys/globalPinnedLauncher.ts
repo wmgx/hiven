@@ -3,6 +3,7 @@ import { useAppStore, type GlobalPinnedLauncherShortcut } from '../store'
 type GlobalShortcutApi = typeof import('@tauri-apps/plugin-global-shortcut')
 type TauriCoreApi = typeof import('@tauri-apps/api/core')
 type TauriEventApi = typeof import('@tauri-apps/api/event')
+type TauriWindowApi = typeof import('@tauri-apps/api/window')
 
 let installed = false
 let unsubscribeStore: (() => void) | null = null
@@ -96,7 +97,7 @@ async function registerAccelerator(
       if (event.state !== 'Pressed') return
       if (shortcutIdentity(useAppStore.getState().settings.globalPinnedLauncherShortcut) !== shortcutIdentity(shortcut)) return
       void (async () => {
-        await showLauncherWindow()
+        await routeGlobalPinnedLauncherShortcut()
       })()
     })
     currentAccelerator = accelerator
@@ -165,6 +166,27 @@ async function showLauncherWindow() {
   }
 }
 
+export async function routeGlobalPinnedLauncherShortcut() {
+  if (await shouldOpenCommandPaletteInMainWindow()) {
+    useAppStore.getState().setCommandPaletteOpen(true)
+    return
+  }
+  await showLauncherWindow()
+}
+
+async function shouldOpenCommandPaletteInMainWindow() {
+  const state = useAppStore.getState()
+  if (state.activeView !== 'editor') return false
+  if (!isTauriRuntime()) return true
+  try {
+    const { getCurrentWindow } = await loadTauriWindowApi()
+    return await getCurrentWindow().isFocused()
+  } catch (error) {
+    console.warn('[hiven] Failed to inspect main window focus for global shortcut:', error)
+    return false
+  }
+}
+
 function updateShortcutStatus(
   shortcut: GlobalPinnedLauncherShortcut,
   registrationStatus: string,
@@ -207,4 +229,8 @@ function loadTauriCoreApi(): Promise<TauriCoreApi> {
 
 function loadTauriEventApi(): Promise<TauriEventApi> {
   return import('@tauri-apps/api/event')
+}
+
+function loadTauriWindowApi(): Promise<TauriWindowApi> {
+  return import('@tauri-apps/api/window')
 }

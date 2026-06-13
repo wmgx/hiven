@@ -11,6 +11,7 @@ import { runToolbarCommand } from '../workspace/toolbarCommandRunner'
 import { runtimeRegistry } from '../workspace/runtimeRegistry'
 import { resolveIcon } from '../utils/resolveIcon'
 import { useT } from '../i18n'
+import { formatGlobalPinnedLauncherShortcutLabel } from '../hotkeys/shortcutDisplay'
 
 function isEditableSelectAllTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
@@ -20,6 +21,7 @@ function isEditableSelectAllTarget(target: EventTarget | null) {
 export function EditorView() {
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
   const locale = useAppStore((s) => s.locale)
+  const globalPinnedLauncherShortcut = useAppStore((s) => s.settings.globalPinnedLauncherShortcut)
   const t = useT('editor')
   const closeActiveSurfaceOrPane = useWorkspaceStore((s) => s.closeActiveSurfaceOrPane)
   const pluginRegistryVersion = usePluginRegistryVersion()
@@ -30,6 +32,7 @@ export function EditorView() {
     .getAllToolbarItems()
     .filter((item) => (item.contribution.placement ?? 'editor-top-right') === 'editor-top-right')
     .sort((a, b) => (a.contribution.order ?? 0) - (b.contribution.order ?? 0))
+  const runActionShortcut = formatGlobalPinnedLauncherShortcutLabel(globalPinnedLauncherShortcut, locale)
 
   // Route shell shortcuts before the browser document can consume them.
   useEffect(() => {
@@ -93,7 +96,7 @@ export function EditorView() {
             className="btn btn-ghost btn-sm ft-btn ft-btn-ghost ft-btn-sm"
             onClick={() => setCommandPaletteOpen(true)}
           >
-            {t('runAction')}
+            {t('runActionWithShortcut', { shortcut: runActionShortcut })}
           </span>
         </div>
       </div>

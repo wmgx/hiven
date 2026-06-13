@@ -13,7 +13,7 @@ import { GlobalLauncher } from './components/GlobalLauncher'
 import { PluginSettingsDialog } from './components/PluginSettingsDialog'
 import { loadInstalledPluginsFromStore } from './workspace/pluginRuntime'
 import { registerBundledPluginPackages } from './workspace/bundledPluginLoader'
-import { installGlobalPinnedLauncherHotkeys } from './hotkeys/globalPinnedLauncher'
+import { installGlobalPinnedLauncherHotkeys, routeGlobalPinnedLauncherShortcut } from './hotkeys/globalPinnedLauncher'
 
 // Register built-in panels
 import './panels/register'
@@ -114,13 +114,6 @@ function MainApp() {
         useAppStore.getState().openGlobalLauncher('full')
         return
       }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        const state = useAppStore.getState()
-        if (state.activeView !== 'editor') return
-        e.preventDefault()
-        e.stopPropagation()
-        state.setCommandPaletteOpen(true)
-      }
     }
     window.addEventListener('keydown', handler, true)
     return () => window.removeEventListener('keydown', handler, true)
@@ -143,6 +136,27 @@ function MainApp() {
       })
       .catch((error) => {
         console.warn('[hiven] Failed to listen for pinned launcher event:', error)
+      })
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    import('@tauri-apps/api/event')
+      .then(({ listen }) => listen('hiven://route-global-pinned-launcher-shortcut', () => {
+        void routeGlobalPinnedLauncherShortcut()
+      }))
+      .then((cleanup) => {
+        if (disposed) cleanup()
+        else unlisten = cleanup
+      })
+      .catch((error) => {
+        console.warn('[hiven] Failed to listen for global launcher route event:', error)
       })
     return () => {
       disposed = true

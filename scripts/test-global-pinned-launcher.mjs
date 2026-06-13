@@ -28,6 +28,7 @@ const files = {
   corePaneManifest: read('src/plugins/core-pane/manifest.json'),
   builtinIndex: read('src/builtin-plugins/index.json'),
   app: read('src/App.tsx'),
+  globalPinnedLauncherHotkeys: read('src/hotkeys/globalPinnedLauncher.ts'),
   main: read('src/main.tsx'),
   indexCss: read('src/index.css'),
   store: read('src/store.ts'),
@@ -604,20 +605,125 @@ check('native launcher show path does not activate the full app window stack', (
   )
 })
 
-check('native launcher show path hides the main window before focusing launcher', () => {
+check('global shortcut routes to in-app command palette when the editor window is focused', () => {
+  assertHas(
+    files.globalPinnedLauncherHotkeys,
+    /routeGlobalPinnedLauncherShortcut/,
+    'global shortcut callbacks should share a foreground-aware launcher route',
+  )
+  assertHas(
+    files.globalPinnedLauncherHotkeys,
+    /getCurrentWindow\(\)\.isFocused\(\)/,
+    'global shortcut route should inspect whether the main window is currently focused',
+  )
+  assertHas(
+    files.globalPinnedLauncherHotkeys,
+    /activeView\s*!={1,2}\s*['"]editor['"][\s\S]{0,80}return\s+false/,
+    'global shortcut route should reject in-app command palette routing outside the editor view',
+  )
+  assertHas(
+    files.globalPinnedLauncherHotkeys,
+    /shouldOpenCommandPaletteInMainWindow\(\)[\s\S]{0,180}setCommandPaletteOpen\(true\)/,
+    'when the focused app window is the editor, global shortcut should open the in-app command palette',
+  )
+  assertHas(
+    files.globalPinnedLauncherHotkeys,
+    /showLauncherWindow\(\)/,
+    'non-editor or background shortcuts should still fall back to the standalone global launcher',
+  )
+  assertHas(
+    files.app,
+    /listen\([\s\S]{0,120}hiven:\/\/route-global-pinned-launcher-shortcut[\s\S]{0,220}routeGlobalPinnedLauncherShortcut\(\)/,
+    'double-modifier native events should use the same foreground-aware route as accelerator shortcuts',
+  )
+})
+
+check('native launcher show path preserves main window visibility state', () => {
   const launcherFn = files.tauriLib.match(/pub\(crate\)\s+fn\s+show_launcher_window_for_hotkey[\s\S]*?\n}\n\n#\[tauri::command\]/)?.[0] ?? ''
-  const hideMainIndex = launcherFn.indexOf('hide_main_window_before_launcher(&app_clone)')
-  const focusIndex = launcherFn.indexOf('window.set_focus()')
-  assert.ok(hideMainIndex >= 0, 'show_launcher_window_for_hotkey should hide main before showing launcher')
-  assert.ok(focusIndex >= 0, 'show_launcher_window_for_hotkey should still focus launcher for keyboard input')
-  assert.ok(
-    hideMainIndex < focusIndex,
-    'show_launcher_window_for_hotkey should hide main before focusing launcher, because set_focus activates the macOS app',
+  assert.doesNotMatch(
+    launcherFn,
+    /window\.show\(\)/,
+    'show_launcher_window_for_hotkey should not use Tauri window.show on the standalone launcher because it can activate the whole app',
+  )
+  assert.doesNotMatch(
+    launcherFn,
+    /window\.set_focus\(\)/,
+    'show_launcher_window_for_hotkey should not use Tauri set_focus because it activates the whole app and flashes the main window',
   )
   assertHas(
     launcherFn,
-    /was_visible[\s\S]{0,180}if\s+!was_visible[\s\S]{0,120}hide_main_window_before_launcher/,
-    'show_launcher_window_for_hotkey should not reset or hide window state when the launcher is already visible',
+    /show_launcher_window_without_app_activation\(&window\)/,
+    'show_launcher_window_for_hotkey should use a macOS non-activating show/focus path for the standalone launcher',
+  )
+  assert.doesNotMatch(
+    launcherFn,
+    /hide_main_window_before_launcher|window\.hide\(\)/,
+    'show_launcher_window_for_hotkey should not hide the main window; launcher close should preserve the previous foreground state',
+  )
+  assertHas(
+    launcherFn,
+    /was_visible[\s\S]{0,760}if\s+!was_visible[\s\S]{0,180}window\.emit\(['"]hiven:\/\/launcher-open['"]/,
+    'show_launcher_window_for_hotkey should still reset launcher UI only for a newly shown launcher',
+  )
+})
+
+check('native launcher close restores the previously foreground app instead of activating main', () => {
+  const launcherFn = files.tauriLib.match(/pub\(crate\)\s+fn\s+show_launcher_window_for_hotkey[\s\S]*?\n}\n\n#\[tauri::command\]/)?.[0] ?? ''
+  const hideFn = files.tauriLib.match(/async\s+fn\s+hide_launcher_window[\s\S]*?\n}\n\nfn\s+/)?.[0] ?? ''
+  assertHas(
+    files.tauriLib,
+    /PREVIOUS_FOREGROUND_PROCESS_ID/,
+    'native launcher should remember which app was foreground before standalone launcher focus',
+  )
+  assertHas(
+    launcherFn,
+    /remember_previous_foreground_app\(\)/,
+    'showing a standalone launcher should capture the prior foreground app before focusing launcher',
+  )
+  assertHas(
+    hideFn,
+    /restore_previous_foreground_app\(\)/,
+    'hiding a standalone launcher should restore focus to the app that was foreground before launcher opened',
+  )
+  const restoreIndex = hideFn.indexOf('restore_previous_foreground_app()')
+  const hideIndex = hideFn.indexOf('window.hide()')
+  assert.ok(restoreIndex >= 0 && hideIndex >= 0, 'hide_launcher_window should restore and hide')
+  assert.ok(
+    restoreIndex < hideIndex,
+    'hide_launcher_window should restore the previous foreground app before hiding the launcher to avoid briefly activating main',
+  )
+  assertHas(
+    files.tauriLib,
+    /runningApplicationWithProcessIdentifier[\s\S]{0,260}activateWithOptions/,
+    'macOS restore should activate the previous foreground process, not the Hiven main window',
+  )
+})
+
+check('native launcher is configured as a non-activating macOS panel', () => {
+  assertHas(
+    files.tauriConfig,
+    /"label":\s*"launcher"[\s\S]{0,520}"focus":\s*false/,
+    'launcher window config should not ask Tauri to focus the standalone window during creation',
+  )
+  assertHas(
+    files.tauriLib,
+    /promote_window_to_nonactivating_panel/,
+    'native launcher should promote the standalone window into a non-activating panel',
+  )
+  assertHas(
+    files.tauriLib,
+    /NSWindowStyleMaskNonactivatingPanel|1usize\s*<<\s*7/,
+    'native launcher should apply the NSWindowStyleMaskNonactivatingPanel style bit',
+  )
+  assertHas(
+    files.tauriLib,
+    /orderFrontRegardless[\s\S]{0,220}makeKeyWindow|makeKeyWindow[\s\S]{0,220}orderFrontRegardless/,
+    'native launcher should order and key the panel without app activation',
+  )
+  assertHas(
+    files.tauriLib,
+    /makeFirstResponder:\s*ns_view/,
+    'native launcher should make the WebView first responder so the search input receives keyboard focus',
   )
 })
 

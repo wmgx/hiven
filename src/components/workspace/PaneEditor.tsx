@@ -247,15 +247,6 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
                 ed.getAction('editor.action.startFindReplaceAction')?.run()
               },
             }))
-            // Cmd+K → open command palette (ensures it works after HMR)
-            disposables.add(editor.addAction({
-              id: 'open-command-palette',
-              label: 'Open Command Palette',
-              keybindings: [2048 | 41], // CtrlCmd + KeyK
-              run: () => {
-                useAppStore.getState().setCommandPaletteOpen(true)
-              },
-            }))
             // Cmd+W → close pane
             disposables.add(editor.addAction({
               id: 'close-pane',

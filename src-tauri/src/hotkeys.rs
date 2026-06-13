@@ -4,6 +4,8 @@ use std::time::{Duration, Instant};
 use tauri::Emitter;
 
 const DOUBLE_MODIFIER_HOTKEY_ERROR_EVENT: &str = "hiven://double-modifier-hotkey-error";
+const ROUTE_GLOBAL_PINNED_LAUNCHER_SHORTCUT_EVENT: &str =
+    "hiven://route-global-pinned-launcher-shortcut";
 const DEFAULT_DOUBLE_MODIFIER_THRESHOLD_MS: u64 = 300;
 
 #[derive(Clone, Debug, serde::Serialize)]
@@ -341,7 +343,7 @@ fn start_double_modifier_listener(state: Arc<DoubleModifierHotkeyState>, app: ta
 
 #[cfg(target_os = "macos")]
 fn open_pinned_launcher(app: &tauri::AppHandle) {
-    let _ = crate::show_launcher_window_for_hotkey(app.clone());
+    let _ = app.emit(ROUTE_GLOBAL_PINNED_LAUNCHER_SHORTCUT_EVENT, ());
 }
 
 #[cfg(target_os = "macos")]
