@@ -10,13 +10,15 @@ import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } fro
 import { resolvePluginSettings } from '../workspace/pluginSettingsStore'
 import { scoreSearchableFields, searchableFieldsMatch, type SearchableFields } from '../workspace/searchRanking'
 import { LauncherController } from '../workspace/launcher/controller'
-import type { LauncherControllerState, CollectInputFrame, ResultFrame } from '../workspace/launcher/controller'
+import type { LauncherControllerState, CollectInputFrame, ParamInputFrame, ResultFrame } from '../workspace/launcher/controller'
 import { createPluginLauncherApi } from '../workspace/launcher/pluginApi'
 import { collectStaticCandidates, collectDynamicItems, filterDynamicForSurface } from '../workspace/launcher/registry'
 import { rankLauncherItems } from '../workspace/launcher/ranking'
 import { resolveDisplayTitle, resolveDisplaySubtitle } from '../workspace/launcher/display'
 import type { LauncherItem as DomainLauncherItem, LauncherSurfaceId } from '../workspace/launcher/types'
 import { resolvePluginSettingsSource } from '../workspace/launcher/pluginSource'
+import { LauncherParamStep } from './launcher/LauncherParamStep'
+import { getPlatformShortcutMeta, shouldCustomizeParams, supportsDefaultParamRun, supportsParamCustomization } from './launcher/launcherParamShortcuts'
 import type { ContributionSource } from '../workspace/pluginTypes'
 
 type LauncherItem =
@@ -282,7 +284,7 @@ export function GlobalLauncher() {
     standaloneLauncher,
   ])
 
-  const selectItem = (item: LauncherItem | undefined) => {
+  const selectItem = (item: LauncherItem | undefined, customizeParams = false) => {
     if (!item) return
 
     if (item.kind === 'domain') {
@@ -291,7 +293,11 @@ export function GlobalLauncher() {
         console.warn('[hiven] Cannot select domain launcher item before controller is ready:', item.domainItem.systemKey)
         return
       }
-      void controller.selectItem(item.domainItem)
+      if (!customizeParams && !supportsDefaultParamRun(item.domainItem)) {
+        void controller.selectItem(item.domainItem, { customizeParams: true })
+        return
+      }
+      void controller.selectItem(item.domainItem, { customizeParams })
       return
     }
 
@@ -439,6 +445,9 @@ export function GlobalLauncher() {
           // Controller frame key handling (collect-input / result)
           if (controllerState && controllerState.frames.length > 1) {
             const topFrame = controllerState.frames[controllerState.frames.length - 1]
+            if (topFrame.kind === 'param-input') {
+              return
+            }
             if (topFrame.kind === 'collect-input') {
               if (event.key === 'Enter') {
                 event.preventDefault()
@@ -488,12 +497,35 @@ export function GlobalLauncher() {
           }
           if (event.key === 'ArrowDown') { event.preventDefault(); setSelectedIndex((index) => Math.min(index + 1, Math.max(0, filtered.length - 1))) }
           if (event.key === 'ArrowUp') { event.preventDefault(); setSelectedIndex((index) => Math.max(index - 1, 0)) }
-          if (event.key === 'Enter') { event.preventDefault(); selectItem(selectedItem) }
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            selectItem(selectedItem, shouldCustomizeParams(event.metaKey, event.ctrlKey))
+          }
         }}
         onCompositionStart={handleCompositionStart}
         onCompositionEnd={handleCompositionEnd}
       >
-        {controllerState && controllerState.frames.length > 1 && controllerState.frames[controllerState.frames.length - 1].kind === 'collect-input' ? (() => {
+        {controllerState && controllerState.frames.length > 1 && controllerState.frames[controllerState.frames.length - 1].kind === 'param-input' ? (() => {
+          const frame = controllerState.frames[controllerState.frames.length - 1] as ParamInputFrame
+          return (
+            <LauncherParamStep
+              frame={frame}
+              error={controllerState.error}
+              busy={controllerState.busy}
+              locale={locale}
+              headerClassName="global-launcher-header flex items-center gap-2 px-3.5 py-2.5"
+              bodyClassName="global-launcher-body"
+              footerClassName="global-launcher-footer flex shrink-0 gap-3 px-3.5 py-1.5"
+              onQueryChange={(value) => controllerRef.current?.setParamQuery(value)}
+              onSelectedIndexChange={(index) => controllerRef.current?.setParamSelectedIndex(index)}
+              onCommit={(value) => { void controllerRef.current?.commitCurrentParam(value) }}
+              onBack={() => {
+                controllerRef.current?.back()
+                requestAnimationFrame(() => inputRef.current?.focus())
+              }}
+            />
+          )
+        })() : controllerState && controllerState.frames.length > 1 && controllerState.frames[controllerState.frames.length - 1].kind === 'collect-input' ? (() => {
           const frame = controllerState.frames[controllerState.frames.length - 1] as CollectInputFrame
           const placeholder = frame.item.behavior.type === 'collect-input'
             ? (frame.item.behavior.input.placeholder ?? '')
@@ -577,12 +609,15 @@ export function GlobalLauncher() {
               <LauncherList
                 items={filtered}
                 selected={selectedItem}
-                onSelect={selectItem}
+                onSelect={(item) => selectItem(item)}
               />
             </div>
             <div className="global-launcher-footer flex shrink-0 gap-3 px-3.5 py-1.5" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
               <HintKey keys="↑↓" label={t(locale, 'palette.select')} />
               <HintKey keys="↵" label={t(locale, 'palette.confirm')} />
+              {selectedItem?.kind === 'domain' && supportsParamCustomization(selectedItem.domainItem) && (
+                <HintKey keys={`${getPlatformShortcutMeta().label}↵`} label={t(locale, 'palette.customizeParamsLabel')} />
+              )}
               <HintKey keys="esc" label={t(locale, 'palette.back')} />
             </div>
           </>

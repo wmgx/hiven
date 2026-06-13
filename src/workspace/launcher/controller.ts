@@ -21,6 +21,7 @@ import type {
   LauncherExecuteResult,
   LauncherItem,
   LauncherOutput,
+  LauncherParamSpec,
   LauncherResultChoice,
   LauncherSurfaceId,
   PluginLauncherApi,
@@ -43,6 +44,9 @@ export type ParamInputFrame = {
   kind: 'param-input'
   item: LauncherItem
   params: Record<string, unknown>
+  paramIndex: number
+  query: string
+  selectedIndex: number
 }
 
 export type ResultFrame = {
@@ -152,6 +156,36 @@ export class LauncherController {
     return params
   }
 
+  private paramOptions(param: LauncherParamSpec): unknown[] {
+    if (param.type === 'boolean') return [true, false]
+    return (param.options ?? []).map((option) => typeof option === 'string' ? option : option.value)
+  }
+
+  private selectedIndexFor(param: LauncherParamSpec | undefined, params: Record<string, unknown>): number {
+    if (!param) return 0
+    const value = params[param.key]
+    const index = this.paramOptions(param).findIndex((option) => option === value)
+    return index >= 0 ? index : 0
+  }
+
+  private queryFor(param: LauncherParamSpec | undefined, params: Record<string, unknown>): string {
+    if (!param || (param.type !== 'text' && param.type !== 'number')) return ''
+    const value = params[param.key]
+    return value === undefined || value === null ? '' : String(value)
+  }
+
+  private paramFrameFor(item: LauncherItem, params = this.defaultParamsFor(item), paramIndex = 0): ParamInputFrame {
+    const param = item.params?.[paramIndex]
+    return {
+      kind: 'param-input',
+      item,
+      params,
+      paramIndex,
+      query: this.queryFor(param, params),
+      selectedIndex: this.selectedIndexFor(param, params),
+    }
+  }
+
   private hasCustomizableParams(item: LauncherItem): boolean {
     return Boolean(item.executeWithParams && item.params && item.params.length > 0)
   }
@@ -169,7 +203,7 @@ export class LauncherController {
         this.deps.recordSelection(this.deps.surfaceId, item)
       }
       this.setState({
-        frames: [...this.state.frames, { kind: 'param-input', item, params: this.defaultParamsFor(item) }],
+        frames: [...this.state.frames, this.paramFrameFor(item)],
       })
       return
     }
@@ -194,23 +228,82 @@ export class LauncherController {
     )
   }
 
-  /** Update a parameter in the active parameter input frame. */
-  setParamValue(key: string, value: unknown): void {
+  setParamQuery(query: string): void {
     const top = this.topFrame()
     if (top.kind !== 'param-input') return
     const frames = this.state.frames.slice(0, -1)
-    frames.push({ ...top, params: { ...top.params, [key]: value } })
+    frames.push({ ...top, query, selectedIndex: 0 })
     this.setState({ frames })
+  }
+
+  setParamSelectedIndex(selectedIndex: number): void {
+    const top = this.topFrame()
+    if (top.kind !== 'param-input') return
+    const frames = this.state.frames.slice(0, -1)
+    frames.push({ ...top, selectedIndex: Math.max(0, selectedIndex) })
+    this.setState({ frames })
+  }
+
+  private currentParam(frame: ParamInputFrame): LauncherParamSpec | undefined {
+    return frame.item.params?.[frame.paramIndex]
+  }
+
+  private normalizeParamValue(param: LauncherParamSpec, value: unknown): unknown {
+    if (param.type === 'number') {
+      if (value === '' || value === undefined || value === null) return undefined
+      const numberValue = Number(value)
+      return Number.isFinite(numberValue) ? numberValue : value
+    }
+    return value
+  }
+
+  private validateParam(param: LauncherParamSpec, params: Record<string, unknown>): string | null {
+    const value = params[param.key]
+    if (!param.required) return null
+    if (value === undefined || value === null || value === '') return `${param.label} is required`
+    if (Array.isArray(value) && value.length === 0) return `${param.label} is required`
+    return null
   }
 
   private validateParams(item: LauncherItem, params: Record<string, unknown>): string | null {
     for (const param of item.params ?? []) {
-      const value = params[param.key]
-      if (!param.required) continue
-      if (value === undefined || value === null || value === '') return `${param.label} is required`
-      if (Array.isArray(value) && value.length === 0) return `${param.label} is required`
+      const error = this.validateParam(param, params)
+      if (error) return error
     }
     return null
+  }
+
+  async commitCurrentParam(value: unknown): Promise<void> {
+    const top = this.topFrame()
+    if (top.kind !== 'param-input') return
+    const param = this.currentParam(top)
+    if (!param) {
+      await this.submitParams()
+      return
+    }
+
+    const params = {
+      ...top.params,
+      [param.key]: this.normalizeParamValue(param, value),
+    }
+    const error = this.validateParam(param, params)
+    if (error) {
+      this.setState({ error })
+      return
+    }
+
+    const nextIndex = top.paramIndex + 1
+    if (nextIndex < (top.item.params?.length ?? 0)) {
+      const frames = this.state.frames.slice(0, -1)
+      frames.push(this.paramFrameFor(top.item, params, nextIndex))
+      this.setState({ frames, error: null })
+      return
+    }
+
+    const frames = this.state.frames.slice(0, -1)
+    frames.push(this.paramFrameFor(top.item, params, top.paramIndex))
+    this.setState({ frames, error: null })
+    await this.submitParams()
   }
 
   /** Submit the active parameter input frame. */

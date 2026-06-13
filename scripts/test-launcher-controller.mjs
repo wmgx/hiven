@@ -211,10 +211,41 @@ function collectInputItem(systemKey, execute, input = {}) {
   }
   await ctrl.selectItem(item, { customizeParams: true })
   assert.deepEqual(order, ['record'], 'usage recorded when entering param mode, before submit')
-  assert.equal(ctrl.getState().frames[ctrl.getState().frames.length - 1].kind, 'param-input')
-  ctrl.setParamValue('suffix', '?')
-  await ctrl.submitParams()
+  let paramFrame = ctrl.getState().frames[ctrl.getState().frames.length - 1]
+  assert.equal(paramFrame.kind, 'param-input')
+  assert.equal(paramFrame.query, '!', 'text param frame starts from the default value')
+  await ctrl.commitCurrentParam('?')
   assert.deepEqual(order, ['record', 'execute:?'], 'param submit executes with edited params')
+}
+
+// --- 12. parameter frame advances one launcher step at a time and preserves default selection ---
+{
+  const order = []
+  const { ctrl } = makeController({ recordSelection: () => order.push('record') })
+  const item = {
+    ...performItem('plugin:p:command:multi-param', async () => { order.push('default'); return { ok: true } }),
+    params: [
+      { key: 'mode', label: 'Mode', type: 'single-select', options: [{ label: 'Pretty', value: 'pretty' }, { label: 'Compact', value: 'compact' }], default: 'compact' },
+      { key: 'ignoreCase', label: 'Ignore Case', type: 'boolean', default: false },
+    ],
+    defaultParams: { mode: 'compact', ignoreCase: false },
+    executeWithParams: async (_ctx, params) => {
+      order.push(`execute:${params.mode}:${String(params.ignoreCase)}`)
+      return { ok: true }
+    },
+  }
+  await ctrl.selectItem(item, { customizeParams: true })
+  let paramFrame = ctrl.getState().frames[ctrl.getState().frames.length - 1]
+  assert.equal(paramFrame.kind, 'param-input')
+  assert.equal(paramFrame.paramIndex, 0)
+  assert.equal(paramFrame.selectedIndex, 1, 'single-select param frame selects the default option')
+  await ctrl.commitCurrentParam('pretty')
+  paramFrame = ctrl.getState().frames[ctrl.getState().frames.length - 1]
+  assert.equal(paramFrame.kind, 'param-input')
+  assert.equal(paramFrame.paramIndex, 1, 'first param commit advances to the next launcher step')
+  assert.equal(paramFrame.selectedIndex, 1, 'boolean false default selects the No option')
+  await ctrl.commitCurrentParam(false)
+  assert.deepEqual(order, ['record', 'execute:pretty:false'])
 }
 
 console.log('✓ test-launcher-controller passed')
