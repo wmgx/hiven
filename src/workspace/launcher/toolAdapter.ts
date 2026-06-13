@@ -102,6 +102,8 @@ export function adaptToolToLauncherItem(
     surfaces: launcherOptions?.surfaces,
     pinnable,
     inputPolicy: tool.inputPolicy,
+    // Legacy usage keys: the tool id may match a command id used in old usage data
+    legacyUsageKeys: [tool.id],
     execute,
   }
 }

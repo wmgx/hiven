@@ -178,11 +178,26 @@ export function CommandPalette() {
   const allFiltered = useMemo<PaletteItem[]>(() => {
     void pluginRegistryVersion
 
-    const allItems: PaletteItem[] = pluginRegistry.getAllCommands().map(({ contribution, meta, isDev }) => ({
-      kind: 'plugin' as const,
-      entry: { contribution, meta },
-      isDev,
-    }))
+    // Build a set of command ids already covered by launcher items (avoid duplicates)
+    const coveredCommandIds = new Set<string>()
+    for (const item of rankedLauncherItems) {
+      if (item.legacyUsageKeys) {
+        for (const key of item.legacyUsageKeys) coveredCommandIds.add(key)
+      }
+      // tool/launcher items with a pluginId: their backing command id is the item id suffix
+      if (item.pluginId && item.systemKey) {
+        const parsed = item.systemKey.split(':')
+        if (parsed.length >= 4) coveredCommandIds.add(parsed.slice(3).join(':'))
+      }
+    }
+
+    const allItems: PaletteItem[] = pluginRegistry.getAllCommands()
+      .filter(({ contribution }) => !coveredCommandIds.has(contribution.id))
+      .map(({ contribution, meta, isDev }) => ({
+        kind: 'plugin' as const,
+        entry: { contribution, meta },
+        isDev,
+      }))
 
     const q = query.trim().toLowerCase()
 
@@ -196,7 +211,7 @@ export function CommandPalette() {
     )
 
     return sorted
-  }, [query, recentActionNames, actionUsageCounts, locale, pluginRegistryVersion])
+  }, [query, recentActionNames, actionUsageCounts, locale, pluginRegistryVersion, rankedLauncherItems])
 
   // 当前参数
   const currentParam: PaletteParamModel | null =
@@ -638,8 +653,8 @@ export function CommandPalette() {
               if (!item.pinnable) return
               pinPluginCommand({
                 kind: 'plugin-command',
-                actionId: item.display.title,
-                pluginId: item.pluginId,
+                actionId: item.systemKey,
+                pluginId: item.pluginId ?? '',
                 title: item.display.title,
                 titleI18n: item.display.titleI18n,
                 icon: item.display.icon,

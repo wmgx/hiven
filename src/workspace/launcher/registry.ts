@@ -79,6 +79,8 @@ function resolveStaticItemFromContribution(
     surfaces: sanitizeSurfaces(contribution.surfaces),
     pinnable: contribution.pinnable ?? true,
     inputPolicy: contribution.inputPolicy,
+    // Legacy usage keys: item id may match a command id from old usage data
+    legacyUsageKeys: [contribution.id],
     execute: contribution.execute,
   }
 }

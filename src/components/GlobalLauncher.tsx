@@ -198,9 +198,18 @@ export function GlobalLauncher() {
     }] : []
 
     // Add quick text commands (always available regardless of mode)
+    // Skip commands already covered by launcher tools (avoid duplicate entries)
+    const staticItems = collectStaticCandidates('global-launcher')
+    const coveredByLauncher = new Set<string>()
+    for (const item of staticItems) {
+      if (item.legacyUsageKeys) {
+        for (const key of item.legacyUsageKeys) coveredByLauncher.add(key)
+      }
+    }
     const quickCommands: LauncherItem[] = []
     const allCommands = pluginRegistry.getAllCommands()
     for (const { contribution, meta } of allCommands) {
+      if (coveredByLauncher.has(contribution.id)) continue
       if (isQuickTextCommand(contribution)) {
         const pluginT = makePluginT(meta.pluginId, locale)
         const title = contribution.titleI18n
@@ -258,23 +267,30 @@ export function GlobalLauncher() {
     )
 
     // Merge domain ranked items alongside legacy — single sorted list (constraint 1)
-    // Dedup: domain items whose systemKey matches a legacy item's id are skipped
-    const legacyIds = new Set(sortedBase.map((item) => item.id))
-    const domainAsLegacy: LauncherItem[] = []
+    // Dedup: legacy items whose command id is already covered by a domain item are skipped
+    const domainCoveredIds = new Set<string>()
     for (const domainItem of rankedLauncherItems) {
-      if (legacyIds.has(domainItem.systemKey)) continue
-      domainAsLegacy.push({
-        kind: 'command' as const,
-        id: domainItem.systemKey,
-        title: resolveDisplayTitle(domainItem.display, locale),
-        subtitle: resolveDisplaySubtitle(domainItem.display, locale) ?? '',
-        icon: domainItem.display.icon,
-        isDev: domainItem.source === 'dev',
-        __domainItem: domainItem,
-      } as LauncherItem & { __domainItem: DomainLauncherItem })
+      domainCoveredIds.add(domainItem.systemKey)
+      if (domainItem.legacyUsageKeys) {
+        for (const key of domainItem.legacyUsageKeys) domainCoveredIds.add(key)
+      }
+      // tool/launcher items: extract the item-id suffix as the backing command id
+      const parsed = domainItem.systemKey.split(':')
+      if (parsed.length >= 4) domainCoveredIds.add(parsed.slice(3).join(':'))
     }
+    const dedupedBase = sortedBase.filter((item) => !domainCoveredIds.has(item.id))
 
-    return [...sortedBase, ...domainAsLegacy]
+    const domainAsLegacy: LauncherItem[] = rankedLauncherItems.map((domainItem) => ({
+      kind: 'command' as const,
+      id: domainItem.systemKey,
+      title: resolveDisplayTitle(domainItem.display, locale),
+      subtitle: resolveDisplaySubtitle(domainItem.display, locale) ?? '',
+      icon: domainItem.display.icon,
+      isDev: domainItem.source === 'dev',
+      __domainItem: domainItem,
+    } as LauncherItem & { __domainItem: DomainLauncherItem }))
+
+    return [...domainAsLegacy, ...dedupedBase]
   }, [items, query, locale, pluginRegistryVersion, recentActionNames, actionUsageCounts, rankedLauncherItems])
 
   const closeLauncher = useCallback(() => {
