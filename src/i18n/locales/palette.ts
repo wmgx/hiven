@@ -40,6 +40,8 @@ export default {
     'quickEntryEmptyInput': 'Please enter content',
     'quickEntryError': 'Execution failed',
     'quickEntryRun': 'run',
+    'submit': 'submit',
+    'hasInput': 'input',
   },
   zh: {
     'search': '搜索操作...',
@@ -82,5 +84,7 @@ export default {
     'quickEntryEmptyInput': '请输入内容',
     'quickEntryError': '执行失败',
     'quickEntryRun': '执行',
+    'submit': '提交',
+    'hasInput': '输入',
   },
 }

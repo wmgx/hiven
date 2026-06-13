@@ -10,13 +10,23 @@ import { showToast } from '../workspace/toast'
 import type { CommandEntry } from '../workspace/pluginRegistry'
 import type { CommandParam, InputSlot, PaneInput, InstantSuggestion, InstantSuggestionProvider } from '../workspace/pluginTypes'
 import type { ResolvedInputs } from '../workspace/pluginTypes'
-import { Search, Check, Pin } from 'lucide-react'
+import { Search, Check, Pin, ChevronLeft } from 'lucide-react'
 import { t, type Locale } from '../i18n'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
 import { readText } from '@tauri-apps/plugin-clipboard-manager'
 import { resolveIcon } from '../utils/resolveIcon'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../utils/imeKeyboard'
 import { pinyinMatch, scoreSearchableFields, searchableFieldsMatch } from '../workspace/searchRanking'
+import { LauncherController } from '../workspace/launcher/controller'
+import type { LauncherControllerState, CollectInputFrame, ResultFrame } from '../workspace/launcher/controller'
+import { createPluginLauncherApi } from '../workspace/launcher/pluginApi'
+import { collectStaticCandidates, collectDynamicItems, filterDynamicForSurface } from '../workspace/launcher/registry'
+import { rankLauncherItems } from '../workspace/launcher/ranking'
+import { resolveDisplayTitle, resolveDisplaySubtitle } from '../workspace/launcher/display'
+import type { LauncherItem as DomainLauncherItem, LauncherResultChoice, LauncherSurfaceId } from '../workspace/launcher/types'
+import { resolvePluginSettingsSource } from '../workspace/launcher/pluginSource'
+import { resolvePluginSettings } from '../workspace/pluginSettingsStore'
+import type { ContributionSource } from '../workspace/pluginTypes'
 
 // 步骤类型
 type Step =
@@ -66,6 +76,14 @@ export function CommandPalette() {
 
   const pluginRegistryVersion = usePluginRegistryVersion()
 
+  // ─── Launcher controller (new path) ───────────────────────────────────────
+  const launcherUsageBySurface = useAppStore((s) => s.launcherUsageBySurface)
+  const recordLauncherSelection = useAppStore((s) => s.recordLauncherSelection)
+  const [controllerState, setControllerState] = useState<LauncherControllerState | null>(null)
+  const controllerRef = useRef<LauncherController | null>(null)
+  const [dynamicItems, setDynamicItems] = useState<DomainLauncherItem[]>([])
+  const dynamicQueryRef = useRef('')
+
   useEffect(() => {
     if (!open) return
     let cancelled = false
@@ -79,6 +97,33 @@ export function CommandPalette() {
       setInputValue('')
       setInputError('')
       setMultiSelected([])
+      setDynamicItems([])
+      dynamicQueryRef.current = ''
+
+      // Initialize or reset the launcher controller
+      if (!controllerRef.current) {
+        const controller = new LauncherController({
+          surfaceId: 'command-palette' as LauncherSurfaceId,
+          api: createPluginLauncherApi(),
+          locale,
+          makeT: (item) => makePluginT(item.pluginId ?? '', locale),
+          getSettings: (item) => {
+            if (!item.pluginId || !item.source) return undefined
+            // item.source is the resolved settings source ('builtin'|'installed'|'dev').
+            const def = pluginRegistry.getPluginDefinition(item.pluginId, item.source)
+            const settingsContribution = def?.settings
+            if (!settingsContribution) return undefined
+            return resolvePluginSettings(item.source, item.pluginId, settingsContribution).value
+          },
+          recordSelection: (surfaceId, item) => {
+            recordLauncherSelection(surfaceId, item.systemKey)
+          },
+          requestClose: () => setOpen(false),
+          onChange: (state) => setControllerState({ ...state }),
+        })
+        controllerRef.current = controller
+      }
+      controllerRef.current.reset()
       setTimeout(() => inputRef.current?.focus(), 50)
     })
     return () => {
@@ -86,7 +131,51 @@ export function CommandPalette() {
     }
   }, [open])
 
-  // 过滤 + 排序：plugin 命令，支持缩写匹配和复合评分
+  // ─── Dynamic items collection (debounced) ─────────────────────────────────
+  useEffect(() => {
+    if (!open) return
+    const q = query.trim()
+    if (!q) {
+      setDynamicItems([])
+      dynamicQueryRef.current = ''
+      return
+    }
+    dynamicQueryRef.current = q
+    const timer = setTimeout(async () => {
+      if (dynamicQueryRef.current !== q) return
+      const getSettingsForPlugin = (pluginId: string, source: ContributionSource) => {
+        const def = pluginRegistry.getPluginDefinition(pluginId, source)
+        const settingsContribution = def?.settings
+        if (!settingsContribution) return undefined
+        const settingsSource = resolvePluginSettingsSource(pluginId, source)
+        return resolvePluginSettings(settingsSource, pluginId, settingsContribution).value
+      }
+      const items = await collectDynamicItems(q, locale, getSettingsForPlugin)
+      if (dynamicQueryRef.current !== q) return
+      setDynamicItems(filterDynamicForSurface(items, 'command-palette'))
+    }, 150)
+    return () => clearTimeout(timer)
+  }, [query, open, locale])
+
+  // ─── Ranked launcher items (new path via registry + ranking) ────────────────
+  const rankedLauncherItems = useMemo<DomainLauncherItem[]>(() => {
+    void pluginRegistryVersion
+    const staticCandidates = collectStaticCandidates('command-palette')
+    const allCandidates = [...staticCandidates, ...dynamicItems]
+    const q = query.trim()
+    return rankLauncherItems(
+      {
+        query: q,
+        locale,
+        surfaceId: 'command-palette',
+        usage: launcherUsageBySurface,
+        now: Date.now(),
+      },
+      allCandidates,
+    )
+  }, [query, locale, pluginRegistryVersion, dynamicItems, launcherUsageBySurface])
+
+  // 过滤 + 排序：legacy plugin 命令，支持缩写匹配和复合评分
   const allFiltered = useMemo<PaletteItem[]>(() => {
     void pluginRegistryVersion
 
@@ -107,7 +196,7 @@ export function CommandPalette() {
       scorePaletteItem(a, q, locale, recentActionNames, actionUsageCounts)
     )
 
-    // 计算 instant suggestions 并置顶
+    // 计算 instant suggestions 并置顶 (constraint 5: preserve until Task 12)
     if (q && q.length <= 500) {
       const instantSuggestions = computeInstantSuggestions(q, locale)
       if (instantSuggestions.length > 0) {
@@ -299,6 +388,10 @@ export function CommandPalette() {
     runPluginCommand(item.entry, item.isDev, customizeParams)
   }
 
+  function selectLauncherItem(item: DomainLauncherItem) {
+    controllerRef.current?.selectItem(item)
+  }
+
   async function executeInstantSuggestion(suggestion: InstantSuggestion) {
     const action = suggestion.action
     try {
@@ -371,7 +464,7 @@ export function CommandPalette() {
       setSelectedIndex(val ? 0 : 1)
     } else if (param.type === 'single-select') {
       const opts = getParamOptionValues(param)
-      const idx = opts.indexOf(currentParams[param.key])
+      const idx = opts.indexOf(currentParams[param.key] as string)
       setSelectedIndex(idx >= 0 ? idx : 0)
     } else if (param.type === 'text' || param.type === 'textarea' || param.type === 'number') {
       setInputValue(String(currentParams[param.key] ?? ''))
@@ -449,13 +542,20 @@ export function CommandPalette() {
 
     // 搜索步骤
     if (step.type === 'search') {
+      const totalItems = rankedLauncherItems.length + allFiltered.length
       if (e.key === 'Escape') { setOpen(false); return }
-      if (e.key === 'ArrowDown') { e.preventDefault(); isKeyboardNavRef.current = true; setSelectedIndex((i) => Math.min(i + 1, allFiltered.length - 1)) }
+      if (e.key === 'ArrowDown') { e.preventDefault(); isKeyboardNavRef.current = true; setSelectedIndex((i) => Math.min(i + 1, totalItems - 1)) }
       if (e.key === 'ArrowUp') { e.preventDefault(); isKeyboardNavRef.current = true; setSelectedIndex((i) => Math.max(i - 1, 0)) }
       if (e.key === 'Enter') {
         e.preventDefault()
-        const item = allFiltered[selectedIndex]
-        if (item) selectItem(item, shouldCustomizeParams(e.metaKey, e.ctrlKey))
+        if (selectedIndex < rankedLauncherItems.length) {
+          const launcherItem = rankedLauncherItems[selectedIndex]
+          if (launcherItem) selectLauncherItem(launcherItem)
+        } else {
+          const legacyIndex = selectedIndex - rankedLauncherItems.length
+          const item = allFiltered[legacyIndex]
+          if (item) selectItem(item, shouldCustomizeParams(e.metaKey, e.ctrlKey))
+        }
       }
       return
     }
@@ -546,9 +646,11 @@ export function CommandPalette() {
             inputRef={inputRef}
             query={query}
             setQuery={(v) => { setQuery(v); setSelectedIndex(0) }}
+            launcherItems={rankedLauncherItems}
             filteredItems={allFiltered}
             selectedIndex={selectedIndex}
             onSelectItem={(item, customizeParams) => selectItem(item, customizeParams)}
+            onSelectLauncherItem={(item) => selectLauncherItem(item)}
             onPinItem={(item) => {
               if (item.kind !== 'plugin') return
               pinPluginCommand({
@@ -563,10 +665,50 @@ export function CommandPalette() {
               })
               setOpen(false)
             }}
+            onPinLauncherItem={(item) => {
+              if (!item.pinnable) return
+              pinPluginCommand({
+                kind: 'plugin-command',
+                actionId: item.display.title,
+                pluginId: item.pluginId,
+                title: item.display.title,
+                titleI18n: item.display.titleI18n,
+                icon: item.display.icon,
+                isDev: item.source === 'dev',
+                live: { pinnable: true },
+              })
+              setOpen(false)
+            }}
             setSelectedIndex={setSelectedIndex}
             isKeyboardNavRef={isKeyboardNavRef}
             shouldCustomizeParams={shouldCustomizeParams}
             shortcutMeta={shortcutMeta}
+            locale={locale}
+          />
+        )}
+
+        {/* Controller collect-input frame */}
+        {controllerState && controllerState.frames.length > 1 && controllerState.frames[controllerState.frames.length - 1].kind === 'collect-input' && (
+          <CollectInputStep
+            frame={controllerState.frames[controllerState.frames.length - 1] as CollectInputFrame}
+            error={controllerState.error}
+            busy={controllerState.busy}
+            onInputChange={(text) => controllerRef.current?.setInputText(text)}
+            onSubmit={() => controllerRef.current?.submitInput()}
+            onBack={() => { controllerRef.current?.back(); }}
+            locale={locale}
+          />
+        )}
+
+        {/* Controller result frame */}
+        {controllerState && controllerState.frames.length > 1 && controllerState.frames[controllerState.frames.length - 1].kind === 'result' && (
+          <ResultStep
+            frame={controllerState.frames[controllerState.frames.length - 1] as ResultFrame}
+            error={controllerState.error}
+            busy={controllerState.busy}
+            onActivateChoice={(choice) => controllerRef.current?.activateChoice(choice)}
+            onActivateSecondary={(choice, actionId) => controllerRef.current?.activateSecondary(choice, actionId)}
+            onBack={() => { controllerRef.current?.back(); }}
             locale={locale}
           />
         )}
@@ -605,21 +747,25 @@ export function CommandPalette() {
 
 // 搜索步骤
 function SearchStep({
-  inputRef, query, setQuery, filteredItems, selectedIndex, onSelectItem, onPinItem, setSelectedIndex, isKeyboardNavRef, shouldCustomizeParams, shortcutMeta, locale,
+  inputRef, query, setQuery, launcherItems, filteredItems, selectedIndex, onSelectItem, onSelectLauncherItem, onPinItem, onPinLauncherItem, setSelectedIndex, isKeyboardNavRef, shouldCustomizeParams, shortcutMeta, locale,
 }: {
   inputRef: React.RefObject<HTMLInputElement | null>
   query: string
   setQuery: (v: string) => void
+  launcherItems: DomainLauncherItem[]
   filteredItems: PaletteItem[]
   selectedIndex: number
   onSelectItem: (item: PaletteItem, customizeParams: boolean) => void
+  onSelectLauncherItem: (item: DomainLauncherItem) => void
   onPinItem: (item: PaletteItem) => void
+  onPinLauncherItem: (item: DomainLauncherItem) => void
   setSelectedIndex: (i: number) => void
   isKeyboardNavRef: React.MutableRefObject<boolean>
   shouldCustomizeParams: (metaKey: boolean, ctrlKey: boolean) => boolean
   shortcutMeta: ShortcutMeta
   locale: import('../i18n').Locale
 }) {
+  const launcherCount = launcherItems.length
   return (
     <>
       <div className="flex items-center px-3.5 gap-2 h-[44px]" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
@@ -634,10 +780,23 @@ function SearchStep({
         />
       </div>
       <div className="command-palette-results py-1" onMouseMove={() => { isKeyboardNavRef.current = false }}>
-        {filteredItems.map((item, i) => (
-          <ActionItem key={i} item={item} selected={selectedIndex === i} onClick={(event) => onSelectItem(item, shouldCustomizeParams(event.metaKey, event.ctrlKey))} onPin={() => onPinItem(item)} onMouseEnter={() => { if (!isKeyboardNavRef.current) setSelectedIndex(i) }} shortcutMeta={shortcutMeta} locale={locale} />
+        {/* New launcher items (from registry + ranking) */}
+        {launcherItems.map((item, i) => (
+          <LauncherActionItem
+            key={`launcher-${item.systemKey}`}
+            item={item}
+            selected={selectedIndex === i}
+            onClick={() => onSelectLauncherItem(item)}
+            onPin={() => onPinLauncherItem(item)}
+            onMouseEnter={() => { if (!isKeyboardNavRef.current) setSelectedIndex(i) }}
+            locale={locale}
+          />
         ))}
-        {filteredItems.length === 0 && (
+        {/* Legacy command items (preserved until Task 12) */}
+        {filteredItems.map((item, i) => (
+          <ActionItem key={`legacy-${i}`} item={item} selected={selectedIndex === (launcherCount + i)} onClick={(event) => onSelectItem(item, shouldCustomizeParams(event.metaKey, event.ctrlKey))} onPin={() => onPinItem(item)} onMouseEnter={() => { if (!isKeyboardNavRef.current) setSelectedIndex(launcherCount + i) }} shortcutMeta={shortcutMeta} locale={locale} />
+        ))}
+        {launcherItems.length === 0 && filteredItems.length === 0 && (
           <div className="px-3.5 py-4 text-center text-xs" style={{ color: 'var(--color-text-tertiary)' }}>{t(locale, 'palette.noResults')}</div>
         )}
       </div>
@@ -828,6 +987,85 @@ function ParamStep({
   )
 }
 
+function LauncherActionItem({ item, selected, onClick, onPin, onMouseEnter, locale }: {
+  item: DomainLauncherItem
+  selected: boolean
+  onClick: () => void
+  onPin: () => void
+  onMouseEnter: () => void
+  locale: import('../i18n').Locale
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (selected && ref.current) {
+      ref.current.scrollIntoView({ block: 'nearest' })
+    }
+  }, [selected])
+
+  const title = resolveDisplayTitle(item.display, locale)
+  const subtitle = resolveDisplaySubtitle(item.display, locale)
+  const canPin = item.pinnable !== false
+
+  return (
+    <div
+      ref={ref}
+      className={`cmd-item ${selected ? 'selected' : ''}`}
+      style={{ background: selected ? 'var(--color-accent-light)' : 'transparent' }}
+      onClick={onClick}
+      onMouseEnter={onMouseEnter}
+    >
+      <div
+        className="w-[26px] h-[26px] rounded-md flex items-center justify-center text-xs font-semibold shrink-0"
+        style={{
+          background: selected ? 'var(--color-accent)' : 'var(--color-background-tertiary)',
+          color: selected ? 'white' : 'var(--color-text-secondary)',
+        }}
+      >
+        {resolveIcon(item.display.icon, 14, item.systemKey)}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          {item.source === 'dev' && (
+            <span className="text-[9px] px-1 py-0.5 rounded font-semibold shrink-0" style={{ background: 'var(--color-accent)', color: '#fff' }}>DEV</span>
+          )}
+          <div className="text-[13px] font-medium truncate" style={{ color: selected ? 'var(--color-accent-hover)' : 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>
+            {title}
+          </div>
+        </div>
+        {subtitle && (
+          <div className="text-[11px]" style={{ color: selected ? 'var(--color-accent)' : 'var(--color-text-tertiary)', marginTop: 1 }}>
+            {subtitle}
+          </div>
+        )}
+      </div>
+      {item.behavior.type === 'collect-input' && (
+        <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0" style={{ background: 'var(--color-background-secondary)', border: '0.5px solid var(--color-border-tertiary)', color: selected ? 'var(--color-accent-hover)' : 'var(--color-text-tertiary)' }}>
+          {t(locale, 'palette.hasInput')}
+        </span>
+      )}
+      {canPin && (
+        <button
+          data-testid="launcher-item-pin-action"
+          className="w-6 h-6 rounded-md border-none bg-transparent cursor-pointer flex items-center justify-center shrink-0"
+          title={t(locale, 'palette.pinAction')}
+          style={{ color: selected ? 'var(--color-accent-hover)' : 'var(--color-text-tertiary)' }}
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            onPin()
+          }}
+        >
+          <Pin size={13} />
+        </button>
+      )}
+      {selected && (
+        <kbd className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--color-background-tertiary)', border: '0.5px solid var(--color-border-tertiary)', color: 'var(--color-text-secondary)' }}>↵</kbd>
+      )}
+    </div>
+  )
+}
+
 function ActionItem({ item, selected, onClick, onPin, onMouseEnter, shortcutMeta, locale }: { item: PaletteItem; selected: boolean; onClick: (event: React.MouseEvent<HTMLDivElement>) => void; onPin: () => void; onMouseEnter: () => void; shortcutMeta: ShortcutMeta; locale: Locale }) {
   const ref = useRef<HTMLDivElement>(null)
 
@@ -973,6 +1211,198 @@ function HintKey({ keys, label }: { keys: string; label: string }) {
       <kbd className="text-[10px] px-1 py-0.5 rounded" style={{ background: 'var(--color-background-tertiary)', border: '0.5px solid var(--color-border-tertiary)' }}>{keys}</kbd>
       {label}
     </span>
+  )
+}
+
+// ── Controller sub-step components ───────────────────────────────────────────
+
+function CollectInputStep({ frame, error, busy, onInputChange, onSubmit, onBack, locale }: {
+  frame: CollectInputFrame
+  error: string | null
+  busy: boolean
+  onInputChange: (text: string) => void
+  onSubmit: () => void
+  onBack: () => void
+  locale: import('../i18n').Locale
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const imeComposingRef = useRef(false)
+
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
+  const title = resolveDisplayTitle(frame.item.display, locale)
+  const placeholder = frame.item.behavior.type === 'collect-input'
+    ? (frame.item.behavior.input?.placeholder ?? '')
+    : ''
+
+  return (
+    <>
+      <div className="flex items-center px-3.5 gap-2 h-[44px]" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
+        <button
+          className="w-6 h-6 rounded-md border-none bg-transparent cursor-pointer flex items-center justify-center shrink-0"
+          style={{ color: 'var(--color-text-secondary)' }}
+          onClick={onBack}
+        >
+          <ChevronLeft size={16} />
+        </button>
+        <span className="text-[13px] font-medium" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>{title}</span>
+      </div>
+      <div className="px-3.5 py-3">
+        <input
+          ref={inputRef}
+          className="w-full border-none outline-none text-sm bg-transparent px-2 py-1.5 rounded-md"
+          style={{
+            color: 'var(--color-text-primary)',
+            fontFamily: 'var(--font-mono)',
+            background: 'var(--color-background-secondary)',
+            border: '0.5px solid var(--color-border-tertiary)',
+          }}
+          placeholder={placeholder}
+          value={frame.inputText}
+          onChange={(e) => onInputChange(e.target.value)}
+          onCompositionStart={() => { imeComposingRef.current = true }}
+          onCompositionEnd={() => { imeComposingRef.current = false }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              e.stopPropagation()
+              if (imeComposingRef.current) return
+              if (!busy) onSubmit()
+            }
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              e.stopPropagation()
+              onBack()
+            }
+          }}
+          disabled={busy}
+        />
+        {error && (
+          <div className="text-[11px] mt-1.5 px-1" style={{ color: 'var(--color-error)' }}>{error}</div>
+        )}
+      </div>
+      <div className="flex gap-3 px-3.5 py-1.5" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
+        <HintKey keys="↵" label={t(locale, 'palette.submit')} />
+        <HintKey keys="esc" label={t(locale, 'palette.back')} />
+      </div>
+    </>
+  )
+}
+
+function ResultStep({ frame, error, busy, onActivateChoice, onActivateSecondary, onBack, locale }: {
+  frame: ResultFrame
+  error: string | null
+  busy: boolean
+  onActivateChoice: (choice: LauncherResultChoice) => void
+  onActivateSecondary: (choice: LauncherResultChoice, actionId: string) => void
+  onBack: () => void
+  locale: import('../i18n').Locale
+}) {
+  const [selectedChoiceIndex, setSelectedChoiceIndex] = useState(0)
+  const choices = frame.output.choices ?? []
+
+  useEffect(() => {
+    setSelectedChoiceIndex(0)
+  }, [frame])
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedChoiceIndex((i) => Math.min(i + 1, choices.length - 1)) }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedChoiceIndex((i) => Math.max(i - 1, 0)) }
+      if (e.key === 'Enter' && !busy) {
+        e.preventDefault()
+        e.stopPropagation()
+        const choice = choices[selectedChoiceIndex]
+        if (choice) onActivateChoice(choice)
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        onBack()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [choices, selectedChoiceIndex, busy, onActivateChoice, onBack])
+
+  return (
+    <>
+      <div className="flex items-center px-3.5 gap-2 h-[44px]" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
+        <button
+          className="w-6 h-6 rounded-md border-none bg-transparent cursor-pointer flex items-center justify-center shrink-0"
+          style={{ color: 'var(--color-text-secondary)' }}
+          onClick={onBack}
+        >
+          <ChevronLeft size={16} />
+        </button>
+        {frame.sourceTitle && (
+          <span className="text-[13px] font-medium" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>{frame.sourceTitle}</span>
+        )}
+      </div>
+      <div className="command-palette-results py-1">
+        {choices.map((choice, i) => {
+          const isSelected = selectedChoiceIndex === i
+          return (
+            <div
+              key={choice.id}
+              className={`cmd-item ${isSelected ? 'selected' : ''}`}
+              style={{ background: isSelected ? 'var(--color-accent-light)' : 'transparent' }}
+              onClick={() => onActivateChoice(choice)}
+              onMouseEnter={() => setSelectedChoiceIndex(i)}
+            >
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-medium truncate" style={{ color: isSelected ? 'var(--color-accent-hover)' : 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>
+                  {choice.title}
+                </div>
+                {choice.subtitle && (
+                  <div className="text-[11px]" style={{ color: isSelected ? 'var(--color-accent)' : 'var(--color-text-tertiary)', marginTop: 1 }}>
+                    {choice.subtitle}
+                  </div>
+                )}
+              </div>
+              {choice.secondaryActions && choice.secondaryActions.length > 0 && (
+                <div className="flex gap-1 shrink-0">
+                  {choice.secondaryActions.map((action) => (
+                    <button
+                      key={action.id}
+                      className="text-[10px] px-1.5 py-0.5 rounded border-none cursor-pointer"
+                      style={{
+                        background: 'var(--color-background-secondary)',
+                        border: '0.5px solid var(--color-border-tertiary)',
+                        color: isSelected ? 'var(--color-accent-hover)' : 'var(--color-text-tertiary)',
+                      }}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        onActivateSecondary(choice, action.id)
+                      }}
+                    >
+                      {action.title}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {isSelected && (
+                <kbd className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--color-background-tertiary)', border: '0.5px solid var(--color-border-tertiary)', color: 'var(--color-text-secondary)' }}>↵</kbd>
+              )}
+            </div>
+          )
+        })}
+        {choices.length === 0 && (
+          <div className="px-3.5 py-4 text-center text-xs" style={{ color: 'var(--color-text-tertiary)' }}>{t(locale, 'palette.noResults')}</div>
+        )}
+      </div>
+      {error && (
+        <div className="px-3.5 py-1.5 text-[11px]" style={{ color: 'var(--color-error)' }}>{error}</div>
+      )}
+      <div className="flex gap-3 px-3.5 py-1.5" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
+        <HintKey keys="↑↓" label={t(locale, 'palette.navigate')} />
+        <HintKey keys="↵" label={t(locale, 'palette.select')} />
+        <HintKey keys="esc" label={t(locale, 'palette.back')} />
+      </div>
+    </>
   )
 }
 
