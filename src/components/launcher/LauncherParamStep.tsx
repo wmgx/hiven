@@ -122,6 +122,11 @@ export function LauncherParamStep({
               event.stopPropagation()
               onBack()
             }
+            if (event.key === 'Backspace' && frame.query === '') {
+              event.preventDefault()
+              event.stopPropagation()
+              onBack()
+            }
           }}
           disabled={busy}
         />

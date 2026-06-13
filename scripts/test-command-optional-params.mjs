@@ -46,6 +46,8 @@ assert(/commitCurrentParam/.test(commandPalette) && /commitCurrentParam/.test(gl
 assert(/frame\.paramIndex/.test(launcherParamStep) && /frame\.query/.test(launcherParamStep) && /frame\.selectedIndex/.test(launcherParamStep), 'LauncherParamStep should consume launcher param frame state')
 assert(!/\bCheck\b/.test(launcherParamStep), 'LauncherParamStep single-select options should not render checkbox-style check marks')
 assert((launcherParamStep.match(/<input/g) ?? []).length === 1, 'LauncherParamStep should keep filtering/input in the single launcher input row')
+assert(/event\.key === 'Escape'[\s\S]*onBack\(\)/.test(launcherParamStep), 'LauncherParamStep should support Escape back navigation')
+assert(/event\.key === 'Backspace' && frame\.query === ''[\s\S]*onBack\(\)/.test(launcherParamStep), 'LauncherParamStep should support Backspace back navigation only when the launcher input is empty')
 assert(!/<form/.test(commandPalette), 'CommandPalette must not render the old parameter form')
 assert(!/<select/.test(commandPalette), 'CommandPalette must not render native select parameters')
 assert(!/multiple/.test(commandPalette), 'CommandPalette must not render native multi-select parameters')
