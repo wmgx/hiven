@@ -2,8 +2,9 @@
 /**
  * test-launcher-registry.mjs
  * Verifies launcher registry candidate collection: surface filtering, tool
- * adaptation, dynamic query guards, and error isolation. Commands are never
- * auto-discovered (the registry only reads launcher.items / tools / dynamicItems).
+ * adaptation, command adaptation, dynamic query guards, and error isolation.
+ * Launcher UI never scans commands directly; safe text commands enter through
+ * the registry-owned command adapter.
  */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -31,6 +32,11 @@ const stripTypeImports = [
 // output.ts (only depends on types)
 const output = loadModule('src/workspace/launcher/output.ts', { stripImports: stripTypeImports })
 
+// pluginCommandRunner.ts (standalone after type imports are stripped)
+const pluginCommandRunner = loadModule('src/workspace/pluginCommandRunner.ts', {
+  stripImports: stripTypeImports,
+})
+
 // toolAdapter.ts depends on ./output + types
 const toolAdapter = loadModule('src/workspace/launcher/toolAdapter.ts', {
   stripImports: [
@@ -42,6 +48,21 @@ const toolAdapter = loadModule('src/workspace/launcher/toolAdapter.ts', {
     replaceActiveTextResult: output.replaceActiveTextResult,
     errorResult: output.errorResult,
     choicesResult: output.choicesResult,
+  },
+})
+
+// commandAdapter.ts depends on pluginCommandRunner + ./output + types
+const commandAdapter = loadModule('src/workspace/launcher/commandAdapter.ts', {
+  stripImports: [
+    ...stripTypeImports,
+    /import\s*\{[^}]*\}\s*from\s*'\.\.\/pluginCommandRunner'\s*;?\s*\n?/,
+    /import\s*\{[^}]*\}\s*from\s*'\.\/output'\s*;?\s*\n?/,
+  ],
+  globals: {
+    defaultPluginCommandParams: pluginCommandRunner.defaultPluginCommandParams,
+    runTextPluginCommand: pluginCommandRunner.runTextPluginCommand,
+    errorResult: output.errorResult,
+    replaceActiveTextResult: output.replaceActiveTextResult,
   },
 })
 
@@ -110,6 +131,73 @@ const noSelApi = { ...api, getSelectionText: () => '' }
 const selRes = await selItem.execute({ settings: {}, locale: 'en', api: noSelApi, t: (k) => k })
 assert.equal(selRes.output.choices[0].title, '', "'selection' with no selection → empty text")
 
+// --- Command adapter: safe text commands only, Enter replaces active text ---
+const textCommand = {
+  id: 'demo.upper',
+  title: 'Uppercase',
+  description: 'Uppercase text',
+  icon: 'CaseUpper',
+  aliases: ['caps'],
+  inputs: [{ key: 'input', label: 'Input', kind: 'text', required: true }],
+  params: [{ key: 'suffix', label: 'Suffix', type: 'text', default: '!' }],
+  run(ctx) {
+    const input = ctx.inputs.input
+    return { output: { kind: 'text', text: `${input.text.toUpperCase()}${ctx.params.suffix}` } }
+  },
+}
+assert.equal(commandAdapter.canAdaptCommandToLauncher(textCommand), true, 'text command with default params is adaptable')
+const commandItem = commandAdapter.adaptCommandToLauncherItem(textCommand, {
+  pluginId: 'demo',
+  source: 'builtin',
+  systemKey: identityWithStub.getPluginCommandAdapterItemKey('demo', 'demo.upper'),
+})
+assert.equal(commandItem.systemKey, 'plugin:demo:command:demo.upper', 'command adapter uses host-generated command key')
+assert.equal(commandItem.legacyUsageKeys?.join(','), 'demo.upper', 'command adapter preserves old command usage key')
+let replaced = null
+let commandCopied = null
+const commandApi = {
+  ...api,
+  getActiveText: () => 'whole',
+  getSelectionText: () => 'abc',
+  replaceActiveText: async (t) => { replaced = t },
+  copyText: async (t) => { commandCopied = t },
+}
+const commandRes = await commandItem.execute({ settings: {}, locale: 'en', api: commandApi, t: (k) => k })
+assert.equal(commandRes.ok, true)
+assert.equal(commandRes.output.choices[0].title, 'ABC!', 'command adapter uses selection before whole text')
+await commandRes.output.choices[0].primaryAction()
+assert.equal(replaced, 'ABC!', 'command adapter primary action replaces active text')
+assert.equal(commandCopied, null, 'command adapter primary action should not copy by default')
+
+assert.equal(
+  commandAdapter.canAdaptCommandToLauncher({
+    ...textCommand,
+    id: 'demo.pane',
+    inputs: [{ key: 'source', label: 'Source', kind: 'pane', required: true }],
+  }),
+  false,
+  'pane commands are skipped',
+)
+assert.equal(
+  commandAdapter.canAdaptCommandToLauncher({
+    ...textCommand,
+    id: 'demo.missing-default',
+    params: [{ key: 'mode', label: 'Mode', type: 'single-select', options: ['a', 'b'], required: true }],
+  }),
+  false,
+  'commands with params lacking defaults are skipped',
+)
+assert.equal(
+  commandAdapter.canAdaptCommandToLauncher({
+    id: 'demo.panel',
+    title: 'Open Panel',
+    live: { pinnable: false },
+    run() { return { effects: [{ type: 'panel.openV2', panelId: 'demo.panel' }] } },
+  }),
+  false,
+  'workspace/panel-style commands that opt out of pinning are skipped',
+)
+
 // --- output helpers contract ---
 assert.equal(output.emptyResult().ok, true)
 assert.equal(output.emptyResult().output, undefined, 'empty result has no output (launcher closes)')
@@ -122,6 +210,11 @@ assert.notEqual(
   identityWithStub.getPluginToolItemKey('p', 'x'),
   identityWithStub.getPluginLauncherItemKey('p', 'x'),
   'tool key and launcher-item key differ even for same id',
+)
+assert.notEqual(
+  identityWithStub.getPluginCommandAdapterItemKey('p', 'x'),
+  identityWithStub.getPluginToolItemKey('p', 'x'),
+  'command adapter key and tool key differ even for same id',
 )
 
 console.log('✓ test-launcher-registry passed')

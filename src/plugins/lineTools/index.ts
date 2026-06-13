@@ -24,7 +24,7 @@ export const lineToolsPlugin = definePlugin({
       aliases: ['flip-lines', 'reverse-lines'],
       inputPolicy: { mode: 'auto' },
       async run(ctx) {
-        return ctx.output.text(reverseLines(ctx.input.text))
+        return ctx.output.replaceActiveText(reverseLines(ctx.input.text))
       },
       surfaces: { launcher: true, panel: true, pinnable: true },
     },

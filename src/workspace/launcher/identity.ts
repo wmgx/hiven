@@ -25,6 +25,11 @@ export function getPluginToolItemKey(pluginId: string, toolId: string): SystemLa
   return `plugin:${pluginId}:tool:${toolId}`
 }
 
+/** `plugin:${pluginId}:command:${commandId}` — command-adapter launcher item key. */
+export function getPluginCommandAdapterItemKey(pluginId: string, commandId: string): SystemLauncherItemKey {
+  return `plugin:${pluginId}:command:${commandId}`
+}
+
 /** `plugin:${pluginId}:dynamic:${itemId}` — dynamic item key (not used for usage/pin). */
 export function getPluginDynamicItemKey(pluginId: string, itemId: string): SystemLauncherItemKey {
   return `plugin:${pluginId}:dynamic:${itemId}`
@@ -45,6 +50,7 @@ export function getHostActionItemKey(actionId: string): SystemLauncherItemKey {
 export type ParsedLauncherItemKey =
   | { kind: 'plugin-launcher'; pluginId: string; itemId: string }
   | { kind: 'plugin-tool'; pluginId: string; itemId: string }
+  | { kind: 'plugin-command-adapter'; pluginId: string; itemId: string }
   | { kind: 'plugin-dynamic'; pluginId: string; itemId: string }
   | { kind: 'host-view'; viewId: string }
   | { kind: 'host-action'; actionId: string }
@@ -63,6 +69,9 @@ export function parseLauncherItemKey(key: SystemLauncherItemKey): ParsedLauncher
     }
     if (tail.startsWith('tool:')) {
       return { kind: 'plugin-tool', pluginId, itemId: tail.slice('tool:'.length) }
+    }
+    if (tail.startsWith('command:')) {
+      return { kind: 'plugin-command-adapter', pluginId, itemId: tail.slice('command:'.length) }
     }
     if (tail.startsWith('dynamic:')) {
       return { kind: 'plugin-dynamic', pluginId, itemId: tail.slice('dynamic:'.length) }
