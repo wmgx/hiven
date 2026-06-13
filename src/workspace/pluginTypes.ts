@@ -216,45 +216,6 @@ export type ToolbarContribution = {
   order?: number
 }
 
-// ─── Instant Suggestion Contribution ─────────────────────────────────────────
-
-/** Context passed to an instant suggestion provider */
-export type InstantSuggestionContext = {
-  query: string
-  locale: Locale
-  /** Plugin-scoped translate function. Resolves keys from the plugin's locales/ dictionaries. */
-  t: (key: string, vars?: Record<string, string | number>) => string
-}
-
-/** Action to perform when user selects an instant suggestion */
-export type InstantSuggestionAction =
-  | { type: 'copy'; text: string }
-  | { type: 'insert'; text: string }
-  | { type: 'effects'; effects: FluxEffect[] }
-
-/** A single instant suggestion result */
-export type InstantSuggestion = {
-  id: string
-  title: string
-  titleI18n?: Partial<Record<Locale, string>>
-  subtitle?: string
-  subtitleI18n?: Partial<Record<Locale, string>>
-  value: string
-  icon?: string
-  actionLabel?: string
-  actionLabelI18n?: Partial<Record<Locale, string>>
-  action: InstantSuggestionAction
-}
-
-/** An instant suggestion provider contributed by a plugin */
-export type InstantSuggestionProvider = {
-  id: string
-  title: string
-  titleI18n?: Partial<Record<Locale, string>>
-  priority?: number
-  suggest(ctx: InstantSuggestionContext): InstantSuggestion | InstantSuggestion[] | null
-}
-
 // ─── Plugin Settings ─────────────────────────────────────────────────────────
 
 export type PluginSettingsBodyProps<TSettings = unknown> = {
@@ -280,33 +241,7 @@ export type PluginSettingsContribution<TSettings = unknown> = {
 }
 
 // ─── Launcher Quick Entry ────────────────────────────────────────────────────
-
-export type LauncherQuickEntryContext = {
-  pluginId: string
-  source: 'builtin' | 'installed' | 'dev'
-  locale: Locale
-  settings: unknown
-}
-
-export type LauncherQuickEntry = {
-  id: string
-  title: string
-  titleI18n?: Partial<Record<Locale, string>>
-  subtitle?: string
-  subtitleI18n?: Partial<Record<Locale, string>>
-  icon?: string
-  aliases: string[]
-  placeholder?: string
-  placeholderI18n?: Partial<Record<Locale, string>>
-  allowEmptyInput?: boolean
-  emptyInputMessage?: string
-  emptyInputMessageI18n?: Partial<Record<Locale, string>>
-  run(input: string, ctx: LauncherQuickEntryContext): PluginCommandResult | Promise<PluginCommandResult>
-}
-
-export type LauncherQuickEntryProvider = {
-  getEntries(ctx: { settings: unknown; locale: Locale }): LauncherQuickEntry[]
-}
+// Removed: migrated to launcher.items (see src/workspace/launcher/types.ts).
 
 // ─── Plugin Definition ────────────────────────────────────────────────────────
 
@@ -327,11 +262,7 @@ export type PluginDefinition<TSettings = unknown> = {
   renderers?: RendererContribution[]
   panels?: PanelContributionV2[]
   toolbar?: ToolbarContribution[]
-  /** @deprecated Migrated to launcher.dynamicItems. Kept until all providers move over. */
-  instantSuggestions?: InstantSuggestionProvider[]
   settings?: PluginSettingsContribution<TSettings>
-  /** @deprecated Migrated to launcher.items. Kept until all entries move over. */
-  launcherQuickEntries?: LauncherQuickEntryProvider
 }
 
 // ─── Plugin Manifest ──────────────────────────────────────────────────────────

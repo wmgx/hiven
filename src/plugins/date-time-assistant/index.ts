@@ -1,4 +1,4 @@
-import { definePlugin, textOutput, type InstantSuggestion, type InstantSuggestionContext, type TextInput, type LauncherDynamicContext, type LauncherItemContribution } from '@hiven/plugin'
+import { definePlugin, textOutput, type TextInput, type LauncherDynamicContext, type LauncherItemContribution } from '@hiven/plugin'
 
 function pad(n: number, width = 2): string {
   return String(n).padStart(width, '0')
@@ -186,47 +186,6 @@ function parseDateTimeQuery(query: string, now: Date): ParsedResult | null {
   return null
 }
 
-function instantSuggestion(query: string, parsed: ParsedResult, subtitle: string, actionLabel: string): InstantSuggestion {
-  return {
-    id: `date-time:${parsed.kind}:${query.trim()}`,
-    title: `${query.trim()} -> ${parsed.display}`,
-    subtitle,
-    value: parsed.value,
-    icon: 'Clock',
-    actionLabel,
-    action: { type: 'copy', text: parsed.value },
-  }
-}
-
-function nowInstantSuggestions(query: string, parsed: ParsedResult, ctx: InstantSuggestionContext): InstantSuggestion[] | null {
-  const separatorIndex = parsed.value.indexOf(' | ')
-  if (separatorIndex < 0) return null
-  const timestampValue = parsed.value.slice(0, separatorIndex)
-  const dateTimeValue = parsed.value.slice(separatorIndex + 3)
-  const trimmed = query.trim()
-  const subtitle = ctx.t('provider.subtitle')
-  return [
-    {
-      id: `date-time:timestamp:${trimmed}`,
-      title: `${trimmed} -> ${timestampValue}`,
-      subtitle,
-      value: timestampValue,
-      icon: 'Clock',
-      actionLabel: ctx.t('action.copyTimestamp'),
-      action: { type: 'copy', text: timestampValue },
-    },
-    {
-      id: `date-time:datetime:${trimmed}`,
-      title: `${trimmed} -> ${dateTimeValue}`,
-      subtitle,
-      value: dateTimeValue,
-      icon: 'Clock',
-      actionLabel: ctx.t('action.copyDateTime'),
-      action: { type: 'copy', text: dateTimeValue },
-    },
-  ]
-}
-
 function parseTimestampForSuggestion(value: string): ParsedResult | null {
   const date = value.length === 10
     ? new Date(parseInt(value, 10) * 1000)
@@ -376,24 +335,6 @@ export const dateTimeAssistantPlugin = definePlugin({
       }]
     },
   },
-  instantSuggestions: [
-    {
-      id: 'date-time.assistant',
-      title: 'provider.title',
-      priority: 95,
-      suggest(ctx: InstantSuggestionContext): InstantSuggestion | InstantSuggestion[] | null {
-        const parsed = parseDateTimeQuery(ctx.query, new Date())
-        if (!parsed) return null
-
-        const nowSuggestions = parseNowExpression(ctx.query, new Date())
-          ? nowInstantSuggestions(ctx.query, parsed, ctx)
-          : null
-        if (nowSuggestions) return nowSuggestions
-
-        return instantSuggestion(ctx.query, parsed, ctx.t('provider.subtitle'), ctx.t(parsed.actionLabelKey))
-      },
-    },
-  ],
 })
 
 export default dateTimeAssistantPlugin

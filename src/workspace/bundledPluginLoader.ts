@@ -81,7 +81,6 @@ export function registerBundledPluginPackages() {
       renderers: definition.renderers,
       panels: definition.panels,
       toolbar: definition.toolbar,
-      instantSuggestions: definition.instantSuggestions,
     })
     pluginRegistry.registerProductionPlugin(
       manifest.pluginId,
@@ -89,7 +88,6 @@ export function registerBundledPluginPackages() {
       localized.renderers,
       localized.panels,
       localized.toolbar,
-      localized.instantSuggestions,
       definition,
     )
   }

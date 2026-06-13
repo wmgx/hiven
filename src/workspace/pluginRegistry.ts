@@ -18,11 +18,9 @@ import type {
   RendererContribution,
   PanelContributionV2,
   ToolbarContribution,
-  InstantSuggestionProvider,
   ContributionMeta,
   ContributionSource,
   PluginDefinition,
-  LauncherQuickEntryProvider,
 } from './pluginTypes'
 
 // ─── Registry Entry ───────────────────────────────────────────────────────────
@@ -44,11 +42,6 @@ type PanelEntry = {
 
 type ToolbarEntry = {
   contribution: ToolbarContribution
-  meta: ContributionMeta
-}
-
-type InstantSuggestionEntry = {
-  contribution: InstantSuggestionProvider
   meta: ContributionMeta
 }
 
@@ -215,33 +208,6 @@ class ScopedToolbarRegistry {
   }
 }
 
-class ScopedInstantSuggestionRegistry {
-  private providers = new Map<string, InstantSuggestionEntry>()
-
-  register(contribution: InstantSuggestionProvider, pluginId: string, source: ContributionSource): void {
-    this.providers.set(contribution.id, {
-      contribution,
-      meta: { pluginId, source },
-    })
-  }
-
-  getAll(): InstantSuggestionEntry[] {
-    return Array.from(this.providers.values())
-  }
-
-  unregisterByPlugin(pluginId: string): void {
-    for (const [id, entry] of this.providers) {
-      if (entry.meta.pluginId === pluginId) {
-        this.providers.delete(id)
-      }
-    }
-  }
-
-  clear(): void {
-    this.providers.clear()
-  }
-}
-
 // ─── Combined Plugin Registry ─────────────────────────────────────────────────
 
 class PluginRegistryImpl {
@@ -255,7 +221,6 @@ class PluginRegistryImpl {
     renderers: new ScopedRendererRegistry(),
     panels: new ScopedPanelRegistry(),
     toolbar: new ScopedToolbarRegistry(),
-    instantSuggestions: new ScopedInstantSuggestionRegistry(),
   }
 
   subscribe(listener: () => void): () => void {
@@ -277,7 +242,6 @@ class PluginRegistryImpl {
     renderers: new ScopedRendererRegistry(),
     panels: new ScopedPanelRegistry(),
     toolbar: new ScopedToolbarRegistry(),
-    instantSuggestions: new ScopedInstantSuggestionRegistry(),
   }
 
   // ─── Production ────────────────────────────────────────────────────────────
@@ -288,7 +252,6 @@ class PluginRegistryImpl {
     renderers: RendererContribution[],
     panels: PanelContributionV2[],
     toolbar: ToolbarContribution[] = [],
-    instantSuggestions: InstantSuggestionProvider[] = [],
     definition?: PluginDefinition<unknown>
   ): void {
     for (const cmd of commands) {
@@ -303,9 +266,6 @@ class PluginRegistryImpl {
     for (const tb of toolbar) {
       this.production.toolbar.register(tb, pluginId, 'production')
     }
-    for (const isp of instantSuggestions) {
-      this.production.instantSuggestions.register(isp, pluginId, 'production')
-    }
     if (definition) {
       this.productionDefinitions.set(pluginId, definition)
     }
@@ -317,7 +277,6 @@ class PluginRegistryImpl {
     this.production.renderers.unregisterByPlugin(pluginId)
     this.production.panels.unregisterByPlugin(pluginId)
     this.production.toolbar.unregisterByPlugin(pluginId)
-    this.production.instantSuggestions.unregisterByPlugin(pluginId)
     this.productionDefinitions.delete(pluginId)
     this.bumpVersion()
   }
@@ -330,7 +289,6 @@ class PluginRegistryImpl {
     renderers: RendererContribution[],
     panels: PanelContributionV2[],
     toolbar: ToolbarContribution[] = [],
-    instantSuggestions: InstantSuggestionProvider[] = [],
     definition?: PluginDefinition<unknown>
   ): void {
     for (const cmd of commands) {
@@ -345,9 +303,6 @@ class PluginRegistryImpl {
     for (const tb of toolbar) {
       this.dev.toolbar.register(tb, pluginId, 'dev')
     }
-    for (const isp of instantSuggestions) {
-      this.dev.instantSuggestions.register(isp, pluginId, 'dev')
-    }
     if (definition) {
       this.devDefinitions.set(pluginId, definition)
     }
@@ -359,7 +314,6 @@ class PluginRegistryImpl {
     this.dev.renderers.unregisterByPlugin(pluginId)
     this.dev.panels.unregisterByPlugin(pluginId)
     this.dev.toolbar.unregisterByPlugin(pluginId)
-    this.dev.instantSuggestions.unregisterByPlugin(pluginId)
     this.devDefinitions.delete(pluginId)
     this.bumpVersion()
   }
@@ -369,7 +323,6 @@ class PluginRegistryImpl {
     this.dev.renderers.clear()
     this.dev.panels.clear()
     this.dev.toolbar.clear()
-    this.dev.instantSuggestions.clear()
     this.devDefinitions.clear()
     this.bumpVersion()
   }
@@ -460,18 +413,6 @@ class PluginRegistryImpl {
     ]
   }
 
-  /** Get all instant suggestion providers from all sources (for CommandPalette) */
-  getAllInstantSuggestionProviders(): Array<InstantSuggestionEntry & { isDev: boolean }> {
-    const result: Array<InstantSuggestionEntry & { isDev: boolean }> = []
-    for (const entry of this.production.instantSuggestions.getAll()) {
-      result.push({ ...entry, isDev: false })
-    }
-    for (const entry of this.dev.instantSuggestions.getAll()) {
-      result.push({ ...entry, isDev: true })
-    }
-    return result
-  }
-
   // ─── Plugin Definitions ─────────────────────────────────────────────────────
 
   /** Get the full plugin definition by pluginId and source */
@@ -480,30 +421,6 @@ class PluginRegistryImpl {
       return this.devDefinitions.get(pluginId)
     }
     return this.productionDefinitions.get(pluginId)
-  }
-
-  /** Get all launcher quick entry providers from all sources */
-  getAllLauncherQuickEntryProviders(): Array<{
-    provider: LauncherQuickEntryProvider
-    pluginId: string
-    source: ContributionSource
-  }> {
-    const result: Array<{
-      provider: LauncherQuickEntryProvider
-      pluginId: string
-      source: ContributionSource
-    }> = []
-    for (const [pluginId, def] of this.productionDefinitions) {
-      if (def.launcherQuickEntries) {
-        result.push({ provider: def.launcherQuickEntries, pluginId, source: 'production' })
-      }
-    }
-    for (const [pluginId, def] of this.devDefinitions) {
-      if (def.launcherQuickEntries) {
-        result.push({ provider: def.launcherQuickEntries, pluginId, source: 'dev' })
-      }
-    }
-    return result
   }
 
   /** Get all plugin definitions with their pluginId and source (both registries). */
@@ -539,4 +456,4 @@ export function usePluginRegistryVersion(): number {
 }
 
 // Re-export types for convenience
-export type { CommandEntry, RendererEntry, PanelEntry, ToolbarEntry, InstantSuggestionEntry }
+export type { CommandEntry, RendererEntry, PanelEntry, ToolbarEntry }

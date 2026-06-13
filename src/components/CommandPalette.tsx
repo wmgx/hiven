@@ -8,7 +8,7 @@ import { resolvePluginInputs, buildPluginCommandContext } from '../workspace/plu
 import { effectsFromPluginCommandResult } from '../workspace/pluginCommandRunner'
 import { showToast } from '../workspace/toast'
 import type { CommandEntry } from '../workspace/pluginRegistry'
-import type { CommandParam, InputSlot, PaneInput, InstantSuggestion, InstantSuggestionProvider } from '../workspace/pluginTypes'
+import type { CommandParam, InputSlot, PaneInput } from '../workspace/pluginTypes'
 import type { ResolvedInputs } from '../workspace/pluginTypes'
 import { Search, Check, Pin, ChevronLeft } from 'lucide-react'
 import { t, type Locale } from '../i18n'
@@ -34,7 +34,6 @@ type Step =
   | { type: 'param'; paramIndex: number }
 
 type PaletteItem =
-  | { kind: 'instant'; provider: InstantSuggestionProvider; suggestion: InstantSuggestion; isDev: boolean }
   | { kind: 'plugin'; entry: CommandEntry; isDev: boolean }
 
 type SelectedPluginCommand = {
@@ -195,14 +194,6 @@ export function CommandPalette() {
       scorePaletteItem(b, q, locale, recentActionNames, actionUsageCounts) -
       scorePaletteItem(a, q, locale, recentActionNames, actionUsageCounts)
     )
-
-    // 计算 instant suggestions 并置顶 (constraint 5: preserve until Task 12)
-    if (q && q.length <= 500) {
-      const instantSuggestions = computeInstantSuggestions(q, locale)
-      if (instantSuggestions.length > 0) {
-        return [...instantSuggestions, ...sorted]
-      }
-    }
 
     return sorted
   }, [query, recentActionNames, actionUsageCounts, locale, pluginRegistryVersion])
@@ -381,10 +372,6 @@ export function CommandPalette() {
   }
 
   function selectItem(item: PaletteItem, customizeParams = false) {
-    if (item.kind === 'instant') {
-      executeInstantSuggestion(item.suggestion)
-      return
-    }
     runPluginCommand(item.entry, item.isDev, customizeParams)
   }
 
@@ -392,24 +379,6 @@ export function CommandPalette() {
     controllerRef.current?.selectItem(item)
   }
 
-  async function executeInstantSuggestion(suggestion: InstantSuggestion) {
-    const action = suggestion.action
-    try {
-      if (action.type === 'copy') {
-        const { writeText } = await import('@tauri-apps/plugin-clipboard-manager')
-        await writeText(action.text)
-        showToast(t(locale, 'palette.copied'), 'success')
-      } else if (action.type === 'insert') {
-        applyEffects([{ type: 'text.replace', target: 'active-input', text: action.text } as never])
-      } else if (action.type === 'effects') {
-        applyEffects(action.effects)
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      showToast(msg, 'error')
-    }
-    setOpen(false)
-  }
 
   function shouldCustomizeParams(metaKey: boolean, ctrlKey: boolean) {
     return shortcutMeta.modifier === 'meta' ? metaKey : ctrlKey
@@ -1075,54 +1044,6 @@ function ActionItem({ item, selected, onClick, onPin, onMouseEnter, shortcutMeta
     }
   }, [selected])
 
-  if (item.kind === 'instant') {
-    const { suggestion, isDev } = item
-    const title = localized(suggestion.title, suggestion.titleI18n, locale)
-    const subtitle = localized(suggestion.subtitle ?? '', suggestion.subtitleI18n, locale)
-    const actionLabel = localized(suggestion.actionLabel ?? '', suggestion.actionLabelI18n, locale)
-
-    return (
-      <div
-        ref={ref}
-        className={`cmd-item ${selected ? 'selected' : ''}`}
-        style={{ background: selected ? 'var(--color-accent-light)' : 'transparent' }}
-        onClick={onClick}
-        onMouseEnter={onMouseEnter}
-      >
-        <div
-          className="w-[26px] h-[26px] rounded-md flex items-center justify-center text-xs font-semibold shrink-0"
-          style={{
-            background: selected ? 'var(--color-accent)' : 'var(--color-background-tertiary)',
-            color: selected ? 'white' : 'var(--color-text-secondary)',
-          }}
-        >
-          {resolveIcon(suggestion.icon, 14, suggestion.id)}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            {isDev && (
-              <span className="text-[9px] px-1 py-0.5 rounded font-semibold shrink-0" style={{ background: 'var(--color-accent)', color: '#fff' }}>DEV</span>
-            )}
-            <div className="text-[13px] font-medium truncate" style={{ color: selected ? 'var(--color-accent-hover)' : 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>
-              {title}
-            </div>
-          </div>
-          <div className="text-[11px]" style={{ color: selected ? 'var(--color-accent)' : 'var(--color-text-tertiary)', marginTop: 1 }}>
-            {subtitle}
-          </div>
-        </div>
-        {actionLabel && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0" style={{ background: 'var(--color-background-secondary)', border: '0.5px solid var(--color-border-tertiary)', color: selected ? 'var(--color-accent-hover)' : 'var(--color-text-tertiary)' }}>
-            {actionLabel}
-          </span>
-        )}
-        {selected && (
-          <kbd className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--color-background-tertiary)', border: '0.5px solid var(--color-border-tertiary)', color: 'var(--color-text-secondary)' }}>↵</kbd>
-        )}
-      </div>
-    )
-  }
-
   const isDev = item.isDev
   const name = item.entry.contribution.id
   const title = getPluginDisplayTitle(item.entry, item.isDev, locale)
@@ -1408,40 +1329,6 @@ function ResultStep({ frame, error, busy, onActivateChoice, onActivateSecondary,
 
 // ── 推荐算法辅助函数 ───────────────────────────────────────────────────────────
 
-function normalizeInstantSuggestions(suggestion: InstantSuggestion | InstantSuggestion[] | null): InstantSuggestion[] {
-  if (!suggestion) return []
-  return Array.isArray(suggestion) ? suggestion : [suggestion]
-}
-
-/** Compute instant suggestions for the given query */
-function computeInstantSuggestions(query: string, locale: Locale): PaletteItem[] {
-  const providers = pluginRegistry.getAllInstantSuggestionProviders()
-  if (providers.length === 0) return []
-
-  const sorted = [...providers].sort(
-    (a, b) => (b.contribution.priority ?? 0) - (a.contribution.priority ?? 0)
-  )
-
-  const items: PaletteItem[] = []
-  for (const { contribution, meta, isDev } of sorted) {
-    try {
-      const pluginT = makePluginT(meta.pluginId, locale)
-      const suggestions = normalizeInstantSuggestions(contribution.suggest({ query, locale, t: pluginT }))
-      for (const suggestion of suggestions) {
-        items.push({
-          kind: 'instant',
-          provider: contribution,
-          suggestion,
-          isDev,
-        })
-      }
-    } catch {
-      // Single provider error should not break the palette
-    }
-  }
-
-  return items
-}
 
 function paramOptionMatchesQuery(option: { label: string; value: string }, query: string): boolean {
   const label = option.label.toLowerCase()
@@ -1454,7 +1341,6 @@ function isSearchableOptionValue(value: string): boolean {
 }
 
 function isCommandPinnable(item: PaletteItem): boolean {
-  if (item.kind !== 'plugin') return false
   return item.entry.contribution.live?.pinnable !== false
 }
 

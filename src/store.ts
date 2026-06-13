@@ -24,6 +24,7 @@ import type {
 import {
   emptyUsageBySurface,
   recordSelection as recordSelectionPure,
+  migrateLegacyUsage,
 } from './workspace/launcher/usage'
 
 migrateLocalStorageKey('fluxtext-settings', 'hiven-settings')
@@ -566,9 +567,27 @@ export const useAppStore = create<AppState>()(persist((set) => ({
       }
     }
     // Restore persisted launcher usage; ensure both surfaces exist.
-    merged.launcherUsageBySurface = {
-      ...emptyUsageBySurface(),
-      ...(persistedState.launcherUsageBySurface ?? {}),
+    const persistedLauncherUsage = persistedState.launcherUsageBySurface
+    const hasPersistedLauncherUsage =
+      persistedLauncherUsage != null &&
+      (Object.keys(persistedLauncherUsage['command-palette'] ?? {}).length > 0 ||
+        Object.keys(persistedLauncherUsage['global-launcher'] ?? {}).length > 0)
+    if (hasPersistedLauncherUsage) {
+      merged.launcherUsageBySurface = {
+        ...emptyUsageBySurface(),
+        ...persistedLauncherUsage,
+      }
+    } else if (merged.actionUsageBySource) {
+      // First run after migration: seed launcher usage from legacy action usage.
+      // Identity map command ids to system keys; launcher items expose the same
+      // command id via legacyUsageKeys, so ranking still finds this history.
+      merged.launcherUsageBySurface = migrateLegacyUsage(
+        merged.actionUsageBySource,
+        (legacyKey) => legacyKey,
+        Date.now(),
+      )
+    } else {
+      merged.launcherUsageBySurface = emptyUsageBySurface()
     }
     // Drop pinned actions persisted from the removed legacy action system;
     // only plugin-command pins remain valid.

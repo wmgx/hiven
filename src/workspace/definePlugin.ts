@@ -22,7 +22,7 @@ import type { PluginDefinition } from './pluginTypes'
  * and serves as a marker for plugin entry points.
  *
  * The TSettings generic connects settings.defaultValue, settings.component props,
- * and launcherQuickEntries.getEntries() ctx.settings to the same type.
+ * and launcher item execute ctx.settings to the same type.
  *
  * Example:
  * ```ts
@@ -53,15 +53,16 @@ export function definePlugin<TSettings = unknown>(
   definition: PluginDefinition<TSettings>
 ): PluginDefinition<TSettings> {
   const hasContributions =
+    Array.isArray(definition.tools) ||
+    definition.launcher != null ||
+    definition.panel != null ||
     Array.isArray(definition.commands) ||
     Array.isArray(definition.renderers) ||
     Array.isArray(definition.panels) ||
     Array.isArray(definition.toolbar) ||
-    Array.isArray(definition.instantSuggestions) ||
-    definition.settings != null ||
-    definition.launcherQuickEntries != null
+    definition.settings != null
   if (!hasContributions) {
-    throw new Error('[definePlugin] Plugin must declare at least one of commands/renderers/panels/toolbar/instantSuggestions/settings/launcherQuickEntries')
+    throw new Error('[definePlugin] Plugin must declare at least one of tools/launcher/panel/commands/renderers/panels/toolbar/settings')
   }
 
   return definition

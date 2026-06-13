@@ -22,13 +22,7 @@ export type { JsonArrayCompareMode } from './kits/diff/jsonSemanticDiff'
 export type {
   CommandContribution,
   CommandParam,
-  InstantSuggestion,
-  InstantSuggestionContext,
-  InstantSuggestionProvider,
   InputSlot,
-  LauncherQuickEntry,
-  LauncherQuickEntryContext,
-  LauncherQuickEntryProvider,
   PaneInput,
   PanelContributionV2,
   PanelHostApi,

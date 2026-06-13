@@ -1,4 +1,4 @@
-import { localized, useAppStore, type ActionUsageSource } from '../store'
+import { localized, useAppStore } from '../store'
 import { applyEffects } from './effectRunner'
 import { pluginRegistry, type CommandEntry } from './pluginRegistry'
 import { defaultPluginCommandParams, effectsFromPluginCommandResult } from './pluginCommandRunner'
@@ -10,7 +10,6 @@ export async function runPluginCommandById(
     isDev?: boolean
     inputs?: ResolvedInputs
     params?: Record<string, unknown>
-    usageSource?: ActionUsageSource | false
   } = {},
 ) {
   const entry = pluginRegistry.resolveCommand(commandId, options.isDev ? 'dev' : 'production')
@@ -24,10 +23,7 @@ export async function runPluginCommandById(
     })
     return false
   }
-  // Only record usage if caller explicitly passes a source
-  if (options.usageSource && options.usageSource !== false) {
-    useAppStore.getState().pushRecentAction(commandId, options.usageSource)
-  }
+  // Usage is a launcher-selection concern; the command executor never records it.
   return runPluginCommandEntry(entry, options)
 }
 

@@ -6,10 +6,8 @@ import { t, type Locale } from '../i18n'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
 import { resolveIcon } from '../utils/resolveIcon'
 import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
-import { applyEffects } from '../workspace/effectRunner'
 import { showToast } from '../workspace/toast'
 import { runPluginCommandById } from '../workspace/pluginCommandExecutor'
-import type { InstantSuggestion, LauncherQuickEntry } from '../workspace/pluginTypes'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../utils/imeKeyboard'
 import { isQuickTextCommand, runQuickTextCommand } from '../workspace/quickTextCommand'
 import { usePluginSettingsStore, resolvePluginSettings } from '../workspace/pluginSettingsStore'
@@ -26,8 +24,6 @@ import type { ContributionSource } from '../workspace/pluginTypes'
 
 type LauncherItem =
   | { kind: 'quick-command'; id: string; title: string; subtitle: string; icon?: string; commandId: string; isDev: boolean }
-  | { kind: 'quick-entry'; id: string; title: string; subtitle: string; icon?: string; entry: LauncherQuickEntry; pluginId: string; source: 'builtin' | 'installed' | 'dev'; aliases: string[] }
-  | { kind: 'instant'; id: string; title: string; subtitle: string; icon?: string; suggestion: InstantSuggestion }
   | { kind: 'command'; id: string; title: string; subtitle: string; icon?: string; isDev?: boolean }
   | { kind: 'pinned'; id: string; title: string; subtitle: string; icon?: string; actionId: string }
   | { kind: 'view'; id: ViewId; title: string; subtitle: string; icon: ReactNode }
@@ -81,14 +77,6 @@ export function GlobalLauncher() {
     running: boolean
     error?: string
   } | null>(null)
-  const [activeQuickEntry, setActiveQuickEntry] = useState<{
-    entry: LauncherQuickEntry
-    pluginId: string
-    source: 'builtin' | 'installed' | 'dev'
-    inputText: string
-    error?: string
-    running: boolean
-  } | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const isImeComposingRef = useRef(false)
@@ -110,7 +98,6 @@ export function GlobalLauncher() {
       setQuery('')
       setSelectedIndex(0)
       setQuickTextSession(null)
-      setActiveQuickEntry(null)
       inputRef.current?.focus()
     })
   }, [open])
@@ -231,40 +218,7 @@ export function GlobalLauncher() {
       }
     }
 
-    // Add launcher quick entries from plugins
-    const quickEntryLabel = t(locale, 'palette.quickEntry')
-    const quickEntryItems: LauncherItem[] = []
-    const providers = pluginRegistry.getAllLauncherQuickEntryProviders()
-    for (const { provider, pluginId, source } of providers) {
-      try {
-        const def = pluginRegistry.getPluginDefinition(pluginId, source)
-        const settingsContribution = def?.settings
-        const resolvedSettings = settingsContribution
-          ? resolvePluginSettings(source === 'dev' ? 'dev' : 'builtin', pluginId, settingsContribution).value
-          : undefined
-        const entries = provider.getEntries({ settings: resolvedSettings, locale })
-        const entrySource = source === 'dev' ? 'dev' : 'builtin' as const
-        for (const entry of entries) {
-          const entryTitle = entry.titleI18n?.[locale] ?? entry.title
-          const entrySubtitle = entry.subtitleI18n?.[locale] ?? entry.subtitle ?? quickEntryLabel
-          quickEntryItems.push({
-            kind: 'quick-entry',
-            id: `qe:${pluginId}:${entry.id}`,
-            title: entryTitle,
-            subtitle: entrySubtitle,
-            icon: entry.icon,
-            entry,
-            pluginId,
-            source: entrySource,
-            aliases: entry.aliases,
-          })
-        }
-      } catch {
-        // Provider error should not break the launcher
-      }
-    }
-
-    if ('pinned-only' === mode) return [...pinned, ...launcherCommands, ...quickCommands, ...quickEntryItems]
+    if ('pinned-only' === mode) return [...pinned, ...launcherCommands, ...quickCommands]
 
     const recentLabel = t(locale, 'palette.globalRecent')
     const viewsLabel = t(locale, 'palette.globalViews')
@@ -291,7 +245,7 @@ export function GlobalLauncher() {
       subtitle: viewsLabel,
       icon: item.icon,
     }))
-    return [...pinned, ...launcherCommands, ...quickCommands, ...quickEntryItems, ...recent, ...views]
+    return [...pinned, ...launcherCommands, ...quickCommands, ...recent, ...views]
   }, [locale, mode, pinnedActions, recentActionNames, pluginRegistryVersion, pluginSettingsData])
 
   const filtered = useMemo(() => {
@@ -303,40 +257,9 @@ export function GlobalLauncher() {
       scoreLauncherItem(a, q, locale, recentActionNames, actionUsageCounts)
     )
 
-    // Compute instant suggestions when there's a query (legacy, preserved until Task 12)
-    let legacyList: LauncherItem[]
-    if (q && q.length <= 500) {
-      const providers = pluginRegistry.getAllInstantSuggestionProviders()
-      const sorted = [...providers].sort(
-        (a, b) => (b.contribution.priority ?? 0) - (a.contribution.priority ?? 0)
-      )
-      const instantItems: LauncherItem[] = []
-      for (const { contribution, meta } of sorted) {
-        try {
-          const pluginT = makePluginT(meta.pluginId, locale)
-          const suggestions = normalizeInstantSuggestions(contribution.suggest({ query: q, locale, t: pluginT }))
-          for (const suggestion of suggestions) {
-            instantItems.push({
-              kind: 'instant',
-              id: suggestion.id,
-              title: localized(suggestion.title, suggestion.titleI18n, locale),
-              subtitle: localized(suggestion.subtitle ?? '', suggestion.subtitleI18n, locale),
-              icon: suggestion.icon,
-              suggestion,
-            })
-          }
-        } catch {
-          // Provider error should not break the launcher
-        }
-      }
-      legacyList = instantItems.length > 0 ? [...instantItems, ...sortedBase] : sortedBase
-    } else {
-      legacyList = sortedBase
-    }
-
     // Merge domain ranked items alongside legacy — single sorted list (constraint 1)
     // Dedup: domain items whose systemKey matches a legacy item's id are skipped
-    const legacyIds = new Set(legacyList.map((item) => item.id))
+    const legacyIds = new Set(sortedBase.map((item) => item.id))
     const domainAsLegacy: LauncherItem[] = []
     for (const domainItem of rankedLauncherItems) {
       if (legacyIds.has(domainItem.systemKey)) continue
@@ -351,7 +274,7 @@ export function GlobalLauncher() {
       } as LauncherItem & { __domainItem: DomainLauncherItem })
     }
 
-    return [...legacyList, ...domainAsLegacy]
+    return [...sortedBase, ...domainAsLegacy]
   }, [items, query, locale, pluginRegistryVersion, recentActionNames, actionUsageCounts, rankedLauncherItems])
 
   const closeLauncher = useCallback(() => {
@@ -481,8 +404,6 @@ export function GlobalLauncher() {
     filtered.length,
     mode,
     open,
-    activeQuickEntry?.inputText.length,
-    activeQuickEntry?.error,
     quickTextSession?.inputText.length,
     quickTextSession?.outputText.length,
     quickTextSession?.running,
@@ -531,10 +452,6 @@ export function GlobalLauncher() {
       return
     }
 
-    if (item.kind === 'instant') {
-      void executeInstantSuggestion(item.suggestion, locale, closeLauncher)
-      return
-    }
     if (item.kind === 'quick-command') {
       setQuickTextSession({
         commandId: item.commandId,
@@ -544,21 +461,6 @@ export function GlobalLauncher() {
         inputText: '',
         outputText: '',
         outputKind: 'text',
-        running: false,
-      })
-      setQuery('')
-      setSelectedIndex(0)
-      requestAnimationFrame(() => inputRef.current?.focus())
-      return
-    }
-    if (item.kind === 'quick-entry') {
-      pushRecentAction(`launcher-entry:${item.pluginId}:${item.entry.id}`, 'global-launcher')
-      setActiveQuickEntry({
-        entry: item.entry,
-        pluginId: item.pluginId,
-        source: item.source,
-        inputText: '',
-        error: undefined,
         running: false,
       })
       setQuery('')
@@ -726,29 +628,6 @@ export function GlobalLauncher() {
         }}
         onKeyDown={(event) => {
           if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
-          if (activeQuickEntry && event.key === 'Escape') {
-            event.preventDefault()
-            event.stopPropagation()
-            setActiveQuickEntry(null)
-            setQuery('')
-            setSelectedIndex(0)
-            requestAnimationFrame(() => inputRef.current?.focus())
-            return
-          }
-          if (activeQuickEntry && event.key === 'Backspace' && !activeQuickEntry.inputText) {
-            event.preventDefault()
-            event.stopPropagation()
-            setActiveQuickEntry(null)
-            setQuery('')
-            setSelectedIndex(0)
-            requestAnimationFrame(() => inputRef.current?.focus())
-            return
-          }
-          if (activeQuickEntry && event.key === 'Enter') {
-            event.preventDefault()
-            void executeQuickEntry(activeQuickEntry, setActiveQuickEntry, closeLauncher)
-            return
-          }
           if (quickTextSession && event.key === 'Escape') {
             event.preventDefault()
             event.stopPropagation()
@@ -820,34 +699,7 @@ export function GlobalLauncher() {
         onCompositionStart={handleCompositionStart}
         onCompositionEnd={handleCompositionEnd}
       >
-        {activeQuickEntry ? (
-          <>
-            <div className="global-launcher-header flex items-center gap-2 px-3.5 py-2.5" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
-              {resolveIcon(activeQuickEntry.entry.icon, 16, activeQuickEntry.entry.title)}
-              <input
-                ref={inputRef}
-                value={activeQuickEntry.inputText}
-                onChange={(event) => setActiveQuickEntry((s) => s ? { ...s, inputText: event.target.value, error: undefined } : s)}
-                placeholder={localized(
-                  activeQuickEntry.entry.placeholder ?? '',
-                  activeQuickEntry.entry.placeholderI18n,
-                  locale
-                ) || t(locale, 'palette.quickEntryPlaceholder', { placeholder: activeQuickEntry.entry.title })}
-                className="flex-1 outline-none border-none bg-transparent text-[14px]"
-                style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
-              />
-            </div>
-            {activeQuickEntry.error && (
-              <div className="px-3.5 py-2 text-[12px]" style={{ color: 'var(--color-error)' }}>
-                {activeQuickEntry.error}
-              </div>
-            )}
-            <div className="global-launcher-footer flex shrink-0 gap-3 px-3.5 py-1.5" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
-              <HintKey keys="↵" label={t(locale, 'palette.quickEntryRun')} />
-              <HintKey keys="esc" label={t(locale, 'palette.back')} />
-            </div>
-          </>
-        ) : quickTextSession ? (
+        {quickTextSession ? (
           <>
             <div className="global-launcher-header flex items-center gap-2 px-3.5 py-2.5" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
               {resolveIcon(quickTextSession.icon, 16, quickTextSession.title)}
@@ -1004,80 +856,10 @@ function readCssPixelValue(value: string, fallback: number) {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
-async function executeInstantSuggestion(suggestion: InstantSuggestion, locale: Locale, onDone: () => void) {
-  const action = suggestion.action
-  try {
-    if (action.type === 'copy') {
-      const { writeText } = await import('@tauri-apps/plugin-clipboard-manager')
-      await writeText(action.text)
-      showToast(t(locale, 'palette.copied'), 'success')
-    } else if (action.type === 'insert') {
-      applyEffects([{ type: 'text.replace', target: 'active-input', text: action.text } as never])
-    } else if (action.type === 'effects') {
-      applyEffects(action.effects)
-    }
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    showToast(msg, 'error')
-  }
-  onDone()
-}
 
-async function executeQuickEntry(
-  session: {
-    entry: LauncherQuickEntry
-    pluginId: string
-    source: 'builtin' | 'installed' | 'dev'
-    inputText: string
-  },
-  setSession: (fn: (s: typeof session & { error?: string; running: boolean } | null) => typeof session & { error?: string; running: boolean } | null) => void,
-  onDone: () => void
-) {
-  const { entry, pluginId, source, inputText } = session
-
-  // Check empty input
-  if (!inputText.trim() && entry.allowEmptyInput === false) {
-    const msg = entry.emptyInputMessageI18n
-      ? Object.values(entry.emptyInputMessageI18n)[0] ?? entry.emptyInputMessage ?? ''
-      : entry.emptyInputMessage ?? ''
-    setSession((s) => s ? { ...s, error: msg || 'Please enter content' } : s)
-    return
-  }
-
-  setSession((s) => s ? { ...s, running: true, error: undefined } : s)
-
-  try {
-    const result = await entry.run(inputText, {
-      pluginId,
-      source,
-      locale: 'zh',
-      settings: undefined,
-    })
-
-    // Apply effects
-    if (result.effects && result.effects.length > 0) {
-      const effectResult = applyEffects(result.effects)
-      if (effectResult.errors.length > 0) {
-        setSession((s) => s ? { ...s, running: false, error: effectResult.errors[0] } : s)
-        return
-      }
-    }
-
-    // Success — close launcher
-    onDone()
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    setSession((s) => s ? { ...s, running: false, error: msg } : s)
-  }
-}
 
 function isStandaloneLauncherWindow() {
   return new URLSearchParams(window.location.search).get('window') === 'launcher'
-}
-
-function normalizeInstantSuggestions(suggestion: InstantSuggestion | InstantSuggestion[] | null): InstantSuggestion[] {
-  if (!suggestion) return []
-  return Array.isArray(suggestion) ? suggestion : [suggestion]
 }
 
 function LauncherList({ items, selected, onSelect }: { items: LauncherItem[]; selected?: LauncherItem; onSelect: (item: LauncherItem) => void }) {
@@ -1106,11 +888,7 @@ function LauncherList({ items, selected, onSelect }: { items: LauncherItem[]; se
             >
               {item.kind === 'pinned'
                 ? resolveIcon(item.icon, 14, item.title) || <Pin size={14} />
-                : item.kind === 'instant'
-                  ? resolveIcon(item.icon, 14, item.title)
-                  : item.kind === 'command' || item.kind === 'quick-command' || item.kind === 'quick-entry'
-                    ? resolveIcon(item.icon, 14, item.title)
-                  : item.kind === 'view' ? item.icon : resolveIcon(item.icon, 14, item.title)}
+                : item.kind === 'view' ? item.icon : resolveIcon(item.icon, 14, item.title)}
             </span>
             <span className="min-w-0 flex-1">
               <span className="block text-[13px] font-medium truncate">{item.title}</span>
@@ -1143,7 +921,6 @@ function scoreLauncherItem(
   recentNames: string[],
   usageCounts: Record<string, number>,
 ): number {
-  if (item.kind === 'instant') return Number.MAX_SAFE_INTEGER
   return scoreSearchableFields(launcherItemSearchFields(item), q, locale, recentNames, usageCounts)
 }
 
@@ -1152,7 +929,6 @@ function launcherItemSearchFields(item: LauncherItem): SearchableFields {
     id: launcherItemSearchId(item),
     title: item.title,
     description: item.subtitle,
-    aliases: item.kind === 'quick-entry' ? item.aliases : undefined,
     usageKey: launcherItemUsageKey(item),
   }
 }
@@ -1167,6 +943,5 @@ function launcherItemSearchId(item: LauncherItem): string {
 function launcherItemUsageKey(item: LauncherItem): string {
   if (item.kind === 'pinned') return item.actionId
   if (item.kind === 'quick-command') return item.commandId
-  if (item.kind === 'quick-entry') return `launcher-entry:${item.pluginId}:${item.entry.id}`
   return item.id
 }

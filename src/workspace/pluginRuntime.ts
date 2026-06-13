@@ -291,7 +291,16 @@ async function loadDevPluginEntry(folderPath: string, entryFile: string): Promis
 function isPluginDefinition(value: unknown): value is PluginDefinition {
   if (!value || typeof value !== 'object') return false
   const v = value as Record<string, unknown>
-  return Array.isArray(v.commands) || Array.isArray(v.renderers) || Array.isArray(v.panels) || Array.isArray(v.toolbar) || Array.isArray(v.instantSuggestions)
+  return (
+    Array.isArray(v.commands) ||
+    Array.isArray(v.renderers) ||
+    Array.isArray(v.panels) ||
+    Array.isArray(v.toolbar) ||
+    Array.isArray(v.tools) ||
+    (v.launcher != null && typeof v.launcher === 'object') ||
+    (v.panel != null && typeof v.panel === 'object') ||
+    v.settings != null
+  )
 }
 
 /**
@@ -426,7 +435,6 @@ export async function enablePlugin(pluginId: string): Promise<void> {
       localized.renderers,
       localized.panels,
       localized.toolbar,
-      localized.instantSuggestions,
       definition
     )
 
@@ -499,7 +507,6 @@ export async function reloadPlugin(pluginId: string): Promise<void> {
       localized.renderers,
       localized.panels,
       localized.toolbar,
-      localized.instantSuggestions,
       definition
     )
 
@@ -592,7 +599,6 @@ export async function sideloadDevPlugin(folderPath: string): Promise<DevPlugin> 
       localized.renderers,
       localized.panels,
       localized.toolbar,
-      localized.instantSuggestions,
       definition
     )
 
@@ -639,7 +645,6 @@ export async function reloadDevPlugin(pluginId: string): Promise<void> {
       localized.renderers,
       localized.panels,
       localized.toolbar,
-      localized.instantSuggestions,
       definition
     )
 
