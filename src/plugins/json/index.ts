@@ -13,7 +13,6 @@ export const jsonPlugin = definePlugin({
       icon: 'Braces',
       aliases: ['json-format', 'pretty-json'],
       live: { live: { enabled: true, trigger: 'on-input', sideEffects: 'none', debounceMs: 250 } },
-      optionalParams: true,
       params: [
         {
           key: 'mode',

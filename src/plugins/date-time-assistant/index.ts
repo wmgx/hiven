@@ -212,7 +212,6 @@ export const dateTimeAssistantPlugin = definePlugin({
       icon: 'Clock',
       aliases: ['unix-time', 'epoch', 'date-convert'],
       live: { live: { enabled: true, trigger: 'on-input', sideEffects: 'none', debounceMs: 250 } },
-      optionalParams: true,
       params: [
         {
           key: 'unit',

@@ -22,11 +22,16 @@ const commandPalette = read('src/components/CommandPalette.tsx')
 const launcherParamStep = read('src/components/launcher/LauncherParamStep.tsx')
 const launcherParamShortcuts = read('src/components/launcher/launcherParamShortcuts.ts')
 const globalLauncher = read('src/components/GlobalLauncher.tsx')
+const commandAdapter = read('src/workspace/launcher/commandAdapter.ts')
 const store = read('src/store.ts')
 const pluginTypes = read('src/workspace/pluginTypes.ts')
+const pluginScaffold = read('src/workspace/pluginScaffold.ts')
 const i18n = readI18n()
 
-assert(/optionalParams\?:\s*boolean/.test(pluginTypes), 'CommandContribution should expose optionalParams')
+assert(/@deprecated Launcher parameter customization is inferred/.test(pluginTypes), 'CommandContribution optionalParams should be deprecated compatibility metadata')
+assert(/const exposesParams = \(command\.params\?\.length \?\? 0\) > 0/.test(commandAdapter), 'command adapter should infer parameter customization from declared params')
+assert(!/command\.optionalParams \?/.test(commandAdapter), 'command adapter must not gate parameter customization on optionalParams')
+assert(!/optionalParams:\s*true/.test(pluginScaffold), 'plugin scaffold should not teach deprecated optionalParams')
 assert(/customizeParamsLabel/.test(i18n), 'i18n should include the compact customize params label')
 assert(!/Hold Command to customize parameters|按住 Command 键自定义参数/.test(i18n), 'i18n should not use the old long customize hint')
 assert(/getPlatformShortcutMeta/.test(launcherParamShortcuts), 'shared launcher shortcut helper should expose platform shortcut metadata')
@@ -57,32 +62,35 @@ function pluginIndex(dir) {
   return existsSync(p) ? readFileSync(p, 'utf8') : null
 }
 
-// optionalParams now lives in first-party plugin packages, not builtins.ts.
-const selectedScripts = [
-  'hash',
-  'json',
-  'sql',
-]
-
-for (const name of selectedScripts) {
-  const src = pluginIndex(name)
-  assert(src, `${name} should exist as a first-party plugin package`)
-  assert(/optionalParams:\s*true/.test(src), `${name} plugin should opt into optional params`)
-  assert(/default:/.test(src), `${name} plugin should provide explicit parameter defaults`)
-}
-
-const notSelectedScripts = [
+const parameterizedPlugins = [
   'base64',
-  'timestamp',
+  'calculator',
+  'case',
+  'css',
+  'csv',
+  'date-time-assistant',
+  'extract',
+  'hash',
+  'html',
+  'json',
+  'lineAffix',
+  'lineTools',
+  'mdquote',
+  'queryString',
+  'slashes',
+  'sql',
+  'sqlin',
   'url',
+  'xml',
   'yaml',
 ]
 
-for (const name of notSelectedScripts) {
+for (const name of parameterizedPlugins) {
   const src = pluginIndex(name)
-  if (src) {
-    assert(!/optionalParams:\s*true/.test(src), `${name} plugin should not opt into optional params in this pass`)
-  }
+  assert(src, `${name} should exist as a first-party plugin package`)
+  assert(!/optionalParams:\s*true/.test(src), `${name} plugin should not use deprecated optionalParams`)
+  assert(/params:\s*\[/.test(src), `${name} plugin should declare command params`)
+  assert(/default:/.test(src), `${name} plugin params should provide explicit defaults for launcher parameter flow`)
 }
 
 console.log('command optional params checks passed')

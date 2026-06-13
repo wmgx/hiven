@@ -13,7 +13,6 @@ export const sqlPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'Database',
       aliases: ['sql-format', 'sql-minify'],
-      optionalParams: true,
       params: [
         {
           key: 'mode',

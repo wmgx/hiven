@@ -13,7 +13,6 @@ export const hashPlugin = definePlugin({
       icon: 'Hash',
       aliases: ['md5', 'sha1', 'sha256', 'sha512'],
       live: { live: { enabled: true, trigger: 'on-input', sideEffects: 'none', debounceMs: 250 } },
-      optionalParams: true,
       params: [
         {
           key: 'algorithm',

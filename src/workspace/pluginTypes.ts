@@ -133,6 +133,7 @@ export type CommandContribution = {
   inputs?: InputSlot[]
   inputResolution?: InputResolution
   params?: CommandParam[]
+  /** @deprecated Launcher parameter customization is inferred from params with explicit defaults. */
   optionalParams?: boolean
   live?: LiveActionCapability
   surfaces?: TextCommandSurfaces

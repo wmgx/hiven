@@ -61,7 +61,6 @@ export default definePlugin({
     id: ${JSON.stringify(`${pluginId}.run`)},
     title: 'command.run.title',
     description: 'command.run.description',
-    optionalParams: true,
     inputs: [{ key: 'input', label: 'input.text.label', kind: 'text', required: true }],
     inputResolution: { strategy: 'use-active', fallback: 'fail' },
     params: [{

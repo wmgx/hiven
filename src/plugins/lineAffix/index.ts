@@ -65,7 +65,6 @@ export const lineAffixPlugin = definePlugin({
       description: 'command.wrap.description',
       icon: 'WrapText',
       aliases: ['wrap-lines', 'surround'],
-      optionalParams: true,
       params: [
         {
           key: 'left',

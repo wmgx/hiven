@@ -36,7 +36,6 @@ export const lineToolsPlugin = definePlugin({
       description: 'command.sort.description',
       icon: 'ArrowUpDown',
       aliases: ['order', 'sort-lines'],
-      optionalParams: true,
       params: [
         {
           key: 'direction',
@@ -76,7 +75,6 @@ export const lineToolsPlugin = definePlugin({
       description: 'command.dedup.description',
       icon: 'Copy',
       aliases: ['unique', 'distinct'],
-      optionalParams: true,
       params: [
         {
           key: 'ignoreCase',

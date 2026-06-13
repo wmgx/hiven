@@ -76,6 +76,7 @@ export function adaptCommandToLauncherItem(
     return replaceActiveTextResult(output.text, ctx.api)
   }
   const defaultParams = defaultPluginCommandParams(command.params)
+  const exposesParams = (command.params?.length ?? 0) > 0
   const execute: LauncherExecuteHandler = (ctx) => runWithParams(ctx, defaultParams)
   const executeWithParams: LauncherExecuteWithParamsHandler = (ctx, params) => runWithParams(ctx, {
     ...defaultParams,
@@ -91,9 +92,9 @@ export function adaptCommandToLauncherItem(
     behavior: { type: 'perform' },
     pinnable: command.live?.pinnable ?? true,
     legacyUsageKeys: [command.id],
-    params: command.optionalParams ? command.params : undefined,
-    defaultParams: command.optionalParams ? defaultParams : undefined,
+    params: exposesParams ? command.params : undefined,
+    defaultParams: exposesParams ? defaultParams : undefined,
     execute,
-    executeWithParams: command.optionalParams ? executeWithParams : undefined,
+    executeWithParams: exposesParams ? executeWithParams : undefined,
   }
 }

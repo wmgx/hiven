@@ -12,7 +12,6 @@ export const mdquotePlugin = definePlugin({
       description: 'command.run.description',
       icon: 'MessageSquareQuote',
       aliases: ['blockquote', 'quote'],
-      optionalParams: true,
       params: [
         {
           key: 'mode',

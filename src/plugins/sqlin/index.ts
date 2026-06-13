@@ -12,7 +12,6 @@ export const sqlinPlugin = definePlugin({
       description: 'command.run.description',
       icon: 'Database',
       aliases: ['sql-in', 'lines-to-sql'],
-      optionalParams: true,
       params: [
         {
           key: 'mode',
