@@ -44,6 +44,8 @@ assert(/LauncherParamStep/.test(globalLauncher), 'GlobalLauncher should render t
 assert(/ParamInputFrame/.test(globalLauncher), 'GlobalLauncher should support param-input controller frames')
 assert(/commitCurrentParam/.test(commandPalette) && /commitCurrentParam/.test(globalLauncher), 'launcher surfaces should commit one parameter at a time through the controller')
 assert(/frame\.paramIndex/.test(launcherParamStep) && /frame\.query/.test(launcherParamStep) && /frame\.selectedIndex/.test(launcherParamStep), 'LauncherParamStep should consume launcher param frame state')
+assert(!/\bCheck\b/.test(launcherParamStep), 'LauncherParamStep single-select options should not render checkbox-style check marks')
+assert((launcherParamStep.match(/<input/g) ?? []).length === 1, 'LauncherParamStep should keep filtering/input in the single launcher input row')
 assert(!/<form/.test(commandPalette), 'CommandPalette must not render the old parameter form')
 assert(!/<select/.test(commandPalette), 'CommandPalette must not render native select parameters')
 assert(!/multiple/.test(commandPalette), 'CommandPalette must not render native multi-select parameters')

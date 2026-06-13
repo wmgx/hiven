@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Check, ChevronLeft, Search } from 'lucide-react'
+import { ChevronLeft, Search } from 'lucide-react'
 import { localized } from '../../store'
 import { t, type Locale } from '../../i18n'
 import { resolveDisplayTitle } from '../../workspace/launcher/display'
@@ -23,19 +23,18 @@ type LauncherParamStepProps = {
 type ParamOption = {
   label: string
   value: unknown
-  selected: boolean
 }
 
 function paramOptions(param: LauncherParamSpec, locale: Locale): ParamOption[] {
   if (param.type === 'boolean') {
     return [
-      { label: locale === 'zh' ? '是' : 'Yes', value: true, selected: false },
-      { label: locale === 'zh' ? '否' : 'No', value: false, selected: false },
+      { label: locale === 'zh' ? '是' : 'Yes', value: true },
+      { label: locale === 'zh' ? '否' : 'No', value: false },
     ]
   }
   return (param.options ?? []).map((option) => {
-    if (typeof option === 'string') return { label: option, value: option, selected: false }
-    return { label: localized(option.label, option.labelI18n, locale), value: option.value, selected: false }
+    if (typeof option === 'string') return { label: option, value: option }
+    return { label: localized(option.label, option.labelI18n, locale), value: option.value }
   })
 }
 
@@ -63,12 +62,8 @@ export function LauncherParamStep({
   const params = frame.item.params ?? []
   const param = params[frame.paramIndex]
   const label = param ? localized(param.label, param.labelI18n, locale) : ''
-  const currentValue = param ? frame.params[param.key] : undefined
   const isTextParam = param?.type === 'text' || param?.type === 'number'
-  const options = param ? filterParamOptions(paramOptions(param, locale).map((option) => ({
-    ...option,
-    selected: Array.isArray(currentValue) ? currentValue.includes(option.value) : currentValue === option.value,
-  })), frame.query) : []
+  const options = param ? filterParamOptions(paramOptions(param, locale), frame.query) : []
   const selectedIndex = Math.min(frame.selectedIndex, Math.max(0, options.length - 1))
 
   useEffect(() => {
@@ -86,6 +81,9 @@ export function LauncherParamStep({
   }
 
   if (!param) return null
+  const placeholder = isTextParam
+    ? `${title} ${label} · ${param.type === 'number' ? t(locale, 'palette.inputNumber') : t(locale, 'palette.inputText')}`
+    : `${title} ${label} · ${t(locale, 'palette.filterOptions')}`
 
   return (
     <>
@@ -93,17 +91,12 @@ export function LauncherParamStep({
         <button className="w-6 h-6 rounded-md border-none bg-transparent cursor-pointer flex items-center justify-center shrink-0" style={{ color: 'var(--color-text-secondary)' }} onClick={onBack}>
           <ChevronLeft size={16} />
         </button>
-        <span className="text-[13px] font-medium truncate" style={{ color: 'var(--color-text-secondary)' }}>{title}</span>
-        <span className="text-[13px] font-medium truncate" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>{label}</span>
-        <span className="ml-auto text-[11px] shrink-0" style={{ color: 'var(--color-text-tertiary)' }}>{frame.paramIndex + 1}/{params.length}</span>
-      </div>
-      <div className={headerClassName} style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
-        <Search size={16} style={{ color: 'var(--color-text-tertiary)' }} />
+        {!isTextParam && <Search size={16} style={{ color: 'var(--color-text-tertiary)' }} />}
         <input
           ref={inputRef}
           className="flex-1 border-none outline-none text-sm bg-transparent"
           style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
-          placeholder={isTextParam ? (param.type === 'number' ? t(locale, 'palette.inputNumber') : t(locale, 'palette.inputText')) : t(locale, 'palette.filterOptions')}
+          placeholder={placeholder}
           value={frame.query}
           type={param.type === 'number' ? 'number' : 'text'}
           onChange={(event) => onQueryChange(event.target.value)}
@@ -132,6 +125,7 @@ export function LauncherParamStep({
           }}
           disabled={busy}
         />
+        <span className="text-[11px] shrink-0" style={{ color: 'var(--color-text-tertiary)' }}>{frame.paramIndex + 1}/{params.length}</span>
       </div>
       {!isTextParam && (
         <div className={bodyClassName}>
@@ -145,9 +139,6 @@ export function LauncherParamStep({
                 onClick={() => commitOption(option.value)}
                 onMouseEnter={() => onSelectedIndexChange(index)}
               >
-                <div className="w-[26px] h-[26px] rounded-md flex items-center justify-center text-xs font-semibold shrink-0" style={{ background: isSelected ? 'var(--color-accent)' : 'var(--color-background-tertiary)', color: isSelected ? 'white' : 'var(--color-text-secondary)' }}>
-                  {option.selected ? <Check size={14} /> : null}
-                </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-[13px] font-medium truncate" style={{ color: isSelected ? 'var(--color-accent-hover)' : 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>
                     {option.label}
