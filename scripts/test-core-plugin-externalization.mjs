@@ -30,8 +30,8 @@ assert.match(corePanePlugin, /type:\s*['"]pane\.update['"][\s\S]*stickyScroll/, 
 assert.match(corePanePlugin, /id:\s*['"]core-pane\.set-language['"]/, 'core-pane should own set language command')
 assert.match(corePanePlugin, /languageSource:\s*['"]manual['"]|languageSource:\s*['"]auto['"]/, 'set language should preserve languageSource behavior')
 
-assert.equal(corePaneManifest.version, '1.2.0', 'core-pane manifest version should be bumped')
-assert.equal(corePaneEntry?.version, '1.2.0', 'builtin index should publish bumped core-pane version')
+assert.equal(corePaneManifest.version, '1.2.1', 'core-pane manifest version should be bumped')
+assert.equal(corePaneEntry?.version, '1.2.1', 'builtin index should publish bumped core-pane version')
 
 // --- Regex Tester Plugin ---
 const regexPlugin = read('src/plugins/regex-tester/index.tsx')
@@ -42,8 +42,8 @@ assert.doesNotMatch(corePlugin, /core\.regex-tester/, 'regex tester command shou
 assert.doesNotMatch(corePlugin, /CoreRegexPanel/, 'regex tester panel should not be registered by internal corePlugin')
 assert.match(regexPlugin, /id:\s*['"]regex-tester\.open['"]/, 'regex tester plugin should provide open command')
 assert.match(regexPlugin, /id:\s*['"]regex-tester\.panel['"]/, 'regex tester plugin should provide panel contribution')
-assert.equal(regexManifest.version, '1.0.0', 'regex tester plugin starts at version 1.0.0')
-assert.equal(regexEntry?.version, '1.0.0', 'builtin index should publish regex tester plugin')
+assert.equal(regexManifest.version, '1.0.1', 'regex tester plugin should be bumped after launcher migration')
+assert.equal(regexEntry?.version, '1.0.1', 'builtin index should publish regex tester plugin')
 
 // --- Final Guardrails ---
 assert.doesNotMatch(corePlugin, /definePlugin\(\{\s*commands:/, 'internal corePlugin should not register user-facing commands')

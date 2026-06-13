@@ -82,11 +82,15 @@ let copied = null
 const api = {
   getActiveText: () => 'whole text',
   getSelectionText: () => 'abc',
+  getPaneSnapshot: () => ({ activePaneId: 'pane-1', paneIds: ['pane-1'], panes: {}, renderers: {} }),
+  isPanePanelOpen: () => false,
   getClipboardText: async () => '',
   replaceActiveText: async () => {},
   insertText: async () => {},
   copyText: async (t) => { copied = t },
   openUrl: async () => {},
+  showMainPanel: async () => {},
+  dispatchEffects: () => ({ applied: [], errors: [] }),
   showMessage: () => {},
 }
 const res = await item.execute({ settings: {}, locale: 'en', api, t: (k) => k })

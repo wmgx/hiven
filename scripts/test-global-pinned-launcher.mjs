@@ -131,8 +131,8 @@ check('main panel launcher command is contributed by the external core-pane plug
   const manifest = JSON.parse(files.corePaneManifest)
   const builtinIndex = JSON.parse(files.builtinIndex)
   const corePaneEntry = builtinIndex.packages?.find((entry) => entry.pluginId === 'core-pane')
-  assert.equal(manifest.version, '1.2.0', 'core-pane manifest version should be bumped for the new command')
-  assert.equal(corePaneEntry?.version, '1.2.0', 'builtin plugin index should publish the bumped core-pane version')
+  assert.equal(manifest.version, '1.2.1', 'core-pane manifest version should be bumped for the launcher migration')
+  assert.equal(corePaneEntry?.version, '1.2.1', 'builtin plugin index should publish the bumped core-pane version')
 })
 
 check('pinned launcher command titles follow current locale', () => {

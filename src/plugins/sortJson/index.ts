@@ -24,6 +24,7 @@ export const sortJsonPlugin = definePlugin({
     {
       id: 'sort-json.run',
       title: 'command.run.title',
+      subtitle: 'command.run.description',
       icon: 'ArrowUpNarrowWide',
       aliases: ['json-sort', 'sort-json-keys'],
       inputPolicy: { mode: 'auto' },

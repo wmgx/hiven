@@ -19,6 +19,7 @@ export const yamlPlugin = definePlugin({
     {
       id: 'yaml.run',
       title: 'command.run.title',
+      subtitle: 'command.run.description',
       icon: 'FileJson',
       aliases: ['json-yaml', 'yaml-json'],
       inputPolicy: { mode: 'auto' },

@@ -2,6 +2,6 @@
   "pluginId": "hash",
   "displayName": "Hash Digest",
   "displayNameI18n": { "zh": "哈希计算" },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "capabilities": ["command"]
 }

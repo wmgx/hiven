@@ -2,6 +2,6 @@
   "pluginId": "csv",
   "displayName": "CSV / TSV Converter",
   "displayNameI18n": { "zh": "CSV / TSV 转换" },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "capabilities": ["command"]
 }

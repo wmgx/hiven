@@ -1,140 +1,140 @@
 {
-  "version": 10,
+  "version": 11,
   "packages": [
     {
       "pluginId": "base64",
       "dir": "base64",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "calculator",
       "dir": "calculator",
-      "version": "1.2.0"
+      "version": "1.2.1"
     },
     {
       "pluginId": "case",
       "dir": "case",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "core-pane",
       "dir": "core-pane",
-      "version": "1.2.0"
+      "version": "1.2.1"
     },
     {
       "pluginId": "count",
       "dir": "count",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "css",
       "dir": "css",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "date-time-assistant",
       "dir": "date-time-assistant",
-      "version": "1.3.0"
+      "version": "1.3.1"
     },
     {
       "pluginId": "csv",
       "dir": "csv",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "extract",
       "dir": "extract",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "hash",
       "dir": "hash",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "html",
       "dir": "html",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "line-affix",
       "dir": "lineAffix",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "line-tools",
       "dir": "lineTools",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "js-filter",
       "dir": "jsFilter",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "json",
       "dir": "json",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "jwt",
       "dir": "jwt",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "mdquote",
       "dir": "mdquote",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "query-string",
       "dir": "queryString",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "regex-tester",
       "dir": "regex-tester",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "slashes",
       "dir": "slashes",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "sort-json",
       "dir": "sortJson",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "sql",
       "dir": "sql",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "sqlin",
       "dir": "sqlin",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "text-diff",
       "dir": "textDiff",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "url",
       "dir": "url",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "xml",
       "dir": "xml",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "yaml",
       "dir": "yaml",
-      "version": "1.0.0"
+      "version": "1.0.1"
     }
   ]
 }

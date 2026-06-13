@@ -171,6 +171,11 @@ export type PluginLauncherApi = {
     previousActivePaneId?: string
     paneIds: string[]
     panes: Record<string, { language?: string; stickyScroll?: boolean }>
+    renderers: Record<string, {
+      rendererId: string
+      ownerPluginId?: string
+      ownerContributionId?: string
+    }>
   }
   isPanePanelOpen(panelId: string): boolean
   getClipboardText(): Promise<string>

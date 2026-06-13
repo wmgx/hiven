@@ -27,6 +27,7 @@ export const cssPlugin = definePlugin({
     {
       id: 'css.run',
       title: 'command.run.title',
+      subtitle: 'command.run.description',
       icon: 'Paintbrush',
       aliases: ['css-format', 'css-minify'],
       inputPolicy: { mode: 'auto' },

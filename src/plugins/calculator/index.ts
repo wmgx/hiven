@@ -265,6 +265,7 @@ const definition: PluginDefinition = {
     {
       id: 'calculator.run',
       title: 'command.run.title',
+      subtitle: 'command.run.description',
       icon: 'Calculator',
       aliases: ['calc', 'formula'],
       inputPolicy: { mode: 'auto' },
@@ -276,6 +277,7 @@ const definition: PluginDefinition = {
     {
       id: 'calculator.sum',
       title: 'command.sum.title',
+      subtitle: 'command.sum.description',
       icon: 'Calculator',
       aliases: ['sum', 'add', 'total'],
       inputPolicy: { mode: 'auto' },
@@ -287,6 +289,7 @@ const definition: PluginDefinition = {
     {
       id: 'calculator.base',
       title: 'command.base.title',
+      subtitle: 'command.base.description',
       icon: 'Binary',
       aliases: ['decimal', 'binary', 'hex', 'hex-convert'],
       inputPolicy: { mode: 'auto' },

@@ -111,6 +111,16 @@ export function createPluginLauncherApi(): PluginLauncherApi {
             },
           ]),
         ),
+        renderers: Object.fromEntries(
+          Object.entries(state.paneRenderers).map(([paneId, renderer]) => [
+            paneId,
+            {
+              rendererId: renderer.rendererId,
+              ownerPluginId: renderer.ownerPluginId,
+              ownerContributionId: renderer.ownerContributionId,
+            },
+          ]),
+        ),
       }
     },
     isPanePanelOpen: (panelId: string) => {

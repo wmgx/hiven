@@ -34,6 +34,7 @@ export const csvPlugin = definePlugin({
     {
       id: 'csv.run',
       title: 'command.run.title',
+      subtitle: 'command.run.description',
       icon: 'Table',
       aliases: ['csv-json', 'tsv-json'],
       inputPolicy: { mode: 'auto' },

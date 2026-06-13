@@ -2,6 +2,6 @@
   "pluginId": "regex-tester",
   "displayName": "Regex Tester",
   "displayNameI18n": { "zh": "正则测试器" },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "capabilities": ["command", "panel"]
 }

@@ -16,6 +16,7 @@ export const hashPlugin = definePlugin({
     {
       id: 'hash.run',
       title: 'command.run.title',
+      subtitle: 'command.run.description',
       icon: 'Hash',
       aliases: ['md5', 'sha1', 'sha256', 'sha512'],
       inputPolicy: { mode: 'auto' },

@@ -17,6 +17,7 @@ export const mdquotePlugin = definePlugin({
     {
       id: 'mdquote.run',
       title: 'command.run.title',
+      subtitle: 'command.run.description',
       icon: 'MessageSquareQuote',
       aliases: ['blockquote', 'quote'],
       inputPolicy: { mode: 'auto' },

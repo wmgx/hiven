@@ -5,6 +5,6 @@
     "zh": "JS 过滤器",
     "en": "JS Filter"
   },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "capabilities": ["panel"]
 }

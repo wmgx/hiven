@@ -44,12 +44,20 @@ function createPinnedLauncherApi(inputText: string): PluginLauncherApi {
   return {
     getActiveText: () => inputText,
     getSelectionText: () => '',
+    getPaneSnapshot: () => ({
+      activePaneId: '',
+      paneIds: [],
+      panes: {},
+      renderers: {},
+    }),
+    isPanePanelOpen: () => false,
     getClipboardText: async () => '',
     replaceActiveText: async () => {},
     insertText: async () => {},
     copyText: async () => {},
     openUrl: async () => {},
     showMainPanel: async () => {},
+    dispatchEffects: () => ({ applied: [], errors: [] }),
     showMessage: () => {},
   }
 }

@@ -26,6 +26,7 @@ export const queryStringPlugin = definePlugin({
     {
       id: 'query-string.run',
       title: 'command.run.title',
+      subtitle: 'command.run.description',
       icon: 'Search',
       aliases: ['query-json', 'json-query', 'qs'],
       inputPolicy: { mode: 'auto' },

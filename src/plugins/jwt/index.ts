@@ -21,6 +21,7 @@ export const jwtPlugin = definePlugin({
     {
       id: 'jwt.run',
       title: 'command.run.title',
+      subtitle: 'command.run.description',
       icon: 'Key',
       aliases: ['jwt-decode', 'json-web-token'],
       inputPolicy: { mode: 'auto' },

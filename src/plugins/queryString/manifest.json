@@ -2,6 +2,6 @@
   "pluginId": "query-string",
   "displayName": "JSON ↔ Query String",
   "displayNameI18n": { "zh": "JSON ↔ 查询字符串" },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "capabilities": ["command"]
 }

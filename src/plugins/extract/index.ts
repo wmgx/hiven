@@ -21,6 +21,7 @@ export const extractPlugin = definePlugin({
     {
       id: 'extract.run',
       title: 'command.run.title',
+      subtitle: 'command.run.description',
       icon: 'Regex',
       aliases: ['grep', 'filter'],
       inputPolicy: { mode: 'auto' },

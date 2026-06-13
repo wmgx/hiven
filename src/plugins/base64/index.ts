@@ -16,6 +16,7 @@ export const base64Plugin = definePlugin({
     {
       id: 'base64.run',
       title: 'command.run.title',
+      subtitle: 'command.run.description',
       icon: 'Binary',
       aliases: ['encode', 'decode'],
       inputPolicy: { mode: 'auto' },

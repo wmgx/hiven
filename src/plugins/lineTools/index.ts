@@ -57,6 +57,7 @@ export const lineToolsPlugin = definePlugin({
     {
       id: 'line-tools.sort',
       title: 'command.sort.title',
+      subtitle: 'command.sort.description',
       icon: 'ArrowUpDown',
       aliases: ['order', 'sort-lines'],
       inputPolicy: { mode: 'auto' },
@@ -86,6 +87,7 @@ export const lineToolsPlugin = definePlugin({
     {
       id: 'line-tools.dedup',
       title: 'command.dedup.title',
+      subtitle: 'command.dedup.description',
       icon: 'Copy',
       aliases: ['unique', 'distinct'],
       inputPolicy: { mode: 'auto' },
@@ -105,6 +107,7 @@ export const lineToolsPlugin = definePlugin({
     {
       id: 'line-tools.reverse',
       title: 'command.reverse.title',
+      subtitle: 'command.reverse.description',
       titleI18n: { zh: '反转行' },
       icon: 'ArrowDownUp',
       aliases: ['flip-lines', 'reverse-lines'],
@@ -117,6 +120,7 @@ export const lineToolsPlugin = definePlugin({
     {
       id: 'line-tools.remove-blank-lines',
       title: 'command.removeBlankLines.title',
+      subtitle: 'command.removeBlankLines.description',
       icon: 'RemoveFormatting',
       aliases: ['remove-empty-lines'],
       inputPolicy: { mode: 'auto' },
@@ -128,6 +132,7 @@ export const lineToolsPlugin = definePlugin({
     {
       id: 'line-tools.trim-whitespace',
       title: 'command.trimWhitespace.title',
+      subtitle: 'command.trimWhitespace.description',
       icon: 'Type',
       aliases: ['strip', 'clean'],
       inputPolicy: { mode: 'auto' },
@@ -139,6 +144,7 @@ export const lineToolsPlugin = definePlugin({
     {
       id: 'line-tools.join',
       title: 'command.join.title',
+      subtitle: 'command.join.description',
       icon: 'Merge',
       aliases: ['merge-lines', 'concat-lines'],
       inputPolicy: { mode: 'auto' },

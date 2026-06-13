@@ -28,6 +28,7 @@ export const slashesPlugin = definePlugin({
     {
       id: 'slashes.run',
       title: 'command.run.title',
+      subtitle: 'command.run.description',
       icon: 'Quote',
       aliases: ['escape', 'unescape', 'addslashes', 'stripslashes'],
       inputPolicy: { mode: 'auto' },

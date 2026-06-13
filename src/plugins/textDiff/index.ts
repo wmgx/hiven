@@ -9,6 +9,11 @@ type PaneSnapshot = {
   activePaneId: string
   previousActivePaneId?: string
   paneIds: string[]
+  renderers?: Record<string, {
+    rendererId: string
+    ownerPluginId?: string
+    ownerContributionId?: string
+  }>
 }
 
 function resolvePanePair(snapshot: PaneSnapshot): { originalPaneId: string; modifiedPaneId: string } | null {
@@ -36,6 +41,12 @@ function textDiffEffects(originalPaneId: string, modifiedPaneId: string) {
   }]
 }
 
+function clearExistingTextDiffEffects(snapshot: PaneSnapshot) {
+  return Object.entries(snapshot.renderers ?? {})
+    .filter(([, renderer]) => renderer.ownerPluginId === 'text-diff' || renderer.rendererId === 'text-diff.renderer')
+    .map(([paneId]) => ({ type: 'pane.clearRenderer' as const, paneId }))
+}
+
 export const textDiffPlugin = definePlugin({
   launcher: {
     items: [
@@ -49,9 +60,13 @@ export const textDiffPlugin = definePlugin({
         surfaces: ['command-palette'],
         pinnable: false,
         execute(ctx) {
-          const pair = resolvePanePair(ctx.api.getPaneSnapshot())
+          const snapshot = ctx.api.getPaneSnapshot()
+          const pair = resolvePanePair(snapshot)
           if (!pair) return { ok: false, message: 'Need 2 panes for this command. Please open another pane first.' }
-          const result = ctx.api.dispatchEffects(textDiffEffects(pair.originalPaneId, pair.modifiedPaneId))
+          const result = ctx.api.dispatchEffects([
+            ...clearExistingTextDiffEffects(snapshot),
+            ...textDiffEffects(pair.originalPaneId, pair.modifiedPaneId),
+          ])
           if (result.errors.length > 0) return { ok: false, message: result.errors[0] }
           return { ok: true }
         },

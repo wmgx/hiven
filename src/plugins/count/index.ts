@@ -17,6 +17,7 @@ export const countPlugin = definePlugin({
     {
       id: 'count.run',
       title: 'command.run.title',
+      subtitle: 'command.run.description',
       icon: 'BarChart',
       aliases: ['stats', 'wc'],
       inputPolicy: { mode: 'auto' },

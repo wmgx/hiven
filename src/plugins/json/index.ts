@@ -17,6 +17,7 @@ export const jsonPlugin = definePlugin({
     {
       id: 'json.run',
       title: 'command.run.title',
+      subtitle: 'command.run.description',
       icon: 'Braces',
       aliases: ['json-format', 'pretty-json'],
       inputPolicy: { mode: 'auto' },

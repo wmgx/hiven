@@ -26,6 +26,7 @@ export const htmlPlugin = definePlugin({
     {
       id: 'html.run',
       title: 'command.run.title',
+      subtitle: 'command.run.description',
       icon: 'FileCode',
       aliases: ['html-entities', 'html-escape'],
       inputPolicy: { mode: 'auto' },

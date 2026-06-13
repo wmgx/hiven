@@ -2,6 +2,6 @@
   "pluginId": "text-diff",
   "displayName": "Text Diff",
   "displayNameI18n": { "zh": "文本对比" },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "capabilities": ["command", "renderer"]
 }

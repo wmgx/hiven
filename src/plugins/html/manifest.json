@@ -2,6 +2,6 @@
   "pluginId": "html",
   "displayName": "HTML Encode/Decode",
   "displayNameI18n": { "zh": "HTML 编解码" },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "capabilities": ["command"]
 }

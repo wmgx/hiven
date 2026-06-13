@@ -17,6 +17,7 @@ export const sqlPlugin = definePlugin({
     {
       id: 'sql.run',
       title: 'command.run.title',
+      subtitle: 'command.run.description',
       icon: 'Database',
       aliases: ['sql-format', 'sql-minify'],
       inputPolicy: { mode: 'auto' },

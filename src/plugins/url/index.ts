@@ -16,6 +16,7 @@ export const urlPlugin = definePlugin({
     {
       id: 'url.run',
       title: 'command.run.title',
+      subtitle: 'command.run.description',
       icon: 'Link',
       aliases: ['urlencode', 'urldecode'],
       inputPolicy: { mode: 'auto' },

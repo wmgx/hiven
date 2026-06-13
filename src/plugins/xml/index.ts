@@ -24,6 +24,7 @@ export const xmlPlugin = definePlugin({
     {
       id: 'xml.run',
       title: 'command.run.title',
+      subtitle: 'command.run.description',
       icon: 'Code',
       aliases: ['xml-format', 'xml-minify', 'html-format'],
       inputPolicy: { mode: 'auto' },

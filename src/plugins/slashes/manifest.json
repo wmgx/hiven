@@ -2,6 +2,6 @@
   "pluginId": "slashes",
   "displayName": "Escape / Unescape",
   "displayNameI18n": { "zh": "转义/反转义" },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "capabilities": ["command"]
 }

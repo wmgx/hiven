@@ -26,6 +26,7 @@ export const lineAffixPlugin = definePlugin({
     {
       id: 'line-affix.prepend',
       title: 'command.prepend.title',
+      subtitle: 'command.prepend.description',
       icon: 'ArrowLeftToLine',
       aliases: ['prepend-lines', 'prefix'],
       inputPolicy: { mode: 'auto' },
@@ -45,6 +46,7 @@ export const lineAffixPlugin = definePlugin({
     {
       id: 'line-affix.append',
       title: 'command.append.title',
+      subtitle: 'command.append.description',
       icon: 'ArrowRightToLine',
       aliases: ['append-lines', 'suffix'],
       inputPolicy: { mode: 'auto' },
@@ -64,6 +66,7 @@ export const lineAffixPlugin = definePlugin({
     {
       id: 'line-affix.wrap',
       title: 'command.wrap.title',
+      subtitle: 'command.wrap.description',
       icon: 'WrapText',
       aliases: ['wrap-lines', 'surround'],
       inputPolicy: { mode: 'auto' },

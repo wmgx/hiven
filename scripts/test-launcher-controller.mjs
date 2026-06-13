@@ -40,11 +40,15 @@ function makeApi() {
     api: {
       getActiveText: () => 'ACTIVE',
       getSelectionText: () => '',
+      getPaneSnapshot: () => ({ activePaneId: 'pane-1', paneIds: ['pane-1'], panes: {}, renderers: {} }),
+      isPanePanelOpen: () => false,
       getClipboardText: async () => '',
       replaceActiveText: async (t) => { calls.replaced.push(t) },
       insertText: async (t) => { calls.inserted.push(t) },
       copyText: async (t) => { calls.copied.push(t) },
       openUrl: async () => {},
+      showMainPanel: async () => {},
+      dispatchEffects: () => ({ applied: [], errors: [] }),
       showMessage: () => {},
     },
   }

@@ -20,6 +20,7 @@ export const casePlugin = definePlugin({
     {
       id: 'case.run',
       title: 'command.run.title',
+      subtitle: 'command.run.description',
       icon: 'CaseSensitive',
       aliases: ['uppercase', 'lowercase', 'titlecase'],
       inputPolicy: { mode: 'auto' },
