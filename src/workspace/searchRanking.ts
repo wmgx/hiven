@@ -20,6 +20,7 @@ export function getAcronym(name: string): string {
 }
 
 const pinyinCache = new Map<string, { full: string; initials: string }>()
+const mixedAcronymCache = new Map<string, string>()
 
 export function pinyinMatch(text: string, query: string): boolean {
   if (!text || !query) return false
@@ -34,6 +35,25 @@ export function pinyinMatch(text: string, query: string): boolean {
   }
 
   return cached.full.includes(query) || cached.initials.startsWith(query)
+}
+
+export function mixedAcronymMatch(text: string, query: string): boolean {
+  if (!text || !query) return false
+  if (!/^[a-z]+$/.test(query)) return false
+
+  let cached = mixedAcronymCache.get(text)
+  if (!cached) {
+    const words = text.split(/[-_\s.]+/).filter(Boolean)
+    cached = words.map((word) => {
+      if (/[一-鿿]/.test(word[0])) {
+        return pinyin(word, { pattern: 'initial', toneType: 'none', separator: '' }).toLowerCase()
+      }
+      return word[0].toLowerCase()
+    }).join('')
+    mixedAcronymCache.set(text, cached)
+  }
+
+  return cached.startsWith(query)
 }
 
 export function searchableFieldsMatch(fields: SearchableFields, q: string, locale: Locale): boolean {
@@ -55,6 +75,9 @@ export function searchableFieldsMatch(fields: SearchableFields, q: string, local
   const zhDescription = fields.descriptionI18n?.zh ?? ''
   if (pinyinMatch(zhTitle || title, q)) return true
   if (zhDescription && pinyinMatch(zhDescription, q)) return true
+
+  if (mixedAcronymMatch(fields.title || fields.id, q)) return true
+  if (zhTitle && mixedAcronymMatch(zhTitle, q)) return true
 
   return false
 }
