@@ -14,6 +14,15 @@ import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } fro
 import { isQuickTextCommand, runQuickTextCommand } from '../workspace/quickTextCommand'
 import { usePluginSettingsStore, resolvePluginSettings } from '../workspace/pluginSettingsStore'
 import { scoreSearchableFields, searchableFieldsMatch, type SearchableFields } from '../workspace/searchRanking'
+import { LauncherController } from '../workspace/launcher/controller'
+import type { LauncherControllerState, CollectInputFrame, ResultFrame } from '../workspace/launcher/controller'
+import { createPluginLauncherApi } from '../workspace/launcher/pluginApi'
+import { collectStaticCandidates, collectDynamicItems, filterDynamicForSurface } from '../workspace/launcher/registry'
+import { rankLauncherItems } from '../workspace/launcher/ranking'
+import { resolveDisplayTitle, resolveDisplaySubtitle } from '../workspace/launcher/display'
+import type { LauncherItem as DomainLauncherItem, LauncherSurfaceId } from '../workspace/launcher/types'
+import { resolvePluginSettingsSource } from '../workspace/launcher/pluginSource'
+import type { ContributionSource } from '../workspace/pluginTypes'
 
 type LauncherItem =
   | { kind: 'quick-command'; id: string; title: string; subtitle: string; icon?: string; commandId: string; isDev: boolean }
@@ -52,6 +61,12 @@ export function GlobalLauncher() {
   const locale = useAppStore((s) => s.locale)
   const pluginRegistryVersion = usePluginRegistryVersion()
   const pluginSettingsData = usePluginSettingsStore((s) => s.pluginSettings)
+  const launcherUsageBySurface = useAppStore((s) => s.launcherUsageBySurface)
+  const recordLauncherSelection = useAppStore((s) => s.recordLauncherSelection)
+  const [controllerState, setControllerState] = useState<LauncherControllerState | null>(null)
+  const controllerRef = useRef<LauncherController | null>(null)
+  const [dynamicItems, setDynamicItems] = useState<DomainLauncherItem[]>([])
+  const dynamicQueryRef = useRef('')
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [dragPosition, setDragPosition] = useState(launcherPosition)
@@ -99,6 +114,74 @@ export function GlobalLauncher() {
       inputRef.current?.focus()
     })
   }, [open])
+
+  // Initialize LauncherController on open
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    queueMicrotask(() => {
+      if (cancelled) return
+      setDynamicItems([])
+      dynamicQueryRef.current = ''
+      if (!controllerRef.current) {
+        const controller = new LauncherController({
+          surfaceId: 'global-launcher' as LauncherSurfaceId,
+          api: createPluginLauncherApi(),
+          locale,
+          makeT: (item) => makePluginT(item.pluginId ?? '', locale),
+          getSettings: (item) => {
+            if (!item.pluginId || !item.source) return undefined
+            const def = pluginRegistry.getPluginDefinition(item.pluginId, item.source)
+            const settingsContribution = def?.settings
+            if (!settingsContribution) return undefined
+            return resolvePluginSettings(item.source, item.pluginId, settingsContribution).value
+          },
+          recordSelection: (surfaceId, item) => {
+            recordLauncherSelection(surfaceId, item.systemKey)
+          },
+          requestClose: () => closeLauncher(),
+          onChange: (state) => setControllerState({ ...state }),
+        })
+        controllerRef.current = controller
+      }
+      controllerRef.current.reset()
+    })
+    return () => { cancelled = true }
+  }, [open])
+
+  // Collect dynamic items with debounce
+  useEffect(() => {
+    if (!open) return
+    const q = query.trim()
+    if (!q) { setDynamicItems([]); dynamicQueryRef.current = ''; return }
+    dynamicQueryRef.current = q
+    const timer = setTimeout(async () => {
+      if (dynamicQueryRef.current !== q) return
+      const getSettingsForPlugin = (pluginId: string, source: ContributionSource) => {
+        const def = pluginRegistry.getPluginDefinition(pluginId, source)
+        const settingsContribution = def?.settings
+        if (!settingsContribution) return undefined
+        const settingsSource = resolvePluginSettingsSource(pluginId, source)
+        return resolvePluginSettings(settingsSource, pluginId, settingsContribution).value
+      }
+      const items = await collectDynamicItems(q, locale, getSettingsForPlugin)
+      if (dynamicQueryRef.current !== q) return
+      setDynamicItems(filterDynamicForSurface(items, 'global-launcher'))
+    }, 150)
+    return () => clearTimeout(timer)
+  }, [query, open, locale])
+
+  // Domain ranked items (new launcher system)
+  const rankedLauncherItems = useMemo<DomainLauncherItem[]>(() => {
+    void pluginRegistryVersion
+    const staticCandidates = collectStaticCandidates('global-launcher')
+    const allCandidates = [...staticCandidates, ...dynamicItems]
+    const q = query.trim()
+    return rankLauncherItems(
+      { query: q, locale, surfaceId: 'global-launcher', usage: launcherUsageBySurface, now: Date.now() },
+      allCandidates,
+    )
+  }, [query, locale, pluginRegistryVersion, dynamicItems, launcherUsageBySurface])
 
   const items = useMemo<LauncherItem[]>(() => {
     void pluginRegistryVersion
@@ -220,7 +303,8 @@ export function GlobalLauncher() {
       scoreLauncherItem(a, q, locale, recentActionNames, actionUsageCounts)
     )
 
-    // Compute instant suggestions when there's a query
+    // Compute instant suggestions when there's a query (legacy, preserved until Task 12)
+    let legacyList: LauncherItem[]
     if (q && q.length <= 500) {
       const providers = pluginRegistry.getAllInstantSuggestionProviders()
       const sorted = [...providers].sort(
@@ -245,11 +329,30 @@ export function GlobalLauncher() {
           // Provider error should not break the launcher
         }
       }
-      if (instantItems.length > 0) return [...instantItems, ...sortedBase]
+      legacyList = instantItems.length > 0 ? [...instantItems, ...sortedBase] : sortedBase
+    } else {
+      legacyList = sortedBase
     }
 
-    return sortedBase
-  }, [items, query, locale, pluginRegistryVersion, recentActionNames, actionUsageCounts])
+    // Merge domain ranked items alongside legacy — single sorted list (constraint 1)
+    // Dedup: domain items whose systemKey matches a legacy item's id are skipped
+    const legacyIds = new Set(legacyList.map((item) => item.id))
+    const domainAsLegacy: LauncherItem[] = []
+    for (const domainItem of rankedLauncherItems) {
+      if (legacyIds.has(domainItem.systemKey)) continue
+      domainAsLegacy.push({
+        kind: 'command' as const,
+        id: domainItem.systemKey,
+        title: resolveDisplayTitle(domainItem.display, locale),
+        subtitle: resolveDisplaySubtitle(domainItem.display, locale) ?? '',
+        icon: domainItem.display.icon,
+        isDev: domainItem.source === 'dev',
+        __domainItem: domainItem,
+      } as LauncherItem & { __domainItem: DomainLauncherItem })
+    }
+
+    return [...legacyList, ...domainAsLegacy]
+  }, [items, query, locale, pluginRegistryVersion, recentActionNames, actionUsageCounts, rankedLauncherItems])
 
   const closeLauncher = useCallback(() => {
     const wasOverlay = overlay
@@ -383,6 +486,7 @@ export function GlobalLauncher() {
     quickTextSession?.inputText.length,
     quickTextSession?.outputText.length,
     quickTextSession?.running,
+    controllerState,
     standaloneLauncher,
   ])
 
@@ -402,6 +506,31 @@ export function GlobalLauncher() {
 
   const selectItem = (item: LauncherItem | undefined) => {
     if (!item) return
+
+    // Domain item path (new launcher system via controller)
+    const domainItem = (item as LauncherItem & { __domainItem?: DomainLauncherItem }).__domainItem
+    if (domainItem && controllerRef.current) {
+      if (standaloneLauncher) {
+        // Constraint 3: record selection BEFORE bridge execution
+        recordLauncherSelection('global-launcher', domainItem.systemKey)
+        void (async () => {
+          try {
+            const { emitTo } = await import('@tauri-apps/api/event')
+            const { invoke } = await import('@tauri-apps/api/core')
+            await emitTo('main', 'hiven://run-plugin-command', { id: domainItem.systemKey, isDev: domainItem.source === 'dev' })
+            await invoke('hide_launcher_window')
+          } catch (error) {
+            console.warn('[hiven] Failed to select domain launcher item:', error)
+          }
+          setOpen(false)
+        })()
+        return
+      }
+      // Non-standalone: controller handles record + execute + lifecycle (output/collect-input frames)
+      void controllerRef.current.selectItem(domainItem)
+      return
+    }
+
     if (item.kind === 'instant') {
       void executeInstantSuggestion(item.suggestion, locale, closeLauncher)
       return
@@ -634,6 +763,50 @@ export function GlobalLauncher() {
             void copyQuickTextOutput(quickTextSession)
             return
           }
+          // Controller frame key handling (collect-input / result)
+          if (controllerState && controllerState.frames.length > 1) {
+            const topFrame = controllerState.frames[controllerState.frames.length - 1]
+            if (topFrame.kind === 'collect-input') {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                void controllerRef.current?.submitInput()
+                return
+              }
+              if (event.key === 'Escape') {
+                event.preventDefault()
+                event.stopPropagation()
+                controllerRef.current?.back()
+                requestAnimationFrame(() => inputRef.current?.focus())
+                return
+              }
+              if (event.key === 'Backspace' && !(topFrame as CollectInputFrame).inputText) {
+                event.preventDefault()
+                event.stopPropagation()
+                controllerRef.current?.back()
+                requestAnimationFrame(() => inputRef.current?.focus())
+                return
+              }
+              return // other keys pass to input naturally
+            }
+            if (topFrame.kind === 'result') {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                const choices = (topFrame as ResultFrame).output.choices
+                if (choices.length > 0) {
+                  void controllerRef.current?.activateChoice(choices[0])
+                }
+                return
+              }
+              if (event.key === 'Escape') {
+                event.preventDefault()
+                event.stopPropagation()
+                controllerRef.current?.back()
+                requestAnimationFrame(() => inputRef.current?.focus())
+                return
+              }
+              return
+            }
+          }
           if (event.key === 'Escape') {
             event.preventDefault()
             event.stopPropagation()
@@ -707,7 +880,74 @@ export function GlobalLauncher() {
               <HintKey keys="esc" label={t(locale, 'palette.back')} />
             </div>
           </>
-        ) : (
+        ) : controllerState && controllerState.frames.length > 1 && controllerState.frames[controllerState.frames.length - 1].kind === 'collect-input' ? (() => {
+          const frame = controllerState.frames[controllerState.frames.length - 1] as CollectInputFrame
+          const placeholder = frame.item.behavior.type === 'collect-input'
+            ? (frame.item.behavior.input.placeholder ?? '')
+            : ''
+          return (
+            <>
+              <div className="global-launcher-header flex items-center gap-2 px-3.5 py-2.5" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
+                {resolveIcon(frame.item.display.icon, 16, resolveDisplayTitle(frame.item.display, locale))}
+                <input
+                  ref={inputRef}
+                  value={frame.inputText}
+                  onChange={(event) => controllerRef.current?.setInputText(event.target.value)}
+                  placeholder={placeholder}
+                  className="flex-1 outline-none border-none bg-transparent text-[14px]"
+                  style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
+                />
+              </div>
+              {controllerState.error && (
+                <div className="px-3.5 py-2 text-[12px]" style={{ color: 'var(--color-error)' }}>
+                  {controllerState.error}
+                </div>
+              )}
+              <div className="global-launcher-footer flex shrink-0 gap-3 px-3.5 py-1.5" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
+                <HintKey keys="↵" label={t(locale, 'palette.quickEntryRun')} />
+                <HintKey keys="esc" label={t(locale, 'palette.back')} />
+              </div>
+            </>
+          )
+        })() : controllerState && controllerState.frames.length > 1 && controllerState.frames[controllerState.frames.length - 1].kind === 'result' ? (() => {
+          const frame = controllerState.frames[controllerState.frames.length - 1] as ResultFrame
+          const choices = frame.output.choices
+          return (
+            <>
+              <div className="global-launcher-header flex items-center gap-2 px-3.5 py-2.5" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
+                <span className="text-[13px] font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                  {frame.sourceTitle}
+                </span>
+              </div>
+              <div className="global-launcher-body">
+                {choices.map((choice, index) => (
+                  <button
+                    key={choice.id}
+                    className={`w-full flex items-center gap-2 px-3.5 py-2 text-left text-[13px] hover:bg-[var(--color-background-secondary)] ${index === 0 ? 'bg-[var(--color-background-secondary)]' : ''}`}
+                    style={{ color: 'var(--color-text-primary)' }}
+                    onClick={() => void controllerRef.current?.activateChoice(choice)}
+                  >
+                    <span className="flex-1 truncate">{choice.title}</span>
+                    {choice.subtitle && (
+                      <span className="text-[11px] truncate" style={{ color: 'var(--color-text-tertiary)' }}>
+                        {choice.subtitle}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              {controllerState.error && (
+                <div className="px-3.5 py-2 text-[12px]" style={{ color: 'var(--color-error)' }}>
+                  {controllerState.error}
+                </div>
+              )}
+              <div className="global-launcher-footer flex shrink-0 gap-3 px-3.5 py-1.5" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
+                <HintKey keys="↵" label={t(locale, 'palette.confirm')} />
+                <HintKey keys="esc" label={t(locale, 'palette.back')} />
+              </div>
+            </>
+          )
+        })() : (
           <>
             <div className="global-launcher-header flex items-center gap-2 px-3.5 py-2.5" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
               <Search size={16} style={{ color: 'var(--color-text-tertiary)' }} />
