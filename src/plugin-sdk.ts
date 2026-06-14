@@ -41,6 +41,31 @@ export type {
   ResolvedInputs,
   TextCommandSurfaces,
   TextInput,
+  // Plugin UI Surface types
+  PluginUiSurfaceKind,
+  PluginUiSurfaceContribution,
+  PluginUiContribution,
+  PluginSurfaceProps,
+  PluginSurfaceHostApi,
+  // Plugin Background types
+  PluginBackgroundContribution,
+  PluginBackgroundContext,
+  PluginBackgroundStop,
+  // Plugin Permission types
+  PluginPermission,
+  PluginPermissionGrant,
+  PluginPermissionSnapshot,
+  // Plugin Storage types
+  PluginPrivateStorageApi,
+  PluginBlobRef,
+  PluginStoragePrunePolicy,
+  // Plugin Clipboard types
+  PluginClipboardApi,
+  ClipboardChange,
+  ClipboardWatchOptions,
+  // Plugin Paste types
+  PluginPasteApi,
+  PluginPasteResult,
 } from './workspace/pluginTypes'
 export type {
   LauncherSurfaceId,

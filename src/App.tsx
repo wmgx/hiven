@@ -13,6 +13,7 @@ import { GlobalLauncher } from './components/GlobalLauncher'
 import { PluginSettingsDialog } from './components/PluginSettingsDialog'
 import { loadInstalledPluginsFromStore } from './workspace/pluginRuntime'
 import { registerBundledPluginPackages } from './workspace/bundledPluginLoader'
+import { initializePluginBackgrounds, setupBackgroundSettingsWatcher } from './workspace/pluginBackgroundManager'
 import { installGlobalPinnedLauncherHotkeys, routeGlobalPinnedLauncherShortcut } from './hotkeys/globalPinnedLauncher'
 
 // Register built-in panels
@@ -20,6 +21,14 @@ import './panels/register'
 
 // Register first-party product plugin packages
 registerBundledPluginPackages()
+
+// Initialize plugin background tasks (deferred to avoid blocking render)
+try {
+  initializePluginBackgrounds()
+  setupBackgroundSettingsWatcher()
+} catch (err) {
+  console.error('[hiven] Failed to initialize plugin backgrounds:', err)
+}
 
 const VIEW_INDEX: Record<ViewId, number> = { editor: 0, scripts: 1, 'plugin-editor': 2, 'pinned-runner': 3, settings: 4 }
 

@@ -1,0 +1,20 @@
+{
+  "pluginId": "clipboard-history",
+  "displayName": "Clipboard History",
+  "displayNameI18n": {
+    "zh": "剪贴板历史"
+  },
+  "version": "1.0.0",
+  "capabilities": ["settings", "ui", "background"],
+  "permissions": [
+    "clipboard.read",
+    "clipboard.write",
+    "clipboard.watch",
+    "clipboard.image",
+    "clipboard.files",
+    "storage.private",
+    "storage.blob",
+    "globalShortcut.register",
+    "accessibility.paste"
+  ]
+}

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { dirname, join, normalize, relative } from 'node:path'
 
 const root = new URL('..', import.meta.url).pathname.replace(/\/$/, '')
 const failures = []
@@ -72,11 +72,13 @@ function checkImports(dir, forbidden, label) {
 function checkPluginCrossImports() {
   const pluginsDir = join(root, 'src/plugins')
   if (!existsSync(pluginsDir)) return
+  // Legacy plugins with known host deep-path imports (to be migrated later)
+  const legacyAllowList = new Set(['jsFilter', 'regex-tester'])
   for (const pluginName of readdirSync(pluginsDir)) {
     const pluginDir = join(pluginsDir, pluginName)
     if (!statSync(pluginDir).isDirectory()) continue
-    const forbidden = [
-      /^\.\.\/(?!\.\.\/)/,
+    if (legacyAllowList.has(pluginName)) continue
+    const absoluteForbidden = [
       /^\.\.\/\.\.\/plugins\//,
       /^@fluxtext\/plugin-/,
     ]
@@ -86,8 +88,17 @@ function checkPluginCrossImports() {
       let match
       while ((match = importRe.exec(text))) {
         const spec = match[1] ?? match[2]
-        if (forbidden.some((rule) => rule.test(spec))) {
+        if (absoluteForbidden.some((rule) => rule.test(spec))) {
           addFailure(`plugins must not import other plugins: ${rel(file)} imports "${spec}"`)
+          continue
+        }
+        // For relative imports starting with ../, resolve and check if it escapes the plugin dir
+        if (/^\.\.\//.test(spec)) {
+          const fileDir = file.substring(0, file.lastIndexOf('/'))
+          const resolved = normalize(join(fileDir, spec))
+          if (!resolved.startsWith(pluginDir)) {
+            addFailure(`plugins must not import other plugins: ${rel(file)} imports "${spec}"`)
+          }
         }
       }
     }
@@ -135,6 +146,38 @@ checkImports('src/workspace', [
 ], 'workspace must not depend on plugins')
 
 checkPluginCrossImports()
+
+// ─── Clipboard History specific checks ───────────────────────────────────────
+
+// clipboard-history must not import @tauri-apps/*
+checkImports('src/plugins/clipboard-history', [
+  /@tauri-apps\//,
+], 'clipboard-history must not import @tauri-apps')
+
+// clipboard-history must not import host store or workspace
+checkImports('src/plugins/clipboard-history', [
+  /^\.\.\/\.\.\/store/,
+  /^\.\.\/\.\.\/workspace/,
+  /^\.\.\/\.\.\/components/,
+  /^\.\.\/\.\.\/i18n/,
+  /^\.\.\/\.\.\/kits/,
+], 'clipboard-history must not import host deep paths')
+
+// workspace must not contain clipboard-history product terms
+checkForbiddenSourceTerms('src/workspace', [
+  /\bClipboardHistoryItem\b/,
+  /\bClipboardHistorySettings\b/,
+  /\bclipboardHistoryStore\b/,
+  /\bclipboardHistoryRepository\b/,
+], 'workspace must not contain clipboard-history product logic')
+
+// clipboard-history must have required directories
+const cbhDir = join(root, 'src/plugins/clipboard-history')
+for (const requiredDir of ['surfaces', 'settings', 'background', 'storage']) {
+  if (!existsSync(join(cbhDir, requiredDir))) {
+    addFailure(`clipboard-history must have ${requiredDir}/ directory`)
+  }
+}
 
 if (failures.length > 0) {
   console.error('Architecture boundary check failed:')

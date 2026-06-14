@@ -26,6 +26,7 @@ import {
   getPluginLauncherItemKey,
   getPluginToolItemKey,
   getPluginDynamicItemKey,
+  getPluginSurfaceItemKey,
   validateLauncherItemIds,
   sanitizeSurfaces,
   findUnknownSurfaces,
@@ -143,6 +144,34 @@ export function collectStaticPluginItems(): LauncherItem[] {
       if (item) {
         items.push(item)
       }
+    }
+
+    // ui.surfaces (adapted to launcher items for search/open)
+    const surfaces = def.ui?.surfaces ?? []
+    for (const surface of surfaces) {
+      if (surface.entry?.launcher === false) continue
+      const item: LauncherItem = {
+        systemKey: getPluginSurfaceItemKey(pluginId, surface.id),
+        kind: 'plugin',
+        pluginId,
+        source: resolvePluginSettingsSource(pluginId, source),
+        display: {
+          title: surface.title,
+          titleI18n: surface.titleI18n,
+          icon: surface.icon,
+          aliases: surface.aliases,
+        },
+        behavior: { type: 'perform' },
+        surfaces: ['global-launcher'],
+        pinnable: false,
+        execute: async (_ctx) => {
+          // Surface opening is handled by the host when this item is selected.
+          // The launcher controller will detect the plugin-surface systemKey
+          // and render the surface component directly.
+          return { ok: true }
+        },
+      }
+      items.push(item)
     }
   }
   return items

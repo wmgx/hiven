@@ -244,6 +244,189 @@ export type PluginSettingsContribution<TSettings = unknown> = {
 // ─── Launcher Quick Entry ────────────────────────────────────────────────────
 // Removed: migrated to launcher.items (see src/workspace/launcher/types.ts).
 
+// ─── Plugin Permission Types ─────────────────────────────────────────────────
+
+export type PluginPermission =
+  | 'clipboard.read'
+  | 'clipboard.write'
+  | 'clipboard.watch'
+  | 'clipboard.image'
+  | 'clipboard.files'
+  | 'storage.private'
+  | 'storage.blob'
+  | 'globalShortcut.register'
+  | 'accessibility.paste'
+
+export type PluginPermissionGrant = {
+  granted: boolean
+  grantedAt?: number
+  deniedAt?: number
+}
+
+export type PluginPermissionSnapshot = Record<PluginPermission, PluginPermissionGrant>
+
+// ─── Plugin Private Storage API ──────────────────────────────────────────────
+
+export type PluginBlobRef = {
+  blobId: string
+  byteSize: number
+  contentType: string
+}
+
+export type PluginStoragePrunePolicy = {
+  maxItems?: number
+  maxBytes?: number
+  maxAgeDays?: number
+}
+
+export type PluginPrivateStorageApi = {
+  kv: {
+    get<T = unknown>(key: string): Promise<T | undefined>
+    set<T = unknown>(key: string, value: T): Promise<void>
+    delete(key: string): Promise<void>
+    list(prefix?: string): Promise<Array<{ key: string; updatedAt: number }>>
+  }
+  blob: {
+    put(input: { bytes: Uint8Array; contentType: string; extension?: string }): Promise<PluginBlobRef>
+    get(blobId: string): Promise<Uint8Array | undefined>
+    delete(blobId: string): Promise<void>
+    url(blobId: string): Promise<string>
+  }
+  quota: {
+    usage(): Promise<{ bytes: number; itemCount: number }>
+    prune(policy: PluginStoragePrunePolicy): Promise<{ removedBytes: number; removedItems: number }>
+  }
+}
+
+// ─── Plugin Clipboard API ────────────────────────────────────────────────────
+
+export type ClipboardChange =
+  | {
+      kind: 'text'
+      text: string
+      byteSize: number
+      hash: string
+      changedAt: number
+    }
+  | {
+      kind: 'image'
+      blobId: string
+      previewBlobId: string
+      contentType: string
+      byteSize: number
+      width?: number
+      height?: number
+      hash: string
+      changedAt: number
+    }
+  | {
+      kind: 'files'
+      paths: string[]
+      fileNames: string[]
+      hash: string
+      changedAt: number
+    }
+
+export type ClipboardWatchOptions = {
+  text?: boolean
+  images?: boolean
+  files?: boolean
+  pollIntervalMs?: number
+  maxTextBytes?: number
+  maxImageBytes?: number
+}
+
+export type PluginClipboardApi = {
+  readText(): Promise<string>
+  writeText(text: string): Promise<void>
+  writeImage(blobId: string): Promise<void>
+  writeFiles(paths: string[]): Promise<void>
+  watch(options: ClipboardWatchOptions, onChange: (change: ClipboardChange) => void): Promise<() => void>
+}
+
+// ─── Plugin Paste API ────────────────────────────────────────────────────────
+
+export type PluginPasteResult =
+  | { ok: true }
+  | { ok: false; fallback: 'copied'; message: string }
+  | { ok: false; fallback: 'none'; message: string }
+
+export type PluginPasteApi = {
+  pasteText(text: string): Promise<PluginPasteResult>
+  pasteImage(blobId: string): Promise<PluginPasteResult>
+  pasteFiles(paths: string[]): Promise<PluginPasteResult>
+}
+
+// ─── Plugin UI Surface Types ─────────────────────────────────────────────────
+
+export type PluginUiSurfaceKind = 'custom-view'
+
+export type PluginSurfaceHostApi = {
+  close(): void
+  requestBack(): void
+  openSettings(): void
+  showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
+  storage: PluginPrivateStorageApi
+  clipboard: PluginClipboardApi
+  paste: PluginPasteApi
+}
+
+export type PluginSurfaceProps<TSettings = unknown> = {
+  pluginId: string
+  surfaceId: string
+  locale: Locale
+  t: (key: string, vars?: Record<string, string | number>) => string
+  settings: TSettings
+  permissions: PluginPermissionSnapshot
+  host: PluginSurfaceHostApi
+}
+
+export type PluginUiSurfaceContribution<TSettings = unknown> = {
+  id: string
+  kind: PluginUiSurfaceKind
+  title: string
+  titleI18n?: Partial<Record<Locale, string>>
+  icon?: string
+  aliases?: string[]
+  component: ComponentType<PluginSurfaceProps<TSettings>>
+  entry?: {
+    launcher?: boolean
+    shortcutBindable?: boolean
+    recommendedShortcut?: string
+  }
+  shell?: {
+    defaultWidth?: number
+    defaultHeight?: number
+    minWidth?: number
+    minHeight?: number
+    closeOnBlur?: boolean
+    resizable?: boolean
+  }
+}
+
+export type PluginUiContribution<TSettings = unknown> = {
+  surfaces?: PluginUiSurfaceContribution<TSettings>[]
+}
+
+// ─── Plugin Background Types ─────────────────────────────────────────────────
+
+export type PluginBackgroundStop = () => void | Promise<void>
+
+export type PluginBackgroundContext<TSettings = unknown> = {
+  pluginId: string
+  locale: Locale
+  settings: TSettings
+  permissions: PluginPermissionSnapshot
+  storage: PluginPrivateStorageApi
+  clipboard: PluginClipboardApi
+  paste: PluginPasteApi
+  showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
+}
+
+export type PluginBackgroundContribution<TSettings = unknown> = {
+  start(ctx: PluginBackgroundContext<TSettings>): Promise<PluginBackgroundStop | void> | PluginBackgroundStop | void
+}
+
 // ─── Plugin Definition ────────────────────────────────────────────────────────
 
 /** The full plugin definition returned by definePlugin */
@@ -264,6 +447,10 @@ export type PluginDefinition<TSettings = unknown> = {
   panels?: PanelContributionV2[]
   toolbar?: ToolbarContribution[]
   settings?: PluginSettingsContribution<TSettings>
+  /** Plugin UI surfaces (host-openable custom views). */
+  ui?: PluginUiContribution<TSettings>
+  /** Plugin background lifecycle (long-running tasks). */
+  background?: PluginBackgroundContribution<TSettings>
 }
 
 // ─── Plugin Manifest ──────────────────────────────────────────────────────────
@@ -275,6 +462,7 @@ export type PluginManifest = {
   displayNameI18n?: Partial<Record<Locale, string>>
   version?: string
   capabilities?: string[]
+  permissions?: PluginPermission[]
 }
 
 // ─── Plugin Runtime State ─────────────────────────────────────────────────────

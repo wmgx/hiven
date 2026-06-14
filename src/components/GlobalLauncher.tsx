@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ErrorInfo, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { LayoutPanelLeft, Pin, Puzzle, Search, Settings } from 'lucide-react'
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
 import { localized, useAppStore, type ViewId } from '../store'
@@ -7,7 +7,7 @@ import { makePluginT } from '../i18n/pluginI18nRegistry'
 import { resolveIcon } from '../utils/resolveIcon'
 import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../utils/imeKeyboard'
-import { resolvePluginSettings } from '../workspace/pluginSettingsStore'
+import { resolvePluginSettings, usePluginSettingsStore } from '../workspace/pluginSettingsStore'
 import { scoreSearchableFields, searchableFieldsMatch, type SearchableFields } from '../workspace/searchRanking'
 import { LauncherController } from '../workspace/launcher/controller'
 import type { LauncherControllerState, CollectInputFrame, ParamInputFrame, ResultFrame } from '../workspace/launcher/controller'
@@ -19,7 +19,10 @@ import type { LauncherItem as DomainLauncherItem, LauncherSurfaceId } from '../w
 import { resolvePluginSettingsSource } from '../workspace/launcher/pluginSource'
 import { LauncherParamStep, resolveParamValueLabel } from './launcher/LauncherParamStep'
 import { getPlatformShortcutMeta, shouldCustomizeParams, supportsDefaultParamRun, supportsParamCustomization } from './launcher/launcherParamShortcuts'
-import type { ContributionSource } from '../workspace/pluginTypes'
+import type { ContributionSource, PluginDefinition, PluginPermissionSnapshot, PluginPermission } from '../workspace/pluginTypes'
+import { createPluginPrivateStorage } from '../workspace/pluginStorage'
+import { createPluginClipboard } from '../workspace/pluginClipboard'
+import { createPluginPaste } from '../workspace/pluginPaste'
 
 type LauncherItem =
   | { kind: 'domain'; id: string; title: string; subtitle: string; icon?: string; domainItem: DomainLauncherItem }
@@ -58,6 +61,7 @@ export function GlobalLauncher() {
   const controllerRef = useRef<LauncherController | null>(null)
   const closeAfterActionRef = useRef<() => void>(() => {})
   const [dynamicItems, setDynamicItems] = useState<DomainLauncherItem[]>([])
+  const [surfaceFrame, setSurfaceFrame] = useState<{ pluginId: string; surfaceId: string } | null>(null)
   const dynamicQueryRef = useRef('')
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -362,6 +366,18 @@ export function GlobalLauncher() {
     if (!item) return
 
     if (item.kind === 'domain') {
+      // Intercept plugin surface items — render surface instead of execute
+      if (item.domainItem.systemKey.startsWith('plugin-surface:')) {
+        const parts = item.domainItem.systemKey.split(':')
+        // format: plugin-surface:source:pluginId:surfaceId
+        const pluginId = parts[2]
+        const surfaceId = parts[3]
+        if (pluginId && surfaceId) {
+          setSurfaceFrame({ pluginId, surfaceId })
+          return
+        }
+      }
+
       const controller = controllerRef.current
       if (!controller) {
         console.warn('[hiven] Cannot select domain launcher item before controller is ready:', item.domainItem.systemKey)
@@ -569,6 +585,10 @@ export function GlobalLauncher() {
           if (event.key === 'Escape') {
             event.preventDefault()
             event.stopPropagation()
+            if (surfaceFrame) {
+              setSurfaceFrame(null)
+              return
+            }
             closeLauncher()
             return
           }
@@ -582,7 +602,44 @@ export function GlobalLauncher() {
         onCompositionStart={handleCompositionStart}
         onCompositionEnd={handleCompositionEnd}
       >
-        {controllerState && controllerState.frames.length > 1 && controllerState.frames[controllerState.frames.length - 1].kind === 'param-input' ? (() => {
+        {surfaceFrame ? (() => {
+          const def = pluginRegistry.getPluginDefinition(surfaceFrame.pluginId, 'production') as PluginDefinition<unknown> | undefined
+          const surface = def?.ui?.surfaces?.find((s) => s.id === surfaceFrame.surfaceId)
+          if (!surface) {
+            return <div className="p-4 text-center text-[12px]" style={{ color: 'var(--color-text-tertiary)' }}>Surface not found</div>
+          }
+          const SurfaceComponent = surface.component
+          const settingsContribution = def?.settings
+          const settings = settingsContribution ? resolvePluginSettings('builtin', surfaceFrame.pluginId, settingsContribution).value : {}
+          const pluginT = makePluginT(surfaceFrame.pluginId, locale)
+          const permissions = buildAllGrantedPermissions()
+          const openSettingsDialog = usePluginSettingsStore.getState().openSettingsDialog
+          return (
+            <PluginSurfaceErrorBoundary pluginId={surfaceFrame.pluginId} onBack={() => setSurfaceFrame(null)}>
+              <div style={{ height: surface.shell?.defaultHeight ?? 480, overflow: 'hidden' }}>
+                <SurfaceComponent
+                  pluginId={surfaceFrame.pluginId}
+                  surfaceId={surfaceFrame.surfaceId}
+                  locale={locale}
+                  t={pluginT}
+                  settings={settings}
+                  permissions={permissions}
+                  host={{
+                    close: () => { setSurfaceFrame(null); closeLauncher() },
+                    requestBack: () => setSurfaceFrame(null),
+                    openSettings: () => { openSettingsDialog({ pluginId: surfaceFrame.pluginId, source: 'builtin' }) },
+                    showMessage: (message, level) => {
+                      useAppStore.getState().setLastCommandStatus({ title: message, status: level === 'error' ? 'error' : 'success', message, updatedAt: Date.now() })
+                    },
+                    storage: createPluginPrivateStorage(surfaceFrame.pluginId),
+                    clipboard: createPluginClipboard(surfaceFrame.pluginId),
+                    paste: createPluginPaste(),
+                  }}
+                />
+              </div>
+            </PluginSurfaceErrorBoundary>
+          )
+        })() : controllerState && controllerState.frames.length > 1 && controllerState.frames[controllerState.frames.length - 1].kind === 'param-input' ? (() => {
           const frame = controllerState.frames[controllerState.frames.length - 1] as ParamInputFrame
           return (
             <LauncherParamStep
@@ -869,4 +926,62 @@ function launcherItemSearchId(item: LauncherItem): string {
 function launcherItemUsageKey(item: LauncherItem): string {
   if (item.kind === 'pinned') return item.actionId
   return item.id
+}
+
+// ─── Plugin Surface Helpers ──────────────────────────────────────────────────
+
+function buildAllGrantedPermissions(): PluginPermissionSnapshot {
+  const permissions: PluginPermission[] = [
+    'clipboard.read', 'clipboard.write', 'clipboard.watch',
+    'clipboard.image', 'clipboard.files',
+    'storage.private', 'storage.blob',
+    'globalShortcut.register', 'accessibility.paste',
+  ]
+  const snapshot = {} as PluginPermissionSnapshot
+  for (const p of permissions) {
+    snapshot[p] = { granted: true, grantedAt: Date.now() }
+  }
+  return snapshot
+}
+
+type SurfaceErrorBoundaryProps = {
+  pluginId: string
+  onBack: () => void
+  children: ReactNode
+}
+
+type SurfaceErrorBoundaryState = {
+  hasError: boolean
+  error?: string
+}
+
+class PluginSurfaceErrorBoundary extends Component<SurfaceErrorBoundaryProps, SurfaceErrorBoundaryState> {
+  state: SurfaceErrorBoundaryState = { hasError: false }
+
+  static getDerivedStateFromError(error: Error): SurfaceErrorBoundaryState {
+    return { hasError: true, error: error.message }
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error(`[hiven] Plugin surface "${this.props.pluginId}" crashed:`, error, info)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center gap-3 p-6" style={{ color: 'var(--color-text-secondary)' }}>
+          <span className="text-[13px]">Plugin surface crashed</span>
+          <span className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>{this.state.error}</span>
+          <button
+            className="text-[12px] px-3 py-1.5 rounded"
+            style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-primary)', border: 'none', cursor: 'pointer' }}
+            onClick={this.props.onBack}
+          >
+            Back
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
 }

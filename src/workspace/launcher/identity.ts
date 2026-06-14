@@ -30,6 +30,11 @@ export function getPluginDynamicItemKey(pluginId: string, itemId: string): Syste
   return `plugin:${pluginId}:dynamic:${itemId}`
 }
 
+/** `plugin-surface:${source}:${pluginId}:${surfaceId}` — plugin UI surface launcher key. */
+export function getPluginSurfaceItemKey(pluginId: string, surfaceId: string): SystemLauncherItemKey {
+  return `plugin-surface:builtin:${pluginId}:${surfaceId}`
+}
+
 /** `host:view:${viewId}` */
 export function getHostViewItemKey(viewId: string): SystemLauncherItemKey {
   return `host:view:${viewId}`

@@ -1,0 +1,210 @@
+#!/usr/bin/env node
+
+/**
+ * Clipboard History Plugin — Integration Test
+ *
+ * Simulates the runtime loading path:
+ * 1. Plugin definition is loaded via bundledPluginLoader glob
+ * 2. registerProductionPlugin stores the definition
+ * 3. collectStaticPluginItems() generates a launcher item from ui.surfaces
+ * 4. Settings body component can be instantiated
+ * 5. GlobalLauncher can find the surface via title/aliases matching
+ */
+
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { execSync } from 'node:child_process'
+
+const root = new URL('..', import.meta.url).pathname.replace(/\/$/, '')
+
+function read(path) {
+  return readFileSync(join(root, path), 'utf8')
+}
+
+// ─── 1. Plugin definition structure ─────────────────────────────────────────
+
+const indexContent = read('src/plugins/clipboard-history/index.tsx')
+
+// definePlugin is called with settings + ui + background
+assert.match(indexContent, /definePlugin/, 'Must call definePlugin')
+assert.match(indexContent, /settings:\s*\{/, 'Must declare settings contribution')
+assert.match(indexContent, /ui:\s*\{/, 'Must declare ui contribution')
+assert.match(indexContent, /background:\s*/, 'Must declare background contribution')
+
+// ui.surfaces declares at least one surface
+assert.match(indexContent, /surfaces:\s*\[/, 'Must declare surfaces array')
+assert.match(indexContent, /id:\s*['"]main['"]/, 'Must declare surface with id "main"')
+assert.match(indexContent, /kind:\s*['"]custom-view['"]/, 'Surface kind must be custom-view')
+assert.match(indexContent, /component:\s*ClipboardHistorySurface/, 'Surface component must reference ClipboardHistorySurface')
+
+// entry.launcher is true (default or explicit)
+assert.match(indexContent, /launcher:\s*true/, 'Surface entry.launcher must be true')
+assert.match(indexContent, /shortcutBindable:\s*true/, 'Surface entry.shortcutBindable must be true')
+
+// aliases for launcher search
+assert.match(indexContent, /aliases:\s*\[/, 'Surface must have aliases for search')
+assert.match(indexContent, /['"]clipboard['"]/, 'Aliases must include "clipboard"')
+assert.match(indexContent, /['"]剪贴板['"]/, 'Aliases must include Chinese "剪贴板"')
+
+// ─── 2. Launcher registry generates item from surface ────────────────────────
+
+const registryContent = read('src/workspace/launcher/registry.ts')
+
+// Must iterate ui.surfaces
+assert.match(registryContent, /def\.ui\?\.surfaces/, 'Registry must access def.ui?.surfaces')
+
+// Must check entry.launcher !== false
+assert.match(registryContent, /entry\?\.launcher\s*===\s*false/, 'Registry must skip surfaces with launcher=false')
+
+// Must generate systemKey with plugin-surface prefix
+assert.match(registryContent, /getPluginSurfaceItemKey\(pluginId,\s*surface\.id\)/, 'Registry must generate surface systemKey')
+
+// Must set surfaces to global-launcher
+assert.match(registryContent, /surfaces:\s*\[['"]global-launcher['"]\]/, 'Surface item must appear in global-launcher')
+
+// Must pass display.title and display.aliases from surface contribution
+assert.match(registryContent, /title:\s*surface\.title/, 'Must pass surface title to launcher display')
+assert.match(registryContent, /aliases:\s*surface\.aliases/, 'Must pass surface aliases to launcher display')
+
+// ─── 3. Settings body renders with standard React patterns ───────────────────
+
+const settingsBody = read('src/plugins/clipboard-history/settings/ClipboardHistorySettingsBody.tsx')
+
+// Uses standard React import
+assert.match(settingsBody, /import\s*\{.*useState.*\}\s*from\s*['"]react['"]/, 'SettingsBody must import useState from react')
+
+// Has proper JSX structure (not createElement hacks)
+assert.match(settingsBody, /<div|<label|<input|<button|<span/, 'SettingsBody must use JSX syntax')
+
+// Has all required settings fields per design doc
+assert.match(settingsBody, /value\.enabled/, 'SettingsBody must bind to value.enabled')
+assert.match(settingsBody, /value\.recordText/, 'SettingsBody must bind to value.recordText')
+assert.match(settingsBody, /value\.recordImages/, 'SettingsBody must bind to value.recordImages')
+assert.match(settingsBody, /value\.recordFiles/, 'SettingsBody must bind to value.recordFiles')
+assert.match(settingsBody, /value\.maxItems/, 'SettingsBody must bind to value.maxItems')
+assert.match(settingsBody, /value\.retentionDays/, 'SettingsBody must bind to value.retentionDays')
+assert.match(settingsBody, /value\.maxTextBytes/, 'SettingsBody must bind to value.maxTextBytes')
+assert.match(settingsBody, /value\.maxImageBytes/, 'SettingsBody must bind to value.maxImageBytes')
+assert.match(settingsBody, /value\.maxTotalCacheBytes/, 'SettingsBody must bind to value.maxTotalCacheBytes')
+
+// Has clear-all with confirmation
+assert.match(settingsBody, /clearAll|clear.*confirm/i, 'SettingsBody must have clear-all with confirmation')
+assert.match(settingsBody, /showClearConfirm/, 'SettingsBody must track confirm state')
+
+// Uses t() for i18n
+assert.match(settingsBody, /t\(['"]settings\./, 'SettingsBody must use t() for localized labels')
+
+// Uses updateValue for partial updates (not setValue for full replace)
+assert.match(settingsBody, /updateValue\(\{/, 'SettingsBody must use updateValue for partial updates')
+
+// ─── 4. i18n completeness ───────────────────────────────────────────────────
+
+const enLocale = JSON.parse(read('src/plugins/clipboard-history/locales/en.json'))
+const zhLocale = JSON.parse(read('src/plugins/clipboard-history/locales/zh.json'))
+
+const requiredKeys = [
+  'settings.enabled',
+  'settings.recordText',
+  'settings.recordImages',
+  'settings.recordFiles',
+  'settings.maxItems',
+  'settings.retentionDays',
+  'settings.clearAll',
+  'settings.clearAll.confirm',
+  'surface.main.title',
+  'search.placeholder',
+  'filter.all',
+  'filter.text',
+  'filter.image',
+  'filter.files',
+  'state.loading',
+  'state.disabled',
+  'state.empty',
+  'preview.empty',
+  'hint.paste',
+  'hint.copy',
+  'hint.delete',
+  'message.copied',
+  'error.loadFailed',
+  'error.pasteFailed',
+]
+
+for (const key of requiredKeys) {
+  assert.ok(key in enLocale, `en.json missing key: "${key}"`)
+  assert.ok(key in zhLocale, `zh.json missing key: "${key}"`)
+  assert.ok(enLocale[key].length > 0, `en.json key "${key}" is empty`)
+  assert.ok(zhLocale[key].length > 0, `zh.json key "${key}" is empty`)
+}
+
+// ─── 5. Surface component structure ─────────────────────────────────────────
+
+const surfaceContent = read('src/plugins/clipboard-history/surfaces/ClipboardHistorySurface.tsx')
+
+// Imports are from @hiven/plugin (SDK) and local relative paths only
+assert.match(surfaceContent, /from\s*['"]@hiven\/plugin['"]/, 'Surface must import types from @hiven/plugin')
+assert.match(surfaceContent, /from\s*['"]\.\.\/settings\/model['"]/, 'Surface must import settings model')
+assert.match(surfaceContent, /from\s*['"]\.\.\/storage\//, 'Surface must import from storage')
+
+// Accepts PluginSurfaceProps
+assert.match(surfaceContent, /PluginSurfaceProps/, 'Surface must accept PluginSurfaceProps')
+
+// Uses host.paste for terminal action
+assert.match(surfaceContent, /host\.paste\.pasteText/, 'Surface must use host.paste.pasteText')
+assert.match(surfaceContent, /host\.paste\.pasteImage/, 'Surface must use host.paste.pasteImage')
+assert.match(surfaceContent, /host\.paste\.pasteFiles/, 'Surface must use host.paste.pasteFiles')
+
+// Uses host.close() after paste
+assert.match(surfaceContent, /host\.close\(\)/, 'Surface must call host.close() after paste')
+
+// Uses host.clipboard for copy action
+assert.match(surfaceContent, /host\.clipboard\.writeText/, 'Surface must use host.clipboard.writeText for copy')
+
+// Has keyboard handling (Enter, Delete, ArrowUp, ArrowDown)
+assert.match(surfaceContent, /['"]Enter['"]/, 'Surface must handle Enter key')
+assert.match(surfaceContent, /['"]Delete['"]|['"]Backspace['"]/, 'Surface must handle Delete/Backspace key')
+assert.match(surfaceContent, /['"]ArrowDown['"]/, 'Surface must handle ArrowDown key')
+assert.match(surfaceContent, /['"]ArrowUp['"]/, 'Surface must handle ArrowUp key')
+
+// Has search/filter capability
+assert.match(surfaceContent, /setQuery|query/, 'Surface must have search query state')
+assert.match(surfaceContent, /setFilter|filter/, 'Surface must have filter state')
+
+// Has loading and disabled states
+assert.match(surfaceContent, /loading/, 'Surface must handle loading state')
+assert.match(surfaceContent, /settings\.enabled/, 'Surface must check settings.enabled')
+
+// ─── 6. Background structure ─────────────────────────────────────────────────
+
+const bgContent = read('src/plugins/clipboard-history/background/clipboardHistoryBackground.ts')
+
+// Must not start when disabled
+assert.match(bgContent, /if\s*\(\s*!ctx\.settings\.enabled\s*\)/, 'Background must check ctx.settings.enabled')
+
+// Must return stop function
+assert.match(bgContent, /return\s+stop/, 'Background must return stop function')
+
+// Must clean up watcher
+assert.match(bgContent, /unwatch\(\)|unwatch\s*=\s*null/, 'Background stop must clean up watcher')
+
+// ─── 7. Manifest correctness ────────────────────────────────────────────────
+
+const manifest = JSON.parse(read('src/plugins/clipboard-history/manifest.json'))
+
+assert.equal(manifest.pluginId, 'clipboard-history')
+assert.equal(manifest.version, '1.0.0')
+assert.ok(manifest.capabilities.includes('settings'))
+assert.ok(manifest.capabilities.includes('ui'))
+assert.ok(manifest.capabilities.includes('background'))
+assert.ok(manifest.permissions.includes('clipboard.read'))
+assert.ok(manifest.permissions.includes('clipboard.write'))
+assert.ok(manifest.permissions.includes('clipboard.watch'))
+assert.ok(manifest.permissions.includes('storage.private'))
+assert.ok(manifest.permissions.includes('accessibility.paste'))
+
+// ─── 8. No globalThis/window hack in settings ────────────────────────────────
+
+assert.doesNotMatch(settingsBody, /globalThis/, 'SettingsBody must not use globalThis')
+assert.doesNotMatch(settingsBody, /window\.HivenPlugin|window\.FluxTextPlugin/, 'SettingsBody must not access window.HivenPlugin')
+
+console.log('clipboard-history integration tests passed')
