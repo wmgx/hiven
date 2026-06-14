@@ -10,6 +10,7 @@
  * changes an item's semantic meaning, it must change the item id.
  */
 
+import type { PluginSettingsSource } from '../pluginSettingsStore'
 import type { LauncherSurfaceId, SystemLauncherItemKey } from './types'
 import { isLauncherSurfaceId } from './types'
 
@@ -31,8 +32,8 @@ export function getPluginDynamicItemKey(pluginId: string, itemId: string): Syste
 }
 
 /** `plugin-surface:${source}:${pluginId}:${surfaceId}` — plugin UI surface launcher key. */
-export function getPluginSurfaceItemKey(pluginId: string, surfaceId: string): SystemLauncherItemKey {
-  return `plugin-surface:builtin:${pluginId}:${surfaceId}`
+export function getPluginSurfaceItemKey(source: PluginSettingsSource, pluginId: string, surfaceId: string): SystemLauncherItemKey {
+  return `plugin-surface:${source}:${pluginId}:${surfaceId}`
 }
 
 /** `host:view:${viewId}` */

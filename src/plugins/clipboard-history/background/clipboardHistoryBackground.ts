@@ -37,6 +37,7 @@ function buildAddItemInput(change: ClipboardChange): AddItemInput | null {
         text: change.text,
         byteSize: change.byteSize,
         hash: change.hash,
+        sourceApp: change.sourceApp,
       }
     case 'image':
       return {
@@ -48,6 +49,7 @@ function buildAddItemInput(change: ClipboardChange): AddItemInput | null {
         width: change.width,
         height: change.height,
         hash: change.hash,
+        sourceApp: change.sourceApp,
       }
     case 'files':
       if (change.paths.length === 0) return null
@@ -57,6 +59,7 @@ function buildAddItemInput(change: ClipboardChange): AddItemInput | null {
         fileNames: change.fileNames,
         byteSize: change.paths.join('\n').length,
         hash: change.hash,
+        sourceApp: change.sourceApp,
       }
     default:
       return null

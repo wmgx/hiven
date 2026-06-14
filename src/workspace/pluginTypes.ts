@@ -230,6 +230,13 @@ export type PluginSettingsBodyProps<TSettings = unknown> = {
   updateValue: (patch: Partial<TSettings>) => void
   resetValue: () => void
   openExternal: (url: string) => Promise<void>
+  host: PluginSettingsHostApi
+}
+
+export type PluginSettingsHostApi = {
+  permissions: PluginPermissionSnapshot
+  storage: PluginPrivateStorageApi
+  showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
 }
 
 export type PluginSettingsContribution<TSettings = unknown> = {
@@ -307,6 +314,7 @@ export type ClipboardChange =
       byteSize: number
       hash: string
       changedAt: number
+      sourceApp?: string
     }
   | {
       kind: 'image'
@@ -318,6 +326,7 @@ export type ClipboardChange =
       height?: number
       hash: string
       changedAt: number
+      sourceApp?: string
     }
   | {
       kind: 'files'
@@ -325,6 +334,7 @@ export type ClipboardChange =
       fileNames: string[]
       hash: string
       changedAt: number
+      sourceApp?: string
     }
 
 export type ClipboardWatchOptions = {
@@ -332,6 +342,7 @@ export type ClipboardWatchOptions = {
   images?: boolean
   files?: boolean
   pollIntervalMs?: number
+  imagePollIntervalMs?: number
   maxTextBytes?: number
   maxImageBytes?: number
 }
@@ -485,6 +496,7 @@ export type InstalledPlugin = {
   version: string
   entry: string
   capabilities: string[]
+  permissions?: PluginPermission[]
   folderPath: string
   packagePath?: string
   source: 'local' | 'github' | 'zip' | 'builtin'
@@ -507,6 +519,7 @@ export type DevPlugin = {
   source?: PluginPackageSource
   sourceUrl?: string
   capabilities?: string[]
+  permissions?: PluginPermission[]
   status: 'active' | 'error'
   error?: string
   loadedAt: number

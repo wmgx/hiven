@@ -17,6 +17,8 @@ import {
 } from '../workspace/pluginSettingsStore'
 import { openExternalUrl } from '../workspace/effectRunner'
 import type { PluginSettingsContribution } from '../workspace/pluginTypes'
+import { createPluginPrivateStorage } from '../workspace/pluginStorage'
+import { getPluginPermissionSnapshot, usePluginPermissionStore } from '../workspace/pluginPermissions'
 
 // ─── Error Boundary ──────────────────────────────────────────────────────────
 
@@ -158,6 +160,8 @@ function SettingsDialogBody({
   const setPluginSettings = usePluginSettingsStore((s) => s.setPluginSettings)
   // Subscribe to the store record reactively so UI updates on setValue
   const storedRecord = usePluginSettingsStore((s) => s.pluginSettings[source][pluginId])
+  const pluginPermissionVersion = usePluginPermissionStore((s) => s.version)
+  void pluginPermissionVersion
 
   const currentVersion = contribution.version ?? 1
 
@@ -213,6 +217,20 @@ function SettingsDialogBody({
 
   const title = contribution.titleI18n?.[locale] ?? contribution.title ?? t(locale, 'scripts.settingsDialogTitle')
   const pluginT = useMemo(() => makePluginT(pluginId, locale), [pluginId, locale])
+  const requestedPermissions = useMemo(() => pluginRegistry.getPluginPermissions(pluginId, source), [pluginId, source])
+  const permissions = getPluginPermissionSnapshot(source, pluginId, requestedPermissions)
+  const settingsHost = useMemo(() => ({
+    permissions,
+    storage: createPluginPrivateStorage(source, pluginId, permissions),
+    showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error') {
+      useAppStore.getState().setLastCommandStatus({
+        title: message,
+        status: level === 'error' ? 'error' : 'success',
+        message,
+        updatedAt: Date.now(),
+      })
+    },
+  }), [source, pluginId, permissions])
 
   const SettingsComponent = contribution.component
 
@@ -255,7 +273,7 @@ function SettingsDialogBody({
       )}
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto px-5 py-4">
+      <div className="flex-1 overflow-y-auto px-5 py-4" data-launcher-scrollable>
         <SettingsErrorBoundary fallback={errorFallback}>
           <SettingsComponent
             pluginId={pluginId}
@@ -268,6 +286,7 @@ function SettingsDialogBody({
             updateValue={updateValue}
             resetValue={resetValue}
             openExternal={openExternal}
+            host={settingsHost}
           />
         </SettingsErrorBoundary>
       </div>

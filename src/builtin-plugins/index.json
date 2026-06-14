@@ -17,6 +17,11 @@
       "version": "1.0.1"
     },
     {
+      "pluginId": "clipboard-history",
+      "dir": "clipboard-history",
+      "version": "1.0.0"
+    },
+    {
       "pluginId": "core-pane",
       "dir": "core-pane",
       "version": "1.2.1"
@@ -39,11 +44,6 @@
     {
       "pluginId": "csv",
       "dir": "csv",
-      "version": "1.0.1"
-    },
-    {
-      "pluginId": "extract",
-      "dir": "extract",
       "version": "1.0.1"
     },
     {

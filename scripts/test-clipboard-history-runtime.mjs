@@ -23,6 +23,8 @@ function read(path) {
   return readFileSync(join(root, path), 'utf8')
 }
 
+const defaultCapability = JSON.parse(read('src-tauri/capabilities/default.json'))
+
 // ─── 1. Storage API implementation exists and is correct ─────────────────────
 
 const storageImpl = read('src/workspace/pluginStorage.ts')
@@ -30,11 +32,17 @@ const storageImpl = read('src/workspace/pluginStorage.ts')
 assert.match(storageImpl, /createPluginPrivateStorage/, 'Must export createPluginPrivateStorage')
 assert.match(storageImpl, /localStorage/, 'Must use localStorage for KV')
 assert.match(storageImpl, /hiven-plugin-kv:/, 'Must namespace KV keys by plugin')
+assert.match(storageImpl, /PluginSettingsSource|source/, 'Storage namespace must include plugin source')
 assert.match(storageImpl, /JSON\.parse/, 'Must parse stored JSON')
 assert.match(storageImpl, /JSON\.stringify/, 'Must stringify values')
 assert.match(storageImpl, /blobStore/, 'Must have blob store')
+assert.match(storageImpl, /hiven-plugin-blob:/, 'Blob storage must persist blobs under a plugin namespace')
+assert.match(storageImpl, /bytesToBase64/, 'Blob storage must serialize bytes for persistence')
+assert.match(storageImpl, /base64ToBytes/, 'Blob storage must restore bytes from persistence')
 assert.match(storageImpl, /URL\.createObjectURL/, 'Must create object URLs for blobs')
 assert.match(storageImpl, /URL\.revokeObjectURL/, 'Must revoke object URLs on delete')
+assert.match(storageImpl, /clearPluginPrivateStorage/, 'Must expose plugin private storage cleanup for uninstall/remove')
+assert.match(storageImpl, /blobStore\.delete/, 'Storage cleanup must delete plugin blobs')
 
 // KV isolation: keys include pluginId
 assert.match(storageImpl, /\$\{pluginId\}/, 'KV keys must include pluginId for isolation')
@@ -49,37 +57,83 @@ assert.match(clipboardImpl, /navigator\.clipboard/, 'Must fallback to navigator.
 assert.match(clipboardImpl, /setInterval/, 'Watch must use polling via setInterval')
 assert.match(clipboardImpl, /clearInterval/, 'Unwatch must clear interval')
 assert.match(clipboardImpl, /hashString/, 'Must hash content for change detection')
+assert.match(clipboardImpl, /hashBytes/, 'Must hash image bytes for image change detection')
 assert.match(clipboardImpl, /onChange\(change\)/, 'Must call onChange callback on changes')
 assert.match(clipboardImpl, /pollIntervalMs/, 'Must respect poll interval option')
+assert.match(clipboardImpl, /writeClipboardImage/, 'Must implement image clipboard writes')
+assert.match(clipboardImpl, /readClipboardImage/, 'Must implement image clipboard reads')
+assert.match(clipboardImpl, /readClipboardImageSnapshot/, 'Image watch should read a lightweight snapshot before storing')
+assert.match(clipboardImpl, /hashBytes\(image\.hashBytes\)[\s\S]{0,320}image\.toStoredImage\(\)/, 'Image watch should encode/store only after detecting a changed image hash')
+assert.match(clipboardImpl, /imagePollIntervalMs|imagePollInterval/, 'Image watch should allow slower image polling than text polling')
+assert.match(clipboardImpl, /current_foreground_app_name/, 'Clipboard watch should capture a best-effort source app when content changes')
+assert.match(clipboardImpl, /if\s*\(\s*stopped\s*\|\|\s*polling\s*\)\s*return/, 'Clipboard watch must skip overlapping poll cycles')
+assert.match(clipboardImpl, /polling\s*=\s*true/, 'Clipboard watch must mark an active poll cycle')
+assert.match(clipboardImpl, /finally\s*\{[\s\S]{0,120}polling\s*=\s*false/, 'Clipboard watch must clear active poll state after each cycle')
+assert.match(clipboardImpl, /storage\.blob\.put/, 'Image watch must persist blobs to plugin storage')
+assert.match(clipboardImpl, /storage\.blob\.get/, 'Image write must resolve blobId from plugin storage')
+assert.match(clipboardImpl, /paths\.join\('\\n'\)/, 'File clipboard write must copy newline-separated paths')
+assert.doesNotMatch(clipboardImpl, /not yet implemented/, 'Clipboard API must not leave stubbed methods')
+assert.ok(
+  defaultCapability.permissions?.includes('clipboard-manager:allow-read-image'),
+  'Tauri capability must allow clipboard image reads',
+)
+assert.ok(
+  defaultCapability.permissions?.includes('clipboard-manager:allow-write-image'),
+  'Tauri capability must allow clipboard image writes',
+)
 
 // ─── 3. Paste API implementation exists and is correct ───────────────────────
 
 const pasteImpl = read('src/workspace/pluginPaste.ts')
+const tauriLib = read('src-tauri/src/lib.rs')
 
 assert.match(pasteImpl, /createPluginPaste/, 'Must export createPluginPaste')
 assert.match(pasteImpl, /writeTextToClipboard/, 'Must write to clipboard before paste')
+assert.match(pasteImpl, /writeImageToClipboard/, 'Must write image blobs to clipboard before paste')
 assert.match(pasteImpl, /simulate_paste/, 'Must try Tauri simulate_paste command')
 assert.match(pasteImpl, /fallback.*copied/, 'Must return copied fallback on failure')
 assert.match(pasteImpl, /hide_launcher_window/, 'Must try to hide launcher window')
+assert.match(pasteImpl, /storage\.blob\.get/, 'Image paste must resolve blobId from plugin storage')
+assert.match(pasteImpl, /paths\.join\('\\n'\)/, 'File paste must copy newline-separated paths before paste')
+assert.doesNotMatch(pasteImpl, /not fully implemented|not yet supported/, 'Paste API must not report implemented paths as unsupported stubs')
 
 // pasteText returns proper types
 assert.match(pasteImpl, /ok:\s*true/, 'Must return ok:true on success')
 assert.match(pasteImpl, /fallback:\s*['"]copied['"]/, 'Must return copied fallback on failure')
+assert.match(tauriLib, /async\s+fn\s+simulate_paste\(\)/, 'Tauri must implement simulate_paste for direct paste')
+assert.match(tauriLib, /simulate_paste,/, 'Tauri invoke handler must register simulate_paste')
+assert.match(tauriLib, /new_keyboard_event[\s\S]{0,500}CGEventFlagCommand/, 'simulate_paste must post a Cmd+V keyboard event')
 
 // ─── 4. Background lifecycle manager exists and is correct ───────────────────
 
 const bgManager = read('src/workspace/pluginBackgroundManager.ts')
 
 assert.match(bgManager, /initializePluginBackgrounds/, 'Must export initializePluginBackgrounds')
+assert.match(bgManager, /stopAllPluginBackgrounds/, 'Must export stopAllPluginBackgrounds for app/window cleanup')
 assert.match(bgManager, /restartPluginBackground/, 'Must export restartPluginBackground')
 assert.match(bgManager, /stopPluginBackground/, 'Must export stopPluginBackground')
 assert.match(bgManager, /setupBackgroundSettingsWatcher/, 'Must export setupBackgroundSettingsWatcher')
+assert.match(bgManager, /setupBackgroundPermissionWatcher/, 'Must export setupBackgroundPermissionWatcher')
 assert.match(bgManager, /background\.start\(ctx\)/, 'Must call background.start with context')
 assert.match(bgManager, /activeBackgrounds/, 'Must track active backgrounds')
 assert.match(bgManager, /await.*stop\(\)/, 'Must await stop function')
 assert.match(bgManager, /createPluginPrivateStorage/, 'Must provide storage to background context')
 assert.match(bgManager, /createPluginClipboard/, 'Must provide clipboard to background context')
 assert.match(bgManager, /createPluginPaste/, 'Must provide paste to background context')
+assert.match(bgManager, /clipboard:\s*createPluginClipboard\([^)]*storage\)/, 'Background clipboard must share plugin storage')
+assert.match(bgManager, /paste:\s*createPluginPaste\([^)]*storage\)/, 'Background paste must share plugin storage')
+
+const bgImpl = read('src/plugins/clipboard-history/background/clipboardHistoryBackground.ts')
+assert.match(bgImpl, /sourceApp:\s*change\.sourceApp/, 'Clipboard history background must persist source app metadata')
+
+const surfaceImpl = read('src/plugins/clipboard-history/surfaces/ClipboardHistorySurface.tsx')
+assert.match(surfaceImpl, /storage\.blob\.url\(item\.previewBlobId\)/, 'Clipboard history surface must render image previews from blob URLs')
+assert.match(surfaceImpl, /<img\s+src=\{imageUrl\}/, 'Clipboard history image preview must render a real img element')
+assert.match(surfaceImpl, /ClipboardImageThumbnail/, 'Clipboard history list must render image thumbnails')
+assert.match(surfaceImpl, /clipboard-history-item-delete/, 'Clipboard history list must expose per-item delete actions')
+const surfaceTopbar = surfaceImpl.match(/<div className="clipboard-history-topbar">[\s\S]*?\n      <\/div>\n\n      \{renderContent\(\)\}/)?.[0] ?? ''
+assert.doesNotMatch(surfaceTopbar, /action\.clearAll|TrashIcon/, 'Clipboard history surface topbar must not include a clear-all action')
+assert.match(surfaceImpl, /meta\.sourceApp/, 'Clipboard history metadata must display source app when available')
 
 // Settings change triggers restart
 assert.match(bgManager, /usePluginSettingsStore\.subscribe/, 'Must subscribe to settings changes')
@@ -103,24 +157,45 @@ assert.match(launcher, /PluginSurfaceErrorBoundary/, 'Must wrap in error boundar
 // Passes all required props
 assert.match(launcher, /pluginId.*surfaceFrame/, 'Must pass pluginId from surfaceFrame')
 assert.match(launcher, /surfaceId.*surfaceFrame/, 'Must pass surfaceId from surfaceFrame')
-assert.match(launcher, /storage:\s*createPluginPrivateStorage/, 'Must provide storage in host API')
+assert.match(launcher, /source.*surfaceFrame|surfaceFrame.*source/, 'Must keep source in surfaceFrame')
+assert.doesNotMatch(launcher, /resolvePluginSettings\('builtin'/, 'Must not hard-code builtin settings for surfaces')
+assert.match(launcher, /hostStorage\s*=\s*createPluginPrivateStorage/, 'Must create host storage once for surface API')
+assert.match(launcher, /storage:\s*hostStorage/, 'Must provide storage in host API')
 assert.match(launcher, /clipboard:\s*createPluginClipboard/, 'Must provide clipboard in host API')
 assert.match(launcher, /paste:\s*createPluginPaste/, 'Must provide paste in host API')
+assert.match(launcher, /clipboard:\s*createPluginClipboard\([^)]*hostStorage\)/, 'Surface clipboard must share host storage')
+assert.match(launcher, /paste:\s*createPluginPaste\([^)]*hostStorage\)/, 'Surface paste must share host storage')
+assert.match(launcher, /PluginSurfacePermissionGate/, 'Must render a host permission gate before protected surface body')
+assert.match(launcher, /global-launcher-surface-shell/, 'Must wrap surface body in a host-owned shell')
+assert.match(launcher, /surfaceFocusVersion|focusSurface/, 'Must hand focus to opened surface')
 
 // Host API methods
-assert.match(launcher, /close:\s*\(\)/, 'Host must provide close()')
-assert.match(launcher, /requestBack:\s*\(\)/, 'Host must provide requestBack()')
+assert.match(launcher, /close:\s*requestSurfaceClose/, 'Host must provide close() through the surface system API bridge')
+assert.match(launcher, /requestBack:\s*requestSurfaceBack/, 'Host must provide requestBack() through the surface system API bridge')
+assert.match(launcher, /PLUGIN_SURFACE_BACK_EVENT|hiven:plugin-surface-back/, 'Surface back API must route through a host-owned event')
+assert.match(launcher, /PLUGIN_SURFACE_CLOSE_EVENT|hiven:plugin-surface-close/, 'Surface close API must route through a host-owned event')
 assert.match(launcher, /openSettings:\s*\(\)/, 'Host must provide openSettings()')
 assert.match(launcher, /showMessage/, 'Host must provide showMessage()')
 
 // Esc goes back from surface
 assert.match(launcher, /surfaceFrame[\s\S]*setSurfaceFrame\(null\)/, 'Esc must go back from surface')
+assert.match(launcher, /handleHostEscape[\s\S]*window\.addEventListener\(['"]keydown['"],\s*handleHostEscape,\s*true\)/, 'Host must capture Escape for plugin surfaces')
+assert.match(launcher, /resetLauncherSession[\s\S]*setSurfaceFrame\(null\)[\s\S]*controllerRef\.current\?\.reset\(\)/, 'Closing the launcher must reset surface and controller state')
 
 // ─── 6. App.tsx initializes background manager ───────────────────────────────
 
 const appTsx = read('src/App.tsx')
 assert.match(appTsx, /initializePluginBackgrounds/, 'App must call initializePluginBackgrounds')
 assert.match(appTsx, /setupBackgroundSettingsWatcher/, 'App must call setupBackgroundSettingsWatcher')
+assert.match(appTsx, /setupBackgroundPermissionWatcher/, 'App must call setupBackgroundPermissionWatcher')
+assert.match(appTsx, /stopAllPluginBackgrounds/, 'App must stop backgrounds during app/window cleanup')
+const beforeMainApp = appTsx.split('function MainApp')[0] ?? appTsx
+assert.doesNotMatch(beforeMainApp, /initializePluginBackgrounds\(\)|setupBackgroundSettingsWatcher\(\)|setupBackgroundPermissionWatcher\(\)/, 'Backgrounds must not initialize at module scope because launcher windows import App.tsx too')
+const mainAppBody = appTsx.match(/function MainApp\(\)[\s\S]*?function LauncherWindowApp\(\)/)?.[0] ?? ''
+assert.match(mainAppBody, /initializePluginBackgrounds\(\)/, 'MainApp should initialize plugin backgrounds')
+assert.match(mainAppBody, /cleanupSettingsWatcher\?\.\(\)|cleanupPermissionWatcher\?\.\(\)/, 'MainApp should retain and clean up background watcher subscriptions')
+const launcherWindowBody = appTsx.match(/function LauncherWindowApp\(\)[\s\S]*?function shouldAllowLauncherListWheel/)?.[0] ?? ''
+assert.doesNotMatch(launcherWindowBody, /initializePluginBackgrounds\(\)|setupBackgroundSettingsWatcher\(\)|setupBackgroundPermissionWatcher\(\)/, 'LauncherWindowApp must not run plugin backgrounds')
 
 // ─── 7. Vite dev server module verification ─────────────────────────────────
 

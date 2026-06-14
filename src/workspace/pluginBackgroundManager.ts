@@ -7,50 +7,49 @@
  * - Stops on plugin disable/unload
  */
 
-import type { PluginBackgroundContribution, PluginBackgroundContext, PluginBackgroundStop, PluginPermissionSnapshot, PluginPermission } from './pluginTypes'
+import type { PluginBackgroundContribution, PluginBackgroundContext, PluginBackgroundStop, PluginPermission } from './pluginTypes'
 import type { PluginDefinition } from './pluginTypes'
 import { pluginRegistry } from './pluginRegistry'
+import type { PluginSettingsSource } from './pluginSettingsStore'
 import { resolvePluginSettings, usePluginSettingsStore } from './pluginSettingsStore'
 import { createPluginPrivateStorage } from './pluginStorage'
 import { createPluginClipboard } from './pluginClipboard'
 import { createPluginPaste } from './pluginPaste'
 import { useAppStore } from '../store'
-import { makePluginT } from '../i18n/pluginI18nRegistry'
+import { getPluginPermissionSnapshot, missingPluginPermissions, usePluginPermissionStore } from './pluginPermissions'
+import { resolvePluginSettingsSource } from './launcher/pluginSource'
 
 type BackgroundInstance = {
+  key: string
+  source: PluginSettingsSource
   pluginId: string
   stop: PluginBackgroundStop | null
 }
 
 const activeBackgrounds = new Map<string, BackgroundInstance>()
 
-function getAllPermissionsGranted(): PluginPermissionSnapshot {
-  // First version: builtin plugins get all permissions granted
-  const permissions: PluginPermission[] = [
-    'clipboard.read', 'clipboard.write', 'clipboard.watch',
-    'clipboard.image', 'clipboard.files',
-    'storage.private', 'storage.blob',
-    'globalShortcut.register', 'accessibility.paste',
-  ]
-  const snapshot = {} as PluginPermissionSnapshot
-  for (const p of permissions) {
-    snapshot[p] = { granted: true, grantedAt: Date.now() }
-  }
-  return snapshot
+function backgroundKey(source: PluginSettingsSource, pluginId: string): string {
+  return `${source}:${pluginId}`
 }
 
-function buildBackgroundContext(pluginId: string, settings: unknown): PluginBackgroundContext<unknown> {
+function buildBackgroundContext(
+  source: PluginSettingsSource,
+  pluginId: string,
+  settings: unknown,
+  requestedPermissions: readonly PluginPermission[],
+): PluginBackgroundContext<unknown> {
   const locale = useAppStore.getState().locale
-  const t = makePluginT(pluginId, locale)
+  const permissions = getPluginPermissionSnapshot(source, pluginId, requestedPermissions)
+  const storage = createPluginPrivateStorage(source, pluginId, permissions)
 
   return {
     pluginId,
     locale,
     settings,
-    permissions: getAllPermissionsGranted(),
-    storage: createPluginPrivateStorage(pluginId),
-    clipboard: createPluginClipboard(pluginId),
-    paste: createPluginPaste(),
+    permissions,
+    storage,
+    clipboard: createPluginClipboard(pluginId, permissions, storage),
+    paste: createPluginPaste(permissions, storage),
     showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error') {
       useAppStore.getState().setLastCommandStatus({
         title: message,
@@ -62,15 +61,31 @@ function buildBackgroundContext(pluginId: string, settings: unknown): PluginBack
   }
 }
 
-async function startBackground(pluginId: string, background: PluginBackgroundContribution<unknown>, settings: unknown): Promise<void> {
+async function startBackground(
+  source: PluginSettingsSource,
+  pluginId: string,
+  background: PluginBackgroundContribution<unknown>,
+  settings: unknown,
+  requestedPermissions: readonly PluginPermission[],
+): Promise<void> {
   // Stop existing if any
-  await stopBackground(pluginId)
+  await stopBackground(source, pluginId)
 
-  const ctx = buildBackgroundContext(pluginId, settings)
+  const permissions = getPluginPermissionSnapshot(source, pluginId, requestedPermissions)
+  const missing = missingPluginPermissions(permissions, requestedPermissions)
+  if (missing.length > 0) {
+    console.warn(`[background] Not starting background for plugin "${pluginId}": missing permissions ${missing.join(', ')}`)
+    return
+  }
+
+  const ctx = buildBackgroundContext(source, pluginId, settings, requestedPermissions)
 
   try {
     const stopFn = await background.start(ctx)
-    activeBackgrounds.set(pluginId, {
+    const key = backgroundKey(source, pluginId)
+    activeBackgrounds.set(key, {
+      key,
+      source,
       pluginId,
       stop: stopFn ?? null,
     })
@@ -79,8 +94,9 @@ async function startBackground(pluginId: string, background: PluginBackgroundCon
   }
 }
 
-async function stopBackground(pluginId: string): Promise<void> {
-  const instance = activeBackgrounds.get(pluginId)
+async function stopBackground(source: PluginSettingsSource, pluginId: string): Promise<void> {
+  const key = backgroundKey(source, pluginId)
+  const instance = activeBackgrounds.get(key)
   if (!instance) return
 
   try {
@@ -90,14 +106,13 @@ async function stopBackground(pluginId: string): Promise<void> {
   } catch (error) {
     console.error(`[background] Failed to stop background for plugin "${pluginId}":`, error)
   }
-  activeBackgrounds.delete(pluginId)
+  activeBackgrounds.delete(key)
 }
 
-function getPluginSettings(pluginId: string, definition: PluginDefinition<unknown>): unknown {
+function getPluginSettings(source: PluginSettingsSource, pluginId: string, definition: PluginDefinition<unknown>): unknown {
   const settingsContribution = definition.settings
   if (!settingsContribution) return {}
-  // Builtin plugins use 'builtin' source
-  const resolved = resolvePluginSettings('builtin', pluginId, settingsContribution)
+  const resolved = resolvePluginSettings(source, pluginId, settingsContribution)
   return resolved.value
 }
 
@@ -105,35 +120,48 @@ function getPluginSettings(pluginId: string, definition: PluginDefinition<unknow
  * Initialize all plugin backgrounds. Call after bundled plugins are registered.
  */
 export function initializePluginBackgrounds(): void {
-  for (const { definition, pluginId } of pluginRegistry.getAllPluginDefinitions()) {
+  for (const { definition, pluginId, source, permissions } of pluginRegistry.getAllPluginDefinitions()) {
     const def = definition as PluginDefinition<unknown>
     if (!def.background) continue
 
-    const settings = getPluginSettings(pluginId, def)
-    void startBackground(pluginId, def.background, settings)
+    const settingsSource = resolvePluginSettingsSource(pluginId, source)
+    const settings = getPluginSettings(settingsSource, pluginId, def)
+    void startBackground(settingsSource, pluginId, def.background, settings, permissions)
   }
 }
 
 /**
  * Restart a specific plugin's background (called on settings change).
  */
-export async function restartPluginBackground(pluginId: string): Promise<void> {
+export async function restartPluginBackground(pluginId: string, source?: PluginSettingsSource): Promise<void> {
   const allDefs = pluginRegistry.getAllPluginDefinitions()
-  const entry = allDefs.find((e) => e.pluginId === pluginId)
+  const entry = allDefs.find((e) => {
+    if (e.pluginId !== pluginId) return false
+    return source == null || resolvePluginSettingsSource(e.pluginId, e.source) === source
+  })
   if (!entry) return
 
   const def = entry.definition as PluginDefinition<unknown>
   if (!def.background) return
 
-  const settings = getPluginSettings(pluginId, def)
-  await startBackground(pluginId, def.background, settings)
+  const settingsSource = resolvePluginSettingsSource(entry.pluginId, entry.source)
+  const settings = getPluginSettings(settingsSource, entry.pluginId, def)
+  await startBackground(settingsSource, entry.pluginId, def.background, settings, entry.permissions)
 }
 
 /**
  * Stop a specific plugin's background (called on plugin disable/unload).
  */
-export async function stopPluginBackground(pluginId: string): Promise<void> {
-  await stopBackground(pluginId)
+export async function stopPluginBackground(pluginId: string, source: PluginSettingsSource = 'builtin'): Promise<void> {
+  await stopBackground(source, pluginId)
+}
+
+export async function stopAllPluginBackgrounds(): Promise<void> {
+  await Promise.all(
+    Array.from(activeBackgrounds.values()).map((instance) =>
+      stopBackground(instance.source, instance.pluginId)
+    ),
+  )
 }
 
 /**
@@ -150,10 +178,31 @@ export function setupBackgroundSettingsWatcher(): () => void {
       for (const pluginId of Object.keys(current)) {
         if (current[pluginId] !== previous[pluginId]) {
           // Settings for this plugin changed — restart background if active
-          if (activeBackgrounds.has(pluginId)) {
-            void restartPluginBackground(pluginId)
+          if (activeBackgrounds.has(backgroundKey(source, pluginId))) {
+            void restartPluginBackground(pluginId, source)
           }
         }
+      }
+    }
+  })
+}
+
+/**
+ * Subscribe to permission changes and stop active backgrounds immediately when
+ * their declared permissions are revoked.
+ */
+export function setupBackgroundPermissionWatcher(): () => void {
+  return usePluginPermissionStore.subscribe((state, prevState) => {
+    if (state.permissions === prevState.permissions) return
+
+    for (const instance of Array.from(activeBackgrounds.values())) {
+      const requestedPermissions = pluginRegistry.getPluginPermissions(instance.pluginId, instance.source)
+      if (requestedPermissions.length === 0) continue
+
+      const permissions = getPluginPermissionSnapshot(instance.source, instance.pluginId, requestedPermissions)
+      const missing = missingPluginPermissions(permissions, requestedPermissions)
+      if (missing.length > 0) {
+        void stopBackground(instance.source, instance.pluginId)
       }
     }
   })

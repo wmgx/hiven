@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { AlertTriangle, Archive, Download, ExternalLink, FolderOpen, Globe, Loader2, Package, Plus, Power, RefreshCw, Search, Settings, Trash2, Upload } from 'lucide-react'
-import { useT, t } from '../i18n'
+import { AlertTriangle, Archive, Download, ExternalLink, FolderOpen, Globe, Keyboard, Loader2, Package, Plus, Power, RefreshCw, Search, Settings, Trash2, Upload } from 'lucide-react'
+import { t } from '../i18n'
 import type { Locale } from '../i18n'
 import { localized, useAppStore } from '../store'
 import { checkBuiltinPluginsUpdate, getConfigDir } from '../configInit'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../utils/imeKeyboard'
 import { usePluginStore } from '../workspace/pluginStore'
 import { usePluginSettingsStore } from '../workspace/pluginSettingsStore'
-import { pluginRegistry } from '../workspace/pluginRegistry'
+import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
+import type { PluginSettingsSource } from '../workspace/pluginSettingsStore'
+import { getPluginPermissionSnapshot, missingPluginPermissions, usePluginPermissionStore } from '../workspace/pluginPermissions'
+import { requestOpenPluginSurfaceTool } from '../workspace/pluginSurfaceOpenRequest'
+import { pluginSurfaceShortcutKey, usePluginSurfaceShortcutStore } from '../workspace/pluginSurfaceShortcuts'
 import {
   createDevPluginScaffold,
   checkInstalledPluginUpdate,
@@ -62,7 +66,16 @@ function statusLabel(status: string, locale: 'zh' | 'en') {
   if (status === 'error') return t(locale, 'scripts.status.error')
   if (status === 'loading') return t(locale, 'scripts.status.loading')
   if (status === 'active') return t(locale, 'scripts.status.active')
+  if (status === 'blocked') return t(locale, 'scripts.status.blocked')
   return t(locale, 'scripts.status.available')
+}
+
+function surfaceShortcutStatusLabel(status: string, locale: 'zh' | 'en') {
+  if (status === 'registered') return t(locale, 'scripts.surfaceShortcutRegistered')
+  if (status === 'conflict') return t(locale, 'scripts.surfaceShortcutConflict')
+  if (status === 'failed') return t(locale, 'scripts.surfaceShortcutFailed')
+  if (status === 'disabled') return t(locale, 'scripts.surfaceShortcutDisabled')
+  return t(locale, 'scripts.surfaceShortcutPending')
 }
 
 function packagePath(plugin: InstalledPlugin | DevPlugin) {
@@ -83,6 +96,12 @@ function pluginDisplayName(
 export function ScriptsView() {
   const locale = useAppStore((s) => s.locale)
   const openPluginEditor = useAppStore((s) => s.openPluginEditor)
+  const pluginRegistryVersion = usePluginRegistryVersion()
+  const pluginSurfaceShortcuts = usePluginSurfaceShortcutStore((s) => s.shortcuts)
+  const setPluginSurfaceShortcut = usePluginSurfaceShortcutStore((s) => s.setShortcut)
+  const clearPluginSurfaceShortcut = usePluginSurfaceShortcutStore((s) => s.clearShortcut)
+  const pluginPermissionVersion = usePluginPermissionStore((s) => s.version)
+  const grantPluginPermissions = usePluginPermissionStore((s) => s.grantPermissions)
   const plugins = usePluginStore((s) => s.plugins)
   const devPlugins = usePluginStore((s) => s.devPlugins)
   const [activeTab, setActiveTab] = useState<TabId>('builtin')
@@ -95,9 +114,11 @@ export function ScriptsView() {
   const [remoteUrl, setRemoteUrl] = useState('')
   const [remoteOpen, setRemoteOpen] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'done' | 'error'>('idle')
+  const [shortcutDrafts, setShortcutDrafts] = useState<Record<string, string>>({})
   const isImeComposingRef = useRef(false)
 
   const installedList = useMemo(() => {
+    void pluginRegistryVersion
     const byId = new Map<string, InstalledPlugin>()
     for (const plugin of Object.values(plugins).filter(Boolean)) {
       byId.set(plugin.pluginId, plugin)
@@ -139,8 +160,11 @@ export function ScriptsView() {
       })
     }
     return Array.from(byId.values())
-  }, [plugins, installedPackages])
-  const devList = useMemo(() => Object.values(devPlugins).filter(Boolean), [devPlugins])
+  }, [pluginRegistryVersion, plugins, installedPackages])
+  const devList = useMemo(() => {
+    void pluginRegistryVersion
+    return Object.values(devPlugins).filter(Boolean)
+  }, [devPlugins, pluginRegistryVersion])
   const normalizedQuery = query.trim().toLowerCase()
 
   useEffect(() => {
@@ -325,6 +349,7 @@ export function ScriptsView() {
   }
 
   function renderInstalled(plugin: InstalledPlugin) {
+    void pluginPermissionVersion
     const key = plugin.pluginId
     const loading = !!busy[key]
     const localError = errors[key]
@@ -336,12 +361,13 @@ export function ScriptsView() {
         subtitle={plugin.pluginId}
         version={plugin.version || '0.0.0'}
         source={sourceLabel(plugin, locale)}
-        status={statusLabel(plugin.status, locale)}
+        status={statusLabel(isPluginBlocked(plugin.pluginId, 'installed') ? 'blocked' : plugin.status, locale)}
         folderPath={packagePath(plugin)}
         sourceUrl={plugin.sourceUrl}
         capabilities={capabilitiesOf(plugin)}
           error={plugin.error || localError || plugin.update?.error}
         loading={loading}
+        details={renderSurfaceShortcuts(plugin.pluginId, 'installed')}
         actions={
           <>
             {hasSettings && (
@@ -401,6 +427,7 @@ export function ScriptsView() {
   }
 
   function renderDev(plugin: DevPlugin) {
+    void pluginPermissionVersion
     const key = `dev:${plugin.pluginId}`
     const hasSettings = !!pluginRegistry.getPluginDefinition(plugin.pluginId, 'dev')?.settings
     return (
@@ -410,12 +437,13 @@ export function ScriptsView() {
         subtitle={plugin.pluginId}
         version={plugin.version || '0.0.0'}
         source={sourceLabel(plugin, locale)}
-        status={statusLabel(plugin.status, locale)}
+        status={statusLabel(isPluginBlocked(plugin.pluginId, 'dev') ? 'blocked' : plugin.status, locale)}
         folderPath={packagePath(plugin)}
         sourceUrl={plugin.sourceUrl}
         capabilities={capabilitiesOf(plugin)}
         error={plugin.error || errors[key]}
         loading={!!busy[key]}
+        details={renderSurfaceShortcuts(plugin.pluginId, 'dev')}
         actions={
           <>
             {hasSettings && (
@@ -460,6 +488,7 @@ export function ScriptsView() {
   }
 
   function renderBuiltin(plugin: PluginPackageSummary) {
+    void pluginPermissionVersion
     const hasSettings = !!pluginRegistry.getPluginDefinition(plugin.pluginId, 'production')?.settings
     return (
       <PluginCard
@@ -468,10 +497,11 @@ export function ScriptsView() {
         subtitle={plugin.pluginId}
         version={plugin.version || '0.0.0'}
         source={t(locale, 'scripts.source.builtin')}
-        status={t(locale, 'scripts.status.available')}
+        status={statusLabel(isPluginBlocked(plugin.pluginId, 'builtin') ? 'blocked' : 'available', locale)}
         folderPath={plugin.folderPath || ''}
         capabilities={capabilitiesOf(plugin)}
         error={plugin.error}
+        details={renderSurfaceShortcuts(plugin.pluginId, 'builtin')}
         actions={
           <>
             {hasSettings && (
@@ -492,6 +522,78 @@ export function ScriptsView() {
           </>
         }
       />
+    )
+  }
+
+  function isPluginBlocked(pluginId: string, source: PluginSettingsSource) {
+    const definition = pluginRegistry.getPluginDefinition(pluginId, source)
+    if (!definition?.background) return false
+    const requested = pluginRegistry.getPluginPermissions(pluginId, source)
+    if (requested.length === 0) return false
+    const snapshot = getPluginPermissionSnapshot(source, pluginId, requested)
+    return missingPluginPermissions(snapshot, requested).length > 0
+  }
+
+  function renderSurfaceShortcuts(pluginId: string, source: PluginSettingsSource) {
+    const definition = pluginRegistry.getPluginDefinition(pluginId, source)
+    const surfaces = definition?.ui?.surfaces?.filter((surface) => surface.entry?.shortcutBindable !== false) ?? []
+    if (surfaces.length === 0) return null
+
+    return (
+      <div className="plugin-surface-shortcuts">
+        {surfaces.map((surface) => {
+          const target = { source, pluginId, surfaceId: surface.id }
+          const key = pluginSurfaceShortcutKey(target)
+          const shortcut = pluginSurfaceShortcuts[key]
+          const draft = shortcutDrafts[key] ?? shortcut?.accelerator ?? surface.entry?.recommendedShortcut ?? ''
+          const status = shortcut?.registrationStatus ?? (shortcut ? 'pending' : '')
+          return (
+            <div key={key} className="plugin-surface-shortcut-row">
+              <div className="plugin-surface-shortcut-title">
+                <Keyboard size={12} />
+                <span>{localized(surface.title, surface.titleI18n, locale)}</span>
+                <span className="script-badge">{source}:{surface.id}</span>
+              </div>
+              <div className="plugin-surface-shortcut-controls">
+                <button className="scripts-btn" onClick={() => { void requestOpenPluginSurfaceTool(target) }}>
+                  {t(locale, 'scripts.surfaceOpen')}
+                </button>
+                <input
+                  className="plugin-surface-shortcut-input"
+                  value={draft}
+                  placeholder={surface.entry?.recommendedShortcut ?? 'Shift+Cmd+V'}
+                  onChange={(event) => setShortcutDrafts((prev) => ({ ...prev, [key]: event.target.value }))}
+                />
+                <button
+                  className="scripts-btn"
+                  onClick={() => {
+                    const value = (shortcutDrafts[key] ?? shortcut?.accelerator ?? surface.entry?.recommendedShortcut ?? '').trim()
+                    if (!value) return
+                    const requested = pluginRegistry.getPluginPermissions(pluginId, source)
+                    if (requested.includes('globalShortcut.register')) {
+                      grantPluginPermissions(source, pluginId, ['globalShortcut.register'])
+                    }
+                    setPluginSurfaceShortcut(target, value)
+                  }}
+                >
+                  {t(locale, 'scripts.surfaceBindShortcut')}
+                </button>
+                {shortcut && (
+                  <button className="scripts-btn" onClick={() => clearPluginSurfaceShortcut(target)}>
+                    {t(locale, 'scripts.surfaceClearShortcut')}
+                  </button>
+                )}
+                {status && <span className="script-badge">{surfaceShortcutStatusLabel(status, locale)}</span>}
+              </div>
+              {shortcut?.registrationError && (
+                <div className="plugin-surface-shortcut-error">
+                  <AlertTriangle size={12} /> {shortcut.registrationError}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
     )
   }
 
@@ -667,6 +769,7 @@ function PluginCard({
   capabilities,
   error,
   loading,
+  details,
   actions,
 }: {
   title: string
@@ -679,6 +782,7 @@ function PluginCard({
   capabilities?: string[]
   error?: string
   loading?: boolean
+  details?: ReactNode
   actions: ReactNode
 }) {
   return (
@@ -707,6 +811,7 @@ function PluginCard({
             <AlertTriangle size={12} /> {error}
           </div>
         )}
+        {details}
       </div>
       {actions}
     </div>

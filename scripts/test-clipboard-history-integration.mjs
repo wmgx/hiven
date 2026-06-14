@@ -25,6 +25,9 @@ function read(path) {
 // ─── 1. Plugin definition structure ─────────────────────────────────────────
 
 const indexContent = read('src/plugins/clipboard-history/index.tsx')
+const bundledLoaderContent = read('src/workspace/bundledPluginLoader.ts')
+const appCssContent = read('src/index.css')
+const pluginStyleContent = read('src/plugins/clipboard-history/style.css')
 
 // definePlugin is called with settings + ui + background
 assert.match(indexContent, /definePlugin/, 'Must call definePlugin')
@@ -58,7 +61,7 @@ assert.match(registryContent, /def\.ui\?\.surfaces/, 'Registry must access def.u
 assert.match(registryContent, /entry\?\.launcher\s*===\s*false/, 'Registry must skip surfaces with launcher=false')
 
 // Must generate systemKey with plugin-surface prefix
-assert.match(registryContent, /getPluginSurfaceItemKey\(pluginId,\s*surface\.id\)/, 'Registry must generate surface systemKey')
+assert.match(registryContent, /getPluginSurfaceItemKey\(settingsSource,\s*pluginId,\s*surface\.id\)/, 'Registry must generate source-aware surface systemKey')
 
 // Must set surfaces to global-launcher
 assert.match(registryContent, /surfaces:\s*\[['"]global-launcher['"]\]/, 'Surface item must appear in global-launcher')
@@ -118,6 +121,9 @@ const requiredKeys = [
   'filter.text',
   'filter.image',
   'filter.files',
+  'filter.label',
+  'group.today',
+  'group.yesterday',
   'state.loading',
   'state.disabled',
   'state.empty',
@@ -125,7 +131,20 @@ const requiredKeys = [
   'hint.paste',
   'hint.copy',
   'hint.delete',
+  'action.back',
+  'action.close',
   'message.copied',
+  'message.cleared',
+  'message.deleted',
+  'meta.contentType',
+  'meta.characters',
+  'meta.words',
+  'meta.byteSize',
+  'meta.dimensions',
+  'meta.files',
+  'meta.timesCopied',
+  'meta.firstCopied',
+  'meta.lastCopied',
   'error.loadFailed',
   'error.pasteFailed',
 ]
@@ -169,6 +188,21 @@ assert.match(surfaceContent, /['"]ArrowUp['"]/, 'Surface must handle ArrowUp key
 // Has search/filter capability
 assert.match(surfaceContent, /setQuery|query/, 'Surface must have search query state')
 assert.match(surfaceContent, /setFilter|filter/, 'Surface must have filter state')
+assert.match(surfaceContent, /host\.requestBack\(\)/, 'Surface must render plugin-owned back affordance through host.requestBack()')
+assert.match(surfaceContent, /clipboard-history-topbar[\s\S]*<SearchField/, 'Surface must keep search in the top bar')
+assert.match(surfaceContent, /clipboard-history-list-toolbar[\s\S]*<SegmentedControl/, 'Surface must place the type filter above the left history list')
+assert.doesNotMatch(surfaceContent, /<Select[\s\S]{0,600}filter\.all/, 'Surface type filter must not use a native select menu')
+assert.match(surfaceContent, /<SurfaceList[\s\S]{0,180}data-launcher-scrollable/, 'Surface history list must opt into launcher window wheel scrolling')
+assert.match(surfaceContent, /clipboard-history-preview-content[\s\S]{0,120}data-launcher-scrollable/, 'Surface preview content must opt into launcher window wheel scrolling')
+assert.match(surfaceContent, /<SurfaceList|<SurfaceListItem|<SurfacePreview/, 'Surface must use plugin-ui list and preview primitives')
+assert.match(surfaceContent, /getMetaRows|meta\.timesCopied|copyCount/, 'Surface must render detailed metadata for the selected item')
+
+// Shell should be large enough for the custom surface opened by shortcut
+assert.match(indexContent, /defaultWidth:\s*900/, 'Clipboard history surface should open wider than the compact launcher')
+assert.match(indexContent, /defaultHeight:\s*640/, 'Clipboard history surface should open taller than the compact launcher')
+assert.match(bundledLoaderContent, /plugins\/\*\/style\.css/, 'Bundled plugin loader must load plugin-owned style.css assets')
+assert.doesNotMatch(appCssContent, /clipboard-history-/, 'App global CSS must not own clipboard-history product styles')
+assert.match(pluginStyleContent, /\.clipboard-history-surface/, 'Clipboard history package must own its surface stylesheet')
 
 // Has loading and disabled states
 assert.match(surfaceContent, /loading/, 'Surface must handle loading state')

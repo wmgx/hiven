@@ -22,6 +22,12 @@ const entryModules = import.meta.glob('../plugins/*/index.{ts,tsx}', {
   eager: true,
 }) as Record<string, BundledPluginModule>
 
+// Optional bundled-plugin styles. The host loads them as package assets but does
+// not own product-specific selectors.
+import.meta.glob('../plugins/*/style.css', {
+  eager: true,
+})
+
 const localeModules = import.meta.glob('../plugins/*/locales/*.json', {
   eager: true,
   import: 'default',
@@ -84,6 +90,7 @@ export function registerBundledPluginPackages() {
       localized.panels,
       localized.toolbar,
       localized.definition,
+      manifest.permissions ?? [],
     )
   }
 }

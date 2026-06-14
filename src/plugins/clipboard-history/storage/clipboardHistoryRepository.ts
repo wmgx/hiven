@@ -13,7 +13,6 @@ import { createClipboardHistoryStore, type ClipboardHistoryStore } from './clipb
 import type {
   AddItemInput,
   ClipboardHistoryItem,
-  ClipboardHistoryIndex,
   ClipboardHistoryIndexEntry,
   ClipboardHistoryPrunePolicy,
   PruneResult,
@@ -65,6 +64,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
           ...existing,
           lastCopiedAt: now,
           copyCount: existing.copyCount + 1,
+          sourceApp: input.sourceApp ?? existing.sourceApp,
         }
         await store.saveItem(updated)
 
@@ -91,6 +91,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
           lastCopiedAt: now,
           copyCount: 1,
           byteSize: input.byteSize,
+          sourceApp: input.sourceApp,
           text: input.text,
           preview: makeTextPreview(input.text),
         } satisfies ClipboardTextHistoryItem
@@ -104,6 +105,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
           lastCopiedAt: now,
           copyCount: 1,
           byteSize: input.byteSize,
+          sourceApp: input.sourceApp,
           blobId: input.blobId,
           previewBlobId: input.previewBlobId,
           contentType: input.contentType,
@@ -120,6 +122,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
           lastCopiedAt: now,
           copyCount: 1,
           byteSize: input.byteSize,
+          sourceApp: input.sourceApp,
           paths: input.paths,
           fileNames: input.fileNames,
         } satisfies ClipboardFilesHistoryItem

@@ -37,8 +37,8 @@ export default definePlugin<ClipboardHistorySettings>({
           recommendedShortcut: 'CmdOrCtrl+Shift+V',
         },
         shell: {
-          defaultWidth: 680,
-          defaultHeight: 480,
+          defaultWidth: 900,
+          defaultHeight: 640,
           minWidth: 500,
           minHeight: 360,
           closeOnBlur: true,

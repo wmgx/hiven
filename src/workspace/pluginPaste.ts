@@ -5,7 +5,8 @@
  * Falls back to "copied to clipboard" if accessibility/simulation unavailable.
  */
 
-import type { PluginPasteApi, PluginPasteResult } from './pluginTypes'
+import type { PluginPasteApi, PluginPasteResult, PluginPermission, PluginPermissionSnapshot, PluginPrivateStorageApi } from './pluginTypes'
+import { requirePluginPermissions } from './pluginPermissions'
 
 async function writeTextToClipboard(text: string): Promise<void> {
   try {
@@ -14,6 +15,29 @@ async function writeTextToClipboard(text: string): Promise<void> {
   } catch {
     await navigator.clipboard.writeText(text)
   }
+}
+
+async function writeImageToClipboard(bytes: Uint8Array): Promise<void> {
+  try {
+    const { writeImage } = await import('@tauri-apps/plugin-clipboard-manager')
+    try {
+      const { Image } = await import('@tauri-apps/api/image')
+      const image = await Image.fromBytes(bytes)
+      await writeImage(image)
+    } catch {
+      await writeImage(bytes)
+    }
+    return
+  } catch {
+    // Fall through to browser ClipboardItem support.
+  }
+
+  const ClipboardItemCtor = globalThis.ClipboardItem
+  if (!navigator.clipboard?.write || !ClipboardItemCtor) {
+    throw new Error('Image clipboard write is not supported in this environment')
+  }
+  const blob = new Blob([bytes], { type: 'image/png' })
+  await navigator.clipboard.write([new ClipboardItemCtor({ [blob.type]: blob })])
 }
 
 async function trySimulatePaste(): Promise<boolean> {
@@ -36,50 +60,68 @@ async function tryHideLauncherWindow(): Promise<void> {
   }
 }
 
-export function createPluginPaste(): PluginPasteApi {
+async function pasteAfterClipboardWrite(successFallbackMessage: string): Promise<PluginPasteResult> {
+  await tryHideLauncherWindow()
+  await new Promise((r) => setTimeout(r, 100))
+
+  const pasted = await trySimulatePaste()
+  if (pasted) {
+    return { ok: true }
+  }
+  return {
+    ok: false,
+    fallback: 'copied',
+    message: successFallbackMessage,
+  }
+}
+
+export function createPluginPaste(
+  permissions?: PluginPermissionSnapshot,
+  storage?: PluginPrivateStorageApi,
+): PluginPasteApi {
+  const requirePermissions = (required: PluginPermission[]) => {
+    if (permissions) requirePluginPermissions(permissions, required)
+  }
+
   return {
     async pasteText(text: string): Promise<PluginPasteResult> {
+      requirePermissions(['clipboard.write', 'accessibility.paste'])
       try {
         await writeTextToClipboard(text)
       } catch {
         return { ok: false, fallback: 'none', message: 'Failed to write to clipboard' }
       }
 
-      await tryHideLauncherWindow()
-
-      // Small delay to let window hide complete before simulating paste
-      await new Promise((r) => setTimeout(r, 100))
-
-      const pasted = await trySimulatePaste()
-      if (pasted) {
-        return { ok: true }
-      }
-      return {
-        ok: false,
-        fallback: 'copied',
-        message: 'Copied to clipboard. Enable accessibility permissions for direct paste.',
-      }
+      return pasteAfterClipboardWrite('Copied to clipboard. Enable accessibility permissions for direct paste.')
     },
 
     async pasteImage(blobId: string): Promise<PluginPasteResult> {
-      // First version: image paste not fully implemented (needs native Tauri plugin)
-      // Just report copied fallback
-      void blobId
-      return {
-        ok: false,
-        fallback: 'copied',
-        message: 'Image copied to clipboard. Direct paste for images is not yet supported.',
+      requirePermissions(['clipboard.write', 'clipboard.image', 'storage.blob', 'accessibility.paste'])
+      if (!storage) {
+        return { ok: false, fallback: 'none', message: 'Image paste requires plugin blob storage' }
       }
+      const bytes = await storage.blob.get(blobId)
+      if (!bytes) {
+        return { ok: false, fallback: 'none', message: 'Image blob is no longer available' }
+      }
+      try {
+        await writeImageToClipboard(bytes)
+      } catch {
+        return { ok: false, fallback: 'none', message: 'Failed to write image to clipboard' }
+      }
+
+      return pasteAfterClipboardWrite('Image copied to clipboard. Enable accessibility permissions for direct paste.')
     },
 
     async pasteFiles(paths: string[]): Promise<PluginPasteResult> {
-      // First version: file paste not fully implemented
-      void paths
-      return {
-        ok: false,
-        fallback: 'copied',
-        message: 'File paths copied. Direct paste for files is not yet supported.',
+      requirePermissions(['clipboard.write', 'clipboard.files', 'accessibility.paste'])
+      try {
+        await writeTextToClipboard(paths.join('\n'))
+      } catch {
+        return { ok: false, fallback: 'none', message: 'Failed to write file paths to clipboard' }
       }
+
+      return pasteAfterClipboardWrite('File paths copied to clipboard. Enable accessibility permissions for direct paste.')
     },
   }
 }

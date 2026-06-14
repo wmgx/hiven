@@ -35,6 +35,7 @@ export type {
   PluginDefinition,
   PluginSettingsBodyProps,
   PluginSettingsContribution,
+  PluginSettingsHostApi,
   RendererContribution,
   RendererHostApi,
   RendererProps,

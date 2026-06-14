@@ -64,13 +64,6 @@ async function syncShortcutNow(shortcut: GlobalPinnedLauncherShortcut, generatio
 
   await unregisterCurrentAccelerator()
   await unregisterDoubleModifier()
-  try {
-    const { unregisterAll } = await loadGlobalShortcutApi()
-    await unregisterAll()
-    currentAccelerator = null
-  } catch (error) {
-    console.warn('[hiven] Failed to clear stale global shortcuts:', error)
-  }
   if (generation !== syncGeneration) return
 
   if (shortcut.kind === 'disabled') {

@@ -13,6 +13,8 @@
       "hiven": ["./src/hiven.d.ts"],
       "fluxtext": ["./src/hiven.d.ts"],
       "@hiven/plugin": ["./src/plugin-sdk.ts"],
+      "@hiven/plugin-ui": ["./src/plugin-ui.tsx"],
+      "@hiven/plugin-ui/icons": ["./src/plugin-ui-icons.ts"],
       "@fluxtext/plugin": ["./src/plugin-sdk.ts"]
     },
     "allowImportingTsExtensions": true,

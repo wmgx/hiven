@@ -276,16 +276,16 @@ check('App global keydown handler ignores shortcut recorder events', () => {
   )
 })
 
-check('global shortcut sync clears stale registrations before startup registration', () => {
-  assertHas(
+check('global shortcut sync only unregisters its own configured accelerator', () => {
+  assertDoesNotHave(
     files.globalPinnedLauncherHotkeys,
     /unregisterAll\s*\(/,
-    'global hotkey sync should call unregisterAll to clear stale registrations from reload/HMR',
+    'global pinned launcher sync must not unregister plugin surface shortcuts',
   )
   assertHas(
     files.globalPinnedLauncherHotkeys,
-    /syncShortcutNow[\s\S]{0,520}unregisterAll\s*\([\s\S]{0,900}(?:registerAccelerator|register\s*\()/,
-    'sync startup should unregister all stale global shortcuts before registering the configured accelerator',
+    /await\s+unregisterCurrentAccelerator\(\)/,
+    'sync startup should unregister only the previous pinned launcher accelerator before registering the configured accelerator',
   )
 })
 

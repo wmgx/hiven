@@ -21,6 +21,7 @@ import type {
   ContributionMeta,
   ContributionSource,
   PluginDefinition,
+  PluginPermission,
 } from './pluginTypes'
 
 // ─── Registry Entry ───────────────────────────────────────────────────────────
@@ -215,6 +216,8 @@ class PluginRegistryImpl {
   private listeners = new Set<() => void>()
   private productionDefinitions = new Map<string, PluginDefinition<unknown>>()
   private devDefinitions = new Map<string, PluginDefinition<unknown>>()
+  private productionPermissions = new Map<string, PluginPermission[]>()
+  private devPermissions = new Map<string, PluginPermission[]>()
 
   readonly production = {
     commands: new ScopedCommandRegistry(),
@@ -252,7 +255,8 @@ class PluginRegistryImpl {
     renderers: RendererContribution[],
     panels: PanelContributionV2[],
     toolbar: ToolbarContribution[] = [],
-    definition?: PluginDefinition<unknown>
+    definition?: PluginDefinition<unknown>,
+    permissions: PluginPermission[] = [],
   ): void {
     for (const cmd of commands) {
       this.production.commands.register(cmd, pluginId, 'production')
@@ -269,6 +273,7 @@ class PluginRegistryImpl {
     if (definition) {
       this.productionDefinitions.set(pluginId, definition)
     }
+    this.productionPermissions.set(pluginId, permissions)
     this.bumpVersion()
   }
 
@@ -278,6 +283,7 @@ class PluginRegistryImpl {
     this.production.panels.unregisterByPlugin(pluginId)
     this.production.toolbar.unregisterByPlugin(pluginId)
     this.productionDefinitions.delete(pluginId)
+    this.productionPermissions.delete(pluginId)
     this.bumpVersion()
   }
 
@@ -289,7 +295,8 @@ class PluginRegistryImpl {
     renderers: RendererContribution[],
     panels: PanelContributionV2[],
     toolbar: ToolbarContribution[] = [],
-    definition?: PluginDefinition<unknown>
+    definition?: PluginDefinition<unknown>,
+    permissions: PluginPermission[] = [],
   ): void {
     for (const cmd of commands) {
       this.dev.commands.register(cmd, pluginId, 'dev')
@@ -306,6 +313,7 @@ class PluginRegistryImpl {
     if (definition) {
       this.devDefinitions.set(pluginId, definition)
     }
+    this.devPermissions.set(pluginId, permissions)
     this.bumpVersion()
   }
 
@@ -315,6 +323,7 @@ class PluginRegistryImpl {
     this.dev.panels.unregisterByPlugin(pluginId)
     this.dev.toolbar.unregisterByPlugin(pluginId)
     this.devDefinitions.delete(pluginId)
+    this.devPermissions.delete(pluginId)
     this.bumpVersion()
   }
 
@@ -324,6 +333,7 @@ class PluginRegistryImpl {
     this.dev.panels.clear()
     this.dev.toolbar.clear()
     this.devDefinitions.clear()
+    this.devPermissions.clear()
     this.bumpVersion()
   }
 
@@ -428,19 +438,26 @@ class PluginRegistryImpl {
     definition: PluginDefinition<unknown>
     pluginId: string
     source: ContributionSource
+    permissions: PluginPermission[]
   }> {
     const result: Array<{
       definition: PluginDefinition<unknown>
       pluginId: string
       source: ContributionSource
+      permissions: PluginPermission[]
     }> = []
     for (const [pluginId, definition] of this.productionDefinitions) {
-      result.push({ definition, pluginId, source: 'production' })
+      result.push({ definition, pluginId, source: 'production', permissions: this.productionPermissions.get(pluginId) ?? [] })
     }
     for (const [pluginId, definition] of this.devDefinitions) {
-      result.push({ definition, pluginId, source: 'dev' })
+      result.push({ definition, pluginId, source: 'dev', permissions: this.devPermissions.get(pluginId) ?? [] })
     }
     return result
+  }
+
+  getPluginPermissions(pluginId: string, source: ContributionSource | 'builtin' | 'installed'): PluginPermission[] {
+    if (source === 'dev') return this.devPermissions.get(pluginId) ?? []
+    return this.productionPermissions.get(pluginId) ?? []
   }
 }
 

@@ -28,6 +28,11 @@ assertHas(files.pluginRuntime, /export\s+async\s+function\s+uninstallPlugin/, 'u
 assertHas(files.pluginRuntime, /remove_plugin_dir/, 'uninstallPlugin should call the Tauri remove_plugin_dir command for installed packages')
 assertHas(files.pluginRuntime, /const\s+installedRoot\s*=\s*await\s+getInstalledPluginRoot\(\)/, 'uninstallPlugin should resolve the installed plugin root')
 assertHas(files.pluginRuntime, /rootPath:\s*installedRoot/, 'uninstallPlugin should delete from the installed plugin root')
+assertHas(files.pluginRuntime, /clearPluginHostState/, 'plugin runtime should centralize settings/permission/storage/shortcut cleanup')
+assertHas(files.pluginRuntime, /clearPluginPrivateStorage/, 'installed uninstall should clear plugin private storage')
+assertHas(files.pluginRuntime, /clearPluginShortcuts/, 'installed uninstall and dev remove should clear surface shortcuts')
+assertHas(files.pluginRuntime, /clearPluginPermissions/, 'installed uninstall and dev remove should clear permission grants')
+assertHas(files.pluginRuntime, /removePluginSettings/, 'installed uninstall and dev remove should clear plugin settings')
 assertHas(files.scriptsView, /await\s+uninstallPlugin\(plugin\.pluginId\)/, 'ScriptsView uninstall button should await physical uninstall')
 assertHas(files.scriptsView, /setUpdateStatus\(['"`]checking['"`]\)|setUpdateStatus\(['"`]done['"`]\)/, 'ScriptsView should refresh directory summaries after uninstall')
 

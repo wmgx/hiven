@@ -21,6 +21,11 @@ import { createPluginScaffoldFiles } from './pluginScaffold.ts'
 import { parsePluginDefinitionSource } from './pluginDebugRunner.ts'
 import { createPluginHostSdk, type PluginHostSdk } from '../pluginHostSdk.ts'
 import { registerPluginMessages, localizeContributions, type PluginMessages } from '../i18n/pluginI18nRegistry.ts'
+import { stopPluginBackground } from './pluginBackgroundManager.ts'
+import { clearPluginPrivateStorage } from './pluginStorage.ts'
+import { usePluginPermissionStore } from './pluginPermissions.ts'
+import { usePluginSettingsStore, type PluginSettingsSource } from './pluginSettingsStore.ts'
+import { usePluginSurfaceShortcutStore } from './pluginSurfaceShortcuts.ts'
 import type {
   PluginDefinition,
   PluginManifest,
@@ -55,6 +60,7 @@ type ResolvedPluginManifest = {
   version: string
   entry: string
   capabilities: string[]
+  permissions: PluginManifest['permissions']
 }
 
 export type InstalledPluginUpdateResult = {
@@ -117,6 +123,19 @@ async function invokeCommand<T>(command: string, args?: Record<string, unknown>)
 /** Join path segments (simple cross-platform helper) */
 function joinPath(...parts: string[]): string {
   return parts.join('/').replace(/\/+/g, '/')
+}
+
+function pluginSettingsSourceForRecord(record: InstalledPlugin): 'builtin' | 'installed' {
+  return record.source === 'builtin' ? 'builtin' : 'installed'
+}
+
+function clearPluginHostState(source: PluginSettingsSource, pluginId: string, options: { clearStorage: boolean }): void {
+  usePluginSurfaceShortcutStore.getState().clearPluginShortcuts(source, pluginId)
+  usePluginPermissionStore.getState().clearPluginPermissions(source, pluginId)
+  usePluginSettingsStore.getState().removePluginSettings(source, pluginId)
+  if (options.clearStorage) {
+    clearPluginPrivateStorage(source, pluginId)
+  }
 }
 
 function validatePackageRelativePath(value: string, label: string): void {
@@ -214,6 +233,7 @@ async function loadManifest(folderPath: string): Promise<ResolvedPluginManifest>
     version,
     entry: resolvedEntry,
     capabilities: manifest.capabilities || [],
+    permissions: manifest.permissions || [],
   }
 }
 
@@ -226,6 +246,7 @@ export async function getPluginPackageSummary(folderPath: string): Promise<Plugi
     version: packageMeta.version,
     entry: packageMeta.entry,
     capabilities: packageMeta.capabilities ?? [],
+    permissions: packageMeta.permissions ?? [],
     folderPath,
   }
 }
@@ -365,6 +386,7 @@ export async function installLocalPlugin(
       updatePluginMetadata(pluginId, {
         displayName: packageMeta.displayName,
         displayNameI18n: packageMeta.displayNameI18n,
+        permissions: packageMeta.permissions ?? [],
         source: options.source ?? existing.source,
         sourceUrl: options.sourceUrl ?? existing.sourceUrl,
         folderPath,
@@ -375,6 +397,7 @@ export async function installLocalPlugin(
         version: packageMeta.version,
         entry: packageMeta.entry,
         capabilities: packageMeta.capabilities ?? [],
+        permissions: packageMeta.permissions ?? [],
         source: options.source ?? existing.source,
         sourceUrl: options.sourceUrl ?? existing.sourceUrl,
         folderPath,
@@ -393,6 +416,7 @@ export async function installLocalPlugin(
     version: packageMeta.version,
     entry: packageMeta.entry,
     capabilities: packageMeta.capabilities ?? [],
+    permissions: packageMeta.permissions ?? [],
     folderPath,
     packagePath: folderPath,
     source: options.source ?? 'local',
@@ -435,7 +459,8 @@ export async function enablePlugin(pluginId: string): Promise<void> {
       localized.renderers,
       localized.panels,
       localized.toolbar,
-      localized.definition
+      localized.definition,
+      record.permissions ?? [],
     )
 
     updatePluginStatus(pluginId, 'enabled')
@@ -454,6 +479,8 @@ export function disablePlugin(pluginId: string): void {
   const record = plugins[pluginId]
 
   if (!record || record.status !== 'enabled') return
+
+  void stopPluginBackground(pluginId, pluginSettingsSourceForRecord(record))
 
   // Unregister from production registry
   // Get panelIds before unregistering (they're removed from registry after)
@@ -507,11 +534,13 @@ export async function reloadPlugin(pluginId: string): Promise<void> {
       localized.renderers,
       localized.panels,
       localized.toolbar,
-      localized.definition
+      localized.definition,
+      newManifest.permissions ?? [],
     )
 
     // Update stored capabilities
     usePluginStore.getState().updatePluginVersion(pluginId, newManifest.version, newManifest.entry, newCapabilities)
+    usePluginStore.getState().updatePluginMetadata(pluginId, { permissions: newManifest.permissions ?? [] })
     updatePluginStatus(pluginId, 'enabled')
 
     // Show capability diff
@@ -539,6 +568,7 @@ export async function uninstallPlugin(pluginId: string): Promise<void> {
   const { plugins, uninstallPlugin: removeFromStore } = usePluginStore.getState()
   const record = plugins[pluginId]
   if (!record) return
+  const source = pluginSettingsSourceForRecord(record)
 
   if (record.status === 'enabled') {
     disablePlugin(pluginId)
@@ -550,6 +580,7 @@ export async function uninstallPlugin(pluginId: string): Promise<void> {
       rootPath: installedRoot,
       pluginId,
     })
+    clearPluginHostState(source, pluginId, { clearStorage: true })
   }
 
   removeFromStore(pluginId)
@@ -583,6 +614,7 @@ export async function sideloadDevPlugin(folderPath: string): Promise<DevPlugin> 
     packagePath: folderPath,
     source: 'local',
     capabilities: packageMeta.capabilities ?? [],
+    permissions: packageMeta.permissions ?? [],
     status: 'active',
     loadedAt: Date.now(),
     updatedAt: Date.now(),
@@ -599,7 +631,8 @@ export async function sideloadDevPlugin(folderPath: string): Promise<DevPlugin> 
       localized.renderers,
       localized.panels,
       localized.toolbar,
-      localized.definition
+      localized.definition,
+      packageMeta.permissions ?? [],
     )
 
     addDevPlugin(devRecord)
@@ -625,6 +658,7 @@ export async function reloadDevPlugin(pluginId: string): Promise<void> {
   // Remove from registry and clean up surfaces
   // Get panelIds before unregistering (they're removed from registry after)
   const panelIds = pluginRegistry.getPluginPanelIds(pluginId)
+  void stopPluginBackground(pluginId, 'dev')
   pluginRegistry.unregisterDevPlugin(pluginId)
 
   const ws = useWorkspaceStore.getState()
@@ -645,7 +679,8 @@ export async function reloadDevPlugin(pluginId: string): Promise<void> {
       localized.renderers,
       localized.panels,
       localized.toolbar,
-      localized.definition
+      localized.definition,
+      packageMeta.permissions ?? [],
     )
 
     updateDevPluginStatus(pluginId, 'active')
@@ -727,6 +762,7 @@ export function removeDevPlugin(pluginId: string): void {
 
   // Get panelIds before unregistering (they're removed from registry after)
   const panelIds = pluginRegistry.getPluginPanelIds(pluginId)
+  void stopPluginBackground(pluginId, 'dev')
   pluginRegistry.unregisterDevPlugin(pluginId)
 
   const ws = useWorkspaceStore.getState()
@@ -735,6 +771,7 @@ export function removeDevPlugin(pluginId: string): void {
     ws.closePanelV2(panelId)
   }
 
+  clearPluginHostState('dev', pluginId, { clearStorage: true })
   removeFromStore(pluginId)
 }
 

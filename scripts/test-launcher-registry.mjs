@@ -176,4 +176,15 @@ assert.notEqual(
   'tool key and launcher-item key differ even for same id',
 )
 
+assert.equal(
+  identityWithStub.getPluginSurfaceItemKey('dev', 'demo', 'main'),
+  'plugin-surface:dev:demo:main',
+  'surface key includes source + pluginId + surfaceId',
+)
+assert.equal(
+  identityWithStub.getPluginSurfaceItemKey('installed', 'demo', 'main'),
+  'plugin-surface:installed:demo:main',
+  'installed surface key must not collapse to builtin',
+)
+
 console.log('✓ test-launcher-registry passed')

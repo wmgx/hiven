@@ -13,22 +13,16 @@ import { GlobalLauncher } from './components/GlobalLauncher'
 import { PluginSettingsDialog } from './components/PluginSettingsDialog'
 import { loadInstalledPluginsFromStore } from './workspace/pluginRuntime'
 import { registerBundledPluginPackages } from './workspace/bundledPluginLoader'
-import { initializePluginBackgrounds, setupBackgroundSettingsWatcher } from './workspace/pluginBackgroundManager'
+import { initializePluginBackgrounds, setupBackgroundPermissionWatcher, setupBackgroundSettingsWatcher, stopAllPluginBackgrounds } from './workspace/pluginBackgroundManager'
 import { installGlobalPinnedLauncherHotkeys, routeGlobalPinnedLauncherShortcut } from './hotkeys/globalPinnedLauncher'
+import { installPluginSurfaceShortcutHotkeys } from './hotkeys/pluginSurfaceShortcuts'
+import { consumePendingPluginSurfaceOpenTarget, isPluginSurfaceOpenTarget } from './workspace/pluginSurfaceOpenRequest'
 
 // Register built-in panels
 import './panels/register'
 
 // Register first-party product plugin packages
 registerBundledPluginPackages()
-
-// Initialize plugin background tasks (deferred to avoid blocking render)
-try {
-  initializePluginBackgrounds()
-  setupBackgroundSettingsWatcher()
-} catch (err) {
-  console.error('[hiven] Failed to initialize plugin backgrounds:', err)
-}
 
 const VIEW_INDEX: Record<ViewId, number> = { editor: 0, scripts: 1, 'plugin-editor': 2, 'pinned-runner': 3, settings: 4 }
 
@@ -92,6 +86,10 @@ function MainApp() {
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    let disposed = false
+    let cleanupSettingsWatcher: (() => void) | undefined
+    let cleanupPermissionWatcher: (() => void) | undefined
+
     initConfigDir().then(async (dir) => {
       if (dir) {
         const pluginDir = `${dir}/plugins/installed`
@@ -111,7 +109,23 @@ function MainApp() {
           console.error('[hiven] Failed to load plugins:', e)
         }
       }
+
+      if (disposed) return
+      try {
+        initializePluginBackgrounds()
+        cleanupSettingsWatcher = setupBackgroundSettingsWatcher()
+        cleanupPermissionWatcher = setupBackgroundPermissionWatcher()
+      } catch (err) {
+        console.error('[hiven] Failed to initialize plugin backgrounds:', err)
+      }
     })
+
+    return () => {
+      disposed = true
+      cleanupSettingsWatcher?.()
+      cleanupPermissionWatcher?.()
+      void stopAllPluginBackgrounds()
+    }
   }, [])
 
   useEffect(() => {
@@ -198,6 +212,7 @@ function MainApp() {
   }, [])
 
   useEffect(() => installGlobalPinnedLauncherHotkeys(), [])
+  useEffect(() => installPluginSurfaceShortcutHotkeys(), [])
 
   useEffect(() => {
     if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
@@ -329,6 +344,10 @@ function LauncherWindowApp() {
         const position = settings.globalLauncherWindowPositionSource === 'user'
           ? settings.globalLauncherWindowPosition
           : undefined
+        const pendingSurfaceTarget = consumePendingPluginSurfaceOpenTarget()
+        if (pendingSurfaceTarget) {
+          useAppStore.getState().openPluginSurfaceTool(pendingSurfaceTarget)
+        }
         useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
         if (position && (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
           try {
@@ -363,6 +382,29 @@ function LauncherWindowApp() {
       })
       .catch((error) => {
         console.warn('[hiven] Failed to listen for launcher open event:', error)
+      })
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    import('@tauri-apps/api/event')
+      .then(({ listen }) => listen('hiven://open-plugin-surface', (event) => {
+        if (!isPluginSurfaceOpenTarget(event.payload)) return
+        useAppStore.getState().openPluginSurfaceTool(event.payload)
+        useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
+      }))
+      .then((cleanup) => {
+        if (disposed) cleanup()
+        else unlisten = cleanup
+      })
+      .catch((error) => {
+        console.warn('[hiven] Failed to listen for plugin surface open event:', error)
       })
     return () => {
       disposed = true
@@ -426,6 +468,7 @@ function LauncherWindowApp() {
   return (
     <div className="flux-spatial-shell launcher-window-shell" data-theme={theme} data-launcher-position={launcherWindowPosition ? 'stored' : 'default'} style={{ fontSize }}>
       <GlobalLauncher />
+      <PluginSettingsDialog />
     </div>
   )
 }
@@ -433,7 +476,7 @@ function LauncherWindowApp() {
 function shouldAllowLauncherListWheel(event: WheelEvent) {
   if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return false
   const target = event.target instanceof Element ? event.target : null
-  const scroller = target?.closest('.global-launcher-body') as HTMLElement | null
+  const scroller = target?.closest('[data-launcher-scrollable], .global-launcher-body') as HTMLElement | null
   if (!scroller) return false
   if (scroller.scrollHeight <= scroller.clientHeight) return false
   if (event.deltaY < 0) return scroller.scrollTop > 0

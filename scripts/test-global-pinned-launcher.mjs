@@ -229,16 +229,21 @@ check('standalone domain launcher items stay on the launcher controller path', (
   )
   assertHas(
     files.globalLauncher,
-    /item\.kind\s*===\s*['"]domain['"][\s\S]{0,740}controller\.selectItem\(item\.domainItem(?:,\s*\{[\s\S]{0,80}\})?\)/,
+    /item\.kind\s*===\s*['"]domain['"][\s\S]*controller\.selectItem\(item\.domainItem(?:,\s*\{[\s\S]{0,80}\})?\)/,
     'domain launcher items should execute through LauncherController so output keeps the launcher open',
   )
 })
 
 check('launcher UI business logic does not parse systemKey for legacy command ids', () => {
+  assertHas(
+    files.globalLauncher,
+    /systemKey\.startsWith\(['"]plugin-surface:/,
+    'GlobalLauncher may parse only explicit plugin-surface system keys for opening plugin UI surfaces',
+  )
   assert.doesNotMatch(
     files.globalLauncher,
-    /systemKey\.split\(/,
-    'GlobalLauncher should use explicit legacyUsageKeys instead of parsing systemKey',
+    /(?:legacyUsageKeys|commandId|run-plugin-command)[\s\S]{0,180}systemKey\.split\(/,
+    'GlobalLauncher should not parse systemKey for legacy command ids',
   )
   assert.doesNotMatch(
     files.commandPalette,
@@ -327,7 +332,7 @@ check('standalone launcher rehydrates persisted settings before opening', () => 
     /useAppStore\.persist\.rehydrate\(\)/,
     'LauncherWindowApp should rehydrate persisted settings so theme changes from the main window are fresh',
   )
-  const launcherOpen = files.app.match(/const\s+openLauncher\s*=\s*[^=]*=>\s*\{[\s\S]*?\n\s*\}/)?.[0] ?? ''
+  const launcherOpen = files.app.match(/const\s+openLauncher\s*=\s*[^=]*=>\s*\{[\s\S]*?useAppStore\.getState\(\)\.openGlobalLauncherOverlay\(['"]pinned-only['"]\)/)?.[0] ?? ''
   assert.ok(launcherOpen, 'LauncherWindowApp should define an openLauncher handler')
   const rehydrateIndex = launcherOpen.indexOf('rehydrate')
   const openIndex = launcherOpen.indexOf('openGlobalLauncherOverlay')
@@ -396,13 +401,13 @@ check('standalone launcher sizes the transparent window to the panel', () => {
   )
   assertHas(
     files.globalLauncher,
-    /new LogicalSize\(STANDALONE_LAUNCHER_WIDTH,\s*nextHeight\)/,
-    'standalone launcher should resize the native window using the measured panel height',
+    /new LogicalSize\(nextWidth,\s*nextHeight\)/,
+    'standalone launcher should resize the native window using the measured panel size',
   )
   assertHas(
     files.globalLauncher,
-    /measureStandaloneLauncherPanelHeight\(panel\)[\s\S]{0,180}STANDALONE_LAUNCHER_VERTICAL_PADDING/,
-    'standalone launcher should include only a small transparent margin around the measured panel content',
+    /surfaceShell\?\.defaultHeight[\s\S]{0,160}measureStandaloneLauncherPanelHeight\(panel\)[\s\S]{0,260}STANDALONE_LAUNCHER_VERTICAL_PADDING/,
+    'standalone launcher should use surface height when present and otherwise include only a small transparent margin around measured panel content',
   )
   assertHas(
     files.globalLauncher,
@@ -425,6 +430,21 @@ check('standalone launcher sizes the transparent window to the panel', () => {
     'standalone launcher should keep the existing max height for long result lists',
   )
   assertHas(
+    files.globalLauncher,
+    /STANDALONE_SURFACE_MAX_HEIGHT\s*=\s*760/,
+    'standalone tool-shell surfaces should not be capped by the compact launcher list height',
+  )
+  assertHas(
+    files.globalLauncher,
+    /surfaceShell\?\.defaultHeight[\s\S]{0,520}STANDALONE_SURFACE_MAX_HEIGHT/,
+    'standalone sizing should use surface shell height when a plugin surface is open',
+  )
+  assertHas(
+    files.globalLauncher,
+    /surfaceShell\?\.defaultWidth[\s\S]{0,520}STANDALONE_SURFACE_MAX_WIDTH/,
+    'standalone sizing should use surface shell width when a plugin surface is open',
+  )
+  assertHas(
     files.indexCss,
     /\.global-launcher-body[\s\S]{0,80}flex:\s*1/,
     'global launcher body should flex inside the bounded panel so the footer stays outside the scroll area',
@@ -439,8 +459,8 @@ check('standalone launcher exposes the whole non-interactive panel as a drag sur
   )
   assertHas(
     files.globalLauncher,
-    /closest\(['"]input,\s*textarea,\s*select,\s*button,\s*a,\s*\[role="button"\],\s*\[data-no-drag\]['"]\)/,
-    'GlobalLauncher drag handling should preserve interactive controls by excluding inputs, buttons, links, and explicit no-drag regions',
+    /closest\(['"]input,\s*textarea,\s*select,\s*button,\s*a,\s*\[role="button"\],\s*\[data-no-drag\],\s*\[data-launcher-scrollable\]['"]\)/,
+    'GlobalLauncher drag handling should preserve interactive controls and scrollable regions',
   )
   assertHas(
     files.globalLauncher,
@@ -497,6 +517,16 @@ check('standalone launcher locks webview document panning while preserving list 
     files.app,
     /function\s+shouldAllowLauncherListWheel[\s\S]{0,900}deltaX[\s\S]{0,900}global-launcher-body[\s\S]{0,900}scrollTop/,
     'LauncherWindowApp should only allow wheel scrolling inside the launcher result list',
+  )
+  assertHas(
+    files.app,
+    /function\s+shouldAllowLauncherListWheel[\s\S]{0,900}data-launcher-scrollable[\s\S]{0,900}scrollTop/,
+    'LauncherWindowApp should also allow wheel scrolling inside launcher-owned modal scroll bodies',
+  )
+  assertHas(
+    files.globalLauncher,
+    /closest\(['"][\s\S]{0,180}data-launcher-scrollable[\s\S]{0,180}\)/,
+    'Global launcher dragging should not start from scrollable surface bodies or their scrollbars',
   )
 })
 
@@ -572,6 +602,16 @@ check('standalone drag path does not save a timed intermediate position', () => 
 check('standalone launcher closes on Escape without bubbling to the app', () => {
   assertHas(
     files.globalLauncher,
+    /window\.addEventListener\(['"]keydown['"],\s*handleHostEscape,\s*true\)/,
+    'Escape should be captured by the launcher host even when a plugin surface owns focus',
+  )
+  assertHas(
+    files.globalLauncher,
+    /function|const\s+handleHostEscape[\s\S]{0,700}controllerRef\.current\?\.back\(\)[\s\S]{0,260}closeLauncher\(\)/,
+    'host Escape should go back from nested launcher frames before closing the launcher',
+  )
+  assertHas(
+    files.globalLauncher,
     /event\.key\s*===\s*['"]Escape['"][\s\S]{0,180}event\.preventDefault\(\)[\s\S]{0,180}event\.stopPropagation\(\)[\s\S]{0,180}closeLauncher\(\)/,
     'Escape should only close the global launcher and stop app-level key handlers',
   )
@@ -592,6 +632,16 @@ check('standalone launcher closes when its window loses focus', () => {
     files.globalLauncher,
     /onFocusChanged\([\s\S]{0,220}payload:\s*focused[\s\S]{0,160}if\s*\(!focused\)\s*closeLauncher\(\)/,
     'standalone launcher should hide itself when the launcher window loses focus',
+  )
+  assertHas(
+    files.globalLauncher,
+    /const\s+resetLauncherSession[\s\S]{0,500}setSurfaceFrame\(null\)[\s\S]{0,500}controllerRef\.current\?\.reset\(\)/,
+    'closing the launcher should reset plugin surface and controller state',
+  )
+  assertHas(
+    files.globalLauncher,
+    /if\s*\(open\)\s*return[\s\S]{0,220}setSurfaceFrame\(null\)/,
+    'closed launcher state should not retain a plugin surface for the next open',
   )
 })
 

@@ -158,6 +158,12 @@ export type GlobalPinnedLauncherShortcut =
   | { kind: 'double-modifier'; modifier: GlobalPinnedLauncherDoubleModifier; registrationStatus?: string; registrationError?: string }
   | { kind: 'disabled'; registrationStatus?: string; registrationError?: string }
 
+export type PluginSurfaceOpenTarget = {
+  source: 'builtin' | 'installed' | 'dev'
+  pluginId: string
+  surfaceId: string
+}
+
 interface AppState {
   // Navigation
   activeView: ViewId
@@ -198,6 +204,9 @@ interface AppState {
   setGlobalLauncherOpen: (open: boolean, mode?: GlobalLauncherMode) => void
   openGlobalLauncher: (mode: GlobalLauncherMode) => void
   openGlobalLauncherOverlay: (mode: GlobalLauncherMode) => void
+  pluginSurfaceToolTarget: PluginSurfaceOpenTarget | null
+  openPluginSurfaceTool: (target: PluginSurfaceOpenTarget) => void
+  clearPluginSurfaceTool: () => void
 
   // Last command status
   lastCommandStatus: LastCommandStatus | null
@@ -431,6 +440,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   globalLauncherOpen: false,
   globalLauncherMode: 'full',
   globalLauncherOverlay: false,
+  pluginSurfaceToolTarget: null,
   setGlobalLauncherOpen: (open, mode) => set((state) => ({
     globalLauncherOpen: open,
     globalLauncherMode: mode ?? (open ? state.globalLauncherMode : 'full'),
@@ -438,6 +448,8 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   })),
   openGlobalLauncher: (mode) => set({ globalLauncherOpen: true, globalLauncherMode: mode }),
   openGlobalLauncherOverlay: (mode) => set({ globalLauncherOpen: true, globalLauncherMode: mode, globalLauncherOverlay: true }),
+  openPluginSurfaceTool: (target) => set({ pluginSurfaceToolTarget: target }),
+  clearPluginSurfaceTool: () => set({ pluginSurfaceToolTarget: null }),
 
   // Last command status
   lastCommandStatus: null,

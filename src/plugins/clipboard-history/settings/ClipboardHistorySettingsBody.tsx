@@ -5,17 +5,48 @@
  * Uses standard React JSX like other plugin settings bodies.
  */
 
-import { useState } from 'react'
-import type { PluginSettingsBodyProps } from '@hiven/plugin'
+import { useState, type ReactNode } from 'react'
+import type { PluginPermission, PluginSettingsBodyProps } from '@hiven/plugin'
 import type { ClipboardHistorySettings } from './model'
+import { createClipboardHistoryRepository } from '../storage/clipboardHistoryRepository'
+
+const REQUIRED_PERMISSIONS: PluginPermission[] = [
+  'clipboard.read',
+  'clipboard.write',
+  'clipboard.watch',
+  'clipboard.image',
+  'clipboard.files',
+  'storage.private',
+  'storage.blob',
+  'globalShortcut.register',
+  'accessibility.paste',
+]
 
 export function ClipboardHistorySettingsBody({
   value,
   updateValue,
   t,
-  locale,
+  host,
 }: PluginSettingsBodyProps<ClipboardHistorySettings>) {
   const [showClearConfirm, setShowClearConfirm] = useState(false)
+  const [clearing, setClearing] = useState(false)
+  const missingPermissions = REQUIRED_PERMISSIONS.filter((permission) => !host.permissions[permission]?.granted)
+  const grantedPermissions = REQUIRED_PERMISSIONS.filter((permission) => host.permissions[permission]?.granted)
+
+  const clearAll = async () => {
+    setClearing(true)
+    try {
+      const repository = createClipboardHistoryRepository(host.storage)
+      await repository.clearAll()
+      host.showMessage(t('message.cleared'), 'success')
+      setShowClearConfirm(false)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      host.showMessage(message, 'error')
+    } finally {
+      setClearing(false)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -90,13 +121,14 @@ export function ClipboardHistorySettingsBody({
           <input
             className="settings-input"
             type="number"
-            min={1024}
-            value={value.maxTextBytes}
-            onChange={(e) => updateValue({ maxTextBytes: Math.max(1024, parseInt(e.target.value) || 256 * 1024) })}
+            min={0.01}
+            step={0.25}
+            value={bytesToMegabytes(value.maxTextBytes)}
+            onChange={(e) => updateValue({ maxTextBytes: megabytesToBytes(parseFloat(e.target.value), 0.25) })}
             disabled={!value.enabled}
           />
           <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
-            {formatBytes(value.maxTextBytes)}
+            MB
           </span>
         </SettingsField>
 
@@ -104,13 +136,14 @@ export function ClipboardHistorySettingsBody({
           <input
             className="settings-input"
             type="number"
-            min={1024}
-            value={value.maxImageBytes}
-            onChange={(e) => updateValue({ maxImageBytes: Math.max(1024, parseInt(e.target.value) || 10 * 1024 * 1024) })}
+            min={1}
+            step={1}
+            value={bytesToMegabytes(value.maxImageBytes)}
+            onChange={(e) => updateValue({ maxImageBytes: megabytesToBytes(parseFloat(e.target.value), 10) })}
             disabled={!value.enabled}
           />
           <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
-            {formatBytes(value.maxImageBytes)}
+            MB
           </span>
         </SettingsField>
 
@@ -118,13 +151,14 @@ export function ClipboardHistorySettingsBody({
           <input
             className="settings-input"
             type="number"
-            min={1024 * 1024}
-            value={value.maxTotalCacheBytes}
-            onChange={(e) => updateValue({ maxTotalCacheBytes: Math.max(1024 * 1024, parseInt(e.target.value) || 500 * 1024 * 1024) })}
+            min={1}
+            step={10}
+            value={bytesToMegabytes(value.maxTotalCacheBytes)}
+            onChange={(e) => updateValue({ maxTotalCacheBytes: megabytesToBytes(parseFloat(e.target.value), 500) })}
             disabled={!value.enabled}
           />
           <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
-            {formatBytes(value.maxTotalCacheBytes)}
+            MB
           </span>
         </SettingsField>
       </div>
@@ -148,29 +182,90 @@ export function ClipboardHistorySettingsBody({
               <button
                 className="text-[12px] px-3 py-1.5 rounded"
                 style={{ background: 'var(--color-error)', color: '#fff', border: 'none', cursor: 'pointer' }}
-                onClick={() => {
-                  // Clear handled by surface; just close confirm
-                  setShowClearConfirm(false)
-                }}
+                onClick={() => { void clearAll() }}
+                disabled={clearing}
               >
-                {t('settings.clearAll')}
+                {clearing ? t('settings.clearAll.clearing') : t('settings.clearAll')}
               </button>
               <button
                 className="text-[12px] px-3 py-1.5 rounded"
                 style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-secondary)', border: 'none', cursor: 'pointer' }}
                 onClick={() => setShowClearConfirm(false)}
+                disabled={clearing}
               >
-                {locale === 'zh' ? '取消' : 'Cancel'}
+                {t('settings.cancel')}
               </button>
             </div>
           </div>
         )}
       </div>
+
+      <div
+        className={`clipboard-history-permissions mt-3 pt-3${missingPermissions.length === 0 ? ' is-all-granted' : ' has-missing'}`}
+        style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}
+        tabIndex={0}
+      >
+        <div className="clipboard-history-permissions-header">
+          <span>{t('settings.permissions')}</span>
+          <strong>
+            {missingPermissions.length === 0
+              ? t('settings.permissionsAllGranted')
+              : t('settings.permissionsMissing', { count: missingPermissions.length })}
+          </strong>
+        </div>
+        {missingPermissions.length > 0 && (
+          <div className="clipboard-history-permission-list">
+            {missingPermissions.map((permission) => (
+              <PermissionRow
+                key={permission}
+                permission={permission}
+                granted={false}
+                t={t}
+              />
+            ))}
+          </div>
+        )}
+        <div className="clipboard-history-permission-popover" role="tooltip">
+          <div className="clipboard-history-permission-popover-title">{t('settings.permissionsAll')}</div>
+          <div className="clipboard-history-permission-list">
+            {[...missingPermissions, ...grantedPermissions].map((permission) => (
+              <PermissionRow
+                key={permission}
+                permission={permission}
+                granted={host.permissions[permission]?.granted === true}
+                t={t}
+              />
+            ))}
+          </div>
+        </div>
+        <p className="text-[11px] leading-4 m-0" style={{ color: 'var(--color-text-tertiary)' }}>
+          {t('settings.privacyNotice')}
+        </p>
+      </div>
     </div>
   )
 }
 
-function SettingsField({ label, children }: { label: string; children: React.ReactNode }) {
+function PermissionRow({
+  permission,
+  granted,
+  t,
+}: {
+  permission: PluginPermission
+  granted: boolean
+  t: (key: string, vars?: Record<string, string | number>) => string
+}) {
+  return (
+    <div className="clipboard-history-permission-row">
+      <span>{t(`permission.${permission}`)}</span>
+      <strong className={granted ? 'is-granted' : 'is-required'}>
+        {granted ? t('settings.permissionGranted') : t('settings.permissionRequired')}
+      </strong>
+    </div>
+  )
+}
+
+function SettingsField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
       <label className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
@@ -183,8 +278,12 @@ function SettingsField({ label, children }: { label: string; children: React.Rea
   )
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
-  return `${Math.round(bytes / (1024 * 1024))} MB`
+function bytesToMegabytes(bytes: number): number {
+  const value = bytes / (1024 * 1024)
+  return Number.isInteger(value) ? value : Number(value.toFixed(2))
+}
+
+function megabytesToBytes(value: number, fallbackMb: number): number {
+  const safeValue = Number.isFinite(value) && value > 0 ? value : fallbackMb
+  return Math.max(1, Math.round(safeValue * 1024 * 1024))
 }

@@ -9,7 +9,6 @@ import type { PluginPrivateStorageApi } from '@hiven/plugin'
 import type {
   ClipboardHistoryItem,
   ClipboardHistoryIndex,
-  ClipboardHistoryIndexEntry,
 } from './clipboardHistoryTypes'
 
 const KV_PREFIX_ITEMS = 'history/items/'

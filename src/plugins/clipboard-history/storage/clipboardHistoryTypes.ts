@@ -12,6 +12,7 @@ export type ClipboardHistoryBase = {
   lastCopiedAt: number
   copyCount: number
   byteSize: number
+  sourceApp?: string
 }
 
 export type ClipboardTextHistoryItem = ClipboardHistoryBase & {
@@ -64,6 +65,7 @@ export type AddTextItemInput = {
   text: string
   byteSize: number
   hash: string
+  sourceApp?: string
 }
 
 export type AddImageItemInput = {
@@ -75,6 +77,7 @@ export type AddImageItemInput = {
   width?: number
   height?: number
   hash: string
+  sourceApp?: string
 }
 
 export type AddFilesItemInput = {
@@ -83,6 +86,7 @@ export type AddFilesItemInput = {
   fileNames: string[]
   byteSize: number
   hash: string
+  sourceApp?: string
 }
 
 export type AddItemInput = AddTextItemInput | AddImageItemInput | AddFilesItemInput

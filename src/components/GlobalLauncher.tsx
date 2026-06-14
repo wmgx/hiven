@@ -1,7 +1,7 @@
 import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ErrorInfo, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { LayoutPanelLeft, Pin, Puzzle, Search, Settings } from 'lucide-react'
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
-import { localized, useAppStore, type ViewId } from '../store'
+import { localized, useAppStore, type PluginSurfaceOpenTarget, type ViewId } from '../store'
 import { t, type Locale } from '../i18n'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
 import { resolveIcon } from '../utils/resolveIcon'
@@ -15,14 +15,17 @@ import { createPluginLauncherApi } from '../workspace/launcher/pluginApi'
 import { collectStaticCandidates, collectDynamicItems, filterDynamicForSurface } from '../workspace/launcher/registry'
 import { rankLauncherItems } from '../workspace/launcher/ranking'
 import { resolveDisplayTitle, resolveDisplaySubtitle } from '../workspace/launcher/display'
-import type { LauncherItem as DomainLauncherItem, LauncherSurfaceId } from '../workspace/launcher/types'
+import type { LauncherItem as DomainLauncherItem, LauncherResultChoice, LauncherSurfaceId } from '../workspace/launcher/types'
 import { resolvePluginSettingsSource } from '../workspace/launcher/pluginSource'
 import { LauncherParamStep, resolveParamValueLabel } from './launcher/LauncherParamStep'
 import { getPlatformShortcutMeta, shouldCustomizeParams, supportsDefaultParamRun, supportsParamCustomization } from './launcher/launcherParamShortcuts'
-import type { ContributionSource, PluginDefinition, PluginPermissionSnapshot, PluginPermission } from '../workspace/pluginTypes'
+import type { ContributionSource, PluginDefinition, PluginPermission } from '../workspace/pluginTypes'
 import { createPluginPrivateStorage } from '../workspace/pluginStorage'
 import { createPluginClipboard } from '../workspace/pluginClipboard'
 import { createPluginPaste } from '../workspace/pluginPaste'
+import { describePluginPermission, getPluginPermissionSnapshot, missingPluginPermissions, usePluginPermissionStore } from '../workspace/pluginPermissions'
+import { restartPluginBackground } from '../workspace/pluginBackgroundManager'
+import type { PluginSettingsSource } from '../workspace/pluginSettingsStore'
 
 type LauncherItem =
   | { kind: 'domain'; id: string; title: string; subtitle: string; icon?: string; domainItem: DomainLauncherItem }
@@ -38,8 +41,13 @@ const viewItems: { id: ViewId; title: string; titleI18n: Partial<Record<Locale, 
 const STANDALONE_LAUNCHER_WIDTH = 660
 const STANDALONE_LAUNCHER_MIN_HEIGHT = 160
 const STANDALONE_LAUNCHER_MAX_HEIGHT = 390
+const STANDALONE_SURFACE_MAX_WIDTH = 920
+const STANDALONE_SURFACE_MAX_HEIGHT = 760
 const STANDALONE_LAUNCHER_VERTICAL_PADDING = 24
+const STANDALONE_LAUNCHER_HORIZONTAL_PADDING = 24
 const STANDALONE_LAUNCHER_LIST_MAX_HEIGHT = 300
+const PLUGIN_SURFACE_BACK_EVENT = 'hiven:plugin-surface-back'
+const PLUGIN_SURFACE_CLOSE_EVENT = 'hiven:plugin-surface-close'
 
 export function GlobalLauncher() {
   const open = useAppStore((s) => s.globalLauncherOpen)
@@ -55,13 +63,20 @@ export function GlobalLauncher() {
   const updateSetting = useAppStore((s) => s.updateSetting)
   const locale = useAppStore((s) => s.locale)
   const pluginRegistryVersion = usePluginRegistryVersion()
+  const pluginPermissionVersion = usePluginPermissionStore((s) => s.version)
+  const grantPluginPermissions = usePluginPermissionStore((s) => s.grantPermissions)
   const launcherUsageBySurface = useAppStore((s) => s.launcherUsageBySurface)
   const recordLauncherSelection = useAppStore((s) => s.recordLauncherSelection)
+  const pluginSurfaceToolTarget = useAppStore((s) => s.pluginSurfaceToolTarget)
+  const clearPluginSurfaceTool = useAppStore((s) => s.clearPluginSurfaceTool)
   const [controllerState, setControllerState] = useState<LauncherControllerState | null>(null)
+  const [launcherController, setLauncherController] = useState<LauncherController | null>(null)
   const controllerRef = useRef<LauncherController | null>(null)
   const closeAfterActionRef = useRef<() => void>(() => {})
   const [dynamicItems, setDynamicItems] = useState<DomainLauncherItem[]>([])
-  const [surfaceFrame, setSurfaceFrame] = useState<{ pluginId: string; surfaceId: string } | null>(null)
+  const [surfaceFrame, setSurfaceFrame] = useState<{ source: PluginSettingsSource; pluginId: string; surfaceId: string } | null>(null)
+  const [surfaceFocusVersion, setSurfaceFocusVersion] = useState(0)
+  const [rankingNow, setRankingNow] = useState(0)
   const dynamicQueryRef = useRef('')
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -92,6 +107,23 @@ export function GlobalLauncher() {
     })
   }, [open])
 
+  useEffect(() => {
+    if (open) return
+    setSurfaceFrame(null)
+    setDynamicItems([])
+    dynamicQueryRef.current = ''
+    controllerRef.current?.reset()
+  }, [open])
+
+  useEffect(() => {
+    if (!open || !pluginSurfaceToolTarget) return
+    const timer = window.setTimeout(() => {
+      setSurfaceFrame(pluginSurfaceToolTarget)
+      setSurfaceFocusVersion((version) => version + 1)
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [open, pluginSurfaceToolTarget])
+
   // Initialize LauncherController on open
   useEffect(() => {
     if (!open) return
@@ -120,17 +152,22 @@ export function GlobalLauncher() {
           onChange: (state) => setControllerState({ ...state }),
         })
         controllerRef.current = controller
+        setLauncherController(controller)
       }
       controllerRef.current.reset()
     })
     return () => { cancelled = true }
-  }, [open])
+  }, [locale, open, recordLauncherSelection])
 
   // Collect dynamic items with debounce
   useEffect(() => {
     if (!open) return
     const q = query.trim()
-    if (!q) { setDynamicItems([]); dynamicQueryRef.current = ''; return }
+    if (!q) {
+      dynamicQueryRef.current = ''
+      const clearTimer = window.setTimeout(() => setDynamicItems([]), 0)
+      return () => window.clearTimeout(clearTimer)
+    }
     dynamicQueryRef.current = q
     const timer = setTimeout(async () => {
       if (dynamicQueryRef.current !== q) return
@@ -148,6 +185,12 @@ export function GlobalLauncher() {
     return () => clearTimeout(timer)
   }, [query, open, locale])
 
+  useEffect(() => {
+    if (!open) return
+    const timer = window.setTimeout(() => setRankingNow(Date.now()), 0)
+    return () => window.clearTimeout(timer)
+  }, [open, query, dynamicItems.length])
+
   // Domain ranked items (new launcher system)
   const rankedLauncherItems = useMemo<DomainLauncherItem[]>(() => {
     void pluginRegistryVersion
@@ -155,10 +198,19 @@ export function GlobalLauncher() {
     const allCandidates = [...staticCandidates, ...dynamicItems]
     const q = query.trim()
     return rankLauncherItems(
-      { query: q, locale, surfaceId: 'global-launcher', usage: launcherUsageBySurface, now: Date.now() },
+      { query: q, locale, surfaceId: 'global-launcher', usage: launcherUsageBySurface, now: rankingNow },
       allCandidates,
     )
-  }, [query, locale, pluginRegistryVersion, dynamicItems, launcherUsageBySurface])
+  }, [query, locale, pluginRegistryVersion, dynamicItems, launcherUsageBySurface, rankingNow])
+
+  const activeSurfaceFrame = useMemo(() => {
+    void pluginRegistryVersion
+    if (!surfaceFrame) return null
+    const def = pluginRegistry.getPluginDefinition(surfaceFrame.pluginId, surfaceFrame.source) as PluginDefinition<unknown> | undefined
+    const surface = def?.ui?.surfaces?.find((s) => s.id === surfaceFrame.surfaceId)
+    if (!def || !surface) return null
+    return { definition: def, surface }
+  }, [surfaceFrame, pluginRegistryVersion])
 
   const items = useMemo<LauncherItem[]>(() => {
     const pinnedLabel = t(locale, 'palette.globalPinned')
@@ -213,8 +265,19 @@ export function GlobalLauncher() {
     previousFocusRef.current = null
   }, [])
 
+  const resetLauncherSession = useCallback(() => {
+    clearPluginSurfaceTool()
+    setSurfaceFrame(null)
+    setQuery('')
+    setSelectedIndex(0)
+    setDynamicItems([])
+    dynamicQueryRef.current = ''
+    controllerRef.current?.reset()
+  }, [clearPluginSurfaceTool])
+
   const closeLauncher = useCallback(() => {
     const wasOverlay = overlay
+    resetLauncherSession()
     if (standaloneLauncher) {
       void (async () => {
         try {
@@ -245,10 +308,11 @@ export function GlobalLauncher() {
     }
     setOpen(false)
     restoreFocus()
-  }, [overlay, setOpen, standaloneLauncher, restoreFocus])
+  }, [overlay, resetLauncherSession, setOpen, standaloneLauncher, restoreFocus])
 
   // Close launcher after a command has been executed (don't hide the main window)
   const closeLauncherAfterAction = useCallback(() => {
+    resetLauncherSession()
     if (standaloneLauncher) {
       void (async () => {
         try {
@@ -278,9 +342,11 @@ export function GlobalLauncher() {
     }
     setOpen(false)
     restoreFocus()
-  }, [overlay, setOpen, standaloneLauncher, restoreFocus])
+  }, [overlay, resetLauncherSession, setOpen, standaloneLauncher, restoreFocus])
 
-  closeAfterActionRef.current = closeLauncherAfterAction
+  useEffect(() => {
+    closeAfterActionRef.current = closeLauncherAfterAction
+  }, [closeLauncherAfterAction])
 
   useEffect(() => {
     if (!open || !standaloneLauncher) return
@@ -340,14 +406,23 @@ export function GlobalLauncher() {
     const frame = window.requestAnimationFrame(() => {
       const panel = panelRef.current
       if (!panel) return
-      const desiredPanelHeight = measureStandaloneLauncherPanelHeight(panel)
+      const surfaceShell = activeSurfaceFrame?.surface.shell
+      const desiredPanelHeight = surfaceShell?.defaultHeight
+        ? surfaceShell.defaultHeight
+        : measureStandaloneLauncherPanelHeight(panel)
       const nextHeight = clamp(
         Math.ceil(desiredPanelHeight + STANDALONE_LAUNCHER_VERTICAL_PADDING),
         STANDALONE_LAUNCHER_MIN_HEIGHT,
-        STANDALONE_LAUNCHER_MAX_HEIGHT,
+        surfaceShell ? STANDALONE_SURFACE_MAX_HEIGHT : STANDALONE_LAUNCHER_MAX_HEIGHT,
+      )
+      const desiredPanelWidth = surfaceShell?.defaultWidth ?? STANDALONE_LAUNCHER_WIDTH
+      const nextWidth = clamp(
+        Math.ceil(desiredPanelWidth + STANDALONE_LAUNCHER_HORIZONTAL_PADDING),
+        STANDALONE_LAUNCHER_WIDTH,
+        surfaceShell ? STANDALONE_SURFACE_MAX_WIDTH : STANDALONE_LAUNCHER_WIDTH,
       )
       void getCurrentWindow()
-        .setSize(new LogicalSize(STANDALONE_LAUNCHER_WIDTH, nextHeight))
+        .setSize(new LogicalSize(nextWidth, nextHeight))
         .catch((error) => {
           console.warn('[hiven] Failed to resize launcher window:', error)
         })
@@ -360,6 +435,7 @@ export function GlobalLauncher() {
     open,
     controllerState,
     standaloneLauncher,
+    activeSurfaceFrame,
   ])
 
   const selectItem = (item: LauncherItem | undefined, customizeParams = false) => {
@@ -370,10 +446,13 @@ export function GlobalLauncher() {
       if (item.domainItem.systemKey.startsWith('plugin-surface:')) {
         const parts = item.domainItem.systemKey.split(':')
         // format: plugin-surface:source:pluginId:surfaceId
+        const source = parts[1]
         const pluginId = parts[2]
         const surfaceId = parts[3]
-        if (pluginId && surfaceId) {
-          setSurfaceFrame({ pluginId, surfaceId })
+        if (isPluginSettingsSource(source) && pluginId && surfaceId) {
+          clearPluginSurfaceTool()
+          setSurfaceFrame({ source, pluginId, surfaceId })
+          setSurfaceFocusVersion((version) => version + 1)
           return
         }
       }
@@ -442,6 +521,70 @@ export function GlobalLauncher() {
     }
   }
 
+  const activateResultChoice = useCallback((choice: LauncherResultChoice) => {
+    void launcherController?.activateChoice(choice)
+  }, [launcherController])
+
+  const leaveSurface = useCallback(() => {
+    if (surfaceFrame && pluginSurfaceToolTarget && samePluginSurfaceTarget(surfaceFrame, pluginSurfaceToolTarget)) {
+      closeLauncher()
+      return
+    }
+    setSurfaceFrame(null)
+  }, [closeLauncher, pluginSurfaceToolTarget, surfaceFrame])
+
+  const closeSurface = useCallback(() => {
+    setSurfaceFrame(null)
+    closeLauncher()
+  }, [closeLauncher])
+
+  const requestSurfaceBack = useCallback(() => {
+    window.dispatchEvent(new CustomEvent(PLUGIN_SURFACE_BACK_EVENT))
+  }, [])
+
+  const requestSurfaceClose = useCallback(() => {
+    window.dispatchEvent(new CustomEvent(PLUGIN_SURFACE_CLOSE_EVENT))
+  }, [])
+
+  const leaveCrashedSurface = useCallback(() => {
+    setSurfaceFrame(null)
+  }, [])
+
+  const handleHostEscape = useCallback((event: KeyboardEvent) => {
+    if (event.key !== 'Escape') return
+    if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (surfaceFrame) {
+      leaveSurface()
+      return
+    }
+
+    if (controllerRef.current?.back()) {
+      focusSearchInputAfterBack()
+      return
+    }
+
+    closeLauncher()
+  }, [closeLauncher, leaveSurface, surfaceFrame])
+
+  useEffect(() => {
+    if (!open) return
+    window.addEventListener('keydown', handleHostEscape, true)
+    return () => window.removeEventListener('keydown', handleHostEscape, true)
+  }, [handleHostEscape, open])
+
+  useEffect(() => {
+    if (!open) return
+    window.addEventListener(PLUGIN_SURFACE_BACK_EVENT, leaveSurface)
+    window.addEventListener(PLUGIN_SURFACE_CLOSE_EVENT, closeSurface)
+    return () => {
+      window.removeEventListener(PLUGIN_SURFACE_BACK_EVENT, leaveSurface)
+      window.removeEventListener(PLUGIN_SURFACE_CLOSE_EVENT, closeSurface)
+    }
+  }, [closeSurface, leaveSurface, open])
+
   function handleCompositionStart() {
     startImeComposition(isImeComposingRef)
   }
@@ -452,7 +595,7 @@ export function GlobalLauncher() {
 
   const beginDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return
-    if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, button, a, [role="button"], [data-no-drag]')) return
+    if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, button, a, [role="button"], [data-no-drag], [data-launcher-scrollable]')) return
     if (standaloneLauncher && (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
       event.preventDefault()
       event.stopPropagation()
@@ -510,10 +653,28 @@ export function GlobalLauncher() {
     background: 'var(--color-background-primary)',
     border: '0.5px solid var(--color-border-secondary)',
     borderRadius: 'var(--radius-xl)',
+    width: activeSurfaceFrame?.surface.shell?.defaultWidth
+      ? `min(${activeSurfaceFrame.surface.shell.defaultWidth}px, calc(100vw - 24px))`
+      : undefined,
+    maxHeight: activeSurfaceFrame?.surface.shell?.defaultHeight
+      ? `min(${activeSurfaceFrame.surface.shell.defaultHeight}px, calc(100vh - 24px))`
+      : undefined,
     left: currentPosition ? currentPosition.x : '50%',
     top: currentPosition ? currentPosition.y : overlay ? 12 : 70,
     transform: currentPosition ? undefined : 'translateX(-50%)',
   }
+
+  useLayoutEffect(() => {
+    if (!surfaceFrame) return
+    const frame = window.requestAnimationFrame(() => {
+      const shell = panelRef.current?.querySelector<HTMLElement>('.global-launcher-surface-shell')
+      const focusTarget =
+        shell?.querySelector<HTMLElement>('[data-plugin-surface-autofocus]') ??
+        shell
+      focusTarget?.focus()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [surfaceFrame, surfaceFocusVersion])
 
   if (!open) return null
 
@@ -535,6 +696,15 @@ export function GlobalLauncher() {
         }}
         onKeyDown={(event) => {
           if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
+          if (event.defaultPrevented) return
+          if (surfaceFrame) {
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              event.stopPropagation()
+              leaveSurface()
+            }
+            return
+          }
           // Controller frame key handling (collect-input / result)
           if (controllerState && controllerState.frames.length > 1) {
             const topFrame = controllerState.frames[controllerState.frames.length - 1]
@@ -585,10 +755,6 @@ export function GlobalLauncher() {
           if (event.key === 'Escape') {
             event.preventDefault()
             event.stopPropagation()
-            if (surfaceFrame) {
-              setSurfaceFrame(null)
-              return
-            }
             closeLauncher()
             return
           }
@@ -603,39 +769,61 @@ export function GlobalLauncher() {
         onCompositionEnd={handleCompositionEnd}
       >
         {surfaceFrame ? (() => {
-          const def = pluginRegistry.getPluginDefinition(surfaceFrame.pluginId, 'production') as PluginDefinition<unknown> | undefined
-          const surface = def?.ui?.surfaces?.find((s) => s.id === surfaceFrame.surfaceId)
-          if (!surface) {
+          void pluginPermissionVersion
+          if (!activeSurfaceFrame) {
             return <div className="p-4 text-center text-[12px]" style={{ color: 'var(--color-text-tertiary)' }}>Surface not found</div>
           }
+          const { definition: def, surface } = activeSurfaceFrame
           const SurfaceComponent = surface.component
-          const settingsContribution = def?.settings
-          const settings = settingsContribution ? resolvePluginSettings('builtin', surfaceFrame.pluginId, settingsContribution).value : {}
+          const settingsContribution = def.settings
+          const settings = settingsContribution ? resolvePluginSettings(surfaceFrame.source, surfaceFrame.pluginId, settingsContribution).value : {}
           const pluginT = makePluginT(surfaceFrame.pluginId, locale)
-          const permissions = buildAllGrantedPermissions()
+          const requestedPermissions = pluginRegistry.getPluginPermissions(surfaceFrame.pluginId, surfaceFrame.source)
+          const permissions = getPluginPermissionSnapshot(surfaceFrame.source, surfaceFrame.pluginId, requestedPermissions)
+          const missingPermissions = missingPluginPermissions(permissions, requestedPermissions)
           const openSettingsDialog = usePluginSettingsStore.getState().openSettingsDialog
+          const hostStorage = createPluginPrivateStorage(surfaceFrame.source, surfaceFrame.pluginId, permissions)
+          const shellHeight = surface.shell?.defaultHeight ?? 480
           return (
-            <PluginSurfaceErrorBoundary pluginId={surfaceFrame.pluginId} onBack={() => setSurfaceFrame(null)}>
-              <div style={{ height: surface.shell?.defaultHeight ?? 480, overflow: 'hidden' }}>
-                <SurfaceComponent
-                  pluginId={surfaceFrame.pluginId}
-                  surfaceId={surfaceFrame.surfaceId}
-                  locale={locale}
-                  t={pluginT}
-                  settings={settings}
-                  permissions={permissions}
-                  host={{
-                    close: () => { setSurfaceFrame(null); closeLauncher() },
-                    requestBack: () => setSurfaceFrame(null),
-                    openSettings: () => { openSettingsDialog({ pluginId: surfaceFrame.pluginId, source: 'builtin' }) },
-                    showMessage: (message, level) => {
-                      useAppStore.getState().setLastCommandStatus({ title: message, status: level === 'error' ? 'error' : 'success', message, updatedAt: Date.now() })
-                    },
-                    storage: createPluginPrivateStorage(surfaceFrame.pluginId),
-                    clipboard: createPluginClipboard(surfaceFrame.pluginId),
-                    paste: createPluginPaste(),
-                  }}
-                />
+            <PluginSurfaceErrorBoundary pluginId={surfaceFrame.pluginId} onBack={leaveCrashedSurface}>
+              <div
+                className="global-launcher-surface-shell flex flex-col min-h-0 outline-none"
+                tabIndex={-1}
+                style={{ height: shellHeight }}
+              >
+                <div className="global-launcher-body" style={{ maxHeight: shellHeight, height: shellHeight, overflow: 'hidden' }}>
+                  {missingPermissions.length > 0 ? (
+                    <PluginSurfacePermissionGate
+                      permissions={missingPermissions}
+                      locale={locale}
+                      onBack={requestSurfaceBack}
+                      onGrant={() => {
+                        grantPluginPermissions(surfaceFrame.source, surfaceFrame.pluginId, missingPermissions)
+                        void restartPluginBackground(surfaceFrame.pluginId, surfaceFrame.source)
+                      }}
+                    />
+                  ) : (
+                    <SurfaceComponent
+                      pluginId={surfaceFrame.pluginId}
+                      surfaceId={surfaceFrame.surfaceId}
+                      locale={locale}
+                      t={pluginT}
+                      settings={settings}
+                      permissions={permissions}
+                      host={{
+                        close: requestSurfaceClose,
+                        requestBack: requestSurfaceBack,
+                        openSettings: () => { openSettingsDialog({ pluginId: surfaceFrame.pluginId, source: surfaceFrame.source }) },
+                        showMessage: (message, level) => {
+                          useAppStore.getState().setLastCommandStatus({ title: message, status: level === 'error' ? 'error' : 'success', message, updatedAt: Date.now() })
+                        },
+                        storage: hostStorage,
+                        clipboard: createPluginClipboard(surfaceFrame.pluginId, permissions, hostStorage),
+                        paste: createPluginPaste(permissions, hostStorage),
+                      }}
+                    />
+                  )}
+                </div>
               </div>
             </PluginSurfaceErrorBoundary>
           )
@@ -713,7 +901,7 @@ export function GlobalLauncher() {
                   <button
                     className="w-full flex items-center gap-2 px-3.5 py-2 text-left text-[13px] bg-[var(--color-background-secondary)] hover:bg-[var(--color-background-secondary)]"
                     style={{ color: 'var(--color-text-primary)' }}
-                    onClick={() => void controllerRef.current?.activateChoice(previewChoice)}
+                    onClick={() => activateResultChoice(previewChoice)}
                   >
                     <span className="flex-1 truncate">{previewChoice.title}</span>
                     {previewChoice.subtitle && (
@@ -748,7 +936,7 @@ export function GlobalLauncher() {
                     key={choice.id}
                     className={`w-full flex items-center gap-2 px-3.5 py-2 text-left text-[13px] hover:bg-[var(--color-background-secondary)] ${index === 0 ? 'bg-[var(--color-background-secondary)]' : ''}`}
                     style={{ color: 'var(--color-text-primary)' }}
-                    onClick={() => void controllerRef.current?.activateChoice(choice)}
+                    onClick={() => activateResultChoice(choice)}
                   >
                     <span className="flex-1 truncate">{choice.title}</span>
                     {choice.subtitle && (
@@ -834,6 +1022,10 @@ function readCssPixelValue(value: string, fallback: number) {
 
 function isStandaloneLauncherWindow() {
   return new URLSearchParams(window.location.search).get('window') === 'launcher'
+}
+
+function isPluginSettingsSource(value: string | undefined): value is PluginSettingsSource {
+  return value === 'builtin' || value === 'installed' || value === 'dev'
 }
 
 function LauncherList({ items, selected, onSelect }: { items: LauncherItem[]; selected?: LauncherItem; onSelect: (item: LauncherItem) => void }) {
@@ -930,18 +1122,63 @@ function launcherItemUsageKey(item: LauncherItem): string {
 
 // ─── Plugin Surface Helpers ──────────────────────────────────────────────────
 
-function buildAllGrantedPermissions(): PluginPermissionSnapshot {
-  const permissions: PluginPermission[] = [
-    'clipboard.read', 'clipboard.write', 'clipboard.watch',
-    'clipboard.image', 'clipboard.files',
-    'storage.private', 'storage.blob',
-    'globalShortcut.register', 'accessibility.paste',
-  ]
-  const snapshot = {} as PluginPermissionSnapshot
-  for (const p of permissions) {
-    snapshot[p] = { granted: true, grantedAt: Date.now() }
-  }
-  return snapshot
+function PluginSurfacePermissionGate({
+  permissions,
+  locale,
+  onBack,
+  onGrant,
+}: {
+  permissions: PluginPermission[]
+  locale: Locale
+  onBack: () => void
+  onGrant: () => void
+}) {
+  const copy = locale === 'zh'
+    ? {
+        title: '需要授权',
+        description: '这个插件需要 host 管理的权限后，才能运行 surface 或 background。',
+        allow: '允许',
+        back: '返回',
+      }
+    : {
+        title: 'Permissions required',
+        description: 'This plugin needs host-managed permissions before its surface or background can run.',
+        allow: 'Allow',
+        back: 'Back',
+      }
+
+  return (
+    <div className="h-full flex flex-col items-center justify-center gap-3 p-6 text-center" style={{ color: 'var(--color-text-secondary)' }}>
+      <div className="text-[13px] font-medium" style={{ color: 'var(--color-text-primary)' }}>{copy.title}</div>
+      <div className="max-w-[420px] text-[12px]" style={{ color: 'var(--color-text-tertiary)' }}>
+        {copy.description}
+      </div>
+      <div className="max-w-[420px] flex flex-col gap-1 text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>
+        {permissions.map((permission) => (
+          <div key={permission}>
+            {describePluginPermission(permission, locale)}
+            <span style={{ color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-mono)' }}> {permission}</span>
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2 pt-1">
+        <button
+          className="text-[12px] px-3 py-1.5 rounded"
+          style={{ background: 'var(--color-accent)', color: '#fff', border: 'none', cursor: 'pointer' }}
+          onClick={onGrant}
+        >
+          {copy.allow}
+        </button>
+        <button
+          className="text-[12px] px-3 py-1.5 rounded"
+          style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-primary)', border: 'none', cursor: 'pointer' }}
+          onClick={onBack}
+        >
+          {copy.back}
+        </button>
+      </div>
+    </div>
+  )
 }
 
 type SurfaceErrorBoundaryProps = {
@@ -984,4 +1221,11 @@ class PluginSurfaceErrorBoundary extends Component<SurfaceErrorBoundaryProps, Su
     }
     return this.props.children
   }
+}
+
+function samePluginSurfaceTarget(
+  a: PluginSurfaceOpenTarget,
+  b: PluginSurfaceOpenTarget,
+): boolean {
+  return a.source === b.source && a.pluginId === b.pluginId && a.surfaceId === b.surfaceId
 }

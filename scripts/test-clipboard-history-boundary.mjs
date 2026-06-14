@@ -129,7 +129,20 @@ assert.match(pluginTypes, /PluginPermissionSnapshot|PluginPermissionGrant/, 'Mus
 
 assert.match(pluginTypes, /permissions\?\s*:\s*(?:string\[\]|PluginPermission\[\])/, 'PluginManifest must include permissions field')
 
-// ─── 6. plugin-sdk.ts must re-export new types ──────────────────────────────
+// ─── 6. Runtime must not grant permissions unconditionally ──────────────────
+
+const bgManager = read('src/workspace/pluginBackgroundManager.ts')
+const launcher = read('src/components/GlobalLauncher.tsx')
+
+assert.doesNotMatch(bgManager, /getAllPermissionsGranted|First version:\s*builtin plugins get all permissions granted/, 'background manager must not grant builtin plugins all permissions')
+assert.doesNotMatch(launcher, /buildAllGrantedPermissions|getAllPermissionsGranted/, 'GlobalLauncher must not grant plugin surfaces all permissions')
+assert.match(bgManager, /getPluginPermissionSnapshot|hasMissingPluginPermissions/, 'background manager must use the permission store')
+assert.match(bgManager, /usePluginPermissionStore\.subscribe/, 'background manager must subscribe to permission changes')
+assert.match(bgManager, /stopBackground\(instance\.source,\s*instance\.pluginId\)/, 'background manager must stop active backgrounds when permissions are revoked')
+assert.match(launcher, /getPluginPermissionSnapshot|usePluginPermissionStore/, 'GlobalLauncher must use the permission store')
+assert.match(launcher, /PluginSurfacePermissionGate/, 'GlobalLauncher must show a host permission gate before rendering protected surfaces')
+
+// ─── 7. plugin-sdk.ts must re-export new types ──────────────────────────────
 
 const sdkExports = read('src/plugin-sdk.ts')
 assert.match(sdkExports, /PluginSurfaceProps/, 'plugin-sdk.ts must export PluginSurfaceProps')

@@ -150,11 +150,12 @@ export function collectStaticPluginItems(): LauncherItem[] {
     const surfaces = def.ui?.surfaces ?? []
     for (const surface of surfaces) {
       if (surface.entry?.launcher === false) continue
+      const settingsSource = resolvePluginSettingsSource(pluginId, source)
       const item: LauncherItem = {
-        systemKey: getPluginSurfaceItemKey(pluginId, surface.id),
+        systemKey: getPluginSurfaceItemKey(settingsSource, pluginId, surface.id),
         kind: 'plugin',
         pluginId,
-        source: resolvePluginSettingsSource(pluginId, source),
+        source: settingsSource,
         display: {
           title: surface.title,
           titleI18n: surface.titleI18n,
@@ -164,7 +165,7 @@ export function collectStaticPluginItems(): LauncherItem[] {
         behavior: { type: 'perform' },
         surfaces: ['global-launcher'],
         pinnable: false,
-        execute: async (_ctx) => {
+        execute: async () => {
           // Surface opening is handled by the host when this item is selected.
           // The launcher controller will detect the plugin-surface systemKey
           // and render the surface component directly.

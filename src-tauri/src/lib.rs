@@ -1,3 +1,5 @@
+#[cfg(target_os = "macos")]
+use std::ffi::CStr;
 use std::fs;
 use std::io::{Cursor, Read};
 use std::path::{Component, Path, PathBuf};
@@ -127,6 +129,38 @@ async fn hide_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
         }
     })
     .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn simulate_paste() -> Result<(), String> {
+    simulate_paste_impl()
+}
+
+#[cfg(target_os = "macos")]
+fn simulate_paste_impl() -> Result<(), String> {
+    use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
+    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+
+    const KEY_V: u16 = 9;
+
+    let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
+        .map_err(|_| "Failed to create paste event source".to_string())?;
+    let key_down = CGEvent::new_keyboard_event(source.clone(), KEY_V, true)
+        .map_err(|_| "Failed to create paste key down event".to_string())?;
+    let key_up = CGEvent::new_keyboard_event(source, KEY_V, false)
+        .map_err(|_| "Failed to create paste key up event".to_string())?;
+
+    key_down.set_flags(CGEventFlags::CGEventFlagCommand);
+    key_up.set_flags(CGEventFlags::CGEventFlagCommand);
+    key_down.post(CGEventTapLocation::HID);
+    key_up.post(CGEventTapLocation::HID);
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn simulate_paste_impl() -> Result<(), String> {
+    Err("Paste simulation is only available on macOS".to_string())
 }
 
 fn previous_foreground_process_id() -> &'static Mutex<Option<u32>> {
@@ -317,6 +351,42 @@ fn current_foreground_process_id() -> Option<u32> {
         let pid: i32 = objc2::msg_send![app, processIdentifier];
         u32::try_from(pid).ok()
     }
+}
+
+#[cfg(target_os = "macos")]
+fn current_foreground_application_name() -> Option<String> {
+    unsafe {
+        let workspace_cls = objc2::runtime::AnyClass::get(c"NSWorkspace")?;
+        let workspace: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![workspace_cls, sharedWorkspace];
+        if workspace.is_null() {
+            return None;
+        }
+        let app: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![workspace, frontmostApplication];
+        if app.is_null() {
+            return None;
+        }
+        let name: *mut objc2::runtime::AnyObject = objc2::msg_send![app, localizedName];
+        if name.is_null() {
+            return None;
+        }
+        let utf8: *const std::ffi::c_char = objc2::msg_send![name, UTF8String];
+        if utf8.is_null() {
+            return None;
+        }
+        Some(CStr::from_ptr(utf8).to_string_lossy().into_owned())
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn current_foreground_application_name() -> Option<String> {
+    None
+}
+
+#[tauri::command]
+async fn current_foreground_app_name() -> Option<String> {
+    current_foreground_application_name()
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -1190,6 +1260,8 @@ pub fn run() {
             show_and_focus_window,
             show_launcher_window,
             hide_launcher_window,
+            simulate_paste,
+            current_foreground_app_name,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
