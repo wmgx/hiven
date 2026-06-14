@@ -162,6 +162,19 @@ check('global launcher renders a single ranked list without category sections', 
   )
 })
 
+check('global launcher keeps keyboard selection visible while navigating', () => {
+  assertHas(
+    files.globalLauncher,
+    /function\s+LauncherList[\s\S]{0,260}selected[\s\S]{0,260}LauncherListItem/,
+    'LauncherList should render item rows through a component that can react when selected changes',
+  )
+  assertHas(
+    files.globalLauncher,
+    /function\s+LauncherListItem[\s\S]{0,260}useRef<[\s\S]{0,360}scrollIntoView\(\{\s*block:\s*['"]nearest['"]\s*\}\)/,
+    'GlobalLauncher selected rows should scroll into view as keyboard navigation changes selection',
+  )
+})
+
 check('launcher surfaces do not auto-discover legacy plugin commands', () => {
   assert.doesNotMatch(
     files.globalLauncher,
@@ -588,6 +601,16 @@ check('programmatic launcher positioning is not persisted as a user drag', () =>
     files.app,
     /onMoved\([\s\S]{0,520}launcherProgrammaticMoveRef\.current[\s\S]{0,420}return/,
     'launcher movement persistence should ignore programmatic positioning events',
+  )
+  assertHas(
+    files.app,
+    /suppressProgrammaticMove\s*=\s*\(\)\s*=>\s*suppressNextLauncherMovePersistence\(\)[\s\S]{0,220}addEventListener\(LAUNCHER_PROGRAMMATIC_MOVE_EVENT,\s*suppressProgrammaticMove\)/,
+    'LauncherWindowApp should suppress native move persistence when another launcher component declares a programmatic resize or move',
+  )
+  assertHas(
+    files.globalLauncher,
+    /dispatchEvent\(new CustomEvent\(LAUNCHER_PROGRAMMATIC_MOVE_EVENT\)\)[\s\S]{0,220}\.setSize\(new LogicalSize\(nextWidth,\s*nextHeight\)\)/,
+    'standalone launcher surface resizing should not persist the resulting native move as a user drag',
   )
 })
 

@@ -17,6 +17,7 @@ import { initializePluginBackgrounds, setupBackgroundPermissionWatcher, setupBac
 import { installGlobalPinnedLauncherHotkeys, routeGlobalPinnedLauncherShortcut } from './hotkeys/globalPinnedLauncher'
 import { installPluginSurfaceShortcutHotkeys } from './hotkeys/pluginSurfaceShortcuts'
 import { consumePendingPluginSurfaceOpenTarget, isPluginSurfaceOpenTarget } from './workspace/pluginSurfaceOpenRequest'
+import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from './workspace/launcherWindowEvents'
 
 // Register built-in panels
 import './panels/register'
@@ -334,6 +335,12 @@ function LauncherWindowApp() {
     if (launcherProgrammaticMoveResetRef.current !== undefined) {
       window.clearTimeout(launcherProgrammaticMoveResetRef.current)
     }
+  }, [])
+
+  useEffect(() => {
+    const suppressProgrammaticMove = () => suppressNextLauncherMovePersistence()
+    window.addEventListener(LAUNCHER_PROGRAMMATIC_MOVE_EVENT, suppressProgrammaticMove)
+    return () => window.removeEventListener(LAUNCHER_PROGRAMMATIC_MOVE_EVENT, suppressProgrammaticMove)
   }, [])
 
   useEffect(() => {

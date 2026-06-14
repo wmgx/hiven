@@ -26,6 +26,7 @@ import { createPluginPaste } from '../workspace/pluginPaste'
 import { describePluginPermission, getPluginPermissionSnapshot, missingPluginPermissions, usePluginPermissionStore } from '../workspace/pluginPermissions'
 import { restartPluginBackground } from '../workspace/pluginBackgroundManager'
 import type { PluginSettingsSource } from '../workspace/pluginSettingsStore'
+import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from '../workspace/launcherWindowEvents'
 
 type LauncherItem =
   | { kind: 'domain'; id: string; title: string; subtitle: string; icon?: string; domainItem: DomainLauncherItem }
@@ -421,6 +422,7 @@ export function GlobalLauncher() {
         STANDALONE_LAUNCHER_WIDTH,
         surfaceShell ? STANDALONE_SURFACE_MAX_WIDTH : STANDALONE_LAUNCHER_WIDTH,
       )
+      window.dispatchEvent(new CustomEvent(LAUNCHER_PROGRAMMATIC_MOVE_EVENT))
       void getCurrentWindow()
         .setSize(new LogicalSize(nextWidth, nextHeight))
         .catch((error) => {
@@ -1035,37 +1037,54 @@ function LauncherList({ items, selected, onSelect }: { items: LauncherItem[]; se
       {items.map((item) => {
         const isSelected = selected?.kind === item.kind && selected.id === item.id
         return (
-          <button
+          <LauncherListItem
             key={`${item.kind}:${item.id}`}
-            className={`cmd-item w-full border-none text-left ${isSelected ? 'selected' : ''}`}
-            style={{
-              background: isSelected ? 'var(--color-accent-light)' : 'transparent',
-              color: 'var(--color-text-primary)',
-              fontFamily: 'var(--font-mono)',
-            }}
-            onClick={() => onSelect(item)}
-          >
-            <span
-              className="w-[26px] h-[26px] rounded-md flex items-center justify-center text-xs font-semibold shrink-0"
-              style={{
-                background: isSelected ? 'var(--color-accent)' : 'var(--color-background-tertiary)',
-                color: isSelected ? 'white' : 'var(--color-text-secondary)',
-              }}
-            >
-              {item.kind === 'domain'
-                ? resolveIcon(item.icon, 14, item.title)
-                : item.kind === 'pinned'
-                ? resolveIcon(item.icon, 14, item.title) || <Pin size={14} />
-                : item.kind === 'view' ? item.icon : resolveIcon(item.icon, 14, item.title)}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-[13px] font-medium truncate">{item.title}</span>
-              <span className="block text-[11px] truncate" style={{ color: 'var(--color-text-tertiary)' }}>{item.subtitle}</span>
-            </span>
-          </button>
+            item={item}
+            selected={isSelected}
+            onSelect={onSelect}
+          />
         )
       })}
     </div>
+  )
+}
+
+function LauncherListItem({ item, selected, onSelect }: { item: LauncherItem; selected: boolean; onSelect: (item: LauncherItem) => void }) {
+  const ref = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (selected) ref.current?.scrollIntoView({ block: 'nearest' })
+  }, [selected])
+
+  return (
+    <button
+      ref={ref}
+      className={`cmd-item w-full border-none text-left ${selected ? 'selected' : ''}`}
+      style={{
+        background: selected ? 'var(--color-accent-light)' : 'transparent',
+        color: 'var(--color-text-primary)',
+        fontFamily: 'var(--font-mono)',
+      }}
+      onClick={() => onSelect(item)}
+    >
+      <span
+        className="w-[26px] h-[26px] rounded-md flex items-center justify-center text-xs font-semibold shrink-0"
+        style={{
+          background: selected ? 'var(--color-accent)' : 'var(--color-background-tertiary)',
+          color: selected ? 'white' : 'var(--color-text-secondary)',
+        }}
+      >
+        {item.kind === 'domain'
+          ? resolveIcon(item.icon, 14, item.title)
+          : item.kind === 'pinned'
+          ? resolveIcon(item.icon, 14, item.title) || <Pin size={14} />
+          : item.kind === 'view' ? item.icon : resolveIcon(item.icon, 14, item.title)}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[13px] font-medium truncate">{item.title}</span>
+        <span className="block text-[11px] truncate" style={{ color: 'var(--color-text-tertiary)' }}>{item.subtitle}</span>
+      </span>
+    </button>
   )
 }
 

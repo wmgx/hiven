@@ -213,32 +213,17 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                   <div key={group.label} className="clipboard-history-group">
                     <div className="clipboard-history-group-title">{group.label}</div>
                     {group.items.map((item) => (
-                      <div
+                      <ClipboardHistoryItemRow
                         key={item.id}
-                        className={`clipboard-history-item-row${item.id === selectedId ? ' is-selected' : ''}`}
-                      >
-                        <SurfaceListItem
-                          type="button"
-                          selected={item.id === selectedId}
-                          className="clipboard-history-item"
-                          onClick={() => setSelectedId(item.id)}
-                          onDoubleClick={() => void handlePaste(item)}
-                        >
-                          {renderItemMedia(item, host.storage)}
-                          <span className="clipboard-history-item-text">
-                            <span className="clipboard-history-item-title">{getItemTitle(item, t)}</span>
-                            <span className="clipboard-history-item-subtitle">{getItemSubtitle(item, locale, t)}</span>
-                          </span>
-                        </SurfaceListItem>
-                        <IconButton
-                          type="button"
-                          label={t('action.delete')}
-                          className="clipboard-history-item-delete"
-                          onClick={() => void handleDelete(item.id)}
-                        >
-                          <CloseIcon size={14} />
-                        </IconButton>
-                      </div>
+                        item={item}
+                        selected={item.id === selectedId}
+                        locale={locale}
+                        t={t}
+                        storage={host.storage}
+                        onSelect={setSelectedId}
+                        onPaste={handlePaste}
+                        onDelete={handleDelete}
+                      />
                     ))}
                   </div>
                 ))
@@ -320,6 +305,61 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       </div>
 
       {renderContent()}
+    </div>
+  )
+}
+
+function ClipboardHistoryItemRow({
+  item,
+  selected,
+  locale,
+  t,
+  storage,
+  onSelect,
+  onPaste,
+  onDelete,
+}: {
+  item: ClipboardHistoryItem
+  selected: boolean
+  locale: string
+  t: (key: string) => string
+  storage: SurfaceStorage
+  onSelect: (id: string) => void
+  onPaste: (item: ClipboardHistoryItem) => Promise<void>
+  onDelete: (id: string) => Promise<void>
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (selected) ref.current?.scrollIntoView({ block: 'nearest' })
+  }, [selected])
+
+  return (
+    <div
+      ref={ref}
+      className={`clipboard-history-item-row${selected ? ' is-selected' : ''}`}
+    >
+      <SurfaceListItem
+        type="button"
+        selected={selected}
+        className="clipboard-history-item"
+        onClick={() => onSelect(item.id)}
+        onDoubleClick={() => void onPaste(item)}
+      >
+        {renderItemMedia(item, storage)}
+        <span className="clipboard-history-item-text">
+          <span className="clipboard-history-item-title">{getItemTitle(item, t)}</span>
+          <span className="clipboard-history-item-subtitle">{getItemSubtitle(item, locale, t)}</span>
+        </span>
+      </SurfaceListItem>
+      <IconButton
+        type="button"
+        label={t('action.delete')}
+        className="clipboard-history-item-delete"
+        onClick={() => void onDelete(item.id)}
+      >
+        <CloseIcon size={14} />
+      </IconButton>
     </div>
   )
 }
