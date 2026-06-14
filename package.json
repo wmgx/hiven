@@ -40,6 +40,7 @@
     "test:monaco-gutter-width": "node scripts/test-monaco-gutter-width.mjs",
     "test:global-pinned-launcher": "node scripts/test-global-pinned-launcher.mjs",
     "test:global-hotkey-settings": "node scripts/test-global-hotkey-settings.mjs",
+    "test:shortcut-recorder-component": "node scripts/test-shortcut-recorder-component.mjs",
     "test:plugin-surface-shortcuts": "node scripts/test-plugin-surface-shortcuts.mjs",
     "test:plugin-ui-primitives": "node scripts/test-plugin-ui-primitives.mjs",
     "test:hiven-brand-migration": "node scripts/test-hiven-brand-migration.mjs",

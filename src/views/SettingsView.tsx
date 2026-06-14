@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import type { KeyboardEvent, ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { getVersion } from '@tauri-apps/api/app'
 import { Check, ChevronDown, Download, Info, Keyboard, Languages, Layout, Minus, Moon, Plus, RefreshCw, SlidersHorizontal, Sun } from 'lucide-react'
-import { useAppStore, type GlobalPinnedLauncherDoubleModifier, type GlobalPinnedLauncherShortcut } from '../store'
+import { useAppStore, type GlobalPinnedLauncherShortcut } from '../store'
 import { useT } from '../i18n'
 import { checkBuiltinPluginsUpdate } from '../configInit'
+import { ShortcutRecorder, doubleModifierLabel, getHotkeyPlatformLabels } from '../components/ShortcutRecorder'
 
 export function SettingsView() {
   const { settings, updateSetting } = useAppStore()
@@ -182,214 +183,36 @@ function HotkeySettings({
   onChange: (value: GlobalPinnedLauncherShortcut) => void
 }) {
   const t = useT('settings')
-  const [isRecording, setIsRecording] = useState(false)
-  const [error, setError] = useState('')
-  const lastModifierTapRef = useRef<{ modifier: GlobalPinnedLauncherDoubleModifier; time: number } | null>(null)
-  const recorderRef = useRef<HTMLDivElement>(null)
-  const platformLabels = useMemo(() => getHotkeyPlatformLabels(), [])
+  const locale = useAppStore((s) => s.locale)
+  const platformLabels = getHotkeyPlatformLabels()
   const registrationStatus = shortcut.registrationError
     ? t('hotkeyRegistrationFailed', { message: localizeHotkeyStatus(shortcut.registrationError, t, platformLabels) })
     : formatHotkeyRegistrationStatus(shortcut.registrationStatus, t, platformLabels)
 
-  const displayValue = () => {
-    if (shortcut.kind === 'accelerator') return formatAcceleratorLabel(shortcut.accelerator, platformLabels)
-    if (shortcut.kind === 'double-modifier') return doubleModifierLabel(shortcut.modifier, t, platformLabels)
-    return t('hotkeyDisabled')
-  }
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!isRecording) return
-    event.preventDefault()
-    event.stopPropagation()
-
-    if (event.key === 'Escape') {
-      setError('')
-      setIsRecording(false)
-      return
-    }
-
-    const recordedShortcut = eventToGlobalPinnedLauncherShortcut(event, lastModifierTapRef.current)
-    lastModifierTapRef.current = recordedShortcut.lastModifierTap
-    if (!recordedShortcut.shortcut) {
-      setError(isModifierKey(event.key) ? '' : t('hotkeyRecordError'))
-      return
-    }
-    setError('')
-    setIsRecording(false)
-    onChange(recordedShortcut.shortcut)
-  }
-
-  useEffect(() => {
-    if (!isRecording) return
-    ;(window as unknown as { __FLUXTEXT_HOTKEY_RECORDING__?: boolean }).__FLUXTEXT_HOTKEY_RECORDING__ = true
-    const timer = window.setTimeout(() => {
-      setIsRecording(false)
-      setError('')
-    }, 10_000)
-    return () => {
-      window.clearTimeout(timer)
-      ;(window as unknown as { __FLUXTEXT_HOTKEY_RECORDING__?: boolean }).__FLUXTEXT_HOTKEY_RECORDING__ = false
-    }
-  }, [isRecording])
-
-  const startRecording = () => {
-    setError('')
-    lastModifierTapRef.current = null
-    setIsRecording(true)
-    requestAnimationFrame(() => recorderRef.current?.focus())
-  }
-
-  const chooseDoubleModifier = (modifier: GlobalPinnedLauncherDoubleModifier) => {
-    setError('')
-    setIsRecording(false)
-    onChange({ kind: 'double-modifier', modifier })
-  }
-
   return (
     <div className="flex flex-col gap-2">
       <SettingRow label={t('globalPinnedLauncherShortcut')} info={t('globalPinnedLauncherShortcutInfo')}>
-        <div
-          ref={recorderRef}
-          tabIndex={0}
-          onKeyDown={handleKeyDown}
-          className="min-w-[170px] px-2.5 py-1 text-right outline-none"
-          style={{
-            fontSize: 'var(--text-sm)',
-            background: isRecording ? 'var(--color-accent-light)' : 'var(--color-background-tertiary)',
-            border: isRecording ? '0.5px solid var(--color-accent)' : '0.5px solid var(--color-border-tertiary)',
-            color: 'var(--color-text-primary)',
-            borderRadius: 'var(--radius-md)',
-          }}
-        >
-          {isRecording ? t('hotkeyRecording') : displayValue()}
-        </div>
+        <ShortcutRecorder
+          value={shortcut}
+          allowDoubleModifier
+          status={registrationStatus}
+          hint={shortcut.kind === 'double-modifier'
+            ? platformLabels.isMac
+              ? t('hotkeyAccessibilityHint', { modifier: doubleModifierLabel(shortcut.modifier, locale, platformLabels) })
+              : t('hotkeyDoubleModifierUnsupported')
+            : undefined}
+          onRecord={onChange}
+          onClear={() => onChange({ kind: 'disabled' })}
+        />
       </SettingRow>
-      <div className="flex flex-wrap gap-2 justify-end">
-        <button className="scripts-btn" onClick={startRecording}>{t('hotkeyRecord')}</button>
-        <button className="scripts-btn" onClick={() => chooseDoubleModifier('Command')}>
-          {doubleModifierLabel('Command', t, platformLabels)}
-        </button>
-        <button className="scripts-btn" onClick={() => chooseDoubleModifier('Shift')}>
-          {doubleModifierLabel('Shift', t, platformLabels)}
-        </button>
-        <button className="scripts-btn" onClick={() => chooseDoubleModifier('Option')}>
-          {doubleModifierLabel('Option', t, platformLabels)}
-        </button>
-        <button className="scripts-btn" onClick={() => { setError(''); setIsRecording(false); onChange({ kind: 'disabled' }) }}>
-          {t('hotkeyDisabled')}
-        </button>
-      </div>
-      <span style={{ fontSize: 'var(--text-sm)', color: error ? 'var(--color-error-text)' : 'var(--color-text-tertiary)' }}>
-        {error || registrationStatus}
-      </span>
-      {shortcut.kind === 'double-modifier' && (
-        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-tertiary)' }}>
-          {platformLabels.isMac
-            ? t('hotkeyAccessibilityHint', { modifier: doubleModifierLabel(shortcut.modifier, t, platformLabels) })
-            : t('hotkeyDoubleModifierUnsupported')}
-        </span>
-      )}
     </div>
   )
-}
-
-function eventToGlobalPinnedLauncherShortcut(
-  event: KeyboardEvent<HTMLDivElement>,
-  lastModifierTap: { modifier: GlobalPinnedLauncherDoubleModifier; time: number } | null,
-): { shortcut: GlobalPinnedLauncherShortcut | null; lastModifierTap: { modifier: GlobalPinnedLauncherDoubleModifier; time: number } | null } {
-  const now = Date.now()
-  if (isModifierKey(event.key)) {
-    const modifier =
-      event.key === 'Meta' ? 'Command' :
-      event.key === 'Control' && !isMacPlatform() ? 'Command' :
-      event.key === 'Shift' ? 'Shift' :
-      event.key === 'Alt' ? 'Option' :
-      null
-    if (!modifier || event.repeat) return { shortcut: null, lastModifierTap }
-    if (lastModifierTap?.modifier === modifier && now - lastModifierTap.time <= 500) {
-      return {
-        shortcut: { kind: 'double-modifier', modifier },
-        lastModifierTap: null,
-      }
-    }
-    return {
-      shortcut: null,
-      lastModifierTap: { modifier, time: now },
-    }
-  }
-
-  return {
-    shortcut: eventToAccelerator(event),
-    lastModifierTap: null,
-  }
-}
-
-function eventToAccelerator(event: KeyboardEvent<HTMLDivElement>): GlobalPinnedLauncherShortcut | null {
-  const key = normalizeKey(event.key)
-  const hasModifier = event.metaKey || event.ctrlKey || event.altKey || event.shiftKey
-  if (!key || !hasModifier) return null
-
-  const parts: string[] = []
-  if (event.metaKey) parts.push('Cmd')
-  if (event.ctrlKey) parts.push('Ctrl')
-  if (event.altKey) parts.push('Alt')
-  if (event.shiftKey) parts.push('Shift')
-  parts.push(key)
-  return { kind: 'accelerator', accelerator: parts.join('+') }
-}
-
-function normalizeKey(key: string): string | null {
-  if (isModifierKey(key)) return null
-  if (key.length === 1) return key.toUpperCase()
-  if (key === ' ') return 'Space'
-  if (key.startsWith('Arrow')) return key.replace('Arrow', '')
-  return key
-}
-
-function isModifierKey(key: string): boolean {
-  return key === 'Meta' || key === 'Control' || key === 'Alt' || key === 'Shift'
 }
 
 type HotkeyPlatformLabels = {
   isMac: boolean
   command: string
   option: string
-}
-
-function getHotkeyPlatformLabels(): HotkeyPlatformLabels {
-  const isMac = isMacPlatform()
-  return {
-    isMac,
-    command: isMac ? 'Cmd' : 'Ctrl',
-    option: isMac ? 'Option' : 'Alt',
-  }
-}
-
-function isMacPlatform(): boolean {
-  const nav = typeof navigator === 'undefined' ? undefined : navigator
-  const platform = nav?.platform || ''
-  const userAgent = nav?.userAgent || ''
-  const userAgentDataPlatform = (nav as Navigator & { userAgentData?: { platform?: string } } | undefined)?.userAgentData?.platform || ''
-  return /Mac|iPhone|iPad|iPod/i.test(`${platform} ${userAgentDataPlatform} ${userAgent}`)
-}
-
-function doubleModifierLabel(
-  modifier: GlobalPinnedLauncherDoubleModifier,
-  t: ReturnType<typeof useT>,
-  platformLabels: HotkeyPlatformLabels,
-): string {
-  return t('hotkeyDoubleModifier', { modifier: modifierLabel(modifier, platformLabels) })
-}
-
-function modifierLabel(modifier: GlobalPinnedLauncherDoubleModifier, platformLabels: HotkeyPlatformLabels): string {
-  if (modifier === 'Shift') return 'Shift'
-  if (modifier === 'Option') return platformLabels.option
-  return platformLabels.command
-}
-
-function formatAcceleratorLabel(accelerator: string, platformLabels: HotkeyPlatformLabels): string {
-  if (platformLabels.isMac) return accelerator
-  return accelerator.replace(/\bCmd\b/g, platformLabels.command).replace(/\bOption\b/g, platformLabels.option)
 }
 
 function formatHotkeyRegistrationStatus(

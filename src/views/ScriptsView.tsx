@@ -13,6 +13,7 @@ import type { PluginSettingsSource } from '../workspace/pluginSettingsStore'
 import { getPluginPermissionSnapshot, missingPluginPermissions, usePluginPermissionStore } from '../workspace/pluginPermissions'
 import { requestOpenPluginSurfaceTool } from '../workspace/pluginSurfaceOpenRequest'
 import { pluginSurfaceShortcutKey, usePluginSurfaceShortcutStore } from '../workspace/pluginSurfaceShortcuts'
+import { ShortcutRecorder } from '../components/ShortcutRecorder'
 import {
   createDevPluginScaffold,
   checkInstalledPluginUpdate,
@@ -114,7 +115,6 @@ export function ScriptsView() {
   const [remoteUrl, setRemoteUrl] = useState('')
   const [remoteOpen, setRemoteOpen] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'done' | 'error'>('idle')
-  const [shortcutDrafts, setShortcutDrafts] = useState<Record<string, string>>({})
   const isImeComposingRef = useRef(false)
 
   const installedList = useMemo(() => {
@@ -545,7 +545,6 @@ export function ScriptsView() {
           const target = { source, pluginId, surfaceId: surface.id }
           const key = pluginSurfaceShortcutKey(target)
           const shortcut = pluginSurfaceShortcuts[key]
-          const draft = shortcutDrafts[key] ?? shortcut?.accelerator ?? surface.entry?.recommendedShortcut ?? ''
           const status = shortcut?.registrationStatus ?? (shortcut ? 'pending' : '')
           return (
             <div key={key} className="plugin-surface-shortcut-row">
@@ -558,32 +557,21 @@ export function ScriptsView() {
                 <button className="scripts-btn" onClick={() => { void requestOpenPluginSurfaceTool(target) }}>
                   {t(locale, 'scripts.surfaceOpen')}
                 </button>
-                <input
-                  className="plugin-surface-shortcut-input"
-                  value={draft}
-                  placeholder={surface.entry?.recommendedShortcut ?? 'Shift+Cmd+V'}
-                  onChange={(event) => setShortcutDrafts((prev) => ({ ...prev, [key]: event.target.value }))}
-                />
-                <button
-                  className="scripts-btn"
-                  onClick={() => {
-                    const value = (shortcutDrafts[key] ?? shortcut?.accelerator ?? surface.entry?.recommendedShortcut ?? '').trim()
-                    if (!value) return
+                <ShortcutRecorder
+                  value={shortcut ? { kind: 'accelerator', accelerator: shortcut.accelerator } : { kind: 'disabled' }}
+                  emptyLabel={surface.entry?.recommendedShortcut ?? t(locale, 'scripts.surfaceShortcutPending')}
+                  status={status ? <span className="script-badge">{surfaceShortcutStatusLabel(status, locale)}</span> : undefined}
+                  clearLabel={t(locale, 'scripts.surfaceClearShortcut')}
+                  onRecord={(recorded) => {
+                    if (recorded.kind !== 'accelerator') return
                     const requested = pluginRegistry.getPluginPermissions(pluginId, source)
                     if (requested.includes('globalShortcut.register')) {
                       grantPluginPermissions(source, pluginId, ['globalShortcut.register'])
                     }
-                    setPluginSurfaceShortcut(target, value)
+                    setPluginSurfaceShortcut(target, recorded.accelerator)
                   }}
-                >
-                  {t(locale, 'scripts.surfaceBindShortcut')}
-                </button>
-                {shortcut && (
-                  <button className="scripts-btn" onClick={() => clearPluginSurfaceShortcut(target)}>
-                    {t(locale, 'scripts.surfaceClearShortcut')}
-                  </button>
-                )}
-                {status && <span className="script-badge">{surfaceShortcutStatusLabel(status, locale)}</span>}
+                  onClear={shortcut ? () => clearPluginSurfaceShortcut(target) : undefined}
+                />
               </div>
               {shortcut?.registrationError && (
                 <div className="plugin-surface-shortcut-error">

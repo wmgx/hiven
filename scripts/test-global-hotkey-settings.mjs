@@ -27,6 +27,7 @@ const files = {
   settingsView: read('src/views/SettingsView.tsx'),
   app: read('src/App.tsx'),
   globalPinnedLauncherHotkeys: read('src/hotkeys/globalPinnedLauncher.ts'),
+  shortcutRecorder: read('src/components/ShortcutRecorder.tsx'),
   tauriHotkeys: read('src-tauri/src/hotkeys.rs'),
   i18n: readI18n(),
 }
@@ -166,12 +167,12 @@ check('SettingsView renders a Hotkeys UI for the global pinned launcher shortcut
 
 check('SettingsView supports recording, disabled, and status display', () => {
   assertHas(
-    files.settingsView,
+    files.shortcutRecorder,
     /recordingShortcut|recordShortcut|isRecording|onKeyDown[\s\S]{0,240}accelerator/,
-    'SettingsView should support recording an accelerator',
+    'ShortcutRecorder should support recording an accelerator',
   )
   assertHas(
-    files.settingsView,
+    `${files.settingsView}\n${files.shortcutRecorder}`,
     /disabled|settings\.hotkeyDisabled|禁用/,
     'SettingsView should expose a disabled option',
   )
@@ -193,53 +194,53 @@ check('SettingsView supports recording, disabled, and status display', () => {
 })
 
 for (const modifier of ['Command', 'Shift', 'Option']) {
-  check(`SettingsView exposes a Double ${modifier} option`, () => {
+  check(`ShortcutRecorder can record Double ${modifier}`, () => {
     assertHas(
-      files.settingsView,
-      new RegExp(`kind:\\s*['"]double-modifier['"][\\s\\S]{0,180}modifier:\\s*['"]${modifier}['"]|modifier:\\s*['"]${modifier}['"][\\s\\S]{0,180}kind:\\s*['"]double-modifier['"]|chooseDoubleModifier\\(\\s*['"]${modifier}['"]\\s*\\)`),
-      `SettingsView should expose a Double ${modifier} option`,
+      files.shortcutRecorder,
+      new RegExp(`['"]${modifier}['"]`),
+      `ShortcutRecorder should be able to record Double ${modifier}`,
     )
   })
 }
 
 check('Settings recording path can identify modifier-only double-modifier shortcuts', () => {
   assertHas(
-    files.settingsView,
-    /eventTo(?:GlobalPinnedLauncherShortcut|Shortcut|DoubleModifierShortcut|RecordedShortcut)\s*\(/,
+    files.shortcutRecorder,
+    /eventTo(?:ShortcutRecorderValue|GlobalPinnedLauncherShortcut|Shortcut|DoubleModifierShortcut|RecordedShortcut)\s*\(/,
     'recording should route key events through a testable shortcut helper, not only a private accelerator formatter',
   )
   assertHas(
-    files.settingsView,
+    files.shortcutRecorder,
     /event\.key\s*===\s*['"](?:Meta|Shift|Alt|Option)['"][\s\S]{0,420}kind:\s*['"]double-modifier['"]|kind:\s*['"]double-modifier['"][\s\S]{0,420}event\.key\s*===\s*['"](?:Meta|Shift|Alt|Option)['"]|isModifierKey\(event\.key\)[\s\S]{0,640}kind:\s*['"]double-modifier['"]/,
     'recording should convert modifier-only key events into double-modifier shortcut configs',
   )
   assertHas(
-    files.settingsView,
-    /onChange\(\s*(?:recordedShortcut(?:\.shortcut)?|shortcut|nextShortcut)\s*\)/,
+    `${files.settingsView}\n${files.shortcutRecorder}`,
+    /onRecord=\{onChange\}|onChange\(\s*(?:recordedShortcut(?:\.shortcut)?|shortcut|nextShortcut)\s*\)/,
     'recording handler should pass the recorded accelerator or double-modifier shortcut through onChange',
   )
 })
 
 check('Settings double-modifier labels adapt to the current platform', () => {
   assertHas(
-    files.settingsView,
+    files.shortcutRecorder,
     /getHotkeyPlatformLabels/,
-    'SettingsView should derive platform-specific hotkey labels',
+    'ShortcutRecorder should derive platform-specific hotkey labels',
   )
   assertHas(
-    files.settingsView,
+    files.shortcutRecorder,
     /command:\s*isMac\s*\?\s*['"]Cmd['"]\s*:\s*['"]Ctrl['"]/,
-    'SettingsView should display Ctrl instead of Cmd on non-macOS platforms',
+    'ShortcutRecorder should display Ctrl instead of Cmd on non-macOS platforms',
   )
   assertHas(
-    files.settingsView,
+    files.shortcutRecorder,
     /option:\s*isMac\s*\?\s*['"]Option['"]\s*:\s*['"]Alt['"]/,
-    'SettingsView should display Alt instead of Option on non-macOS platforms',
+    'ShortcutRecorder should display Alt instead of Option on non-macOS platforms',
   )
   assertHas(
-    files.settingsView,
+    files.shortcutRecorder,
     /event\.key\s*===\s*['"]Control['"][\s\S]{0,120}!isMacPlatform\(\)[\s\S]{0,120}['"]Command['"]/,
-    'SettingsView should allow double Ctrl recording to use the primary double-modifier slot on non-macOS platforms',
+    'ShortcutRecorder should allow double Ctrl recording to use the primary double-modifier slot on non-macOS platforms',
   )
 })
 
