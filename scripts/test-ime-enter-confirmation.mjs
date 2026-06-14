@@ -19,6 +19,8 @@ const globalLauncher = read('src/components/GlobalLauncher.tsx')
 const scriptsView = read('src/views/ScriptsView.tsx')
 const settingsView = read('src/views/SettingsView.tsx')
 const jsFilterPlugin = read('src/plugins/jsFilter/index.tsx')
+const pluginUi = read('src/plugin-ui.tsx')
+const clipboardHistorySurface = read('src/plugins/clipboard-history/surfaces/ClipboardHistorySurface.tsx')
 const imeKeyboard = read('src/utils/imeKeyboard.ts')
 const helperModule = await import(
   `data:text/javascript;base64,${Buffer.from(ts.transpileModule(imeKeyboard, {
@@ -58,13 +60,69 @@ assertImeGuardedEnter(globalLauncher, 'GlobalLauncher')
 assertImeGuardedEnter(scriptsView, 'ScriptsView remote import')
 
 assert(
-  /eventToGlobalPinnedLauncherShortcut/.test(settingsView),
+  /<ShortcutRecorder\b/.test(settingsView) &&
+    /onRecord=\{onChange\}/.test(settingsView) &&
+    /globalPinnedLauncherShortcut/.test(settingsView),
   'SettingsView Enter handling is a shortcut recorder, not text-input confirmation',
 )
 assert(
   /monaco\.KeyCode\.Enter/.test(jsFilterPlugin),
   'jsFilter Enter handling is Monaco Ctrl/Cmd+Enter, not text-input confirmation',
 )
+
+function assertClipboardHistoryUsesReusableImeInputContract() {
+  const failures = []
+  const expect = (condition, message) => {
+    if (!condition) failures.push(message)
+  }
+
+  const pluginUiExposesImeInputContract =
+    /export\s+(?:const|function)\s+(?:useIme|useImeKeyboard|useImeSafeKeyDown|useImeAwareInput|createImeInputProps)\b/.test(pluginUi) ||
+    /export\s+\{\s*(?:[^}]*,\s*)?shouldIgnoreImeKeyDown(?:\s*,[^}]*)?\s*\}/s.test(pluginUi) ||
+    /type\s+(?:SearchField|TextInput|TextArea)[A-Za-z]*Props[\s\S]*onImeKeyDown/.test(pluginUi)
+  expect(
+    pluginUiExposesImeInputContract,
+    'plugin-ui should expose a reusable IME-aware input contract such as a hook, props helper, or exported shouldIgnoreImeKeyDown guard; clipboard-history should not need a private one-off patch',
+  )
+
+  expect(
+    /isImeComposingRef/.test(clipboardHistorySurface) ||
+      /useIme(?:Keyboard|SafeKeyDown|AwareInput)\s*\(/.test(clipboardHistorySurface),
+    'ClipboardHistorySurface should track IME composition state for the search input before treating Enter as paste confirmation',
+  )
+  expect(
+    /onCompositionStart=\{[^}]*\}/.test(clipboardHistorySurface) &&
+      /onCompositionEnd=\{[^}]*\}/.test(clipboardHistorySurface),
+    'ClipboardHistorySurface SearchField should receive composition start/end handlers from the reusable IME input contract',
+  )
+  const enterBranch = clipboardHistorySurface.match(/if\s*\(\s*e\.key\s*={2,3}\s*['"]Enter['"]\s*\)\s*\{([\s\S]*?)\n\s*\}\s*else if/)
+  const enterBody = enterBranch?.[1] ?? ''
+  const imeGuardIndex = Math.max(
+    enterBody.search(/shouldIgnoreImeKeyDown\(.*(?:isImeComposingRef|ime[A-Za-z]*Ref|ime[A-Za-z]*Input)/s),
+    enterBody.search(/ime[A-Za-z]*(?:Props|Guard|KeyDown)\.shouldIgnoreKeyDown\(e\)/s),
+  )
+  const preventDefaultIndex = enterBody.indexOf('preventDefault')
+  const pasteIndex = enterBody.indexOf('handlePaste')
+  expect(
+    enterBranch !== null && imeGuardIndex >= 0,
+    'ClipboardHistorySurface Enter paste branch should call an IME guard',
+  )
+  expect(
+    imeGuardIndex >= 0 &&
+      preventDefaultIndex >= 0 &&
+      pasteIndex >= 0 &&
+      imeGuardIndex < preventDefaultIndex &&
+      imeGuardIndex < pasteIndex,
+    'ClipboardHistorySurface Enter paste handling should check the IME guard before preventDefault() and handlePaste()',
+  )
+
+  assert(
+    failures.length === 0,
+    `Clipboard history IME Enter confirmation contract is missing:\n- ${failures.join('\n- ')}`,
+  )
+}
+
+assertClipboardHistoryUsesReusableImeInputContract()
 
 const {
   finishImeComposition,

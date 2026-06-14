@@ -1,4 +1,5 @@
-import { forwardRef, type ButtonHTMLAttributes, type ComponentPropsWithoutRef, type InputHTMLAttributes, type LabelHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
+import { forwardRef, useRef, type ButtonHTMLAttributes, type ComponentPropsWithoutRef, type InputHTMLAttributes, type LabelHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
+import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from './utils/imeKeyboard'
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger'
@@ -47,6 +48,18 @@ type ConfirmDialogProps = {
 
 function cx(...values: Array<string | false | undefined>): string {
   return values.filter(Boolean).join(' ')
+}
+
+export function useImeKeyboard() {
+  const isImeComposingRef = useRef(false)
+
+  return {
+    isImeComposingRef,
+    onCompositionStart: () => startImeComposition(isImeComposingRef),
+    onCompositionEnd: () => finishImeComposition(isImeComposingRef),
+    shouldIgnoreKeyDown: (event: Parameters<typeof shouldIgnoreImeKeyDown>[0]) =>
+      shouldIgnoreImeKeyDown(event, isImeComposingRef),
+  }
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(

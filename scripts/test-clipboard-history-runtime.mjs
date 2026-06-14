@@ -131,6 +131,8 @@ assert.match(surfaceImpl, /storage\.blob\.url\(item\.previewBlobId\)/, 'Clipboar
 assert.match(surfaceImpl, /<img\s+src=\{imageUrl\}/, 'Clipboard history image preview must render a real img element')
 assert.match(surfaceImpl, /ClipboardImageThumbnail/, 'Clipboard history list must render image thumbnails')
 assert.match(surfaceImpl, /clipboard-history-item-delete/, 'Clipboard history list must expose per-item delete actions')
+assert.match(surfaceImpl, /setSelectedId\(\(current\)\s*=>\s*\{[\s\S]{0,260}filteredItems\.length\s*={2,3}\s*0[\s\S]{0,260}filteredItems\.some\(\(item\)\s*=>\s*item\.id\s*={2,3}\s*current\)[\s\S]{0,260}filteredItems\[0\]\.id/, 'Clipboard history search/filter changes must select the first visible item when the previous selection is no longer visible')
+assert.match(surfaceImpl, /filteredItems\.find\(\(i\)\s*=>\s*i\.id\s*={2,3}\s*selectedId\)/, 'Clipboard history selectedItem must resolve from visible filtered items so Enter never pastes an invisible stale selection')
 const surfaceTopbar = surfaceImpl.match(/<div className="clipboard-history-topbar">[\s\S]*?\n      <\/div>\n\n      \{renderContent\(\)\}/)?.[0] ?? ''
 assert.doesNotMatch(surfaceTopbar, /action\.clearAll|TrashIcon/, 'Clipboard history surface topbar must not include a clear-all action')
 assert.match(surfaceImpl, /meta\.sourceApp/, 'Clipboard history metadata must display source app when available')

@@ -20,6 +20,7 @@ import {
   SurfaceListItem,
   SurfacePreview,
   ToolbarButton,
+  useImeKeyboard,
 } from '@hiven/plugin-ui'
 import { BackIcon, ClipboardIcon, CloseIcon, FileTextIcon, ImageIcon, SettingsIcon } from '@hiven/plugin-ui/icons'
 import type { ClipboardHistorySettings } from '../settings/model'
@@ -45,6 +46,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [loading, setLoading] = useState(true)
   const containerRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
+  const imeKeyDown = useImeKeyboard()
 
   const repository = useMemo(
     () => createClipboardHistoryRepository(host.storage),
@@ -95,9 +97,17 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     return result
   }, [items, filter, query])
 
+  useEffect(() => {
+    setSelectedId((current) => {
+      if (filteredItems.length === 0) return null
+      if (current && filteredItems.some((item) => item.id === current)) return current
+      return filteredItems[0].id
+    })
+  }, [filteredItems])
+
   const selectedItem = useMemo(
-    () => items.find((i) => i.id === selectedId) ?? null,
-    [items, selectedId]
+    () => filteredItems.find((i) => i.id === selectedId) ?? null,
+    [filteredItems, selectedId]
   )
 
   const groupedItems = useMemo(() => groupItemsByDay(filteredItems, locale, t), [filteredItems, locale, t])
@@ -130,6 +140,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (!selectedItem) return
     if (e.key === 'Enter') {
+      if (imeKeyDown.shouldIgnoreKeyDown(e)) return
       e.preventDefault()
       void handlePaste(selectedItem)
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -151,7 +162,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       const idx = filteredItems.findIndex((i) => i.id === selectedId)
       if (idx > 0) setSelectedId(filteredItems[idx - 1].id)
     }
-  }, [selectedItem, selectedId, filteredItems, handlePaste, handleDelete, host, t])
+  }, [selectedItem, selectedId, filteredItems, handlePaste, handleDelete, host, t, imeKeyDown])
 
   const renderContent = () => {
     if (loading) {
@@ -287,6 +298,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
           data-plugin-surface-autofocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onCompositionStart={imeKeyDown.onCompositionStart}
+          onCompositionEnd={imeKeyDown.onCompositionEnd}
           placeholder={t('search.placeholder')}
           disabled={loading || !settings.enabled}
         />
