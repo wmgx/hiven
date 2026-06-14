@@ -6,7 +6,7 @@ import {
   usePluginSurfaceShortcutStore,
   type PluginSurfaceShortcut,
 } from '../workspace/pluginSurfaceShortcuts'
-import type { PluginSurfaceOpenTarget } from '../store'
+import { useAppStore, type PluginSurfaceOpenTarget } from '../store'
 import { resolvePluginSettingsSource } from '../workspace/launcher/pluginSource'
 
 type GlobalShortcutApi = typeof import('@tauri-apps/plugin-global-shortcut')
@@ -25,7 +25,7 @@ export function installPluginSurfaceShortcutHotkeys(): () => void {
 
   void enqueueSync()
   unsubscribeShortcutStore = usePluginSurfaceShortcutStore.subscribe((state, previous) => {
-    if (state.shortcuts !== previous.shortcuts) void enqueueSync()
+    if (shortcutSyncSignature(state.shortcuts) !== shortcutSyncSignature(previous.shortcuts)) void enqueueSync()
   })
   unsubscribeRegistry = pluginRegistry.subscribe(() => {
     void enqueueSync()
@@ -116,17 +116,24 @@ async function registerShortcut(
   generation: number,
 ): Promise<void> {
   const current = currentAccelerators.get(key)
-  if (current === accelerator) return
-  await unregisterKey(key)
-
   try {
     const { register, isRegistered } = await loadGlobalShortcutApi()
+    if (current === accelerator) {
+      await unregisterAccelerator(accelerator)
+      currentAccelerators.delete(key)
+    } else {
+      await unregisterKey(key)
+    }
+
     if (await isRegistered(accelerator)) {
-      usePluginSurfaceShortcutStore.getState().updateRegistration(key, {
-        registrationStatus: 'conflict',
-        registrationError: 'Shortcut is already registered',
-      })
-      return
+      if (isGlobalPinnedLauncherAccelerator(accelerator)) {
+        usePluginSurfaceShortcutStore.getState().updateRegistration(key, {
+          registrationStatus: 'conflict',
+          registrationError: 'Shortcut is already registered',
+        })
+        return
+      }
+      await unregisterAccelerator(accelerator)
     }
     await register(accelerator, (event) => {
       if (event.state !== 'Pressed') return
@@ -209,6 +216,25 @@ function markNonTauri(shortcuts: Record<string, PluginSurfaceShortcut>): void {
 
 function normalizeAccelerator(accelerator: string): string {
   return accelerator.trim().replace(/\bCmd\b/g, 'Command')
+}
+
+function shortcutSyncSignature(shortcuts: Record<string, PluginSurfaceShortcut>): string {
+  return Object.entries(shortcuts)
+    .map(([key, shortcut]) => [
+      key,
+      shortcut.target.source,
+      shortcut.target.pluginId,
+      shortcut.target.surfaceId,
+      normalizeAccelerator(shortcut.accelerator),
+      shortcut.enabled ? '1' : '0',
+    ].join('\u0000'))
+    .sort()
+    .join('\u0001')
+}
+
+function isGlobalPinnedLauncherAccelerator(accelerator: string): boolean {
+  const shortcut = useAppStore.getState().settings.globalPinnedLauncherShortcut
+  return shortcut.kind === 'accelerator' && normalizeAccelerator(shortcut.accelerator) === accelerator
 }
 
 function isTauriRuntime(): boolean {

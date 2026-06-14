@@ -54,6 +54,16 @@ assert.match(files.surfaceHotkeys, /requestOpenPluginSurfaceTool/, 'surface hotk
 assert.match(files.surfaceHotkeys, /pluginRegistry\.subscribe/, 'surface hotkey installer must resync when plugins enable, disable, or reload')
 assert.match(files.surfaceHotkeys, /usePluginPermissionStore\.subscribe/, 'surface hotkey installer must resync on permission changes')
 
+const registerShortcutFunction = files.surfaceHotkeys.match(/async function registerShortcut[\s\S]*?\n}\n\nasync function unregisterRemovedOrChanged/)?.[0] ?? ''
+const cachedAcceleratorBranch = registerShortcutFunction.match(/if\s*\(\s*current\s*===\s*accelerator\s*\)\s*\{([\s\S]*?)\n\s*\}/)?.[1] ?? ''
+assert.doesNotMatch(cachedAcceleratorBranch, /return/, 'surface hotkey resync must not skip rebinding a cached accelerator because its callback channel may be stale')
+assert.match(cachedAcceleratorBranch, /unregisterAccelerator\(accelerator\)/, 'surface hotkey resync must clear cached native registrations before rebinding')
+assert.match(cachedAcceleratorBranch, /currentAccelerators\.delete\(key\)/, 'surface hotkey resync must drop stale cached accelerators after native service reload')
+assert.match(registerShortcutFunction, /isGlobalPinnedLauncherAccelerator\(accelerator\)[\s\S]{0,260}registrationStatus:\s*'conflict'/, 'surface hotkey resync must preserve conflicts with the global pinned launcher shortcut')
+assert.match(registerShortcutFunction, /await unregisterAccelerator\(accelerator\)[\s\S]{0,220}await register\(accelerator/, 'surface hotkey resync must reclaim stale native plugin registrations before binding a fresh callback')
+assert.match(files.surfaceHotkeys, /settings\.globalPinnedLauncherShortcut/, 'surface hotkey conflict detection must inspect the global pinned launcher shortcut')
+assert.match(files.surfaceHotkeys, /shortcutSyncSignature\(state\.shortcuts\)\s*!==\s*shortcutSyncSignature\(previous\.shortcuts\)/, 'surface hotkey installer must ignore registration status writes when deciding whether to resync')
+
 assert.match(files.globalLauncher, /pluginSurfaceToolTarget/, 'GlobalLauncher must read tool-shell target')
 assert.match(files.globalLauncher, /samePluginSurfaceTarget/, 'GlobalLauncher must distinguish tool-shell surfaces from launcher-list surfaces')
 assert.match(files.globalLauncher, /leaveSurface/, 'GlobalLauncher must route Esc/back by surface origin')
