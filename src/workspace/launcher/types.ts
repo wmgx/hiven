@@ -167,7 +167,7 @@ export type LauncherOutput = {
 }
 
 export type LauncherExecuteResult =
-  | { ok: true; output?: LauncherOutput }
+  | { ok: true; output?: LauncherOutput; keepOpen?: boolean }
   | { ok: false; message: string }
 
 // ─── Plugin Launcher API (controlled) ────────────────────────────────────────
@@ -198,6 +198,8 @@ export type PluginLauncherApi = {
   copyText(text: string): Promise<void>
   openUrl(url: string): Promise<void>
   showMainPanel(): Promise<void>
+  showPluginsPage(): Promise<void>
+  showSettingsPage(): Promise<void>
   createPane(options?: { text?: string; title?: string; language?: string; focus?: boolean; direction?: 'left' | 'right' | 'top' | 'bottom' }): string
   dispatchEffects(effects: FluxEffect[]): EffectRunnerResult
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void

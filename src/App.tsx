@@ -214,6 +214,42 @@ function MainApp() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+    let disposed = false
+    let unlistenPlugins: (() => void) | undefined
+    let unlistenSettings: (() => void) | undefined
+    import('@tauri-apps/api/event')
+      .then(async ({ listen }) => {
+        unlistenPlugins = await listen('hiven://show-plugins-page', () => {
+          const state = useAppStore.getState()
+          state.setActiveView('scripts')
+          state.setCommandPaletteOpen(false)
+          state.setGlobalLauncherOpen(false)
+        })
+        unlistenSettings = await listen('hiven://show-settings-page', () => {
+          const state = useAppStore.getState()
+          state.setActiveView('settings')
+          state.setCommandPaletteOpen(false)
+          state.setGlobalLauncherOpen(false)
+        })
+      })
+      .then(() => {
+        if (disposed) {
+          unlistenPlugins?.()
+          unlistenSettings?.()
+        }
+      })
+      .catch((error) => {
+        console.warn('[hiven] Failed to listen for launcher page events:', error)
+      })
+    return () => {
+      disposed = true
+      unlistenPlugins?.()
+      unlistenSettings?.()
+    }
+  }, [])
+
   useEffect(() => installGlobalPinnedLauncherHotkeys(), [])
   useEffect(() => installPluginSurfaceShortcutHotkeys(), [])
 

@@ -30,8 +30,10 @@ assert.match(corePanePlugin, /type:\s*['"]pane\.update['"][\s\S]*stickyScroll/, 
 assert.match(corePanePlugin, /id:\s*['"]core-pane\.set-language['"]/, 'core-pane should own set language command')
 assert.match(corePanePlugin, /languageSource:\s*['"]manual['"]|languageSource:\s*['"]auto['"]/, 'set language should preserve languageSource behavior')
 
-assert.equal(corePaneManifest.version, '1.2.1', 'core-pane manifest version should be bumped')
-assert.equal(corePaneEntry?.version, '1.2.1', 'builtin index should publish bumped core-pane version')
+assert.notEqual(corePaneManifest.displayName, 'Pane Controls', 'core-pane user-visible displayName should be generalized')
+assert.notEqual(corePaneManifest.displayNameI18n?.zh, '面板控制', 'core-pane Chinese displayName should be generalized')
+assert.equal(corePaneManifest.version, '1.2.2', 'core-pane manifest version should be bumped')
+assert.equal(corePaneEntry?.version, '1.2.2', 'builtin index should publish bumped core-pane version')
 
 // --- Regex Tester Plugin ---
 const regexPlugin = read('src/plugins/regex-tester/index.tsx')

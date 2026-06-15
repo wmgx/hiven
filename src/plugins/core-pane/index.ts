@@ -1,9 +1,8 @@
 /**
- * First-party Pane Controls plugin.
+ * First-party Core Controls plugin.
  *
- * Provides workspace pane operations (split / close) as plugin commands so they
- * appear in the plugin manager alongside other built-in plugins. The commands
- * only emit effects; the effect runner performs the actual workspace mutations.
+ * Provides core workspace actions as plugin contributions so they appear in the
+ * plugin manager alongside other built-in plugins.
  */
 
 import { definePlugin, type PaneInput } from '@hiven/plugin'
@@ -53,6 +52,36 @@ export const corePanePlugin = definePlugin({
         pinnable: false,
         async execute(ctx) {
           await ctx.api.showMainPanel()
+          return { ok: true }
+        },
+      },
+      {
+        id: 'show-plugins-page',
+        display: {
+          title: 'command.showPluginsPage.title',
+          subtitle: 'command.showPluginsPage.description',
+          icon: 'Puzzle',
+          aliases: ['plugin', 'plugins', 'extension', 'extensions', 'scripts', 'plugin manager', '插件', '扩展'],
+        },
+        surfaces: ['command-palette', 'global-launcher'],
+        pinnable: false,
+        async execute(ctx) {
+          await ctx.api.showPluginsPage()
+          return { ok: true }
+        },
+      },
+      {
+        id: 'show-settings-page',
+        display: {
+          title: 'command.showSettingsPage.title',
+          subtitle: 'command.showSettingsPage.description',
+          icon: 'Settings',
+          aliases: ['setting', 'settings', 'preference', 'preferences', 'app settings', '设置', '偏好设置'],
+        },
+        surfaces: ['command-palette', 'global-launcher'],
+        pinnable: false,
+        async execute(ctx) {
+          await ctx.api.showSettingsPage()
           return { ok: true }
         },
       },

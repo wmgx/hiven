@@ -5,7 +5,7 @@
  * The plugin provides the body content via its settings.component.
  */
 
-import { Component, useCallback, useMemo, type ErrorInfo, type ReactNode } from 'react'
+import { Component, useCallback, useEffect, useMemo, type ErrorInfo, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { t } from '../i18n'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
@@ -55,7 +55,22 @@ export function PluginSettingsDialog() {
   const target = usePluginSettingsStore((s) => s.settingsDialogTarget)
   const closeSettingsDialog = usePluginSettingsStore((s) => s.closeSettingsDialog)
 
+  useEffect(() => {
+    if (!target) return
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        event.stopImmediatePropagation()
+        closeSettingsDialog()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [closeSettingsDialog, target])
+
   if (!target) return null
+  if (target.presentation === 'global-launcher') return null
 
   return (
     <div
@@ -75,7 +90,7 @@ export function PluginSettingsDialog() {
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <SettingsDialogContent
+        <PluginSettingsContent
           pluginId={target.pluginId}
           source={target.source}
           locale={locale}
@@ -88,7 +103,7 @@ export function PluginSettingsDialog() {
 
 // ─── Dialog Content ──────────────────────────────────────────────────────────
 
-function SettingsDialogContent({
+export function PluginSettingsContent({
   pluginId,
   source,
   locale,

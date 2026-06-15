@@ -18,6 +18,7 @@ import { resolveDisplayTitle, resolveDisplaySubtitle } from '../workspace/launch
 import type { LauncherItem as DomainLauncherItem, LauncherResultChoice, LauncherSurfaceId } from '../workspace/launcher/types'
 import { resolvePluginSettingsSource } from '../workspace/launcher/pluginSource'
 import { LauncherParamStep, resolveParamValueLabel } from './launcher/LauncherParamStep'
+import { PluginSettingsContent } from './PluginSettingsDialog'
 import { getPlatformShortcutMeta, shouldCustomizeParams, supportsDefaultParamRun, supportsParamCustomization } from './launcher/launcherParamShortcuts'
 import type { ContributionSource, PluginDefinition, PluginPermission } from '../workspace/pluginTypes'
 import { createPluginPrivateStorage } from '../workspace/pluginStorage'
@@ -47,6 +48,8 @@ const STANDALONE_SURFACE_MAX_HEIGHT = 760
 const STANDALONE_LAUNCHER_VERTICAL_PADDING = 24
 const STANDALONE_LAUNCHER_HORIZONTAL_PADDING = 24
 const STANDALONE_LAUNCHER_LIST_MAX_HEIGHT = 300
+const GLOBAL_LAUNCHER_SETTINGS_WIDTH = 720
+const GLOBAL_LAUNCHER_SETTINGS_HEIGHT = 560
 const MAX_GLOBAL_LAUNCHER_RENDERED_ITEMS = 20
 const PLUGIN_SURFACE_BACK_EVENT = 'hiven:plugin-surface-back'
 const PLUGIN_SURFACE_CLOSE_EVENT = 'hiven:plugin-surface-close'
@@ -71,6 +74,8 @@ export function GlobalLauncher() {
   const recordLauncherSelection = useAppStore((s) => s.recordLauncherSelection)
   const pluginSurfaceToolTarget = useAppStore((s) => s.pluginSurfaceToolTarget)
   const clearPluginSurfaceTool = useAppStore((s) => s.clearPluginSurfaceTool)
+  const settingsDialogTarget = usePluginSettingsStore((s) => s.settingsDialogTarget)
+  const closeSettingsDialog = usePluginSettingsStore((s) => s.closeSettingsDialog)
   const [controllerState, setControllerState] = useState<LauncherControllerState | null>(null)
   const [launcherController, setLauncherController] = useState<LauncherController | null>(null)
   const controllerRef = useRef<LauncherController | null>(null)
@@ -100,6 +105,9 @@ export function GlobalLauncher() {
     position: { x: number; y: number }
   } | null>(null)
   const standaloneLauncher = isStandaloneLauncherWindow()
+  const launcherSettingsTarget = settingsDialogTarget?.presentation === 'global-launcher'
+    ? settingsDialogTarget
+    : null
 
   useEffect(() => {
     if (dragRef.current) return
@@ -300,12 +308,15 @@ export function GlobalLauncher() {
     clearPluginSurfaceTool()
     setSurfaceFrame(null)
     setItemPermissionFrame(null)
+    if (usePluginSettingsStore.getState().settingsDialogTarget?.presentation === 'global-launcher') {
+      closeSettingsDialog()
+    }
     setQuery('')
     setSelectedIndex(0)
     setDynamicItems([])
     dynamicQueryRef.current = ''
     controllerRef.current?.reset()
-  }, [clearPluginSurfaceTool])
+  }, [clearPluginSurfaceTool, closeSettingsDialog])
 
   const closeLauncher = useCallback(() => {
     const wasOverlay = overlay
@@ -439,19 +450,23 @@ export function GlobalLauncher() {
       const panel = panelRef.current
       if (!panel) return
       const surfaceShell = activeSurfaceFrame?.surface.shell
-      const desiredPanelHeight = surfaceShell?.defaultHeight
+      const desiredPanelHeight = launcherSettingsTarget
+        ? GLOBAL_LAUNCHER_SETTINGS_HEIGHT
+        : surfaceShell?.defaultHeight
         ? surfaceShell.defaultHeight
         : measureStandaloneLauncherPanelHeight(panel)
       const nextHeight = clamp(
         Math.ceil(desiredPanelHeight + STANDALONE_LAUNCHER_VERTICAL_PADDING),
         STANDALONE_LAUNCHER_MIN_HEIGHT,
-        surfaceShell ? STANDALONE_SURFACE_MAX_HEIGHT : STANDALONE_LAUNCHER_MAX_HEIGHT,
+        surfaceShell || launcherSettingsTarget ? STANDALONE_SURFACE_MAX_HEIGHT : STANDALONE_LAUNCHER_MAX_HEIGHT,
       )
-      const desiredPanelWidth = surfaceShell?.defaultWidth ?? STANDALONE_LAUNCHER_WIDTH
+      const desiredPanelWidth = launcherSettingsTarget
+        ? GLOBAL_LAUNCHER_SETTINGS_WIDTH
+        : surfaceShell?.defaultWidth ?? STANDALONE_LAUNCHER_WIDTH
       const nextWidth = clamp(
         Math.ceil(desiredPanelWidth + STANDALONE_LAUNCHER_HORIZONTAL_PADDING),
         STANDALONE_LAUNCHER_WIDTH,
-        surfaceShell ? STANDALONE_SURFACE_MAX_WIDTH : STANDALONE_LAUNCHER_WIDTH,
+        surfaceShell || launcherSettingsTarget ? STANDALONE_SURFACE_MAX_WIDTH : STANDALONE_LAUNCHER_WIDTH,
       )
       window.dispatchEvent(new CustomEvent(LAUNCHER_PROGRAMMATIC_MOVE_EVENT))
       void getCurrentWindow()
@@ -469,6 +484,7 @@ export function GlobalLauncher() {
     controllerState,
     standaloneLauncher,
     activeSurfaceFrame,
+    launcherSettingsTarget,
   ])
 
   const selectItem = (item: LauncherItem | undefined, customizeParams = false) => {
@@ -625,6 +641,14 @@ export function GlobalLauncher() {
   const handleHostEscape = useCallback((event: KeyboardEvent) => {
     if (event.key !== 'Escape') return
     if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
+    if (event.key === 'Escape' && launcherSettingsTarget) {
+      event.preventDefault()
+      event.stopPropagation()
+      closeSettingsDialog()
+      focusSearchInputAfterBack()
+      return
+    }
+    if (settingsDialogTarget) return
     event.preventDefault()
     event.stopPropagation()
 
@@ -644,7 +668,7 @@ export function GlobalLauncher() {
     }
 
     closeLauncher()
-  }, [closeLauncher, itemPermissionFrame, leaveSurface, surfaceFrame])
+  }, [closeLauncher, closeSettingsDialog, itemPermissionFrame, launcherSettingsTarget, leaveSurface, settingsDialogTarget, surfaceFrame])
 
   useEffect(() => {
     if (!open) return
@@ -730,10 +754,14 @@ export function GlobalLauncher() {
     background: 'var(--color-background-primary)',
     border: '0.5px solid var(--color-border-secondary)',
     borderRadius: 'var(--radius-xl)',
-    width: activeSurfaceFrame?.surface.shell?.defaultWidth
+    width: launcherSettingsTarget
+      ? `min(${GLOBAL_LAUNCHER_SETTINGS_WIDTH}px, calc(100vw - 24px))`
+      : activeSurfaceFrame?.surface.shell?.defaultWidth
       ? `min(${activeSurfaceFrame.surface.shell.defaultWidth}px, calc(100vw - 24px))`
       : undefined,
-    maxHeight: activeSurfaceFrame?.surface.shell?.defaultHeight
+    maxHeight: launcherSettingsTarget
+      ? `min(${GLOBAL_LAUNCHER_SETTINGS_HEIGHT}px, calc(100vh - 24px))`
+      : activeSurfaceFrame?.surface.shell?.defaultHeight
       ? `min(${activeSurfaceFrame.surface.shell.defaultHeight}px, calc(100vh - 24px))`
       : undefined,
     left: currentPosition ? currentPosition.x : '50%',
@@ -742,16 +770,16 @@ export function GlobalLauncher() {
   }
 
   useLayoutEffect(() => {
-    if (!surfaceFrame) return
+    if (!surfaceFrame && !launcherSettingsTarget) return
     const frame = window.requestAnimationFrame(() => {
-      const shell = panelRef.current?.querySelector<HTMLElement>('.global-launcher-surface-shell')
+      const shell = panelRef.current?.querySelector<HTMLElement>('.global-launcher-surface-shell, .global-launcher-settings-shell')
       const focusTarget =
         shell?.querySelector<HTMLElement>('[data-plugin-surface-autofocus]') ??
         shell
       focusTarget?.focus()
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [surfaceFrame, surfaceFocusVersion])
+  }, [launcherSettingsTarget, surfaceFrame, surfaceFocusVersion])
 
   if (!open) return null
 
@@ -774,6 +802,16 @@ export function GlobalLauncher() {
         onKeyDown={(event) => {
           if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
           if (event.defaultPrevented) return
+          if (event.key === 'Escape' && launcherSettingsTarget) {
+            event.preventDefault()
+            event.stopPropagation()
+            closeSettingsDialog()
+            focusSearchInputAfterBack()
+            return
+          }
+          if (launcherSettingsTarget) {
+            return
+          }
           if (surfaceFrame) {
             if (event.key === 'Escape') {
               event.preventDefault()
@@ -853,7 +891,23 @@ export function GlobalLauncher() {
         onCompositionStart={handleCompositionStart}
         onCompositionEnd={handleCompositionEnd}
       >
-        {surfaceFrame ? (() => {
+        {launcherSettingsTarget ? (
+          <div
+            className="global-launcher-settings-shell flex flex-col min-h-0 outline-none"
+            tabIndex={-1}
+            style={{ height: GLOBAL_LAUNCHER_SETTINGS_HEIGHT }}
+          >
+            <PluginSettingsContent
+              pluginId={launcherSettingsTarget.pluginId}
+              source={launcherSettingsTarget.source}
+              locale={locale}
+              onClose={() => {
+                closeSettingsDialog()
+                focusSearchInputAfterBack()
+              }}
+            />
+          </div>
+        ) : surfaceFrame ? (() => {
           void pluginPermissionVersion
           if (!activeSurfaceFrame) {
             return <div className="p-4 text-center text-[12px]" style={{ color: 'var(--color-text-tertiary)' }}>Surface not found</div>
@@ -898,7 +952,14 @@ export function GlobalLauncher() {
                       host={{
                         close: requestSurfaceClose,
                         requestBack: requestSurfaceBack,
-                        openSettings: () => { openSettingsDialog({ pluginId: surfaceFrame.pluginId, source: surfaceFrame.source }) },
+                        openSettings: () => {
+                          openSettingsDialog({
+                            pluginId: surfaceFrame.pluginId,
+                            source: surfaceFrame.source,
+                            presentation: 'global-launcher',
+                            context: { surfaceId: 'global-launcher' },
+                          })
+                        },
                         showMessage: (message, level) => {
                           useAppStore.getState().setLastCommandStatus({ title: message, status: level === 'error' ? 'error' : 'success', message, updatedAt: Date.now() })
                         },

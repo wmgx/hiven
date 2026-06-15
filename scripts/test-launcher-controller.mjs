@@ -137,7 +137,20 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.equal(choice.title, 'HELLO')
 }
 
-// --- 3. text output Enter-copy default ---
+// --- 3. perform with keepOpen success: stays open without entering a result frame ---
+{
+  const { ctrl, getClosed } = makeController()
+  const item = performItem('plugin:p:launcher:keep-open', async () => ({ ok: true, keepOpen: true }))
+  await ctrl.selectItem(item)
+  const st = ctrl.getState()
+  assert.equal(st.frames.length, 1, 'keepOpen success should stay on the base launcher frame')
+  assert.equal(st.frames[0].kind, 'list', 'keepOpen success should not enter a result frame')
+  assert.equal(st.busy, false, 'keepOpen success should finish the action')
+  assert.equal(st.error, null, 'keepOpen success should not show an error')
+  assert.equal(getClosed(), 0, 'keepOpen success should not request launcher close')
+}
+
+// --- 4. text output Enter-copy default ---
 {
   const cap = makeApi()
   const { ctrl } = makeController({ api: cap.api })
@@ -149,7 +162,7 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.deepEqual(cap.calls.copied, ['XYZ'], 'default text output Enter copies')
 }
 
-// --- 4. collect-input: records usage on ENTER input (not submit), submits once ---
+// --- 5. collect-input: records usage on ENTER input (not submit), submits once ---
 {
   const order = []
   let executeCount = 0
@@ -168,7 +181,7 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.deepEqual(order, ['record', 'execute:query'], 'execute happens on submit with input text')
 }
 
-// --- 5. collect-input empty rejected unless allowEmptyInput ---
+// --- 6. collect-input empty rejected unless allowEmptyInput ---
 {
   let executeCount = 0
   const { ctrl } = makeController()
@@ -179,7 +192,7 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.equal(ctrl.getState().error, 'need input', 'shows empty-input message')
 }
 
-// --- 6. failure keeps launcher open and shows error ---
+// --- 7. failure keeps launcher open and shows error ---
 {
   const { ctrl, getClosed } = makeController()
   const item = performItem('plugin:p:launcher:fail', async () => ({ ok: false, message: 'boom' }))
@@ -188,7 +201,7 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.equal(getClosed(), 0, 'failure does not close launcher')
 }
 
-// --- 7. Escape pops frames; from base returns false ---
+// --- 8. Escape pops frames; from base returns false ---
 {
   const { ctrl } = makeController()
   const item = performItem('plugin:p:launcher:o', async (ctx) => output.textResult('Z', ctx.api))
@@ -199,7 +212,7 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.equal(ctrl.back(), false, 'escape from base returns false (host closes)')
 }
 
-// --- 8. pinned execution does not record usage (recordUsage:false) ---
+// --- 9. pinned execution does not record usage (recordUsage:false) ---
 {
   const recorded = []
   const { ctrl } = makeController({ recordSelection: (s, i) => recorded.push(i.systemKey) })
@@ -208,7 +221,7 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.equal(recorded.length, 0, 'pinned execution does not record usage')
 }
 
-// --- 9. dynamic item never records usage ---
+// --- 10. dynamic item never records usage ---
 {
   const recorded = []
   const { ctrl } = makeController({ recordSelection: (s, i) => recorded.push(i.systemKey) })
@@ -217,7 +230,7 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.equal(recorded.length, 0, 'dynamic item does not record long-term usage')
 }
 
-// --- 10. multi-level: choice action returning output pushes another result frame ---
+// --- 11. multi-level: choice action returning output pushes another result frame ---
 {
   const { ctrl, api } = makeController()
   const item = performItem('plugin:p:launcher:multi', async (ctx) => output.choicesResult([
@@ -232,7 +245,7 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.equal(st.frames.length, 3, 'choice returning output pushes another result frame')
 }
 
-// --- 11. Cmd/Ctrl+Enter customization enters param frame and executes with supplied params ---
+// --- 12. Cmd/Ctrl+Enter customization enters param frame and executes with supplied params ---
 {
   const order = []
   const { ctrl } = makeController({ recordSelection: () => order.push('record') })
@@ -254,7 +267,7 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.deepEqual(order, ['record', 'execute:?'], 'param submit executes with edited params')
 }
 
-// --- 12. parameter frame advances one launcher step at a time and preserves default selection ---
+// --- 13. parameter frame advances one launcher step at a time and preserves default selection ---
 {
   const order = []
   const { ctrl } = makeController({ recordSelection: () => order.push('record') })
@@ -284,7 +297,7 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.deepEqual(order, ['record', 'execute:pretty:false'])
 }
 
-// --- 13. global launcher text tools collect manual input instead of reading the pane immediately ---
+// --- 14. global launcher text tools collect manual input instead of reading the pane immediately ---
 {
   const order = []
   const { ctrl } = makeController({
@@ -308,7 +321,7 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.deepEqual(order, ['record', 'execute:manual text'], 'manual input is passed into execution')
 }
 
-// --- 14. global launcher param tools collect manual input after params are confirmed ---
+// --- 15. global launcher param tools collect manual input after params are confirmed ---
 {
   const order = []
   const { ctrl } = makeController({
@@ -335,7 +348,7 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.deepEqual(order, ['record', 'execute:Abc:lower'], 'manual input and chosen params are submitted together')
 }
 
-// --- 15. global manual input tools can preview output while typing ---
+// --- 16. global manual input tools can preview output while typing ---
 {
   const cap = makeApi()
   const { ctrl } = makeController({
@@ -354,7 +367,7 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.equal(frame.previewOutput.choices[0].title, 'LIVE', 'live preview output updates in the input frame')
 }
 
-// --- 16. submitting a live preview copies the preview output and closes without re-running ---
+// --- 17. submitting a live preview copies the preview output and closes without re-running ---
 {
   const cap = makeApi()
   let executeCount = 0

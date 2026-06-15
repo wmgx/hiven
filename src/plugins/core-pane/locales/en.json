@@ -1,6 +1,10 @@
 {
   "command.showMainPanel.title": "Show Main Panel",
   "command.showMainPanel.description": "Show hiven and return to the main editor panel",
+  "command.showPluginsPage.title": "Plugins",
+  "command.showPluginsPage.description": "Open the plugin manager",
+  "command.showSettingsPage.title": "Settings",
+  "command.showSettingsPage.description": "Open app settings",
   "command.split.title": "Split",
   "command.split.description": "Split the workspace into a new pane",
   "command.close.title": "Close Pane",

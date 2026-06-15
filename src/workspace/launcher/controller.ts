@@ -581,6 +581,10 @@ export class LauncherController {
       })
       return
     }
+    if (result.keepOpen) {
+      this.setState({ busy: false, error: null })
+      return
+    }
     // Success with no output: close.
     this.setState({ busy: false, error: null })
     this.deps.requestClose()

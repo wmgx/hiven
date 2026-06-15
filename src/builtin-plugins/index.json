@@ -1,5 +1,5 @@
 {
-  "version": 18,
+  "version": 19,
   "packages": [
     {
       "pluginId": "app-launcher",
@@ -29,7 +29,7 @@
     {
       "pluginId": "core-pane",
       "dir": "core-pane",
-      "version": "1.2.1"
+      "version": "1.2.2"
     },
     {
       "pluginId": "count",

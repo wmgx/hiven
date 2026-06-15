@@ -98,6 +98,40 @@ async function showMainPanel(): Promise<void> {
   applyEffects(effects)
 }
 
+async function showPluginsPage(): Promise<void> {
+  if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
+    try {
+      const [{ emitTo }, { invoke }] = await Promise.all([
+        import('@tauri-apps/api/event'),
+        import('@tauri-apps/api/core'),
+      ])
+      await emitTo('main', 'hiven://show-plugins-page')
+      await invoke('show_and_focus_window')
+      return
+    } catch (error) {
+      console.warn('[launcher] failed to show plugins page via Tauri:', error)
+    }
+  }
+  useAppStore.getState().setActiveView('scripts')
+}
+
+async function showSettingsPage(): Promise<void> {
+  if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
+    try {
+      const [{ emitTo }, { invoke }] = await Promise.all([
+        import('@tauri-apps/api/event'),
+        import('@tauri-apps/api/core'),
+      ])
+      await emitTo('main', 'hiven://show-settings-page')
+      await invoke('show_and_focus_window')
+      return
+    } catch (error) {
+      console.warn('[launcher] failed to show settings page via Tauri:', error)
+    }
+  }
+  useAppStore.getState().setActiveView('settings')
+}
+
 /**
  * Build a PluginLauncherApi. The host owns the implementation, so plugins get a
  * stable, narrow surface. All text targets resolve against the active pane.
@@ -200,6 +234,8 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
       await openExternalUrl(url)
     },
     showMainPanel,
+    showPluginsPage,
+    showSettingsPage,
     createPane: (options) => useWorkspaceStore.getState().createPane(options),
     dispatchEffects: (effects: FluxEffect[]) => applyEffects(effects),
     showMessage: (message: string, level = 'info') => {

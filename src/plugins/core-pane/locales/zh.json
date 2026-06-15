@@ -1,6 +1,10 @@
 {
   "command.showMainPanel.title": "显示主面板",
   "command.showMainPanel.description": "唤起 hiven 并回到主编辑面板",
+  "command.showPluginsPage.title": "插件",
+  "command.showPluginsPage.description": "打开插件管理",
+  "command.showSettingsPage.title": "设置",
+  "command.showSettingsPage.description": "打开应用设置",
   "command.split.title": "分栏",
   "command.split.description": "将工作区分栏为新面板",
   "command.close.title": "关闭当前面板",

@@ -28,6 +28,10 @@ export type PluginSettingsStore = {
 export type PluginSettingsDialogTarget = {
   pluginId: string
   source: PluginSettingsSource
+  presentation?: 'dialog' | 'global-launcher'
+  context?: {
+    surfaceId?: 'command-palette' | 'global-launcher'
+  }
 } | null
 
 // ─── Store Interface ─────────────────────────────────────────────────────────

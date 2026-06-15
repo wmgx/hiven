@@ -3,7 +3,7 @@
  *
  * Collects launcher candidates from three sources and resolves them into
  * system-owned `LauncherItem`s:
- *   1. Host-owned launcher items (views/actions).
+ *   1. Host-owned launcher items from registered providers.
  *   2. Plugin static items — from `launcher.items` and adapted from `tools`.
  *   3. Plugin dynamic items — from `launcher.dynamicItems` and tool-less
  *      dynamic providers, guarded by query rules + per-provider error isolation.
@@ -15,6 +15,7 @@
 import type { Locale } from '../../i18n'
 import { makePluginT } from '../../i18n/pluginI18nRegistry'
 import { pluginRegistry } from '../pluginRegistry'
+import { usePluginSettingsStore } from '../pluginSettingsStore'
 import type { ContributionSource, PluginDefinition } from '../pluginTypes'
 import type {
   LauncherDynamicItemProvider,
@@ -107,6 +108,65 @@ function resolveToolItem(
   })
 }
 
+function withSettingsSuffix(title: string, suffix: string): string {
+  return title.toLowerCase().includes(suffix.toLowerCase()) ? title : `${title} ${suffix}`
+}
+
+function withChineseSettingsSuffix(title: string): string {
+  return title.includes('设置') ? title : `${title} 设置`
+}
+
+function resolvePluginSettingsItem(
+  definition: PluginDefinition<unknown>,
+  pluginId: string,
+  source: ContributionSource,
+): LauncherItem | null {
+  const settings = definition.settings
+  if (!settings) return null
+
+  const settingsSource = resolvePluginSettingsSource(pluginId, source)
+  const baseTitle = settings.title ?? pluginId
+  const titleI18n = { ...settings.titleI18n }
+  titleI18n.zh = withChineseSettingsSuffix(titleI18n.zh ?? baseTitle)
+
+  return {
+    systemKey: `plugin-settings:${settingsSource}:${pluginId}`,
+    kind: 'host',
+    pluginId,
+    source: settingsSource,
+    display: {
+      title: withSettingsSuffix(baseTitle, 'Settings'),
+      titleI18n,
+      icon: 'Settings',
+      aliases: ['settings', 'preferences', 'extension settings', 'plugin settings', '设置', '偏好设置', pluginId],
+    },
+    behavior: { type: 'perform' },
+    surfaces: ['command-palette', 'global-launcher'],
+    pinnable: false,
+    execute: async (ctx) => {
+      const settingsState = usePluginSettingsStore.getState()
+      if (ctx.surfaceId === 'global-launcher') {
+        settingsState.openSettingsDialog({
+          pluginId,
+          source: settingsSource,
+          presentation: 'global-launcher',
+          context: { surfaceId: ctx.surfaceId },
+        })
+        return { ok: true, keepOpen: true }
+      }
+      if (ctx.surfaceId !== 'global-launcher') {
+        settingsState.openSettingsDialog({
+          pluginId,
+          source: settingsSource,
+          presentation: 'dialog',
+          context: { surfaceId: ctx.surfaceId },
+        })
+      }
+      return { ok: true }
+    },
+  }
+}
+
 /**
  * Collect all static plugin launcher items (from launcher.items + tools),
  * validating ids per plugin. Duplicate/invalid ids are skipped with a warning.
@@ -175,6 +235,11 @@ export function collectStaticPluginItems(): LauncherItem[] {
         },
       }
       items.push(item)
+    }
+
+    const settingsItem = resolvePluginSettingsItem(def, pluginId, source)
+    if (settingsItem) {
+      items.push(settingsItem)
     }
   }
   return items
