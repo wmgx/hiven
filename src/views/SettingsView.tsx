@@ -261,6 +261,9 @@ function localizeHotkeyStatusDetail(detail: string, t: ReturnType<typeof useT>):
   if (/Double modifier global hotkey is only available on macOS/i.test(detail)) {
     return t('hotkeyDoubleModifierUnsupported')
   }
+  if (/Accessibility permission is required for double-modifier global shortcuts/i.test(detail)) {
+    return t('hotkeyAccessibilityRequired')
+  }
   return detail || t('hotkeyStatusUnknownError')
 }
 

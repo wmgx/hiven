@@ -42,6 +42,7 @@ export default {
     'hotkeyRegistrationFailed': 'Registration failed: {message}',
     'hotkeyStatusUnknownError': 'unknown error',
     'hotkeyAccessibilityHint': '{modifier} may require Accessibility permission in macOS System Settings.',
+    'hotkeyAccessibilityRequired': 'Accessibility permission is required. Grant Hiven access in macOS System Settings, then retry the shortcut.',
     'hotkeyDoubleModifierUnsupported': 'Double-modifier global shortcuts are currently only supported on macOS.',
   },
   zh: {
@@ -87,6 +88,7 @@ export default {
     'hotkeyRegistrationFailed': '注册失败：{message}',
     'hotkeyStatusUnknownError': '未知错误',
     'hotkeyAccessibilityHint': '{modifier} 可能需要在 macOS 系统设置中授予辅助功能权限。',
+    'hotkeyAccessibilityRequired': '需要辅助功能权限。请在 macOS 系统设置中允许 Hiven，然后重试快捷键。',
     'hotkeyDoubleModifierUnsupported': '双击修饰键全局快捷键目前仅支持 macOS。',
   },
 }

@@ -264,6 +264,24 @@ check('native double-modifier hotkey layer supports Command, Shift, and Option',
   )
 })
 
+check('native double-modifier registration requests macOS Accessibility trust', () => {
+  assertHas(
+    files.tauriHotkeys,
+    /AXIsProcessTrustedWithOptions/,
+    'native double-modifier registration should ask macOS for Accessibility trust before creating the event tap',
+  )
+  assertHas(
+    files.tauriHotkeys,
+    /AXTrustedCheckOptionPrompt/,
+    'native Accessibility trust check should request the system prompt for GitHub/release installs',
+  )
+  assertHas(
+    files.tauriHotkeys,
+    /Accessibility permission is required for double-modifier global shortcuts/,
+    'native hotkey status should expose a recognizable Accessibility failure',
+  )
+})
+
 check('App global keydown handler ignores shortcut recorder events', () => {
   assertHas(
     files.app,
@@ -301,6 +319,7 @@ check('i18n includes English and Chinese copy for the hotkey settings', () => {
     'hotkeyDoubleModifier',
     'hotkeyStatusDoubleRegistered',
     'hotkeyRegistrationFailed',
+    'hotkeyAccessibilityRequired',
     'hotkeyDoubleModifierUnsupported',
   ]) {
     assertHas(files.i18n, new RegExp(`['"]${key}['"]`), `i18n should include ${key}`)

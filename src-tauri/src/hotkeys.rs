@@ -173,6 +173,8 @@ fn register_double_modifier_hotkey_impl(
     app: tauri::AppHandle,
     modifier: DoubleModifier,
 ) -> Result<HotkeyRegistrationStatus, String> {
+    ensure_accessibility_trusted()?;
+
     let state = DOUBLE_MODIFIER_HOTKEY_STATE
         .get_or_init(|| {
             Arc::new(DoubleModifierHotkeyState {
@@ -192,6 +194,30 @@ fn register_double_modifier_hotkey_impl(
     Ok(HotkeyRegistrationStatus {
         status: format!("Double {} registered", modifier.label()),
     })
+}
+
+#[cfg(target_os = "macos")]
+fn ensure_accessibility_trusted() -> Result<(), String> {
+    use core_foundation::base::TCFType;
+    use core_foundation::boolean::CFBoolean;
+    use core_foundation::dictionary::CFDictionary;
+    use core_foundation::string::CFString;
+
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXIsProcessTrustedWithOptions(options: core_foundation::dictionary::CFDictionaryRef)
+            -> bool;
+    }
+
+    let prompt_key = CFString::new("AXTrustedCheckOptionPrompt");
+    let prompt = CFBoolean::true_value();
+    let options = CFDictionary::from_CFType_pairs(&[(prompt_key.as_CFType(), prompt.as_CFType())]);
+    let trusted = unsafe { AXIsProcessTrustedWithOptions(options.as_concrete_TypeRef()) };
+    if trusted {
+        Ok(())
+    } else {
+        Err("Accessibility permission is required for double-modifier global shortcuts".to_string())
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
