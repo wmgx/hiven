@@ -14,6 +14,10 @@ export function reverseLines(text: string): string {
   return text.split('\n').reverse().join('\n')
 }
 
+function reverseText(text: string): string {
+  return Array.from(text).reverse().join('')
+}
+
 function sortLines(text: string, params: Record<string, unknown>): string {
   const lines = text.split('\n')
   lines.sort((a, b) => {
@@ -118,6 +122,18 @@ export const lineToolsPlugin = definePlugin({
       surfaces: { launcher: { surfaces: ['command-palette'] }, panel: true, pinnable: true },
     },
     {
+      id: 'line-tools.reverse-text',
+      title: 'command.reverseText.title',
+      subtitle: 'command.reverseText.description',
+      icon: 'ArrowDownUp',
+      aliases: ['reverse-text', 'flip-text'],
+      inputPolicy: { mode: 'auto' },
+      run(ctx) {
+        return ctx.output.replaceActiveText(reverseText(ctx.input.text))
+      },
+      surfaces: { launcher: { surfaces: ['command-palette', 'global-launcher'] }, panel: true, pinnable: true },
+    },
+    {
       id: 'line-tools.remove-blank-lines',
       title: 'command.removeBlankLines.title',
       subtitle: 'command.removeBlankLines.description',
@@ -139,7 +155,7 @@ export const lineToolsPlugin = definePlugin({
       run(ctx) {
         return ctx.output.replaceActiveText(trimLineWhitespace(ctx.input.text))
       },
-      surfaces: { launcher: { surfaces: ['command-palette'] }, panel: true, pinnable: true },
+      surfaces: { launcher: { surfaces: ['command-palette', 'global-launcher'] }, panel: true, pinnable: true },
     },
     {
       id: 'line-tools.join',
@@ -232,6 +248,21 @@ export const lineToolsPlugin = definePlugin({
       run(ctx) {
         const input = ctx.inputs.input as TextInput
         return textOutput(reverseLines(inputText(input)))
+      },
+    },
+    {
+      id: 'line-tools.reverse-text',
+      title: 'command.reverseText.title',
+      description: 'command.reverseText.description',
+      icon: 'ArrowDownUp',
+      aliases: ['reverse-text', 'flip-text'],
+      inputs: [
+        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
+      ],
+      inputResolution: { strategy: 'use-active', fallback: 'fail' },
+      run(ctx) {
+        const input = ctx.inputs.input as TextInput
+        return textOutput(reverseText(inputText(input)))
       },
     },
     {

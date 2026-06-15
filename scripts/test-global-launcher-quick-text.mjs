@@ -19,7 +19,30 @@ const packageJson = read('package.json')
 
 assert.match(packageJson, /test:global-launcher-quick-text/, 'package.json should expose the quick text verifier')
 assert.match(lineToolsPlugin, /tools:\s*\[/, 'quick text style tools should be contributed through the tool-first launcher API')
-assert.match(lineToolsPlugin, /id:\s*['"]line-tools\.reverse['"][\s\S]{0,420}surfaces:\s*\{[\s\S]{0,120}launcher:\s*true/, 'reverse should be available as a launcher tool')
+for (const id of [
+  'line-tools.sort',
+  'line-tools.dedup',
+  'line-tools.reverse',
+  'line-tools.remove-blank-lines',
+  'line-tools.join',
+]) {
+  const escapedId = id.replace(/\./g, '\\.')
+  assert.match(
+    lineToolsPlugin,
+    new RegExp(`id:\\s*['"]${escapedId}['"][\\s\\S]{0,1800}surfaces:\\s*\\{[\\s\\S]{0,180}launcher:\\s*\\{[\\s\\S]{0,120}surfaces:\\s*\\[[\\s\\S]{0,80}['"]command-palette['"][\\s\\S]{0,80}\\]`),
+    `${id} should remain command-palette only because global quick text is single-line`,
+  )
+}
+assert.match(
+  lineToolsPlugin,
+  /id:\s*['"]line-tools\.trim-whitespace['"][\s\S]{0,700}surfaces:\s*\{[\s\S]{0,180}launcher:\s*\{[\s\S]{0,120}surfaces:\s*\[[\s\S]{0,80}['"]command-palette['"][\s\S]{0,80}['"]global-launcher['"]/,
+  'trim whitespace should be exposed in global launcher quick text and command palette',
+)
+assert.match(
+  lineToolsPlugin,
+  /id:\s*['"]line-tools\.reverse-text['"][\s\S]{0,700}surfaces:\s*\{[\s\S]{0,180}launcher:\s*\{[\s\S]{0,120}surfaces:\s*\[[\s\S]{0,80}['"]command-palette['"][\s\S]{0,80}['"]global-launcher['"]/,
+  'reverse text should be exposed in global launcher quick text and command palette',
+)
 assert.match(lineToolsPlugin, /inputPolicy:\s*\{\s*mode:\s*['"]auto['"]\s*\}/, 'reverse should use the shared auto input policy')
 assert.match(lineToolsPlugin, /id:\s*['"]line-tools\.reverse['"][\s\S]{0,360}ctx\.output\.replaceActiveText/, 'reverse launcher tool should replace active text, not copy-only')
 assert.doesNotMatch(launcherRegistry, /adaptCommandToLauncherItem|canAdaptCommandToLauncher|commandAdapter/, 'launcher registry should not use a command adapter')

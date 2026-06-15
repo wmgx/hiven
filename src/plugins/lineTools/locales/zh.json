@@ -5,6 +5,8 @@
   "command.dedup.description": "移除文本中的重复行",
   "command.reverse.title": "反转行",
   "command.reverse.description": "反转行顺序",
+  "command.reverseText.title": "反转文本",
+  "command.reverseText.description": "反转字符顺序",
   "command.removeBlankLines.title": "去除空白行",
   "command.removeBlankLines.description": "移除文本中的空白行",
   "command.trimWhitespace.title": "去除首尾空白",

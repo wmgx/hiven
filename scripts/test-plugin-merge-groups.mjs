@@ -94,6 +94,7 @@ assert.deepEqual(
     'line-tools.sort',
     'line-tools.dedup',
     'line-tools.reverse',
+    'line-tools.reverse-text',
     'line-tools.remove-blank-lines',
     'line-tools.trim-whitespace',
     'line-tools.join',
@@ -114,6 +115,11 @@ assert.equal(
   await runTextCommand(lineTools, 'line-tools.reverse', 'a\nb\nc'),
   'c\nb\na',
   'line-tools reverse should reverse line order',
+)
+assert.equal(
+  await runTextCommand(lineTools, 'line-tools.reverse-text', 'abc 123'),
+  '321 cba',
+  'line-tools reverse text should reverse character order',
 )
 assert.equal(
   await runTextCommand(lineTools, 'line-tools.remove-blank-lines', 'a\n\n  \nb'),
