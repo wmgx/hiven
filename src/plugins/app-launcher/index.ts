@@ -4,9 +4,6 @@ import { pinyin } from 'pinyin-pro'
 import { createAppLauncherRepository } from './storage/repository'
 import type { CachedAppEntry } from './storage/model'
 
-const EN_REFRESH_SUCCESS = 'Refreshed application index: {count} apps'
-const EN_REFRESH_PERMISSION_DENIED = 'Cannot refresh application index: missing application discovery permission'
-
 const REFRESH_ICON = 'RefreshCw'
 const REFRESH_ALIASES = [
   'app',
@@ -109,7 +106,7 @@ function prewarmAppIcons(ctx: AppIndexContext, apps: CachedAppEntry[]): void {
 async function refreshApplicationIndex(ctx: AppIndexContext, options: { notify?: boolean; force?: boolean } = { notify: true }) {
   const repository = createAppLauncherRepository(ctx.storage)
   if (options.force !== true) {
-    const cache = await repository.readCache(ctx.locale)
+    const cache = await repository.readCache()
     if (cache.apps.length > 0 && !shouldRefreshApplicationIndex(cache.refreshedAt)) {
       prewarmAppIcons(ctx, cache.apps)
       return { ok: true as const, skipped: true as const }
@@ -121,15 +118,15 @@ async function refreshApplicationIndex(ctx: AppIndexContext, options: { notify?:
     apps = await ctx.api.apps.discoverApps()
   } catch (error) {
     if (permissionErrorMessage(error, 'app.discover')) {
-      return { ok: false as const, code: 'permission-denied' as const, message: ctx.t('refresh.permissionDenied') || EN_REFRESH_PERMISSION_DENIED }
+      return { ok: false as const, code: 'permission-denied' as const, message: ctx.t('refresh.permissionDenied') }
     }
     const message = error instanceof Error ? error.message : String(error)
     return { ok: false as const, message: ctx.t('refresh.failed', { message }) }
   }
 
   try {
-    const cache = await repository.storeDiscoveredApps(apps, ctx.locale)
-    const message = ctx.t('refresh.success', { count: cache.apps.length }) || EN_REFRESH_SUCCESS
+    const cache = await repository.storeDiscoveredApps(apps)
+    const message = ctx.t('refresh.success', { count: cache.apps.length })
     if (options.notify !== false) ctx.api.showMessage(message, 'success')
     prewarmAppIcons(ctx, cache.apps)
     return { ok: true as const }
@@ -143,10 +140,8 @@ function refreshItem(): LauncherItemContribution {
   return {
     id: 'refresh-app-index',
     display: {
-      title: 'Refresh Applications Index',
-      titleI18n: { zh: '刷新应用索引' },
-      subtitle: 'Scan installed applications',
-      subtitleI18n: { zh: '扫描已安装应用' },
+      title: 'refresh.title',
+      subtitle: 'refresh.subtitle',
       icon: REFRESH_ICON,
       aliases: REFRESH_ALIASES,
     },
@@ -166,7 +161,7 @@ async function startup(ctx: PluginStartupHookContext): Promise<void> {
 async function dynamicItems(ctx: LauncherDynamicContext): Promise<LauncherItemContribution[]> {
   if (ctx.surfaceId !== 'global-launcher') return []
   const repository = createAppLauncherRepository(ctx.storage)
-  const cache = await repository.readCache(ctx.locale)
+  const cache = await repository.readCache()
   const apps = cache.apps
     .filter((app) => appMatchesQuery(app, ctx.query))
     .slice(0, MAX_DYNAMIC_APP_ITEMS)
@@ -176,7 +171,6 @@ async function dynamicItems(ctx: LauncherDynamicContext): Promise<LauncherItemCo
     id: `app-${app.appId}`,
     display: {
       title: app.name,
-      titleI18n: app.nameI18n,
       subtitle: subtitles.get(app.appId) ?? ctx.t('app.subtitle'),
       icon: appIconRef(app.appId),
       aliases: searchAliases(app),

@@ -75,7 +75,14 @@ function assertHostLauncherApiBoundary() {
 
   const pluginApi = read('src/workspace/launcher/pluginApi.ts')
   assert.match(pluginApi, /createPluginAppsApi/, 'host should build apps API outside plugins')
-  assert.match(pluginApi, /invoke(?:<[^>]+>)?\(['"]discover_installed_apps['"][\s\S]*locale/, 'discoverApps should call a host command with the current locale')
+  const discoverApps = sliceBetween(
+    pluginApi,
+    'discoverApps: async () => {',
+    '\n    },',
+    'discoverApps implementation should be present',
+  )
+  assert.match(discoverApps, /invoke(?:<[^>]+>)?\(['"]discover_installed_apps['"]\)/, 'discoverApps should let the host use the system application language')
+  assert.doesNotMatch(discoverApps, /useAppStore\.getState\(\)\.locale|locale/, 'discoverApps should not pass the UI locale as the application discovery language')
   assert.match(pluginApi, /invoke(?:<[^>]+>)?\(['"]cache_installed_app_icons['"][\s\S]*appIds/, 'cacheAppIcons should call the host icon cache warmup command')
   assert.match(pluginApi, /invoke(?:<[^>]+>)?\(['"]launch_installed_app['"][\s\S]*appId/, 'launchApp should pass only appId to the host command')
   assert.doesNotMatch(pluginApi, /displayPath[\s\S]*launch_installed_app|path[\s\S]*launch_installed_app/, 'launch API should not launch by display path or arbitrary path')
@@ -149,8 +156,12 @@ function assertPluginBehavior() {
   assert.doesNotMatch(index, /launchApp\([^)]*displayPath|launchApp\([^)]*path|launchApp\([^)]*command/, 'dynamic app items should not launch by path or command')
   assert.doesNotMatch(index, /launched successfully|启动成功|已启动/, 'successful app launch should not emit success copy')
   assert.match(index, /ctx\.api\.apps\.discoverApps\(\)/, 'refresh item should call host app discovery')
-  assert.match(index, /Refreshed application index: \{count\} apps/, 'refresh success should use localized count text')
-  assert.match(index, /Cannot refresh application index: missing application discovery permission/, 'refresh permission failure should be visible')
+  assert.match(index, /title:\s*['"]refresh\.title['"]/, 'refresh item title should use the plugin locale key')
+  assert.match(index, /subtitle:\s*['"]refresh\.subtitle['"]/, 'refresh item subtitle should use the plugin locale key')
+  assert.match(index, /ctx\.t\(['"]refresh\.success['"]/, 'refresh success should use plugin i18n')
+  assert.match(index, /ctx\.t\(['"]refresh\.permissionDenied['"]/, 'refresh permission failure should use plugin i18n')
+  assert.doesNotMatch(index, /titleI18n:\s*\{[^}]*刷新应用索引|subtitleI18n:\s*\{[^}]*扫描已安装应用/, 'refresh launcher item should not hard-code localized display strings')
+  assert.doesNotMatch(index, /Refresh Applications Index|Scan installed applications|Refreshed application index: \{count\} apps|Cannot refresh application index: missing application discovery permission/, 'refresh display and status copy should live in locales/*.json')
   for (const alias of ['app', 'apps', 'application', 'refresh apps', 'scan apps', '应用', '刷新应用', '扫描应用']) {
     assert.match(index, new RegExp(String.raw`['"]${alias}['"]`), `refresh item should declare alias ${alias}`)
   }
@@ -189,16 +200,17 @@ function assertCacheAndSearchRules() {
 
   assert.match(model, /type CachedAppEntry\s*=\s*\{[\s\S]*nameI18n\?:/, 'cached app entries should keep localized app display names')
   assert.match(model, /type CachedAppEntry\s*=\s*\{[\s\S]*aliases\?:\s*string\[\]/, 'cached app entries should keep host-provided app search aliases')
-  assert.match(model, /type AppLauncherCache\s*=\s*\{[\s\S]*version:\s*4[\s\S]*locale\?:\s*string[\s\S]*refreshedAt:\s*number[\s\S]*apps:\s*CachedAppEntry\[\]/, 'cache model should match design schema and track locale-specific app names')
-  assert.match(model, /APP_LAUNCHER_CACHE_KEY\s*=\s*['"]app-launcher:index:v4['"]/, 'cache key should invalidate older app indexes that did not persist localized names')
+  assert.match(model, /type AppLauncherCache\s*=\s*\{[\s\S]*version:\s*5[\s\S]*refreshedAt:\s*number[\s\S]*apps:\s*CachedAppEntry\[\]/, 'cache model should match design schema and store system-localized app names')
+  assert.doesNotMatch(model, /locale\?:\s*string/, 'app launcher cache should not be partitioned by the app UI locale')
+  assert.match(model, /APP_LAUNCHER_CACHE_KEY\s*=\s*['"]app-launcher:index:v5['"]/, 'cache key should invalidate older UI-locale-scoped app indexes')
   assert.doesNotMatch(model, /iconBlobId|iconHash/, 'cached apps should not store copied app icon blob refs')
   assert.match(repository, /replaceCache/, 'repository should replace cache atomically after refresh success')
-  assert.match(repository, /readCache\(locale\?:\s*string\)/, 'dynamic query should read cache without scanning')
-  assert.match(repository, /cache\.locale\s*!==\s*locale/, 'app index cache should be invalidated when the UI locale changes')
+  assert.match(repository, /readCache\(\)/, 'dynamic query should read cache without scanning')
+  assert.doesNotMatch(repository, /cache\.locale|locale\?:\s*string/, 'app index cache should not be invalidated by UI locale changes')
   assert.match(repository, /storeDiscoveredApps/, 'repository should store discovered app metadata')
   assert.match(repository, /nameI18n:\s*app\.nameI18n/, 'repository should persist localized app names from host discovery')
   assert.match(repository, /aliases:\s*app\.aliases/, 'repository should persist host-provided app aliases such as CFBundleName')
-  assert.match(repository, /storeDiscoveredApps\(apps:[\s\S]*locale\?:\s*string/, 'repository should persist the locale used for discovered app names')
+  assert.doesNotMatch(repository, /locale,/, 'repository should not persist the UI locale for discovered app names')
   assert.doesNotMatch(repository, /storage\.blob|icon\.bytes|contentType:\s*app\.icon/, 'repository must not persist copied app icons')
   assert.doesNotMatch(repository, /discoverApps/, 'repository reads must not trigger host scans')
 
@@ -209,8 +221,8 @@ function assertCacheAndSearchRules() {
   assert.doesNotMatch(indexOrHelpers(), /aliases:\s*\[[\s\S]*displayPath[\s\S]*\]/, 'full displayPath should not be added to aliases')
   assert.match(indexOrHelpers(), /duplicateNameSubtitles|sameName|normalizeAppName/, 'subtitles should handle exact duplicate normalized names')
   assert.match(indexOrHelpers(), /trim\(\)[\s\S]*toLowerCase\(\)|toLowerCase\(\)[\s\S]*trim\(\)/, 'duplicate-name subtitles should use trim + lowercase normalization')
-  assert.match(indexOrHelpers(), /readCache\(ctx\.locale\)[\s\S]*dynamicItems|dynamicItems[\s\S]*readCache\(ctx\.locale\)/, 'dynamic launcher queries should be served from locale-aware cache')
-  assert.match(indexOrHelpers(), /titleI18n:\s*app\.nameI18n/, 'dynamic app items should render localized app names through titleI18n')
+  assert.match(indexOrHelpers(), /readCache\(\)[\s\S]*dynamicItems|dynamicItems[\s\S]*readCache\(\)/, 'dynamic launcher queries should be served from the system-language cache')
+  assert.doesNotMatch(indexOrHelpers(), /titleI18n:\s*app\.nameI18n/, 'dynamic app items should not override the system-localized app name with UI-locale titleI18n')
   assert.match(indexOrHelpers(), /aliases:\s*searchAliases\(app\)/, 'dynamic app items should pass app aliases through to launcher ranking')
   assert.doesNotMatch(indexOrHelpers(), /dynamicItems[\s\S]{0,1200}discoverApps/, 'dynamic launcher queries must not trigger a disk scan')
 }
@@ -377,7 +389,8 @@ function assertNativeHostCommands() {
   assert.match(tauri, /nameI18n|name_i18n/, 'Tauri host should return localized app name maps to the launcher')
   assert.match(tauri, /aliases[\s\S]*Vec<String>/, 'Tauri host should return app aliases for alternative names such as Feishu')
   assert.match(tauri, /CFBundleName should be searchable as an app alias/, 'native tests should cover CFBundleName aliases such as Feishu')
-  assert.match(tauri, /discover_installed_apps\(locale:\s*Option<String>\)/, 'macOS app discovery should accept the current UI locale')
+  assert.match(tauri, /displayNameAtPath|localizedName/, 'macOS app discovery should use system display-name localization')
+  assert.match(tauri, /fn discover_installed_apps\(\)/, 'macOS app discovery should not accept the current UI locale')
   assert.match(tauri, /飞书/, 'native tests should cover localized macOS app display names such as Feishu/Lark')
   assert.match(iconReader, /iconForFile|NSWorkspace/, 'installed app icon reads should use the system icon API')
   assert.match(iconReader, /representationUsingType:\s*4usize|imageRepWithData/, 'installed app icon reads should convert image bytes in memory')

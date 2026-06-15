@@ -13,16 +13,15 @@ export type CachedAppEntry = {
 }
 
 export type AppLauncherCache = {
-  version: 4
-  locale?: string
+  version: 5
   refreshedAt: number
   apps: CachedAppEntry[]
 }
 
-export const APP_LAUNCHER_CACHE_KEY = 'app-launcher:index:v4'
+export const APP_LAUNCHER_CACHE_KEY = 'app-launcher:index:v5'
 
 export const EMPTY_APP_LAUNCHER_CACHE: AppLauncherCache = {
-  version: 4,
+  version: 5,
   refreshedAt: 0,
   apps: [],
 }

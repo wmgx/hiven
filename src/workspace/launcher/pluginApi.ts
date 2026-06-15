@@ -112,8 +112,7 @@ export function createPluginAppsApi(options: PluginLauncherApiOptions = {}): Plu
       const snapshot = permissions()
       if (snapshot) requirePluginPermissions(snapshot, ['app.discover'])
       const { invoke } = await import('@tauri-apps/api/core')
-      const locale = useAppStore.getState().locale
-      return await invoke('discover_installed_apps', { locale }) as DiscoveredApp[]
+      return await invoke('discover_installed_apps') as DiscoveredApp[]
     },
     cacheAppIcons: async (appIds: string[]) => {
       const snapshot = permissions()

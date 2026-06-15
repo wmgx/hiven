@@ -701,9 +701,43 @@ fn read_macos_localized_bundle_name(path: &Path, locale: Option<&str>) -> Option
     None
 }
 
+#[cfg(target_os = "macos")]
+fn read_macos_system_display_name(path: &Path) -> Option<String> {
+    let path = CString::new(path.to_string_lossy().as_bytes()).ok()?;
+    unsafe {
+        let ns_string_cls = objc2::runtime::AnyClass::get(c"NSString")?;
+        let ns_path: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![ns_string_cls, stringWithUTF8String: path.as_ptr()];
+        if ns_path.is_null() {
+            return None;
+        }
+        let file_manager_cls = objc2::runtime::AnyClass::get(c"NSFileManager")?;
+        let file_manager: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![file_manager_cls, defaultManager];
+        if file_manager.is_null() {
+            return None;
+        }
+        let name: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![file_manager, displayNameAtPath: ns_path];
+        if name.is_null() {
+            return None;
+        }
+        let utf8: *const std::ffi::c_char = objc2::msg_send![name, UTF8String];
+        if utf8.is_null() {
+            return None;
+        }
+        let value = CStr::from_ptr(utf8).to_string_lossy().trim().to_string();
+        (!value.is_empty()).then_some(value)
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn read_macos_system_display_name(_path: &Path) -> Option<String> {
+    None
+}
+
 fn read_macos_bundle_metadata(
     path: &Path,
-    locale: Option<&str>,
 ) -> (
     Option<String>,
     Option<String>,
@@ -719,7 +753,7 @@ fn read_macos_bundle_metadata(
         .clone()
         .or_else(|| plist_bundle_name.clone());
     let zh_name = read_macos_localized_bundle_name(path, Some("zh"));
-    let name = read_macos_localized_bundle_name(path, locale)
+    let name = read_macos_system_display_name(path)
         .or_else(|| plist_name.clone())
         .or_else(|| zh_name.clone());
     let mut name_i18n = HashMap::new();
@@ -845,7 +879,7 @@ fn system_open_app_target(target: &str) -> Result<(), String> {
 }
 
 #[cfg(target_os = "macos")]
-fn discover_platform_apps_for_locale(locale: Option<&str>) -> Vec<InstalledAppEntry> {
+fn discover_platform_apps() -> Vec<InstalledAppEntry> {
     let mut roots = vec![
         PathBuf::from("/Applications"),
         PathBuf::from("/System/Applications"),
@@ -867,7 +901,7 @@ fn discover_platform_apps_for_locale(locale: Option<&str>) -> Vec<InstalledAppEn
             let canonical = path.canonicalize().unwrap_or(path.clone());
             let canonical_str = canonical.to_string_lossy().to_string();
             let (bundle_id, bundle_name, name_i18n, aliases) =
-                read_macos_bundle_metadata(&canonical, locale);
+                read_macos_bundle_metadata(&canonical);
             let app_id = bundle_id
                 .map(|id| format!("macos:bundle:{}", id))
                 .unwrap_or_else(|| format!("macos:path:{}", stable_hash(&canonical_str)));
@@ -890,7 +924,7 @@ fn discover_platform_apps_for_locale(locale: Option<&str>) -> Vec<InstalledAppEn
 }
 
 #[cfg(target_os = "windows")]
-fn discover_platform_apps_for_locale(_locale: Option<&str>) -> Vec<InstalledAppEntry> {
+fn discover_platform_apps() -> Vec<InstalledAppEntry> {
     let mut roots = Vec::new();
     if let Some(appdata) = std::env::var_os("APPDATA") {
         roots.push(PathBuf::from(appdata).join("Microsoft\\Windows\\Start Menu\\Programs"));
@@ -1015,7 +1049,7 @@ fn parse_windows_app_paths_registry_output(raw: &str) -> Vec<InstalledAppEntry> 
 }
 
 #[cfg(target_os = "linux")]
-fn discover_platform_apps_for_locale(_locale: Option<&str>) -> Vec<InstalledAppEntry> {
+fn discover_platform_apps() -> Vec<InstalledAppEntry> {
     let mut roots = vec![
         PathBuf::from("/usr/share/applications"),
         PathBuf::from("/usr/local/share/applications"),
@@ -1041,10 +1075,6 @@ fn discover_platform_apps_for_locale(_locale: Option<&str>) -> Vec<InstalledAppE
         }
     }
     dedupe_installed_apps(apps)
-}
-
-fn discover_platform_apps() -> Vec<InstalledAppEntry> {
-    discover_platform_apps_for_locale(None)
 }
 
 #[allow(dead_code)]
@@ -1085,8 +1115,8 @@ fn dedupe_installed_apps(apps: Vec<InstalledAppEntry>) -> Vec<InstalledAppEntry>
 }
 
 #[tauri::command]
-fn discover_installed_apps(locale: Option<String>) -> Result<Vec<DiscoveredApp>, String> {
-    let apps = discover_platform_apps_for_locale(locale.as_deref());
+fn discover_installed_apps() -> Result<Vec<DiscoveredApp>, String> {
+    let apps = discover_platform_apps();
     if let Ok(mut targets) = installed_app_targets().lock() {
         targets.clear();
         for app in &apps {
@@ -2296,7 +2326,7 @@ mod plugin_dir_command_tests {
     }
 
     #[test]
-    fn macos_bundle_metadata_prefers_localized_info_plist_strings() {
+    fn macos_bundle_metadata_keeps_search_names_and_uses_system_display_name() {
         let dir = unique_home("macos-localized-bundle");
         let app = dir.join("Lark.app");
         let contents = app.join("Contents");
@@ -2319,10 +2349,12 @@ CFBundleName = "飞书";"#,
         )
         .expect("localized InfoPlist.strings fixture should be written");
 
-        let (bundle_id, zh_name, name_i18n, aliases) =
-            read_macos_bundle_metadata(&app, Some("zh-CN"));
+        let (bundle_id, system_name, name_i18n, aliases) = read_macos_bundle_metadata(&app);
         assert_eq!(bundle_id.as_deref(), Some("com.electron.lark"));
-        assert_eq!(zh_name.as_deref(), Some("飞书"));
+        assert_eq!(
+            system_name.as_deref(),
+            read_macos_system_display_name(&app).as_deref()
+        );
         assert_eq!(
             name_i18n
                 .as_ref()
@@ -2335,8 +2367,6 @@ CFBundleName = "飞书";"#,
             "CFBundleName should be searchable as an app alias"
         );
 
-        let (_, en_name, _, _) = read_macos_bundle_metadata(&app, Some("en"));
-        assert_eq!(en_name.as_deref(), Some("Lark"));
         let _ = fs::remove_dir_all(dir);
     }
 
