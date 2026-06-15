@@ -55,15 +55,15 @@
 body,
 body[data-theme='dark'],
 .flux-spatial-shell[data-theme='dark'] {
-  --bg-page: #0d0f14;
+  --bg-page: #15120e;
   --bg-gradient:
-    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(99, 102, 241, 0.12), transparent),
-    radial-gradient(ellipse 60% 50% at 80% 50%, rgba(79, 70, 229, 0.06), transparent),
-    radial-gradient(ellipse 50% 40% at 10% 80%, rgba(139, 92, 246, 0.04), transparent);
-  --color-accent: #8b93ff;
-  --color-accent-hover: #a6adff;
-  --color-accent-light: rgba(139, 147, 255, 0.24);
-  --color-accent-glow: rgba(139, 147, 255, 0.32);
+    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(217, 154, 78, 0.14), transparent),
+    radial-gradient(ellipse 60% 50% at 80% 50%, rgba(199, 160, 106, 0.07), transparent),
+    radial-gradient(ellipse 50% 40% at 10% 80%, rgba(180, 130, 70, 0.05), transparent);
+  --color-accent: #d99a4e;
+  --color-accent-hover: #e3a95f;
+  --color-accent-light: rgba(217, 154, 78, 0.18);
+  --color-accent-glow: rgba(217, 154, 78, 0.32);
   --color-success: #10b981;
   --color-success-bg: rgba(16, 185, 129, 0.15);
   --color-success-text: #34d399;
@@ -72,51 +72,51 @@ body[data-theme='dark'],
   --color-error: #ef4444;
   --color-error-bg: rgba(239, 68, 68, 0.15);
   --color-error-text: #fca5a5;
-  --glass-border: rgba(223, 230, 246, 0.16);
-  --glass-bg: rgba(22, 25, 33, 0.72);
-  --glass-bg-solid: rgba(22, 25, 33, 0.96);
+  --glass-border: rgba(240, 232, 218, 0.16);
+  --glass-bg: rgba(33, 29, 22, 0.72);
+  --glass-bg-solid: rgba(33, 29, 22, 0.96);
   --glass-shine:
     inset 0 1px 1px rgba(255, 255, 255, 0.1),
     inset 0 0 0 1px rgba(255, 255, 255, 0.04);
   --shadow-panel:
     0 24px 48px -12px rgba(0, 0, 0, 0.62),
     0 12px 24px -8px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(223, 230, 246, 0.12);
+    0 0 0 1px rgba(240, 232, 218, 0.12);
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
   --color-bg: var(--bg-page);
-  --color-text: #f4f7fb;
-  --color-text-muted: #c3c8d2;
-  --color-text-faint: #8d96a3;
-  --color-surface: rgba(223, 230, 246, 0.08);
-  --color-surface-hover: rgba(223, 230, 246, 0.14);
-  --color-divider: rgba(223, 230, 246, 0.12);
-  --input-bg: rgba(223, 230, 246, 0.1);
-  --btn-ghost-hover: rgba(223, 230, 246, 0.12);
-  --scrollbar-thumb: rgba(223, 230, 246, 0.22);
+  --color-text: #f6f1e9;
+  --color-text-muted: #c7bdab;
+  --color-text-faint: #978d7b;
+  --color-surface: rgba(240, 232, 218, 0.08);
+  --color-surface-hover: rgba(240, 232, 218, 0.14);
+  --color-divider: rgba(240, 232, 218, 0.12);
+  --input-bg: rgba(240, 232, 218, 0.1);
+  --btn-ghost-hover: rgba(240, 232, 218, 0.12);
+  --scrollbar-thumb: rgba(240, 232, 218, 0.22);
 
   --color-background-primary: var(--bg-page);
-  --color-background-secondary: rgba(223, 230, 246, 0.08);
-  --color-background-tertiary: rgba(223, 230, 246, 0.14);
+  --color-background-secondary: rgba(240, 232, 218, 0.08);
+  --color-background-tertiary: rgba(240, 232, 218, 0.14);
   --color-text-primary: var(--color-text);
   --color-text-secondary: var(--color-text-muted);
   --color-text-tertiary: var(--color-text-faint);
-  --color-border-secondary: rgba(223, 230, 246, 0.22);
+  --color-border-secondary: rgba(240, 232, 218, 0.22);
   --color-border-tertiary: var(--color-divider);
   --color-accent-bg: var(--color-accent-light);
 }
 
 body[data-theme='light'],
 .flux-spatial-shell[data-theme='light'] {
-  --bg-page: #f7f8fb;
+  --bg-page: #f8f6f2;
   --bg-gradient:
-    radial-gradient(ellipse 80% 55% at 50% -18%, rgba(99, 102, 241, 0.08), transparent),
-    radial-gradient(ellipse 58% 45% at 100% 12%, rgba(14, 165, 233, 0.035), transparent),
-    linear-gradient(180deg, #f8f9fc 0%, #f3f5f9 100%);
-  --color-accent: #4f46e5;
-  --color-accent-hover: #4338ca;
-  --color-accent-light: rgba(79, 70, 229, 0.09);
-  --color-accent-glow: rgba(79, 70, 229, 0.14);
+    radial-gradient(ellipse 80% 55% at 50% -18%, rgba(176, 111, 26, 0.07), transparent),
+    radial-gradient(ellipse 58% 45% at 100% 12%, rgba(217, 119, 6, 0.03), transparent),
+    linear-gradient(180deg, #faf8f4 0%, #f4f1ea 100%);
+  --color-accent: #b06f1a;
+  --color-accent-hover: #985f14;
+  --color-accent-light: rgba(176, 111, 26, 0.1);
+  --color-accent-glow: rgba(176, 111, 26, 0.16);
   --color-success: #059669;
   --color-success-bg: rgba(5, 150, 105, 0.1);
   --color-success-text: #047857;
@@ -125,36 +125,36 @@ body[data-theme='light'],
   --color-error: #dc2626;
   --color-error-bg: rgba(220, 38, 38, 0.1);
   --color-error-text: #b91c1c;
-  --glass-border: rgba(15, 23, 42, 0.08);
+  --glass-border: rgba(60, 40, 10, 0.1);
   --glass-bg: rgba(255, 255, 255, 0.78);
   --glass-bg-solid: rgba(255, 255, 255, 0.96);
   --glass-shine:
     inset 0 1px 1px rgba(255, 255, 255, 0.8),
     inset 0 0 0 1px rgba(255, 255, 255, 0.55);
   --shadow-panel:
-    0 20px 42px -20px rgba(15, 23, 42, 0.18),
-    0 10px 24px -18px rgba(15, 23, 42, 0.12),
-    0 0 0 1px rgba(15, 23, 42, 0.06);
-  --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.05);
-  --shadow-md: 0 10px 22px rgba(15, 23, 42, 0.08);
+    0 20px 42px -20px rgba(60, 40, 10, 0.16),
+    0 10px 24px -18px rgba(60, 40, 10, 0.1),
+    0 0 0 1px rgba(60, 40, 10, 0.06);
+  --shadow-sm: 0 2px 8px rgba(60, 40, 10, 0.05);
+  --shadow-md: 0 10px 22px rgba(60, 40, 10, 0.08);
   --color-bg: var(--bg-page);
-  --color-text: #111113;
-  --color-text-muted: #4b5563;
-  --color-text-faint: #6b7280;
-  --color-surface: rgba(15, 23, 42, 0.025);
+  --color-text: #241d12;
+  --color-text-muted: #665a48;
+  --color-text-faint: #9a8e78;
+  --color-surface: rgba(60, 40, 10, 0.025);
   --color-surface-hover: rgba(255, 255, 255, 0.92);
-  --color-divider: rgba(15, 23, 42, 0.08);
-  --input-bg: rgba(15, 23, 42, 0.04);
-  --btn-ghost-hover: rgba(15, 23, 42, 0.055);
-  --scrollbar-thumb: rgba(15, 23, 42, 0.14);
+  --color-divider: rgba(60, 40, 10, 0.08);
+  --input-bg: rgba(60, 40, 10, 0.04);
+  --btn-ghost-hover: rgba(60, 40, 10, 0.055);
+  --scrollbar-thumb: rgba(60, 40, 10, 0.14);
 
   --color-background-primary: var(--bg-page);
   --color-background-secondary: rgba(255, 255, 255, 0.78);
-  --color-background-tertiary: rgba(15, 23, 42, 0.055);
+  --color-background-tertiary: rgba(60, 40, 10, 0.055);
   --color-text-primary: var(--color-text);
   --color-text-secondary: var(--color-text-muted);
   --color-text-tertiary: var(--color-text-faint);
-  --color-border-secondary: rgba(15, 23, 42, 0.14);
+  --color-border-secondary: rgba(60, 40, 10, 0.14);
   --color-border-tertiary: var(--color-divider);
   --color-accent-bg: var(--color-accent-light);
 }
@@ -1802,8 +1802,8 @@ html[data-window='launcher'] .global-launcher-panel :is(input, textarea, select,
   background: color-mix(in srgb, var(--color-accent) 12%, #fff);
   color: var(--color-accent-hover);
   box-shadow:
-    0 8px 18px -14px rgba(79, 70, 229, 0.42),
-    0 0 0 1px rgba(79, 70, 229, 0.08);
+    0 8px 18px -14px rgba(176, 111, 26,0.42),
+    0 0 0 1px rgba(176, 111, 26,0.08);
   transform: translateY(-1px);
 }
 
@@ -1813,7 +1813,7 @@ html[data-window='launcher'] .global-launcher-panel :is(input, textarea, select,
   color: var(--color-text-primary);
   box-shadow:
     0 8px 18px -16px rgba(0, 0, 0, 0.8),
-    0 0 0 1px rgba(139, 147, 255, 0.08);
+    0 0 0 1px rgba(217, 154, 78,0.08);
   transform: translateY(-1px);
 }
 
@@ -1829,7 +1829,7 @@ html[data-window='launcher'] .global-launcher-panel :is(input, textarea, select,
   color: #fff;
   filter: none;
   box-shadow:
-    0 10px 22px -14px rgba(79, 70, 229, 0.62),
+    0 10px 22px -14px rgba(176, 111, 26,0.62),
     0 0 0 1px rgba(255, 255, 255, 0.2) inset;
   transform: translateY(-1px);
 }
@@ -1870,10 +1870,10 @@ html[data-window='launcher'] .global-launcher-panel :is(input, textarea, select,
 
 .flux-spatial-shell[data-theme='light'] .script-card:hover {
   background: #fff;
-  border-color: rgba(79, 70, 229, 0.22);
+  border-color: rgba(176, 111, 26,0.22);
   box-shadow:
     0 14px 30px -22px rgba(15, 23, 42, 0.28),
-    0 0 0 1px rgba(79, 70, 229, 0.05);
+    0 0 0 1px rgba(176, 111, 26,0.05);
   transform: translateY(-2px);
 }
 
@@ -1888,7 +1888,7 @@ html[data-window='launcher'] .global-launcher-panel :is(input, textarea, select,
   border-color: var(--color-border-secondary);
   box-shadow:
     0 8px 18px -14px rgba(0, 0, 0, 0.7),
-    0 0 0 1px rgba(139, 147, 255, 0.08);
+    0 0 0 1px rgba(217, 154, 78,0.08);
   transform: translateY(-1px);
 }
 
