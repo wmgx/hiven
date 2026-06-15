@@ -53,5 +53,8 @@ assertNotHas(files.pinnedRunner, /Controls panel placeholder/, 'PinnedRunnerView
 assertHas(files.pinnedRunner, /updatePinnedAction\([^)]*\{\s*params:/s, 'PinnedRunner controls should update PinnedAction.params')
 assertHas(files.pinnedRunner, /param\.type\s*===\s*['"]single-select['"]|case\s+['"]single-select['"]/, 'PinnedRunner controls should support select params')
 assertHas(files.pinnedRunner, /param\.type\s*===\s*['"]boolean['"]|case\s+['"]boolean['"]/, 'PinnedRunner controls should support boolean params')
+assertHas(files.pinnedRunner, /localized\(pinned\.title,\s*pinned\.titleI18n,\s*locale\)/, 'PinnedRunner title should follow the current locale')
+assertNotHas(files.pinnedRunner, /\{pinned\.title\}/, 'PinnedRunner should not render raw persisted English title text')
+assertHas(files.i18n, /pinned\.controlsTitle/, 'i18n should define a localized custom controls panel title')
 
 console.log('pinned action completion-gap checks passed')

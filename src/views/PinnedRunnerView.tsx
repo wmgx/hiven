@@ -102,6 +102,10 @@ export function PinnedRunnerView() {
   }), [actionParams, pinned?.params])
   const paramsFingerprint = useMemo(() => JSON.stringify(params), [params])
   const activationRunKey = pinnedRuntime?.lastActivatedAt ?? 0
+  const getPinnedTitle = useCallback(
+    (action: PinnedAction) => localized(action.title, action.titleI18n, locale),
+    [locale],
+  )
 
   const runPinnedAction = async () => {
     if (!pinned) return
@@ -182,7 +186,7 @@ export function PinnedRunnerView() {
 
   const sendOutputToNewPane = () => {
     if (!pinned || !canApplyOutput) return
-    applyEffects([{ type: 'pane.create', pane: { text: pinned.outputText, title: pinned.title }, focus: true }])
+    applyEffects([{ type: 'pane.create', pane: { text: pinned.outputText, title: getPinnedTitle(pinned) }, focus: true }])
     setActiveView('editor')
   }
 
@@ -203,7 +207,7 @@ export function PinnedRunnerView() {
             params,
           },
           scope: { type: 'pinned-action', pinnedId: pinned.id },
-          title: `${pinned.title} Controls`,
+          title: t(locale, 'pinned.controlsTitle', { title: getPinnedTitle(pinned) }),
           ownerPluginId: pluginCommand?.meta.pluginId,
           _isDev: pinned.isDev,
         }
@@ -231,6 +235,7 @@ export function PinnedRunnerView() {
     )
   }
 
+  const pinnedTitle = localized(pinned.title, pinned.titleI18n, locale)
   const statusText = running
     ? t(locale, 'pinned.status.running')
     : pinned.lastError
@@ -247,7 +252,7 @@ export function PinnedRunnerView() {
         style={{ borderWidth: '0 0 1px' }}
       >
         <div className="min-w-0 flex items-center gap-3">
-          <div className="scripts-title truncate text-[14px]">{pinned.title}</div>
+          <div className="scripts-title truncate text-[14px]">{pinnedTitle}</div>
           <span
             className="text-[11px] px-2 py-0.5 rounded-full"
             style={{
@@ -353,7 +358,7 @@ export function PinnedRunnerView() {
       {/* Controls Panel */}
       {pinned.controlsOpen && !customControls?.panelId && (
         <PinnedActionControls
-          pinned={pinned}
+          title={pinnedTitle}
           params={params}
           actionParams={actionParams}
           locale={locale}
@@ -473,7 +478,7 @@ function PinnedMonacoEditor({ pinnedId, value, onChange, readOnly, onBlur }: {
   )
 }
 
-function PinnedActionControls({ pinned, params, actionParams, locale, onChange }: { pinned: PinnedAction; params: Record<string, unknown>; actionParams: ControlParam[]; locale: Locale; onChange: (params: Record<string, unknown>) => void }) {
+function PinnedActionControls({ title, params, actionParams, locale, onChange }: { title: string; params: Record<string, unknown>; actionParams: ControlParam[]; locale: Locale; onChange: (params: Record<string, unknown>) => void }) {
   const visibleParams = actionParams.filter((param) => isParamVisible(param, params))
 
   const updateParam = (key: string, value: unknown) => {
@@ -483,7 +488,7 @@ function PinnedActionControls({ pinned, params, actionParams, locale, onChange }
   if (visibleParams.length === 0) {
     return (
       <div className="pinned-controls-empty">
-        {t(locale, 'pinned.noControls', { title: pinned.title })}
+        {t(locale, 'pinned.noControls', { title })}
       </div>
     )
   }
