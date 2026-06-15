@@ -1,3 +1,4 @@
+use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::HashMap;
 #[cfg(target_os = "macos")]
 use std::ffi::{CStr, CString};
@@ -1375,6 +1376,28 @@ struct PluginBlobMetadata {
     updated_at: u128,
 }
 
+#[derive(serde::Serialize)]
+struct PluginKvListEntry {
+    key: String,
+    #[serde(rename = "updatedAt")]
+    updated_at: i64,
+}
+
+#[derive(serde::Serialize)]
+struct PluginKvUsage {
+    bytes: i64,
+    #[serde(rename = "itemCount")]
+    item_count: i64,
+}
+
+#[derive(serde::Serialize)]
+struct PluginKvPruneResult {
+    #[serde(rename = "removedBytes")]
+    removed_bytes: i64,
+    #[serde(rename = "removedItems")]
+    removed_items: i64,
+}
+
 fn validate_plugin_storage_source(source: &str) -> Result<(), String> {
     match source {
         "builtin" | "installed" | "dev" => Ok(()),
@@ -1393,6 +1416,68 @@ fn validate_storage_segment(value: &str, label: &str) -> Result<(), String> {
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
     {
         return Err(format!("{} must be a plain storage id", label));
+    }
+    Ok(())
+}
+
+fn validate_plugin_kv_key(key: &str) -> Result<(), String> {
+    if key.trim().is_empty() || key.contains('\0') || key.len() > 2048 {
+        return Err("Plugin KV key must be non-empty plain text".to_string());
+    }
+    Ok(())
+}
+
+fn plugin_kv_db_path() -> Result<PathBuf, String> {
+    let dir = config_dir()?.join("plugin-data");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("plugin-storage.sqlite"))
+}
+
+fn open_plugin_kv_db() -> Result<Connection, String> {
+    let connection = Connection::open(plugin_kv_db_path()?).map_err(|e| e.to_string())?;
+    connection
+        .execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS plugin_kv (
+              source TEXT NOT NULL,
+              plugin_id TEXT NOT NULL,
+              key TEXT NOT NULL,
+              value_json TEXT NOT NULL,
+              byte_size INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              PRIMARY KEY (source, plugin_id, key)
+            );
+            CREATE INDEX IF NOT EXISTS idx_plugin_kv_namespace_updated
+              ON plugin_kv (source, plugin_id, updated_at);
+            "#,
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(connection)
+}
+
+fn validate_plugin_kv_namespace(source: &str, plugin_id: &str) -> Result<(), String> {
+    validate_plugin_storage_source(source)?;
+    validate_storage_segment(plugin_id, "Plugin id")
+}
+
+fn current_millis_i64() -> Result<i64, String> {
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis();
+    i64::try_from(millis).map_err(|_| "Current timestamp is too large".to_string())
+}
+
+fn validate_plugin_kv_prune_policy(
+    max_items: Option<i64>,
+    max_bytes: Option<i64>,
+    max_age_days: Option<i64>,
+) -> Result<(), String> {
+    if max_items.is_some_and(|value| value < 0)
+        || max_bytes.is_some_and(|value| value < 0)
+        || max_age_days.is_some_and(|value| value < 0)
+    {
+        return Err("Plugin KV prune limits must be non-negative".to_string());
     }
     Ok(())
 }
@@ -1439,6 +1524,229 @@ fn plugin_blob_paths(
         return Err("Plugin blob path escaped its storage directory".to_string());
     }
     Ok((canonical_data, metadata))
+}
+
+#[tauri::command]
+fn plugin_kv_get(source: String, plugin_id: String, key: String) -> Result<Option<String>, String> {
+    validate_plugin_kv_namespace(&source, &plugin_id)?;
+    validate_plugin_kv_key(&key)?;
+    let connection = open_plugin_kv_db()?;
+    connection
+        .query_row(
+            "SELECT value_json FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 AND key = ?3",
+            params![source, plugin_id, key],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn plugin_kv_set(
+    source: String,
+    plugin_id: String,
+    key: String,
+    value_json: String,
+) -> Result<(), String> {
+    validate_plugin_kv_namespace(&source, &plugin_id)?;
+    validate_plugin_kv_key(&key)?;
+    let byte_size =
+        i64::try_from(value_json.len()).map_err(|_| "Plugin KV value is too large".to_string())?;
+    let updated_at = current_millis_i64()?;
+    let connection = open_plugin_kv_db()?;
+    connection
+        .execute(
+            r#"
+            INSERT INTO plugin_kv (source, plugin_id, key, value_json, byte_size, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            ON CONFLICT(source, plugin_id, key) DO UPDATE SET
+              value_json = excluded.value_json,
+              byte_size = excluded.byte_size,
+              updated_at = excluded.updated_at
+            "#,
+            params![source, plugin_id, key, value_json, byte_size, updated_at],
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn plugin_kv_delete(source: String, plugin_id: String, key: String) -> Result<(), String> {
+    validate_plugin_kv_namespace(&source, &plugin_id)?;
+    validate_plugin_kv_key(&key)?;
+    let connection = open_plugin_kv_db()?;
+    connection
+        .execute(
+            "DELETE FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 AND key = ?3",
+            params![source, plugin_id, key],
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn plugin_kv_list(
+    source: String,
+    plugin_id: String,
+    prefix: Option<String>,
+) -> Result<Vec<PluginKvListEntry>, String> {
+    validate_plugin_kv_namespace(&source, &plugin_id)?;
+    if let Some(prefix) = prefix.as_deref() {
+        if prefix.contains('\0') {
+            return Err("Plugin KV prefix must be plain text".to_string());
+        }
+    }
+    let connection = open_plugin_kv_db()?;
+    let mut statement = connection
+        .prepare(
+            "SELECT key, updated_at FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 ORDER BY updated_at DESC, key ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = statement
+        .query_map(params![source, plugin_id], |row| {
+            Ok(PluginKvListEntry {
+                key: row.get(0)?,
+                updated_at: row.get(1)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut entries = Vec::new();
+    for row in rows {
+        let entry = row.map_err(|e| e.to_string())?;
+        if prefix
+            .as_ref()
+            .is_some_and(|prefix| !entry.key.starts_with(prefix))
+        {
+            continue;
+        }
+        entries.push(entry);
+    }
+    Ok(entries)
+}
+
+#[tauri::command]
+fn plugin_kv_usage(source: String, plugin_id: String) -> Result<PluginKvUsage, String> {
+    validate_plugin_kv_namespace(&source, &plugin_id)?;
+    let connection = open_plugin_kv_db()?;
+    let (bytes, item_count): (i64, i64) = connection
+        .query_row(
+            "SELECT COALESCE(SUM(byte_size), 0), COUNT(*) FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2",
+            params![source, plugin_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(PluginKvUsage { bytes, item_count })
+}
+
+#[tauri::command]
+fn plugin_kv_prune(
+    source: String,
+    plugin_id: String,
+    max_items: Option<i64>,
+    max_bytes: Option<i64>,
+    max_age_days: Option<i64>,
+) -> Result<PluginKvPruneResult, String> {
+    validate_plugin_kv_namespace(&source, &plugin_id)?;
+    validate_plugin_kv_prune_policy(max_items, max_bytes, max_age_days)?;
+
+    let mut connection = open_plugin_kv_db()?;
+    let transaction = connection.transaction().map_err(|e| e.to_string())?;
+    let mut removed_bytes = 0;
+    let mut removed_items = 0;
+
+    if let Some(days) = max_age_days {
+        let cutoff = current_millis_i64()?.saturating_sub(days.saturating_mul(86_400_000));
+        let expired = {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT key, byte_size FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 AND updated_at < ?3",
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = statement
+                .query_map(
+                    params![source.as_str(), plugin_id.as_str(), cutoff],
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+                )
+                .map_err(|e| e.to_string())?;
+            let mut expired = Vec::new();
+            for row in rows {
+                expired.push(row.map_err(|e| e.to_string())?);
+            }
+            expired
+        };
+        for (key, byte_size) in expired {
+            transaction
+                .execute(
+                    "DELETE FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 AND key = ?3",
+                    params![source.as_str(), plugin_id.as_str(), key],
+                )
+                .map_err(|e| e.to_string())?;
+            removed_bytes += byte_size;
+            removed_items += 1;
+        }
+    }
+
+    if max_items.is_some() || max_bytes.is_some() {
+        let mut items = {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT key, byte_size FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 ORDER BY updated_at DESC, key ASC",
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = statement
+                .query_map(params![source.as_str(), plugin_id.as_str()], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+                })
+                .map_err(|e| e.to_string())?;
+            let mut items = Vec::new();
+            for row in rows {
+                items.push(row.map_err(|e| e.to_string())?);
+            }
+            items
+        };
+
+        let mut total_items = i64::try_from(items.len())
+            .map_err(|_| "Plugin KV item count is too large".to_string())?;
+        let mut total_bytes = items.iter().map(|(_, byte_size)| *byte_size).sum::<i64>();
+
+        while let Some((key, byte_size)) = items.pop() {
+            let over_items = max_items.is_some_and(|limit| total_items > limit);
+            let over_bytes = max_bytes.is_some_and(|limit| total_bytes > limit);
+            if !over_items && !over_bytes {
+                break;
+            }
+            transaction
+                .execute(
+                    "DELETE FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 AND key = ?3",
+                    params![source.as_str(), plugin_id.as_str(), key],
+                )
+                .map_err(|e| e.to_string())?;
+            removed_bytes += byte_size;
+            removed_items += 1;
+            total_bytes -= byte_size;
+            total_items -= 1;
+        }
+    }
+
+    transaction.commit().map_err(|e| e.to_string())?;
+    Ok(PluginKvPruneResult {
+        removed_bytes,
+        removed_items,
+    })
+}
+
+#[tauri::command]
+fn plugin_kv_clear(source: String, plugin_id: String) -> Result<(), String> {
+    validate_plugin_kv_namespace(&source, &plugin_id)?;
+    let connection = open_plugin_kv_db()?;
+    connection
+        .execute(
+            "DELETE FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2",
+            params![source, plugin_id],
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -2230,6 +2538,13 @@ pub fn run() {
             open_plugin_dir,
             read_plugin_file,
             save_plugin_file,
+            plugin_kv_get,
+            plugin_kv_set,
+            plugin_kv_delete,
+            plugin_kv_list,
+            plugin_kv_usage,
+            plugin_kv_prune,
+            plugin_kv_clear,
             plugin_blob_save,
             plugin_blob_read,
             plugin_blob_delete,
@@ -2449,6 +2764,255 @@ HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\App Paths\Example.e
         assert_eq!(app.app_id, entry.app_id);
         assert_eq!(app.name, "Missing Icon");
         assert!(extract_app_icon(&entry).is_none());
+    }
+
+    #[test]
+    fn plugin_kv_round_trips_lists_usage_and_deletes() {
+        with_isolated_home("plugin-kv-round-trip", |home| {
+            plugin_kv_set(
+                "builtin".to_string(),
+                "clipboard-history".to_string(),
+                "items:a".to_string(),
+                r#"{"text":"a"}"#.to_string(),
+            )
+            .expect("plugin KV set should upsert a value");
+            plugin_kv_set(
+                "builtin".to_string(),
+                "clipboard-history".to_string(),
+                "items:b".to_string(),
+                r#"{"text":"bb"}"#.to_string(),
+            )
+            .expect("plugin KV set should upsert a second value");
+            plugin_kv_set(
+                "builtin".to_string(),
+                "clipboard-history".to_string(),
+                "index".to_string(),
+                r#"{"entries":["a","b"]}"#.to_string(),
+            )
+            .expect("plugin KV set should allow non-prefixed keys");
+            plugin_kv_set(
+                "installed".to_string(),
+                "clipboard-history".to_string(),
+                "items:a".to_string(),
+                r#"{"text":"isolated"}"#.to_string(),
+            )
+            .expect("plugin KV set should isolate sources");
+
+            assert_eq!(
+                plugin_kv_get(
+                    "builtin".to_string(),
+                    "clipboard-history".to_string(),
+                    "items:a".to_string(),
+                )
+                .expect("plugin KV get should succeed")
+                .as_deref(),
+                Some(r#"{"text":"a"}"#),
+            );
+            assert_eq!(
+                plugin_kv_get(
+                    "builtin".to_string(),
+                    "clipboard-history".to_string(),
+                    "missing".to_string(),
+                )
+                .expect("missing plugin KV get should succeed"),
+                None,
+            );
+
+            let mut item_keys: Vec<String> = plugin_kv_list(
+                "builtin".to_string(),
+                "clipboard-history".to_string(),
+                Some("items:".to_string()),
+            )
+            .expect("plugin KV list should succeed")
+            .into_iter()
+            .map(|entry| entry.key)
+            .collect();
+            item_keys.sort();
+            assert_eq!(
+                item_keys,
+                vec!["items:a".to_string(), "items:b".to_string()]
+            );
+
+            let usage = plugin_kv_usage("builtin".to_string(), "clipboard-history".to_string())
+                .expect("plugin KV usage should succeed");
+            assert_eq!(usage.item_count, 3);
+            assert_eq!(
+                usage.bytes,
+                (r#"{"text":"a"}"#.len()
+                    + r#"{"text":"bb"}"#.len()
+                    + r#"{"entries":["a","b"]}"#.len()) as i64,
+            );
+
+            plugin_kv_delete(
+                "builtin".to_string(),
+                "clipboard-history".to_string(),
+                "items:a".to_string(),
+            )
+            .expect("plugin KV delete should succeed");
+            assert_eq!(
+                plugin_kv_get(
+                    "builtin".to_string(),
+                    "clipboard-history".to_string(),
+                    "items:a".to_string(),
+                )
+                .expect("deleted plugin KV get should succeed"),
+                None,
+            );
+            assert!(
+                home.join(".local")
+                    .join("hiven")
+                    .join("plugin-data")
+                    .join("plugin-storage.sqlite")
+                    .exists(),
+                "plugin KV DB should live under the hiven config dir",
+            );
+        });
+    }
+
+    #[test]
+    fn plugin_kv_prune_and_clear_are_namespace_scoped() {
+        with_isolated_home("plugin-kv-prune", |_| {
+            for (key, value) in [("a", r#""aaaa""#), ("b", r#""bbbb""#), ("c", r#""cccc""#)] {
+                plugin_kv_set(
+                    "builtin".to_string(),
+                    "app-launcher".to_string(),
+                    key.to_string(),
+                    value.to_string(),
+                )
+                .expect("plugin KV fixture should be written");
+            }
+            plugin_kv_set(
+                "builtin".to_string(),
+                "other-plugin".to_string(),
+                "a".to_string(),
+                r#""keep""#.to_string(),
+            )
+            .expect("other namespace fixture should be written");
+
+            let result = plugin_kv_prune(
+                "builtin".to_string(),
+                "app-launcher".to_string(),
+                Some(2),
+                None,
+                None,
+            )
+            .expect("plugin KV prune should succeed");
+            assert_eq!(result.removed_items, 1);
+            assert!(result.removed_bytes > 0);
+            assert_eq!(
+                plugin_kv_usage("builtin".to_string(), "app-launcher".to_string())
+                    .expect("plugin KV usage should succeed")
+                    .item_count,
+                2,
+            );
+
+            plugin_kv_clear("builtin".to_string(), "app-launcher".to_string())
+                .expect("plugin KV clear should succeed");
+            assert_eq!(
+                plugin_kv_usage("builtin".to_string(), "app-launcher".to_string())
+                    .expect("cleared plugin KV usage should succeed")
+                    .item_count,
+                0,
+            );
+            assert_eq!(
+                plugin_kv_usage("builtin".to_string(), "other-plugin".to_string())
+                    .expect("other namespace usage should succeed")
+                    .item_count,
+                1,
+            );
+        });
+    }
+
+    #[test]
+    fn plugin_kv_prune_supports_max_bytes_and_max_age_days() {
+        with_isolated_home("plugin-kv-prune-limits", |_| {
+            for (key, value) in [("a", r#""aaaa""#), ("b", r#""bbbb""#), ("c", r#""cccc""#)] {
+                plugin_kv_set(
+                    "builtin".to_string(),
+                    "clipboard-history".to_string(),
+                    key.to_string(),
+                    value.to_string(),
+                )
+                .expect("plugin KV fixture should be written");
+            }
+
+            let result = plugin_kv_prune(
+                "builtin".to_string(),
+                "clipboard-history".to_string(),
+                None,
+                Some(12),
+                None,
+            )
+            .expect("plugin KV maxBytes prune should succeed");
+            assert_eq!(result.removed_items, 1);
+            assert!(
+                plugin_kv_usage("builtin".to_string(), "clipboard-history".to_string())
+                    .expect("plugin KV usage should succeed")
+                    .bytes
+                    <= 12,
+            );
+
+            plugin_kv_set(
+                "builtin".to_string(),
+                "clipboard-history".to_string(),
+                "old".to_string(),
+                r#""old""#.to_string(),
+            )
+            .expect("old plugin KV fixture should be written");
+            let connection = open_plugin_kv_db().expect("plugin KV DB should open");
+            connection
+                .execute(
+                    "UPDATE plugin_kv SET updated_at = 1 WHERE source = ?1 AND plugin_id = ?2 AND key = ?3",
+                    params!["builtin", "clipboard-history", "old"],
+                )
+                .expect("old plugin KV fixture should be backdated");
+
+            let result = plugin_kv_prune(
+                "builtin".to_string(),
+                "clipboard-history".to_string(),
+                None,
+                None,
+                Some(1),
+            )
+            .expect("plugin KV maxAgeDays prune should succeed");
+            assert_eq!(result.removed_items, 1);
+            assert_eq!(
+                plugin_kv_get(
+                    "builtin".to_string(),
+                    "clipboard-history".to_string(),
+                    "old".to_string(),
+                )
+                .expect("plugin KV get should succeed"),
+                None,
+            );
+        });
+    }
+
+    #[test]
+    fn plugin_kv_rejects_invalid_source_plugin_id_and_key() {
+        with_isolated_home("plugin-kv-rejects", |_| {
+            assert!(plugin_kv_set(
+                "remote".to_string(),
+                "app-launcher".to_string(),
+                "key".to_string(),
+                "1".to_string(),
+            )
+            .is_err());
+            assert!(plugin_kv_set(
+                "builtin".to_string(),
+                "../escape".to_string(),
+                "key".to_string(),
+                "1".to_string(),
+            )
+            .is_err());
+            assert!(plugin_kv_set(
+                "builtin".to_string(),
+                "app-launcher".to_string(),
+                "   ".to_string(),
+                "1".to_string(),
+            )
+            .is_err());
+        });
     }
 
     #[test]

@@ -337,6 +337,53 @@ function assertPluginBlobStorageNativePersistence() {
   )
 }
 
+function assertPluginKvStorageNativePersistence() {
+  const pluginStorage = read('src/workspace/pluginStorage.ts')
+  const tauri = readFilesUnder('src-tauri/src', /\.rs$/)
+  const repository = read('src/plugins/app-launcher/storage/repository.ts')
+
+  const kvApi = sliceBetween(
+    pluginStorage,
+    'kv: {',
+    '\n    blob:',
+    'plugin private storage should expose a KV API before blob API',
+  )
+  const quotaApi = sliceBetween(
+    pluginStorage,
+    'quota: {',
+    '\n    },\n  }',
+    'plugin private storage should expose a quota API',
+  )
+
+  assert.match(repository, /storage\.kv\.get/, 'app launcher cache should read through PluginPrivateStorageApi KV')
+  assert.match(repository, /storage\.kv\.set/, 'app launcher cache should write through PluginPrivateStorageApi KV')
+  assert.doesNotMatch(repository, /localStorage|@tauri-apps\/api\/core|invoke\(/, 'app launcher cache repository must not bypass plugin private storage')
+
+  assert.match(kvApi, /plugin_kv_get/, 'desktop KV get should use the native SQLite command')
+  assert.match(kvApi, /plugin_kv_set/, 'desktop KV set should use the native SQLite command')
+  assert.match(kvApi, /plugin_kv_delete/, 'desktop KV delete should use the native SQLite command')
+  assert.match(kvApi, /plugin_kv_list/, 'desktop KV list should use the native SQLite command')
+  assert.match(quotaApi, /plugin_kv_usage/, 'desktop quota usage should use the native SQLite command')
+  assert.match(quotaApi, /plugin_kv_prune/, 'desktop quota prune should use the native SQLite command')
+  assert.match(pluginStorage, /plugin_kv_clear/, 'installed plugin cleanup should clear native SQLite KV records')
+  assert.match(pluginStorage, /non-Tauri browser preview fallback/, 'localStorage KV should be documented as a non-Tauri preview fallback')
+
+  assert.match(tauri, /rusqlite/, 'Tauri host should use SQLite for plugin KV storage')
+  assert.match(tauri, /plugin-storage\.sqlite/, 'plugin KV SQLite file should live under plugin-data')
+  assert.match(tauri, /CREATE TABLE IF NOT EXISTS plugin_kv/, 'Tauri host should initialize a fixed plugin_kv table')
+  assert.match(tauri, /CREATE INDEX IF NOT EXISTS idx_plugin_kv_namespace_updated/, 'Tauri host should initialize the namespace updated_at index')
+  assert.match(tauri, /fn plugin_kv_get/, 'Tauri host should expose plugin_kv_get')
+  assert.match(tauri, /fn plugin_kv_set[\s\S]*ON CONFLICT\(source, plugin_id, key\) DO UPDATE/, 'plugin_kv_set should upsert by source/plugin/key')
+  assert.match(tauri, /fn plugin_kv_delete/, 'Tauri host should expose plugin_kv_delete')
+  assert.match(tauri, /fn plugin_kv_list/, 'Tauri host should expose plugin_kv_list')
+  assert.match(tauri, /fn plugin_kv_usage/, 'Tauri host should expose plugin_kv_usage')
+  assert.match(tauri, /fn plugin_kv_prune/, 'Tauri host should expose plugin_kv_prune')
+  assert.match(tauri, /fn plugin_kv_clear/, 'Tauri host should expose plugin_kv_clear')
+  assert.match(tauri, /"builtin" \| "installed" \| "dev"/, 'Tauri host should validate plugin storage source')
+  assert.match(tauri, /plugin_kv_round_trips_lists_usage_and_deletes/, 'native tests should cover plugin KV round trip behavior')
+  assert.match(tauri, /plugin_kv_prune_and_clear_are_namespace_scoped/, 'native tests should cover plugin KV prune and clear behavior')
+}
+
 function indexOrHelpers() {
   const candidates = [
     'src/plugins/app-launcher/index.ts',
@@ -419,6 +466,7 @@ assertCacheAndSearchRules()
 assertAppIconRuntimeBudget()
 assertPluginStartupHooks()
 assertPluginBlobStorageNativePersistence()
+assertPluginKvStorageNativePersistence()
 assertNativeHostCommands()
 
 console.log('app launcher contract checks passed')

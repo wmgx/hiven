@@ -1,8 +1,9 @@
 /**
  * Plugin Private Storage — Host Implementation
  *
- * Provides per-plugin isolated KV storage (localStorage) and native blob storage.
- * Plugins access this through PluginPrivateStorageApi; they never touch localStorage directly.
+ * Provides per-plugin isolated KV storage and native blob storage.
+ * Desktop KV is persisted by Tauri host SQLite commands. localStorage is only
+ * a non-Tauri browser preview fallback.
  */
 
 import type { PluginPrivateStorageApi, PluginBlobRef, PluginStoragePrunePolicy, PluginPermissionSnapshot } from './pluginTypes'
@@ -37,6 +38,16 @@ function legacyBlobPrefixForPlugin(source: PluginSettingsSource, pluginId: strin
 type NativeBlobReadResult = {
   bytes: number[] | Uint8Array
   contentType: string
+}
+
+type NativeKvListEntry = {
+  key: string
+  updatedAt: number
+}
+
+type NativeKvUsage = {
+  bytes: number
+  itemCount: number
 }
 
 const blobUrlCache = new Map<string, string>()
@@ -86,6 +97,9 @@ export function clearPluginPrivateStorage(source: PluginSettingsSource, pluginId
   }
 
   if (isTauri()) {
+    void invoke<void>('plugin_kv_clear', { source, pluginId }).catch((error) => {
+      console.warn('[hiven] Failed to clear plugin KV storage:', error)
+    })
     void invoke<void>('plugin_blob_clear', { source, pluginId }).catch((error) => {
       console.warn('[hiven] Failed to clear plugin blob storage:', error)
     })
@@ -110,7 +124,9 @@ export function createPluginPrivateStorage(
     kv: {
       async get<T = unknown>(key: string): Promise<T | undefined> {
         requireKv()
-        const raw = localStorage.getItem(kvKey(source, pluginId, key))
+        const raw = isTauri()
+          ? await invoke<string | null>('plugin_kv_get', { source, pluginId, key })
+          : localStorage.getItem(kvKey(source, pluginId, key))
         if (raw === null) return undefined
         try {
           return JSON.parse(raw) as T
@@ -121,18 +137,33 @@ export function createPluginPrivateStorage(
 
       async set<T = unknown>(key: string, value: T): Promise<void> {
         requireKv()
-        localStorage.setItem(kvKey(source, pluginId, key), JSON.stringify(value))
+        const valueJson = JSON.stringify(value)
+        if (valueJson === undefined) {
+          throw new Error('Plugin KV value must be JSON serializable')
+        }
+        if (isTauri()) {
+          await invoke<void>('plugin_kv_set', { source, pluginId, key, valueJson })
+          return
+        }
+        localStorage.setItem(kvKey(source, pluginId, key), valueJson)
         localStorage.setItem(kvMetaKey(source, pluginId, key), JSON.stringify({ updatedAt: Date.now() }))
       },
 
       async delete(key: string): Promise<void> {
         requireKv()
+        if (isTauri()) {
+          await invoke<void>('plugin_kv_delete', { source, pluginId, key })
+          return
+        }
         localStorage.removeItem(kvKey(source, pluginId, key))
         localStorage.removeItem(kvMetaKey(source, pluginId, key))
       },
 
       async list(prefix?: string): Promise<Array<{ key: string; updatedAt: number }>> {
         requireKv()
+        if (isTauri()) {
+          return await invoke<NativeKvListEntry[]>('plugin_kv_list', { source, pluginId, prefix })
+        }
         const pluginPrefix = kvPrefixForPlugin(source, pluginId)
         const fullPrefix = prefix ? `${pluginPrefix}${prefix}` : pluginPrefix
         const results: Array<{ key: string; updatedAt: number }> = []
@@ -204,6 +235,9 @@ export function createPluginPrivateStorage(
     quota: {
       async usage(): Promise<{ bytes: number; itemCount: number }> {
         requireKv()
+        if (isTauri()) {
+          return await invoke<NativeKvUsage>('plugin_kv_usage', { source, pluginId })
+        }
         const pluginPrefix = kvPrefixForPlugin(source, pluginId)
         let bytes = 0
         let itemCount = 0
@@ -221,14 +255,21 @@ export function createPluginPrivateStorage(
 
       async prune(policy: PluginStoragePrunePolicy): Promise<{ removedBytes: number; removedItems: number }> {
         requireKv()
+        if (isTauri()) {
+          return await invoke<{ removedBytes: number; removedItems: number }>('plugin_kv_prune', {
+            source,
+            pluginId,
+            maxItems: policy.maxItems,
+            maxBytes: policy.maxBytes,
+            maxAgeDays: policy.maxAgeDays,
+          })
+        }
         // Simple prune: remove oldest KV items if over limits
         let removedBytes = 0
         let removedItems = 0
-
-        if (policy.maxItems || policy.maxBytes) {
-          const pluginPrefix = kvPrefixForPlugin(source, pluginId)
+        const pluginPrefix = kvPrefixForPlugin(source, pluginId)
+        const collectItems = () => {
           const items: Array<{ key: string; size: number; updatedAt: number }> = []
-
           for (let i = 0; i < localStorage.length; i++) {
             const storageKey = localStorage.key(i)
             if (!storageKey || !storageKey.startsWith(pluginPrefix)) continue
@@ -241,6 +282,22 @@ export function createPluginPrivateStorage(
             }
             items.push({ key: userKey, size: (value?.length ?? 0) * 2, updatedAt })
           }
+          return items
+        }
+
+        if (policy.maxAgeDays != null) {
+          const cutoff = Date.now() - policy.maxAgeDays * 24 * 60 * 60 * 1000
+          for (const item of collectItems()) {
+            if (item.updatedAt >= cutoff) continue
+            localStorage.removeItem(kvKey(source, pluginId, item.key))
+            localStorage.removeItem(kvMetaKey(source, pluginId, item.key))
+            removedBytes += item.size
+            removedItems++
+          }
+        }
+
+        if (policy.maxItems || policy.maxBytes) {
+          const items = collectItems()
 
           // Sort by updatedAt descending (keep newest)
           items.sort((a, b) => b.updatedAt - a.updatedAt)
