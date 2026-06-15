@@ -27,6 +27,7 @@ import type {
   LauncherSurfaceId,
   PluginLauncherApi,
 } from './types'
+import type { PluginPrivateStorageApi } from '../pluginTypes'
 import { isOutputResult } from './output'
 import { translate, type Locale } from '../../i18n'
 
@@ -78,6 +79,8 @@ export type LauncherControllerState = {
 export type LauncherControllerDeps = {
   surfaceId: LauncherSurfaceId
   api: PluginLauncherApi
+  makeApi?: (item: LauncherItem) => PluginLauncherApi
+  getStorage?: (item: LauncherItem) => PluginPrivateStorageApi
   locale: string
   /** Translate function scoped to the item's plugin. */
   makeT: (item: LauncherItem) => (key: string, vars?: Record<string, string | number>) => string
@@ -89,6 +92,27 @@ export type LauncherControllerDeps = {
   requestClose: () => void
   /** Notify subscribers of a state change. */
   onChange: (state: LauncherControllerState) => void
+}
+
+const emptyStorage: PluginPrivateStorageApi = {
+  kv: {
+    get: async () => undefined,
+    set: async () => {},
+    delete: async () => {},
+    list: async () => [],
+  },
+  blob: {
+    put: async () => {
+      throw new Error('Plugin storage is not available for this launcher item')
+    },
+    get: async () => undefined,
+    delete: async () => {},
+    url: async () => '',
+  },
+  quota: {
+    usage: async () => ({ bytes: 0, itemCount: 0 }),
+    prune: async () => ({ removedBytes: 0, removedItems: 0 }),
+  },
 }
 
 export type SelectOptions = {
@@ -142,7 +166,8 @@ export class LauncherController {
       input: inputText !== undefined ? { text: inputText } : undefined,
       settings: this.deps.getSettings(item),
       locale: this.deps.locale as never,
-      api: this.deps.api,
+      api: this.deps.makeApi?.(item) ?? this.deps.api,
+      storage: this.deps.getStorage?.(item) ?? emptyStorage,
       t: this.deps.makeT(item),
     }
   }

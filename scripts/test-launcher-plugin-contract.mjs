@@ -80,7 +80,7 @@ function assertLauncherToolsHaveSubtitles() {
 
 function assertBuiltinVersionsMatchManifests() {
   const index = JSON.parse(read('src/builtin-plugins/index.json'))
-  assert.equal(index.version, 13, 'builtin plugin index version should be bumped for launcher migration')
+  assert.equal(index.version, 18, 'builtin plugin index version should be bumped for launcher migration')
   for (const pkg of index.packages) {
     const manifest = JSON.parse(read(`src/plugins/${pkg.dir}/manifest.json`))
     assert.equal(pkg.version, manifest.version, `${pkg.pluginId} builtin index version should match manifest version`)

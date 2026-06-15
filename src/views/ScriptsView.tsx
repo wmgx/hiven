@@ -10,7 +10,8 @@ import { usePluginStore } from '../workspace/pluginStore'
 import { usePluginSettingsStore } from '../workspace/pluginSettingsStore'
 import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
 import type { PluginSettingsSource } from '../workspace/pluginSettingsStore'
-import { getPluginPermissionSnapshot, missingPluginPermissions, usePluginPermissionStore } from '../workspace/pluginPermissions'
+import { describePluginPermission, getPluginPermissionSnapshot, missingPluginPermissions, usePluginPermissionStore } from '../workspace/pluginPermissions'
+import { runPluginStartupHooks } from '../workspace/pluginHookManager'
 import { requestOpenPluginSurfaceTool } from '../workspace/pluginSurfaceOpenRequest'
 import { pluginSurfaceShortcutKey, usePluginSurfaceShortcutStore } from '../workspace/pluginSurfaceShortcuts'
 import { ShortcutRecorder } from '../components/ShortcutRecorder'
@@ -367,7 +368,12 @@ export function ScriptsView() {
         capabilities={capabilitiesOf(plugin)}
           error={plugin.error || localError || plugin.update?.error}
         loading={loading}
-        details={renderSurfaceShortcuts(plugin.pluginId, 'installed')}
+        details={
+          <>
+            {renderPluginPermissions(plugin.pluginId, 'installed')}
+            {renderSurfaceShortcuts(plugin.pluginId, 'installed')}
+          </>
+        }
         actions={
           <>
             {hasSettings && (
@@ -443,7 +449,12 @@ export function ScriptsView() {
         capabilities={capabilitiesOf(plugin)}
         error={plugin.error || errors[key]}
         loading={!!busy[key]}
-        details={renderSurfaceShortcuts(plugin.pluginId, 'dev')}
+        details={
+          <>
+            {renderPluginPermissions(plugin.pluginId, 'dev')}
+            {renderSurfaceShortcuts(plugin.pluginId, 'dev')}
+          </>
+        }
         actions={
           <>
             {hasSettings && (
@@ -501,7 +512,12 @@ export function ScriptsView() {
         folderPath={plugin.folderPath || ''}
         capabilities={capabilitiesOf(plugin)}
         error={plugin.error}
-        details={renderSurfaceShortcuts(plugin.pluginId, 'builtin')}
+        details={
+          <>
+            {renderPluginPermissions(plugin.pluginId, 'builtin')}
+            {renderSurfaceShortcuts(plugin.pluginId, 'builtin')}
+          </>
+        }
         actions={
           <>
             {hasSettings && (
@@ -532,6 +548,39 @@ export function ScriptsView() {
     if (requested.length === 0) return false
     const snapshot = getPluginPermissionSnapshot(source, pluginId, requested)
     return missingPluginPermissions(snapshot, requested).length > 0
+  }
+
+  function renderPluginPermissions(pluginId: string, source: PluginSettingsSource) {
+    const requested = pluginRegistry.getPluginPermissions(pluginId, source)
+    if (requested.length === 0) return null
+    const snapshot = getPluginPermissionSnapshot(source, pluginId, requested)
+    const missingPermissions = missingPluginPermissions(snapshot, requested)
+    const permissionLabels = requested.map((permission) => describePluginPermission(permission, locale)).join(', ')
+    return (
+      <div className="plugin-permissions mt-2">
+        <div className="flex items-center gap-2 flex-wrap text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>
+          <span className="script-badge">
+            {missingPermissions.length > 0
+              ? t(locale, 'scripts.permissionsMissing', { count: missingPermissions.length })
+              : t(locale, 'scripts.permissionsAllGranted')}
+          </span>
+          <span className="truncate max-w-[420px]" title={permissionLabels}>
+            {permissionLabels}
+          </span>
+          {missingPermissions.length > 0 && (
+            <button
+              className="scripts-btn"
+              onClick={() => {
+                grantPluginPermissions(source, pluginId, missingPermissions)
+                runPluginStartupHooks()
+              }}
+            >
+              {t(locale, 'scripts.actionGrantPermissions')}
+            </button>
+          )}
+        </div>
+      </div>
+    )
   }
 
   function renderSurfaceShortcuts(pluginId: string, source: PluginSettingsSource) {

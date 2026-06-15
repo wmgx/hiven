@@ -9,7 +9,7 @@ import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginReg
 import { resolvePluginSettings } from '../workspace/pluginSettingsStore'
 import { LauncherController } from '../workspace/launcher/controller'
 import type { CollectInputFrame, LauncherControllerState, ParamInputFrame, ResultFrame } from '../workspace/launcher/controller'
-import { createPluginLauncherApi } from '../workspace/launcher/pluginApi'
+import { createPluginLauncherApi, createPluginLauncherStorage } from '../workspace/launcher/pluginApi'
 import { collectDynamicItems, collectStaticCandidates, filterDynamicForSurface } from '../workspace/launcher/registry'
 import { rankLauncherItems } from '../workspace/launcher/ranking'
 import { resolveDisplaySubtitle, resolveDisplayTitle } from '../workspace/launcher/display'
@@ -55,6 +55,26 @@ export function CommandPalette() {
         controllerRef.current = new LauncherController({
           surfaceId: 'command-palette' as LauncherSurfaceId,
           api: createPluginLauncherApi(),
+          makeApi: (item) => {
+            const requestedPermissions = item.pluginId && item.source
+              ? pluginRegistry.getPluginPermissions(item.pluginId, item.source)
+              : []
+            return createPluginLauncherApi({
+              pluginId: item.pluginId,
+              source: item.source,
+              requestedPermissions,
+            })
+          },
+          getStorage: (item) => {
+            const requestedPermissions = item.pluginId && item.source
+              ? pluginRegistry.getPluginPermissions(item.pluginId, item.source)
+              : []
+            return createPluginLauncherStorage({
+              pluginId: item.pluginId,
+              source: item.source,
+              requestedPermissions,
+            })
+          },
           locale,
           makeT: (item) => makePluginT(item.pluginId ?? '', locale),
           getSettings: (item) => {
@@ -97,7 +117,7 @@ export function CommandPalette() {
         const settingsSource = resolvePluginSettingsSource(pluginId, source)
         return resolvePluginSettings(settingsSource, pluginId, settingsContribution).value
       }
-      const items = await collectDynamicItems(q, locale, getSettingsForPlugin)
+      const items = await collectDynamicItems(q, 'command-palette', locale, getSettingsForPlugin)
       if (dynamicQueryRef.current !== q) return
       setDynamicItems(filterDynamicForSurface(items, 'command-palette'))
     }, 150)

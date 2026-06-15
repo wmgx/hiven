@@ -63,6 +63,12 @@ const PLUGIN_MANIFEST_MODULES = import.meta.glob('./plugins/*/manifest.json', {
   import: 'default',
 }) as Record<string, string>
 
+const BUILTIN_PLUGIN_INDEX_MODULES = import.meta.glob('./builtin-plugins/index.json', {
+  eager: true,
+  query: '?raw',
+  import: 'default',
+}) as Record<string, string>
+
 const PLUGIN_FILE_MODULES = import.meta.glob('./plugins/*/**/*.{ts,tsx,js,jsx,mjs,json,md}', {
   eager: true,
   query: '?raw',
@@ -134,8 +140,12 @@ async function fetchWithFallback(urls: string[]): Promise<string> {
 }
 
 function buildEmbeddedBuiltinIndex(): BuiltinPluginIndex {
+  const rawIndex = Object.values(BUILTIN_PLUGIN_INDEX_MODULES)[0]
+  const indexVersion = rawIndex
+    ? normalizeBuiltinPluginIndex(JSON.parse(rawIndex)).version
+    : 0
   return {
-    version: 7,
+    version: indexVersion,
     packages: BUILTIN_PLUGIN_PACKAGES.map((pkg) => ({
       pluginId: pkg.pluginId,
       dir: pkg.dir,
@@ -276,11 +286,15 @@ async function releaseBuiltinPluginManifests(_configDir: string, pluginBuiltinDi
     .then((raw) => normalizeBuiltinPluginIndex(JSON.parse(raw)))
     .catch(() => ({ version: 0, packages: [] } satisfies BuiltinPluginIndex))
   const currentPackages = new Set(currentIndex.packages.map((pkg) => pkg.pluginId))
+  const currentPackageVersions = new Map(currentIndex.packages.map((pkg) => [pkg.pluginId, pkg.version ?? '']))
   const packagesChanged =
     currentPackages.size !== embeddedIndex.packages.length ||
     embeddedIndex.packages.some((pkg) => !currentPackages.has(pkg.pluginId))
+  const packageVersionsChanged = embeddedIndex.packages.some((pkg) => {
+    return (pkg.version ?? '') !== (currentPackageVersions.get(pkg.pluginId) ?? '')
+  })
   const versionChanged = Number(currentIndex.version ?? 0) < embeddedIndex.version
-  const needsRelease = versionChanged || packagesChanged
+  const needsRelease = versionChanged || packagesChanged || packageVersionsChanged
 
   if (needsRelease) {
     // 整目录覆盖：先删除每个内置包的现有目录，清掉历史残留文件

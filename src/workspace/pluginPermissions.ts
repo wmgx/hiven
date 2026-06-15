@@ -12,6 +12,8 @@ export const ALL_PLUGIN_PERMISSIONS: readonly PluginPermission[] = [
   'clipboard.files',
   'storage.private',
   'storage.blob',
+  'app.discover',
+  'app.launch',
   'globalShortcut.register',
   'accessibility.paste',
 ]
@@ -136,6 +138,8 @@ const permissionLabels: Record<PluginPermission, Record<Locale, string>> = {
   'clipboard.files': { en: 'Access clipboard file paths', zh: '访问剪贴板文件路径' },
   'storage.private': { en: 'Use private plugin storage', zh: '使用插件私有存储' },
   'storage.blob': { en: 'Store private blobs', zh: '存储插件私有 Blob' },
+  'app.discover': { en: 'Discover installed applications', zh: '扫描已安装应用' },
+  'app.launch': { en: 'Launch installed applications', zh: '启动已安装应用' },
   'globalShortcut.register': { en: 'Register global shortcuts', zh: '注册全局快捷键' },
   'accessibility.paste': { en: 'Paste into the foreground app', zh: '粘贴到前台应用' },
 }

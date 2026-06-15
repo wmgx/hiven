@@ -16,6 +16,7 @@
 
 import type { ComponentType } from 'react'
 import type { Locale } from '../../i18n'
+import type { PluginPrivateStorageApi } from '../pluginTypes'
 import type { FluxEffect } from '../types'
 import type { EffectRunnerResult } from '../effectRunner'
 
@@ -200,6 +201,23 @@ export type PluginLauncherApi = {
   createPane(options?: { text?: string; title?: string; language?: string; focus?: boolean; direction?: 'left' | 'right' | 'top' | 'bottom' }): string
   dispatchEffects(effects: FluxEffect[]): EffectRunnerResult
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
+  apps: PluginAppsApi
+}
+
+export type DiscoveredApp = {
+  appId: string
+  name: string
+  nameI18n?: Partial<Record<Locale, string>>
+  aliases?: string[]
+  platform: 'macos' | 'windows' | 'linux'
+  source: 'applications' | 'start-menu' | 'app-paths' | 'desktop-entry'
+  displayPath?: string
+}
+
+export type PluginAppsApi = {
+  discoverApps(): Promise<DiscoveredApp[]>
+  cacheAppIcons(appIds: string[]): Promise<number>
+  launchApp(appId: string): Promise<void>
 }
 
 // ─── Execution Context ───────────────────────────────────────────────────────
@@ -211,6 +229,7 @@ export type LauncherExecutionContext<TSettings = unknown> = {
   settings: TSettings
   locale: Locale
   api: PluginLauncherApi
+  storage: PluginPrivateStorageApi
   /** Plugin-scoped translate function. */
   t: (key: string, vars?: Record<string, string | number>) => string
 }
@@ -255,8 +274,14 @@ export type LauncherItemContribution<TSettings = unknown> = {
 
 export type LauncherDynamicContext = {
   query: string
+  surfaceId: LauncherSurfaceId
   locale: Locale
   settings: unknown
+  api: PluginLauncherApi
+  storage: PluginPrivateStorageApi
+  t: (key: string, vars?: Record<string, string | number>) => string
+  source: 'builtin' | 'installed' | 'dev'
+  pluginId: string
 }
 
 export type LauncherDynamicItemProvider = (
@@ -352,6 +377,7 @@ export type PluginToolContext<TSettings = unknown> = {
   settings: TSettings
   locale: Locale
   api: PluginLauncherApi
+  storage: PluginPrivateStorageApi
   t: (key: string, vars?: Record<string, string | number>) => string
   output: PluginToolOutput
 }

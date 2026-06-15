@@ -11,7 +11,7 @@ import { resolvePluginSettings, usePluginSettingsStore } from '../workspace/plug
 import { scoreSearchableFields, searchableFieldsMatch, type SearchableFields } from '../workspace/searchRanking'
 import { LauncherController } from '../workspace/launcher/controller'
 import type { LauncherControllerState, CollectInputFrame, ParamInputFrame, ResultFrame } from '../workspace/launcher/controller'
-import { createPluginLauncherApi } from '../workspace/launcher/pluginApi'
+import { createPluginLauncherApi, createPluginLauncherStorage } from '../workspace/launcher/pluginApi'
 import { collectStaticCandidates, collectDynamicItems, filterDynamicForSurface } from '../workspace/launcher/registry'
 import { rankLauncherItems } from '../workspace/launcher/ranking'
 import { resolveDisplayTitle, resolveDisplaySubtitle } from '../workspace/launcher/display'
@@ -29,8 +29,8 @@ import type { PluginSettingsSource } from '../workspace/pluginSettingsStore'
 import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from '../workspace/launcherWindowEvents'
 
 type LauncherItem =
-  | { kind: 'domain'; id: string; title: string; subtitle: string; icon?: string; domainItem: DomainLauncherItem }
-  | { kind: 'pinned'; id: string; title: string; subtitle: string; icon?: string; actionId: string }
+  | { kind: 'domain'; id: string; title: string; subtitle: string; icon?: string; aliases?: string[]; domainItem: DomainLauncherItem }
+  | { kind: 'pinned'; id: string; title: string; subtitle: string; icon?: string; aliases?: string[]; actionId: string }
   | { kind: 'view'; id: ViewId; title: string; subtitle: string; icon: ReactNode }
 
 const viewItems: { id: ViewId; title: string; titleI18n: Partial<Record<Locale, string>>; icon: ReactNode }[] = [
@@ -47,6 +47,7 @@ const STANDALONE_SURFACE_MAX_HEIGHT = 760
 const STANDALONE_LAUNCHER_VERTICAL_PADDING = 24
 const STANDALONE_LAUNCHER_HORIZONTAL_PADDING = 24
 const STANDALONE_LAUNCHER_LIST_MAX_HEIGHT = 300
+const MAX_GLOBAL_LAUNCHER_RENDERED_ITEMS = 20
 const PLUGIN_SURFACE_BACK_EVENT = 'hiven:plugin-surface-back'
 const PLUGIN_SURFACE_CLOSE_EVENT = 'hiven:plugin-surface-close'
 
@@ -76,6 +77,13 @@ export function GlobalLauncher() {
   const closeAfterActionRef = useRef<() => void>(() => {})
   const [dynamicItems, setDynamicItems] = useState<DomainLauncherItem[]>([])
   const [surfaceFrame, setSurfaceFrame] = useState<{ source: PluginSettingsSource; pluginId: string; surfaceId: string } | null>(null)
+  const [itemPermissionFrame, setItemPermissionFrame] = useState<{
+    item: DomainLauncherItem
+    source: PluginSettingsSource
+    pluginId: string
+    permissions: PluginPermission[]
+    customizeParams: boolean
+  } | null>(null)
   const [surfaceFocusVersion, setSurfaceFocusVersion] = useState(0)
   const [rankingNow, setRankingNow] = useState(0)
   const dynamicQueryRef = useRef('')
@@ -137,6 +145,26 @@ export function GlobalLauncher() {
         const controller = new LauncherController({
           surfaceId: 'global-launcher' as LauncherSurfaceId,
           api: createPluginLauncherApi(),
+          makeApi: (item) => {
+            const requestedPermissions = item.pluginId && item.source
+              ? pluginRegistry.getPluginPermissions(item.pluginId, item.source)
+              : []
+            return createPluginLauncherApi({
+              pluginId: item.pluginId,
+              source: item.source,
+              requestedPermissions,
+            })
+          },
+          getStorage: (item) => {
+            const requestedPermissions = item.pluginId && item.source
+              ? pluginRegistry.getPluginPermissions(item.pluginId, item.source)
+              : []
+            return createPluginLauncherStorage({
+              pluginId: item.pluginId,
+              source: item.source,
+              requestedPermissions,
+            })
+          },
           locale,
           makeT: (item) => makePluginT(item.pluginId ?? '', locale),
           getSettings: (item) => {
@@ -179,7 +207,7 @@ export function GlobalLauncher() {
         const settingsSource = resolvePluginSettingsSource(pluginId, source)
         return resolvePluginSettings(settingsSource, pluginId, settingsContribution).value
       }
-      const items = await collectDynamicItems(q, locale, getSettingsForPlugin)
+      const items = await collectDynamicItems(q, 'global-launcher', locale, getSettingsForPlugin)
       if (dynamicQueryRef.current !== q) return
       setDynamicItems(filterDynamicForSurface(items, 'global-launcher'))
     }, 150)
@@ -252,11 +280,13 @@ export function GlobalLauncher() {
       title: resolveDisplayTitle(domainItem.display, locale),
       subtitle: resolveDisplaySubtitle(domainItem.display, locale) ?? '',
       icon: domainItem.display.icon,
+      aliases: domainItem.display.aliases,
       domainItem,
     }))
 
     return [...domainItems, ...sortedBase]
   }, [items, query, locale, pluginRegistryVersion, recentActionNames, actionUsageCounts, rankedLauncherItems])
+  const visibleFiltered = useMemo(() => filtered.slice(0, MAX_GLOBAL_LAUNCHER_RENDERED_ITEMS), [filtered])
 
   const restoreFocus = useCallback(() => {
     const el = previousFocusRef.current
@@ -269,6 +299,7 @@ export function GlobalLauncher() {
   const resetLauncherSession = useCallback(() => {
     clearPluginSurfaceTool()
     setSurfaceFrame(null)
+    setItemPermissionFrame(null)
     setQuery('')
     setSelectedIndex(0)
     setDynamicItems([])
@@ -372,8 +403,8 @@ export function GlobalLauncher() {
     }
   }, [closeLauncher, open, standaloneLauncher])
 
-  const clampedSelectedIndex = Math.min(selectedIndex, Math.max(0, filtered.length - 1))
-  const selectedItem = filtered.length === 1 ? filtered[0] : filtered[clampedSelectedIndex]
+  const clampedSelectedIndex = Math.min(selectedIndex, Math.max(0, visibleFiltered.length - 1))
+  const selectedItem = visibleFiltered.length === 1 ? visibleFiltered[0] : visibleFiltered[clampedSelectedIndex]
 
   function focusSearchInputAfterBack() {
     requestAnimationFrame(() => inputRef.current?.focus())
@@ -432,7 +463,7 @@ export function GlobalLauncher() {
 
     return () => window.cancelAnimationFrame(frame)
   }, [
-    filtered.length,
+    visibleFiltered.length,
     mode,
     open,
     controllerState,
@@ -459,16 +490,19 @@ export function GlobalLauncher() {
         }
       }
 
-      const controller = controllerRef.current
-      if (!controller) {
-        console.warn('[hiven] Cannot select domain launcher item before controller is ready:', item.domainItem.systemKey)
+      const missingPermissions = missingPluginItemPermissions(item.domainItem)
+      if (missingPermissions.length > 0 && item.domainItem.pluginId && item.domainItem.source) {
+        setItemPermissionFrame({
+          item: item.domainItem,
+          source: item.domainItem.source,
+          pluginId: item.domainItem.pluginId,
+          permissions: missingPermissions,
+          customizeParams,
+        })
         return
       }
-      if (!customizeParams && !supportsDefaultParamRun(item.domainItem)) {
-        void controller.selectItem(item.domainItem, { customizeParams: true })
-        return
-      }
-      void controller.selectItem(item.domainItem, { customizeParams })
+
+      executeDomainItem(item.domainItem, customizeParams)
       return
     }
 
@@ -523,6 +557,42 @@ export function GlobalLauncher() {
     }
   }
 
+  function executeDomainItem(item: DomainLauncherItem, customizeParams = false) {
+    const controller = controllerRef.current
+    if (!controller) {
+      console.warn('[hiven] Cannot select domain launcher item before controller is ready:', item.systemKey)
+      return
+    }
+    if (!customizeParams && !supportsDefaultParamRun(item)) {
+      void controller.selectItem(item, { customizeParams: true })
+      return
+    }
+    void controller.selectItem(item, { customizeParams })
+  }
+
+  function missingPluginItemPermissions(item: DomainLauncherItem): PluginPermission[] {
+    if (!item.pluginId || !item.source) return []
+    const requestedPermissions = pluginRegistry.getPluginPermissions(item.pluginId, item.source)
+    if (requestedPermissions.length === 0) return []
+    const permissions = getPluginPermissionSnapshot(item.source, item.pluginId, requestedPermissions)
+    return missingPluginPermissions(permissions, requestedPermissions)
+  }
+
+  function grantItemPermissionsAndRun() {
+    if (!itemPermissionFrame) return
+    grantPluginPermissions(itemPermissionFrame.source, itemPermissionFrame.pluginId, itemPermissionFrame.permissions)
+    void restartPluginBackground(itemPermissionFrame.pluginId, itemPermissionFrame.source)
+    const item = itemPermissionFrame.item
+    const customizeParams = itemPermissionFrame.customizeParams
+    setItemPermissionFrame(null)
+    executeDomainItem(item, customizeParams)
+  }
+
+  function cancelItemPermissionPrompt() {
+    setItemPermissionFrame(null)
+    focusSearchInputAfterBack()
+  }
+
   const activateResultChoice = useCallback((choice: LauncherResultChoice) => {
     void launcherController?.activateChoice(choice)
   }, [launcherController])
@@ -563,13 +633,18 @@ export function GlobalLauncher() {
       return
     }
 
+    if (itemPermissionFrame) {
+      cancelItemPermissionPrompt()
+      return
+    }
+
     if (controllerRef.current?.back()) {
       focusSearchInputAfterBack()
       return
     }
 
     closeLauncher()
-  }, [closeLauncher, leaveSurface, surfaceFrame])
+  }, [closeLauncher, itemPermissionFrame, leaveSurface, surfaceFrame])
 
   useEffect(() => {
     if (!open) return
@@ -707,6 +782,14 @@ export function GlobalLauncher() {
             }
             return
           }
+          if (itemPermissionFrame) {
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              event.stopPropagation()
+              cancelItemPermissionPrompt()
+            }
+            return
+          }
           // Controller frame key handling (collect-input / result)
           if (controllerState && controllerState.frames.length > 1) {
             const topFrame = controllerState.frames[controllerState.frames.length - 1]
@@ -760,7 +843,7 @@ export function GlobalLauncher() {
             closeLauncher()
             return
           }
-          if (event.key === 'ArrowDown') { event.preventDefault(); setSelectedIndex((index) => Math.min(index + 1, Math.max(0, filtered.length - 1))) }
+          if (event.key === 'ArrowDown') { event.preventDefault(); setSelectedIndex((index) => Math.min(index + 1, Math.max(0, visibleFiltered.length - 1))) }
           if (event.key === 'ArrowUp') { event.preventDefault(); setSelectedIndex((index) => Math.max(index - 1, 0)) }
           if (event.key === 'Enter') {
             event.preventDefault()
@@ -829,7 +912,16 @@ export function GlobalLauncher() {
               </div>
             </PluginSurfaceErrorBoundary>
           )
-        })() : controllerState && controllerState.frames.length > 1 && controllerState.frames[controllerState.frames.length - 1].kind === 'param-input' ? (() => {
+        })() : itemPermissionFrame ? (
+          <div className="global-launcher-body" style={{ height: 260 }}>
+            <PluginSurfacePermissionGate
+              permissions={itemPermissionFrame.permissions}
+              locale={locale}
+              onBack={cancelItemPermissionPrompt}
+              onGrant={grantItemPermissionsAndRun}
+            />
+          </div>
+        ) : controllerState && controllerState.frames.length > 1 && controllerState.frames[controllerState.frames.length - 1].kind === 'param-input' ? (() => {
           const frame = controllerState.frames[controllerState.frames.length - 1] as ParamInputFrame
           return (
             <LauncherParamStep
@@ -980,7 +1072,7 @@ export function GlobalLauncher() {
             )}
             <div className="global-launcher-body">
               <LauncherList
-                items={filtered}
+                items={visibleFiltered}
                 selected={selectedItem}
                 onSelect={(item) => selectItem(item)}
               />
@@ -1030,6 +1122,10 @@ function isPluginSettingsSource(value: string | undefined): value is PluginSetti
   return value === 'builtin' || value === 'installed' || value === 'dev'
 }
 
+function isAppIconRef(icon?: string): boolean {
+  return icon?.startsWith('app-icon:') === true
+}
+
 function LauncherList({ items, selected, onSelect }: { items: LauncherItem[]; selected?: LauncherItem; onSelect: (item: LauncherItem) => void }) {
   if (items.length === 0) return null
   return (
@@ -1051,6 +1147,7 @@ function LauncherList({ items, selected, onSelect }: { items: LauncherItem[]; se
 
 function LauncherListItem({ item, selected, onSelect }: { item: LauncherItem; selected: boolean; onSelect: (item: LauncherItem) => void }) {
   const ref = useRef<HTMLButtonElement>(null)
+  const appIcon = item.kind !== 'view' && isAppIconRef(item.icon)
 
   useEffect(() => {
     if (selected) ref.current?.scrollIntoView({ block: 'nearest' })
@@ -1068,16 +1165,16 @@ function LauncherListItem({ item, selected, onSelect }: { item: LauncherItem; se
       onClick={() => onSelect(item)}
     >
       <span
-        className="w-[26px] h-[26px] rounded-md flex items-center justify-center text-xs font-semibold shrink-0"
+        className="w-[26px] h-[26px] rounded-md flex items-center justify-center text-xs font-semibold shrink-0 overflow-hidden"
         style={{
-          background: selected ? 'var(--color-accent)' : 'var(--color-background-tertiary)',
+          background: appIcon ? 'transparent' : selected ? 'var(--color-accent)' : 'var(--color-background-tertiary)',
           color: selected ? 'white' : 'var(--color-text-secondary)',
         }}
       >
         {item.kind === 'domain'
-          ? resolveIcon(item.icon, 14, item.title)
+          ? resolveIcon(item.icon, appIcon ? 26 : 14, item.title)
           : item.kind === 'pinned'
-          ? resolveIcon(item.icon, 14, item.title) || <Pin size={14} />
+          ? resolveIcon(item.icon, appIcon ? 26 : 14, item.title) || <Pin size={14} />
           : item.kind === 'view' ? item.icon : resolveIcon(item.icon, 14, item.title)}
       </span>
       <span className="min-w-0 flex-1">
@@ -1124,6 +1221,7 @@ function launcherItemSearchFields(item: LauncherItem): SearchableFields {
     id: launcherItemSearchId(item),
     title: item.title,
     description: item.subtitle,
+    aliases: item.kind === 'view' ? undefined : item.aliases,
     usageKey: launcherItemUsageKey(item),
   }
 }
@@ -1155,13 +1253,13 @@ function PluginSurfacePermissionGate({
   const copy = locale === 'zh'
     ? {
         title: '需要授权',
-        description: '这个插件需要 host 管理的权限后，才能运行 surface 或 background。',
+        description: '这个插件需要 host 管理的权限后，才能继续运行。',
         allow: '允许',
         back: '返回',
       }
     : {
         title: 'Permissions required',
-        description: 'This plugin needs host-managed permissions before its surface or background can run.',
+        description: 'This plugin needs host-managed permissions before it can continue.',
         allow: 'Allow',
         back: 'Back',
       }

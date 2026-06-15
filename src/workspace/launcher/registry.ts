@@ -13,6 +13,7 @@
  */
 
 import type { Locale } from '../../i18n'
+import { makePluginT } from '../../i18n/pluginI18nRegistry'
 import { pluginRegistry } from '../pluginRegistry'
 import type { ContributionSource, PluginDefinition } from '../pluginTypes'
 import type {
@@ -31,6 +32,7 @@ import {
   sanitizeSurfaces,
   findUnknownSurfaces,
 } from './identity'
+import { createPluginLauncherApi, createPluginLauncherStorage } from './pluginApi'
 import { resolvePluginSettingsSource } from './pluginSource'
 import { adaptToolToLauncherItem } from './toolAdapter'
 
@@ -221,6 +223,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
  */
 export async function collectDynamicItems(
   query: string,
+  surfaceId: LauncherSurfaceId,
   locale: Locale,
   getSettings: (pluginId: string, source: ContributionSource) => unknown,
 ): Promise<LauncherItem[]> {
@@ -233,8 +236,20 @@ export async function collectDynamicItems(
     providers.map(async ({ provider, pluginId, source }) => {
       try {
         const settings = getSettings(pluginId, source)
+        const settingsSource = resolvePluginSettingsSource(pluginId, source)
+        const requestedPermissions = pluginRegistry.getPluginPermissions(pluginId, settingsSource)
         const raw = await withTimeout(
-          Promise.resolve(provider({ query: q, locale, settings })),
+          Promise.resolve(provider({
+            query: q,
+            surfaceId,
+            locale,
+            settings,
+            source: settingsSource,
+            pluginId,
+            api: createPluginLauncherApi({ pluginId, source: settingsSource, requestedPermissions }),
+            storage: createPluginLauncherStorage({ pluginId, source: settingsSource, requestedPermissions }),
+            t: makePluginT(pluginId, locale),
+          })),
           DYNAMIC_PROVIDER_TIMEOUT_MS,
         )
         if (!Array.isArray(raw)) return []

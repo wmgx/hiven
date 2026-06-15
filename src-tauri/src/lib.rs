@@ -1,12 +1,13 @@
+use std::collections::HashMap;
 #[cfg(target_os = "macos")]
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 use std::fs;
 use std::io::{Cursor, Read};
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
-use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::Emitter;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
+use tauri::Emitter;
 use tauri::LogicalSize;
 use zip::ZipArchive;
 
@@ -15,6 +16,8 @@ pub mod hotkeys;
 const LAUNCHER_COMPACT_WIDTH: f64 = 660.0;
 const LAUNCHER_COMPACT_HEIGHT: f64 = 160.0;
 static PREVIOUS_FOREGROUND_PROCESS_ID: OnceLock<Mutex<Option<u32>>> = OnceLock::new();
+static INSTALLED_APP_TARGETS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+const MAX_APP_ICON_CACHE_WARM_COUNT: usize = 20;
 
 #[tauri::command]
 fn show_and_focus_window(app: tauri::AppHandle) {
@@ -81,10 +84,11 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
                 .windows
                 .iter()
                 .find(|window| window.label == "launcher")
-                .cloned() else {
-                    eprintln!("[hiven] Launcher window config not found");
-                    return;
-                };
+                .cloned()
+            else {
+                eprintln!("[hiven] Launcher window config not found");
+                return;
+            };
             match tauri::WebviewWindowBuilder::from_config(&app_clone, &config)
                 .and_then(|builder| builder.build())
             {
@@ -101,7 +105,10 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
                 LAUNCHER_COMPACT_WIDTH,
                 LAUNCHER_COMPACT_HEIGHT,
             )) {
-                eprintln!("[hiven] Failed to compact launcher window before show: {}", error);
+                eprintln!(
+                    "[hiven] Failed to compact launcher window before show: {}",
+                    error
+                );
             }
         }
         if let Err(error) = show_launcher_window_without_app_activation(&window) {
@@ -168,8 +175,7 @@ fn previous_foreground_process_id() -> &'static Mutex<Option<u32>> {
 }
 
 fn remember_previous_foreground_app() {
-    let previous = current_foreground_process_id()
-        .filter(|pid| *pid != std::process::id());
+    let previous = current_foreground_process_id().filter(|pid| *pid != std::process::id());
     if let Ok(mut stored) = previous_foreground_process_id().lock() {
         *stored = previous;
     }
@@ -291,19 +297,21 @@ fn get_or_register_keyable_panel_class() -> *const objc2::runtime::AnyClass {
     REGISTER.call_once(|| {
         // If the class already exists (e.g. hot-reload), just reuse it
         if let Some(existing) = objc2::runtime::AnyClass::get(c"HivenKeyablePanel") {
-            unsafe { CLASS_PTR = existing; }
+            unsafe {
+                CLASS_PTR = existing;
+            }
             return;
         }
-        let panel_cls = objc2::runtime::AnyClass::get(c"NSPanel")
-            .expect("NSPanel class must exist on macOS");
+        let panel_cls =
+            objc2::runtime::AnyClass::get(c"NSPanel").expect("NSPanel class must exist on macOS");
 
         unsafe {
-            let new_class = objc2::ffi::objc_allocateClassPair(
-                panel_cls,
-                c"HivenKeyablePanel".as_ptr(),
-                0,
+            let new_class =
+                objc2::ffi::objc_allocateClassPair(panel_cls, c"HivenKeyablePanel".as_ptr(), 0);
+            assert!(
+                !new_class.is_null(),
+                "Failed to allocate HivenKeyablePanel class"
             );
-            assert!(!new_class.is_null(), "Failed to allocate HivenKeyablePanel class");
 
             // Override canBecomeKeyWindow to return YES
             unsafe extern "C-unwind" fn can_become_key_window(
@@ -316,15 +324,17 @@ fn get_or_register_keyable_panel_class() -> *const objc2::runtime::AnyClass {
             let sel = objc2::ffi::sel_registerName(c"canBecomeKeyWindow".as_ptr())
                 .expect("canBecomeKeyWindow selector must be registerable");
             let imp: objc2::runtime::Imp = std::mem::transmute(
-                can_become_key_window as unsafe extern "C-unwind" fn(*mut objc2::runtime::AnyObject, *const std::ffi::c_void) -> objc2::runtime::Bool,
+                can_become_key_window
+                    as unsafe extern "C-unwind" fn(
+                        *mut objc2::runtime::AnyObject,
+                        *const std::ffi::c_void,
+                    ) -> objc2::runtime::Bool,
             );
-            let success = objc2::ffi::class_addMethod(
-                new_class,
-                sel,
-                imp,
-                c"B@:".as_ptr(),
+            let success = objc2::ffi::class_addMethod(new_class, sel, imp, c"B@:".as_ptr());
+            assert!(
+                success.as_bool(),
+                "Failed to add canBecomeKeyWindow to HivenKeyablePanel"
             );
-            assert!(success.as_bool(), "Failed to add canBecomeKeyWindow to HivenKeyablePanel");
 
             objc2::ffi::objc_registerClassPair(new_class);
             CLASS_PTR = new_class as *const objc2::runtime::AnyClass;
@@ -343,8 +353,7 @@ fn current_foreground_process_id() -> Option<u32> {
         if workspace.is_null() {
             return None;
         }
-        let app: *mut objc2::runtime::AnyObject =
-            objc2::msg_send![workspace, frontmostApplication];
+        let app: *mut objc2::runtime::AnyObject = objc2::msg_send![workspace, frontmostApplication];
         if app.is_null() {
             return None;
         }
@@ -362,8 +371,7 @@ fn current_foreground_application_name() -> Option<String> {
         if workspace.is_null() {
             return None;
         }
-        let app: *mut objc2::runtime::AnyObject =
-            objc2::msg_send![workspace, frontmostApplication];
+        let app: *mut objc2::runtime::AnyObject = objc2::msg_send![workspace, frontmostApplication];
         if app.is_null() {
             return None;
         }
@@ -387,6 +395,730 @@ fn current_foreground_application_name() -> Option<String> {
 #[tauri::command]
 async fn current_foreground_app_name() -> Option<String> {
     current_foreground_application_name()
+}
+
+#[derive(Clone)]
+struct InstalledAppEntry {
+    app_id: String,
+    name: String,
+    name_i18n: Option<HashMap<String, String>>,
+    aliases: Vec<String>,
+    platform: String,
+    source: String,
+    display_path: Option<String>,
+    launch_target: String,
+}
+
+#[derive(Clone, serde::Serialize)]
+struct DiscoveredAppIcon {
+    bytes: Vec<u8>,
+    #[serde(rename = "contentType")]
+    content_type: String,
+    hash: String,
+}
+
+#[derive(serde::Serialize)]
+struct DiscoveredApp {
+    #[serde(rename = "appId")]
+    app_id: String,
+    name: String,
+    #[serde(rename = "nameI18n", skip_serializing_if = "Option::is_none")]
+    name_i18n: Option<HashMap<String, String>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    aliases: Vec<String>,
+    platform: String,
+    source: String,
+    #[serde(rename = "displayPath", skip_serializing_if = "Option::is_none")]
+    display_path: Option<String>,
+}
+
+fn installed_app_targets() -> &'static Mutex<HashMap<String, String>> {
+    INSTALLED_APP_TARGETS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn stable_hash(value: &str) -> String {
+    stable_hash_bytes(value.as_bytes())
+}
+
+fn stable_hash_bytes(bytes: &[u8]) -> String {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{:016x}", hash)
+}
+
+fn installed_app_from_entry(entry: &InstalledAppEntry) -> DiscoveredApp {
+    DiscoveredApp {
+        app_id: entry.app_id.clone(),
+        name: entry.name.clone(),
+        name_i18n: entry.name_i18n.clone(),
+        aliases: entry.aliases.clone(),
+        platform: entry.platform.clone(),
+        source: entry.source.clone(),
+        display_path: entry.display_path.clone(),
+    }
+}
+
+#[tauri::command]
+fn read_installed_app_icon_url(app: tauri::AppHandle, app_id: String) -> Option<String> {
+    let entry = resolve_installed_app_entry(&app_id)?;
+    let cache_path = cached_app_icon_path(&entry).ok()?;
+    if cache_path.exists() {
+        return Some(cache_path.to_string_lossy().to_string());
+    }
+    let icon = extract_app_icon_for_command(app, entry)?;
+    if fs::write(&cache_path, icon.bytes).is_err() {
+        return None;
+    }
+    Some(cache_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn cache_installed_app_icons(app: tauri::AppHandle, app_ids: Vec<String>) -> usize {
+    app_ids
+        .into_iter()
+        .take(MAX_APP_ICON_CACHE_WARM_COUNT)
+        .filter(|app_id| read_installed_app_icon_url(app.clone(), app_id.to_string()).is_some())
+        .count()
+}
+
+fn resolve_installed_app_entry(app_id: &str) -> Option<InstalledAppEntry> {
+    let cached_target = installed_app_targets()
+        .lock()
+        .ok()
+        .and_then(|targets| targets.get(app_id).cloned());
+    if let Some(target) = cached_target {
+        return Some(InstalledAppEntry {
+            app_id: app_id.to_string(),
+            name: String::new(),
+            name_i18n: None,
+            aliases: Vec::new(),
+            platform: current_platform_name().to_string(),
+            source: "applications".to_string(),
+            display_path: Some(target.clone()),
+            launch_target: target,
+        });
+    }
+
+    let apps = discover_platform_apps();
+    if let Ok(mut targets) = installed_app_targets().lock() {
+        for app in &apps {
+            targets.insert(app.app_id.clone(), app.launch_target.clone());
+        }
+    }
+    apps.into_iter()
+        .find(|candidate| candidate.app_id == app_id)
+}
+
+fn app_icon_cache_dir() -> Result<PathBuf, String> {
+    let dir = config_dir()?.join("cache").join("app-icons");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+fn app_icon_target_mtime(entry: &InstalledAppEntry) -> u128 {
+    entry
+        .display_path
+        .as_ref()
+        .and_then(|path| fs::metadata(path).ok())
+        .and_then(|metadata| metadata.modified().ok())
+        .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0)
+}
+
+fn cached_app_icon_path(entry: &InstalledAppEntry) -> Result<PathBuf, String> {
+    let target = entry
+        .display_path
+        .as_deref()
+        .unwrap_or(&entry.launch_target);
+    let cache_key = stable_hash(&format!(
+        "{}|{}|{}|32",
+        entry.app_id,
+        target,
+        app_icon_target_mtime(entry)
+    ));
+    Ok(app_icon_cache_dir()?.join(format!("{}.png", cache_key)))
+}
+
+#[cfg(target_os = "macos")]
+fn extract_app_icon_for_command(
+    app: tauri::AppHandle,
+    entry: InstalledAppEntry,
+) -> Option<DiscoveredAppIcon> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let _ = tx.send(extract_app_icon(&entry));
+    })
+    .ok()?;
+    rx.recv_timeout(Duration::from_secs(2)).ok().flatten()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn extract_app_icon_for_command(
+    _app: tauri::AppHandle,
+    entry: InstalledAppEntry,
+) -> Option<DiscoveredAppIcon> {
+    extract_app_icon(&entry)
+}
+
+fn current_platform_name() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(target_os = "windows") {
+        "windows"
+    } else {
+        "linux"
+    }
+}
+
+fn app_name_from_path(path: &Path) -> Option<String> {
+    path.file_stem()
+        .or_else(|| path.file_name())
+        .and_then(|name| name.to_str())
+        .map(|name| name.trim_end_matches(".app").to_string())
+        .filter(|name| !name.trim().is_empty())
+}
+
+fn parse_plist_string(raw: &str, key: &str) -> Option<String> {
+    let key_marker = format!("<key>{}</key>", key);
+    let key_index = raw.find(&key_marker)?;
+    let rest = &raw[key_index + key_marker.len()..];
+    let start_marker = "<string>";
+    let start = rest.find(start_marker)? + start_marker.len();
+    let end = rest[start..].find("</string>")?;
+    Some(rest[start..start + end].trim().to_string())
+}
+
+fn decode_text_file(bytes: &[u8]) -> String {
+    if bytes.starts_with(&[0xfe, 0xff]) {
+        let units: Vec<u16> = bytes[2..]
+            .chunks_exact(2)
+            .map(|chunk| u16::from_be_bytes([chunk[0], chunk[1]]))
+            .collect();
+        return String::from_utf16_lossy(&units);
+    }
+    if bytes.starts_with(&[0xff, 0xfe]) {
+        let units: Vec<u16> = bytes[2..]
+            .chunks_exact(2)
+            .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+            .collect();
+        return String::from_utf16_lossy(&units);
+    }
+    String::from_utf8_lossy(bytes).to_string()
+}
+
+fn parse_apple_strings_value(raw: &str, key: &str) -> Option<String> {
+    let quoted_key_marker = format!("\"{}\"", key);
+    let rest = if let Some(key_index) = raw.find(&quoted_key_marker) {
+        &raw[key_index + quoted_key_marker.len()..]
+    } else {
+        let key_index = raw.find(key)?;
+        let rest = &raw[key_index + key.len()..];
+        if rest.trim_start().starts_with('=') {
+            rest
+        } else {
+            return None;
+        }
+    };
+    let value_start = rest.find('"')? + 1;
+    let mut escaped = false;
+    let mut value = String::new();
+    for ch in rest[value_start..].chars() {
+        if escaped {
+            match ch {
+                'n' => value.push('\n'),
+                'r' => value.push('\r'),
+                't' => value.push('\t'),
+                '"' => value.push('"'),
+                '\\' => value.push('\\'),
+                other => value.push(other),
+            }
+            escaped = false;
+            continue;
+        }
+        if ch == '\\' {
+            escaped = true;
+            continue;
+        }
+        if ch == '"' {
+            let trimmed = value.trim();
+            return (!trimmed.is_empty()).then(|| trimmed.to_string());
+        }
+        value.push(ch);
+    }
+    None
+}
+
+fn macos_locale_candidates(locale: Option<&str>) -> Vec<String> {
+    let normalized = locale.unwrap_or("").replace('_', "-");
+    let lower = normalized.to_lowercase();
+    let mut candidates = Vec::new();
+    if lower.starts_with("zh") {
+        if lower.contains("hant") || lower.ends_with("-tw") || lower.ends_with("-hk") {
+            candidates.extend(["zh-Hant", "zh_TW", "zh_HK", "zh"]);
+        } else {
+            candidates.extend(["zh-Hans", "zh_CN", "zh"]);
+        }
+    }
+    if !normalized.is_empty() {
+        candidates.push(normalized.as_str());
+        if let Some(language) = normalized.split('-').next() {
+            candidates.push(language);
+        }
+    }
+    candidates.push("Base");
+    candidates.push("en");
+
+    let mut deduped = Vec::new();
+    for candidate in candidates {
+        let candidate = candidate.to_string();
+        if !deduped.contains(&candidate) {
+            deduped.push(candidate);
+        }
+    }
+    deduped
+}
+
+fn read_macos_localized_bundle_name(path: &Path, locale: Option<&str>) -> Option<String> {
+    let resources = path.join("Contents").join("Resources");
+    for candidate in macos_locale_candidates(locale) {
+        let strings = resources
+            .join(format!("{}.lproj", candidate))
+            .join("InfoPlist.strings");
+        let Ok(bytes) = fs::read(strings) else {
+            continue;
+        };
+        let raw = decode_text_file(&bytes);
+        if let Some(name) = parse_apple_strings_value(&raw, "CFBundleDisplayName")
+            .or_else(|| parse_apple_strings_value(&raw, "CFBundleName"))
+        {
+            return Some(name);
+        }
+    }
+    None
+}
+
+fn read_macos_bundle_metadata(
+    path: &Path,
+    locale: Option<&str>,
+) -> (
+    Option<String>,
+    Option<String>,
+    Option<HashMap<String, String>>,
+    Vec<String>,
+) {
+    let info = path.join("Contents").join("Info.plist");
+    let raw = fs::read_to_string(info).unwrap_or_default();
+    let bundle_id = parse_plist_string(&raw, "CFBundleIdentifier");
+    let plist_display_name = parse_plist_string(&raw, "CFBundleDisplayName");
+    let plist_bundle_name = parse_plist_string(&raw, "CFBundleName");
+    let plist_name = plist_display_name
+        .clone()
+        .or_else(|| plist_bundle_name.clone());
+    let zh_name = read_macos_localized_bundle_name(path, Some("zh"));
+    let name = read_macos_localized_bundle_name(path, locale)
+        .or_else(|| plist_name.clone())
+        .or_else(|| zh_name.clone());
+    let mut name_i18n = HashMap::new();
+    if let Some(ref name) = zh_name {
+        if plist_name.as_deref() != Some(name.as_str()) {
+            name_i18n.insert("zh".to_string(), name.clone());
+        }
+    }
+    let mut aliases = Vec::new();
+    for alias in [plist_display_name, plist_bundle_name, bundle_id.clone()] {
+        let Some(alias) = alias else {
+            continue;
+        };
+        if name.as_deref() == Some(alias.as_str()) || zh_name.as_deref() == Some(alias.as_str()) {
+            continue;
+        }
+        if !aliases.iter().any(|item| item == &alias) {
+            aliases.push(alias);
+        }
+    }
+    let name_i18n = (!name_i18n.is_empty()).then_some(name_i18n);
+    (bundle_id, name, name_i18n, aliases)
+}
+
+#[cfg(target_os = "macos")]
+fn read_macos_app_icon_png(app_path: &Path) -> Option<Vec<u8>> {
+    if !app_path.exists() {
+        return None;
+    }
+
+    let path = CString::new(app_path.to_string_lossy().as_bytes()).ok()?;
+    unsafe {
+        let ns_string_cls = objc2::runtime::AnyClass::get(c"NSString")?;
+        let ns_path: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![ns_string_cls, stringWithUTF8String: path.as_ptr()];
+        if ns_path.is_null() {
+            return None;
+        }
+
+        let workspace_cls = objc2::runtime::AnyClass::get(c"NSWorkspace")?;
+        let workspace: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![workspace_cls, sharedWorkspace];
+        if workspace.is_null() {
+            return None;
+        }
+
+        let image: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![workspace, iconForFile: ns_path];
+        if image.is_null() {
+            return None;
+        }
+
+        let tiff_data: *mut objc2::runtime::AnyObject = objc2::msg_send![image, TIFFRepresentation];
+        if tiff_data.is_null() {
+            return None;
+        }
+
+        let bitmap_cls = objc2::runtime::AnyClass::get(c"NSBitmapImageRep")?;
+        let bitmap: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![bitmap_cls, imageRepWithData: tiff_data];
+        if bitmap.is_null() {
+            return None;
+        }
+
+        let properties: *mut objc2::runtime::AnyObject = std::ptr::null_mut();
+        let png_data: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![bitmap, representationUsingType: 4usize, properties: properties];
+        if png_data.is_null() {
+            return None;
+        }
+
+        let len: usize = objc2::msg_send![png_data, length];
+        let bytes: *const u8 = objc2::msg_send![png_data, bytes];
+        if bytes.is_null() || len == 0 {
+            return None;
+        }
+        Some(std::slice::from_raw_parts(bytes, len).to_vec())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn extract_app_icon(entry: &InstalledAppEntry) -> Option<DiscoveredAppIcon> {
+    let display_path = entry.display_path.as_ref()?;
+    let bytes = read_macos_app_icon_png(Path::new(display_path))?;
+    Some(DiscoveredAppIcon {
+        hash: stable_hash_bytes(&bytes),
+        bytes,
+        content_type: "image/png".to_string(),
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn extract_app_icon(_entry: &InstalledAppEntry) -> Option<DiscoveredAppIcon> {
+    None
+}
+
+#[cfg(target_os = "macos")]
+fn system_open_app_target(target: &str) -> Result<(), String> {
+    std::process::Command::new("open")
+        .arg(target)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn system_open_app_target(target: &str) -> Result<(), String> {
+    std::process::Command::new("explorer")
+        .arg(target)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "linux")]
+fn system_open_app_target(target: &str) -> Result<(), String> {
+    std::process::Command::new("gtk-launch")
+        .arg(target)
+        .spawn()
+        .or_else(|_| std::process::Command::new("xdg-open").arg(target).spawn())
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn discover_platform_apps_for_locale(locale: Option<&str>) -> Vec<InstalledAppEntry> {
+    let mut roots = vec![
+        PathBuf::from("/Applications"),
+        PathBuf::from("/System/Applications"),
+    ];
+    if let Some(home) = dirs_next_home() {
+        roots.push(home.join("Applications"));
+    }
+
+    let mut apps = Vec::new();
+    for root in roots {
+        let Ok(entries) = fs::read_dir(&root) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("app") {
+                continue;
+            }
+            let canonical = path.canonicalize().unwrap_or(path.clone());
+            let canonical_str = canonical.to_string_lossy().to_string();
+            let (bundle_id, bundle_name, name_i18n, aliases) =
+                read_macos_bundle_metadata(&canonical, locale);
+            let app_id = bundle_id
+                .map(|id| format!("macos:bundle:{}", id))
+                .unwrap_or_else(|| format!("macos:path:{}", stable_hash(&canonical_str)));
+            let Some(name) = bundle_name.or_else(|| app_name_from_path(&canonical)) else {
+                continue;
+            };
+            apps.push(InstalledAppEntry {
+                app_id,
+                name,
+                name_i18n,
+                aliases,
+                platform: "macos".to_string(),
+                source: "applications".to_string(),
+                display_path: Some(canonical_str.clone()),
+                launch_target: canonical_str,
+            });
+        }
+    }
+    dedupe_installed_apps(apps)
+}
+
+#[cfg(target_os = "windows")]
+fn discover_platform_apps_for_locale(_locale: Option<&str>) -> Vec<InstalledAppEntry> {
+    let mut roots = Vec::new();
+    if let Some(appdata) = std::env::var_os("APPDATA") {
+        roots.push(PathBuf::from(appdata).join("Microsoft\\Windows\\Start Menu\\Programs"));
+    }
+    if let Some(programdata) = std::env::var_os("PROGRAMDATA") {
+        roots.push(PathBuf::from(programdata).join("Microsoft\\Windows\\Start Menu\\Programs"));
+    }
+    // App Paths registry support belongs here; keep the source label stable for indexed results.
+    let _app_paths_source = "app-paths";
+    let _app_paths_label = "App Paths";
+
+    let mut apps = Vec::new();
+    for root in roots {
+        collect_windows_start_menu_apps(&root, &mut apps);
+    }
+    collect_windows_app_paths_apps(&mut apps);
+    dedupe_installed_apps(apps)
+}
+
+#[allow(dead_code)]
+fn collect_windows_start_menu_apps(root: &Path, apps: &mut Vec<InstalledAppEntry>) {
+    let Ok(entries) = fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_windows_start_menu_apps(&path, apps);
+            continue;
+        }
+        if path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.eq_ignore_ascii_case("lnk"))
+            != Some(true)
+        {
+            continue;
+        }
+        let Some(name) = app_name_from_path(&path) else {
+            continue;
+        };
+        let canonical = path.canonicalize().unwrap_or(path.clone());
+        let canonical_str = canonical.to_string_lossy().to_string();
+        apps.push(InstalledAppEntry {
+            app_id: format!("windows:start-menu:{}", stable_hash(&canonical_str)),
+            name,
+            name_i18n: None,
+            aliases: Vec::new(),
+            platform: "windows".to_string(),
+            source: "start-menu".to_string(),
+            display_path: Some(canonical_str.clone()),
+            launch_target: canonical_str,
+        });
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn collect_windows_app_paths_apps(apps: &mut Vec<InstalledAppEntry>) {
+    for hive in [
+        r"HKCU\Software\Microsoft\Windows\CurrentVersion\App Paths",
+        r"HKLM\Software\Microsoft\Windows\CurrentVersion\App Paths",
+    ] {
+        let Ok(output) = std::process::Command::new("reg")
+            .args(["query", hive, "/s"])
+            .output()
+        else {
+            continue;
+        };
+        if !output.status.success() {
+            continue;
+        }
+        let raw = String::from_utf8_lossy(&output.stdout);
+        apps.extend(parse_windows_app_paths_registry_output(&raw));
+    }
+}
+
+#[allow(dead_code)]
+fn parse_windows_app_paths_registry_output(raw: &str) -> Vec<InstalledAppEntry> {
+    let mut apps = Vec::new();
+    let mut current_name: Option<String> = None;
+    for line in raw.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if trimmed.contains("\\App Paths\\") {
+            current_name = trimmed
+                .rsplit('\\')
+                .next()
+                .and_then(|name| name.strip_suffix(".exe").or(Some(name)))
+                .map(|name| name.to_string());
+            continue;
+        }
+        let Some(name) = current_name.as_ref() else {
+            continue;
+        };
+        if !(trimmed.starts_with("(Default)") || trimmed.starts_with("@"))
+            || !trimmed.contains("REG_SZ")
+        {
+            continue;
+        }
+        let Some((_, value)) = trimmed.split_once("REG_SZ") else {
+            continue;
+        };
+        let target = value.trim().trim_matches('"');
+        if target.is_empty() {
+            continue;
+        }
+        apps.push(InstalledAppEntry {
+            app_id: format!("windows:app-paths:{}", stable_hash(target)),
+            name: name.clone(),
+            name_i18n: None,
+            aliases: Vec::new(),
+            platform: "windows".to_string(),
+            source: "app-paths".to_string(),
+            display_path: Some(target.to_string()),
+            launch_target: target.to_string(),
+        });
+        current_name = None;
+    }
+    apps
+}
+
+#[cfg(target_os = "linux")]
+fn discover_platform_apps_for_locale(_locale: Option<&str>) -> Vec<InstalledAppEntry> {
+    let mut roots = vec![
+        PathBuf::from("/usr/share/applications"),
+        PathBuf::from("/usr/local/share/applications"),
+    ];
+    if let Some(home) = dirs_next_home() {
+        roots.push(home.join(".local/share/applications"));
+    }
+
+    let mut apps = Vec::new();
+    for root in roots {
+        let Ok(entries) = fs::read_dir(root) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("desktop") {
+                continue;
+            }
+            let Some(app) = parse_linux_desktop_entry(&path) else {
+                continue;
+            };
+            apps.push(app);
+        }
+    }
+    dedupe_installed_apps(apps)
+}
+
+fn discover_platform_apps() -> Vec<InstalledAppEntry> {
+    discover_platform_apps_for_locale(None)
+}
+
+#[allow(dead_code)]
+fn parse_linux_desktop_entry(path: &Path) -> Option<InstalledAppEntry> {
+    let raw = fs::read_to_string(path).ok()?;
+    if raw.lines().any(|line| line.trim() == "NoDisplay=true") {
+        return None;
+    }
+    let name = raw
+        .lines()
+        .find_map(|line| line.strip_prefix("Name="))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?
+        .to_string();
+    let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let canonical_str = canonical.to_string_lossy().to_string();
+    let desktop_id = path.file_name()?.to_string_lossy().to_string();
+    Some(InstalledAppEntry {
+        app_id: format!("linux:desktop-entry:{}", desktop_id),
+        name,
+        name_i18n: None,
+        aliases: Vec::new(),
+        platform: "linux".to_string(),
+        source: "desktop-entry".to_string(),
+        display_path: Some(canonical_str),
+        launch_target: desktop_id,
+    })
+}
+
+fn dedupe_installed_apps(apps: Vec<InstalledAppEntry>) -> Vec<InstalledAppEntry> {
+    let mut by_key = HashMap::<String, InstalledAppEntry>::new();
+    for app in apps {
+        by_key.entry(app.app_id.clone()).or_insert(app);
+    }
+    let mut result: Vec<InstalledAppEntry> = by_key.into_values().collect();
+    result.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    result
+}
+
+#[tauri::command]
+fn discover_installed_apps(locale: Option<String>) -> Result<Vec<DiscoveredApp>, String> {
+    let apps = discover_platform_apps_for_locale(locale.as_deref());
+    if let Ok(mut targets) = installed_app_targets().lock() {
+        targets.clear();
+        for app in &apps {
+            targets.insert(app.app_id.clone(), app.launch_target.clone());
+        }
+    }
+    Ok(apps.iter().map(installed_app_from_entry).collect())
+}
+
+#[tauri::command]
+fn launch_installed_app(app_id: String) -> Result<(), String> {
+    let cached_target = installed_app_targets()
+        .lock()
+        .ok()
+        .and_then(|targets| targets.get(&app_id).cloned());
+    let target = if let Some(target) = cached_target {
+        target
+    } else {
+        let apps = discover_platform_apps();
+        let target = apps
+            .iter()
+            .find(|app| app.app_id == app_id)
+            .map(|app| app.launch_target.clone())
+            .ok_or_else(|| "Application is no longer available".to_string())?;
+        if let Ok(mut targets) = installed_app_targets().lock() {
+            for app in &apps {
+                targets.insert(app.app_id.clone(), app.launch_target.clone());
+            }
+        }
+        target
+    };
+    system_open_app_target(&target)
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -486,6 +1218,7 @@ fn init_config_dir() -> Result<String, String> {
     let scripts_dir = base.join("scripts");
     let builtin_dir = scripts_dir.join("builtin");
     let plugins_dir = base.join("plugins");
+    let app_icon_cache_dir = base.join("cache").join("app-icons");
     let plugin_builtin_dir = plugins_dir.join("builtin");
     let plugin_installed_dir = plugins_dir.join("installed");
     let plugin_dev_dir = plugins_dir.join("dev");
@@ -493,6 +1226,7 @@ fn init_config_dir() -> Result<String, String> {
     fs::create_dir_all(&plugin_builtin_dir).map_err(|e| e.to_string())?;
     fs::create_dir_all(&plugin_installed_dir).map_err(|e| e.to_string())?;
     fs::create_dir_all(&plugin_dev_dir).map_err(|e| e.to_string())?;
+    fs::create_dir_all(&app_icon_cache_dir).map_err(|e| e.to_string())?;
     Ok(base.to_string_lossy().to_string())
 }
 
@@ -583,6 +1317,189 @@ struct PluginFileNode {
     children: Option<Vec<PluginFileNode>>,
 }
 
+#[derive(serde::Serialize)]
+struct PluginBlobWriteResult {
+    #[serde(rename = "blobId")]
+    blob_id: String,
+    #[serde(rename = "byteSize")]
+    byte_size: usize,
+    #[serde(rename = "contentType")]
+    content_type: String,
+}
+
+#[derive(serde::Serialize)]
+struct PluginBlobReadResult {
+    bytes: Vec<u8>,
+    #[serde(rename = "contentType")]
+    content_type: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct PluginBlobMetadata {
+    #[serde(rename = "contentType")]
+    content_type: String,
+    extension: String,
+    #[serde(rename = "byteSize")]
+    byte_size: usize,
+    #[serde(rename = "updatedAt")]
+    updated_at: u128,
+}
+
+fn validate_plugin_storage_source(source: &str) -> Result<(), String> {
+    match source {
+        "builtin" | "installed" | "dev" => Ok(()),
+        _ => Err("Plugin storage source must be builtin, installed, or dev".to_string()),
+    }
+}
+
+fn validate_storage_segment(value: &str, label: &str) -> Result<(), String> {
+    if value.is_empty()
+        || value == "."
+        || value == ".."
+        || value.contains('/')
+        || value.contains('\\')
+        || !value
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
+    {
+        return Err(format!("{} must be a plain storage id", label));
+    }
+    Ok(())
+}
+
+fn sanitize_blob_extension(extension: Option<String>) -> Result<String, String> {
+    let value = extension.unwrap_or_else(|| "bin".to_string());
+    let trimmed = value.trim().trim_start_matches('.').to_ascii_lowercase();
+    if trimmed.is_empty()
+        || trimmed.len() > 16
+        || !trimmed.chars().all(|ch| ch.is_ascii_alphanumeric())
+    {
+        return Err("Plugin blob extension must be alphanumeric".to_string());
+    }
+    Ok(trimmed)
+}
+
+fn plugin_blob_dir(source: &str, plugin_id: &str) -> Result<PathBuf, String> {
+    validate_plugin_storage_source(source)?;
+    validate_storage_segment(plugin_id, "Plugin id")?;
+    let dir = config_dir().map(|root| {
+        root.join("plugin-data")
+            .join(source)
+            .join(plugin_id)
+            .join("blobs")
+    })?;
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    dir.canonicalize().map_err(|e| e.to_string())
+}
+
+fn plugin_blob_paths(
+    source: &str,
+    plugin_id: &str,
+    blob_id: &str,
+) -> Result<(PathBuf, PluginBlobMetadata), String> {
+    validate_storage_segment(blob_id, "Plugin blob id")?;
+    let dir = plugin_blob_dir(source, plugin_id)?;
+    let meta_path = dir.join(format!("{}.json", blob_id));
+    let raw = fs::read_to_string(&meta_path).map_err(|e| e.to_string())?;
+    let metadata: PluginBlobMetadata = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+    let data_path = dir.join(format!("{}.{}", blob_id, metadata.extension));
+    let canonical_dir = dir.canonicalize().map_err(|e| e.to_string())?;
+    let canonical_data = data_path.canonicalize().map_err(|e| e.to_string())?;
+    if !canonical_data.starts_with(&canonical_dir) {
+        return Err("Plugin blob path escaped its storage directory".to_string());
+    }
+    Ok((canonical_data, metadata))
+}
+
+#[tauri::command]
+fn plugin_blob_save(
+    source: String,
+    plugin_id: String,
+    blob_id: String,
+    bytes: Vec<u8>,
+    content_type: String,
+    extension: Option<String>,
+) -> Result<PluginBlobWriteResult, String> {
+    validate_storage_segment(&blob_id, "Plugin blob id")?;
+    let extension = sanitize_blob_extension(extension)?;
+    let dir = plugin_blob_dir(&source, &plugin_id)?;
+    let data_path = dir.join(format!("{}.{}", blob_id, extension));
+    let metadata_path = dir.join(format!("{}.json", blob_id));
+    let metadata = PluginBlobMetadata {
+        content_type: content_type.clone(),
+        extension,
+        byte_size: bytes.len(),
+        updated_at: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| e.to_string())?
+            .as_millis(),
+    };
+    fs::write(&data_path, &bytes).map_err(|e| e.to_string())?;
+    let metadata_raw = serde_json::to_string(&metadata).map_err(|e| e.to_string())?;
+    fs::write(&metadata_path, metadata_raw).map_err(|e| e.to_string())?;
+    Ok(PluginBlobWriteResult {
+        blob_id,
+        byte_size: metadata.byte_size,
+        content_type,
+    })
+}
+
+#[tauri::command]
+fn plugin_blob_read(
+    source: String,
+    plugin_id: String,
+    blob_id: String,
+) -> Result<Option<PluginBlobReadResult>, String> {
+    match plugin_blob_paths(&source, &plugin_id, &blob_id) {
+        Ok((data_path, metadata)) => {
+            let bytes = fs::read(data_path).map_err(|e| e.to_string())?;
+            Ok(Some(PluginBlobReadResult {
+                bytes,
+                content_type: metadata.content_type,
+            }))
+        }
+        Err(error) if error.contains("No such file") || error.contains("os error 2") => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+#[tauri::command]
+fn plugin_blob_path(
+    source: String,
+    plugin_id: String,
+    blob_id: String,
+) -> Result<Option<String>, String> {
+    match plugin_blob_paths(&source, &plugin_id, &blob_id) {
+        Ok((data_path, _)) => Ok(Some(data_path.to_string_lossy().to_string())),
+        Err(error) if error.contains("No such file") || error.contains("os error 2") => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+#[tauri::command]
+fn plugin_blob_delete(source: String, plugin_id: String, blob_id: String) -> Result<(), String> {
+    validate_storage_segment(&blob_id, "Plugin blob id")?;
+    let dir = plugin_blob_dir(&source, &plugin_id)?;
+    let metadata_path = dir.join(format!("{}.json", blob_id));
+    if let Ok(raw) = fs::read_to_string(&metadata_path) {
+        if let Ok(metadata) = serde_json::from_str::<PluginBlobMetadata>(&raw) {
+            let data_path = dir.join(format!("{}.{}", blob_id, metadata.extension));
+            let _ = fs::remove_file(data_path);
+        }
+    }
+    let _ = fs::remove_file(metadata_path);
+    Ok(())
+}
+
+#[tauri::command]
+fn plugin_blob_clear(source: String, plugin_id: String) -> Result<(), String> {
+    let dir = plugin_blob_dir(&source, &plugin_id)?;
+    if dir.exists() {
+        fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn list_plugin_dirs(path: String) -> Result<Vec<PluginDirSummary>, String> {
     let root = expand_path(&path);
@@ -644,7 +1561,11 @@ fn remove_plugin_dir(root_path: String, plugin_id: String) -> Result<(), String>
 }
 
 #[tauri::command]
-fn replace_plugin_dir(source_path: String, root_path: String, plugin_id: String) -> Result<(), String> {
+fn replace_plugin_dir(
+    source_path: String,
+    root_path: String,
+    plugin_id: String,
+) -> Result<(), String> {
     validate_plugin_id(&plugin_id)?;
     let source = ensure_existing_plugin_path(&expand_path(&source_path))?;
     if !source.is_dir() {
@@ -725,7 +1646,11 @@ fn open_plugin_dir(path: String) -> Result<(), String> {
     let dir_str = dir.to_string_lossy().to_string();
 
     // Prefer opening in VS Code (`code` CLI) when available.
-    let code_command = if cfg!(target_os = "windows") { "code.cmd" } else { "code" };
+    let code_command = if cfg!(target_os = "windows") {
+        "code.cmd"
+    } else {
+        "code"
+    };
     if std::process::Command::new(code_command)
         .arg(&dir_str)
         .spawn()
@@ -841,7 +1766,10 @@ async fn fetch_github_directory(
     ensure_plugin_path_for_write(&destination_root)?;
     fs::create_dir_all(&destination_root).map_err(|e| e.to_string())?;
     let destination_root = ensure_existing_plugin_path(&destination_root)?;
-    let archive_url = format!("https://codeload.github.com/{}/{}/zip/refs/heads/{}", owner, repo, branch);
+    let archive_url = format!(
+        "https://codeload.github.com/{}/{}/zip/refs/heads/{}",
+        owner, repo, branch
+    );
     let bytes = reqwest::get(&archive_url)
         .await
         .map_err(|e| format!("GitHub download failed: {}", e))?
@@ -860,7 +1788,9 @@ async fn fetch_github_directory(
             let canonical_candidate = candidate.canonicalize().map_err(|e| e.to_string())?;
             let canonical_top = top.canonicalize().map_err(|e| e.to_string())?;
             if !canonical_candidate.starts_with(&canonical_top) {
-                return Err("GitHub directory path must stay inside the repository archive".to_string());
+                return Err(
+                    "GitHub directory path must stay inside the repository archive".to_string(),
+                );
             }
             if !candidate.join("manifest.json").exists() {
                 return Err("GitHub directory does not contain manifest.json".to_string());
@@ -903,7 +1833,9 @@ fn read_plugin_manifest_summary(folder: &Path) -> Result<PluginDirSummary, Strin
         .unwrap_or("0.0.0")
         .to_string();
     if value.get("entry").is_some() {
-        return Err("manifest.json must not declare entry; use a fixed index.* plugin entry".to_string());
+        return Err(
+            "manifest.json must not declare entry; use a fixed index.* plugin entry".to_string(),
+        );
     }
     let entry = find_fixed_plugin_entry(folder)?;
     let capabilities = value
@@ -973,7 +1905,9 @@ fn is_allowed_plugin_text_file(path: &Path) -> bool {
         }
     }
     matches!(
-        path.extension().and_then(|s| s.to_str()).unwrap_or_default(),
+        path.extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default(),
         "js" | "ts" | "jsx" | "tsx" | "json" | "css" | "md" | "txt" | "html" | "yml" | "yaml"
     )
 }
@@ -1008,16 +1942,18 @@ fn validate_plugin_relative_path(value: &str, label: &str) -> Result<(), String>
         || trimmed.contains('?')
         || trimmed.contains('#')
         || trimmed.contains(':')
-        || trimmed.split('/').any(|segment| segment.is_empty() || segment == "." || segment == "..")
+        || trimmed
+            .split('/')
+            .any(|segment| segment.is_empty() || segment == "." || segment == "..")
     {
         return Err(format!("{} must be a package-relative path", label));
     }
 
     let path = Path::new(trimmed);
     if path.is_absolute()
-        || path.components().any(|component| {
-            !matches!(component, Component::Normal(_))
-        })
+        || path
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
     {
         return Err(format!("{} must be a package-relative path", label));
     }
@@ -1025,7 +1961,13 @@ fn validate_plugin_relative_path(value: &str, label: &str) -> Result<(), String>
 }
 
 fn find_fixed_plugin_entry(folder: &Path) -> Result<String, String> {
-    for entry in ["index.tsx", "index.ts", "index.jsx", "index.js", "index.mjs"] {
+    for entry in [
+        "index.tsx",
+        "index.ts",
+        "index.jsx",
+        "index.js",
+        "index.mjs",
+    ] {
         let candidate = folder.join(entry);
         if candidate.exists() && candidate.is_file() {
             validate_plugin_relative_path(entry, "plugin entry")?;
@@ -1042,7 +1984,8 @@ fn plugin_root_dir() -> Result<PathBuf, String> {
 }
 
 fn has_parent_component(path: &Path) -> bool {
-    path.components().any(|component| matches!(component, Component::ParentDir))
+    path.components()
+        .any(|component| matches!(component, Component::ParentDir))
 }
 
 fn ensure_existing_plugin_path(path: &Path) -> Result<PathBuf, String> {
@@ -1103,7 +2046,10 @@ fn extract_zip_bytes_to_dir(bytes: &[u8], target: &Path) -> Result<(), String> {
     extract_zip_archive(&mut archive, target)
 }
 
-fn extract_zip_archive<R: Read + std::io::Seek>(archive: &mut ZipArchive<R>, target: &Path) -> Result<(), String> {
+fn extract_zip_archive<R: Read + std::io::Seek>(
+    archive: &mut ZipArchive<R>,
+    target: &Path,
+) -> Result<(), String> {
     for i in 0..archive.len() {
         let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
         let enclosed = file
@@ -1124,7 +2070,10 @@ fn extract_zip_archive<R: Read + std::io::Seek>(archive: &mut ZipArchive<R>, tar
     Ok(())
 }
 
-fn install_package_from_extracted_dir(extracted_root: &Path, destination_root: &Path) -> Result<String, String> {
+fn install_package_from_extracted_dir(
+    extracted_root: &Path,
+    destination_root: &Path,
+) -> Result<String, String> {
     let package_root = find_manifest_root(extracted_root)?;
     install_package_dir(&package_root, destination_root)
 }
@@ -1251,6 +2200,11 @@ pub fn run() {
             open_plugin_dir,
             read_plugin_file,
             save_plugin_file,
+            plugin_blob_save,
+            plugin_blob_read,
+            plugin_blob_delete,
+            plugin_blob_path,
+            plugin_blob_clear,
             install_plugin_dir,
             install_plugin_zip,
             install_plugin_zip_url,
@@ -1262,6 +2216,10 @@ pub fn run() {
             hide_launcher_window,
             simulate_paste,
             current_foreground_app_name,
+            discover_installed_apps,
+            read_installed_app_icon_url,
+            cache_installed_app_icons,
+            launch_installed_app,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -1302,6 +2260,168 @@ mod plugin_dir_command_tests {
     }
 
     #[test]
+    fn stable_app_id_hash_generation_is_deterministic() {
+        let left = stable_hash("/Applications/Example.app");
+        let right = stable_hash("/Applications/Example.app");
+        assert_eq!(left, right);
+        assert_ne!(left, stable_hash("/Applications/Other.app"));
+    }
+
+    #[test]
+    fn dedupe_app_discovery_keeps_one_duplicate_app_id() {
+        let apps = dedupe_installed_apps(vec![
+            InstalledAppEntry {
+                app_id: "macos:bundle:com.example.App".to_string(),
+                name: "Example".to_string(),
+                name_i18n: None,
+                aliases: Vec::new(),
+                platform: "macos".to_string(),
+                source: "applications".to_string(),
+                display_path: Some("/Applications/Example.app".to_string()),
+                launch_target: "/Applications/Example.app".to_string(),
+            },
+            InstalledAppEntry {
+                app_id: "macos:bundle:com.example.App".to_string(),
+                name: "Example Copy".to_string(),
+                name_i18n: None,
+                aliases: Vec::new(),
+                platform: "macos".to_string(),
+                source: "applications".to_string(),
+                display_path: Some("/Users/me/Applications/Example.app".to_string()),
+                launch_target: "/Users/me/Applications/Example.app".to_string(),
+            },
+        ]);
+        assert_eq!(apps.len(), 1);
+        assert_eq!(apps[0].app_id, "macos:bundle:com.example.App");
+    }
+
+    #[test]
+    fn macos_bundle_metadata_prefers_localized_info_plist_strings() {
+        let dir = unique_home("macos-localized-bundle");
+        let app = dir.join("Lark.app");
+        let contents = app.join("Contents");
+        let resources = contents.join("Resources").join("zh-Hans.lproj");
+        fs::create_dir_all(&resources).expect("localized resources should be created");
+        fs::write(
+            contents.join("Info.plist"),
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>com.electron.lark</string>
+  <key>CFBundleDisplayName</key><string>Lark</string>
+  <key>CFBundleName</key><string>Feishu</string>
+</dict></plist>"#,
+        )
+        .expect("Info.plist fixture should be written");
+        fs::write(
+            resources.join("InfoPlist.strings"),
+            r#"CFBundleDisplayName = "飞书";
+CFBundleName = "飞书";"#,
+        )
+        .expect("localized InfoPlist.strings fixture should be written");
+
+        let (bundle_id, zh_name, name_i18n, aliases) =
+            read_macos_bundle_metadata(&app, Some("zh-CN"));
+        assert_eq!(bundle_id.as_deref(), Some("com.electron.lark"));
+        assert_eq!(zh_name.as_deref(), Some("飞书"));
+        assert_eq!(
+            name_i18n
+                .as_ref()
+                .and_then(|names| names.get("zh"))
+                .map(String::as_str),
+            Some("飞书")
+        );
+        assert!(
+            aliases.iter().any(|alias| alias == "Feishu"),
+            "CFBundleName should be searchable as an app alias"
+        );
+
+        let (_, en_name, _, _) = read_macos_bundle_metadata(&app, Some("en"));
+        assert_eq!(en_name.as_deref(), Some("Lark"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn linux_desktop_entry_fixture_parses_visible_apps() {
+        let dir = unique_home("linux-desktop-entry");
+        fs::create_dir_all(&dir).expect("fixture dir should be created");
+        let desktop = dir.join("example.desktop");
+        fs::write(
+            &desktop,
+            "[Desktop Entry]\nType=Application\nName=Example App\nExec=/usr/bin/example %U\n",
+        )
+        .expect("desktop fixture should be written");
+
+        let app = parse_linux_desktop_entry(&desktop).expect("desktop fixture should parse");
+        assert_eq!(app.app_id, "linux:desktop-entry:example.desktop");
+        assert_eq!(app.name, "Example App");
+        assert_eq!(app.source, "desktop-entry");
+        assert_eq!(app.launch_target, "example.desktop");
+
+        fs::write(
+            &desktop,
+            "[Desktop Entry]\nType=Application\nName=Hidden App\nNoDisplay=true\n",
+        )
+        .expect("hidden desktop fixture should be written");
+        assert!(parse_linux_desktop_entry(&desktop).is_none());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn windows_start_menu_fixture_indexes_lnk_files() {
+        let dir = unique_home("windows-start-menu");
+        let nested = dir.join("Programs").join("Tools");
+        fs::create_dir_all(&nested).expect("start menu fixture should be created");
+        fs::write(nested.join("Example Tool.lnk"), "shortcut")
+            .expect("lnk fixture should be written");
+        fs::write(nested.join("ignore.txt"), "not an app")
+            .expect("non-app fixture should be written");
+
+        let mut apps = Vec::new();
+        collect_windows_start_menu_apps(&dir, &mut apps);
+        assert_eq!(apps.len(), 1);
+        assert_eq!(apps[0].name, "Example Tool");
+        assert_eq!(apps[0].platform, "windows");
+        assert_eq!(apps[0].source, "start-menu");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn windows_app_paths_fixture_parses_registry_output() {
+        let raw = r#"
+HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\App Paths\Example.exe
+    (Default)    REG_SZ    C:\Program Files\Example\Example.exe
+"#;
+
+        let apps = parse_windows_app_paths_registry_output(raw);
+        assert_eq!(apps.len(), 1);
+        assert_eq!(apps[0].name, "Example");
+        assert_eq!(apps[0].source, "app-paths");
+        assert_eq!(
+            apps[0].launch_target,
+            r"C:\Program Files\Example\Example.exe"
+        );
+    }
+
+    #[test]
+    fn missing_icon_keeps_app_metadata_without_icon() {
+        let entry = InstalledAppEntry {
+            app_id: "macos:path:missing-icon".to_string(),
+            name: "Missing Icon".to_string(),
+            name_i18n: None,
+            aliases: Vec::new(),
+            platform: "macos".to_string(),
+            source: "applications".to_string(),
+            display_path: Some("/does/not/exist/Missing.app".to_string()),
+            launch_target: "/does/not/exist/Missing.app".to_string(),
+        };
+
+        let app = installed_app_from_entry(&entry);
+        assert_eq!(app.app_id, entry.app_id);
+        assert_eq!(app.name, "Missing Icon");
+        assert!(extract_app_icon(&entry).is_none());
+    }
+
+    #[test]
     fn init_config_dir_migrates_legacy_fluxtext_config() {
         with_isolated_home("config-migration", |home| {
             let legacy = home.join(".local").join("fluxtext");
@@ -1310,8 +2430,11 @@ mod plugin_dir_command_tests {
                 .join("installed")
                 .join("legacy-plugin");
             fs::create_dir_all(&legacy_plugin).expect("legacy plugin dir should be created");
-            fs::write(legacy_plugin.join("manifest.json"), r#"{"pluginId":"legacy-plugin"}"#)
-                .expect("legacy plugin manifest should be written");
+            fs::write(
+                legacy_plugin.join("manifest.json"),
+                r#"{"pluginId":"legacy-plugin"}"#,
+            )
+            .expect("legacy plugin manifest should be written");
 
             let config = PathBuf::from(init_config_dir().expect("config dir should initialize"));
 
@@ -1343,7 +2466,8 @@ mod plugin_dir_command_tests {
   "displayNameI18n": { "zh": "插件创作验证" },
   "version": "1.0.0",
   "capabilities": ["command"]
-}"#.to_string(),
+}"#
+                .to_string(),
             )
             .expect("manifest should be writable under plugins root");
             save_plugin_file(
@@ -1406,7 +2530,8 @@ mod plugin_dir_command_tests {
   "displayName": "Bad Entry",
   "entry": "custom.js",
   "version": "1.0.0"
-}"#.to_string(),
+}"#
+                .to_string(),
             )
             .expect("manifest should be writable before validation");
             save_plugin_file(
@@ -1420,12 +2545,10 @@ mod plugin_dir_command_tests {
             assert_eq!(summaries.len(), 1);
             assert_eq!(summaries[0].plugin_id, "bad-entry");
             assert_eq!(summaries[0].entry, "");
-            assert!(
-                summaries[0]
-                    .error
-                    .as_ref()
-                    .is_some_and(|error| error.contains("must not declare entry"))
-            );
+            assert!(summaries[0]
+                .error
+                .as_ref()
+                .is_some_and(|error| error.contains("must not declare entry")));
 
             let parent_path = installed.join("..").join("escape").join("index.js");
             let parent_error = save_plugin_file(

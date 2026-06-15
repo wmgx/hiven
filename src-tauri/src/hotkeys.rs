@@ -323,9 +323,7 @@ fn start_double_modifier_listener(state: Arc<DoubleModifierHotkeyState>, app: ta
                 }
             }
             Err(_) => {
-                eprintln!(
-                    "[hiven] Failed to create CGEventTap! Check Accessibility permissions."
-                );
+                eprintln!("[hiven] Failed to create CGEventTap! Check Accessibility permissions.");
                 if let Ok(mut listener_running) = state.listener_running.lock() {
                     *listener_running = false;
                 }

@@ -14,6 +14,7 @@ import { PluginSettingsDialog } from './components/PluginSettingsDialog'
 import { loadInstalledPluginsFromStore } from './workspace/pluginRuntime'
 import { registerBundledPluginPackages } from './workspace/bundledPluginLoader'
 import { initializePluginBackgrounds, setupBackgroundPermissionWatcher, setupBackgroundSettingsWatcher, stopAllPluginBackgrounds } from './workspace/pluginBackgroundManager'
+import { runPluginStartupHooks } from './workspace/pluginHookManager'
 import { installGlobalPinnedLauncherHotkeys, routeGlobalPinnedLauncherShortcut } from './hotkeys/globalPinnedLauncher'
 import { installPluginSurfaceShortcutHotkeys } from './hotkeys/pluginSurfaceShortcuts'
 import { consumePendingPluginSurfaceOpenTarget, isPluginSurfaceOpenTarget } from './workspace/pluginSurfaceOpenRequest'
@@ -112,6 +113,7 @@ function MainApp() {
       }
 
       if (disposed) return
+      runPluginStartupHooks()
       try {
         initializePluginBackgrounds()
         cleanupSettingsWatcher = setupBackgroundSettingsWatcher()

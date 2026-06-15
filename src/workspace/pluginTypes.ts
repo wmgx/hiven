@@ -12,6 +12,7 @@ import type {
   LauncherDynamicItemProvider,
   PluginToolContribution,
   PanelActionContribution,
+  PluginLauncherApi,
 } from './launcher/types'
 
 // ─── Input Types ─────────────────────────────────────────────────────────────
@@ -261,6 +262,8 @@ export type PluginPermission =
   | 'clipboard.files'
   | 'storage.private'
   | 'storage.blob'
+  | 'app.discover'
+  | 'app.launch'
   | 'globalShortcut.register'
   | 'accessibility.paste'
 
@@ -438,6 +441,26 @@ export type PluginBackgroundContribution<TSettings = unknown> = {
   start(ctx: PluginBackgroundContext<TSettings>): Promise<PluginBackgroundStop | void> | PluginBackgroundStop | void
 }
 
+// ─── Plugin Hooks ────────────────────────────────────────────────────────────
+
+export type PluginStartupHookContext<TSettings = unknown> = {
+  pluginId: string
+  source: 'builtin' | 'installed' | 'dev'
+  locale: Locale
+  settings: TSettings
+  permissions: PluginPermissionSnapshot
+  storage: PluginPrivateStorageApi
+  clipboard: PluginClipboardApi
+  paste: PluginPasteApi
+  api: PluginLauncherApi
+  t: (key: string, vars?: Record<string, string | number>) => string
+  showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
+}
+
+export type PluginHooksContribution<TSettings = unknown> = {
+  startup?(ctx: PluginStartupHookContext<TSettings>): Promise<void> | void
+}
+
 // ─── Plugin Definition ────────────────────────────────────────────────────────
 
 /** The full plugin definition returned by definePlugin */
@@ -462,6 +485,8 @@ export type PluginDefinition<TSettings = unknown> = {
   ui?: PluginUiContribution<TSettings>
   /** Plugin background lifecycle (long-running tasks). */
   background?: PluginBackgroundContribution<TSettings>
+  /** One-shot plugin lifecycle hooks. */
+  hooks?: PluginHooksContribution<TSettings>
 }
 
 // ─── Plugin Manifest ──────────────────────────────────────────────────────────

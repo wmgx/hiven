@@ -62,9 +62,10 @@ export function definePlugin<TSettings = unknown>(
     Array.isArray(definition.toolbar) ||
     definition.settings != null ||
     definition.ui != null ||
-    definition.background != null
+    definition.background != null ||
+    definition.hooks != null
   if (!hasContributions) {
-    throw new Error('[definePlugin] Plugin must declare at least one of tools/launcher/panel/commands/renderers/panels/toolbar/settings/ui/background')
+    throw new Error('[definePlugin] Plugin must declare at least one of tools/launcher/panel/commands/renderers/panels/toolbar/settings/ui/background/hooks')
   }
 
   return definition

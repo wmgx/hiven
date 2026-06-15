@@ -23,6 +23,7 @@
     "test:plugin-merge-groups": "node scripts/test-plugin-merge-groups.mjs",
     "test:plugin-selection-input-resolution": "node scripts/test-plugin-selection-input-resolution.mjs",
     "test:web-open-dynamic-items": "node scripts/test-web-open-dynamic-items.mjs",
+    "test:app-launcher-contract": "node scripts/test-app-launcher-contract.mjs",
     "test:tauri-plugin-dir-commands": "cargo test --manifest-path src-tauri/Cargo.toml plugin_dir_command_tests -- --test-threads=1",
     "test:clipboard-history-storage": "node scripts/test-clipboard-history-storage.mjs",
     "test:clipboard-history-boundary": "node scripts/test-clipboard-history-boundary.mjs",

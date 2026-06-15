@@ -1,7 +1,7 @@
 /**
  * Plugin Private Storage — Host Implementation
  *
- * Provides per-plugin isolated KV storage (localStorage) and blob storage (in-memory + object URLs).
+ * Provides per-plugin isolated KV storage (localStorage) and native blob storage.
  * Plugins access this through PluginPrivateStorageApi; they never touch localStorage directly.
  */
 
@@ -11,7 +11,8 @@ import { requirePluginPermissions } from './pluginPermissions'
 
 const KV_PREFIX = 'hiven-plugin-kv:'
 const KV_META_PREFIX = 'hiven-plugin-kv-meta:'
-const BLOB_PREFIX = 'hiven-plugin-blob:'
+const LEGACY_BLOB_PREFIX = 'hiven-plugin-blob:'
+const legacyBlobCleanupDone = new Set<string>()
 
 function kvKey(source: PluginSettingsSource, pluginId: string, key: string): string {
   return `${KV_PREFIX}${source}:${pluginId}:${key}`
@@ -29,90 +30,65 @@ function kvMetaPrefixForPlugin(source: PluginSettingsSource, pluginId: string): 
   return `${KV_META_PREFIX}${source}:${pluginId}:`
 }
 
-function blobKey(source: PluginSettingsSource, pluginId: string, blobId: string): string {
-  return `${BLOB_PREFIX}${source}:${pluginId}:${blobId}`
+function legacyBlobPrefixForPlugin(source: PluginSettingsSource, pluginId: string): string {
+  return `${LEGACY_BLOB_PREFIX}${source}:${pluginId}:`
 }
 
-function blobPrefixForPlugin(source: PluginSettingsSource, pluginId: string): string {
-  return `${BLOB_PREFIX}${source}:${pluginId}:`
-}
-
-type BlobEntry = {
-  bytes: Uint8Array
+type NativeBlobReadResult = {
+  bytes: number[] | Uint8Array
   contentType: string
-  source: PluginSettingsSource
-  pluginId: string
 }
 
-type StoredBlobEntry = {
-  bytesBase64: string
-  contentType: string
-  updatedAt: number
-}
-
-// In-memory blob store is a cache over persisted per-plugin blob storage.
-const blobStore = new Map<string, BlobEntry>()
 const blobUrlCache = new Map<string, string>()
 let blobCounter = 0
 
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = ''
-  const chunkSize = 0x8000
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
-  }
-  return btoa(binary)
+function isTauri(): boolean {
+  return !!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
 }
 
-function base64ToBytes(value: string): Uint8Array {
-  const binary = atob(value)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i)
-  }
-  return bytes
+async function invoke<T>(command: string, args: Record<string, unknown>): Promise<T> {
+  const { invoke: tauriInvoke } = await import('@tauri-apps/api/core')
+  return tauriInvoke<T>(command, args)
 }
 
-function readPersistedBlob(source: PluginSettingsSource, pluginId: string, blobId: string): BlobEntry | undefined {
-  const raw = localStorage.getItem(blobKey(source, pluginId, blobId))
-  if (!raw) return undefined
-  try {
-    const stored = JSON.parse(raw) as StoredBlobEntry
-    return {
-      bytes: base64ToBytes(stored.bytesBase64),
-      contentType: stored.contentType,
-      source,
-      pluginId,
-    }
-  } catch {
-    return undefined
-  }
+function revokeCachedBlobUrl(blobId: string): void {
+  const url = blobUrlCache.get(blobId)
+  if (!url) return
+  if (url.startsWith('blob:')) URL.revokeObjectURL(url)
+  blobUrlCache.delete(blobId)
 }
 
-function getBlobEntry(source: PluginSettingsSource, pluginId: string, blobId: string): BlobEntry | undefined {
-  const cached = blobStore.get(blobId)
-  if (cached && cached.pluginId === pluginId && cached.source === source) return cached
-  const persisted = readPersistedBlob(source, pluginId, blobId)
-  if (persisted) blobStore.set(blobId, persisted)
-  return persisted
+function clearLegacyBlobLocalStorage(source: PluginSettingsSource, pluginId: string): void {
+  const cleanupKey = `${source}:${pluginId}`
+  if (legacyBlobCleanupDone.has(cleanupKey)) return
+  legacyBlobCleanupDone.add(cleanupKey)
+
+  const prefix = legacyBlobPrefixForPlugin(source, pluginId)
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const key = localStorage.key(i)
+    if (!key?.startsWith(prefix)) continue
+    localStorage.removeItem(key)
+  }
 }
 
 export function clearPluginPrivateStorage(source: PluginSettingsSource, pluginId: string): void {
-  const prefixes = [kvPrefixForPlugin(source, pluginId), kvMetaPrefixForPlugin(source, pluginId), blobPrefixForPlugin(source, pluginId)]
+  const prefixes = [kvPrefixForPlugin(source, pluginId), kvMetaPrefixForPlugin(source, pluginId), legacyBlobPrefixForPlugin(source, pluginId)]
   for (let i = localStorage.length - 1; i >= 0; i--) {
     const key = localStorage.key(i)
     if (!key || !prefixes.some((prefix) => key.startsWith(prefix))) continue
     localStorage.removeItem(key)
   }
 
-  for (const [blobId, entry] of Array.from(blobStore)) {
-    if (entry.source !== source || entry.pluginId !== pluginId) continue
-    blobStore.delete(blobId)
-    const url = blobUrlCache.get(blobId)
-    if (url) {
-      URL.revokeObjectURL(url)
-      blobUrlCache.delete(blobId)
-    }
+  const blobIdPrefix = `blob-${source}-${pluginId}-`
+  for (const blobId of Array.from(blobUrlCache.keys())) {
+    if (!blobId.startsWith(blobIdPrefix)) continue
+    revokeCachedBlobUrl(blobId)
+  }
+
+  if (isTauri()) {
+    void invoke<void>('plugin_blob_clear', { source, pluginId }).catch((error) => {
+      console.warn('[hiven] Failed to clear plugin blob storage:', error)
+    })
   }
 }
 
@@ -121,6 +97,8 @@ export function createPluginPrivateStorage(
   pluginId: string,
   permissions?: PluginPermissionSnapshot,
 ): PluginPrivateStorageApi {
+  clearLegacyBlobLocalStorage(source, pluginId)
+
   const requireKv = () => {
     if (permissions) requirePluginPermissions(permissions, ['storage.private'])
   }
@@ -178,42 +156,46 @@ export function createPluginPrivateStorage(
     blob: {
       async put(input: { bytes: Uint8Array; contentType: string; extension?: string }): Promise<PluginBlobRef> {
         requireBlob()
+        if (!isTauri()) {
+          throw new Error('Plugin blob storage requires the desktop app')
+        }
         const blobId = `blob-${source}-${pluginId}-${++blobCounter}-${Date.now().toString(36)}`
-        blobStore.set(blobId, { bytes: input.bytes, contentType: input.contentType, source, pluginId })
-        localStorage.setItem(blobKey(source, pluginId, blobId), JSON.stringify({
-          bytesBase64: bytesToBase64(input.bytes),
+        await invoke('plugin_blob_save', {
+          source,
+          pluginId,
+          blobId,
+          bytes: Array.from(input.bytes),
           contentType: input.contentType,
-          updatedAt: Date.now(),
-        } satisfies StoredBlobEntry))
+          extension: input.extension,
+        })
         return { blobId, byteSize: input.bytes.length, contentType: input.contentType }
       },
 
       async get(blobId: string): Promise<Uint8Array | undefined> {
         requireBlob()
-        return getBlobEntry(source, pluginId, blobId)?.bytes
+        if (!isTauri()) return undefined
+        const result = await invoke<NativeBlobReadResult | null>('plugin_blob_read', { source, pluginId, blobId })
+        if (!result) return undefined
+        return result.bytes instanceof Uint8Array ? result.bytes : new Uint8Array(result.bytes)
       },
 
       async delete(blobId: string): Promise<void> {
         requireBlob()
-        const entry = blobStore.get(blobId)
-        if (entry && (entry.pluginId !== pluginId || entry.source !== source)) return
-        blobStore.delete(blobId)
-        localStorage.removeItem(blobKey(source, pluginId, blobId))
-        const url = blobUrlCache.get(blobId)
-        if (url) {
-          URL.revokeObjectURL(url)
-          blobUrlCache.delete(blobId)
+        if (isTauri()) {
+          await invoke<void>('plugin_blob_delete', { source, pluginId, blobId })
         }
+        revokeCachedBlobUrl(blobId)
       },
 
       async url(blobId: string): Promise<string> {
         requireBlob()
         const cached = blobUrlCache.get(blobId)
         if (cached) return cached
-        const entry = getBlobEntry(source, pluginId, blobId)
-        if (!entry) return ''
-        const blob = new Blob([entry.bytes], { type: entry.contentType })
-        const url = URL.createObjectURL(blob)
+        if (!isTauri()) return ''
+        const path = await invoke<string | null>('plugin_blob_path', { source, pluginId, blobId })
+        if (!path) return ''
+        const { convertFileSrc } = await import('@tauri-apps/api/core')
+        const url = convertFileSrc(path)
         blobUrlCache.set(blobId, url)
         return url
       },
@@ -231,17 +213,6 @@ export function createPluginPrivateStorage(
           const value = localStorage.getItem(key)
           if (value) {
             bytes += value.length * 2 // approximate: UTF-16
-            itemCount++
-          }
-        }
-        // Add blob sizes
-        const blobPrefix = blobPrefixForPlugin(source, pluginId)
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i)
-          if (!key || !key.startsWith(blobPrefix)) continue
-          const value = localStorage.getItem(key)
-          if (value) {
-            bytes += value.length * 2
             itemCount++
           }
         }

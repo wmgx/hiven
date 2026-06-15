@@ -106,6 +106,7 @@ export function adaptToolToLauncherItem(
         settings: ctx.settings,
         locale: ctx.locale,
         api: ctx.api,
+        storage: ctx.storage,
         t: ctx.t,
         output: makeOutput(ctx.api, ctx.locale, hasManualInput && ctx.surfaceId === 'global-launcher'),
       }),

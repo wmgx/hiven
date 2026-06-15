@@ -14,8 +14,18 @@ import { useWorkspaceStore } from '../workspaceStore'
 import { runtimeRegistry } from '../runtimeRegistry'
 import { applyEffects, openExternalUrl } from '../effectRunner'
 import { useAppStore } from '../../store'
+import { createPluginPrivateStorage } from '../pluginStorage'
+import { getPluginPermissionSnapshot, requirePluginPermissions } from '../pluginPermissions'
 import type { FluxEffect, SerializedRange } from '../types'
-import type { PluginLauncherApi } from './types'
+import type { PluginPermission } from '../pluginTypes'
+import type { PluginSettingsSource } from '../pluginSettingsStore'
+import type { DiscoveredApp, PluginAppsApi, PluginLauncherApi } from './types'
+
+export type PluginLauncherApiOptions = {
+  pluginId?: string
+  source?: PluginSettingsSource
+  requestedPermissions?: readonly PluginPermission[]
+}
 
 function readActiveText(): string {
   return useWorkspaceStore.getState().getActivePaneText()
@@ -92,7 +102,35 @@ async function showMainPanel(): Promise<void> {
  * Build a PluginLauncherApi. The host owns the implementation, so plugins get a
  * stable, narrow surface. All text targets resolve against the active pane.
  */
-export function createPluginLauncherApi(): PluginLauncherApi {
+export function createPluginAppsApi(options: PluginLauncherApiOptions = {}): PluginAppsApi {
+  const permissions = () => options.pluginId && options.source
+    ? getPluginPermissionSnapshot(options.source, options.pluginId, options.requestedPermissions ?? [])
+    : undefined
+
+  return {
+    discoverApps: async () => {
+      const snapshot = permissions()
+      if (snapshot) requirePluginPermissions(snapshot, ['app.discover'])
+      const { invoke } = await import('@tauri-apps/api/core')
+      const locale = useAppStore.getState().locale
+      return await invoke('discover_installed_apps', { locale }) as DiscoveredApp[]
+    },
+    cacheAppIcons: async (appIds: string[]) => {
+      const snapshot = permissions()
+      if (snapshot) requirePluginPermissions(snapshot, ['app.discover'])
+      const { invoke } = await import('@tauri-apps/api/core')
+      return await invoke('cache_installed_app_icons', { appIds }) as number
+    },
+    launchApp: async (appId: string) => {
+      const snapshot = permissions()
+      if (snapshot) requirePluginPermissions(snapshot, ['app.launch'])
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('launch_installed_app', { appId })
+    },
+  }
+}
+
+export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}): PluginLauncherApi {
   return {
     getActiveText: () => readActiveText(),
     getSelectionText: () => readSelectionText(),
@@ -173,5 +211,15 @@ export function createPluginLauncherApi(): PluginLauncherApi {
         updatedAt: Date.now(),
       })
     },
+    apps: createPluginAppsApi(options),
   }
+}
+
+export function createPluginLauncherStorage(options: PluginLauncherApiOptions = {}) {
+  const source = options.source ?? 'builtin'
+  const pluginId = options.pluginId ?? ''
+  const permissions = options.pluginId && options.source
+    ? getPluginPermissionSnapshot(options.source, options.pluginId, options.requestedPermissions ?? [])
+    : undefined
+  return createPluginPrivateStorage(source, pluginId, permissions)
 }

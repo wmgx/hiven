@@ -1,6 +1,11 @@
 {
-  "version": 13,
+  "version": 18,
   "packages": [
+    {
+      "pluginId": "app-launcher",
+      "dir": "app-launcher",
+      "version": "1.0.5"
+    },
     {
       "pluginId": "base64",
       "dir": "base64",
