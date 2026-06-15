@@ -16,6 +16,7 @@ function assert(condition, message) {
 
 const commandPalette = read('src/components/CommandPalette.tsx')
 const globalLauncher = read('src/components/GlobalLauncher.tsx')
+const launcherParamStep = read('src/components/launcher/LauncherParamStep.tsx')
 const scriptsView = read('src/views/ScriptsView.tsx')
 const settingsView = read('src/views/SettingsView.tsx')
 const jsFilterPlugin = read('src/plugins/jsFilter/index.tsx')
@@ -58,6 +59,49 @@ function assertImeGuardedEnter(source, label) {
 assertImeGuardedEnter(commandPalette, 'CommandPalette')
 assertImeGuardedEnter(globalLauncher, 'GlobalLauncher')
 assertImeGuardedEnter(scriptsView, 'ScriptsView remote import')
+
+function assertLauncherParamStepUsesImeGuardedBackspace() {
+  const failures = []
+  const expect = (condition, message) => {
+    if (!condition) failures.push(message)
+  }
+
+  expect(
+    /useRef\(false\)/.test(launcherParamStep) && /isImeComposingRef/.test(launcherParamStep),
+    'LauncherParamStep should track IME composition state for the parameter input',
+  )
+  expect(
+    /onCompositionStart=\{handleCompositionStart\}/.test(launcherParamStep) &&
+      /onCompositionEnd=\{handleCompositionEnd\}/.test(launcherParamStep),
+    'LauncherParamStep input should receive composition start/end handlers',
+  )
+
+  const backspaceBranch = launcherParamStep.match(/if\s*\(\s*event\.key\s*={2,3}\s*['"]Backspace['"]\s*&&\s*frame\.query\s*={2,3}\s*['"]['"]\s*\)\s*\{([\s\S]*?)\n\s*\}/)
+  const backspaceBody = backspaceBranch?.[1] ?? ''
+  const imeGuardIndex = backspaceBody.search(/shouldIgnoreImeKeyDown\(.*isImeComposingRef\)/s)
+  const preventDefaultIndex = backspaceBody.indexOf('preventDefault')
+  const onBackIndex = backspaceBody.indexOf('onBack')
+
+  expect(
+    backspaceBranch !== null && imeGuardIndex >= 0,
+    'LauncherParamStep Backspace return branch should call shouldIgnoreImeKeyDown',
+  )
+  expect(
+    imeGuardIndex >= 0 &&
+      preventDefaultIndex >= 0 &&
+      onBackIndex >= 0 &&
+      imeGuardIndex < preventDefaultIndex &&
+      imeGuardIndex < onBackIndex,
+    'LauncherParamStep Backspace return branch should check shouldIgnoreImeKeyDown before preventDefault() and onBack()',
+  )
+
+  assert(
+    failures.length === 0,
+    `LauncherParamStep IME Backspace contract is missing:\n- ${failures.join('\n- ')}`,
+  )
+}
+
+assertLauncherParamStepUsesImeGuardedBackspace()
 
 assert(
   /<ShortcutRecorder\b/.test(settingsView) &&

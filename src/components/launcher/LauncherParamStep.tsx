@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { ChevronLeft, Search } from 'lucide-react'
 import { localized } from '../../store'
 import { t, type Locale } from '../../i18n'
+import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../../utils/imeKeyboard'
 import type { ParamInputFrame } from '../../workspace/launcher/controller'
 import type { LauncherParamSpec } from '../../workspace/launcher/types'
 import { searchableFieldsMatch, type SearchableFields } from '../../workspace/searchRanking'
@@ -80,6 +81,7 @@ export function LauncherParamStep({
   onBack,
 }: LauncherParamStepProps) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const isImeComposingRef = useRef(false)
   const params = frame.item.params ?? []
   const param = params[frame.paramIndex]
   const label = param ? localized(param.label, param.labelI18n, locale) : ''
@@ -100,6 +102,14 @@ export function LauncherParamStep({
   function commitOption(value: unknown) {
     if (!param || busy) return
     onCommit(value)
+  }
+
+  function handleCompositionStart() {
+    startImeComposition(isImeComposingRef)
+  }
+
+  function handleCompositionEnd() {
+    finishImeComposition(isImeComposingRef)
   }
 
   // Build breadcrumb chips for previously committed params
@@ -146,7 +156,17 @@ export function LauncherParamStep({
           value={frame.query}
           type={param.type === 'number' ? 'number' : 'text'}
           onChange={(event) => onQueryChange(event.target.value)}
+          onCompositionStart={handleCompositionStart}
+          onCompositionEnd={handleCompositionEnd}
           onKeyDown={(event) => {
+            if (event.key === 'Backspace' && frame.query === '') {
+              if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
+              event.preventDefault()
+              event.stopPropagation()
+              onBack()
+              return
+            }
+            if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
             if (event.key === 'Enter') {
               event.preventDefault()
               event.stopPropagation()
@@ -164,11 +184,6 @@ export function LauncherParamStep({
               onSelectedIndexChange(Math.max(selectedIndex - 1, 0))
             }
             if (event.key === 'Escape') {
-              event.preventDefault()
-              event.stopPropagation()
-              onBack()
-            }
-            if (event.key === 'Backspace' && frame.query === '') {
               event.preventDefault()
               event.stopPropagation()
               onBack()
