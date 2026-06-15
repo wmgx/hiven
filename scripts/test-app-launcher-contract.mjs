@@ -215,14 +215,15 @@ function assertCacheAndSearchRules() {
   assert.doesNotMatch(repository, /discoverApps/, 'repository reads must not trigger host scans')
 
   assert.match(indexOrHelpers(), /basenameForSearch|searchBasename/, 'search aliases should include only displayPath basename')
-  assert.match(indexOrHelpers(), /localizedNames[\s\S]*nameI18n/, 'search should include localized app names such as Feishu/Lark translations')
-  assert.match(indexOrHelpers(), /pinyin\(value[\s\S]*pattern:\s*['"]initial['"]/, 'app launcher query prefilter should support pinyin initials such as fs for 飞书')
+  assert.match(indexOrHelpers(), /titleI18n:\s*app\.nameI18n/, 'search should include localized app names such as Feishu/Lark translations')
+  assert.match(indexOrHelpers(), /searchableFieldsMatch/, 'app launcher query prefilter should reuse the shared launcher matcher')
+  assert.doesNotMatch(indexOrHelpers(), /pinyin-pro|pinyin\(value/, 'app launcher should not reimplement pinyin search locally')
   assert.match(indexOrHelpers(), /app\.aliases/, 'app launcher query prefilter should include host-provided aliases such as Feishu')
-  assert.doesNotMatch(indexOrHelpers(), /aliases:\s*\[[\s\S]*displayPath[\s\S]*\]/, 'full displayPath should not be added to aliases')
+  assert.doesNotMatch(indexOrHelpers(), /aliases:\s*\[[^\]]*\n\s*app\.displayPath\s*,/, 'full displayPath should not be added to aliases')
   assert.match(indexOrHelpers(), /duplicateNameSubtitles|sameName|normalizeAppName/, 'subtitles should handle exact duplicate normalized names')
   assert.match(indexOrHelpers(), /trim\(\)[\s\S]*toLowerCase\(\)|toLowerCase\(\)[\s\S]*trim\(\)/, 'duplicate-name subtitles should use trim + lowercase normalization')
   assert.match(indexOrHelpers(), /readCache\(\)[\s\S]*dynamicItems|dynamicItems[\s\S]*readCache\(\)/, 'dynamic launcher queries should be served from the system-language cache')
-  assert.doesNotMatch(indexOrHelpers(), /titleI18n:\s*app\.nameI18n/, 'dynamic app items should not override the system-localized app name with UI-locale titleI18n')
+  assert.match(indexOrHelpers(), /display:\s*\{[\s\S]*title:\s*app\.name/, 'dynamic app items should keep the system-localized app name as the visible title')
   assert.match(indexOrHelpers(), /aliases:\s*searchAliases\(app\)/, 'dynamic app items should pass app aliases through to launcher ranking')
   assert.doesNotMatch(indexOrHelpers(), /dynamicItems[\s\S]{0,1200}discoverApps/, 'dynamic launcher queries must not trigger a disk scan')
 }
@@ -278,6 +279,7 @@ function assertPluginStartupHooks() {
   assert.match(app, /runPluginStartupHooks\(\)/, 'MainApp should run plugin startup hooks after plugin registration/loading')
   assert.doesNotMatch(app.slice(0, app.indexOf('function MainApp')), /runPluginStartupHooks\(\)/, 'plugin startup hooks must not run at module scope or in launcher window imports')
   assert.match(sdk, /PluginStartupHookContext|PluginHooksContribution/, 'plugin SDK should export startup hook types')
+  assert.match(sdk, /searchableFieldsMatch|SearchableFields/, 'plugin SDK should export the shared launcher search matcher for first-party dynamic items')
   assert.match(read('src/views/ScriptsView.tsx'), /grantPluginPermissions\([^)]*missingPermissions[^)]*\)[\s\S]*runPluginStartupHooks\(\)/, 'granting plugin permissions from the plugin page should rerun eligible startup hooks')
 }
 

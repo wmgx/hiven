@@ -46,6 +46,7 @@ assertHas(files.scriptsView, /displayNameI18n:\s*pkg\.displayNameI18n/, 'Scripts
 assertHas(files.scriptsView, /updatePluginMetadata\(pkg\.pluginId[\s\S]*displayNameI18n:\s*pkg\.displayNameI18n/, 'ScriptsView should refresh displayNameI18n for already persisted packages')
 assertHas(files.scriptsView, /function\s+pluginDisplayName[\s\S]*localized\([\s\S]*displayNameI18n[\s\S]*locale[\s\S]*\)/, 'ScriptsView should localize plugin package display names from displayNameI18n')
 assertHas(files.scriptsView, /title=\{pluginDisplayName\(plugin,\s*locale\)\}/, 'ScriptsView cards should render localized plugin display names')
-assertHas(files.scriptsView, /textMatches\(pluginDisplayName\(plugin,\s*locale\),\s*normalizedQuery\)/, 'ScriptsView search should match localized plugin display names')
+assertHas(files.scriptsView, /searchableFieldsMatch\(pluginSearchFields\(plugin\),\s*query,\s*locale\)/, 'ScriptsView search should use the shared matcher for localized plugin display names')
+assertHas(files.scriptsView, /titleI18n:\s*plugin\.displayNameI18n/, 'ScriptsView search fields should preserve localized plugin display names')
 
 console.log('plugin package lifecycle checks passed')

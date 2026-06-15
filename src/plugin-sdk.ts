@@ -3,6 +3,13 @@ export { detectExternalEditorLanguage } from './workspace/languageDetector'
 export { getPluginHostSdk, createPluginHostSdk } from './pluginHostSdk'
 export { useT } from './i18n'
 export {
+  scoreSearchableFields,
+  searchableFieldsMatch,
+} from './workspace/searchRanking'
+export type {
+  SearchableFields,
+} from './workspace/searchRanking'
+export {
   textOutput,
   textError,
   defineTextCommand,

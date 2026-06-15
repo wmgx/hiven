@@ -4,6 +4,7 @@ import { localized } from '../../store'
 import { t, type Locale } from '../../i18n'
 import type { ParamInputFrame } from '../../workspace/launcher/controller'
 import type { LauncherParamSpec } from '../../workspace/launcher/types'
+import { searchableFieldsMatch, type SearchableFields } from '../../workspace/searchRanking'
 
 type LauncherParamStepProps = {
   frame: ParamInputFrame
@@ -21,6 +22,7 @@ type LauncherParamStepProps = {
 
 type ParamOption = {
   label: string
+  labelI18n?: Partial<Record<Locale, string>>
   value: unknown
 }
 
@@ -33,7 +35,7 @@ function paramOptions(param: LauncherParamSpec, locale: Locale): ParamOption[] {
   }
   return (param.options ?? []).map((option) => {
     if (typeof option === 'string') return { label: option, value: option }
-    return { label: localized(option.label, option.labelI18n, locale), value: option.value }
+    return { label: localized(option.label, option.labelI18n, locale), labelI18n: option.labelI18n, value: option.value }
   })
 }
 
@@ -48,10 +50,20 @@ export function resolveParamValueLabel(param: LauncherParamSpec, value: unknown,
   return str.length > 12 ? `${str.slice(0, 11)}…` : str
 }
 
-function filterParamOptions(options: ParamOption[], query: string) {
+function paramOptionSearchFields(option: ParamOption): SearchableFields {
+  const value = String(option.value)
+  return {
+    id: value,
+    title: option.label,
+    titleI18n: option.labelI18n,
+    aliases: value === option.label ? undefined : [value],
+  }
+}
+
+function filterParamOptions(options: ParamOption[], query: string, locale: Locale) {
   const q = query.trim().toLowerCase()
   if (!q) return options
-  return options.filter((option) => option.label.toLowerCase().includes(q) || String(option.value).toLowerCase().includes(q))
+  return options.filter((option) => searchableFieldsMatch(paramOptionSearchFields(option), q, locale))
 }
 
 export function LauncherParamStep({
@@ -72,7 +84,7 @@ export function LauncherParamStep({
   const param = params[frame.paramIndex]
   const label = param ? localized(param.label, param.labelI18n, locale) : ''
   const isTextParam = param?.type === 'text' || param?.type === 'number'
-  const options = param ? filterParamOptions(paramOptions(param, locale), frame.query) : []
+  const options = param ? filterParamOptions(paramOptions(param, locale), frame.query, locale) : []
   const selectedIndex = Math.min(frame.selectedIndex, Math.max(0, options.length - 1))
 
   useEffect(() => {

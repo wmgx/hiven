@@ -67,7 +67,10 @@ export function searchableFieldsMatch(fields: SearchableFields, q: string, local
   if (description.toLowerCase().includes(q)) return true
   if (Object.values(fields.descriptionI18n || {}).some((value) => value && value.toLowerCase().includes(q))) return true
 
-  if ((fields.aliases ?? []).some((alias) => alias.toLowerCase().includes(q))) return true
+  if ((fields.aliases ?? []).some((alias) => {
+    const normalized = alias.toLowerCase()
+    return normalized.includes(q) || pinyinMatch(alias, q) || mixedAcronymMatch(alias, q)
+  })) return true
   if (getAcronym(id).startsWith(q)) return true
   if (getAcronym((fields.title || fields.id).toLowerCase()).startsWith(q)) return true
 

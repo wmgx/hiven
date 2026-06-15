@@ -1,6 +1,5 @@
-import { definePlugin } from '@hiven/plugin'
+import { definePlugin, searchableFieldsMatch, type SearchableFields } from '@hiven/plugin'
 import type { LauncherItemContribution, LauncherDynamicContext, LauncherExecutionContext, PluginStartupHookContext } from '@hiven/plugin'
-import { pinyin } from 'pinyin-pro'
 import { createAppLauncherRepository } from './storage/repository'
 import type { CachedAppEntry } from './storage/model'
 
@@ -61,24 +60,22 @@ function searchAliases(app: CachedAppEntry): string[] {
   return Array.from(new Set(aliases.filter(Boolean)))
 }
 
-function localizedNames(app: CachedAppEntry): string[] {
-  return Object.values(app.nameI18n ?? {})
-    .filter((value): value is string => Boolean(value))
+function appSearchFields(app: CachedAppEntry): SearchableFields {
+  return {
+    id: app.appId,
+    title: app.name,
+    titleI18n: app.nameI18n,
+    aliases: [
+      basenameForSearch(app.displayPath),
+      ...searchAliases(app),
+    ].filter((value): value is string => Boolean(value)),
+  }
 }
 
-function appMatchesQuery(app: CachedAppEntry, query: string): boolean {
+function appMatchesQuery(app: CachedAppEntry, query: string, ctx: LauncherDynamicContext): boolean {
   const q = query.trim().toLowerCase()
   if (!q) return false
-  const fields = [app.appId, app.name, app.displayPath, basenameForSearch(app.displayPath), ...localizedNames(app), ...searchAliases(app)]
-    .filter((value): value is string => Boolean(value))
-  return fields.some((value) => {
-    const normalized = value.toLowerCase()
-    if (normalized.includes(q)) return true
-    if (!/^[a-z]+$/.test(q)) return false
-    const full = pinyin(value, { toneType: 'none', separator: '' }).toLowerCase()
-    const initials = pinyin(value, { pattern: 'initial', toneType: 'none', separator: '' }).toLowerCase()
-    return full.includes(q) || initials.startsWith(q)
-  })
+  return searchableFieldsMatch(appSearchFields(app), q, ctx.locale)
 }
 
 function appIconRef(appId: string): string {
@@ -163,7 +160,7 @@ async function dynamicItems(ctx: LauncherDynamicContext): Promise<LauncherItemCo
   const repository = createAppLauncherRepository(ctx.storage)
   const cache = await repository.readCache()
   const apps = cache.apps
-    .filter((app) => appMatchesQuery(app, ctx.query))
+    .filter((app) => appMatchesQuery(app, ctx.query, ctx))
     .slice(0, MAX_DYNAMIC_APP_ITEMS)
   const subtitles = duplicateNameSubtitles(apps, ctx)
 

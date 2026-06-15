@@ -220,6 +220,11 @@ check('global launcher reuses shared search ranking logic', () => {
     'shared search ranking should combine match quality with recent usage',
   )
   assertHas(
+    files.searchRanking,
+    /aliases[\s\S]*pinyinMatch\(alias,\s*q\)[\s\S]*mixedAcronymMatch\(alias,\s*q\)/,
+    'shared search ranking should apply pinyin and acronym matching to aliases',
+  )
+  assertHas(
     files.globalLauncher,
     /filtered\.length\s*===\s*1\s*\?\s*filtered\[0\]\s*:\s*filtered\[clampedSelectedIndex\]/,
     'GlobalLauncher should select the only result directly when a query narrows to one item',

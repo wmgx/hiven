@@ -41,6 +41,7 @@ import {
 } from '../workspace/pluginRuntime'
 import type { PluginPackageSummary } from '../workspace/pluginRuntime'
 import type { DevPlugin, InstalledPlugin } from '../workspace/pluginTypes'
+import { searchableFieldsMatch, type SearchableFields } from '../workspace/searchRanking'
 
 type TabId = 'builtin' | 'installed' | 'dev'
 type BusyMap = Record<string, boolean>
@@ -48,10 +49,6 @@ type ErrorMap = Record<string, string>
 
 function isTauri() {
   return !!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
-}
-
-function textMatches(value: string | undefined, query: string) {
-  return (value ?? '').toLowerCase().includes(query)
 }
 
 function sourceLabel(plugin: InstalledPlugin | DevPlugin, locale: 'zh' | 'en') {
@@ -93,6 +90,29 @@ function pluginDisplayName(
   locale: Locale,
 ) {
   return localized(plugin.displayName || plugin.pluginId, plugin.displayNameI18n, locale)
+}
+
+function pluginSearchFields(
+  plugin: Pick<InstalledPlugin | DevPlugin | PluginPackageSummary, 'pluginId' | 'displayName' | 'displayNameI18n' | 'folderPath' | 'capabilities'> & { sourceUrl?: string },
+): SearchableFields {
+  return {
+    id: plugin.pluginId,
+    title: plugin.displayName || plugin.pluginId,
+    titleI18n: plugin.displayNameI18n,
+    aliases: [
+      plugin.folderPath,
+      plugin.sourceUrl,
+      ...(Array.isArray(plugin.capabilities) ? plugin.capabilities : []),
+    ].filter((value): value is string => Boolean(value)),
+  }
+}
+
+function pluginMatchesQuery(
+  plugin: Pick<InstalledPlugin | DevPlugin | PluginPackageSummary, 'pluginId' | 'displayName' | 'displayNameI18n' | 'folderPath' | 'capabilities'> & { sourceUrl?: string },
+  query: string,
+  locale: Locale,
+) {
+  return searchableFieldsMatch(pluginSearchFields(plugin), query, locale)
 }
 
 export function ScriptsView() {
@@ -227,30 +247,17 @@ export function ScriptsView() {
 
   const filteredBuiltin = useMemo(() => {
     if (!normalizedQuery) return builtinPlugins
-    return builtinPlugins.filter((plugin) =>
-      textMatches(plugin.pluginId, normalizedQuery) ||
-      textMatches(pluginDisplayName(plugin, locale), normalizedQuery) ||
-      textMatches(plugin.folderPath, normalizedQuery),
-    )
+    return builtinPlugins.filter((plugin) => pluginMatchesQuery(plugin, normalizedQuery, locale))
   }, [builtinPlugins, locale, normalizedQuery])
 
   const filteredInstalled = useMemo(() => {
     if (!normalizedQuery) return installedList
-    return installedList.filter((plugin) =>
-      textMatches(plugin.pluginId, normalizedQuery) ||
-      textMatches(pluginDisplayName(plugin, locale), normalizedQuery) ||
-      textMatches(plugin.folderPath, normalizedQuery) ||
-      textMatches(plugin.sourceUrl, normalizedQuery),
-    )
+    return installedList.filter((plugin) => pluginMatchesQuery(plugin, normalizedQuery, locale))
   }, [installedList, locale, normalizedQuery])
 
   const filteredDev = useMemo(() => {
     if (!normalizedQuery) return devList
-    return devList.filter((plugin) =>
-      textMatches(plugin.pluginId, normalizedQuery) ||
-      textMatches(pluginDisplayName(plugin, locale), normalizedQuery) ||
-      textMatches(plugin.folderPath, normalizedQuery),
-    )
+    return devList.filter((plugin) => pluginMatchesQuery(plugin, normalizedQuery, locale))
   }, [devList, locale, normalizedQuery])
 
   const setItemBusy = (key: string, value: boolean) =>
