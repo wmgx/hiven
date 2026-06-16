@@ -55,15 +55,15 @@
 body,
 body[data-theme='dark'],
 .flux-spatial-shell[data-theme='dark'] {
-  --bg-page: #15120e;
+  --bg-page: #0d0f14;
   --bg-gradient:
-    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(217, 154, 78, 0.14), transparent),
-    radial-gradient(ellipse 60% 50% at 80% 50%, rgba(199, 160, 106, 0.07), transparent),
-    radial-gradient(ellipse 50% 40% at 10% 80%, rgba(180, 130, 70, 0.05), transparent);
-  --color-accent: #d99a4e;
-  --color-accent-hover: #e3a95f;
-  --color-accent-light: rgba(217, 154, 78, 0.18);
-  --color-accent-glow: rgba(217, 154, 78, 0.32);
+    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(99, 102, 241, 0.12), transparent),
+    radial-gradient(ellipse 60% 50% at 80% 50%, rgba(79, 70, 229, 0.06), transparent),
+    radial-gradient(ellipse 50% 40% at 10% 80%, rgba(139, 92, 246, 0.04), transparent);
+  --color-accent: #8b93ff;
+  --color-accent-hover: #a6adff;
+  --color-accent-light: rgba(139, 147, 255, 0.24);
+  --color-accent-glow: rgba(139, 147, 255, 0.32);
   --color-success: #10b981;
   --color-success-bg: rgba(16, 185, 129, 0.15);
   --color-success-text: #34d399;
@@ -72,36 +72,36 @@ body[data-theme='dark'],
   --color-error: #ef4444;
   --color-error-bg: rgba(239, 68, 68, 0.15);
   --color-error-text: #fca5a5;
-  --glass-border: rgba(240, 232, 218, 0.16);
-  --glass-bg: rgba(33, 29, 22, 0.72);
-  --glass-bg-solid: rgba(33, 29, 22, 0.96);
+  --glass-border: rgba(223, 230, 246, 0.16);
+  --glass-bg: rgba(22, 25, 33, 0.72);
+  --glass-bg-solid: rgba(22, 25, 33, 0.96);
   --glass-shine:
     inset 0 1px 1px rgba(255, 255, 255, 0.1),
     inset 0 0 0 1px rgba(255, 255, 255, 0.04);
   --shadow-panel:
     0 24px 48px -12px rgba(0, 0, 0, 0.62),
     0 12px 24px -8px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(240, 232, 218, 0.12);
+    0 0 0 1px rgba(223, 230, 246, 0.12);
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
   --color-bg: var(--bg-page);
-  --color-text: #f6f1e9;
-  --color-text-muted: #c7bdab;
-  --color-text-faint: #978d7b;
-  --color-surface: rgba(240, 232, 218, 0.08);
-  --color-surface-hover: rgba(240, 232, 218, 0.14);
-  --color-divider: rgba(240, 232, 218, 0.12);
-  --input-bg: rgba(240, 232, 218, 0.1);
-  --btn-ghost-hover: rgba(240, 232, 218, 0.12);
-  --scrollbar-thumb: rgba(240, 232, 218, 0.22);
+  --color-text: #f4f7fb;
+  --color-text-muted: #c3c8d2;
+  --color-text-faint: #8d96a3;
+  --color-surface: rgba(223, 230, 246, 0.08);
+  --color-surface-hover: rgba(223, 230, 246, 0.14);
+  --color-divider: rgba(223, 230, 246, 0.12);
+  --input-bg: rgba(223, 230, 246, 0.1);
+  --btn-ghost-hover: rgba(223, 230, 246, 0.12);
+  --scrollbar-thumb: rgba(223, 230, 246, 0.22);
 
   --color-background-primary: var(--bg-page);
-  --color-background-secondary: rgba(240, 232, 218, 0.08);
-  --color-background-tertiary: rgba(240, 232, 218, 0.14);
+  --color-background-secondary: rgba(223, 230, 246, 0.08);
+  --color-background-tertiary: rgba(223, 230, 246, 0.14);
   --color-text-primary: var(--color-text);
   --color-text-secondary: var(--color-text-muted);
   --color-text-tertiary: var(--color-text-faint);
-  --color-border-secondary: rgba(240, 232, 218, 0.22);
+  --color-border-secondary: rgba(223, 230, 246, 0.22);
   --color-border-tertiary: var(--color-divider);
   --color-accent-bg: var(--color-accent-light);
 }
@@ -1813,7 +1813,7 @@ html[data-window='launcher'] .global-launcher-panel :is(input, textarea, select,
   color: var(--color-text-primary);
   box-shadow:
     0 8px 18px -16px rgba(0, 0, 0, 0.8),
-    0 0 0 1px rgba(217, 154, 78,0.08);
+    0 0 0 1px rgba(139, 147, 255, 0.08);
   transform: translateY(-1px);
 }
 
@@ -1832,6 +1832,13 @@ html[data-window='launcher'] .global-launcher-panel :is(input, textarea, select,
     0 10px 22px -14px rgba(176, 111, 26,0.62),
     0 0 0 1px rgba(255, 255, 255, 0.2) inset;
   transform: translateY(-1px);
+}
+
+/* 仅暗色回滚：primary hover 投影匹配恢复后的冷色 accent */
+.flux-spatial-shell[data-theme='dark'] .scripts-btn-primary:hover {
+  box-shadow:
+    0 10px 22px -14px rgba(139, 147, 255, 0.62),
+    0 0 0 1px rgba(255, 255, 255, 0.2) inset;
 }
 
 .scripts-search-bar,
@@ -1888,7 +1895,7 @@ html[data-window='launcher'] .global-launcher-panel :is(input, textarea, select,
   border-color: var(--color-border-secondary);
   box-shadow:
     0 8px 18px -14px rgba(0, 0, 0, 0.7),
-    0 0 0 1px rgba(217, 154, 78,0.08);
+    0 0 0 1px rgba(139, 147, 255, 0.08);
   transform: translateY(-1px);
 }
 
