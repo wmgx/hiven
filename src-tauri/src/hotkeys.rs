@@ -205,8 +205,9 @@ fn ensure_accessibility_trusted() -> Result<(), String> {
 
     #[link(name = "ApplicationServices", kind = "framework")]
     extern "C" {
-        fn AXIsProcessTrustedWithOptions(options: core_foundation::dictionary::CFDictionaryRef)
-            -> bool;
+        fn AXIsProcessTrustedWithOptions(
+            options: core_foundation::dictionary::CFDictionaryRef,
+        ) -> bool;
     }
 
     let prompt_key = CFString::new("AXTrustedCheckOptionPrompt");
@@ -367,7 +368,23 @@ fn start_double_modifier_listener(state: Arc<DoubleModifierHotkeyState>, app: ta
 
 #[cfg(target_os = "macos")]
 fn open_pinned_launcher(app: &tauri::AppHandle) {
-    let _ = app.emit(ROUTE_GLOBAL_PINNED_LAUNCHER_SHORTCUT_EVENT, ());
+    use tauri::Manager;
+
+    let main_window_focused = app
+        .get_webview_window("main")
+        .and_then(|window| window.is_focused().ok())
+        .unwrap_or(false);
+    if main_window_focused {
+        let _ = app.emit(ROUTE_GLOBAL_PINNED_LAUNCHER_SHORTCUT_EVENT, ());
+        return;
+    }
+
+    if let Err(error) = crate::show_launcher_window_for_hotkey(app.clone()) {
+        eprintln!(
+            "[hiven] Failed to show launcher window from double modifier hotkey: {}",
+            error
+        );
+    }
 }
 
 #[cfg(target_os = "macos")]

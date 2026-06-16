@@ -716,6 +716,26 @@ check('global shortcut routes to in-app command palette when the editor window i
   )
 })
 
+check('native double-modifier opens standalone launcher directly when the main window is not focused', () => {
+  const openPinnedLauncherFn = files.tauriHotkeys.match(/fn\s+open_pinned_launcher[\s\S]*?\n}\n\n#\[cfg\(target_os = "macos"\)\]/)?.[0] ?? ''
+  assert.ok(openPinnedLauncherFn, 'src-tauri/src/hotkeys.rs should define open_pinned_launcher')
+  assertHas(
+    openPinnedLauncherFn,
+    /get_webview_window\("main"\)[\s\S]{0,180}is_focused\(\)/,
+    'native double-modifier routing should inspect whether the main window is focused',
+  )
+  assertHas(
+    openPinnedLauncherFn,
+    /if\s+main_window_focused[\s\S]{0,180}emit\(ROUTE_GLOBAL_PINNED_LAUNCHER_SHORTCUT_EVENT/,
+    'native double-modifier routing should preserve the in-app command palette route when the main window is focused',
+  )
+  assertHas(
+    openPinnedLauncherFn,
+    /show_launcher_window_for_hotkey\(app\.clone\(\)\)/,
+    'native double-modifier routing should open the standalone launcher directly while the app is in the background',
+  )
+})
+
 check('native launcher show path preserves main window visibility state', () => {
   const launcherFn = files.tauriLib.match(/pub\(crate\)\s+fn\s+show_launcher_window_for_hotkey[\s\S]*?\n}\n\n#\[tauri::command\]/)?.[0] ?? ''
   assert.doesNotMatch(

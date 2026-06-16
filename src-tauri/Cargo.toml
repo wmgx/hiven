@@ -1,6 +1,6 @@
 [package]
 name = "hiven"
-version = "0.2.26"
+version = "0.2.27"
 description = "hiven — A command-driven text processing workbench"
 authors = ["hiven"]
 license = "MIT"
