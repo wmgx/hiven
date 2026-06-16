@@ -2,12 +2,10 @@ import { useAppStore, type GlobalPinnedLauncherShortcut } from '../store'
 
 type GlobalShortcutApi = typeof import('@tauri-apps/plugin-global-shortcut')
 type TauriCoreApi = typeof import('@tauri-apps/api/core')
-type TauriEventApi = typeof import('@tauri-apps/api/event')
 type TauriWindowApi = typeof import('@tauri-apps/api/window')
 
 let installed = false
 let unsubscribeStore: (() => void) | null = null
-let unsubscribeDoubleModifierError: (() => void) | null = null
 let currentAccelerator: string | null = null
 let syncGeneration = 0
 let syncQueue: Promise<void> = Promise.resolve()
@@ -17,7 +15,6 @@ export function installGlobalPinnedLauncherHotkeys() {
   installed = true
 
   void syncShortcut(useAppStore.getState().settings.globalPinnedLauncherShortcut)
-  void listenForDoubleModifierErrors()
   unsubscribeStore = useAppStore.subscribe((state, previousState) => {
     const next = state.settings.globalPinnedLauncherShortcut
     const previous = previousState.settings.globalPinnedLauncherShortcut
@@ -31,24 +28,7 @@ export function installGlobalPinnedLauncherHotkeys() {
     syncGeneration += 1
     unsubscribeStore?.()
     unsubscribeStore = null
-    unsubscribeDoubleModifierError?.()
-    unsubscribeDoubleModifierError = null
     void unregisterCurrentAccelerator()
-    void unregisterDoubleModifier()
-  }
-}
-
-async function listenForDoubleModifierErrors() {
-  if (!isTauriRuntime() || unsubscribeDoubleModifierError) return
-  try {
-    const { listen } = await loadTauriEventApi()
-    unsubscribeDoubleModifierError = await listen<{ error?: string }>('hiven://double-modifier-hotkey-error', (event) => {
-      const shortcut = useAppStore.getState().settings.globalPinnedLauncherShortcut
-      if (shortcut.kind !== 'double-modifier') return
-      updateShortcutStatus(shortcut, 'Registration failed', event.payload?.error ?? 'Double modifier listener failed')
-    })
-  } catch (error) {
-    console.warn('[hiven] Failed to listen for double modifier errors:', error)
   }
 }
 
@@ -63,16 +43,10 @@ async function syncShortcutNow(shortcut: GlobalPinnedLauncherShortcut, generatio
   if (!isTauriRuntime()) return
 
   await unregisterCurrentAccelerator()
-  await unregisterDoubleModifier()
   if (generation !== syncGeneration) return
 
   if (shortcut.kind === 'disabled') {
     updateShortcutStatus(shortcut, 'Disabled')
-    return
-  }
-
-  if (shortcut.kind === 'double-modifier') {
-    await registerDoubleModifier(shortcut, generation)
     return
   }
 
@@ -107,23 +81,6 @@ async function registerAccelerator(
   }
 }
 
-async function registerDoubleModifier(shortcut: GlobalPinnedLauncherShortcut, generation: number) {
-  try {
-    const { invoke } = await loadTauriCoreApi()
-    const modifier = shortcut.kind === 'double-modifier' ? shortcut.modifier : 'Command'
-    const result = await invoke<{ status: string }>('register_double_modifier_hotkey', { modifier })
-    if (generation !== syncGeneration) {
-      if (shortcutIdentity(useAppStore.getState().settings.globalPinnedLauncherShortcut) !== shortcutIdentity(shortcut)) {
-        await unregisterDoubleModifier()
-      }
-      return
-    }
-    if (generation === syncGeneration) updateShortcutStatus(shortcut, result.status)
-  } catch (error) {
-    if (generation === syncGeneration) updateShortcutStatus(shortcut, 'Registration failed', formatError(error))
-  }
-}
-
 async function unregisterCurrentAccelerator() {
   if (!currentAccelerator || !isTauriRuntime()) return
   const accelerator = currentAccelerator
@@ -138,16 +95,6 @@ async function unregisterCurrentAccelerator() {
 async function unregisterAccelerator(accelerator: string) {
   const { unregister } = await loadGlobalShortcutApi()
   await unregister(accelerator)
-}
-
-async function unregisterDoubleModifier() {
-  if (!isTauriRuntime()) return
-  try {
-    const { invoke } = await loadTauriCoreApi()
-    await invoke('unregister_double_modifier_hotkey')
-  } catch (error) {
-    console.warn('[hiven] Failed to unregister double modifier hook:', error)
-  }
 }
 
 async function showLauncherWindow() {
@@ -200,7 +147,6 @@ function normalizeAccelerator(accelerator: string) {
 
 function shortcutIdentity(shortcut: GlobalPinnedLauncherShortcut) {
   if (shortcut.kind === 'accelerator') return `${shortcut.kind}:${shortcut.accelerator}`
-  if (shortcut.kind === 'double-modifier') return `${shortcut.kind}:${shortcut.modifier}`
   return shortcut.kind
 }
 
@@ -220,9 +166,7 @@ function loadTauriCoreApi(): Promise<TauriCoreApi> {
   return import('@tauri-apps/api/core')
 }
 
-function loadTauriEventApi(): Promise<TauriEventApi> {
-  return import('@tauri-apps/api/event')
-}
+
 
 function loadTauriWindowApi(): Promise<TauriWindowApi> {
   return import('@tauri-apps/api/window')

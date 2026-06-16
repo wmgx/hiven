@@ -1,19 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
-import type { GlobalPinnedLauncherDoubleModifier } from '../store'
 import { useAppStore } from '../store'
 import { translate } from '../i18n'
 
 export type ShortcutRecorderValue =
   | { kind: 'accelerator'; accelerator: string }
-  | { kind: 'double-modifier'; modifier: GlobalPinnedLauncherDoubleModifier }
   | { kind: 'disabled' }
-
-type LastModifierTap = { modifier: GlobalPinnedLauncherDoubleModifier; time: number }
 
 type ShortcutRecorderProps = {
   value: ShortcutRecorderValue
-  allowDoubleModifier?: boolean
   emptyLabel?: string
   status?: ReactNode
   hint?: ReactNode
@@ -30,7 +25,6 @@ type HotkeyPlatformLabels = {
 
 export function ShortcutRecorder({
   value,
-  allowDoubleModifier = false,
   emptyLabel,
   status,
   hint,
@@ -41,7 +35,6 @@ export function ShortcutRecorder({
   const locale = useAppStore((s) => s.locale)
   const [isRecording, setIsRecording] = useState(false)
   const [error, setError] = useState('')
-  const lastModifierTapRef = useRef<LastModifierTap | null>(null)
   const recorderRef = useRef<HTMLButtonElement>(null)
   const platformLabels = useMemo(() => getHotkeyPlatformLabels(), [])
   const recordLabel = translate(locale, 'settings', 'hotkeyRecord')
@@ -64,15 +57,14 @@ export function ShortcutRecorder({
       return
     }
 
-    const recordedShortcut = eventToShortcutRecorderValue(event, lastModifierTapRef.current, allowDoubleModifier)
-    lastModifierTapRef.current = recordedShortcut.lastModifierTap
-    if (!recordedShortcut.shortcut) {
+    const recorded = eventToAccelerator(event)
+    if (!recorded) {
       setError(isModifierKey(event.key) ? '' : recordError)
       return
     }
     setError('')
     setIsRecording(false)
-    onRecord(recordedShortcut.shortcut)
+    onRecord(recorded)
   }
 
   useEffect(() => {
@@ -90,7 +82,6 @@ export function ShortcutRecorder({
 
   const startRecording = () => {
     setError('')
-    lastModifierTapRef.current = null
     setIsRecording(true)
     requestAnimationFrame(() => recorderRef.current?.focus())
   }
@@ -132,39 +123,6 @@ export function ShortcutRecorder({
   )
 }
 
-export function eventToShortcutRecorderValue(
-  event: KeyboardEvent<HTMLElement>,
-  lastModifierTap: LastModifierTap | null,
-  allowDoubleModifier: boolean,
-): { shortcut: Exclude<ShortcutRecorderValue, { kind: 'disabled' }> | null; lastModifierTap: LastModifierTap | null } {
-  const now = Date.now()
-  if (isModifierKey(event.key)) {
-    if (!allowDoubleModifier) return { shortcut: null, lastModifierTap: null }
-    const modifier =
-      event.key === 'Meta' ? 'Command' :
-      event.key === 'Control' && !isMacPlatform() ? 'Command' :
-      event.key === 'Shift' ? 'Shift' :
-      event.key === 'Alt' ? 'Option' :
-      null
-    if (!modifier || event.repeat) return { shortcut: null, lastModifierTap }
-    if (lastModifierTap?.modifier === modifier && now - lastModifierTap.time <= 500) {
-      return {
-        shortcut: { kind: 'double-modifier', modifier },
-        lastModifierTap: null,
-      }
-    }
-    return {
-      shortcut: null,
-      lastModifierTap: { modifier, time: now },
-    }
-  }
-
-  return {
-    shortcut: eventToAccelerator(event),
-    lastModifierTap: null,
-  }
-}
-
 export function getHotkeyPlatformLabels(): HotkeyPlatformLabels {
   const isMac = isMacPlatform()
   return {
@@ -174,16 +132,6 @@ export function getHotkeyPlatformLabels(): HotkeyPlatformLabels {
   }
 }
 
-export function doubleModifierLabel(
-  modifier: GlobalPinnedLauncherDoubleModifier,
-  locale: 'zh' | 'en',
-  platformLabels = getHotkeyPlatformLabels(),
-): string {
-  return translate(locale, 'settings', 'hotkeyDoubleModifier', {
-    modifier: modifierLabel(modifier, platformLabels),
-  })
-}
-
 export function formatShortcutRecorderValueLabel(
   value: ShortcutRecorderValue,
   locale: 'zh' | 'en',
@@ -191,11 +139,10 @@ export function formatShortcutRecorderValueLabel(
   disabledLabel = translate(locale, 'settings', 'hotkeyDisabled'),
 ): string {
   if (value.kind === 'accelerator') return formatAcceleratorLabel(value.accelerator, platformLabels)
-  if (value.kind === 'double-modifier') return doubleModifierLabel(value.modifier, locale, platformLabels)
   return disabledLabel
 }
 
-function eventToAccelerator(event: KeyboardEvent<HTMLElement>): Exclude<ShortcutRecorderValue, { kind: 'disabled' | 'double-modifier' }> | null {
+function eventToAccelerator(event: KeyboardEvent<HTMLElement>): Exclude<ShortcutRecorderValue, { kind: 'disabled' }> | null {
   const key = normalizeKey(event.key)
   const hasModifier = event.metaKey || event.ctrlKey || event.altKey || event.shiftKey
   if (!key || !hasModifier) return null
@@ -211,8 +158,8 @@ function eventToAccelerator(event: KeyboardEvent<HTMLElement>): Exclude<Shortcut
 
 function normalizeKey(key: string): string | null {
   if (isModifierKey(key)) return null
+  if (key === ' ' || key === 'Space') return 'Space'
   if (key.length === 1) return key.toUpperCase()
-  if (key === ' ') return 'Space'
   if (key.startsWith('Arrow')) return key.replace('Arrow', '')
   return key
 }
@@ -227,12 +174,6 @@ function isMacPlatform(): boolean {
   const userAgent = nav?.userAgent || ''
   const userAgentDataPlatform = (nav as Navigator & { userAgentData?: { platform?: string } } | undefined)?.userAgentData?.platform || ''
   return /Mac|iPhone|iPad|iPod/i.test(`${platform} ${userAgentDataPlatform} ${userAgent}`)
-}
-
-function modifierLabel(modifier: GlobalPinnedLauncherDoubleModifier, platformLabels: HotkeyPlatformLabels): string {
-  if (modifier === 'Shift') return 'Shift'
-  if (modifier === 'Option') return platformLabels.option
-  return platformLabels.command
 }
 
 function formatAcceleratorLabel(accelerator: string, platformLabels: HotkeyPlatformLabels): string {

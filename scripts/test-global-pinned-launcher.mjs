@@ -33,7 +33,7 @@ const files = {
   indexCss: read('src/index.css'),
   store: read('src/store.ts'),
   tauriLib: read('src-tauri/src/lib.rs'),
-  tauriHotkeys: read('src-tauri/src/hotkeys.rs'),
+  tauriHotkeys: readOptional('src-tauri/src/hotkeys.rs'),
   searchRanking: read('src/workspace/searchRanking.ts'),
   tauriConfig: read('src-tauri/tauri.conf.json'),
   tauriCapabilities: read('src-tauri/capabilities/default.json'),
@@ -712,7 +712,7 @@ check('global shortcut routes to in-app command palette when the editor window i
   assertHas(
     files.app,
     /listen\([\s\S]{0,120}hiven:\/\/route-global-pinned-launcher-shortcut[\s\S]{0,220}routeGlobalPinnedLauncherShortcut\(\)/,
-    'double-modifier native events should use the same foreground-aware route as accelerator shortcuts',
+    'global pinned launcher route event should be listened and wired to the router',
   )
 })
 
@@ -802,24 +802,6 @@ check('native launcher is configured as a non-activating macOS panel', () => {
     files.tauriLib,
     /makeFirstResponder:\s*ns_view/,
     'native launcher should make the WebView first responder so the search input receives keyboard focus',
-  )
-})
-
-check('double modifier detection is based on two quick down events', () => {
-  assertHas(
-    files.tauriHotkeys,
-    /last_modifier_down/,
-    'double modifier detector should track the first down event, not only key-up timing',
-  )
-  assertHas(
-    files.tauriHotkeys,
-    /current_modifier_down[\s\S]{0,360}was_short_press/,
-    'double modifier detector should discard a first press that was held too long',
-  )
-  assertHas(
-    files.tauriHotkeys,
-    /long_modifier_hold_then_second_down_does_not_trigger/,
-    'double modifier tests should cover long hold followed by another press',
   )
 })
 

@@ -150,12 +150,10 @@ export type LastCommandStatus = {
 
 export type AppTheme = 'dark' | 'light'
 export type GlobalLauncherMode = 'full' | 'pinned-only'
-export type GlobalPinnedLauncherDoubleModifier = 'Command' | 'Shift' | 'Option'
 export type GlobalLauncherPosition = { x: number; y: number }
 
 export type GlobalPinnedLauncherShortcut =
   | { kind: 'accelerator'; accelerator: string; registrationStatus?: string; registrationError?: string }
-  | { kind: 'double-modifier'; modifier: GlobalPinnedLauncherDoubleModifier; registrationStatus?: string; registrationError?: string }
   | { kind: 'disabled'; registrationStatus?: string; registrationError?: string }
 
 export type PluginSurfaceOpenTarget = {
@@ -273,7 +271,6 @@ function serializePinnedTombstones(state: AppState): Record<string, PinnedTombst
 
 function stripShortcutRuntimeStatus(shortcut: GlobalPinnedLauncherShortcut): GlobalPinnedLauncherShortcut {
   if (shortcut.kind === 'accelerator') return { kind: 'accelerator', accelerator: shortcut.accelerator }
-  if (shortcut.kind === 'double-modifier') return { kind: 'double-modifier', modifier: shortcut.modifier }
   return { kind: 'disabled' }
 }
 
@@ -559,9 +556,12 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     }
     const merged = { ...current, ...persistedState }
     merged.settings = { ...current.settings, ...persistedState.settings }
-    merged.settings.globalPinnedLauncherShortcut = stripShortcutRuntimeStatus(
-      merged.settings.globalPinnedLauncherShortcut ?? current.settings.globalPinnedLauncherShortcut
-    )
+    let launcherShortcut = merged.settings.globalPinnedLauncherShortcut ?? current.settings.globalPinnedLauncherShortcut
+    // 移除双击支持后，旧版 double-modifier 配置迁移为 disabled
+    if (launcherShortcut && (launcherShortcut as any).kind === 'double-modifier') {
+      launcherShortcut = { kind: 'disabled' }
+    }
+    merged.settings.globalPinnedLauncherShortcut = stripShortcutRuntimeStatus(launcherShortcut)
     // Migrate legacy top-level recentActionNames/actionUsageCounts into command-palette bucket
     if (!persistedState.actionUsageBySource && (persistedState.recentActionNames || persistedState.actionUsageCounts)) {
       merged.actionUsageBySource = {

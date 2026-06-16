@@ -28,7 +28,6 @@ const files = {
   app: read('src/App.tsx'),
   globalPinnedLauncherHotkeys: read('src/hotkeys/globalPinnedLauncher.ts'),
   shortcutRecorder: read('src/components/ShortcutRecorder.tsx'),
-  tauriHotkeys: read('src-tauri/src/hotkeys.rs'),
   i18n: readI18n(),
 }
 
@@ -117,8 +116,8 @@ check('store settings include a single global pinned launcher shortcut config', 
   )
 })
 
-check('shortcut config supports accelerator, double-modifier, disabled, and all supported double modifiers', () => {
-  for (const kind of ['accelerator', 'double-modifier', 'disabled']) {
+check('shortcut config supports accelerator and disabled kinds', () => {
+  for (const kind of ['accelerator', 'disabled']) {
     assertHas(
       files.store,
       new RegExp(`['"]${kind}['"]`),
@@ -130,22 +129,13 @@ check('shortcut config supports accelerator, double-modifier, disabled, and all 
     /accelerator\s*:\s*string|value\s*:\s*string|shortcut\s*:\s*string/,
     'accelerator variant should carry the configured shortcut string',
   )
-  assertDoesNotHave(
+  // double-modifier support has been removed; old persisted values should be migrated
+  assertHas(
     files.store,
-    /globalPinnedLauncherShortcut\?\.kind\s*===\s*['"]double-modifier['"][\s\S]{0,220}kind:\s*['"]accelerator['"]/,
-    'persisted double-modifier shortcuts should not be migrated away from double-modifier support',
+    /double-modifier|kind === ['"]double-modifier|doubleModifier/,
+    'migration code should reference legacy double-modifier to convert it (e.g. to disabled)',
   )
 })
-
-for (const modifier of ['Command', 'Shift', 'Option']) {
-  check(`store double-modifier shortcut supports ${modifier}`, () => {
-    assertHas(
-      files.store,
-      new RegExp(`['"]${modifier}['"]`),
-      `double-modifier variant should support ${modifier}`,
-    )
-  })
-}
 
 check('SettingsView renders a Hotkeys UI for the global pinned launcher shortcut', () => {
   assertHas(
@@ -193,35 +183,7 @@ check('SettingsView supports recording, disabled, and status display', () => {
   )
 })
 
-for (const modifier of ['Command', 'Shift', 'Option']) {
-  check(`ShortcutRecorder can record Double ${modifier}`, () => {
-    assertHas(
-      files.shortcutRecorder,
-      new RegExp(`['"]${modifier}['"]`),
-      `ShortcutRecorder should be able to record Double ${modifier}`,
-    )
-  })
-}
-
-check('Settings recording path can identify modifier-only double-modifier shortcuts', () => {
-  assertHas(
-    files.shortcutRecorder,
-    /eventTo(?:ShortcutRecorderValue|GlobalPinnedLauncherShortcut|Shortcut|DoubleModifierShortcut|RecordedShortcut)\s*\(/,
-    'recording should route key events through a testable shortcut helper, not only a private accelerator formatter',
-  )
-  assertHas(
-    files.shortcutRecorder,
-    /event\.key\s*===\s*['"](?:Meta|Shift|Alt|Option)['"][\s\S]{0,420}kind:\s*['"]double-modifier['"]|kind:\s*['"]double-modifier['"][\s\S]{0,420}event\.key\s*===\s*['"](?:Meta|Shift|Alt|Option)['"]|isModifierKey\(event\.key\)[\s\S]{0,640}kind:\s*['"]double-modifier['"]/,
-    'recording should convert modifier-only key events into double-modifier shortcut configs',
-  )
-  assertHas(
-    `${files.settingsView}\n${files.shortcutRecorder}`,
-    /onRecord=\{onChange\}|onChange\(\s*(?:recordedShortcut(?:\.shortcut)?|shortcut|nextShortcut)\s*\)/,
-    'recording handler should pass the recorded accelerator or double-modifier shortcut through onChange',
-  )
-})
-
-check('Settings double-modifier labels adapt to the current platform', () => {
+check('ShortcutRecorder supports accelerator recording and platform labels', () => {
   assertHas(
     files.shortcutRecorder,
     /getHotkeyPlatformLabels/,
@@ -238,47 +200,15 @@ check('Settings double-modifier labels adapt to the current platform', () => {
     'ShortcutRecorder should display Alt instead of Option on non-macOS platforms',
   )
   assertHas(
+    `${files.settingsView}\n${files.shortcutRecorder}`,
+    /onRecord=\{onChange\}|onChange\(\s*(?:recordedShortcut(?:\.shortcut)?|shortcut|nextShortcut)\s*\)/,
+    'recording handler should pass the recorded accelerator through onChange',
+  )
+  // space support (with modifiers) must be possible for accelerators like Cmd+Space
+  assertHas(
     files.shortcutRecorder,
-    /event\.key\s*===\s*['"]Control['"][\s\S]{0,120}!isMacPlatform\(\)[\s\S]{0,120}['"]Command['"]/,
-    'ShortcutRecorder should allow double Ctrl recording to use the primary double-modifier slot on non-macOS platforms',
-  )
-})
-
-check('native double-modifier hotkey layer supports Command, Shift, and Option', () => {
-  assertHas(
-    files.tauriHotkeys,
-    /register_double_modifier_hotkey/,
-    'native hotkey command should accept a modifier argument instead of only registering Double Cmd',
-  )
-  for (const modifier of ['Command', 'Shift', 'Option']) {
-    assertHas(
-      files.tauriHotkeys,
-      new RegExp(`['"]${modifier}['"]|\\b${modifier}\\b`),
-      `native double-modifier detector should model ${modifier}`,
-    )
-  }
-  assertDoesNotHave(
-    files.tauriHotkeys,
-    /start_double_cmd_listener|DoubleCmdHotkeyState|Key::Meta|meta_was_down|Modifiers\s*\{\s*meta:/,
-    'native double-modifier listener should not retain Cmd-only detector symbols after adding Shift and Option',
-  )
-})
-
-check('native double-modifier registration requests macOS Accessibility trust', () => {
-  assertHas(
-    files.tauriHotkeys,
-    /AXIsProcessTrustedWithOptions/,
-    'native double-modifier registration should ask macOS for Accessibility trust before creating the event tap',
-  )
-  assertHas(
-    files.tauriHotkeys,
-    /AXTrustedCheckOptionPrompt/,
-    'native Accessibility trust check should request the system prompt for GitHub/release installs',
-  )
-  assertHas(
-    files.tauriHotkeys,
-    /Accessibility permission is required for double-modifier global shortcuts/,
-    'native hotkey status should expose a recognizable Accessibility failure',
+    /key === ['"] ['"]|key === ['"]Space['"]|normalizeKey/,
+    'ShortcutRecorder normalizeKey should handle Space key for Cmd+Space etc recording',
   )
 })
 
@@ -313,14 +243,10 @@ check('i18n includes English and Chinese copy for the hotkey settings', () => {
     'globalPinnedLauncherShortcut',
     'globalPinnedLauncherShortcutInfo',
     'hotkeyRecord',
-    'hotkeyDoubleCmd',
     'hotkeyDisabled',
     'hotkeyStatus',
-    'hotkeyDoubleModifier',
-    'hotkeyStatusDoubleRegistered',
     'hotkeyRegistrationFailed',
     'hotkeyAccessibilityRequired',
-    'hotkeyDoubleModifierUnsupported',
   ]) {
     assertHas(files.i18n, new RegExp(`['"]${key}['"]`), `i18n should include ${key}`)
   }
@@ -335,12 +261,6 @@ check('i18n includes English and Chinese copy for the hotkey settings', () => {
     'Chinese i18n should describe the global pinned launcher shortcut',
   )
 })
-
-for (const key of ['hotkeyDoubleShift', 'hotkeyDoubleOption']) {
-  check(`i18n includes ${key}`, () => {
-    assertHas(files.i18n, new RegExp(`['"]${key}['"]`), `i18n should include ${key}`)
-  })
-}
 
 if (failures.length > 0) {
   console.error(`global hotkey settings checks failed (${failures.length}):`)
