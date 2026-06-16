@@ -143,7 +143,16 @@ export function formatShortcutRecorderValueLabel(
 }
 
 function eventToAccelerator(event: KeyboardEvent<HTMLElement>): Exclude<ShortcutRecorderValue, { kind: 'disabled' }> | null {
-  const key = normalizeKey(event.key)
+  // Use event.code for physical key detection. This is critical for Option+Space
+  // on macOS, where Option can turn the space key into a non-breaking space (\u00A0)
+  // in event.key, while event.code remains 'Space'.
+  let key: string | null
+  if (event.code === 'Space') {
+    key = 'Space'
+  } else {
+    key = normalizeKey(event.key)
+  }
+
   const hasModifier = event.metaKey || event.ctrlKey || event.altKey || event.shiftKey
   if (!key || !hasModifier) return null
 
@@ -158,7 +167,7 @@ function eventToAccelerator(event: KeyboardEvent<HTMLElement>): Exclude<Shortcut
 
 function normalizeKey(key: string): string | null {
   if (isModifierKey(key)) return null
-  if (key === ' ' || key === 'Space') return 'Space'
+  if (key === ' ' || key === 'Space' || key === '\u00A0') return 'Space'
   if (key.length === 1) return key.toUpperCase()
   if (key.startsWith('Arrow')) return key.replace('Arrow', '')
   return key
@@ -177,6 +186,9 @@ function isMacPlatform(): boolean {
 }
 
 function formatAcceleratorLabel(accelerator: string, platformLabels: HotkeyPlatformLabels): string {
-  if (platformLabels.isMac) return accelerator
-  return accelerator.replace(/\bCmd\b/g, platformLabels.command).replace(/\bOption\b/g, platformLabels.option)
+  // Always map internal names (Cmd/Alt) to platform-friendly labels.
+  // This makes Option+Space show as "Option+Space" on macOS instead of "Alt+Space".
+  return accelerator
+    .replace(/\bCmd\b/g, platformLabels.command)
+    .replace(/\bAlt\b/g, platformLabels.option)
 }
