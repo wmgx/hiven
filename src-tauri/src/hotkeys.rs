@@ -368,6 +368,14 @@ fn start_double_modifier_listener(state: Arc<DoubleModifierHotkeyState>, app: ta
 
 #[cfg(target_os = "macos")]
 fn open_pinned_launcher(app: &tauri::AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        route_pinned_launcher_hotkey(app);
+    });
+}
+
+#[cfg(target_os = "macos")]
+fn route_pinned_launcher_hotkey(app: tauri::AppHandle) {
     use tauri::Manager;
 
     let main_window_focused = app
@@ -379,7 +387,7 @@ fn open_pinned_launcher(app: &tauri::AppHandle) {
         return;
     }
 
-    if let Err(error) = crate::show_launcher_window_for_hotkey(app.clone()) {
+    if let Err(error) = crate::show_launcher_window_for_hotkey(app) {
         eprintln!(
             "[hiven] Failed to show launcher window from double modifier hotkey: {}",
             error

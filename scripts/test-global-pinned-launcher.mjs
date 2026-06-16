@@ -718,20 +718,27 @@ check('global shortcut routes to in-app command palette when the editor window i
 
 check('native double-modifier opens standalone launcher directly when the main window is not focused', () => {
   const openPinnedLauncherFn = files.tauriHotkeys.match(/fn\s+open_pinned_launcher[\s\S]*?\n}\n\n#\[cfg\(target_os = "macos"\)\]/)?.[0] ?? ''
+  const routePinnedLauncherFn = files.tauriHotkeys.match(/fn\s+route_pinned_launcher_hotkey[\s\S]*?\n}\n\n#\[cfg\(target_os = "macos"\)\]/)?.[0] ?? ''
   assert.ok(openPinnedLauncherFn, 'src-tauri/src/hotkeys.rs should define open_pinned_launcher')
+  assert.ok(routePinnedLauncherFn, 'src-tauri/src/hotkeys.rs should route double-modifier triggers outside the event tap callback')
   assertHas(
     openPinnedLauncherFn,
+    /std::thread::spawn/,
+    'native double-modifier callback should hand off routing work instead of doing window operations inside CGEventTap',
+  )
+  assertHas(
+    routePinnedLauncherFn,
     /get_webview_window\("main"\)[\s\S]{0,180}is_focused\(\)/,
     'native double-modifier routing should inspect whether the main window is focused',
   )
   assertHas(
-    openPinnedLauncherFn,
+    routePinnedLauncherFn,
     /if\s+main_window_focused[\s\S]{0,180}emit\(ROUTE_GLOBAL_PINNED_LAUNCHER_SHORTCUT_EVENT/,
     'native double-modifier routing should preserve the in-app command palette route when the main window is focused',
   )
   assertHas(
-    openPinnedLauncherFn,
-    /show_launcher_window_for_hotkey\(app\.clone\(\)\)/,
+    routePinnedLauncherFn,
+    /show_launcher_window_for_hotkey\(app\)/,
     'native double-modifier routing should open the standalone launcher directly while the app is in the background',
   )
 })
