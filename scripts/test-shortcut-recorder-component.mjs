@@ -21,13 +21,16 @@ const files = {
 }
 
 assert.match(files.component, /export function ShortcutRecorder/, 'ShortcutRecorder should export a reusable React component')
+assert.match(files.component, /allowDoubleModifier/, 'ShortcutRecorder should make double-modifier recording an explicit capability')
+assert.match(files.component, /lastModifierTapRef/, 'ShortcutRecorder should detect consecutive modifier taps while recording')
 assert.match(files.component, /onRecord/, 'ShortcutRecorder should report the recorded shortcut through a callback')
 assert.match(files.component, /onClear/, 'ShortcutRecorder should support clearing from the same component')
 assert.match(files.component, /formatAcceleratorLabel/, 'ShortcutRecorder should own platform-aware accelerator display')
+assert.match(files.component, /doubleModifierLabel/, 'ShortcutRecorder should own platform-aware double-modifier display')
 
-assert.match(files.settingsView, /<ShortcutRecorder/, 'SettingsView should use ShortcutRecorder for global launcher hotkeys')
-assert.doesNotMatch(files.settingsView, /allowDoubleModifier/, 'SettingsView should not pass allowDoubleModifier after double support removal')
+assert.match(files.settingsView, /<ShortcutRecorder[\s\S]*allowDoubleModifier/, 'SettingsView should use ShortcutRecorder for global launcher hotkeys')
 assert.doesNotMatch(files.settingsView, /chooseDoubleModifier/, 'SettingsView should not render separate double-modifier choice buttons')
+assert.doesNotMatch(files.settingsView, /onClick=\{\(\) => chooseDoubleModifier/, 'double-modifier shortcuts should be recorded instead of chosen')
 
 assert.match(files.scriptsView, /<ShortcutRecorder/, 'ScriptsView should use ShortcutRecorder for plugin surface shortcuts')
 assert.doesNotMatch(files.scriptsView, /<input[\s\S]{0,240}plugin-surface-shortcut-input/, 'plugin surface shortcuts should not use a manual text input')

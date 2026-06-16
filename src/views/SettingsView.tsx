@@ -7,7 +7,7 @@ import { Check, ChevronDown, Download, Info, Keyboard, Languages, Layout, Minus,
 import { useAppStore, type GlobalPinnedLauncherShortcut } from '../store'
 import { useT } from '../i18n'
 import { checkBuiltinPluginsUpdate } from '../configInit'
-import { ShortcutRecorder, getHotkeyPlatformLabels } from '../components/ShortcutRecorder'
+import { ShortcutRecorder, doubleModifierLabel, getHotkeyPlatformLabels } from '../components/ShortcutRecorder'
 
 export function SettingsView() {
   const { settings, updateSetting } = useAppStore()
@@ -80,7 +80,7 @@ export function SettingsView() {
 
         <SettingCard icon={<Keyboard size={16} />} title={t('hotkeys')}>
           <HotkeySettings
-            shortcut={settings.globalPinnedLauncherShortcut ?? { kind: 'disabled' }}
+            shortcut={settings.globalPinnedLauncherShortcut ?? { kind: 'double-modifier', modifier: 'Command' }}
             onChange={(value) => updateSetting('globalPinnedLauncherShortcut', value)}
           />
         </SettingCard>
@@ -194,7 +194,13 @@ function HotkeySettings({
       <SettingRow label={t('globalPinnedLauncherShortcut')} info={t('globalPinnedLauncherShortcutInfo')}>
         <ShortcutRecorder
           value={shortcut}
+          allowDoubleModifier
           status={registrationStatus}
+          hint={shortcut.kind === 'double-modifier'
+            ? platformLabels.isMac
+              ? t('hotkeyAccessibilityHint', { modifier: doubleModifierLabel(shortcut.modifier, locale, platformLabels) })
+              : t('hotkeyDoubleModifierUnsupported')
+            : undefined}
           onRecord={onChange}
           onClear={() => onChange({ kind: 'disabled' })}
         />
@@ -226,6 +232,14 @@ function localizeHotkeyStatus(
   if (status === 'Registered') return t('hotkeyStatusRegistered')
   if (status === 'Registration pending') return t('hotkeyStatusPending')
   if (status === 'Disabled') return t('hotkeyStatusDisabled')
+  if (status === 'Double modifier detector unregistered') return t('hotkeyStatusUnregistered')
+
+  const doubleRegistered = status.match(/^Double (Cmd|Shift|Option) registered$/)
+  if (doubleRegistered) {
+    return t('hotkeyStatusDoubleRegistered', {
+      modifier: nativeModifierLabel(doubleRegistered[1], platformLabels),
+    })
+  }
 
   const failed = status.match(/^Registration failed(?::\s*)?(.*)$/)
   if (failed) {
@@ -237,8 +251,17 @@ function localizeHotkeyStatus(
   return t('hotkeyStatusDetail', { status })
 }
 
+function nativeModifierLabel(nativeModifier: string, platformLabels: HotkeyPlatformLabels): string {
+  if (nativeModifier === 'Option') return platformLabels.option
+  if (nativeModifier === 'Cmd') return platformLabels.command
+  return nativeModifier
+}
+
 function localizeHotkeyStatusDetail(detail: string, t: ReturnType<typeof useT>): string {
-  if (/Accessibility permission is required/i.test(detail)) {
+  if (/Double modifier global hotkey is only available on macOS/i.test(detail)) {
+    return t('hotkeyDoubleModifierUnsupported')
+  }
+  if (/Accessibility permission is required for double-modifier global shortcuts/i.test(detail)) {
     return t('hotkeyAccessibilityRequired')
   }
   return detail || t('hotkeyStatusUnknownError')

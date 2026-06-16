@@ -12,7 +12,7 @@ use tauri::Emitter;
 use tauri::LogicalSize;
 use zip::ZipArchive;
 
-
+pub mod hotkeys;
 
 const LAUNCHER_COMPACT_WIDTH: f64 = 660.0;
 const LAUNCHER_COMPACT_HEIGHT: f64 = 160.0;
@@ -2554,6 +2554,8 @@ pub fn run() {
             install_plugin_zip,
             install_plugin_zip_url,
             fetch_github_directory,
+            hotkeys::register_double_modifier_hotkey,
+            hotkeys::unregister_double_modifier_hotkey,
             show_and_focus_window,
             show_launcher_window,
             hide_launcher_window,
