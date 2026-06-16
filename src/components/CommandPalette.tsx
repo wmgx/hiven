@@ -228,9 +228,9 @@ export function CommandPalette() {
         tabIndex={-1}
         className="w-[min(630px,90vw)] overflow-hidden outline-none palette-panel"
         style={{
-          background: 'var(--color-background-primary)',
+          background: 'var(--bg-surface)',
           border: '0.5px solid var(--color-border-secondary)',
-          borderRadius: 'var(--radius-xl)',
+          borderRadius: '6px',
         }}
         onKeyDown={handleKeyDown}
         onCompositionStart={handleCompositionStart}
@@ -333,12 +333,11 @@ function SearchStep({
 }) {
   return (
     <>
-      <div className="flex items-center px-3.5 gap-2 h-[44px]" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
-        <Search size={16} style={{ color: 'var(--color-text-tertiary)' }} />
+      <div className="flex items-center px-3.5 py-2" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
         <input
           ref={inputRef}
-          className="flex-1 border-none outline-none text-sm bg-transparent"
-          style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
+          className="flex-1 border-none outline-none text-[15px] bg-transparent"
+          style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-sans)' }}
           placeholder={t(locale, 'palette.search')}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -405,30 +404,39 @@ function LauncherActionItem({ item, selected, onClick, onPin, onMouseEnter, loca
     <div
       ref={ref}
       className={`cmd-item ${selected ? 'selected' : ''}`}
-      style={{ background: selected ? 'var(--color-accent-light)' : 'transparent' }}
       onClick={onClick}
       onMouseEnter={onMouseEnter}
     >
-      <div
-        className="w-[26px] h-[26px] rounded-md flex items-center justify-center text-xs font-semibold shrink-0"
-        style={{
-          background: selected ? 'var(--color-accent)' : 'var(--color-background-tertiary)',
-          color: selected ? 'white' : 'var(--color-text-secondary)',
-        }}
+      {/* 匹配全局 launcher 的干净图标样式：纯 icon，无彩色 badge（除 app 图标外） */}
+      <span
+        className="w-5 shrink-0 flex items-center justify-center"
+        style={{ color: 'var(--color-text-secondary)' }}
       >
-        {resolveIcon(item.display.icon, 14, item.systemKey)}
-      </div>
-      <div className="flex-1 min-w-0">
+        {resolveIcon(item.display.icon, 16, item.systemKey)}
+      </span>
+      <div
+        className={`flex-1 min-w-0 flex flex-col ${!subtitle ? 'justify-center' : ''}`}
+        style={{ minHeight: '32px' }}
+      >
         <div className="flex items-center gap-1.5">
           {item.source === 'dev' && (
             <span className="text-[9px] px-1 py-0.5 rounded font-semibold shrink-0" style={{ background: 'var(--color-accent)', color: '#fff' }}>DEV</span>
           )}
-          <div className="text-[13px] font-medium truncate" style={{ color: selected ? 'var(--color-accent-hover)' : 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>
+          <div
+            className="text-[14px] font-medium truncate launcher-item-title"
+            style={{ fontFamily: 'var(--font-sans)' }}
+          >
             {title}
           </div>
         </div>
         {subtitle && (
-          <div className="text-[11px]" style={{ color: selected ? 'var(--color-accent)' : 'var(--color-text-tertiary)', marginTop: 1 }}>
+          <div
+            className="text-[11px]"
+            style={{
+              color: 'var(--color-text-tertiary)',
+              marginTop: 1
+            }}
+          >
             {subtitle}
           </div>
         )}

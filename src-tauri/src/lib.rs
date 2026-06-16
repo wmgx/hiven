@@ -117,10 +117,57 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
             return;
         }
         if !was_visible {
+            // Position AFTER showing: on macOS a `set_position` on a hidden
+            // window gets clobbered by the window's initial frame when it is
+            // ordered front, leaving it at the OS default (bottom-right) spot.
+            center_launcher_window(&window);
             let _ = window.emit("hiven://launcher-open", ());
         }
     })
     .map_err(|error| error.to_string())
+}
+
+/// Position the launcher window horizontally centered and in the upper portion
+/// of the monitor under the cursor (Spotlight/Raycast style). Without this the
+/// OS keeps the window at its last/default spot (often the bottom-right corner)
+/// since the launcher config carries no position. The cursor's monitor is used
+/// rather than `current_monitor()` so the launcher follows the active screen
+/// instead of wherever the hidden window happened to live.
+fn center_launcher_window(window: &tauri::WebviewWindow) {
+    let monitor = monitor_under_cursor(window)
+        .or_else(|| window.current_monitor().ok().flatten())
+        .or_else(|| window.primary_monitor().ok().flatten());
+    let Some(monitor) = monitor else { return };
+
+    let scale = monitor.scale_factor();
+    let mon_pos = monitor.position();
+    let mon_size = monitor.size();
+    let win_w = (LAUNCHER_COMPACT_WIDTH * scale).round() as i32;
+    let win_h = (LAUNCHER_COMPACT_HEIGHT * scale).round() as i32;
+
+    let x = mon_pos.x + ((mon_size.width as i32 - win_w) / 2).max(0);
+    // Keep the panel in the upper third so it stays anchored as the window
+    // grows downward to fit results.
+    let upper = ((mon_size.height as i32 - win_h) as f64 * 0.30).round() as i32;
+    let y = mon_pos.y + upper.max(0);
+
+    if let Err(error) = window.set_position(tauri::PhysicalPosition::new(x, y)) {
+        eprintln!("[hiven] Failed to center launcher window: {}", error);
+    }
+}
+
+/// Find the monitor that currently contains the mouse cursor (physical coords).
+fn monitor_under_cursor(window: &tauri::WebviewWindow) -> Option<tauri::Monitor> {
+    let cursor = window.cursor_position().ok()?;
+    let monitors = window.available_monitors().ok()?;
+    monitors.into_iter().find(|monitor| {
+        let pos = monitor.position();
+        let size = monitor.size();
+        cursor.x >= pos.x as f64
+            && cursor.x < pos.x as f64 + size.width as f64
+            && cursor.y >= pos.y as f64
+            && cursor.y < pos.y as f64 + size.height as f64
+    })
 }
 
 #[tauri::command]

@@ -1,6 +1,6 @@
 import { Component, type ReactNode, useEffect, useRef } from 'react'
 import { useAppStore } from './store'
-import type { ViewId } from './store'
+import type { GlobalLauncherPosition, ViewId } from './store'
 import { initConfigDir } from './configInit'
 import { Sidebar } from './components/Sidebar'
 import { EditorView } from './views/EditorView'
@@ -385,32 +385,29 @@ function LauncherWindowApp() {
     const openLauncher = () => {
       void (async () => {
         await rehydratePersistedAppState()
-        const settings = useAppStore.getState().settings
-        const position = settings.globalLauncherWindowPositionSource === 'user'
-          ? settings.globalLauncherWindowPosition
-          : undefined
         const pendingSurfaceTarget = consumePendingPluginSurfaceOpenTarget()
         if (pendingSurfaceTarget) {
           useAppStore.getState().openPluginSurfaceTool(pendingSurfaceTarget)
         }
         useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
-        if (position && (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
-          try {
-            const { LogicalPosition } = await import('@tauri-apps/api/dpi')
-            const { getCurrentWindow } = await import('@tauri-apps/api/window')
-            suppressNextLauncherMovePersistence()
-            await getCurrentWindow().setPosition(new LogicalPosition(position.x, position.y))
-          } catch (error) {
-            console.warn('[hiven] Failed to restore launcher window position:', error)
-          }
-        } else if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
-          try {
-            const { getCurrentWindow } = await import('@tauri-apps/api/window')
-            suppressNextLauncherMovePersistence()
-            await getCurrentWindow().center()
-          } catch (error) {
-            console.warn('[hiven] Failed to center launcher window:', error)
-          }
+        // The window is centered on the cursor's monitor natively in
+        // `center_launcher_window` before this event fires. Only override that
+        // centering with a previously dragged position while it is still fresh
+        // (within the TTL and on the same screen); otherwise the launcher falls
+        // back to centered so it never gets stranded where it was last left.
+        if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+        const settings = useAppStore.getState().settings
+        const saved = settings.globalLauncherWindowPositionSource === 'user'
+          ? settings.globalLauncherWindowPosition
+          : undefined
+        if (!saved || !isLauncherPositionFresh(saved)) return
+        try {
+          const { LogicalPosition } = await import('@tauri-apps/api/dpi')
+          const { getCurrentWindow } = await import('@tauri-apps/api/window')
+          suppressNextLauncherMovePersistence()
+          await getCurrentWindow().setPosition(new LogicalPosition(saved.x, saved.y))
+        } catch (error) {
+          console.warn('[hiven] Failed to restore launcher window position:', error)
         }
       })()
     }
@@ -476,7 +473,13 @@ function LauncherWindowApp() {
             }
             const scaleFactor = await win.scaleFactor()
             const logicalPosition = position.toLogical(scaleFactor)
-            useAppStore.getState().updateSetting('globalLauncherWindowPosition', { x: logicalPosition.x, y: logicalPosition.y })
+            useAppStore.getState().updateSetting('globalLauncherWindowPosition', {
+              x: logicalPosition.x,
+              y: logicalPosition.y,
+              lastDraggedAt: Date.now(),
+              screenWidth: window.screen.width,
+              screenHeight: window.screen.height,
+            })
             useAppStore.getState().updateSetting('globalLauncherWindowPositionSource', 'user')
           } catch (error) {
             console.warn('[hiven] Failed to persist launcher window position:', error)
@@ -539,4 +542,22 @@ async function rehydratePersistedAppState() {
 
 function isLauncherWindow() {
   return new URLSearchParams(window.location.search).get('window') === 'launcher'
+}
+
+const LAUNCHER_POSITION_TTL_MS = 2 * 60 * 1000
+
+// A dragged launcher position is only honored briefly (TTL) and on the same
+// screen it was saved on; once stale it is ignored so the launcher reverts to
+// being centered on the cursor's monitor.
+function isLauncherPositionFresh(position: GlobalLauncherPosition): boolean {
+  if (position.lastDraggedAt == null) return false
+  if (Date.now() - position.lastDraggedAt >= LAUNCHER_POSITION_TTL_MS) return false
+  if (
+    position.screenWidth != null &&
+    position.screenHeight != null &&
+    (position.screenWidth !== window.screen.width || position.screenHeight !== window.screen.height)
+  ) {
+    return false
+  }
+  return true
 }

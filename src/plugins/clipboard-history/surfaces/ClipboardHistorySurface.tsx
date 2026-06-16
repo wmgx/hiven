@@ -8,7 +8,7 @@
  * - Keyboard shortcuts: Enter=paste, Cmd/Ctrl+C=copy, Delete=remove
  */
 
-import { useState, useEffect, useCallback, useMemo, useRef, type KeyboardEvent } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, memo, type KeyboardEvent } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import {
   IconButton,
@@ -47,6 +47,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const containerRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const imeKeyDown = useImeKeyboard()
+  const isKeyboardNavRef = useRef(false)
 
   const repository = useMemo(
     () => createClipboardHistoryRepository(host.storage),
@@ -137,6 +138,12 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     host.showMessage(t('message.deleted'), 'success')
   }, [repository, loadItems, host, t])
 
+  const handleItemHover = useCallback((id: string) => {
+    if (!isKeyboardNavRef.current) {
+      setSelectedId(id)
+    }
+  }, [])
+
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (!selectedItem) return
     if (e.key === 'Enter') {
@@ -155,10 +162,12 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       }
     } else if (e.key === 'ArrowDown') {
       e.preventDefault()
+      isKeyboardNavRef.current = true
       const idx = filteredItems.findIndex((i) => i.id === selectedId)
       if (idx < filteredItems.length - 1) setSelectedId(filteredItems[idx + 1].id)
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
+      isKeyboardNavRef.current = true
       const idx = filteredItems.findIndex((i) => i.id === selectedId)
       if (idx > 0) setSelectedId(filteredItems[idx - 1].id)
     }
@@ -187,7 +196,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     return (
       <>
         <div className="clipboard-history-main">
-          <div className="clipboard-history-list-pane">
+          <div className="clipboard-history-list-pane" onMouseMove={() => { isKeyboardNavRef.current = false }}>
             <div className="clipboard-history-list-toolbar">
               <SegmentedControl
                 className="clipboard-history-filter"
@@ -221,6 +230,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                         t={t}
                         storage={host.storage}
                         onSelect={setSelectedId}
+                        onHover={handleItemHover}
                         onPaste={handlePaste}
                         onDelete={handleDelete}
                       />
@@ -309,13 +319,14 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   )
 }
 
-function ClipboardHistoryItemRow({
+const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   item,
   selected,
   locale,
   t,
   storage,
   onSelect,
+  onHover,
   onPaste,
   onDelete,
 }: {
@@ -325,13 +336,21 @@ function ClipboardHistoryItemRow({
   t: (key: string) => string
   storage: SurfaceStorage
   onSelect: (id: string) => void
+  onHover?: (id: string) => void
   onPaste: (item: ClipboardHistoryItem) => Promise<void>
   onDelete: (id: string) => Promise<void>
 }) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (selected) ref.current?.scrollIntoView({ block: 'nearest' })
+    if (!selected) return
+    const el = ref.current
+    if (el) {
+      // 使用 rAF 推迟滚动，避免选择变更时的布局抖动和卡顿感
+      requestAnimationFrame(() => {
+        el.scrollIntoView({ block: 'nearest' })
+      })
+    }
   }, [selected])
 
   return (
@@ -344,6 +363,7 @@ function ClipboardHistoryItemRow({
         selected={selected}
         className="clipboard-history-item"
         onClick={() => onSelect(item.id)}
+        onMouseEnter={() => onHover && onHover(item.id)}
         onDoubleClick={() => void onPaste(item)}
       >
         {renderItemMedia(item, storage)}
@@ -362,7 +382,7 @@ function ClipboardHistoryItemRow({
       </IconButton>
     </div>
   )
-}
+})
 
 function ClipboardImageThumbnail({ item, storage }: { item: ImageHistoryItem, storage: SurfaceStorage }) {
   const [imageUrl, setImageUrl] = useState('')

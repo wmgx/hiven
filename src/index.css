@@ -27,7 +27,7 @@
   --space-4: 16px;
   --space-5: 20px;
   --space-6: 24px;
-  --sidebar-w: 44px;
+  --sidebar-w: 48px; /* pure icon rail (simple style, icon only + tooltip; no text labels) */
   --statusbar-h: 28px;
   --command-palette-list-max-height: 300px;
   --command-palette-panel-max-height: 390px;
@@ -56,6 +56,10 @@ body,
 body[data-theme='dark'],
 .flux-spatial-shell[data-theme='dark'] {
   --bg-page: #0d0f14;
+  --bg-surface: #16181f;         /* pure dark content like editor (symmetric to light pure white) */
+  --bg-surface-2: #1e2028;
+  --bg-surface-3: #25272f;
+  --bg-surface-hover: #20232b;   /* subtle hover lift for dark launcher items */
   --bg-gradient:
     radial-gradient(ellipse 80% 60% at 50% -10%, rgba(99, 102, 241, 0.12), transparent),
     radial-gradient(ellipse 60% 50% at 80% 50%, rgba(79, 70, 229, 0.06), transparent),
@@ -108,55 +112,172 @@ body[data-theme='dark'],
 
 body[data-theme='light'],
 .flux-spatial-shell[data-theme='light'] {
-  --bg-page: #f8f6f2;
-  --bg-gradient:
-    radial-gradient(ellipse 80% 55% at 50% -18%, rgba(176, 111, 26, 0.07), transparent),
-    radial-gradient(ellipse 58% 45% at 100% 12%, rgba(217, 119, 6, 0.03), transparent),
-    linear-gradient(180deg, #faf8f4 0%, #f4f1ea 100%);
-  --color-accent: #b06f1a;
-  --color-accent-hover: #985f14;
-  --color-accent-light: rgba(176, 111, 26, 0.1);
-  --color-accent-glow: rgba(176, 111, 26, 0.16);
-  --color-success: #059669;
-  --color-success-bg: rgba(5, 150, 105, 0.1);
-  --color-success-text: #047857;
-  --color-warning: #d97706;
-  --color-warning-bg: rgba(217, 119, 6, 0.1);
-  --color-error: #dc2626;
-  --color-error-bg: rgba(220, 38, 38, 0.1);
-  --color-error-text: #b91c1c;
-  --glass-border: rgba(60, 40, 10, 0.1);
-  --glass-bg: rgba(255, 255, 255, 0.78);
-  --glass-bg-solid: rgba(255, 255, 255, 0.96);
-  --glass-shine:
-    inset 0 1px 1px rgba(255, 255, 255, 0.8),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.55);
-  --shadow-panel:
-    0 20px 42px -20px rgba(60, 40, 10, 0.16),
-    0 10px 24px -18px rgba(60, 40, 10, 0.1),
-    0 0 0 1px rgba(60, 40, 10, 0.06);
-  --shadow-sm: 0 2px 8px rgba(60, 40, 10, 0.05);
-  --shadow-md: 0 10px 22px rgba(60, 40, 10, 0.08);
+  /* VS Code Light+ inspired clean cold high-end white (final chosen) */
+  --bg-page: #f3f3f3;          /* chrome gray like VS Code sidebar */
+  --bg-surface: #ffffff;         /* pure white content like editor */
+  --bg-surface-2: #f3f3f3;
+  --bg-surface-3: #e8e8e8;
+  --text-primary: #000000;
+  --text-secondary: #6f6f6f;
+  --text-tertiary: #8a8a8a;
+  --border: #e5e5e5;
+  --border-subtle: #ededed;
+  --accent: #007acc;           /* VS Code blue */
+  --accent-hover: #005a9e;
+  --accent-tint: rgba(0, 122, 204, 0.1);
+
+  /* 统一 light 模式下的 accent 变量，避免旧紫色 tint 残留 */
+  --color-accent: #007acc;
+  --color-accent-light: rgba(0, 122, 204, 0.1);
+  --color-accent-hover: #005a9e;
+  --success: #16825d;
+  --error: #be1100;
+
+  /* clean, no heavy glass in light */
+  --glass-border: #e5e5e5;
+  --glass-bg: #ffffff;
+  --glass-bg-solid: #ffffff;
+  --glass-shine: none;
+  --shadow-panel: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.07);
+
   --color-bg: var(--bg-page);
-  --color-text: #241d12;
-  --color-text-muted: #665a48;
-  --color-text-faint: #9a8e78;
-  --color-surface: rgba(60, 40, 10, 0.025);
-  --color-surface-hover: rgba(255, 255, 255, 0.92);
-  --color-divider: rgba(60, 40, 10, 0.08);
-  --input-bg: rgba(60, 40, 10, 0.04);
-  --btn-ghost-hover: rgba(60, 40, 10, 0.055);
-  --scrollbar-thumb: rgba(60, 40, 10, 0.14);
+  --color-text: #1e1e1e;
+  --color-text-muted: #6f6f6f;
+  --color-text-faint: #8a8a8a;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f3f3f3;
+  --color-divider: #e5e5e5;
+  --input-bg: #ffffff;
+  --btn-ghost-hover: #f3f3f3;
+  --scrollbar-thumb: #c5c5c5;
 
   --color-background-primary: var(--bg-page);
-  --color-background-secondary: rgba(255, 255, 255, 0.78);
-  --color-background-tertiary: rgba(60, 40, 10, 0.055);
-  --color-text-primary: var(--color-text);
-  --color-text-secondary: var(--color-text-muted);
-  --color-text-tertiary: var(--color-text-faint);
-  --color-border-secondary: rgba(60, 40, 10, 0.14);
-  --color-border-tertiary: var(--color-divider);
-  --color-accent-bg: var(--color-accent-light);
+  --color-background-secondary: #f3f3f3;
+  --color-background-tertiary: #e8e8e8;
+  --color-text-primary: #000000;
+  --color-text-secondary: #6f6f6f;
+  --color-text-tertiary: #8a8a8a;
+  --color-border-secondary: #e5e5e5;
+  --color-border-tertiary: #ededed;
+  --color-accent-bg: var(--accent-tint);
+
+  /* no gradient for clean light */
+  --bg-gradient: none;
+}
+
+/* Clean light mode overrides per VS Code Light+ final scheme (solid, no heavy glass, clean chrome) */
+.light .glass {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: none;
+}
+
+.light .flux-sidebar,
+.light .statusbar {
+  background: var(--bg-surface-2);
+  border-color: var(--border);
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+.light .topbar {
+  background: var(--bg-surface-2);
+}
+
+/* Pure icon rail — simple editor-focused style (left sidebar shows icons only; labels via tooltip). Matches accepted VS Code Light+ mock + "和之前一样简单风格，光显示 icon" requirement. */
+.light .flux-sidebar .sidebar-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.light .flux-sidebar .sidebar-btn.active {
+  background: var(--accent-tint);
+  color: var(--accent);
+  box-shadow: none; /* clean tint, no dark-mode gradient/glow on light chrome */
+}
+
+/* Clean launcher and palette in light (matching mock) */
+.light .global-launcher-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.light .global-launcher-panel .pal-search,
+.light .global-launcher-panel .global-launcher-header {
+  background: var(--bg-surface-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.light .lnch-item:hover,
+.light .cmd-item:hover,
+.light .clipboard-history-item-row:hover {
+  background: var(--bg-surface-2); /* 极轻冷灰 hover，干净不脏 */
+}
+
+/* Dark theme launcher hover - subtle dark gray lift for clean simple style */
+.flux-spatial-shell[data-theme='dark'] .global-launcher-panel .cmd-item:hover,
+.flux-spatial-shell[data-theme='dark'] .palette-panel .cmd-item:hover {
+  background: var(--bg-surface-hover); /* 极轻深灰 hover，对应 light 的 surface-2，干净不脏 */
+}
+
+/* When moving cursor with keys (光标移动), the selected item should show the hover bg state in dark */
+.flux-spatial-shell[data-theme='dark'] .global-launcher-panel .cmd-item.selected,
+.flux-spatial-shell[data-theme='dark'] .palette-panel .cmd-item.selected {
+  background: var(--bg-surface-hover);
+  border-radius: 0;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.light .lnch-item.selected,
+.light .cmd-item.selected,
+.light .cmd-item.highlight,
+.light .clipboard-history-item-row.is-selected {
+  background: var(--accent-tint);
+  /* 极简左边指示条，精准专业感（不抢眼） */
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* Raycast 风格列表覆盖（中性灰选中条 + 圆角高亮，右侧标签对齐，适合 launcher）
+   降低密度：增加垂直留白、字体已在上层放大，图标区稍大 */
+.global-launcher-panel .cmd-item {
+  padding-top: 7px;
+  padding-bottom: 7px;
+  gap: 10px;
+}
+.global-launcher-panel .cmd-item.selected,
+.palette-panel .cmd-item.selected,
+.global-launcher-panel .clipboard-history-item-row.is-selected,
+.palette-panel .clipboard-history-item-row.is-selected {
+  background: var(--accent-tint);
+  border-radius: 0;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.global-launcher-panel .cmd-item .text-tertiary {
+  color: #8a8a8a;
+}
+
+/* Launcher item titles: theme-aware, base leaned gray in light, selected pure/primary */
+.cmd-item .launcher-item-title {
+  color: var(--color-text-secondary);
+}
+.light .cmd-item .launcher-item-title {
+  color: #222222; /* light base: lean gray from pure black (per iteration) */
+}
+.cmd-item.selected .launcher-item-title,
+.cmd-item.highlight .launcher-item-title {
+  color: var(--color-text-primary); /* selected: pure black in light, bright primary in dark */
+}
+
+.light .palette-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
 }
 
 * {
@@ -199,8 +320,7 @@ html[data-window='launcher'] #root {
   color: var(--color-text-primary);
   background: var(--bg-gradient), var(--bg-page);
   font-family: var(--font-sans);
-  -webkit-user-select: none;
-  user-select: none;
+  /* 全局非输入框文本默认可选中复制（用户反馈需求），仅对控件类显式禁用 */
 }
 
 .launcher-window-shell {
@@ -210,6 +330,32 @@ html[data-window='launcher'] #root {
 .flux-spatial-shell :is(input, textarea, select, [contenteditable='true']) {
   -webkit-user-select: text;
   user-select: text;
+}
+
+/* 明确允许复制的文本内容区域 */
+.flux-spatial-shell :is(
+  .cmd-item, .lnch-item,
+  .statusbar, .topbar,
+  .flux-content, .pane-title, .panel-title,
+  .clipboard-history-item-title, .clipboard-history-item-subtitle,
+  .clipboard-history-meta, .clipboard-history-preview-text,
+  .global-launcher-body, .command-palette-results,
+  .text-primary, .text-secondary, .text-tertiary,
+  label, p, span:not(button span)
+) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* 控件类禁止文本选中（避免误选按钮文字等） */
+.flux-spatial-shell :is(
+  button, [role="button"],
+  .sidebar-btn, .flux-sidebar,
+  .drag-handle, [data-no-select],
+  .icon, .no-select
+) {
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .flux-spatial-shell .monaco-editor,
@@ -536,6 +682,14 @@ html[data-window='launcher'] #root {
   transform: translateY(-1px);
 }
 
+/* Settings page cards: no hover state as requested */
+.setting-card:hover {
+  border-color: var(--glass-border);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-shine);
+  transform: none;
+}
+
 .card.card-error,
 .script-card.has-error {
   border-color: color-mix(in srgb, var(--color-error) 45%, transparent);
@@ -545,17 +699,21 @@ html[data-window='launcher'] #root {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 38px;
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
+  padding: 5px 10px;
   color: var(--color-text-secondary);
   cursor: pointer;
   transition:
-    background 0.15s ease,
-    color 0.15s ease;
+    background 0.1s ease,
+    color 0.1s ease;
+  font-family: var(--font-sans);
+  border-radius: 0;
 }
 
-.cmd-item:hover,
+.cmd-item:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
 .cmd-item.selected,
 .cmd-item.highlight {
   background: var(--color-accent-light);
@@ -768,14 +926,13 @@ html[data-window='launcher'] #root {
 /* ─── Palette Overlay ─── */
 .palette-overlay {
   background: rgba(0, 0, 0, 0);
-  backdrop-filter: blur(0px);
+  backdrop-filter: none;
   transition:
-    background 0.2s ease,
-    backdrop-filter 0.2s ease;
+    background 0.2s ease;
 }
 .palette-overlay.open {
-  background: rgba(0, 0, 0, 0.25);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.12);
+  backdrop-filter: none;
 }
 .palette-panel {
   transform: scale(0.95) translateY(-10px);
@@ -812,8 +969,7 @@ html[data-window='launcher'] .global-launcher-overlay.open {
   max-height: min(var(--command-palette-panel-max-height), calc(100vh - 24px));
   display: flex;
   flex-direction: column;
-  -webkit-user-select: none;
-  user-select: none;
+  /* 允许列表文本选中复制；输入框已单独处理 */
 }
 
 html[data-window='launcher'] .global-launcher-panel {
@@ -2345,7 +2501,7 @@ html[data-window='launcher'] .global-launcher-panel :is(input, textarea, select,
 }
 
 .global-launcher-panel.palette-panel {
-  border-radius: 8px !important;
+  border-radius: 6px !important;
   background: var(--color-background-primary) !important;
   box-shadow: 0 0 0 1px var(--color-border-secondary);
   backdrop-filter: none;
@@ -2372,24 +2528,33 @@ html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-lau
   box-shadow:
     0 18px 44px rgba(17, 24, 39, 0.14),
     0 3px 10px rgba(17, 24, 39, 0.08);
+  border-radius: 6px !important;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+}
+
+/* 应用内 CommandPalette（in-app launcher）面板也使用干净不模糊的样式，匹配简单风格 */
+.flux-spatial-shell .palette-panel {
+  border: 0.5px solid var(--color-border-secondary) !important;
+  background: var(--bg-surface) !important;  /* pure surface like editor content (white in light, solid dark in dark), keeps launcher crisp */
+  /* 干净的立体阴影，让 launcher 在暗色蒙层上更 crisp、更有存在感（避免平坦模糊感） */
+  box-shadow:
+    0 12px 36px -10px rgba(0, 0, 0, 0.16),
+    0 4px 10px -2px rgba(0, 0, 0, 0.08),
+    0 0 0 1px var(--border);
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-radius: 6px !important;
 }
 
 html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-launcher-panel.palette-panel {
   box-shadow: 0 0 0 1px rgba(17, 24, 39, 0.1);
 }
 
+/* 旧的 cmd-item 基础覆盖已合并到上方主规则，此处保留最小不冲突声明 */
 .cmd-item {
   border: none;
   background: transparent;
-  font-family: var(--font-sans);
-}
-
-.cmd-item.selected,
-.cmd-item.highlight,
-.cmd-item:hover {
-  background: var(--color-accent-light) !important;
 }
 
 .monaco-editor,

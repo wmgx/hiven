@@ -158,6 +158,11 @@ export function resolveIcon(iconName?: string, size = 16, fallbackName?: string)
     if (IconComponent) return <IconComponent size={size} />
   }
   // fallback: 取 name 前两个字母
-  const letters = (fallbackName || '??').slice(0, 2).toUpperCase()
-  return <span style={{ fontSize: size * 0.7, fontWeight: 600, lineHeight: 1 }}>{letters}</span>
+  // 针对中文等宽字符避免拥挤偏移，只取第一个字符
+  let raw = (fallbackName || '??').trim()
+  const firstChar = raw[0] || '?'
+  const isWideChar = /[^\x00-\x7F]/.test(firstChar) // 非 ASCII 认为宽字符（中文、日文等）
+  const letters = isWideChar ? firstChar : raw.slice(0, 2).toUpperCase()
+  const fontSize = isWideChar ? size * 0.8 : size * 0.65
+  return <span style={{ fontSize, fontWeight: 600, lineHeight: 1 }}>{letters}</span>
 }

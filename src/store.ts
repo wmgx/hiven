@@ -151,7 +151,13 @@ export type LastCommandStatus = {
 export type AppTheme = 'dark' | 'light'
 export type GlobalLauncherMode = 'full' | 'pinned-only'
 export type GlobalPinnedLauncherDoubleModifier = 'Command' | 'Shift' | 'Option'
-export type GlobalLauncherPosition = { x: number; y: number }
+export type GlobalLauncherPosition = {
+  x: number;
+  y: number;
+  lastDraggedAt?: number;
+  screenWidth?: number;
+  screenHeight?: number;
+}
 
 export type GlobalPinnedLauncherShortcut =
   | { kind: 'accelerator'; accelerator: string; registrationStatus?: string; registrationError?: string }
@@ -240,7 +246,6 @@ interface AppState {
     disabledBuiltins: string[]
     disabledCustoms: string[]
     globalPinnedLauncherShortcut: GlobalPinnedLauncherShortcut
-    globalLauncherPosition?: GlobalLauncherPosition
     globalLauncherWindowPosition?: GlobalLauncherPosition
     globalLauncherWindowPositionSource?: 'user'
   }
@@ -501,7 +506,6 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     disabledBuiltins: [],
     disabledCustoms: [],
     globalPinnedLauncherShortcut: { kind: 'accelerator', accelerator: 'Shift+Cmd+Space' },
-    globalLauncherPosition: undefined,
     globalLauncherWindowPosition: undefined,
     globalLauncherWindowPositionSource: undefined,
   },

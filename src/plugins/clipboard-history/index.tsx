@@ -28,7 +28,7 @@ export default definePlugin<ClipboardHistorySettings>({
         kind: 'custom-view',
         title: 'Clipboard History',
         titleI18n: { zh: '剪贴板历史' },
-        icon: 'clipboard',
+        icon: 'Clipboard',
         aliases: ['clipboard', 'paste', 'history', '剪贴板', '粘贴板', '剪切板'],
         component: ClipboardHistorySurface,
         entry: {

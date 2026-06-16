@@ -64,8 +64,6 @@ export function GlobalLauncher() {
   const pinnedActions = useAppStore((s) => s.pinnedActions)
   const recentActionNames = useAppStore((s) => s.actionUsageBySource['global-launcher'].recentActionNames)
   const actionUsageCounts = useAppStore((s) => s.actionUsageBySource['global-launcher'].actionUsageCounts)
-  const launcherPosition = useAppStore((s) => s.settings.globalLauncherPosition)
-  const updateSetting = useAppStore((s) => s.updateSetting)
   const locale = useAppStore((s) => s.locale)
   const pluginRegistryVersion = usePluginRegistryVersion()
   const pluginPermissionVersion = usePluginPermissionStore((s) => s.version)
@@ -94,25 +92,15 @@ export function GlobalLauncher() {
   const dynamicQueryRef = useRef('')
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
-  const [dragPosition, setDragPosition] = useState(launcherPosition)
+  const isKeyboardNavRef = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const isImeComposingRef = useRef(false)
   const previousFocusRef = useRef<HTMLElement | null>(null)
-  const dragRef = useRef<{
-    offsetX: number
-    offsetY: number
-    position: { x: number; y: number }
-  } | null>(null)
   const standaloneLauncher = isStandaloneLauncherWindow()
   const launcherSettingsTarget = settingsDialogTarget?.presentation === 'global-launcher'
     ? settingsDialogTarget
     : null
-
-  useEffect(() => {
-    if (dragRef.current) return
-    setDragPosition(launcherPosition)
-  }, [launcherPosition])
 
   useEffect(() => {
     if (!open) return
@@ -697,6 +685,8 @@ export function GlobalLauncher() {
   const beginDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return
     if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, button, a, [role="button"], [data-no-drag], [data-launcher-scrollable]')) return
+    // Only the standalone launcher window is draggable, via the native Tauri
+    // window drag. Its position (with TTL) is persisted in App.tsx `onMoved`.
     if (standaloneLauncher && (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
       event.preventDefault()
       event.stopPropagation()
@@ -707,53 +697,16 @@ export function GlobalLauncher() {
       } catch (error) {
         console.warn('[hiven] Failed to drag launcher window:', error)
       }
-      return
     }
-    const panel = panelRef.current
-    if (!panel) return
-    const rect = panel.getBoundingClientRect()
-    const initialPosition = { x: rect.left, y: rect.top }
-    dragRef.current = {
-      offsetX: event.clientX - rect.left,
-      offsetY: event.clientY - rect.top,
-      position: initialPosition,
-    }
-    setDragPosition(initialPosition)
-    event.preventDefault()
+  }, [standaloneLauncher])
 
-    const move = (moveEvent: PointerEvent) => {
-      const currentPanel = panelRef.current
-      const drag = dragRef.current
-      if (!currentPanel || !drag) return
-      const width = currentPanel.offsetWidth
-      const height = currentPanel.offsetHeight
-      const next = {
-        x: clamp(moveEvent.clientX - drag.offsetX, 8, Math.max(8, window.innerWidth - width - 8)),
-        y: clamp(moveEvent.clientY - drag.offsetY, 8, Math.max(8, window.innerHeight - height - 8)),
-      }
-      drag.position = next
-      setDragPosition(next)
-    }
-
-    const finish = () => {
-      const position = dragRef.current?.position
-      dragRef.current = null
-      if (position) updateSetting('globalLauncherPosition', position)
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', finish)
-      window.removeEventListener('pointercancel', finish)
-    }
-
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', finish)
-    window.addEventListener('pointercancel', finish)
-  }, [standaloneLauncher, updateSetting])
-
-  const currentPosition = standaloneLauncher ? undefined : (dragPosition ?? launcherPosition)
+  // The launcher is always horizontally centered. In the standalone window the
+  // window itself is positioned natively (see `center_launcher_window`); here
+  // the panel just centers within whatever window renders it.
   const panelStyle: CSSProperties = {
     background: 'var(--color-background-primary)',
     border: '0.5px solid var(--color-border-secondary)',
-    borderRadius: 'var(--radius-xl)',
+    borderRadius: '6px',
     width: launcherSettingsTarget
       ? `min(${GLOBAL_LAUNCHER_SETTINGS_WIDTH}px, calc(100vw - 24px))`
       : activeSurfaceFrame?.surface.shell?.defaultWidth
@@ -764,9 +717,9 @@ export function GlobalLauncher() {
       : activeSurfaceFrame?.surface.shell?.defaultHeight
       ? `min(${activeSurfaceFrame.surface.shell.defaultHeight}px, calc(100vh - 24px))`
       : undefined,
-    left: currentPosition ? currentPosition.x : '50%',
-    top: currentPosition ? currentPosition.y : overlay ? 12 : 70,
-    transform: currentPosition ? undefined : 'translateX(-50%)',
+    left: '50%',
+    top: overlay ? 12 : 70,
+    transform: 'translateX(-50%)',
   }
 
   useLayoutEffect(() => {
@@ -881,8 +834,16 @@ export function GlobalLauncher() {
             closeLauncher()
             return
           }
-          if (event.key === 'ArrowDown') { event.preventDefault(); setSelectedIndex((index) => Math.min(index + 1, Math.max(0, visibleFiltered.length - 1))) }
-          if (event.key === 'ArrowUp') { event.preventDefault(); setSelectedIndex((index) => Math.max(index - 1, 0)) }
+          if (event.key === 'ArrowDown') {
+            event.preventDefault()
+            isKeyboardNavRef.current = true
+            setSelectedIndex((index) => Math.min(index + 1, Math.max(0, visibleFiltered.length - 1)))
+          }
+          if (event.key === 'ArrowUp') {
+            event.preventDefault()
+            isKeyboardNavRef.current = true
+            setSelectedIndex((index) => Math.max(index - 1, 0))
+          }
           if (event.key === 'Enter') {
             event.preventDefault()
             selectItem(selectedItem, shouldCustomizeParams(event.metaKey, event.ctrlKey))
@@ -1115,15 +1076,14 @@ export function GlobalLauncher() {
           )
         })() : (
           <>
-            <div className="global-launcher-header flex items-center gap-2 px-3.5 py-2.5" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
-              <Search size={16} style={{ color: 'var(--color-text-tertiary)' }} />
+            <div className="global-launcher-header flex items-center px-3.5 py-2" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
               <input
                 ref={inputRef}
                 value={query}
                 onChange={(event) => { setQuery(event.target.value); setSelectedIndex(0) }}
                 placeholder={t(locale, 'palette.globalPlaceholder')}
-                className="flex-1 outline-none border-none bg-transparent text-[14px]"
-                style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
+                className="flex-1 outline-none border-none bg-transparent text-[15px]"
+                style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-sans)' }}
               />
             </div>
             {controllerState?.error && (
@@ -1131,11 +1091,12 @@ export function GlobalLauncher() {
                 {controllerState.error}
               </div>
             )}
-            <div className="global-launcher-body">
+            <div className="global-launcher-body" onMouseMove={() => { isKeyboardNavRef.current = false }}>
               <LauncherList
                 items={visibleFiltered}
                 selected={selectedItem}
                 onSelect={(item) => selectItem(item)}
+                onHoverIndex={(index) => { if (!isKeyboardNavRef.current) setSelectedIndex(index) }}
               />
             </div>
             <div className="global-launcher-footer flex shrink-0 gap-3 px-3.5 py-1.5" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
@@ -1187,11 +1148,11 @@ function isAppIconRef(icon?: string): boolean {
   return icon?.startsWith('app-icon:') === true
 }
 
-function LauncherList({ items, selected, onSelect }: { items: LauncherItem[]; selected?: LauncherItem; onSelect: (item: LauncherItem) => void }) {
+function LauncherList({ items, selected, onSelect, onHoverIndex }: { items: LauncherItem[]; selected?: LauncherItem; onSelect: (item: LauncherItem) => void; onHoverIndex?: (index: number) => void }) {
   if (items.length === 0) return null
   return (
-    <div className="py-1">
-      {items.map((item) => {
+    <div className="py-1.5">
+      {items.map((item, index) => {
         const isSelected = selected?.kind === item.kind && selected.id === item.id
         return (
           <LauncherListItem
@@ -1199,6 +1160,7 @@ function LauncherList({ items, selected, onSelect }: { items: LauncherItem[]; se
             item={item}
             selected={isSelected}
             onSelect={onSelect}
+            onMouseEnter={() => onHoverIndex && onHoverIndex(index)}
           />
         )
       })}
@@ -1206,7 +1168,7 @@ function LauncherList({ items, selected, onSelect }: { items: LauncherItem[]; se
   )
 }
 
-function LauncherListItem({ item, selected, onSelect }: { item: LauncherItem; selected: boolean; onSelect: (item: LauncherItem) => void }) {
+function LauncherListItem({ item, selected, onSelect, onMouseEnter }: { item: LauncherItem; selected: boolean; onSelect: (item: LauncherItem) => void; onMouseEnter?: () => void }) {
   const ref = useRef<HTMLButtonElement>(null)
   const appIcon = item.kind !== 'view' && isAppIconRef(item.icon)
 
@@ -1218,30 +1180,45 @@ function LauncherListItem({ item, selected, onSelect }: { item: LauncherItem; se
     <button
       ref={ref}
       className={`cmd-item w-full border-none text-left ${selected ? 'selected' : ''}`}
-      style={{
-        background: selected ? 'var(--color-accent-light)' : 'transparent',
-        color: 'var(--color-text-primary)',
-        fontFamily: 'var(--font-mono)',
-      }}
       onClick={() => onSelect(item)}
+      onMouseEnter={onMouseEnter}
     >
+      {/* 参考 Raycast 布局：左侧彩色/线条图标 + 标题+副标题同行或换行 + 右侧类型标签（视图/固定/命令） */}
       <span
-        className="w-[26px] h-[26px] rounded-md flex items-center justify-center text-xs font-semibold shrink-0 overflow-hidden"
-        style={{
-          background: appIcon ? 'transparent' : selected ? 'var(--color-accent)' : 'var(--color-background-tertiary)',
-          color: selected ? 'white' : 'var(--color-text-secondary)',
-        }}
+        className="w-5 shrink-0 flex items-center justify-center"
+        style={{ color: 'var(--color-text-secondary)' }}
       >
-        {item.kind === 'domain'
-          ? resolveIcon(item.icon, appIcon ? 26 : 14, item.title)
-          : item.kind === 'pinned'
-          ? resolveIcon(item.icon, appIcon ? 26 : 14, item.title) || <Pin size={14} />
-          : item.kind === 'view' ? item.icon : resolveIcon(item.icon, 14, item.title)}
+        {appIcon ? (
+          <span style={{ width: 18, height: 18, borderRadius: 3, overflow: 'hidden', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+            {item.kind === 'domain'
+              ? resolveIcon(item.icon, 16, item.title)
+              : item.kind === 'pinned'
+              ? (resolveIcon(item.icon, 16, item.title) || <Pin size={16} />)
+              : resolveIcon(item.icon, 16, item.title)}
+          </span>
+        ) : (
+          item.kind === 'domain'
+            ? resolveIcon(item.icon, 16, item.title)
+            : item.kind === 'pinned'
+            ? (resolveIcon(item.icon, 16, item.title) || <Pin size={16} />)
+            : item.kind === 'view' ? item.icon : resolveIcon(item.icon, 16, item.title)
+        )}
       </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-[13px] font-medium truncate">{item.title}</span>
-        <span className="block text-[11px] truncate" style={{ color: 'var(--color-text-tertiary)' }}>{item.subtitle}</span>
-      </span>
+
+      <div
+        className={`flex-1 min-w-0 overflow-hidden flex flex-col ${!item.subtitle ? 'justify-center' : ''}`}
+        style={{ minHeight: '32px' }}
+      >
+        <span
+          className="block text-[14px] font-medium truncate launcher-item-title"
+          style={{ fontFamily: 'var(--font-sans)' }}
+        >
+          {item.title}
+        </span>
+        {item.subtitle && (
+          <span className="block text-[12px] truncate" style={{ color: 'var(--color-text-tertiary)' }}>{item.subtitle}</span>
+        )}
+      </div>
     </button>
   )
 }

@@ -64,6 +64,13 @@ export function ShortcutRecorder({
       return
     }
 
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      setError('')
+      setIsRecording(false)
+      if (onClear) onClear()
+      return
+    }
+
     const recordedShortcut = eventToShortcutRecorderValue(event, lastModifierTapRef.current, allowDoubleModifier)
     lastModifierTapRef.current = recordedShortcut.lastModifierTap
     if (!recordedShortcut.shortcut) {
@@ -95,6 +102,13 @@ export function ShortcutRecorder({
     requestAnimationFrame(() => recorderRef.current?.focus())
   }
 
+  const handleBlur = () => {
+    if (isRecording) {
+      setIsRecording(false)
+      setError('')
+    }
+  }
+
   return (
     <div className="shortcut-recorder">
       <button
@@ -103,25 +117,11 @@ export function ShortcutRecorder({
         className={`shortcut-recorder-display ${isRecording ? 'is-recording' : ''}`}
         onClick={startRecording}
         onKeyDown={handleKeyDown}
+        onBlur={handleBlur}
+        title="点击录入快捷键"
       >
         {displayValue}
       </button>
-      <div className="shortcut-recorder-actions">
-        <button type="button" className="scripts-btn" onClick={startRecording}>{recordLabel}</button>
-        {onClear && (
-          <button
-            type="button"
-            className="scripts-btn"
-            onClick={() => {
-              setError('')
-              setIsRecording(false)
-              onClear()
-            }}
-          >
-            {clearLabel ?? disabledLabel}
-          </button>
-        )}
-      </div>
       {(error || status) && (
         <span className={`shortcut-recorder-status ${error ? 'is-error' : ''}`}>
           {error || status}

@@ -132,11 +132,21 @@ function SettingRow({ label, info, children }: { label: string; info?: string; c
   const infoRef = useRef<HTMLDivElement>(null)
 
   return (
-    <div className="flex items-center justify-between py-1.5" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
-      <span className="flex items-center gap-1" style={{ fontSize: 'var(--text-base)', color: 'var(--color-text-secondary)' }}>
+    <div
+      style={{
+        borderBottom: '0.5px solid var(--color-border-tertiary)',
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 55%) 1fr',
+        gap: '8px',
+        alignItems: 'start',
+        paddingTop: '6px',
+        paddingBottom: '6px'
+      }}
+    >
+      <span className="flex items-start gap-1" style={{ fontSize: 'var(--text-base)', color: 'var(--color-text-secondary)', minWidth: 0 }}>
         {label}
         {info && (
-          <div className="relative inline-flex" ref={infoRef}>
+          <div className="relative inline-flex mt-[1px]" ref={infoRef}>
             <Info
               size={12}
               className="cursor-pointer shrink-0 opacity-40 hover:opacity-70 transition-opacity"
@@ -159,7 +169,9 @@ function SettingRow({ label, info, children }: { label: string; info?: string; c
           </div>
         )}
       </span>
-      {children}
+      <div style={{ minWidth: 0 }}>
+        {children}
+      </div>
     </div>
   )
 }
