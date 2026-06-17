@@ -72,28 +72,26 @@ jobs:
 
           echo "$CERTIFICATE_P12" | base64 --decode > /tmp/cert.p12
 
-          # 创建临时钥匙串
+          # 创建临时钥匙串并配置
           security create-keychain -p "actions" /tmp/build.keychain
+          security set-keychain-settings -lut 3600 /tmp/build.keychain
           security unlock-keychain -p "actions" /tmp/build.keychain
-          # 将临时钥匙串加入搜索列表（保留已有的 login + System keychain）
-          security list-keychains -d user -s /tmp/build.keychain $(security list-keychains -d user | tr -d '"')
-          security default-keychain -s /tmp/build.keychain
 
-          # 导入证书
+          # 导入证书（-A 允许所有应用访问，-T 明确授权 codesign）
           security import /tmp/cert.p12 \
             -k /tmp/build.keychain \
             -P "$CERTIFICATE_PASSWORD" \
             -T /usr/bin/codesign \
+            -T /usr/bin/security \
             -A
 
-          # 允许 codesign 无弹窗使用证书
-          security set-key-partition-list -S apple-tool:,apple: \
-            -s -k "actions" /tmp/build.keychain
+          # 设为默认并加入搜索列表（保留已有的 login + System keychain）
+          security default-keychain -s /tmp/build.keychain
+          security list-keychains -d user -s /tmp/build.keychain $(security list-keychains -d user | tr -d '"' | tr '\n' ' ')
 
-          # 提取证书并设置信任策略（自签名证书必须显式信任才算 valid）
-          security find-certificate -a -p /tmp/build.keychain > /tmp/cert.pem
-          sudo security add-trusted-cert -d -r trustRoot \
-            -k /tmp/build.keychain /tmp/cert.pem || true
+          # 关键：允许 codesign 无弹窗使用证书的私钥
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "actions" /tmp/build.keychain
 
           # 验证证书已导入且可用于签名
           security find-identity -p codesigning /tmp/build.keychain | grep "$APPLE_SIGNING_IDENTITY" || {
