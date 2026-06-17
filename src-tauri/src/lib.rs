@@ -198,6 +198,11 @@ fn simulate_paste_impl() -> Result<(), String> {
     use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
     use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 
+    // Check accessibility permission first
+    if !ax_is_trusted(false) {
+        return Err("Accessibility permission not granted".into());
+    }
+
     const KEY_V: u16 = 9;
     let src = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
         .map_err(|_| "Failed to create event source")?;
@@ -210,6 +215,30 @@ fn simulate_paste_impl() -> Result<(), String> {
     dn.post(CGEventTapLocation::HID);
     up.post(CGEventTapLocation::HID);
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn ax_is_trusted(prompt: bool) -> bool {
+    use core_foundation::base::TCFType;
+    use core_foundation::boolean::CFBoolean;
+    use core_foundation::dictionary::CFDictionary;
+    use core_foundation::string::CFString;
+
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXIsProcessTrustedWithOptions(
+            options: core_foundation::dictionary::CFDictionaryRef,
+        ) -> bool;
+    }
+
+    let key = CFString::new("AXTrustedCheckOptionPrompt");
+    let val = if prompt {
+        CFBoolean::true_value()
+    } else {
+        CFBoolean::false_value()
+    };
+    let opts = CFDictionary::from_CFType_pairs(&[(key.as_CFType(), val.as_CFType())]);
+    unsafe { AXIsProcessTrustedWithOptions(opts.as_concrete_TypeRef()) }
 }
 
 #[cfg(target_os = "windows")]
