@@ -74,10 +74,10 @@ jobs:
 
           # 创建临时钥匙串
           security create-keychain -p "actions" /tmp/build.keychain
-          security default-keychain -s /tmp/build.keychain
           security unlock-keychain -p "actions" /tmp/build.keychain
-          # 将临时钥匙串加入搜索列表
-          security list-keychains -s /tmp/build.keychain
+          # 将临时钥匙串加入搜索列表（保留已有的 login + System keychain）
+          security list-keychains -d user -s /tmp/build.keychain $(security list-keychains -d user | tr -d '"')
+          security default-keychain -s /tmp/build.keychain
 
           # 导入证书
           security import /tmp/cert.p12 \
