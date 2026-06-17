@@ -13,8 +13,6 @@ use tauri::LogicalSize;
 use zip::ZipArchive;
 
 pub mod hotkeys;
-#[cfg(target_os = "macos")]
-pub mod helper_ipc;
 
 const LAUNCHER_COMPACT_WIDTH: f64 = 660.0;
 const LAUNCHER_COMPACT_HEIGHT: f64 = 160.0;
@@ -195,13 +193,20 @@ async fn simulate_paste() -> Result<(), String> {
 
 #[cfg(target_os = "macos")]
 fn simulate_paste_impl() -> Result<(), String> {
-    let response = crate::helper_ipc::send_command(serde_json::json!({"cmd": "simulate_paste"}))?;
-    if response["result"] == "error" {
-        return Err(response["message"]
-            .as_str()
-            .unwrap_or("Accessibility permission not granted")
-            .to_string());
-    }
+    use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
+    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+
+    const KEY_V: u16 = 9;
+    let src = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
+        .map_err(|_| "Failed to create event source")?;
+    let dn = CGEvent::new_keyboard_event(src.clone(), KEY_V, true)
+        .map_err(|_| "Failed to create key-down event")?;
+    let up = CGEvent::new_keyboard_event(src, KEY_V, false)
+        .map_err(|_| "Failed to create key-up event")?;
+    dn.set_flags(CGEventFlags::CGEventFlagCommand);
+    up.set_flags(CGEventFlags::CGEventFlagCommand);
+    dn.post(CGEventTapLocation::HID);
+    up.post(CGEventTapLocation::HID);
     Ok(())
 }
 
@@ -2630,16 +2635,6 @@ pub fn run() {
             // `run_on_main_thread` callbacks used to show the launcher window.
             #[cfg(target_os = "macos")]
             disable_app_nap();
-
-            // Launch hiven-helper in the background. It holds the single
-            // Accessibility permission entry (for CGEventPost/simulate_paste)
-            // so that binary-hash changes in the main app don't invalidate it.
-            #[cfg(target_os = "macos")]
-            if let Err(e) = crate::helper_ipc::launch_and_connect() {
-                eprintln!("[hiven] Failed to start hiven-helper: {}", e);
-                // Non-fatal: the user will see an error message if they try to
-                // use paste or the global hotkey.
-            }
 
             // 构建 Edit 子菜单（macOS 需要原生 Edit 菜单才能让剪贴板快捷键生效）
             // 注意：不加 Undo/Redo，否则会拦截 Monaco 自己的撤销栈

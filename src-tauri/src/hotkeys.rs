@@ -25,8 +25,7 @@ pub struct HotkeyRegistrationStatus {
     pub status: String,
 }
 
-// macOS: hotkey detection runs in-process via NSEvent global monitors (no
-// Accessibility needed). Only simulate_paste is delegated to hiven-helper.
+// macOS: hotkey detection runs in-process via NSEvent global monitors.
 #[cfg(target_os = "macos")]
 struct DoubleModifierHotkeyState {
     enabled: Mutex<bool>,

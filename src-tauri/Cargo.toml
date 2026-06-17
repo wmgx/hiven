@@ -12,10 +12,6 @@ default-run = "hiven"
 name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
-[[bin]]
-name = "hiven-helper"
-path = "src/bin/hiven-helper.rs"
-
 [build-dependencies]
 tauri-build = { version = "2.6.1", features = [] }
 

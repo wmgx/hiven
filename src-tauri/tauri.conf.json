@@ -55,7 +55,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "externalBin": ["binaries/hiven-helper"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -65,7 +64,7 @@
     ],
     "createUpdaterArtifacts": true,
     "macOS": {
-      "signingIdentity": "-"
+      "signingIdentity": null
     }
   },
   "plugins": {

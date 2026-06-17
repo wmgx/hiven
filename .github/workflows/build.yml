@@ -48,6 +48,36 @@ jobs:
             libsoup-3.0-dev \
             libjavascriptcoregtk-4.1-dev
 
+      # macOS: 导入自签名证书用于 codesign
+      - name: Import macOS signing certificate
+        if: contains(matrix.target, 'apple')
+        env:
+          CERTIFICATE_P12: ${{ secrets.CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+        run: |
+          echo "$CERTIFICATE_P12" | base64 --decode > /tmp/cert.p12
+
+          # 创建临时钥匙串
+          security create-keychain -p "actions" /tmp/build.keychain
+          security default-keychain -s /tmp/build.keychain
+          security unlock-keychain -p "actions" /tmp/build.keychain
+
+          # 导入证书
+          security import /tmp/cert.p12 \
+            -k /tmp/build.keychain \
+            -P "$CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign
+
+          # 允许 codesign 无弹窗使用证书
+          security set-key-partition-list -S apple-tool:,apple: \
+            -s -k "actions" /tmp/build.keychain
+
+          # 验证证书已导入
+          security find-identity -v /tmp/build.keychain
+
+          # 清理临时文件
+          rm -f /tmp/cert.p12
+
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
@@ -81,22 +111,14 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build hiven-helper sidecar (macOS only)
-        if: contains(matrix.target, 'apple')
-        shell: bash
-        run: |
-          cargo build --release --target ${{ matrix.target }} --bin hiven-helper --manifest-path src-tauri/Cargo.toml
-          mkdir -p src-tauri/binaries
-          cp "src-tauri/target/${{ matrix.target }}/release/hiven-helper" \
-             "src-tauri/binaries/hiven-helper-${{ matrix.target }}"
-          chmod +x "src-tauri/binaries/hiven-helper-${{ matrix.target }}"
-
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0.6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # macOS: 指定签名证书名称
+          APPLE_SIGNING_IDENTITY: ${{ contains(matrix.target, 'apple') && secrets.APPLE_SIGNING_IDENTITY || '' }}
         with:
           tauriScript: npx tauri
           args: --target ${{ matrix.target }}
