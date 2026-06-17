@@ -40,14 +40,14 @@ async function writeImageToClipboard(bytes: Uint8Array): Promise<void> {
   await navigator.clipboard.write([new ClipboardItemCtor({ [blob.type]: blob })])
 }
 
-async function trySimulatePaste(): Promise<boolean> {
-  // Try to simulate Cmd+V via Tauri invoke (requires accessibility permissions on macOS)
+async function trySimulatePaste(): Promise<{ ok: boolean; permissionDenied?: boolean }> {
   try {
     const { invoke } = await import('@tauri-apps/api/core')
     await invoke('simulate_paste')
-    return true
-  } catch {
-    return false
+    return { ok: true }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { ok: false, permissionDenied: msg.includes('Accessibility permission') }
   }
 }
 
@@ -60,20 +60,19 @@ async function tryHideLauncherWindow(): Promise<void> {
   }
 }
 
-async function pasteAfterClipboardWrite(successFallbackMessage: string): Promise<PluginPasteResult> {
+async function pasteAfterClipboardWrite(fallbackMessage: string): Promise<PluginPasteResult> {
   // Paste before hiding: the launcher is a non-activating panel so the previous app stays
   // frontmost the entire time. Sending Cmd+V while the launcher is still visible guarantees
   // the event goes to the correct target app — no focus-transition race condition.
-  const pasted = await trySimulatePaste()
+  const result = await trySimulatePaste()
   void tryHideLauncherWindow()
-  if (pasted) {
+  if (result.ok) {
     return { ok: true }
   }
-  return {
-    ok: false,
-    fallback: 'copied',
-    message: successFallbackMessage,
-  }
+  const message = result.permissionDenied
+    ? 'Copied to clipboard. Grant Accessibility access in System Settings → Privacy & Security → Accessibility to enable auto-paste.'
+    : fallbackMessage
+  return { ok: false, fallback: 'copied', message }
 }
 
 export function createPluginPaste(

@@ -196,6 +196,10 @@ fn simulate_paste_impl() -> Result<(), String> {
     use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
     use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 
+    if !hotkeys::check_accessibility_trusted() {
+        return Err("Accessibility permission not granted".to_string());
+    }
+
     const KEY_V: u16 = 9;
 
     let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)

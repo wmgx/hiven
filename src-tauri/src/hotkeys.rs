@@ -247,6 +247,11 @@ fn register_double_modifier_hotkey_impl(
 }
 
 #[cfg(target_os = "macos")]
+pub fn check_accessibility_trusted() -> bool {
+    check_accessibility_permission(false)
+}
+
+#[cfg(target_os = "macos")]
 fn check_accessibility_permission(with_prompt: bool) -> bool {
     use core_foundation::base::TCFType;
     use core_foundation::boolean::CFBoolean;
