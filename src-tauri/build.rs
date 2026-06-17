@@ -29,12 +29,15 @@ fn prepare_helper_binary() {
     let profile = std::env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
     let target_dir = manifest_dir.join("target");
 
-    // Prefer native output dir (target/debug/) over explicit-target dir, since
-    // `cargo check --target <triple>` creates a 0-byte placeholder in the
-    // target/<triple>/debug/ path that would otherwise shadow the real binary.
+    // Search order: same-profile native → same-profile cross → debug fallback.
+    // Falling back to debug ensures a release bundle (npm run tauri build) gets
+    // fresh code even when the release helper hasn't been pre-built separately.
+    // `cargo check --target <triple>` creates 0-byte placeholders, so we skip those.
     let real_src = [
         target_dir.join(&profile).join("hiven-helper"),
         target_dir.join(&target_triple).join(&profile).join("hiven-helper"),
+        target_dir.join("debug").join("hiven-helper"),
+        target_dir.join(&target_triple).join("debug").join("hiven-helper"),
     ]
     .into_iter()
     .find(|p| p.metadata().map(|m| m.len() > 0).unwrap_or(false));
