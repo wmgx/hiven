@@ -69,6 +69,10 @@ fn client_thread(stream: UnixStream, writer: Arc<Mutex<BufWriter<UnixStream>>>) 
 
 #[cfg(target_os = "macos")]
 fn run_server() {
+    // Prompt for Accessibility permission on first launch so the user sees
+    // the system dialog before they try to paste anything.
+    ax_is_trusted(true);
+
     let path = socket_path();
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
