@@ -195,14 +195,21 @@ export function setupBackgroundPermissionWatcher(): () => void {
   return usePluginPermissionStore.subscribe((state, prevState) => {
     if (state.permissions === prevState.permissions) return
 
-    for (const instance of Array.from(activeBackgrounds.values())) {
-      const requestedPermissions = pluginRegistry.getPluginPermissions(instance.pluginId, instance.source)
-      if (requestedPermissions.length === 0) continue
+    for (const { definition, pluginId, source, permissions: requestedPermissions } of pluginRegistry.getAllPluginDefinitions()) {
+      const def = definition as PluginDefinition<unknown>
+      if (!def.background || requestedPermissions.length === 0) continue
 
-      const permissions = getPluginPermissionSnapshot(instance.source, instance.pluginId, requestedPermissions)
-      const missing = missingPluginPermissions(permissions, requestedPermissions)
-      if (missing.length > 0) {
-        void stopBackground(instance.source, instance.pluginId)
+      const settingsSource = resolvePluginSettingsSource(pluginId, source)
+      const snapshot = getPluginPermissionSnapshot(settingsSource, pluginId, requestedPermissions)
+      const missing = missingPluginPermissions(snapshot, requestedPermissions)
+      const key = backgroundKey(settingsSource, pluginId)
+      const isActive = activeBackgrounds.has(key)
+
+      if (missing.length > 0 && isActive) {
+        void stopBackground(settingsSource, pluginId)
+      } else if (missing.length === 0 && !isActive) {
+        const settings = getPluginSettings(settingsSource, pluginId, def)
+        void startBackground(settingsSource, pluginId, def.background, settings, requestedPermissions)
       }
     }
   })

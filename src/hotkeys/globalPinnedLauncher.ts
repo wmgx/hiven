@@ -8,6 +8,7 @@ type TauriWindowApi = typeof import('@tauri-apps/api/window')
 let installed = false
 let unsubscribeStore: (() => void) | null = null
 let unsubscribeDoubleModifierError: (() => void) | null = null
+let unsubscribeDoubleModifierReady: (() => void) | null = null
 let currentAccelerator: string | null = null
 let syncGeneration = 0
 let syncQueue: Promise<void> = Promise.resolve()
@@ -16,8 +17,11 @@ export function installGlobalPinnedLauncherHotkeys() {
   if (installed) return () => {}
   installed = true
 
-  void syncShortcut(useAppStore.getState().settings.globalPinnedLauncherShortcut)
+  const shortcut = useAppStore.getState().settings.globalPinnedLauncherShortcut
+  console.warn('[hiven-diag] installGlobalPinnedLauncherHotkeys called, shortcut:', JSON.stringify(shortcut))
+  void syncShortcut(shortcut)
   void listenForDoubleModifierErrors()
+  void listenForDoubleModifierReady()
   unsubscribeStore = useAppStore.subscribe((state, previousState) => {
     const next = state.settings.globalPinnedLauncherShortcut
     const previous = previousState.settings.globalPinnedLauncherShortcut
@@ -33,6 +37,8 @@ export function installGlobalPinnedLauncherHotkeys() {
     unsubscribeStore = null
     unsubscribeDoubleModifierError?.()
     unsubscribeDoubleModifierError = null
+    unsubscribeDoubleModifierReady?.()
+    unsubscribeDoubleModifierReady = null
     void unregisterCurrentAccelerator()
     void unregisterDoubleModifier()
   }
@@ -52,6 +58,20 @@ async function listenForDoubleModifierErrors() {
   }
 }
 
+async function listenForDoubleModifierReady() {
+  if (!isTauriRuntime() || unsubscribeDoubleModifierReady) return
+  try {
+    const { listen } = await loadTauriEventApi()
+    unsubscribeDoubleModifierReady = await listen<{ status?: string }>('hiven://double-modifier-hotkey-ready', (event) => {
+      const shortcut = useAppStore.getState().settings.globalPinnedLauncherShortcut
+      if (shortcut.kind !== 'double-modifier') return
+      updateShortcutStatus(shortcut, event.payload?.status ?? 'Registered')
+    })
+  } catch (error) {
+    console.warn('[hiven] Failed to listen for double modifier ready:', error)
+  }
+}
+
 function syncShortcut(shortcut: GlobalPinnedLauncherShortcut) {
   const generation = ++syncGeneration
   syncQueue = syncQueue
@@ -60,19 +80,15 @@ function syncShortcut(shortcut: GlobalPinnedLauncherShortcut) {
 }
 
 async function syncShortcutNow(shortcut: GlobalPinnedLauncherShortcut, generation: number) {
+  console.warn('[hiven-diag] syncShortcutNow called, kind:', shortcut.kind, 'isTauri:', isTauriRuntime())
   if (!isTauriRuntime()) return
 
   await unregisterCurrentAccelerator()
   await unregisterDoubleModifier()
   if (generation !== syncGeneration) return
 
-  if (shortcut.kind === 'disabled') {
+  if (shortcut.kind === 'disabled' || shortcut.kind === 'double-modifier') {
     updateShortcutStatus(shortcut, 'Disabled')
-    return
-  }
-
-  if (shortcut.kind === 'double-modifier') {
-    await registerDoubleModifier(shortcut, generation)
     return
   }
 
@@ -111,7 +127,9 @@ async function registerDoubleModifier(shortcut: GlobalPinnedLauncherShortcut, ge
   try {
     const { invoke } = await loadTauriCoreApi()
     const modifier = shortcut.kind === 'double-modifier' ? shortcut.modifier : 'Command'
+    console.warn('[hiven-diag] invoking register_double_modifier_hotkey, modifier:', modifier)
     const result = await invoke<{ status: string }>('register_double_modifier_hotkey', { modifier })
+    console.warn('[hiven-diag] register_double_modifier_hotkey result:', result)
     if (generation !== syncGeneration) {
       if (shortcutIdentity(useAppStore.getState().settings.globalPinnedLauncherShortcut) !== shortcutIdentity(shortcut)) {
         await unregisterDoubleModifier()
@@ -120,6 +138,7 @@ async function registerDoubleModifier(shortcut: GlobalPinnedLauncherShortcut, ge
     }
     if (generation === syncGeneration) updateShortcutStatus(shortcut, result.status)
   } catch (error) {
+    console.warn('[hiven-diag] register_double_modifier_hotkey ERROR:', error)
     if (generation === syncGeneration) updateShortcutStatus(shortcut, 'Registration failed', formatError(error))
   }
 }

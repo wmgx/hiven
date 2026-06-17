@@ -213,9 +213,49 @@ fn simulate_paste_impl() -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
 fn simulate_paste_impl() -> Result<(), String> {
-    Err("Paste simulation is only available on macOS".to_string())
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
+        VIRTUAL_KEY,
+    };
+
+    const VK_CONTROL: VIRTUAL_KEY = VIRTUAL_KEY(0x11);
+    const VK_V: VIRTUAL_KEY = VIRTUAL_KEY(0x56);
+
+    let make = |vk: VIRTUAL_KEY, flags: KEYBD_EVENT_FLAGS| INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: unsafe {
+            INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: vk,
+                    wScan: 0,
+                    dwFlags: flags,
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            }
+        },
+    };
+
+    let inputs = [
+        make(VK_CONTROL, KEYBD_EVENT_FLAGS(0)),
+        make(VK_V, KEYBD_EVENT_FLAGS(0)),
+        make(VK_V, KEYEVENTF_KEYUP),
+        make(VK_CONTROL, KEYEVENTF_KEYUP),
+    ];
+
+    let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
+    if sent == 4 {
+        Ok(())
+    } else {
+        Err(format!("SendInput sent {} of 4 expected events", sent))
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn simulate_paste_impl() -> Result<(), String> {
+    Err("Paste simulation is not supported on this platform".to_string())
 }
 
 fn previous_foreground_process_id() -> &'static Mutex<Option<u32>> {
@@ -319,6 +359,13 @@ fn promote_window_to_nonactivating_panel(ns_window: *mut std::ffi::c_void) {
         let _: () = objc2::msg_send![ns_window, setFloatingPanel: true];
         let _: () = objc2::msg_send![ns_window, setHidesOnDeactivate: false];
         let _: () = objc2::msg_send![ns_window, setBecomesKeyOnlyIfNeeded: false];
+
+        // Explicitly set the window level above normal and floating windows so
+        // the launcher appears on top even when the app is fully in the background.
+        // kCGStatusWindowLevel (25) is sufficient — it sits above main-menu level
+        // (24) and all regular app windows, matching Spotlight/Raycast behavior.
+        const STATUS_WINDOW_LEVEL: i64 = 25;
+        let _: () = objc2::msg_send![ns_window, setLevel: STATUS_WINDOW_LEVEL];
 
         // Allow the panel to appear on all Spaces (follows user across desktops)
         let behavior: usize = objc2::msg_send![ns_window, collectionBehavior];
@@ -2541,6 +2588,39 @@ fn dirs_next_home() -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
+/// Disable App Nap for this process via NSProcessInfo. When App Nap is active
+/// macOS will throttle timers and delay event delivery for background apps,
+/// which prevents the global hotkey from showing the launcher window promptly.
+#[cfg(target_os = "macos")]
+fn disable_app_nap() {
+    unsafe {
+        let process_info_cls =
+            objc2::runtime::AnyClass::get(c"NSProcessInfo").expect("NSProcessInfo must exist");
+        let process_info: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![process_info_cls, processInfo];
+        if process_info.is_null() {
+            return;
+        }
+        // NSActivityUserInitiatedAllowingIdleSystemSleep = 0x00FFFFFFULL & ~(1ULL << 20)
+        // This effectively disables App Nap while allowing idle system sleep.
+        let reason_cls =
+            objc2::runtime::AnyClass::get(c"NSString").expect("NSString must exist");
+        let reason: *mut objc2::runtime::AnyObject = objc2::msg_send![
+            reason_cls,
+            stringWithUTF8String: c"Global hotkey must respond immediately".as_ptr()
+        ];
+        const NS_ACTIVITY_USER_INITIATED_ALLOWING_IDLE_SYSTEM_SLEEP: u64 =
+            (0x00FFFFFF_u64) & !(1u64 << 20);
+        let _activity: *mut objc2::runtime::AnyObject = objc2::msg_send![
+            process_info,
+            beginActivityWithOptions: NS_ACTIVITY_USER_INITIATED_ALLOWING_IDLE_SYSTEM_SLEEP,
+            reason: reason
+        ];
+        // We intentionally never end this activity — it must persist for the
+        // process lifetime so the hotkey listener is never throttled.
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -2552,6 +2632,13 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
+            // Disable App Nap so the event loop stays responsive to global
+            // hotkeys even when the app is fully in the background. Without
+            // this, macOS may throttle the main RunLoop and delay the
+            // `run_on_main_thread` callbacks used to show the launcher window.
+            #[cfg(target_os = "macos")]
+            disable_app_nap();
+
             // 构建 Edit 子菜单（macOS 需要原生 Edit 菜单才能让剪贴板快捷键生效）
             // 注意：不加 Undo/Redo，否则会拦截 Monaco 自己的撤销栈
             let edit_menu = SubmenuBuilder::new(app, "Edit")
