@@ -87,8 +87,13 @@ async function syncShortcutNow(shortcut: GlobalPinnedLauncherShortcut, generatio
   await unregisterDoubleModifier()
   if (generation !== syncGeneration) return
 
-  if (shortcut.kind === 'disabled' || shortcut.kind === 'double-modifier') {
+  if (shortcut.kind === 'disabled') {
     updateShortcutStatus(shortcut, 'Disabled')
+    return
+  }
+
+  if (shortcut.kind === 'double-modifier') {
+    await registerDoubleModifier(shortcut, generation)
     return
   }
 
