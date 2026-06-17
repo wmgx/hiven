@@ -1,5 +1,7 @@
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(target_os = "macos")]
+use std::time::Instant;
 
 use tauri::Emitter;
 
@@ -297,6 +299,7 @@ fn start_double_modifier_listener(state: Arc<DoubleModifierHotkeyState>, app: ta
     let _ = state.app_handle.set(app);
 
     std::thread::spawn(move || {
+        use windows::Win32::Foundation::HINSTANCE;
         use windows::Win32::System::LibraryLoader::GetModuleHandleW;
         use windows::Win32::UI::WindowsAndMessaging::{
             DispatchMessageW, GetMessageW, SetWindowsHookExW, TranslateMessage,
@@ -304,9 +307,11 @@ fn start_double_modifier_listener(state: Arc<DoubleModifierHotkeyState>, app: ta
         };
 
         let hmod = unsafe { GetModuleHandleW(None).unwrap_or_default() };
+        // HMODULE → HINSTANCE conversion for SetWindowsHookExW
+        let hinstance: HINSTANCE = unsafe { std::mem::transmute(hmod) };
 
         let hook = unsafe {
-            SetWindowsHookExW(WH_KEYBOARD_LL, Some(low_level_keyboard_proc), hmod, 0)
+            SetWindowsHookExW(WH_KEYBOARD_LL, Some(low_level_keyboard_proc), Some(hinstance), 0)
         };
         let hook = match hook {
             Ok(h) => h,
@@ -339,8 +344,8 @@ fn start_double_modifier_listener(state: Arc<DoubleModifierHotkeyState>, app: ta
     });
 }
 
-/// Thread-local: tracks which modifier the hook last observed so the detector
-/// can be reset when the configured modifier changes.
+// Thread-local: tracks which modifier the hook last observed so the detector
+// can be reset when the configured modifier changes.
 #[cfg(target_os = "windows")]
 thread_local! {
     static HOOK_LAST_MODIFIER: std::cell::Cell<Option<DoubleModifier>> =
@@ -356,7 +361,6 @@ unsafe extern "system" fn low_level_keyboard_proc(
     use windows::Win32::UI::WindowsAndMessaging::{
         CallNextHookEx, KBDLLHOOKSTRUCT, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
     };
-    use windows::Win32::Foundation::HHOOK;
 
     if code >= 0 {
         if let Some(state) = DOUBLE_MODIFIER_HOTKEY_STATE.get() {
@@ -422,7 +426,7 @@ unsafe extern "system" fn low_level_keyboard_proc(
         }
     }
 
-    CallNextHookEx(HHOOK::default(), code, wparam, lparam)
+    CallNextHookEx(None, code, wparam, lparam)
 }
 
 #[cfg(target_os = "windows")]
