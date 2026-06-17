@@ -189,8 +189,23 @@ async fn hide_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn simulate_paste() -> Result<(), String> {
-    simulate_paste_impl()
+async fn simulate_paste(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let (tx, rx) = std::sync::mpsc::channel();
+        app.run_on_main_thread(move || {
+            tx.send(simulate_paste_impl()).ok();
+        })
+        .map_err(|e| e.to_string())?;
+        return rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .map_err(|_| "simulate_paste timed out".to_string())?;
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        simulate_paste_impl()
+    }
 }
 
 #[cfg(target_os = "macos")]
