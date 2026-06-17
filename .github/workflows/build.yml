@@ -48,13 +48,28 @@ jobs:
             libsoup-3.0-dev \
             libjavascriptcoregtk-4.1-dev
 
-      # macOS: 导入自签名证书用于 codesign
+      # macOS: 导入自签名证书用于 codesign（缺少 secret 直接失败）
       - name: Import macOS signing certificate
         if: contains(matrix.target, 'apple')
         env:
           CERTIFICATE_P12: ${{ secrets.CERTIFICATE_P12 }}
           CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
+          # 校验必要的 secrets
+          if [ -z "$CERTIFICATE_P12" ]; then
+            echo "::error::CERTIFICATE_P12 secret is missing"
+            exit 1
+          fi
+          if [ -z "$CERTIFICATE_PASSWORD" ]; then
+            echo "::error::CERTIFICATE_PASSWORD secret is missing"
+            exit 1
+          fi
+          if [ -z "$APPLE_SIGNING_IDENTITY" ]; then
+            echo "::error::APPLE_SIGNING_IDENTITY secret is missing"
+            exit 1
+          fi
+
           echo "$CERTIFICATE_P12" | base64 --decode > /tmp/cert.p12
 
           # 创建临时钥匙串
@@ -72,8 +87,12 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: \
             -s -k "actions" /tmp/build.keychain
 
-          # 验证证书已导入
-          security find-identity -v /tmp/build.keychain
+          # 验证证书已导入，且能找到指定的签名身份
+          security find-identity -v /tmp/build.keychain | grep "$APPLE_SIGNING_IDENTITY" || {
+            echo "::error::Certificate '$APPLE_SIGNING_IDENTITY' not found in keychain after import"
+            security find-identity -v /tmp/build.keychain
+            exit 1
+          }
 
           # 清理临时文件
           rm -f /tmp/cert.p12
@@ -117,8 +136,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # macOS: 指定签名证书名称
-          APPLE_SIGNING_IDENTITY: ${{ contains(matrix.target, 'apple') && secrets.APPLE_SIGNING_IDENTITY || '' }}
+          # macOS: 指定签名证书名称（通过 tauri.conf.json signingIdentity=null 时读取此变量）
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         with:
           tauriScript: npx tauri
           args: --target ${{ matrix.target }}
