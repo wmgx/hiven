@@ -27,32 +27,19 @@ pub struct HotkeyRegistrationStatus {
     pub status: String,
 }
 
+// On macOS, hotkey detection and paste simulation run in hiven-helper (a
+// separate process that holds the Accessibility permission). The main app
+// communicates with it via helper_ipc. No in-process state is needed.
+#[cfg(target_os = "windows")]
 struct DoubleModifierHotkeyState {
     enabled: Mutex<bool>,
     listener_running: Mutex<bool>,
     modifier: Mutex<DoubleModifier>,
-    /// Raw CFMachPortRef for the CGEventTap so the callback can re-enable
-    /// the tap when macOS disables it due to timeout.
-    #[cfg(target_os = "macos")]
-    tap_port: Mutex<Option<SendableMachPort>>,
-    /// Windows: persistent double-tap detector shared with the hook callback.
-    #[cfg(target_os = "windows")]
     detector: Mutex<DoubleModifierDetector>,
-    /// Windows: app handle used by the hook callback to open the launcher.
-    /// Set once before the hook thread starts; never changes.
-    #[cfg(target_os = "windows")]
     app_handle: std::sync::OnceLock<tauri::AppHandle>,
 }
 
-/// Wrapper to make CFMachPortRef Send+Sync. The pointer is only ever used
-/// to call CGEventTapEnable which is thread-safe for a given tap.
-#[cfg(target_os = "macos")]
-struct SendableMachPort(core_foundation::mach_port::CFMachPortRef);
-#[cfg(target_os = "macos")]
-unsafe impl Send for SendableMachPort {}
-#[cfg(target_os = "macos")]
-unsafe impl Sync for SendableMachPort {}
-
+#[cfg(target_os = "windows")]
 static DOUBLE_MODIFIER_HOTKEY_STATE: OnceLock<Arc<DoubleModifierHotkeyState>> = OnceLock::new();
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -194,8 +181,16 @@ pub fn register_double_modifier_hotkey(
 
 #[tauri::command]
 pub fn unregister_double_modifier_hotkey() -> Result<HotkeyRegistrationStatus, String> {
-    if let Some(state) = DOUBLE_MODIFIER_HOTKEY_STATE.get() {
-        *state.enabled.lock().map_err(|e| e.to_string())? = false;
+    #[cfg(target_os = "macos")]
+    {
+        // Best-effort — ignore errors if the helper isn't running.
+        let _ = crate::helper_ipc::send_command(serde_json::json!({"cmd": "unregister_hotkey"}));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(state) = DOUBLE_MODIFIER_HOTKEY_STATE.get() {
+            *state.enabled.lock().map_err(|e| e.to_string())? = false;
+        }
     }
     Ok(HotkeyRegistrationStatus {
         status: "Double modifier detector unregistered".to_string(),
@@ -204,120 +199,35 @@ pub fn unregister_double_modifier_hotkey() -> Result<HotkeyRegistrationStatus, S
 
 #[cfg(target_os = "macos")]
 fn register_double_modifier_hotkey_impl(
-    app: tauri::AppHandle,
+    _app: tauri::AppHandle,
     modifier: DoubleModifier,
 ) -> Result<HotkeyRegistrationStatus, String> {
-    hotkey_log(&format!("register_double_modifier_hotkey_impl called with {:?}", modifier));
-
-    let state = DOUBLE_MODIFIER_HOTKEY_STATE
-        .get_or_init(|| {
-            Arc::new(DoubleModifierHotkeyState {
-                enabled: Mutex::new(false),
-                listener_running: Mutex::new(false),
-                modifier: Mutex::new(DoubleModifier::Command),
-                #[cfg(target_os = "macos")]
-                tap_port: Mutex::new(None),
-            })
-        })
-        .clone();
-    *state.enabled.lock().map_err(|e| e.to_string())? = true;
-    *state.modifier.lock().map_err(|e| e.to_string())? = modifier;
-
-    // Show the accessibility prompt (non-blocking — returns immediately even if user hasn't acted yet).
-    let trusted = check_accessibility_permission(true);
-    hotkey_log(&format!("accessibility trusted: {}", trusted));
-
-    if trusted {
-        let mut listener_running = state.listener_running.lock().map_err(|e| e.to_string())?;
-        if !*listener_running {
-            *listener_running = true;
-            start_double_modifier_listener(Arc::clone(&state), app);
-        }
-        Ok(HotkeyRegistrationStatus {
-            status: format!("Double {} registered", modifier.label()),
-        })
-    } else {
-        // Prompt was shown to the user. Poll in the background and auto-register once granted.
-        // This avoids requiring a restart after granting accessibility in System Settings.
-        start_accessibility_poller(Arc::clone(&state), app);
-        Ok(HotkeyRegistrationStatus {
-            status: "Accessibility permission required — please grant access in System Settings".to_string(),
-        })
-    }
-}
-
-#[cfg(target_os = "macos")]
-pub fn check_accessibility_trusted() -> bool {
-    check_accessibility_permission(false)
-}
-
-#[cfg(target_os = "macos")]
-fn check_accessibility_permission(with_prompt: bool) -> bool {
-    use core_foundation::base::TCFType;
-    use core_foundation::boolean::CFBoolean;
-    use core_foundation::dictionary::CFDictionary;
-    use core_foundation::string::CFString;
-
-    #[link(name = "ApplicationServices", kind = "framework")]
-    extern "C" {
-        fn AXIsProcessTrustedWithOptions(
-            options: core_foundation::dictionary::CFDictionaryRef,
-        ) -> bool;
-    }
-
-    let prompt_key = CFString::new("AXTrustedCheckOptionPrompt");
-    let prompt = if with_prompt {
-        CFBoolean::true_value()
-    } else {
-        CFBoolean::false_value()
+    hotkey_log(&format!("register_double_modifier_hotkey_impl → helper IPC {:?}", modifier));
+    let modifier_str = match modifier {
+        DoubleModifier::Command => "Command",
+        DoubleModifier::Shift => "Shift",
+        DoubleModifier::Option => "Option",
     };
-    let options = CFDictionary::from_CFType_pairs(&[(prompt_key.as_CFType(), prompt.as_CFType())]);
-    unsafe { AXIsProcessTrustedWithOptions(options.as_concrete_TypeRef()) }
+    let response = crate::helper_ipc::send_command(
+        serde_json::json!({"cmd": "register_hotkey", "modifier": modifier_str}),
+    )?;
+    if response["result"] == "error" {
+        return Err(response["message"]
+            .as_str()
+            .unwrap_or("register_hotkey failed")
+            .to_string());
+    }
+    let status = response["status"]
+        .as_str()
+        .unwrap_or("registered")
+        .to_string();
+    Ok(HotkeyRegistrationStatus { status })
 }
 
-/// After showing the accessibility prompt, poll silently until the user grants access,
-/// then auto-register the event tap without requiring an app restart.
+/// Called by `helper_ipc` when the helper broadcasts `hotkey_triggered`.
 #[cfg(target_os = "macos")]
-fn start_accessibility_poller(state: Arc<DoubleModifierHotkeyState>, app: tauri::AppHandle) {
-    std::thread::spawn(move || {
-        hotkey_log("accessibility poller started");
-        // Poll every 500 ms for up to 2 minutes.
-        for _ in 0..240 {
-            std::thread::sleep(Duration::from_millis(500));
-
-            // Stop polling if the hotkey was disabled in the meantime.
-            if !state.enabled.lock().map(|v| *v).unwrap_or(false) {
-                hotkey_log("accessibility poller: hotkey disabled, stopping");
-                return;
-            }
-
-            if check_accessibility_permission(false) {
-                hotkey_log("accessibility poller: permission granted, starting listener");
-                if let Ok(mut listener_running) = state.listener_running.lock() {
-                    if !*listener_running {
-                        *listener_running = true;
-                        let modifier = state
-                            .modifier
-                            .lock()
-                            .map(|v| *v)
-                            .unwrap_or(DoubleModifier::Command);
-                        drop(listener_running);
-                        start_double_modifier_listener(Arc::clone(&state), app.clone());
-                        let _ = app.emit(
-                            DOUBLE_MODIFIER_HOTKEY_READY_EVENT,
-                            serde_json::json!({ "status": format!("Double {} registered", modifier.label()) }),
-                        );
-                    }
-                }
-                return;
-            }
-        }
-        hotkey_log("accessibility poller: timed out waiting for permission");
-        let _ = app.emit(
-            DOUBLE_MODIFIER_HOTKEY_ERROR_EVENT,
-            serde_json::json!({ "error": "Accessibility permission was not granted. Please grant access in System Settings › Privacy & Security › Accessibility, then re-enable the shortcut." }),
-        );
-    });
+pub fn on_helper_hotkey_triggered(app: tauri::AppHandle) {
+    route_pinned_launcher_hotkey(app);
 }
 
 #[cfg(target_os = "windows")]
@@ -571,191 +481,9 @@ fn windows_route_pinned_launcher(app: tauri::AppHandle) {
     }
 }
 
-#[cfg(target_os = "macos")]
-fn start_double_modifier_listener(state: Arc<DoubleModifierHotkeyState>, app: tauri::AppHandle) {
-    hotkey_log("start_double_modifier_listener: spawning listener thread");
-    std::thread::spawn(move || {
-        use core_foundation::mach_port::CFMachPortRef;
-        use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop};
-        use core_graphics::event::{
-            CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType,
-        };
-        use std::cell::RefCell;
-
-        let callback_app = app.clone();
-        let callback_state = Arc::clone(&state);
-
-        struct ListenerState {
-            detector: DoubleModifierDetector,
-            started_at: Instant,
-            modifier: DoubleModifier,
-            modifier_was_down: bool,
-            flags_changed_count: u64,
-        }
-
-        let listener_state = RefCell::new(ListenerState {
-            detector: DoubleModifierDetector::new(Duration::from_millis(
-                DEFAULT_DOUBLE_MODIFIER_THRESHOLD_MS,
-            )),
-            started_at: Instant::now(),
-            modifier: DoubleModifier::Command,
-            modifier_was_down: false,
-            flags_changed_count: 0,
-        });
-
-        let tap = CGEventTap::new(
-            CGEventTapLocation::HID,
-            CGEventTapPlacement::HeadInsertEventTap,
-            CGEventTapOptions::ListenOnly,
-            vec![
-                CGEventType::KeyDown,
-                CGEventType::KeyUp,
-                CGEventType::FlagsChanged,
-                CGEventType::TapDisabledByTimeout,
-            ],
-            move |_proxy, event_type, event| {
-                // When macOS disables the tap due to timeout, re-enable it immediately.
-                // This happens in release builds when the system considers the tap
-                // unresponsive (e.g. after sleep/wake cycles or heavy system load).
-                if matches!(event_type, CGEventType::TapDisabledByTimeout) {
-                    hotkey_log("TapDisabledByTimeout received! re-enabling tap");
-                    if let Ok(port_guard) = callback_state.tap_port.lock() {
-                        if let Some(ref port) = *port_guard {
-                            unsafe {
-                                extern "C" {
-                                    fn CGEventTapEnable(tap: CFMachPortRef, enable: bool);
-                                }
-                                CGEventTapEnable(port.0, true);
-                            }
-                        }
-                    }
-                    return None;
-                }
-
-                let enabled = callback_state.enabled.lock().map(|v| *v).unwrap_or(false);
-                let mut s = listener_state.borrow_mut();
-                if !enabled {
-                    // Only log once to avoid spam — use a static flag
-                    s.detector.reset();
-                    s.modifier_was_down = false;
-                    return None;
-                }
-
-                let timestamp = s.started_at.elapsed();
-
-                if matches!(event_type, CGEventType::FlagsChanged) {
-                    s.flags_changed_count += 1;
-                    // Log every 50th FlagsChanged to prove tap is alive without spam
-                    if s.flags_changed_count % 50 == 1 {
-                        hotkey_log(&format!("FlagsChanged #{}, modifier_was_down={}", s.flags_changed_count, s.modifier_was_down));
-                    }
-                    let flags = event.get_flags();
-                    let modifier = callback_state
-                        .modifier
-                        .lock()
-                        .map(|value| *value)
-                        .unwrap_or(DoubleModifier::Command);
-                    if modifier != s.modifier {
-                        s.detector.reset();
-                        s.modifier = modifier;
-                        s.modifier_was_down = modifier_flag_is_down(flags, modifier);
-                        return None;
-                    }
-
-                    let modifier_now = modifier_flag_is_down(flags, modifier);
-                    let has_other_modifiers = has_other_modifier_flags(flags, modifier);
-
-                    if modifier_now && !s.modifier_was_down {
-                        let triggered = s.detector.handle_event(KeyEvent {
-                            key: Key::Modifier,
-                            phase: KeyPhase::Down,
-                            timestamp,
-                            modifiers: Modifiers {
-                                other: has_other_modifiers,
-                            },
-                        });
-                        if triggered {
-                            hotkey_log("DOUBLE MODIFIER TRIGGERED! calling open_pinned_launcher");
-                            open_pinned_launcher(&callback_app);
-                        }
-                    } else if !modifier_now && s.modifier_was_down {
-                        s.detector.handle_event(KeyEvent {
-                            key: Key::Modifier,
-                            phase: KeyPhase::Up,
-                            timestamp,
-                            modifiers: Modifiers {
-                                other: has_other_modifiers,
-                            },
-                        });
-                    } else if !modifier_now && !s.modifier_was_down && has_other_modifiers {
-                        // Another modifier changed while the configured modifier is not held.
-                        s.detector.handle_event(KeyEvent {
-                            key: Key::Other,
-                            phase: KeyPhase::Down,
-                            timestamp,
-                            modifiers: Modifiers { other: true },
-                        });
-                    }
-                    s.modifier_was_down = modifier_now;
-                } else if matches!(event_type, CGEventType::KeyDown) {
-                    // A real key was pressed between modifier taps — invalidate
-                    s.detector.reset();
-                }
-                None
-            },
-        );
-
-        match tap {
-            Ok(tap) => {
-                hotkey_log("CGEventTap created successfully, starting RunLoop");
-                unsafe {
-                    // Store the mach port ref so the callback can re-enable the tap
-                    use core_foundation::base::TCFType;
-                    if let Ok(mut port_guard) = state.tap_port.lock() {
-                        *port_guard = Some(SendableMachPort(tap.mach_port.as_concrete_TypeRef()));
-                    }
-
-                    let loop_source = tap
-                        .mach_port
-                        .create_runloop_source(0)
-                        .expect("failed to create runloop source");
-                    let run_loop = CFRunLoop::get_current();
-                    run_loop.add_source(&loop_source, kCFRunLoopCommonModes);
-                    tap.enable();
-                    CFRunLoop::run_current();
-                }
-                if let Ok(mut port_guard) = state.tap_port.lock() {
-                    *port_guard = None;
-                }
-                if let Ok(mut listener_running) = state.listener_running.lock() {
-                    *listener_running = false;
-                }
-            }
-            Err(_) => {
-                hotkey_log("CGEventTap FAILED to create!");
-                eprintln!("[hiven] Failed to create CGEventTap! Check Accessibility permissions.");
-                if let Ok(mut listener_running) = state.listener_running.lock() {
-                    *listener_running = false;
-                }
-                if let Ok(mut enabled) = state.enabled.lock() {
-                    *enabled = false;
-                }
-                let _ = app.emit(
-                    DOUBLE_MODIFIER_HOTKEY_ERROR_EVENT,
-                    serde_json::json!({ "error": "Failed to create CGEventTap. Check Accessibility permissions." }),
-                );
-            }
-        }
-    });
-}
-
-#[cfg(target_os = "macos")]
-fn open_pinned_launcher(app: &tauri::AppHandle) {
-    let app = app.clone();
-    std::thread::spawn(move || {
-        route_pinned_launcher_hotkey(app);
-    });
-}
+// CGEventTap, accessibility check, and poller have moved to hiven-helper.
+// route_pinned_launcher_hotkey and wake_main_runloop stay here because they
+// use the Tauri AppHandle to interact with the Tauri window manager.
 
 #[cfg(target_os = "macos")]
 fn route_pinned_launcher_hotkey(app: tauri::AppHandle) {
@@ -801,38 +529,6 @@ fn wake_main_runloop() {
     unsafe {
         core_foundation::runloop::CFRunLoopWakeUp(CFRunLoop::get_main().as_concrete_TypeRef());
     }
-}
-
-#[cfg(target_os = "macos")]
-fn modifier_flag_is_down(
-    flags: core_graphics::event::CGEventFlags,
-    modifier: DoubleModifier,
-) -> bool {
-    use core_graphics::event::CGEventFlags;
-    match modifier {
-        DoubleModifier::Command => flags.contains(CGEventFlags::CGEventFlagCommand),
-        DoubleModifier::Shift => flags.contains(CGEventFlags::CGEventFlagShift),
-        DoubleModifier::Option => flags.contains(CGEventFlags::CGEventFlagAlternate),
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn has_other_modifier_flags(
-    flags: core_graphics::event::CGEventFlags,
-    modifier: DoubleModifier,
-) -> bool {
-    use core_graphics::event::CGEventFlags;
-    let mut other_flags = CGEventFlags::CGEventFlagControl;
-    if modifier != DoubleModifier::Command {
-        other_flags |= CGEventFlags::CGEventFlagCommand;
-    }
-    if modifier != DoubleModifier::Shift {
-        other_flags |= CGEventFlags::CGEventFlagShift;
-    }
-    if modifier != DoubleModifier::Option {
-        other_flags |= CGEventFlags::CGEventFlagAlternate;
-    }
-    flags.intersects(other_flags)
 }
 
 #[cfg(test)]

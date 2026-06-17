@@ -13,6 +13,8 @@ use tauri::LogicalSize;
 use zip::ZipArchive;
 
 pub mod hotkeys;
+#[cfg(target_os = "macos")]
+pub mod helper_ipc;
 
 const LAUNCHER_COMPACT_WIDTH: f64 = 660.0;
 const LAUNCHER_COMPACT_HEIGHT: f64 = 160.0;
@@ -193,27 +195,13 @@ async fn simulate_paste() -> Result<(), String> {
 
 #[cfg(target_os = "macos")]
 fn simulate_paste_impl() -> Result<(), String> {
-    use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
-    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
-
-    if !hotkeys::check_accessibility_trusted() {
-        return Err("Accessibility permission not granted".to_string());
+    let response = crate::helper_ipc::send_command(serde_json::json!({"cmd": "simulate_paste"}))?;
+    if response["result"] == "error" {
+        return Err(response["message"]
+            .as_str()
+            .unwrap_or("Accessibility permission not granted")
+            .to_string());
     }
-
-    const KEY_V: u16 = 9;
-
-    let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
-        .map_err(|_| "Failed to create paste event source".to_string())?;
-    let key_down = CGEvent::new_keyboard_event(source.clone(), KEY_V, true)
-        .map_err(|_| "Failed to create paste key down event".to_string())?;
-    let key_up = CGEvent::new_keyboard_event(source, KEY_V, false)
-        .map_err(|_| "Failed to create paste key up event".to_string())?;
-
-    key_down.set_flags(CGEventFlags::CGEventFlagCommand);
-    key_up.set_flags(CGEventFlags::CGEventFlagCommand);
-    key_down.post(CGEventTapLocation::HID);
-    key_up.post(CGEventTapLocation::HID);
-
     Ok(())
 }
 
@@ -2642,6 +2630,16 @@ pub fn run() {
             // `run_on_main_thread` callbacks used to show the launcher window.
             #[cfg(target_os = "macos")]
             disable_app_nap();
+
+            // Launch hiven-helper in the background. It holds the single
+            // Accessibility permission entry (for CGEventTap + CGEventPost)
+            // so that binary-hash changes in the main app don't invalidate it.
+            #[cfg(target_os = "macos")]
+            if let Err(e) = crate::helper_ipc::launch_and_connect(app.handle().clone()) {
+                eprintln!("[hiven] Failed to start hiven-helper: {}", e);
+                // Non-fatal: the user will see an error message if they try to
+                // use paste or the global hotkey.
+            }
 
             // 构建 Edit 子菜单（macOS 需要原生 Edit 菜单才能让剪贴板快捷键生效）
             // 注意：不加 Undo/Redo，否则会拦截 Monaco 自己的撤销栈

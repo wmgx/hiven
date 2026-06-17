@@ -81,6 +81,16 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Build hiven-helper sidecar (macOS only)
+        if: contains(matrix.target, 'apple')
+        shell: bash
+        run: |
+          cargo build --release --target ${{ matrix.target }} --bin hiven-helper --manifest-path src-tauri/Cargo.toml
+          mkdir -p src-tauri/binaries
+          cp "src-tauri/target/${{ matrix.target }}/release/hiven-helper" \
+             "src-tauri/binaries/hiven-helper-${{ matrix.target }}"
+          chmod +x "src-tauri/binaries/hiven-helper-${{ matrix.target }}"
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0.6
         env:
