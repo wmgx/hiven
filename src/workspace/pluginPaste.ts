@@ -61,10 +61,11 @@ async function tryHideLauncherWindow(): Promise<void> {
 }
 
 async function pasteAfterClipboardWrite(successFallbackMessage: string): Promise<PluginPasteResult> {
-  await tryHideLauncherWindow()
-  await new Promise((r) => setTimeout(r, 100))
-
+  // Paste before hiding: the launcher is a non-activating panel so the previous app stays
+  // frontmost the entire time. Sending Cmd+V while the launcher is still visible guarantees
+  // the event goes to the correct target app — no focus-transition race condition.
   const pasted = await trySimulatePaste()
+  void tryHideLauncherWindow()
   if (pasted) {
     return { ok: true }
   }
