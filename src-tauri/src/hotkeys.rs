@@ -16,8 +16,6 @@ pub(crate) fn hotkey_log(msg: &str) {
     }
 }
 
-const DOUBLE_MODIFIER_HOTKEY_ERROR_EVENT: &str = "hiven://double-modifier-hotkey-error";
-const DOUBLE_MODIFIER_HOTKEY_READY_EVENT: &str = "hiven://double-modifier-hotkey-ready";
 const ROUTE_GLOBAL_PINNED_LAUNCHER_SHORTCUT_EVENT: &str =
     "hiven://route-global-pinned-launcher-shortcut";
 const DEFAULT_DOUBLE_MODIFIER_THRESHOLD_MS: u64 = 300;
@@ -27,9 +25,18 @@ pub struct HotkeyRegistrationStatus {
     pub status: String,
 }
 
-// On macOS, hotkey detection and paste simulation run in hiven-helper (a
-// separate process that holds the Accessibility permission). The main app
-// communicates with it via helper_ipc. No in-process state is needed.
+// macOS: hotkey detection runs in-process via NSEvent global monitors (no
+// Accessibility needed). Only simulate_paste is delegated to hiven-helper.
+#[cfg(target_os = "macos")]
+struct DoubleModifierHotkeyState {
+    enabled: Mutex<bool>,
+    listener_running: Mutex<bool>,
+    modifier: Mutex<DoubleModifier>,
+}
+
+#[cfg(target_os = "macos")]
+static DOUBLE_MODIFIER_HOTKEY_STATE: OnceLock<Arc<DoubleModifierHotkeyState>> = OnceLock::new();
+
 #[cfg(target_os = "windows")]
 struct DoubleModifierHotkeyState {
     enabled: Mutex<bool>,
@@ -183,8 +190,11 @@ pub fn register_double_modifier_hotkey(
 pub fn unregister_double_modifier_hotkey() -> Result<HotkeyRegistrationStatus, String> {
     #[cfg(target_os = "macos")]
     {
-        // Best-effort — ignore errors if the helper isn't running.
-        let _ = crate::helper_ipc::send_command(serde_json::json!({"cmd": "unregister_hotkey"}));
+        if let Some(state) = DOUBLE_MODIFIER_HOTKEY_STATE.get() {
+            if let Ok(mut e) = state.enabled.lock() {
+                *e = false;
+            }
+        }
     }
     #[cfg(target_os = "windows")]
     {
@@ -199,35 +209,37 @@ pub fn unregister_double_modifier_hotkey() -> Result<HotkeyRegistrationStatus, S
 
 #[cfg(target_os = "macos")]
 fn register_double_modifier_hotkey_impl(
-    _app: tauri::AppHandle,
+    app: tauri::AppHandle,
     modifier: DoubleModifier,
 ) -> Result<HotkeyRegistrationStatus, String> {
-    hotkey_log(&format!("register_double_modifier_hotkey_impl → helper IPC {:?}", modifier));
-    let modifier_str = match modifier {
-        DoubleModifier::Command => "Command",
-        DoubleModifier::Shift => "Shift",
-        DoubleModifier::Option => "Option",
-    };
-    let response = crate::helper_ipc::send_command(
-        serde_json::json!({"cmd": "register_hotkey", "modifier": modifier_str}),
-    )?;
-    if response["result"] == "error" {
-        return Err(response["message"]
-            .as_str()
-            .unwrap_or("register_hotkey failed")
-            .to_string());
-    }
-    let status = response["status"]
-        .as_str()
-        .unwrap_or("registered")
-        .to_string();
-    Ok(HotkeyRegistrationStatus { status })
-}
+    hotkey_log(&format!(
+        "register_double_modifier_hotkey_impl NSEvent path {:?}",
+        modifier
+    ));
 
-/// Called by `helper_ipc` when the helper broadcasts `hotkey_triggered`.
-#[cfg(target_os = "macos")]
-pub fn on_helper_hotkey_triggered(app: tauri::AppHandle) {
-    route_pinned_launcher_hotkey(app);
+    let state = DOUBLE_MODIFIER_HOTKEY_STATE
+        .get_or_init(|| {
+            Arc::new(DoubleModifierHotkeyState {
+                enabled: Mutex::new(false),
+                listener_running: Mutex::new(false),
+                modifier: Mutex::new(DoubleModifier::Command),
+            })
+        })
+        .clone();
+
+    *state.enabled.lock().map_err(|e| e.to_string())? = true;
+    *state.modifier.lock().map_err(|e| e.to_string())? = modifier;
+
+    let mut lr = state.listener_running.lock().map_err(|e| e.to_string())?;
+    if !*lr {
+        *lr = true;
+        drop(lr);
+        start_nsevent_listener(Arc::clone(&state), app);
+    }
+
+    Ok(HotkeyRegistrationStatus {
+        status: format!("Double {} registered", modifier.label()),
+    })
 }
 
 #[cfg(target_os = "windows")]
@@ -481,9 +493,119 @@ fn windows_route_pinned_launcher(app: tauri::AppHandle) {
     }
 }
 
-// CGEventTap, accessibility check, and poller have moved to hiven-helper.
-// route_pinned_launcher_hotkey and wake_main_runloop stay here because they
-// use the Tauri AppHandle to interact with the Tauri window manager.
+/// Install a `NSEvent` global monitor for FlagsChanged+KeyDown events.
+/// These are delivered on the main thread without requiring Accessibility.
+#[cfg(target_os = "macos")]
+fn start_nsevent_listener(state: Arc<DoubleModifierHotkeyState>, app: tauri::AppHandle) {
+    use block2::RcBlock;
+    use objc2::runtime::{AnyClass, AnyObject};
+    use objc2::msg_send;
+
+    // NSEventMaskFlagsChanged = 1<<12, NSEventMaskKeyDown = 1<<10
+    let mask: u64 = (1u64 << 12) | (1u64 << 10);
+    const FLAGS_CHANGED: u64 = 12; // NSEventTypeFlagsChanged
+
+    // NSEventModifierFlags bit positions
+    const CMD: u64 = 1 << 20;
+    const SHIFT: u64 = 1 << 17;
+    const OPTION: u64 = 1 << 19;
+    const CTRL: u64 = 1 << 18;
+
+    struct ListenerState {
+        detector: DoubleModifierDetector,
+        started_at: Instant,
+        modifier: DoubleModifier,
+        was_down: bool,
+    }
+
+    let ls = Arc::new(Mutex::new(ListenerState {
+        detector: DoubleModifierDetector::new(Duration::from_millis(
+            DEFAULT_DOUBLE_MODIFIER_THRESHOLD_MS,
+        )),
+        started_at: Instant::now(),
+        modifier: DoubleModifier::Command,
+        was_down: false,
+    }));
+
+    let ls2 = Arc::clone(&ls);
+    let state2 = Arc::clone(&state);
+    let app2 = app.clone();
+
+    let block = RcBlock::new(move |event: *mut AnyObject| {
+        if !state2.enabled.lock().map(|v| *v).unwrap_or(false) {
+            return;
+        }
+
+        let event_type: u64 = unsafe { msg_send![event, type] };
+        let modifier = state2.modifier.lock().map(|v| *v).unwrap_or(DoubleModifier::Command);
+        let mut ls = ls2.lock().unwrap();
+        let timestamp = ls.started_at.elapsed();
+
+        if event_type == FLAGS_CHANGED {
+            if ls.modifier != modifier {
+                ls.detector.reset();
+                ls.modifier = modifier;
+            }
+            let flags: u64 = unsafe { msg_send![event, modifierFlags] };
+            let (mod_now, has_other) = match modifier {
+                DoubleModifier::Command => (
+                    flags & CMD != 0,
+                    flags & (CTRL | SHIFT | OPTION) != 0,
+                ),
+                DoubleModifier::Shift => (
+                    flags & SHIFT != 0,
+                    flags & (CTRL | CMD | OPTION) != 0,
+                ),
+                DoubleModifier::Option => (
+                    flags & OPTION != 0,
+                    flags & (CTRL | CMD | SHIFT) != 0,
+                ),
+            };
+            if mod_now && !ls.was_down {
+                let triggered = ls.detector.handle_event(KeyEvent {
+                    key: Key::Modifier,
+                    phase: KeyPhase::Down,
+                    timestamp,
+                    modifiers: Modifiers { other: has_other },
+                });
+                if triggered {
+                    let a = app2.clone();
+                    std::thread::spawn(move || route_pinned_launcher_hotkey(a));
+                }
+            } else if !mod_now && ls.was_down {
+                ls.detector.handle_event(KeyEvent {
+                    key: Key::Modifier,
+                    phase: KeyPhase::Up,
+                    timestamp,
+                    modifiers: Modifiers { other: has_other },
+                });
+            }
+            ls.was_down = mod_now;
+        } else {
+            // KeyDown — invalidate any in-progress double-tap
+            ls.detector.handle_event(KeyEvent {
+                key: Key::Other,
+                phase: KeyPhase::Down,
+                timestamp,
+                modifiers: Modifiers { other: true },
+            });
+        }
+    });
+
+    // Box::leak keeps the block alive for the app lifetime (monitor is never removed).
+    let block_ref: &'static _ = Box::leak(Box::new(block));
+
+    unsafe {
+        let cls = AnyClass::get(c"NSEvent").expect("NSEvent class not found");
+        let _monitor: *mut AnyObject = msg_send![
+            cls,
+            addGlobalMonitorForEventsMatchingMask: mask,
+            handler: &**block_ref
+        ];
+    }
+
+    hotkey_log("NSEvent global monitor installed (no Accessibility needed)");
+}
 
 #[cfg(target_os = "macos")]
 fn route_pinned_launcher_hotkey(app: tauri::AppHandle) {

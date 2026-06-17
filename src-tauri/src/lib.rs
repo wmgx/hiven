@@ -2632,10 +2632,10 @@ pub fn run() {
             disable_app_nap();
 
             // Launch hiven-helper in the background. It holds the single
-            // Accessibility permission entry (for CGEventTap + CGEventPost)
+            // Accessibility permission entry (for CGEventPost/simulate_paste)
             // so that binary-hash changes in the main app don't invalidate it.
             #[cfg(target_os = "macos")]
-            if let Err(e) = crate::helper_ipc::launch_and_connect(app.handle().clone()) {
+            if let Err(e) = crate::helper_ipc::launch_and_connect() {
                 eprintln!("[hiven] Failed to start hiven-helper: {}", e);
                 // Non-fatal: the user will see an error message if they try to
                 // use paste or the global hotkey.

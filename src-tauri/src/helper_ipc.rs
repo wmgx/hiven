@@ -1,11 +1,10 @@
 //! IPC client for communicating with hiven-helper (macOS only).
 //!
 //! The helper binary holds the Accessibility permission and handles:
-//!   - CGEventTap (double-modifier hotkey detection)
 //!   - CGEventPost (simulate Cmd+V paste)
 //!
-//! This module connects to the helper's Unix-domain socket, sends commands,
-//! and dispatches unsolicited events (hotkey_triggered, etc.) to the Tauri app.
+//! Double-modifier hotkey detection runs in-process via NSEvent (no Accessibility).
+//! This module connects to the helper's Unix-domain socket and sends commands.
 
 #[cfg(target_os = "macos")]
 mod inner {
@@ -15,11 +14,6 @@ mod inner {
     use std::path::PathBuf;
     use std::sync::{mpsc, Arc, Mutex, OnceLock};
     use std::time::Duration;
-
-    use tauri::Emitter;
-
-    const DOUBLE_MODIFIER_HOTKEY_ERROR_EVENT: &str = "hiven://double-modifier-hotkey-error";
-    const DOUBLE_MODIFIER_HOTKEY_READY_EVENT: &str = "hiven://double-modifier-hotkey-ready";
 
     type ResponseTx = mpsc::SyncSender<serde_json::Value>;
 
@@ -49,7 +43,7 @@ mod inner {
         }
     }
 
-    pub fn launch_and_connect(app: tauri::AppHandle) -> Result<(), String> {
+    pub fn launch_and_connect() -> Result<(), String> {
         let helper_path = helper_binary_path()
             .ok_or_else(|| "hiven-helper binary not found next to app binary".to_string())?;
 
@@ -91,7 +85,7 @@ mod inner {
             .set(Arc::clone(&ipc))
             .map_err(|_| "HelperIpc already initialised".to_string())?;
 
-        // Background reader thread: routes responses and events.
+        // Background reader thread: dispatches command responses to waiting callers.
         let ipc_for_reader = Arc::clone(&ipc);
         std::thread::spawn(move || {
             let reader = BufReader::new(read_stream);
@@ -110,32 +104,7 @@ mod inner {
                     if let Some(tx) = ipc_for_reader.pending.lock().unwrap().pop_front() {
                         let _ = tx.try_send(val);
                     }
-                } else if let Some(event) = val.get("event").and_then(|e| e.as_str()) {
-                    match event {
-                        "hotkey_triggered" => {
-                            let app = app.clone();
-                            std::thread::spawn(move || {
-                                crate::hotkeys::on_helper_hotkey_triggered(app);
-                            });
-                        }
-                        "hotkey_ready" => {
-                            let status =
-                                val["status"].as_str().unwrap_or("ready").to_string();
-                            let _ = app.emit(
-                                DOUBLE_MODIFIER_HOTKEY_READY_EVENT,
-                                serde_json::json!({ "status": status }),
-                            );
-                        }
-                        "hotkey_error" => {
-                            let msg = val["message"].as_str().unwrap_or("").to_string();
-                            let _ = app.emit(
-                                DOUBLE_MODIFIER_HOTKEY_ERROR_EVENT,
-                                serde_json::json!({ "error": msg }),
-                            );
-                        }
-                        _ => {}
-                    }
-                }
+                } // unknown events are ignored
             }
         });
 
