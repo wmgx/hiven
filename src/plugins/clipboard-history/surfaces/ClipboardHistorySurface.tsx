@@ -39,20 +39,24 @@ type MetaRow = {
 export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHistorySettings>) {
   const { host, locale, t, settings } = props
 
-  const [items, setItems] = useState<ClipboardHistoryItem[]>([])
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<FilterKind>('all')
-  const [loading, setLoading] = useState(true)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const searchRef = useRef<HTMLInputElement>(null)
-  const imeKeyDown = useImeKeyboard()
-  const isKeyboardNavRef = useRef(false)
-
   const repository = useMemo(
     () => createClipboardHistoryRepository(host.storage),
     [host.storage]
   )
+
+  // Try to initialize synchronously from in-memory cache (warmed by background)
+  const initialItems = useMemo(() => repository.getListItemsSync() ?? [], [repository])
+  const hasInitialCache = initialItems.length > 0
+
+  const [items, setItems] = useState<ClipboardHistoryItem[]>(initialItems)
+  const [selectedId, setSelectedId] = useState<string | null>(initialItems[0]?.id ?? null)
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<FilterKind>('all')
+  const [loading, setLoading] = useState(!hasInitialCache)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+  const imeKeyDown = useImeKeyboard()
+  const isKeyboardNavRef = useRef(false)
 
   const loadItems = useCallback(async () => {
     try {
@@ -71,9 +75,11 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [repository, host, t])
 
   useEffect(() => {
+    // If we already have cached data, skip the initial load delay
+    if (hasInitialCache) return
     const timer = window.setTimeout(() => { void loadItems() }, 0)
     return () => window.clearTimeout(timer)
-  }, [loadItems])
+  }, [loadItems, hasInitialCache])
 
   useEffect(() => {
     if (loading || !settings.enabled) return

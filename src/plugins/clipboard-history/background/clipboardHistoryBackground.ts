@@ -77,6 +77,9 @@ export function createClipboardHistoryBackground(): PluginBackgroundContribution
       const repository = createClipboardHistoryRepository(ctx.storage)
       const watchOptions = buildWatchOptions(ctx.settings)
 
+      // Warm the in-memory index cache so Surface opens instantly
+      void repository.getListItems()
+
       let unwatch: (() => void) | null = null
 
       try {

@@ -10,9 +10,11 @@
 
 import type { PluginPrivateStorageApi } from '@hiven/plugin'
 import { createClipboardHistoryStore, type ClipboardHistoryStore } from './clipboardHistoryStore'
+import { getCachedIndex, setCachedIndex, clearCachedIndex } from './clipboardHistoryCache'
 import type {
   AddItemInput,
   ClipboardHistoryItem,
+  ClipboardHistoryIndex,
   ClipboardHistoryIndexEntry,
   ClipboardHistoryPrunePolicy,
   PruneResult,
@@ -26,6 +28,7 @@ export type ClipboardHistoryRepository = {
   getItem(id: string): Promise<ClipboardHistoryItem | undefined>
   getAllItems(): Promise<ClipboardHistoryItem[]>
   getListItems(): Promise<ClipboardHistoryItem[]>
+  getListItemsSync(): ClipboardHistoryItem[] | null
   deleteItem(id: string): Promise<void>
   clearAll(): Promise<void>
   pruneItems(policy: ClipboardHistoryPrunePolicy): Promise<PruneResult>
@@ -44,6 +47,12 @@ function makeTextPreview(text: string, maxLength = 200): string {
 
 export function createClipboardHistoryRepository(storage: PluginPrivateStorageApi): ClipboardHistoryRepository {
   const store: ClipboardHistoryStore = createClipboardHistoryStore(storage)
+
+  /** Save index to storage and update in-memory cache. */
+  async function saveIndexAndCache(index: ClipboardHistoryIndex): Promise<void> {
+    await store.saveIndex(index)
+    setCachedIndex(index)
+  }
 
   async function findByHash(hash: string): Promise<ClipboardHistoryItem | undefined> {
     const index = await store.getIndex()
@@ -78,7 +87,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
           sourceApp: updated.sourceApp,
         }
         filtered.unshift(updatedEntry)
-        await store.saveIndex({ entries: filtered, updatedAt: now })
+        await saveIndexAndCache({ entries: filtered, updatedAt: now })
 
         return updated
       }
@@ -153,7 +162,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
       ...(input.kind === 'files' ? { fileNames: input.fileNames } : {}),
     }
     index.entries.unshift(newEntry)
-    await store.saveIndex({ entries: index.entries, updatedAt: now })
+    await saveIndexAndCache({ entries: index.entries, updatedAt: now })
 
     return item
   }
@@ -170,8 +179,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     return items.filter(Boolean) as ClipboardHistoryItem[]
   }
 
-  async function getListItems(): Promise<ClipboardHistoryItem[]> {
-    const index = await store.getIndex()
+  function indexToListItems(index: ClipboardHistoryIndex): ClipboardHistoryItem[] {
     return index.entries.map((entry): ClipboardHistoryItem | null => {
       const base = {
         id: entry.id,
@@ -196,6 +204,20 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     }).filter(Boolean) as ClipboardHistoryItem[]
   }
 
+  async function getListItems(): Promise<ClipboardHistoryItem[]> {
+    const cached = getCachedIndex()
+    if (cached) return indexToListItems(cached)
+    const index = await store.getIndex()
+    setCachedIndex(index)
+    return indexToListItems(index)
+  }
+
+  function getListItemsSync(): ClipboardHistoryItem[] | null {
+    const cached = getCachedIndex()
+    if (!cached) return null
+    return indexToListItems(cached)
+  }
+
   async function deleteItem(id: string): Promise<void> {
     const item = await store.getItem(id)
     if (!item) return
@@ -211,7 +233,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     // Remove from index
     const index = await store.getIndex()
     const filtered = index.entries.filter((e) => e.id !== id)
-    await store.saveIndex({ entries: filtered, updatedAt: Date.now() })
+    await saveIndexAndCache({ entries: filtered, updatedAt: Date.now() })
   }
 
   async function clearAll(): Promise<void> {
@@ -229,6 +251,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     }
 
     await store.clear()
+    clearCachedIndex()
   }
 
   async function pruneItems(policy: ClipboardHistoryPrunePolicy): Promise<PruneResult> {
@@ -289,7 +312,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
 
     // Update index
     const newEntries = entries.filter((e) => !toRemove.has(e.id))
-    await store.saveIndex({ entries: newEntries, updatedAt: now })
+    await saveIndexAndCache({ entries: newEntries, updatedAt: now })
 
     return {
       removedCount: toRemove.size,
@@ -303,6 +326,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     getItem,
     getAllItems,
     getListItems,
+    getListItemsSync,
     deleteItem,
     clearAll,
     pruneItems,
