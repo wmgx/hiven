@@ -61,11 +61,14 @@ async function tryHideLauncherWindow(): Promise<void> {
 }
 
 async function pasteAfterClipboardWrite(fallbackMessage: string): Promise<PluginPasteResult> {
-  // Paste before hiding: the launcher is a non-activating panel so the previous app stays
-  // frontmost the entire time. Sending Cmd+V while the launcher is still visible guarantees
-  // the event goes to the correct target app — no focus-transition race condition.
+  // Hide launcher first, then paste into the previously-focused app.
+  // Even though the launcher is a non-activating panel, CGEventPost sends
+  // the keystroke to the key window — which may be the panel itself if it
+  // accepted key status. Hiding first ensures the target app regains key focus.
+  await tryHideLauncherWindow()
+  // Small delay to let the target app regain focus
+  await new Promise((r) => setTimeout(r, 80))
   const result = await trySimulatePaste()
-  void tryHideLauncherWindow()
   if (result.ok) {
     return { ok: true }
   }
