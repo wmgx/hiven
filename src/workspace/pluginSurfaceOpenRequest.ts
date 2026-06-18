@@ -1,7 +1,11 @@
 import { useAppStore, type PluginSurfaceOpenTarget } from '../store'
+import { pluginRegistry } from './pluginRegistry'
+import type { PluginDefinition } from './pluginTypes'
 
 const PENDING_OPEN_KEY = 'hiven-plugin-surface-open-request'
 const MAX_PENDING_AGE_MS = 30_000
+const STANDALONE_LAUNCHER_VERTICAL_PADDING = 24
+const STANDALONE_LAUNCHER_HORIZONTAL_PADDING = 24
 
 type PendingOpenRequest = {
   target: PluginSurfaceOpenTarget
@@ -45,6 +49,20 @@ export async function requestOpenPluginSurfaceTool(target: PluginSurfaceOpenTarg
     return
   }
 
+  // Pre-size the launcher window to the target surface dimensions before showing,
+  // so there's no compact→surface resize jump visible to the user.
+  const shell = resolveSurfaceShell(target)
+  if (shell) {
+    try {
+      const { getCurrentWindow, LogicalSize } = await import('@tauri-apps/api/window')
+      const width = Math.ceil((shell.defaultWidth ?? 660) + STANDALONE_LAUNCHER_HORIZONTAL_PADDING)
+      const height = Math.ceil((shell.defaultHeight ?? 480) + STANDALONE_LAUNCHER_VERTICAL_PADDING)
+      await getCurrentWindow().setSize(new LogicalSize(width, height))
+    } catch {
+      // Non-critical: window will resize later via useLayoutEffect fallback
+    }
+  }
+
   const { invoke } = await import('@tauri-apps/api/core')
   await invoke('show_launcher_window')
   try {
@@ -69,4 +87,10 @@ export function isPluginSurfaceOpenTarget(value: unknown): value is PluginSurfac
 
 function isTauriRuntime(): boolean {
   return Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
+}
+
+function resolveSurfaceShell(target: PluginSurfaceOpenTarget): { defaultWidth?: number; defaultHeight?: number } | null {
+  const def = pluginRegistry.getPluginDefinition(target.pluginId, target.source) as PluginDefinition<unknown> | undefined
+  const surface = def?.ui?.surfaces?.find((s) => s.id === target.surfaceId)
+  return surface?.shell ?? null
 }
