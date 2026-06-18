@@ -340,12 +340,14 @@ function UpdateChecker() {
   const [error, setError] = useState('')
   const [pluginStatus, setPluginStatus] = useState<'idle' | 'checking' | 'updated' | 'up-to-date' | 'error'>('idle')
   const [pluginVersion, setPluginVersion] = useState(0)
+  const [pluginError, setPluginError] = useState('')
   const updateRef = useRef<Awaited<ReturnType<typeof check>> | null>(null)
 
   const handleCheck = async () => {
     setStatus('checking')
     setPluginStatus('checking')
     setError('')
+    setPluginError('')
     try {
       const update = await check()
       if (update) {
@@ -365,10 +367,14 @@ function UpdateChecker() {
       if (result.updated) {
         setPluginStatus('updated')
         setPluginVersion(result.version || 0)
+      } else if (result.error) {
+        setPluginError(result.error)
+        setPluginStatus('error')
       } else {
-        setPluginStatus(result.error ? 'error' : 'up-to-date')
+        setPluginStatus('up-to-date')
       }
-    } catch {
+    } catch (err) {
+      setPluginError(String(err))
       setPluginStatus('error')
     }
   }
@@ -426,7 +432,7 @@ function UpdateChecker() {
             ? t('pluginsUpdated', { version: String(pluginVersion) })
             : pluginStatus === 'up-to-date'
               ? t('pluginsUpToDate')
-              : t('pluginsUpdateError')}
+              : `${t('pluginsUpdateError')}: ${pluginError}`}
         </span>
       )}
     </div>
