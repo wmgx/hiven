@@ -51,6 +51,16 @@ export type ClipboardHistoryIndexEntry = {
   hash: string
   lastCopiedAt: number
   byteSize: number
+  // ── List display fields (avoid per-item IPC) ──
+  preview?: string
+  sourceApp?: string
+  contentType?: string
+  width?: number
+  height?: number
+  fileNames?: string[]
+  previewBlobId?: string
+  firstCopiedAt?: number
+  copyCount?: number
 }
 
 export type ClipboardHistoryIndex = {

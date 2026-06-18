@@ -25,6 +25,7 @@ export type ClipboardHistoryRepository = {
   addItem(input: AddItemInput): Promise<ClipboardHistoryItem>
   getItem(id: string): Promise<ClipboardHistoryItem | undefined>
   getAllItems(): Promise<ClipboardHistoryItem[]>
+  getListItems(): Promise<ClipboardHistoryItem[]>
   deleteItem(id: string): Promise<void>
   clearAll(): Promise<void>
   pruneItems(policy: ClipboardHistoryPrunePolicy): Promise<PruneResult>
@@ -68,9 +69,15 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
         }
         await store.saveItem(updated)
 
-        // Move to top of index
+        // Move to top of index and update fields
         const filtered = index.entries.filter((e) => e.id !== existingEntry.id)
-        filtered.unshift({ ...existingEntry, lastCopiedAt: now })
+        const updatedEntry: ClipboardHistoryIndexEntry = {
+          ...existingEntry,
+          lastCopiedAt: now,
+          copyCount: updated.copyCount,
+          sourceApp: updated.sourceApp,
+        }
+        filtered.unshift(updatedEntry)
         await store.saveIndex({ entries: filtered, updatedAt: now })
 
         return updated
@@ -138,6 +145,12 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
       hash: input.hash,
       lastCopiedAt: now,
       byteSize: input.byteSize,
+      sourceApp: input.sourceApp,
+      firstCopiedAt: now,
+      copyCount: 1,
+      ...(input.kind === 'text' ? { preview: makeTextPreview(input.text) } : {}),
+      ...(input.kind === 'image' ? { contentType: input.contentType, width: input.width, height: input.height, previewBlobId: input.previewBlobId } : {}),
+      ...(input.kind === 'files' ? { fileNames: input.fileNames } : {}),
     }
     index.entries.unshift(newEntry)
     await store.saveIndex({ entries: index.entries, updatedAt: now })
@@ -151,12 +164,36 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
 
   async function getAllItems(): Promise<ClipboardHistoryItem[]> {
     const index = await store.getIndex()
-    const items: ClipboardHistoryItem[] = []
-    for (const entry of index.entries) {
-      const item = await store.getItem(entry.id)
-      if (item) items.push(item)
-    }
-    return items
+    const items = await Promise.all(
+      index.entries.map((entry) => store.getItem(entry.id))
+    )
+    return items.filter(Boolean) as ClipboardHistoryItem[]
+  }
+
+  async function getListItems(): Promise<ClipboardHistoryItem[]> {
+    const index = await store.getIndex()
+    return index.entries.map((entry): ClipboardHistoryItem | null => {
+      const base = {
+        id: entry.id,
+        kind: entry.kind,
+        hash: entry.hash,
+        firstCopiedAt: entry.firstCopiedAt ?? entry.lastCopiedAt,
+        lastCopiedAt: entry.lastCopiedAt,
+        copyCount: entry.copyCount ?? 1,
+        byteSize: entry.byteSize,
+        sourceApp: entry.sourceApp,
+      }
+      switch (entry.kind) {
+        case 'text':
+          return { ...base, kind: 'text', text: '', preview: entry.preview ?? '' } as ClipboardTextHistoryItem
+        case 'image':
+          return { ...base, kind: 'image', blobId: '', previewBlobId: entry.previewBlobId ?? '', contentType: entry.contentType ?? 'image/png', width: entry.width, height: entry.height } as ClipboardImageHistoryItem
+        case 'files':
+          return { ...base, kind: 'files', paths: [], fileNames: entry.fileNames ?? [] } as ClipboardFilesHistoryItem
+        default:
+          return null
+      }
+    }).filter(Boolean) as ClipboardHistoryItem[]
   }
 
   async function deleteItem(id: string): Promise<void> {
@@ -265,6 +302,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     addItem,
     getItem,
     getAllItems,
+    getListItems,
     deleteItem,
     clearAll,
     pruneItems,

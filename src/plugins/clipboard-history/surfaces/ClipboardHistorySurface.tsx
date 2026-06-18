@@ -56,12 +56,12 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
   const loadItems = useCallback(async () => {
     try {
-      const allItems = await repository.getAllItems()
-      setItems(allItems)
+      const listItems = await repository.getListItems()
+      setItems(listItems)
       setSelectedId((current) => {
-        if (allItems.length === 0) return null
-        if (current && allItems.some((item) => item.id === current)) return current
-        return allItems[0].id
+        if (listItems.length === 0) return null
+        if (current && listItems.some((item) => item.id === current)) return current
+        return listItems[0].id
       })
     } catch {
       host.showMessage(t('error.loadFailed'), 'error')
@@ -89,9 +89,9 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     if (query.trim()) {
       const q = query.toLowerCase()
       result = result.filter((item) => {
-        if (item.kind === 'text') return item.text.toLowerCase().includes(q) || item.preview.toLowerCase().includes(q)
+        if (item.kind === 'text') return item.preview.toLowerCase().includes(q)
         if (item.kind === 'image') return `${item.contentType} ${item.width ?? ''} ${item.height ?? ''}`.toLowerCase().includes(q)
-        if (item.kind === 'files') return item.fileNames.some((f) => f.toLowerCase().includes(q)) || item.paths.some((p) => p.toLowerCase().includes(q))
+        if (item.kind === 'files') return item.fileNames.some((f) => f.toLowerCase().includes(q))
         return false
       })
     }
@@ -111,17 +111,42 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     [filteredItems, selectedId]
   )
 
+  const [selectedFullItem, setSelectedFullItem] = useState<ClipboardHistoryItem | null>(null)
+
+  useEffect(() => {
+    if (!selectedId) {
+      setSelectedFullItem(null)
+      return
+    }
+    let cancelled = false
+    void repository.getItem(selectedId).then((item) => {
+      if (!cancelled && item) setSelectedFullItem(item)
+    })
+    return () => { cancelled = true }
+  }, [selectedId, repository])
+
   const groupedItems = useMemo(() => groupItemsByDay(filteredItems, locale, t), [filteredItems, locale, t])
 
   const handlePaste = useCallback(async (item: ClipboardHistoryItem) => {
     try {
+      // For list items from index, load full item for paste
+      let fullItem = item
+      if ((item.kind === 'text' && !item.text) || (item.kind === 'image' && !item.blobId) || (item.kind === 'files' && item.paths.length === 0)) {
+        const loaded = await repository.getItem(item.id)
+        if (!loaded) {
+          host.showMessage(t('error.pasteFailed'), 'error')
+          return
+        }
+        fullItem = loaded
+      }
+
       let result
-      if (item.kind === 'text') {
-        result = await host.paste.pasteText(item.text)
-      } else if (item.kind === 'image') {
-        result = await host.paste.pasteImage(item.blobId)
-      } else if (item.kind === 'files') {
-        result = await host.paste.pasteFiles(item.paths)
+      if (fullItem.kind === 'text') {
+        result = await host.paste.pasteText(fullItem.text)
+      } else if (fullItem.kind === 'image') {
+        result = await host.paste.pasteImage(fullItem.blobId)
+      } else if (fullItem.kind === 'files') {
+        result = await host.paste.pasteFiles(fullItem.paths)
       }
       if (result && !result.ok && result.fallback === 'copied') {
         host.showMessage(result.message, 'info')
@@ -130,7 +155,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     } catch {
       host.showMessage(t('error.pasteFailed'), 'error')
     }
-  }, [host, t])
+  }, [host, t, repository])
 
   const handleDelete = useCallback(async (id: string) => {
     await repository.deleteItem(id)
@@ -156,8 +181,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       void handleDelete(selectedItem.id)
     } else if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
       e.preventDefault()
-      if (selectedItem.kind === 'text') {
-        void host.clipboard.writeText(selectedItem.text)
+      if (selectedFullItem && selectedFullItem.kind === 'text') {
+        void host.clipboard.writeText(selectedFullItem.text)
         host.showMessage(t('message.copied'), 'success')
       }
     } else if (e.key === 'ArrowDown') {
@@ -171,7 +196,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       const idx = filteredItems.findIndex((i) => i.id === selectedId)
       if (idx > 0) setSelectedId(filteredItems[idx - 1].id)
     }
-  }, [selectedItem, selectedId, filteredItems, handlePaste, handleDelete, host, t, imeKeyDown])
+  }, [selectedItem, selectedFullItem, selectedId, filteredItems, handlePaste, handleDelete, host, t, imeKeyDown])
 
   const renderContent = () => {
     if (loading) {
@@ -249,10 +274,10 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
             ) : (
               <>
                 <div className="clipboard-history-preview-content" data-launcher-scrollable>
-                  {renderPreview(selectedItem, t, host.storage)}
+                  {renderPreview(selectedFullItem ?? selectedItem, t, host.storage)}
                 </div>
                 <div className="clipboard-history-meta">
-                  {getMetaRows(selectedItem, locale, t).map((row) => (
+                  {getMetaRows(selectedFullItem ?? selectedItem, locale, t).map((row) => (
                     <div key={row.label} className="clipboard-history-meta-row">
                       <span>{row.label}</span>
                       <strong>{row.value}</strong>
@@ -461,14 +486,28 @@ function ClipboardImagePreview({ item, storage, t }: { item: ImageHistoryItem, s
 
 function renderPreview(item: ClipboardHistoryItem, t: (key: string) => string, storage: SurfaceStorage) {
   if (item.kind === 'text') {
+    // Show preview text while full item is loading
+    const displayText = item.text || item.preview
     return (
       <pre className="clipboard-history-preview-text">
-        {item.text}
+        {displayText}
       </pre>
     )
   }
   if (item.kind === 'image') {
     return <ClipboardImagePreview item={item} storage={storage} t={t} />
+  }
+  if (item.paths.length === 0 && item.fileNames.length > 0) {
+    // List item from index — show fileNames as fallback
+    return (
+      <div className="clipboard-history-preview-files">
+        {item.fileNames.map((name, index) => (
+          <div key={`${name}-${index}`} className="clipboard-history-preview-path">
+            {name}
+          </div>
+        ))}
+      </div>
+    )
   }
   return (
     <div className="clipboard-history-preview-files">
@@ -503,7 +542,7 @@ function getMetaRows(item: ClipboardHistoryItem, locale: string, t: (key: string
     { label: t('meta.lastCopied'), value: formatDateTime(item.lastCopiedAt, locale) },
   ]
 
-  if (item.kind === 'text') {
+  if (item.kind === 'text' && item.text) {
     rows.splice(1, 0, { label: t('meta.characters'), value: String(item.text.length) })
     rows.splice(2, 0, { label: t('meta.words'), value: String(countWords(item.text)) })
   }
