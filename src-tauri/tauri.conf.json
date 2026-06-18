@@ -64,7 +64,7 @@
     ],
     "createUpdaterArtifacts": true,
     "macOS": {
-      "signingIdentity": null
+      "signingIdentity": "Hiven"
     }
   },
   "plugins": {
