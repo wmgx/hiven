@@ -666,7 +666,11 @@ function formatDateTime(timestamp: number, locale: string) {
 }
 
 function resolveIntlLocale(locale: string) {
-  return locale === 'zh' ? 'zh-CN' : 'en-US'
+  const intlLocales: Record<string, string> = {
+    zh: 'zh-CN',
+    en: 'en-US',
+  }
+  return intlLocales[locale] ?? 'en-US'
 }
 
 function formatBytes(bytes: number) {

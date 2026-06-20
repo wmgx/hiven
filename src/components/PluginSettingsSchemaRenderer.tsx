@@ -30,7 +30,8 @@ import type {
   PluginPermission,
   PluginPermissionSnapshot,
 } from '../workspace/pluginTypes'
-import type { Locale } from '../i18n'
+import { describePluginPermission } from '../workspace/pluginPermissions'
+import { translate, type Locale } from '../i18n'
 
 type PluginSettingsSchemaRendererProps<TSettings = unknown> = {
   schema: PluginSettingsSchema<TSettings>
@@ -119,10 +120,12 @@ function fieldIconComponent(
   return Type
 }
 
-function permissionReason(permissions: PluginPermissionSnapshot | undefined, required: PluginPermission[] | undefined): string {
+function permissionReason(permissions: PluginPermissionSnapshot | undefined, required: PluginPermission[] | undefined, locale: Locale): string {
   if (!permissions || !required?.length) return ''
   const missing = required.filter((permission) => !permissions[permission]?.granted)
-  return missing.length > 0 ? `需 ${missing.join(' · ')}` : ''
+  if (missing.length === 0) return ''
+  const labels = missing.map((permission) => describePluginPermission(permission, locale)).join(' · ')
+  return translate(locale, 'scripts', 'settingsPermissionRequired', { permissions: labels })
 }
 
 function isRenderableField<TSettings>(field: PluginSettingsField<TSettings>): boolean {
@@ -348,7 +351,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
   function renderField(field: PluginSettingsField<TSettings>) {
     const label = localize(field.label, field.labelI18n, locale)
     const description = localize(field.description, field.descriptionI18n, locale)
-    const reason = permissionReason(permissions, field.requires)
+    const reason = permissionReason(permissions, field.requires, locale)
     const disabled = Boolean(field.disabled || reason)
     const commonLabel = renderFieldTitle(label, description, reason)
     const Icon = fieldIconComponent(field.kind, field.icon)
@@ -377,6 +380,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
       const rawValue = typeof record[field.key] === 'number' ? Number(record[field.key]) : 0
       const displayValue = scale === 1 ? rawValue : rawValue / scale
       const displayText = numberDrafts[field.key] ?? formatNumberInputValue(displayValue)
+      const unitLabel = localize(field.unit, field.unitI18n, locale)
       const parsedDisplayValue = Number.parseFloat(displayText)
       const isAtMin = Number.isFinite(field.min) && Number.isFinite(displayValue) && displayValue <= Number(field.min)
       const isAtMax = Number.isFinite(field.max) && Number.isFinite(displayValue) && displayValue >= Number(field.max)
@@ -458,7 +462,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
               >
                 <Plus size={13} strokeWidth={2} />
               </button>
-              {field.unit && <span className="plugin-settings-stepper-unit">{field.unit}</span>}
+              {unitLabel && <span className="plugin-settings-stepper-unit">{unitLabel}</span>}
             </span>
           </div>
         </label>

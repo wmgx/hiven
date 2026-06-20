@@ -32,7 +32,7 @@ function buildEntryLauncherItem(entry: WebQuickOpenSettings['entries'][number]):
       input: {
         placeholder: entry.placeholder,
         allowEmptyInput: entry.emptyQueryBehavior !== 'block',
-        emptyInputMessage: entry.emptyQueryBehavior === 'block' ? '请输入内容' : undefined,
+        emptyInputMessage: entry.emptyQueryBehavior === 'block' ? 'Please enter content' : undefined,
         emptyInputMessageI18n: entry.emptyQueryBehavior === 'block'
           ? { zh: '请输入内容', en: 'Please enter content' }
           : undefined,
@@ -40,7 +40,7 @@ function buildEntryLauncherItem(entry: WebQuickOpenSettings['entries'][number]):
     },
     async execute(ctx) {
       if (ctx.settings?.enabled === false) {
-        const message = ctx.locale === 'zh' ? '网页快开已关闭' : 'Web Quick Open is disabled'
+        const message = ctx.t('disabledMessage')
         ctx.api.showMessage(message, 'warning')
         return { ok: false, message }
       }

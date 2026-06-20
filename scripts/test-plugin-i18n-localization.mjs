@@ -4,9 +4,18 @@
  * contribution family that the launcher/registry reads from full definitions.
  */
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
+
+function readSourceFiles(dir) {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = `${dir}/${entry.name}`
+    if (entry.isDirectory()) return readSourceFiles(path)
+    if (!entry.isFile() || !/\.(ts|tsx|js|jsx|mjs)$/.test(entry.name)) return []
+    return [{ path, source: readFileSync(path, 'utf8') }]
+  })
+}
 
 function loadModule(path, { stripImports = [], globals = {} } = {}) {
   let src = readFileSync(path, 'utf8')
@@ -118,5 +127,13 @@ assert.equal(localized.definition.launcher.items[0].display.title, 'Web Quick Op
 
 assert.equal(localized.panel.actions[0].title, 'Apply', 'panel action title should localize')
 assert.equal(localized.settings.title, 'Plugin Settings', 'settings title should localize')
+
+for (const file of readSourceFiles('src')) {
+  assert.doesNotMatch(
+    file.source,
+    /(?:ctx\.)?locale\s*===\s*['"]zh['"]/,
+    `${file.path} must use locale dictionaries instead of inline zh branches`,
+  )
+}
 
 console.log('plugin i18n localization checks passed')

@@ -276,6 +276,7 @@ export type PluginSettingsNumberField<TSettings = unknown> = PluginSettingsField
   max?: number
   step?: number
   unit?: string
+  unitI18n?: Partial<Record<Locale, string>>
   /** Multiplies the displayed number before storing it, e.g. 1048576 for MB-backed byte fields. */
   storageScale?: number
 }

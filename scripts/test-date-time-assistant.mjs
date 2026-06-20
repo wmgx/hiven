@@ -57,13 +57,14 @@ const timestampCommand = plugin.commands?.find((item) => item.id === 'timestamp.
 assert.ok(timestampCommand, 'date-time assistant should expose the timestamp conversion command')
 
 async function values(query) {
-  const items = await provider({ query, locale: 'en', settings: {} })
+  const translate = (key) => key
+  const items = await provider({ query, locale: 'en', settings: {}, t: translate })
   const copied = []
   const api = {
     copyText: async (text) => { copied.push(text) },
   }
   for (const item of items) {
-    await item.execute({ api, locale: 'en', settings: {}, t: (key) => key })
+    await item.execute({ api, locale: 'en', settings: {}, t: translate })
   }
   return copied
 }

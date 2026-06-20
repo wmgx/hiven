@@ -13,6 +13,8 @@ type BundledPluginPackage = {
   definition: PluginDefinition
 }
 
+const SUPPORTED_BUNDLED_PLUGIN_LOCALES = new Set(['en', 'zh'])
+
 const manifestModules = import.meta.glob('../plugins/*/manifest.json', {
   eager: true,
   query: '?raw',
@@ -44,7 +46,7 @@ function readBundledPluginMessages(dir: string): PluginMessages {
   for (const [path, dict] of Object.entries(localeModules)) {
     if (!path.includes(`/plugins/${dir}/locales/`)) continue
     const locale = localeFromPath(path)
-    if (locale === 'en' || locale === 'zh') {
+    if (locale && SUPPORTED_BUNDLED_PLUGIN_LOCALES.has(locale)) {
       messages[locale] = dict
     }
   }

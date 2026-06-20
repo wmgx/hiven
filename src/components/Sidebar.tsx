@@ -71,9 +71,7 @@ export function Sidebar() {
   const locale = useAppStore((s) => s.locale)
   const t = useT('nav')
   const isDark = theme === 'dark'
-  const themeLabel = isDark
-    ? (locale === 'zh' ? '切换亮色主题' : 'Switch to light theme')
-    : (locale === 'zh' ? '切换暗色主题' : 'Switch to dark theme')
+  const themeLabel = t(isDark ? 'switchToLightTheme' : 'switchToDarkTheme')
 
   return (
     <div

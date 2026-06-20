@@ -73,6 +73,9 @@ export default {
     'pinned.sendNewPane': 'New Pane',
     'pinned.inputPlaceholder': 'Type or paste text here…',
     'pinned.noControls': 'No controls for {title}',
+    'pane.noActive': 'No active pane',
+    'pane.stickyScroll.enabled': 'Current pane sticky scroll enabled',
+    'pane.stickyScroll.disabled': 'Current pane sticky scroll disabled',
   },
   zh: {
     'close': '关闭',
@@ -148,5 +151,8 @@ export default {
     'pinned.sendNewPane': '发送到新面板',
     'pinned.inputPlaceholder': '在此输入或粘贴文本…',
     'pinned.noControls': '{title} 没有可用控制项',
+    'pane.noActive': '没有当前面板',
+    'pane.stickyScroll.enabled': '已开启当前面板的层级吸顶',
+    'pane.stickyScroll.disabled': '已关闭当前面板的层级吸顶',
   },
 }

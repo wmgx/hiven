@@ -1,4 +1,5 @@
 import { useWorkspaceStore } from '../workspaceStore'
+import { translate } from '../../i18n'
 import type { LauncherItem, LauncherParamOption } from './types'
 
 type SystemPowerAction = 'restart' | 'shutdown' | 'lock-screen'
@@ -305,13 +306,11 @@ export function getHostPaneControlItems(): LauncherItem[] {
       execute: async (ctx) => {
         const state = useWorkspaceStore.getState()
         const pane = state.panes[state.activePaneId]
-        if (!pane) return { ok: false, message: 'No active pane' }
+        if (!pane) return { ok: false, message: translate(ctx.locale, 'workspace', 'pane.noActive') }
         const next = pane.stickyScroll !== true
         state.updatePaneStickyScroll(state.activePaneId, next)
         ctx.api.showMessage(
-          ctx.locale === 'zh'
-            ? next ? '已开启当前面板的层级吸顶' : '已关闭当前面板的层级吸顶'
-            : next ? 'Current pane sticky scroll enabled' : 'Current pane sticky scroll disabled',
+          translate(ctx.locale, 'workspace', next ? 'pane.stickyScroll.enabled' : 'pane.stickyScroll.disabled'),
           'info',
         )
         return { ok: true }

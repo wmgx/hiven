@@ -13,6 +13,7 @@
   "emptyQueryOpen": "Allow empty",
   "emptyQueryBehavior": "Empty input behavior",
   "testOpen": "Test open",
+  "disabledMessage": "Web Quick Open is disabled",
   "defaultBaiduTitle": "Baidu Search",
   "defaultBaiduPlaceholder": "Enter search keywords"
 }

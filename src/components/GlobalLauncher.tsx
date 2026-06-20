@@ -1384,25 +1384,11 @@ function PluginSurfacePermissionGate({
   onBack: () => void
   onGrant: () => void
 }) {
-  const copy = locale === 'zh'
-    ? {
-        title: '需要授权',
-        description: '这个插件需要 host 管理的权限后，才能继续运行。',
-        allow: '允许',
-        back: '返回',
-      }
-    : {
-        title: 'Permissions required',
-        description: 'This plugin needs host-managed permissions before it can continue.',
-        allow: 'Allow',
-        back: 'Back',
-      }
-
   return (
     <div className="h-full flex flex-col items-center justify-center gap-3 p-6 text-center" style={{ color: 'var(--color-text-secondary)' }}>
-      <div className="text-[13px] font-medium" style={{ color: 'var(--color-text-primary)' }}>{copy.title}</div>
+      <div className="text-[13px] font-medium" style={{ color: 'var(--color-text-primary)' }}>{t(locale, 'palette.pluginPermissionTitle')}</div>
       <div className="max-w-[420px] text-[12px]" style={{ color: 'var(--color-text-tertiary)' }}>
-        {copy.description}
+        {t(locale, 'palette.pluginPermissionDescription')}
       </div>
       <div className="max-w-[420px] flex flex-col gap-1 text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>
         {permissions.map((permission) => (
@@ -1418,14 +1404,14 @@ function PluginSurfacePermissionGate({
           style={{ background: 'var(--color-accent)', color: '#fff', border: 'none', cursor: 'pointer' }}
           onClick={onGrant}
         >
-          {copy.allow}
+          {t(locale, 'palette.pluginPermissionAllow')}
         </button>
         <button
           className="text-[12px] px-3 py-1.5 rounded"
           style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-primary)', border: 'none', cursor: 'pointer' }}
           onClick={onBack}
         >
-          {copy.back}
+          {t(locale, 'palette.pluginPermissionBack')}
         </button>
       </div>
     </div>

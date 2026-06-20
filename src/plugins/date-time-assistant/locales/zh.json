@@ -10,6 +10,9 @@
   "param.overwrite.option.no.label": "保留原值",
   "provider.title": "时间助手",
   "provider.subtitle": "时间助手",
+  "result.timestamp": "时间戳",
+  "result.date": "日期",
+  "result.datetime": "日期时间",
   "action.copyDateTime": "复制日期时间",
   "action.copyDate": "复制日期",
   "action.copyTimestamp": "复制时间戳"

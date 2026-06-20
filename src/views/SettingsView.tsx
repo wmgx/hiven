@@ -29,8 +29,8 @@ export function SettingsView() {
       </div>
 
       <div className="sscroll">
-        <SettingGroup title={locale === 'zh' ? '通用' : 'General'}>
-          <SettingsListRow icon="文" name={t('language')} desc={locale === 'zh' ? '界面显示语言' : 'Interface display language'}>
+        <SettingGroup title={t('general')}>
+          <SettingsListRow icon="文" name={t('language')} desc={t('languageInfo')}>
             <LocaleSelect
               value={locale}
               options={[
@@ -43,7 +43,7 @@ export function SettingsView() {
               }}
             />
           </SettingsListRow>
-          <SettingsListRow icon="◐" name={locale === 'zh' ? '暗色主题' : 'Dark theme'} desc={locale === 'zh' ? '在亮色和暗色界面之间切换' : 'Switch between light and dark appearance'}>
+          <SettingsListRow icon="◐" name={t('darkTheme')} desc={t('darkThemeInfo')}>
             <Toggle value={settings.theme === 'dark'} onChange={(value) => updateSetting('theme', value ? 'dark' : 'light')} />
           </SettingsListRow>
         </SettingGroup>
@@ -60,17 +60,17 @@ export function SettingsView() {
         </SettingGroup>
 
         <SettingGroup title={t('editor')}>
-          <SettingsListRow icon="A" name={t('fontSize')} desc={locale === 'zh' ? '编辑区正文字号' : 'Editor text size'}>
+          <SettingsListRow icon="A" name={t('fontSize')} desc={t('fontSizeInfo')}>
             <span className="num">
               <button type="button" onClick={() => updateSetting('fontSize', Math.max(10, settings.fontSize - 1))}>−</button>
               <span className="v">{settings.fontSize}</span>
               <button type="button" onClick={() => updateSetting('fontSize', Math.min(24, settings.fontSize + 1))}>＋</button>
             </span>
           </SettingsListRow>
-          <SettingsListRow icon="↵" name={t('wordWrap')} desc={locale === 'zh' ? '超出宽度时折行显示' : 'Wrap long lines'}>
+          <SettingsListRow icon="↵" name={t('wordWrap')} desc={t('wordWrapInfo')}>
             <Toggle value={settings.wordWrap} onChange={(value) => updateSetting('wordWrap', value)} />
           </SettingsListRow>
-          <SettingsListRow icon="#" name={t('lineNumbers')} desc={locale === 'zh' ? '在左侧显示行号' : 'Show line numbers'}>
+          <SettingsListRow icon="#" name={t('lineNumbers')} desc={t('lineNumbersInfo')}>
             <Toggle value={settings.lineNumbers} onChange={(value) => updateSetting('lineNumbers', value)} />
           </SettingsListRow>
         </SettingGroup>
@@ -88,7 +88,7 @@ export function SettingsView() {
         </SettingGroup>
 
         <SettingGroup title={tUpdate('title')}>
-          <SettingsListRow icon="↻" name={locale === 'zh' ? '当前版本' : 'Current version'} desc={locale === 'zh' ? '应用与内置插件更新' : 'App and bundled plugin updates'}>
+          <SettingsListRow icon="↻" name={t('currentVersion')} desc={t('currentVersionInfo')}>
             <span className="kbd">v{appVersion}</span>
           </SettingsListRow>
         </SettingGroup>

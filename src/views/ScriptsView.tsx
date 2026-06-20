@@ -138,40 +138,20 @@ function formatPluginShortcutLabel(accelerator: string) {
 
 function permissionImpactLabel(permission: PluginPermission, pluginId: string, locale: Locale) {
   if (pluginId === 'clipboard-history') {
-    const zh: Partial<Record<PluginPermission, string>> = {
-      'clipboard.watch': '后台记录不会启动，文本、图片和文件记录都不可用。',
-      'clipboard.read': '无法读取当前剪贴板文本。',
-      'clipboard.write': '只能查看记录，不能把内容写回剪贴板。',
-      'clipboard.image': '图片记录和图片预览不可用。',
-      'clipboard.files': '文件路径记录不可用。',
-      'storage.private': '历史记录无法持久保存，重启后会丢失。',
-      'storage.blob': '图片和文件 Blob 无法保存。',
-      'accessibility.paste': '无法直接粘贴到前台应用，只能降级为复制。',
-      'globalShortcut.register': '全局快捷键无法注册。',
-    }
-    const en: Partial<Record<PluginPermission, string>> = {
-      'clipboard.watch': 'Background capture will not start, so text, images, and files are unavailable.',
-      'clipboard.read': 'The plugin cannot read the current clipboard text.',
-      'clipboard.write': 'Items can be viewed but not written back to the clipboard.',
-      'clipboard.image': 'Image capture and image preview are unavailable.',
-      'clipboard.files': 'File path history is unavailable.',
-      'storage.private': 'History cannot persist and will be lost after restart.',
-      'storage.blob': 'Image and file blobs cannot be stored.',
-      'accessibility.paste': 'Direct paste into the foreground app falls back to copy only.',
-      'globalShortcut.register': 'The global shortcut cannot be registered.',
-    }
-    const label = locale === 'zh' ? zh[permission] : en[permission]
-    if (label) return label
+    const key = `scripts.permissionImpact.${permission}`
+    const label = t(locale, key)
+    if (label !== key.replace('scripts.', '')) return label
   }
-  if (locale === 'zh') return `缺少 ${describePluginPermission(permission, locale)} 时，相关能力会保持关闭。`
-  return `Without ${describePluginPermission(permission, locale)}, related features stay disabled.`
+  return t(locale, 'scripts.permissionImpact.generic', {
+    permission: describePluginPermission(permission, locale),
+  })
 }
 
 function permissionSensitivityLabel(permission: PluginPermission, locale: Locale) {
   if (permission === 'clipboard.watch' || permission === 'accessibility.paste') {
-    return locale === 'zh' ? '高敏感' : 'Sensitive'
+    return t(locale, 'scripts.permissionSensitivity.high')
   }
-  return locale === 'zh' ? '本地权限' : 'Local'
+  return t(locale, 'scripts.permissionSensitivity.local')
 }
 
 function pluginDetailStatusKey(row: PluginDetailRow) {
@@ -776,10 +756,10 @@ export function ScriptsView() {
           <div className="plugin-permissions-head-copy">
             <span className="plugin-permissions-kicker">
               <ShieldHalf size={14} />
-              {locale === 'zh' ? `${missingPermissions.length} 项权限待处理` : `${missingPermissions.length} permissions pending`}
+              {t(locale, 'scripts.permissionsPendingCount', { count: missingPermissions.length })}
             </span>
             <span className="plugin-permissions-detail">
-              {locale === 'zh' ? '授权后，设置项会自动解锁并恢复对应插件能力。' : 'Granting permissions unlocks the matching settings and plugin features.'}
+              {t(locale, 'scripts.permissionsPendingDetail')}
             </span>
           </div>
           <button
@@ -789,7 +769,7 @@ export function ScriptsView() {
               runPluginStartupHooks()
             }}
           >
-            {locale === 'zh' ? '全部授权' : 'Grant all'}
+            {t(locale, 'scripts.permissionsGrantAll')}
           </button>
         </div>
         <div className="plugin-permission-list">
@@ -817,7 +797,7 @@ export function ScriptsView() {
                   runPluginStartupHooks()
                 }}
               >
-                {locale === 'zh' ? '授权' : 'Grant'}
+                {t(locale, 'scripts.permissionsGrant')}
               </button>
             </div>
           ))}
@@ -832,9 +812,7 @@ export function ScriptsView() {
     permissionLabels?: string,
   ) {
     if (requested.length === 0) return null
-    const title = locale === 'zh'
-      ? `已授权 ${requested.length} 项权限`
-      : `${requested.length} permissions granted`
+    const title = t(locale, 'scripts.permissionsGrantedCount', { count: requested.length })
     const labels = permissionLabels || requested.map((permission) => describePluginPermission(permission, locale)).join(', ')
     return (
       <details className="plugin-permissions-granted">
@@ -866,10 +844,10 @@ export function ScriptsView() {
   }
 
   function surfaceActionLabel(pluginId: string, surface: PluginUiSurfaceContribution) {
-    if (pluginId === 'clipboard-history') return locale === 'zh' ? '查看历史' : 'View history'
-    return locale === 'zh'
-      ? `打开${localized(surface.title, surface.titleI18n, locale)}`
-      : `Open ${localized(surface.title, surface.titleI18n, locale)}`
+    if (pluginId === 'clipboard-history') return t(locale, 'scripts.surfaceAction.clipboardHistory')
+    return t(locale, 'scripts.surfaceAction.open', {
+      title: localized(surface.title, surface.titleI18n, locale),
+    })
   }
 
   function surfaceShortcutLabel(pluginId: string, source: PluginSettingsSource, surface: PluginUiSurfaceContribution) {
@@ -914,11 +892,11 @@ export function ScriptsView() {
               <div className="plugin-surface-shortcut-title">
                 <span className="plugin-surface-shortcut-icon"><Keyboard size={14} /></span>
                 <span className="plugin-surface-shortcut-copy">
-                  <span>{locale === 'zh' ? '快捷键' : 'Shortcut'}</span>
+                  <span>{t(locale, 'scripts.surfaceShortcutTitle')}</span>
                   <small>
                     {localized(surface.title, surface.titleI18n, locale)}
                     {surface.entry?.recommendedShortcut
-                      ? ` · ${locale === 'zh' ? '推荐 ' : 'Recommended '}${formatPluginShortcutLabel(surface.entry.recommendedShortcut)}`
+                      ? ` · ${t(locale, 'scripts.surfaceShortcutRecommended', { shortcut: formatPluginShortcutLabel(surface.entry.recommendedShortcut) })}`
                       : ''}
                   </small>
                 </span>
@@ -1096,7 +1074,7 @@ export function ScriptsView() {
     return (
       <section className={`a-detail plugin-detail-panel ${row.error ? 'has-error' : ''}`}>
         <div className="plugin-detail-panel-title">
-          <span>{locale === 'zh' ? '插件详情' : 'Plugin details'}</span>
+          <span>{t(locale, 'scripts.pluginDetailsTitle')}</span>
         </div>
         <div className="d-head plugin-detail-header">
           <div className="d-ico plugin-detail-icon">
@@ -1236,11 +1214,11 @@ export function ScriptsView() {
             }}
             className="btn primary split"
           >
-            <span className="bi">＋</span>{locale === 'zh' ? '添加插件' : 'Add Plugin'}<span className="chev">▾</span>
+            <span className="bi">＋</span>{t(locale, 'scripts.addPlugin')}<span className="chev">▾</span>
           </button>
           {addMenuOpen && (
             <div className="menu open" onClick={(event) => event.stopPropagation()}>
-              <div className="m-label">{locale === 'zh' ? '从来源安装' : 'Install from'}</div>
+              <div className="m-label">{t(locale, 'scripts.installFrom')}</div>
               <button className="m-item" type="button" onClick={() => { setAddMenuOpen(false); setRemoteOpen(true) }}>
                 <span className="m-ico">⎋</span><span className="m-main"><span className="m-name">{t(locale, 'scripts.importGithub')}</span><span className="m-desc">GitHub URL</span></span>
               </button>
@@ -1248,7 +1226,7 @@ export function ScriptsView() {
                 <span className="m-ico">⊟</span><span className="m-main"><span className="m-name">{t(locale, 'scripts.importZip')}</span><span className="m-desc">.zip</span></span>
               </button>
               <button className="m-item" type="button" onClick={() => { setAddMenuOpen(false); void handleInstallDirectory() }}>
-                <span className="m-ico">▢</span><span className="m-main"><span className="m-name">{t(locale, 'scripts.importFolder')}</span><span className="m-desc">{locale === 'zh' ? '选择已解压的插件目录' : 'Choose an unpacked directory'}</span></span>
+                <span className="m-ico">▢</span><span className="m-main"><span className="m-name">{t(locale, 'scripts.importFolder')}</span><span className="m-desc">{t(locale, 'scripts.importFolderDesc')}</span></span>
               </button>
             </div>
           )}

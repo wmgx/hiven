@@ -13,6 +13,7 @@
   "emptyQueryOpen": "允许为空",
   "emptyQueryBehavior": "空输入行为",
   "testOpen": "测试打开",
+  "disabledMessage": "网页快开已关闭",
   "defaultBaiduTitle": "百度搜索",
   "defaultBaiduPlaceholder": "输入搜索关键词"
 }

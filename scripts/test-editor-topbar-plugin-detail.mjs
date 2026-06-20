@@ -21,6 +21,9 @@ const files = {
   packageJson: read('package.json'),
   editorView: read('src/views/EditorView.tsx'),
   scriptsView: read('src/views/ScriptsView.tsx'),
+  sidebar: read('src/components/Sidebar.tsx'),
+  settingsSchemaRenderer: read('src/components/PluginSettingsSchemaRenderer.tsx'),
+  globalLauncher: read('src/components/GlobalLauncher.tsx'),
   renderStatusBar: read('src/components/workspace/RenderStatusBar.tsx'),
   schemaInline: existsSync(join(root, 'src/components/PluginSettingsInline.tsx'))
     ? read('src/components/PluginSettingsInline.tsx')
@@ -28,6 +31,10 @@ const files = {
   scriptsI18n: read('src/i18n/locales/scripts.ts'),
   css: read('src/index.css'),
   settingsView: read('src/views/SettingsView.tsx'),
+  navI18n: read('src/i18n/locales/nav.ts'),
+  paletteI18n: read('src/i18n/locales/palette.ts'),
+  settingsI18n: read('src/i18n/locales/settings.ts'),
+  workspaceI18n: read('src/i18n/locales/workspace.ts'),
 }
 
 const packageJson = JSON.parse(files.packageJson)
@@ -88,6 +95,23 @@ assert.match(files.scriptsI18n, /['"]capability\.command['"]:\s*['"]Command['"]/
 assert.match(files.scriptsI18n, /['"]capability\.instantSuggestion['"]:\s*['"]Instant suggestion['"]/, 'Scripts i18n must include the English instant suggestion capability label')
 assert.match(files.scriptsI18n, /['"]capability\.command['"]:\s*['"]命令['"]/, 'Scripts i18n must include the Chinese command capability label')
 assert.match(files.scriptsI18n, /['"]capability\.instantSuggestion['"]:\s*['"]即时建议['"]/, 'Scripts i18n must include the Chinese instant suggestion capability label')
+
+for (const [name, source] of Object.entries({
+  scriptsView: files.scriptsView,
+  settingsView: files.settingsView,
+  sidebar: files.sidebar,
+  settingsSchemaRenderer: files.settingsSchemaRenderer,
+  globalLauncher: files.globalLauncher,
+})) {
+  assert.doesNotMatch(source, /(?:ctx\.)?locale\s*===\s*['"]zh['"]/, `${name} must use the shared i18n registry instead of inline zh branches`)
+}
+
+assert.match(files.scriptsI18n, /['"]settingsPermissionRequired['"]/, 'Scripts i18n must include schema permission dependency copy')
+assert.match(files.scriptsI18n, /['"]surfaceShortcutRecommended['"]/, 'Scripts i18n must include surface shortcut recommendation copy')
+assert.match(files.settingsI18n, /['"]languageInfo['"]/, 'Settings i18n must include language row description copy')
+assert.match(files.navI18n, /['"]switchToLightTheme['"]/, 'Nav i18n must include theme toggle labels')
+assert.match(files.paletteI18n, /['"]pluginPermissionTitle['"]/, 'Palette i18n must include plugin permission gate copy')
+assert.match(files.workspaceI18n, /['"]pane\.stickyScroll\.enabled['"]/, 'Workspace i18n must include host action toast copy')
 
 assert.match(files.css, /\.plugin-master-detail/, 'Plugin master-detail layout must have stable styling')
 assert.match(files.css, /\.plugin-detail-panel/, 'Plugin detail panel must have stable styling')

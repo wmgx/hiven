@@ -16,7 +16,7 @@ async function loadMonacoNls() {
     const stored = JSON.parse(localStorage.getItem('hiven-settings') || localStorage.getItem('fluxtext-settings') || '{}')
     const locale = stored?.state?.locale || stored?.state?.settings?.locale || 'en'
 
-    if (locale === 'zh') {
+    if (String(locale).toLowerCase().startsWith('zh')) {
       // 尝试从本地 node_modules 加载中文语言包
       try {
         const nls = await import('monaco-editor/esm/nls.messages.zh-cn.js')
