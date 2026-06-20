@@ -3824,6 +3824,10 @@ body[data-theme='dark'] .global-launcher-panel.palette-panel {
   box-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
 }
 
+html[data-window='launcher'] .global-launcher-panel.palette-panel {
+  box-shadow: none !important;
+}
+
 .global-launcher-header.l-search,
 .l-search {
   display: flex;
