@@ -1,13 +1,13 @@
-import { Component, type ReactNode, useEffect, useRef } from 'react'
+import { Component, lazy, type ReactNode, Suspense, useEffect, useRef } from 'react'
 import { useAppStore } from './store'
 import type { GlobalLauncherPosition, ViewId } from './store'
 import { initConfigDir } from './configInit'
 import { Sidebar } from './components/Sidebar'
-import { EditorView } from './views/EditorView'
-import { ScriptsView } from './views/ScriptsView'
-import { PluginEditorView } from './views/PluginEditorView'
-import { PinnedRunnerView } from './views/PinnedRunnerView'
-import { SettingsView } from './views/SettingsView'
+const EditorView = lazy(() => import('./views/EditorView').then(m => ({ default: m.EditorView })))
+const ScriptsView = lazy(() => import('./views/ScriptsView').then(m => ({ default: m.ScriptsView })))
+const PluginEditorView = lazy(() => import('./views/PluginEditorView').then(m => ({ default: m.PluginEditorView })))
+const PinnedRunnerView = lazy(() => import('./views/PinnedRunnerView').then(m => ({ default: m.PinnedRunnerView })))
+const SettingsView = lazy(() => import('./views/SettingsView').then(m => ({ default: m.SettingsView })))
 import { CommandPalette } from './components/CommandPalette'
 import { GlobalLauncher } from './components/GlobalLauncher'
 import { PluginSettingsDialog } from './components/PluginSettingsDialog'
@@ -69,13 +69,15 @@ class ViewErrorBoundary extends Component<
 }
 
 function ViewContent({ viewId }: { viewId: ViewId }) {
-  switch (viewId) {
-    case 'editor': return <EditorView />
-    case 'scripts': return <ScriptsView />
-    case 'plugin-editor': return <PluginEditorView />
-    case 'pinned-runner': return <PinnedRunnerView />
-    case 'settings': return <SettingsView />
-  }
+  return (
+    <Suspense fallback={<div className="view-loading" />}>
+      {viewId === 'editor' && <EditorView />}
+      {viewId === 'scripts' && <ScriptsView />}
+      {viewId === 'plugin-editor' && <PluginEditorView />}
+      {viewId === 'pinned-runner' && <PinnedRunnerView />}
+      {viewId === 'settings' && <SettingsView />}
+    </Suspense>
+  )
 }
 
 export default function App() {
@@ -85,7 +87,7 @@ export default function App() {
 function MainApp() {
   const activeView = useAppStore((s) => s.activeView)
   const fontSize = useAppStore((s) => s.settings.fontSize)
-  const settings = useAppStore((s) => s.settings)
+  const theme = useAppStore((s) => s.settings.theme)
   const prunePinnedRuntimes = useAppStore((s) => s.prunePinnedRuntimes)
   const prevViewRef = useRef<ViewId>(activeView)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -293,7 +295,7 @@ function MainApp() {
     import('@tauri-apps/api/app')
       .then(async ({ setTheme }) => {
         if (disposed) return
-        await setTheme(settings.theme)
+        await setTheme(theme)
       })
       .catch((error) => {
         console.warn('[hiven] Failed to sync native window theme:', error)
@@ -301,7 +303,7 @@ function MainApp() {
     return () => {
       disposed = true
     }
-  }, [settings.theme])
+  }, [theme])
 
   // Direction-aware view transition
   useEffect(() => {
@@ -335,7 +337,7 @@ function MainApp() {
   return (
     <div
       className="flux-spatial-shell"
-      data-theme={settings.theme}
+      data-theme={theme}
       style={{ fontSize }}
     >
       <div className="flux-main">
@@ -462,32 +464,43 @@ function LauncherWindowApp() {
     if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
     let disposed = false
     let unlisten: (() => void) | undefined
+    let moveThrottleTimer: ReturnType<typeof setTimeout> | undefined
+    let lastMovePayload: unknown = null
+
     import('@tauri-apps/api/window')
       .then(async ({ getCurrentWindow }) => {
         const win = getCurrentWindow()
         return win.onMoved(async ({ payload: position }) => {
-          try {
-            if (launcherProgrammaticMoveRef.current) {
-              launcherProgrammaticMoveRef.current = false
-              if (launcherProgrammaticMoveResetRef.current !== undefined) {
-                window.clearTimeout(launcherProgrammaticMoveResetRef.current)
-                launcherProgrammaticMoveResetRef.current = undefined
-              }
-              return
+          if (launcherProgrammaticMoveRef.current) {
+            launcherProgrammaticMoveRef.current = false
+            if (launcherProgrammaticMoveResetRef.current !== undefined) {
+              window.clearTimeout(launcherProgrammaticMoveResetRef.current)
+              launcherProgrammaticMoveResetRef.current = undefined
             }
-            const scaleFactor = await win.scaleFactor()
-            const logicalPosition = position.toLogical(scaleFactor)
-            useAppStore.getState().updateSetting('globalLauncherWindowPosition', {
-              x: logicalPosition.x,
-              y: logicalPosition.y,
-              lastDraggedAt: Date.now(),
-              screenWidth: window.screen.width,
-              screenHeight: window.screen.height,
-            })
-            useAppStore.getState().updateSetting('globalLauncherWindowPositionSource', 'user')
-          } catch (error) {
-            console.warn('[hiven] Failed to persist launcher window position:', error)
+            return
           }
+          // Throttle: only persist position at most every 150ms
+          lastMovePayload = position
+          if (moveThrottleTimer !== undefined) return
+          moveThrottleTimer = setTimeout(async () => {
+            moveThrottleTimer = undefined
+            const pos = lastMovePayload as typeof position
+            if (!pos) return
+            try {
+              const scaleFactor = await win.scaleFactor()
+              const logicalPosition = pos.toLogical(scaleFactor)
+              useAppStore.getState().updateSetting('globalLauncherWindowPosition', {
+                x: logicalPosition.x,
+                y: logicalPosition.y,
+                lastDraggedAt: Date.now(),
+                screenWidth: window.screen.width,
+                screenHeight: window.screen.height,
+              })
+              useAppStore.getState().updateSetting('globalLauncherWindowPositionSource', 'user')
+            } catch (error) {
+              console.warn('[hiven] Failed to persist launcher window position:', error)
+            }
+          }, 150)
         })
       })
       .then((cleanup) => {
@@ -500,6 +513,7 @@ function LauncherWindowApp() {
     return () => {
       disposed = true
       unlisten?.()
+      if (moveThrottleTimer !== undefined) clearTimeout(moveThrottleTimer)
     }
   }, [])
 

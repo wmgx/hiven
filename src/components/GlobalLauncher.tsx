@@ -1,4 +1,4 @@
-import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ErrorInfo, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { Component, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ErrorInfo, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { Pin, Search } from 'lucide-react'
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
 import { localized, useAppStore, type PluginSurfaceOpenTarget } from '../store'
@@ -423,7 +423,7 @@ export function GlobalLauncher() {
     if (!open || !standaloneLauncher) return
     if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
 
-    const frame = window.requestAnimationFrame(() => {
+    const timer = window.setTimeout(() => {
       const panel = panelRef.current
       if (!panel) return
       const surfaceShell = activeSurfaceFrame?.surface.shell
@@ -451,9 +451,9 @@ export function GlobalLauncher() {
         .catch((error) => {
           console.warn('[hiven] Failed to resize launcher window:', error)
         })
-    })
+    }, 50)
 
-    return () => window.cancelAnimationFrame(frame)
+    return () => window.clearTimeout(timer)
   }, [
     visibleFiltered.length,
     mode,
@@ -1003,9 +1003,9 @@ export function GlobalLauncher() {
                   <span className="t-ico">{resolveIcon(frame.item.display.icon, 14, resolveDisplayTitle(frame.item.display, locale))}</span>
                   {resolveDisplayTitle(frame.item.display, locale)}
                 </span>
-                {paramChips.map((chip, i) => (
+                {paramChips.map((chip) => (
                   <span
-                    key={i}
+                    key={chip.label}
                     className="kbd shrink-0 max-w-[100px] truncate"
                     title={`${chip.label}: ${chip.value}`}
                   >
@@ -1205,7 +1205,7 @@ function LauncherList({
   )
 }
 
-function LauncherListItem({
+const LauncherListItem = memo(function LauncherListItem({
   item,
   selected,
   locale,
@@ -1265,7 +1265,7 @@ function LauncherListItem({
       {selected && <span className="r-kbd">↵</span>}
     </button>
   )
-}
+})
 
 function getLauncherItemKindLabel(item: LauncherItem, locale: Locale) {
   if (item.kind === 'pinned') return t(locale, 'palette.kindPinned')
