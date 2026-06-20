@@ -1184,15 +1184,8 @@ export function ScriptsView() {
 
   const selectedPluginRow = pluginDetailRows.find((row) => row.key === selectedPluginKey) ?? pluginDetailRows[0]
   const activeItems = activeTab === 'builtin' ? filteredBuiltin : activeTab === 'installed' ? filteredInstalled : filteredDev
-  const totalCount = filteredBuiltin.length + filteredInstalled.length + filteredDev.length
-
   return (
     <div className="scripts-content body">
-      <div className="phead">
-        <span className="ptitle">{t(locale, 'scripts.title')}</span>
-        <span className="pcount">{totalCount}</span>
-      </div>
-
       <div className="ptools">
         <div className="psearch scripts-search-bar">
           <Search size={14} />

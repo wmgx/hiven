@@ -22,12 +22,6 @@ export function SettingsView() {
 
   return (
     <div className="settings-page body">
-      <div className="phead">
-        <span className="ptitle">{t('title')}</span>
-        <span className="sp" />
-        <UpdateChecker compact />
-      </div>
-
       <div className="sscroll">
         <SettingGroup title={t('general')}>
           <SettingsListRow icon="文" name={t('language')} desc={t('languageInfo')}>
@@ -89,7 +83,10 @@ export function SettingsView() {
 
         <SettingGroup title={tUpdate('title')}>
           <SettingsListRow icon="↻" name={t('currentVersion')} desc={t('currentVersionInfo')}>
-            <span className="kbd">v{appVersion}</span>
+            <div className="settings-version-control">
+              <span className="kbd">v{appVersion}</span>
+              <UpdateChecker compact />
+            </div>
           </SettingsListRow>
         </SettingGroup>
       </div>

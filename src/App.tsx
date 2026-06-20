@@ -1,6 +1,7 @@
 import { Component, lazy, type ReactNode, Suspense, useEffect, useRef } from 'react'
 import { useAppStore } from './store'
 import type { GlobalLauncherPosition, ViewId } from './store'
+import { translate } from './i18n'
 import { initConfigDir } from './configInit'
 import { Sidebar } from './components/Sidebar'
 const EditorView = lazy(() => import('./views/EditorView').then(m => ({ default: m.EditorView })))
@@ -86,6 +87,7 @@ export default function App() {
 
 function MainApp() {
   const activeView = useAppStore((s) => s.activeView)
+  const locale = useAppStore((s) => s.locale)
   const fontSize = useAppStore((s) => s.settings.fontSize)
   const theme = useAppStore((s) => s.settings.theme)
   const prunePinnedRuntimes = useAppStore((s) => s.prunePinnedRuntimes)
@@ -258,6 +260,23 @@ function MainApp() {
 
   useEffect(() => installGlobalPinnedLauncherHotkeys(), [])
   useEffect(() => installPluginSurfaceShortcutHotkeys(), [])
+
+  useEffect(() => {
+    const viewTitle =
+      activeView === 'scripts'
+        ? translate(locale, 'scripts', 'title')
+        : activeView === 'settings'
+          ? translate(locale, 'settings', 'title')
+          : ''
+    const nextTitle = viewTitle ? `Hiven - ${viewTitle}` : 'Hiven'
+    document.title = nextTitle
+    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+    import('@tauri-apps/api/window')
+      .then(({ getCurrentWindow }) => getCurrentWindow().setTitle(nextTitle))
+      .catch((error) => {
+        console.warn('[hiven] Failed to sync native window title:', error)
+      })
+  }, [activeView, locale])
 
   useEffect(() => {
     if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
