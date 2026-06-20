@@ -94,21 +94,6 @@ function sourceLabel(app: HostAppEntry): string {
   }
 }
 
-function duplicateNameSubtitles(apps: HostAppEntry[]): Map<string, string> {
-  const counts = new Map<string, number>()
-  for (const app of apps) {
-    const key = normalizeAppName(app.name)
-    counts.set(key, (counts.get(key) ?? 0) + 1)
-  }
-
-  const subtitles = new Map<string, string>()
-  for (const app of apps) {
-    const sameName = (counts.get(normalizeAppName(app.name)) ?? 0) >= 2
-    subtitles.set(app.appId, sameName ? app.displayPath || sourceLabel(app) : 'Application')
-  }
-  return subtitles
-}
-
 function searchAliases(app: HostAppEntry): string[] {
   const base = basenameForSearch(app.displayPath)
   const aliases = [...(app.aliases ?? [])]
@@ -202,7 +187,6 @@ export async function getHostAppLauncherDynamicItems({
   const cache = readCache()
   const apps = cache.apps
     .filter((app) => appMatchesQuery(app, query, locale))
-  const subtitles = duplicateNameSubtitles(apps)
 
   return apps.map((app) => ({
     systemKey: `host:app-launcher:app:${app.appId}`,
@@ -210,7 +194,7 @@ export async function getHostAppLauncherDynamicItems({
     display: {
       title: app.name,
       titleI18n: app.nameI18n,
-      subtitle: subtitles.get(app.appId) ?? 'Application',
+      subtitle: app.displayPath || sourceLabel(app),
       icon: appIconRef(app.appId),
       aliases: searchAliases(app),
     },

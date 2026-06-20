@@ -83,6 +83,8 @@ assert.doesNotMatch(files.hostAppLauncher, /pinyin-pro|pinyin\(value/, 'host app
 assert.match(files.hostAppLauncher, /app-icon:\$\{appId\}/, 'host app launcher must use host app-icon refs')
 assert.match(files.hostAppLauncher, /host:app-launcher:refresh/, 'host app launcher must expose a host refresh item')
 assert.match(files.hostAppLauncher, /host:app-launcher:app:\$\{app\.appId\}/, 'host app dynamic items must use host-owned identity')
+assert.match(files.hostAppLauncher, /subtitle:\s*app\.displayPath\s*\|\|\s*sourceLabel\(app\)/, 'host app dynamic item subtitles should show the app path when available')
+assert.doesNotMatch(files.hostAppLauncher, /:\s*['"]Application['"]/, 'host app dynamic item subtitles should not fall back to a generic Application label')
 assert.match(files.hostAppLauncher, /installedAt:\s*app\.installedAt/, 'host app dynamic items must pass install time into launcher ranking metadata')
 assert.doesNotMatch(files.hostAppLauncher, /kind:\s*['"]plugin['"]/, 'host app launcher items must not be plugin items')
 
