@@ -20,7 +20,7 @@ use zip::ZipArchive;
 pub mod hotkeys;
 
 const LAUNCHER_COMPACT_WIDTH: f64 = 660.0;
-const LAUNCHER_COMPACT_HEIGHT: f64 = 160.0;
+const LAUNCHER_COMPACT_HEIGHT: f64 = 294.0;
 static PREVIOUS_FOREGROUND_PROCESS_ID: OnceLock<Mutex<Option<u32>>> = OnceLock::new();
 static INSTALLED_APP_TARGETS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 static PLUGIN_KV_DB: OnceLock<Result<Mutex<Connection>, String>> = OnceLock::new();

@@ -61,6 +61,7 @@
     "test:launcher-controller": "node scripts/test-launcher-controller.mjs",
     "test:launcher-back-focus": "node scripts/test-launcher-back-focus.mjs",
     "test:global-launcher-v3-ui": "node scripts/test-global-launcher-v3-ui.mjs",
+    "test:global-launcher-window-height": "node scripts/test-global-launcher-window-height.mjs",
     "test:launcher-plugin-contract": "node scripts/test-launcher-plugin-contract.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
