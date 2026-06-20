@@ -423,7 +423,7 @@ export function GlobalLauncher() {
     if (!open || !standaloneLauncher) return
     if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
 
-    const frame = window.requestAnimationFrame(() => {
+    const timer = window.setTimeout(() => {
       const panel = panelRef.current
       if (!panel) return
       const surfaceShell = activeSurfaceFrame?.surface.shell
@@ -451,9 +451,9 @@ export function GlobalLauncher() {
         .catch((error) => {
           console.warn('[hiven] Failed to resize launcher window:', error)
         })
-    })
+    }, 50)
 
-    return () => window.cancelAnimationFrame(frame)
+    return () => window.clearTimeout(timer)
   }, [
     visibleFiltered.length,
     mode,

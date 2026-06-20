@@ -462,32 +462,43 @@ function LauncherWindowApp() {
     if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
     let disposed = false
     let unlisten: (() => void) | undefined
+    let moveThrottleTimer: ReturnType<typeof setTimeout> | undefined
+    let lastMovePayload: unknown = null
+
     import('@tauri-apps/api/window')
       .then(async ({ getCurrentWindow }) => {
         const win = getCurrentWindow()
         return win.onMoved(async ({ payload: position }) => {
-          try {
-            if (launcherProgrammaticMoveRef.current) {
-              launcherProgrammaticMoveRef.current = false
-              if (launcherProgrammaticMoveResetRef.current !== undefined) {
-                window.clearTimeout(launcherProgrammaticMoveResetRef.current)
-                launcherProgrammaticMoveResetRef.current = undefined
-              }
-              return
+          if (launcherProgrammaticMoveRef.current) {
+            launcherProgrammaticMoveRef.current = false
+            if (launcherProgrammaticMoveResetRef.current !== undefined) {
+              window.clearTimeout(launcherProgrammaticMoveResetRef.current)
+              launcherProgrammaticMoveResetRef.current = undefined
             }
-            const scaleFactor = await win.scaleFactor()
-            const logicalPosition = position.toLogical(scaleFactor)
-            useAppStore.getState().updateSetting('globalLauncherWindowPosition', {
-              x: logicalPosition.x,
-              y: logicalPosition.y,
-              lastDraggedAt: Date.now(),
-              screenWidth: window.screen.width,
-              screenHeight: window.screen.height,
-            })
-            useAppStore.getState().updateSetting('globalLauncherWindowPositionSource', 'user')
-          } catch (error) {
-            console.warn('[hiven] Failed to persist launcher window position:', error)
+            return
           }
+          // Throttle: only persist position at most every 150ms
+          lastMovePayload = position
+          if (moveThrottleTimer !== undefined) return
+          moveThrottleTimer = setTimeout(async () => {
+            moveThrottleTimer = undefined
+            const pos = lastMovePayload as typeof position
+            if (!pos) return
+            try {
+              const scaleFactor = await win.scaleFactor()
+              const logicalPosition = pos.toLogical(scaleFactor)
+              useAppStore.getState().updateSetting('globalLauncherWindowPosition', {
+                x: logicalPosition.x,
+                y: logicalPosition.y,
+                lastDraggedAt: Date.now(),
+                screenWidth: window.screen.width,
+                screenHeight: window.screen.height,
+              })
+              useAppStore.getState().updateSetting('globalLauncherWindowPositionSource', 'user')
+            } catch (error) {
+              console.warn('[hiven] Failed to persist launcher window position:', error)
+            }
+          }, 150)
         })
       })
       .then((cleanup) => {
@@ -500,6 +511,7 @@ function LauncherWindowApp() {
     return () => {
       disposed = true
       unlisten?.()
+      if (moveThrottleTimer !== undefined) clearTimeout(moveThrottleTimer)
     }
   }, [])
 
