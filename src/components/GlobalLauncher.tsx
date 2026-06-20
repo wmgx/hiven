@@ -1,4 +1,4 @@
-import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ErrorInfo, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { Component, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ErrorInfo, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { Pin, Search } from 'lucide-react'
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
 import { localized, useAppStore, type PluginSurfaceOpenTarget } from '../store'
@@ -1205,7 +1205,7 @@ function LauncherList({
   )
 }
 
-function LauncherListItem({
+const LauncherListItem = memo(function LauncherListItem({
   item,
   selected,
   locale,
@@ -1265,7 +1265,7 @@ function LauncherListItem({
       {selected && <span className="r-kbd">↵</span>}
     </button>
   )
-}
+})
 
 function getLauncherItemKindLabel(item: LauncherItem, locale: Locale) {
   if (item.kind === 'pinned') return t(locale, 'palette.kindPinned')

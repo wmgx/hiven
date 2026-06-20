@@ -1,13 +1,13 @@
-import { Component, type ReactNode, useEffect, useRef } from 'react'
+import { Component, lazy, type ReactNode, Suspense, useEffect, useRef } from 'react'
 import { useAppStore } from './store'
 import type { GlobalLauncherPosition, ViewId } from './store'
 import { initConfigDir } from './configInit'
 import { Sidebar } from './components/Sidebar'
-import { EditorView } from './views/EditorView'
-import { ScriptsView } from './views/ScriptsView'
-import { PluginEditorView } from './views/PluginEditorView'
-import { PinnedRunnerView } from './views/PinnedRunnerView'
-import { SettingsView } from './views/SettingsView'
+const EditorView = lazy(() => import('./views/EditorView').then(m => ({ default: m.EditorView })))
+const ScriptsView = lazy(() => import('./views/ScriptsView').then(m => ({ default: m.ScriptsView })))
+const PluginEditorView = lazy(() => import('./views/PluginEditorView').then(m => ({ default: m.PluginEditorView })))
+const PinnedRunnerView = lazy(() => import('./views/PinnedRunnerView').then(m => ({ default: m.PinnedRunnerView })))
+const SettingsView = lazy(() => import('./views/SettingsView').then(m => ({ default: m.SettingsView })))
 import { CommandPalette } from './components/CommandPalette'
 import { GlobalLauncher } from './components/GlobalLauncher'
 import { PluginSettingsDialog } from './components/PluginSettingsDialog'
@@ -69,13 +69,15 @@ class ViewErrorBoundary extends Component<
 }
 
 function ViewContent({ viewId }: { viewId: ViewId }) {
-  switch (viewId) {
-    case 'editor': return <EditorView />
-    case 'scripts': return <ScriptsView />
-    case 'plugin-editor': return <PluginEditorView />
-    case 'pinned-runner': return <PinnedRunnerView />
-    case 'settings': return <SettingsView />
-  }
+  return (
+    <Suspense fallback={<div className="view-loading" />}>
+      {viewId === 'editor' && <EditorView />}
+      {viewId === 'scripts' && <ScriptsView />}
+      {viewId === 'plugin-editor' && <PluginEditorView />}
+      {viewId === 'pinned-runner' && <PinnedRunnerView />}
+      {viewId === 'settings' && <SettingsView />}
+    </Suspense>
+  )
 }
 
 export default function App() {
