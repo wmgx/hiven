@@ -130,7 +130,6 @@ const requiredKeys = [
   'meta.byteSize',
   'meta.dimensions',
   'meta.files',
-  'meta.timesCopied',
   'meta.firstCopied',
   'meta.lastCopied',
   'error.loadFailed',
@@ -181,10 +180,12 @@ assert.match(surfaceContent, /clipboard-history-topbar[\s\S]*<SearchField/, 'Sur
 assert.match(surfaceContent, /clipboard-history-list-toolbar[\s\S]*<SegmentedControl/, 'Surface must place the type filter above the left history list')
 assert.doesNotMatch(surfaceContent, /<Select[\s\S]{0,600}filter\.all/, 'Surface type filter must not use a native select menu')
 assert.match(surfaceContent, /<SurfaceList[\s\S]{0,180}data-launcher-scrollable/, 'Surface history list must opt into launcher window wheel scrolling')
+assert.match(surfaceContent, /<SurfacePreview[\s\S]{0,180}data-launcher-scrollable/, 'Surface preview pane must opt into launcher window wheel scrolling')
 assert.match(surfaceContent, /clipboard-history-preview-content[\s\S]{0,120}data-launcher-scrollable/, 'Surface preview content must opt into launcher window wheel scrolling')
 assert.match(surfaceContent, /<SurfaceList|<SurfaceListItem|<SurfacePreview/, 'Surface must use plugin-ui list and preview primitives')
 assert.match(surfaceContent, /function\s+ClipboardHistoryItemRow[\s\S]{0,900}useRef<[\s\S]{0,360}scrollIntoView\(\{\s*block:\s*['"]nearest['"]\s*\}\)/, 'Selected clipboard history rows must scroll into view during keyboard navigation')
-assert.match(surfaceContent, /getMetaRows|meta\.timesCopied|copyCount/, 'Surface must render detailed metadata for the selected item')
+assert.match(surfaceContent, /getMetaRows|meta\.firstCopied|meta\.lastCopied/, 'Surface must render detailed metadata for the selected item')
+assert.doesNotMatch(surfaceContent, /clipboard-history-copy-count|meta\.timesCopied/, 'Surface must not display copy-count UI')
 
 // Shell should be large enough for the custom surface opened by shortcut
 assert.match(indexContent, /defaultWidth:\s*900/, 'Clipboard history surface should open wider than the compact launcher')

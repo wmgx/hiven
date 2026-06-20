@@ -64,7 +64,6 @@
   "meta.dimensions": "尺寸",
   "meta.sourceApp": "来源应用",
   "meta.files": "文件数",
-  "meta.timesCopied": "复制次数",
   "meta.firstCopied": "首次复制",
   "meta.lastCopied": "最近复制",
   "message.copied": "已复制到剪贴板",

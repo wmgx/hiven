@@ -277,7 +277,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
             </SurfaceList>
           </div>
 
-          <SurfacePreview className="clipboard-history-preview">
+          <SurfacePreview className="clipboard-history-preview" data-launcher-scrollable>
             {!selectedItem ? (
               <SurfaceEmptyState>
                 {t('preview.empty')}
@@ -414,9 +414,6 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
           <span className="clipboard-history-item-title">{getItemTitle(item, t)}</span>
           <span className="clipboard-history-item-subtitle">{getItemSubtitle(item, locale, t)}</span>
         </span>
-        {item.copyCount > 1 && (
-          <span className="clipboard-history-copy-count">×{item.copyCount}</span>
-        )}
       </SurfaceListItem>
       <IconButton
         type="button"
@@ -510,7 +507,7 @@ function renderPreview(item: ClipboardHistoryItem, t: (key: string) => string, s
     // Show preview text while full item is loading
     const displayText = item.text || item.preview
     return (
-      <pre className="clipboard-history-preview-text">
+      <pre className="clipboard-history-preview-text" data-launcher-scrollable>
         {displayText}
       </pre>
     )
@@ -558,7 +555,6 @@ function getMetaRows(item: ClipboardHistoryItem, locale: string, t: (key: string
   const rows: MetaRow[] = [
     { label: t('meta.contentType'), value: getContentTypeLabel(item, t) },
     { label: t('meta.byteSize'), value: formatBytes(item.byteSize) },
-    { label: t('meta.timesCopied'), value: String(item.copyCount) },
     { label: t('meta.firstCopied'), value: formatDateTime(item.firstCopiedAt, locale) },
     { label: t('meta.lastCopied'), value: formatDateTime(item.lastCopiedAt, locale) },
   ]

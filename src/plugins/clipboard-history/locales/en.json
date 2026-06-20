@@ -64,7 +64,6 @@
   "meta.dimensions": "Dimensions",
   "meta.sourceApp": "Source app",
   "meta.files": "Files",
-  "meta.timesCopied": "Times copied",
   "meta.firstCopied": "First copied",
   "meta.lastCopied": "Last copied",
   "message.copied": "Copied to clipboard",
