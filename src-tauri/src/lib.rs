@@ -20,6 +20,7 @@ const LAUNCHER_COMPACT_WIDTH: f64 = 660.0;
 const LAUNCHER_COMPACT_HEIGHT: f64 = 160.0;
 static PREVIOUS_FOREGROUND_PROCESS_ID: OnceLock<Mutex<Option<u32>>> = OnceLock::new();
 static INSTALLED_APP_TARGETS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+static PLUGIN_KV_DB: OnceLock<Result<Mutex<Connection>, String>> = OnceLock::new();
 const MAX_APP_ICON_CACHE_WARM_COUNT: usize = 20;
 
 #[tauri::command]
@@ -1557,26 +1558,33 @@ fn plugin_kv_db_path() -> Result<PathBuf, String> {
     Ok(dir.join("plugin-storage.sqlite"))
 }
 
-fn open_plugin_kv_db() -> Result<Connection, String> {
+fn init_plugin_kv_db() -> Result<Mutex<Connection>, String> {
     let connection = Connection::open(plugin_kv_db_path()?).map_err(|e| e.to_string())?;
     connection
         .execute_batch(
             r#"
-            CREATE TABLE IF NOT EXISTS plugin_kv (
-              source TEXT NOT NULL,
-              plugin_id TEXT NOT NULL,
-              key TEXT NOT NULL,
-              value_json TEXT NOT NULL,
-              byte_size INTEGER NOT NULL,
-              updated_at INTEGER NOT NULL,
-              PRIMARY KEY (source, plugin_id, key)
-            );
-            CREATE INDEX IF NOT EXISTS idx_plugin_kv_namespace_updated
-              ON plugin_kv (source, plugin_id, updated_at);
-            "#,
+                CREATE TABLE IF NOT EXISTS plugin_kv (
+                  source TEXT NOT NULL,
+                  plugin_id TEXT NOT NULL,
+                  key TEXT NOT NULL,
+                  value_json TEXT NOT NULL,
+                  byte_size INTEGER NOT NULL,
+                  updated_at INTEGER NOT NULL,
+                  PRIMARY KEY (source, plugin_id, key)
+                );
+                CREATE INDEX IF NOT EXISTS idx_plugin_kv_namespace_updated
+                  ON plugin_kv (source, plugin_id, updated_at);
+                "#,
         )
         .map_err(|e| e.to_string())?;
-    Ok(connection)
+    Ok(Mutex::new(connection))
+}
+
+fn get_plugin_kv_db() -> Result<&'static Mutex<Connection>, String> {
+    PLUGIN_KV_DB
+        .get_or_init(init_plugin_kv_db)
+        .as_ref()
+        .map_err(|e| e.clone())
 }
 
 fn validate_plugin_kv_namespace(source: &str, plugin_id: &str) -> Result<(), String> {
@@ -1654,15 +1662,14 @@ fn plugin_blob_paths(
 fn plugin_kv_get(source: String, plugin_id: String, key: String) -> Result<Option<String>, String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     validate_plugin_kv_key(&key)?;
-    let connection = open_plugin_kv_db()?;
-    connection
-        .query_row(
-            "SELECT value_json FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 AND key = ?3",
-            params![source, plugin_id, key],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()
-        .map_err(|e| e.to_string())
+    let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
+    db.query_row(
+        "SELECT value_json FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 AND key = ?3",
+        params![source, plugin_id, key],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1677,9 +1684,8 @@ fn plugin_kv_set(
     let byte_size =
         i64::try_from(value_json.len()).map_err(|_| "Plugin KV value is too large".to_string())?;
     let updated_at = current_millis_i64()?;
-    let connection = open_plugin_kv_db()?;
-    connection
-        .execute(
+    let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
+    db.execute(
             r#"
             INSERT INTO plugin_kv (source, plugin_id, key, value_json, byte_size, updated_at)
             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
@@ -1698,9 +1704,8 @@ fn plugin_kv_set(
 fn plugin_kv_delete(source: String, plugin_id: String, key: String) -> Result<(), String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     validate_plugin_kv_key(&key)?;
-    let connection = open_plugin_kv_db()?;
-    connection
-        .execute(
+    let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
+    db.execute(
             "DELETE FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 AND key = ?3",
             params![source, plugin_id, key],
         )
@@ -1720,7 +1725,7 @@ fn plugin_kv_list(
             return Err("Plugin KV prefix must be plain text".to_string());
         }
     }
-    let connection = open_plugin_kv_db()?;
+    let connection = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
     let mut statement = connection
         .prepare(
             "SELECT key, updated_at FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 ORDER BY updated_at DESC, key ASC",
@@ -1752,8 +1757,8 @@ fn plugin_kv_list(
 #[tauri::command]
 fn plugin_kv_usage(source: String, plugin_id: String) -> Result<PluginKvUsage, String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
-    let connection = open_plugin_kv_db()?;
-    let (bytes, item_count): (i64, i64) = connection
+    let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
+    let (bytes, item_count): (i64, i64) = db
         .query_row(
             "SELECT COALESCE(SUM(byte_size), 0), COUNT(*) FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2",
             params![source, plugin_id],
@@ -1774,7 +1779,7 @@ fn plugin_kv_prune(
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     validate_plugin_kv_prune_policy(max_items, max_bytes, max_age_days)?;
 
-    let mut connection = open_plugin_kv_db()?;
+    let mut connection = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
     let transaction = connection.transaction().map_err(|e| e.to_string())?;
     let mut removed_bytes = 0;
     let mut removed_items = 0;
@@ -1863,9 +1868,8 @@ fn plugin_kv_prune(
 #[tauri::command]
 fn plugin_kv_clear(source: String, plugin_id: String) -> Result<(), String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
-    let connection = open_plugin_kv_db()?;
-    connection
-        .execute(
+    let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
+    db.execute(
             "DELETE FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2",
             params![source, plugin_id],
         )
@@ -3124,7 +3128,8 @@ HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\App Paths\Example.e
                 r#""old""#.to_string(),
             )
             .expect("old plugin KV fixture should be written");
-            let connection = open_plugin_kv_db().expect("plugin KV DB should open");
+            let connection = get_plugin_kv_db().expect("plugin KV DB should open");
+            let connection = connection.lock().expect("plugin KV DB lock should not be poisoned");
             connection
                 .execute(
                     "UPDATE plugin_kv SET updated_at = 1 WHERE source = ?1 AND plugin_id = ?2 AND key = ?3",
