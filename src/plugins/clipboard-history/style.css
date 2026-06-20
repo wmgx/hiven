@@ -1,4 +1,6 @@
 .clipboard-history-surface {
+  --clipboard-history-list-width: 350px;
+
   height: 100%;
   min-height: 0;
   display: flex;
@@ -77,7 +79,7 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 262px minmax(0, 1fr);
+  grid-template-columns: var(--clipboard-history-list-width) minmax(0, 1fr);
 }
 
 .clipboard-history-main::after {
@@ -85,7 +87,7 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 262px;
+  left: var(--clipboard-history-list-width);
   z-index: 3;
   width: 1px;
   pointer-events: none;
@@ -285,9 +287,10 @@
 
 .clipboard-history-preview-content {
   min-height: 0;
+  max-height: 50%;
   flex: 0 0 auto;
-  overflow: visible;
-  padding: 16px 18px 0;
+  overflow: auto;
+  padding: 16px 18px;
 }
 
 .clipboard-history-section-label {
@@ -301,8 +304,7 @@
 
 .clipboard-history-preview-text {
   margin: 0;
-  max-height: 150px;
-  overflow: auto;
+  overflow: visible;
   padding: 13px 15px;
   border: 1px solid var(--border, var(--hiven-color-border));
   border-radius: var(--radius, 10px);

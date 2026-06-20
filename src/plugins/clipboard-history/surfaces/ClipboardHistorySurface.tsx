@@ -338,7 +338,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
             </div>
           </div>
 
-          <SurfacePreview className="clipboard-history-preview">
+          <SurfacePreview className="clipboard-history-preview" data-launcher-scrollable>
             {!selectedItem ? (
               <SurfaceEmptyState>
                 {t('preview.empty')}
