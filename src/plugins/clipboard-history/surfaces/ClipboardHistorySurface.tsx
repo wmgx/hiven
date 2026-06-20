@@ -9,6 +9,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef, memo, type KeyboardEvent } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import {
   IconButton,
@@ -27,7 +28,7 @@ import type { ClipboardHistorySettings } from '../settings/model'
 import type { ClipboardHistoryItem } from '../storage/clipboardHistoryTypes'
 import { createClipboardHistoryRepository } from '../storage/clipboardHistoryRepository'
 
-type FilterKind = 'all' | 'frequent' | 'text' | 'image' | 'files'
+type FilterKind = 'all' | 'text' | 'image' | 'files'
 type SurfaceStorage = PluginSurfaceProps<ClipboardHistorySettings>['host']['storage']
 type ImageHistoryItem = Extract<ClipboardHistoryItem, { kind: 'image' }>
 
@@ -89,11 +90,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
   const filteredItems = useMemo(() => {
     let result = items
-    if (filter === 'frequent') {
-      result = [...result]
-        .filter((item) => item.copyCount > 1)
-        .sort((a, b) => b.copyCount - a.copyCount)
-    } else if (filter !== 'all') {
+    if (filter !== 'all') {
       result = result.filter((item) => item.kind === filter)
     }
     if (query.trim()) {
@@ -136,6 +133,30 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [selectedId, repository])
 
   const groupedItems = useMemo(() => groupItemsByDay(filteredItems, locale, t), [filteredItems, locale, t])
+
+  type VirtualRow =
+    | { type: 'group-header'; label: string }
+    | { type: 'item'; item: ClipboardHistoryItem }
+
+  const flatRows = useMemo<VirtualRow[]>(() => {
+    const rows: VirtualRow[] = []
+    for (const group of groupedItems) {
+      rows.push({ type: 'group-header', label: group.label })
+      for (const item of group.items) {
+        rows.push({ type: 'item', item })
+      }
+    }
+    return rows
+  }, [groupedItems])
+
+  const listRef = useRef<HTMLDivElement>(null)
+
+  const virtualizer = useVirtualizer({
+    count: flatRows.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: (index) => flatRows[index].type === 'group-header' ? 28 : 44,
+    overscan: 8,
+  })
 
   const handlePaste = useCallback(async (item: ClipboardHistoryItem) => {
     try {
@@ -199,14 +220,24 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       e.preventDefault()
       isKeyboardNavRef.current = true
       const idx = filteredItems.findIndex((i) => i.id === selectedId)
-      if (idx < filteredItems.length - 1) setSelectedId(filteredItems[idx + 1].id)
+      if (idx < filteredItems.length - 1) {
+        const nextId = filteredItems[idx + 1].id
+        setSelectedId(nextId)
+        const flatIndex = flatRows.findIndex((r) => r.type === 'item' && r.item.id === nextId)
+        if (flatIndex >= 0) virtualizer.scrollToIndex(flatIndex, { align: 'auto' })
+      }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
       isKeyboardNavRef.current = true
       const idx = filteredItems.findIndex((i) => i.id === selectedId)
-      if (idx > 0) setSelectedId(filteredItems[idx - 1].id)
+      if (idx > 0) {
+        const prevId = filteredItems[idx - 1].id
+        setSelectedId(prevId)
+        const flatIndex = flatRows.findIndex((r) => r.type === 'item' && r.item.id === prevId)
+        if (flatIndex >= 0) virtualizer.scrollToIndex(flatIndex, { align: 'auto' })
+      }
     }
-  }, [selectedItem, selectedFullItem, selectedId, filteredItems, handlePaste, handleDelete, host, t, imeKeyDown])
+  }, [selectedItem, selectedFullItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleDelete, host, t, imeKeyDown])
 
   const renderContent = () => {
     if (loading) {
@@ -241,43 +272,73 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                 aria-label={t('filter.label')}
                 options={[
                   { value: 'all', label: t('filter.all') },
-                  { value: 'frequent', label: t('filter.frequent') },
                   { value: 'text', label: t('filter.text') },
                   { value: 'image', label: t('filter.image') },
                   { value: 'files', label: t('filter.files') },
                 ]}
               />
             </div>
-            <SurfaceList className="clipboard-history-list" aria-label={t('surface.main.title')} data-launcher-scrollable>
-              {filteredItems.length === 0 ? (
-                <SurfaceEmptyState>
-                  {t('state.empty')}
-                </SurfaceEmptyState>
-              ) : (
-                groupedItems.map((group) => (
-                  <div key={group.label} className="clipboard-history-group">
-                    <div className="clipboard-history-group-title">{group.label}</div>
-                    {group.items.map((item) => (
-                      <ClipboardHistoryItemRow
-                        key={item.id}
-                        item={item}
-                        selected={item.id === selectedId}
-                        locale={locale}
-                        t={t}
-                        storage={host.storage}
-                        onSelect={setSelectedId}
-                        onHover={handleItemHover}
-                        onPaste={handlePaste}
-                        onDelete={handleDelete}
-                      />
-                    ))}
+            <div ref={listRef} className="clipboard-history-list" data-launcher-scrollable style={{ overflow: 'auto', flex: 1 }}>
+              <SurfaceList aria-label={t('surface.main.title')}>
+                {filteredItems.length === 0 ? (
+                  <SurfaceEmptyState>
+                    {t('state.empty')}
+                  </SurfaceEmptyState>
+                ) : (
+                  <div style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
+                    {virtualizer.getVirtualItems().map((virtualRow) => {
+                      const row = flatRows[virtualRow.index]
+                      if (row.type === 'group-header') {
+                        return (
+                          <div
+                            key={`group:${row.label}`}
+                            className="clipboard-history-group-title"
+                            style={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              width: '100%',
+                              height: `${virtualRow.size}px`,
+                              transform: `translateY(${virtualRow.start}px)`,
+                            }}
+                          >
+                            {row.label}
+                          </div>
+                        )
+                      }
+                      return (
+                        <div
+                          key={row.item.id}
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            height: `${virtualRow.size}px`,
+                            transform: `translateY(${virtualRow.start}px)`,
+                          }}
+                        >
+                          <ClipboardHistoryItemRow
+                            item={row.item}
+                            selected={row.item.id === selectedId}
+                            locale={locale}
+                            t={t}
+                            storage={host.storage}
+                            onSelect={setSelectedId}
+                            onHover={handleItemHover}
+                            onPaste={handlePaste}
+                            onDelete={handleDelete}
+                          />
+                        </div>
+                      )
+                    })}
                   </div>
-                ))
-              )}
-            </SurfaceList>
+                )}
+              </SurfaceList>
+            </div>
           </div>
 
-          <SurfacePreview className="clipboard-history-preview" data-launcher-scrollable>
+          <SurfacePreview className="clipboard-history-preview">
             {!selectedItem ? (
               <SurfaceEmptyState>
                 {t('preview.empty')}
@@ -285,11 +346,9 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
             ) : (
               <>
                 <div className="clipboard-history-preview-content" data-launcher-scrollable>
-                  <div className="clipboard-history-section-label">{t('preview.label')}</div>
                   {renderPreview(selectedFullItem ?? selectedItem, t, host.storage)}
                 </div>
                 <div className="clipboard-history-meta">
-                  <div className="clipboard-history-section-label">{t('meta.label')}</div>
                   {getMetaRows(selectedFullItem ?? selectedItem, locale, t).map((row) => (
                     <div key={row.label} className="clipboard-history-meta-row">
                       <span>{row.label}</span>
@@ -303,14 +362,9 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         </div>
 
         <SurfaceFooterHints className="clipboard-history-footer">
-          <span className="clipboard-history-footer-brand">
-            <span className="clipboard-history-footer-logo">H</span>
-            {t('surface.main.title')}
-          </span>
-          <span className="clipboard-history-footer-spacer" />
-          <span className="clipboard-history-footer-group is-primary"><kbd>↵</kbd>{t('hint.paste')}</span>
-          <span className="clipboard-history-footer-group"><kbd>⌘C</kbd>{t('hint.copy')}</span>
-          <span className="clipboard-history-footer-group"><kbd>⌫</kbd>{t('hint.delete')}</span>
+          <span>↵ {t('hint.paste')}</span>
+          <span>⌘C {t('hint.copy')}</span>
+          <span>⌫ {t('hint.delete')}</span>
         </SurfaceFooterHints>
       </>
     )
@@ -384,17 +438,6 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   onDelete: (id: string) => Promise<void>
 }) {
   const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!selected) return
-    const el = ref.current
-    if (el) {
-      // 使用 rAF 推迟滚动，避免选择变更时的布局抖动和卡顿感
-      requestAnimationFrame(() => {
-        el.scrollIntoView({ block: 'nearest' })
-      })
-    }
-  }, [selected])
 
   return (
     <div
@@ -507,7 +550,7 @@ function renderPreview(item: ClipboardHistoryItem, t: (key: string) => string, s
     // Show preview text while full item is loading
     const displayText = item.text || item.preview
     return (
-      <pre className="clipboard-history-preview-text" data-launcher-scrollable>
+      <pre className="clipboard-history-preview-text">
         {displayText}
       </pre>
     )
@@ -555,6 +598,7 @@ function getMetaRows(item: ClipboardHistoryItem, locale: string, t: (key: string
   const rows: MetaRow[] = [
     { label: t('meta.contentType'), value: getContentTypeLabel(item, t) },
     { label: t('meta.byteSize'), value: formatBytes(item.byteSize) },
+    { label: t('meta.timesCopied'), value: String(item.copyCount) },
     { label: t('meta.firstCopied'), value: formatDateTime(item.firstCopiedAt, locale) },
     { label: t('meta.lastCopied'), value: formatDateTime(item.lastCopiedAt, locale) },
   ]
