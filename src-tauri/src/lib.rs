@@ -4,11 +4,14 @@ use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::fs;
 use std::io::{Cursor, Read};
+#[cfg(target_os = "macos")]
+use std::os::raw::{c_char, c_int, c_void};
 use std::path::{Component, Path, PathBuf};
+use std::process::Command;
 use std::sync::{Mutex, OnceLock};
-use std::time::{SystemTime, UNIX_EPOCH};
 #[cfg(target_os = "macos")]
 use std::time::Duration;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
 use tauri::Emitter;
 use tauri::LogicalSize;
@@ -22,6 +25,136 @@ static PREVIOUS_FOREGROUND_PROCESS_ID: OnceLock<Mutex<Option<u32>>> = OnceLock::
 static INSTALLED_APP_TARGETS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 static PLUGIN_KV_DB: OnceLock<Result<Mutex<Connection>, String>> = OnceLock::new();
 const MAX_APP_ICON_CACHE_WARM_COUNT: usize = 20;
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum SystemPowerAction {
+    Restart,
+    Shutdown,
+    LockScreen,
+}
+
+fn spawn_system_command(program: &str, args: &[&str]) -> Result<(), String> {
+    Command::new(program)
+        .args(args)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "macos")]
+unsafe extern "C" {
+    fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void;
+    fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
+    fn dlclose(handle: *mut c_void) -> c_int;
+}
+
+#[cfg(target_os = "macos")]
+fn macos_lock_screen_immediate() -> Result<(), String> {
+    type SacLockScreenImmediate = unsafe extern "C" fn();
+    const RTLD_LAZY: c_int = 0x1;
+
+    let path = CString::new("/System/Library/PrivateFrameworks/login.framework/login")
+        .map_err(|e| e.to_string())?;
+    let symbol = CString::new("SACLockScreenImmediate").map_err(|e| e.to_string())?;
+    unsafe {
+        let handle = dlopen(path.as_ptr(), RTLD_LAZY);
+        if handle.is_null() {
+            return Err("login.framework is not available".to_string());
+        }
+        let function = dlsym(handle, symbol.as_ptr());
+        if function.is_null() {
+            let _ = dlclose(handle);
+            return Err("SACLockScreenImmediate is not available".to_string());
+        }
+        let lock_screen: SacLockScreenImmediate = std::mem::transmute(function);
+        lock_screen();
+        let _ = dlclose(handle);
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn macos_send_lock_screen_shortcut() -> Result<(), String> {
+    use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
+    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+
+    if !ax_is_trusted(false) {
+        return Err("Accessibility permission not granted for Lock Screen shortcut".into());
+    }
+
+    const KEY_Q: u16 = 12;
+    let src = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
+        .map_err(|_| "Failed to create event source")?;
+    let dn = CGEvent::new_keyboard_event(src.clone(), KEY_Q, true)
+        .map_err(|_| "Failed to create key down event")?;
+    let up = CGEvent::new_keyboard_event(src, KEY_Q, false)
+        .map_err(|_| "Failed to create key up event")?;
+    let flags = CGEventFlags::CGEventFlagCommand | CGEventFlags::CGEventFlagControl;
+    dn.set_flags(flags);
+    up.set_flags(flags);
+    dn.post(CGEventTapLocation::HID);
+    up.post(CGEventTapLocation::HID);
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn macos_lock_screen() -> Result<(), String> {
+    if macos_lock_screen_immediate().is_ok() {
+        return Ok(());
+    }
+
+    for path in [
+        "/System/Library/CoreServices/Menu Extras/User.menu/Contents/Resources/CGSession",
+        "/System/Library/CoreServices/CGSession",
+    ] {
+        if Path::new(path).exists() && spawn_system_command(path, &["-suspend"]).is_ok() {
+            return Ok(());
+        }
+    }
+    macos_send_lock_screen_shortcut()
+}
+
+#[cfg(target_os = "macos")]
+fn perform_platform_system_power_action(action: SystemPowerAction) -> Result<(), String> {
+    match action {
+        SystemPowerAction::Restart => spawn_system_command(
+            "osascript",
+            &["-e", r#"tell application "System Events" to restart"#],
+        ),
+        SystemPowerAction::Shutdown => spawn_system_command(
+            "osascript",
+            &["-e", r#"tell application "System Events" to shut down"#],
+        ),
+        SystemPowerAction::LockScreen => macos_lock_screen(),
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn perform_platform_system_power_action(action: SystemPowerAction) -> Result<(), String> {
+    match action {
+        SystemPowerAction::Restart => spawn_system_command("shutdown", &["/r", "/t", "0"]),
+        SystemPowerAction::Shutdown => spawn_system_command("shutdown", &["/s", "/t", "0"]),
+        SystemPowerAction::LockScreen => {
+            spawn_system_command("rundll32.exe", &["user32.dll,LockWorkStation"])
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn perform_platform_system_power_action(action: SystemPowerAction) -> Result<(), String> {
+    match action {
+        SystemPowerAction::Restart => spawn_system_command("systemctl", &["reboot"]),
+        SystemPowerAction::Shutdown => spawn_system_command("systemctl", &["poweroff"]),
+        SystemPowerAction::LockScreen => spawn_system_command("loginctl", &["lock-session"])
+            .or_else(|_| spawn_system_command("xdg-screensaver", &["lock"])),
+    }
+}
+
+#[tauri::command]
+fn perform_system_power_action(action: SystemPowerAction) -> Result<(), String> {
+    perform_platform_system_power_action(action)
+}
 
 #[tauri::command]
 fn show_and_focus_window(app: tauri::AppHandle) {
@@ -2733,6 +2866,7 @@ pub fn run() {
             read_installed_app_icon_url,
             cache_installed_app_icons,
             launch_installed_app,
+            perform_system_power_action,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -35,6 +35,7 @@
     "test:plugin-goal-suite": "node scripts/test-plugin-goal-suite.mjs",
     "test:command-palette-page-policy": "node scripts/test-command-palette-page-policy.mjs",
     "test:command-palette-system-page-shortcuts": "node scripts/test-command-palette-system-page-shortcuts.mjs",
+    "test:global-launcher-system-power-actions": "node scripts/test-global-launcher-system-power-actions.mjs",
     "test:command-palette-extension-settings": "node scripts/test-command-palette-extension-settings.mjs",
     "test:plugin-settings-dialog-keyboard": "node scripts/test-plugin-settings-dialog-keyboard.mjs",
     "test:plugin-settings-schema": "node scripts/test-plugin-settings-schema.mjs",

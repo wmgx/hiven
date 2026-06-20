@@ -1,6 +1,8 @@
 import { useWorkspaceStore } from '../workspaceStore'
 import type { LauncherItem, LauncherParamOption } from './types'
 
+type SystemPowerAction = 'restart' | 'shutdown' | 'lock-screen'
+
 const LANGUAGE_OPTIONS: LauncherParamOption[] = [
   { label: 'Auto Detect', value: 'auto', labelI18n: { zh: '自动检测' } },
   { label: 'Plain Text', value: 'plaintext', labelI18n: { zh: '纯文本' } },
@@ -47,6 +49,70 @@ function setActivePaneLanguage(requested: unknown): void {
   const normalized = EDITOR_LANGUAGE_VALUES.has(language) ? language : 'plaintext'
   state.updatePaneLanguage(paneId, normalized)
   useWorkspaceStore.getState().updatePaneLanguageSource(paneId, 'manual')
+}
+
+async function performSystemPowerAction(action: SystemPowerAction): Promise<{ ok: boolean; message?: string }> {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    await invoke('perform_system_power_action', { action })
+    return { ok: true }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return { ok: false, message }
+  }
+}
+
+export function getHostSystemPowerItems(): LauncherItem[] {
+  return [
+    {
+      systemKey: 'host:system:restart',
+      kind: 'host',
+      display: {
+        title: 'Restart',
+        titleI18n: { zh: '重启' },
+        subtitle: 'Restart this computer',
+        subtitleI18n: { zh: '重启这台电脑' },
+        icon: 'RotateCcw',
+        aliases: ['restart', 'reboot', 'system restart', '重启', '重新启动'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['global-launcher'],
+      pinnable: false,
+      execute: async () => performSystemPowerAction('restart'),
+    },
+    {
+      systemKey: 'host:system:shutdown',
+      kind: 'host',
+      display: {
+        title: 'Shut Down',
+        titleI18n: { zh: '关机' },
+        subtitle: 'Shut down this computer',
+        subtitleI18n: { zh: '关闭这台电脑' },
+        icon: 'Power',
+        aliases: ['shutdown', 'shut down', 'power off', 'system shutdown', '关机', '关闭电脑'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['global-launcher'],
+      pinnable: false,
+      execute: async () => performSystemPowerAction('shutdown'),
+    },
+    {
+      systemKey: 'host:system:lock-screen',
+      kind: 'host',
+      display: {
+        title: 'Lock Screen',
+        titleI18n: { zh: '锁屏' },
+        subtitle: 'Lock the current session',
+        subtitleI18n: { zh: '锁定当前会话' },
+        icon: 'Lock',
+        aliases: ['lock', 'lock screen', 'screen lock', '锁屏', '锁定'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['global-launcher'],
+      pinnable: false,
+      execute: async () => performSystemPowerAction('lock-screen'),
+    },
+  ]
 }
 
 export function getHostPaneControlItems(): LauncherItem[] {
