@@ -261,6 +261,8 @@ export type PluginSettingsFieldBase<TSettings = unknown> = {
   labelI18n?: Partial<Record<Locale, string>>
   description?: string
   descriptionI18n?: Partial<Record<Locale, string>>
+  icon?: string
+  requires?: PluginPermission[]
   disabled?: boolean
 }
 
@@ -320,6 +322,7 @@ export type PluginSettingsObjectListField<TSettings = unknown> = PluginSettingsF
   kind: 'object-list'
   itemLabel?: string
   itemLabelI18n?: Partial<Record<Locale, string>>
+  itemTitleKey?: string
   addLabel?: string
   addLabelI18n?: Partial<Record<Locale, string>>
   emptyText?: string

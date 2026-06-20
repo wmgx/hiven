@@ -42,6 +42,7 @@ const definition = webOpen.default
 assert.ok(definition.launcher.dynamicItems, 'web-open should provide runtime dynamic launcher items')
 
 const settings = {
+  enabled: true,
   entries: [
     ...model.DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries,
     {
@@ -64,7 +65,7 @@ assert.equal(items[0].behavior.type, 'collect-input')
 assert.equal(items[0].behavior.input.placeholder, 'Issue id')
 
 const defaultMatches = definition.launcher.dynamicItems({
-  query: 'baidu',
+  query: 'google',
   locale: 'en',
   settings,
 })
@@ -92,12 +93,27 @@ await items[0].execute({
     insertText: async () => {},
     copyText: async () => {},
     openUrl: async (url) => { openedUrl = url },
-    showMainPanel: async () => {},
-    dispatchEffects: () => ({ applied: [], errors: [] }),
     showMessage: () => {},
+    showMainPanel: async () => {},
+    showPluginsPage: async () => {},
+    showSettingsPage: async () => {},
+    createPane: () => 'pane-new',
+    dispatchEffects: () => ({ applied: [], errors: [] }),
+    apps: {
+      discoverApps: async () => [],
+      cacheAppIcons: async () => 0,
+      launchApp: async () => {},
+    },
   },
   t: (key) => key,
 })
 assert.equal(openedUrl, 'https://github.com/acme/project/issues/123', 'dynamic item should open the runtime settings URL')
+
+const disabledItems = definition.launcher.dynamicItems({
+  query: 'gh',
+  locale: 'en',
+  settings: { ...settings, enabled: false },
+})
+assert.equal(disabledItems.length, 0, 'disabled web-open settings should suppress dynamic quick-open items')
 
 console.log('web-open dynamic launcher item checks passed')

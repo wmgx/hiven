@@ -318,6 +318,7 @@ function SettingsDialogBody({
               value={value}
               updateValue={updateValue}
               onOpenModal={(field) => setSettingsModalTarget(resolvePluginSettingsModal(contribution, field))}
+              permissions={permissions}
             />
           ) : SettingsComponent ? (
             <SettingsComponent {...settingsBodyProps} />

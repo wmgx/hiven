@@ -1,6 +1,7 @@
 import { pluginRegistry } from './pluginRegistry'
 import { registerPluginMessages, localizeContributions, type PluginMessages } from '../i18n/pluginI18nRegistry'
 import type { PluginDefinition, PluginManifest } from './pluginTypes'
+import type { PluginPackageSummary } from './pluginRuntime'
 
 type BundledPluginModule = {
   default?: PluginDefinition
@@ -75,6 +76,18 @@ function readBundledPluginPackages(): BundledPluginPackage[] {
 }
 
 let registered = false
+
+export function listBundledPluginPackageSummaries(): PluginPackageSummary[] {
+  return readBundledPluginPackages().map(({ dir, manifest }) => ({
+    pluginId: manifest.pluginId,
+    displayName: manifest.displayName ?? manifest.pluginId,
+    displayNameI18n: manifest.displayNameI18n,
+    version: manifest.version ?? '0.0.0',
+    entry: manifest.entry ?? 'index.tsx',
+    capabilities: manifest.capabilities ?? [],
+    folderPath: `src/plugins/${dir}`,
+  }))
+}
 
 export function registerBundledPluginPackages() {
   if (registered) return

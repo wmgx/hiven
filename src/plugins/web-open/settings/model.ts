@@ -9,17 +9,37 @@ export type WebQuickOpenEntry = {
 }
 
 export type WebQuickOpenSettings = {
+  enabled: boolean
   entries: WebQuickOpenEntry[]
 }
 
 export const DEFAULT_WEB_QUICK_OPEN_SETTINGS: WebQuickOpenSettings = {
+  enabled: true,
   entries: [
     {
-      id: 'baidu',
-      title: '百度搜索',
-      aliases: ['bd', 'baidu'],
+      id: 'google',
+      title: 'Google 搜索',
+      aliases: ['g', 'google'],
       placeholder: '输入搜索关键词',
-      urlTemplate: 'https://www.baidu.com/s?wd={query}',
+      urlTemplate: 'https://www.google.com/search?q={query}',
+      encodeQuery: true,
+      emptyQueryBehavior: 'block',
+    },
+    {
+      id: 'github',
+      title: 'GitHub 仓库',
+      aliases: ['gh', 'github'],
+      placeholder: 'owner/repo 或关键词',
+      urlTemplate: 'https://github.com/search?q={query}',
+      encodeQuery: true,
+      emptyQueryBehavior: 'block',
+    },
+    {
+      id: 'mdn',
+      title: 'MDN 文档',
+      aliases: ['mdn'],
+      placeholder: '输入 Web API 或 CSS 关键词',
+      urlTemplate: 'https://developer.mozilla.org/search?q={query}',
       encodeQuery: true,
       emptyQueryBehavior: 'block',
     },

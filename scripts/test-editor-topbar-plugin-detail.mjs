@@ -25,6 +25,7 @@ const files = {
   schemaInline: existsSync(join(root, 'src/components/PluginSettingsInline.tsx'))
     ? read('src/components/PluginSettingsInline.tsx')
     : '',
+  scriptsI18n: read('src/i18n/locales/scripts.ts'),
   css: read('src/index.css'),
   settingsView: read('src/views/SettingsView.tsx'),
 }
@@ -67,6 +68,8 @@ assert.match(files.schemaInline, /settingsModalTarget/, 'PluginSettingsInline mu
 assert.match(files.scriptsView, /PluginSettingsInline/, 'ScriptsView must render inline schema settings on plugin details')
 assert.match(files.scriptsView, /plugin-settings-inline-detail/, 'ScriptsView must wrap inline schema settings in a detail section')
 assert.match(files.scriptsView, /plugin-master-detail/, 'ScriptsView must render plugin management as a master-detail surface')
+assert.match(files.scriptsView, /listBundledPluginPackageSummaries/, 'ScriptsView browser preview must list bundled plugins without Tauri directory APIs')
+assert.match(files.scriptsView, /if \(!isTauri\(\)\)[\s\S]{0,220}setBuiltinPlugins\(listBundledPluginPackageSummaries\(\)\)/, 'ScriptsView non-Tauri path must render real bundled plugin details for visual QA')
 assert.match(files.scriptsView, /className=["']phead["'][\s\S]{0,220}className=["']ptitle["'][\s\S]{0,220}className=["']pcount["']/, 'ScriptsView must render the plugin page title and total count header')
 assert.match(files.scriptsView, /className=["']ptools["']/, 'ScriptsView must use the design ptools header row')
 assert.doesNotMatch(files.scriptsView, /scripts-title|className=["']phead scripts-header["']|className=["']ptitle scripts-title["']/, 'ScriptsView must not render the old plugin page title/count header')
@@ -79,6 +82,12 @@ assert.match(files.scriptsView, /hasLegacySettings/, 'ScriptsView must keep lega
 assert.match(files.scriptsView, /pluginDetailDescription/, 'Plugin detail must resolve a runtime description for the selected plugin')
 assert.match(files.scriptsView, /className=["']d-desc plugin-detail-description["']/, 'Plugin detail must render the plugin description as a dedicated description block')
 assert.match(files.scriptsView, /surfaceShortcutHintForPlugin/, 'Plugin master list must show shortcut hints instead of generic status text')
+assert.match(files.scriptsView, /function capabilityLabel\(/, 'ScriptsView must map raw plugin capability ids through localized labels')
+assert.match(files.scriptsView, /\{capabilityLabel\(capability,\s*locale\)\}/, 'ScriptsView capability badges must render localized labels')
+assert.match(files.scriptsI18n, /['"]capability\.command['"]:\s*['"]Command['"]/, 'Scripts i18n must include the English command capability label')
+assert.match(files.scriptsI18n, /['"]capability\.instantSuggestion['"]:\s*['"]Instant suggestion['"]/, 'Scripts i18n must include the English instant suggestion capability label')
+assert.match(files.scriptsI18n, /['"]capability\.command['"]:\s*['"]命令['"]/, 'Scripts i18n must include the Chinese command capability label')
+assert.match(files.scriptsI18n, /['"]capability\.instantSuggestion['"]:\s*['"]即时建议['"]/, 'Scripts i18n must include the Chinese instant suggestion capability label')
 
 assert.match(files.css, /\.plugin-master-detail/, 'Plugin master-detail layout must have stable styling')
 assert.match(files.css, /\.plugin-detail-panel/, 'Plugin detail panel must have stable styling')
@@ -88,6 +97,13 @@ assert.match(files.css, /\.scripts-content\.body[\s\S]{0,120}overflow:\s*hidden/
 assert.match(files.css, /\.scripts-search-results[\s\S]{0,160}overflow:\s*hidden/, 'Plugin page results must constrain scrolling to inner panes')
 assert.match(files.css, /\.a-list[\s\S]{0,180}overflow-y:\s*auto/, 'Plugin master list must scroll internally')
 assert.match(files.css, /\.a-detail[\s\S]{0,180}overflow-y:\s*auto/, 'Plugin detail pane must scroll internally')
+assert.match(files.css, /\.splitwrap\.plugin-master-detail[\s\S]{0,120}flex-direction:\s*column/, 'Plugin master-detail must collapse to one column on narrow viewports')
+assert.match(files.css, /\.plugin-master-list\.a-list[\s\S]{0,180}width:\s*100%/, 'Plugin master list must use full width in the mobile master-detail layout')
+assert.match(files.css, /\.settings-page\.body[\s\S]{0,160}overflow:\s*hidden/, 'Settings page must keep scrolling inside its design scroller')
+assert.match(files.css, /\.body\s*\{[\s\S]{0,160}min-height:\s*0/, 'View bodies must be allowed to shrink so nested scroll panes can scroll')
+assert.match(files.css, /\.sscroll\s*\{[\s\S]{0,180}min-height:\s*0/, 'Settings page scroll surface must shrink inside the fixed app viewport')
+assert.match(files.css, /\.flux-spatial-shell\s+\*\s*\{[\s\S]{0,180}scrollbar-color:\s*var\(--scrollbar-thumb\)\s+var\(--scrollbar-track\)/, 'App scrollbars must use the hiven theme tokens')
+assert.match(files.css, /::-webkit-scrollbar-thumb\s*\{[\s\S]{0,220}background:\s*var\(--scrollbar-thumb\)/, 'WebKit scrollbar thumbs must use the hiven theme token')
 assert.match(files.css, /\.psearch[\s\S]{0,120}height:\s*34px/, 'Plugin search input shell must align with toolbar button height')
 assert.match(files.css, /\.btn\s*\{[\s\S]{0,120}height:\s*34px/, 'Plugin toolbar buttons must align with the search input height')
 

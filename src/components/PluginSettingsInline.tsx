@@ -160,6 +160,7 @@ function PluginSettingsInlineBody({
         value={value}
         updateValue={updateValue}
         onOpenModal={(field) => setSettingsModalTarget(resolvePluginSettingsModal(contribution, field))}
+        permissions={permissions}
       />
       {settingsModalTarget && SettingsModalComponent && (
         <div

@@ -39,6 +39,11 @@ function buildEntryLauncherItem(entry: WebQuickOpenSettings['entries'][number]):
       },
     },
     async execute(ctx) {
+      if (ctx.settings?.enabled === false) {
+        const message = ctx.locale === 'zh' ? '网页快开已关闭' : 'Web Quick Open is disabled'
+        ctx.api.showMessage(message, 'warning')
+        return { ok: false, message }
+      }
       const runtimeEntry = ctx.settings?.entries?.find((candidate) => candidate.id === entry.id) ?? entry
       const url = buildWebQuickOpenUrl(runtimeEntry.urlTemplate, ctx.input?.text ?? '', runtimeEntry.encodeQuery)
       await ctx.api.openUrl(url)
@@ -78,6 +83,7 @@ function isUnchangedDefaultEntry(entry: WebQuickOpenSettings['entries'][number])
 
 function buildDynamicLauncherItems(ctx: LauncherDynamicContext): LauncherItemContribution[] {
   const settings = ctx.settings as WebQuickOpenSettings | undefined
+  if (settings?.enabled === false) return []
   const entries = settings?.entries ?? DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries
   return entries
     .filter((entry) => !isUnchangedDefaultEntry(entry))
@@ -85,26 +91,68 @@ function buildDynamicLauncherItems(ctx: LauncherDynamicContext): LauncherItemCon
     .map((entry) => buildEntryLauncherItem(entry) as LauncherItemContribution)
 }
 
+function migrateWebQuickOpenSettings(stored: unknown): WebQuickOpenSettings {
+  const value = stored && typeof stored === 'object' && !Array.isArray(stored)
+    ? stored as Partial<WebQuickOpenSettings>
+    : {}
+  const entries = Array.isArray(value.entries) ? value.entries : DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries
+  return {
+    enabled: typeof value.enabled === 'boolean' ? value.enabled : DEFAULT_WEB_QUICK_OPEN_SETTINGS.enabled,
+    entries: entries.map((entry, index) => {
+      const source = entry && typeof entry === 'object' && !Array.isArray(entry)
+        ? entry as Partial<WebQuickOpenSettings['entries'][number]>
+        : {}
+      return {
+        id: String(source.id || `web-${index + 1}`),
+        title: String(source.title || ''),
+        aliases: Array.isArray(source.aliases) ? source.aliases.map(String) : [],
+        placeholder: String(source.placeholder || ''),
+        urlTemplate: String(source.urlTemplate || 'https://example.com/search?q={query}'),
+        encodeQuery: typeof source.encodeQuery === 'boolean' ? source.encodeQuery : true,
+        emptyQueryBehavior: source.emptyQueryBehavior === 'open' ? 'open' : 'block',
+      }
+    }),
+  }
+}
+
 export default definePlugin<WebQuickOpenSettings>({
   settings: {
     title: 'Web Quick Open',
     titleI18n: { zh: '网页快开' },
-    version: 1,
+    version: 2,
     defaultValue: DEFAULT_WEB_QUICK_OPEN_SETTINGS,
+    migrate: migrateWebQuickOpenSettings,
     schema: {
       sections: [
         {
+          id: 'general',
+          title: 'General',
+          titleI18n: { zh: '通用' },
+          fields: [
+            {
+              kind: 'switch',
+              key: 'enabled',
+              icon: 'Power',
+              label: 'Enable plugin',
+              labelI18n: { zh: '启用插件' },
+              description: 'When disabled, quick-open trigger words stop opening pages.',
+              descriptionI18n: { zh: '关闭后所有触发词不再打开网页。' },
+            },
+          ],
+        },
+        {
           id: 'entries',
           title: 'Rules',
-          titleI18n: { zh: '规则' },
+          titleI18n: { zh: '网址规则' },
           description: 'Configure quick-open rules that appear in the launcher.',
-          descriptionI18n: { zh: '配置会出现在启动器里的网页快开规则。' },
+          descriptionI18n: { zh: '每条规则拥有自己的触发词、地址模板和打开方式。' },
           fields: [
             {
               kind: 'object-list',
               key: 'entries',
               label: 'Quick-open rules',
               labelI18n: { zh: '网页快开规则' },
+              itemTitleKey: 'title',
               addLabel: 'Add rule',
               addLabelI18n: { zh: '添加规则' },
               itemLabel: 'Rule',
@@ -142,14 +190,6 @@ export default definePlugin<WebQuickOpenSettings>({
                 },
                 {
                   kind: 'text',
-                  key: 'placeholder',
-                  label: 'Launcher input hint',
-                  labelI18n: { zh: '启动器输入提示' },
-                  placeholder: 'Search keyword',
-                  placeholderI18n: { zh: '输入搜索关键词' },
-                },
-                {
-                  kind: 'textarea',
                   key: 'urlTemplate',
                   label: 'Address template',
                   labelI18n: { zh: '地址模板' },
@@ -157,7 +197,6 @@ export default definePlugin<WebQuickOpenSettings>({
                   descriptionI18n: { zh: '{query} 会被命令面板中输入的查询内容替换。' },
                   placeholder: 'https://www.google.com/search?q={query}',
                   placeholderI18n: { zh: 'https://www.google.com/search?q={query}' },
-                  rows: 2,
                   mono: true,
                 },
                 {

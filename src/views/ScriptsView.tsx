@@ -1,10 +1,34 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { AlertTriangle, Download, ExternalLink, FolderOpen, Globe, Keyboard, Loader2, Package, Power, RefreshCw, Search, Settings, Trash2 } from 'lucide-react'
+import {
+  AlertTriangle,
+  Clipboard,
+  Database,
+  Download,
+  ExternalLink,
+  FileText,
+  Folder,
+  FolderOpen,
+  Globe,
+  History,
+  Image,
+  Keyboard,
+  Loader2,
+  MousePointerClick,
+  Package,
+  Power,
+  RefreshCw,
+  Search,
+  Settings,
+  ShieldCheck,
+  ShieldHalf,
+  Trash2,
+} from 'lucide-react'
 import { t } from '../i18n'
 import type { Locale } from '../i18n'
 import { localized, useAppStore } from '../store'
 import { checkBuiltinPluginsUpdate, getConfigDir } from '../configInit'
+import { listBundledPluginPackageSummaries } from '../workspace/bundledPluginLoader'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../utils/imeKeyboard'
 import { usePluginStore } from '../workspace/pluginStore'
 import { usePluginSettingsStore } from '../workspace/pluginSettingsStore'
@@ -39,7 +63,7 @@ import {
   watchDevPlugin,
 } from '../workspace/pluginRuntime'
 import type { PluginPackageSummary } from '../workspace/pluginRuntime'
-import type { DevPlugin, InstalledPlugin } from '../workspace/pluginTypes'
+import type { DevPlugin, InstalledPlugin, PluginPermission, PluginUiSurfaceContribution } from '../workspace/pluginTypes'
 import { searchableFieldsMatch, type SearchableFields } from '../workspace/searchRanking'
 
 type TabId = 'builtin' | 'installed' | 'dev'
@@ -91,6 +115,70 @@ function surfaceShortcutStatusLabel(status: string, locale: 'zh' | 'en') {
   if (status === 'failed') return t(locale, 'scripts.surfaceShortcutFailed')
   if (status === 'disabled') return t(locale, 'scripts.surfaceShortcutDisabled')
   return t(locale, 'scripts.surfaceShortcutPending')
+}
+
+function capabilityLabel(capability: string, locale: 'zh' | 'en') {
+  if (capability === 'command') return t(locale, 'scripts.capability.command')
+  if (capability === 'instant-suggestion') return t(locale, 'scripts.capability.instantSuggestion')
+  return capability
+}
+
+function formatPluginShortcutLabel(accelerator: string) {
+  return accelerator
+    .replace(/\bCmdOrCtrl\b/g, '⌘')
+    .replace(/\bCommandOrControl\b/g, '⌘')
+    .replace(/\bCommand\b/g, '⌘')
+    .replace(/\bCmd\b/g, '⌘')
+    .replace(/\bCtrl\b/g, 'Ctrl')
+    .replace(/\bShift\b/g, '⇧')
+    .replace(/\bAlt\b/g, '⌥')
+    .replace(/\bOption\b/g, '⌥')
+    .replace(/\+/g, '')
+}
+
+function permissionImpactLabel(permission: PluginPermission, pluginId: string, locale: Locale) {
+  if (pluginId === 'clipboard-history') {
+    const zh: Partial<Record<PluginPermission, string>> = {
+      'clipboard.watch': '后台记录不会启动，文本、图片和文件记录都不可用。',
+      'clipboard.read': '无法读取当前剪贴板文本。',
+      'clipboard.write': '只能查看记录，不能把内容写回剪贴板。',
+      'clipboard.image': '图片记录和图片预览不可用。',
+      'clipboard.files': '文件路径记录不可用。',
+      'storage.private': '历史记录无法持久保存，重启后会丢失。',
+      'storage.blob': '图片和文件 Blob 无法保存。',
+      'accessibility.paste': '无法直接粘贴到前台应用，只能降级为复制。',
+      'globalShortcut.register': '全局快捷键无法注册。',
+    }
+    const en: Partial<Record<PluginPermission, string>> = {
+      'clipboard.watch': 'Background capture will not start, so text, images, and files are unavailable.',
+      'clipboard.read': 'The plugin cannot read the current clipboard text.',
+      'clipboard.write': 'Items can be viewed but not written back to the clipboard.',
+      'clipboard.image': 'Image capture and image preview are unavailable.',
+      'clipboard.files': 'File path history is unavailable.',
+      'storage.private': 'History cannot persist and will be lost after restart.',
+      'storage.blob': 'Image and file blobs cannot be stored.',
+      'accessibility.paste': 'Direct paste into the foreground app falls back to copy only.',
+      'globalShortcut.register': 'The global shortcut cannot be registered.',
+    }
+    const label = locale === 'zh' ? zh[permission] : en[permission]
+    if (label) return label
+  }
+  if (locale === 'zh') return `缺少 ${describePluginPermission(permission, locale)} 时，相关能力会保持关闭。`
+  return `Without ${describePluginPermission(permission, locale)}, related features stay disabled.`
+}
+
+function permissionSensitivityLabel(permission: PluginPermission, locale: Locale) {
+  if (permission === 'clipboard.watch' || permission === 'accessibility.paste') {
+    return locale === 'zh' ? '高敏感' : 'Sensitive'
+  }
+  return locale === 'zh' ? '本地权限' : 'Local'
+}
+
+function pluginDetailStatusKey(row: PluginDetailRow) {
+  if (row.status.includes('禁用') || row.status.toLowerCase().includes('disabled')) return 'is-disabled'
+  if (row.status.includes('阻塞') || row.status.toLowerCase().includes('blocked')) return 'is-blocked'
+  if (row.status.includes('错误') || row.status.toLowerCase().includes('error')) return 'is-error'
+  return 'is-loaded'
 }
 
 function packagePath(plugin: InstalledPlugin | DevPlugin) {
@@ -209,7 +297,11 @@ export function ScriptsView() {
   useEffect(() => {
     let cancelled = false
     async function loadDirectoryPlugins() {
-      if (!isTauri()) return
+      if (!isTauri()) {
+        setBuiltinPlugins(listBundledPluginPackageSummaries())
+        setInstalledPackages([])
+        return
+      }
       const configDir = await getConfigDir()
       if (!configDir || cancelled) return
       try {
@@ -459,7 +551,6 @@ export function ScriptsView() {
                 <PluginSettingsInline pluginId={plugin.pluginId} source="installed" locale={locale} />
               </div>
             )}
-            {renderSurfaceShortcuts(plugin.pluginId, 'installed')}
           </>
         }
         actions={
@@ -547,7 +638,6 @@ export function ScriptsView() {
                 <PluginSettingsInline pluginId={plugin.pluginId} source="dev" locale={locale} />
               </div>
             )}
-            {renderSurfaceShortcuts(plugin.pluginId, 'dev')}
           </>
         }
         actions={
@@ -617,7 +707,6 @@ export function ScriptsView() {
                 <PluginSettingsInline pluginId={plugin.pluginId} source="builtin" locale={locale} />
               </div>
             )}
-            {renderSurfaceShortcuts(plugin.pluginId, 'builtin')}
           </>
         }
         actions={
@@ -657,51 +746,160 @@ export function ScriptsView() {
     if (requested.length === 0) return null
     const snapshot = getPluginPermissionSnapshot(source, pluginId, requested)
     const missingPermissions = missingPluginPermissions(snapshot, requested)
-    const permissionLabels = requested.map((permission) => describePluginPermission(permission, locale)).join(', ')
-    const missingPermissionLabels = missingPermissions.map((permission) => describePluginPermission(permission, locale)).join(', ')
+    const grantedPermissions = requested.filter((permission) => snapshot[permission]?.granted)
+    const permissionLabels = grantedPermissions.map((permission) => describePluginPermission(permission, locale)).join(', ')
+    if (missingPermissions.length === 0) return renderGrantedPermissions(pluginId, requested, permissionLabels)
+    return renderPendingPermissions(pluginId, source, requested)
+  }
+
+  function renderPermissionIcon(permission: PluginPermission) {
+    if (permission === 'clipboard.image') return <Image size={15} />
+    if (permission === 'clipboard.files') return <Folder size={15} />
+    if (permission.startsWith('clipboard.')) return <Clipboard size={15} />
+    if (permission.startsWith('storage.')) return <Database size={15} />
+    if (permission === 'accessibility.paste') return <MousePointerClick size={15} />
+    if (permission === 'globalShortcut.register') return <Keyboard size={15} />
+    return <ShieldHalf size={15} />
+  }
+
+  function renderPendingPermissions(
+    pluginId: string,
+    source: PluginSettingsSource,
+    requested: readonly PluginPermission[],
+  ) {
+    const snapshot = getPluginPermissionSnapshot(source, pluginId, requested)
+    const missingPermissions = missingPluginPermissions(snapshot, requested)
+    if (missingPermissions.length === 0) return null
     return (
-      <div className={`plugin-permissions mt-2 ${missingPermissions.length > 0 ? 'is-missing' : ''}`}>
-        <div className="flex items-center gap-2 flex-wrap text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>
-          {missingPermissions.length > 0 ? (
-            <>
-              <span className="plugin-permissions-title">
-                <AlertTriangle size={12} />
-                {t(locale, 'scripts.permissionsBlockedTitle')}
-              </span>
-              <span className="plugin-permissions-detail">
-                {t(locale, 'scripts.permissionsBlockedDetail', { count: missingPermissions.length })}
-              </span>
-              <span className="truncate max-w-[420px]" title={missingPermissionLabels}>
-                {missingPermissionLabels}
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="script-badge">{t(locale, 'scripts.permissionsAllGranted')}</span>
-              <span className="truncate max-w-[420px]" title={permissionLabels}>
-                {permissionLabels}
-              </span>
-            </>
-          )}
-          {missingPermissions.length > 0 && (
-            <button
-              className="scripts-btn plugin-permissions-grant"
-              onClick={() => {
-                grantPluginPermissions(source, pluginId, missingPermissions)
-                runPluginStartupHooks()
-              }}
-            >
-              {t(locale, 'scripts.actionGrantPermissions')}
-            </button>
-          )}
+      <section className="plugin-permissions plugin-permissions-card is-missing">
+        <div className="plugin-permissions-card-head">
+          <div className="plugin-permissions-head-copy">
+            <span className="plugin-permissions-kicker">
+              <ShieldHalf size={14} />
+              {locale === 'zh' ? `${missingPermissions.length} 项权限待处理` : `${missingPermissions.length} permissions pending`}
+            </span>
+            <span className="plugin-permissions-detail">
+              {locale === 'zh' ? '授权后，设置项会自动解锁并恢复对应插件能力。' : 'Granting permissions unlocks the matching settings and plugin features.'}
+            </span>
+          </div>
+          <button
+            className="scripts-btn plugin-permissions-grant-all"
+            onClick={() => {
+              grantPluginPermissions(source, pluginId, missingPermissions)
+              runPluginStartupHooks()
+            }}
+          >
+            {locale === 'zh' ? '全部授权' : 'Grant all'}
+          </button>
         </div>
-      </div>
+        <div className="plugin-permission-list">
+          {missingPermissions.map((permission) => (
+            <div key={permission} className="plugin-permission-row">
+              <div className="plugin-permission-icon" aria-hidden="true">
+                {renderPermissionIcon(permission)}
+              </div>
+              <div className="plugin-permission-main">
+                <div className="plugin-permission-title-line">
+                  <span className="plugin-permission-code">{permission}</span>
+                  <span className="plugin-permission-tag">{permissionSensitivityLabel(permission, locale)}</span>
+                </div>
+                <div className="plugin-permission-meaning">
+                  {describePluginPermission(permission, locale)}
+                </div>
+                <div className="plugin-permission-impact">
+                  {permissionImpactLabel(permission, pluginId, locale)}
+                </div>
+              </div>
+              <button
+                className="scripts-btn plugin-permission-grant"
+                onClick={() => {
+                  grantPluginPermissions(source, pluginId, [permission])
+                  runPluginStartupHooks()
+                }}
+              >
+                {locale === 'zh' ? '授权' : 'Grant'}
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+    )
+  }
+
+  function renderGrantedPermissions(
+    pluginId: string,
+    requested: readonly PluginPermission[],
+    permissionLabels?: string,
+  ) {
+    if (requested.length === 0) return null
+    const title = locale === 'zh'
+      ? `已授权 ${requested.length} 项权限`
+      : `${requested.length} permissions granted`
+    const labels = permissionLabels || requested.map((permission) => describePluginPermission(permission, locale)).join(', ')
+    return (
+      <details className="plugin-permissions-granted">
+        <summary>
+          <ShieldCheck size={14} />
+          <span>{title}</span>
+          <span className="plugin-permissions-granted-summary">{labels}</span>
+        </summary>
+        <div className="plugin-permissions-granted-list">
+          {requested.map((permission) => (
+            <span key={`${pluginId}:${permission}`} className="script-badge">
+              {describePluginPermission(permission, locale)}
+            </span>
+          ))}
+        </div>
+      </details>
+    )
+  }
+
+  function primarySurfaceForPlugin(pluginId: string, source: PluginSettingsSource) {
+    const definition = pluginRegistry.getPluginDefinition(pluginId, source)
+    const surfaces = definition?.ui?.surfaces ?? []
+    return surfaces.find((surface) => surface.entry?.launcher !== false) ?? surfaces[0]
+  }
+
+  function shortcutBindableSurfaces(pluginId: string, source: PluginSettingsSource) {
+    const definition = pluginRegistry.getPluginDefinition(pluginId, source)
+    return definition?.ui?.surfaces?.filter((surface) => surface.entry?.shortcutBindable === true) ?? []
+  }
+
+  function surfaceActionLabel(pluginId: string, surface: PluginUiSurfaceContribution) {
+    if (pluginId === 'clipboard-history') return locale === 'zh' ? '查看历史' : 'View history'
+    return locale === 'zh'
+      ? `打开${localized(surface.title, surface.titleI18n, locale)}`
+      : `Open ${localized(surface.title, surface.titleI18n, locale)}`
+  }
+
+  function surfaceShortcutLabel(pluginId: string, source: PluginSettingsSource, surface: PluginUiSurfaceContribution) {
+    const shortcut = pluginSurfaceShortcuts[pluginSurfaceShortcutKey({ source, pluginId, surfaceId: surface.id })]
+    const accelerator = shortcut?.accelerator || ''
+    return accelerator ? formatPluginShortcutLabel(accelerator) : ''
+  }
+
+  function renderPrimarySurfaceAction(row: PluginDetailRow) {
+    const surface = primarySurfaceForPlugin(row.pluginId, row.settingsSource)
+    if (!surface) return null
+    const target = { source: row.settingsSource, pluginId: row.pluginId, surfaceId: surface.id }
+    const shortcut = surfaceShortcutLabel(row.pluginId, row.settingsSource, surface)
+    return (
+      <button
+        type="button"
+        className="plugin-primary-action"
+        onClick={() => { void requestOpenPluginSurfaceTool(target) }}
+      >
+        <span className="plugin-primary-action-main">
+          {row.pluginId === 'clipboard-history' ? <History size={15} /> : <ExternalLink size={15} />}
+          {surfaceActionLabel(row.pluginId, surface)}
+        </span>
+        {shortcut && <span className="plugin-primary-action-shortcut">{shortcut}</span>}
+      </button>
     )
   }
 
   function renderSurfaceShortcuts(pluginId: string, source: PluginSettingsSource) {
-    const definition = pluginRegistry.getPluginDefinition(pluginId, source)
-    const surfaces = definition?.ui?.surfaces?.filter((surface) => surface.entry?.shortcutBindable !== false) ?? []
+    const surfaces = shortcutBindableSurfaces(pluginId, source)
     if (surfaces.length === 0) return null
 
     return (
@@ -714,17 +912,21 @@ export function ScriptsView() {
           return (
             <div key={key} className="plugin-surface-shortcut-row">
               <div className="plugin-surface-shortcut-title">
-                <Keyboard size={12} />
-                <span>{localized(surface.title, surface.titleI18n, locale)}</span>
-                <span className="script-badge">{source}:{surface.id}</span>
+                <span className="plugin-surface-shortcut-icon"><Keyboard size={14} /></span>
+                <span className="plugin-surface-shortcut-copy">
+                  <span>{locale === 'zh' ? '快捷键' : 'Shortcut'}</span>
+                  <small>
+                    {localized(surface.title, surface.titleI18n, locale)}
+                    {surface.entry?.recommendedShortcut
+                      ? ` · ${locale === 'zh' ? '推荐 ' : 'Recommended '}${formatPluginShortcutLabel(surface.entry.recommendedShortcut)}`
+                      : ''}
+                  </small>
+                </span>
               </div>
               <div className="plugin-surface-shortcut-controls">
-                <button className="scripts-btn" onClick={() => { void requestOpenPluginSurfaceTool(target) }}>
-                  {t(locale, 'scripts.surfaceOpen')}
-                </button>
                 <ShortcutRecorder
                   value={shortcut ? { kind: 'accelerator', accelerator: shortcut.accelerator } : { kind: 'disabled' }}
-                  emptyLabel={surface.entry?.recommendedShortcut ?? t(locale, 'scripts.surfaceShortcutPending')}
+                  emptyLabel={t(locale, 'scripts.surfaceBindShortcut')}
                   status={status ? <span className="script-badge">{surfaceShortcutStatusLabel(status, locale)}</span> : undefined}
                   clearLabel={t(locale, 'scripts.surfaceClearShortcut')}
                   onRecord={(recorded) => {
@@ -772,7 +974,6 @@ export function ScriptsView() {
           >
             <FolderOpen size={13} />
           </IconButton>
-          <span className="script-badge">{t(locale, 'scripts.readOnly')}</span>
         </>
       )
     }
@@ -884,12 +1085,19 @@ export function ScriptsView() {
     const hasSchemaSettings = !!settingsContribution?.schema
     const hasLegacySettings = !!settingsContribution && !settingsContribution.schema
     const permissions = pluginRegistry.getPluginPermissions(row.pluginId, row.settingsSource)
-    const surfaces = pluginRegistry.getPluginDefinition(row.pluginId, row.settingsSource)?.ui?.surfaces ?? []
-    const hasDetailBlocks = permissions.length > 0 || hasSchemaSettings || surfaces.length > 0
+    const primarySurface = primarySurfaceForPlugin(row.pluginId, row.settingsSource)
+    const hasSurfaceShortcuts = shortcutBindableSurfaces(row.pluginId, row.settingsSource).length > 0
+    const hasDetailBlocks = permissions.length > 0 || hasSchemaSettings || hasSurfaceShortcuts || !!primarySurface
     const pluginDetailDescription = getPluginDetailDescription(row.pluginId, row.settingsSource, locale)
+    const snapshot = getPluginPermissionSnapshot(row.settingsSource, row.pluginId, permissions)
+    const missingPermissions = missingPluginPermissions(snapshot, permissions)
+    const statusKey = pluginDetailStatusKey(row)
 
     return (
       <section className={`a-detail plugin-detail-panel ${row.error ? 'has-error' : ''}`}>
+        <div className="plugin-detail-panel-title">
+          <span>{locale === 'zh' ? '插件详情' : 'Plugin details'}</span>
+        </div>
         <div className="d-head plugin-detail-header">
           <div className="d-ico plugin-detail-icon">
             {row.loading ? <Loader2 size={18} className="animate-spin" /> : <Package size={18} />}
@@ -898,7 +1106,18 @@ export function ScriptsView() {
             <div className="d-name plugin-detail-title-row">
               {row.title}
             </div>
-            <div className="d-meta plugin-detail-subtitle">{row.source}://{row.pluginId} · v{row.version}</div>
+            <div className="d-meta plugin-detail-subtitle">
+              <span>{row.pluginId}</span>
+              <span className="plugin-detail-source-tag">{row.source}</span>
+              <span>v{row.version}</span>
+              <span className="plugin-detail-status">
+                <span className={`plugin-detail-status-dot ${statusKey}`} />
+                {row.status}
+              </span>
+            </div>
+          </div>
+          <div className="plugin-detail-actions">
+            {renderPluginDetailActions(row)}
           </div>
         </div>
 
@@ -918,22 +1137,25 @@ export function ScriptsView() {
           )}
         </div>
 
+        {renderPrimarySurfaceAction(row)}
+
         <div className="plugin-detail-sections">
-          {renderPluginPermissions(row.pluginId, row.settingsSource)}
+          {renderPendingPermissions(row.pluginId, row.settingsSource, permissions)}
+          {renderSurfaceShortcuts(row.pluginId, row.settingsSource)}
           {hasSchemaSettings && (
             <div className="plugin-settings-inline-detail">
               <PluginSettingsInline pluginId={row.pluginId} source={row.settingsSource} locale={locale} />
             </div>
           )}
-          {renderSurfaceShortcuts(row.pluginId, row.settingsSource)}
           {!hasDetailBlocks && (
             <div className="plugin-detail-empty-note">{t(locale, 'scripts.noDetails')}</div>
           )}
         </div>
+        {missingPermissions.length === 0 && renderGrantedPermissions(row.pluginId, permissions)}
         {row.capabilities.length > 0 && (
           <div className="d-caps plugin-detail-capabilities">
             {row.capabilities.map((capability) => (
-              <span key={capability} className="d-cap script-badge">{capability}</span>
+              <span key={capability} className="d-cap script-badge">{capabilityLabel(capability, locale)}</span>
             ))}
           </div>
         )}
@@ -974,11 +1196,10 @@ export function ScriptsView() {
   }
 
   function surfaceShortcutHintForPlugin(pluginId: string, source: PluginSettingsSource) {
-    const definition = pluginRegistry.getPluginDefinition(pluginId, source)
-    const surfaces = definition?.ui?.surfaces?.filter((surface) => surface.entry?.shortcutBindable !== false) ?? []
+    const surfaces = shortcutBindableSurfaces(pluginId, source)
     for (const surface of surfaces) {
       const shortcut = pluginSurfaceShortcuts[pluginSurfaceShortcutKey({ source, pluginId, surfaceId: surface.id })]
-      if (shortcut?.accelerator) return shortcut.accelerator
+      if (shortcut?.accelerator) return formatPluginShortcutLabel(shortcut.accelerator)
     }
     return ''
   }
@@ -1189,7 +1410,7 @@ function PluginCard({
         {(capabilities ?? []).length > 0 && (
           <div className="flex items-center gap-1 mt-1 flex-wrap">
             {(capabilities ?? []).map((capability) => (
-              <span key={capability} className="script-badge">{capability}</span>
+              <span key={capability} className="script-badge">{capabilityLabel(capability, locale)}</span>
             ))}
           </div>
         )}

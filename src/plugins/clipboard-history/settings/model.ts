@@ -12,8 +12,6 @@ export type ClipboardHistorySettings = {
   maxTextBytes: number
   maxImageBytes: number
   maxTotalCacheBytes: number
-  defaultAction: 'paste'
-  pasteFailureFallback: 'copy-and-notify'
 }
 
 export const DEFAULT_CLIPBOARD_HISTORY_SETTINGS: ClipboardHistorySettings = {
@@ -26,6 +24,4 @@ export const DEFAULT_CLIPBOARD_HISTORY_SETTINGS: ClipboardHistorySettings = {
   maxTextBytes: 256 * 1024,
   maxImageBytes: 10 * 1024 * 1024,
   maxTotalCacheBytes: 500 * 1024 * 1024,
-  defaultAction: 'paste',
-  pasteFailureFallback: 'copy-and-notify',
 }
