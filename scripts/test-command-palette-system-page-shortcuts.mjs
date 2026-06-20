@@ -3,39 +3,16 @@
 /**
  * System page launcher shortcuts
  *
- * Command palette and global launcher expose system page shortcuts through the
- * first-party core controls plugin. The launcher registry should only collect
- * contributions; it should not hard-code concrete app pages.
+ * Command palette and global launcher expose system page shortcuts through
+ * host-owned launcher actions. The launcher registry should only collect
+ * providers; it should not hard-code concrete app pages.
  */
 
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import vm from 'node:vm'
-import ts from 'typescript'
 
 function read(path) {
   return readFileSync(path, 'utf8')
-}
-
-function loadCorePlugin() {
-  let src = read('src/plugins/core-pane/index.ts')
-  src = src.replace(/import[\s\S]*?from\s*['"][^'"]+['"];?\n/g, '')
-  const out = ts.transpileModule(src, {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2023,
-      esModuleInterop: true,
-    },
-  }).outputText
-  const moduleExports = {}
-  const sandbox = {
-    exports: moduleExports,
-    module: { exports: moduleExports },
-    definePlugin: (definition) => definition,
-    console,
-  }
-  vm.runInNewContext(out, sandbox)
-  return sandbox.module.exports.default ?? sandbox.module.exports.corePanePlugin
 }
 
 const registrySource = read('src/workspace/launcher/registry.ts')
@@ -45,67 +22,15 @@ assert.doesNotMatch(
   'launcher registry should not hard-code concrete Plugins or Settings page shortcuts',
 )
 
-const manifest = JSON.parse(read('src/plugins/core-pane/manifest.json'))
-assert.notEqual(manifest.displayName, 'Pane Controls', 'core plugin display name should be broader than pane controls')
-assert.notEqual(manifest.displayNameI18n?.zh, '面板控制', 'core plugin Chinese display name should be broader than pane controls')
-
-const corePlugin = loadCorePlugin()
-const launcherItems = corePlugin.launcher?.items ?? []
-
-function findRequiredItem(id) {
-  const item = launcherItems.find((candidate) => candidate.id === id)
-  assert.ok(item, `core plugin should contribute launcher item ${id}`)
-  assert.deepEqual(
-    Array.from(item.surfaces ?? []),
-    ['command-palette', 'global-launcher'],
-    `${id} should appear in both launcher surfaces`,
-  )
-  assert.equal(item.pinnable, false, `${id} should not be pinnable`)
-  return item
-}
-
-const apiCalls = []
-const ctx = {
-  surfaceId: 'command-palette',
-  settings: {},
-  locale: 'zh',
-  api: {
-    showPluginsPage: async () => apiCalls.push('plugins'),
-    showSettingsPage: async () => apiCalls.push('settings'),
-  },
-  storage: {},
-  t: (key) => key,
-}
-
-const pluginsItem = findRequiredItem('show-plugins-page')
-assert.equal(pluginsItem.display.icon, 'Puzzle', 'plugins page shortcut should use the Plugins sidebar icon')
-assert.ok(pluginsItem.display.aliases?.includes('plugins'), 'plugins page shortcut should be searchable by plugins')
-assert.ok(pluginsItem.display.aliases?.includes('plugin'), 'plugins page shortcut should be searchable by singular plugin')
-assert.ok(pluginsItem.display.aliases?.includes('插件'), 'plugins page shortcut should be searchable by Chinese plugin query')
-const pluginsResult = await pluginsItem.execute(ctx)
-assert.deepEqual(apiCalls, ['plugins'], 'plugins page shortcut should navigate through the plugin launcher API')
-assert.equal(pluginsResult?.ok, true, 'plugins page shortcut should complete successfully')
-
-apiCalls.length = 0
-const globalPluginsResult = await pluginsItem.execute({ ...ctx, surfaceId: 'global-launcher' })
-assert.deepEqual(apiCalls, ['plugins'], 'global launcher plugins page shortcut should navigate through the plugin launcher API')
-assert.equal(globalPluginsResult?.ok, true, 'global launcher plugins page shortcut should complete successfully')
-
-apiCalls.length = 0
-
-const settingsItem = findRequiredItem('show-settings-page')
-assert.equal(settingsItem.display.icon, 'Settings', 'settings page shortcut should use the Settings sidebar icon')
-assert.ok(settingsItem.display.aliases?.includes('settings'), 'settings page shortcut should be searchable by settings')
-assert.ok(settingsItem.display.aliases?.includes('setting'), 'settings page shortcut should be searchable by singular setting')
-assert.ok(settingsItem.display.aliases?.includes('设置'), 'settings page shortcut should be searchable by Chinese settings query')
-const settingsResult = await settingsItem.execute(ctx)
-assert.deepEqual(apiCalls, ['settings'], 'settings page shortcut should navigate through the plugin launcher API')
-assert.equal(settingsResult?.ok, true, 'settings page shortcut should complete successfully')
-
-apiCalls.length = 0
-const globalSettingsResult = await settingsItem.execute({ ...ctx, surfaceId: 'global-launcher' })
-assert.deepEqual(apiCalls, ['settings'], 'global launcher settings page shortcut should navigate through the plugin launcher API')
-assert.equal(globalSettingsResult?.ok, true, 'global launcher settings page shortcut should complete successfully')
+const hostProviderSource = read('src/workspace/launcher/hostProvider.ts')
+const hostActionsSource = read('src/workspace/launcher/hostActions.ts')
+assert.match(hostProviderSource, /getHostPaneControlItems\(\)/, 'host provider should include system page and pane controls')
+assert.match(hostActionsSource, /systemKey:\s*['"]host:view:plugins['"]/, 'host actions should contribute plugins page shortcut')
+assert.match(hostActionsSource, /systemKey:\s*['"]host:view:settings['"]/, 'host actions should contribute settings page shortcut')
+assert.match(hostActionsSource, /showPluginsPage\(\)/, 'plugins shortcut should navigate through the launcher API')
+assert.match(hostActionsSource, /showSettingsPage\(\)/, 'settings shortcut should navigate through the launcher API')
+assert.match(hostActionsSource, /aliases:\s*\[[\s\S]*['"]plugins['"][\s\S]*['"]插件['"]/, 'plugins shortcut should be searchable by English and Chinese terms')
+assert.match(hostActionsSource, /aliases:\s*\[[\s\S]*['"]settings['"][\s\S]*['"]设置['"]/, 'settings shortcut should be searchable by English and Chinese terms')
 
 const appSource = read('src/App.tsx')
 const pluginApiSource = read('src/workspace/launcher/pluginApi.ts')

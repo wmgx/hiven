@@ -7,12 +7,12 @@
  * 1. Plugin definition is loaded via bundledPluginLoader glob
  * 2. registerProductionPlugin stores the definition
  * 3. collectStaticPluginItems() generates a launcher item from ui.surfaces
- * 4. Settings body component can be instantiated
+ * 4. Settings schema can be rendered by the host
  * 5. GlobalLauncher can find the surface via title/aliases matching
  */
 
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { execSync } from 'node:child_process'
 
@@ -70,36 +70,24 @@ assert.match(registryContent, /surfaces:\s*\[['"]global-launcher['"]\]/, 'Surfac
 assert.match(registryContent, /title:\s*surface\.title/, 'Must pass surface title to launcher display')
 assert.match(registryContent, /aliases:\s*surface\.aliases/, 'Must pass surface aliases to launcher display')
 
-// ─── 3. Settings body renders with standard React patterns ───────────────────
+// ─── 3. Settings render through host schema controls ─────────────────────────
 
-const settingsBody = read('src/plugins/clipboard-history/settings/ClipboardHistorySettingsBody.tsx')
+assert.equal(
+  existsSync(join(root, 'src/plugins/clipboard-history/settings/ClipboardHistorySettingsBody.tsx')),
+  false,
+  'Clipboard history must not keep the legacy custom settings body',
+)
 
-// Uses standard React import
-assert.match(settingsBody, /import\s*\{.*useState.*\}\s*from\s*['"]react['"]/, 'SettingsBody must import useState from react')
-
-// Has proper JSX structure (not createElement hacks)
-assert.match(settingsBody, /<div|<label|<input|<button|<span/, 'SettingsBody must use JSX syntax')
-
-// Has all required settings fields per design doc
-assert.match(settingsBody, /value\.enabled/, 'SettingsBody must bind to value.enabled')
-assert.match(settingsBody, /value\.recordText/, 'SettingsBody must bind to value.recordText')
-assert.match(settingsBody, /value\.recordImages/, 'SettingsBody must bind to value.recordImages')
-assert.match(settingsBody, /value\.recordFiles/, 'SettingsBody must bind to value.recordFiles')
-assert.match(settingsBody, /value\.maxItems/, 'SettingsBody must bind to value.maxItems')
-assert.match(settingsBody, /value\.retentionDays/, 'SettingsBody must bind to value.retentionDays')
-assert.match(settingsBody, /value\.maxTextBytes/, 'SettingsBody must bind to value.maxTextBytes')
-assert.match(settingsBody, /value\.maxImageBytes/, 'SettingsBody must bind to value.maxImageBytes')
-assert.match(settingsBody, /value\.maxTotalCacheBytes/, 'SettingsBody must bind to value.maxTotalCacheBytes')
-
-// Has clear-all with confirmation
-assert.match(settingsBody, /clearAll|clear.*confirm/i, 'SettingsBody must have clear-all with confirmation')
-assert.match(settingsBody, /showClearConfirm/, 'SettingsBody must track confirm state')
-
-// Uses t() for i18n
-assert.match(settingsBody, /t\(['"]settings\./, 'SettingsBody must use t() for localized labels')
-
-// Uses updateValue for partial updates (not setValue for full replace)
-assert.match(settingsBody, /updateValue\(\{/, 'SettingsBody must use updateValue for partial updates')
+assert.match(indexContent, /schema:\s*\{/, 'Clipboard history must declare a settings schema')
+assert.match(indexContent, /key:\s*['"]enabled['"]/, 'Settings schema must include enabled')
+assert.match(indexContent, /key:\s*['"]recordText['"]/, 'Settings schema must include recordText')
+assert.match(indexContent, /key:\s*['"]recordImages['"]/, 'Settings schema must include recordImages')
+assert.match(indexContent, /key:\s*['"]recordFiles['"]/, 'Settings schema must include recordFiles')
+assert.match(indexContent, /key:\s*['"]maxItems['"]/, 'Settings schema must include maxItems')
+assert.match(indexContent, /key:\s*['"]retentionDays['"]/, 'Settings schema must include retentionDays')
+assert.match(indexContent, /key:\s*['"]maxTextBytes['"]/, 'Settings schema must include maxTextBytes')
+assert.match(indexContent, /key:\s*['"]maxImageBytes['"]/, 'Settings schema must include maxImageBytes')
+assert.match(indexContent, /key:\s*['"]maxTotalCacheBytes['"]/, 'Settings schema must include maxTotalCacheBytes')
 
 // ─── 4. i18n completeness ───────────────────────────────────────────────────
 
@@ -227,7 +215,7 @@ assert.match(bgContent, /unwatch\(\)|unwatch\s*=\s*null/, 'Background stop must 
 const manifest = JSON.parse(read('src/plugins/clipboard-history/manifest.json'))
 
 assert.equal(manifest.pluginId, 'clipboard-history')
-assert.equal(manifest.version, '1.0.0')
+assert.equal(manifest.version, '1.2.0')
 assert.ok(manifest.capabilities.includes('settings'))
 assert.ok(manifest.capabilities.includes('ui'))
 assert.ok(manifest.capabilities.includes('background'))
@@ -236,10 +224,5 @@ assert.ok(manifest.permissions.includes('clipboard.write'))
 assert.ok(manifest.permissions.includes('clipboard.watch'))
 assert.ok(manifest.permissions.includes('storage.private'))
 assert.ok(manifest.permissions.includes('accessibility.paste'))
-
-// ─── 8. No globalThis/window hack in settings ────────────────────────────────
-
-assert.doesNotMatch(settingsBody, /globalThis/, 'SettingsBody must not use globalThis')
-assert.doesNotMatch(settingsBody, /window\.HivenPlugin|window\.FluxTextPlugin/, 'SettingsBody must not access window.HivenPlugin')
 
 console.log('clipboard-history integration tests passed')

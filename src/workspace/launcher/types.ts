@@ -99,7 +99,7 @@ export type LauncherParamType = 'boolean' | 'text' | 'number' | 'single-select' 
 
 export type LauncherParamOption =
   | string
-  | { label: string; value: string; labelI18n?: Partial<Record<Locale, string>> }
+  | { label: string; value: string; labelI18n?: Partial<Record<Locale, string>>; description?: string; descriptionI18n?: Partial<Record<Locale, string>> }
 
 export type LauncherParamSpec = {
   key: string
@@ -111,6 +111,10 @@ export type LauncherParamSpec = {
   required?: boolean
   hint?: string
   hintI18n?: Partial<Record<Locale, string>>
+  /** For multi-select params: minimum selected items required before submit. */
+  minSelect?: number
+  /** For multi-select params: maximum selected items. Reaching it disables unselected options. */
+  maxSelect?: number
 }
 
 /**

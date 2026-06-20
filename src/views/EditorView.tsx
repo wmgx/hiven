@@ -12,6 +12,7 @@ import { runtimeRegistry } from '../workspace/runtimeRegistry'
 import { resolveIcon } from '../utils/resolveIcon'
 import { useT } from '../i18n'
 import { formatGlobalPinnedLauncherShortcutLabel } from '../hotkeys/shortcutDisplay'
+import { Command, PanelBottom, PanelRight, Search, WrapText } from 'lucide-react'
 
 function isEditableSelectAllTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
@@ -20,10 +21,14 @@ function isEditableSelectAllTarget(target: EventTarget | null) {
 
 export function EditorView() {
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
+  const setGlobalLauncherOpen = useAppStore((s) => s.setGlobalLauncherOpen)
+  const wordWrap = useAppStore((s) => s.settings.wordWrap)
+  const updateSetting = useAppStore((s) => s.updateSetting)
   const locale = useAppStore((s) => s.locale)
   const globalPinnedLauncherShortcut = useAppStore((s) => s.settings.globalPinnedLauncherShortcut)
   const t = useT('editor')
   const closeActiveSurfaceOrPane = useWorkspaceStore((s) => s.closeActiveSurfaceOrPane)
+  const createPane = useWorkspaceStore((s) => s.createPane)
   const pluginRegistryVersion = usePluginRegistryVersion()
 
   // Toolbar buttons contributed by plugins (top-right region), sorted by order.
@@ -33,6 +38,22 @@ export function EditorView() {
     .filter((item) => (item.contribution.placement ?? 'editor-top-right') === 'editor-top-right')
     .sort((a, b) => (a.contribution.order ?? 0) - (b.contribution.order ?? 0))
   const runActionShortcut = formatGlobalPinnedLauncherShortcutLabel(globalPinnedLauncherShortcut, locale)
+  const getActiveCodeEditor = () => {
+    const workspace = useWorkspaceStore.getState()
+    return workspace.activePaneId
+      ? runtimeRegistry.getCodeEditor(workspace.activePaneId)
+      : useAppStore.getState().editorInstance
+  }
+  const runEditorAction = (actionId: string) => {
+    const editor = getActiveCodeEditor()
+    editor?.focus?.()
+    const action = editor?.getAction(actionId)
+    if (action) {
+      void action.run()
+      return
+    }
+    editor?.trigger?.('editor-topbar', actionId, null)
+  }
 
   // Route shell shortcuts before the browser document can consume them.
   useEffect(() => {
@@ -66,24 +87,55 @@ export function EditorView() {
     <div className="flex flex-col flex-1 overflow-hidden">
       {/* Top bar */}
       <div
-        className="h-9 flex items-center px-3 gap-3 shrink-0 glass"
-        style={{
-          borderWidth: '0 0 1px',
-        }}
+        className="editor-topbar glass"
       >
-        <span className="text-[11px] flex items-center gap-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-          <span className="status-dot ready" />
-          {t('ready')}
-        </span>
+        <div className="editor-topbar-system" aria-label="Editor actions">
+          <button
+            className={`editor-topbar-button ${wordWrap ? 'is-active' : ''}`}
+            onClick={() => updateSetting('wordWrap', !wordWrap)}
+            title={t('toggleWordWrap')}
+          >
+            <WrapText size={14} />
+          </button>
+          <button
+            className="editor-topbar-button"
+            onClick={() => runEditorAction('editor.action.startFindReplaceAction')}
+            title={t('findReplace')}
+          >
+            <Search size={14} />
+          </button>
+          <span className="editor-topbar-divider" />
+          <button
+            className="editor-topbar-button"
+            onClick={() => setGlobalLauncherOpen(true, 'full')}
+            title={t('openLauncher')}
+          >
+            <Command size={14} />
+          </button>
+          <button
+            className="editor-topbar-button"
+            onClick={() => createPane({ text: '', focus: true, direction: 'right' })}
+            title={t('splitRight')}
+          >
+            <PanelRight size={14} />
+          </button>
+          <button
+            className="editor-topbar-button"
+            onClick={() => createPane({ text: '', focus: true, direction: 'bottom' })}
+            title={t('splitDown')}
+          >
+            <PanelBottom size={14} />
+          </button>
+        </div>
 
         {/* Right side: plugin toolbar buttons + Run Action */}
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="editor-topbar-plugin-slot">
           {toolbarItems.map((item) => {
             const title = localized(item.contribution.title, item.contribution.titleI18n, locale)
             return (
               <button
                 key={item.contribution.id}
-                className="ft-btn-icon-sm btn-ghost"
+                className="editor-topbar-button"
                 onClick={() => { void runToolbarCommand(item.contribution.commandId, item.isDev) }}
                 title={title}
               >

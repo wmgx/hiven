@@ -219,19 +219,14 @@ export function CommandPalette() {
 
   return (
     <div
-      className={`fixed inset-0 flex items-start justify-center pt-[70px] z-50 palette-overlay ${open ? 'open' : ''}`}
+      className={`fixed inset-0 flex items-start justify-center pt-[54px] z-50 palette-overlay ${open ? 'open' : ''}`}
       style={{ pointerEvents: 'auto', visibility: 'visible', zIndex: 1000 }}
       onClick={(event) => { if (event.target === event.currentTarget) closePalette() }}
     >
       <div
         ref={panelRef}
         tabIndex={-1}
-        className="w-[min(630px,90vw)] overflow-hidden outline-none palette-panel"
-        style={{
-          background: 'var(--bg-surface)',
-          border: '0.5px solid var(--color-border-secondary)',
-          borderRadius: '6px',
-        }}
+        className="command-launcher-panel global-launcher-panel overflow-hidden outline-none palette-panel"
         onKeyDown={handleKeyDown}
         onCompositionStart={handleCompositionStart}
         onCompositionEnd={handleCompositionEnd}
@@ -333,12 +328,11 @@ function SearchStep({
 }) {
   return (
     <>
-      <div className="flex items-center px-3.5 py-2" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
+      <div className="global-launcher-header l-search" style={{ borderBottom: '1px solid var(--border)' }}>
+        <Search className="ico" />
         <input
           ref={inputRef}
-          className="flex-1 border-none outline-none text-[15px] bg-transparent"
-          style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-sans)' }}
-          placeholder={t(locale, 'palette.search')}
+          placeholder={t(locale, 'palette.globalPlaceholder')}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
@@ -351,7 +345,7 @@ function SearchStep({
           {error}
         </div>
       )}
-      <div className="command-palette-results py-1" onMouseMove={() => { isKeyboardNavRef.current = false }}>
+      <div className="command-palette-results global-launcher-body l-list" onMouseMove={() => { isKeyboardNavRef.current = false }}>
         {items.map((item, index) => (
           <LauncherActionItem
             key={item.systemKey}
@@ -369,7 +363,7 @@ function SearchStep({
           </div>
         )}
       </div>
-      <div className="flex gap-3 px-3.5 py-1.5" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
+      <div className="global-launcher-footer l-foot">
         <HintKey keys="↑↓" label={t(locale, 'palette.navigate')} />
         <HintKey keys="↵" label={t(locale, 'palette.select')} />
         {supportsParamCustomization(items[selectedIndex]) && (
@@ -395,6 +389,9 @@ function LauncherActionItem({ item, selected, onClick, onPin, onMouseEnter, loca
   const canPin = item.pinnable !== false
   const shortcutMeta = getPlatformShortcutMeta()
   const showParamShortcut = supportsParamCustomization(item)
+  const tag = item.display.icon?.startsWith('app-icon:')
+    ? t(locale, 'palette.kindApp')
+    : t(locale, 'palette.kindCommand')
 
   useEffect(() => {
     if (selected) ref.current?.scrollIntoView({ block: 'nearest' })
@@ -403,39 +400,31 @@ function LauncherActionItem({ item, selected, onClick, onPin, onMouseEnter, loca
   return (
     <div
       ref={ref}
-      className={`cmd-item ${selected ? 'selected' : ''}`}
+      className={`l-row command-launcher-row ${selected ? 'sel selected' : ''}`}
       onClick={onClick}
       onMouseEnter={onMouseEnter}
     >
-      {/* 匹配全局 launcher 的干净图标样式：纯 icon，无彩色 badge（除 app 图标外） */}
       <span
-        className="w-5 shrink-0 flex items-center justify-center"
-        style={{ color: 'var(--color-text-secondary)' }}
+        className={item.display.icon?.startsWith('app-icon:') ? 'r-app' : 'r-ico'}
       >
         {resolveIcon(item.display.icon, 16, item.systemKey)}
       </span>
       <div
-        className={`flex-1 min-w-0 flex flex-col ${!subtitle ? 'justify-center' : ''}`}
-        style={{ minHeight: '32px' }}
+        className="r-main"
       >
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 min-w-0">
           {item.source === 'dev' && (
             <span className="text-[9px] px-1 py-0.5 rounded font-semibold shrink-0" style={{ background: 'var(--color-accent)', color: '#fff' }}>DEV</span>
           )}
           <div
-            className="text-[14px] font-medium truncate launcher-item-title"
-            style={{ fontFamily: 'var(--font-sans)' }}
+            className="r-title launcher-item-title"
           >
             {title}
           </div>
         </div>
         {subtitle && (
           <div
-            className="text-[11px]"
-            style={{
-              color: 'var(--color-text-tertiary)',
-              marginTop: 1
-            }}
+            className="r-desc"
           >
             {subtitle}
           </div>
@@ -451,6 +440,9 @@ function LauncherActionItem({ item, selected, onClick, onPin, onMouseEnter, loca
           {shortcutMeta.label}↵ {t(locale, 'palette.customizeParamsLabel')}
         </span>
       )}
+      <span className="r-tag launcher-kind-tag">
+        {tag}
+      </span>
       {canPin && (
         <button
           data-testid="launcher-item-pin-action"
@@ -467,7 +459,7 @@ function LauncherActionItem({ item, selected, onClick, onPin, onMouseEnter, loca
         </button>
       )}
       {selected && (
-        <kbd className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--color-background-tertiary)', border: '0.5px solid var(--color-border-tertiary)', color: 'var(--color-text-secondary)' }}>↵</kbd>
+        <span className="r-kbd">↵</span>
       )}
     </div>
   )
@@ -560,7 +552,7 @@ function CollectInputStep({ frame, error, busy, onInputChange, onSubmit, onBack,
           <div className="text-[11px] mt-1.5 px-1" style={{ color: 'var(--color-error)' }}>{error}</div>
         )}
       </div>
-      <div className="flex gap-3 px-3.5 py-1.5" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
+      <div className="global-launcher-footer l-foot">
         <HintKey keys="↵" label={t(locale, 'palette.submit')} />
         <HintKey keys="esc" label={t(locale, 'palette.back')} />
       </div>
@@ -646,15 +638,14 @@ function ResultStep({ frame, error, busy, onActivateChoice, onActivateSecondary,
           <span className="text-[13px] font-medium" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>{frame.sourceTitle}</span>
         )}
       </div>
-      <div className="command-palette-results py-1">
+      <div className="command-palette-results global-launcher-body l-list">
         {choices.map((choice, index) => {
           const isSelected = selectedChoiceIndex === index
           const isChecked = selectedChoiceIds.includes(choice.id)
           return (
             <div
               key={choice.id}
-              className={`cmd-item ${isSelected ? 'selected' : ''}`}
-              style={{ background: isSelected ? 'var(--color-accent-light)' : 'transparent' }}
+              className={`l-row global-launcher-result-row ${isSelected ? 'sel selected' : ''}`}
               onClick={() => selection ? toggleChoice(choice) : onActivateChoice(choice)}
               onMouseEnter={() => setSelectedChoiceIndex(index)}
             >
@@ -714,7 +705,7 @@ function ResultStep({ frame, error, busy, onActivateChoice, onActivateSecondary,
       {error && (
         <div className="px-3.5 py-1.5 text-[11px]" style={{ color: 'var(--color-error)' }}>{error}</div>
       )}
-      <div className="flex gap-3 px-3.5 py-1.5" style={{ borderTop: '0.5px solid var(--color-border-tertiary)' }}>
+      <div className="global-launcher-footer l-foot">
         <HintKey keys="↑↓" label={t(locale, 'palette.navigate')} />
         {selection && <HintKey keys="space" label={t(locale, 'palette.toggle')} />}
         <HintKey keys="↵" label={selection?.submitTitle ?? t(locale, 'palette.select')} />
@@ -731,8 +722,8 @@ function ResultStep({ frame, error, busy, onActivateChoice, onActivateSecondary,
 
 function HintKey({ keys, label }: { keys: string; label: string }) {
   return (
-    <span className="text-[11px] flex items-center gap-1" style={{ color: 'var(--color-text-tertiary)' }}>
-      <kbd className="text-[10px] px-1 py-0.5 rounded" style={{ background: 'var(--color-background-tertiary)', border: '0.5px solid var(--color-border-tertiary)' }}>{keys}</kbd>
+    <span className="grp">
+      <kbd>{keys}</kbd>
       {label}
     </span>
   )

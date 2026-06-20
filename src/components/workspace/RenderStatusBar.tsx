@@ -14,8 +14,10 @@ export function RenderStatusBar() {
   const paneRenderers = useWorkspaceStore((s) => s.paneRenderers)
   const panelInstancesV2 = useWorkspaceStore((s) => s.panelInstancesV2)
   const occupancies = useWorkspaceStore((s) => s.occupancies)
+  const closeActiveSurfaceOrPane = useWorkspaceStore((s) => s.closeActiveSurfaceOrPane)
   const lastCommandStatus = useAppStore((s) => s.lastCommandStatus)
   const t = useT('workspace')
+  const tEditor = useT('editor')
   const [menuOpen, setMenuOpen] = useState(false)
 
   const hasPresentations = Object.keys(presentations).length > 0
@@ -33,7 +35,7 @@ export function RenderStatusBar() {
         : 'status.commandError')
     : ''
   const commandStatusColor = lastCommandStatus?.status === 'success'
-    ? 'var(--color-success-text)'
+    ? 'var(--text-2)'
     : lastCommandStatus?.status === 'error'
       ? 'var(--color-error-text)'
       : 'var(--color-text-secondary)'
@@ -80,10 +82,12 @@ export function RenderStatusBar() {
         </span>
       ))}
 
+      <span className="statusbar-spacer" />
+
       {/* Status menu toggle */}
       {hasOccupancies && (
         <button
-          className="ml-auto text-[10px] flex items-center gap-0.5 hover:opacity-70"
+          className="text-[10px] flex items-center gap-0.5 hover:opacity-70"
           style={{ color: 'var(--color-text-tertiary)' }}
           onClick={() => setMenuOpen(!menuOpen)}
         >
@@ -93,13 +97,22 @@ export function RenderStatusBar() {
 
       {lastCommandStatus && (
         <span
-          className={`${hasOccupancies ? '' : 'ml-auto'} text-[10px] min-w-0 max-w-[40vw] truncate`}
+          className="text-[10px] min-w-0 max-w-[40vw] truncate"
           style={{ color: commandStatusColor }}
           title={lastCommandStatus.message ? `${lastCommandStatus.title}: ${lastCommandStatus.message}` : lastCommandStatus.title}
         >
           {t('status.lastCommand')}: {lastCommandStatus.title} · {commandStatusLabel}
         </span>
       )}
+
+      <button
+        type="button"
+        className="statusbar-close"
+        title={tEditor('closePane')}
+        onClick={() => closeActiveSurfaceOrPane()}
+      >
+        <X size={11} />
+      </button>
 
       {/* Status menu dropdown */}
       {menuOpen && (

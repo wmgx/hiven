@@ -105,7 +105,7 @@ assertLauncherParamStepUsesImeGuardedBackspace()
 
 assert(
   /<ShortcutRecorder\b/.test(settingsView) &&
-    /onRecord=\{onChange\}/.test(settingsView) &&
+    /onRecord=\{[\s\S]{0,160}globalPinnedLauncherShortcut/.test(settingsView) &&
     /globalPinnedLauncherShortcut/.test(settingsView),
   'SettingsView Enter handling is a shortcut recorder, not text-input confirmation',
 )

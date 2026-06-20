@@ -80,7 +80,8 @@ function assertLauncherToolsHaveSubtitles() {
 
 function assertBuiltinVersionsMatchManifests() {
   const index = JSON.parse(read('src/builtin-plugins/index.json'))
-  assert.equal(index.version, 19, 'builtin plugin index version should be bumped for launcher migration')
+  assert.equal(index.version, 23, 'builtin plugin index version should be bumped after retiring core-pane')
+  assert.equal(index.packages.some((pkg) => pkg.pluginId === 'core-pane'), false, 'core-pane should no longer ship as a bundled plugin')
   for (const pkg of index.packages) {
     const manifest = JSON.parse(read(`src/plugins/${pkg.dir}/manifest.json`))
     assert.equal(pkg.version, manifest.version, `${pkg.pluginId} builtin index version should match manifest version`)
@@ -174,30 +175,11 @@ function assertLauncherParamsAreLocalized() {
     'launcher item params should be localized, including labels and select options',
   )
 
-  const corePaneZh = JSON.parse(read('src/plugins/core-pane/locales/zh.json'))
-  const corePane = read('src/plugins/core-pane/index.ts')
-  for (const key of [
-    'param.direction.label',
-    'param.direction.option.right.label',
-    'param.direction.option.left.label',
-    'param.direction.option.down.label',
-    'param.direction.option.up.label',
-    'param.language.label',
-    'param.language.option.auto.label',
-    'param.language.option.plaintext.label',
-    'param.language.option.javascript.label',
-    'param.language.option.shell.label',
-    'message.stickyScroll.enabled',
-    'message.stickyScroll.disabled',
-  ]) {
-    assert.equal(typeof corePaneZh[key], 'string', `core-pane zh locale should define ${key}`)
-    assert.notEqual(corePaneZh[key], key, `core-pane zh locale should translate ${key}`)
-  }
-  assert.doesNotMatch(
-    corePane,
-    /\{\s*label:\s*['"](JSON|JavaScript|TypeScript|Markdown|Shell)['"],\s*value:/,
-    'core-pane language options should be declared through locale keys, not raw English labels',
-  )
+  const hostActions = read('src/workspace/launcher/hostActions.ts')
+  assert.match(hostActions, /host:pane:set-language/, 'host launcher actions should own pane language selection')
+  assert.match(hostActions, /labelI18n:\s*\{\s*zh:\s*['"]语言['"]\s*\}/, 'host language param should provide Chinese label text')
+  assert.match(hostActions, /labelI18n:\s*\{\s*zh:\s*['"]自动检测['"]\s*\}/, 'host language auto option should provide Chinese label text')
+  assert.match(hostActions, /labelI18n:\s*\{\s*zh:\s*['"]纯文本['"]\s*\}/, 'host language plaintext option should provide Chinese label text')
 }
 
 function assertLauncherSystemMessagesAreLocalized() {

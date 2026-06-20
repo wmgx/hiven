@@ -15,6 +15,8 @@ import { loadInstalledPluginsFromStore } from './workspace/pluginRuntime'
 import { registerBundledPluginPackages } from './workspace/bundledPluginLoader'
 import { initializePluginBackgrounds, setupBackgroundPermissionWatcher, setupBackgroundSettingsWatcher, stopAllPluginBackgrounds } from './workspace/pluginBackgroundManager'
 import { runPluginStartupHooks } from './workspace/pluginHookManager'
+import { refreshHostApplicationIndexOnStartup } from './workspace/appLauncher/hostAppLauncher'
+import { registerHostLauncherProviders } from './workspace/launcher/hostProvider'
 import { installGlobalPinnedLauncherHotkeys, routeGlobalPinnedLauncherShortcut } from './hotkeys/globalPinnedLauncher'
 import { installPluginSurfaceShortcutHotkeys } from './hotkeys/pluginSurfaceShortcuts'
 import { consumePendingPluginSurfaceOpenTarget, isPluginSurfaceOpenTarget } from './workspace/pluginSurfaceOpenRequest'
@@ -24,6 +26,7 @@ import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from './workspace/launcherWindowEven
 import './panels/register'
 
 // Register first-party product plugin packages
+registerHostLauncherProviders()
 registerBundledPluginPackages()
 
 const VIEW_INDEX: Record<ViewId, number> = { editor: 0, scripts: 1, 'plugin-editor': 2, 'pinned-runner': 3, settings: 4 }
@@ -113,6 +116,7 @@ function MainApp() {
       }
 
       if (disposed) return
+      refreshHostApplicationIndexOnStartup()
       runPluginStartupHooks()
       try {
         initializePluginBackgrounds()

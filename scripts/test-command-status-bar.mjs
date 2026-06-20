@@ -21,6 +21,7 @@ function assert(condition, message) {
 const editorView = read('src/views/EditorView.tsx')
 const renderStatusBar = read('src/components/workspace/RenderStatusBar.tsx')
 const commandPalette = read('src/components/CommandPalette.tsx')
+const pluginCommandExecutor = read('src/workspace/pluginCommandExecutor.ts')
 const store = read('src/store.ts')
 const i18n = readI18n()
 
@@ -44,20 +45,22 @@ assert(
 
 assert(
   /lastCommandStatus/.test(renderStatusBar) &&
-  /paneOrder\.length <= 1[\s\S]*!lastCommandStatus/.test(renderStatusBar),
-  'RenderStatusBar should remain visible when only last command status exists',
+  /statusbar-spacer/.test(renderStatusBar) &&
+  /statusbar-close/.test(renderStatusBar),
+  'RenderStatusBar should reserve the right side for command status and close action',
 )
 
 assert(
-  /setLastCommandStatus\(\{\s*title:\s*commandTitle,\s*status:\s*'running'/.test(commandPalette) &&
-  /setLastCommandStatus\(\{\s*title:\s*commandTitle,\s*status:\s*'success'/.test(commandPalette) &&
-  /setLastCommandStatus\(\{\s*title:\s*commandTitle,\s*status:\s*'error'/.test(commandPalette),
-  'CommandPalette should record running, success, and error command status',
+  /setLastCommandStatus\(\{\s*title:\s*displayTitle,\s*status:\s*'running'/.test(pluginCommandExecutor) &&
+  /setLastCommandStatus\(\{\s*title:\s*displayTitle,\s*status:\s*'success'/.test(pluginCommandExecutor) &&
+  /setLastCommandStatus\(\{\s*title:\s*displayTitle,\s*status:\s*'error'/.test(pluginCommandExecutor),
+  'Plugin command executor should record running, success, and error command status',
 )
 
 assert(
-  /localized\(action\.title/.test(commandPalette) &&
-  /localized\(entry\.contribution\.title/.test(commandPalette),
+  /title:\s*item\.display\.title/.test(commandPalette) &&
+  /titleI18n:\s*item\.display\.titleI18n/.test(commandPalette) &&
+  /localized\(command\.title\s*\|\|\s*command\.id,\s*command\.titleI18n/.test(pluginCommandExecutor),
   'Command status should use the command title, not the command id/name',
 )
 

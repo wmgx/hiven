@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { AlertTriangle, Archive, Download, ExternalLink, FolderOpen, Globe, Keyboard, Loader2, Package, Plus, Power, RefreshCw, Search, Settings, Trash2, Upload } from 'lucide-react'
+import { AlertTriangle, Download, ExternalLink, FolderOpen, Globe, Keyboard, Loader2, Package, Power, RefreshCw, Search, Settings, Trash2 } from 'lucide-react'
 import { t } from '../i18n'
 import type { Locale } from '../i18n'
 import { localized, useAppStore } from '../store'
@@ -15,12 +15,11 @@ import { runPluginStartupHooks } from '../workspace/pluginHookManager'
 import { requestOpenPluginSurfaceTool } from '../workspace/pluginSurfaceOpenRequest'
 import { pluginSurfaceShortcutKey, usePluginSurfaceShortcutStore } from '../workspace/pluginSurfaceShortcuts'
 import { ShortcutRecorder } from '../components/ShortcutRecorder'
+import { PluginSettingsInline } from '../components/PluginSettingsInline'
 import {
-  createDevPluginScaffold,
   checkInstalledPluginUpdate,
   disablePlugin,
   enablePlugin,
-  importDevPluginDirectory,
   importGithubDirectory,
   importLocalPluginDirectory,
   importPluginZip,
@@ -46,6 +45,23 @@ import { searchableFieldsMatch, type SearchableFields } from '../workspace/searc
 type TabId = 'builtin' | 'installed' | 'dev'
 type BusyMap = Record<string, boolean>
 type ErrorMap = Record<string, string>
+type PluginDetailRow = {
+  key: string
+  kind: TabId
+  pluginId: string
+  title: string
+  subtitle: string
+  version: string
+  source: string
+  status: string
+  folderPath: string
+  sourceUrl?: string
+  capabilities: string[]
+  error?: string
+  loading?: boolean
+  settingsSource: PluginSettingsSource
+  plugin: InstalledPlugin | DevPlugin | PluginPackageSummary
+}
 
 function isTauri() {
   return !!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
@@ -135,7 +151,9 @@ export function ScriptsView() {
   const [listError, setListError] = useState('')
   const [remoteUrl, setRemoteUrl] = useState('')
   const [remoteOpen, setRemoteOpen] = useState(false)
+  const [addMenuOpen, setAddMenuOpen] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'done' | 'error'>('idle')
+  const [selectedPluginKey, setSelectedPluginKey] = useState('')
   const isImeComposingRef = useRef(false)
 
   const installedList = useMemo(() => {
@@ -260,6 +278,79 @@ export function ScriptsView() {
     return devList.filter((plugin) => pluginMatchesQuery(plugin, normalizedQuery, locale))
   }, [devList, locale, normalizedQuery])
 
+  const pluginDetailRows = useMemo<PluginDetailRow[]>(() => {
+    void pluginPermissionVersion
+    if (activeTab === 'builtin') {
+      return filteredBuiltin.map((plugin) => ({
+        key: `builtin:${plugin.pluginId}`,
+        kind: 'builtin',
+        pluginId: plugin.pluginId,
+        title: pluginDisplayName(plugin, locale),
+        subtitle: plugin.pluginId,
+        version: plugin.version || '0.0.0',
+        source: t(locale, 'scripts.source.builtin'),
+        status: statusLabel(isPluginBlocked(plugin.pluginId, 'builtin') ? 'blocked' : 'available', locale),
+        folderPath: plugin.folderPath || '',
+        capabilities: capabilitiesOf(plugin),
+        error: plugin.error,
+        settingsSource: 'builtin',
+        plugin,
+      }))
+    }
+    if (activeTab === 'installed') {
+      return filteredInstalled.map((plugin) => {
+        const key = plugin.pluginId
+        return {
+          key,
+          kind: 'installed',
+          pluginId: plugin.pluginId,
+          title: pluginDisplayName(plugin, locale),
+          subtitle: plugin.pluginId,
+          version: plugin.version || '0.0.0',
+          source: sourceLabel(plugin, locale),
+          status: statusLabel(isPluginBlocked(plugin.pluginId, 'installed') ? 'blocked' : plugin.status, locale),
+          folderPath: packagePath(plugin),
+          sourceUrl: plugin.sourceUrl,
+          capabilities: capabilitiesOf(plugin),
+          error: plugin.error || errors[key] || plugin.update?.error,
+          loading: !!busy[key],
+          settingsSource: 'installed',
+          plugin,
+        }
+      })
+    }
+    return filteredDev.map((plugin) => {
+      const key = `dev:${plugin.pluginId}`
+      return {
+        key,
+        kind: 'dev',
+        pluginId: plugin.pluginId,
+        title: pluginDisplayName(plugin, locale),
+        subtitle: plugin.pluginId,
+        version: plugin.version || '0.0.0',
+        source: sourceLabel(plugin, locale),
+        status: statusLabel(isPluginBlocked(plugin.pluginId, 'dev') ? 'blocked' : plugin.status, locale),
+        folderPath: packagePath(plugin),
+        sourceUrl: plugin.sourceUrl,
+        capabilities: capabilitiesOf(plugin),
+        error: plugin.error || errors[key],
+        loading: !!busy[key],
+        settingsSource: 'dev',
+        plugin,
+      }
+    })
+  }, [activeTab, busy, errors, filteredBuiltin, filteredDev, filteredInstalled, locale, pluginPermissionVersion])
+
+  useEffect(() => {
+    if (pluginDetailRows.length === 0) {
+      if (selectedPluginKey) setSelectedPluginKey('')
+      return
+    }
+    if (!pluginDetailRows.some((row) => row.key === selectedPluginKey)) {
+      setSelectedPluginKey(pluginDetailRows[0].key)
+    }
+  }, [pluginDetailRows, selectedPluginKey])
+
   const setItemBusy = (key: string, value: boolean) =>
     setBusy((prev) => ({ ...prev, [key]: value }))
   const setItemError = (key: string, message: string) =>
@@ -305,23 +396,6 @@ export function ScriptsView() {
     })
   }
 
-  async function handleSideloadDev() {
-    const folder = await pickLocalPluginFolder()
-    if (!folder) return
-    await runTask('_dev-folder', async () => {
-      await importDevPluginDirectory(folder)
-      setActiveTab('dev')
-    })
-  }
-
-  async function handleCreatePlugin() {
-    await runTask('_new-plugin', async () => {
-      const plugin = await createDevPluginScaffold()
-      setActiveTab('dev')
-      await openPluginDir(plugin.folderPath)
-    })
-  }
-
   async function handleRemoteInstall() {
     const url = remoteUrl.trim()
     if (!url) return
@@ -361,7 +435,9 @@ export function ScriptsView() {
     const key = plugin.pluginId
     const loading = !!busy[key]
     const localError = errors[key]
-    const hasSettings = !!pluginRegistry.getPluginDefinition(plugin.pluginId, 'production')?.settings
+    const settingsContribution = pluginRegistry.getPluginDefinition(plugin.pluginId, 'production')?.settings
+    const hasSchemaSettings = !!settingsContribution?.schema
+    const hasLegacySettings = !!settingsContribution && !settingsContribution.schema
     return (
       <PluginCard
         key={plugin.pluginId}
@@ -378,12 +454,17 @@ export function ScriptsView() {
         details={
           <>
             {renderPluginPermissions(plugin.pluginId, 'installed')}
+            {hasSchemaSettings && (
+              <div className="plugin-settings-inline-detail">
+                <PluginSettingsInline pluginId={plugin.pluginId} source="installed" locale={locale} />
+              </div>
+            )}
             {renderSurfaceShortcuts(plugin.pluginId, 'installed')}
           </>
         }
         actions={
           <>
-            {hasSettings && (
+            {hasLegacySettings && (
               <IconButton
                 title={t(locale, 'scripts.settings')}
                 onClick={() => usePluginSettingsStore.getState().openSettingsDialog({ pluginId: plugin.pluginId, source: 'installed' })}
@@ -442,7 +523,9 @@ export function ScriptsView() {
   function renderDev(plugin: DevPlugin) {
     void pluginPermissionVersion
     const key = `dev:${plugin.pluginId}`
-    const hasSettings = !!pluginRegistry.getPluginDefinition(plugin.pluginId, 'dev')?.settings
+    const settingsContribution = pluginRegistry.getPluginDefinition(plugin.pluginId, 'dev')?.settings
+    const hasSchemaSettings = !!settingsContribution?.schema
+    const hasLegacySettings = !!settingsContribution && !settingsContribution.schema
     return (
       <PluginCard
         key={plugin.pluginId}
@@ -459,12 +542,17 @@ export function ScriptsView() {
         details={
           <>
             {renderPluginPermissions(plugin.pluginId, 'dev')}
+            {hasSchemaSettings && (
+              <div className="plugin-settings-inline-detail">
+                <PluginSettingsInline pluginId={plugin.pluginId} source="dev" locale={locale} />
+              </div>
+            )}
             {renderSurfaceShortcuts(plugin.pluginId, 'dev')}
           </>
         }
         actions={
           <>
-            {hasSettings && (
+            {hasLegacySettings && (
               <IconButton
                 title={t(locale, 'scripts.settings')}
                 onClick={() => usePluginSettingsStore.getState().openSettingsDialog({ pluginId: plugin.pluginId, source: 'dev' })}
@@ -507,7 +595,9 @@ export function ScriptsView() {
 
   function renderBuiltin(plugin: PluginPackageSummary) {
     void pluginPermissionVersion
-    const hasSettings = !!pluginRegistry.getPluginDefinition(plugin.pluginId, 'production')?.settings
+    const settingsContribution = pluginRegistry.getPluginDefinition(plugin.pluginId, 'production')?.settings
+    const hasSchemaSettings = !!settingsContribution?.schema
+    const hasLegacySettings = !!settingsContribution && !settingsContribution.schema
     return (
       <PluginCard
         key={plugin.pluginId}
@@ -522,12 +612,17 @@ export function ScriptsView() {
         details={
           <>
             {renderPluginPermissions(plugin.pluginId, 'builtin')}
+            {hasSchemaSettings && (
+              <div className="plugin-settings-inline-detail">
+                <PluginSettingsInline pluginId={plugin.pluginId} source="builtin" locale={locale} />
+              </div>
+            )}
             {renderSurfaceShortcuts(plugin.pluginId, 'builtin')}
           </>
         }
         actions={
           <>
-            {hasSettings && (
+            {hasLegacySettings && (
               <IconButton
                 title={t(locale, 'scripts.settings')}
                 onClick={() => usePluginSettingsStore.getState().openSettingsDialog({ pluginId: plugin.pluginId, source: 'builtin' })}
@@ -563,20 +658,34 @@ export function ScriptsView() {
     const snapshot = getPluginPermissionSnapshot(source, pluginId, requested)
     const missingPermissions = missingPluginPermissions(snapshot, requested)
     const permissionLabels = requested.map((permission) => describePluginPermission(permission, locale)).join(', ')
+    const missingPermissionLabels = missingPermissions.map((permission) => describePluginPermission(permission, locale)).join(', ')
     return (
-      <div className="plugin-permissions mt-2">
+      <div className={`plugin-permissions mt-2 ${missingPermissions.length > 0 ? 'is-missing' : ''}`}>
         <div className="flex items-center gap-2 flex-wrap text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>
-          <span className="script-badge">
-            {missingPermissions.length > 0
-              ? t(locale, 'scripts.permissionsMissing', { count: missingPermissions.length })
-              : t(locale, 'scripts.permissionsAllGranted')}
-          </span>
-          <span className="truncate max-w-[420px]" title={permissionLabels}>
-            {permissionLabels}
-          </span>
+          {missingPermissions.length > 0 ? (
+            <>
+              <span className="plugin-permissions-title">
+                <AlertTriangle size={12} />
+                {t(locale, 'scripts.permissionsBlockedTitle')}
+              </span>
+              <span className="plugin-permissions-detail">
+                {t(locale, 'scripts.permissionsBlockedDetail', { count: missingPermissions.length })}
+              </span>
+              <span className="truncate max-w-[420px]" title={missingPermissionLabels}>
+                {missingPermissionLabels}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="script-badge">{t(locale, 'scripts.permissionsAllGranted')}</span>
+              <span className="truncate max-w-[420px]" title={permissionLabels}>
+                {permissionLabels}
+              </span>
+            </>
+          )}
           {missingPermissions.length > 0 && (
             <button
-              className="scripts-btn"
+              className="scripts-btn plugin-permissions-grant"
               onClick={() => {
                 grantPluginPermissions(source, pluginId, missingPermissions)
                 runPluginStartupHooks()
@@ -641,72 +750,305 @@ export function ScriptsView() {
     )
   }
 
+  function renderPluginDetailActions(row: PluginDetailRow) {
+    const settingsContribution = pluginRegistry.getPluginDefinition(row.pluginId, row.settingsSource)?.settings
+    const hasLegacySettings = !!settingsContribution && !settingsContribution.schema
+
+    if (row.kind === 'builtin') {
+      const plugin = row.plugin as PluginPackageSummary
+      return (
+        <>
+          {hasLegacySettings && (
+            <IconButton
+              title={t(locale, 'scripts.settings')}
+              onClick={() => usePluginSettingsStore.getState().openSettingsDialog({ pluginId: plugin.pluginId, source: 'builtin' })}
+            >
+              <Settings size={13} />
+            </IconButton>
+          )}
+          <IconButton
+            title={t(locale, 'scripts.actionOpenEditor')}
+            onClick={() => openPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'builtin', readOnly: true })}
+          >
+            <FolderOpen size={13} />
+          </IconButton>
+          <span className="script-badge">{t(locale, 'scripts.readOnly')}</span>
+        </>
+      )
+    }
+
+    if (row.kind === 'installed') {
+      const plugin = row.plugin as InstalledPlugin
+      const key = plugin.pluginId
+      return (
+        <>
+          {hasLegacySettings && (
+            <IconButton
+              title={t(locale, 'scripts.settings')}
+              onClick={() => usePluginSettingsStore.getState().openSettingsDialog({ pluginId: plugin.pluginId, source: 'installed' })}
+            >
+              <Settings size={13} />
+            </IconButton>
+          )}
+          <IconButton
+            title={t(locale, 'scripts.actionOpenEditor')}
+            onClick={() => openPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'installed' })}
+          >
+            <FolderOpen size={13} />
+          </IconButton>
+          {plugin.status !== 'enabled' && (
+            <IconButton title={t(locale, 'scripts.actionEnable')} onClick={() => runTask(key, () => enablePlugin(plugin.pluginId))}>
+              <Power size={13} />
+            </IconButton>
+          )}
+          {plugin.status === 'enabled' && (
+            <IconButton title={t(locale, 'scripts.actionDisable')} onClick={() => disablePlugin(plugin.pluginId)}>
+              <Power size={13} />
+            </IconButton>
+          )}
+          <IconButton title={t(locale, 'scripts.actionReload')} onClick={() => runTask(key, () => reloadPlugin(plugin.pluginId))}>
+            <RefreshCw size={13} />
+          </IconButton>
+          {plugin.source === 'github' && (
+            <IconButton
+              title={t(locale, 'scripts.actionCheckPluginUpdate')}
+              onClick={() => runTask(`${key}:check-update`, () => checkInstalledPluginUpdate(plugin.pluginId).then(() => undefined))}
+            >
+              <Download size={13} />
+            </IconButton>
+          )}
+          {plugin.source === 'github' && plugin.update?.status === 'available' && (
+            <IconButton
+              title={t(locale, 'scripts.actionUpdatePlugin').replace('{version}', plugin.update.latestVersion || '')}
+              onClick={() => runTask(`${key}:update`, () => updateInstalledPlugin(plugin.pluginId).then(() => undefined))}
+            >
+              <RefreshCw size={13} />
+            </IconButton>
+          )}
+          <IconButton title={t(locale, 'scripts.actionUninstall')} onClick={() => runTask(key, async () => {
+            await uninstallPlugin(plugin.pluginId)
+            setUpdateStatus('checking')
+            setUpdateStatus('done')
+          })}>
+            <Trash2 size={13} />
+          </IconButton>
+        </>
+      )
+    }
+
+    const plugin = row.plugin as DevPlugin
+    const key = `dev:${plugin.pluginId}`
+    return (
+      <>
+        {hasLegacySettings && (
+          <IconButton
+            title={t(locale, 'scripts.settings')}
+            onClick={() => usePluginSettingsStore.getState().openSettingsDialog({ pluginId: plugin.pluginId, source: 'dev' })}
+          >
+            <Settings size={13} />
+          </IconButton>
+        )}
+        <IconButton
+          title={t(locale, 'scripts.actionOpenEditor')}
+          onClick={() => openPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'dev' })}
+        >
+          <FolderOpen size={13} />
+        </IconButton>
+        <IconButton
+          title={t(locale, 'scripts.actionOpenExternal')}
+          onClick={() => runTask(key, () => openPluginDir(plugin.folderPath))}
+        >
+          <ExternalLink size={13} />
+        </IconButton>
+        {plugin.watching ? (
+          <IconButton title={t(locale, 'scripts.actionStopWatching')} onClick={() => unwatchDevPlugin(plugin.pluginId)}>
+            <Power size={13} />
+          </IconButton>
+        ) : (
+          <IconButton title={t(locale, 'scripts.actionWatchDev')} onClick={() => runTask(key, () => watchDevPlugin(plugin.pluginId))}>
+            <Power size={13} />
+          </IconButton>
+        )}
+        <IconButton title={t(locale, 'scripts.actionReloadDev')} onClick={() => runTask(key, () => reloadDevPlugin(plugin.pluginId))}>
+          <RefreshCw size={13} />
+        </IconButton>
+        <IconButton title={t(locale, 'scripts.actionRemoveDev')} onClick={() => removeDevPlugin(plugin.pluginId)}>
+          <Trash2 size={13} />
+        </IconButton>
+      </>
+    )
+  }
+
+  function renderPluginDetail(row: PluginDetailRow) {
+    const settingsContribution = pluginRegistry.getPluginDefinition(row.pluginId, row.settingsSource)?.settings
+    const hasSchemaSettings = !!settingsContribution?.schema
+    const hasLegacySettings = !!settingsContribution && !settingsContribution.schema
+    const permissions = pluginRegistry.getPluginPermissions(row.pluginId, row.settingsSource)
+    const surfaces = pluginRegistry.getPluginDefinition(row.pluginId, row.settingsSource)?.ui?.surfaces ?? []
+    const hasDetailBlocks = permissions.length > 0 || hasSchemaSettings || surfaces.length > 0
+    const pluginDetailDescription = getPluginDetailDescription(row.pluginId, row.settingsSource, locale)
+
+    return (
+      <section className={`a-detail plugin-detail-panel ${row.error ? 'has-error' : ''}`}>
+        <div className="d-head plugin-detail-header">
+          <div className="d-ico plugin-detail-icon">
+            {row.loading ? <Loader2 size={18} className="animate-spin" /> : <Package size={18} />}
+          </div>
+          <div className="d-htext plugin-detail-title-group">
+            <div className="d-name plugin-detail-title-row">
+              {row.title}
+            </div>
+            <div className="d-meta plugin-detail-subtitle">{row.source}://{row.pluginId} · v{row.version}</div>
+          </div>
+        </div>
+
+        {pluginDetailDescription && (
+          <p className="d-desc plugin-detail-description">
+            {pluginDetailDescription}
+          </p>
+        )}
+
+        <div className="plugin-detail-meta">
+          {row.folderPath && <div className="plugin-detail-path truncate">{row.folderPath}</div>}
+          {row.sourceUrl && <div className="plugin-detail-path truncate">{row.sourceUrl}</div>}
+          {row.error && (
+            <div className="plugin-detail-error">
+              <AlertTriangle size={13} /> {row.error}
+            </div>
+          )}
+        </div>
+
+        <div className="plugin-detail-sections">
+          {renderPluginPermissions(row.pluginId, row.settingsSource)}
+          {hasSchemaSettings && (
+            <div className="plugin-settings-inline-detail">
+              <PluginSettingsInline pluginId={row.pluginId} source={row.settingsSource} locale={locale} />
+            </div>
+          )}
+          {renderSurfaceShortcuts(row.pluginId, row.settingsSource)}
+          {!hasDetailBlocks && (
+            <div className="plugin-detail-empty-note">{t(locale, 'scripts.noDetails')}</div>
+          )}
+        </div>
+        {row.capabilities.length > 0 && (
+          <div className="d-caps plugin-detail-capabilities">
+            {row.capabilities.map((capability) => (
+              <span key={capability} className="d-cap script-badge">{capability}</span>
+            ))}
+          </div>
+        )}
+      </section>
+    )
+  }
+
+  function renderPluginListRow(row: PluginDetailRow) {
+    const selected = row.key === selectedPluginKey
+    const shortcutHint = surfaceShortcutHintForPlugin(row.pluginId, row.settingsSource)
+    return (
+      <button
+        key={row.key}
+        type="button"
+        className={`prow plugin-master-row ${selected ? 'sel is-selected' : ''} ${row.error ? 'has-error' : ''}`}
+        onClick={() => setSelectedPluginKey(row.key)}
+      >
+        <span className="p-ico plugin-master-row-icon">
+          {row.loading ? <Loader2 size={15} className="animate-spin" /> : <Package size={15} />}
+        </span>
+        <span className="p-name plugin-master-row-main">
+          {row.title}
+        </span>
+        {shortcutHint && <span className="p-hint">{shortcutHint}</span>}
+      </button>
+    )
+  }
+
+  function getPluginDetailDescription(pluginId: string, source: PluginSettingsSource, currentLocale: Locale) {
+    const definition = pluginRegistry.getPluginDefinition(pluginId, source)
+    const schemaSection = definition?.settings?.schema?.sections.find((section) => section.description || section.descriptionI18n)
+    if (schemaSection) return localized(schemaSection.description ?? '', schemaSection.descriptionI18n, currentLocale)
+    const surface = definition?.ui?.surfaces?.[0]
+    if (surface) return localized(surface.title, surface.titleI18n, currentLocale)
+    const command = definition?.commands?.find((item) => item.description || item.descriptionI18n)
+    if (command) return localized(command.description ?? '', command.descriptionI18n, currentLocale)
+    return ''
+  }
+
+  function surfaceShortcutHintForPlugin(pluginId: string, source: PluginSettingsSource) {
+    const definition = pluginRegistry.getPluginDefinition(pluginId, source)
+    const surfaces = definition?.ui?.surfaces?.filter((surface) => surface.entry?.shortcutBindable !== false) ?? []
+    for (const surface of surfaces) {
+      const shortcut = pluginSurfaceShortcuts[pluginSurfaceShortcutKey({ source, pluginId, surfaceId: surface.id })]
+      if (shortcut?.accelerator) return shortcut.accelerator
+    }
+    return ''
+  }
+
+  const selectedPluginRow = pluginDetailRows.find((row) => row.key === selectedPluginKey) ?? pluginDetailRows[0]
   const activeItems = activeTab === 'builtin' ? filteredBuiltin : activeTab === 'installed' ? filteredInstalled : filteredDev
   const totalCount = filteredBuiltin.length + filteredInstalled.length + filteredDev.length
 
   return (
-    <div className="scripts-content">
-      <div className="scripts-header">
-        <span className="scripts-title">{t(locale, 'scripts.title')}</span>
-        <div className="scripts-header-actions">
-          <button data-testid="plugin-new-button" onClick={handleCreatePlugin} className="scripts-btn scripts-btn-primary">
-            <Plus size={14} /> {t(locale, 'scripts.new')}
+    <div className="scripts-content body">
+      <div className="phead">
+        <span className="ptitle">{t(locale, 'scripts.title')}</span>
+        <span className="pcount">{totalCount}</span>
+      </div>
+
+      <div className="ptools">
+        <div className="psearch scripts-search-bar">
+          <Search size={14} />
+          <input
+            className="scripts-search-input"
+            type="text"
+            placeholder={t(locale, 'scripts.searchPlaceholder')}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </div>
+        <div className="menu-wrap">
+          <button
+            data-testid="plugin-new-button"
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              setAddMenuOpen((value) => !value)
+            }}
+            className="btn primary split"
+          >
+            <span className="bi">＋</span>{locale === 'zh' ? '添加插件' : 'Add Plugin'}<span className="chev">▾</span>
           </button>
-          <button onClick={() => setRemoteOpen(true)} className="scripts-btn">
-            <Globe size={14} /> {t(locale, 'scripts.importGithub')}
-          </button>
-          <button onClick={handleInstallZip} className="scripts-btn">
-            <Archive size={14} /> {t(locale, 'scripts.importZip')}
-          </button>
-          <button onClick={handleInstallDirectory} className="scripts-btn">
-            <Upload size={14} /> {t(locale, 'scripts.importFolder')}
-          </button>
-          <button onClick={handleSideloadDev} className="scripts-btn scripts-btn-primary">
-            <FolderOpen size={14} /> {t(locale, 'scripts.importDev')}
-          </button>
+          {addMenuOpen && (
+            <div className="menu open" onClick={(event) => event.stopPropagation()}>
+              <div className="m-label">{locale === 'zh' ? '从来源安装' : 'Install from'}</div>
+              <button className="m-item" type="button" onClick={() => { setAddMenuOpen(false); setRemoteOpen(true) }}>
+                <span className="m-ico">⎋</span><span className="m-main"><span className="m-name">{t(locale, 'scripts.importGithub')}</span><span className="m-desc">GitHub URL</span></span>
+              </button>
+              <button className="m-item" type="button" onClick={() => { setAddMenuOpen(false); void handleInstallZip() }}>
+                <span className="m-ico">⊟</span><span className="m-main"><span className="m-name">{t(locale, 'scripts.importZip')}</span><span className="m-desc">.zip</span></span>
+              </button>
+              <button className="m-item" type="button" onClick={() => { setAddMenuOpen(false); void handleInstallDirectory() }}>
+                <span className="m-ico">▢</span><span className="m-main"><span className="m-name">{t(locale, 'scripts.importFolder')}</span><span className="m-desc">{locale === 'zh' ? '选择已解压的插件目录' : 'Choose an unpacked directory'}</span></span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="scripts-search-bar">
-        <Search size={14} />
-        <input
-          className="scripts-search-input"
-          type="text"
-          placeholder={t(locale, 'scripts.searchPlaceholder')}
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-        <span className={`scripts-search-count ${query ? 'has-query' : ''}`}>{totalCount}</span>
-      </div>
-
-      <div className="scripts-tabs seg-control sm">
-        <button className={`scripts-tab seg-item ${activeTab === 'builtin' ? 'active' : ''}`} onClick={() => setActiveTab('builtin')}>
+      <div className="ptabs scripts-tabs">
+        <button className={`ptab scripts-tab ${activeTab === 'builtin' ? 'on active' : ''}`} onClick={() => setActiveTab('builtin')}>
           {t(locale, 'scripts.tabBuiltin')}
-          <span className={`scripts-tab-count ${activeTab === 'builtin' ? 'active' : ''}`}>{builtinPlugins.length}</span>
+          <span className="pt-n scripts-tab-count">{builtinPlugins.length}</span>
         </button>
-        <button className={`scripts-tab seg-item ${activeTab === 'installed' ? 'active' : ''}`} onClick={() => setActiveTab('installed')}>
+        <button className={`ptab scripts-tab ${activeTab === 'installed' ? 'on active' : ''}`} onClick={() => setActiveTab('installed')}>
           {t(locale, 'scripts.tabInstalled')}
-          <span className={`scripts-tab-count ${activeTab === 'installed' ? 'active' : ''}`}>{installedList.length}</span>
+          <span className="pt-n scripts-tab-count">{installedList.length}</span>
         </button>
-        <button className={`scripts-tab seg-item ${activeTab === 'dev' ? 'active' : ''}`} onClick={() => setActiveTab('dev')}>
+        <button className={`ptab scripts-tab ${activeTab === 'dev' ? 'on active' : ''}`} onClick={() => setActiveTab('dev')}>
           {t(locale, 'scripts.tabDev')}
-          <span className={`scripts-tab-count ${activeTab === 'dev' ? 'active' : ''}`}>{devList.length}</span>
+          <span className="pt-n scripts-tab-count">{devList.length}</span>
         </button>
       </div>
 
-      <div className="flex items-center justify-between mb-2 px-1">
-        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-tertiary)' }}>
-          {activeTab === 'builtin'
-            ? t(locale, 'scripts.sectionBuiltin')
-            : activeTab === 'installed'
-              ? t(locale, 'scripts.sectionInstalled')
-              : t(locale, 'scripts.sectionDev')}
-        </span>
-        <button onClick={handlePackageUpdateCheck} className="scripts-btn" style={{ fontSize: 'var(--text-xs)', padding: '2px 8px' }}>
-          {updateStatus === 'checking' ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
-          {t(locale, 'scripts.checkPackageUpdates')}
-        </button>
-      </div>
       {updateStatus === 'error' && (
         <div className="text-[11px] mb-2" style={{ color: 'var(--color-error-text)' }}>{t(locale, 'scripts.packageUpdateError')}</div>
       )}
@@ -725,15 +1067,16 @@ export function ScriptsView() {
                 ? t(locale, 'scripts.emptyInstalled')
                 : activeTab === 'builtin'
                   ? t(locale, 'scripts.emptyBuiltin')
-                  : t(locale, 'scripts.emptyDev')}
+                : t(locale, 'scripts.emptyDev')}
             </div>
           </div>
         ) : (
-          activeTab === 'builtin'
-            ? filteredBuiltin.map(renderBuiltin)
-            : activeTab === 'installed'
-            ? filteredInstalled.map(renderInstalled)
-            : filteredDev.map(renderDev)
+          <div className="splitwrap plugin-master-detail">
+            <div className="a-list plugin-master-list" role="listbox" aria-label={t(locale, 'scripts.title')}>
+              {pluginDetailRows.map(renderPluginListRow)}
+            </div>
+            {selectedPluginRow && renderPluginDetail(selectedPluginRow)}
+          </div>
         )}
       </div>
 

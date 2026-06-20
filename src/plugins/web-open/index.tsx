@@ -9,7 +9,6 @@ import {
   type LauncherDynamicContext,
   type LauncherItemContribution,
 } from '@hiven/plugin'
-import { WebQuickOpenSettingsBody } from './settings/WebQuickOpenSettingsBody'
 import {
   buildWebQuickOpenUrl,
   DEFAULT_WEB_QUICK_OPEN_SETTINGS,
@@ -77,13 +76,13 @@ function isUnchangedDefaultEntry(entry: WebQuickOpenSettings['entries'][number])
   )
 }
 
-function buildDynamicLauncherItems(ctx: LauncherDynamicContext): LauncherItemContribution<WebQuickOpenSettings>[] {
+function buildDynamicLauncherItems(ctx: LauncherDynamicContext): LauncherItemContribution[] {
   const settings = ctx.settings as WebQuickOpenSettings | undefined
   const entries = settings?.entries ?? DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries
   return entries
     .filter((entry) => !isUnchangedDefaultEntry(entry))
     .filter((entry) => entryMatchesQuery(entry, ctx.query))
-    .map(buildEntryLauncherItem)
+    .map((entry) => buildEntryLauncherItem(entry) as LauncherItemContribution)
 }
 
 export default definePlugin<WebQuickOpenSettings>({
@@ -92,7 +91,97 @@ export default definePlugin<WebQuickOpenSettings>({
     titleI18n: { zh: '网页快开' },
     version: 1,
     defaultValue: DEFAULT_WEB_QUICK_OPEN_SETTINGS,
-    component: WebQuickOpenSettingsBody,
+    schema: {
+      sections: [
+        {
+          id: 'entries',
+          title: 'Rules',
+          titleI18n: { zh: '规则' },
+          description: 'Configure quick-open rules that appear in the launcher.',
+          descriptionI18n: { zh: '配置会出现在启动器里的网页快开规则。' },
+          fields: [
+            {
+              kind: 'object-list',
+              key: 'entries',
+              label: 'Quick-open rules',
+              labelI18n: { zh: '网页快开规则' },
+              addLabel: 'Add rule',
+              addLabelI18n: { zh: '添加规则' },
+              itemLabel: 'Rule',
+              itemLabelI18n: { zh: '规则' },
+              emptyText: 'No quick-open rules yet.',
+              emptyTextI18n: { zh: '还没有网页快开规则。' },
+              itemDefaults: {
+                id: 'web',
+                title: '',
+                aliases: [],
+                placeholder: '',
+                urlTemplate: 'https://example.com/search?q={query}',
+                encodeQuery: true,
+                emptyQueryBehavior: 'block',
+              },
+              fields: [
+                {
+                  kind: 'text',
+                  key: 'title',
+                  label: 'Name',
+                  labelI18n: { zh: '名称' },
+                  placeholder: 'Google Search',
+                  placeholderI18n: { zh: 'Google 搜索' },
+                },
+                {
+                  kind: 'string-list',
+                  key: 'aliases',
+                  label: 'Trigger words',
+                  labelI18n: { zh: '触发词' },
+                  description: 'Press Enter to add. Any trigger word can launch this rule.',
+                  descriptionI18n: { zh: '输入后回车添加，任一词都可唤起。' },
+                  placeholder: 'Add trigger word...',
+                  placeholderI18n: { zh: '添加触发词…' },
+                  rows: 2,
+                },
+                {
+                  kind: 'text',
+                  key: 'placeholder',
+                  label: 'Launcher input hint',
+                  labelI18n: { zh: '启动器输入提示' },
+                  placeholder: 'Search keyword',
+                  placeholderI18n: { zh: '输入搜索关键词' },
+                },
+                {
+                  kind: 'textarea',
+                  key: 'urlTemplate',
+                  label: 'Address template',
+                  labelI18n: { zh: '地址模板' },
+                  description: 'Use {query} as the input placeholder.',
+                  descriptionI18n: { zh: '{query} 会被命令面板中输入的查询内容替换。' },
+                  placeholder: 'https://www.google.com/search?q={query}',
+                  placeholderI18n: { zh: 'https://www.google.com/search?q={query}' },
+                  rows: 2,
+                  mono: true,
+                },
+                {
+                  kind: 'switch',
+                  key: 'encodeQuery',
+                  label: 'Encode query',
+                  labelI18n: { zh: '自动编码输入内容' },
+                },
+                {
+                  kind: 'select',
+                  key: 'emptyQueryBehavior',
+                  label: 'Empty input',
+                  labelI18n: { zh: '空输入时' },
+                  options: [
+                    { value: 'block', label: 'Block', labelI18n: { zh: '阻止打开' } },
+                    { value: 'open', label: 'Open anyway', labelI18n: { zh: '仍然打开' } },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
   },
 
   launcher: {

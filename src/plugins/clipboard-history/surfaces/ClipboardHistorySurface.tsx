@@ -27,7 +27,7 @@ import type { ClipboardHistorySettings } from '../settings/model'
 import type { ClipboardHistoryItem } from '../storage/clipboardHistoryTypes'
 import { createClipboardHistoryRepository } from '../storage/clipboardHistoryRepository'
 
-type FilterKind = 'all' | 'text' | 'image' | 'files'
+type FilterKind = 'all' | 'frequent' | 'text' | 'image' | 'files'
 type SurfaceStorage = PluginSurfaceProps<ClipboardHistorySettings>['host']['storage']
 type ImageHistoryItem = Extract<ClipboardHistoryItem, { kind: 'image' }>
 
@@ -89,7 +89,11 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
   const filteredItems = useMemo(() => {
     let result = items
-    if (filter !== 'all') {
+    if (filter === 'frequent') {
+      result = [...result]
+        .filter((item) => item.copyCount > 1)
+        .sort((a, b) => b.copyCount - a.copyCount)
+    } else if (filter !== 'all') {
       result = result.filter((item) => item.kind === filter)
     }
     if (query.trim()) {
@@ -237,6 +241,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                 aria-label={t('filter.label')}
                 options={[
                   { value: 'all', label: t('filter.all') },
+                  { value: 'frequent', label: t('filter.frequent') },
                   { value: 'text', label: t('filter.text') },
                   { value: 'image', label: t('filter.image') },
                   { value: 'files', label: t('filter.files') },
@@ -280,9 +285,11 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
             ) : (
               <>
                 <div className="clipboard-history-preview-content" data-launcher-scrollable>
+                  <div className="clipboard-history-section-label">{t('preview.label')}</div>
                   {renderPreview(selectedFullItem ?? selectedItem, t, host.storage)}
                 </div>
                 <div className="clipboard-history-meta">
+                  <div className="clipboard-history-section-label">{t('meta.label')}</div>
                   {getMetaRows(selectedFullItem ?? selectedItem, locale, t).map((row) => (
                     <div key={row.label} className="clipboard-history-meta-row">
                       <span>{row.label}</span>
@@ -296,9 +303,14 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         </div>
 
         <SurfaceFooterHints className="clipboard-history-footer">
-          <span>↵ {t('hint.paste')}</span>
-          <span>⌘C {t('hint.copy')}</span>
-          <span>⌫ {t('hint.delete')}</span>
+          <span className="clipboard-history-footer-brand">
+            <span className="clipboard-history-footer-logo">H</span>
+            {t('surface.main.title')}
+          </span>
+          <span className="clipboard-history-footer-spacer" />
+          <span className="clipboard-history-footer-group is-primary"><kbd>↵</kbd>{t('hint.paste')}</span>
+          <span className="clipboard-history-footer-group"><kbd>⌘C</kbd>{t('hint.copy')}</span>
+          <span className="clipboard-history-footer-group"><kbd>⌫</kbd>{t('hint.delete')}</span>
         </SurfaceFooterHints>
       </>
     )
@@ -402,6 +414,9 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
           <span className="clipboard-history-item-title">{getItemTitle(item, t)}</span>
           <span className="clipboard-history-item-subtitle">{getItemSubtitle(item, locale, t)}</span>
         </span>
+        {item.copyCount > 1 && (
+          <span className="clipboard-history-copy-count">×{item.copyCount}</span>
+        )}
       </SurfaceListItem>
       <IconButton
         type="button"

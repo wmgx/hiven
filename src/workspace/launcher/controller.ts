@@ -196,6 +196,7 @@ export class LauncherController {
 
   private selectedIndexFor(param: LauncherParamSpec | undefined, params: Record<string, unknown>): number {
     if (!param) return 0
+    if (param.type === 'multi-select') return 0
     const value = params[param.key]
     const index = this.paramOptions(param).findIndex((option) => option === value)
     return index >= 0 ? index : 0
@@ -313,6 +314,34 @@ export class LauncherController {
     this.setState({ frames })
   }
 
+  toggleCurrentMultiParamValue(value: unknown): void {
+    const top = this.topFrame()
+    if (top.kind !== 'param-input') return
+    const param = this.currentParam(top)
+    if (!param || param.type !== 'multi-select') return
+    const currentValue = top.params[param.key]
+    const current = Array.isArray(currentValue) ? [...currentValue] : []
+    const valueKey = String(value)
+    const existingIndex = current.findIndex((item) => String(item) === valueKey)
+    const max = param.maxSelect ?? Number.POSITIVE_INFINITY
+    let next: unknown[]
+    if (existingIndex >= 0) {
+      next = current.filter((_, index) => index !== existingIndex)
+    } else {
+      if (current.length >= max) return
+      next = [...current, value]
+    }
+    const frames = this.state.frames.slice(0, -1)
+    frames.push({
+      ...top,
+      params: {
+        ...top.params,
+        [param.key]: next,
+      },
+    })
+    this.setState({ frames, error: null })
+  }
+
   private currentParam(frame: ParamInputFrame): LauncherParamSpec | undefined {
     return frame.item.params?.[frame.paramIndex]
   }
@@ -328,6 +357,10 @@ export class LauncherController {
 
   private validateParam(param: LauncherParamSpec, params: Record<string, unknown>): string | null {
     const value = params[param.key]
+    if (param.type === 'multi-select' && Array.isArray(value)) {
+      const min = param.minSelect ?? (param.required ? 1 : 0)
+      if (value.length < min) return translate(this.deps.locale as Locale, 'palette', 'fieldRequiredWithLabel', { label: param.label })
+    }
     if (!param.required) return null
     if (value === undefined || value === null || value === '') return translate(this.deps.locale as Locale, 'palette', 'fieldRequiredWithLabel', { label: param.label })
     if (Array.isArray(value) && value.length === 0) return translate(this.deps.locale as Locale, 'palette', 'fieldRequiredWithLabel', { label: param.label })
@@ -351,10 +384,12 @@ export class LauncherController {
       return
     }
 
-    const params = {
-      ...top.params,
-      [param.key]: this.normalizeParamValue(param, value),
-    }
+    const params = param.type === 'multi-select' && value === undefined
+      ? top.params
+      : {
+          ...top.params,
+          [param.key]: this.normalizeParamValue(param, value),
+        }
     const error = this.validateParam(param, params)
     if (error) {
       this.setState({ error })

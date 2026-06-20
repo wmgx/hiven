@@ -37,6 +37,8 @@
     "test:command-palette-system-page-shortcuts": "node scripts/test-command-palette-system-page-shortcuts.mjs",
     "test:command-palette-extension-settings": "node scripts/test-command-palette-extension-settings.mjs",
     "test:plugin-settings-dialog-keyboard": "node scripts/test-plugin-settings-dialog-keyboard.mjs",
+    "test:plugin-settings-schema": "node scripts/test-plugin-settings-schema.mjs",
+    "test:editor-topbar-plugin-detail": "node scripts/test-editor-topbar-plugin-detail.mjs",
     "test:command-optional-params": "node scripts/test-command-optional-params.mjs",
     "test:ime-enter-confirmation": "node scripts/test-ime-enter-confirmation.mjs",
     "test:spatial-ui-contract": "node scripts/test-spatial-ui-contract.mjs",
@@ -57,6 +59,7 @@
     "test:launcher-registry": "node scripts/test-launcher-registry.mjs",
     "test:launcher-controller": "node scripts/test-launcher-controller.mjs",
     "test:launcher-back-focus": "node scripts/test-launcher-back-focus.mjs",
+    "test:global-launcher-v3-ui": "node scripts/test-global-launcher-v3-ui.mjs",
     "test:launcher-plugin-contract": "node scripts/test-launcher-plugin-contract.mjs",
     "preview": "vite preview",
     "tauri": "tauri"

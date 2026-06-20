@@ -62,11 +62,15 @@ export type CommandParam = {
   label: string
   labelI18n?: Partial<Record<Locale, string>>
   type: ParamType
-  options?: string[] | { label: string; value: string; labelI18n?: Partial<Record<Locale, string>> }[]
+  options?: string[] | { label: string; value: string; labelI18n?: Partial<Record<Locale, string>>; description?: string; descriptionI18n?: Partial<Record<Locale, string>> }[]
   default?: unknown
   required?: boolean
   hint?: string
   hintI18n?: Partial<Record<Locale, string>>
+  /** For multi-select params: minimum selected items required before submit. */
+  minSelect?: number
+  /** For multi-select params: maximum selected items. */
+  maxSelect?: number
 }
 
 // ─── Command Contribution ─────────────────────────────────────────────────────
@@ -234,10 +238,136 @@ export type PluginSettingsBodyProps<TSettings = unknown> = {
   host: PluginSettingsHostApi
 }
 
+export type PluginSettingsModalBodyProps<TSettings = unknown> = PluginSettingsBodyProps<TSettings> & {
+  modalId: string
+  close: () => void
+}
+
 export type PluginSettingsHostApi = {
   permissions: PluginPermissionSnapshot
   storage: PluginPrivateStorageApi
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
+}
+
+export type PluginSettingsOption = {
+  label: string
+  labelI18n?: Partial<Record<Locale, string>>
+  value: string
+}
+
+export type PluginSettingsFieldBase<TSettings = unknown> = {
+  key: keyof TSettings & string
+  label: string
+  labelI18n?: Partial<Record<Locale, string>>
+  description?: string
+  descriptionI18n?: Partial<Record<Locale, string>>
+  disabled?: boolean
+}
+
+export type PluginSettingsSwitchField<TSettings = unknown> = PluginSettingsFieldBase<TSettings> & {
+  kind: 'switch'
+}
+
+export type PluginSettingsNumberField<TSettings = unknown> = PluginSettingsFieldBase<TSettings> & {
+  kind: 'number'
+  min?: number
+  max?: number
+  step?: number
+  unit?: string
+  /** Multiplies the displayed number before storing it, e.g. 1048576 for MB-backed byte fields. */
+  storageScale?: number
+}
+
+export type PluginSettingsSelectField<TSettings = unknown> = PluginSettingsFieldBase<TSettings> & {
+  kind: 'select'
+  options: PluginSettingsOption[]
+}
+
+export type PluginSettingsTextField<TSettings = unknown> = PluginSettingsFieldBase<TSettings> & {
+  kind: 'text'
+  placeholder?: string
+  placeholderI18n?: Partial<Record<Locale, string>>
+  mono?: boolean
+}
+
+export type PluginSettingsTextareaField<TSettings = unknown> = PluginSettingsFieldBase<TSettings> & {
+  kind: 'textarea'
+  placeholder?: string
+  placeholderI18n?: Partial<Record<Locale, string>>
+  rows?: number
+  mono?: boolean
+}
+
+export type PluginSettingsListField<TSettings = unknown> = PluginSettingsFieldBase<TSettings> & {
+  kind: 'list'
+}
+
+export type PluginSettingsObjectListItemField = {
+  key: string
+  label: string
+  labelI18n?: Partial<Record<Locale, string>>
+  description?: string
+  descriptionI18n?: Partial<Record<Locale, string>>
+  kind: 'text' | 'textarea' | 'switch' | 'select' | 'string-list'
+  placeholder?: string
+  placeholderI18n?: Partial<Record<Locale, string>>
+  rows?: number
+  options?: PluginSettingsOption[]
+  mono?: boolean
+}
+
+export type PluginSettingsObjectListField<TSettings = unknown> = PluginSettingsFieldBase<TSettings> & {
+  kind: 'object-list'
+  itemLabel?: string
+  itemLabelI18n?: Partial<Record<Locale, string>>
+  addLabel?: string
+  addLabelI18n?: Partial<Record<Locale, string>>
+  emptyText?: string
+  emptyTextI18n?: Partial<Record<Locale, string>>
+  itemDefaults?: Record<string, unknown>
+  fields: PluginSettingsObjectListItemField[]
+}
+
+export type PluginSettingsModalContribution<TSettings = unknown> = {
+  id: string
+  title: string
+  titleI18n?: Partial<Record<Locale, string>>
+  width?: number
+  height?: number
+  component: ComponentType<PluginSettingsModalBodyProps<TSettings>>
+}
+
+export type PluginSettingsModalField<TSettings = unknown> = Omit<PluginSettingsFieldBase<TSettings>, 'key'> & {
+  kind: 'modal'
+  id: string
+  modalId?: string
+  surfaceId?: string
+  buttonLabel?: string
+  buttonLabelI18n?: Partial<Record<Locale, string>>
+  component?: ComponentType<PluginSettingsModalBodyProps<TSettings>>
+}
+
+export type PluginSettingsField<TSettings = unknown> =
+  | PluginSettingsSwitchField<TSettings>
+  | PluginSettingsNumberField<TSettings>
+  | PluginSettingsSelectField<TSettings>
+  | PluginSettingsTextField<TSettings>
+  | PluginSettingsTextareaField<TSettings>
+  | PluginSettingsListField<TSettings>
+  | PluginSettingsObjectListField<TSettings>
+  | PluginSettingsModalField<TSettings>
+
+export type PluginSettingsSection<TSettings = unknown> = {
+  id: string
+  title?: string
+  titleI18n?: Partial<Record<Locale, string>>
+  description?: string
+  descriptionI18n?: Partial<Record<Locale, string>>
+  fields: PluginSettingsField<TSettings>[]
+}
+
+export type PluginSettingsSchema<TSettings = unknown> = {
+  sections: PluginSettingsSection<TSettings>[]
 }
 
 export type PluginSettingsContribution<TSettings = unknown> = {
@@ -246,7 +376,9 @@ export type PluginSettingsContribution<TSettings = unknown> = {
   version?: number
   defaultValue: TSettings
   migrate?: (stored: unknown, fromVersion: number) => TSettings
-  component: ComponentType<PluginSettingsBodyProps<TSettings>>
+  schema?: PluginSettingsSchema<TSettings>
+  modals?: PluginSettingsModalContribution<TSettings>[]
+  component?: ComponentType<PluginSettingsBodyProps<TSettings>>
 }
 
 // ─── Launcher Quick Entry ────────────────────────────────────────────────────

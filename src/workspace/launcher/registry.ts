@@ -43,10 +43,24 @@ const DYNAMIC_PROVIDER_TIMEOUT_MS = 1000
 // ─── Host-owned items ────────────────────────────────────────────────────────
 
 let hostItemsProvider: (() => LauncherItem[]) | null = null
+let hostDynamicItemsProvider: ((ctx: {
+  query: string
+  surfaceId: LauncherSurfaceId
+  locale: Locale
+}) => Promise<LauncherItem[]> | LauncherItem[]) | null = null
 
 /** Register a provider for host-owned launcher items (views/actions). */
 export function setHostLauncherItemsProvider(provider: () => LauncherItem[]): void {
   hostItemsProvider = provider
+}
+
+/** Register a provider for host-owned dynamic launcher items (apps, system search). */
+export function setHostLauncherDynamicItemsProvider(provider: (ctx: {
+  query: string
+  surfaceId: LauncherSurfaceId
+  locale: Locale
+}) => Promise<LauncherItem[]> | LauncherItem[]): void {
+  hostDynamicItemsProvider = provider
 }
 
 export function getHostLauncherItems(): LauncherItem[] {
@@ -154,14 +168,12 @@ function resolvePluginSettingsItem(
         })
         return { ok: true, keepOpen: true }
       }
-      if (ctx.surfaceId !== 'global-launcher') {
-        settingsState.openSettingsDialog({
-          pluginId,
-          source: settingsSource,
-          presentation: 'dialog',
-          context: { surfaceId: ctx.surfaceId },
-        })
-      }
+      settingsState.openSettingsDialog({
+        pluginId,
+        source: settingsSource,
+        presentation: 'dialog',
+        context: { surfaceId: ctx.surfaceId },
+      })
       return { ok: true }
     },
   }
@@ -281,7 +293,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 /**
  * Run dynamic providers for a query. Returns resolved dynamic LauncherItems.
  * Guards:
- *  - Empty query → no providers run.
+ *  - Empty query → host dynamic providers may run; plugin dynamic providers do not.
  *  - Query longer than DYNAMIC_QUERY_MAX_LENGTH → skip.
  *  - Each provider isolated by try/catch + timeout; one failure cannot break
  *    the launcher or other providers.
@@ -293,8 +305,12 @@ export async function collectDynamicItems(
   getSettings: (pluginId: string, source: ContributionSource) => unknown,
 ): Promise<LauncherItem[]> {
   const q = query.trim()
-  if (!q) return []
   if (q.length > DYNAMIC_QUERY_MAX_LENGTH) return []
+
+  const hostDynamicItems = hostDynamicItemsProvider
+    ? await Promise.resolve(hostDynamicItemsProvider({ query: q, surfaceId, locale }))
+    : []
+  if (!q) return hostDynamicItems
 
   const providers = collectDynamicProviders()
   const results = await Promise.all(
@@ -325,7 +341,10 @@ export async function collectDynamicItems(
       }
     }),
   )
-  return results.flat().filter((item): item is LauncherItem => item != null)
+  return [
+    ...hostDynamicItems,
+    ...results.flat().filter((item): item is LauncherItem => item != null),
+  ]
 }
 
 function resolveDynamicItem(

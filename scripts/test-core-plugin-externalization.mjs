@@ -17,23 +17,18 @@ function readOptional(path) {
 }
 
 const corePlugin = readOptional('src/workspace/corePlugin.ts')
-const corePanePlugin = read('src/plugins/core-pane/index.ts')
-const corePaneManifest = JSON.parse(read('src/plugins/core-pane/manifest.json'))
+const hostActions = read('src/workspace/launcher/hostActions.ts')
 const builtinIndex = JSON.parse(read('src/builtin-plugins/index.json'))
-const corePaneEntry = builtinIndex.packages.find((entry) => entry.pluginId === 'core-pane')
 
 assert.doesNotMatch(corePlugin, /core\.toggle-sticky-scroll/, 'sticky scroll command should not live in internal corePlugin')
 assert.doesNotMatch(corePlugin, /core\.set-language/, 'set language command should not live in internal corePlugin')
 
-assert.match(corePanePlugin, /id:\s*['"]core-pane\.toggle-sticky-scroll['"]/, 'core-pane should own sticky scroll command')
-assert.match(corePanePlugin, /type:\s*['"]pane\.update['"][\s\S]*stickyScroll/, 'sticky scroll should remain a pane update effect')
-assert.match(corePanePlugin, /id:\s*['"]core-pane\.set-language['"]/, 'core-pane should own set language command')
-assert.match(corePanePlugin, /languageSource:\s*['"]manual['"]|languageSource:\s*['"]auto['"]/, 'set language should preserve languageSource behavior')
+assert.match(hostActions, /host:pane:toggle-sticky-scroll/, 'host launcher actions should own sticky scroll command')
+assert.match(hostActions, /updatePaneStickyScroll\(state\.activePaneId,\s*next\)/, 'sticky scroll should update the active pane')
+assert.match(hostActions, /host:pane:set-language/, 'host launcher actions should own set language command')
+assert.match(hostActions, /updatePaneLanguageSource\(paneId,\s*['"]auto['"]\)|updatePaneLanguageSource\(paneId,\s*['"]manual['"]\)/, 'set language should preserve languageSource behavior')
 
-assert.notEqual(corePaneManifest.displayName, 'Pane Controls', 'core-pane user-visible displayName should be generalized')
-assert.notEqual(corePaneManifest.displayNameI18n?.zh, '面板控制', 'core-pane Chinese displayName should be generalized')
-assert.equal(corePaneManifest.version, '1.2.2', 'core-pane manifest version should be bumped')
-assert.equal(corePaneEntry?.version, '1.2.2', 'builtin index should publish bumped core-pane version')
+assert.equal(builtinIndex.packages.some((entry) => entry.pluginId === 'core-pane'), false, 'core-pane should no longer ship as a builtin plugin')
 
 // --- Regex Tester Plugin ---
 const regexPlugin = read('src/plugins/regex-tester/index.tsx')

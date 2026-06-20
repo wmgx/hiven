@@ -34,7 +34,7 @@ assert.ok(
 )
 
 assert.ok(
-  /ctx\.surfaceId\s*!==\s*['"]global-launcher['"][\s\S]{0,260}presentation:\s*['"]dialog['"]|presentation:\s*ctx\.surfaceId\s*===\s*['"]global-launcher['"]\s*\?\s*['"]global-launcher['"]\s*:\s*['"]dialog['"]/.test(registry),
+  /ctx\.surfaceId\s*!==\s*['"]global-launcher['"][\s\S]{0,260}presentation:\s*['"]dialog['"]|ctx\.surfaceId\s*===\s*['"]global-launcher['"][\s\S]{0,260}return\s+\{\s*ok:\s*true,\s*keepOpen:\s*true\s*\}[\s\S]{0,260}presentation:\s*['"]dialog['"]|presentation:\s*ctx\.surfaceId\s*===\s*['"]global-launcher['"]\s*\?\s*['"]global-launcher['"]\s*:\s*['"]dialog['"]/.test(registry),
   'non-global plugin settings actions should keep dialog presentation',
 )
 

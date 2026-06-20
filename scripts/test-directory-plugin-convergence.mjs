@@ -276,7 +276,7 @@ check('Time utilities ship as one first-party plugin package', () => {
   const manifest = JSON.parse(files.dateTimeAssistantManifest)
   assert.deepEqual(manifest.capabilities?.sort(), ['command', 'instant-suggestion'], 'date-time-assistant should advertise both command and instant-suggestion capabilities')
   assert.match(files.dateTimeAssistantPlugin, /\bcommands\s*:/, 'date-time-assistant should include the timestamp conversion command')
-  assert.match(files.dateTimeAssistantPlugin, /\binstantSuggestions\s*:/, 'date-time-assistant should keep date/time instant suggestions')
+  assert.match(files.dateTimeAssistantPlugin, /\blauncher\s*:\s*\{[\s\S]*\bdynamicItems\s*\(/, 'date-time-assistant should keep date/time instant suggestions through launcher dynamic items')
   assert.match(files.dateTimeAssistantPlugin, /tomorrow\s+/, 'date-time-assistant instant suggestions should preserve natural date query support')
 })
 
@@ -399,7 +399,7 @@ check('Builtin plugin update check compares remote package metadata', () => {
   assert.match(files.tauriLib, /fn\s+replace_plugin_dir[\s\S]*backup[\s\S]*fs::rename/, 'Tauri should provide a replace_plugin_dir command with backup/rename replacement')
   assert.match(files.tauriLib, /generate_handler!\[[\s\S]*replace_plugin_dir/, 'replace_plugin_dir should be registered as a Tauri command')
   assert.ok(files.builtinPluginIndex, 'remote builtin plugin index should exist at src/builtin-plugins/index.json')
-  assert.match(files.builtinPluginIndex, /"version"\s*:\s*18/, 'remote builtin plugin index should carry the current package index version')
+  assert.match(files.builtinPluginIndex, /"version"\s*:\s*22/, 'remote builtin plugin index should carry the current package index version')
   assert.doesNotMatch(files.builtinPluginIndex, /"files"\s*:/, 'remote builtin plugin index should not expose file lists as part of the plugin package contract')
   assert.doesNotMatch(files.configInit, /declare downloadable files/, 'builtin plugin updates should not reject package indexes that omit explicit file lists')
   assert.match(files.configInit, /fetchRemoteBuiltinPackageIndex|GitHub tree|recursive|tree API/i, 'builtin plugin updates should discover package files from the directory instead of requiring explicit file lists')

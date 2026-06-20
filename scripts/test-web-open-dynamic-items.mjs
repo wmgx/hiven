@@ -29,12 +29,10 @@ const webOpen = loadModule('src/plugins/web-open/index.tsx', {
   stripImports: [
     ...stripTypeImports,
     /import\s*\{[\s\S]*?\}\s*from\s*'@hiven\/plugin'\s*;?\s*\n?/g,
-    /import\s*\{[\s\S]*?\}\s*from\s*'\.\/settings\/WebQuickOpenSettingsBody'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/settings\/model'\s*;?\s*\n?/g,
   ],
   globals: {
     definePlugin: (definition) => definition,
-    WebQuickOpenSettingsBody: function WebQuickOpenSettingsBody() {},
     buildWebQuickOpenUrl: model.buildWebQuickOpenUrl,
     DEFAULT_WEB_QUICK_OPEN_SETTINGS: model.DEFAULT_WEB_QUICK_OPEN_SETTINGS,
   },

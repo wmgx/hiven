@@ -8,7 +8,7 @@ import type { ToastLevel } from '../../workspace/toast'
 
 const levelStyles: Record<ToastLevel, { bg: string; color: string }> = {
   info: { bg: 'var(--color-background-tertiary)', color: 'var(--color-text-primary)' },
-  success: { bg: 'var(--color-success-bg)', color: 'var(--color-success-text)' },
+  success: { bg: 'var(--accent-soft)', color: 'var(--accent)' },
   error: { bg: '#fef2f2', color: '#dc2626' },
   warning: { bg: '#fffbeb', color: '#d97706' },
 }

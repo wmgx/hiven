@@ -1,7 +1,0 @@
-{
-  "pluginId": "core-pane",
-  "displayName": "Core Controls",
-  "displayNameI18n": { "zh": "核心控制" },
-  "version": "1.2.2",
-  "capabilities": ["command", "toolbar"]
-}

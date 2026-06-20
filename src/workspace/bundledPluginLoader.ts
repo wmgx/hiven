@@ -57,7 +57,7 @@ function pluginDirFromPath(path: string): string {
 }
 
 function readBundledPluginPackages(): BundledPluginPackage[] {
-  return Object.entries(manifestModules).map(([manifestPath, rawManifest]) => {
+  return Object.entries(manifestModules).flatMap(([manifestPath, rawManifest]) => {
     const dir = pluginDirFromPath(manifestPath)
     const manifest = JSON.parse(rawManifest) as PluginManifest
     const entryPath = `../plugins/${dir}/index.tsx`
@@ -70,7 +70,7 @@ function readBundledPluginPackages(): BundledPluginPackage[] {
       throw new Error(`Bundled plugin "${manifest.pluginId}" entry "${entry}" has no default export`)
     }
 
-    return { dir, manifest: { ...manifest, entry }, definition }
+    return [{ dir, manifest: { ...manifest, entry }, definition }]
   })
 }
 

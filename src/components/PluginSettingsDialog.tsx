@@ -5,7 +5,7 @@
  * The plugin provides the body content via its settings.component.
  */
 
-import { Component, useCallback, useEffect, useMemo, type ErrorInfo, type ReactNode } from 'react'
+import { Component, useCallback, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { t } from '../i18n'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
@@ -19,6 +19,8 @@ import { openExternalUrl } from '../workspace/effectRunner'
 import type { PluginSettingsContribution } from '../workspace/pluginTypes'
 import { createPluginPrivateStorage } from '../workspace/pluginStorage'
 import { getPluginPermissionSnapshot, usePluginPermissionStore } from '../workspace/pluginPermissions'
+import { PluginSettingsSchemaRenderer } from './PluginSettingsSchemaRenderer'
+import { resolvePluginSettingsModal, type ResolvedPluginSettingsModal } from './pluginSettingsModalResolution'
 
 // ─── Error Boundary ──────────────────────────────────────────────────────────
 
@@ -83,7 +85,7 @@ export function PluginSettingsDialog() {
         style={{
           width: 'min(560px, calc(100vw - 48px))',
           maxHeight: 'min(600px, calc(100vh - 96px))',
-          background: 'var(--color-background-primary)',
+          background: 'var(--panel, var(--bg-surface, #ffffff))',
           border: '0.5px solid var(--color-border-secondary)',
           borderRadius: 'var(--radius-xl)',
           boxShadow: '0 24px 48px rgba(0, 0, 0, 0.2)',
@@ -176,6 +178,7 @@ function SettingsDialogBody({
   // Subscribe to the store record reactively so UI updates on setValue
   const storedRecord = usePluginSettingsStore((s) => s.pluginSettings[source][pluginId])
   const pluginPermissionVersion = usePluginPermissionStore((s) => s.version)
+  const [settingsModalTarget, setSettingsModalTarget] = useState<ResolvedPluginSettingsModal<unknown> | null>(null)
   void pluginPermissionVersion
 
   const currentVersion = contribution.version ?? 1
@@ -248,12 +251,30 @@ function SettingsDialogBody({
   }), [source, pluginId, permissions])
 
   const SettingsComponent = contribution.component
+  const SettingsModalComponent = settingsModalTarget?.modal.component
+  const settingsModalTitle = settingsModalTarget
+    ? settingsModalTarget.modal.titleI18n?.[locale] ?? settingsModalTarget.modal.title
+    : ''
 
   const errorFallback = (
     <div className="p-4 text-[13px]" style={{ color: 'var(--color-error)' }}>
       {t(locale, 'scripts.settingsRenderError')}
     </div>
   )
+
+  const settingsBodyProps = {
+    pluginId,
+    source,
+    locale,
+    t: pluginT,
+    value,
+    defaultValue: contribution.defaultValue,
+    setValue,
+    updateValue,
+    resetValue,
+    openExternal,
+    host: settingsHost,
+  }
 
   return (
     <>
@@ -290,21 +311,67 @@ function SettingsDialogBody({
       {/* Body */}
       <div className="flex-1 overflow-y-auto px-5 py-4" data-launcher-scrollable>
         <SettingsErrorBoundary fallback={errorFallback}>
-          <SettingsComponent
-            pluginId={pluginId}
-            source={source}
-            locale={locale}
-            t={pluginT}
-            value={value}
-            defaultValue={contribution.defaultValue}
-            setValue={setValue}
-            updateValue={updateValue}
-            resetValue={resetValue}
-            openExternal={openExternal}
-            host={settingsHost}
-          />
+          {contribution.schema ? (
+            <PluginSettingsSchemaRenderer
+              schema={contribution.schema}
+              locale={locale}
+              value={value}
+              updateValue={updateValue}
+              onOpenModal={(field) => setSettingsModalTarget(resolvePluginSettingsModal(contribution, field))}
+            />
+          ) : SettingsComponent ? (
+            <SettingsComponent {...settingsBodyProps} />
+          ) : (
+            <div className="text-[13px]" style={{ color: 'var(--color-text-secondary)' }}>
+              {t(locale, 'scripts.settingsRenderError')}
+            </div>
+          )}
         </SettingsErrorBoundary>
       </div>
+
+      {settingsModalTarget && SettingsModalComponent && (
+        <div
+          className="absolute inset-0 flex items-center justify-center"
+          style={{ background: 'rgba(0, 0, 0, 0.28)' }}
+          onClick={() => setSettingsModalTarget(null)}
+        >
+          <div
+            className="flex max-h-[calc(100%-48px)] w-[min(520px,calc(100%-48px))] flex-col overflow-hidden rounded-lg"
+            style={{
+              background: 'var(--panel, var(--bg-surface, #ffffff))',
+              border: '0.5px solid var(--color-border-secondary)',
+              boxShadow: '0 20px 44px rgba(0, 0, 0, 0.22)',
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div
+              className="flex items-center justify-between px-4 py-3"
+              style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}
+            >
+              <h3 className="m-0 text-[14px] font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                {settingsModalTitle}
+              </h3>
+              <button
+                className="flex h-7 w-7 items-center justify-center rounded-md"
+                style={{ color: 'var(--color-text-tertiary)', background: 'transparent' }}
+                onClick={() => setSettingsModalTarget(null)}
+                title={t(locale, 'scripts.settingsClose')}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <SettingsErrorBoundary fallback={errorFallback}>
+                <SettingsModalComponent
+                  {...settingsBodyProps}
+                  modalId={settingsModalTarget.modal.id}
+                  close={() => setSettingsModalTarget(null)}
+                />
+              </SettingsErrorBoundary>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
