@@ -87,7 +87,7 @@ export default function App() {
 function MainApp() {
   const activeView = useAppStore((s) => s.activeView)
   const fontSize = useAppStore((s) => s.settings.fontSize)
-  const settings = useAppStore((s) => s.settings)
+  const theme = useAppStore((s) => s.settings.theme)
   const prunePinnedRuntimes = useAppStore((s) => s.prunePinnedRuntimes)
   const prevViewRef = useRef<ViewId>(activeView)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -295,7 +295,7 @@ function MainApp() {
     import('@tauri-apps/api/app')
       .then(async ({ setTheme }) => {
         if (disposed) return
-        await setTheme(settings.theme)
+        await setTheme(theme)
       })
       .catch((error) => {
         console.warn('[hiven] Failed to sync native window theme:', error)
@@ -303,7 +303,7 @@ function MainApp() {
     return () => {
       disposed = true
     }
-  }, [settings.theme])
+  }, [theme])
 
   // Direction-aware view transition
   useEffect(() => {
@@ -337,7 +337,7 @@ function MainApp() {
   return (
     <div
       className="flux-spatial-shell"
-      data-theme={settings.theme}
+      data-theme={theme}
       style={{ fontSize }}
     >
       <div className="flux-main">

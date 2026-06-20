@@ -1003,9 +1003,9 @@ export function GlobalLauncher() {
                   <span className="t-ico">{resolveIcon(frame.item.display.icon, 14, resolveDisplayTitle(frame.item.display, locale))}</span>
                   {resolveDisplayTitle(frame.item.display, locale)}
                 </span>
-                {paramChips.map((chip, i) => (
+                {paramChips.map((chip) => (
                   <span
-                    key={i}
+                    key={chip.label}
                     className="kbd shrink-0 max-w-[100px] truncate"
                     title={`${chip.label}: ${chip.value}`}
                   >

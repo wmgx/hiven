@@ -502,9 +502,9 @@ function CollectInputStep({ frame, error, busy, onInputChange, onSubmit, onBack,
           <ChevronLeft size={16} />
         </button>
         <span className="text-[13px] font-medium shrink-0" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>{title}</span>
-        {paramChips.map((chip, i) => (
+        {paramChips.map((chip) => (
           <span
-            key={i}
+            key={chip.label}
             className="inline-flex items-center text-[11px] px-1.5 py-0.5 rounded shrink-0 max-w-[100px] truncate"
             style={{
               background: 'var(--color-background-tertiary)',
