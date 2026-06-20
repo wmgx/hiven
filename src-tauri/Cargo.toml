@@ -46,3 +46,6 @@ windows = { version = "0.61", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_System_LibraryLoader",
 ] }
+
+[profile.dev]
+debug = 1  # 行号级别调试信息，减少约 30-50% 构建体积

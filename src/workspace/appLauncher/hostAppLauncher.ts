@@ -3,9 +3,7 @@ import type { Locale } from '../../i18n'
 import type { DiscoveredApp, LauncherItem, LauncherSurfaceId } from '../launcher/types'
 
 const HOST_APP_INDEX_CACHE_KEY = 'hiven:host-app-launcher:index:v1'
-const MAX_APP_ICON_PREWARM_ITEMS = 20
 const APP_INDEX_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
-const APP_ICON_PREWARM_DELAY_MS = 1200
 
 type HostAppEntry = DiscoveredApp
 
@@ -63,12 +61,6 @@ async function discoverInstalledApps(): Promise<DiscoveredApp[]> {
   if (!isTauriRuntime()) throw new Error('Application discovery is only available in the desktop runtime.')
   const { invoke } = await import('@tauri-apps/api/core')
   return await invoke('discover_installed_apps') as DiscoveredApp[]
-}
-
-async function cacheAppIcons(appIds: string[]): Promise<number> {
-  if (!isTauriRuntime()) return 0
-  const { invoke } = await import('@tauri-apps/api/core')
-  return await invoke('cache_installed_app_icons', { appIds }) as number
 }
 
 async function launchInstalledApp(appId: string): Promise<void> {
@@ -148,21 +140,10 @@ function appIconRef(appId: string): string {
   return `app-icon:${appId}`
 }
 
-function prewarmAppIcons(apps: HostAppEntry[]): void {
-  const appIds = apps.slice(0, MAX_APP_ICON_PREWARM_ITEMS).map((app) => app.appId)
-  if (appIds.length === 0) return
-  setTimeout(() => {
-    void cacheAppIcons(appIds).catch((error) => {
-      if (import.meta.env.DEV) console.warn('[app-launcher] App icon cache warmup failed:', error)
-    })
-  }, APP_ICON_PREWARM_DELAY_MS)
-}
-
 async function refreshApplicationIndex(options: { force?: boolean } = {}): Promise<{ ok: true; count: number } | { ok: false; message: string }> {
   if (options.force !== true) {
     const cache = readCache()
     if (cache.apps.length > 0 && !shouldRefreshApplicationIndex(cache.refreshedAt)) {
-      prewarmAppIcons(cache.apps)
       return { ok: true, count: cache.apps.length }
     }
   }
@@ -170,7 +151,6 @@ async function refreshApplicationIndex(options: { force?: boolean } = {}): Promi
   try {
     const apps = await discoverInstalledApps()
     const cache = writeCache(apps)
-    prewarmAppIcons(cache.apps)
     return { ok: true, count: cache.apps.length }
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : String(error) }

@@ -72,11 +72,10 @@ assert.equal(existsSync(join(root, 'src/plugins/core-pane')), false, 'core-pane 
 assert.match(files.hostAppLauncher, /HOST_APP_INDEX_CACHE_KEY\s*=\s*['"]hiven:host-app-launcher:index:v1['"]/, 'host app launcher must use a new host-owned cache key')
 assert.doesNotMatch(files.hostAppLauncher, /app-launcher:index:v5|createPluginPrivateStorage|PluginPrivateStorageApi|storage\.kv/, 'host app launcher must not reuse the old plugin cache or plugin storage')
 assert.match(files.hostAppLauncher, /invoke\(['"]discover_installed_apps['"]\)/, 'host app launcher must discover apps via native command')
-assert.match(files.hostAppLauncher, /invoke\(['"]cache_installed_app_icons['"][\s\S]*appIds/, 'host app launcher must warm host-owned app icon cache')
+assert.doesNotMatch(files.hostAppLauncher, /cache_installed_app_icons|prewarmAppIcons|APP_ICON_PREWARM/, 'host app launcher must not prewarm app icons during startup/index refresh')
 assert.match(files.hostAppLauncher, /invoke\(['"]launch_installed_app['"][\s\S]*appId/, 'host app launcher must launch by appId')
 assert.doesNotMatch(files.hostAppLauncher, /displayPath[\s\S]*launch_installed_app|path[\s\S]*launch_installed_app/, 'host app launcher must not launch by path')
 assert.doesNotMatch(files.hostAppLauncher, /MAX_DYNAMIC_APP_ITEMS/, 'host app launcher results should no longer use the old dynamic result cap')
-assert.match(files.hostAppLauncher, /MAX_APP_ICON_PREWARM_ITEMS\s*=\s*20/, 'host app launcher should only cap icon prewarming')
 assert.match(files.hostAppLauncher, /if\s*\(!q\)\s*return true/, 'host app launcher should include apps in the empty-query mixed list')
 assert.doesNotMatch(files.hostAppLauncher, /\.filter\(\(app\) => appMatchesQuery\(app,\s*query,\s*locale\)\)\s*\n\s*\.slice\(/, 'host app launcher dynamic results should not be sliced after matching')
 assert.match(files.hostAppLauncher, /searchableFieldsMatch/, 'host app launcher must reuse shared launcher search ranking')
@@ -87,5 +86,6 @@ assert.match(files.hostAppLauncher, /host:app-launcher:app:\$\{app\.appId\}/, 'h
 assert.doesNotMatch(files.hostAppLauncher, /kind:\s*['"]plugin['"]/, 'host app launcher items must not be plugin items')
 
 assert.match(files.resolveIcon, /read_installed_app_icon_url/, 'existing icon resolver must still load host app icon refs')
+assert.match(files.resolveIcon, /APP_ICON_MAX_CONCURRENT\s*=\s*2/, 'host app icon refs should remain lazy-loaded with bounded concurrency')
 
 console.log('host app launcher contract checks passed')
