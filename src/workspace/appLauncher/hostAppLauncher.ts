@@ -217,6 +217,9 @@ export async function getHostAppLauncherDynamicItems({
     behavior: { type: 'perform' },
     surfaces: ['global-launcher'],
     pinnable: false,
+    ranking: {
+      installedAt: app.installedAt,
+    },
     execute: async () => {
       try {
         await launchInstalledApp(app.appId)

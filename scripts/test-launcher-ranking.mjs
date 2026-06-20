@@ -69,6 +69,7 @@ function item(systemKey, title, opts = {}) {
     behavior: { type: 'perform' },
     pinnable: true,
     staticPriority: opts.staticPriority,
+    ranking: opts.ranking,
     legacyUsageKeys: opts.legacyUsageKeys,
     execute: () => ({ ok: true }),
   }
@@ -136,5 +137,35 @@ let uLegacy = usage.emptyUsageBySurface()
 for (let i = 0; i < 8; i++) uLegacy = usage.recordSelection(uLegacy, 'command-palette', 'old.command.id', now)
 const scoreLegacy = ranking.usageScore({ query: '', locale: 'en', surfaceId: 'command-palette', usage: uLegacy, now }, migratedItem)
 assert.ok(scoreLegacy > 0, 'legacy usage key contributes usage score')
+
+// --- 6. Host app selections use the same usage score ---
+const notes = item('host:app-launcher:app:notes', 'Notes', { kind: 'host' })
+const calendar = item('host:app-launcher:app:calendar', 'Calendar', { kind: 'host' })
+let uApps = usage.emptyUsageBySurface()
+for (let i = 0; i < 3; i++) uApps = usage.recordSelection(uApps, 'global-launcher', calendar.systemKey, now)
+const rankedAppsByUsage = ranking.rankLauncherItems(
+  { query: '', locale: 'en', surfaceId: 'global-launcher', usage: uApps, now },
+  [notes, calendar],
+)
+assert.equal(rankedAppsByUsage[0].systemKey, calendar.systemKey, 'selected app count influences global launcher ranking')
+
+// --- 7. Recently installed apps get a bounded freshness boost ---
+const oldApp = item('host:app-launcher:app:old', 'Same App', {
+  kind: 'host',
+  ranking: { installedAt: now - 90 * 24 * 60 * 60 * 1000 },
+})
+const newApp = item('host:app-launcher:app:new', 'Same App', {
+  kind: 'host',
+  ranking: { installedAt: now - 2 * 24 * 60 * 60 * 1000 },
+})
+const rankedFreshApps = ranking.rankLauncherItems(
+  { query: '', locale: 'en', surfaceId: 'global-launcher', usage: usage.emptyUsageBySurface(), now },
+  [oldApp, newApp],
+)
+assert.equal(rankedFreshApps[0].systemKey, newApp.systemKey, 'recently installed app receives freshness boost')
+assert.ok(
+  ranking.installFreshnessScore({ query: '', locale: 'en', surfaceId: 'global-launcher', usage: usage.emptyUsageBySurface(), now }, newApp) < 1000,
+  'install freshness boost stays below one match tier',
+)
 
 console.log('✓ test-launcher-ranking passed')

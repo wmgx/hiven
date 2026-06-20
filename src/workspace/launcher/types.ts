@@ -218,6 +218,7 @@ export type DiscoveredApp = {
   platform: 'macos' | 'windows' | 'linux'
   source: 'applications' | 'start-menu' | 'app-paths' | 'desktop-entry'
   displayPath?: string
+  installedAt?: number
 }
 
 export type PluginAppsApi = {
@@ -315,6 +316,11 @@ export type LauncherItem = {
   inputPolicy?: TextInputPolicy
   /** Host-only ranking nudge for a small number of host-owned items. */
   staticPriority?: number
+  /** Host-owned ranking metadata. Plugins never construct resolved launcher items. */
+  ranking?: {
+    /** Milliseconds since epoch; used as a small freshness boost for recently installed apps. */
+    installedAt?: number
+  }
   /**
    * Host-only legacy usage keys (e.g. the backing command id) consulted as a
    * fallback by ranking so pre-migration usage history is preserved. Never

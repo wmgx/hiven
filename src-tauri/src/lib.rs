@@ -665,6 +665,7 @@ struct InstalledAppEntry {
     platform: String,
     source: String,
     display_path: Option<String>,
+    installed_at: Option<u64>,
     launch_target: String,
 }
 
@@ -689,6 +690,22 @@ struct DiscoveredApp {
     source: String,
     #[serde(rename = "displayPath", skip_serializing_if = "Option::is_none")]
     display_path: Option<String>,
+    #[serde(rename = "installedAt", skip_serializing_if = "Option::is_none")]
+    installed_at: Option<u64>,
+}
+
+fn system_time_millis(time: SystemTime) -> Option<u64> {
+    let millis = time.duration_since(UNIX_EPOCH).ok()?.as_millis();
+    u64::try_from(millis).ok()
+}
+
+fn installed_at_from_path(path: &Path) -> Option<u64> {
+    let metadata = fs::metadata(path).ok()?;
+    metadata
+        .created()
+        .ok()
+        .and_then(system_time_millis)
+        .or_else(|| metadata.modified().ok().and_then(system_time_millis))
 }
 
 fn installed_app_targets() -> &'static Mutex<HashMap<String, String>> {
@@ -717,6 +734,7 @@ fn installed_app_from_entry(entry: &InstalledAppEntry) -> DiscoveredApp {
         platform: entry.platform.clone(),
         source: entry.source.clone(),
         display_path: entry.display_path.clone(),
+        installed_at: entry.installed_at,
     }
 }
 
@@ -757,6 +775,7 @@ fn resolve_installed_app_entry(app_id: &str) -> Option<InstalledAppEntry> {
             platform: current_platform_name().to_string(),
             source: "applications".to_string(),
             display_path: Some(target.clone()),
+            installed_at: installed_at_from_path(Path::new(&target)),
             launch_target: target,
         });
     }
@@ -1175,6 +1194,7 @@ fn discover_platform_apps() -> Vec<InstalledAppEntry> {
                 platform: "macos".to_string(),
                 source: "applications".to_string(),
                 display_path: Some(canonical_str.clone()),
+                installed_at: installed_at_from_path(&canonical),
                 launch_target: canonical_str,
             });
         }
@@ -1235,6 +1255,7 @@ fn collect_windows_start_menu_apps(root: &Path, apps: &mut Vec<InstalledAppEntry
             platform: "windows".to_string(),
             source: "start-menu".to_string(),
             display_path: Some(canonical_str.clone()),
+            installed_at: installed_at_from_path(&canonical),
             launch_target: canonical_str,
         });
     }
@@ -1300,6 +1321,7 @@ fn parse_windows_app_paths_registry_output(raw: &str) -> Vec<InstalledAppEntry> 
             platform: "windows".to_string(),
             source: "app-paths".to_string(),
             display_path: Some(target.to_string()),
+            installed_at: installed_at_from_path(Path::new(target)),
             launch_target: target.to_string(),
         });
         current_name = None;
@@ -1359,6 +1381,7 @@ fn parse_linux_desktop_entry(path: &Path) -> Option<InstalledAppEntry> {
         platform: "linux".to_string(),
         source: "desktop-entry".to_string(),
         display_path: Some(canonical_str),
+        installed_at: installed_at_from_path(&canonical),
         launch_target: desktop_id,
     })
 }
@@ -2926,6 +2949,7 @@ mod plugin_dir_command_tests {
                 platform: "macos".to_string(),
                 source: "applications".to_string(),
                 display_path: Some("/Applications/Example.app".to_string()),
+                installed_at: Some(1_000),
                 launch_target: "/Applications/Example.app".to_string(),
             },
             InstalledAppEntry {
@@ -2936,6 +2960,7 @@ mod plugin_dir_command_tests {
                 platform: "macos".to_string(),
                 source: "applications".to_string(),
                 display_path: Some("/Users/me/Applications/Example.app".to_string()),
+                installed_at: Some(2_000),
                 launch_target: "/Users/me/Applications/Example.app".to_string(),
             },
         ]);
@@ -3060,12 +3085,14 @@ HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\App Paths\Example.e
             platform: "macos".to_string(),
             source: "applications".to_string(),
             display_path: Some("/does/not/exist/Missing.app".to_string()),
+            installed_at: Some(42),
             launch_target: "/does/not/exist/Missing.app".to_string(),
         };
 
         let app = installed_app_from_entry(&entry);
         assert_eq!(app.app_id, entry.app_id);
         assert_eq!(app.name, "Missing Icon");
+        assert_eq!(app.installed_at, Some(42));
         assert!(extract_app_icon(&entry).is_none());
     }
 

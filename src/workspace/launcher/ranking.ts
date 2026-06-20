@@ -5,6 +5,7 @@
  * a single ranked list is produced.
  *
  *   score = matchScore + usageScore(surface) + pinnedBoost + hostStaticPriority
+ *     + installFreshnessScore
  *
  * Rules (design doc §6):
  *  - Match relevance dominates (match tier contributes thousands; the rest are
@@ -35,6 +36,8 @@ import { localizedDisplay } from './display'
 const USAGE_FREQ_WEIGHT = 6 // * log1p(count)  → ~ up to ~40 for very frequent
 const USAGE_RECENCY_WEIGHT = 60 // decays over RECENCY_WINDOW_MS
 const RECENCY_WINDOW_MS = 14 * 24 * 60 * 60 * 1000 // 14 days
+const INSTALL_FRESHNESS_WEIGHT = 70 // decays over INSTALL_FRESHNESS_WINDOW_MS
+const INSTALL_FRESHNESS_WINDOW_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 const PINNED_BOOST = 40 // mild; far below a one-tier (1000) jump
 const MAX_STATIC_PRIORITY = 300 // host-only ceiling, still < 1000
 
@@ -93,6 +96,15 @@ function staticPriority(item: LauncherItem): number {
   return Math.max(0, Math.min(MAX_STATIC_PRIORITY, item.staticPriority))
 }
 
+/** Small host-owned boost for newly installed applications. Always < 1000. */
+export function installFreshnessScore(ctx: RankContext, item: LauncherItem): number {
+  const installedAt = item.ranking?.installedAt
+  if (!installedAt || installedAt > ctx.now) return 0
+  const age = ctx.now - installedAt
+  if (age >= INSTALL_FRESHNESS_WINDOW_MS) return 0
+  return (1 - age / INSTALL_FRESHNESS_WINDOW_MS) * INSTALL_FRESHNESS_WEIGHT
+}
+
 /**
  * Score one item for one surface. Combines the shared match score (which uses
  * tier*1000 + small usage base) with launcher usage, pinned boost, and host
@@ -105,7 +117,7 @@ function staticPriority(item: LauncherItem): number {
 export function scoreLauncherItem(ctx: RankContext, item: LauncherItem): number {
   const q = ctx.query.trim().toLowerCase()
   const matchScore = scoreSearchableFields(toSearchableFields(item, ctx.locale), q, ctx.locale, [], {})
-  return matchScore + usageScore(ctx, item) + pinnedBoost(ctx, item) + staticPriority(item)
+  return matchScore + usageScore(ctx, item) + pinnedBoost(ctx, item) + staticPriority(item) + installFreshnessScore(ctx, item)
 }
 
 /**
