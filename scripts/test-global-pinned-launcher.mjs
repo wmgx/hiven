@@ -816,16 +816,31 @@ check('native launcher is configured as a non-activating macOS panel', () => {
   )
 })
 
-check('double modifier detection is based on two quick down events', () => {
+check('double modifier detection allows a natural second tap after a short release', () => {
   assertHas(
     files.tauriHotkeys,
-    /last_modifier_down/,
-    'double modifier detector should track the first down event, not only key-up timing',
+    /DEFAULT_DOUBLE_MODIFIER_THRESHOLD_MS:\s*u64\s*=\s*500/,
+    'double modifier detector should use the same 500ms window as shortcut recording',
+  )
+  assertHas(
+    files.tauriHotkeys,
+    /last_modifier_up/,
+    'double modifier detector should measure the second tap from the first short release',
   )
   assertHas(
     files.tauriHotkeys,
     /current_modifier_down[\s\S]{0,360}was_short_press/,
     'double modifier detector should discard a first press that was held too long',
+  )
+  assertHas(
+    files.tauriHotkeys,
+    /default_double_modifier_window_accepts_500ms/,
+    'double modifier tests should cover the default 500ms recognition window',
+  )
+  assertHas(
+    files.tauriHotkeys,
+    /listener_recovers_when_key_up_is_lost_after_trigger/,
+    'double modifier tests should cover recovery when the trigger steals the key-up event',
   )
   assertHas(
     files.tauriHotkeys,

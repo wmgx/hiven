@@ -20,7 +20,7 @@ pub(crate) fn hotkey_log(msg: &str) {
 
 const ROUTE_GLOBAL_PINNED_LAUNCHER_SHORTCUT_EVENT: &str =
     "hiven://route-global-pinned-launcher-shortcut";
-const DEFAULT_DOUBLE_MODIFIER_THRESHOLD_MS: u64 = 300;
+const DEFAULT_DOUBLE_MODIFIER_THRESHOLD_MS: u64 = 500;
 
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct HotkeyRegistrationStatus {
@@ -105,7 +105,7 @@ impl KeyEvent {
 
 pub struct DoubleModifierDetector {
     threshold: Duration,
-    last_modifier_down: Option<Duration>,
+    last_modifier_up: Option<Duration>,
     current_modifier_down: Option<Duration>,
     current_modifier_press_valid: bool,
 }
@@ -114,7 +114,7 @@ impl DoubleModifierDetector {
     pub fn new(threshold: Duration) -> Self {
         Self {
             threshold,
-            last_modifier_down: None,
+            last_modifier_up: None,
             current_modifier_down: None,
             current_modifier_press_valid: false,
         }
@@ -139,18 +139,18 @@ impl DoubleModifierDetector {
 
         self.current_modifier_press_valid = true;
         self.current_modifier_down = Some(event.timestamp);
-        let Some(last_modifier_down) = self.last_modifier_down else {
+        let Some(last_modifier_up) = self.last_modifier_up else {
             return false;
         };
 
-        let within_threshold = event.timestamp >= last_modifier_down
-            && event.timestamp - last_modifier_down <= self.threshold;
+        let within_threshold = event.timestamp >= last_modifier_up
+            && event.timestamp - last_modifier_up <= self.threshold;
         if within_threshold {
-            self.last_modifier_down = None;
+            self.last_modifier_up = None;
             self.current_modifier_down = None;
             true
         } else {
-            self.last_modifier_down = None;
+            self.last_modifier_up = None;
             false
         }
     }
@@ -160,12 +160,12 @@ impl DoubleModifierDetector {
             if let Some(current_modifier_down) = self.current_modifier_down {
                 let was_short_press = event.timestamp >= current_modifier_down
                     && event.timestamp - current_modifier_down <= self.threshold;
-                self.last_modifier_down = was_short_press.then_some(current_modifier_down);
+                self.last_modifier_up = was_short_press.then_some(event.timestamp);
             } else {
-                self.last_modifier_down = None;
+                self.last_modifier_up = None;
             }
         } else {
-            self.last_modifier_down = None;
+            self.last_modifier_up = None;
         }
         self.current_modifier_down = None;
         self.current_modifier_press_valid = false;
@@ -173,9 +173,70 @@ impl DoubleModifierDetector {
     }
 
     pub fn reset(&mut self) {
-        self.last_modifier_down = None;
+        self.last_modifier_up = None;
         self.current_modifier_down = None;
         self.current_modifier_press_valid = false;
+    }
+}
+
+struct DoubleModifierListenerState {
+    detector: DoubleModifierDetector,
+    modifier: DoubleModifier,
+    was_down: bool,
+}
+
+impl DoubleModifierListenerState {
+    fn new(threshold: Duration, modifier: DoubleModifier) -> Self {
+        Self {
+            detector: DoubleModifierDetector::new(threshold),
+            modifier,
+            was_down: false,
+        }
+    }
+
+    fn handle_flags_changed(
+        &mut self,
+        modifier: DoubleModifier,
+        mod_now: bool,
+        has_other: bool,
+        timestamp: Duration,
+    ) -> bool {
+        if self.modifier != modifier {
+            self.detector.reset();
+            self.modifier = modifier;
+        }
+
+        if mod_now && !self.was_down {
+            let triggered = self.detector.handle_event(KeyEvent {
+                key: Key::Modifier,
+                phase: KeyPhase::Down,
+                timestamp,
+                modifiers: Modifiers { other: has_other },
+            });
+            if triggered {
+                self.detector.reset();
+                self.was_down = false;
+                return true;
+            }
+        } else if !mod_now && self.was_down {
+            self.detector.handle_event(KeyEvent {
+                key: Key::Modifier,
+                phase: KeyPhase::Up,
+                timestamp,
+                modifiers: Modifiers { other: has_other },
+            });
+        }
+        self.was_down = mod_now;
+        false
+    }
+
+    fn handle_other_key_down(&mut self, timestamp: Duration) {
+        self.detector.handle_event(KeyEvent {
+            key: Key::Other,
+            phase: KeyPhase::Down,
+            timestamp,
+            modifiers: Modifiers { other: true },
+        });
     }
 }
 
@@ -515,19 +576,16 @@ fn start_nsevent_listener(state: Arc<DoubleModifierHotkeyState>, app: tauri::App
     const CTRL: u64 = 1 << 18;
 
     struct ListenerState {
-        detector: DoubleModifierDetector,
         started_at: Instant,
-        modifier: DoubleModifier,
-        was_down: bool,
+        double_modifier: DoubleModifierListenerState,
     }
 
     let ls = Arc::new(Mutex::new(ListenerState {
-        detector: DoubleModifierDetector::new(Duration::from_millis(
-            DEFAULT_DOUBLE_MODIFIER_THRESHOLD_MS,
-        )),
+        double_modifier: DoubleModifierListenerState::new(
+            Duration::from_millis(DEFAULT_DOUBLE_MODIFIER_THRESHOLD_MS),
+            DoubleModifier::Command,
+        ),
         started_at: Instant::now(),
-        modifier: DoubleModifier::Command,
-        was_down: false,
     }));
 
     let ls2 = Arc::clone(&ls);
@@ -540,15 +598,15 @@ fn start_nsevent_listener(state: Arc<DoubleModifierHotkeyState>, app: tauri::App
         }
 
         let event_type: u64 = unsafe { msg_send![event, type] };
-        let modifier = state2.modifier.lock().map(|v| *v).unwrap_or(DoubleModifier::Command);
+        let modifier = state2
+            .modifier
+            .lock()
+            .map(|v| *v)
+            .unwrap_or(DoubleModifier::Command);
         let mut ls = ls2.lock().unwrap();
         let timestamp = ls.started_at.elapsed();
 
         if event_type == FLAGS_CHANGED {
-            if ls.modifier != modifier {
-                ls.detector.reset();
-                ls.modifier = modifier;
-            }
             let flags: u64 = unsafe { msg_send![event, modifierFlags] };
             let (mod_now, has_other) = match modifier {
                 DoubleModifier::Command => (
@@ -564,34 +622,16 @@ fn start_nsevent_listener(state: Arc<DoubleModifierHotkeyState>, app: tauri::App
                     flags & (CTRL | CMD | SHIFT) != 0,
                 ),
             };
-            if mod_now && !ls.was_down {
-                let triggered = ls.detector.handle_event(KeyEvent {
-                    key: Key::Modifier,
-                    phase: KeyPhase::Down,
-                    timestamp,
-                    modifiers: Modifiers { other: has_other },
-                });
-                if triggered {
-                    let a = app2.clone();
-                    std::thread::spawn(move || route_pinned_launcher_hotkey(a));
-                }
-            } else if !mod_now && ls.was_down {
-                ls.detector.handle_event(KeyEvent {
-                    key: Key::Modifier,
-                    phase: KeyPhase::Up,
-                    timestamp,
-                    modifiers: Modifiers { other: has_other },
-                });
+            if ls
+                .double_modifier
+                .handle_flags_changed(modifier, mod_now, has_other, timestamp)
+            {
+                let a = app2.clone();
+                std::thread::spawn(move || route_pinned_launcher_hotkey(a));
             }
-            ls.was_down = mod_now;
         } else {
             // KeyDown — invalidate any in-progress double-tap
-            ls.detector.handle_event(KeyEvent {
-                key: Key::Other,
-                phase: KeyPhase::Down,
-                timestamp,
-                modifiers: Modifiers { other: true },
-            });
+            ls.double_modifier.handle_other_key_down(timestamp);
         }
     });
 
@@ -664,6 +704,10 @@ mod double_modifier_tests {
         DoubleModifierDetector::new(Duration::from_millis(300))
     }
 
+    fn default_detector() -> DoubleModifierDetector {
+        DoubleModifierDetector::new(Duration::from_millis(DEFAULT_DOUBLE_MODIFIER_THRESHOLD_MS))
+    }
+
     fn modifier_down(timestamp_ms: u64) -> KeyEvent {
         KeyEvent::new(
             Key::Modifier,
@@ -700,6 +744,10 @@ mod double_modifier_tests {
         )
     }
 
+    fn timestamp(timestamp_ms: u64) -> Duration {
+        Duration::from_millis(timestamp_ms)
+    }
+
     #[test]
     fn double_modifier_within_threshold_triggers() {
         let mut detector = detector();
@@ -707,6 +755,59 @@ mod double_modifier_tests {
         assert!(!detector.handle_event(modifier_down(0)));
         assert!(!detector.handle_event(modifier_up(20)));
         assert!(detector.handle_event(modifier_down(140)));
+    }
+
+    #[test]
+    fn default_double_modifier_window_accepts_500ms() {
+        let mut detector = default_detector();
+
+        assert!(!detector.handle_event(modifier_down(0)));
+        assert!(!detector.handle_event(modifier_up(20)));
+        assert!(detector.handle_event(modifier_down(500)));
+    }
+
+    #[test]
+    fn listener_recovers_when_key_up_is_lost_after_trigger() {
+        let mut listener =
+            DoubleModifierListenerState::new(Duration::from_millis(300), DoubleModifier::Command);
+
+        assert!(!listener.handle_flags_changed(
+            DoubleModifier::Command,
+            true,
+            false,
+            timestamp(0),
+        ));
+        assert!(!listener.handle_flags_changed(
+            DoubleModifier::Command,
+            false,
+            false,
+            timestamp(20),
+        ));
+        assert!(listener.handle_flags_changed(
+            DoubleModifier::Command,
+            true,
+            false,
+            timestamp(140),
+        ));
+
+        assert!(!listener.handle_flags_changed(
+            DoubleModifier::Command,
+            true,
+            false,
+            timestamp(1_000),
+        ));
+        assert!(!listener.handle_flags_changed(
+            DoubleModifier::Command,
+            false,
+            false,
+            timestamp(1_020),
+        ));
+        assert!(listener.handle_flags_changed(
+            DoubleModifier::Command,
+            true,
+            false,
+            timestamp(1_140),
+        ));
     }
 
     #[test]
