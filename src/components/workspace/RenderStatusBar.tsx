@@ -53,12 +53,13 @@ export function RenderStatusBar() {
 
       {activeRenderer?.statusLabel && (
         <span
-          className="text-[10px]"
+          className={`text-[10px] statusbar-renderer-status ${activeRenderer.statusLevel === 'error' ? 'is-error' : ''}`}
           style={{
             color: activeRenderer.statusLevel === 'error'
-              ? 'var(--color-error-text)'
+              ? undefined
               : 'var(--color-text-secondary)',
           }}
+          title={activeRenderer.statusLabel}
         >
           {activeRenderer.statusLabel}
         </span>
