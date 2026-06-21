@@ -4882,6 +4882,10 @@ body[data-theme='dark'] .menu {
   background: var(--panel);
 }
 
+.scard:has(.settings-select-wrap.is-open) {
+  overflow: visible;
+}
+
 .srow {
   min-height: 48px;
   display: flex;
@@ -5013,18 +5017,32 @@ body[data-theme='dark'] .sw.on {
   text-align: center;
 }
 
+.settings-select-wrap {
+  position: relative;
+  width: 112px;
+  min-width: 112px;
+}
+
+.settings-select-wrap.is-open {
+  z-index: 80;
+}
+
 .sel-ctl {
+  width: 100%;
+  min-height: 36px;
   display: inline-flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
+  box-sizing: border-box;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--surface);
   color: var(--text);
   cursor: pointer;
   font-size: 12px;
   font-weight: 500;
-  padding: 4px 8px;
+  padding: 7px 9px 7px 11px;
 }
 
 .sel-ctl.open {
@@ -5049,6 +5067,8 @@ body[data-theme='dark'] .sel-ctl.open {
   top: calc(100% + 6px);
   left: 0;
   right: 0;
+  width: 100%;
+  box-sizing: border-box;
   overflow: hidden;
   border: 1px solid var(--border-2);
   border-radius: var(--radius-sm);

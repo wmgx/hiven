@@ -143,7 +143,7 @@ function LocaleSelect({ options, value, onChange }: { options: { value: string; 
   const selected = options.find((option) => option.value === value)
 
   return (
-    <div className="relative min-w-[112px]" ref={ref}>
+    <div className={`settings-select-wrap ${open ? 'is-open' : ''}`} ref={ref}>
       <div className={`sel-ctl ${open ? 'open' : ''}`} onClick={() => setOpen(!open)}>
         <span>{selected?.label ?? value}</span>
         <span className="chev">▾</span>

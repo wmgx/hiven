@@ -64,7 +64,8 @@
     "test:global-launcher-window-height": "node scripts/test-global-launcher-window-height.mjs",
     "test:launcher-plugin-contract": "node scripts/test-launcher-plugin-contract.mjs",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test:settings-select-layout": "node scripts/test-settings-select-layout.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
