@@ -94,10 +94,12 @@ assert.ok(
 
 const pasteImpl = read('src/workspace/pluginPaste.ts')
 const tauriLib = read('src-tauri/src/lib.rs')
+const cargoToml = read('src-tauri/Cargo.toml')
 
 assert.match(pasteImpl, /createPluginPaste/, 'Must export createPluginPaste')
 assert.match(pasteImpl, /writeTextToClipboard/, 'Must write to clipboard before paste')
 assert.match(pasteImpl, /writeImageToClipboard/, 'Must write image blobs to clipboard before paste')
+assert.match(cargoToml, /tauri\s*=\s*\{[^}]*features\s*=\s*\[[^\]]*['"]image-png['"]/s, 'Stored clipboard image blobs are PNG bytes, so Tauri must enable the image-png feature for image paste writes')
 assert.match(pasteImpl, /simulate_paste/, 'Must try Tauri simulate_paste command')
 assert.match(pasteImpl, /fallback.*copied/, 'Must return copied fallback on failure')
 assert.match(pasteImpl, /hide_launcher_window/, 'Must try to hide launcher window')
