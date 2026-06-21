@@ -13,11 +13,20 @@ import {
   type JsonArrayCompareMode,
 } from '@hiven/plugin'
 import {
+  SegmentedControl,
+  Select,
+  SurfaceToolbar,
+  TextInput,
+  ToolbarButton,
+} from '@hiven/plugin-ui'
+import { CloseIcon } from '@hiven/plugin-ui/icons'
+import {
   canUseSemanticJsonDiff,
   decideAutoDiffMode,
   isAutoDiffExitKey,
   normalizeAutoDiffLayout,
 } from './autoDiffMode'
+import './style.css'
 
 const PLUGIN_ID = 'text-diff'
 
@@ -130,74 +139,78 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
   if (!originalPane || !modifiedPane) return null
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <div
-        className="h-[28px] flex items-center px-3 gap-2 shrink-0"
-        style={{ borderBottom: '0.5px solid var(--color-border-tertiary)', background: 'var(--color-background-secondary)' }}
-      >
-        <span className="text-[11px] font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-          {t('textDiff.title')}: {originalPane.title} ↔ {modifiedPane.title}
-        </span>
-        <span className="text-[10px] px-1 py-0.5 rounded" style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-tertiary)' }}>
-          {autoMode === 'json-semantic' ? t('diff.jsonSemanticDiff') : t('diff.textLineDiff')}
-        </span>
+    <div className="text-diff-surface">
+      <SurfaceToolbar className="text-diff-toolbar">
+        <div className="text-diff-title-group">
+          <span className="text-diff-title">{t('textDiff.title')}</span>
+          <span className="text-diff-source" title={`${originalPane.title} ↔ ${modifiedPane.title}`}>
+            {originalPane.title} ↔ {modifiedPane.title}
+          </span>
+        </div>
+
+        <SegmentedControl
+          className="text-diff-mode-switch"
+          value={autoMode === 'json-semantic' ? 'json-semantic' : 'text-line'}
+          disabled={!semanticAvailable}
+          aria-label={t('diff.mode')}
+          options={[
+            { value: 'text-line', label: t('diff.textMode') },
+            { value: 'json-semantic', label: t('diff.semantic') },
+          ]}
+          onChange={(value) => setSemanticEnabled(value === 'json-semantic')}
+        />
+
         {autoMode === 'json-semantic' && changes.length > 0 && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--color-warning-bg, #fff3cd)', color: 'var(--color-warning-text, #856404)' }}>
+          <span className="text-diff-status-badge" data-tone="changed">
             {t('diff.changeCount', { count: changes.length })}
           </span>
         )}
         {autoMode === 'json-semantic' && changes.length === 0 && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'var(--color-success-bg)', color: 'var(--color-success-text)' }}>
+          <span className="text-diff-status-badge" data-tone="equal">
             {t('diff.semanticEqual')}
           </span>
         )}
-        <button
-          className="text-[10px] px-1.5 py-0.5 rounded hover:opacity-80 disabled:opacity-50"
-          style={{
-            background: semanticEnabled && semanticAvailable ? 'var(--color-accent-bg)' : 'var(--color-background-tertiary)',
-            color: semanticEnabled && semanticAvailable ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
-          }}
-          disabled={!semanticAvailable}
-          aria-pressed={semanticEnabled && semanticAvailable}
-          title={semanticAvailable ? t('diff.semantic') : t('diff.semanticUnavailable')}
-          onClick={() => setSemanticEnabled((enabled) => !enabled)}
-        >
-          {t('diff.semantic')}
-        </button>
-        <button
-          className="ml-auto text-[10px] px-1.5 py-0.5 rounded hover:opacity-80"
-          style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-secondary)' }}
+
+        {!semanticAvailable && (
+          <span className="text-diff-hint" title={t('diff.semanticUnavailable')}>
+            {t('diff.textLineDiff')}
+          </span>
+        )}
+
+        <ToolbarButton
+          type="button"
+          className="text-diff-exit-button"
           onClick={host.close}
+          title={t('diff.exit')}
         >
+          <CloseIcon size={13} />
           {t('diff.exit')}
-        </button>
-      </div>
+        </ToolbarButton>
+      </SurfaceToolbar>
 
       {autoMode === 'json-semantic' && (
-        <div
-          className="h-[26px] flex items-center px-3 gap-2 shrink-0"
-          style={{ borderBottom: '0.5px solid var(--color-border-tertiary)', background: 'var(--color-background-secondary)' }}
-        >
-          <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
+        <div className="text-diff-optionsbar">
+          <span className="text-diff-options-label">
             {t('diff.array')}:
           </span>
-          {(['by-index', 'unordered-scalar', 'by-object-key'] as const).map((mode) => (
-            <button
-              key={mode}
-              className="text-[10px] px-1.5 py-0.5 rounded"
-              style={{ background: arrayMode === mode ? 'var(--color-accent-bg)' : 'var(--color-background-tertiary)', color: arrayMode === mode ? 'var(--color-accent)' : 'var(--color-text-tertiary)' }}
-              onClick={() => setArrayMode(mode)}
-            >
-              {t(mode === 'by-index' ? 'diff.byIndex' : mode === 'unordered-scalar' ? 'diff.unorderedScalar' : 'diff.byKey')}
-            </button>
-          ))}
+          <Select
+            className="text-diff-array-select"
+            value={arrayMode}
+            aria-label={t('diff.array')}
+            options={[
+              { value: 'by-index', label: t('diff.byIndex') },
+              { value: 'unordered-scalar', label: t('diff.unorderedScalar') },
+              { value: 'by-object-key', label: t('diff.byKey') },
+            ]}
+            onChange={(event) => setArrayMode(event.target.value as typeof arrayMode)}
+          />
           {arrayMode === 'by-object-key' && (
-            <input
-              className="text-[10px] px-1.5 py-0.5 rounded w-[60px]"
-              style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border-tertiary)' }}
+            <TextInput
+              className="text-diff-key-input"
               value={objectKey}
               onChange={(event) => setObjectKey(event.target.value)}
               placeholder={t('diff.keyPlaceholder')}
+              aria-label={t('diff.keyPlaceholder')}
             />
           )}
         </div>
