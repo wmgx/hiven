@@ -495,7 +495,11 @@ export function ScriptsView() {
   async function handlePackageUpdateCheck() {
     setUpdateStatus('checking')
     try {
-      await checkBuiltinPluginsUpdate()
+      const result = await checkBuiltinPluginsUpdate()
+      if (result.error) {
+        setUpdateStatus('error')
+        return
+      }
       setUpdateStatus('done')
     } catch {
       setUpdateStatus('error')

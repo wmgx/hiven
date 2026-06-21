@@ -19,7 +19,9 @@ const REMOTE_BUILTIN_PLUGIN_SOURCE_BASE_URLS = [
   'https://cdn.jsdelivr.net/gh/wmgx/hiven@main/src/plugins',
   'https://raw.githubusercontent.com/wmgx/hiven/main/src/plugins',
 ]
-const REMOTE_BUILTIN_PLUGIN_TREE_URLS = [
+const REMOTE_BUILTIN_PLUGIN_FILE_LIST_URLS = [
+  'https://data.jsdelivr.com/v1/packages/gh/wmgx/hiven@main?structure=flat',
+  'https://data.jsdelivr.com/v1/package/gh/wmgx/hiven@main/flat',
   'https://api.github.com/repos/wmgx/hiven/git/trees/main?recursive=1',
 ]
 const DOWNLOADABLE_PLUGIN_FILE_PATTERN = /\.(?:ts|tsx|js|jsx|mjs|json|md)$/i
@@ -55,6 +57,10 @@ type BuiltinPluginIndex = {
 type RemoteBuiltinTreeItem = {
   path?: unknown
   type?: unknown
+}
+
+type RemoteBuiltinFlatFileItem = {
+  name?: unknown
 }
 
 const PLUGIN_MANIFEST_MODULES = import.meta.glob('./plugins/*/manifest.json', {
@@ -201,17 +207,26 @@ let remoteBuiltinTreePaths: Promise<string[]> | null = null
 
 async function fetchRemoteBuiltinTreePaths(): Promise<string[]> {
   if (remoteBuiltinTreePaths) return remoteBuiltinTreePaths
-  remoteBuiltinTreePaths = fetchWithFallback(REMOTE_BUILTIN_PLUGIN_TREE_URLS).then((raw) => {
-    const parsed = JSON.parse(raw) as { tree?: RemoteBuiltinTreeItem[]; truncated?: boolean }
-    if (!Array.isArray(parsed.tree)) {
-      throw new Error('Remote builtin plugin GitHub tree response is invalid')
+  remoteBuiltinTreePaths = fetchWithFallback(REMOTE_BUILTIN_PLUGIN_FILE_LIST_URLS).then((raw) => {
+    const parsed = JSON.parse(raw) as {
+      tree?: RemoteBuiltinTreeItem[]
+      files?: RemoteBuiltinFlatFileItem[]
+      truncated?: boolean
     }
-    if (parsed.truncated) {
-      throw new Error('Remote builtin plugin GitHub tree response is truncated')
+    if (Array.isArray(parsed.files)) {
+      return parsed.files
+        .map((item) => typeof item.name === 'string' ? item.name.replace(/^\/+/, '') : '')
+        .filter(Boolean)
     }
-    return parsed.tree
-      .filter((item) => item.type === 'blob' && typeof item.path === 'string')
-      .map((item) => item.path as string)
+    if (Array.isArray(parsed.tree)) {
+      if (parsed.truncated) {
+        throw new Error('Remote builtin plugin GitHub tree response is truncated')
+      }
+      return parsed.tree
+        .filter((item) => item.type === 'blob' && typeof item.path === 'string')
+        .map((item) => item.path as string)
+    }
+    throw new Error('Remote builtin plugin file-list response is invalid')
   })
   return remoteBuiltinTreePaths
 }

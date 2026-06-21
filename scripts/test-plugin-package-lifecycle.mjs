@@ -35,6 +35,7 @@ assertHas(files.pluginRuntime, /clearPluginPermissions/, 'installed uninstall an
 assertHas(files.pluginRuntime, /removePluginSettings/, 'installed uninstall and dev remove should clear plugin settings')
 assertHas(files.scriptsView, /await\s+uninstallPlugin\(plugin\.pluginId\)/, 'ScriptsView uninstall button should await physical uninstall')
 assertHas(files.scriptsView, /setUpdateStatus\(['"`]checking['"`]\)|setUpdateStatus\(['"`]done['"`]\)/, 'ScriptsView should refresh directory summaries after uninstall')
+assertHas(files.scriptsView, /const\s+result\s*=\s*await\s+checkBuiltinPluginsUpdate\(\)[\s\S]*result\.error[\s\S]*setUpdateStatus\(['"`]error['"`]\)/, 'ScriptsView package update checks should surface checkBuiltinPluginsUpdate returned errors')
 
 assertNotHas(files.configInit, /createScriptPluginEntrySource|parseScriptToAction/, 'configInit should no longer use the legacy defineAction parser/wrapper')
 assertNotHas(files.configInit, /releaseUserScriptPluginPackages|releaseBuiltinScriptPluginPackages/, 'configInit should no longer release defineAction scripts as packages')
