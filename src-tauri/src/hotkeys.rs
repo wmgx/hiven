@@ -206,6 +206,11 @@ impl DoubleModifierListenerState {
             self.modifier = modifier;
         }
 
+        if !mod_now && !self.was_down && has_other {
+            self.detector.reset();
+            return false;
+        }
+
         if mod_now && !self.was_down {
             let triggered = self.detector.handle_event(KeyEvent {
                 key: Key::Modifier,
@@ -829,6 +834,37 @@ mod double_modifier_tests {
             true,
             false,
             timestamp(1_140),
+        ));
+    }
+
+    #[test]
+    fn listener_invalidates_first_tap_when_other_modifier_is_pressed_between_taps() {
+        let mut listener =
+            DoubleModifierListenerState::new(Duration::from_millis(300), DoubleModifier::Command);
+
+        assert!(!listener.handle_flags_changed(
+            DoubleModifier::Command,
+            true,
+            false,
+            timestamp(0),
+        ));
+        assert!(!listener.handle_flags_changed(
+            DoubleModifier::Command,
+            false,
+            false,
+            timestamp(20),
+        ));
+        assert!(!listener.handle_flags_changed(
+            DoubleModifier::Command,
+            false,
+            true,
+            timestamp(80),
+        ));
+        assert!(!listener.handle_flags_changed(
+            DoubleModifier::Command,
+            true,
+            false,
+            timestamp(140),
         ));
     }
 

@@ -171,6 +171,19 @@ check('global launcher keeps keyboard selection visible while navigating', () =>
   )
 })
 
+check('main window supports Cmd or Ctrl K as an in-app global launcher shortcut', () => {
+  assertHas(
+    files.app,
+    /\(e\.metaKey\s*\|\|\s*e\.ctrlKey\)[\s\S]{0,180}!e\.shiftKey[\s\S]{0,180}e\.key\.toLowerCase\(\)\s*===\s*['"]k['"][\s\S]{0,180}openGlobalLauncher\(['"]full['"]\)/,
+    'MainApp should open the app launcher with Cmd/Ctrl+K when not recording shortcuts',
+  )
+  assert.doesNotMatch(
+    files.app,
+    /\(e\.metaKey\s*\|\|\s*e\.ctrlKey\)\s*&&\s*e\.shiftKey\s*&&\s*e\.key\.toLowerCase\(\)\s*===\s*['"]k['"][\s\S]{0,180}openGlobalLauncher\(['"]full['"]\)/,
+    'MainApp should not add a local Cmd/Ctrl+Shift+K launcher path; configured global hotkeys handle app-internal/app-external routing',
+  )
+})
+
 check('launcher surfaces do not auto-discover legacy plugin commands', () => {
   assert.doesNotMatch(
     files.globalLauncher,
