@@ -145,7 +145,7 @@ function MainApp() {
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         e.stopPropagation()
-        useAppStore.getState().openGlobalLauncher('full')
+        useAppStore.getState().setCommandPaletteOpen(true)
         return
       }
     }

@@ -174,8 +174,13 @@ check('global launcher keeps keyboard selection visible while navigating', () =>
 check('main window supports Cmd or Ctrl K as an in-app global launcher shortcut', () => {
   assertHas(
     files.app,
+    /\(e\.metaKey\s*\|\|\s*e\.ctrlKey\)[\s\S]{0,180}!e\.shiftKey[\s\S]{0,180}e\.key\.toLowerCase\(\)\s*===\s*['"]k['"][\s\S]{0,180}setCommandPaletteOpen\(true\)/,
+    'MainApp should open the in-app launcher with Cmd/Ctrl+K when not recording shortcuts',
+  )
+  assert.doesNotMatch(
+    files.app,
     /\(e\.metaKey\s*\|\|\s*e\.ctrlKey\)[\s\S]{0,180}!e\.shiftKey[\s\S]{0,180}e\.key\.toLowerCase\(\)\s*===\s*['"]k['"][\s\S]{0,180}openGlobalLauncher\(['"]full['"]\)/,
-    'MainApp should open the app launcher with Cmd/Ctrl+K when not recording shortcuts',
+    'Cmd/Ctrl+K should not open the global launcher; it should open the in-app launcher',
   )
   assert.doesNotMatch(
     files.app,
