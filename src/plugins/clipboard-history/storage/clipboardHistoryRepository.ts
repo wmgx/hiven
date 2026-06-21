@@ -28,6 +28,7 @@ export type ClipboardHistoryRepository = {
   getItem(id: string): Promise<ClipboardHistoryItem | undefined>
   getAllItems(): Promise<ClipboardHistoryItem[]>
   getListItems(): Promise<ClipboardHistoryItem[]>
+  getFreshListItems(): Promise<ClipboardHistoryItem[]>
   getListItemsSync(): ClipboardHistoryItem[] | null
   deleteItem(id: string): Promise<void>
   clearAll(): Promise<void>
@@ -212,6 +213,12 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     return indexToListItems(index)
   }
 
+  async function getFreshListItems(): Promise<ClipboardHistoryItem[]> {
+    const index = await store.getIndex()
+    setCachedIndex(index)
+    return indexToListItems(index)
+  }
+
   function getListItemsSync(): ClipboardHistoryItem[] | null {
     const cached = getCachedIndex()
     if (!cached) return null
@@ -326,6 +333,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     getItem,
     getAllItems,
     getListItems,
+    getFreshListItems,
     getListItemsSync,
     deleteItem,
     clearAll,

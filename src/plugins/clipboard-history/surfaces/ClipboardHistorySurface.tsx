@@ -60,22 +60,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const imeKeyDown = useImeKeyboard()
   const isKeyboardNavRef = useRef(false)
 
-  const loadItems = useCallback(async () => {
-    try {
-      const listItems = await repository.getListItems()
-      setItems(listItems)
-      setSelectedId((current) => {
-        if (listItems.length === 0) return null
-        if (current && listItems.some((item) => item.id === current)) return current
-        return listItems[0].id
-      })
-    } catch {
-      host.showMessage(t('error.loadFailed'), 'error')
-    } finally {
-      setLoading(false)
-    }
-  }, [repository, host, t])
-
   const applyListItems = useCallback((listItems: ClipboardHistoryItem[]) => {
     setItems(listItems)
     setSelectedId((current) => {
@@ -85,6 +69,17 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     })
     setLoading(false)
   }, [])
+
+  const loadItems = useCallback(async () => {
+    try {
+      const listItems = await repository.getFreshListItems()
+      applyListItems(listItems)
+    } catch {
+      host.showMessage(t('error.loadFailed'), 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [repository, host, t, applyListItems])
 
   useEffect(() => {
     // If we already have cached data, skip the initial load delay
@@ -98,6 +93,19 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       applyListItems(index ? indexToListItems(index) : [])
     })
   }, [applyListItems])
+
+  useEffect(() => {
+    if (!settings.enabled) return
+    void repository.getFreshListItems()
+      .then(applyListItems)
+      .catch(() => {})
+    const intervalId = window.setInterval(() => {
+      void repository.getFreshListItems()
+        .then(applyListItems)
+        .catch(() => {})
+    }, 1000)
+    return () => window.clearInterval(intervalId)
+  }, [repository, settings.enabled, applyListItems])
 
   useEffect(() => {
     if (loading || !settings.enabled) return
