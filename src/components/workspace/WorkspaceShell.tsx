@@ -1,10 +1,7 @@
 import { useWorkspaceStore } from '../../workspace/workspaceStore'
-import { useAppStore } from '../../store'
 import { PaneEditor } from './PaneEditor'
 import { PresentationHost } from './PresentationHost'
 import { RendererHost } from './RendererHost'
-import { X } from 'lucide-react'
-import { useT } from '../../i18n'
 import type { PaneId, PaneRendererState } from '../../workspace/types'
 import { pluginRegistry, usePluginRegistryVersion } from '../../workspace/pluginRegistry'
 
@@ -14,10 +11,7 @@ export function WorkspaceShell() {
   const panes = useWorkspaceStore((s) => s.panes)
   const presentations = useWorkspaceStore((s) => s.presentations)
   const paneRenderers = useWorkspaceStore((s) => s.paneRenderers)
-  const closePane = useWorkspaceStore((s) => s.closePane)
   const setActivePaneId = useWorkspaceStore((s) => s.setActivePaneId)
-  const locale = useAppStore((s) => s.locale)
-  const t = useT('workspace')
   const registryVersion = usePluginRegistryVersion()
   const workspaceRenderer = findWorkspaceRenderer(activePaneId, paneRenderers, registryVersion)
 
@@ -85,36 +79,7 @@ export function WorkspaceShell() {
                   style={{ background: 'var(--color-accent)' }}
                 />
               )}
-              {/* Pane title tab */}
-              {layout.panes.length > 1 && (
-                <div
-                  className="pane-tab h-[24px] flex items-center px-2 text-[10px] shrink-0 justify-between"
-                  style={{
-                    background: activePaneId === paneId
-                      ? 'var(--color-background-primary)'
-                      : 'var(--color-background-secondary)',
-                    color: activePaneId === paneId
-                      ? 'var(--color-text-primary)'
-                      : 'var(--color-text-tertiary)',
-                    borderBottom: '0.5px solid var(--color-border-tertiary)',
-                  }}
-                  onClick={() => setActivePaneId(paneId)}
-                >
-                  <span>{panes[paneId]?.title || paneId}</span>
-                  <span
-                    className="ml-2 rounded hover:opacity-100 opacity-50 cursor-pointer flex items-center justify-center"
-                    style={{ width: 14, height: 14 }}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      closePane(paneId)
-                    }}
-                    title={t('close')}
-                  >
-                    <X size={10} />
-                  </span>
-                </div>
-              )}
-              <div className="flex-1 overflow-hidden" style={{ height: layout.panes.length > 1 ? 'calc(100% - 24px)' : '100%' }}>
+              <div className="flex-1 overflow-hidden h-full">
                 <PaneEditor paneId={paneId} />
               </div>
             </div>

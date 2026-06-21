@@ -13,6 +13,7 @@ import { PaneBottomPanels } from './PaneBottomPanels'
 import { installMonacoHoverOverlay } from '../../utils/monacoHoverOverlay'
 import { createMonacoDisposableBucket } from '../../utils/monacoDisposables'
 import { getFluxMonacoTheme, registerFluxMonacoThemes } from '../../utils/monacoTheme'
+import { X } from 'lucide-react'
 
 interface PaneEditorProps {
   paneId: string
@@ -23,6 +24,8 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
   const setPaneText = useWorkspaceStore((s) => s.setPaneText)
   const setActivePaneId = useWorkspaceStore((s) => s.setActivePaneId)
   const setPaneSelection = useWorkspaceStore((s) => s.setPaneSelection)
+  const closePane = useWorkspaceStore((s) => s.closePane)
+  const layout = useWorkspaceStore((s) => s.layout)
   const setEditorInstance = useAppStore((s) => s.setEditorInstance)
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
   const settings = useAppStore((s) => s.settings)
@@ -131,6 +134,9 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
   const languageStatus = languageSource === 'manual'
     ? languageLabel
     : `${languageLabel} · ${t('autoLanguage')}`
+  const visiblePaneIds = layout.panes
+  const paneNumber = visiblePaneIds.indexOf(paneId) + 1
+  const showPaneNumber = visiblePaneIds.length > 1 && paneNumber > 0
 
   return (
     <div className="flex flex-col h-full" onPointerDown={() => setActivePaneId(paneId)}>
@@ -296,6 +302,15 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
           color: 'var(--color-text-tertiary)',
         }}
       >
+        {showPaneNumber && (
+          <span
+            className="pane-status-index shrink-0"
+            title={pane.title}
+            data-active={activePaneId === paneId ? 'true' : 'false'}
+          >
+            {paneNumber}
+          </span>
+        )}
         <span className="shrink-0">
           {t('line')} {cursorInfo.line}, {t('column')} {cursorInfo.col}
         </span>
@@ -319,6 +334,17 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
             {languageStatus}
           </span>
         )}
+        <button
+          type="button"
+          className="pane-status-close"
+          title={t('closePane')}
+          onClick={(event) => {
+            event.stopPropagation()
+            closePane(paneId)
+          }}
+        >
+          <X size={11} />
+        </button>
       </div>
     </div>
   )

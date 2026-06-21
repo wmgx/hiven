@@ -588,22 +588,21 @@ fn start_nsevent_listener(state: Arc<DoubleModifierHotkeyState>, app: tauri::App
         started_at: Instant::now(),
     }));
 
-    let ls2 = Arc::clone(&ls);
-    let state2 = Arc::clone(&state);
-    let app2 = app.clone();
-
-    let block = RcBlock::new(move |event: *mut AnyObject| {
-        if !state2.enabled.lock().map(|v| *v).unwrap_or(false) {
+    let handle_event = move |event: *mut AnyObject,
+                             state: &Arc<DoubleModifierHotkeyState>,
+                             listener_state: &Arc<Mutex<ListenerState>>,
+                             app: &tauri::AppHandle| {
+        if !state.enabled.lock().map(|v| *v).unwrap_or(false) {
             return;
         }
 
         let event_type: u64 = unsafe { msg_send![event, type] };
-        let modifier = state2
+        let modifier = state
             .modifier
             .lock()
             .map(|v| *v)
             .unwrap_or(DoubleModifier::Command);
-        let mut ls = ls2.lock().unwrap();
+        let mut ls = listener_state.lock().unwrap();
         let timestamp = ls.started_at.elapsed();
 
         if event_type == FLAGS_CHANGED {
@@ -626,28 +625,51 @@ fn start_nsevent_listener(state: Arc<DoubleModifierHotkeyState>, app: tauri::App
                 .double_modifier
                 .handle_flags_changed(modifier, mod_now, has_other, timestamp)
             {
-                let a = app2.clone();
+                let a = app.clone();
                 std::thread::spawn(move || route_pinned_launcher_hotkey(a));
             }
         } else {
             // KeyDown — invalidate any in-progress double-tap
             ls.double_modifier.handle_other_key_down(timestamp);
         }
+    };
+
+    let ls2 = Arc::clone(&ls);
+    let state2 = Arc::clone(&state);
+    let app2 = app.clone();
+    let global_handler = handle_event.clone();
+
+    let global_block = RcBlock::new(move |event: *mut AnyObject| {
+        global_handler(event, &state2, &ls2, &app2);
+    });
+
+    let ls3 = Arc::clone(&ls);
+    let state3 = Arc::clone(&state);
+    let app3 = app.clone();
+    let local_block = RcBlock::new(move |event: *mut AnyObject| -> *mut AnyObject {
+        handle_event(event, &state3, &ls3, &app3);
+        event
     });
 
     // Box::leak keeps the block alive for the app lifetime (monitor is never removed).
-    let block_ref: &'static _ = Box::leak(Box::new(block));
+    let global_block_ref: &'static _ = Box::leak(Box::new(global_block));
+    let local_block_ref: &'static _ = Box::leak(Box::new(local_block));
 
     unsafe {
         let cls = AnyClass::get(c"NSEvent").expect("NSEvent class not found");
         let _monitor: *mut AnyObject = msg_send![
             cls,
             addGlobalMonitorForEventsMatchingMask: mask,
-            handler: &**block_ref
+            handler: &**global_block_ref
+        ];
+        let _local_monitor: *mut AnyObject = msg_send![
+            cls,
+            addLocalMonitorForEventsMatchingMask: mask,
+            handler: &**local_block_ref
         ];
     }
 
-    hotkey_log("NSEvent global monitor installed (no Accessibility needed)");
+    hotkey_log("NSEvent global and local monitors installed (local covers in-app focus)");
 }
 
 #[cfg(target_os = "macos")]

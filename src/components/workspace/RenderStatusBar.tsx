@@ -8,16 +8,13 @@ import { useT } from '../../i18n'
 export function RenderStatusBar() {
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
   const pane = useWorkspaceStore((s) => s.panes[s.activePaneId])
-  const paneOrder = useWorkspaceStore((s) => s.paneOrder)
   const presentations = useWorkspaceStore((s) => s.presentations)
   const panels = useWorkspaceStore((s) => s.panels)
   const paneRenderers = useWorkspaceStore((s) => s.paneRenderers)
   const panelInstancesV2 = useWorkspaceStore((s) => s.panelInstancesV2)
   const occupancies = useWorkspaceStore((s) => s.occupancies)
-  const closeActiveSurfaceOrPane = useWorkspaceStore((s) => s.closeActiveSurfaceOrPane)
   const lastCommandStatus = useAppStore((s) => s.lastCommandStatus)
   const t = useT('workspace')
-  const tEditor = useT('editor')
   const [menuOpen, setMenuOpen] = useState(false)
 
   const hasPresentations = Object.keys(presentations).length > 0
@@ -104,15 +101,6 @@ export function RenderStatusBar() {
           {t('status.lastCommand')}: {lastCommandStatus.title} · {commandStatusLabel}
         </span>
       )}
-
-      <button
-        type="button"
-        className="statusbar-close"
-        title={tEditor('closePane')}
-        onClick={() => closeActiveSurfaceOrPane()}
-      >
-        <X size={11} />
-      </button>
 
       {/* Status menu dropdown */}
       {menuOpen && (

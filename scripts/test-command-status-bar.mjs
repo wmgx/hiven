@@ -20,6 +20,7 @@ function assert(condition, message) {
 
 const editorView = read('src/views/EditorView.tsx')
 const renderStatusBar = read('src/components/workspace/RenderStatusBar.tsx')
+const paneEditor = read('src/components/workspace/PaneEditor.tsx')
 const commandPalette = read('src/components/CommandPalette.tsx')
 const pluginCommandExecutor = read('src/workspace/pluginCommandExecutor.ts')
 const store = read('src/store.ts')
@@ -46,8 +47,8 @@ assert(
 assert(
   /lastCommandStatus/.test(renderStatusBar) &&
   /statusbar-spacer/.test(renderStatusBar) &&
-  /statusbar-close/.test(renderStatusBar),
-  'RenderStatusBar should reserve the right side for command status and close action',
+  /pane-status-close/.test(paneEditor),
+  'RenderStatusBar should reserve the right side for command status and panes should expose close from their status bars',
 )
 
 assert(

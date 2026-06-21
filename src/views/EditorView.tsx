@@ -12,7 +12,7 @@ import { runtimeRegistry } from '../workspace/runtimeRegistry'
 import { resolveIcon } from '../utils/resolveIcon'
 import { useT } from '../i18n'
 import { formatGlobalPinnedLauncherShortcutLabel } from '../hotkeys/shortcutDisplay'
-import { Command, PanelBottom, PanelRight, Search, WrapText } from 'lucide-react'
+import { Command, PanelBottom, PanelRight, Search, Sparkles, WrapText } from 'lucide-react'
 
 function isEditableSelectAllTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
@@ -144,12 +144,15 @@ export function EditorView() {
             )
           })}
 
-          <span
-            className="btn btn-ghost btn-sm ft-btn ft-btn-ghost ft-btn-sm"
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm ft-btn ft-btn-ghost ft-btn-sm editor-topbar-run"
             onClick={() => setCommandPaletteOpen(true)}
+            title={t('runActionWithShortcut', { shortcut: runActionShortcut })}
           >
-            {t('runActionWithShortcut', { shortcut: runActionShortcut })}
-          </span>
+            <Sparkles size={13} />
+            <span>{t('runAction')}</span>
+          </button>
         </div>
       </div>
 
