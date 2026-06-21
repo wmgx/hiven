@@ -3873,6 +3873,7 @@ body[data-theme='dark'] .global-launcher-panel.palette-panel {
 }
 
 html[data-window='launcher'] .global-launcher-panel.palette-panel {
+  border-color: transparent !important;
   box-shadow: none !important;
 }
 

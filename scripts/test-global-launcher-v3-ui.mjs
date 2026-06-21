@@ -73,6 +73,11 @@ assert.match(files.css, /\.l-row\.sel/, 'Launcher selected rows must have the v3
 assert.match(files.css, /\.l-foot/, 'Launcher footer must have the v3 CSS')
 assert.match(files.css, /\.launcher-kind-tag/, 'Launcher type tags must have CSS')
 assert.match(files.css, /--launcher-panel-width:\s*680px/, 'Launcher CSS should expose the widened 680px panel width')
+assert.match(
+  files.css,
+  /html\[data-window='launcher'\]\s+\.global-launcher-panel\.palette-panel\s*\{[\s\S]*?border-color:\s*transparent\s*!important;[\s\S]*?box-shadow:\s*none\s*!important;[\s\S]*?\}/,
+  'Standalone global launcher window must suppress the outer border/outline',
+)
 
 assert.match(files.palette, /kindCommand/, 'Palette i18n must include command tag copy')
 assert.match(files.palette, /kindApp/, 'Palette i18n must include app tag copy')
