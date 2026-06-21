@@ -61,6 +61,7 @@ export type {
   PluginUiSurfaceKind,
   PluginUiSurfaceContribution,
   PluginUiContribution,
+  PluginSurfaceOpenContext,
   PluginSurfaceProps,
   PluginSurfaceHostApi,
   // Plugin Background types

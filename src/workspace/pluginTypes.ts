@@ -531,6 +531,19 @@ export type PluginSurfaceProps<TSettings = unknown> = {
   host: PluginSurfaceHostApi
 }
 
+export type PluginSurfaceOpenContext<TSettings = unknown> = {
+  pluginId: string
+  surfaceId: string
+  source: 'builtin' | 'installed' | 'dev'
+  locale: Locale
+  t: (key: string, vars?: Record<string, string | number>) => string
+  settings: TSettings
+  permissions: PluginPermissionSnapshot
+  storage: PluginPrivateStorageApi
+  clipboard: PluginClipboardApi
+  paste: PluginPasteApi
+}
+
 export type PluginUiSurfaceContribution<TSettings = unknown> = {
   id: string
   kind: PluginUiSurfaceKind
@@ -539,6 +552,7 @@ export type PluginUiSurfaceContribution<TSettings = unknown> = {
   icon?: string
   aliases?: string[]
   component: ComponentType<PluginSurfaceProps<TSettings>>
+  beforeOpen?(ctx: PluginSurfaceOpenContext<TSettings>): Promise<void> | void
   entry?: {
     launcher?: boolean
     shortcutBindable?: boolean

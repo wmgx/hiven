@@ -158,11 +158,13 @@ assert.match(launcher, /surfaceFrame.*setSurfaceFrame/, 'Must have surfaceFrame 
 
 // Intercepts plugin-surface items
 assert.match(launcher, /plugin-surface:/, 'Must check for plugin-surface systemKey')
-assert.match(launcher, /setSurfaceFrame\(\{/, 'Must set surface frame on selection')
+assert.match(launcher, /openPluginSurface\(\{\s*source,\s*pluginId,\s*surfaceId\s*\}\)/, 'Must open plugin surfaces through the pre-open activation path')
 
 // Renders surface component
 assert.match(launcher, /SurfaceComponent/, 'Must render surface component')
 assert.match(launcher, /PluginSurfaceErrorBoundary/, 'Must wrap in error boundary')
+assert.match(launcher, /beforeOpen\?\.\(/, 'GlobalLauncher must run plugin surface beforeOpen hooks before activation')
+assert.match(launcher, /setSurfaceFrame\(target\)/, 'GlobalLauncher must activate plugin surfaces after the pre-open hook completes')
 
 // Passes all required props
 assert.match(launcher, /pluginId.*surfaceFrame/, 'Must pass pluginId from surfaceFrame')

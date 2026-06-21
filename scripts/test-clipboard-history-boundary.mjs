@@ -103,6 +103,8 @@ assert.match(pluginTypes, /background\?.*PluginBackgroundContribution/, 'PluginD
 
 // Must export surface-related types
 assert.match(pluginTypes, /PluginUiSurfaceContribution/, 'Must define PluginUiSurfaceContribution type')
+assert.match(pluginTypes, /beforeOpen\?/, 'Plugin surfaces must support a beforeOpen lifecycle hook')
+assert.match(pluginTypes, /PluginSurfaceOpenContext/, 'Plugin surface beforeOpen must receive a typed open context')
 assert.match(pluginTypes, /PluginSurfaceProps/, 'Must define PluginSurfaceProps type')
 assert.match(pluginTypes, /PluginSurfaceHostApi/, 'Must define PluginSurfaceHostApi type')
 
@@ -156,6 +158,7 @@ assert.match(scriptsI18n, /permissionsBlockedDetail/, 'ScriptsView i18n must inc
 
 const sdkExports = read('src/plugin-sdk.ts')
 assert.match(sdkExports, /PluginSurfaceProps/, 'plugin-sdk.ts must export PluginSurfaceProps')
+assert.match(sdkExports, /PluginSurfaceOpenContext/, 'plugin-sdk.ts must export PluginSurfaceOpenContext')
 assert.match(sdkExports, /PluginBackgroundContribution/, 'plugin-sdk.ts must export PluginBackgroundContribution')
 assert.match(sdkExports, /PluginBackgroundContext/, 'plugin-sdk.ts must export PluginBackgroundContext')
 assert.match(sdkExports, /PluginPrivateStorageApi/, 'plugin-sdk.ts must export PluginPrivateStorageApi')

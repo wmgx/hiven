@@ -96,6 +96,41 @@ export function GlobalLauncher() {
     ? settingsDialogTarget
     : null
 
+  const openPluginSurface = useCallback(async (target: { source: PluginSettingsSource; pluginId: string; surfaceId: string }) => {
+    const def = pluginRegistry.getPluginDefinition(target.pluginId, target.source) as PluginDefinition<unknown> | undefined
+    const surface = def?.ui?.surfaces?.find((candidate) => candidate.id === target.surfaceId)
+    if (!surface) return
+
+    const requestedPermissions = pluginRegistry.getPluginPermissions(target.pluginId, target.source)
+    const permissions = getPluginPermissionSnapshot(target.source, target.pluginId, requestedPermissions)
+    const settingsContribution = def.settings
+    const settings = settingsContribution ? resolvePluginSettings(target.source, target.pluginId, settingsContribution).value : {}
+    const storage = createPluginPrivateStorage(target.source, target.pluginId, permissions)
+    const pluginT = makePluginT(target.pluginId, locale)
+
+    if (missingPluginPermissions(permissions, requestedPermissions).length === 0) {
+      try {
+        await surface.beforeOpen?.({
+          pluginId: target.pluginId,
+          surfaceId: target.surfaceId,
+          source: target.source,
+          locale,
+          t: pluginT,
+          settings,
+          permissions,
+          storage,
+          clipboard: createPluginClipboard(target.pluginId, permissions, storage),
+          paste: createPluginPaste(permissions, storage),
+        })
+      } catch (error) {
+        console.warn(`[launcher] Plugin surface beforeOpen failed for "${target.pluginId}:${target.surfaceId}":`, error)
+      }
+    }
+
+    setSurfaceFrame(target)
+    setSurfaceFocusVersion((version) => version + 1)
+  }, [locale, pluginRegistryVersion])
+
   useEffect(() => {
     if (!open) return
     previousFocusRef.current = document.activeElement as HTMLElement | null
@@ -117,11 +152,10 @@ export function GlobalLauncher() {
   useEffect(() => {
     if (!open || !pluginSurfaceToolTarget) return
     const timer = window.setTimeout(() => {
-      setSurfaceFrame(pluginSurfaceToolTarget)
-      setSurfaceFocusVersion((version) => version + 1)
+      void openPluginSurface(pluginSurfaceToolTarget)
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [open, pluginSurfaceToolTarget])
+  }, [open, pluginSurfaceToolTarget, openPluginSurface])
 
   // Initialize LauncherController on open
   useEffect(() => {
@@ -477,8 +511,7 @@ export function GlobalLauncher() {
         const surfaceId = parts[3]
         if (isPluginSettingsSource(source) && pluginId && surfaceId) {
           clearPluginSurfaceTool()
-          setSurfaceFrame({ source, pluginId, surfaceId })
-          setSurfaceFocusVersion((version) => version + 1)
+          void openPluginSurface({ source, pluginId, surfaceId })
           return
         }
       }

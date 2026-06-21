@@ -10,6 +10,7 @@ import type { ClipboardHistorySettings } from './settings/model'
 import { DEFAULT_CLIPBOARD_HISTORY_SETTINGS } from './settings/model'
 import { ClipboardHistorySurface } from './surfaces/ClipboardHistorySurface'
 import { clipboardHistoryBackground } from './background/clipboardHistoryBackground'
+import { createClipboardHistoryRepository } from './storage/clipboardHistoryRepository'
 
 const MB = 1024 * 1024
 
@@ -142,6 +143,9 @@ export default definePlugin<ClipboardHistorySettings>({
         icon: 'Clipboard',
         aliases: ['clipboard', 'paste', 'history', '剪贴板', '粘贴板', '剪切板'],
         component: ClipboardHistorySurface,
+        async beforeOpen(ctx) {
+          await createClipboardHistoryRepository(ctx.storage).getFreshListItems()
+        },
         entry: {
           launcher: true,
           shortcutBindable: true,

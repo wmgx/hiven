@@ -40,6 +40,7 @@ assert.match(indexContent, /surfaces:\s*\[/, 'Must declare surfaces array')
 assert.match(indexContent, /id:\s*['"]main['"]/, 'Must declare surface with id "main"')
 assert.match(indexContent, /kind:\s*['"]custom-view['"]/, 'Surface kind must be custom-view')
 assert.match(indexContent, /component:\s*ClipboardHistorySurface/, 'Surface component must reference ClipboardHistorySurface')
+assert.match(indexContent, /beforeOpen[\s\S]{0,220}getFreshListItems/, 'Clipboard history surface must prewarm fresh storage before activation')
 
 // entry.launcher is true (default or explicit)
 assert.match(indexContent, /launcher:\s*true/, 'Surface entry.launcher must be true')
