@@ -26,7 +26,8 @@ import {
 import { BackIcon, ClipboardIcon, CloseIcon, FileTextIcon, ImageIcon, SettingsIcon } from '@hiven/plugin-ui/icons'
 import type { ClipboardHistorySettings } from '../settings/model'
 import type { ClipboardHistoryItem } from '../storage/clipboardHistoryTypes'
-import { createClipboardHistoryRepository } from '../storage/clipboardHistoryRepository'
+import { subscribeCachedIndex } from '../storage/clipboardHistoryCache'
+import { createClipboardHistoryRepository, indexToListItems } from '../storage/clipboardHistoryRepository'
 
 type FilterKind = 'all' | 'text' | 'image' | 'files'
 type SurfaceStorage = PluginSurfaceProps<ClipboardHistorySettings>['host']['storage']
@@ -75,12 +76,28 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     }
   }, [repository, host, t])
 
+  const applyListItems = useCallback((listItems: ClipboardHistoryItem[]) => {
+    setItems(listItems)
+    setSelectedId((current) => {
+      if (listItems.length === 0) return null
+      if (current && listItems.some((item) => item.id === current)) return current
+      return listItems[0].id
+    })
+    setLoading(false)
+  }, [])
+
   useEffect(() => {
     // If we already have cached data, skip the initial load delay
     if (hasInitialCache) return
     const timer = window.setTimeout(() => { void loadItems() }, 0)
     return () => window.clearTimeout(timer)
   }, [loadItems, hasInitialCache])
+
+  useEffect(() => {
+    return subscribeCachedIndex((index) => {
+      applyListItems(index ? indexToListItems(index) : [])
+    })
+  }, [applyListItems])
 
   useEffect(() => {
     if (loading || !settings.enabled) return
@@ -126,6 +143,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       return
     }
     let cancelled = false
+    setSelectedFullItem(null)
     void repository.getItem(selectedId).then((item) => {
       if (!cancelled && item) setSelectedFullItem(item)
     })
@@ -279,7 +297,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
               />
             </div>
             <div ref={listRef} className="clipboard-history-list" data-launcher-scrollable style={{ overflow: 'auto', flex: 1 }}>
-              <SurfaceList aria-label={t('surface.main.title')}>
+              <SurfaceList aria-label={t('surface.main.title')} data-launcher-scrollable>
                 {filteredItems.length === 0 ? (
                   <SurfaceEmptyState>
                     {t('state.empty')}
@@ -438,6 +456,12 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   onDelete: (id: string) => Promise<void>
 }) {
   const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (selected) {
+      ref.current?.scrollIntoView({ block: 'nearest' })
+    }
+  }, [selected])
 
   return (
     <div
@@ -598,7 +622,6 @@ function getMetaRows(item: ClipboardHistoryItem, locale: string, t: (key: string
   const rows: MetaRow[] = [
     { label: t('meta.contentType'), value: getContentTypeLabel(item, t) },
     { label: t('meta.byteSize'), value: formatBytes(item.byteSize) },
-    { label: t('meta.timesCopied'), value: String(item.copyCount) },
     { label: t('meta.firstCopied'), value: formatDateTime(item.firstCopiedAt, locale) },
     { label: t('meta.lastCopied'), value: formatDateTime(item.lastCopiedAt, locale) },
   ]

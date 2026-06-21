@@ -45,6 +45,31 @@ function makeTextPreview(text: string, maxLength = 200): string {
   return singleLine.slice(0, maxLength) + '…'
 }
 
+export function indexToListItems(index: ClipboardHistoryIndex): ClipboardHistoryItem[] {
+  return index.entries.map((entry): ClipboardHistoryItem | null => {
+    const base = {
+      id: entry.id,
+      kind: entry.kind,
+      hash: entry.hash,
+      firstCopiedAt: entry.firstCopiedAt ?? entry.lastCopiedAt,
+      lastCopiedAt: entry.lastCopiedAt,
+      copyCount: entry.copyCount ?? 1,
+      byteSize: entry.byteSize,
+      sourceApp: entry.sourceApp,
+    }
+    switch (entry.kind) {
+      case 'text':
+        return { ...base, kind: 'text', text: '', preview: entry.preview ?? '' } as ClipboardTextHistoryItem
+      case 'image':
+        return { ...base, kind: 'image', blobId: '', previewBlobId: entry.previewBlobId ?? '', contentType: entry.contentType ?? 'image/png', width: entry.width, height: entry.height } as ClipboardImageHistoryItem
+      case 'files':
+        return { ...base, kind: 'files', paths: [], fileNames: entry.fileNames ?? [] } as ClipboardFilesHistoryItem
+      default:
+        return null
+    }
+  }).filter(Boolean) as ClipboardHistoryItem[]
+}
+
 export function createClipboardHistoryRepository(storage: PluginPrivateStorageApi): ClipboardHistoryRepository {
   const store: ClipboardHistoryStore = createClipboardHistoryStore(storage)
 
@@ -177,31 +202,6 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
       index.entries.map((entry) => store.getItem(entry.id))
     )
     return items.filter(Boolean) as ClipboardHistoryItem[]
-  }
-
-  function indexToListItems(index: ClipboardHistoryIndex): ClipboardHistoryItem[] {
-    return index.entries.map((entry): ClipboardHistoryItem | null => {
-      const base = {
-        id: entry.id,
-        kind: entry.kind,
-        hash: entry.hash,
-        firstCopiedAt: entry.firstCopiedAt ?? entry.lastCopiedAt,
-        lastCopiedAt: entry.lastCopiedAt,
-        copyCount: entry.copyCount ?? 1,
-        byteSize: entry.byteSize,
-        sourceApp: entry.sourceApp,
-      }
-      switch (entry.kind) {
-        case 'text':
-          return { ...base, kind: 'text', text: '', preview: entry.preview ?? '' } as ClipboardTextHistoryItem
-        case 'image':
-          return { ...base, kind: 'image', blobId: '', previewBlobId: entry.previewBlobId ?? '', contentType: entry.contentType ?? 'image/png', width: entry.width, height: entry.height } as ClipboardImageHistoryItem
-        case 'files':
-          return { ...base, kind: 'files', paths: [], fileNames: entry.fileNames ?? [] } as ClipboardFilesHistoryItem
-        default:
-          return null
-      }
-    }).filter(Boolean) as ClipboardHistoryItem[]
   }
 
   async function getListItems(): Promise<ClipboardHistoryItem[]> {

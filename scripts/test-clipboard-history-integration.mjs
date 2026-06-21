@@ -146,6 +146,7 @@ for (const key of requiredKeys) {
 // ─── 5. Surface component structure ─────────────────────────────────────────
 
 const surfaceContent = read('src/plugins/clipboard-history/surfaces/ClipboardHistorySurface.tsx')
+const cacheContent = read('src/plugins/clipboard-history/storage/clipboardHistoryCache.ts')
 
 // Imports are from @hiven/plugin (SDK) and local relative paths only
 assert.match(surfaceContent, /from\s*['"]@hiven\/plugin['"]/, 'Surface must import types from @hiven/plugin')
@@ -197,6 +198,9 @@ assert.match(pluginStyleContent, /\.clipboard-history-surface/, 'Clipboard histo
 // Has loading and disabled states
 assert.match(surfaceContent, /loading/, 'Surface must handle loading state')
 assert.match(surfaceContent, /settings\.enabled/, 'Surface must check settings.enabled')
+assert.match(cacheContent, /subscribeCachedIndex/, 'Clipboard history cache must expose change subscriptions for already-open surfaces')
+assert.match(surfaceContent, /subscribeCachedIndex/, 'Clipboard history surface must subscribe to cache updates so newly copied items appear while it is open')
+assert.match(surfaceContent, /indexToListItems/, 'Clipboard history surface must map subscribed index snapshots into list items without waiting for remount')
 
 // ─── 6. Background structure ─────────────────────────────────────────────────
 

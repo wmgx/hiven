@@ -756,10 +756,10 @@ export function ScriptsView() {
           <div className="plugin-permissions-head-copy">
             <span className="plugin-permissions-kicker">
               <ShieldHalf size={14} />
-              {t(locale, 'scripts.permissionsPendingCount', { count: missingPermissions.length })}
+              {t(locale, 'scripts.permissionsBlockedTitle')}
             </span>
             <span className="plugin-permissions-detail">
-              {t(locale, 'scripts.permissionsPendingDetail')}
+              {t(locale, 'scripts.permissionsBlockedDetail', { count: missingPermissions.length })}
             </span>
           </div>
           <button
