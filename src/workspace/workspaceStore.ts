@@ -184,6 +184,7 @@ interface WorkspaceSlice {
 
   // Pane renderer actions (plugin system)
   setPaneRenderer: (paneId: PaneId, state: PaneRendererState) => void
+  updatePaneRendererStatus: (paneId: PaneId, label: string | null, level?: 'info' | 'error') => void
   clearPaneRenderer: (paneId: PaneId) => void
   clearPaneRenderersForPlugin: (pluginId: string) => void
 
@@ -476,6 +477,19 @@ export const useWorkspaceStore = create<WorkspaceSlice>()(persist(
     setPaneRenderer: (paneId, state) => {
       const { paneRenderers } = get()
       set({ paneRenderers: { ...paneRenderers, [paneId]: state } })
+    },
+
+    updatePaneRendererStatus: (paneId, label, level = 'info') => {
+      const { paneRenderers } = get()
+      const state = paneRenderers[paneId]
+      if (!state) return
+      const nextLabel = label || undefined
+      const nextLevel = nextLabel ? level : undefined
+      if (state.statusLabel === nextLabel && state.statusLevel === nextLevel) return
+      const nextState = label
+        ? { ...state, statusLabel: label, statusLevel: level }
+        : (({ statusLabel: _statusLabel, statusLevel: _statusLevel, ...rest }) => rest)(state)
+      set({ paneRenderers: { ...paneRenderers, [paneId]: nextState } })
     },
 
     clearPaneRenderer: (paneId) => {

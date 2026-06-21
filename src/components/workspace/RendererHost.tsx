@@ -27,6 +27,7 @@ export function RendererHost({ paneId, rendererState }: RendererHostProps) {
   const clearPaneRenderer = useWorkspaceStore((s) => s.clearPaneRenderer)
   const setActivePaneId = useWorkspaceStore((s) => s.setActivePaneId)
   const setPaneText = useWorkspaceStore((s) => s.setPaneText)
+  const updatePaneRendererStatus = useWorkspaceStore((s) => s.updatePaneRendererStatus)
   const t = useT('workspace')
 
   // Resolve renderer from registry (prefer dev if it's a dev renderer)
@@ -47,11 +48,14 @@ export function RendererHost({ paneId, rendererState }: RendererHostProps) {
       updatePaneText: (targetPaneId, text) => {
         setPaneText(targetPaneId, text)
       },
+      setStatus: (label, level) => {
+        updatePaneRendererStatus(paneId, label, level)
+      },
       dispatch: (effects) => {
         applyEffects(stampDevEffects(effects, rendererState.isDevRenderer))
       },
     }),
-    [paneId, clearPaneRenderer, setActivePaneId, setPaneText, rendererState.isDevRenderer]
+    [paneId, clearPaneRenderer, setActivePaneId, setPaneText, updatePaneRendererStatus, rendererState.isDevRenderer]
   )
 
   // Build inputs for renderer (push model)

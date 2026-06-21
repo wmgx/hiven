@@ -51,6 +51,19 @@ export function RenderStatusBar() {
         {t('status.renderer')}: {activeRenderer?.rendererId ?? t('status.code')}
       </span>
 
+      {activeRenderer?.statusLabel && (
+        <span
+          className="text-[10px]"
+          style={{
+            color: activeRenderer.statusLevel === 'error'
+              ? 'var(--color-error-text)'
+              : 'var(--color-text-secondary)',
+          }}
+        >
+          {activeRenderer.statusLabel}
+        </span>
+      )}
+
       {/* Presentations */}
       {hasPresentations && Object.values(presentations).map((session) => (
         <span key={session.id} className="text-[10px] flex items-center gap-1" style={{ color: 'var(--color-accent)' }}>

@@ -316,6 +316,8 @@ export type PaneRendererState = {
   ownerPluginId?: string
   ownerContributionId?: string
   isDevRenderer?: boolean
+  statusLabel?: string
+  statusLevel?: 'info' | 'error'
 }
 
 // ─── Panel Instance V2 State (plugin system, single-instance model) ──────────

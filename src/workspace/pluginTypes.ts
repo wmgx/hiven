@@ -155,6 +155,8 @@ export type RendererHostApi = {
   focusPane: (paneId: PaneId) => void
   /** Update pane text from an editable renderer surface */
   updatePaneText: (paneId: PaneId, text: string) => void
+  /** Set a short status label shown in the global status bar while this renderer is active. */
+  setStatus: (label: string | null, level?: 'info' | 'error') => void
   /** Dispatch effects from within the renderer */
   dispatch: (effects: FluxEffect[]) => void
 }

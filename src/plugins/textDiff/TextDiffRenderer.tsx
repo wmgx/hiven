@@ -22,7 +22,6 @@ import {
 import { CloseIcon } from '@hiven/plugin-ui/icons'
 import {
   canUseSemanticJsonDiff,
-  decideAutoDiffMode,
   isAutoDiffExitKey,
   normalizeAutoDiffLayout,
 } from './autoDiffMode'
@@ -50,17 +49,15 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
   const modifiedText = modifiedPane?.text ?? ''
 
   const layout = normalizeAutoDiffLayout(inputs?.renderMode)
-  const [semanticEnabled, setSemanticEnabled] = useState(true)
-  const [arrayMode, setArrayMode] = useState<'by-index' | 'unordered-scalar' | 'by-object-key'>('by-index')
-  const [objectKey, setObjectKey] = useState('id')
   const semanticAvailable = useMemo(
     () => canUseSemanticJsonDiff(originalText, modifiedText),
     [originalText, modifiedText],
   )
-  const autoMode = useMemo(
-    () => decideAutoDiffMode({ leftText: originalText, rightText: modifiedText, semanticEnabled }),
-    [originalText, modifiedText, semanticEnabled],
-  )
+  const [semanticEnabled, setSemanticEnabled] = useState(() => canUseSemanticJsonDiff(originalText, modifiedText))
+  const [arrayMode, setArrayMode] = useState<'by-index' | 'unordered-scalar' | 'by-object-key'>('by-index')
+  const [objectKey, setObjectKey] = useState('id')
+  const selectedMode = semanticEnabled ? 'json-semantic' : 'text-line'
+  const renderMode = semanticEnabled && semanticAvailable ? 'json-semantic' : 'text'
   const arrayCompareMode = useMemo<JsonArrayCompareMode>(() => (
     arrayMode === 'by-object-key'
       ? { type: 'by-object-key', key: objectKey }
@@ -75,7 +72,7 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
   )
   const changes = viewModel?.changes ?? []
   const { leftText, rightText, leftHighlights, rightHighlights } = useMemo(() => {
-    if (autoMode === 'json-semantic') {
+    if (renderMode === 'json-semantic') {
       const origParsed = diff.parseJson(originalText)
       const modParsed = diff.parseJson(modifiedText)
       if (origParsed.ok && modParsed.ok && origParsed.value != null && modParsed.value != null) {
@@ -99,15 +96,18 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
 
     const { leftHighlights, rightHighlights } = diff.computeTextLineDiff(originalText, modifiedText)
     return { leftText: originalText, rightText: modifiedText, leftHighlights, rightHighlights }
-  }, [autoMode, originalText, modifiedText, arrayCompareMode, diff])
+  }, [renderMode, originalText, modifiedText, arrayCompareMode, diff])
+  const diffCount = renderMode === 'json-semantic'
+    ? changes.length
+    : Math.max(leftHighlights.length, rightHighlights.length)
   const editorLanguage = useMemo(
-    () => autoMode === 'json-semantic'
+    () => renderMode === 'json-semantic'
       ? 'json'
       : detectExternalEditorLanguage(
         [originalText, modifiedText],
         [originalPane?.language, modifiedPane?.language],
       ),
-    [autoMode, originalText, modifiedText, originalPane?.language, modifiedPane?.language],
+    [renderMode, originalText, modifiedText, originalPane?.language, modifiedPane?.language],
   )
 
   useEffect(() => {
@@ -119,6 +119,18 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [host])
+
+  useEffect(() => {
+    if (semanticEnabled && !semanticAvailable) {
+      host.setStatus(t('diff.jsonInvalid'), 'error')
+      return
+    }
+    if (diffCount > 0) {
+      host.setStatus(t('diff.changeCount', { count: diffCount }))
+      return
+    }
+    host.setStatus(semanticEnabled ? t('diff.semanticNoChanges') : t('diff.lineNoChanges'))
+  }, [diffCount, host, semanticAvailable, semanticEnabled, t])
 
   const handleOriginalFocus = useCallback(() => {
     if (originalPaneId) host.focusPane(originalPaneId)
@@ -150,8 +162,7 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
 
         <SegmentedControl
           className="text-diff-mode-switch"
-          value={autoMode === 'json-semantic' ? 'json-semantic' : 'text-line'}
-          disabled={!semanticAvailable}
+          value={selectedMode}
           aria-label={t('diff.mode')}
           options={[
             { value: 'text-line', label: t('diff.textMode') },
@@ -160,20 +171,9 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
           onChange={(value) => setSemanticEnabled(value === 'json-semantic')}
         />
 
-        {autoMode === 'json-semantic' && changes.length > 0 && (
-          <span className="text-diff-status-badge" data-tone="changed">
-            {t('diff.changeCount', { count: changes.length })}
-          </span>
-        )}
-        {autoMode === 'json-semantic' && changes.length === 0 && (
-          <span className="text-diff-status-badge" data-tone="equal">
-            {t('diff.semanticEqual')}
-          </span>
-        )}
-
-        {!semanticAvailable && (
+        {semanticEnabled && !semanticAvailable && (
           <span className="text-diff-hint" title={t('diff.semanticUnavailable')}>
-            {t('diff.textLineDiff')}
+            {t('diff.error')}
           </span>
         )}
 
@@ -182,13 +182,13 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
           className="text-diff-exit-button"
           onClick={host.close}
           title={t('diff.exit')}
+          aria-label={t('diff.exit')}
         >
           <CloseIcon size={13} />
-          {t('diff.exit')}
         </ToolbarButton>
       </SurfaceToolbar>
 
-      {autoMode === 'json-semantic' && (
+      {renderMode === 'json-semantic' && (
         <div className="text-diff-optionsbar">
           <span className="text-diff-options-label">
             {t('diff.array')}:

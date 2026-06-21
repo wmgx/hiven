@@ -71,7 +71,6 @@
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hiven-color-accent) 36%, transparent);
 }
 
-.text-diff-status-badge,
 .text-diff-hint {
   flex: 0 0 auto;
   min-height: 22px;
@@ -84,16 +83,6 @@
   white-space: nowrap;
 }
 
-.text-diff-status-badge[data-tone='changed'] {
-  color: var(--hiven-color-accent);
-  background: var(--color-accent-bg);
-}
-
-.text-diff-status-badge[data-tone='equal'] {
-  color: var(--hiven-color-accent);
-  background: color-mix(in srgb, var(--hiven-color-accent) 12%, transparent);
-}
-
 .text-diff-hint {
   color: var(--hiven-color-text-tertiary);
   background: var(--hiven-color-bg-secondary);
@@ -101,14 +90,13 @@
 
 .text-diff-exit-button {
   flex: 0 0 auto;
-  gap: 5px;
+  width: 26px;
   min-height: 26px;
   margin-left: 2px;
-  padding: 0 8px;
+  padding: 0;
   border-color: transparent;
   background: transparent;
   color: var(--hiven-color-text-secondary);
-  font-size: 11px;
 }
 
 .text-diff-exit-button:hover {
