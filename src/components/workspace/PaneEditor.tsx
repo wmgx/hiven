@@ -273,6 +273,7 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
             lineNumbers: settings.lineNumbers ? 'on' : 'off',
             wordWrap: settings.wordWrap ? 'on' : 'off',
             minimap: { enabled: false },
+            find: { addExtraSpaceOnTop: false },
             scrollBeyondLastLine: false,
             renderLineHighlight: 'line',
             overviewRulerLanes: 0,

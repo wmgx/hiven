@@ -147,6 +147,7 @@ export function DualEditorView({
     lineNumbers: lineNumbers ? 'on' : 'off',
     wordWrap: wordWrap ? 'on' : 'off',
     minimap: { enabled: false },
+    find: { addExtraSpaceOnTop: false },
     scrollBeyondLastLine: false,
     renderLineHighlight: 'none',
     folding: foldingEnabled,

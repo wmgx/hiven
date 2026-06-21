@@ -201,6 +201,7 @@ export function PluginEditorView() {
             beforeMount={registerFluxMonacoThemes}
             options={{
               minimap: { enabled: false },
+              find: { addExtraSpaceOnTop: false },
               fontSize: 13,
               wordWrap: 'off',
               scrollBeyondLastLine: false,

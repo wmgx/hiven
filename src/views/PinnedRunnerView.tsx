@@ -461,6 +461,7 @@ function PinnedMonacoEditor({ pinnedId, value, onChange, readOnly, onBlur }: {
         lineNumbers: 'on',
         wordWrap: 'on',
         minimap: { enabled: false },
+        find: { addExtraSpaceOnTop: false },
         scrollBeyondLastLine: false,
         renderLineHighlight: 'line',
         overviewRulerLanes: 0,

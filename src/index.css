@@ -3151,6 +3151,208 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
   height: auto !important;
 }
 
+/* hiven-styled Monaco native find/replace widget. Keep Monaco behavior; only replace chrome. */
+.monaco-editor .find-widget {
+  height: 48px !important;
+  min-width: 520px !important;
+  padding: 8px 42px 8px 30px !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 14px !important;
+  background: var(--panel) !important;
+  color: var(--text) !important;
+  box-shadow: 0 18px 46px -18px rgba(0, 0, 0, 0.38), 0 0 0 1px rgba(0, 0, 0, 0.035) !important;
+  font-family: var(--font) !important;
+  line-height: 1 !important;
+}
+
+.flux-spatial-shell[data-theme='dark'] .monaco-editor .find-widget,
+body[data-theme='dark'] .monaco-editor .find-widget {
+  box-shadow: 0 22px 56px -18px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(255, 255, 255, 0.045) !important;
+}
+
+.monaco-editor .find-widget.replaceToggled {
+  height: 86px !important;
+}
+
+.monaco-editor .find-widget > .find-part,
+.monaco-editor .find-widget > .replace-part {
+  height: 30px !important;
+  margin: 0 !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.monaco-editor .find-widget > .replace-part {
+  margin-top: 6px !important;
+}
+
+.monaco-editor .find-widget .monaco-findInput {
+  height: 30px !important;
+  min-width: 170px !important;
+}
+
+.monaco-editor .find-widget .monaco-inputbox,
+.monaco-editor .find-widget > .find-part .monaco-inputbox,
+.monaco-editor .find-widget > .replace-part .monaco-inputbox {
+  min-height: 30px !important;
+  border: 1px solid var(--border-2) !important;
+  border-radius: 8px !important;
+  background: var(--surface) !important;
+  box-shadow: none !important;
+}
+
+.monaco-editor .find-widget .monaco-inputbox.synthetic-focus,
+.monaco-editor .find-widget .monaco-inputbox.focused {
+  border-color: var(--accent) !important;
+  background: var(--panel) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px var(--accent-soft) !important;
+}
+
+.monaco-editor .find-widget .monaco-inputbox .ibwrapper {
+  height: 28px !important;
+  background: transparent !important;
+}
+
+.monaco-editor .find-widget .monaco-inputbox .input,
+.monaco-editor .find-widget .monaco-inputbox textarea.input {
+  height: 28px !important;
+  min-height: 28px !important;
+  background: transparent !important;
+  color: var(--text) !important;
+  font-size: 13px !important;
+  line-height: 18px !important;
+  padding: 5px 10px !important;
+  overflow: hidden !important;
+}
+
+.monaco-editor .find-widget .monaco-inputbox .mirror {
+  padding: 5px 10px !important;
+  line-height: 18px !important;
+}
+
+.monaco-editor .find-widget .monaco-inputbox .input::placeholder {
+  color: var(--text-3) !important;
+}
+
+.monaco-editor .find-widget .find-actions,
+.monaco-editor .find-widget .replace-actions {
+  height: 30px !important;
+  align-items: center !important;
+}
+
+.monaco-editor .find-widget .matchesCount {
+  height: 24px !important;
+  min-width: 52px !important;
+  margin: 0 !important;
+  padding: 0 6px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--text-2) !important;
+  font-size: 11px !important;
+  line-height: 24px !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.monaco-editor .find-widget.no-results .matchesCount {
+  background: transparent !important;
+  color: var(--color-error-text) !important;
+}
+
+.monaco-editor .find-widget .button {
+  color: var(--text-2) !important;
+}
+
+.monaco-editor .find-widget .codicon-find-selection,
+.monaco-editor .find-widget .monaco-custom-toggle {
+  color: var(--text-2) !important;
+}
+
+.monaco-editor .find-widget .button:not(.disabled):hover,
+.monaco-editor .find-widget .codicon-find-selection:hover,
+.monaco-editor .find-widget .monaco-custom-toggle:hover {
+  background-color: var(--surface) !important;
+  color: var(--text) !important;
+}
+
+.monaco-editor .find-widget .button.checked,
+.monaco-editor .find-widget .monaco-custom-toggle.checked {
+  color: var(--accent) !important;
+}
+
+.monaco-editor .find-widget .button.disabled,
+.monaco-editor .find-widget .disabled {
+  color: var(--text-3) !important;
+  opacity: 0.45 !important;
+  cursor: default !important;
+}
+
+.monaco-editor .find-widget::before {
+  content: '';
+  position: absolute;
+  left: 14px;
+  top: 22px;
+  width: 8px;
+  height: 8px;
+  border-right: 1.75px solid var(--text-2);
+  border-bottom: 1.75px solid var(--text-2);
+  transform: translateY(-50%) rotate(-45deg);
+  pointer-events: none;
+}
+
+.monaco-editor .find-widget.replaceToggled::before {
+  top: 20px;
+  transform: translateY(-50%) rotate(45deg);
+  border-color: var(--text);
+}
+
+.monaco-editor .find-widget .button.toggle {
+  position: absolute !important;
+  top: 8px !important;
+  left: 6px !important;
+  width: 28px !important;
+  height: 34px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  outline: none !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  opacity: 0 !important;
+  color: transparent !important;
+  overflow: hidden !important;
+}
+
+.monaco-editor .find-widget .button.toggle::before,
+.monaco-editor .find-widget .button.toggle::after,
+.monaco-editor .find-widget .button.toggle * {
+  content: none !important;
+  display: none !important;
+  opacity: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.monaco-editor .find-widget > .button.codicon-widget-close {
+  top: 12px !important;
+  right: 12px !important;
+}
+
+.monaco-editor .find-widget > .replace-part > .monaco-findInput > .controls,
+.monaco-editor .find-widget .monaco-findInput > .controls {
+  top: 5px !important;
+  right: 5px !important;
+}
+
+.monaco-editor .find-widget .monaco-sash {
+  display: none !important;
+}
+
 .monaco-editor .find-widget .button.toggle {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;

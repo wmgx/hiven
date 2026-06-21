@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useAppStore, localized } from '../store'
 import { useWorkspaceStore } from '../workspace/workspaceStore'
 import { WorkspaceShell } from '../components/workspace/WorkspaceShell'
@@ -19,6 +19,11 @@ function isEditableSelectAllTarget(target: EventTarget | null) {
   return Boolean(target.closest(".monaco-editor, input, textarea, select, [contenteditable='true']"))
 }
 
+function isFindWidgetVisible(editor?: { getDomNode?: () => HTMLElement | null }) {
+  const root = editor?.getDomNode?.() ?? document
+  return Boolean(root.querySelector('.find-widget.visible:not(.hiddenEditor)'))
+}
+
 export function EditorView() {
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
   const setGlobalLauncherOpen = useAppStore((s) => s.setGlobalLauncherOpen)
@@ -30,6 +35,7 @@ export function EditorView() {
   const closeActiveSurfaceOrPane = useWorkspaceStore((s) => s.closeActiveSurfaceOrPane)
   const createPane = useWorkspaceStore((s) => s.createPane)
   const pluginRegistryVersion = usePluginRegistryVersion()
+  const [isFindOpen, setIsFindOpen] = useState(false)
 
   // Toolbar buttons contributed by plugins (top-right region), sorted by order.
   void pluginRegistryVersion
@@ -44,16 +50,45 @@ export function EditorView() {
       ? runtimeRegistry.getCodeEditor(workspace.activePaneId)
       : useAppStore.getState().editorInstance
   }
-  const runEditorAction = (actionId: string) => {
+  const toggleFindReplace = () => {
     const editor = getActiveCodeEditor()
-    editor?.focus?.()
-    const action = editor?.getAction(actionId)
-    if (action) {
-      void action.run()
+    if (!editor) return
+    editor.focus?.()
+    if (isFindWidgetVisible(editor)) {
+      const closeAction = editor.getAction?.('closeFindWidget')
+      if (closeAction) {
+        void closeAction.run()
+      } else {
+        editor.trigger?.('editor-topbar', 'closeFindWidget', null)
+      }
+      setIsFindOpen(false)
       return
     }
-    editor?.trigger?.('editor-topbar', actionId, null)
+    const action = editor.getAction?.('editor.action.startFindReplaceAction')
+    if (action) {
+      void action.run()
+    } else {
+      editor.trigger?.('editor-topbar', 'editor.action.startFindReplaceAction', null)
+    }
+    setIsFindOpen(true)
   }
+
+  useEffect(() => {
+    const syncFindOpen = () => setIsFindOpen(isFindWidgetVisible(getActiveCodeEditor()))
+    syncFindOpen()
+    const observer = new MutationObserver(syncFindOpen)
+    observer.observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ['class'],
+    })
+    window.addEventListener('focus', syncFindOpen)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('focus', syncFindOpen)
+    }
+  }, [])
 
   // Route shell shortcuts before the browser document can consume them.
   useEffect(() => {
@@ -98,9 +133,10 @@ export function EditorView() {
             <WrapText size={14} />
           </button>
           <button
-            className="editor-topbar-button"
-            onClick={() => runEditorAction('editor.action.startFindReplaceAction')}
+            className={`editor-topbar-button ${isFindOpen ? 'is-active' : ''}`}
+            onClick={toggleFindReplace}
             title={t('findReplace')}
+            aria-pressed={isFindOpen}
           >
             <Search size={14} />
           </button>
