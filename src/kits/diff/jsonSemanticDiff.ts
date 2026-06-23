@@ -20,6 +20,7 @@ export type JsonDiffChange =
   | { kind: 'moved-or-reordered'; path: string; note: string }
 
 export type JsonArrayCompareMode =
+  | { type: 'semantic' }
   | { type: 'by-index' }
   | { type: 'unordered-scalar' }
   | { type: 'by-object-key'; key: string }
@@ -191,6 +192,236 @@ function normalizeJsonForDisplay(
 
 // ─── Semantic Diff ──────────────────────────────────────────────────────────
 
+
+function isObjectRecord(value: JsonValue): value is Record<string, JsonValue> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function canonicalSignature(value: JsonValue): string {
+  if (value === null) return 'null:null'
+  if (Array.isArray(value)) {
+    return `array:[${value.map(canonicalSignature).sort().join(',')}]`
+  }
+  if (typeof value === 'object') {
+    const entries = Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalSignature(value[key])}`)
+    return `object:{${entries.join(',')}}`
+  }
+  return `${typeof value}:${JSON.stringify(value)}`
+}
+
+const IDENTITY_KEY_HINTS = [
+  'id',
+  'uid',
+  'uuid',
+  'key',
+  'code',
+  'name',
+  'slug',
+  'value',
+  'type',
+  'identifier',
+]
+
+type ArrayMatchReason = 'exact' | 'identity-key' | 'similarity'
+
+type ArrayMatch = {
+  leftIndex: number
+  rightIndex: number
+  reason: ArrayMatchReason
+  pathLabel?: string
+}
+
+type ArrayMatchResult = {
+  matched: ArrayMatch[]
+  added: number[]
+  removed: number[]
+}
+
+function primitiveIdentityValue(value: JsonValue): value is null | boolean | number | string {
+  return value === null || typeof value !== 'object'
+}
+
+function identityPath(path: string, key: string, value: JsonValue): string {
+  return `${path}{${key}=${JSON.stringify(value)}}`
+}
+
+function fallbackElementPath(path: string, value: JsonValue, index: number): string {
+  if (isObjectRecord(value)) {
+    for (const key of IDENTITY_KEY_HINTS) {
+      if (key in value && primitiveIdentityValue(value[key])) {
+        return identityPath(path, key, value[key])
+      }
+    }
+  }
+  return `${path}[${index}]`
+}
+
+function inferArrayIdentityKey(
+  leftItems: JsonValue[],
+  rightItems: JsonValue[],
+  leftIndexes: Set<number>,
+  rightIndexes: Set<number>,
+): string | null {
+  const leftObjects = [...leftIndexes].map(index => leftItems[index]).filter(isObjectRecord)
+  const rightObjects = [...rightIndexes].map(index => rightItems[index]).filter(isObjectRecord)
+  if (leftObjects.length === 0 || rightObjects.length === 0) return null
+
+  const candidateKeys = new Set<string>()
+  for (const item of [...leftObjects, ...rightObjects]) {
+    for (const [key, value] of Object.entries(item)) {
+      if (primitiveIdentityValue(value)) candidateKeys.add(key)
+    }
+  }
+
+  let bestKey: string | null = null
+  let bestScore = 0
+  let secondBestScore = 0
+
+  for (const key of candidateKeys) {
+    const leftValues = leftObjects
+      .filter(item => key in item && primitiveIdentityValue(item[key]))
+      .map(item => JSON.stringify(item[key]))
+    const rightValues = rightObjects
+      .filter(item => key in item && primitiveIdentityValue(item[key]))
+      .map(item => JSON.stringify(item[key]))
+
+    if (leftValues.length === 0 || rightValues.length === 0) continue
+
+    const leftUnique = new Set(leftValues)
+    const rightUnique = new Set(rightValues)
+    const leftDuplicateFree = leftUnique.size === leftValues.length
+    const rightDuplicateFree = rightUnique.size === rightValues.length
+    if (!leftDuplicateFree || !rightDuplicateFree) continue
+
+    const coverage = (leftValues.length / leftObjects.length + rightValues.length / rightObjects.length) / 2
+    const overlapCount = [...leftUnique].filter(value => rightUnique.has(value)).length
+    const overlap = overlapCount / Math.max(1, Math.min(leftUnique.size, rightUnique.size))
+    const uniqueness = (leftUnique.size / leftValues.length + rightUnique.size / rightValues.length) / 2
+    const hint = IDENTITY_KEY_HINTS.includes(key) || /(^|_|-)(id|key|code|name|slug|type|value)($|_|-)/i.test(key) ? 1 : 0
+    const score = coverage * 2 + overlap * 3 + uniqueness * 2 + hint
+
+    if (score > bestScore) {
+      secondBestScore = bestScore
+      bestScore = score
+      bestKey = key
+    } else if (score > secondBestScore) {
+      secondBestScore = score
+    }
+  }
+
+  if (bestScore < 5) return null
+  if (bestScore - secondBestScore < 0.25) return null
+  return bestKey
+}
+
+function objectSimilarity(left: Record<string, JsonValue>, right: Record<string, JsonValue>): number {
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  const allKeys = new Set([...leftKeys, ...rightKeys])
+  if (allKeys.size === 0) return 1
+
+  const sharedKeys = leftKeys.filter(key => key in right)
+  const keyOverlap = sharedKeys.length / allKeys.size
+  let comparable = 0
+  let equal = 0
+
+  for (const key of sharedKeys) {
+    const leftValue = left[key]
+    const rightValue = right[key]
+    if (typeOf(leftValue) !== typeOf(rightValue)) continue
+    comparable++
+    if (canonicalSignature(leftValue) === canonicalSignature(rightValue)) equal++
+  }
+
+  const valueOverlap = comparable === 0 ? 0 : equal / comparable
+  return keyOverlap * 0.4 + valueOverlap * 0.6
+}
+
+function matchSemanticArray(leftItems: JsonValue[], rightItems: JsonValue[]): ArrayMatchResult {
+  const matched: ArrayMatch[] = []
+  const leftUnmatched = new Set(leftItems.map((_, index) => index))
+  const rightUnmatched = new Set(rightItems.map((_, index) => index))
+  const rightBySignature = new Map<string, number[]>()
+
+  for (const rightIndex of rightUnmatched) {
+    const signature = canonicalSignature(rightItems[rightIndex])
+    const bucket = rightBySignature.get(signature) ?? []
+    bucket.push(rightIndex)
+    rightBySignature.set(signature, bucket)
+  }
+
+  for (const leftIndex of [...leftUnmatched]) {
+    const signature = canonicalSignature(leftItems[leftIndex])
+    const bucket = rightBySignature.get(signature)
+    const rightIndex = bucket?.shift()
+    if (rightIndex === undefined) continue
+    matched.push({ leftIndex, rightIndex, reason: 'exact' })
+    leftUnmatched.delete(leftIndex)
+    rightUnmatched.delete(rightIndex)
+  }
+
+  const identityKey = inferArrayIdentityKey(leftItems, rightItems, leftUnmatched, rightUnmatched)
+  if (identityKey) {
+    const rightByIdentity = new Map<string, number>()
+    for (const rightIndex of rightUnmatched) {
+      const item = rightItems[rightIndex]
+      if (isObjectRecord(item) && identityKey in item && primitiveIdentityValue(item[identityKey])) {
+        rightByIdentity.set(JSON.stringify(item[identityKey]), rightIndex)
+      }
+    }
+
+    for (const leftIndex of [...leftUnmatched]) {
+      const leftItem = leftItems[leftIndex]
+      if (!isObjectRecord(leftItem) || !(identityKey in leftItem) || !primitiveIdentityValue(leftItem[identityKey])) continue
+      const identity = JSON.stringify(leftItem[identityKey])
+      const rightIndex = rightByIdentity.get(identity)
+      if (rightIndex === undefined || !rightUnmatched.has(rightIndex)) continue
+      matched.push({
+        leftIndex,
+        rightIndex,
+        reason: 'identity-key',
+        pathLabel: identityPath('', identityKey, leftItem[identityKey]),
+      })
+      leftUnmatched.delete(leftIndex)
+      rightUnmatched.delete(rightIndex)
+    }
+  }
+
+  const similarityCandidates: Array<{ leftIndex: number; rightIndex: number; score: number }> = []
+  for (const leftIndex of leftUnmatched) {
+    const leftItem = leftItems[leftIndex]
+    if (!isObjectRecord(leftItem)) continue
+    for (const rightIndex of rightUnmatched) {
+      const rightItem = rightItems[rightIndex]
+      if (!isObjectRecord(rightItem)) continue
+      const score = objectSimilarity(leftItem, rightItem)
+      if (score >= 0.75) similarityCandidates.push({ leftIndex, rightIndex, score })
+    }
+  }
+
+  similarityCandidates.sort((a, b) => b.score - a.score)
+  for (const candidate of similarityCandidates) {
+    if (!leftUnmatched.has(candidate.leftIndex) || !rightUnmatched.has(candidate.rightIndex)) continue
+    matched.push({
+      leftIndex: candidate.leftIndex,
+      rightIndex: candidate.rightIndex,
+      reason: 'similarity',
+    })
+    leftUnmatched.delete(candidate.leftIndex)
+    rightUnmatched.delete(candidate.rightIndex)
+  }
+
+  matched.sort((a, b) => a.leftIndex - b.leftIndex || a.rightIndex - b.rightIndex)
+
+  return {
+    matched,
+    added: [...rightUnmatched].sort((a, b) => a - b),
+    removed: [...leftUnmatched].sort((a, b) => a - b),
+  }
+}
+
 function typeOf(value: JsonValue): string {
   if (value === null) return 'null'
   if (Array.isArray(value)) return 'array'
@@ -206,7 +437,7 @@ export function computeJsonDiff(
   options: JsonDiffOptions = {}
 ): JsonDiffChange[] {
   const changes: JsonDiffChange[] = []
-  const arrayMode = options.arrayCompareMode || { type: 'by-index' }
+  const arrayMode = options.arrayCompareMode || { type: 'semantic' }
 
   function diffRecursive(orig: JsonValue, mod: JsonValue, path: string) {
     const origType = typeOf(orig)
@@ -254,6 +485,9 @@ export function computeJsonDiff(
 
   function diffArray(orig: JsonValue[], mod: JsonValue[], path: string, mode: JsonArrayCompareMode) {
     switch (mode.type) {
+      case 'semantic':
+        diffArraySemantic(orig, mod, path)
+        break
       case 'by-index':
         diffArrayByIndex(orig, mod, path)
         break
@@ -263,6 +497,25 @@ export function computeJsonDiff(
       case 'by-object-key':
         diffArrayByObjectKey(orig, mod, path, mode.key)
         break
+    }
+  }
+
+  function diffArraySemantic(orig: JsonValue[], mod: JsonValue[], path: string) {
+    const result = matchSemanticArray(orig, mod)
+
+    for (const match of result.matched) {
+      const childPath = match.pathLabel
+        ? `${path}${match.pathLabel}`
+        : fallbackElementPath(path, orig[match.leftIndex], match.leftIndex)
+      diffRecursive(orig[match.leftIndex], mod[match.rightIndex], childPath)
+    }
+
+    for (const index of result.removed) {
+      changes.push({ kind: 'removed', path: fallbackElementPath(path, orig[index], index), oldValue: orig[index] })
+    }
+
+    for (const index of result.added) {
+      changes.push({ kind: 'added', path: fallbackElementPath(path, mod[index], index), newValue: mod[index] })
     }
   }
 
@@ -433,7 +686,7 @@ export function buildDiffTree(
   modified: JsonValue,
   options: JsonDiffOptions = {}
 ): DiffTreeNode {
-  const arrayMode = options.arrayCompareMode ?? ({ type: 'by-index' } as const)
+  const arrayMode = options.arrayCompareMode ?? ({ type: 'semantic' } as const)
 
   function nodeHasChanges(node: DiffTreeNode): boolean {
     if (node.type === 'same') return false
@@ -506,9 +759,34 @@ export function buildDiffTree(
   }
 
   function buildArrayNode(orig: JsonValue[], mod: JsonValue[]): DiffTreeNode {
+    if (arrayMode.type === 'semantic') return buildArraySemantic(orig, mod)
     if (arrayMode.type === 'unordered-scalar') return buildArrayUnorderedScalar(orig, mod)
     if (arrayMode.type === 'by-object-key') return buildArrayByObjectKey(orig, mod, arrayMode.key)
     return buildArrayByIndex(orig, mod)
+  }
+
+  function buildArraySemantic(orig: JsonValue[], mod: JsonValue[]): DiffTreeNode {
+    const result = matchSemanticArray(orig, mod)
+    const items: DiffTreeNode[] = []
+    let hasChanges = false
+
+    for (const match of result.matched) {
+      const node = build(orig[match.leftIndex], mod[match.rightIndex])
+      if (nodeHasChanges(node)) hasChanges = true
+      items.push(node)
+    }
+
+    for (const index of result.removed) {
+      items.push({ type: 'removed', value: orig[index] })
+      hasChanges = true
+    }
+
+    for (const index of result.added) {
+      items.push({ type: 'added', value: mod[index] })
+      hasChanges = true
+    }
+
+    return { type: 'array', items, hasChanges }
   }
 
   function buildArrayByIndex(orig: JsonValue[], mod: JsonValue[]): DiffTreeNode {
@@ -595,7 +873,7 @@ export function buildDiffTree(
         node = build(origItem, modItem)
         if (nodeHasChanges(node)) hasChanges = true
       } else {
-        node = { type: 'same' }
+        node = { type: 'same', value: null }
       }
       items.push(node)
     }

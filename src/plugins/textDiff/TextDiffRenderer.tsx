@@ -10,13 +10,10 @@ import {
   detectExternalEditorLanguage,
   type PaneInput,
   type RendererProps,
-  type JsonArrayCompareMode,
 } from '@hiven/plugin'
 import {
   SegmentedControl,
-  Select,
   SurfaceToolbar,
-  TextInput,
   ToolbarButton,
 } from '@hiven/plugin-ui'
 import { CloseIcon } from '@hiven/plugin-ui/icons'
@@ -54,21 +51,14 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
     [originalText, modifiedText],
   )
   const [semanticEnabled, setSemanticEnabled] = useState(() => canUseSemanticJsonDiff(originalText, modifiedText))
-  const [arrayMode, setArrayMode] = useState<'by-index' | 'unordered-scalar' | 'by-object-key'>('by-index')
-  const [objectKey, setObjectKey] = useState('id')
   const selectedMode = semanticEnabled ? 'json-semantic' : 'text-line'
   const renderMode = semanticEnabled && semanticAvailable ? 'json-semantic' : 'text'
-  const arrayCompareMode = useMemo<JsonArrayCompareMode>(() => (
-    arrayMode === 'by-object-key'
-      ? { type: 'by-object-key', key: objectKey }
-      : { type: arrayMode }
-  ), [arrayMode, objectKey])
 
   const viewModel = useMemo(
     () => semanticAvailable
-      ? diff.buildJsonDiffViewModel(originalText, modifiedText, { arrayCompareMode })
+      ? diff.buildJsonDiffViewModel(originalText, modifiedText)
       : null,
-    [semanticAvailable, originalText, modifiedText, arrayCompareMode, diff],
+    [semanticAvailable, originalText, modifiedText, diff],
   )
   const changes = viewModel?.changes ?? []
   const { leftText, rightText, leftHighlights, rightHighlights } = useMemo(() => {
@@ -76,7 +66,7 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
       const origParsed = diff.parseJson(originalText)
       const modParsed = diff.parseJson(modifiedText)
       if (origParsed.ok && modParsed.ok && origParsed.value != null && modParsed.value != null) {
-        const tree = diff.buildDiffTree(origParsed.value, modParsed.value, { arrayCompareMode })
+        const tree = diff.buildDiffTree(origParsed.value, modParsed.value)
         const leftLines = diff.buildSideLines(tree, 'left')
         const rightLines = diff.buildSideLines(tree, 'right')
         return {
@@ -96,7 +86,7 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
 
     const { leftHighlights, rightHighlights } = diff.computeTextLineDiff(originalText, modifiedText)
     return { leftText: originalText, rightText: modifiedText, leftHighlights, rightHighlights }
-  }, [renderMode, originalText, modifiedText, arrayCompareMode, diff])
+  }, [renderMode, originalText, modifiedText, diff])
   const diffCount = renderMode === 'json-semantic'
     ? changes.length
     : Math.max(leftHighlights.length, rightHighlights.length)
@@ -187,34 +177,6 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
           <CloseIcon size={13} />
         </ToolbarButton>
       </SurfaceToolbar>
-
-      {renderMode === 'json-semantic' && (
-        <div className="text-diff-optionsbar">
-          <span className="text-diff-options-label">
-            {t('diff.array')}:
-          </span>
-          <Select
-            className="text-diff-array-select"
-            value={arrayMode}
-            aria-label={t('diff.array')}
-            options={[
-              { value: 'by-index', label: t('diff.byIndex') },
-              { value: 'unordered-scalar', label: t('diff.unorderedScalar') },
-              { value: 'by-object-key', label: t('diff.byKey') },
-            ]}
-            onChange={(event) => setArrayMode(event.target.value as typeof arrayMode)}
-          />
-          {arrayMode === 'by-object-key' && (
-            <TextInput
-              className="text-diff-key-input"
-              value={objectKey}
-              onChange={(event) => setObjectKey(event.target.value)}
-              placeholder={t('diff.keyPlaceholder')}
-              aria-label={t('diff.keyPlaceholder')}
-            />
-          )}
-        </div>
-      )}
 
       <div className="flex-1 overflow-hidden">
         <DualEditorView

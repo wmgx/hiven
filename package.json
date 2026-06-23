@@ -65,7 +65,8 @@
     "test:launcher-plugin-contract": "node scripts/test-launcher-plugin-contract.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test:settings-select-layout": "node scripts/test-settings-select-layout.mjs"
+    "test:settings-select-layout": "node scripts/test-settings-select-layout.mjs",
+    "test:json-semantic-diff": "node scripts/test-json-semantic-diff.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
