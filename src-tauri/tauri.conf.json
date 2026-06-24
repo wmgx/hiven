@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Hiven",
-  "version": "0.2.34",
+  "version": "0.2.53",
   "identifier": "com.hiven.app",
   "build": {
     "frontendDist": "../dist",

@@ -1,7 +1,7 @@
 {
   "name": "hiven-app",
   "private": true,
-  "version": "0.2.34",
+  "version": "0.2.53",
   "type": "module",
   "scripts": {
     "dev": "vite",
