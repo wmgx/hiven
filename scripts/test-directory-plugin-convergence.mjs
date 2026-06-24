@@ -211,6 +211,39 @@ check('pluginRuntime exposes directory, zip, GitHub directory, and single-file r
   assert.match(files.scriptsView, /checkInstalledPluginUpdate[\s\S]*updateInstalledPlugin|updateInstalledPlugin[\s\S]*checkInstalledPluginUpdate/, 'ScriptsView should expose installed GitHub plugin update check and one-click update actions')
 })
 
+check('Remote GitHub plugin updates use fresh metadata and proxy fallback', () => {
+  assert.match(
+    files.pluginRuntime,
+    /REMOTE_GITHUB_RAW_BASE_URLS[\s\S]*proxy\.github\.wmgx\.top[\s\S]*raw\.githubusercontent\.com[\s\S]*cdn\.jsdelivr\.net/,
+    'GitHub plugin metadata should try the GitHub proxy before raw/cdn mirrors',
+  )
+  assert.match(
+    files.pluginRuntime,
+    /githubRawFileUrls[\s\S]*cacheBust[\s\S]*Date\.now\(\)|Date\.now\(\)[\s\S]*githubRawFileUrls/,
+    'GitHub plugin update metadata requests should include a cache-busting query',
+  )
+  assert.match(
+    files.pluginRuntime,
+    /fetchGithubManifest\(record\.sourceUrl,[^)]*true\)/,
+    'installed GitHub plugin update checks should bypass stale CDN metadata',
+  )
+  assert.match(
+    files.pluginRuntime,
+    /fetchGithubManifest\(record\.sourceUrl,[^)]*true\)[\s\S]*fetchGithubDirectory\(record\.sourceUrl,[^)]*stagingRoot/,
+    'installed GitHub plugin updates should check fresh manifest metadata before downloading replacement files',
+  )
+  assert.match(
+    files.tauriLib,
+    /GITHUB_ARCHIVE_URL_TEMPLATES[\s\S]*proxy\.github\.wmgx\.top[\s\S]*codeload\.github\.com/,
+    'Tauri GitHub directory downloads should include a proxy archive URL fallback',
+  )
+  assert.match(
+    files.tauriLib,
+    /for\s+archive_url\s+in\s+github_archive_urls[\s\S]*reqwest::get\(&archive_url\)/,
+    'Tauri GitHub directory downloads should try archive mirrors in order',
+  )
+})
+
 check('pluginRuntime exposes injected SDK helpers for plugin authors', () => {
   assert.match(
     files.pluginRuntime + files.pluginHostSdk,

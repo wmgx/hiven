@@ -2437,6 +2437,23 @@ fn install_plugin_dir(source_path: String, destination_root: String) -> Result<S
     Ok(destination.to_string_lossy().to_string())
 }
 
+const GITHUB_ARCHIVE_URL_TEMPLATES: [&str; 2] = [
+    "https://proxy.github.wmgx.top/github/{owner}/{repo}/archive/refs/heads/{branch}.zip",
+    "https://codeload.github.com/{owner}/{repo}/zip/refs/heads/{branch}",
+];
+
+fn github_archive_urls(owner: &str, repo: &str, branch: &str) -> Vec<String> {
+    GITHUB_ARCHIVE_URL_TEMPLATES
+        .iter()
+        .map(|template| {
+            template
+                .replace("{owner}", owner)
+                .replace("{repo}", repo)
+                .replace("{branch}", branch)
+        })
+        .collect()
+}
+
 #[tauri::command]
 async fn fetch_github_directory(
     owner: String,
@@ -2449,16 +2466,28 @@ async fn fetch_github_directory(
     ensure_plugin_path_for_write(&destination_root)?;
     fs::create_dir_all(&destination_root).map_err(|e| e.to_string())?;
     let destination_root = ensure_existing_plugin_path(&destination_root)?;
-    let archive_url = format!(
-        "https://codeload.github.com/{}/{}/zip/refs/heads/{}",
-        owner, repo, branch
-    );
-    let bytes = reqwest::get(&archive_url)
-        .await
-        .map_err(|e| format!("GitHub download failed: {}", e))?
-        .bytes()
-        .await
-        .map_err(|e| format!("Failed to read GitHub archive: {}", e))?;
+    let mut last_error = String::new();
+    let mut downloaded_bytes: Option<Vec<u8>> = None;
+    for archive_url in github_archive_urls(&owner, &repo, &branch) {
+        match reqwest::get(&archive_url).await {
+            Ok(response) if response.status().is_success() => match response.bytes().await {
+                Ok(bytes) => {
+                    downloaded_bytes = Some(bytes.to_vec());
+                    break;
+                }
+                Err(error) => last_error = format!("Failed to read GitHub archive: {}", error),
+            },
+            Ok(response) => last_error = format!("GitHub archive returned HTTP {}", response.status()),
+            Err(error) => last_error = format!("GitHub download failed: {}", error),
+        }
+    }
+    let bytes = downloaded_bytes.ok_or_else(|| {
+        if last_error.is_empty() {
+            "GitHub download failed".to_string()
+        } else {
+            last_error
+        }
+    })?;
 
     let temp_dir = make_temp_dir(&destination_root)?;
     let result = extract_zip_bytes_to_dir(bytes.as_ref(), &temp_dir).and_then(|_| {

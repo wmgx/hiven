@@ -63,6 +63,12 @@ type ResolvedPluginManifest = {
   permissions: PluginManifest['permissions']
 }
 
+const REMOTE_GITHUB_RAW_BASE_URLS = [
+  'https://proxy.github.wmgx.top/raw',
+  'https://raw.githubusercontent.com',
+  'https://cdn.jsdelivr.net/gh',
+]
+
 export type InstalledPluginUpdateResult = {
   status: 'available' | 'up-to-date' | 'error'
   latestVersion?: string
@@ -910,19 +916,22 @@ function parseGithubDirectoryUrl(sourceUrl: string): {
   return { owner, repo, branch: branch || 'main', path: rest.join('/') }
 }
 
-function githubRawFileUrls(sourceUrl: string, filePath: string): string[] {
+function githubRawFileUrls(sourceUrl: string, filePath: string, cacheBust = false): string[] {
   const target = parseGithubDirectoryUrl(sourceUrl)
   validatePackageRelativePath(filePath, 'GitHub plugin file path')
   const packagePath = [target.path, filePath].filter(Boolean).join('/')
   const encodedPath = packagePath.split('/').map(encodeURIComponent).join('/')
-  const encodedRepoPath = [target.owner, target.repo, target.branch, encodedPath]
+  const rawPath = [target.owner, target.repo, target.branch, encodedPath]
     .filter(Boolean)
     .map((part) => String(part).replace(/\/$/, ''))
     .join('/')
-  return [
-    `https://raw.githubusercontent.com/${encodedRepoPath}`,
-    `https://cdn.jsdelivr.net/gh/${target.owner}/${target.repo}@${target.branch}/${encodedPath}`,
-  ]
+  const jsdelivrPath = `${target.owner}/${target.repo}@${target.branch}/${encodedPath}`
+  const query = cacheBust ? `?t=${Date.now()}` : ''
+  return REMOTE_GITHUB_RAW_BASE_URLS.map((base) => {
+    const normalizedBase = base.replace(/\/$/, '')
+    const path = normalizedBase.includes('cdn.jsdelivr.net') ? jsdelivrPath : rawPath
+    return `${normalizedBase}/${path}${query}`
+  })
 }
 
 async function fetchTextWithFallback(urls: string[]): Promise<string> {
@@ -937,8 +946,8 @@ async function fetchTextWithFallback(urls: string[]): Promise<string> {
   throw new Error(`All remote plugin metadata requests failed. Last error: ${lastError}`)
 }
 
-async function fetchGithubManifest(sourceUrl: string): Promise<ResolvedPluginManifest> {
-  const raw = await fetchTextWithFallback(githubRawFileUrls(sourceUrl, 'manifest.json'))
+async function fetchGithubManifest(sourceUrl: string, cacheBust = false): Promise<ResolvedPluginManifest> {
+  const raw = await fetchTextWithFallback(githubRawFileUrls(sourceUrl, 'manifest.json', cacheBust))
   const manifest = JSON.parse(raw) as Partial<PluginManifest>
   if (!manifest.pluginId) {
     throw new Error('Remote GitHub plugin manifest is missing pluginId')
@@ -981,7 +990,7 @@ export async function checkInstalledPluginUpdate(pluginId: string): Promise<Inst
 
   updatePluginMetadata(pluginId, { update: { status: 'checking', checkedAt: Date.now() } })
   try {
-    const remote = await fetchGithubManifest(record.sourceUrl)
+    const remote = await fetchGithubManifest(record.sourceUrl, true)
     if (remote.pluginId !== pluginId) {
       throw new Error(`Remote manifest pluginId mismatch: expected ${pluginId}, got ${remote.pluginId}`)
     }
@@ -1019,6 +1028,10 @@ export async function updateInstalledPlugin(pluginId: string): Promise<Installed
 
   try {
     if (wasEnabled) disablePlugin(pluginId)
+    const remote = await fetchGithubManifest(record.sourceUrl, true)
+    if (remote.pluginId !== pluginId) {
+      throw new Error(`Remote manifest pluginId mismatch: expected ${pluginId}, got ${remote.pluginId}`)
+    }
     const stagedFolder = await fetchGithubDirectory(record.sourceUrl, stagingRoot)
     const stagedSummary = await getPluginPackageSummary(stagedFolder)
     if (stagedSummary.pluginId !== pluginId) {
