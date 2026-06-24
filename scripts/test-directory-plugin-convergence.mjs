@@ -211,11 +211,21 @@ check('pluginRuntime exposes directory, zip, GitHub directory, and single-file r
   assert.match(files.scriptsView, /checkInstalledPluginUpdate[\s\S]*updateInstalledPlugin|updateInstalledPlugin[\s\S]*checkInstalledPluginUpdate/, 'ScriptsView should expose installed GitHub plugin update check and one-click update actions')
 })
 
-check('Remote GitHub plugin updates use fresh metadata and proxy fallback', () => {
+check('Remote GitHub plugin updates use fresh metadata without the hiven-only proxy', () => {
   assert.match(
     files.pluginRuntime,
-    /REMOTE_GITHUB_RAW_BASE_URLS[\s\S]*proxy\.github\.wmgx\.top[\s\S]*raw\.githubusercontent\.com[\s\S]*cdn\.jsdelivr\.net/,
-    'GitHub plugin metadata should try the GitHub proxy before raw/cdn mirrors',
+    /REMOTE_GITHUB_RAW_BASE_URLS[\s\S]*raw\.githubusercontent\.com[\s\S]*cdn\.jsdelivr\.net/,
+    'GitHub plugin metadata should use public GitHub raw and CDN mirrors',
+  )
+  assert.doesNotMatch(
+    files.pluginRuntime,
+    /REMOTE_GITHUB_RAW_BASE_URLS[\s\S]*proxy\.github\.wmgx\.top/,
+    'third-party GitHub plugin metadata must not use the hiven-only proxy host',
+  )
+  assert.doesNotMatch(
+    files.tauriLib,
+    /proxy\.github\.wmgx\.top\/github\/\{owner\}|GITHUB_ARCHIVE_URL_TEMPLATES/,
+    'third-party GitHub plugin archive downloads must not use the hiven-only proxy host',
   )
   assert.match(
     files.pluginRuntime,
@@ -231,16 +241,6 @@ check('Remote GitHub plugin updates use fresh metadata and proxy fallback', () =
     files.pluginRuntime,
     /fetchGithubManifest\(record\.sourceUrl,[^)]*true\)[\s\S]*fetchGithubDirectory\(record\.sourceUrl,[^)]*stagingRoot/,
     'installed GitHub plugin updates should check fresh manifest metadata before downloading replacement files',
-  )
-  assert.match(
-    files.tauriLib,
-    /GITHUB_ARCHIVE_URL_TEMPLATES[\s\S]*proxy\.github\.wmgx\.top[\s\S]*codeload\.github\.com/,
-    'Tauri GitHub directory downloads should include a proxy archive URL fallback',
-  )
-  assert.match(
-    files.tauriLib,
-    /for\s+archive_url\s+in\s+github_archive_urls[\s\S]*reqwest::get\(&archive_url\)/,
-    'Tauri GitHub directory downloads should try archive mirrors in order',
   )
 })
 

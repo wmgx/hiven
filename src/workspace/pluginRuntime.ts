@@ -64,7 +64,6 @@ type ResolvedPluginManifest = {
 }
 
 const REMOTE_GITHUB_RAW_BASE_URLS = [
-  'https://proxy.github.wmgx.top/raw',
   'https://raw.githubusercontent.com',
   'https://cdn.jsdelivr.net/gh',
 ]
