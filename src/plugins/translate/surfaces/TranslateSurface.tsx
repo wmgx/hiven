@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { IconButton, Select, TextArea } from '@hiven/plugin-ui'
-import { CloseIcon, SettingsIcon } from '@hiven/plugin-ui/icons'
+import { AlertTriangle, ArrowRight, Check, ChevronDown, Languages, LoaderCircle, Settings, X } from 'lucide-react'
 import type { LanguageCode, SourceLanguageCode, TargetLanguageCode, TranslateProfile, TranslateSettings } from '../settings/model'
 import { currentUsageMonth } from '../settings/model'
 import { estimateBilledChars, resolveSmartTargetLang, translateText } from '../providers/adapters'
@@ -22,8 +21,14 @@ type CacheEntry = {
   billedChars: number
 }
 
-const TARGET_LANGUAGE_OPTIONS: Array<{ label: string; value: TargetLanguageCode }> = [
-  { label: 'Smart', value: 'smart' },
+type SelectOption<T extends string> = {
+  label: string
+  value: T
+  sub?: string
+}
+
+const TARGET_LANGUAGE_OPTIONS: Array<SelectOption<TargetLanguageCode>> = [
+  { label: 'Smart', value: 'smart', sub: 'auto target' },
   { label: '中文', value: 'zh' },
   { label: 'English', value: 'en' },
   { label: '日本語', value: 'ja' },
@@ -33,8 +38,8 @@ const TARGET_LANGUAGE_OPTIONS: Array<{ label: string; value: TargetLanguageCode 
   { label: 'Español', value: 'es' },
 ]
 
-const SOURCE_LANGUAGE_OPTIONS: Array<{ label: string; value: SourceLanguageCode }> = [
-  { label: 'Auto', value: 'auto' },
+const SOURCE_LANGUAGE_OPTIONS: Array<SelectOption<SourceLanguageCode>> = [
+  { label: 'Auto-detect', value: 'auto' },
   { label: '中文', value: 'zh' },
   { label: 'English', value: 'en' },
   { label: '日本語', value: 'ja' },
@@ -52,22 +57,74 @@ function selectInitialProfile(settings: TranslateSettings): TranslateProfile | u
   return enabledProfiles(settings).find((profile) => profile.id === settings.defaultProfileId) ?? enabledProfiles(settings)[0] ?? settings.profiles[0]
 }
 
-function displayLimit(value: number): string {
-  return value > 0 ? value.toLocaleString() : '∞'
-}
-
-function statusText(status: TranslateStatus): string {
-  if (status.kind === 'waiting') return 'waiting'
-  if (status.kind === 'translating') return 'translating'
-  if (status.kind === 'success') return 'translated'
-  if (status.kind === 'error') return `failed · ${status.message}`
-  if (status.kind === 'quota-exceeded') return `quota exceeded · ${status.usedChars.toLocaleString()} / ${status.limitChars.toLocaleString()}`
-  return 'idle'
-}
-
 function resetUsageMonth(profile: TranslateProfile, month: string): TranslateProfile {
   if (profile.usedCharsMonth === month) return profile
   return { ...profile, usedCharsMonth: month, usedChars: 0 }
+}
+
+function stateName(status: TranslateStatus): 'idle' | 'waiting' | 'translating' | 'failed' | 'quota' {
+  if (status.kind === 'waiting') return 'waiting'
+  if (status.kind === 'translating') return 'translating'
+  if (status.kind === 'error') return 'failed'
+  if (status.kind === 'quota-exceeded') return 'quota'
+  return 'idle'
+}
+
+function statusLabel(status: TranslateStatus): string {
+  if (status.kind === 'waiting') return 'Waiting to translate...'
+  if (status.kind === 'translating') return 'Translating...'
+  if (status.kind === 'success') return 'Translated'
+  if (status.kind === 'error') return `Translation failed - ${status.message}`
+  if (status.kind === 'quota-exceeded') return 'Monthly quota reached'
+  return 'Idle'
+}
+
+function optionLabel<T extends string>(options: Array<SelectOption<T>>, value: T): string {
+  return options.find((option) => option.value === value)?.label ?? value
+}
+
+function formatLimit(value: number): string {
+  if (value <= 0) return '∞'
+  if (value >= 1000) return `${Math.round(value / 100) / 10}k`
+  return value.toLocaleString()
+}
+
+function TranslateSelect<T extends string>({
+  value,
+  options,
+  onChange,
+  width,
+}: {
+  value: T
+  options: Array<SelectOption<T>>
+  onChange: (value: T) => void
+  width?: number
+}) {
+  const selected = options.find((option) => option.value === value) ?? options[0]
+  return (
+    <label className="translate-select" style={width ? { width } : undefined}>
+      <select
+        className="translate-select__control"
+        value={value}
+        onChange={(event) => onChange(event.target.value as T)}
+        aria-label={selected?.label}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.sub ? `${option.label} · ${option.sub}` : option.label}
+          </option>
+        ))}
+      </select>
+      <span className="translate-select__trigger" aria-hidden="true">
+        <span className="translate-select__value">
+          {selected?.label}
+          {selected?.sub && <span className="translate-surface__menu-sub"> · {selected.sub}</span>}
+        </span>
+        <ChevronDown className="translate-select__chev" size={14} strokeWidth={2} />
+      </span>
+      <Check className="translate-surface__menu-check" size={0} aria-hidden="true" />
+    </label>
+  )
 }
 
 export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
@@ -82,6 +139,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   const [targetLang, setTargetLang] = useState<TargetLanguageCode>(initialProfile?.defaultTargetLang ?? settings.defaultTargetLang ?? 'smart')
   const [inputText, setInputText] = useState('')
   const [outputText, setOutputText] = useState('')
+  const [inputFocused, setInputFocused] = useState(false)
   const [status, setStatus] = useState<TranslateStatus>({ kind: 'idle' })
   const [usageByProfile, setUsageByProfile] = useState(() => new Map(settings.profiles.map((profile) => [profile.id, profile.usedChars])))
 
@@ -95,6 +153,10 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   }, [host.storage])
 
   const profiles = useMemo(() => enabledProfiles(settings), [settings])
+  const profileOptions = useMemo<Array<SelectOption<string>>>(
+    () => profiles.map((profile) => ({ label: profile.name, value: profile.id, sub: profile.provider })),
+    [profiles],
+  )
   const activeProfile = useMemo(
     () => settings.profiles.find((profile) => profile.id === profileId) ?? initialProfile,
     [settings.profiles, profileId, initialProfile],
@@ -140,8 +202,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
       setUsageByProfile((current) => {
         const next = new Map(current)
         next.set(profile.id, (next.get(profile.id) ?? normalizedProfile.usedChars) + result.billedChars)
-        const serializable = Object.fromEntries(next)
-        void host.storage.kv.set('usage.currentMonth', serializable).catch(() => {})
+        void host.storage.kv.set('usage.currentMonth', Object.fromEntries(next)).catch(() => {})
         return next
       })
       setStatus({ kind: 'success', translatedAt: Date.now() })
@@ -149,7 +210,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
       if (requestIdRef.current !== requestId) return
       setStatus({ kind: 'error', message: error instanceof Error ? error.message : 'Unknown error' })
     }
-  }, [host.storage, usageByProfile])
+  }, [host.network, host.storage, usageByProfile])
 
   useEffect(() => {
     const trimmed = inputText.trim()
@@ -162,8 +223,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
       return
     }
 
-    const dueAt = Date.now() + AUTO_TRANSLATE_DEBOUNCE_MS
-    setStatus({ kind: 'waiting', dueAt })
+    setStatus({ kind: 'waiting', dueAt: Date.now() + AUTO_TRANSLATE_DEBOUNCE_MS })
     const timer = window.setTimeout(() => {
       void translateCurrentText(requestId, activeProfile, trimmed, sourceLang, targetLang)
     }, AUTO_TRANSLATE_DEBOUNCE_MS)
@@ -171,73 +231,85 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   }, [inputText, activeProfile, sourceLang, targetLang, translateCurrentText])
 
   const activeUsedChars = activeProfile ? (usageByProfile.get(activeProfile.id) ?? activeProfile.usedChars) : 0
+  const monthlyLimit = activeProfile?.monthlyLimitChars ?? 0
+  const quotaPercent = monthlyLimit > 0 ? Math.min(100, Math.round((activeUsedChars / monthlyLimit) * 100)) : 0
   const inputChars = estimateBilledChars(inputText)
+  const resolvedTarget = targetLang === 'smart' ? resolveSmartTargetLang(inputText) : targetLang
+  const statusState = stateName(status)
 
   return (
-    <div className="translate-surface">
-      <div className="translate-surface-ambient" aria-hidden="true" />
-      <header className="translate-surface-header">
-        <div className="translate-surface-title-block">
-          <div className="translate-surface-kicker">Global utility</div>
-          <h2>Translate</h2>
+    <section className="translate-surface" aria-label="Translate">
+      <header className="translate-surface__header">
+        <div className="translate-surface__brand">
+          <Languages size={15} strokeWidth={1.75} />
+          <span className="translate-surface__title">Translate</span>
         </div>
-        <div className="translate-surface-header-actions">
-          <IconButton label="Settings" onClick={() => host.openSettings()}><SettingsIcon size={16} /></IconButton>
-          <IconButton label="Close" onClick={() => host.close()}><CloseIcon size={16} /></IconButton>
-        </div>
+        <div className="translate-surface__header-spacer" />
+        <span className="translate-kbd" title="Recommended global shortcut"><kbd>⌘</kbd><kbd>⇧</kbd><kbd>T</kbd></span>
+        <button className="translate-iconbtn" type="button" aria-label="Settings" onClick={() => host.openSettings()}>
+          <Settings size={16} strokeWidth={1.75} />
+        </button>
+        <button className="translate-iconbtn" type="button" aria-label="Close" onClick={() => host.close()}>
+          <X size={16} strokeWidth={1.9} />
+        </button>
       </header>
 
-      <section className="translate-surface-controls" aria-label="Translate controls">
-        <label>
-          <span>Profile</span>
-          <Select
-            value={profileId}
-            onChange={(event) => setProfileId(event.target.value)}
-            options={profiles.map((profile) => ({ label: profile.name, value: profile.id }))}
-          />
-        </label>
-        <label>
-          <span>Source</span>
-          <Select value={sourceLang} onChange={(event) => setSourceLang(event.target.value as SourceLanguageCode)} options={SOURCE_LANGUAGE_OPTIONS} />
-        </label>
-        <div className="translate-surface-swap" aria-hidden="true">⇄</div>
-        <label>
-          <span>Target</span>
-          <Select value={targetLang} onChange={(event) => setTargetLang(event.target.value as TargetLanguageCode)} options={TARGET_LANGUAGE_OPTIONS} />
-        </label>
-      </section>
+      <div className="translate-surface__controls">
+        <div className="translate-pair">
+          <TranslateSelect value={sourceLang} options={SOURCE_LANGUAGE_OPTIONS} onChange={setSourceLang} width={154} />
+          <span className="translate-pair__arrow"><ArrowRight size={15} strokeWidth={1.9} /></span>
+          <TranslateSelect value={targetLang} options={TARGET_LANGUAGE_OPTIONS} onChange={setTargetLang} width={136} />
+        </div>
+        <div className="grow" />
+        <span className="translate-controls-label">Profile</span>
+        <TranslateSelect value={profileId} options={profileOptions} onChange={setProfileId} width={222} />
+      </div>
 
-      <main className="translate-surface-editor-grid">
-        <section className="translate-surface-pane translate-surface-input-pane">
-          <div className="translate-surface-pane-head">
-            <span>Original</span>
-            <span>{inputChars.toLocaleString()} chars</span>
+      <div className="translate-surface__body">
+        <div className={`translate-pane translate-pane--source ${inputFocused ? 'is-focused' : ''}`}>
+          <div className="translate-pane__eyebrow">
+            Original
+            <span className="detected">· {sourceLang === 'auto' ? 'auto-detect' : optionLabel(SOURCE_LANGUAGE_OPTIONS, sourceLang)}</span>
           </div>
-          <TextArea
+          <textarea
             ref={inputRef}
+            className="translate-input"
             value={inputText}
             onChange={(event) => setInputText(event.target.value)}
-            placeholder="Type or paste text here. Translation starts automatically after 800ms."
+            onFocus={() => setInputFocused(true)}
+            onBlur={() => setInputFocused(false)}
+            placeholder="Type or paste text to translate..."
             spellCheck={false}
-            className="translate-surface-input"
           />
-        </section>
-        <section className="translate-surface-pane translate-surface-output-pane">
-          <div className="translate-surface-pane-head">
-            <span>Translation</span>
-            <span>{targetLang === 'smart' ? `smart → ${inputText.trim() ? resolveSmartTargetLang(inputText) : 'zh'}` : targetLang}</span>
+        </div>
+        <div className="translate-pane translate-pane--target">
+          <div className="translate-pane__eyebrow">
+            Translation
+            <span className="detected">· {optionLabel(TARGET_LANGUAGE_OPTIONS, resolvedTarget)}</span>
           </div>
-          <div className="translate-surface-output" aria-live="polite">
-            {outputText ? outputText : <span className="translate-surface-output-placeholder">The translated text will appear here as selectable text.</span>}
+          <div className={`translate-output ${outputText ? '' : 'is-empty'} ${status.kind === 'translating' ? 'is-stale' : ''}`} aria-live="polite">
+            {outputText || 'Translation appears here.'}
           </div>
-        </section>
-      </main>
+        </div>
+      </div>
 
-      <footer className="translate-surface-statusbar">
-        <span className={`translate-surface-status translate-surface-status-${status.kind}`}>{statusText(status)}</span>
-        <span>{activeProfile ? `${activeProfile.name} · ${activeProfile.provider}` : 'No profile'}</span>
-        <span>{activeUsedChars.toLocaleString()} / {displayLimit(activeProfile?.monthlyLimitChars ?? 0)} monthly chars</span>
+      <footer className="translate-surface__status">
+        <div className="translate-status" data-state={statusState}>
+          <span className="translate-status__dot" />
+          <LoaderCircle className="translate-status__spin" size={13} strokeWidth={2.2} />
+          <AlertTriangle className="translate-status__alert" size={13} strokeWidth={1.9} />
+          <span className="translate-status__label">{statusLabel(status)}</span>
+        </div>
+        <div className="grow" />
+        <div className="translate-meta">
+          <span>{inputChars.toLocaleString()} {inputChars === 1 ? 'character' : 'characters'}</span>
+          <span className="sep">·</span>
+          <div className={`translate-quota ${status.kind === 'quota-exceeded' ? 'is-over' : ''}`}>
+            <span className="translate-quota__num">{formatLimit(activeUsedChars)} / {formatLimit(monthlyLimit)}</span>
+            <span className="translate-quota__bar"><span className="translate-quota__fill" style={{ width: `${quotaPercent}%` }} /></span>
+          </div>
+        </div>
       </footer>
-    </div>
+    </section>
   )
 }

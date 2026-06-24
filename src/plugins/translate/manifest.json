@@ -2,7 +2,7 @@
   "pluginId": "translate",
   "displayName": "Translate",
   "displayNameI18n": { "zh": "翻译" },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "capabilities": ["settings", "ui"],
   "permissions": ["storage.private", "network.request"]
 }

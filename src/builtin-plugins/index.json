@@ -1,5 +1,5 @@
 {
-  "version": 24,
+  "version": 25,
   "packages": [
     {
       "pluginId": "base64",
@@ -129,7 +129,7 @@
     {
       "pluginId": "translate",
       "dir": "translate",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "yaml",
