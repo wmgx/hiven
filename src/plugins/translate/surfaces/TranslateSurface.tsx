@@ -27,26 +27,34 @@ type SelectOption<T extends string> = {
   sub?: string
 }
 
-const TARGET_LANGUAGE_OPTIONS: Array<SelectOption<TargetLanguageCode>> = [
-  { label: 'Smart', value: 'smart', sub: 'auto target' },
-  { label: '中文', value: 'zh' },
-  { label: 'English', value: 'en' },
-  { label: '日本語', value: 'ja' },
-  { label: '한국어', value: 'ko' },
-  { label: 'Français', value: 'fr' },
-  { label: 'Deutsch', value: 'de' },
-  { label: 'Español', value: 'es' },
+type OptionConfig<T extends string> = {
+  labelKey: string
+  fallback: string
+  value: T
+  subKey?: string
+  subFallback?: string
+}
+
+const TARGET_LANGUAGE_OPTIONS: Array<OptionConfig<TargetLanguageCode>> = [
+  { labelKey: 'language.smart', fallback: 'Smart', value: 'smart', subKey: 'language.smart.sub', subFallback: 'auto target' },
+  { labelKey: 'language.zh', fallback: 'Chinese', value: 'zh' },
+  { labelKey: 'language.en', fallback: 'English', value: 'en' },
+  { labelKey: 'language.ja', fallback: 'Japanese', value: 'ja' },
+  { labelKey: 'language.ko', fallback: 'Korean', value: 'ko' },
+  { labelKey: 'language.fr', fallback: 'French', value: 'fr' },
+  { labelKey: 'language.de', fallback: 'German', value: 'de' },
+  { labelKey: 'language.es', fallback: 'Spanish', value: 'es' },
 ]
 
-const SOURCE_LANGUAGE_OPTIONS: Array<SelectOption<SourceLanguageCode>> = [
-  { label: 'Auto-detect', value: 'auto' },
-  { label: '中文', value: 'zh' },
-  { label: 'English', value: 'en' },
-  { label: '日本語', value: 'ja' },
-  { label: '한국어', value: 'ko' },
-  { label: 'Français', value: 'fr' },
-  { label: 'Deutsch', value: 'de' },
-  { label: 'Español', value: 'es' },
+const SOURCE_LANGUAGE_OPTIONS: Array<OptionConfig<SourceLanguageCode>> = [
+  { labelKey: 'language.auto', fallback: 'Auto-detect', value: 'auto' },
+  { labelKey: 'language.zh', fallback: 'Chinese', value: 'zh' },
+  { labelKey: 'language.en', fallback: 'English', value: 'en' },
+  { labelKey: 'language.ja', fallback: 'Japanese', value: 'ja' },
+  { labelKey: 'language.ko', fallback: 'Korean', value: 'ko' },
+  { labelKey: 'language.fr', fallback: 'French', value: 'fr' },
+  { labelKey: 'language.de', fallback: 'German', value: 'de' },
+  { labelKey: 'language.es', fallback: 'Spanish', value: 'es' },
 ]
 
 function enabledProfiles(settings: TranslateSettings): TranslateProfile[] {
@@ -70,17 +78,32 @@ function stateName(status: TranslateStatus): 'idle' | 'waiting' | 'translating' 
   return 'idle'
 }
 
-function statusLabel(status: TranslateStatus): string {
-  if (status.kind === 'waiting') return 'Waiting to translate...'
-  if (status.kind === 'translating') return 'Translating...'
-  if (status.kind === 'success') return 'Translated'
-  if (status.kind === 'error') return `Translation failed - ${status.message}`
-  if (status.kind === 'quota-exceeded') return 'Monthly quota reached'
-  return 'Idle'
+function statusLabel(status: TranslateStatus, t: (key: string) => string): string {
+  if (status.kind === 'waiting') return localizedText(t, 'status.waiting', 'Waiting to translate...')
+  if (status.kind === 'translating') return localizedText(t, 'status.translating', 'Translating...')
+  if (status.kind === 'success') return localizedText(t, 'status.success', 'Translated')
+  if (status.kind === 'error') {
+    return localizedText(t, 'status.error', 'Translation failed - {message}').replace('{message}', status.message)
+  }
+  if (status.kind === 'quota-exceeded') return localizedText(t, 'status.quota', 'Monthly quota reached')
+  return localizedText(t, 'status.idle', 'Idle')
 }
 
 function optionLabel<T extends string>(options: Array<SelectOption<T>>, value: T): string {
   return options.find((option) => option.value === value)?.label ?? value
+}
+
+function localizedText(t: (key: string) => string, key: string, fallback: string): string {
+  const label = t(key)
+  return label === key ? fallback : label
+}
+
+function localizedOptions<T extends string>(t: (key: string) => string, options: Array<OptionConfig<T>>): Array<SelectOption<T>> {
+  return options.map((option) => ({
+    label: localizedText(t, option.labelKey, option.fallback),
+    value: option.value,
+    sub: option.subKey ? localizedText(t, option.subKey, option.subFallback ?? '') : undefined,
+  }))
 }
 
 function formatLimit(value: number): string {
@@ -89,46 +112,76 @@ function formatLimit(value: number): string {
   return value.toLocaleString()
 }
 
-function TranslateSelect<T extends string>({
+function SchemaSelect<T extends string>({
   value,
   options,
   onChange,
   width,
+  ariaLabel,
 }: {
   value: T
   options: Array<SelectOption<T>>
   onChange: (value: T) => void
   width?: number
+  ariaLabel: string
 }) {
   const selected = options.find((option) => option.value === value) ?? options[0]
+  const [open, setOpen] = useState(false)
   return (
-    <label className="translate-select" style={width ? { width } : undefined}>
-      <select
-        className="translate-select__control"
-        value={value}
-        onChange={(event) => onChange(event.target.value as T)}
-        aria-label={selected?.label}
+    <div
+      className={`schema-select-wrap translate-select ${open ? 'is-open' : ''}`}
+      style={width ? { width } : undefined}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false)
+      }}
+    >
+      <button
+        type="button"
+        className="schema-select-trigger"
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
       >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.sub ? `${option.label} · ${option.sub}` : option.label}
-          </option>
-        ))}
-      </select>
-      <span className="translate-select__trigger" aria-hidden="true">
-        <span className="translate-select__value">
+        <span className="schema-select-label translate-select__value">
           {selected?.label}
           {selected?.sub && <span className="translate-surface__menu-sub"> · {selected.sub}</span>}
         </span>
-        <ChevronDown className="translate-select__chev" size={14} strokeWidth={2} />
-      </span>
-      <Check className="translate-surface__menu-check" size={0} aria-hidden="true" />
-    </label>
+        <ChevronDown className="schema-select-chevron" size={14} strokeWidth={1.8} />
+      </button>
+      {open && (
+        <div className="schema-select-menu" role="listbox">
+          {options.map((option) => {
+            const selectedOption = option.value === value
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="option"
+                aria-selected={selectedOption}
+                className={`schema-select-option ${selectedOption ? 'is-selected' : ''}`}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  onChange(option.value)
+                  setOpen(false)
+                }}
+              >
+                <span>
+                  {option.label}
+                  {option.sub && <span className="translate-surface__menu-sub"> · {option.sub}</span>}
+                </span>
+                {selectedOption && <Check className="schema-select-check" size={13} strokeWidth={2} />}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }
 
 export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
-  const { host, settings } = props
+  const { host, settings, t } = props
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const requestIdRef = useRef(0)
   const cacheRef = useRef(new Map<string, CacheEntry>())
@@ -153,6 +206,8 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   }, [host.storage])
 
   const profiles = useMemo(() => enabledProfiles(settings), [settings])
+  const sourceOptions = useMemo(() => localizedOptions(t, SOURCE_LANGUAGE_OPTIONS), [t])
+  const targetOptions = useMemo(() => localizedOptions(t, TARGET_LANGUAGE_OPTIONS), [t])
   const profileOptions = useMemo<Array<SelectOption<string>>>(
     () => profiles.map((profile) => ({ label: profile.name, value: profile.id, sub: profile.provider })),
     [profiles],
@@ -242,34 +297,33 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
       <header className="translate-surface__header">
         <div className="translate-surface__brand">
           <Languages size={15} strokeWidth={1.75} />
-          <span className="translate-surface__title">Translate</span>
+          <span className="translate-surface__title">{localizedText(t, 'surface.title', 'Translate')}</span>
         </div>
         <div className="translate-surface__header-spacer" />
-        <span className="translate-kbd" title="Recommended global shortcut"><kbd>⌘</kbd><kbd>⇧</kbd><kbd>T</kbd></span>
-        <button className="translate-iconbtn" type="button" aria-label="Settings" onClick={() => host.openSettings()}>
+        <button className="translate-iconbtn" type="button" aria-label={localizedText(t, 'action.openSettings', 'Open Settings')} onClick={() => host.openSettings()}>
           <Settings size={16} strokeWidth={1.75} />
         </button>
-        <button className="translate-iconbtn" type="button" aria-label="Close" onClick={() => host.close()}>
+        <button className="translate-iconbtn" type="button" aria-label={localizedText(t, 'action.close', 'Close')} onClick={() => host.close()}>
           <X size={16} strokeWidth={1.9} />
         </button>
       </header>
 
       <div className="translate-surface__controls">
         <div className="translate-pair">
-          <TranslateSelect value={sourceLang} options={SOURCE_LANGUAGE_OPTIONS} onChange={setSourceLang} width={154} />
+          <SchemaSelect value={sourceLang} options={sourceOptions} onChange={setSourceLang} width={154} ariaLabel={localizedText(t, 'control.source', 'Source')} />
           <span className="translate-pair__arrow"><ArrowRight size={15} strokeWidth={1.9} /></span>
-          <TranslateSelect value={targetLang} options={TARGET_LANGUAGE_OPTIONS} onChange={setTargetLang} width={136} />
+          <SchemaSelect value={targetLang} options={targetOptions} onChange={setTargetLang} width={136} ariaLabel={localizedText(t, 'control.target', 'Target')} />
         </div>
         <div className="grow" />
-        <span className="translate-controls-label">Profile</span>
-        <TranslateSelect value={profileId} options={profileOptions} onChange={setProfileId} width={222} />
+        <span className="translate-controls-label">{localizedText(t, 'control.profile', 'Profile')}</span>
+        <SchemaSelect value={profileId} options={profileOptions} onChange={setProfileId} width={222} ariaLabel={localizedText(t, 'control.profile', 'Profile')} />
       </div>
 
       <div className="translate-surface__body">
         <div className={`translate-pane translate-pane--source ${inputFocused ? 'is-focused' : ''}`}>
           <div className="translate-pane__eyebrow">
-            Original
-            <span className="detected">· {sourceLang === 'auto' ? 'auto-detect' : optionLabel(SOURCE_LANGUAGE_OPTIONS, sourceLang)}</span>
+            {localizedText(t, 'pane.original', 'Original')}
+            <span className="detected">· {sourceLang === 'auto' ? optionLabel(sourceOptions, sourceLang) : optionLabel(sourceOptions, sourceLang)}</span>
           </div>
           <textarea
             ref={inputRef}
@@ -278,17 +332,17 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
             onChange={(event) => setInputText(event.target.value)}
             onFocus={() => setInputFocused(true)}
             onBlur={() => setInputFocused(false)}
-            placeholder="Type or paste text to translate..."
+            placeholder={localizedText(t, 'input.placeholder', 'Type or paste text to translate...')}
             spellCheck={false}
           />
         </div>
         <div className="translate-pane translate-pane--target">
           <div className="translate-pane__eyebrow">
-            Translation
-            <span className="detected">· {optionLabel(TARGET_LANGUAGE_OPTIONS, resolvedTarget)}</span>
+            {localizedText(t, 'pane.translation', 'Translation')}
+            <span className="detected">· {optionLabel(targetOptions, resolvedTarget)}</span>
           </div>
           <div className={`translate-output ${outputText ? '' : 'is-empty'} ${status.kind === 'translating' ? 'is-stale' : ''}`} aria-live="polite">
-            {outputText || 'Translation appears here.'}
+            {outputText || localizedText(t, 'output.placeholder', 'Translation appears here.')}
           </div>
         </div>
       </div>
@@ -298,11 +352,11 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
           <span className="translate-status__dot" />
           <LoaderCircle className="translate-status__spin" size={13} strokeWidth={2.2} />
           <AlertTriangle className="translate-status__alert" size={13} strokeWidth={1.9} />
-          <span className="translate-status__label">{statusLabel(status)}</span>
+          <span className="translate-status__label">{statusLabel(status, t)}</span>
         </div>
         <div className="grow" />
         <div className="translate-meta">
-          <span>{inputChars.toLocaleString()} {inputChars === 1 ? 'character' : 'characters'}</span>
+          <span>{localizedText(t, inputChars === 1 ? 'meta.character' : 'meta.characters', inputChars === 1 ? '{count} character' : '{count} characters').replace('{count}', inputChars.toLocaleString())}</span>
           <span className="sep">·</span>
           <div className={`translate-quota ${status.kind === 'quota-exceeded' ? 'is-over' : ''}`}>
             <span className="translate-quota__num">{formatLimit(activeUsedChars)} / {formatLimit(monthlyLimit)}</span>
