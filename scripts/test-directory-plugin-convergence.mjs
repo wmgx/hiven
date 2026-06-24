@@ -392,6 +392,8 @@ check('Builtin plugin update check compares remote package metadata', () => {
   assert.match(files.configInit, /checkBuiltinPluginsUpdate/, 'configInit should expose builtin plugin package update checks')
   assert.match(files.configInit, /fetchWithFallback|remote|index|manifest|version|update metadata|updateMetadata/i, 'update check should fetch/read plugin package index or manifest version metadata')
   assert.match(files.configInit, /version[\s\S]*(?:>|!==|compare|semver|newer)|(?:>|!==|compare|semver|newer)[\s\S]*version/i, 'update check should compare installed and remote/index versions')
+  assert.match(files.configInit, /list_plugin_dirs[\s\S]*builtinIndexHasUpdate|builtinIndexHasUpdate[\s\S]*list_plugin_dirs/, 'builtin plugin update checks should compare remote metadata against actual released package manifests, not only index.json')
+  assert.match(files.configInit, /builtinPackageVersionsChanged[\s\S]*pluginId[\s\S]*version/, 'builtin plugin update checks should detect per-package version changes')
   assert.match(files.configInit, /downloadRemoteBuiltinPackage|stageRemoteBuiltinPackage|REMOTE_BUILTIN_PLUGIN_SOURCE_BASE_URLS/, 'builtin plugin updates should download remote package files, not only the index')
   assert.match(files.configInit, /replace_plugin_dir/, 'builtin plugin updates should replace whole plugin package directories')
   assert.match(files.configInit, /validateStagedBuiltinPackage[\s\S]*manifest\.json[\s\S]*pluginId/, 'builtin plugin updates should validate staged package manifests before replacing directories')

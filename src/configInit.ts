@@ -181,6 +181,24 @@ function normalizeBuiltinPluginIndex(value: unknown): BuiltinPluginIndex {
   }
 }
 
+function builtinPackageVersionsChanged(currentPackages: BuiltinPluginIndexPackage[], nextPackages: BuiltinPluginIndexPackage[]): boolean {
+  const currentById = new Map(currentPackages.map((pkg) => [pkg.pluginId, pkg]))
+  if (currentById.size !== nextPackages.length) return true
+  return nextPackages.some((pkg) => {
+    const current = currentById.get(pkg.pluginId)
+    if (!current) return true
+    return (current.version ?? '') !== (pkg.version ?? '') || (current.dir ?? current.pluginId) !== (pkg.dir ?? pkg.pluginId)
+  })
+}
+
+function builtinIndexHasUpdate(currentIndex: BuiltinPluginIndex, currentPackages: BuiltinPluginIndexPackage[], remoteIndex: BuiltinPluginIndex): boolean {
+  const localVersion = Number(currentIndex.version ?? 0)
+  const remoteVersion = Number(remoteIndex.version ?? 0)
+  if (remoteVersion > localVersion) return true
+  if (remoteVersion < localVersion) return false
+  return builtinPackageVersionsChanged(currentPackages, remoteIndex.packages)
+}
+
 function validatePackageRelativePath(value: string, label: string): void {
   const trimmed = value.trim()
   const segments = trimmed.split('/')
@@ -300,16 +318,8 @@ async function releaseBuiltinPluginManifests(_configDir: string, pluginBuiltinDi
   const currentIndex = await invoke<string>('read_plugin_file', { path: `${pluginBuiltinDir}/index.json` })
     .then((raw) => normalizeBuiltinPluginIndex(JSON.parse(raw)))
     .catch(() => ({ version: 0, packages: [] } satisfies BuiltinPluginIndex))
-  const currentPackages = new Set(currentIndex.packages.map((pkg) => pkg.pluginId))
-  const currentPackageVersions = new Map(currentIndex.packages.map((pkg) => [pkg.pluginId, pkg.version ?? '']))
-  const packagesChanged =
-    currentPackages.size !== embeddedIndex.packages.length ||
-    embeddedIndex.packages.some((pkg) => !currentPackages.has(pkg.pluginId))
-  const packageVersionsChanged = embeddedIndex.packages.some((pkg) => {
-    return (pkg.version ?? '') !== (currentPackageVersions.get(pkg.pluginId) ?? '')
-  })
   const versionChanged = Number(currentIndex.version ?? 0) < embeddedIndex.version
-  const needsRelease = versionChanged || packagesChanged || packageVersionsChanged
+  const needsRelease = versionChanged || builtinPackageVersionsChanged(currentIndex.packages, embeddedIndex.packages)
 
   if (needsRelease) {
     // 整目录覆盖：先删除每个内置包的现有目录，清掉历史残留文件
@@ -390,12 +400,18 @@ export async function checkBuiltinPluginsUpdate(): Promise<{
     const localIndexPath = `${configDir}/plugins/builtin/index.json`
     const localIndexRaw = await invoke<string>('read_plugin_file', { path: localIndexPath }).catch(() => '{"version":0,"packages":[]}')
     const localIndex = normalizeBuiltinPluginIndex(JSON.parse(localIndexRaw))
+    const localPackageSummaries = await invoke<Array<{ pluginId: string; version: string; folderPath?: string }>>('list_plugin_dirs', { path: pluginBuiltinDir }).catch(() => [])
+    const localPackages = localPackageSummaries
+      .filter((pkg) => pkg.pluginId && !pkg.pluginId.startsWith('.'))
+      .map((pkg): BuiltinPluginIndexPackage => ({
+        pluginId: pkg.pluginId,
+        version: pkg.version,
+      }))
     const remoteIndexRaw = await fetchWithFallback(REMOTE_BUILTIN_PLUGIN_INDEX_URLS)
     const remoteIndex = normalizeBuiltinPluginIndex(JSON.parse(remoteIndexRaw))
 
-    const localVersion = Number(localIndex.version ?? 0)
     const remoteVersion = Number(remoteIndex.version ?? 0)
-    if (remoteVersion > localVersion) {
+    if (builtinIndexHasUpdate(localIndex, localPackages, remoteIndex)) {
       const stagingRoot = `${pluginBuiltinDir}/.builtin-update-${Date.now()}`
       const stagedPackages: BuiltinPluginIndexPackage[] = []
       try {
