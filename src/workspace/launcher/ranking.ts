@@ -51,14 +51,28 @@ export type RankContext = {
   pinnedKeys?: Set<SystemLauncherItemKey>
 }
 
+function isHostAppItem(item: LauncherItem): boolean {
+  return item.kind === 'host' && item.systemKey.startsWith('host:app-launcher:app:')
+}
+
+function isBundleIdentifierLike(value: string): boolean {
+  return /^[a-z0-9-]+(?:\.[a-z0-9-]+){2,}$/i.test(value.trim())
+}
+
+function searchableAliasesForItem(item: LauncherItem): string[] | undefined {
+  if (!isHostAppItem(item)) return item.display.aliases
+  return item.display.aliases?.filter((alias) => !isBundleIdentifierLike(alias))
+}
+
 function toSearchableFields(item: LauncherItem, locale: Locale): SearchableFields {
+  const title = localizedDisplay(item.display.title, item.display.titleI18n, locale)
   return {
-    id: item.systemKey,
-    title: localizedDisplay(item.display.title, item.display.titleI18n, locale),
+    id: isHostAppItem(item) ? title : item.systemKey,
+    title,
     titleI18n: item.display.titleI18n,
     description: item.display.subtitle,
     descriptionI18n: item.display.subtitleI18n,
-    aliases: item.display.aliases,
+    aliases: searchableAliasesForItem(item),
     usageKey: item.systemKey,
   }
 }

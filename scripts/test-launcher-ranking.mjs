@@ -65,7 +65,7 @@ function item(systemKey, title, opts = {}) {
   return {
     systemKey,
     kind: opts.kind ?? 'plugin',
-    display: { title, aliases: opts.aliases },
+    display: { title, titleI18n: opts.titleI18n, aliases: opts.aliases },
     behavior: { type: 'perform' },
     pinnable: true,
     staticPriority: opts.staticPriority,
@@ -167,5 +167,32 @@ assert.ok(
   ranking.installFreshnessScore({ query: '', locale: 'en', surfaceId: 'global-launcher', usage: usage.emptyUsageBySurface(), now }, newApp) < 1000,
   'install freshness boost stays below one match tier',
 )
+
+
+// --- 8. Host applications do not match bundle identifiers ahead of real dynamic commands ---
+const typelessApp = item('host:app-launcher:app:macos:bundle:now.typeless.desktop', 'Typeless', {
+  kind: 'host',
+  aliases: ['now.typeless.desktop'],
+})
+const nowDynamic = item('plugin:date-time-assistant:dynamic:dt-now-timestamp', 'now -> 1000000000000', {
+  kind: 'dynamic',
+})
+const rankedNow = ranking.rankLauncherItems(
+  { query: 'now', locale: 'en', surfaceId: 'global-launcher', usage: usage.emptyUsageBySurface(), now },
+  [typelessApp, nowDynamic],
+)
+assert.equal(rankedNow[0].systemKey, nowDynamic.systemKey, 'real now result ranks above app bundle id match')
+assert.ok(!rankedNow.some((entry) => entry.systemKey === typelessApp.systemKey), 'app bundle id should not match normal app search')
+
+// --- 9. Host applications match localized names ---
+const localizedApp = item('host:app-launcher:app:macos:bundle:com.example.lark', 'Lark', {
+  kind: 'host',
+  titleI18n: { zh: '飞书' },
+})
+const rankedLocalizedApp = ranking.rankLauncherItems(
+  { query: '飞书', locale: 'en', surfaceId: 'global-launcher', usage: usage.emptyUsageBySurface(), now },
+  [localizedApp],
+)
+assert.equal(rankedLocalizedApp[0]?.systemKey, localizedApp.systemKey, 'app localized names remain searchable')
 
 console.log('✓ test-launcher-ranking passed')

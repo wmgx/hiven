@@ -73,13 +73,6 @@ function normalizeAppName(name: string): string {
   return name.trim().toLowerCase()
 }
 
-function basenameForSearch(displayPath?: string): string | undefined {
-  if (!displayPath) return undefined
-  const normalized = displayPath.replace(/\\/g, '/')
-  const base = normalized.split('/').filter(Boolean).pop()
-  if (!base) return undefined
-  return base.replace(/\.(app|lnk|desktop)$/i, '')
-}
 
 function sourceLabel(app: HostAppEntry): string {
   switch (app.source) {
@@ -95,23 +88,23 @@ function sourceLabel(app: HostAppEntry): string {
 }
 
 function searchAliases(app: HostAppEntry): string[] {
-  const base = basenameForSearch(app.displayPath)
-  const aliases = [...(app.aliases ?? [])]
-  if (base && normalizeAppName(base) !== normalizeAppName(app.name)) {
-    aliases.push(base)
-  }
-  return Array.from(new Set(aliases.filter(Boolean)))
+  return Array.from(new Set((app.aliases ?? []).filter((alias) => {
+    if (!alias) return false
+    if (normalizeAppName(alias) === normalizeAppName(app.appId)) return false
+    return !isBundleIdentifierLike(alias)
+  })))
+}
+
+function isBundleIdentifierLike(value: string): boolean {
+  return /^[a-z0-9-]+(?:\.[a-z0-9-]+){2,}$/i.test(value.trim())
 }
 
 function appSearchFields(app: HostAppEntry): SearchableFields {
   return {
-    id: app.appId,
+    id: app.name,
     title: app.name,
     titleI18n: app.nameI18n,
-    aliases: [
-      basenameForSearch(app.displayPath),
-      ...searchAliases(app),
-    ].filter((value): value is string => Boolean(value)),
+    aliases: searchAliases(app),
   }
 }
 
