@@ -561,11 +561,22 @@ function LauncherWindowApp() {
 function shouldAllowLauncherListWheel(event: WheelEvent) {
   if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return false
   const target = event.target instanceof Element ? event.target : null
-  const scroller = target?.closest('[data-launcher-scrollable], .global-launcher-body') as HTMLElement | null
-  if (!scroller) return false
-  if (scroller.scrollHeight <= scroller.clientHeight) return false
-  if (event.deltaY < 0) return scroller.scrollTop > 0
-  if (event.deltaY > 0) return scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight - 1
+  return findLauncherWheelScroller(target, event.deltaY) !== null
+}
+
+function findLauncherWheelScroller(target: Element | null, deltaY: number): HTMLElement | null {
+  let candidate = target?.closest('[data-launcher-scrollable], .global-launcher-body') as HTMLElement | null
+  while (candidate) {
+    if (canScrollLauncherElement(candidate, deltaY)) return candidate
+    candidate = candidate.parentElement?.closest('[data-launcher-scrollable], .global-launcher-body') as HTMLElement | null
+  }
+  return null
+}
+
+function canScrollLauncherElement(element: HTMLElement, deltaY: number) {
+  if (element.scrollHeight <= element.clientHeight) return false
+  if (deltaY < 0) return element.scrollTop > 0
+  if (deltaY > 0) return element.scrollTop + element.clientHeight < element.scrollHeight - 1
   return true
 }
 

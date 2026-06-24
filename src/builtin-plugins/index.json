@@ -1,5 +1,5 @@
 {
-  "version": 23,
+  "version": 24,
   "packages": [
     {
       "pluginId": "base64",
@@ -19,7 +19,7 @@
     {
       "pluginId": "clipboard-history",
       "dir": "clipboard-history",
-      "version": "1.2.0"
+      "version": "1.2.1"
     },
     {
       "pluginId": "count",
@@ -114,7 +114,7 @@
     {
       "pluginId": "text-diff",
       "dir": "textDiff",
-      "version": "1.0.4"
+      "version": "1.0.5"
     },
     {
       "pluginId": "url",

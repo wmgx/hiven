@@ -223,7 +223,7 @@ assert.match(bgContent, /unwatch\(\)|unwatch\s*=\s*null/, 'Background stop must 
 const manifest = JSON.parse(read('src/plugins/clipboard-history/manifest.json'))
 
 assert.equal(manifest.pluginId, 'clipboard-history')
-assert.equal(manifest.version, '1.2.0')
+assert.equal(manifest.version, '1.2.1')
 assert.ok(manifest.capabilities.includes('settings'))
 assert.ok(manifest.capabilities.includes('ui'))
 assert.ok(manifest.capabilities.includes('background'))

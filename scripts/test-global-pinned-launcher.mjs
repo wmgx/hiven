@@ -556,6 +556,11 @@ check('standalone launcher locks webview document panning while preserving list 
     'LauncherWindowApp should also allow wheel scrolling inside launcher-owned modal scroll bodies',
   )
   assertHas(
+    files.app,
+    /function\s+findLauncherWheelScroller[\s\S]{0,900}while\s*\(candidate\)[\s\S]{0,900}parentElement\?\.closest\(['"][\s\S]{0,180}data-launcher-scrollable[\s\S]{0,180}\)/,
+    'LauncherWindowApp should climb past nested non-scrolling surface elements to find the actual scroll container',
+  )
+  assertHas(
     files.globalLauncher,
     /closest\(['"][\s\S]{0,180}data-launcher-scrollable[\s\S]{0,180}\)/,
     'Global launcher dragging should not start from scrollable surface bodies or their scrollbars',
