@@ -358,19 +358,26 @@ async function releaseBuiltinPluginManifests(_configDir: string, pluginBuiltinDi
  * 初始化配置目录，按目录约定释放内置插件包。
  * 返回配置根目录路径。
  */
+async function initPluginPackageDirs(): Promise<string | null> {
+  const configDir = await invoke<string>('init_config_dir')
+  const pluginBuiltinDir = `${configDir}/plugins/builtin`
+  const pluginInstalledDir = `${configDir}/plugins/installed`
+  const pluginDevDir = `${configDir}/plugins/dev`
+
+  await ensureTextFile(`${pluginBuiltinDir}/.keep`, '')
+  await ensureTextFile(`${pluginInstalledDir}/.keep`, '')
+  await ensureTextFile(`${pluginDevDir}/.keep`, '')
+
+  return configDir
+}
+
 export async function initConfigDir(): Promise<string | null> {
   if (!isTauri()) return null
 
   try {
-    const configDir = await invoke<string>('init_config_dir')
-    const pluginBuiltinDir = `${configDir}/plugins/builtin`
-    const pluginInstalledDir = `${configDir}/plugins/installed`
-    const pluginDevDir = `${configDir}/plugins/dev`
-
-    await ensureTextFile(`${pluginBuiltinDir}/.keep`, '')
-    await ensureTextFile(`${pluginInstalledDir}/.keep`, '')
-    await ensureTextFile(`${pluginDevDir}/.keep`, '')
-    await releaseBuiltinPluginManifests(configDir, pluginBuiltinDir)
+    const configDir = await initPluginPackageDirs()
+    if (!configDir) return null
+    await releaseBuiltinPluginManifests(configDir, `${configDir}/plugins/builtin`)
 
     return configDir
   } catch (error) {
@@ -393,7 +400,7 @@ export async function checkBuiltinPluginsUpdate(): Promise<{
   if (!isTauri()) return { updated: false, version: 0 }
 
   try {
-    const configDir = await initConfigDir()
+    const configDir = await initPluginPackageDirs()
     if (!configDir) return { updated: false, version: 0 }
 
     const pluginBuiltinDir = `${configDir}/plugins/builtin`
@@ -410,6 +417,7 @@ export async function checkBuiltinPluginsUpdate(): Promise<{
     const remoteIndexRaw = await fetchWithFallback(REMOTE_BUILTIN_PLUGIN_INDEX_URLS)
     const remoteIndex = normalizeBuiltinPluginIndex(JSON.parse(remoteIndexRaw))
 
+    const localVersion = Number(localIndex.version ?? 0)
     const remoteVersion = Number(remoteIndex.version ?? 0)
     if (builtinIndexHasUpdate(localIndex, localPackages, remoteIndex)) {
       const stagingRoot = `${pluginBuiltinDir}/.builtin-update-${Date.now()}`

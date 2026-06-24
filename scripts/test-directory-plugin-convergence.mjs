@@ -393,6 +393,9 @@ check('Builtin plugin update check compares remote package metadata', () => {
   assert.match(files.configInit, /fetchWithFallback|remote|index|manifest|version|update metadata|updateMetadata/i, 'update check should fetch/read plugin package index or manifest version metadata')
   assert.match(files.configInit, /version[\s\S]*(?:>|!==|compare|semver|newer)|(?:>|!==|compare|semver|newer)[\s\S]*version/i, 'update check should compare installed and remote/index versions')
   assert.match(files.configInit, /list_plugin_dirs[\s\S]*builtinIndexHasUpdate|builtinIndexHasUpdate[\s\S]*list_plugin_dirs/, 'builtin plugin update checks should compare remote metadata against actual released package manifests, not only index.json')
+  const checkImpl = files.configInit.match(/export async function checkBuiltinPluginsUpdate\(\)[\s\S]*?\n}\n\n\/\*\*/)?.[0] ?? ''
+  assert.ok(checkImpl, 'configInit should expose checkBuiltinPluginsUpdate implementation')
+  assert.doesNotMatch(checkImpl, /initConfigDir\(\)/, 'builtin plugin update check must not release embedded packages before comparing local and remote metadata')
   assert.match(files.configInit, /builtinPackageVersionsChanged[\s\S]*pluginId[\s\S]*version/, 'builtin plugin update checks should detect per-package version changes')
   assert.match(files.configInit, /downloadRemoteBuiltinPackage|stageRemoteBuiltinPackage|REMOTE_BUILTIN_PLUGIN_SOURCE_BASE_URLS/, 'builtin plugin updates should download remote package files, not only the index')
   assert.match(files.configInit, /replace_plugin_dir/, 'builtin plugin updates should replace whole plugin package directories')
@@ -401,7 +404,7 @@ check('Builtin plugin update check compares remote package metadata', () => {
   assert.match(files.tauriLib, /fn\s+replace_plugin_dir[\s\S]*backup[\s\S]*fs::rename/, 'Tauri should provide a replace_plugin_dir command with backup/rename replacement')
   assert.match(files.tauriLib, /generate_handler!\[[\s\S]*replace_plugin_dir/, 'replace_plugin_dir should be registered as a Tauri command')
   assert.ok(files.builtinPluginIndex, 'remote builtin plugin index should exist at src/builtin-plugins/index.json')
-  assert.match(files.builtinPluginIndex, /"version"\s*:\s*24/, 'remote builtin plugin index should carry the current package index version')
+  assert.match(files.builtinPluginIndex, /"version"\s*:\s*26/, 'remote builtin plugin index should carry the current package index version')
   assert.doesNotMatch(files.builtinPluginIndex, /"files"\s*:/, 'remote builtin plugin index should not expose file lists as part of the plugin package contract')
   assert.doesNotMatch(files.configInit, /declare downloadable files/, 'builtin plugin updates should not reject package indexes that omit explicit file lists')
   assert.match(files.configInit, /fetchRemoteBuiltinPackageIndex|GitHub tree|recursive|tree API/i, 'builtin plugin updates should discover package files from the directory instead of requiring explicit file lists')
