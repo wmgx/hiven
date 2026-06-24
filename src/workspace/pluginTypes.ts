@@ -404,6 +404,7 @@ export type PluginPermission =
   | 'app.launch'
   | 'globalShortcut.register'
   | 'accessibility.paste'
+  | 'network.request'
 
 export type PluginPermissionGrant = {
   granted: boolean
@@ -509,6 +510,25 @@ export type PluginPasteApi = {
   pasteFiles(paths: string[]): Promise<PluginPasteResult>
 }
 
+// ─── Plugin Network API ─────────────────────────────────────────────────────
+
+export type PluginNetworkRequest = {
+  url: string
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  headers?: Record<string, string>
+  body?: string
+}
+
+export type PluginNetworkResponse = {
+  status: number
+  headers: Record<string, string>
+  body: string
+}
+
+export type PluginNetworkApi = {
+  request(input: PluginNetworkRequest): Promise<PluginNetworkResponse>
+}
+
 // ─── Plugin UI Surface Types ─────────────────────────────────────────────────
 
 export type PluginUiSurfaceKind = 'custom-view'
@@ -521,6 +541,7 @@ export type PluginSurfaceHostApi = {
   storage: PluginPrivateStorageApi
   clipboard: PluginClipboardApi
   paste: PluginPasteApi
+  network: PluginNetworkApi
 }
 
 export type PluginSurfaceProps<TSettings = unknown> = {
@@ -544,6 +565,7 @@ export type PluginSurfaceOpenContext<TSettings = unknown> = {
   storage: PluginPrivateStorageApi
   clipboard: PluginClipboardApi
   paste: PluginPasteApi
+  network: PluginNetworkApi
 }
 
 export type PluginUiSurfaceContribution<TSettings = unknown> = {
@@ -586,6 +608,7 @@ export type PluginBackgroundContext<TSettings = unknown> = {
   storage: PluginPrivateStorageApi
   clipboard: PluginClipboardApi
   paste: PluginPasteApi
+  network: PluginNetworkApi
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
 }
 
@@ -604,6 +627,7 @@ export type PluginStartupHookContext<TSettings = unknown> = {
   storage: PluginPrivateStorageApi
   clipboard: PluginClipboardApi
   paste: PluginPasteApi
+  network: PluginNetworkApi
   api: PluginLauncherApi
   t: (key: string, vars?: Record<string, string | number>) => string
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void

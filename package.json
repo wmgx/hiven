@@ -10,6 +10,8 @@
     "check:architecture": "node scripts/check-architecture.mjs",
     "test:calculator-command-mode": "node scripts/test-calculator-command-mode.mjs",
     "test:date-time-assistant": "node scripts/test-date-time-assistant.mjs",
+    "test:translate-plugin": "node scripts/test-translate-plugin-contract.mjs",
+    "test:plugin-network-proxy": "node scripts/test-plugin-network-proxy.mjs",
     "test:directory-plugin-convergence": "node scripts/test-directory-plugin-convergence.mjs",
     "test:instant-suggestion-multiple-results": "node scripts/test-instant-suggestion-multiple-results.mjs",
     "test:pinned-action-live-runner": "node scripts/test-pinned-action-live-runner.mjs",

@@ -24,6 +24,7 @@ import type { ContributionSource, PluginDefinition, PluginPermission } from '../
 import { createPluginPrivateStorage } from '../workspace/pluginStorage'
 import { createPluginClipboard } from '../workspace/pluginClipboard'
 import { createPluginPaste } from '../workspace/pluginPaste'
+import { createPluginNetwork } from '../workspace/pluginNetwork'
 import { describePluginPermission, getPluginPermissionSnapshot, missingPluginPermissions, usePluginPermissionStore } from '../workspace/pluginPermissions'
 import { restartPluginBackground } from '../workspace/pluginBackgroundManager'
 import type { PluginSettingsSource } from '../workspace/pluginSettingsStore'
@@ -978,6 +979,7 @@ export function GlobalLauncher() {
                         storage: hostStorage,
                         clipboard: createPluginClipboard(surfaceFrame.pluginId, permissions, hostStorage),
                         paste: createPluginPaste(permissions, hostStorage),
+                        network: createPluginNetwork(permissions),
                       }}
                     />
                   )}

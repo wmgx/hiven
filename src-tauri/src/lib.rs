@@ -1589,6 +1589,67 @@ fn read_file(path: String) -> Result<String, String> {
     fs::read_to_string(&file_path).map_err(|e| e.to_string())
 }
 
+
+#[derive(serde::Deserialize)]
+struct ProxyHttpRequest {
+    url: String,
+    method: Option<String>,
+    headers: Option<std::collections::HashMap<String, String>>,
+    body: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+struct ProxyHttpResponse {
+    status: u16,
+    headers: std::collections::HashMap<String, String>,
+    body: String,
+}
+
+#[tauri::command]
+async fn plugin_http_request(request: ProxyHttpRequest) -> Result<ProxyHttpResponse, String> {
+    let parsed = reqwest::Url::parse(&request.url).map_err(|e| e.to_string())?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err("Plugin network request URL must use http or https".to_string());
+    }
+
+    let method_text = request.method.unwrap_or_else(|| "GET".to_string());
+    let method = reqwest::Method::from_bytes(method_text.as_bytes())
+        .map_err(|e| format!("Invalid HTTP method: {}", e))?;
+    let client = reqwest::Client::new();
+    let mut builder = client.request(method, parsed);
+
+    if let Some(headers) = request.headers {
+        for (name, value) in headers {
+            if name.eq_ignore_ascii_case("host") || name.eq_ignore_ascii_case("content-length") {
+                continue;
+            }
+            builder = builder.header(name, value);
+        }
+    }
+
+    if let Some(body) = request.body {
+        builder = builder.body(body);
+    }
+
+    let resp = builder
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+    let status = resp.status().as_u16();
+    let mut headers = std::collections::HashMap::new();
+    for (name, value) in resp.headers().iter() {
+        if let Ok(text) = value.to_str() {
+            headers.insert(name.to_string(), text.to_string());
+        }
+    }
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read response: {}", e))?;
+
+    Ok(ProxyHttpResponse { status, headers, body })
+}
+
 #[tauri::command]
 async fn fetch_url(url: String) -> Result<String, String> {
     let resp = reqwest::get(&url)
@@ -2855,6 +2916,7 @@ pub fn run() {
             read_scripts_dir,
             read_file,
             fetch_url,
+            plugin_http_request,
             list_plugin_dirs,
             remove_plugin_dir,
             replace_plugin_dir,

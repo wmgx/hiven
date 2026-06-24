@@ -16,6 +16,7 @@ export const ALL_PLUGIN_PERMISSIONS: readonly PluginPermission[] = [
   'app.launch',
   'globalShortcut.register',
   'accessibility.paste',
+  'network.request',
 ]
 
 export type PluginPermissionStore = Record<PluginSettingsSource, Record<string, Partial<Record<PluginPermission, PluginPermissionGrant>>>>
@@ -142,6 +143,7 @@ const permissionLabels: Record<PluginPermission, Record<Locale, string>> = {
   'app.launch': { en: 'Launch installed applications', zh: '启动已安装应用' },
   'globalShortcut.register': { en: 'Register global shortcuts', zh: '注册全局快捷键' },
   'accessibility.paste': { en: 'Paste into the foreground app', zh: '粘贴到前台应用' },
+  'network.request': { en: 'Network request', zh: '访问网络请求' },
 }
 
 export function describePluginPermission(permission: PluginPermission, locale: Locale): string {

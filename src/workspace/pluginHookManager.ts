@@ -5,6 +5,7 @@ import { resolvePluginSettings } from './pluginSettingsStore'
 import { createPluginPrivateStorage } from './pluginStorage'
 import { createPluginClipboard } from './pluginClipboard'
 import { createPluginPaste } from './pluginPaste'
+import { createPluginNetwork } from './pluginNetwork'
 import { useAppStore } from '../store'
 import { getPluginPermissionSnapshot, missingPluginPermissions } from './pluginPermissions'
 import { resolvePluginSettingsSource } from './launcher/pluginSource'
@@ -43,6 +44,7 @@ function buildStartupHookContext(
     storage,
     clipboard: createPluginClipboard(pluginId, permissions, storage),
     paste: createPluginPaste(permissions, storage),
+    network: createPluginNetwork(permissions),
     api: createPluginLauncherApi({ pluginId, source, requestedPermissions }),
     t: makePluginT(pluginId, locale),
     showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error') {
