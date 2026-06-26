@@ -15,6 +15,7 @@ import { loadInstalledPluginsFromStore } from '../workspace/pluginRuntime'
 import { initConfigDir } from '../configInit'
 import { PluginSettingsDialog } from './PluginSettingsDialog'
 import type { PluginDefinition, PluginPermission } from '../workspace/pluginTypes'
+import './PluginSurfaceWindow.css'
 
 export function PluginSurfaceWindow() {
   const locale = useAppStore((s) => s.locale)
