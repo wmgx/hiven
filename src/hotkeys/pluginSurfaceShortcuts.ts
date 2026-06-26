@@ -1,6 +1,7 @@
 import { usePluginPermissionStore, getPluginPermissionSnapshot, missingPluginPermissions } from '../workspace/pluginPermissions'
 import { pluginRegistry } from '../workspace/pluginRegistry'
 import { requestOpenPluginSurfaceTool } from '../workspace/pluginSurfaceOpenRequest'
+import { getPluginSurfaceShortcutPresentation, requestOpenPluginSurfaceWindow } from '../workspace/pluginSurfaceWindows'
 import {
   pluginSurfaceShortcutKey,
   usePluginSurfaceShortcutStore,
@@ -139,7 +140,7 @@ async function registerShortcut(
       if (event.state !== 'Pressed') return
       const latest = usePluginSurfaceShortcutStore.getState().shortcuts[key]
       if (!latest || !latest.enabled || normalizeAccelerator(latest.accelerator) !== accelerator) return
-      void requestOpenPluginSurfaceTool(shortcut.target)
+      void openSurfaceForShortcut(shortcut.target)
     })
     if (generation !== syncGeneration) {
       await unregisterAccelerator(accelerator)
@@ -156,6 +157,14 @@ async function registerShortcut(
       registrationError: formatError(error),
     })
   }
+}
+
+async function openSurfaceForShortcut(target: PluginSurfaceOpenTarget): Promise<void> {
+  if (getPluginSurfaceShortcutPresentation(target) === 'window') {
+    await requestOpenPluginSurfaceWindow(target)
+    return
+  }
+  await requestOpenPluginSurfaceTool(target)
 }
 
 async function unregisterRemovedOrChanged(shortcuts: Record<string, PluginSurfaceShortcut>): Promise<void> {
