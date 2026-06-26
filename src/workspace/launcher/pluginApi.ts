@@ -16,6 +16,7 @@ import { applyEffects, openExternalUrl } from '../effectRunner'
 import { useAppStore } from '../../store'
 import { createPluginPrivateStorage } from '../pluginStorage'
 import { getPluginPermissionSnapshot, requirePluginPermissions } from '../pluginPermissions'
+import { requestOpenEditorWindow } from '../editorWindow'
 import type { FluxEffect, SerializedRange } from '../types'
 import type { PluginPermission } from '../pluginTypes'
 import type { PluginSettingsSource } from '../pluginSettingsStore'
@@ -81,21 +82,15 @@ async function writeClipboard(text: string): Promise<void> {
 }
 
 async function showMainPanel(): Promise<void> {
-  const effects: FluxEffect[] = [{ type: 'app.showMainPanel' }]
   if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
     try {
-      const [{ emitTo }, { invoke }] = await Promise.all([
-        import('@tauri-apps/api/event'),
-        import('@tauri-apps/api/core'),
-      ])
-      await emitTo('main', 'hiven://show-main-panel')
-      await invoke('show_and_focus_window')
+      await requestOpenEditorWindow()
       return
     } catch (error) {
-      console.warn('[launcher] failed to show main panel via Tauri:', error)
+      console.warn('[launcher] failed to show editor window:', error)
     }
   }
-  applyEffects(effects)
+  applyEffects([{ type: 'app.showMainPanel' }])
 }
 
 async function showPluginsPage(): Promise<void> {
