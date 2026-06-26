@@ -1,4 +1,4 @@
-import { Component, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from 'react'
+import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { localized, useAppStore, type PluginSurfaceOpenTarget } from '../store'
 import { t, type Locale } from '../i18n'
@@ -12,19 +12,27 @@ import { createPluginClipboard } from '../workspace/pluginClipboard'
 import { createPluginPaste } from '../workspace/pluginPaste'
 import { createPluginNetwork } from '../workspace/pluginNetwork'
 import { loadInstalledPluginsFromStore } from '../workspace/pluginRuntime'
+import { registerBundledPluginPackages } from '../workspace/bundledPluginLoader'
+import { registerHostLauncherProviders } from '../workspace/launcher/hostProvider'
+import { pluginSurfaceWindowCloseOnBlur, pluginSurfaceWindowDestroyTimeout } from '../workspace/pluginSurfaceWindows'
 import { initConfigDir } from '../configInit'
 import { PluginSettingsDialog } from './PluginSettingsDialog'
 import type { PluginDefinition, PluginPermission } from '../workspace/pluginTypes'
 import './PluginSurfaceWindow.css'
 
+registerHostLauncherProviders()
+registerBundledPluginPackages()
+
 export function PluginSurfaceWindow() {
   const locale = useAppStore((s) => s.locale)
+  const theme = useAppStore((s) => s.settings.theme)
   const pluginRegistryVersion = usePluginRegistryVersion()
   const permissionVersion = usePluginPermissionStore((s) => s.version)
   const grantPluginPermissions = usePluginPermissionStore((s) => s.grantPermissions)
   const openSettingsDialog = usePluginSettingsStore((s) => s.openSettingsDialog)
   const [runtimeReady, setRuntimeReady] = useState(false)
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
+  const destroyTimerRef = useRef<number | undefined>(undefined)
   const target = useMemo(() => parseTargetFromUrl(), [])
 
   useEffect(() => {
@@ -39,6 +47,42 @@ export function PluginSurfaceWindow() {
       })
     return () => { disposed = true }
   }, [])
+
+  useEffect(() => {
+    if (!target || !isTauriRuntime()) return
+    let disposed = false
+    const clearDestroyTimer = () => {
+      if (destroyTimerRef.current !== undefined) {
+        window.clearTimeout(destroyTimerRef.current)
+        destroyTimerRef.current = undefined
+      }
+    }
+    const scheduleDestroy = () => {
+      clearDestroyTimer()
+      destroyTimerRef.current = window.setTimeout(() => {
+        destroyTimerRef.current = undefined
+        void getCurrentWindow().destroy().catch(() => undefined)
+      }, pluginSurfaceWindowDestroyTimeout(target))
+    }
+
+    const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+      if (disposed) return
+      if (focused) {
+        clearDestroyTimer()
+        return
+      }
+      if (pluginSurfaceWindowCloseOnBlur(target)) {
+        void getCurrentWindow().hide().catch(() => undefined)
+        scheduleDestroy()
+      }
+    })
+
+    return () => {
+      disposed = true
+      clearDestroyTimer()
+      void unlisten.then((cleanup) => cleanup()).catch(() => undefined)
+    }
+  }, [target])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -116,7 +160,7 @@ export function PluginSurfaceWindow() {
   const title = localized(resolved.surface.title, resolved.surface.titleI18n, locale)
 
   return (
-    <div className="flux-spatial-shell plugin-surface-window-shell" data-theme={useAppStore.getState().settings.theme}>
+    <div className="flux-spatial-shell plugin-surface-window-shell" data-theme={theme}>
       <div className="plugin-surface-window-frame">
         <div className="plugin-surface-window-titlebar" data-tauri-drag-region>
           <div className="plugin-surface-window-title" data-tauri-drag-region>{title}</div>
@@ -189,8 +233,12 @@ function isPluginSettingsSource(value: string | null): value is PluginSettingsSo
   return value === 'builtin' || value === 'installed' || value === 'dev'
 }
 
+function isTauriRuntime(): boolean {
+  return Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
+}
+
 async function hideCurrentWindow(): Promise<void> {
-  if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
+  if (isTauriRuntime()) {
     await getCurrentWindow().hide().catch(() => undefined)
     return
   }
