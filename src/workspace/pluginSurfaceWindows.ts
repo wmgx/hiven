@@ -61,11 +61,10 @@ export async function requestOpenPluginSurfaceWindow(target: PluginSurfaceOpenTa
     skipTaskbar: false,
   })
 
-  const cleanup = await win.once('tauri://created', () => {
-    cleanup()
+  window.setTimeout(() => {
     void win.center().catch(() => undefined)
     void win.setFocus().catch(() => undefined)
-  })
+  }, 60)
 }
 
 export function pluginSurfaceWindowLabel(target: PluginSurfaceOpenTarget): string {
