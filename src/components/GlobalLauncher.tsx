@@ -34,15 +34,15 @@ type LauncherItem =
   | { kind: 'domain'; id: string; title: string; subtitle: string; icon?: string; aliases?: string[]; domainItem: DomainLauncherItem }
   | { kind: 'pinned'; id: string; title: string; subtitle: string; icon?: string; aliases?: string[]; actionId: string }
 
-const GLOBAL_LAUNCHER_PANEL_WIDTH = 680
-const STANDALONE_LAUNCHER_WIDTH = 728
-const STANDALONE_LAUNCHER_MIN_HEIGHT = 294
-const STANDALONE_LAUNCHER_MAX_HEIGHT = 390
+const GLOBAL_LAUNCHER_PANEL_WIDTH = 760
+const STANDALONE_LAUNCHER_WIDTH = 808
+const STANDALONE_LAUNCHER_MIN_HEIGHT = 334
+const STANDALONE_LAUNCHER_MAX_HEIGHT = 430
 const STANDALONE_SURFACE_MAX_WIDTH = 920
 const STANDALONE_SURFACE_MAX_HEIGHT = 760
 const STANDALONE_LAUNCHER_VERTICAL_PADDING = 24
 const STANDALONE_LAUNCHER_HORIZONTAL_PADDING = 24
-const STANDALONE_LAUNCHER_LIST_MAX_HEIGHT = 300
+const STANDALONE_LAUNCHER_LIST_MAX_HEIGHT = 340
 const GLOBAL_LAUNCHER_SETTINGS_WIDTH = 720
 const GLOBAL_LAUNCHER_SETTINGS_HEIGHT = 560
 const PLUGIN_SURFACE_BACK_EVENT = 'hiven:plugin-surface-back'

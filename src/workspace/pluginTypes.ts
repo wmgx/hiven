@@ -257,6 +257,36 @@ export type PluginSettingsOption = {
   value: string
 }
 
+export type PluginSettingsOptionSource = {
+  listKey: string
+  valueKey: string
+  labelKey?: string
+  fallbackLabelKey?: string
+}
+
+export type PluginSettingsCondition = {
+  key: string
+  equals?: unknown
+  notEquals?: unknown
+  in?: unknown[]
+  truthy?: boolean
+}
+
+export type PluginSettingsPresetNumberOption = {
+  label: string
+  labelI18n?: Partial<Record<Locale, string>>
+  value: number
+}
+
+export type PluginSettingsObjectListGroup = {
+  id: string
+  title: string
+  titleI18n?: Partial<Record<Locale, string>>
+  description?: string
+  descriptionI18n?: Partial<Record<Locale, string>>
+  collapsed?: boolean
+}
+
 export type PluginSettingsFieldBase<TSettings = unknown> = {
   key: keyof TSettings & string
   label: string
@@ -286,6 +316,7 @@ export type PluginSettingsNumberField<TSettings = unknown> = PluginSettingsField
 export type PluginSettingsSelectField<TSettings = unknown> = PluginSettingsFieldBase<TSettings> & {
   kind: 'select'
   options: PluginSettingsOption[]
+  optionsFromList?: PluginSettingsOptionSource
 }
 
 export type PluginSettingsTextField<TSettings = unknown> = PluginSettingsFieldBase<TSettings> & {
@@ -313,16 +344,35 @@ export type PluginSettingsObjectListItemField = {
   labelI18n?: Partial<Record<Locale, string>>
   description?: string
   descriptionI18n?: Partial<Record<Locale, string>>
-  kind: 'text' | 'textarea' | 'switch' | 'select' | 'string-list'
+  kind: 'text' | 'number' | 'preset-number' | 'secret' | 'textarea' | 'switch' | 'select' | 'string-list' | 'callout'
   placeholder?: string
   placeholderI18n?: Partial<Record<Locale, string>>
   rows?: number
   options?: PluginSettingsOption[]
+  presets?: PluginSettingsPresetNumberOption[]
   mono?: boolean
+  sensitive?: boolean
+  wide?: boolean
+  inline?: boolean
+  groupId?: string
+  visibleWhen?: PluginSettingsCondition
+  required?: boolean
+  requiredWhen?: PluginSettingsCondition
+  tone?: 'info' | 'warning' | 'danger'
+}
+
+export type PluginSettingsObjectListSummaryField = {
+  key: string
+  label?: string
+  labelI18n?: Partial<Record<Locale, string>>
+  emptyText?: string
+  emptyTextI18n?: Partial<Record<Locale, string>>
 }
 
 export type PluginSettingsObjectListField<TSettings = unknown> = PluginSettingsFieldBase<TSettings> & {
   kind: 'object-list'
+  display?: 'cards' | 'master-detail'
+  detailColumns?: 1 | 2
   itemLabel?: string
   itemLabelI18n?: Partial<Record<Locale, string>>
   itemTitleKey?: string
@@ -331,6 +381,8 @@ export type PluginSettingsObjectListField<TSettings = unknown> = PluginSettingsF
   emptyText?: string
   emptyTextI18n?: Partial<Record<Locale, string>>
   itemDefaults?: Record<string, unknown>
+  summaryFields?: PluginSettingsObjectListSummaryField[]
+  groups?: PluginSettingsObjectListGroup[]
   fields: PluginSettingsObjectListItemField[]
 }
 

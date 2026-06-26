@@ -49,7 +49,7 @@ assert.match(files.globalLauncher, /global-launcher-footer l-foot/, 'GlobalLaunc
 assert.match(files.globalLauncher, /launcher-kind-tag/, 'GlobalLauncher list rows must render right-side type tags')
 assert.match(files.globalLauncher, /kindApp/, 'GlobalLauncher must distinguish application rows')
 assert.match(files.globalLauncher, /kindCommand/, 'GlobalLauncher must distinguish command rows')
-assert.match(files.globalLauncher, /GLOBAL_LAUNCHER_PANEL_WIDTH\s*=\s*680/, 'GlobalLauncher panel should be widened to 680px')
+assert.match(files.globalLauncher, /GLOBAL_LAUNCHER_PANEL_WIDTH\s*=\s*760/, 'GlobalLauncher panel should be widened to 760px')
 assert.doesNotMatch(files.globalLauncher, /MAX_GLOBAL_LAUNCHER_RENDERED_ITEMS/, 'GlobalLauncher should not keep the old rendered item cap')
 assert.match(files.globalLauncher, /collectDynamicItems\(q,\s*['"]global-launcher['"],\s*locale/, 'GlobalLauncher should collect host dynamic items even for empty-query app mixing')
 
@@ -72,7 +72,7 @@ assert.match(files.css, /\.l-search/, 'Launcher search bar must have the v3 CSS'
 assert.match(files.css, /\.l-row\.sel/, 'Launcher selected rows must have the v3 expanded row CSS')
 assert.match(files.css, /\.l-foot/, 'Launcher footer must have the v3 CSS')
 assert.match(files.css, /\.launcher-kind-tag/, 'Launcher type tags must have CSS')
-assert.match(files.css, /--launcher-panel-width:\s*680px/, 'Launcher CSS should expose the widened 680px panel width')
+assert.match(files.css, /--launcher-panel-width:\s*760px/, 'Launcher CSS should expose the widened 760px panel width')
 assert.match(
   files.css,
   /html\[data-window='launcher'\]\s+\.global-launcher-panel\.palette-panel\s*\{[\s\S]*?border-color:\s*transparent\s*!important;[\s\S]*?box-shadow:\s*none\s*!important;[\s\S]*?\}/,

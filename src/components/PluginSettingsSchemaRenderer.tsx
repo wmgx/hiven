@@ -23,8 +23,11 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import type {
+  PluginSettingsCondition,
   PluginSettingsField,
   PluginSettingsModalField,
+  PluginSettingsObjectListField,
+  PluginSettingsObjectListGroup,
   PluginSettingsObjectListItemField,
   PluginSettingsSchema,
   PluginPermission,
@@ -129,10 +132,10 @@ function permissionReason(permissions: PluginPermissionSnapshot | undefined, req
 }
 
 function isRenderableField<TSettings>(field: PluginSettingsField<TSettings>): boolean {
-  return field.kind !== 'select' || field.options.length > 1
+  return field.kind !== 'select' || field.options.length > 1 || Boolean(field.optionsFromList)
 }
 
-function isRenderableObjectListItemField(field: PluginSettingsObjectListItemField): boolean {
+function hasEnoughOptions(field: PluginSettingsObjectListItemField): boolean {
   return field.kind !== 'select' || (field.options?.length ?? 0) > 1
 }
 
@@ -146,6 +149,24 @@ function formatNumberInputValue(value: number): string {
   if (!Number.isFinite(value)) return ''
   if (Number.isInteger(value)) return String(value)
   return String(Number(value.toFixed(4)))
+}
+
+function matchesCondition(record: Record<string, unknown>, condition: PluginSettingsCondition | undefined): boolean {
+  if (!condition) return true
+  const value = record[condition.key]
+  if ('equals' in condition && value !== condition.equals) return false
+  if ('notEquals' in condition && value === condition.notEquals) return false
+  if (condition.in && !condition.in.includes(value)) return false
+  if (condition.truthy !== undefined && Boolean(value) !== condition.truthy) return false
+  return true
+}
+
+function compactNumber(value: number): string {
+  if (!Number.isFinite(value)) return ''
+  if (value <= 0) return '∞'
+  if (value >= 1000000) return `${Math.round(value / 100000) / 10}m`
+  if (value >= 1000) return `${Math.round(value / 100) / 10}k`
+  return value.toLocaleString()
 }
 
 export function PluginSettingsSchemaRenderer<TSettings = unknown>({
@@ -163,6 +184,71 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
 
   function setFieldValue(key: string, next: unknown) {
     updateValue({ [key]: next } as Partial<TSettings>)
+  }
+
+  function getSelectOptions(field: Extract<PluginSettingsField<TSettings>, { kind: 'select' }>) {
+    const source = field.optionsFromList
+    if (!source) return field.options
+    const items = getObjectList(record[source.listKey])
+    const options = items.map((item, index) => {
+      const value = String(item[source.valueKey] ?? '')
+      const labelValue = item[source.labelKey ?? source.valueKey] ?? item[source.fallbackLabelKey ?? source.valueKey] ?? value
+      const label = String(labelValue || `${index + 1}`)
+      return { value, label }
+    }).filter((option) => option.value)
+    return options.length > 0 ? options : field.options
+  }
+
+  function formatObjectListSummaryValue(field: PluginSettingsObjectListField<TSettings>, item: Record<string, unknown>, key: string): string {
+    const value = item[key]
+    if (typeof value === 'boolean') return value ? translate(locale, 'scripts', 'status.enabled') : translate(locale, 'scripts', 'status.disabled')
+    const itemField = field.fields.find((candidate) => candidate.key === key)
+    if (itemField?.kind === 'select') {
+      const option = itemField.options?.find((candidate) => candidate.value === String(value))
+      if (option) return localize(option.label, option.labelI18n, locale)
+    }
+    if (typeof value === 'number' && (itemField?.kind === 'preset-number' || itemField?.kind === 'number')) {
+      const preset = itemField.presets?.find((p) => p.value === value)
+      if (preset) return localize(preset.label, preset.labelI18n, locale)
+      return compactNumber(value)
+    }
+    if (typeof value === 'number') return compactNumber(value)
+    return String(value ?? '')
+  }
+
+  function renderObjectListSummary(field: PluginSettingsObjectListField<TSettings>, item: Record<string, unknown>) {
+    const summaries = field.summaryFields ?? []
+    if (summaries.length === 0) return null
+    const chips = summaries.map((summary) => {
+      const value = formatObjectListSummaryValue(field, item, summary.key)
+      const text = value || localize(summary.emptyText, summary.emptyTextI18n, locale)
+      if (!text) return null
+      const label = localize(summary.label, summary.labelI18n, locale)
+      return { key: summary.key, label, text }
+    }).filter((chip): chip is { key: string; label: string; text: string } => Boolean(chip))
+    if (chips.length === 0) return null
+    return (
+      <span className="schema-object-list-summary wr-summary">
+        {chips.map((chip) => (
+          <span className="schema-object-list-summary-chip wr-summary-chip" key={chip.key}>
+            {chip.label && <span className="wr-summary-label">{chip.label}</span>}
+            <span>{chip.text}</span>
+          </span>
+        ))}
+      </span>
+    )
+  }
+
+
+  function objectListItemTitle(field: PluginSettingsObjectListField<TSettings>, item: Record<string, unknown>, itemIndex: number, itemLabel: string): string {
+    const titleKey = field.itemTitleKey ?? 'title'
+    return String(item[titleKey] ?? '') || `${itemLabel} ${itemIndex + 1}`
+  }
+
+  function objectListItemTone(item: Record<string, unknown>): string {
+    const enabled = item.enabled
+    if (typeof enabled === 'boolean') return enabled ? 'enabled' : 'disabled'
+    return 'neutral'
   }
 
   function renderFieldTitle(label: string, description: string, reason = '') {
@@ -185,6 +271,23 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
         {description && <small>{description}</small>}
       </>
     )
+  }
+
+  function isVisibleObjectListItemField(field: PluginSettingsObjectListItemField, item: Record<string, unknown>): boolean {
+    return hasEnoughOptions(field) && matchesCondition(item, field.visibleWhen)
+  }
+
+  function isRequiredObjectListItemField(field: PluginSettingsObjectListItemField, item: Record<string, unknown>): boolean {
+    return Boolean(field.required || matchesCondition(item, field.requiredWhen))
+  }
+
+  function isEmptyValue(value: unknown): boolean {
+    return value === undefined || value === null || value === ''
+  }
+
+  function validationMessage(field: PluginSettingsObjectListItemField, item: Record<string, unknown>): string {
+    if (!isRequiredObjectListItemField(field, item) || !isEmptyValue(item[field.key])) return ''
+    return translate(locale, 'scripts', 'settingsRequired')
   }
 
   function renderSelectControl(
@@ -255,6 +358,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
     const placeholder = localize(itemField.placeholder, itemField.placeholderI18n, locale)
     const value = item[itemField.key]
     const itemLabel = renderControlLabel(label, description)
+    const error = validationMessage(itemField, item)
 
     function commitAliasInput(event: KeyboardEvent<HTMLInputElement>) {
       const input = event.currentTarget
@@ -275,12 +379,21 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
       input.value = ''
     }
 
+    if (itemField.kind === 'callout') {
+      return (
+        <div className={`schema-object-list-callout wr-callout wr-callout-${itemField.tone ?? 'info'}`}>
+          <span className="wr-callout-title">{label}</span>
+          {description && <span className="wr-callout-copy">{description}</span>}
+        </div>
+      )
+    }
+
     if (itemField.kind === 'switch') {
       return (
         <label className="schema-object-list-switch wr-field">
           <span className="schema-object-list-switch-copy">{itemLabel}</span>
           <input className="schema-native-hidden" type="checkbox" checked={Boolean(value)} onChange={(event) => onChange(event.currentTarget.checked)} />
-          <span className={`sw schema-switch ${Boolean(value) ? 'on' : ''}`} />
+          <span className={`sw schema-switch ${value ? 'on' : ''}`} />
         </label>
       )
     }
@@ -290,6 +403,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
         <div className="schema-object-list-field schema-object-list-field-select wr-field">
           <span>{itemLabel}</span>
           {renderSelectControl(controlId, String(value ?? ''), itemField.options ?? [], onChange)}
+          {error && <small className="wr-error">{error}</small>}
         </div>
       )
     }
@@ -319,6 +433,37 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
       )
     }
 
+    if (itemField.kind === 'number' || itemField.kind === 'preset-number') {
+      const numericValue = typeof value === 'number' ? value : Number(value) || 0
+      return (
+        <label className="schema-object-list-field wr-field">
+          {itemLabel}
+          {itemField.kind === 'preset-number' && itemField.presets?.length ? (
+            <span className="wr-preset-row">
+              {itemField.presets.map((preset) => (
+                <button
+                  type="button"
+                  className={`wr-preset ${numericValue === preset.value ? 'is-active' : ''}`}
+                  key={preset.value}
+                  onClick={() => onChange(preset.value)}
+                >
+                  {localize(preset.label, preset.labelI18n, locale)}
+                </button>
+              ))}
+            </span>
+          ) : null}
+          <input
+            className="wr-in wr-mono"
+            type="text"
+            value={numericValue}
+            placeholder={placeholder}
+            onChange={(event) => onChange(Number(event.currentTarget.value) || 0)}
+          />
+          {error && <small className="wr-error">{error}</small>}
+        </label>
+      )
+    }
+
     if (itemField.kind === 'textarea') {
       return (
         <label className="schema-object-list-field schema-object-list-field-wide wr-field">
@@ -330,6 +475,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
             placeholder={placeholder}
             onChange={(event) => onChange(event.currentTarget.value)}
           />
+          {error && <small className="wr-error">{error}</small>}
         </label>
       )
     }
@@ -339,13 +485,53 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
         {itemLabel}
         <input
           className={`wr-in ${itemField.mono || itemField.key.toLowerCase().includes('url') ? 'wr-mono' : ''}`}
-          type="text"
+          type={itemField.sensitive || itemField.kind === 'secret' ? 'password' : 'text'}
           value={String(value ?? '')}
           placeholder={placeholder}
           onChange={(event) => onChange(event.currentTarget.value)}
         />
+        {itemField.kind === 'secret' && !isEmptyValue(value) && <small className="wr-secret-state">{translate(locale, 'scripts', 'settingsSecretSaved')}</small>}
+        {error && <small className="wr-error">{error}</small>}
       </label>
     )
+  }
+
+  function renderObjectListItemGroups(
+    field: PluginSettingsObjectListField<TSettings>,
+    item: Record<string, unknown>,
+    cardId: string,
+    itemIndex: number,
+    items: Record<string, unknown>[],
+  ) {
+    const visibleFields = field.fields.filter((itemField) => isVisibleObjectListItemField(itemField, item))
+    const groups = field.groups ?? []
+    const fallbackGroup: PluginSettingsObjectListGroup = { id: '', title: '' }
+    const renderFields = (groupFields: PluginSettingsObjectListItemField[]) => groupFields.map((itemField) => (
+      <div key={itemField.key} className={`wr-field-shell wr-kind-${itemField.kind}${itemField.wide ? ' wr-wide' : ''}${itemField.inline ? ' wr-inline' : ''}`}>
+        {renderObjectListItemField(itemField, item, `${field.key}:${cardId}:${itemField.key}`, (next) => {
+          setFieldValue(field.key, items.map((candidate, index) => (
+            index === itemIndex ? { ...candidate, [itemField.key]: next } : candidate
+          )))
+        })}
+      </div>
+    ))
+    const grouped = groups.length > 0 ? [...groups, fallbackGroup] : [fallbackGroup]
+    return grouped.map((group) => {
+      const groupFields = visibleFields.filter((itemField) => (itemField.groupId ?? '') === group.id)
+      if (groupFields.length === 0) return null
+      if (!group.id) return renderFields(groupFields)
+      return (
+        <div className="wr-group" key={group.id}>
+          <div className="wr-group-head">
+            <span>
+              <strong>{localize(group.title, group.titleI18n, locale)}</strong>
+              {localize(group.description, group.descriptionI18n, locale) && <small>{localize(group.description, group.descriptionI18n, locale)}</small>}
+            </span>
+          </div>
+          <div className="wr-group-body">{renderFields(groupFields)}</div>
+        </div>
+      )
+    })
   }
 
   function renderField(field: PluginSettingsField<TSettings>) {
@@ -369,7 +555,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
               disabled={disabled}
               onChange={(event: ChangeEvent<HTMLInputElement>) => setFieldValue(field.key, event.currentTarget.checked)}
             />
-            <span className={`sw schema-switch ${Boolean(record[field.key]) ? 'on' : ''}`} />
+            <span className={`sw schema-switch ${record[field.key] ? 'on' : ''}`} />
           </span>
         </label>
       )
@@ -475,7 +661,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
           <span className="schema-row-icon"><Icon size={14} strokeWidth={1.8} /></span>
           {commonLabel}
           <div className="schema-row-control">
-            {renderSelectControl(`field:${field.key}`, String(record[field.key] ?? ''), field.options, (next) => setFieldValue(field.key, next), disabled)}
+            {renderSelectControl(`field:${field.key}`, String(record[field.key] ?? ''), getSelectOptions(field), (next) => setFieldValue(field.key, next), disabled)}
           </div>
         </div>
       )
@@ -544,6 +730,82 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
         setFieldValue(field.key, [...items, nextItem])
         setOpenObjectListCards((current) => ({ ...current, [field.key]: nextCardId }))
       }
+      const activeCardId = openObjectListCards[field.key] ?? String(items[0]?.id ?? 0)
+      const activeItemIndex = Math.max(0, items.findIndex((item, index) => String(item.id ?? index) === activeCardId))
+      const activeItem = items[activeItemIndex]
+      if (field.display === 'master-detail') {
+        return (
+          <div className={`schema-object-list d-rules schema-object-list-master-detail ${disabled ? 'is-disabled' : ''}`}>
+            <div className="schema-object-list-head">
+              {commonLabel}
+            </div>
+            {items.length === 0 || !activeItem ? (
+              <div className="schema-object-list-empty">
+                {localize(field.emptyText, field.emptyTextI18n, locale)}
+              </div>
+            ) : (
+              <div className="schema-object-list-md">
+                <div className="schema-object-list-md-list" role="listbox" aria-label={label}>
+                  {items.map((item, itemIndex) => {
+                    const cardId = String(item.id ?? itemIndex)
+                    const title = objectListItemTitle(field, item, itemIndex, itemLabel)
+                    const isSelected = itemIndex === activeItemIndex
+                    return (
+                      <div
+                        className={`schema-object-list-md-row is-${objectListItemTone(item)} ${isSelected ? 'is-selected' : ''}`}
+                        key={`${cardId}-${itemIndex}`}
+                        role="option"
+                        aria-selected={isSelected}
+                      >
+                        <button
+                          type="button"
+                          className="schema-object-list-md-row-btn"
+                          disabled={disabled}
+                          onClick={() => setOpenObjectListCards((current) => ({ ...current, [field.key]: cardId }))}
+                        >
+                          <span className="schema-object-list-md-avatar">{title.slice(0, 1).toUpperCase()}</span>
+                          <span className="schema-object-list-md-copy">
+                            <span className="schema-object-list-md-title">{title}</span>
+                            {renderObjectListSummary(field, item)}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className="schema-object-list-md-row-x"
+                          disabled={disabled}
+                          aria-label="Delete"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            const nextItems = items.filter((_, index) => index !== itemIndex)
+                            const nextActive = nextItems[Math.min(itemIndex, nextItems.length - 1)]
+                            setFieldValue(field.key, nextItems)
+                            setOpenObjectListCards((current) => ({ ...current, [field.key]: nextActive ? String(nextActive.id ?? Math.min(itemIndex, nextItems.length - 1)) : '' }))
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )
+                  })}
+                  <button
+                    type="button"
+                    className="schema-object-list-md-add"
+                    disabled={disabled}
+                    onClick={addItem}
+                  >
+                    <span>＋</span>{addLabel}
+                  </button>
+                </div>
+                <div className={`schema-object-list-md-detail is-${objectListItemTone(activeItem)}`}>
+                  <div className={`schema-object-list-grid wr-body wr-cols-${field.detailColumns ?? 1}`}>
+                    {renderObjectListItemGroups(field, activeItem, String(activeItem.id ?? activeItemIndex), activeItemIndex, items)}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      }
       return (
         <div className={`schema-object-list d-rules ${disabled ? 'is-disabled' : ''}`}>
           <div className="schema-object-list-head">
@@ -559,8 +821,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
                 const cardId = String(item.id ?? itemIndex)
                 const openCardId = openObjectListCards[field.key]
                 const isOpen = openCardId ? openCardId === cardId : itemIndex === 0
-                const titleKey = field.itemTitleKey ?? 'title'
-                const title = String(item[titleKey] ?? '') || `${itemLabel} ${itemIndex + 1}`
+                const title = objectListItemTitle(field, item, itemIndex, itemLabel)
                 return (
                 <details
                   className={`schema-object-list-card wr-card ${isOpen ? 'open' : ''}`}
@@ -580,6 +841,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
                     <span className="schema-object-list-caret wr-caret">›</span>
                     <span className="wr-htext">
                       <span className="schema-object-list-title wr-title">{title}</span>
+                      {renderObjectListSummary(field, item)}
                       {Array.isArray(item.aliases) && item.aliases.length > 0 && (
                         <span className="schema-object-list-tag wr-kwtag">
                           {String(item.aliases[0])}{item.aliases.length > 1 ? ` +${item.aliases.length - 1}` : ''}
@@ -600,15 +862,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
                     </button>
                   </summary>
                   <div className="schema-object-list-grid wr-body">
-                    {field.fields.filter(isRenderableObjectListItemField).map((itemField) => (
-                      <div key={itemField.key}>
-                        {renderObjectListItemField(itemField, item, `${field.key}:${cardId}:${itemField.key}`, (next) => {
-                          setFieldValue(field.key, items.map((candidate, index) => (
-                            index === itemIndex ? { ...candidate, [itemField.key]: next } : candidate
-                          )))
-                        })}
-                      </div>
-                    ))}
+                    {renderObjectListItemGroups(field, item, cardId, itemIndex, items)}
                   </div>
                 </details>
                 )

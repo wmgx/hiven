@@ -308,7 +308,7 @@ check('Tauri config defines a standalone launcher window', () => {
   assert.ok(launcher, 'tauri.conf.json should define a launcher window')
   assert.equal(
     launcher.height,
-    390,
+    430,
     'launcher window should be tall enough to match the in-app command palette result area instead of clipping it',
   )
   assert.equal(launcher.visible, false, 'launcher window should not open at startup')
@@ -379,7 +379,7 @@ check('standalone launcher rehydrates persisted settings before opening', () => 
 check('launcher panel height matches the in-app command palette list height', () => {
   assertHas(
     files.indexCss,
-    /--command-palette-list-max-height:\s*300px/,
+    /--command-palette-list-max-height:\s*340px/,
     'CSS should expose the in-app command palette list height as a shared token',
   )
   assertHas(
@@ -407,7 +407,7 @@ check('launcher panel drags the native launcher window and persists moved positi
   )
   assertHas(
     files.app,
-    /onMoved\([\s\S]{0,760}updateSetting\(['"]globalLauncherWindowPosition['"]/,
+    /onMoved\([\s\S]{0,1100}updateSetting\(['"]globalLauncherWindowPosition['"]/,
     'LauncherWindowApp should persist native launcher movement from the Tauri window moved event',
   )
   assertHas(
@@ -458,8 +458,8 @@ check('standalone launcher sizes the transparent window to the panel', () => {
   )
   assertHas(
     files.globalLauncher,
-    /STANDALONE_LAUNCHER_MAX_HEIGHT\s*=\s*390/,
-    'standalone launcher should keep the existing max height for long result lists',
+    /STANDALONE_LAUNCHER_MAX_HEIGHT\s*=\s*430/,
+    'standalone launcher should keep the enlarged max height for long result lists',
   )
   assertHas(
     files.globalLauncher,
