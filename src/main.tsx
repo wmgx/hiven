@@ -4,7 +4,7 @@ import './index.css'
 import { loader } from '@monaco-editor/react'
 
 const windowType = new URLSearchParams(window.location.search).get('window')
-if (windowType === 'launcher' || windowType === 'plugin-surface') {
+if (windowType === 'launcher' || windowType === 'plugin-surface' || windowType === 'editor') {
   document.documentElement.dataset.window = windowType
 }
 
@@ -35,6 +35,10 @@ async function loadRootComponent(): Promise<ComponentType> {
   if (windowType === 'plugin-surface') {
     const mod = await import('./components/PluginSurfaceWindow.tsx')
     return mod.PluginSurfaceWindow
+  }
+  if (windowType === 'editor') {
+    const mod = await import('./components/EditorWindow.tsx')
+    return mod.EditorWindow
   }
   const mod = await import('./App.tsx')
   return mod.default
