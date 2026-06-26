@@ -30,11 +30,10 @@ export async function requestOpenEditorWindow(): Promise<void> {
     skipTaskbar: false,
   })
 
-  const cleanup = await win.once('tauri://created', () => {
-    cleanup()
+  window.setTimeout(() => {
     void win.center().catch(() => undefined)
     void win.setFocus().catch(() => undefined)
-  })
+  }, 60)
 }
 
 function isTauriRuntime(): boolean {
