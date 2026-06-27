@@ -34,9 +34,10 @@ assert.match(hostActionsSource, /aliases:\s*\[[\s\S]*['"]settings['"][\s\S]*['"]
 
 const appSource = read('src/App.tsx')
 const pluginApiSource = read('src/workspace/launcher/pluginApi.ts')
-assert.match(pluginApiSource, /hiven:\/\/show-plugins-page/, 'plugin launcher API should route standalone plugins page requests to the main window')
-assert.match(pluginApiSource, /hiven:\/\/show-settings-page/, 'plugin launcher API should route standalone settings page requests to the main window')
-assert.match(appSource, /listen\(['"]hiven:\/\/show-plugins-page['"][\s\S]{0,260}setActiveView\(['"]scripts['"]\)/, 'main window should handle plugins page requests from the standalone launcher')
-assert.match(appSource, /listen\(['"]hiven:\/\/show-settings-page['"][\s\S]{0,260}setActiveView\(['"]settings['"]\)/, 'main window should handle settings page requests from the standalone launcher')
+assert.match(pluginApiSource, /requestOpenHostLauncherSurface\(['"]plugins['"]\)/, 'plugin launcher API should route plugins page requests to the launcher-hosted Plugins surface')
+assert.match(pluginApiSource, /requestOpenHostLauncherSurface\(['"]settings['"]\)/, 'plugin launcher API should route settings page requests to the launcher-hosted Settings surface')
+assert.match(appSource, /listen\(['"]hiven:\/\/open-host-surface['"][\s\S]{0,360}openHostLauncherSurface/, 'launcher window should handle host surface requests without showing the main window')
+assert.doesNotMatch(appSource, /listen\(['"]hiven:\/\/show-plugins-page['"][\s\S]{0,260}setActiveView\(['"]scripts['"]\)/, 'plugins page requests should no longer be routed through the main window')
+assert.doesNotMatch(appSource, /listen\(['"]hiven:\/\/show-settings-page['"][\s\S]{0,260}setActiveView\(['"]settings['"]\)/, 'settings page requests should no longer be routed through the main window')
 
 console.log('command palette system page shortcut checks passed')

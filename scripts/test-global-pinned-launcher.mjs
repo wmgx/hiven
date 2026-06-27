@@ -25,6 +25,8 @@ const files = {
   commandPalette: read('src/components/CommandPalette.tsx'),
   corePlugin: readOptional('src/workspace/corePlugin.ts'),
   hostActions: read('src/workspace/launcher/hostActions.ts'),
+  pluginApi: read('src/workspace/launcher/pluginApi.ts'),
+  editorWindow: read('src/components/EditorWindow.tsx'),
   builtinIndex: read('src/builtin-plugins/index.json'),
   app: read('src/App.tsx'),
   globalPinnedLauncherHotkeys: read('src/hotkeys/globalPinnedLauncher.ts'),
@@ -118,10 +120,15 @@ check('main panel launcher command is contributed by host launcher actions', () 
     /legacyUsageKeys:\s*\[[\s\S]*['"]show-main-panel['"][\s\S]*['"]core-pane\.show-main-panel['"][\s\S]*\]/,
     'host main panel item should preserve usage ranking from the retired core-pane action',
   )
-  assertHas(
+  assert.doesNotMatch(
     files.app,
-    /listen\(['"]hiven:\/\/show-main-panel['"][\s\S]{0,260}setActiveView\(['"]editor['"]\)/,
-    'main window should handle show-main-panel requests from the standalone launcher',
+    /hiven:\/\/show-main-panel|function\s+MainApp\(/,
+    'launcher-first app should not keep a persistent main-window show-main-panel fallback',
+  )
+  assertHas(
+    files.pluginApi,
+    /showMainPanel\(\)[\s\S]{0,220}requestOpenEditorWindow\(\)/,
+    'showMainPanel should open the standalone editor window directly',
   )
   assert.doesNotMatch(
     files.globalLauncher,
@@ -171,21 +178,16 @@ check('global launcher keeps keyboard selection visible while navigating', () =>
   )
 })
 
-check('main window supports Cmd or Ctrl K as an in-app global launcher shortcut', () => {
+check('editor command bar stays editor-local after removing the main window fallback', () => {
+  assert.doesNotMatch(
+    files.app,
+    /setCommandPaletteOpen\(true\)|function\s+MainApp\(/,
+    'App should not keep a main-window Cmd/Ctrl+K command-palette fallback',
+  )
   assertHas(
-    files.app,
-    /\(e\.metaKey\s*\|\|\s*e\.ctrlKey\)[\s\S]{0,180}!e\.shiftKey[\s\S]{0,180}e\.key\.toLowerCase\(\)\s*===\s*['"]k['"][\s\S]{0,180}setCommandPaletteOpen\(true\)/,
-    'MainApp should open the in-app launcher with Cmd/Ctrl+K when not recording shortcuts',
-  )
-  assert.doesNotMatch(
-    files.app,
-    /\(e\.metaKey\s*\|\|\s*e\.ctrlKey\)[\s\S]{0,180}!e\.shiftKey[\s\S]{0,180}e\.key\.toLowerCase\(\)\s*===\s*['"]k['"][\s\S]{0,180}openGlobalLauncher\(['"]full['"]\)/,
-    'Cmd/Ctrl+K should not open the global launcher; it should open the in-app launcher',
-  )
-  assert.doesNotMatch(
-    files.app,
-    /\(e\.metaKey\s*\|\|\s*e\.ctrlKey\)\s*&&\s*e\.shiftKey\s*&&\s*e\.key\.toLowerCase\(\)\s*===\s*['"]k['"][\s\S]{0,180}openGlobalLauncher\(['"]full['"]\)/,
-    'MainApp should not add a local Cmd/Ctrl+Shift+K launcher path; configured global hotkeys handle app-internal/app-external routing',
+    files.editorWindow,
+    /<CommandPalette\s*\/>/,
+    'standalone editor window should own the editor command bar',
   )
 })
 
@@ -284,21 +286,16 @@ check('launcher UI business logic does not parse systemKey for legacy command id
   )
 })
 
-check('App listens for the Tauri open-pinned-launcher event', () => {
-  assertHas(
+check('App does not keep legacy pinned-launcher main-window event bridges', () => {
+  assert.doesNotMatch(
     files.app,
-    /@tauri-apps\/api\/event|from\s+['"]@tauri-apps\/api\/event['"]/,
-    'App should import the Tauri event listener API',
+    /hiven:\/\/open-pinned-launcher|hiven:\/\/route-global-pinned-launcher-shortcut/,
+    'native global shortcuts should open the standalone launcher directly instead of routing through App',
   )
   assertHas(
-    files.app,
-    /listen\([\s\S]{0,120}hiven:\/\/open-pinned-launcher|hiven:\/\/open-pinned-launcher[\s\S]{0,120}listen\(/,
-    'App should listen for the hiven://open-pinned-launcher event',
-  )
-  assertHas(
-    files.app,
-    /show_launcher_window/,
-    'Tauri event handler should open the standalone launcher window',
+    files.tauriHotkeys,
+    /show_launcher_window_for_hotkey\(app\)/,
+    'native hotkeys should call the launcher window helper directly',
   )
 })
 
@@ -407,7 +404,7 @@ check('launcher panel drags the native launcher window and persists moved positi
   )
   assertHas(
     files.app,
-    /onMoved\([\s\S]{0,760}updateSetting\(['"]globalLauncherWindowPosition['"]/,
+    /onMoved\([\s\S]*updateSetting\(['"]globalLauncherWindowPosition['"]/,
     'LauncherWindowApp should persist native launcher movement from the Tauri window moved event',
   )
   assertHas(
@@ -692,61 +689,36 @@ check('native launcher show path does not activate the full app window stack', (
   )
 })
 
-check('global shortcut routes to in-app command palette when the editor window is focused', () => {
+check('global shortcut always opens the standalone launcher', () => {
   assertHas(
     files.globalPinnedLauncherHotkeys,
-    /routeGlobalPinnedLauncherShortcut/,
-    'global shortcut callbacks should share a foreground-aware launcher route',
+    /export\s+async\s+function\s+routeGlobalPinnedLauncherShortcut\(\)\s*{\s*await\s+showLauncherWindow\(\)/,
+    'global shortcut route should always open the launcher window',
   )
-  assertHas(
+  assert.doesNotMatch(
     files.globalPinnedLauncherHotkeys,
-    /getCurrentWindow\(\)\.isFocused\(\)/,
-    'global shortcut route should inspect whether the main window is currently focused',
-  )
-  assertHas(
-    files.globalPinnedLauncherHotkeys,
-    /activeView\s*!={1,2}\s*['"]editor['"][\s\S]{0,80}return\s+false/,
-    'global shortcut route should reject in-app command palette routing outside the editor view',
-  )
-  assertHas(
-    files.globalPinnedLauncherHotkeys,
-    /shouldOpenCommandPaletteInMainWindow\(\)[\s\S]{0,180}setCommandPaletteOpen\(true\)/,
-    'when the focused app window is the editor, global shortcut should open the in-app command palette',
-  )
-  assertHas(
-    files.globalPinnedLauncherHotkeys,
-    /showLauncherWindow\(\)/,
-    'non-editor or background shortcuts should still fall back to the standalone global launcher',
-  )
-  assertHas(
-    files.app,
-    /listen\([\s\S]{0,120}hiven:\/\/route-global-pinned-launcher-shortcut[\s\S]{0,220}routeGlobalPinnedLauncherShortcut\(\)/,
-    'double-modifier native events should use the same foreground-aware route as accelerator shortcuts',
+    /shouldOpenCommandPaletteInMainWindow|getCurrentWindow\(\)\.isFocused\(\)/,
+    'global shortcut route should no longer inspect a main window to toggle CommandPalette',
   )
 })
 
-check('native double-modifier opens standalone launcher directly when the main window is not focused', () => {
-  const routePinnedLauncherFn = files.tauriHotkeys.match(/fn\s+route_pinned_launcher_hotkey[\s\S]*?\n}\n\n\/\/\/ Poke/)?.[0] ?? ''
+check('native double-modifier opens standalone launcher directly', () => {
+  const routePinnedLauncherFn = files.tauriHotkeys.match(new RegExp('fn\\s+route_pinned_launcher_hotkey[\\s\\S]*?\\n}\\n\\n/// Poke'))?.[0] ?? ''
   assert.ok(routePinnedLauncherFn, 'src-tauri/src/hotkeys.rs should route double-modifier triggers outside the event tap callback')
   assertHas(
     files.tauriHotkeys,
     /std::thread::spawn/,
     'native double-modifier callback should hand off routing work instead of doing window operations inside CGEventTap',
   )
-  assertHas(
+  assert.doesNotMatch(
     routePinnedLauncherFn,
-    /get_webview_window\("main"\)[\s\S]{0,180}is_focused\(\)/,
-    'native double-modifier routing should inspect whether the main window is focused',
-  )
-  assertHas(
-    routePinnedLauncherFn,
-    /if\s+main_window_focused[\s\S]{0,180}emit\(ROUTE_GLOBAL_PINNED_LAUNCHER_SHORTCUT_EVENT/,
-    'native double-modifier routing should preserve the in-app command palette route when the main window is focused',
+    /get_webview_window\("main"\)|main_window_focused|ROUTE_GLOBAL_PINNED_LAUNCHER_SHORTCUT_EVENT/,
+    'native double-modifier routing should not depend on a persistent main window',
   )
   assertHas(
     routePinnedLauncherFn,
     /show_launcher_window_for_hotkey\(app\)/,
-    'native double-modifier routing should open the standalone launcher directly while the app is in the background',
+    'native double-modifier routing should always open the standalone launcher directly',
   )
 })
 

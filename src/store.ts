@@ -150,6 +150,7 @@ export type LastCommandStatus = {
 
 export type AppTheme = 'dark' | 'light'
 export type GlobalLauncherMode = 'full' | 'pinned-only'
+export type HostLauncherSurface = 'settings' | 'plugins' | 'plugin-editor' | 'pinned-runner'
 export type GlobalPinnedLauncherDoubleModifier = 'Command' | 'Shift' | 'Option'
 export type GlobalLauncherPosition = {
   x: number;
@@ -211,8 +212,11 @@ interface AppState {
   openGlobalLauncher: (mode: GlobalLauncherMode) => void
   openGlobalLauncherOverlay: (mode: GlobalLauncherMode) => void
   pluginSurfaceToolTarget: PluginSurfaceOpenTarget | null
+  hostLauncherSurface: HostLauncherSurface | null
   openPluginSurfaceTool: (target: PluginSurfaceOpenTarget) => void
   clearPluginSurfaceTool: () => void
+  openHostLauncherSurface: (surface: HostLauncherSurface) => void
+  clearHostLauncherSurface: () => void
 
   // Last command status
   lastCommandStatus: LastCommandStatus | null
@@ -291,8 +295,8 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   activeView: 'editor',
   setActiveView: (view) => set(view === 'editor' ? { activeView: view } : { activeView: view, commandPaletteOpen: false }),
   pluginEditor: null,
-  openPluginEditor: (plugin) => set({ pluginEditor: plugin, activeView: 'plugin-editor', commandPaletteOpen: false }),
-  closePluginEditor: () => set({ pluginEditor: null, activeView: 'scripts', commandPaletteOpen: false }),
+  openPluginEditor: (plugin) => set({ pluginEditor: plugin, activeView: 'plugin-editor', commandPaletteOpen: false, hostLauncherSurface: 'plugin-editor', globalLauncherOpen: true, globalLauncherOverlay: true }),
+  closePluginEditor: () => set({ pluginEditor: null, activeView: 'scripts', commandPaletteOpen: false, hostLauncherSurface: 'plugins', globalLauncherOpen: true, globalLauncherOverlay: true }),
 
   // Pinned Action / Live Runner
   pinnedActions: [],
@@ -341,7 +345,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   }),
   setActivePinnedAction: (pinnedId) => set((state) => (
     state.pinnedActions.some((pinned) => pinned.id === pinnedId)
-      ? { activePinnedActionId: pinnedId, activeView: 'pinned-runner' }
+      ? { activePinnedActionId: pinnedId, activeView: 'pinned-runner', hostLauncherSurface: 'pinned-runner', globalLauncherOpen: true, globalLauncherOverlay: true }
       : {}
   )),
   activatePinnedAction: (pinnedId) => set((state) => {
@@ -358,6 +362,9 @@ export const useAppStore = create<AppState>()(persist((set) => ({
       pinnedActions: state.pinnedActions.map((item) => item.id === pinnedId ? restoredPinned : item),
       activePinnedActionId: pinnedId,
       activeView: 'pinned-runner',
+      hostLauncherSurface: 'pinned-runner',
+      globalLauncherOpen: true,
+      globalLauncherOverlay: true,
       pinnedRuntimes: nextRuntimes,
       pinnedTombstones: nextTombstones,
       commandPaletteOpen: false,
@@ -446,6 +453,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   globalLauncherMode: 'full',
   globalLauncherOverlay: false,
   pluginSurfaceToolTarget: null,
+  hostLauncherSurface: null,
   setGlobalLauncherOpen: (open, mode) => set((state) => ({
     globalLauncherOpen: open,
     globalLauncherMode: mode ?? (open ? state.globalLauncherMode : 'full'),
@@ -453,8 +461,10 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   })),
   openGlobalLauncher: (mode) => set({ globalLauncherOpen: true, globalLauncherMode: mode }),
   openGlobalLauncherOverlay: (mode) => set({ globalLauncherOpen: true, globalLauncherMode: mode, globalLauncherOverlay: true }),
-  openPluginSurfaceTool: (target) => set({ pluginSurfaceToolTarget: target }),
+  openPluginSurfaceTool: (target) => set({ pluginSurfaceToolTarget: target, hostLauncherSurface: null }),
   clearPluginSurfaceTool: () => set({ pluginSurfaceToolTarget: null }),
+  openHostLauncherSurface: (surface) => set({ hostLauncherSurface: surface, pluginSurfaceToolTarget: null }),
+  clearHostLauncherSurface: () => set({ hostLauncherSurface: null }),
 
   // Last command status
   lastCommandStatus: null,

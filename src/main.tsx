@@ -4,7 +4,9 @@ import './index.css'
 import { loader } from '@monaco-editor/react'
 
 const windowType = new URLSearchParams(window.location.search).get('window')
-if (windowType === 'launcher' || windowType === 'plugin-surface' || windowType === 'editor') {
+if (windowType === 'launcher') {
+  document.documentElement.dataset.window = 'launcher'
+} else if (windowType === 'plugin-surface' || windowType === 'editor') {
   document.documentElement.dataset.window = windowType
 }
 

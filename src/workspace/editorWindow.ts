@@ -4,10 +4,19 @@ import { LogicalSize } from '@tauri-apps/api/window'
 const EDITOR_WINDOW_LABEL = 'editor'
 const EDITOR_WINDOW_WIDTH = 1100
 const EDITOR_WINDOW_HEIGHT = 720
+let pendingEditorWindowOpen: Promise<void> | null = null
 
 export async function requestOpenEditorWindow(): Promise<void> {
   if (!isTauriRuntime()) return
+  if (pendingEditorWindowOpen) {
+    await pendingEditorWindowOpen
+    return
+  }
+  pendingEditorWindowOpen = openEditorWindow().finally(() => { pendingEditorWindowOpen = null })
+  await pendingEditorWindowOpen
+}
 
+async function openEditorWindow(): Promise<void> {
   const existing = await WebviewWindow.getByLabel(EDITOR_WINDOW_LABEL).catch(() => null)
   if (existing) {
     await existing.setSize(new LogicalSize(EDITOR_WINDOW_WIDTH, EDITOR_WINDOW_HEIGHT)).catch(() => undefined)

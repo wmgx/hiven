@@ -17,6 +17,7 @@ import { useAppStore } from '../../store'
 import { createPluginPrivateStorage } from '../pluginStorage'
 import { getPluginPermissionSnapshot, requirePluginPermissions } from '../pluginPermissions'
 import { requestOpenEditorWindow } from '../editorWindow'
+import { requestOpenHostLauncherSurface } from '../hostSurfaceOpenRequest'
 import type { FluxEffect, SerializedRange } from '../types'
 import type { PluginPermission } from '../pluginTypes'
 import type { PluginSettingsSource } from '../pluginSettingsStore'
@@ -94,37 +95,25 @@ async function showMainPanel(): Promise<void> {
 }
 
 async function showPluginsPage(): Promise<void> {
-  if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
-    try {
-      const [{ emitTo }, { invoke }] = await Promise.all([
-        import('@tauri-apps/api/event'),
-        import('@tauri-apps/api/core'),
-      ])
-      await emitTo('main', 'hiven://show-plugins-page')
-      await invoke('show_and_focus_window')
-      return
-    } catch (error) {
-      console.warn('[launcher] failed to show plugins page via Tauri:', error)
-    }
+  try {
+    await requestOpenHostLauncherSurface('plugins')
+    return
+  } catch (error) {
+    console.warn('[launcher] failed to show plugins surface via launcher:', error)
   }
-  useAppStore.getState().setActiveView('scripts')
+  useAppStore.getState().openHostLauncherSurface('plugins')
+  useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
 }
 
 async function showSettingsPage(): Promise<void> {
-  if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
-    try {
-      const [{ emitTo }, { invoke }] = await Promise.all([
-        import('@tauri-apps/api/event'),
-        import('@tauri-apps/api/core'),
-      ])
-      await emitTo('main', 'hiven://show-settings-page')
-      await invoke('show_and_focus_window')
-      return
-    } catch (error) {
-      console.warn('[launcher] failed to show settings page via Tauri:', error)
-    }
+  try {
+    await requestOpenHostLauncherSurface('settings')
+    return
+  } catch (error) {
+    console.warn('[launcher] failed to show settings surface via launcher:', error)
   }
-  useAppStore.getState().setActiveView('settings')
+  useAppStore.getState().openHostLauncherSurface('settings')
+  useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
 }
 
 /**

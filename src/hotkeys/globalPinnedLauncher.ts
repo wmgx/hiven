@@ -3,7 +3,6 @@ import { useAppStore, type GlobalPinnedLauncherShortcut } from '../store'
 type GlobalShortcutApi = typeof import('@tauri-apps/plugin-global-shortcut')
 type TauriCoreApi = typeof import('@tauri-apps/api/core')
 type TauriEventApi = typeof import('@tauri-apps/api/event')
-type TauriWindowApi = typeof import('@tauri-apps/api/window')
 
 let installed = false
 let unsubscribeStore: (() => void) | null = null
@@ -18,7 +17,6 @@ export function installGlobalPinnedLauncherHotkeys() {
   installed = true
 
   const shortcut = useAppStore.getState().settings.globalPinnedLauncherShortcut
-  console.warn('[hiven-diag] installGlobalPinnedLauncherHotkeys called, shortcut:', JSON.stringify(shortcut))
   void syncShortcut(shortcut)
   void listenForDoubleModifierErrors()
   void listenForDoubleModifierReady()
@@ -80,7 +78,6 @@ function syncShortcut(shortcut: GlobalPinnedLauncherShortcut) {
 }
 
 async function syncShortcutNow(shortcut: GlobalPinnedLauncherShortcut, generation: number) {
-  console.warn('[hiven-diag] syncShortcutNow called, kind:', shortcut.kind, 'isTauri:', isTauriRuntime())
   if (!isTauriRuntime()) return
 
   await unregisterCurrentAccelerator()
@@ -132,9 +129,7 @@ async function registerDoubleModifier(shortcut: GlobalPinnedLauncherShortcut, ge
   try {
     const { invoke } = await loadTauriCoreApi()
     const modifier = shortcut.kind === 'double-modifier' ? shortcut.modifier : 'Command'
-    console.warn('[hiven-diag] invoking register_double_modifier_hotkey, modifier:', modifier)
     const result = await invoke<{ status: string }>('register_double_modifier_hotkey', { modifier })
-    console.warn('[hiven-diag] register_double_modifier_hotkey result:', result)
     if (generation !== syncGeneration) {
       if (shortcutIdentity(useAppStore.getState().settings.globalPinnedLauncherShortcut) !== shortcutIdentity(shortcut)) {
         await unregisterDoubleModifier()
@@ -143,7 +138,6 @@ async function registerDoubleModifier(shortcut: GlobalPinnedLauncherShortcut, ge
     }
     if (generation === syncGeneration) updateShortcutStatus(shortcut, result.status)
   } catch (error) {
-    console.warn('[hiven-diag] register_double_modifier_hotkey ERROR:', error)
     if (generation === syncGeneration) updateShortcutStatus(shortcut, 'Registration failed', formatError(error))
   }
 }
@@ -184,24 +178,7 @@ async function showLauncherWindow() {
 }
 
 export async function routeGlobalPinnedLauncherShortcut() {
-  if (await shouldOpenCommandPaletteInMainWindow()) {
-    useAppStore.getState().setCommandPaletteOpen(true)
-    return
-  }
   await showLauncherWindow()
-}
-
-async function shouldOpenCommandPaletteInMainWindow() {
-  const state = useAppStore.getState()
-  if (state.activeView !== 'editor') return false
-  if (!isTauriRuntime()) return true
-  try {
-    const { getCurrentWindow } = await loadTauriWindowApi()
-    return await getCurrentWindow().isFocused()
-  } catch (error) {
-    console.warn('[hiven] Failed to inspect main window focus for global shortcut:', error)
-    return false
-  }
 }
 
 function updateShortcutStatus(
@@ -246,8 +223,4 @@ function loadTauriCoreApi(): Promise<TauriCoreApi> {
 
 function loadTauriEventApi(): Promise<TauriEventApi> {
   return import('@tauri-apps/api/event')
-}
-
-function loadTauriWindowApi(): Promise<TauriWindowApi> {
-  return import('@tauri-apps/api/window')
 }

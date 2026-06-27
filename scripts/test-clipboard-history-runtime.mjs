@@ -203,13 +203,13 @@ assert.match(appTsx, /initializePluginBackgrounds/, 'App must call initializePlu
 assert.match(appTsx, /setupBackgroundSettingsWatcher/, 'App must call setupBackgroundSettingsWatcher')
 assert.match(appTsx, /setupBackgroundPermissionWatcher/, 'App must call setupBackgroundPermissionWatcher')
 assert.match(appTsx, /stopAllPluginBackgrounds/, 'App must stop backgrounds during app/window cleanup')
-const beforeMainApp = appTsx.split('function MainApp')[0] ?? appTsx
-assert.doesNotMatch(beforeMainApp, /initializePluginBackgrounds\(\)|setupBackgroundSettingsWatcher\(\)|setupBackgroundPermissionWatcher\(\)/, 'Backgrounds must not initialize at module scope because launcher windows import App.tsx too')
-const mainAppBody = appTsx.match(/function MainApp\(\)[\s\S]*?function LauncherWindowApp\(\)/)?.[0] ?? ''
-assert.match(mainAppBody, /initializePluginBackgrounds\(\)/, 'MainApp should initialize plugin backgrounds')
-assert.match(mainAppBody, /cleanupSettingsWatcher\?\.\(\)|cleanupPermissionWatcher\?\.\(\)/, 'MainApp should retain and clean up background watcher subscriptions')
+const beforeBackgroundRuntime = appTsx.split('function BackgroundRuntime')[0] ?? appTsx
+assert.doesNotMatch(beforeBackgroundRuntime, /initializePluginBackgrounds\(\)|setupBackgroundSettingsWatcher\(\)|setupBackgroundPermissionWatcher\(\)/, 'Backgrounds must not initialize at module scope because launcher windows import App.tsx too')
+const backgroundRuntimeBody = appTsx.match(/function BackgroundRuntime\(\)[\s\S]*?function LauncherWindowApp\(\)/)?.[0] ?? ''
+assert.match(backgroundRuntimeBody, /initializePluginBackgrounds\(\)/, 'BackgroundRuntime should initialize plugin backgrounds once the launcher runtime mounts')
+assert.match(backgroundRuntimeBody, /cleanupSettingsWatcher\?\.\(\)|cleanupPermissionWatcher\?\.\(\)/, 'BackgroundRuntime should retain and clean up background watcher subscriptions')
 const launcherWindowBody = appTsx.match(/function LauncherWindowApp\(\)[\s\S]*?function shouldAllowLauncherListWheel/)?.[0] ?? ''
-assert.doesNotMatch(launcherWindowBody, /initializePluginBackgrounds\(\)|setupBackgroundSettingsWatcher\(\)|setupBackgroundPermissionWatcher\(\)/, 'LauncherWindowApp must not run plugin backgrounds')
+assert.match(launcherWindowBody, /<BackgroundRuntime\s*\/>/, 'LauncherWindowApp should mount the shared background runtime')
 
 // ─── 7. Vite dev server module verification ─────────────────────────────────
 

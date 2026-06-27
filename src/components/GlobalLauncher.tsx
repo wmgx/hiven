@@ -1,7 +1,7 @@
 import { Component, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ErrorInfo, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { Pin, Search } from 'lucide-react'
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
-import { localized, useAppStore, type PluginSurfaceOpenTarget } from '../store'
+import { localized, useAppStore, type HostLauncherSurface, type PluginSurfaceOpenTarget } from '../store'
 import { t, type Locale } from '../i18n'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
 import { resolveIcon } from '../utils/resolveIcon'
@@ -19,6 +19,10 @@ import type { LauncherItem as DomainLauncherItem, LauncherResultChoice, Launcher
 import { resolvePluginSettingsSource } from '../workspace/launcher/pluginSource'
 import { LauncherParamStep, resolveParamValueLabel } from './launcher/LauncherParamStep'
 import { PluginSettingsContent } from './PluginSettingsDialog'
+import { SettingsView } from '../views/SettingsView'
+import { ScriptsView } from '../views/ScriptsView'
+import { PluginEditorView } from '../views/PluginEditorView'
+import { PinnedRunnerView } from '../views/PinnedRunnerView'
 import { getPlatformShortcutMeta, shouldCustomizeParams, supportsDefaultParamRun, supportsParamCustomization } from './launcher/launcherParamShortcuts'
 import type { ContributionSource, PluginDefinition, PluginPermission } from '../workspace/pluginTypes'
 import { createPluginPrivateStorage } from '../workspace/pluginStorage'
@@ -64,6 +68,9 @@ export function GlobalLauncher() {
   const launcherUsageBySurface = useAppStore((s) => s.launcherUsageBySurface)
   const recordLauncherSelection = useAppStore((s) => s.recordLauncherSelection)
   const pluginSurfaceToolTarget = useAppStore((s) => s.pluginSurfaceToolTarget)
+  const hostSurface = useAppStore((s) => s.hostLauncherSurface)
+  const openHostSurface = useAppStore((s) => s.openHostLauncherSurface)
+  const clearHostSurface = useAppStore((s) => s.clearHostLauncherSurface)
   const clearPluginSurfaceTool = useAppStore((s) => s.clearPluginSurfaceTool)
   const settingsDialogTarget = usePluginSettingsStore((s) => s.settingsDialogTarget)
   const closeSettingsDialog = usePluginSettingsStore((s) => s.closeSettingsDialog)
@@ -145,6 +152,7 @@ export function GlobalLauncher() {
   useEffect(() => {
     if (open) return
     setSurfaceFrame(null)
+    clearHostSurface()
     setDynamicItems([])
     dynamicQueryRef.current = ''
     controllerRef.current?.reset()
@@ -310,6 +318,7 @@ export function GlobalLauncher() {
   const resetLauncherSession = useCallback(() => {
     clearPluginSurfaceTool()
     setSurfaceFrame(null)
+    clearHostSurface()
     setItemPermissionFrame(null)
     if (usePluginSettingsStore.getState().settingsDialogTarget?.presentation === 'global-launcher') {
       closeSettingsDialog()
@@ -319,7 +328,7 @@ export function GlobalLauncher() {
     setDynamicItems([])
     dynamicQueryRef.current = ''
     controllerRef.current?.reset()
-  }, [clearPluginSurfaceTool, closeSettingsDialog])
+  }, [clearHostSurface, clearPluginSurfaceTool, closeSettingsDialog])
 
   const closeLauncher = useCallback(() => {
     const wasOverlay = overlay
@@ -470,7 +479,7 @@ export function GlobalLauncher() {
       const nextHeight = clamp(
         Math.ceil(desiredPanelHeight + STANDALONE_LAUNCHER_VERTICAL_PADDING),
         STANDALONE_LAUNCHER_MIN_HEIGHT,
-        surfaceShell || launcherSettingsTarget ? STANDALONE_SURFACE_MAX_HEIGHT : STANDALONE_LAUNCHER_MAX_HEIGHT,
+        surfaceShell || launcherSettingsTarget || hostSurface ? STANDALONE_SURFACE_MAX_HEIGHT : STANDALONE_LAUNCHER_MAX_HEIGHT,
       )
       const desiredPanelWidth = launcherSettingsTarget
         ? GLOBAL_LAUNCHER_SETTINGS_WIDTH
@@ -478,7 +487,7 @@ export function GlobalLauncher() {
       const nextWidth = clamp(
         Math.ceil(desiredPanelWidth + STANDALONE_LAUNCHER_HORIZONTAL_PADDING),
         STANDALONE_LAUNCHER_WIDTH,
-        surfaceShell || launcherSettingsTarget ? STANDALONE_SURFACE_MAX_WIDTH : STANDALONE_LAUNCHER_WIDTH,
+        surfaceShell || launcherSettingsTarget || hostSurface ? STANDALONE_SURFACE_MAX_WIDTH : STANDALONE_LAUNCHER_WIDTH,
       )
       window.dispatchEvent(new CustomEvent(LAUNCHER_PROGRAMMATIC_MOVE_EVENT))
       void getCurrentWindow()
@@ -497,12 +506,21 @@ export function GlobalLauncher() {
     standaloneLauncher,
     activeSurfaceFrame,
     launcherSettingsTarget,
+    hostSurface,
   ])
 
   const selectItem = (item: LauncherItem | undefined, customizeParams = false) => {
     if (!item) return
 
     if (item.kind === 'domain') {
+      if (item.domainItem.systemKey === 'host:view:settings') {
+        openHostSurface('settings')
+        return
+      }
+      if (item.domainItem.systemKey === 'host:view:plugins') {
+        openHostSurface('plugins')
+        return
+      }
       // Intercept plugin surface items — render surface instead of execute
       if (item.domainItem.systemKey.startsWith('plugin-surface:')) {
         const parts = item.domainItem.systemKey.split(':')
@@ -534,20 +552,10 @@ export function GlobalLauncher() {
     }
 
     if (standaloneLauncher) {
-      void (async () => {
-        try {
-          const { emitTo } = await import('@tauri-apps/api/event')
-          const { invoke } = await import('@tauri-apps/api/core')
-          if (item.kind === 'pinned') {
-            await emitTo('main', 'hiven://run-pinned-action', { id: item.id })
-          }
-          await invoke('hide_launcher_window')
-        } catch (error) {
-          console.warn('[hiven] Failed to select launcher item:', error)
-        }
-        setOpen(false)
-        restoreFocus()
-      })()
+      if (item.kind === 'pinned') {
+        openPinnedAction(item.id)
+        openHostSurface('pinned-runner')
+      }
       return
     }
     if (overlay) {
@@ -681,6 +689,12 @@ export function GlobalLauncher() {
       return
     }
 
+    if (hostSurface) {
+      clearHostSurface()
+      focusSearchInputAfterBack()
+      return
+    }
+
     if (itemPermissionFrame) {
       cancelItemPermissionPrompt()
       return
@@ -692,7 +706,7 @@ export function GlobalLauncher() {
     }
 
     closeLauncher()
-  }, [closeLauncher, closeSettingsDialog, itemPermissionFrame, launcherSettingsTarget, leaveSurface, settingsDialogTarget, surfaceFrame])
+  }, [clearHostSurface, closeLauncher, closeSettingsDialog, hostSurface, itemPermissionFrame, launcherSettingsTarget, leaveSurface, settingsDialogTarget, surfaceFrame])
 
   useEffect(() => {
     if (!open) return
@@ -743,17 +757,17 @@ export function GlobalLauncher() {
     background: 'var(--panel, #ffffff)',
     border: '1px solid var(--border, #ececed)',
     borderRadius: 'var(--radius, 10px)',
-    '--launcher-panel-width': launcherSettingsTarget
+    '--launcher-panel-width': launcherSettingsTarget || hostSurface
       ? `${GLOBAL_LAUNCHER_SETTINGS_WIDTH}px`
       : activeSurfaceFrame?.surface.shell?.defaultWidth
       ? `${activeSurfaceFrame.surface.shell.defaultWidth}px`
       : `${GLOBAL_LAUNCHER_PANEL_WIDTH}px`,
-    width: launcherSettingsTarget
+    width: launcherSettingsTarget || hostSurface
       ? `min(${GLOBAL_LAUNCHER_SETTINGS_WIDTH}px, calc(100vw - 24px))`
       : activeSurfaceFrame?.surface.shell?.defaultWidth
       ? `min(${activeSurfaceFrame.surface.shell.defaultWidth}px, calc(100vw - 24px))`
       : undefined,
-    maxHeight: launcherSettingsTarget
+    maxHeight: launcherSettingsTarget || hostSurface
       ? `min(${GLOBAL_LAUNCHER_SETTINGS_HEIGHT}px, calc(100vh - 24px))`
       : activeSurfaceFrame?.surface.shell?.defaultHeight
       ? `min(${activeSurfaceFrame.surface.shell.defaultHeight}px, calc(100vh - 24px))`
@@ -764,7 +778,7 @@ export function GlobalLauncher() {
   }
 
   useLayoutEffect(() => {
-    if (!surfaceFrame && !launcherSettingsTarget) return
+    if (!surfaceFrame && !launcherSettingsTarget && !hostSurface) return
     const frame = window.requestAnimationFrame(() => {
       const shell = panelRef.current?.querySelector<HTMLElement>('.global-launcher-surface-shell, .global-launcher-settings-shell')
       const focusTarget =
@@ -773,7 +787,7 @@ export function GlobalLauncher() {
       focusTarget?.focus()
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [launcherSettingsTarget, surfaceFrame, surfaceFocusVersion])
+  }, [hostSurface, launcherSettingsTarget, surfaceFrame, surfaceFocusVersion])
 
   if (!open) return null
 
@@ -804,6 +818,15 @@ export function GlobalLauncher() {
             return
           }
           if (launcherSettingsTarget) {
+            return
+          }
+          if (hostSurface) {
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              event.stopPropagation()
+              clearHostSurface()
+              focusSearchInputAfterBack()
+            }
             return
           }
           if (surfaceFrame) {
@@ -919,6 +942,14 @@ export function GlobalLauncher() {
                 focusSearchInputAfterBack()
               }}
             />
+          </div>
+        ) : hostSurface ? (
+          <div
+            className="global-launcher-settings-shell flex flex-col min-h-0 outline-none"
+            tabIndex={-1}
+            style={{ height: GLOBAL_LAUNCHER_SETTINGS_HEIGHT, overflow: 'auto' }}
+          >
+            <HostSurfaceContent hostSurface={hostSurface} />
           </div>
         ) : surfaceFrame ? (() => {
           void pluginPermissionVersion
@@ -1171,6 +1202,14 @@ export function GlobalLauncher() {
       </div>
     </div>
   )
+}
+
+
+function HostSurfaceContent({ hostSurface }: { hostSurface: HostLauncherSurface }) {
+  if (hostSurface === 'settings') return <SettingsView />
+  if (hostSurface === 'plugin-editor') return <PluginEditorView />
+  if (hostSurface === 'pinned-runner') return <PinnedRunnerView />
+  return <ScriptsView />
 }
 
 function clamp(value: number, min: number, max: number) {

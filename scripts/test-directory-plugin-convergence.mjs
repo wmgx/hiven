@@ -25,6 +25,7 @@ const files = {
   configInit: read('src/configInit.ts'),
   store: read('src/store.ts'),
   app: read('src/App.tsx'),
+  globalLauncher: read('src/components/GlobalLauncher.tsx'),
   tauriLib: read('src-tauri/src/lib.rs'),
   pluginEditorView: readIfExists('src/views/PluginEditorView.tsx'),
   pluginDebugRunner: readIfExists('src/workspace/pluginDebugRunner.ts'),
@@ -357,9 +358,9 @@ check('PluginEditorView is a read-only source viewer with directory tree and no 
   assert.doesNotMatch(files.pluginEditorView, /runDebug|runPluginDebugSource|debugOutput|debugLogs/, 'PluginEditorView should not include a debug panel anymore')
 })
 
-check('App protects menu navigation from plugin view render crashes', () => {
-  assert.match(files.app, /class\s+ViewErrorBoundary/, 'App should define a view error boundary')
-  assert.match(files.app, /ViewErrorBoundary[\s\S]*ViewContent/, 'App should wrap view content with the error boundary')
+check('launcher hosts plugin-management surfaces after main window removal', () => {
+  assert.doesNotMatch(files.app, /class\s+ViewErrorBoundary|ViewContent|function\s+MainApp\(/, 'App should no longer keep main-window view fallback routing')
+  assert.match(files.globalLauncher, /HostSurfaceContent[\s\S]*<ScriptsView\s*\/>/, 'GlobalLauncher should host the plugin management surface')
 })
 
 check('Tauri exposes plugin directory filesystem commands', () => {

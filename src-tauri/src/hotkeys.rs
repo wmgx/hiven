@@ -3,8 +3,6 @@ use std::time::Duration;
 #[cfg(target_os = "macos")]
 use std::time::Instant;
 
-use tauri::Emitter;
-
 /// Debug: append a line to /tmp/hiven-hotkey.log for diagnosing release builds.
 #[cfg(target_os = "macos")]
 pub(crate) fn hotkey_log(msg: &str) {
@@ -18,8 +16,6 @@ pub(crate) fn hotkey_log(msg: &str) {
     }
 }
 
-const ROUTE_GLOBAL_PINNED_LAUNCHER_SHORTCUT_EVENT: &str =
-    "hiven://route-global-pinned-launcher-shortcut";
 const DEFAULT_DOUBLE_MODIFIER_THRESHOLD_MS: u64 = 500;
 
 #[derive(Clone, Debug, serde::Serialize)]
@@ -545,18 +541,6 @@ fn windows_has_other_modifiers(modifier: DoubleModifier) -> bool {
 
 #[cfg(target_os = "windows")]
 fn windows_route_pinned_launcher(app: tauri::AppHandle) {
-    use tauri::Manager;
-    let main_focused = app
-        .get_webview_window("main")
-        .and_then(|w| w.is_focused().ok())
-        .unwrap_or(false);
-    if main_focused {
-        let _ = app.emit(
-            ROUTE_GLOBAL_PINNED_LAUNCHER_SHORTCUT_EVENT,
-            (),
-        );
-        return;
-    }
     if let Err(e) = crate::show_launcher_window_for_hotkey(app) {
         eprintln!("[hiven] Failed to show launcher from double modifier hotkey: {}", e);
     }
@@ -679,20 +663,7 @@ fn start_nsevent_listener(state: Arc<DoubleModifierHotkeyState>, app: tauri::App
 
 #[cfg(target_os = "macos")]
 fn route_pinned_launcher_hotkey(app: tauri::AppHandle) {
-    use tauri::Manager;
-
     hotkey_log("route_pinned_launcher_hotkey entered");
-
-    let main_window_focused = app
-        .get_webview_window("main")
-        .and_then(|window| window.is_focused().ok())
-        .unwrap_or(false);
-    hotkey_log(&format!("main_window_focused = {}", main_window_focused));
-    if main_window_focused {
-        let _ = app.emit(ROUTE_GLOBAL_PINNED_LAUNCHER_SHORTCUT_EVENT, ());
-        return;
-    }
-
     hotkey_log("calling show_launcher_window_for_hotkey");
     if let Err(error) = crate::show_launcher_window_for_hotkey(app) {
         hotkey_log(&format!("show_launcher_window_for_hotkey ERROR: {}", error));

@@ -197,7 +197,7 @@ function assertLauncherSystemMessagesAreLocalized() {
   assert.doesNotMatch(controller, /is required|Input required/, 'launcher controller should not hardcode English validation text')
 
   const dateTime = read('src/plugins/date-time-assistant/index.ts')
-  assert.match(dateTime, /resultKindLabel\(parsed\.kind,\s*ctx\.locale\)/, 'date-time dynamic subtitles should be locale-aware')
+  assert.match(dateTime, /resultKindLabel\(parsed\.kind,\s*ctx\.t\)/, 'date-time dynamic subtitles should be locale-aware')
   assert.doesNotMatch(dateTime, /subtitle:\s*['"](Timestamp|DateTime)['"]|subtitle:\s*parsed\.kind/, 'date-time dynamic subtitles should not hardcode English labels')
 }
 
