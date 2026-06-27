@@ -1,0 +1,32 @@
+- [x] 已切换到独立分支 `ralph-hiven-refactor-20260626`
+- [x] 未回滚或删除用户已有未提交改动
+- [x] Editor Command Bar 默认不展示 app launch、system power、settings 等全局能力
+- [x] Editor Command Bar 提供跳转 GlobalLauncher 的 Search all Hiven 入口
+- [x] legacy `command-palette` usage 可迁移或兼容到 `editor-command-bar`
+- [x] 插件 surface 类型支持 `instancePolicy`、`shell`、`entry.shortcutPresentation`
+- [x] 快捷键打开 clipboard-history 时创建或聚焦独立插件 Surface 窗口
+- [x] 插件独立窗口 Esc 隐藏、destroyTimeout 到期销毁、再次快捷键可显示或重建
+- [x] GlobalLauncher 内 transient surface 不会被快捷键插件窗口覆盖
+- [x] GlobalLauncher 内 launcher-invoked transient surface 仍保持可用
+- [x] Editor 可通过 GlobalLauncher 创建或聚焦为 singleton 独立窗口
+- [x] Editor Window 中 Cmd+K、多 pane、PanelHostV2、plugin toolbar 正常
+- [x] 关闭 Editor Window 后重新打开默认为空 Scratch Pad
+- [x] 启动 Hiven 时不显示旧主窗口
+- [x] 全局快捷键可唤起 Spotlight 风格 Launcher
+- [x] 关闭所有窗口后 tray/background 仍运行
+- [x] Settings、插件管理、插件编辑器不再依赖 Sidebar/ViewId 主窗口导航
+- [x] GlobalLauncherHost 和 EditorCommandBarHost 共享 LauncherSession 与 LauncherView 基础件
+- [x] 两个 Launcher host 保持不同 presentation、文案、capability 和候选范围
+- [x] IME、参数输入、结果选择、Escape/Back 行为在两个 host 中一致
+- [x] 插件 Surface 渲染逻辑已从 GlobalLauncher 抽出并被独立窗口复用
+- [x] 可附着插件 panel 能打开到 Editor PanelHostV2 left/right/bottom
+- [x] 已引入 WorkObject、WorkAction、OutputTarget 与 OutputRouter 基础模型
+- [x] 剪贴板对象可执行 paste、copy、open in editor、format 等动作
+- [x] 文本插件结果可通过 OutputRouter 路由到 copy、paste、replace selection、insert/open editor、attach panel、save shelf
+- [x] Context Broker 可提供全局调用与 editor context snapshot
+- [x] `npm run build` 通过
+- [x] Launcher、Plugin Surface、Editor Window、OutputRouter、Context Snapshot 相关脚本测试通过
+- [x] 本轮新增/重构的 Launcher、Surface、Window、Workflow 直接相关模块通过 targeted ESLint 检查
+- [x] 最终提交前已复核待提交文件范围，未回滚或删除用户已有改动
+- [x] 最终验证命令通过：targeted ESLint、核心契约测试、`npm run build`、`cargo check --manifest-path src-tauri/Cargo.toml`、`npm run check:architecture`
+- [x] 本轮 Ralph Loop 所有任务已勾选完成，并已提交所有改动

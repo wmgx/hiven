@@ -20,9 +20,13 @@ import type {
 } from './types'
 import { LAUNCHER_SURFACE_IDS } from './types'
 
+function normalizeUsageSurfaceId(surfaceId: LauncherSurfaceId): LauncherSurfaceId {
+  return surfaceId === 'global-launcher' ? 'global-launcher' : 'editor-command-bar'
+}
+
 export function emptyUsageBySurface(): LauncherUsageBySurface {
   return {
-    'command-palette': {},
+    'editor-command-bar': {},
     'global-launcher': {},
   }
 }
@@ -37,7 +41,8 @@ export function recordSelection(
   itemKey: SystemLauncherItemKey,
   now: number,
 ): LauncherUsageBySurface {
-  const bucket = usage[surfaceId] ?? {}
+  const normalizedSurfaceId = normalizeUsageSurfaceId(surfaceId)
+  const bucket = usage[normalizedSurfaceId] ?? {}
   const prev = bucket[itemKey]
   const nextRecord: LauncherUsageRecord = {
     count: (prev?.count ?? 0) + 1,
@@ -45,7 +50,7 @@ export function recordSelection(
   }
   return {
     ...usage,
-    [surfaceId]: { ...bucket, [itemKey]: nextRecord },
+    [normalizedSurfaceId]: { ...bucket, [itemKey]: nextRecord },
   }
 }
 
@@ -54,14 +59,16 @@ export function getUsageRecord(
   surfaceId: LauncherSurfaceId,
   itemKey: SystemLauncherItemKey,
 ): LauncherUsageRecord | undefined {
-  return usage[surfaceId]?.[itemKey]
+  const normalizedSurfaceId = normalizeUsageSurfaceId(surfaceId)
+  return usage[normalizedSurfaceId]?.[itemKey]
 }
 
 export function getUsageBucket(
   usage: LauncherUsageBySurface,
   surfaceId: LauncherSurfaceId,
 ): LauncherUsageBucket {
-  return usage[surfaceId] ?? {}
+  const normalizedSurfaceId = normalizeUsageSurfaceId(surfaceId)
+  return usage[normalizedSurfaceId] ?? {}
 }
 
 // ─── Legacy Migration ────────────────────────────────────────────────────────
@@ -130,7 +137,8 @@ export function migrateLegacyUsage(
   const result = emptyUsageBySurface()
   if (!legacy) return result
   for (const surfaceId of LAUNCHER_SURFACE_IDS) {
-    result[surfaceId] = migrateLegacyBucket(legacy[surfaceId], mapKey, baseTime)
+    const legacySource = surfaceId === 'editor-command-bar' ? 'command-palette' : surfaceId
+    result[surfaceId] = migrateLegacyBucket(legacy[legacySource], mapKey, baseTime)
   }
   return result
 }

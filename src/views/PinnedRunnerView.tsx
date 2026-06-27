@@ -81,7 +81,7 @@ export function PinnedRunnerView() {
   const pinnedLauncherItem = useMemo(() => {
     if (!pinned || pluginCommand) return undefined
     void pluginRegistryVersion
-    return collectStaticCandidates('command-palette').find((item) => item.systemKey === pinned.actionId)
+    return collectStaticCandidates('editor-command-bar').find((item) => item.systemKey === pinned.actionId)
       ?? collectStaticCandidates('global-launcher').find((item) => item.systemKey === pinned.actionId)
   }, [pinned?.actionId, pluginCommand, pluginRegistryVersion])
   const pinnedLauncherSettings = useMemo(() => {

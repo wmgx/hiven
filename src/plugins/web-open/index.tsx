@@ -119,7 +119,7 @@ export default definePlugin<WebQuickOpenSettings>({
   settings: {
     title: 'Web Quick Open',
     titleI18n: { zh: '网页快开' },
-    version: 2,
+    version: 3,
     defaultValue: DEFAULT_WEB_QUICK_OPEN_SETTINGS,
     migrate: migrateWebQuickOpenSettings,
     schema: {

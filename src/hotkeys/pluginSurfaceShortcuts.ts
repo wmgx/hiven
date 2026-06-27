@@ -8,6 +8,8 @@ import {
 } from '../workspace/pluginSurfaceShortcuts'
 import { useAppStore, type PluginSurfaceOpenTarget } from '../store'
 import { resolvePluginSettingsSource } from '../workspace/launcher/pluginSource'
+import { showPluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
+import type { PluginUiSurfaceContribution } from '../workspace/pluginTypes'
 
 type GlobalShortcutApi = typeof import('@tauri-apps/plugin-global-shortcut')
 
@@ -139,7 +141,7 @@ async function registerShortcut(
       if (event.state !== 'Pressed') return
       const latest = usePluginSurfaceShortcutStore.getState().shortcuts[key]
       if (!latest || !latest.enabled || normalizeAccelerator(latest.accelerator) !== accelerator) return
-      void requestOpenPluginSurfaceTool(shortcut.target)
+      void openPluginSurfaceShortcutTarget(latest.target)
     })
     if (generation !== syncGeneration) {
       await unregisterAccelerator(accelerator)
@@ -190,12 +192,27 @@ async function unregisterAccelerator(accelerator: string): Promise<void> {
 }
 
 function isBindableSurfaceTarget(target: PluginSurfaceOpenTarget): boolean {
+  return !!resolveBindableSurface(target)
+}
+
+function resolveBindableSurface(target: PluginSurfaceOpenTarget): PluginUiSurfaceContribution | null {
   const entry = pluginRegistry.getAllPluginDefinitions().find((candidate) => {
     if (candidate.pluginId !== target.pluginId) return false
     return resolvePluginSettingsSource(candidate.pluginId, candidate.source) === target.source
   })
   const surface = entry?.definition.ui?.surfaces?.find((item) => item.id === target.surfaceId)
-  return !!surface && surface.entry?.shortcutBindable !== false
+  if (!surface || surface.entry?.shortcutBindable === false) return null
+  return surface
+}
+
+async function openPluginSurfaceShortcutTarget(target: PluginSurfaceOpenTarget): Promise<void> {
+  const surface = resolveBindableSurface(target)
+  const shortcutPresentation = surface?.entry?.shortcutPresentation ?? 'launcher'
+  if (shortcutPresentation === 'window') {
+    await showPluginSurfaceWindow(target)
+    return
+  }
+  await requestOpenPluginSurfaceTool(target)
 }
 
 function missingShortcutPermissions(target: PluginSurfaceOpenTarget): string[] {

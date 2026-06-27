@@ -33,9 +33,12 @@ import {
   sanitizeSurfaces,
   findUnknownSurfaces,
 } from './identity'
+import { normalizeLauncherSurfaceId } from './types'
 import { createPluginLauncherApi, createPluginLauncherStorage } from './pluginApi'
 import { resolvePluginSettingsSource } from './pluginSource'
 import { adaptToolToLauncherItem } from './toolAdapter'
+import type { WorkAction, WorkActionProvider } from '../../workflow/workAction'
+import type { WorkObject, WorkObjectProvider } from '../../workflow/workObject'
 
 const DYNAMIC_QUERY_MAX_LENGTH = 500
 const DYNAMIC_PROVIDER_TIMEOUT_MS = 1000
@@ -48,6 +51,8 @@ let hostDynamicItemsProvider: ((ctx: {
   surfaceId: LauncherSurfaceId
   locale: Locale
 }) => Promise<LauncherItem[]> | LauncherItem[]) | null = null
+let workObjectProvider: WorkObjectProvider | null = null
+let workActionRegistry: WorkActionProvider | null = null
 
 /** Register a provider for host-owned launcher items (views/actions). */
 export function setHostLauncherItemsProvider(provider: () => LauncherItem[]): void {
@@ -67,11 +72,48 @@ export function getHostLauncherItems(): LauncherItem[] {
   return hostItemsProvider ? hostItemsProvider() : []
 }
 
+export function setWorkObjectProvider(provider: WorkObjectProvider | null): void {
+  workObjectProvider = provider
+}
+
+export function registerWorkObjectProvider(provider: WorkObjectProvider): void {
+  setWorkObjectProvider(provider)
+}
+
+export function getWorkObjectProvider(): WorkObjectProvider | null {
+  return workObjectProvider
+}
+
+export async function collectWorkObjects(ctx: {
+  query: string
+  surfaceId: LauncherSurfaceId
+}): Promise<WorkObject[]> {
+  if (!workObjectProvider) return []
+  return await Promise.resolve(workObjectProvider(ctx))
+}
+
+export function setWorkActionRegistry(provider: WorkActionProvider | null): void {
+  workActionRegistry = provider
+}
+
+export function registerWorkAction(provider: WorkActionProvider): void {
+  setWorkActionRegistry(provider)
+}
+
+export function getWorkActionRegistry(): WorkActionProvider | null {
+  return workActionRegistry
+}
+
+export async function collectWorkActions(object: WorkObject): Promise<WorkAction[]> {
+  if (!workActionRegistry) return []
+  return await Promise.resolve(workActionRegistry(object))
+}
+
 // ─── Surface filtering ───────────────────────────────────────────────────────
 
 function appearsOnSurface(item: LauncherItem, surfaceId: LauncherSurfaceId): boolean {
   if (!item.surfaces || item.surfaces.length === 0) return true
-  return item.surfaces.includes(surfaceId)
+  return item.surfaces.some((surface) => normalizeLauncherSurfaceId(surface) === surfaceId)
 }
 
 // ─── Plugin static items ─────────────────────────────────────────────────────
@@ -155,7 +197,7 @@ function resolvePluginSettingsItem(
       aliases: ['settings', 'preferences', 'extension settings', 'plugin settings', '设置', '偏好设置', pluginId],
     },
     behavior: { type: 'perform' },
-    surfaces: ['command-palette', 'global-launcher'],
+    surfaces: ['global-launcher'],
     pinnable: false,
     execute: async (ctx) => {
       const settingsState = usePluginSettingsStore.getState()

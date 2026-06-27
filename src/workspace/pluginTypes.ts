@@ -623,6 +623,7 @@ export type PluginSurfaceOpenContext<TSettings = unknown> = {
 export type PluginUiSurfaceContribution<TSettings = unknown> = {
   id: string
   kind: PluginUiSurfaceKind
+  instancePolicy?: 'singleton' | 'multi'
   title: string
   titleI18n?: Partial<Record<Locale, string>>
   icon?: string
@@ -633,6 +634,7 @@ export type PluginUiSurfaceContribution<TSettings = unknown> = {
     launcher?: boolean
     shortcutBindable?: boolean
     recommendedShortcut?: string
+    shortcutPresentation?: 'launcher' | 'window'
   }
   shell?: {
     defaultWidth?: number
@@ -640,6 +642,7 @@ export type PluginUiSurfaceContribution<TSettings = unknown> = {
     minWidth?: number
     minHeight?: number
     closeOnBlur?: boolean
+    destroyTimeout?: number
     resizable?: boolean
   }
 }

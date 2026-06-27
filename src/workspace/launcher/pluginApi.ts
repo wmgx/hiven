@@ -16,6 +16,7 @@ import { applyEffects, openExternalUrl } from '../effectRunner'
 import { useAppStore } from '../../store'
 import { createPluginPrivateStorage } from '../pluginStorage'
 import { getPluginPermissionSnapshot, requirePluginPermissions } from '../pluginPermissions'
+import { showEditorWindow } from '../windowManager/editorWindow'
 import type { FluxEffect, SerializedRange } from '../types'
 import type { PluginPermission } from '../pluginTypes'
 import type { PluginSettingsSource } from '../pluginSettingsStore'
@@ -84,15 +85,10 @@ async function showMainPanel(): Promise<void> {
   const effects: FluxEffect[] = [{ type: 'app.showMainPanel' }]
   if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
     try {
-      const [{ emitTo }, { invoke }] = await Promise.all([
-        import('@tauri-apps/api/event'),
-        import('@tauri-apps/api/core'),
-      ])
-      await emitTo('main', 'hiven://show-main-panel')
-      await invoke('show_and_focus_window')
+      await showEditorWindow()
       return
     } catch (error) {
-      console.warn('[launcher] failed to show main panel via Tauri:', error)
+      console.warn('[launcher] failed to show editor window via Tauri:', error)
     }
   }
   applyEffects(effects)
@@ -101,35 +97,25 @@ async function showMainPanel(): Promise<void> {
 async function showPluginsPage(): Promise<void> {
   if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
     try {
-      const [{ emitTo }, { invoke }] = await Promise.all([
-        import('@tauri-apps/api/event'),
-        import('@tauri-apps/api/core'),
-      ])
-      await emitTo('main', 'hiven://show-plugins-page')
-      await invoke('show_and_focus_window')
-      return
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('show_launcher_window')
     } catch (error) {
-      console.warn('[launcher] failed to show plugins page via Tauri:', error)
+      console.warn('[launcher] failed to focus launcher for plugins page:', error)
     }
   }
-  useAppStore.getState().setActiveView('scripts')
+  useAppStore.getState().openLauncherHostSurface('plugins')
 }
 
 async function showSettingsPage(): Promise<void> {
   if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
     try {
-      const [{ emitTo }, { invoke }] = await Promise.all([
-        import('@tauri-apps/api/event'),
-        import('@tauri-apps/api/core'),
-      ])
-      await emitTo('main', 'hiven://show-settings-page')
-      await invoke('show_and_focus_window')
-      return
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('show_launcher_window')
     } catch (error) {
-      console.warn('[launcher] failed to show settings page via Tauri:', error)
+      console.warn('[launcher] failed to focus launcher for settings page:', error)
     }
   }
-  useAppStore.getState().setActiveView('settings')
+  useAppStore.getState().openLauncherHostSurface('settings')
 }
 
 /**

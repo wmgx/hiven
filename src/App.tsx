@@ -12,6 +12,8 @@ const SettingsView = lazy(() => import('./views/SettingsView').then(m => ({ defa
 import { CommandPalette } from './components/CommandPalette'
 import { GlobalLauncher } from './components/GlobalLauncher'
 import { PluginSettingsDialog } from './components/PluginSettingsDialog'
+import { EditorWindowApp } from './windows/EditorWindowApp'
+import { PluginSurfaceWindowApp } from './windows/PluginSurfaceWindowApp'
 import { loadInstalledPluginsFromStore } from './workspace/pluginRuntime'
 import { registerBundledPluginPackages } from './workspace/bundledPluginLoader'
 import { initializePluginBackgrounds, setupBackgroundPermissionWatcher, setupBackgroundSettingsWatcher, stopAllPluginBackgrounds } from './workspace/pluginBackgroundManager'
@@ -82,10 +84,13 @@ function ViewContent({ viewId }: { viewId: ViewId }) {
 }
 
 export default function App() {
-  return isLauncherWindow() ? <LauncherWindowApp /> : <MainApp />
+  if (isLauncherWindow()) return <LauncherWindowApp />
+  if (isPluginSurfaceWindow()) return <PluginSurfaceWindowApp />
+  if (isEditorWindow()) return <EditorWindowApp />
+  return <LauncherWindowApp />
 }
 
-function MainApp() {
+export function MainApp() {
   const activeView = useAppStore((s) => s.activeView)
   const locale = useAppStore((s) => s.locale)
   const fontSize = useAppStore((s) => s.settings.fontSize)
@@ -590,6 +595,14 @@ async function rehydratePersistedAppState() {
 
 function isLauncherWindow() {
   return new URLSearchParams(window.location.search).get('window') === 'launcher'
+}
+
+function isPluginSurfaceWindow() {
+  return new URLSearchParams(window.location.search).get('window') === 'plugin-surface'
+}
+
+function isEditorWindow() {
+  return new URLSearchParams(window.location.search).get('window') === 'editor'
 }
 
 const LAUNCHER_POSITION_TTL_MS = 2 * 60 * 1000

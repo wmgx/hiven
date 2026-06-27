@@ -3,8 +3,9 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import { loader } from '@monaco-editor/react'
 
-if (new URLSearchParams(window.location.search).get('window') === 'launcher') {
-  document.documentElement.dataset.window = 'launcher'
+const windowKind = new URLSearchParams(window.location.search).get('window')
+if (windowKind === 'launcher' || windowKind === 'plugin-surface' || windowKind === 'editor') {
+  document.documentElement.dataset.window = windowKind
 }
 
 // 禁用浏览器右键菜单

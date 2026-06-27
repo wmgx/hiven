@@ -90,7 +90,7 @@ export default definePlugin<TranslateSettings>({
   settings: {
     title: 'Translate',
     titleI18n: { zh: '翻译' },
-    version: 1,
+    version: 2,
     defaultValue: DEFAULT_TRANSLATE_SETTINGS,
     schema: {
       sections: [

@@ -1,4 +1,5 @@
 import { useWorkspaceStore } from '../workspaceStore'
+import { showEditorWindow } from '../windowManager/editorWindow'
 import { translate } from '../../i18n'
 import type { LauncherItem, LauncherParamOption } from './types'
 
@@ -63,6 +64,23 @@ async function performSystemPowerAction(action: SystemPowerAction): Promise<{ ok
   }
 }
 
+async function showGlobalLauncherFromEditorCommandBar(): Promise<{ ok: boolean; message?: string }> {
+  try {
+    const { useAppStore } = await import('../../store')
+    useAppStore.getState().setCommandPaletteOpen(false)
+    useAppStore.getState().setGlobalLauncherOpen(true, 'full')
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('show_launcher_window')
+    } catch {
+      // Browser/dev overlay mode can still hand off through the store.
+    }
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : String(error) }
+  }
+}
+
 export function getHostSystemPowerItems(): LauncherItem[] {
   return [
     {
@@ -124,8 +142,8 @@ export function getHostPaneControlItems(): LauncherItem[] {
       display: {
         title: 'Editor',
         titleI18n: { zh: '编辑器' },
-        subtitle: 'Open the main workspace',
-        subtitleI18n: { zh: '打开主工作区' },
+        subtitle: 'Open the editor window',
+        subtitleI18n: { zh: '打开编辑器窗口' },
         icon: 'PanelTopOpen',
         aliases: ['main', 'home', 'editor', 'main-panel', '主面板', '编辑器'],
       },
@@ -133,10 +151,26 @@ export function getHostPaneControlItems(): LauncherItem[] {
       surfaces: ['global-launcher'],
       pinnable: false,
       legacyUsageKeys: ['show-main-panel', 'core-pane.show-main-panel'],
-      execute: async (ctx) => {
-        await ctx.api.showMainPanel()
+      execute: async () => {
+        await showEditorWindow()
         return { ok: true }
       },
+    },
+    {
+      systemKey: 'host:launcher:search-all-hiven',
+      kind: 'host',
+      display: {
+        title: 'Search all Hiven...',
+        titleI18n: { zh: '搜索整个 Hiven...' },
+        subtitle: 'Jump to the GlobalLauncher',
+        subtitleI18n: { zh: '切换到全局启动器' },
+        icon: 'Search',
+        aliases: ['global search', 'search all', 'launcher', 'hiven', '全局搜索'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['editor-command-bar'],
+      pinnable: false,
+      execute: async () => showGlobalLauncherFromEditorCommandBar(),
     },
     {
       systemKey: 'host:view:plugins',
@@ -150,12 +184,12 @@ export function getHostPaneControlItems(): LauncherItem[] {
         aliases: ['plugin', 'plugins', 'extension', 'extensions', 'scripts', 'plugin manager', '插件', '扩展'],
       },
       behavior: { type: 'perform' },
-      surfaces: ['command-palette', 'global-launcher'],
+      surfaces: ['global-launcher'],
       pinnable: false,
       legacyUsageKeys: ['show-plugins-page'],
       execute: async (ctx) => {
         await ctx.api.showPluginsPage()
-        return { ok: true }
+        return { ok: true, keepOpen: true }
       },
     },
     {
@@ -170,12 +204,32 @@ export function getHostPaneControlItems(): LauncherItem[] {
         aliases: ['setting', 'settings', 'preference', 'preferences', 'app settings', '设置', '偏好设置'],
       },
       behavior: { type: 'perform' },
-      surfaces: ['command-palette', 'global-launcher'],
+      surfaces: ['global-launcher'],
       pinnable: false,
       legacyUsageKeys: ['show-settings-page'],
       execute: async (ctx) => {
         await ctx.api.showSettingsPage()
-        return { ok: true }
+        return { ok: true, keepOpen: true }
+      },
+    },
+    {
+      systemKey: 'host:view:plugin-editor',
+      kind: 'host',
+      display: {
+        title: 'Plugin Editor',
+        titleI18n: { zh: '插件编辑器' },
+        subtitle: 'Open the plugin editor surface',
+        subtitleI18n: { zh: '打开插件编辑器 surface' },
+        icon: 'FileCode',
+        aliases: ['plugin editor', 'extension editor', 'dev plugin', '插件编辑器', '插件开发'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['global-launcher'],
+      pinnable: false,
+      execute: async () => {
+        const { useAppStore } = await import('../../store')
+        useAppStore.getState().openLauncherHostSurface('plugin-editor')
+        return { ok: true, keepOpen: true }
       },
     },
     {
@@ -300,7 +354,7 @@ export function getHostPaneControlItems(): LauncherItem[] {
         aliases: ['sticky-scroll', 'toggle-sticky-scroll', '层级吸顶', '吸顶'],
       },
       behavior: { type: 'perform' },
-      surfaces: ['command-palette'],
+      surfaces: ['editor-command-bar'],
       pinnable: false,
       legacyUsageKeys: ['core-pane.toggle-sticky-scroll'],
       execute: async (ctx) => {
@@ -328,7 +382,7 @@ export function getHostPaneControlItems(): LauncherItem[] {
         aliases: ['language', 'set-language', '语言'],
       },
       behavior: { type: 'perform' },
-      surfaces: ['command-palette'],
+      surfaces: ['editor-command-bar'],
       pinnable: false,
       legacyUsageKeys: ['core-pane.set-language'],
       params: [

@@ -112,7 +112,7 @@ export function adaptToolToLauncherItem(
       }),
     )
     if (
-      ctx.surfaceId === 'command-palette' &&
+      ctx.surfaceId === 'editor-command-bar' &&
       result.ok &&
       result.output?.choices.length === 1 &&
       result.output.choices[0]?.id === REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID

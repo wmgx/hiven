@@ -12,7 +12,7 @@
 
 import type { PluginSettingsSource } from '../pluginSettingsStore'
 import type { LauncherSurfaceId, SystemLauncherItemKey } from './types'
-import { isLauncherSurfaceId } from './types'
+import { normalizeLauncherSurfaceId } from './types'
 
 // ─── Key Generation ──────────────────────────────────────────────────────────
 
@@ -128,7 +128,7 @@ export function findUnknownSurfaces(surfaces: unknown): string[] {
   if (!Array.isArray(surfaces)) return ['<not-an-array>']
   const unknown: string[] = []
   for (const value of surfaces) {
-    if (!isLauncherSurfaceId(value)) unknown.push(String(value))
+    if (!normalizeLauncherSurfaceId(value)) unknown.push(String(value))
   }
   return unknown
 }
@@ -137,6 +137,8 @@ export function findUnknownSurfaces(surfaces: unknown): string[] {
 export function sanitizeSurfaces(surfaces: unknown): LauncherSurfaceId[] | undefined {
   if (surfaces == null) return undefined
   if (!Array.isArray(surfaces)) return undefined
-  const valid = surfaces.filter(isLauncherSurfaceId)
+  const valid = Array.from(new Set(surfaces
+    .map((surface) => normalizeLauncherSurfaceId(surface))
+    .filter((surface): surface is LauncherSurfaceId => surface != null)))
   return valid.length > 0 ? valid : undefined
 }

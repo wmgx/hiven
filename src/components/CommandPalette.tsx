@@ -1,25 +1,45 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type MutableRefObject, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState as useReactState, type KeyboardEvent, type MouseEvent, type MutableRefObject, type RefObject } from 'react'
 import { Check, ChevronLeft, Pin, Search } from 'lucide-react'
 import { localized, useAppStore } from '../store'
 import { t } from '../i18n'
-import { makePluginT } from '../i18n/pluginI18nRegistry'
 import { resolveIcon } from '../utils/resolveIcon'
-import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../utils/imeKeyboard'
-import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
-import { resolvePluginSettings } from '../workspace/pluginSettingsStore'
-import { LauncherController } from '../workspace/launcher/controller'
-import type { CollectInputFrame, LauncherControllerState, ParamInputFrame, ResultFrame } from '../workspace/launcher/controller'
-import { createPluginLauncherApi, createPluginLauncherStorage } from '../workspace/launcher/pluginApi'
-import { collectDynamicItems, collectStaticCandidates, filterDynamicForSurface } from '../workspace/launcher/registry'
-import { rankLauncherItems } from '../workspace/launcher/ranking'
+import { usePluginRegistryVersion } from '../workspace/pluginRegistry'
+import type { CollectInputFrame, ParamInputFrame, ResultFrame } from '../workspace/launcher/controller'
 import { resolveDisplaySubtitle, resolveDisplayTitle } from '../workspace/launcher/display'
-import { resolvePluginSettingsSource } from '../workspace/launcher/pluginSource'
 import { LauncherParamStep, resolveParamValueLabel } from './launcher/LauncherParamStep'
 import { getPlatformShortcutMeta, shouldCustomizeParams, supportsDefaultParamRun, supportsParamCustomization } from './launcher/launcherParamShortcuts'
-import type { ContributionSource } from '../workspace/pluginTypes'
 import type { LauncherItem as DomainLauncherItem, LauncherResultChoice, LauncherSurfaceId } from '../workspace/launcher/types'
+import type { LauncherHostConfig } from '../launcher/LauncherHostConfig'
+import { useLauncherSession } from '../launcher/useLauncherSession'
+import {
+  CollectInputStep as SharedCollectInputStep,
+  LauncherSearch,
+  LauncherShell,
+  ResultStep as SharedResultStep,
+} from '../launcher/ui'
 
 export function CommandPalette() {
+  return <EditorCommandBarHost />
+}
+
+const EDITOR_COMMAND_BAR_SURFACE_ID: LauncherSurfaceId = 'editor-command-bar'
+
+const EDITOR_COMMAND_BAR_HOST_CONFIG: LauncherHostConfig = {
+  hostId: EDITOR_COMMAND_BAR_SURFACE_ID,
+  capabilities: ['editor-actions', 'collect-input', 'param-input', 'result-choice'],
+  presentation: {
+    shellClassName: 'command-launcher-panel global-launcher-panel overflow-hidden outline-none palette-panel',
+    panelClassName: 'command-launcher-panel global-launcher-panel overflow-hidden outline-none palette-panel',
+    overlayZIndex: 1000,
+    topOffset: 54,
+  },
+  closeBehavior: {
+    restoreFocus: true,
+    requestClose: () => {},
+  },
+}
+
+export function EditorCommandBarHost() {
   const open = useAppStore((s) => s.commandPaletteOpen)
   const setOpen = useAppStore((s) => s.setCommandPaletteOpen)
   const pinPluginCommand = useAppStore((s) => s.pinPluginCommand)
@@ -27,130 +47,48 @@ export function CommandPalette() {
   const launcherUsageBySurface = useAppStore((s) => s.launcherUsageBySurface)
   const recordLauncherSelection = useAppStore((s) => s.recordLauncherSelection)
   const pluginRegistryVersion = usePluginRegistryVersion()
-
-  const [query, setQuery] = useState('')
-  const [selectedIndex, setSelectedIndex] = useState(0)
-  const [controllerState, setControllerState] = useState<LauncherControllerState | null>(null)
-  const [dynamicItems, setDynamicItems] = useState<DomainLauncherItem[]>([])
-  const inputRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
-  const controllerRef = useRef<LauncherController | null>(null)
-  const dynamicQueryRef = useRef('')
-  const isKeyboardNavRef = useRef(false)
-  const isImeComposingRef = useRef(false)
-  const previousFocusRef = useRef<HTMLElement | null>(null)
+  const sessionRef = useRef<{ restoreFocus: () => void } | null>(null)
 
-  useEffect(() => {
-    if (!open) return
-    previousFocusRef.current = document.activeElement as HTMLElement | null
-    let cancelled = false
-    queueMicrotask(() => {
-      if (cancelled) return
-      setQuery('')
-      setSelectedIndex(0)
-      setDynamicItems([])
-      dynamicQueryRef.current = ''
-
-      if (!controllerRef.current) {
-        controllerRef.current = new LauncherController({
-          surfaceId: 'command-palette' as LauncherSurfaceId,
-          api: createPluginLauncherApi(),
-          makeApi: (item) => {
-            const requestedPermissions = item.pluginId && item.source
-              ? pluginRegistry.getPluginPermissions(item.pluginId, item.source)
-              : []
-            return createPluginLauncherApi({
-              pluginId: item.pluginId,
-              source: item.source,
-              requestedPermissions,
-            })
-          },
-          getStorage: (item) => {
-            const requestedPermissions = item.pluginId && item.source
-              ? pluginRegistry.getPluginPermissions(item.pluginId, item.source)
-              : []
-            return createPluginLauncherStorage({
-              pluginId: item.pluginId,
-              source: item.source,
-              requestedPermissions,
-            })
-          },
-          locale,
-          makeT: (item) => makePluginT(item.pluginId ?? '', locale),
-          getSettings: (item) => {
-            if (!item.pluginId || !item.source) return undefined
-            const def = pluginRegistry.getPluginDefinition(item.pluginId, item.source)
-            const settingsContribution = def?.settings
-            if (!settingsContribution) return undefined
-            return resolvePluginSettings(item.source, item.pluginId, settingsContribution).value
-          },
-          recordSelection: (surfaceId, item) => {
-            recordLauncherSelection(surfaceId, item.systemKey)
-          },
-          requestClose: () => closePalette(),
-          onChange: (state) => setControllerState({ ...state }),
-        })
-      }
-      controllerRef.current.reset()
-      setTimeout(() => inputRef.current?.focus(), 50)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [locale, open, recordLauncherSelection, setOpen])
-
-  useEffect(() => {
-    if (!open) return
-    const q = query.trim()
-    if (!q) {
-      setDynamicItems([])
-      dynamicQueryRef.current = ''
-      return
-    }
-    dynamicQueryRef.current = q
-    const timer = setTimeout(async () => {
-      if (dynamicQueryRef.current !== q) return
-      const getSettingsForPlugin = (pluginId: string, source: ContributionSource) => {
-        const def = pluginRegistry.getPluginDefinition(pluginId, source)
-        const settingsContribution = def?.settings
-        if (!settingsContribution) return undefined
-        const settingsSource = resolvePluginSettingsSource(pluginId, source)
-        return resolvePluginSettings(settingsSource, pluginId, settingsContribution).value
-      }
-      const items = await collectDynamicItems(q, 'command-palette', locale, getSettingsForPlugin)
-      if (dynamicQueryRef.current !== q) return
-      setDynamicItems(filterDynamicForSurface(items, 'command-palette'))
-    }, 150)
-    return () => clearTimeout(timer)
-  }, [query, open, locale])
-
-  const rankedLauncherItems = useMemo<DomainLauncherItem[]>(() => {
-    void pluginRegistryVersion
-    const staticCandidates = collectStaticCandidates('command-palette')
-    const allCandidates = [...staticCandidates, ...dynamicItems]
-    return rankLauncherItems(
-      {
-        query: query.trim(),
-        locale,
-        surfaceId: 'command-palette',
-        usage: launcherUsageBySurface,
-        now: Date.now(),
-      },
-      allCandidates,
-    )
-  }, [query, locale, pluginRegistryVersion, dynamicItems, launcherUsageBySurface])
-
-  const topFrame = controllerState?.frames[controllerState.frames.length - 1]
-  const inControllerFrame = topFrame && topFrame.kind !== 'list'
-
-  function closePalette() {
+  const closePalette = useCallback(() => {
     setOpen(false)
-    const el = previousFocusRef.current
-    if (el && typeof el.focus === 'function') {
-      requestAnimationFrame(() => el.focus())
-    }
-    previousFocusRef.current = null
-  }
+    sessionRef.current?.restoreFocus()
+  }, [setOpen])
+
+  const hostConfig = useMemo<LauncherHostConfig>(() => ({
+    ...EDITOR_COMMAND_BAR_HOST_CONFIG,
+    closeBehavior: {
+      ...EDITOR_COMMAND_BAR_HOST_CONFIG.closeBehavior,
+      requestClose: closePalette,
+    },
+  }), [closePalette])
+
+  const session = useLauncherSession({
+    open,
+    hostConfig,
+    locale,
+    launcherUsageBySurface,
+    pluginRegistryVersion,
+    recordSelection: recordLauncherSelection,
+    focusDelay: 50,
+  })
+  useEffect(() => {
+    sessionRef.current = session
+  }, [session])
+
+  const {
+    controllerRef,
+    controllerState,
+    inControllerFrame,
+    inputRef,
+    isKeyboardNavRef,
+    query,
+    rankedLauncherItems,
+    selectedIndex,
+    setSearchQuery,
+    setSelectedIndex,
+    topFrame,
+  } = session
 
   function focusSearchInputAfterBack() {
     requestAnimationFrame(() => inputRef.current?.focus())
@@ -181,7 +119,7 @@ export function CommandPalette() {
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
+    if (session.shouldIgnoreKeyDown(event.nativeEvent)) return
     if (inControllerFrame) return
 
     if (event.key === 'Escape') {
@@ -207,99 +145,89 @@ export function CommandPalette() {
     }
   }
 
-  function handleCompositionStart() {
-    startImeComposition(isImeComposingRef)
-  }
-
-  function handleCompositionEnd() {
-    finishImeComposition(isImeComposingRef)
-  }
-
   if (!open) return null
 
   return (
-    <div
-      className={`fixed inset-0 flex items-start justify-center pt-[54px] z-50 palette-overlay ${open ? 'open' : ''}`}
+    <LauncherShell
+      open={open}
+      overlayClassName={`fixed inset-0 flex items-start justify-center pt-[54px] z-50 palette-overlay ${open ? 'open' : ''}`}
       style={{ pointerEvents: 'auto', visibility: 'visible', zIndex: 1000 }}
-      onClick={(event) => { if (event.target === event.currentTarget) closePalette() }}
+      panelRef={panelRef}
+      panelClassName={hostConfig.presentation.panelClassName}
+      onOverlayClick={(event) => { if (event.target === event.currentTarget) closePalette() }}
+      onKeyDown={handleKeyDown}
+      onCompositionStart={session.handleCompositionStart}
+      onCompositionEnd={session.handleCompositionEnd}
     >
-      <div
-        ref={panelRef}
-        tabIndex={-1}
-        className="command-launcher-panel global-launcher-panel overflow-hidden outline-none palette-panel"
-        onKeyDown={handleKeyDown}
-        onCompositionStart={handleCompositionStart}
-        onCompositionEnd={handleCompositionEnd}
-      >
-        {!inControllerFrame && (
-          <SearchStep
-            inputRef={inputRef}
-            query={query}
-            setQuery={(value) => { setQuery(value); setSelectedIndex(0) }}
-            items={rankedLauncherItems}
-            selectedIndex={selectedIndex}
-            selectItem={selectItem}
-            onPinItem={pinLauncherItem}
-            setSelectedIndex={setSelectedIndex}
-            isKeyboardNavRef={isKeyboardNavRef}
-            locale={locale}
-            error={controllerState?.error ?? null}
-            busy={controllerState?.busy ?? false}
-          />
-        )}
+      {!inControllerFrame && (
+        <LauncherSearch
+          inputRef={inputRef}
+          query={query}
+          setQuery={setSearchQuery}
+          items={rankedLauncherItems}
+          selectedIndex={selectedIndex}
+          selectItem={selectItem}
+          onPinItem={pinLauncherItem}
+          setSelectedIndex={setSelectedIndex}
+          isKeyboardNavigation={() => isKeyboardNavRef.current}
+          onMouseNavigation={() => { isKeyboardNavRef.current = false }}
+          locale={locale}
+          error={controllerState?.error ?? null}
+          busy={controllerState?.busy ?? false}
+        />
+      )}
 
-        {topFrame?.kind === 'collect-input' && (
-          <CollectInputStep
-            frame={topFrame as CollectInputFrame}
-            error={controllerState?.error ?? null}
-            busy={controllerState?.busy ?? false}
-            onInputChange={(text) => controllerRef.current?.setInputText(text)}
-            onSubmit={() => controllerRef.current?.submitInput()}
-            onBack={() => {
-              controllerRef.current?.back()
-              focusSearchInputAfterBack()
-            }}
-            locale={locale}
-          />
-        )}
+      {topFrame?.kind === 'collect-input' && (
+        <SharedCollectInputStep
+          frame={topFrame as CollectInputFrame}
+          error={controllerState?.error ?? null}
+          busy={controllerState?.busy ?? false}
+          onInputChange={(text) => controllerRef.current?.setInputText(text)}
+          onSubmit={() => controllerRef.current?.submitInput()}
+          onBack={() => {
+            controllerRef.current?.back()
+            focusSearchInputAfterBack()
+          }}
+          locale={locale}
+        />
+      )}
 
-        {topFrame?.kind === 'param-input' && (
-          <LauncherParamStep
-            frame={topFrame as ParamInputFrame}
-            error={controllerState?.error ?? null}
-            busy={controllerState?.busy ?? false}
-            locale={locale}
-            onQueryChange={(value) => controllerRef.current?.setParamQuery(value)}
-            onSelectedIndexChange={(index) => controllerRef.current?.setParamSelectedIndex(index)}
-            onCommit={(value) => { void controllerRef.current?.commitCurrentParam(value) }}
-            onBack={() => {
-              controllerRef.current?.back()
-              focusSearchInputAfterBack()
-            }}
-          />
-        )}
+      {topFrame?.kind === 'param-input' && (
+        <LauncherParamStep
+          frame={topFrame as ParamInputFrame}
+          error={controllerState?.error ?? null}
+          busy={controllerState?.busy ?? false}
+          locale={locale}
+          onQueryChange={(value) => controllerRef.current?.setParamQuery(value)}
+          onSelectedIndexChange={(index) => controllerRef.current?.setParamSelectedIndex(index)}
+          onCommit={(value) => { void controllerRef.current?.commitCurrentParam(value) }}
+          onBack={() => {
+            controllerRef.current?.back()
+            focusSearchInputAfterBack()
+          }}
+        />
+      )}
 
-        {topFrame?.kind === 'result' && (
-          <ResultStep
-            frame={topFrame as ResultFrame}
-            error={controllerState?.error ?? null}
-            busy={controllerState?.busy ?? false}
-            onActivateChoice={(choice) => controllerRef.current?.activateChoice(choice)}
-            onActivateSecondary={(choice, actionId) => controllerRef.current?.activateSecondary(choice, actionId)}
-            onSubmitSelection={(choices) => controllerRef.current?.submitResultSelection(choices)}
-            onBack={() => {
-              controllerRef.current?.back()
-              focusSearchInputAfterBack()
-            }}
-            locale={locale}
-          />
-        )}
-      </div>
-    </div>
+      {topFrame?.kind === 'result' && (
+        <SharedResultStep
+          frame={topFrame as ResultFrame}
+          error={controllerState?.error ?? null}
+          busy={controllerState?.busy ?? false}
+          onActivateChoice={(choice) => controllerRef.current?.activateChoice(choice)}
+          onActivateSecondary={(choice, actionId) => controllerRef.current?.activateSecondary(choice, actionId)}
+          onSubmitSelection={(choices) => controllerRef.current?.submitResultSelection(choices)}
+          onBack={() => {
+            controllerRef.current?.back()
+            focusSearchInputAfterBack()
+          }}
+          locale={locale}
+        />
+      )}
+    </LauncherShell>
   )
 }
 
-function SearchStep({
+export function SearchStep({
   inputRef,
   query,
   setQuery,
@@ -465,7 +393,7 @@ function LauncherActionItem({ item, selected, onClick, onPin, onMouseEnter, loca
   )
 }
 
-function CollectInputStep({ frame, error, busy, onInputChange, onSubmit, onBack, locale }: {
+export function CollectInputStep({ frame, error, busy, onInputChange, onSubmit, onBack, locale }: {
   frame: CollectInputFrame
   error: string | null
   busy: boolean
@@ -560,7 +488,7 @@ function CollectInputStep({ frame, error, busy, onInputChange, onSubmit, onBack,
   )
 }
 
-function ResultStep({ frame, error, busy, onActivateChoice, onActivateSecondary, onSubmitSelection, onBack, locale }: {
+type LegacyResultStepProps = {
   frame: ResultFrame
   error: string | null
   busy: boolean
@@ -569,34 +497,41 @@ function ResultStep({ frame, error, busy, onActivateChoice, onActivateSecondary,
   onSubmitSelection: (choices: LauncherResultChoice[]) => void
   onBack: () => void
   locale: import('../i18n').Locale
-}) {
-  const [selectedChoiceIndex, setSelectedChoiceIndex] = useState(0)
-  const [selectedChoiceIds, setSelectedChoiceIds] = useState<string[]>([])
+}
+
+export function ResultStep(props: LegacyResultStepProps) {
+  return <LegacyResultStepBody key={getLegacyResultFrameKey(props.frame)} {...props} />
+}
+
+function getLegacyResultFrameKey(frame: ResultFrame) {
   const choices = frame.output.choices ?? []
+  const selectionType = frame.output.selection?.type ?? 'single'
+  return `${frame.sourceTitle ?? ''}:${selectionType}:${choices.map((choice) => choice.id).join('|')}`
+}
+
+function LegacyResultStepBody({ frame, error, busy, onActivateChoice, onActivateSecondary, onSubmitSelection, onBack, locale }: LegacyResultStepProps) {
+  const [selectedChoiceIndex, setSelectedChoiceIndex] = useReactState(0)
+  const [selectedChoiceKeys, setSelectedChoiceKeys] = useReactState<string[]>([])
+  const choices = useMemo(() => frame.output.choices ?? [], [frame])
   const selection = frame.output.selection?.type === 'multi' ? frame.output.selection : null
-  const selectedChoices = choices.filter((choice) => selectedChoiceIds.includes(choice.id))
+  const selectedChoices = choices.filter((choice) => selectedChoiceKeys.includes(choice.id))
   const canSubmitSelection = selection
     ? selectedChoices.length >= selection.min && selectedChoices.length <= selection.max
     : false
 
-  useEffect(() => {
-    setSelectedChoiceIndex(0)
-    setSelectedChoiceIds([])
-  }, [frame])
-
-  function toggleChoice(choice: LauncherResultChoice) {
+  const toggleChoice = useCallback((choice: LauncherResultChoice) => {
     if (!selection || busy) return
-    setSelectedChoiceIds((current) => {
+    setSelectedChoiceKeys((current) => {
       if (current.includes(choice.id)) return current.filter((id) => id !== choice.id)
       if (current.length >= selection.max) return current
       return [...current, choice.id]
     })
-  }
+  }, [busy, selection, setSelectedChoiceKeys])
 
-  function submitSelection() {
+  const submitSelection = useCallback(() => {
     if (!selection || !canSubmitSelection || busy) return
     onSubmitSelection(selectedChoices)
-  }
+  }, [busy, canSubmitSelection, onSubmitSelection, selectedChoices, selection])
 
   useEffect(() => {
     function handleKeyDown(event: globalThis.KeyboardEvent) {
@@ -626,7 +561,7 @@ function ResultStep({ frame, error, busy, onActivateChoice, onActivateSecondary,
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [choices, selectedChoiceIndex, busy, onActivateChoice, onBack, selection, selectedChoices, canSubmitSelection])
+  }, [busy, choices, onActivateChoice, onBack, selectedChoiceIndex, selection, setSelectedChoiceIndex, submitSelection, toggleChoice])
 
   return (
     <>
@@ -641,11 +576,11 @@ function ResultStep({ frame, error, busy, onActivateChoice, onActivateSecondary,
       <div className="command-palette-results global-launcher-body l-list">
         {choices.map((choice, index) => {
           const isSelected = selectedChoiceIndex === index
-          const isChecked = selectedChoiceIds.includes(choice.id)
+          const isChecked = selectedChoiceKeys.includes(choice.id)
           return (
             <div
               key={choice.id}
-              className={`l-row global-launcher-result-row ${isSelected ? 'sel selected' : ''}`}
+              className={`l-row command-palette-choice-row ${isSelected ? 'sel selected' : ''}`}
               onClick={() => selection ? toggleChoice(choice) : onActivateChoice(choice)}
               onMouseEnter={() => setSelectedChoiceIndex(index)}
             >

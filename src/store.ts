@@ -30,6 +30,7 @@ import {
 migrateLocalStorageKey('fluxtext-settings', 'hiven-settings')
 
 export type ViewId = 'editor' | 'scripts' | 'plugin-editor' | 'pinned-runner' | 'settings'
+export type LauncherHostSurfaceId = 'settings' | 'plugins' | 'plugin-editor'
 
 export type ActionUsageSource =
   | 'command-palette'
@@ -207,9 +208,12 @@ interface AppState {
   globalLauncherOpen: boolean
   globalLauncherMode: GlobalLauncherMode
   globalLauncherOverlay: boolean
+  launcherHostSurface: LauncherHostSurfaceId | null
   setGlobalLauncherOpen: (open: boolean, mode?: GlobalLauncherMode) => void
   openGlobalLauncher: (mode: GlobalLauncherMode) => void
   openGlobalLauncherOverlay: (mode: GlobalLauncherMode) => void
+  openLauncherHostSurface: (surface: LauncherHostSurfaceId) => void
+  closeLauncherHostSurface: () => void
   pluginSurfaceToolTarget: PluginSurfaceOpenTarget | null
   openPluginSurfaceTool: (target: PluginSurfaceOpenTarget) => void
   clearPluginSurfaceTool: () => void
@@ -291,8 +295,12 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   activeView: 'editor',
   setActiveView: (view) => set(view === 'editor' ? { activeView: view } : { activeView: view, commandPaletteOpen: false }),
   pluginEditor: null,
-  openPluginEditor: (plugin) => set({ pluginEditor: plugin, activeView: 'plugin-editor', commandPaletteOpen: false }),
-  closePluginEditor: () => set({ pluginEditor: null, activeView: 'scripts', commandPaletteOpen: false }),
+  openPluginEditor: (plugin) => set((state) => state.globalLauncherOpen
+    ? { pluginEditor: plugin, launcherHostSurface: 'plugin-editor', commandPaletteOpen: false }
+    : { pluginEditor: plugin, activeView: 'plugin-editor', commandPaletteOpen: false }),
+  closePluginEditor: () => set((state) => state.globalLauncherOpen
+    ? { pluginEditor: null, launcherHostSurface: 'plugins', commandPaletteOpen: false }
+    : { pluginEditor: null, activeView: 'scripts', commandPaletteOpen: false }),
 
   // Pinned Action / Live Runner
   pinnedActions: [],
@@ -445,6 +453,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   globalLauncherOpen: false,
   globalLauncherMode: 'full',
   globalLauncherOverlay: false,
+  launcherHostSurface: null,
   pluginSurfaceToolTarget: null,
   setGlobalLauncherOpen: (open, mode) => set((state) => ({
     globalLauncherOpen: open,
@@ -453,6 +462,13 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   })),
   openGlobalLauncher: (mode) => set({ globalLauncherOpen: true, globalLauncherMode: mode }),
   openGlobalLauncherOverlay: (mode) => set({ globalLauncherOpen: true, globalLauncherMode: mode, globalLauncherOverlay: true }),
+  openLauncherHostSurface: (surface) => set({
+    launcherHostSurface: surface,
+    globalLauncherOpen: true,
+    globalLauncherMode: 'full',
+    globalLauncherOverlay: false,
+  }),
+  closeLauncherHostSurface: () => set({ launcherHostSurface: null }),
   openPluginSurfaceTool: (target) => set({ pluginSurfaceToolTarget: target }),
   clearPluginSurfaceTool: () => set({ pluginSurfaceToolTarget: null }),
 
@@ -584,14 +600,22 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     }
     // Restore persisted launcher usage; ensure both surfaces exist.
     const persistedLauncherUsage = persistedState.launcherUsageBySurface
+    const persistedLauncherUsageRecord = persistedLauncherUsage as
+      | (Partial<LauncherUsageBySurface> & Record<string, LauncherUsageBySurface[keyof LauncherUsageBySurface] | undefined>)
+      | undefined
     const hasPersistedLauncherUsage =
       persistedLauncherUsage != null &&
-      (Object.keys(persistedLauncherUsage['command-palette'] ?? {}).length > 0 ||
-        Object.keys(persistedLauncherUsage['global-launcher'] ?? {}).length > 0)
+      (Object.keys(persistedLauncherUsageRecord?.['command-palette'] ?? {}).length > 0 ||
+        Object.keys(persistedLauncherUsageRecord?.['editor-command-bar'] ?? {}).length > 0 ||
+        Object.keys(persistedLauncherUsageRecord?.['global-launcher'] ?? {}).length > 0)
     if (hasPersistedLauncherUsage) {
       merged.launcherUsageBySurface = {
         ...emptyUsageBySurface(),
-        ...persistedLauncherUsage,
+        'editor-command-bar': {
+          ...(persistedLauncherUsageRecord?.['command-palette'] ?? {}),
+          ...(persistedLauncherUsageRecord?.['editor-command-bar'] ?? {}),
+        },
+        'global-launcher': persistedLauncherUsageRecord?.['global-launcher'] ?? {},
       }
     } else if (merged.actionUsageBySource) {
       // First run after migration: seed launcher usage from legacy action usage.

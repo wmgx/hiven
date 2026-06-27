@@ -154,6 +154,7 @@ assert.match(bgManager, /restartPluginBackground/, 'Must restart on settings cha
 // ─── 5. GlobalLauncher surface rendering ─────────────────────────────────────
 
 const launcher = read('src/components/GlobalLauncher.tsx')
+const pluginSurfaceRenderer = read('src/components/pluginSurface/PluginSurfaceRenderer.tsx')
 
 // Surface frame state
 assert.match(launcher, /surfaceFrame.*setSurfaceFrame/, 'Must have surfaceFrame state')
@@ -162,39 +163,39 @@ assert.match(launcher, /surfaceFrame.*setSurfaceFrame/, 'Must have surfaceFrame 
 assert.match(launcher, /plugin-surface:/, 'Must check for plugin-surface systemKey')
 assert.match(launcher, /openPluginSurface\(\{\s*source,\s*pluginId,\s*surfaceId\s*\}\)/, 'Must open plugin surfaces through the pre-open activation path')
 
-// Renders surface component
-assert.match(launcher, /SurfaceComponent/, 'Must render surface component')
-assert.match(launcher, /PluginSurfaceErrorBoundary/, 'Must wrap in error boundary')
-assert.match(launcher, /beforeOpen\?\.\(/, 'GlobalLauncher must run plugin surface beforeOpen hooks before activation')
+// Renders through the shared surface renderer
+assert.match(launcher, /PluginSurfaceRenderer|resolvePluginSurface/, 'Must render plugin surfaces through shared renderer')
+assert.match(pluginSurfaceRenderer, /PluginSurfaceErrorBoundary|getDerivedStateFromError|componentDidCatch|fallback|try\s*\{|catch\s*\(/, 'Shared plugin surface renderer must provide an error boundary or fallback handling')
+assert.match(pluginSurfaceRenderer, /beforeOpen\?\.\(|surface\.beforeOpen\s*\(\s*\{/, 'Shared plugin surface renderer must run plugin surface beforeOpen hooks before activation')
 assert.match(launcher, /setSurfaceFrame\(target\)/, 'GlobalLauncher must activate plugin surfaces after the pre-open hook completes')
 
 // Passes all required props
-assert.match(launcher, /pluginId.*surfaceFrame/, 'Must pass pluginId from surfaceFrame')
-assert.match(launcher, /surfaceId.*surfaceFrame/, 'Must pass surfaceId from surfaceFrame')
-assert.match(launcher, /source.*surfaceFrame|surfaceFrame.*source/, 'Must keep source in surfaceFrame')
+assert.match(launcher, /target=\{surfaceFrame\}/, 'Must pass source/pluginId/surfaceId through surfaceFrame target')
 assert.doesNotMatch(launcher, /resolvePluginSettings\('builtin'/, 'Must not hard-code builtin settings for surfaces')
-assert.match(launcher, /hostStorage\s*=\s*createPluginPrivateStorage/, 'Must create host storage once for surface API')
-assert.match(launcher, /storage:\s*hostStorage/, 'Must provide storage in host API')
-assert.match(launcher, /clipboard:\s*createPluginClipboard/, 'Must provide clipboard in host API')
-assert.match(launcher, /paste:\s*createPluginPaste/, 'Must provide paste in host API')
-assert.match(launcher, /clipboard:\s*createPluginClipboard\([^)]*hostStorage\)/, 'Surface clipboard must share host storage')
-assert.match(launcher, /paste:\s*createPluginPaste\([^)]*hostStorage\)/, 'Surface paste must share host storage')
-assert.match(launcher, /PluginSurfacePermissionGate/, 'Must render a host permission gate before protected surface body')
+assert.match(pluginSurfaceRenderer, /createPluginPrivateStorage/, 'Shared plugin surface renderer must create storage for surface API')
+assert.match(pluginSurfaceRenderer, /storage,/, 'Shared plugin surface renderer must provide storage in host API')
+assert.match(pluginSurfaceRenderer, /const clipboard = useMemo[\s\S]*createPluginClipboard/, 'Shared plugin surface renderer must create clipboard for surface API')
+assert.match(pluginSurfaceRenderer, /const paste = useMemo[\s\S]*createPluginPaste/, 'Shared plugin surface renderer must create paste for surface API')
+assert.match(pluginSurfaceRenderer, /\n\s*clipboard,\n/, 'Shared plugin surface renderer must provide clipboard in host API')
+assert.match(pluginSurfaceRenderer, /\n\s*paste,\n/, 'Shared plugin surface renderer must provide paste in host API')
+assert.match(pluginSurfaceRenderer, /createPluginClipboard\([^)]*storage\)/, 'Surface clipboard must share surface storage')
+assert.match(pluginSurfaceRenderer, /createPluginPaste\([^)]*storage\)/, 'Surface paste must share surface storage')
+assert.match(pluginSurfaceRenderer, /PluginSurfacePermissionGate/, 'Shared plugin surface renderer must render a host permission gate before protected surface body')
 assert.match(launcher, /global-launcher-surface-shell/, 'Must wrap surface body in a host-owned shell')
 assert.match(launcher, /surfaceFocusVersion|focusSurface/, 'Must hand focus to opened surface')
 
 // Host API methods
-assert.match(launcher, /close:\s*requestSurfaceClose/, 'Host must provide close() through the surface system API bridge')
-assert.match(launcher, /requestBack:\s*requestSurfaceBack/, 'Host must provide requestBack() through the surface system API bridge')
+assert.match(pluginSurfaceRenderer, /close:\s*onClose/, 'Shared plugin surface renderer must provide close() through the surface system API bridge')
+assert.match(pluginSurfaceRenderer, /requestBack:\s*onBack/, 'Shared plugin surface renderer must provide requestBack() through the surface system API bridge')
 assert.match(launcher, /PLUGIN_SURFACE_BACK_EVENT|hiven:plugin-surface-back/, 'Surface back API must route through a host-owned event')
 assert.match(launcher, /PLUGIN_SURFACE_CLOSE_EVENT|hiven:plugin-surface-close/, 'Surface close API must route through a host-owned event')
-assert.match(launcher, /openSettings:\s*\(\)/, 'Host must provide openSettings()')
-assert.match(launcher, /showMessage/, 'Host must provide showMessage()')
+assert.match(pluginSurfaceRenderer, /openSettings:\s*onOpenSettings/, 'Shared plugin surface renderer must provide openSettings()')
+assert.match(pluginSurfaceRenderer, /showMessage/, 'Shared plugin surface renderer must provide showMessage()')
 
 // Esc goes back from surface
 assert.match(launcher, /surfaceFrame[\s\S]*setSurfaceFrame\(null\)/, 'Esc must go back from surface')
 assert.match(launcher, /handleHostEscape[\s\S]*window\.addEventListener\(['"]keydown['"],\s*handleHostEscape,\s*true\)/, 'Host must capture Escape for plugin surfaces')
-assert.match(launcher, /resetLauncherSession[\s\S]*setSurfaceFrame\(null\)[\s\S]*controllerRef\.current\?\.reset\(\)/, 'Closing the launcher must reset surface and controller state')
+assert.match(launcher, /resetLauncherSession[\s\S]*setSurfaceFrame\(null\)[\s\S]*(controllerRef\.current\?\.reset\(\)|sessionRef\.current\?\.resetSession\(\))/, 'Closing the launcher must reset surface and controller state')
 
 // ─── 6. App.tsx initializes background manager ───────────────────────────────
 

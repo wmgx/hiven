@@ -30,7 +30,7 @@ export type PluginSettingsDialogTarget = {
   source: PluginSettingsSource
   presentation?: 'dialog' | 'global-launcher'
   context?: {
-    surfaceId?: 'command-palette' | 'global-launcher'
+    surfaceId?: 'editor-command-bar' | 'global-launcher'
   }
 } | null
 

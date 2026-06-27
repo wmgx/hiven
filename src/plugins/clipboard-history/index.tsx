@@ -150,6 +150,7 @@ export default definePlugin<ClipboardHistorySettings>({
           launcher: true,
           shortcutBindable: true,
           recommendedShortcut: 'CmdOrCtrl+Shift+V',
+          shortcutPresentation: 'window',
         },
         shell: {
           defaultWidth: 900,

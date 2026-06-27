@@ -19,19 +19,36 @@ import type { Locale } from '../../i18n'
 import type { PluginPrivateStorageApi } from '../pluginTypes'
 import type { FluxEffect } from '../types'
 import type { EffectRunnerResult } from '../effectRunner'
+import type { WorkObject } from '../../workflow/workObject'
 
 // ─── System Surfaces ───────────────────────────────────────────────────────
 
-/** The two system launcher surfaces in the first version. */
-export type LauncherSurfaceId = 'command-palette' | 'global-launcher'
+/** First-class launcher hosts. */
+export type LauncherHostId = 'editor-command-bar' | 'global-launcher'
+
+/** Legacy host id accepted only at boundaries and normalized immediately. */
+export type LegacyLauncherSurfaceId = 'command-palette'
+
+export type LauncherSurfaceId = LauncherHostId
+export type LauncherSurfaceInputId = LauncherSurfaceId | LegacyLauncherSurfaceId
 
 export const LAUNCHER_SURFACE_IDS: readonly LauncherSurfaceId[] = [
-  'command-palette',
+  'editor-command-bar',
   'global-launcher',
 ] as const
 
+export function normalizeLauncherSurfaceId(value: LegacyLauncherSurfaceId): 'editor-command-bar'
+export function normalizeLauncherSurfaceId(value: LauncherSurfaceId): LauncherSurfaceId
+export function normalizeLauncherSurfaceId(value: LauncherSurfaceInputId): LauncherSurfaceId
+export function normalizeLauncherSurfaceId(value: unknown): LauncherSurfaceId | undefined
+export function normalizeLauncherSurfaceId(value: unknown): LauncherSurfaceId | undefined {
+  if (value === 'command-palette') return 'editor-command-bar'
+  if (value === 'editor-command-bar' || value === 'global-launcher') return value
+  return undefined
+}
+
 export function isLauncherSurfaceId(value: unknown): value is LauncherSurfaceId {
-  return value === 'command-palette' || value === 'global-launcher'
+  return value === 'editor-command-bar' || value === 'global-launcher'
 }
 
 // ─── System Identity ───────────────────────────────────────────────────────
@@ -265,7 +282,7 @@ export type LauncherItemContribution<TSettings = unknown> = {
   display: LauncherItemDisplay
   behavior?: LauncherBehavior
   /** Restrict where the item appears. Missing = both main surfaces. */
-  surfaces?: LauncherSurfaceId[]
+  surfaces?: LauncherSurfaceInputId[]
   /** Whether this item can be pinned. Defaults to true for static items. */
   pinnable?: boolean
   inputPolicy?: TextInputPolicy
@@ -307,6 +324,8 @@ export type LauncherItemContributionKind = 'plugin' | 'host' | 'dynamic'
 export type LauncherItem = {
   systemKey: SystemLauncherItemKey
   kind: LauncherItemContributionKind
+  /** Object-backed launcher item used by the WorkObject migration model. */
+  workObject?: WorkObject
   pluginId?: string
   source?: 'builtin' | 'installed' | 'dev'
   display: LauncherItemDisplay
@@ -358,7 +377,7 @@ export type LauncherUsageBySurface = Record<LauncherSurfaceId, LauncherUsageBuck
 // ─── Tool-First API (preferred plugin authoring layer) ───────────────────────
 
 export type ToolLauncherOptions = {
-  surfaces?: LauncherSurfaceId[]
+  surfaces?: LauncherSurfaceInputId[]
   pinnable?: boolean
 }
 

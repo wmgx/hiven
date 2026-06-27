@@ -26,6 +26,37 @@ static INSTALLED_APP_TARGETS: OnceLock<Mutex<HashMap<String, String>>> = OnceLoc
 static PLUGIN_KV_DB: OnceLock<Result<Mutex<Connection>, String>> = OnceLock::new();
 const MAX_APP_ICON_CACHE_WARM_COUNT: usize = 20;
 
+#[derive(Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PluginSurfaceWindowOptions {
+    source: String,
+    plugin_id: String,
+    surface_id: String,
+    title: Option<String>,
+    width: Option<f64>,
+    height: Option<f64>,
+    min_width: Option<f64>,
+    min_height: Option<f64>,
+    resizable: Option<bool>,
+    close_on_blur: Option<bool>,
+    destroy_timeout: Option<u64>,
+}
+
+#[derive(Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HidePluginSurfaceWindowOptions {
+    label: String,
+    destroy_timeout: Option<u64>,
+}
+
+#[derive(Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EditorWindowOptions {
+    initial_text: Option<String>,
+    language: Option<String>,
+    title: Option<String>,
+}
+
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 enum SystemPowerAction {
@@ -162,20 +193,20 @@ fn show_and_focus_window(app: tauri::AppHandle) {
     {
         let app_clone = app.clone();
         let _ = app.run_on_main_thread(move || {
-            show_and_focus_main_window(&app_clone);
+            show_and_focus_editor_window(&app_clone);
         });
     }
     #[cfg(not(target_os = "macos"))]
     {
-        show_and_focus_main_window(&app);
+        show_and_focus_editor_window(&app);
     }
 }
 
-fn show_and_focus_main_window(app: &tauri::AppHandle) {
+fn show_and_focus_editor_window(app: &tauri::AppHandle) {
     use tauri::Manager;
 
     // Clear saved foreground app so that a subsequent hide_launcher_window
-    // won't restore focus away from the main window we're about to show.
+    // won't restore focus away from the editor window we're about to show.
     if let Ok(mut stored) = previous_foreground_process_id().lock() {
         *stored = None;
     }
@@ -186,10 +217,15 @@ fn show_and_focus_main_window(app: &tauri::AppHandle) {
 
     activate_app();
 
-    if let Some(window) = app.get_webview_window("main") {
+    if let Some(window) = app.get_webview_window("editor") {
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
+    } else {
+        let app_clone = app.clone();
+        tauri::async_runtime::spawn(async move {
+            let _ = open_editor_window_from_hotkey(app_clone).await;
+        });
     }
 }
 
@@ -320,6 +356,203 @@ async fn hide_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
         }
     })
     .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn show_plugin_surface_window(
+    app: tauri::AppHandle,
+    options: PluginSurfaceWindowOptions,
+) -> Result<(), String> {
+    use tauri::Manager;
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    let app_clone = app.clone();
+    app.run_on_main_thread(move || {
+        let label = plugin_surface_window_label(&options.source, &options.plugin_id, &options.surface_id);
+        let result = (|| -> Result<(), String> {
+            let window = if let Some(window) = app_clone.get_webview_window(&label) {
+                window
+            } else {
+                let url = format!(
+                    "index.html?window=plugin-surface&source={}&pluginId={}&surfaceId={}",
+                    encode_query_component(&options.source),
+                    encode_query_component(&options.plugin_id),
+                    encode_query_component(&options.surface_id)
+                );
+                let mut builder = tauri::WebviewWindowBuilder::new(
+                    &app_clone,
+                    label.as_str(),
+                    tauri::WebviewUrl::App(url.into()),
+                )
+                .title(options.title.clone().unwrap_or_else(|| options.plugin_id.clone()))
+                .inner_size(options.width.unwrap_or(900.0), options.height.unwrap_or(640.0))
+                .decorations(true)
+                .visible(false)
+                .focused(true)
+                .resizable(options.resizable.unwrap_or(true));
+
+                if let (Some(min_width), Some(min_height)) = (options.min_width, options.min_height) {
+                    builder = builder.min_inner_size(min_width, min_height);
+                }
+
+                builder.build().map_err(|error| error.to_string())?
+            };
+
+            let _ = options.close_on_blur;
+            let _ = options.destroy_timeout;
+            activate_app();
+            window.show().map_err(|error| error.to_string())?;
+            let _ = window.unminimize();
+            window.set_focus().map_err(|error| error.to_string())
+        })();
+        let _ = tx.send(result);
+    })
+    .map_err(|error| error.to_string())?;
+
+    rx.recv().map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn hide_plugin_surface_window(
+    app: tauri::AppHandle,
+    options: HidePluginSurfaceWindowOptions,
+) -> Result<(), String> {
+    use tauri::Manager;
+
+    let label = options.label.clone();
+    let destroy_timeout = options.destroy_timeout;
+    let (tx, rx) = std::sync::mpsc::channel();
+    let app_clone = app.clone();
+    app.run_on_main_thread(move || {
+        let result = app_clone
+            .get_webview_window(&label)
+            .map(|window| window.hide().map_err(|error| error.to_string()))
+            .unwrap_or(Ok(()));
+        let _ = tx.send(result);
+    })
+    .map_err(|error| error.to_string())?;
+    rx.recv().map_err(|error| error.to_string())??;
+
+    if let Some(timeout) = destroy_timeout.filter(|value| *value > 0) {
+        let app_clone = app.clone();
+        let label = options.label;
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(timeout)).await;
+            let app_for_thread = app_clone.clone();
+            let _ = app_clone.run_on_main_thread(move || {
+                if let Some(window) = app_for_thread.get_webview_window(&label) {
+                    let visible = window.is_visible().unwrap_or(false);
+                    if !visible {
+                        let _ = window.close();
+                    }
+                }
+            });
+        });
+    }
+
+    Ok(())
+}
+
+fn plugin_surface_window_label(source: &str, plugin_id: &str, surface_id: &str) -> String {
+    format!("plugin-surface:{}:{}:{}", source, plugin_id, surface_id)
+}
+
+#[tauri::command]
+async fn show_editor_window(
+    app: tauri::AppHandle,
+    options: Option<EditorWindowOptions>,
+) -> Result<(), String> {
+    use tauri::Manager;
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    let app_clone = app.clone();
+    app.run_on_main_thread(move || {
+        let result = (|| -> Result<(), String> {
+            let window = if let Some(window) = app_clone.get_webview_window("editor") {
+                window
+            } else {
+                let mut query = String::from("index.html?window=editor");
+                if let Some(options) = options.as_ref() {
+                    if let Some(language) = options.language.as_ref().filter(|value| !value.is_empty()) {
+                        query.push_str("&language=");
+                        query.push_str(&encode_query_component(language));
+                    }
+                    if let Some(title) = options.title.as_ref().filter(|value| !value.is_empty()) {
+                        query.push_str("&title=");
+                        query.push_str(&encode_query_component(title));
+                    }
+                    if let Some(initial_text) = options.initial_text.as_ref().filter(|value| !value.is_empty() && value.len() <= 2048) {
+                        query.push_str("&initialText=");
+                        query.push_str(&encode_query_component(initial_text));
+                    }
+                }
+                tauri::WebviewWindowBuilder::new(
+                    &app_clone,
+                    "editor",
+                    tauri::WebviewUrl::App(query.into()),
+                )
+                .title(
+                    options
+                        .as_ref()
+                        .and_then(|value| value.title.clone())
+                        .filter(|value| !value.is_empty())
+                        .unwrap_or_else(|| "Hiven Editor".to_string()),
+                )
+                .inner_size(1180.0, 760.0)
+                .min_inner_size(860.0, 560.0)
+                .decorations(true)
+                .visible(false)
+                .focused(true)
+                .resizable(true)
+                .build()
+                .map_err(|error| error.to_string())?
+            };
+
+            activate_app();
+            window.show().map_err(|error| error.to_string())?;
+            let _ = window.unminimize();
+            window.set_focus().map_err(|error| error.to_string())
+        })();
+        let _ = tx.send(result);
+    })
+    .map_err(|error| error.to_string())?;
+
+    rx.recv().map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn close_editor_window(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    let app_clone = app.clone();
+    app.run_on_main_thread(move || {
+        let result = app_clone
+            .get_webview_window("editor")
+            .map(|window| window.close().map_err(|error| error.to_string()))
+            .unwrap_or(Ok(()));
+        let _ = tx.send(result);
+    })
+    .map_err(|error| error.to_string())?;
+
+    rx.recv().map_err(|error| error.to_string())?
+}
+
+async fn open_editor_window_from_hotkey(app: tauri::AppHandle) -> Result<(), String> {
+    show_editor_window(app, None).await
+}
+
+fn encode_query_component(input: &str) -> String {
+    let mut encoded = String::new();
+    for byte in input.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                encoded.push(byte as char)
+            }
+            _ => encoded.push_str(&format!("%{:02X}", byte)),
+        }
+    }
+    encoded
 }
 
 #[tauri::command]
@@ -2945,6 +3178,10 @@ pub fn run() {
             show_and_focus_window,
             show_launcher_window,
             hide_launcher_window,
+            show_plugin_surface_window,
+            hide_plugin_surface_window,
+            show_editor_window,
+            close_editor_window,
             simulate_paste,
             current_foreground_app_name,
             discover_installed_apps,
@@ -2957,9 +3194,12 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             let _ = (&app, &event); // suppress unused warnings on non-macOS
+            if let tauri::RunEvent::ExitRequested { ref api, .. } = event {
+                api.prevent_exit();
+            }
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = event {
-                show_and_focus_main_window(app);
+                show_launcher_window_for_hotkey(app.clone()).ok();
             }
         });
 }
