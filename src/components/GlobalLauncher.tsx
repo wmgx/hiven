@@ -398,11 +398,12 @@ export function GlobalLauncher() {
     if (!open || !standaloneLauncher) return
     if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
 
+    const closeOnBlur = activeSurfaceFrame?.surface.shell?.closeOnBlur
     let disposed = false
     let unlisten: (() => void) | undefined
     import('@tauri-apps/api/window')
       .then(({ getCurrentWindow }) => getCurrentWindow().onFocusChanged(({ payload: focused }) => {
-        if (!focused) closeLauncher()
+        if (!focused && closeOnBlur !== false) closeLauncher()
       }))
       .then((cleanup) => {
         if (disposed) cleanup()
@@ -415,7 +416,7 @@ export function GlobalLauncher() {
       disposed = true
       unlisten?.()
     }
-  }, [closeLauncher, open, standaloneLauncher])
+  }, [activeSurfaceFrame?.surface.shell?.closeOnBlur, closeLauncher, open, standaloneLauncher])
 
   const clampedSelectedIndex = Math.min(selectedIndex, Math.max(0, visibleFiltered.length - 1))
   const selectedItem = visibleFiltered.length === 1 ? visibleFiltered[0] : visibleFiltered[clampedSelectedIndex]
@@ -1264,7 +1265,7 @@ const LauncherListItem = memo(function LauncherListItem({
   return (
     <button
       ref={ref}
-      className={`l-row w-full border-none text-left ${selected ? 'sel selected' : ''}`}
+      className={`l-row cmd-item w-full border-none text-left ${selected ? 'sel selected' : ''}`}
       onClick={() => onSelect(item)}
       onMouseEnter={onMouseEnter}
     >

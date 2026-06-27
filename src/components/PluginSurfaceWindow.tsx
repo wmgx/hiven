@@ -1,4 +1,4 @@
-import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react'
+import { Component, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { localized, useAppStore, type PluginSurfaceOpenTarget } from '../store'
 import { t, type Locale } from '../i18n'
@@ -11,17 +11,25 @@ import { createPluginPrivateStorage } from '../workspace/pluginStorage'
 import { createPluginClipboard } from '../workspace/pluginClipboard'
 import { createPluginPaste } from '../workspace/pluginPaste'
 import { createPluginNetwork } from '../workspace/pluginNetwork'
-import { loadInstalledPluginsFromStore } from '../workspace/pluginRuntime'
-import { registerBundledPluginPackages } from '../workspace/bundledPluginLoader'
-import { registerHostLauncherProviders } from '../workspace/launcher/hostProvider'
-import { pluginSurfaceWindowCloseOnBlur, pluginSurfaceWindowDestroyTimeout } from '../workspace/pluginSurfaceWindows'
-import { initConfigDir } from '../configInit'
+import { ensurePluginRuntimeReady } from '../workspace/pluginRuntimeBootstrap'
 import { PluginSettingsDialog } from './PluginSettingsDialog'
-import type { PluginDefinition, PluginPermission } from '../workspace/pluginTypes'
+import type { PluginDefinition, PluginPermission, PluginPermissionSnapshot, PluginUiSurfaceContribution } from '../workspace/pluginTypes'
 import './PluginSurfaceWindow.css'
 
-registerHostLauncherProviders()
-registerBundledPluginPackages()
+type ResolvedSurfaceWindow = {
+  definition: PluginDefinition<unknown>
+  surface: PluginUiSurfaceContribution<unknown>
+  permissions: PluginPermissionSnapshot
+  missingPermissions: PluginPermission[]
+}
+
+type SurfaceWindowState =
+  | { status: 'loading-runtime' }
+  | { status: 'surface-not-found'; message: string }
+  | ({ status: 'permission-gate' } & ResolvedSurfaceWindow)
+  | ({ status: 'before-open' } & ResolvedSurfaceWindow)
+  | ({ status: 'ready' } & ResolvedSurfaceWindow)
+  | { status: 'error'; title: string; message: string }
 
 export function PluginSurfaceWindow() {
   const locale = useAppStore((s) => s.locale)
@@ -30,59 +38,89 @@ export function PluginSurfaceWindow() {
   const permissionVersion = usePluginPermissionStore((s) => s.version)
   const grantPluginPermissions = usePluginPermissionStore((s) => s.grantPermissions)
   const openSettingsDialog = usePluginSettingsStore((s) => s.openSettingsDialog)
-  const [runtimeReady, setRuntimeReady] = useState(false)
-  const [runtimeError, setRuntimeError] = useState<string | null>(null)
-  const destroyTimerRef = useRef<number | undefined>(undefined)
   const target = useMemo(() => parseTargetFromUrl(), [])
+  const [surfaceState, setSurfaceState] = useState<SurfaceWindowState>(
+    target
+      ? { status: 'loading-runtime' }
+      : { status: 'surface-not-found', message: 'Invalid plugin surface target' },
+  )
 
   useEffect(() => {
     let disposed = false
-    initConfigDir()
-      .then(() => loadInstalledPluginsFromStore())
-      .catch((error) => {
-        if (!disposed) setRuntimeError(error instanceof Error ? error.message : String(error))
-      })
-      .finally(() => {
-        if (!disposed) setRuntimeReady(true)
-      })
-    return () => { disposed = true }
-  }, [])
 
-  useEffect(() => {
-    if (!target || !isTauriRuntime()) return
-    let disposed = false
-    const clearDestroyTimer = () => {
-      if (destroyTimerRef.current !== undefined) {
-        window.clearTimeout(destroyTimerRef.current)
-        destroyTimerRef.current = undefined
-      }
-    }
-    const scheduleDestroy = () => {
-      clearDestroyTimer()
-      destroyTimerRef.current = window.setTimeout(() => {
-        destroyTimerRef.current = undefined
-        void getCurrentWindow().destroy().catch(() => undefined)
-      }, pluginSurfaceWindowDestroyTimeout(target))
-    }
-
-    const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
-      if (disposed) return
-      if (focused) {
-        clearDestroyTimer()
+    async function openSurfaceWindow() {
+      if (!target) {
+        setSurfaceState({ status: 'surface-not-found', message: 'Invalid plugin surface target' })
         return
       }
-      if (pluginSurfaceWindowCloseOnBlur(target)) {
-        void getCurrentWindow().hide().catch(() => undefined)
-        scheduleDestroy()
-      }
-    })
 
-    return () => {
-      disposed = true
-      clearDestroyTimer()
-      void unlisten.then((cleanup) => cleanup()).catch(() => undefined)
+      setSurfaceState({ status: 'loading-runtime' })
+
+      try {
+        await ensurePluginRuntimeReady()
+        if (disposed) return
+
+        const definition = pluginRegistry.getPluginDefinition(target.pluginId, target.source) as PluginDefinition<unknown> | undefined
+        const surface = definition?.ui?.surfaces?.find((item) => item.id === target.surfaceId) as PluginUiSurfaceContribution<unknown> | undefined
+        if (!definition || !surface) {
+          setSurfaceState({ status: 'surface-not-found', message: `${target.pluginId}:${target.surfaceId}` })
+          return
+        }
+
+        const requestedPermissions = pluginRegistry.getPluginPermissions(target.pluginId, target.source)
+        const permissions = getPluginPermissionSnapshot(target.source, target.pluginId, requestedPermissions)
+        const missingPermissions = missingPluginPermissions(permissions, requestedPermissions)
+        const resolved: ResolvedSurfaceWindow = {
+          definition,
+          surface,
+          permissions,
+          missingPermissions,
+        }
+
+        if (missingPermissions.length > 0) {
+          setSurfaceState({ status: 'permission-gate', ...resolved })
+          return
+        }
+
+        setSurfaceState({ status: 'before-open', ...resolved })
+
+        const settingsContribution = definition.settings
+        const settings = settingsContribution ? resolvePluginSettings(target.source, target.pluginId, settingsContribution).value : {}
+        const storage = createPluginPrivateStorage(target.source, target.pluginId, permissions)
+        const pluginT = makePluginT(target.pluginId, locale)
+
+        await surface.beforeOpen?.({
+          pluginId: target.pluginId,
+          surfaceId: target.surfaceId,
+          source: target.source,
+          locale,
+          t: pluginT,
+          settings,
+          permissions,
+          storage,
+          clipboard: createPluginClipboard(target.pluginId, permissions, storage),
+          paste: createPluginPaste(permissions, storage),
+          network: createPluginNetwork(permissions),
+        })
+
+        if (!disposed) {
+          setSurfaceState({ status: 'ready', ...resolved })
+        }
+      } catch (error) {
+        if (!disposed) {
+          setSurfaceState({
+            status: 'error',
+            title: 'Plugin surface failed to open',
+            message: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
     }
-  }, [target])
+
+    void openSurfaceWindow()
+
+    return () => { disposed = true }
+  }, [target, pluginRegistryVersion, permissionVersion, locale])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -92,89 +130,55 @@ export function PluginSurfaceWindow() {
       void hideCurrentWindow()
     }
     window.addEventListener('keydown', onKeyDown, true)
-    return () => window.removeEventListener('keydown', onKeyDown, true)
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true)
+      document.removeEventListener('keydown', onKeyDown, true)
+    }
   }, [])
-
-  void pluginRegistryVersion
-  void permissionVersion
-
-  const resolved = useMemo(() => {
-    if (!target) return null
-    const definition = pluginRegistry.getPluginDefinition(target.pluginId, target.source) as PluginDefinition<unknown> | undefined
-    const surface = definition?.ui?.surfaces?.find((item) => item.id === target.surfaceId)
-    return definition && surface ? { definition, surface } : null
-  }, [target, pluginRegistryVersion])
-
-  useEffect(() => {
-    if (!target || !resolved || !runtimeReady) return
-    const requestedPermissions = pluginRegistry.getPluginPermissions(target.pluginId, target.source)
-    const permissions = getPluginPermissionSnapshot(target.source, target.pluginId, requestedPermissions)
-    if (missingPluginPermissions(permissions, requestedPermissions).length > 0) return
-
-    let disposed = false
-    const settingsContribution = resolved.definition.settings
-    const settings = settingsContribution ? resolvePluginSettings(target.source, target.pluginId, settingsContribution).value : {}
-    const storage = createPluginPrivateStorage(target.source, target.pluginId, permissions)
-    const pluginT = makePluginT(target.pluginId, locale)
-
-    Promise.resolve(resolved.surface.beforeOpen?.({
-      pluginId: target.pluginId,
-      surfaceId: target.surfaceId,
-      source: target.source,
-      locale,
-      t: pluginT,
-      settings,
-      permissions,
-      storage,
-      clipboard: createPluginClipboard(target.pluginId, permissions, storage),
-      paste: createPluginPaste(permissions, storage),
-      network: createPluginNetwork(permissions),
-    })).catch((error) => {
-      if (!disposed) console.warn(`[hiven] Plugin surface beforeOpen failed for "${target.pluginId}:${target.surfaceId}":`, error)
-    })
-
-    return () => { disposed = true }
-  }, [target, resolved, runtimeReady, locale])
 
   if (!target) {
     return <WindowMessage title="Invalid plugin surface target" />
   }
-  if (!runtimeReady) {
+  if (surfaceState.status === 'loading-runtime') {
     return <WindowMessage title="Loading plugin surface…" />
   }
-  if (runtimeError) {
-    return <WindowMessage title="Plugin runtime failed" message={runtimeError} />
+  if (surfaceState.status === 'error') {
+    return <WindowMessage title={surfaceState.title} message={surfaceState.message} />
   }
-  if (!resolved) {
-    return <WindowMessage title="Plugin surface not found" message={`${target.pluginId}:${target.surfaceId}`} />
+  if (surfaceState.status === 'surface-not-found') {
+    return <WindowMessage title="Plugin surface not found" message={surfaceState.message} />
+  }
+  if (surfaceState.status === 'before-open') {
+    return <WindowMessage title="Opening plugin surface…" />
   }
 
-  const requestedPermissions = pluginRegistry.getPluginPermissions(target.pluginId, target.source)
-  const permissions = getPluginPermissionSnapshot(target.source, target.pluginId, requestedPermissions)
-  const missingPermissions = missingPluginPermissions(permissions, requestedPermissions)
-  const settingsContribution = resolved.definition.settings
+  const settingsContribution = surfaceState.definition.settings
   const settings = settingsContribution ? resolvePluginSettings(target.source, target.pluginId, settingsContribution).value : {}
   const pluginT = makePluginT(target.pluginId, locale)
-  const hostStorage = createPluginPrivateStorage(target.source, target.pluginId, permissions)
-  const SurfaceComponent = resolved.surface.component
-  const title = localized(resolved.surface.title, resolved.surface.titleI18n, locale)
+  const hostStorage = createPluginPrivateStorage(target.source, target.pluginId, surfaceState.permissions)
+  const SurfaceComponent = surfaceState.surface.component
+  const title = localized(surfaceState.surface.title, surfaceState.surface.titleI18n, locale)
+  const usesPluginTitlebar = surfaceState.surface.shell?.rendersTitlebar === true
 
   return (
     <div className="flux-spatial-shell plugin-surface-window-shell" data-theme={theme}>
       <div className="plugin-surface-window-frame">
-        <div className="plugin-surface-window-titlebar" data-tauri-drag-region>
-          <div className="plugin-surface-window-title" data-tauri-drag-region>{title}</div>
-          <button className="plugin-surface-window-close" type="button" onClick={() => { void hideCurrentWindow() }}>×</button>
-        </div>
+        {!usesPluginTitlebar && (
+          <div className="plugin-surface-window-titlebar" data-tauri-drag-region>
+            <div className="plugin-surface-window-title" data-tauri-drag-region>{title}</div>
+            <button className="plugin-surface-window-close" type="button" onClick={() => { void hideCurrentWindow() }}>×</button>
+          </div>
+        )}
         <PluginSurfaceErrorBoundary pluginId={target.pluginId} onBack={() => { void hideCurrentWindow() }}>
           <div className="plugin-surface-window-body">
-            {missingPermissions.length > 0 ? (
+            {surfaceState.status === 'permission-gate' ? (
               <PluginSurfacePermissionGate
-                permissions={missingPermissions}
+                permissions={surfaceState.missingPermissions}
                 locale={locale}
                 onBack={() => { void hideCurrentWindow() }}
                 onGrant={() => {
-                  grantPluginPermissions(target.source, target.pluginId, missingPermissions)
+                  grantPluginPermissions(target.source, target.pluginId, surfaceState.missingPermissions)
                   void restartPluginBackground(target.pluginId, target.source)
                 }}
               />
@@ -185,7 +189,7 @@ export function PluginSurfaceWindow() {
                 locale={locale}
                 t={pluginT}
                 settings={settings}
-                permissions={permissions}
+                permissions={surfaceState.permissions}
                 host={{
                   close: () => { void hideCurrentWindow() },
                   requestBack: () => { void hideCurrentWindow() },
@@ -206,9 +210,9 @@ export function PluginSurfaceWindow() {
                     })
                   },
                   storage: hostStorage,
-                  clipboard: createPluginClipboard(target.pluginId, permissions, hostStorage),
-                  paste: createPluginPaste(permissions, hostStorage),
-                  network: createPluginNetwork(permissions),
+                  clipboard: createPluginClipboard(target.pluginId, surfaceState.permissions, hostStorage),
+                  paste: createPluginPaste(surfaceState.permissions, hostStorage),
+                  network: createPluginNetwork(surfaceState.permissions),
                 }}
               />
             )}

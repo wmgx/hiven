@@ -533,6 +533,21 @@ export type PluginNetworkApi = {
 
 export type PluginUiSurfaceKind = 'custom-view'
 
+export type PluginSurfaceInstancePolicy = 'singleton' | 'multi'
+
+export type PluginSurfaceShortcutPresentation = 'launcher' | 'window'
+
+export type PluginSurfaceShell = {
+  defaultWidth?: number
+  defaultHeight?: number
+  minWidth?: number
+  minHeight?: number
+  closeOnBlur?: boolean
+  destroyTimeout?: number
+  resizable?: boolean
+  rendersTitlebar?: boolean
+}
+
 export type PluginSurfaceHostApi = {
   close(): void
   requestBack(): void
@@ -577,19 +592,14 @@ export type PluginUiSurfaceContribution<TSettings = unknown> = {
   aliases?: string[]
   component: ComponentType<PluginSurfaceProps<TSettings>>
   beforeOpen?(ctx: PluginSurfaceOpenContext<TSettings>): Promise<void> | void
+  instancePolicy?: PluginSurfaceInstancePolicy
   entry?: {
     launcher?: boolean
     shortcutBindable?: boolean
     recommendedShortcut?: string
+    shortcutPresentation?: PluginSurfaceShortcutPresentation
   }
-  shell?: {
-    defaultWidth?: number
-    defaultHeight?: number
-    minWidth?: number
-    minHeight?: number
-    closeOnBlur?: boolean
-    resizable?: boolean
-  }
+  shell?: PluginSurfaceShell
 }
 
 export type PluginUiContribution<TSettings = unknown> = {

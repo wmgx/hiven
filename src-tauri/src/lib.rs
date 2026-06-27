@@ -9,21 +9,26 @@ use std::os::raw::{c_char, c_int, c_void};
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::sync::{Mutex, OnceLock};
-#[cfg(target_os = "macos")]
-use std::time::Duration;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
 use tauri::Emitter;
 use tauri::LogicalSize;
+use tauri::Manager;
 use zip::ZipArchive;
 
 pub mod hotkeys;
 
 const LAUNCHER_COMPACT_WIDTH: f64 = 660.0;
 const LAUNCHER_COMPACT_HEIGHT: f64 = 294.0;
+const PLUGIN_SURFACE_WINDOW_DEFAULT_WIDTH: f64 = 900.0;
+const PLUGIN_SURFACE_WINDOW_DEFAULT_HEIGHT: f64 = 640.0;
+const PLUGIN_SURFACE_WINDOW_DEFAULT_MIN_WIDTH: f64 = 320.0;
+const PLUGIN_SURFACE_WINDOW_DEFAULT_MIN_HEIGHT: f64 = 240.0;
+const PLUGIN_SURFACE_WINDOW_DEFAULT_DESTROY_TIMEOUT_MS: u64 = 120_000;
 static PREVIOUS_FOREGROUND_PROCESS_ID: OnceLock<Mutex<Option<u32>>> = OnceLock::new();
 static INSTALLED_APP_TARGETS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 static PLUGIN_KV_DB: OnceLock<Result<Mutex<Connection>, String>> = OnceLock::new();
+static PLUGIN_SURFACE_WINDOW_TOKENS: OnceLock<Mutex<HashMap<String, u64>>> = OnceLock::new();
 const MAX_APP_ICON_CACHE_WARM_COUNT: usize = 20;
 
 #[derive(serde::Deserialize)]
@@ -321,6 +326,218 @@ async fn hide_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
     })
     .map_err(|error| error.to_string())
 }
+
+#[tauri::command(rename_all = "camelCase")]
+async fn show_plugin_surface_window(
+    app: tauri::AppHandle,
+    source: String,
+    plugin_id: String,
+    surface_id: String,
+    title: Option<String>,
+    width: Option<f64>,
+    height: Option<f64>,
+    min_width: Option<f64>,
+    min_height: Option<f64>,
+    resizable: Option<bool>,
+    close_on_blur: Option<bool>,
+    destroy_timeout_ms: Option<u64>,
+) -> Result<(), String> {
+    let label = plugin_surface_window_label(&source, &plugin_id, &surface_id);
+    let url = plugin_surface_window_url(&source, &plugin_id, &surface_id);
+    let title = title.unwrap_or_else(|| surface_id.clone());
+    let width = width.unwrap_or(PLUGIN_SURFACE_WINDOW_DEFAULT_WIDTH);
+    let height = height.unwrap_or(PLUGIN_SURFACE_WINDOW_DEFAULT_HEIGHT);
+    let min_width = min_width.unwrap_or(PLUGIN_SURFACE_WINDOW_DEFAULT_MIN_WIDTH);
+    let min_height = min_height.unwrap_or(PLUGIN_SURFACE_WINDOW_DEFAULT_MIN_HEIGHT);
+    let resizable = resizable.unwrap_or(true);
+    let close_on_blur = close_on_blur.unwrap_or(true);
+    let destroy_timeout_ms =
+        destroy_timeout_ms.unwrap_or(PLUGIN_SURFACE_WINDOW_DEFAULT_DESTROY_TIMEOUT_MS);
+
+    touch_plugin_surface_window(&label);
+    let window = if let Some(window) = app.get_webview_window(&label) {
+        let _ = window.set_size(LogicalSize::new(width, height));
+        window
+    } else {
+        let window =
+            tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App(url.into()))
+                .title(title)
+                .inner_size(width, height)
+                .min_inner_size(min_width, min_height)
+                .decorations(false)
+                .transparent(true)
+                .shadow(false)
+                .resizable(resizable)
+                .focused(true)
+                .skip_taskbar(false)
+                .center()
+                .build()
+                .map_err(|error| error.to_string())?;
+
+        attach_plugin_surface_window_events(
+            &window,
+            app.clone(),
+            label.clone(),
+            close_on_blur,
+            destroy_timeout_ms,
+        );
+        window
+    };
+
+    show_and_focus_plugin_surface_window(&app, &window)
+}
+
+fn plugin_surface_window_label(source: &str, plugin_id: &str, surface_id: &str) -> String {
+    format!("plugin-surface:{source}:{plugin_id}:{surface_id}")
+}
+
+fn plugin_surface_window_url(source: &str, plugin_id: &str, surface_id: &str) -> String {
+    format!(
+        "index.html?window=plugin-surface&source={}&pluginId={}&surfaceId={}",
+        url_query_encode(source),
+        url_query_encode(plugin_id),
+        url_query_encode(surface_id)
+    )
+}
+
+fn url_query_encode(value: &str) -> String {
+    let mut encoded = String::new();
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                encoded.push(byte as char)
+            }
+            _ => encoded.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    encoded
+}
+
+fn plugin_surface_window_tokens() -> &'static Mutex<HashMap<String, u64>> {
+    PLUGIN_SURFACE_WINDOW_TOKENS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn touch_plugin_surface_window(label: &str) -> u64 {
+    let Ok(mut tokens) = plugin_surface_window_tokens().lock() else {
+        return 0;
+    };
+    let token = tokens.get(label).copied().unwrap_or(0).wrapping_add(1);
+    tokens.insert(label.to_string(), token);
+    token
+}
+
+fn current_plugin_surface_window_token(label: &str) -> Option<u64> {
+    plugin_surface_window_tokens()
+        .lock()
+        .ok()
+        .and_then(|tokens| tokens.get(label).copied())
+}
+
+fn clear_plugin_surface_window_token(label: &str) {
+    if let Ok(mut tokens) = plugin_surface_window_tokens().lock() {
+        tokens.remove(label);
+    }
+}
+
+fn attach_plugin_surface_window_events(
+    window: &tauri::WebviewWindow,
+    app: tauri::AppHandle,
+    label: String,
+    close_on_blur: bool,
+    destroy_timeout_ms: u64,
+) {
+    window.on_window_event(move |event| match event {
+        tauri::WindowEvent::Focused(false) if close_on_blur => {
+            let token = touch_plugin_surface_window(&label);
+            if let Some(window) = app.get_webview_window(&label) {
+                let _ = window.hide();
+            }
+            restore_launcher_level(&app);
+            schedule_plugin_surface_window_destroy(
+                app.clone(),
+                label.clone(),
+                token,
+                destroy_timeout_ms,
+            );
+        }
+        tauri::WindowEvent::Destroyed => {
+            clear_plugin_surface_window_token(&label);
+            restore_launcher_level(&app);
+        }
+        _ => {}
+    });
+}
+
+fn schedule_plugin_surface_window_destroy(
+    app: tauri::AppHandle,
+    label: String,
+    token: u64,
+    destroy_timeout_ms: u64,
+) {
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(destroy_timeout_ms));
+        if current_plugin_surface_window_token(&label) != Some(token) {
+            return;
+        }
+        if let Some(window) = app.get_webview_window(&label) {
+            let _ = window.destroy();
+        }
+        clear_plugin_surface_window_token(&label);
+    });
+}
+
+fn show_and_focus_plugin_surface_window(app: &tauri::AppHandle, window: &tauri::WebviewWindow) -> Result<(), String> {
+    let app_clone = app.clone();
+    let window_clone = window.clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let result = (|| {
+            demote_launcher_level(&app_clone);
+            window_clone.show().map_err(|error| error.to_string())?;
+            let _ = window_clone.unminimize();
+            window_clone.set_focus().map_err(|error| error.to_string())
+        })();
+        let _ = tx.send(result);
+    })
+    .map_err(|error| error.to_string())?;
+    rx.recv().map_err(|error| error.to_string())?
+}
+
+#[cfg(target_os = "macos")]
+fn demote_launcher_level(app: &tauri::AppHandle) {
+    if let Some(launcher) = app.get_webview_window("launcher") {
+        if let Ok(ns_window) = launcher.ns_window() {
+            if !ns_window.is_null() {
+                unsafe {
+                    let ns_window = ns_window as *mut objc2::runtime::AnyObject;
+                    const NORMAL_WINDOW_LEVEL: i64 = 0;
+                    let _: () = objc2::msg_send![ns_window, setLevel: NORMAL_WINDOW_LEVEL];
+                }
+            }
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn demote_launcher_level(_app: &tauri::AppHandle) {}
+
+#[cfg(target_os = "macos")]
+fn restore_launcher_level(app: &tauri::AppHandle) {
+    if let Some(launcher) = app.get_webview_window("launcher") {
+        if let Ok(ns_window) = launcher.ns_window() {
+            if !ns_window.is_null() {
+                unsafe {
+                    let ns_window = ns_window as *mut objc2::runtime::AnyObject;
+                    const STATUS_WINDOW_LEVEL: i64 = 25;
+                    let _: () = objc2::msg_send![ns_window, setLevel: STATUS_WINDOW_LEVEL];
+                }
+            }
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn restore_launcher_level(_app: &tauri::AppHandle) {}
 
 #[tauri::command]
 async fn simulate_paste() -> Result<(), String> {
@@ -2945,6 +3162,7 @@ pub fn run() {
             show_and_focus_window,
             show_launcher_window,
             hide_launcher_window,
+            show_plugin_surface_window,
             simulate_paste,
             current_foreground_app_name,
             discover_installed_apps,

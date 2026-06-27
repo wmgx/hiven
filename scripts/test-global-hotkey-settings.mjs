@@ -303,6 +303,14 @@ check('App global keydown handler ignores shortcut recorder events', () => {
   )
 })
 
+check('launcher runtime installs the global pinned launcher hotkey coordinator', () => {
+  assertHas(
+    files.app,
+    /function LauncherWindowApp[\s\S]*installGlobalPinnedLauncherHotkeys\(\)/,
+    'LauncherWindowApp should install global pinned launcher hotkeys because launcher is the default runtime window',
+  )
+})
+
 check('global shortcut sync only unregisters its own configured accelerator', () => {
   assertDoesNotHave(
     files.globalPinnedLauncherHotkeys,

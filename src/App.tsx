@@ -88,8 +88,8 @@ export default function App() {
 function MainApp() {
   const activeView = useAppStore((s) => s.activeView)
   const locale = useAppStore((s) => s.locale)
-  const fontSize = useAppStore((s) => s.settings.fontSize)
-  const theme = useAppStore((s) => s.settings.theme)
+  const settings = useAppStore((s) => s.settings)
+  const fontSize = settings.fontSize
   const prunePinnedRuntimes = useAppStore((s) => s.prunePinnedRuntimes)
   const prevViewRef = useRef<ViewId>(activeView)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -314,7 +314,7 @@ function MainApp() {
     import('@tauri-apps/api/app')
       .then(async ({ setTheme }) => {
         if (disposed) return
-        await setTheme(theme)
+        await setTheme(settings.theme)
       })
       .catch((error) => {
         console.warn('[hiven] Failed to sync native window theme:', error)
@@ -322,7 +322,7 @@ function MainApp() {
     return () => {
       disposed = true
     }
-  }, [theme])
+  }, [settings.theme])
 
   // Direction-aware view transition
   useEffect(() => {
@@ -356,7 +356,7 @@ function MainApp() {
   return (
     <div
       className="flux-spatial-shell"
-      data-theme={theme}
+      data-theme={settings.theme}
       style={{ fontSize }}
     >
       <div className="flux-main">
@@ -404,6 +404,30 @@ function LauncherWindowApp() {
     const suppressProgrammaticMove = () => suppressNextLauncherMovePersistence()
     window.addEventListener(LAUNCHER_PROGRAMMATIC_MOVE_EVENT, suppressProgrammaticMove)
     return () => window.removeEventListener(LAUNCHER_PROGRAMMATIC_MOVE_EVENT, suppressProgrammaticMove)
+  }, [])
+
+  useEffect(() => installGlobalPinnedLauncherHotkeys(), [])
+  useEffect(() => installPluginSurfaceShortcutHotkeys(), [])
+
+  useEffect(() => {
+    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    import('@tauri-apps/api/event')
+      .then(({ listen }) => listen('hiven://route-global-pinned-launcher-shortcut', () => {
+        void routeGlobalPinnedLauncherShortcut()
+      }))
+      .then((cleanup) => {
+        if (disposed) cleanup()
+        else unlisten = cleanup
+      })
+      .catch((error) => {
+        console.warn('[hiven] Failed to listen for global launcher route event:', error)
+      })
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
   }, [])
 
   useEffect(() => {
@@ -498,6 +522,19 @@ function LauncherWindowApp() {
             }
             return
           }
+          const persistLauncherWindowPosition = async (nextPosition: typeof position) => {
+            const scaleFactor = await win.scaleFactor()
+            const logicalPosition = nextPosition.toLogical(scaleFactor)
+            useAppStore.getState().updateSetting('globalLauncherWindowPosition', {
+              x: logicalPosition.x,
+              y: logicalPosition.y,
+              lastDraggedAt: Date.now(),
+              screenWidth: window.screen.width,
+              screenHeight: window.screen.height,
+            })
+            useAppStore.getState().updateSetting('globalLauncherWindowPositionSource', 'user')
+          }
+
           // Throttle: only persist position at most every 150ms
           lastMovePayload = position
           if (moveThrottleTimer !== undefined) return
@@ -506,16 +543,7 @@ function LauncherWindowApp() {
             const pos = lastMovePayload as typeof position
             if (!pos) return
             try {
-              const scaleFactor = await win.scaleFactor()
-              const logicalPosition = pos.toLogical(scaleFactor)
-              useAppStore.getState().updateSetting('globalLauncherWindowPosition', {
-                x: logicalPosition.x,
-                y: logicalPosition.y,
-                lastDraggedAt: Date.now(),
-                screenWidth: window.screen.width,
-                screenHeight: window.screen.height,
-              })
-              useAppStore.getState().updateSetting('globalLauncherWindowPositionSource', 'user')
+              await persistLauncherWindowPosition(pos)
             } catch (error) {
               console.warn('[hiven] Failed to persist launcher window position:', error)
             }

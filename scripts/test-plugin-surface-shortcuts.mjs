@@ -17,10 +17,14 @@ const files = {
   globalPinnedHotkeys: read('src/hotkeys/globalPinnedLauncher.ts'),
   surfaceHotkeys: read('src/hotkeys/pluginSurfaceShortcuts.ts'),
   surfaceShortcutStore: read('src/workspace/pluginSurfaceShortcuts.ts'),
+  pluginTypes: read('src/workspace/pluginTypes.ts'),
+  clipboardHistory: read('src/plugins/clipboard-history/index.tsx'),
   surfaceOpenRequest: read('src/workspace/pluginSurfaceOpenRequest.ts'),
   globalLauncher: read('src/components/GlobalLauncher.tsx'),
+  pluginSurfaceWindow: read('src/components/PluginSurfaceWindow.tsx'),
   scriptsView: read('src/views/ScriptsView.tsx'),
   scriptsI18n: read('src/i18n/locales/scripts.ts'),
+  tauriLib: read('src-tauri/src/lib.rs'),
 }
 
 const packageJson = JSON.parse(files.packageJson)
@@ -42,10 +46,76 @@ assert.match(files.surfaceOpenRequest, /show_launcher_window/, 'surface open req
 assert.match(files.surfaceOpenRequest, /hiven:\/\/open-plugin-surface/, 'surface open request must emit the open surface event')
 assert.match(files.surfaceOpenRequest, /localStorage\.setItem/, 'surface open request must persist a pending target for newly created launcher windows')
 
-assert.match(files.app, /installPluginSurfaceShortcutHotkeys/, 'main app must install plugin surface shortcut hotkeys')
+assert.match(files.app, /installPluginSurfaceShortcutHotkeys/, 'app must import plugin surface shortcut hotkeys')
+assert.match(
+  files.app,
+  /function LauncherWindowApp[\s\S]*installPluginSurfaceShortcutHotkeys\(\)/,
+  'launcher runtime must install plugin surface shortcut hotkeys because launcher is the default runtime window',
+)
 assert.match(files.app, /consumePendingPluginSurfaceOpenTarget/, 'launcher window must consume pending surface open targets')
 assert.match(files.app, /hiven:\/\/open-plugin-surface/, 'launcher window must listen for plugin surface open events')
 assert.match(files.app, /function LauncherWindowApp[\s\S]*<PluginSettingsDialog \/>/, 'launcher window must render plugin settings dialogs opened from a surface')
+assert.match(
+  files.tauriLib,
+  /show_and_focus_plugin_surface_window\(&app,\s*&window\)/,
+  'plugin surface window command must show and focus the window',
+)
+assert.match(
+  files.tauriLib,
+  /fn show_and_focus_plugin_surface_window[\s\S]*demote_launcher_level[\s\S]*window\.show\(\)[\s\S]*set_focus\(\)/,
+  'plugin surface window helper must demote launcher level then show and focus',
+)
+assert.match(
+  files.tauriLib,
+  /fn restore_launcher_level[\s\S]*STATUS_WINDOW_LEVEL/,
+  'launcher level must be restored after plugin surface window closes',
+)
+assert.doesNotMatch(
+  files.tauriLib.match(/async fn show_plugin_surface_window[\s\S]*?\n}\n\nfn plugin_surface_window_label/)?.[0] ?? '',
+  /always_on_top|setLevel|orderFrontRegardless|promote_plugin_surface/,
+  'plugin surface window command must not force window level — let macOS focus-based ordering handle it',
+)
+assert.doesNotMatch(
+  files.tauriLib.match(/async fn show_plugin_surface_window[\s\S]*?\n}\n\nfn plugin_surface_window_label/)?.[0] ?? '',
+  /get_webview_window\("launcher"\)[\s\S]*\.hide\(\)/,
+  'plugin surface window command must not hide the launcher because it may host another active surface',
+)
+const surfaceShellType =
+  files.pluginTypes.match(/export type PluginSurfaceShell = \{[\s\S]*?\n\}/)?.[0] ?? ''
+assert.match(
+  surfaceShellType,
+  /rendersTitlebar\?:\s*boolean/,
+  'plugin surface shell protocol must allow plugins to declare that they render their own titlebar',
+)
+assert.match(
+  files.clipboardHistory,
+  /id:\s*'main'[\s\S]*?shell:\s*\{[\s\S]*?rendersTitlebar:\s*true/,
+  'clipboard history main surface should declare that it renders its own titlebar',
+)
+const readyPluginSurfaceWindowRender =
+  files.pluginSurfaceWindow.match(/const title = localized[\s\S]*?\n}\n\nfunction parseTargetFromUrl/)?.[0] ?? ''
+assert.match(
+  readyPluginSurfaceWindowRender,
+  /const\s+usesPluginTitlebar\s*=\s*surfaceState\.surface\.shell\?\.rendersTitlebar\s*===\s*true/,
+  'plugin surface window should read shell.rendersTitlebar for host chrome decisions',
+)
+const hostTitlebarBranch =
+  readyPluginSurfaceWindowRender.match(/!\s*usesPluginTitlebar\s*&&\s*\(([\s\S]*?)\n\s*\)\}/)?.[1] ?? ''
+assert.match(
+  hostTitlebarBranch,
+  /plugin-surface-window-titlebar/,
+  'host titlebar should remain available when the plugin does not render its own titlebar',
+)
+assert.match(
+  hostTitlebarBranch,
+  /plugin-surface-window-close/,
+  'host titlebar and close button should render only when the plugin does not render its own titlebar',
+)
+assert.match(
+  files.pluginSurfaceWindow,
+  /document\.addEventListener\(['"]keydown['"],\s*onKeyDown,\s*true\)/,
+  'plugin surface window should capture Escape at document level so focused inputs cannot block close',
+)
 
 assert.doesNotMatch(files.globalPinnedHotkeys, /unregisterAll\(/, 'global pinned hotkey sync must not unregister plugin surface shortcuts')
 assert.match(files.surfaceHotkeys, /isRegistered\(accelerator\)/, 'surface hotkey installer must detect conflicts')
