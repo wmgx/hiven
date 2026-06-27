@@ -19,6 +19,7 @@ const files = {
   store: read('src/store.ts'),
   sidebar: read('src/components/Sidebar.tsx'),
   app: read('src/App.tsx'),
+  globalLauncher: read('src/components/GlobalLauncher.tsx'),
   pinnedRunnerView: readIfExists('src/views/PinnedRunnerView.tsx'),
 }
 
@@ -79,10 +80,10 @@ check('Milestone A adds a sidebar Pinned section with entries that open existing
   assertSourceHas(files.sidebar, /resolveIcon\([^)]*pinned\.icon/, 'Sidebar pinned entry should resolve icon names instead of rendering raw icon strings')
 })
 
-check('Milestone B wires a PinnedRunnerView into app navigation', () => {
-  assertSourceHas(files.store, /ViewId[\s\S]*['"]pinned(?:-runner|-action)?['"]/, 'ViewId should include a pinned runner view')
-  assertSourceHas(files.app, /PinnedRunnerView/, 'App should import/render PinnedRunnerView')
-  assertSourceHas(files.app, /case\s+['"]pinned(?:-runner|-action)?['"]/, 'ViewContent should route to the pinned runner view')
+check('Milestone B wires a PinnedRunnerView into launcher-hosted navigation', () => {
+  assertSourceHas(files.store, /HostLauncherSurface[\s\S]*['"]pinned(?:-runner|-action)?['"]/, 'Host launcher surfaces should include a pinned runner view')
+  assertSourceHas(files.globalLauncher, /PinnedRunnerView/, 'GlobalLauncher should import/render PinnedRunnerView')
+  assertSourceHas(files.globalLauncher, /hostSurface\s*===\s*['"]pinned(?:-runner|-action)?['"]/, 'HostSurfaceContent should route to the pinned runner view')
   assert.ok(files.pinnedRunnerView, 'src/views/PinnedRunnerView.tsx should exist')
 })
 

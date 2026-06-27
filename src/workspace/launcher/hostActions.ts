@@ -150,7 +150,7 @@ export function getHostPaneControlItems(): LauncherItem[] {
         aliases: ['plugin', 'plugins', 'extension', 'extensions', 'scripts', 'plugin manager', '插件', '扩展'],
       },
       behavior: { type: 'perform' },
-      surfaces: ['command-palette', 'global-launcher'],
+      surfaces: ['global-launcher'],
       pinnable: false,
       legacyUsageKeys: ['show-plugins-page'],
       execute: async (ctx) => {
@@ -170,7 +170,7 @@ export function getHostPaneControlItems(): LauncherItem[] {
         aliases: ['setting', 'settings', 'preference', 'preferences', 'app settings', '设置', '偏好设置'],
       },
       behavior: { type: 'perform' },
-      surfaces: ['command-palette', 'global-launcher'],
+      surfaces: ['global-launcher'],
       pinnable: false,
       legacyUsageKeys: ['show-settings-page'],
       execute: async (ctx) => {

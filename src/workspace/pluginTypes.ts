@@ -577,10 +577,12 @@ export type PluginUiSurfaceContribution<TSettings = unknown> = {
   aliases?: string[]
   component: ComponentType<PluginSurfaceProps<TSettings>>
   beforeOpen?(ctx: PluginSurfaceOpenContext<TSettings>): Promise<void> | void
+  instancePolicy?: 'singleton' | 'multi'
   entry?: {
     launcher?: boolean
     shortcutBindable?: boolean
     recommendedShortcut?: string
+    shortcutPresentation?: 'launcher' | 'window'
   }
   shell?: {
     defaultWidth?: number
@@ -588,6 +590,7 @@ export type PluginUiSurfaceContribution<TSettings = unknown> = {
     minWidth?: number
     minHeight?: number
     closeOnBlur?: boolean
+    destroyTimeout?: number
     resizable?: boolean
   }
 }

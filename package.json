@@ -68,7 +68,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test:settings-select-layout": "node scripts/test-settings-select-layout.mjs",
-    "test:json-semantic-diff": "node scripts/test-json-semantic-diff.mjs"
+    "test:json-semantic-diff": "node scripts/test-json-semantic-diff.mjs",
+    "test:launcher-web-smoke": "node scripts/test-launcher-web-smoke.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

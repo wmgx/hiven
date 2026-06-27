@@ -4,24 +4,14 @@ import { pluginRegistry } from './pluginRegistry'
 import type { PluginSurfaceOpenTarget } from '../store'
 import type { PluginDefinition, PluginUiSurfaceContribution } from './pluginTypes'
 
-type ShortcutPresentation = 'launcher' | 'window'
+type ShortcutPresentation = NonNullable<NonNullable<PluginUiSurfaceContribution['entry']>['shortcutPresentation']>
 
-type WindowSurfaceEntry = NonNullable<PluginUiSurfaceContribution['entry']> & {
-  shortcutPresentation?: ShortcutPresentation
-}
-
-type WindowSurfaceShell = NonNullable<PluginUiSurfaceContribution['shell']> & {
-  destroyTimeout?: number
-}
-
-type WindowCapableSurface = PluginUiSurfaceContribution & {
-  entry?: WindowSurfaceEntry
-  shell?: WindowSurfaceShell
-}
+type WindowCapableSurface = PluginUiSurfaceContribution
 
 const DEFAULT_WIDTH = 900
 const DEFAULT_HEIGHT = 640
 const DEFAULT_DESTROY_TIMEOUT_MS = 120_000
+const pendingWindowOpens = new Map<string, Promise<void>>()
 
 export function getPluginSurfaceShortcutPresentation(target: PluginSurfaceOpenTarget): ShortcutPresentation {
   const surface = resolvePluginSurface(target)
@@ -31,11 +21,25 @@ export function getPluginSurfaceShortcutPresentation(target: PluginSurfaceOpenTa
 export async function requestOpenPluginSurfaceWindow(target: PluginSurfaceOpenTarget): Promise<void> {
   if (!isTauriRuntime()) return
 
+  const label = pluginSurfaceWindowLabel(target)
+  const pending = pendingWindowOpens.get(label)
+  if (pending) {
+    await pending
+    return
+  }
+
+  const operation = openPluginSurfaceWindow(target, label).finally(() => {
+    pendingWindowOpens.delete(label)
+  })
+  pendingWindowOpens.set(label, operation)
+  await operation
+}
+
+async function openPluginSurfaceWindow(target: PluginSurfaceOpenTarget, label: string): Promise<void> {
   const surface = resolvePluginSurface(target)
   const shell = surface?.shell
   const width = shell?.defaultWidth ?? DEFAULT_WIDTH
   const height = shell?.defaultHeight ?? DEFAULT_HEIGHT
-  const label = pluginSurfaceWindowLabel(target)
   const url = pluginSurfaceWindowUrl(target)
 
   const existing = await WebviewWindow.getByLabel(label).catch(() => null)

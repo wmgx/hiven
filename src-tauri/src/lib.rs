@@ -157,43 +157,6 @@ fn perform_system_power_action(action: SystemPowerAction) -> Result<(), String> 
 }
 
 #[tauri::command]
-fn show_and_focus_window(app: tauri::AppHandle) {
-    #[cfg(target_os = "macos")]
-    {
-        let app_clone = app.clone();
-        let _ = app.run_on_main_thread(move || {
-            show_and_focus_main_window(&app_clone);
-        });
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        show_and_focus_main_window(&app);
-    }
-}
-
-fn show_and_focus_main_window(app: &tauri::AppHandle) {
-    use tauri::Manager;
-
-    // Clear saved foreground app so that a subsequent hide_launcher_window
-    // won't restore focus away from the main window we're about to show.
-    if let Ok(mut stored) = previous_foreground_process_id().lock() {
-        *stored = None;
-    }
-
-    if let Some(window) = app.get_webview_window("launcher") {
-        let _ = window.hide();
-    }
-
-    activate_app();
-
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
-    }
-}
-
-#[tauri::command]
 async fn show_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
     show_launcher_window_for_hotkey(app)
 }
@@ -2908,6 +2871,12 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            // Hiven is now tray/launcher-first: create no persistent main
+            // window at startup and show the non-activating launcher instead.
+            if let Err(error) = show_launcher_window_for_hotkey(app.handle().clone()) {
+                eprintln!("[hiven] Failed to show launcher on startup: {}", error);
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -2942,7 +2911,6 @@ pub fn run() {
             fetch_github_directory,
             hotkeys::register_double_modifier_hotkey,
             hotkeys::unregister_double_modifier_hotkey,
-            show_and_focus_window,
             show_launcher_window,
             hide_launcher_window,
             simulate_paste,
@@ -2959,7 +2927,7 @@ pub fn run() {
             let _ = (&app, &event); // suppress unused warnings on non-macOS
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = event {
-                show_and_focus_main_window(app);
+                let _ = show_launcher_window_for_hotkey(app.clone());
             }
         });
 }
