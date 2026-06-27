@@ -388,6 +388,9 @@ function LauncherWindowApp() {
   const launcherProgrammaticMoveRef = useRef(false)
   const launcherProgrammaticMoveResetRef = useRef<number | undefined>(undefined)
 
+  useEffect(() => installGlobalPinnedLauncherHotkeys(), [])
+  useEffect(() => installPluginSurfaceShortcutHotkeys(), [])
+
   const suppressNextLauncherMovePersistence = () => {
     launcherProgrammaticMoveRef.current = true
     if (launcherProgrammaticMoveResetRef.current !== undefined) {
@@ -419,7 +422,7 @@ function LauncherWindowApp() {
         if (pendingSurfaceTarget) {
           useAppStore.getState().openPluginSurfaceTool(pendingSurfaceTarget)
         }
-        useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
+        useAppStore.getState().openGlobalLauncherOverlay('full')
         // The window is centered on the cursor's monitor natively in
         // `center_launcher_window` before this event fires. Only override that
         // centering with a previously dragged position while it is still fresh

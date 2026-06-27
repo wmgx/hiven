@@ -61,6 +61,14 @@ function objectBlockAround(source, marker) {
   return ''
 }
 
+function sliceBetween(source, startMarker, endMarker) {
+  const start = source.indexOf(startMarker)
+  if (start < 0) return ''
+  const end = source.indexOf(endMarker, start)
+  if (end < 0) return ''
+  return source.slice(start, end)
+}
+
 function checkGlobalLauncherAction(source, marker, label) {
   const block = objectBlockAround(source, marker)
   check(block.length > 0, `${label} 必须存在 launcher action/surface 入口`)
@@ -76,6 +84,9 @@ const storeSource = read('src/store.ts')
 const sidebarSource = read('src/components/Sidebar.tsx')
 const hostActionsSource = read('src/workspace/launcher/hostActions.ts')
 const registrySource = read('src/workspace/launcher/registry.ts')
+const launcherWindowAppSource = sliceBetween(appSource, 'function LauncherWindowApp', '\nfunction shouldAllowLauncherListWheel')
+const openLauncherSource = sliceBetween(launcherWindowAppSource, 'const openLauncher', '\n    openLauncher()')
+const openPluginSurfaceSource = sliceBetween(launcherWindowAppSource, "listen('hiven://open-plugin-surface'", '\n      }))')
 const rustSources = [
   read('src-tauri/src/main.rs'),
   read('src-tauri/src/lib.rs'),
@@ -115,6 +126,34 @@ check(
 check(
   /function\s+LauncherWindowApp\s*\(/.test(appSource),
   'App 必须保留 launcher/background-safe 渲染路径',
+)
+check(
+  launcherWindowAppSource.length > 0,
+  '必须能静态定位 LauncherWindowApp resident 启动路径',
+)
+check(
+  openLauncherSource.length > 0,
+  'LauncherWindowApp 必须定义 hiven://launcher-open/openLauncher 处理器',
+)
+check(
+  /openGlobalLauncherOverlay\(/.test(openLauncherSource),
+  '普通 launcher-open/show_launcher_window 路径必须打开 GlobalLauncher',
+)
+check(
+  !/openGlobalLauncherOverlay\(\s*['"]pinned-only['"]\s*\)/.test(openLauncherSource),
+  '普通 launcher-open/show_launcher_window 路径不能固定为 pinned-only；插件 surface 请求才可以使用 pinned-only',
+)
+check(
+  /openGlobalLauncherOverlay\(\s*['"]pinned-only['"]\s*\)/.test(openPluginSurfaceSource),
+  'hiven://open-plugin-surface 路径可以继续使用 pinned-only 打开插件 surface tool-shell',
+)
+check(
+  /installGlobalPinnedLauncherHotkeys\s*\(\s*\)/.test(launcherWindowAppSource),
+  'LauncherWindowApp resident 启动路径必须安装 global pinned launcher hotkeys',
+)
+check(
+  /installPluginSurfaceShortcutHotkeys\s*\(\s*\)/.test(launcherWindowAppSource),
+  'LauncherWindowApp resident 启动路径必须安装 plugin surface shortcut hotkeys',
 )
 
 // 4. Settings / Plugins / Plugin editor must be reachable through launcher items.
