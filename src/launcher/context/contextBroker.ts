@@ -11,7 +11,7 @@ export type EditorContextSnapshot = {
   activePaneId: string
   paneIds: string[]
   language?: string
-  activeText?: string
+  activeText: string
   selectedText?: string
   selectionRange?: TextRange
   cursor?: { line: number; column: number }

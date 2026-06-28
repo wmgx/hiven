@@ -317,7 +317,7 @@ function isEditorBridgeResponse(value: unknown): value is EditorBridgeResponse {
 
 function isEditorContextSnapshot(value: unknown): value is EditorContextSnapshot {
   const snapshot = value as Partial<EditorContextSnapshot> | undefined
-  return Boolean(snapshot && typeof snapshot === 'object' && snapshot.windowLabel === 'editor' && typeof snapshot.activePaneId === 'string' && Array.isArray(snapshot.paneIds))
+  return Boolean(snapshot && typeof snapshot === 'object' && snapshot.windowLabel === 'editor' && typeof snapshot.activePaneId === 'string' && Array.isArray(snapshot.paneIds) && typeof snapshot.activeText === 'string')
 }
 
 function isEditorPaneSnapshot(value: unknown): value is EditorPaneSnapshot {
