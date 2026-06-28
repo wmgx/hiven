@@ -38,7 +38,7 @@ const files = {
   commandPalette: read('src/components/CommandPalette.tsx'),
   launcherDomainSearchStep: read('src/components/launcher/LauncherDomainSearchStep.tsx'),
   launcherMixedList: read('src/components/launcher/LauncherMixedList.tsx'),
-  globalLauncher: read('src/launcher/hosts/GlobalLauncherHost.tsx') + '\n' + read('src/components/launcher/GlobalLauncherWindowLifecycle.ts'),
+  globalLauncher: read('src/launcher/hosts/GlobalLauncherHost.tsx') + '\n' + read('src/components/launcher/GlobalLauncherWindowLifecycle.ts') + '\n' + read('src/workspace/windowManager/launcherWindow.ts'),
   paneEditor: read('src/components/workspace/PaneEditor.tsx'),
   dualEditor: read('src/kits/ui/DualEditorView.tsx'),
   monacoTheme: read('src/utils/monacoTheme.ts'),
@@ -83,7 +83,7 @@ has(files.pluginEditor, /file-tree|tree-node/, 'Plugin editor should use file tr
 has(files.commandPalette, /EditorCommandBarHost/, 'Command palette compatibility wrapper should delegate to the editor command bar host')
 has(files.launcherDomainSearchStep + files.launcherMixedList, /cmd-item/, 'Shared launcher rows should render spec command items')
 has(files.globalLauncher, /global-launcher-panel/, 'Global launcher should use a bounded panel component')
-has(files.globalLauncher, /startDragging\(\)/, 'Standalone global launcher should drag the native window instead of moving inside its own bounds')
+has(files.globalLauncher, /startCurrentLauncherWindowDrag|startDragging\(\)/, 'Standalone global launcher should drag the native window instead of moving inside its own bounds')
 has(files.store, /globalLauncherWindowPosition\??:\s*GlobalLauncherPosition/, 'Global launcher should persist its dragged native window position separately from in-app panel position')
 has(files.globalLauncher, /onPointerDown=\{beginDrag\}/, 'Global launcher should expose a drag handle')
 has(files.css, /\.global-launcher-panel[\s\S]{0,260}max-height:\s*min\(var\(--command-palette-panel-max-height\),\s*calc\(100vh - 24px\)\)/, 'Global launcher panel should be constrained within the viewport')

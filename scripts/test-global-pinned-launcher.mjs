@@ -31,6 +31,7 @@ const files = {
     read('src/components/launcher/GlobalLauncherSelection.ts'),
     read('src/components/launcher/GlobalLauncherSurfaceRegistry.ts'),
     read('src/components/launcher/GlobalLauncherWindowLifecycle.ts'),
+    read('src/workspace/windowManager/launcherWindow.ts'),
     read('src/components/launcher/GlobalLauncherSurfaceFrame.ts'),
     read('src/components/launcher/GlobalLauncherResults.ts'),
     read('src/components/launcher/GlobalLauncherItems.ts'),
@@ -421,7 +422,7 @@ check('launcher panel drags the native launcher window and persists moved positi
   )
   assertHas(
     files.globalLauncher,
-    /startDragging\(\)/,
+    /startCurrentLauncherWindowDrag|startDragging\(\)/,
     'GlobalLauncher should move the native launcher window instead of moving inside its own window',
   )
   assertHas(
@@ -449,7 +450,7 @@ check('launcher panel drags the native launcher window and persists moved positi
 check('standalone launcher ignores in-app panel drag coordinates', () => {
   assertHas(
     files.globalLauncher,
-    /standaloneLauncher[\s\S]{0,520}startDragging\(\)/,
+    /standaloneLauncher[\s\S]{0,520}startCurrentLauncherWindowDrag\(\)/,
     'standalone launcher should keep the panel fixed inside its transparent native window and move only the native window',
   )
 })
@@ -462,7 +463,7 @@ check('standalone launcher sizes the transparent window to the panel', () => {
   )
   assertHas(
     files.globalLauncher,
-    /new LogicalSize\(nextWidth,\s*nextHeight\)/,
+    /resizeCurrentLauncherWindow\(\{\s*width:\s*nextWidth,\s*height:\s*nextHeight\s*\}\)/,
     'standalone launcher should resize the native window using the measured panel size',
   )
   assertHas(
@@ -525,8 +526,8 @@ check('standalone launcher exposes the whole non-interactive panel as a drag sur
   )
   assertHas(
     files.globalLauncher,
-    /import\s*\{[\s\S]{0,80}getCurrentWindow[\s\S]{0,80}\}\s*from\s*['"]@tauri-apps\/api\/window['"]/,
-    'GlobalLauncher should import getCurrentWindow up front so native dragging starts during the pointerdown turn',
+    /startCurrentLauncherWindowDrag\(\)/,
+    'GlobalLauncher should delegate native dragging through the launcher window manager during the pointerdown turn',
   )
   assertHas(
     files.indexCss,
@@ -652,7 +653,7 @@ check('programmatic launcher positioning is not persisted as a user drag', () =>
   )
   assertHas(
     files.globalLauncher,
-    /dispatchEvent\(new CustomEvent\(LAUNCHER_PROGRAMMATIC_MOVE_EVENT\)\)[\s\S]{0,220}\.setSize\(new LogicalSize\(nextWidth,\s*nextHeight\)\)/,
+    /dispatchEvent\(new CustomEvent\(LAUNCHER_PROGRAMMATIC_MOVE_EVENT\)\)[\s\S]{0,220}resizeCurrentLauncherWindow\(\{\s*width:\s*nextWidth,\s*height:\s*nextHeight\s*\}\)/,
     'standalone launcher surface resizing should not persist the resulting native move as a user drag',
   )
 })
@@ -696,7 +697,7 @@ check('standalone launcher closes on Escape without bubbling to the app', () => 
 check('standalone launcher closes when its window loses focus', () => {
   assertHas(
     files.globalLauncher,
-    /onFocusChanged\([\s\S]{0,220}payload:\s*focused[\s\S]{0,220}if\s*\(!focused[\s\S]{0,80}\)\s*closeLauncher\(\)/,
+    /onCurrentLauncherWindowFocusChanged\(\(focused\)[\s\S]{0,220}if\s*\(!focused[\s\S]{0,80}\)\s*closeLauncher\(\)/,
     'standalone launcher should hide itself when the launcher window loses focus',
   )
   assertHas(

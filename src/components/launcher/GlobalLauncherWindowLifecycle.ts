@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
-import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
 import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from '../../workspace/launcherWindowEvents'
+import { onCurrentLauncherWindowFocusChanged, resizeCurrentLauncherWindow, startCurrentLauncherWindowDrag } from '../../workspace/windowManager/launcherWindow'
 import { computeStandaloneLauncherSize } from './GlobalLauncherLayout'
 
 type SurfaceShellConfig = {
@@ -28,10 +28,9 @@ export function useCloseStandaloneLauncherOnBlur({
 
     let disposed = false
     let unlisten: (() => void) | undefined
-    import('@tauri-apps/api/window')
-      .then(({ getCurrentWindow }) => getCurrentWindow().onFocusChanged(({ payload: focused }) => {
-        if (!focused && closeOnBlur !== false) closeLauncher()
-      }))
+    onCurrentLauncherWindowFocusChanged((focused) => {
+      if (!focused && closeOnBlur !== false) closeLauncher()
+    })
       .then((cleanup) => {
         if (disposed) cleanup()
         else unlisten = cleanup
@@ -81,8 +80,7 @@ export function useStandaloneLauncherResize({
         surfaceShell,
       })
       window.dispatchEvent(new CustomEvent(LAUNCHER_PROGRAMMATIC_MOVE_EVENT))
-      void getCurrentWindow()
-        .setSize(new LogicalSize(nextWidth, nextHeight))
+      void resizeCurrentLauncherWindow({ width: nextWidth, height: nextHeight })
         .catch((error) => {
           console.warn('[hiven] Failed to resize launcher window:', error)
         })
@@ -138,7 +136,7 @@ export function useGlobalLauncherNativeDrag(standaloneLauncher: boolean) {
       event.preventDefault()
       event.stopPropagation()
       try {
-        void getCurrentWindow().startDragging().catch((error) => {
+        void startCurrentLauncherWindowDrag().catch((error) => {
           console.warn('[hiven] Failed to drag launcher window:', error)
         })
       } catch (error) {

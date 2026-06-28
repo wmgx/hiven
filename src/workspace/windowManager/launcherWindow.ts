@@ -55,6 +55,20 @@ export async function resizeCurrentLauncherWindow(size: { width: number; height:
   await getCurrentWindow().setSize(new LogicalSize(size.width, size.height))
 }
 
+export async function onCurrentLauncherWindowFocusChanged(
+  onFocusChanged: (focused: boolean) => void,
+): Promise<() => void> {
+  if (!isTauriRuntime()) return () => {}
+  const { getCurrentWindow } = await import('@tauri-apps/api/window')
+  return getCurrentWindow().onFocusChanged(({ payload: focused }) => onFocusChanged(focused))
+}
+
+export async function startCurrentLauncherWindowDrag(): Promise<void> {
+  if (!isTauriRuntime()) return
+  const { getCurrentWindow } = await import('@tauri-apps/api/window')
+  await getCurrentWindow().startDragging()
+}
+
 function isTauriRuntime(): boolean {
   return Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
 }
