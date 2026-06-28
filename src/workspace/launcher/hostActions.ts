@@ -151,6 +151,85 @@ function normalizeEditorActionText(text: string): string {
   return text.replace(/\s+/g, ' ').trim()
 }
 
+function minifyActiveEditorJson(): boolean {
+  const target = getActiveEditorTextTarget()
+  if (!target || !target.text.trim()) return false
+  try {
+    const parsed = JSON.parse(target.text)
+    replaceEditorTextTarget(target, JSON.stringify(parsed))
+    return true
+  } catch {
+    return false
+  }
+}
+
+function convertActiveEditorJsonToYaml(): boolean {
+  const target = getActiveEditorTextTarget()
+  if (!target || !target.text.trim()) return false
+  try {
+    const parsed = JSON.parse(target.text)
+    replaceEditorTextTarget(target, jsonToYaml(parsed))
+    return true
+  } catch {
+    return false
+  }
+}
+
+function extractActiveEditorJsonFields(): boolean {
+  const target = getActiveEditorTextTarget()
+  if (!target || !target.text.trim()) return false
+  try {
+    const parsed = JSON.parse(target.text)
+    const fields = collectJsonFields(parsed)
+    replaceEditorTextTarget(target, fields.join('\n'))
+    return true
+  } catch {
+    return false
+  }
+}
+
+function jsonToYaml(value: unknown, indent = 0): string {
+  const pad = '  '.repeat(indent)
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '[]'
+    return value.map((item) => `${pad}- ${formatYamlValue(item, indent + 1)}`).join('\n')
+  }
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+    if (entries.length === 0) return '{}'
+    return entries.map(([key, item]) => {
+      if (item && typeof item === 'object') return `${pad}${key}:\n${jsonToYaml(item, indent + 1)}`
+      return `${pad}${key}: ${formatYamlScalar(item)}`
+    }).join('\n')
+  }
+  return `${pad}${formatYamlScalar(value)}`
+}
+
+function formatYamlValue(value: unknown, indent: number): string {
+  if (value && typeof value === 'object') return `\n${jsonToYaml(value, indent)}`
+  return formatYamlScalar(value)
+}
+
+function formatYamlScalar(value: unknown): string {
+  if (typeof value === 'string') return JSON.stringify(value)
+  if (value === null) return 'null'
+  return String(value)
+}
+
+function collectJsonFields(value: unknown, prefix = ''): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) => collectJsonFields(item, `${prefix}[${index}]`))
+  }
+  if (!value || typeof value !== 'object') return prefix ? [prefix] : []
+  const keys = Object.keys(value as Record<string, unknown>)
+  if (keys.length === 0 && prefix) return [prefix]
+  return keys.flatMap((key) => {
+    const path = prefix ? `${prefix}.${key}` : key
+    const child = (value as Record<string, unknown>)[key]
+    return child && typeof child === 'object' ? collectJsonFields(child, path) : [path]
+  })
+}
+
 async function performSystemPowerAction(action: SystemPowerAction): Promise<{ ok: boolean; message?: string }> {
   try {
     const { invoke } = await import('@tauri-apps/api/core')
@@ -415,6 +494,57 @@ export function getHostPaneControlItems(): LauncherItem[] {
         await attachBuiltinPluginSurfacePanel('clipboard-history')
         return { ok: true }
       },
+    },
+    {
+      systemKey: 'host:editor:json-minify',
+      kind: 'host',
+      display: {
+        title: 'Compress JSON to Single Line',
+        titleI18n: { zh: 'JSON 压缩为单行' },
+        subtitle: 'Minify the current JSON selection or pane',
+        subtitleI18n: { zh: '压缩当前 JSON 选区或面板内容' },
+        icon: 'Braces',
+        aliases: ['json minify', 'single line json', 'json 单行', 'json 压缩'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['editor-command-bar'],
+      requiredCapabilities: ['text-input-actions'],
+      pinnable: false,
+      execute: async () => ({ ok: minifyActiveEditorJson() }),
+    },
+    {
+      systemKey: 'host:editor:json-to-yaml',
+      kind: 'host',
+      display: {
+        title: 'Convert JSON to YAML',
+        titleI18n: { zh: 'JSON 转 YAML' },
+        subtitle: 'Convert the current JSON selection or pane to YAML',
+        subtitleI18n: { zh: '将当前 JSON 选区或面板内容转为 YAML' },
+        icon: 'FileCode2',
+        aliases: ['json yaml', 'json to yaml', 'yaml', '转 yaml'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['editor-command-bar'],
+      requiredCapabilities: ['text-input-actions'],
+      pinnable: false,
+      execute: async () => ({ ok: convertActiveEditorJsonToYaml() }),
+    },
+    {
+      systemKey: 'host:editor:json-extract-fields',
+      kind: 'host',
+      display: {
+        title: 'Extract JSON Fields',
+        titleI18n: { zh: '提取 JSON 字段' },
+        subtitle: 'List field paths from the current JSON selection or pane',
+        subtitleI18n: { zh: '列出当前 JSON 选区或面板内容的字段路径' },
+        icon: 'ListTree',
+        aliases: ['json fields', 'extract fields', '字段', '提取字段'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['editor-command-bar'],
+      requiredCapabilities: ['text-input-actions'],
+      pinnable: false,
+      execute: async () => ({ ok: extractActiveEditorJsonFields() }),
     },
     {
       systemKey: 'host:editor:attach-json-panel',

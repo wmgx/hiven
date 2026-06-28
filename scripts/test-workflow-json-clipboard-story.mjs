@@ -11,6 +11,7 @@ const files = {
   packageJson: read('package.json'),
   defaultWorkflowProviders: read('src/workflow/defaultWorkflowProviders.ts'),
   workflowIndex: read('src/workflow/index.ts'),
+  hostActions: read('src/workspace/launcher/hostActions.ts'),
 }
 
 const packageJson = JSON.parse(files.packageJson)
@@ -54,5 +55,31 @@ assert.match(
   /tryFormatJsonClipboardText/,
   'workflow index must export JSON clipboard formatting for focused verification and future providers',
 )
+assert.match(
+  files.hostActions,
+  /function\s+minifyActiveEditorJson\(\)[\s\S]*JSON\.stringify\(parsed\)/,
+  'Editor command bar must provide a local JSON minify helper',
+)
+assert.match(
+  files.hostActions,
+  /function\s+convertActiveEditorJsonToYaml\(\)[\s\S]*jsonToYaml/,
+  'Editor command bar must provide a local JSON to YAML helper',
+)
+assert.match(
+  files.hostActions,
+  /function\s+extractActiveEditorJsonFields\(\)[\s\S]*Object\.keys/,
+  'Editor command bar must provide a local JSON field extraction helper',
+)
+for (const [systemKey, title] of [
+  ['host:editor:json-minify', 'Compress JSON to Single Line'],
+  ['host:editor:json-to-yaml', 'Convert JSON to YAML'],
+  ['host:editor:json-extract-fields', 'Extract JSON Fields'],
+]) {
+  assert.match(
+    files.hostActions,
+    new RegExp(`systemKey:\\s*['\"]${systemKey}['\"][\\s\\S]*title:\\s*['\"]${title}['\"][\\s\\S]*surfaces:\\s*\\[['\"]editor-command-bar['\"]\\]`),
+    `${title} must be available as an editor-local command bar action`,
+  )
+}
 
 console.log('workflow JSON clipboard story checks passed')
