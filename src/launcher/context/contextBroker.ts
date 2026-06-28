@@ -11,6 +11,7 @@ export type EditorContextSnapshot = {
   activePaneId: string
   paneIds: string[]
   language?: string
+  activeText?: string
   selectedText?: string
   selectionRange?: TextRange
   cursor?: { line: number; column: number }
@@ -94,6 +95,7 @@ export function readLocalEditorContextSnapshot(): EditorContextSnapshot | undefi
     activePaneId: state.activePaneId,
     paneIds: state.paneOrder,
     language: pane.language ?? pane.detectedLanguage,
+    activeText: pane.text,
     selectedText,
     selectionRange,
     cursor: position

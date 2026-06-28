@@ -173,6 +173,11 @@ function assertLauncherApiExposesPaneCreation() {
   )
   assert.match(
     pluginApi,
+    /function readActiveText[\s\S]*getActiveEditorContextSnapshot\(\)\?\.activeText/,
+    'PluginLauncherApi getActiveText must use activeText from synced editor context outside the editor runtime',
+  )
+  assert.match(
+    pluginApi,
     /function readSelectionText[\s\S]*if \(!isEditorWindowRuntime\(\)\)[\s\S]*getActiveEditorContextSnapshot\(\)/,
     'PluginLauncherApi must read selection text from synced editor context outside the editor runtime',
   )

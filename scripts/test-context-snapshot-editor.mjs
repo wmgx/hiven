@@ -21,6 +21,8 @@ assert.match(contextBroker, /\[foregroundContextProvider,\s*editorContextProvide
 assert.match(contextBroker, /runtimeRegistry\.getCodeEditor\(state\.activePaneId\)/, 'editor provider must read live editor runtime')
 assert.match(contextBroker, /getValueInRange\(selection\)/, 'editor provider must read selected text from live selection')
 assert.match(contextBroker, /selectionRange:\s*TextRange/, 'editor provider must expose selection range')
+assert.match(contextBroker, /activeText\?:\s*string/, 'editor context snapshot must include active pane text for cross-window launcher APIs')
+assert.match(contextBroker, /activeText:\s*pane\.text/, 'local editor context snapshot must publish active pane text')
 assert.match(contextBroker, /EDITOR_WINDOW_LABEL/, 'context broker must use the centralized editor window label')
 assert.match(contextBroker, /import \{ EDITOR_WINDOW_LABEL \} from ['"]\.\.\/\.\.\/workspace\/windowManager\/windowLabels['"]/, 'context broker must import the centralized editor label at runtime')
 assert.match(contextBroker, /getActiveEditorContextSnapshot/, 'non-editor windows must read synced editor context first')

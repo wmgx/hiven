@@ -37,7 +37,7 @@ export type PluginLauncherApiOptions = {
 
 function readActiveText(): string {
   if (!isEditorWindowRuntime()) {
-    return getActiveEditorContextSnapshot()?.selectedText ?? ''
+    return getActiveEditorContextSnapshot()?.activeText ?? ''
   }
   return useWorkspaceStore.getState().getActivePaneText()
 }
