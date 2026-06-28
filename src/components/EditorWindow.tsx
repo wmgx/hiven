@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useAppStore } from '../store'
 import { readLocalEditorContextSnapshot } from '../launcher/context/contextBroker'
+import { requestCloseEditorWindow } from '../workspace/editorWindow'
 import { markSurfaceInstanceState, upsertSurfaceInstance } from '../surfaces/registry'
 import {
   registerActiveEditorContext,
@@ -222,7 +222,7 @@ function publishEditorSnapshots(): void {
 
 async function closeCurrentWindow(): Promise<void> {
   if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
-    await getCurrentWindow().close().catch(() => undefined)
+    await requestCloseEditorWindow().catch(() => undefined)
     return
   }
   window.close()

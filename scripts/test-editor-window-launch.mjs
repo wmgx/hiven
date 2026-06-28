@@ -17,6 +17,8 @@ const capability = JSON.parse(read('src-tauri/capabilities/default.json'))
 
 assert.match(main, /windowType === ['"]editor['"][\s\S]*EditorWindow/, 'main entry must render EditorWindow for ?window=editor')
 assert.match(editorWindowApi, /invoke\(['"]show_editor_window['"]\)/, 'frontend editor opener must delegate lifecycle to native runtime')
+assert.match(editorWindowApi, /invoke\(['"]close_editor_window['"]\)/, 'frontend editor closer must delegate lifecycle to native runtime')
+assert.match(editorWindowApi, /markSurfaceInstanceState\(['"]editor['"],\s*['"]hidden['"]\)/, 'frontend editor closer must mark editor surface hidden')
 assert.doesNotMatch(editorWindowApi, /new WebviewWindow|WebviewWindow\.getByLabel/, 'frontend must not create editor windows directly')
 assert.doesNotMatch(editorWindowApi, /createPane|openPanelV2|EDITOR_OPEN_REQUEST_EVENT/, 'editor window lifecycle module must not mutate editor workspace state')
 assert.match(editorBridge, /EDITOR_BRIDGE_REQUEST_EVENT/, 'editor bridge must define a request event')
@@ -52,6 +54,8 @@ assert.match(editorWindow, /applyOpenEditorPanel[\s\S]*openPanelV2/, 'EditorWind
 assert.match(editorWindow, /registerActiveEditorContext/, 'EditorWindow must publish active editor context')
 assert.match(editorWindow, /updateActivePaneSnapshot/, 'EditorWindow must publish active pane snapshots')
 assert.match(editorWindow, /Cmd|metaKey|ctrlKey|key\.toLowerCase\(\) !== ['"]w['"]/, 'EditorWindow must support primary-W close handling')
+assert.match(editorWindow, /requestCloseEditorWindow\(\)/, 'EditorWindow close affordances must route through the editor window manager')
+assert.doesNotMatch(editorWindow, /getCurrentWindow\(\)\.close\(\)/, 'EditorWindow must not close itself directly through Tauri window APIs')
 assert.match(editorWindow, /upsertSurfaceInstance\([\s\S]*id:\s*['"]editor['"]/, 'EditorWindow must register itself as a surface')
 assert.match(workspaceStore, /isEditorWindowWorkspaceSession[\s\S]*sessionStorage/, 'editor workspace state must use session storage for scratch sessions')
 

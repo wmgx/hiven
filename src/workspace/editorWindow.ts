@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { upsertSurfaceInstance } from '../surfaces/registry'
+import { markSurfaceInstanceState, upsertSurfaceInstance } from '../surfaces/registry'
 
 export async function requestOpenEditorWindow(): Promise<void> {
   if (!isTauriRuntime()) return
@@ -14,6 +14,12 @@ export async function requestOpenEditorWindow(): Promise<void> {
     canProvideText: true,
     canAttachToEditor: true,
   })
+}
+
+export async function requestCloseEditorWindow(): Promise<void> {
+  if (!isTauriRuntime()) return
+  await invoke('close_editor_window')
+  markSurfaceInstanceState('editor', 'hidden')
 }
 
 function isTauriRuntime(): boolean {
