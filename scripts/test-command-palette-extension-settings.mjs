@@ -44,6 +44,8 @@ const registry = loadLauncherRegistry({
   getPluginToolItemKey: (pluginId, toolId) => `plugin:${pluginId}:tool:${toolId}`,
   getPluginDynamicItemKey: (pluginId, itemId) => `plugin:${pluginId}:dynamic:${itemId}`,
   getPluginSurfaceItemKey: (source, pluginId, surfaceId) => `plugin-surface:${source}:${pluginId}:${surfaceId}`,
+  normalizeLauncherSurfaceId: (surfaceId) => surfaceId === 'command-palette' ? 'editor-command-bar' : surfaceId,
+  launcherHostHasCapability: (hostId, capability) => hostId === 'global-launcher' || !['settings', 'app-search', 'system-power', 'host-surfaces', 'plugin-surfaces'].includes(capability),
   validateLauncherItemIds: () => [],
   sanitizeSurfaces: (surfaces) => surfaces,
   findUnknownSurfaces: () => [],
@@ -80,30 +82,12 @@ const settingsItem = commandPaletteItems.find((item) =>
   /设置/.test(item.display.titleI18n?.zh ?? ''),
 )
 
-assert.ok(
+assert.equal(
   settingsItem,
-  'Command palette should include a plugin/extension settings entry for plugins that declare settings',
+  undefined,
+  'Editor command bar should not include plugin/extension settings navigation entries',
 )
-assert.equal(settingsItem.pinnable, false, 'Settings shortcut should be a navigation entry, not a pinnable transform action')
-assert.ok(settingsItem.surfaces?.includes('command-palette'), 'Settings shortcut should be visible in the command palette')
-
-const result = await settingsItem.execute({
-  surfaceId: 'command-palette',
-  settings: demoSettingsContribution.defaultValue,
-  locale: 'zh',
-  api: {},
-  storage: {},
-  t: (key) => key,
-})
-
-assert.equal(openedSettingsTargets.length, 1, 'Selecting the command-palette settings entry should open one settings target')
-assert.equal(openedSettingsTargets[0]?.pluginId, 'demo-extension', 'Settings target should use the matching plugin id')
-assert.equal(openedSettingsTargets[0]?.source, 'builtin', 'Settings target should use the matching plugin source')
-assert.equal(openedSettingsTargets[0]?.presentation, 'dialog', 'Command palette settings target should request dialog presentation')
-assert.equal(openedSettingsTargets[0]?.context?.surfaceId, 'command-palette', 'Command palette settings target should record its launcher surface context')
-assert.equal(result?.ok, true, 'Opening settings should complete the launcher action')
-assert.equal(result?.keepOpen, undefined, 'Command palette settings shortcut should remain a terminal success and close normally')
-assert.equal('output' in result, false, 'Opening settings should not leave the launcher in a result frame')
+assert.equal(openedSettingsTargets.length, 0, 'Collecting editor command bar items should not open settings')
 
 openedSettingsTargets.length = 0
 

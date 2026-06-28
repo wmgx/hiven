@@ -20,6 +20,9 @@ const registry = readFileSync('src/workspace/launcher/registry.ts', 'utf8')
 const types = readFileSync('src/workspace/launcher/types.ts', 'utf8')
 const commandPalette = readFileSync('src/components/CommandPalette.tsx', 'utf8')
 const globalLauncher = readFileSync('src/components/GlobalLauncher.tsx', 'utf8')
+const editorCommandBarHost = readFileSync('src/launcher/hosts/EditorCommandBarHost.tsx', 'utf8')
+const globalLauncherHost = readFileSync('src/launcher/hosts/GlobalLauncherHost.tsx', 'utf8')
+const launcherSession = readFileSync('src/workspace/launcher/useLauncherSession.ts', 'utf8')
 const calculator = readFileSync('src/plugins/calculator/index.ts', 'utf8')
 const dateTime = readFileSync('src/plugins/date-time-assistant/index.ts', 'utf8')
 
@@ -54,19 +57,12 @@ assert.match(
   'Dynamic provider errors should be caught and isolated',
 )
 
-// CommandPalette consumes dynamic items from registry
-assert.match(
-  commandPalette,
-  /collectDynamicItems|dynamicItems/,
-  'CommandPalette should use dynamic items from the registry',
-)
-
-// GlobalLauncher consumes dynamic items from registry
-assert.match(
-  globalLauncher,
-  /collectDynamicItems|dynamicItems/,
-  'GlobalLauncher should use dynamic items from the registry',
-)
+// CommandPalette and GlobalLauncher are thin wrappers; their hosts consume dynamic items through the shared session.
+assert.match(commandPalette, /EditorCommandBarHost/, 'CommandPalette should delegate to EditorCommandBarHost')
+assert.match(globalLauncher, /GlobalLauncherHost/, 'GlobalLauncher should delegate to GlobalLauncherHost')
+assert.match(editorCommandBarHost, /useLauncherSession\(\{[\s\S]*hostId:\s*['"]editor-command-bar['"]/, 'EditorCommandBarHost should use the shared launcher session')
+assert.match(globalLauncherHost, /useLauncherSession\(\{[\s\S]*hostId:\s*['"]global-launcher['"]/, 'GlobalLauncherHost should use the shared launcher session')
+assert.match(launcherSession, /collectDynamicItems\(q,\s*normalizedHostId/, 'shared launcher session should consume dynamic items from the registry')
 
 // date-time-assistant returns multiple items for "now" queries
 assert.match(

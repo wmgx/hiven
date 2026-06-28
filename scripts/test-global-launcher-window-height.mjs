@@ -20,7 +20,7 @@ function read(path) {
 
 const files = {
   packageJson: read('package.json'),
-  globalLauncher: read('src/components/GlobalLauncher.tsx'),
+  globalLauncherLayout: read('src/components/launcher/GlobalLauncherLayout.ts'),
   indexCss: read('src/index.css'),
   tauriLib: read('src-tauri/src/lib.rs'),
 }
@@ -86,7 +86,7 @@ const headerMinHeight = readCssPx(headerBlock, 'min-height')
 const rowHeight = readCssPx(rowBlock, 'height')
 const selectedRowHeight = readCssPx(selectedRowBlock, 'height')
 const footerVisibleHeight = readCssVerticalPadding(footerBlock) + readCssPx(footerBlock, 'font-size')
-const nativeMargin = readNumberConstant(files.globalLauncher, 'STANDALONE_LAUNCHER_VERTICAL_PADDING')
+const nativeMargin = readNumberConstant(files.globalLauncherLayout, 'STANDALONE_LAUNCHER_VERTICAL_PADDING')
 const minRowsBeyondSelected = 3
 const minimumUsableLauncherHeight = Math.ceil(
   headerMinHeight +
@@ -97,7 +97,7 @@ const minimumUsableLauncherHeight = Math.ceil(
   nativeMargin,
 )
 
-const frontendMinHeight = readNumberConstant(files.globalLauncher, 'STANDALONE_LAUNCHER_MIN_HEIGHT')
+const frontendMinHeight = readNumberConstant(files.globalLauncherLayout, 'STANDALONE_LAUNCHER_MIN_HEIGHT')
 const nativeCompactHeight = readNumberConstant(files.tauriLib, 'LAUNCHER_COMPACT_HEIGHT')
 const failures = []
 

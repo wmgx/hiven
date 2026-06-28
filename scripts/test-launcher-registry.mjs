@@ -61,8 +61,10 @@ const toolAdapter = loadModule('src/workspace/launcher/toolAdapter.ts', {
   stripImports: [
     ...stripTypeImports,
     /import\s*\{[^}]*\}\s*from\s*'\.\/output'\s*;?\s*\n?/,
+    /import\s*\{[^}]*normalizeLauncherSurfaceId[^}]*\}\s*from\s*'\.\/types'\s*;?\s*\n?/,
   ],
   globals: {
+    normalizeLauncherSurfaceId: (surfaceId) => surfaceId === 'command-palette' ? 'editor-command-bar' : surfaceId,
     textResult: output.textResult,
     replaceActiveTextResult: output.replaceActiveTextResult,
     errorResult: output.errorResult,
@@ -74,7 +76,7 @@ const toolAdapter = loadModule('src/workspace/launcher/toolAdapter.ts', {
 const identityWithStub = (() => {
   let src = readFileSync('src/workspace/launcher/identity.ts', 'utf8').replace(
     /import\s*\{[^}]*\}\s*from\s*'\.\/types'\s*;?\s*\n?/,
-    "const isLauncherSurfaceId=(v)=>v==='command-palette'||v==='global-launcher';\n",
+    "const isLauncherSurfaceId=(v)=>v==='command-palette'||v==='editor-command-bar'||v==='global-launcher';\n",
   )
   const out = ts.transpileModule(src, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, esModuleInterop: true },
