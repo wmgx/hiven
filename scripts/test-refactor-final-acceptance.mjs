@@ -54,6 +54,11 @@ assert.equal(
   'node scripts/test-refactor-final-acceptance.mjs',
   'package.json must expose the final refactor acceptance check',
 )
+assert.equal(
+  packageJson.scripts?.['test:background-lifecycle'],
+  'node scripts/test-background-lifecycle.mjs',
+  'package.json must expose the background lifecycle acceptance check',
+)
 
 // Product/behavior acceptance: startup and global entry.
 assert.ok(!tauriConfig.app.windows.some((window) => window.label === 'main'), 'startup must not declare a retired main window')
@@ -154,5 +159,7 @@ assert.match(files.outputRouter, /pasteToForegroundApp:[\s\S]*createPluginPaste\
 assert.match(files.outputRouter, /openInEditor:[\s\S]*createEditorPane\(\{[\s\S]*text/, 'complex text must be routable into Editor')
 assert.match(files.outputRouter, /attachEditorPanel:[\s\S]*openEditorPanel\(\{/, 'complex surfaces must be attachable into Editor panels')
 assert.match(files.clipboardSurface, /pasteText|paste-to-foreground-app|copyText/, 'clipboard history surface must expose copy/paste behavior')
+assert.match(files.tauriLib, /tauri::RunEvent::Reopen[\s\S]*show_launcher_window_for_hotkey/, 'closing visible windows must leave a background runtime that can reopen the launcher')
+assert.doesNotMatch(files.tauriLib, /RunEvent::ExitRequested[\s\S]*app\.exit|process::exit|std::process::exit/, 'runtime must not explicitly exit when all visible windows are closed')
 
 console.log('refactor final acceptance checks passed')
