@@ -1,0 +1,58 @@
+#!/usr/bin/env node
+
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+const root = process.cwd()
+const read = (path) => readFileSync(join(root, path), 'utf8')
+
+const main = read('src/main.tsx')
+const editorWindow = read('src/components/EditorWindow.tsx')
+const editorWindowApi = read('src/workspace/editorWindow.ts')
+const editorBridge = read('src/workspace/editorBridge.ts')
+const tauriLib = read('src-tauri/src/lib.rs')
+const workspaceStore = read('src/workspace/workspaceStore.ts')
+const capability = JSON.parse(read('src-tauri/capabilities/default.json'))
+
+assert.match(main, /windowType === ['"]editor['"][\s\S]*EditorWindow/, 'main entry must render EditorWindow for ?window=editor')
+assert.match(editorWindowApi, /invoke\(['"]show_editor_window['"]\)/, 'frontend editor opener must delegate lifecycle to native runtime')
+assert.doesNotMatch(editorWindowApi, /new WebviewWindow|WebviewWindow\.getByLabel/, 'frontend must not create editor windows directly')
+assert.doesNotMatch(editorWindowApi, /createPane|openPanelV2|EDITOR_OPEN_REQUEST_EVENT/, 'editor window lifecycle module must not mutate editor workspace state')
+assert.match(editorBridge, /EDITOR_BRIDGE_REQUEST_EVENT/, 'editor bridge must define a request event')
+assert.match(editorBridge, /EDITOR_BRIDGE_RESPONSE_EVENT/, 'editor bridge must define a response event')
+assert.match(editorBridge, /EDITOR_ACTIVE_CONTEXT_EVENT/, 'editor bridge must define an active context event')
+assert.match(editorBridge, /getEditorContext/, 'editor bridge must expose getEditorContext')
+assert.match(editorBridge, /createEditorPane/, 'editor bridge must expose createEditorPane')
+assert.match(editorBridge, /replaceEditorSelection/, 'editor bridge must expose replaceEditorSelection')
+assert.match(editorBridge, /insertIntoEditor/, 'editor bridge must expose insertIntoEditor')
+assert.match(editorBridge, /openEditorPanel/, 'editor bridge must expose openEditorPanel')
+assert.match(editorBridge, /localStorage\.setItem\(EDITOR_BRIDGE_PENDING_REQUESTS_KEY/, 'editor bridge must persist pending requests for newly-created editor windows')
+assert.match(editorBridge, /emitTo\(['"]editor['"],\s*EDITOR_BRIDGE_REQUEST_EVENT/, 'editor bridge must emit requests to already-running editor windows')
+assert.match(editorBridge, /waitForEditorBridgeResponse/, 'editor bridge must wait for explicit responses')
+assert.match(editorBridge, /registerActiveEditorContext/, 'editor bridge must expose active context registration')
+assert.match(editorBridge, /updateActivePaneSnapshot/, 'editor bridge must expose active pane snapshot updates')
+assert.doesNotMatch(editorBridge, /useWorkspaceStore|getState\(\)\.createPane|getState\(\)\.openPanelV2/, 'editor bridge caller side must not mutate editor workspace state directly')
+assert.match(tauriLib, /async fn show_editor_window/, 'native runtime must expose show_editor_window')
+assert.match(tauriLib, /async fn close_editor_window/, 'native runtime must expose close_editor_window')
+assert.match(tauriLib, /close_editor_window,[\s\S]*show_plugin_surface_window/, 'close_editor_window must be registered with Tauri')
+assert.match(tauriLib, /get_webview_window\("editor"\)/, 'editor window must be singleton and reuse existing windows')
+assert.match(tauriLib, /WebviewUrl::App\("index\.html\?window=editor"/, 'editor window must route to ?window=editor')
+assert.match(tauriLib, /inner_size\(EDITOR_WINDOW_WIDTH,\s*EDITOR_WINDOW_HEIGHT\)/, 'editor window must have explicit default size')
+assert.match(tauriLib, /min_inner_size\(EDITOR_WINDOW_MIN_WIDTH,\s*EDITOR_WINDOW_MIN_HEIGHT\)/, 'editor window must have explicit minimum size')
+assert.match(tauriLib, /show_and_focus_editor_window[\s\S]*set_focus/, 'show_editor_window must focus the editor window')
+assert.ok(capability.windows.includes('editor'), 'capability scope must allow the editor window')
+
+assert.match(editorWindow, /<EditorView \/>/, 'EditorWindow must host EditorView')
+assert.match(editorWindow, /<CommandPalette \/>/, 'EditorWindow must host the editor command bar')
+assert.match(editorWindow, /ensurePluginRuntimeReady/, 'EditorWindow must use shared plugin runtime bootstrap')
+assert.match(editorWindow, /registerEditorBridgeHandlers/, 'EditorWindow must register bridge handlers')
+assert.match(editorWindow, /applyCreateEditorPane[\s\S]*createPane/, 'EditorWindow must create editor panes from bridge requests in its own store')
+assert.match(editorWindow, /applyOpenEditorPanel[\s\S]*openPanelV2/, 'EditorWindow must attach panels from bridge requests in its own store')
+assert.match(editorWindow, /registerActiveEditorContext/, 'EditorWindow must publish active editor context')
+assert.match(editorWindow, /updateActivePaneSnapshot/, 'EditorWindow must publish active pane snapshots')
+assert.match(editorWindow, /Cmd|metaKey|ctrlKey|key\.toLowerCase\(\) !== ['"]w['"]/, 'EditorWindow must support primary-W close handling')
+assert.match(editorWindow, /upsertSurfaceInstance\([\s\S]*id:\s*['"]editor['"]/, 'EditorWindow must register itself as a surface')
+assert.match(workspaceStore, /isEditorWindowWorkspaceSession[\s\S]*sessionStorage/, 'editor workspace state must use session storage for scratch sessions')
+
+console.log('editor window launch checks passed')

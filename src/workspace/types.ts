@@ -129,7 +129,6 @@ export type WorkspaceLayoutEffect =
   | { type: 'workspace.split'; direction: 'horizontal' | 'vertical'; sourcePaneId?: PaneId }
 
 export type AppEffect =
-  | { type: 'app.showMainPanel' }
   | { type: 'app.openExternal'; url: string }
 
 export type PresentationEffect =

@@ -1,6 +1,7 @@
 import type { TextRange } from '../../workspace/launcher/types'
 import { runtimeRegistry } from '../../workspace/runtimeRegistry'
 import { useWorkspaceStore } from '../../workspace/workspaceStore'
+import { getActiveEditorContextSnapshot, getEditorContext } from '../../workspace/editorBridge'
 
 export type WorkContextInvocationSource = 'global-hotkey' | 'editor-command-bar' | 'plugin-surface'
 
@@ -53,40 +54,51 @@ export async function createWorkContextSnapshot(
 
 export const editorContextProvider: ContextSnapshotProvider = {
   id: 'editor',
-  getSnapshot: () => {
-    const state = useWorkspaceStore.getState()
-    const pane = state.panes[state.activePaneId]
-    if (!pane) return {}
-    const editor = runtimeRegistry.getCodeEditor(state.activePaneId)
-    const selection = editor?.getSelection?.()
-    const model = editor?.getModel?.()
-    const selectedText = selection && !selection.isEmpty?.()
-      ? model?.getValueInRange(selection)
-      : undefined
-    const position = editor?.getPosition?.()
-    const selectionRange: TextRange | undefined = selection && !selection.isEmpty?.()
-      ? {
-          startLineNumber: selection.startLineNumber,
-          startColumn: selection.startColumn,
-          endLineNumber: selection.endLineNumber,
-          endColumn: selection.endColumn,
-        }
-      : undefined
-
-    return {
-      editor: {
-        windowLabel: 'editor',
-        activePaneId: state.activePaneId,
-        paneIds: state.paneOrder,
-        language: pane.language ?? pane.detectedLanguage,
-        selectedText,
-        selectionRange,
-        cursor: position
-          ? { line: position.lineNumber, column: position.column }
-          : undefined,
-      },
+  getSnapshot: async () => {
+    if (isEditorWindowRuntime()) {
+      const editor = readLocalEditorContextSnapshot()
+      return editor ? { editor } : {}
     }
+
+    const cached = getActiveEditorContextSnapshot()
+    if (cached) return { editor: cached }
+
+    const editor = await getEditorContext({ timeoutMs: 300 })
+    return editor ? { editor } : {}
   },
+}
+
+export function readLocalEditorContextSnapshot(): EditorContextSnapshot | undefined {
+  const state = useWorkspaceStore.getState()
+  const pane = state.panes[state.activePaneId]
+  if (!pane) return undefined
+  const editor = runtimeRegistry.getCodeEditor(state.activePaneId)
+  const selection = editor?.getSelection?.()
+  const model = editor?.getModel?.()
+  const selectedText = selection && !selection.isEmpty?.()
+    ? model?.getValueInRange(selection)
+    : undefined
+  const position = editor?.getPosition?.()
+  const selectionRange: TextRange | undefined = selection && !selection.isEmpty?.()
+    ? {
+        startLineNumber: selection.startLineNumber,
+        startColumn: selection.startColumn,
+        endLineNumber: selection.endLineNumber,
+        endColumn: selection.endColumn,
+      }
+    : undefined
+
+  return {
+    windowLabel: 'editor',
+    activePaneId: state.activePaneId,
+    paneIds: state.paneOrder,
+    language: pane.language ?? pane.detectedLanguage,
+    selectedText,
+    selectionRange,
+    cursor: position
+      ? { line: position.lineNumber, column: position.column }
+      : undefined,
+  }
 }
 
 export const clipboardContextProvider: ContextSnapshotProvider = {
@@ -101,13 +113,21 @@ export const clipboardContextProvider: ContextSnapshotProvider = {
   },
 }
 
+export const foregroundContextProvider: ContextSnapshotProvider = {
+  id: 'foreground',
+  getSnapshot: async () => {
+    const foreground = await readForegroundAppContext()
+    return foreground ? { foreground } : {}
+  },
+}
+
 export async function createDefaultWorkContextSnapshot(
   source: WorkContextInvocationSource,
   providers: ContextSnapshotProvider[] = [],
 ): Promise<WorkContextSnapshot> {
   return createWorkContextSnapshot(
     { source, timestamp: Date.now() },
-    [editorContextProvider, clipboardContextProvider, ...providers],
+    [foregroundContextProvider, editorContextProvider, clipboardContextProvider, ...providers],
   )
 }
 
@@ -122,4 +142,24 @@ async function readClipboardText(): Promise<string> {
       return ''
     }
   }
+}
+
+async function readForegroundAppContext(): Promise<WorkContextSnapshot['foreground'] | undefined> {
+  if (!isTauriRuntime()) return undefined
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    const foreground = await invoke<WorkContextSnapshot['foreground']>('current_foreground_app_context')
+    if (!foreground?.appName && !foreground?.processId && !foreground?.windowTitle) return undefined
+    return foreground
+  } catch {
+    return undefined
+  }
+}
+
+function isTauriRuntime(): boolean {
+  return Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
+}
+
+function isEditorWindowRuntime(): boolean {
+  return new URLSearchParams(window.location.search).get('window') === 'editor'
 }

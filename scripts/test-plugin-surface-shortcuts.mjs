@@ -22,6 +22,7 @@ const files = {
   surfaceOpenRequest: read('src/workspace/pluginSurfaceOpenRequest.ts'),
   launcherWindowManager: read('src/workspace/windowManager/launcherWindow.ts'),
   globalLauncher: read('src/launcher/hosts/GlobalLauncherHost.tsx'),
+  globalLauncherFrames: read('src/components/launcher/GlobalLauncherFrames.tsx'),
   pluginSurfaceWindow: read('src/components/PluginSurfaceWindow.tsx'),
   pluginSurfaceRenderer: read('src/components/pluginSurface/PluginSurfaceRenderer.tsx'),
   scriptsView: read('src/views/ScriptsView.tsx'),
@@ -118,7 +119,8 @@ assert.match(
   'plugin surface window should capture Escape at document level so focused inputs cannot block close',
 )
 assert.match(files.pluginSurfaceWindow, /<PluginSurfaceRenderer/, 'plugin surface window must delegate plugin rendering to the shared renderer')
-assert.match(files.globalLauncher, /<PluginSurfaceRenderer/, 'global launcher surface frame must delegate plugin rendering to the shared renderer')
+assert.match(files.globalLauncher, /<GlobalLauncherPluginSurfaceFrame/, 'global launcher host must delegate plugin surface rendering to a frame')
+assert.match(files.globalLauncherFrames, /<PluginSurfaceRenderer/, 'global launcher surface frame must delegate plugin rendering to the shared renderer')
 assert.match(files.pluginSurfaceRenderer, /ensurePluginRuntimeReady/, 'shared plugin surface renderer must bootstrap plugin runtime')
 assert.match(files.pluginSurfaceRenderer, /missingPluginPermissions/, 'shared plugin surface renderer must gate missing permissions')
 assert.match(files.pluginSurfaceRenderer, /beforeOpen/, 'shared plugin surface renderer must run beforeOpen before rendering')

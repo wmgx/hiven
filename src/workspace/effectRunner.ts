@@ -118,7 +118,6 @@ export function applyEffects(
           applyWorkspaceEffect(effect)
           result.applied.push(effect)
           break
-        case 'app.showMainPanel':
         case 'app.openExternal':
           applyAppEffect(effect)
           result.applied.push(effect)
@@ -268,13 +267,7 @@ function applyTextReplace(effect: TextReplaceEffect) {
 }
 
 function applyAppEffect(effect: AppEffect) {
-  const app = useAppStore.getState()
   switch (effect.type) {
-    case 'app.showMainPanel':
-      app.setActiveView('editor')
-      app.setCommandPaletteOpen(false)
-      app.setGlobalLauncherOpen(false)
-      break
     case 'app.openExternal':
       void openExternalUrl(effect.url)
       break

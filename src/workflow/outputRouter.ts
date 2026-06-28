@@ -1,9 +1,8 @@
 import type { ActionResult, OutputTarget } from './outputTarget'
 import { useAppStore } from '../store'
 import { createPluginPaste } from '../workspace/pluginPaste'
-import { useWorkspaceStore } from '../workspace/workspaceStore'
 import { applyEffects } from '../workspace/effectRunner'
-import { requestOpenEditorWindow } from '../workspace/editorWindow'
+import { createEditorPane, insertIntoEditor, openEditorPanel, replaceEditorSelection } from '../workspace/editorBridge'
 import { createPluginLauncherApi } from '../workspace/launcher/pluginApi'
 
 export type OutputRouterContext = {
@@ -24,15 +23,18 @@ export function createDefaultOutputRouterContext(): OutputRouterContext {
     pasteToForegroundApp: async (text) => {
       await createPluginPaste().pasteText(text)
     },
-    replaceEditorSelection: (text) => launcherApi.replaceActiveText(text),
-    insertIntoEditor: (text) => launcherApi.insertText(text),
+    replaceEditorSelection: (text, options) => replaceEditorSelection(text, {
+      paneId: options?.paneId,
+      range: options?.range,
+    }),
+    insertIntoEditor: (text, options) => insertIntoEditor(text, {
+      paneId: options?.paneId,
+    }),
     openInEditor: async (text, options) => {
-      await requestOpenEditorWindow()
-      useWorkspaceStore.getState().createPane({
+      await createEditorPane({
         text,
         title: options?.title,
         language: options?.language,
-        focus: true,
       })
     },
     openPluginSurface: (options) => {
@@ -43,13 +45,10 @@ export function createDefaultOutputRouterContext(): OutputRouterContext {
       })
     },
     attachEditorPanel: async (text, options) => {
-      await requestOpenEditorWindow()
-      const state = useWorkspaceStore.getState()
-      state.openPanelV2({
+      await openEditorPanel({
         panelId: options.panelId,
         placement: options.placement,
         inputs: { text, target: options.pluginSurfaceTarget },
-        scope: { type: 'pane', paneId: state.activePaneId },
       })
     },
     saveToShelf: (text) => {

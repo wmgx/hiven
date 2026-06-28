@@ -321,6 +321,14 @@ async fn show_editor_window(app: tauri::AppHandle) -> Result<(), String> {
     show_and_focus_editor_window(&app, &window)
 }
 
+#[tauri::command]
+async fn close_editor_window(app: tauri::AppHandle) -> Result<(), String> {
+    let Some(window) = app.get_webview_window("editor") else {
+        return Ok(());
+    };
+    window.close().map_err(|error| error.to_string())
+}
+
 fn show_and_focus_editor_window(
     app: &tauri::AppHandle,
     window: &tauri::WebviewWindow,
@@ -883,6 +891,25 @@ fn current_foreground_application_name() -> Option<String> {
 #[tauri::command]
 async fn current_foreground_app_name() -> Option<String> {
     current_foreground_application_name()
+}
+
+#[derive(serde::Serialize)]
+struct ForegroundAppContext {
+    #[serde(rename = "appName", skip_serializing_if = "Option::is_none")]
+    app_name: Option<String>,
+    #[serde(rename = "processId", skip_serializing_if = "Option::is_none")]
+    process_id: Option<u32>,
+    #[serde(rename = "windowTitle", skip_serializing_if = "Option::is_none")]
+    window_title: Option<String>,
+}
+
+#[tauri::command]
+async fn current_foreground_app_context() -> ForegroundAppContext {
+    ForegroundAppContext {
+        app_name: current_foreground_application_name(),
+        process_id: current_foreground_process_id(),
+        window_title: None,
+    }
 }
 
 #[derive(Clone)]
@@ -3165,9 +3192,11 @@ pub fn run() {
             show_launcher_window,
             hide_launcher_window,
             show_editor_window,
+            close_editor_window,
             show_plugin_surface_window,
             simulate_paste,
             current_foreground_app_name,
+            current_foreground_app_context,
             discover_installed_apps,
             read_installed_app_icon_url,
             cache_installed_app_icons,

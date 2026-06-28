@@ -1,0 +1,37 @@
+#!/usr/bin/env node
+
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+const root = process.cwd()
+const read = (path) => readFileSync(join(root, path), 'utf8')
+
+const contextBroker = read('src/launcher/context/contextBroker.ts')
+const editorBridge = read('src/workspace/editorBridge.ts')
+const tauriLib = read('src-tauri/src/lib.rs')
+const workflowAdapter = read('src/workflow/workflowLauncherAdapter.ts')
+const defaultWorkflowProviders = read('src/workflow/defaultWorkflowProviders.ts')
+
+assert.match(contextBroker, /export type WorkContextSnapshot/, 'Context broker must define WorkContextSnapshot')
+assert.match(contextBroker, /foreground\?:\s*\{[\s\S]*appName\?:\s*string[\s\S]*processId\?:\s*number[\s\S]*windowTitle\?:\s*string/, 'snapshot must include foreground app fields')
+assert.match(contextBroker, /export const foregroundContextProvider/, 'default context broker must expose a foreground provider')
+assert.match(contextBroker, /current_foreground_app_context/, 'foreground provider must call the native foreground context command')
+assert.match(contextBroker, /\[foregroundContextProvider,\s*editorContextProvider,\s*clipboardContextProvider/, 'default snapshot must compose foreground, editor, and clipboard providers')
+assert.match(contextBroker, /runtimeRegistry\.getCodeEditor\(state\.activePaneId\)/, 'editor provider must read live editor runtime')
+assert.match(contextBroker, /getValueInRange\(selection\)/, 'editor provider must read selected text from live selection')
+assert.match(contextBroker, /selectionRange:\s*TextRange/, 'editor provider must expose selection range')
+assert.match(contextBroker, /getActiveEditorContextSnapshot/, 'non-editor windows must read synced editor context first')
+assert.match(contextBroker, /getEditorContext\(\{ timeoutMs:/, 'non-editor windows must request live editor context through the bridge')
+assert.match(editorBridge, /registerActiveEditorContext/, 'editor bridge must publish active context updates')
+assert.match(editorBridge, /updateActivePaneSnapshot/, 'editor bridge must publish active pane snapshot updates')
+assert.match(contextBroker, /readClipboardText/, 'clipboard provider must read clipboard text')
+assert.match(tauriLib, /struct ForegroundAppContext/, 'native runtime must serialize foreground context')
+assert.match(tauriLib, /async fn current_foreground_app_context/, 'native runtime must expose current_foreground_app_context')
+assert.match(tauriLib, /current_foreground_application_name\(\)/, 'foreground context must include app name when available')
+assert.match(tauriLib, /current_foreground_process_id\(\)/, 'foreground context must include process id when available')
+assert.match(tauriLib, /current_foreground_app_context,/, 'foreground context command must be registered with Tauri')
+assert.match(workflowAdapter, /createDefaultWorkContextSnapshot\(['"]global-hotkey['"]\)/, 'workflow launcher adapter must build a context snapshot before expanding actions')
+assert.match(defaultWorkflowProviders, /currentContextObjectProvider[\s\S]*createDefaultWorkContextSnapshot\(['"]global-hotkey['"]\)/, 'current context object provider must use the default context snapshot')
+
+console.log('context snapshot editor checks passed')

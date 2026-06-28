@@ -1,9 +1,7 @@
-import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
-import { Pin, Search } from 'lucide-react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
-import { localized, useAppStore, type LauncherHostSurfaceTarget, type PluginSurfaceOpenTarget } from '../../store'
+import { localized, useAppStore, type PluginSurfaceOpenTarget } from '../../store'
 import { t, type Locale } from '../../i18n'
-import { resolveIcon } from '../../utils/resolveIcon'
 import { pluginRegistry, usePluginRegistryVersion } from '../../workspace/pluginRegistry'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../../utils/imeKeyboard'
 import { usePluginSettingsStore } from '../../workspace/pluginSettingsStore'
@@ -13,22 +11,21 @@ import { resolveDisplayTitle, resolveDisplaySubtitle } from '../../workspace/lau
 import type { LauncherItem as DomainLauncherItem, LauncherResultChoice } from '../../workspace/launcher/types'
 import { LauncherParamStep, resolveParamValueLabel } from '../../components/launcher/LauncherParamStep'
 import { LauncherView } from '../../components/launcher/LauncherView'
-import { PluginSettingsContent } from '../../components/PluginSettingsDialog'
+import type { LauncherMixedItem } from '../../components/launcher/LauncherMixedList'
+import { GlobalLauncherCollectInputFrame, GlobalLauncherPluginSurfaceFrame, GlobalLauncherResultFrame, GlobalLauncherSearchFrame, GlobalLauncherSettingsFrame, GlobalLauncherSystemSurfaceFrame } from '../../components/launcher/GlobalLauncherFrames'
 import { getPlatformShortcutMeta, shouldCustomizeParams, supportsDefaultParamRun, supportsParamCustomization } from '../../components/launcher/launcherParamShortcuts'
 import type { PluginDefinition, PluginPermission } from '../../workspace/pluginTypes'
 import { getPluginPermissionSnapshot, missingPluginPermissions, usePluginPermissionStore } from '../../workspace/pluginPermissions'
 import { restartPluginBackground } from '../../workspace/pluginBackgroundManager'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from '../../workspace/launcherWindowEvents'
-import { PluginSurfacePermissionGate, PluginSurfaceRenderer } from '../../components/pluginSurface/PluginSurfaceRenderer'
+import { PluginSurfacePermissionGate } from '../../components/pluginSurface/PluginSurfaceRenderer'
 import { useLauncherSession } from '../../workspace/launcher/useLauncherSession'
 import { markSurfaceInstanceState, upsertSurfaceInstance } from '../../surfaces/registry'
 import { pluginSurfaceInstanceId } from '../../workspace/pluginSurfaceWindows'
 import { hideLauncherWindow } from '../../workspace/windowManager/launcherWindow'
 
-type LauncherItem =
-  | { kind: 'domain'; id: string; title: string; subtitle: string; icon?: string; aliases?: string[]; domainItem: DomainLauncherItem }
-  | { kind: 'pinned'; id: string; title: string; subtitle: string; icon?: string; aliases?: string[]; actionId: string }
+type LauncherItem = LauncherMixedItem
 
 const GLOBAL_LAUNCHER_PANEL_WIDTH = 680
 const STANDALONE_LAUNCHER_WIDTH = 728
@@ -43,8 +40,6 @@ const GLOBAL_LAUNCHER_SETTINGS_WIDTH = 720
 const GLOBAL_LAUNCHER_SETTINGS_HEIGHT = 560
 const PLUGIN_SURFACE_BACK_EVENT = 'hiven:plugin-surface-back'
 const PLUGIN_SURFACE_CLOSE_EVENT = 'hiven:plugin-surface-close'
-const SettingsSurfaceView = lazy(() => import('../../views/SettingsView').then((mod) => ({ default: mod.SettingsView })))
-const ScriptsSurfaceView = lazy(() => import('../../views/ScriptsView').then((mod) => ({ default: mod.ScriptsView })))
 
 export function GlobalLauncherHost() {
   const open = useAppStore((s) => s.globalLauncherOpen)
@@ -861,29 +856,21 @@ export function GlobalLauncherHost() {
         onCompositionEnd={handleCompositionEnd}
       >
         {hostSurfaceTarget ? (
-          <div
-            className="global-launcher-host-surface-shell flex flex-col min-h-0 outline-none"
-            tabIndex={-1}
-            style={{ height: STANDALONE_SURFACE_MAX_HEIGHT }}
-          >
-            <HostSurfaceView target={hostSurfaceTarget} />
-          </div>
+          <GlobalLauncherSystemSurfaceFrame
+            target={hostSurfaceTarget}
+            height={STANDALONE_SURFACE_MAX_HEIGHT}
+          />
         ) : launcherSettingsTarget ? (
-          <div
-            className="global-launcher-settings-shell flex flex-col min-h-0 outline-none"
-            tabIndex={-1}
-            style={{ height: GLOBAL_LAUNCHER_SETTINGS_HEIGHT }}
-          >
-            <PluginSettingsContent
-              pluginId={launcherSettingsTarget.pluginId}
-              source={launcherSettingsTarget.source}
-              locale={locale}
-              onClose={() => {
-                closeSettingsDialog()
-                focusSearchInputAfterBack()
-              }}
-            />
-          </div>
+          <GlobalLauncherSettingsFrame
+            pluginId={launcherSettingsTarget.pluginId}
+            source={launcherSettingsTarget.source}
+            locale={locale}
+            height={GLOBAL_LAUNCHER_SETTINGS_HEIGHT}
+            onClose={() => {
+              closeSettingsDialog()
+              focusSearchInputAfterBack()
+            }}
+          />
         ) : surfaceFrame ? (() => {
           if (!activeSurfaceFrame) {
             return <div className="p-4 text-center text-[12px]" style={{ color: 'var(--color-text-tertiary)' }}>Surface not found</div>
@@ -891,22 +878,13 @@ export function GlobalLauncherHost() {
           const { surface } = activeSurfaceFrame
           const shellHeight = surface.shell?.defaultHeight ?? 480
           return (
-            <div
-              className="global-launcher-surface-shell flex flex-col min-h-0 outline-none"
-              tabIndex={-1}
-              style={{ height: shellHeight }}
-            >
-              <div className="global-launcher-body" style={{ maxHeight: shellHeight, height: shellHeight, overflow: 'hidden' }}>
-                <PluginSurfaceRenderer
-                  target={surfaceFrame}
-                  locale={locale}
-                  presentation="global-launcher"
-                  contextSurfaceId="global-launcher"
-                  onBack={requestSurfaceBack}
-                  onClose={requestSurfaceClose}
-                />
-              </div>
-            </div>
+            <GlobalLauncherPluginSurfaceFrame
+              target={surfaceFrame}
+              locale={locale}
+              shellHeight={shellHeight}
+              onBack={requestSurfaceBack}
+              onClose={requestSurfaceClose}
+            />
           )
         })() : itemPermissionFrame ? (
           <div className="global-launcher-body" style={{ height: 260 }}>
@@ -940,8 +918,6 @@ export function GlobalLauncherHost() {
           )
         })() : controllerState && controllerState.frames.length > 1 && controllerState.frames[controllerState.frames.length - 1].kind === 'collect-input' ? (() => {
           const frame = controllerState.frames[controllerState.frames.length - 1] as CollectInputFrame
-          const placeholder = frame.input.placeholder ?? ''
-          const previewChoices = frame.previewOutput?.choices ?? []
           const paramChips: { label: string; value: string }[] = []
           if (frame.params && frame.item.params) {
             for (const p of frame.item.params) {
@@ -952,145 +928,55 @@ export function GlobalLauncherHost() {
             }
           }
           return (
-            <>
-              <div className="global-launcher-header l-search" style={{ borderBottom: '1px solid var(--border)' }}>
-                <button className="back" type="button" onClick={() => { controllerRef.current?.back(); focusSearchInputAfterBack() }}>‹</button>
-                <span className="title">
-                  <span className="t-ico">{resolveIcon(frame.item.display.icon, 14, resolveDisplayTitle(frame.item.display, locale))}</span>
-                  {resolveDisplayTitle(frame.item.display, locale)}
-                </span>
-                {paramChips.map((chip) => (
-                  <span
-                    key={chip.label}
-                    className="kbd shrink-0 max-w-[100px] truncate"
-                    title={`${chip.label}: ${chip.value}`}
-                  >
-                    {chip.value}
-                  </span>
-                ))}
-                <span className="vbar" />
-                <input
-                  ref={inputRef}
-                  value={frame.inputText}
-                  onChange={(event) => controllerRef.current?.setInputText(event.target.value)}
-                  placeholder={placeholder}
-                  className="mono"
-                />
-                {controllerState.busy && (
-                  <span className="meta">...</span>
-                )}
-              </div>
-              {controllerState.error && (
-                <div className="px-3.5 py-2 text-[12px]" style={{ color: 'var(--color-error)' }}>
-                  {controllerState.error}
-                </div>
-              )}
-              {previewChoices.length > 0 && (
-                <div className="global-launcher-body l-results">
-                  {previewChoices.map((choice, index) => (
-                    <ResultChoiceRow
-                      key={choice.id}
-                      choice={choice}
-                      index={index}
-                      selected={index === 0}
-                      onSelect={() => activateResultChoice(choice)}
-                    />
-                  ))}
-                </div>
-              )}
-              <div className="global-launcher-footer l-foot">
-                {previewChoices.length > 0
-                  ? <HintText label={t(locale, 'palette.enterToCopy')} />
-                  : <HintKey keys="↵" label={t(locale, 'palette.quickEntryRun')} />}
-                <HintKey keys="esc" label={t(locale, 'palette.back')} />
-              </div>
-            </>
+            <GlobalLauncherCollectInputFrame
+              inputRef={inputRef}
+              frame={frame}
+              busy={controllerState.busy}
+              error={controllerState.error}
+              locale={locale}
+              paramChips={paramChips}
+              onInputChange={(value) => controllerRef.current?.setInputText(value)}
+              onBack={() => {
+                controllerRef.current?.back()
+                focusSearchInputAfterBack()
+              }}
+              onActivateChoice={activateResultChoice}
+            />
           )
         })() : controllerState && controllerState.frames.length > 1 && controllerState.frames[controllerState.frames.length - 1].kind === 'result' ? (() => {
           const frame = controllerState.frames[controllerState.frames.length - 1] as ResultFrame
-          const choices = frame.output.choices
-          const selection = frame.output.selection
-          const clampedResultSelectedIndex = Math.min(resultSelectedIndex, Math.max(0, choices.length - 1))
-          const selectedCount = selectedResultChoiceIds.size
-          const countLabel = selection?.type === 'multi'
-            ? t(locale, 'palette.selectedCountMax', { count: selectedCount, max: selection.max })
-            : null
           return (
-            <>
-              <div className="global-launcher-header l-search" style={{ borderBottom: '1px solid var(--border)' }}>
-                <button className="back" type="button" onClick={() => { controllerRef.current?.back(); focusSearchInputAfterBack() }}>‹</button>
-                <span className="title">
-                  {frame.sourceTitle}
-                </span>
-              </div>
-              <div className="global-launcher-body l-results">
-                {choices.map((choice, index) => {
-                  const checked = selectedResultChoiceIds.has(choice.id)
-                  const disabled = selection?.type === 'multi' && selectedCount >= selection.max && !checked
-                  return (
-                  <ResultChoiceRow
-                    key={choice.id}
-                    choice={choice}
-                    index={index}
-                    selected={index === clampedResultSelectedIndex}
-                    checked={checked}
-                    disabled={disabled}
-                    multi={selection?.type === 'multi'}
-                    onHover={() => setResultSelectedIndex(index)}
-                    onSelect={() => toggleResultChoice(choice, frame)}
-                  />
-                  )
-                })}
-              </div>
-              {controllerState.error && (
-                <div className="px-3.5 py-2 text-[12px]" style={{ color: 'var(--color-error)' }}>
-                  {controllerState.error}
-                </div>
-              )}
-              <div className="global-launcher-footer l-foot">
-                {countLabel && <HintText label={countLabel} />}
-                <HintKey keys="↵" label={selection?.type === 'multi' ? t(locale, 'palette.select') : t(locale, 'palette.confirm')} />
-                <HintKey keys="esc" label={t(locale, 'palette.back')} />
-              </div>
-            </>
+            <GlobalLauncherResultFrame
+              frame={frame}
+              error={controllerState.error}
+              locale={locale}
+              selectedIndex={resultSelectedIndex}
+              selectedChoiceIds={selectedResultChoiceIds}
+              onBack={() => {
+                controllerRef.current?.back()
+                focusSearchInputAfterBack()
+              }}
+              onHoverChoice={setResultSelectedIndex}
+              onToggleChoice={toggleResultChoice}
+            />
           )
         })() : (
-          <>
-            <div className="global-launcher-header l-search" style={{ borderBottom: '1px solid var(--border)' }}>
-              <Search className="ico" />
-              <input
-                ref={inputRef}
-                value={query}
-                onChange={(event) => { setQuery(event.target.value); setSelectedIndex(0) }}
-                placeholder={t(locale, 'palette.globalPlaceholder')}
-              />
-            </div>
-            {controllerState?.error && (
-              <div className="px-3.5 py-1.5 text-[12px]" style={{ color: 'var(--color-error)', borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
-                {controllerState.error}
-              </div>
-            )}
-            <div className="global-launcher-body l-list" onMouseMove={() => { isKeyboardNavRef.current = false }}>
-              <LauncherList
-                items={visibleFiltered}
-                selected={selectedItem}
-                locale={locale}
-                onSelect={(item) => selectItem(item)}
-                onHoverIndex={(index) => { if (!isKeyboardNavRef.current) setSelectedIndex(index) }}
-              />
-            </div>
-            <div className="global-launcher-footer l-foot">
-              <HintKey keys="↑↓" label={t(locale, 'palette.select')} />
-              <HintKey keys="↵" label={t(locale, 'palette.confirm')} />
-              {selectedItem?.kind === 'domain' && supportsParamCustomization(selectedItem.domainItem) && (
-                <HintKey keys={`${getPlatformShortcutMeta().label}↵`} label={t(locale, 'palette.customizeParamsLabel')} />
-              )}
-              {isWorkflowObjectLauncherItem(selectedItem) && (
-                <HintKey keys="tab" label={t(locale, 'palette.select')} />
-              )}
-              <HintKey keys="esc" label={t(locale, 'palette.back')} />
-            </div>
-          </>
+          <GlobalLauncherSearchFrame
+            inputRef={inputRef}
+            query={query}
+            placeholder={t(locale, 'palette.globalPlaceholder')}
+            error={controllerState?.error}
+            items={visibleFiltered}
+            selectedItem={selectedItem}
+            locale={locale}
+            showCustomizeHint={selectedItem?.kind === 'domain' && supportsParamCustomization(selectedItem.domainItem)}
+            showWorkflowObjectHint={isWorkflowObjectLauncherItem(selectedItem)}
+            customizeShortcutLabel={getPlatformShortcutMeta().label}
+            onQueryChange={(value) => { setQuery(value); setSelectedIndex(0) }}
+            onSelectItem={(item) => selectItem(item)}
+            onHoverIndex={(index) => { if (!isKeyboardNavRef.current) setSelectedIndex(index) }}
+            onMouseMove={() => { isKeyboardNavRef.current = false }}
+          />
         )}
       </LauncherView>
     </div>
@@ -1131,175 +1017,6 @@ function isWorkflowObjectLauncherItem(item?: LauncherItem): boolean {
   return item?.kind === 'domain' && item.domainItem.systemKey.startsWith('workflow:object:')
 }
 
-function isAppIconRef(icon?: string): boolean {
-  return icon?.startsWith('app-icon:') === true
-}
-
-function LauncherList({
-  items,
-  selected,
-  locale,
-  onSelect,
-  onHoverIndex,
-}: {
-  items: LauncherItem[]
-  selected?: LauncherItem
-  locale: Locale
-  onSelect: (item: LauncherItem) => void
-  onHoverIndex?: (index: number) => void
-}) {
-  if (items.length === 0) return null
-  return (
-    <>
-      {items.map((item, index) => {
-        const isSelected = selected?.kind === item.kind && selected.id === item.id
-        return (
-          <LauncherListItem
-            key={`${item.kind}:${item.id}`}
-            item={item}
-            selected={isSelected}
-            locale={locale}
-            onSelect={onSelect}
-            onMouseEnter={() => onHoverIndex && onHoverIndex(index)}
-          />
-        )
-      })}
-    </>
-  )
-}
-
-const LauncherListItem = memo(function LauncherListItem({
-  item,
-  selected,
-  locale,
-  onSelect,
-  onMouseEnter,
-}: {
-  item: LauncherItem
-  selected: boolean
-  locale: Locale
-  onSelect: (item: LauncherItem) => void
-  onMouseEnter?: () => void
-}) {
-  const ref = useRef<HTMLButtonElement>(null)
-  const appIcon = isAppIconRef(item.icon)
-  const tag = getLauncherItemKindLabel(item, locale)
-
-  useEffect(() => {
-    if (selected) ref.current?.scrollIntoView({ block: 'nearest' })
-  }, [selected])
-
-  return (
-    <button
-      ref={ref}
-      className={`l-row cmd-item w-full border-none text-left ${selected ? 'sel selected' : ''}`}
-      onClick={() => onSelect(item)}
-      onMouseEnter={onMouseEnter}
-    >
-      <span
-        className={appIcon ? 'r-app' : 'r-ico'}
-      >
-        {appIcon ? (
-          <span className="app-icon">
-            {item.kind === 'domain'
-              ? resolveIcon(item.icon, 16, item.title)
-              : (resolveIcon(item.icon, 16, item.title) || <Pin size={16} />)}
-          </span>
-        ) : (
-          item.kind === 'domain'
-            ? resolveIcon(item.icon, 16, item.title)
-            : (resolveIcon(item.icon, 16, item.title) || <Pin size={16} />)
-        )}
-      </span>
-
-      <div
-        className="r-main"
-      >
-        <span className="r-title launcher-item-title">
-          {item.title}
-        </span>
-        {item.subtitle && (
-          <span className="r-desc">{item.subtitle}</span>
-        )}
-      </div>
-      <span className="r-tag launcher-kind-tag">
-        {tag}
-      </span>
-      {selected && <span className="r-kbd">↵</span>}
-    </button>
-  )
-})
-
-function getLauncherItemKindLabel(item: LauncherItem, locale: Locale) {
-  if (item.kind === 'pinned') return t(locale, 'palette.kindPinned')
-  if (isAppIconRef(item.icon)) return t(locale, 'palette.kindApp')
-  return t(locale, 'palette.kindCommand')
-}
-
-function ResultChoiceRow({
-  choice,
-  index,
-  selected,
-  checked = false,
-  disabled = false,
-  multi = false,
-  onHover,
-  onSelect,
-}: {
-  choice: LauncherResultChoice
-  index: number
-  selected: boolean
-  checked?: boolean
-  disabled?: boolean
-  multi?: boolean
-  onHover?: () => void
-  onSelect: () => void
-}) {
-  const bodyText = choice.preview ?? choice.title
-  const longResult = isLongResultText(bodyText)
-  const className = `global-launcher-result-row ${longResult ? 'l-result-block' : 'l-result'} ${selected ? 'sel is-selected' : ''} ${disabled ? 'disabled' : ''}`
-  return (
-    <button
-      className={className}
-      onMouseEnter={onHover}
-      onClick={onSelect}
-      disabled={disabled}
-    >
-      {multi ? (
-        <span className={`check ${checked ? 'on' : ''}`}>{checked ? '✓' : ''}</span>
-      ) : (
-        <span className="ri">{index === 0 ? '=' : '#'}</span>
-      )}
-      <span className={longResult ? 'block-main' : 'rtext'}>{bodyText}</span>
-      {!longResult && choice.subtitle && (
-        <span className="rkind">{choice.subtitle}</span>
-      )}
-      {!multi && <span className="rkbd">↵</span>}
-    </button>
-  )
-}
-
-function isLongResultText(text: string): boolean {
-  return text.includes('\n') || text.length > 88
-}
-
-function HintKey({ keys, label }: { keys: string; label: string }) {
-  return (
-    <span className="grp">
-      <kbd>{keys}</kbd>
-      {label}
-    </span>
-  )
-}
-
-function HintText({ label }: { label: string }) {
-  return (
-    <span className="grp primary">
-      {label}
-    </span>
-  )
-}
-
 function launcherItemMatchesQuery(item: LauncherItem, q: string, locale: Locale): boolean {
   return searchableFieldsMatch(launcherItemSearchFields(item), q, locale)
 }
@@ -1332,16 +1049,6 @@ function launcherItemSearchId(item: LauncherItem): string {
 function launcherItemUsageKey(item: LauncherItem): string {
   if (item.kind === 'pinned') return item.actionId
   return item.id
-}
-
-function HostSurfaceView({ target }: { target: LauncherHostSurfaceTarget }) {
-  return (
-    <div className="global-launcher-body" style={{ height: STANDALONE_SURFACE_MAX_HEIGHT, maxHeight: STANDALONE_SURFACE_MAX_HEIGHT, overflow: 'hidden' }}>
-      <Suspense fallback={<div className="view-loading" />}>
-        {target === 'settings' ? <SettingsSurfaceView /> : <ScriptsSurfaceView />}
-      </Suspense>
-    </div>
-  )
 }
 
 function samePluginSurfaceTarget(

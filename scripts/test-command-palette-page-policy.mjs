@@ -13,6 +13,7 @@ function read(path) {
 const files = {
   app: read('src/App.tsx'),
   store: read('src/store.ts'),
+  editorWindow: read('src/components/EditorWindow.tsx'),
   editorView: read('src/views/EditorView.tsx'),
   paneEditor: read('src/components/workspace/PaneEditor.tsx'),
   editorLocale: read('src/i18n/locales/editor.ts'),
@@ -32,9 +33,6 @@ function check(name, fn) {
 function assertHas(source, pattern, message) {
   assert.match(source, pattern, message)
 }
-
-const editorOnlyCommandPaletteRender =
-  /activeView\s*={2,3}\s*['"]editor['"][\s\S]{0,220}<CommandPalette\s*\/>|<CommandPalette\s*\/>[\s\S]{0,220}activeView\s*={2,3}\s*['"]editor['"]/
 
 check('ViewId includes the plugin editor and pinned runner pages under test', () => {
   assertHas(
@@ -60,10 +58,16 @@ check('Monaco editor does not register CtrlCmd+K for the command palette', () =>
   )
 })
 
-check('CommandPalette is only rendered while the editor page is active', () => {
-  assert.ok(
-    editorOnlyCommandPaletteRender.test(files.app),
-    'CommandPalette is rendered outside an activeView === "editor" condition, so a non-editor page can still display it when commandPaletteOpen becomes true',
+check('CommandPalette is only hosted by the editor window surface', () => {
+  assert.doesNotMatch(
+    files.app,
+    /<CommandPalette\s*\/>/,
+    'Launcher runtime App must not render the editor command bar',
+  )
+  assertHas(
+    files.editorWindow,
+    /<CommandPalette\s*\/>/,
+    'EditorWindow should own the editor command bar',
   )
 })
 

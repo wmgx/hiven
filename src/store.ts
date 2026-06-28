@@ -297,8 +297,8 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   activeView: 'editor',
   setActiveView: (view) => set(view === 'editor' ? { activeView: view } : { activeView: view, commandPaletteOpen: false }),
   pluginEditor: null,
-  openPluginEditor: (plugin) => set({ pluginEditor: plugin, activeView: 'plugin-editor', commandPaletteOpen: false }),
-  closePluginEditor: () => set({ pluginEditor: null, activeView: 'scripts', commandPaletteOpen: false }),
+  openPluginEditor: (plugin) => set({ pluginEditor: plugin, commandPaletteOpen: false }),
+  closePluginEditor: () => set({ pluginEditor: null, commandPaletteOpen: false }),
 
   // Pinned Action / Live Runner
   pinnedActions: [],

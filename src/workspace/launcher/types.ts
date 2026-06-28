@@ -272,7 +272,7 @@ export type PluginLauncherApi = {
   showMainPanel(): Promise<void>
   showPluginsPage(): Promise<void>
   showSettingsPage(): Promise<void>
-  createPane(options?: { text?: string; title?: string; language?: string; focus?: boolean; direction?: 'left' | 'right' | 'top' | 'bottom' }): string
+  createPane(options?: { text?: string; title?: string; language?: string; focus?: boolean; direction?: 'left' | 'right' | 'top' | 'bottom' }): string | Promise<string | undefined>
   dispatchEffects(effects: FluxEffect[]): EffectRunnerResult
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
   apps: PluginAppsApi

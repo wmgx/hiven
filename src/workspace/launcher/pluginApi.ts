@@ -17,6 +17,12 @@ import { useAppStore } from '../../store'
 import { createPluginPrivateStorage } from '../pluginStorage'
 import { getPluginPermissionSnapshot, requirePluginPermissions } from '../pluginPermissions'
 import { requestOpenEditorWindow } from '../editorWindow'
+import {
+  createEditorPane,
+  getActiveEditorPaneSnapshot,
+  insertIntoEditor,
+  replaceEditorSelection,
+} from '../editorBridge'
 import type { FluxEffect, SerializedRange } from '../types'
 import type { PluginPermission } from '../pluginTypes'
 import type { PluginSettingsSource } from '../pluginSettingsStore'
@@ -55,6 +61,10 @@ function activeSelectionRange(): SerializedRange | undefined {
   }
 }
 
+function isEditorWindowRuntime(): boolean {
+  return new URLSearchParams(window.location.search).get('window') === 'editor'
+}
+
 async function readClipboard(): Promise<string> {
   try {
     const { readText } = await import('@tauri-apps/plugin-clipboard-manager')
@@ -82,15 +92,11 @@ async function writeClipboard(text: string): Promise<void> {
 }
 
 async function showMainPanel(): Promise<void> {
-  if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
-    try {
-      await requestOpenEditorWindow()
-      return
-    } catch (error) {
-      console.warn('[launcher] failed to show editor window:', error)
-    }
+  try {
+    await requestOpenEditorWindow()
+  } catch (error) {
+    console.warn('[launcher] failed to show editor window:', error)
   }
-  applyEffects([{ type: 'app.showMainPanel' }])
 }
 
 async function showPluginsPage(): Promise<void> {
@@ -137,6 +143,18 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
     getActiveText: () => readActiveText(),
     getSelectionText: () => readSelectionText(),
     getPaneSnapshot: () => {
+      if (!isEditorWindowRuntime()) {
+        const snapshot = getActiveEditorPaneSnapshot()
+        if (snapshot) {
+          return {
+            activePaneId: snapshot.activePaneId,
+            previousActivePaneId: snapshot.previousActivePaneId,
+            paneIds: snapshot.paneIds,
+            panes: snapshot.panes,
+            renderers: {},
+          }
+        }
+      }
       const state = useWorkspaceStore.getState()
       return {
         activePaneId: state.activePaneId,
@@ -171,6 +189,10 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
     },
     getClipboardText: () => readClipboard(),
     replaceActiveText: async (text: string) => {
+      if (!isEditorWindowRuntime()) {
+        await replaceEditorSelection(text)
+        return
+      }
       const range = activeSelectionRange()
       const paneId = useWorkspaceStore.getState().activePaneId
       // If there is a selection, replace only that range; otherwise replace all.
@@ -180,6 +202,10 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
       applyEffects(effects)
     },
     insertText: async (text: string) => {
+      if (!isEditorWindowRuntime()) {
+        await insertIntoEditor(text)
+        return
+      }
       const range = activeSelectionRange()
       const paneId = useWorkspaceStore.getState().activePaneId
       // Insert at cursor: a zero-width replace at the selection start, or append.
@@ -205,7 +231,9 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
     showMainPanel,
     showPluginsPage,
     showSettingsPage,
-    createPane: (options) => useWorkspaceStore.getState().createPane(options),
+    createPane: (options) => isEditorWindowRuntime()
+      ? useWorkspaceStore.getState().createPane(options)
+      : createEditorPane(options),
     dispatchEffects: (effects: FluxEffect[]) => applyEffects(effects),
     showMessage: (message: string, level = 'info') => {
       useAppStore.getState().setLastCommandStatus({

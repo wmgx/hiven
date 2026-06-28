@@ -25,6 +25,8 @@ const files = {
   configInit: read('src/configInit.ts'),
   store: read('src/store.ts'),
   app: read('src/App.tsx'),
+  pluginsSurface: readIfExists('src/surfaces/PluginsSurface.tsx'),
+  pluginSurfaceRenderer: readIfExists('src/components/pluginSurface/PluginSurfaceRenderer.tsx'),
   tauriLib: read('src-tauri/src/lib.rs'),
   pluginEditorView: readIfExists('src/views/PluginEditorView.tsx'),
   pluginDebugRunner: readIfExists('src/workspace/pluginDebugRunner.ts'),
@@ -357,9 +359,11 @@ check('PluginEditorView is a read-only source viewer with directory tree and no 
   assert.doesNotMatch(files.pluginEditorView, /runDebug|runPluginDebugSource|debugOutput|debugLogs/, 'PluginEditorView should not include a debug panel anymore')
 })
 
-check('App protects menu navigation from plugin view render crashes', () => {
-  assert.match(files.app, /class\s+ViewErrorBoundary/, 'App should define a view error boundary')
-  assert.match(files.app, /ViewErrorBoundary[\s\S]*ViewContent/, 'App should wrap view content with the error boundary')
+check('Plugin management is hosted as a surface instead of main-window view content', () => {
+  assert.doesNotMatch(files.app, /ViewContent|class\s+ViewErrorBoundary|<ScriptsView|<PluginEditorView/, 'Launcher runtime App should not mount legacy plugin view content')
+  assert.match(files.pluginsSurface, /<ScriptsView\s*\/>/, 'PluginsSurface should host the plugin manager view')
+  assert.match(files.pluginsSurface, /<PluginEditorSurface\s*\/>/, 'PluginsSurface should host the plugin editor surface')
+  assert.match(files.pluginSurfaceRenderer, /PluginSurfaceErrorBoundary|surfaceState\.status === 'error'/, 'Plugin surface renderer should isolate plugin surface render failures')
 })
 
 check('Tauri exposes plugin directory filesystem commands', () => {

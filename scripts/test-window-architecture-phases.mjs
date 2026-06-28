@@ -21,22 +21,36 @@ const files = {
   launcherTypes: read('src/workspace/launcher/types.ts'),
   launcherSession: read('src/workspace/launcher/useLauncherSession.ts'),
   launcherView: read('src/components/launcher/LauncherView.tsx'),
+  launcherDomainSearchStep: read('src/components/launcher/LauncherDomainSearchStep.tsx'),
+  launcherCollectInputStep: read('src/components/launcher/LauncherCollectInputStep.tsx'),
+  launcherResultStep: read('src/components/launcher/LauncherResultStep.tsx'),
+  launcherFooterHints: read('src/components/launcher/LauncherFooterHints.tsx'),
+  launcherMixedList: read('src/components/launcher/LauncherMixedList.tsx'),
+  launcherResultChoiceRow: read('src/components/launcher/LauncherResultChoiceRow.tsx'),
+  globalLauncherFrames: read('src/components/launcher/GlobalLauncherFrames.tsx'),
   launcherUsage: read('src/workspace/launcher/usage.ts'),
   launcherRegistry: read('src/workspace/launcher/registry.ts'),
   globalLauncher: read('src/components/GlobalLauncher.tsx'),
   globalLauncherHost: read('src/launcher/hosts/GlobalLauncherHost.tsx'),
   surfaceRegistry: read('src/surfaces/registry.ts'),
+  settingsSurface: read('src/surfaces/SettingsSurface.tsx'),
+  pluginsSurface: read('src/surfaces/PluginsSurface.tsx'),
+  pluginEditorSurface: read('src/surfaces/PluginEditorSurface.tsx'),
   surfaceActions: read('src/surfaces/actions.ts'),
   windowManagerEditor: read('src/workspace/windowManager/editorWindow.ts'),
   windowManagerPluginSurfaces: read('src/workspace/windowManager/pluginSurfaceWindows.ts'),
   windowManagerLauncher: read('src/workspace/windowManager/launcherWindow.ts'),
   windowLabels: read('src/workspace/windowManager/windowLabels.ts'),
   editorWindowApi: read('src/workspace/editorWindow.ts'),
+  editorBridge: read('src/workspace/editorBridge.ts'),
   pluginSurfaceWindowComponent: read('src/components/PluginSurfaceWindow.tsx'),
   editorWindowComponent: read('src/components/EditorWindow.tsx'),
   hostActions: read('src/workspace/launcher/hostActions.ts'),
   registry: read('src/workspace/launcher/registry.ts'),
   pluginApi: read('src/workspace/launcher/pluginApi.ts'),
+  pluginHostCore: read('src/pluginHostCore.ts'),
+  workspaceTypes: read('src/workspace/types.ts'),
+  effectRunner: read('src/workspace/effectRunner.ts'),
   hostProvider: read('src/workspace/launcher/hostProvider.ts'),
   tauriConfig: read('src-tauri/tauri.conf.json'),
   defaultCapability: read('src-tauri/capabilities/default.json'),
@@ -55,6 +69,16 @@ assert.equal(
 assert.match(files.hostProvider, /getEditorWindowItems/, 'Editor window launcher item must be wired into host provider')
 assert.match(files.editorWindowApi, /invoke\(['"]show_editor_window['"]\)/, 'editor window opener must delegate lifecycle to the native window manager')
 assert.doesNotMatch(files.editorWindowApi, /new WebviewWindow|WebviewWindow\.getByLabel/, 'editor window opener must not create editor windows from frontend JS')
+assert.doesNotMatch(files.editorWindowApi, /createPane|openPanelV2|EDITOR_OPEN_REQUEST_EVENT/, 'editor window opener must only own lifecycle, not editor workspace mutations')
+assert.match(files.editorBridge, /EDITOR_BRIDGE_REQUEST_EVENT/, 'editor bridge must expose an explicit request event')
+assert.match(files.editorBridge, /EDITOR_BRIDGE_RESPONSE_EVENT/, 'editor bridge must expose an explicit response event')
+assert.match(files.editorBridge, /getEditorContext/, 'editor bridge must support launcher-to-editor context requests')
+assert.match(files.editorBridge, /createEditorPane/, 'editor bridge must support launcher-to-editor pane creation')
+assert.match(files.editorBridge, /replaceEditorSelection/, 'editor bridge must support launcher-to-editor selection replacement')
+assert.match(files.editorBridge, /insertIntoEditor/, 'editor bridge must support launcher-to-editor insertion')
+assert.match(files.editorBridge, /openEditorPanel/, 'editor bridge must support launcher-to-editor panel opening')
+assert.match(files.editorBridge, /registerActiveEditorContext/, 'editor bridge must support editor-to-launcher active context registration')
+assert.match(files.editorBridge, /updateActivePaneSnapshot/, 'editor bridge must support editor-to-launcher pane snapshot updates')
 
 assert.match(files.workspaceStore, /isEditorWindowWorkspaceSession/, 'workspace store must detect editor window sessions')
 assert.match(files.workspaceStore, /createJSONStorage/, 'workspace store must explicitly choose storage per runtime window')
@@ -78,15 +102,52 @@ assert.match(files.launcherSession, /new LauncherController/, 'shared launcher s
 assert.match(files.launcherSession, /collectDynamicItems/, 'shared launcher session must own dynamic item collection')
 assert.match(files.launcherSession, /rankLauncherItems/, 'shared launcher session must own launcher ranking')
 assert.match(files.launcherView, /data-launcher-host/, 'shared LauncherView must stamp the active host id')
+assert.match(files.launcherDomainSearchStep, /export function LauncherDomainSearchStep/, 'shared launcher UI must provide the search/list step')
+assert.match(files.launcherCollectInputStep, /export function LauncherCollectInputStep/, 'shared launcher UI must provide the collect-input step')
+assert.match(files.launcherResultStep, /export function LauncherResultStep/, 'shared launcher UI must provide the result-choice step')
+assert.match(files.launcherFooterHints, /export function LauncherHintKey/, 'shared launcher UI must provide footer hint primitives')
+assert.match(files.launcherFooterHints, /export function LauncherHintText/, 'shared launcher UI must provide text-only footer hints')
+assert.match(files.launcherMixedList, /export function LauncherMixedList/, 'shared launcher UI must provide the mixed global list')
+assert.match(files.launcherResultChoiceRow, /export function LauncherResultChoiceRow/, 'shared launcher UI must provide global result choice rows')
+assert.match(files.globalLauncherFrames, /export function GlobalLauncherSystemSurfaceFrame/, 'global launcher frames must provide a system surface frame')
+assert.match(files.globalLauncherFrames, /export function GlobalLauncherSettingsFrame/, 'global launcher frames must provide a settings frame')
+assert.match(files.globalLauncherFrames, /export function GlobalLauncherPluginSurfaceFrame/, 'global launcher frames must provide a plugin surface frame')
+assert.match(files.globalLauncherFrames, /export function GlobalLauncherSearchFrame/, 'global launcher frames must provide a search frame')
+assert.match(files.globalLauncherFrames, /export function GlobalLauncherCollectInputFrame/, 'global launcher frames must provide a collect-input frame')
+assert.match(files.globalLauncherFrames, /export function GlobalLauncherResultFrame/, 'global launcher frames must provide a result frame')
+assert.match(files.globalLauncherFrames, /surfaces\/SettingsSurface/, 'global launcher system frame must load SettingsSurface instead of the legacy view directly')
+assert.match(files.globalLauncherFrames, /surfaces\/PluginsSurface/, 'global launcher system frame must load PluginsSurface instead of the legacy view directly')
+assert.match(files.settingsSurface, /export function SettingsSurface/, 'settings must have a first-class surface wrapper')
+assert.match(files.pluginsSurface, /export function PluginsSurface/, 'plugins must have a first-class surface wrapper')
+assert.match(files.pluginsSurface, /<PluginEditorSurface \/>/, 'plugins surface must host plugin editor inside the surface boundary')
+assert.match(files.pluginEditorSurface, /export function PluginEditorSurface/, 'plugin editor must have a first-class surface wrapper')
 assert.match(files.commandPalette, /return <EditorCommandBarHost \/>/, 'CommandPalette must be a compatibility wrapper')
 assert.match(files.globalLauncher, /return <GlobalLauncherHost \/>/, 'GlobalLauncher must be a compatibility wrapper')
 assert.match(files.editorCommandBarHost, /useLauncherSession\(\{[\s\S]*hostId:\s*['"]editor-command-bar['"][\s\S]*staticItemFilter:\s*filterEditorCommandBarItems/, 'EditorCommandBarHost must use the shared session and filter to editor-local actions')
 assert.match(files.globalLauncherHost, /useLauncherSession\(\{[\s\S]*hostId:\s*['"]global-launcher['"]/, 'GlobalLauncherHost must use the shared launcher session')
 assert.match(files.editorCommandBarHost, /<LauncherView[\s\S]*hostId=['"]editor-command-bar['"]/, 'EditorCommandBarHost must render through the shared LauncherView')
+assert.match(files.editorCommandBarHost, /<LauncherDomainSearchStep/, 'EditorCommandBarHost must use the shared search/list step')
+assert.match(files.editorCommandBarHost, /<LauncherCollectInputStep/, 'EditorCommandBarHost must use the shared collect-input step')
+assert.match(files.editorCommandBarHost, /<LauncherResultStep/, 'EditorCommandBarHost must use the shared result-choice step')
+assert.doesNotMatch(files.editorCommandBarHost, /function SearchStep|function CollectInputStep|function ResultStep|function LauncherActionItem/, 'EditorCommandBarHost must not carry duplicate launcher UI step implementations')
 assert.match(files.globalLauncherHost, /<LauncherView[\s\S]*hostId=['"]global-launcher['"]/, 'GlobalLauncherHost must render through the shared LauncherView')
+assert.match(files.globalLauncherFrames, /<LauncherMixedList/, 'GlobalLauncher frames must use the shared mixed list')
+assert.match(files.globalLauncherFrames, /<LauncherResultChoiceRow/, 'GlobalLauncher frames must use the shared result choice row')
+assert.match(files.globalLauncherFrames, /<LauncherHintKey/, 'GlobalLauncher frames must use shared footer key hints')
+assert.match(files.globalLauncherFrames, /<LauncherHintText/, 'GlobalLauncher frames must use shared footer text hints')
+assert.match(files.globalLauncherHost, /<GlobalLauncherSystemSurfaceFrame/, 'GlobalLauncherHost must delegate system surfaces to a frame component')
+assert.match(files.globalLauncherHost, /<GlobalLauncherSettingsFrame/, 'GlobalLauncherHost must delegate settings to a frame component')
+assert.match(files.globalLauncherHost, /<GlobalLauncherPluginSurfaceFrame/, 'GlobalLauncherHost must delegate plugin surfaces to a frame component')
+assert.match(files.globalLauncherHost, /<GlobalLauncherSearchFrame/, 'GlobalLauncherHost must delegate search rendering to a frame component')
+assert.match(files.globalLauncherHost, /<GlobalLauncherCollectInputFrame/, 'GlobalLauncherHost must delegate collect-input rendering to a frame component')
+assert.match(files.globalLauncherHost, /<GlobalLauncherResultFrame/, 'GlobalLauncherHost must delegate result rendering to a frame component')
+assert.doesNotMatch(files.globalLauncherHost, /function LauncherList|const LauncherListItem|function ResultChoiceRow|function HintKey|function HintText|function getLauncherItemKindLabel|function isLongResultText|function HostSurfaceView|<PluginSettingsContent|<PluginSurfaceRenderer|<LauncherMixedList|<LauncherResultChoiceRow|<LauncherHintKey|<LauncherHintText|<Search className=/, 'GlobalLauncherHost must not carry duplicate shared launcher UI primitives or extracted frames')
 assert.match(files.surfaceRegistry, /export type SurfaceInstance/, 'Surface registry must model surface instances')
 assert.match(files.surfaceRegistry, /upsertSurfaceInstance/, 'Surface registry must upsert surface instances')
 assert.match(files.surfaceRegistry, /getSurfaceInstances/, 'Surface registry must expose current surfaces')
+assert.match(files.surfaceRegistry, /SURFACE_REGISTRY_EVENT/, 'Surface registry must sync state across windows through Tauri events')
+assert.match(files.surfaceRegistry, /broadcastSurfaceRegistryMutation/, 'Surface registry must broadcast local mutations')
+assert.match(files.surfaceRegistry, /applyRemoteSurfaceRegistryMutation/, 'Surface registry must apply remote mutations')
 assert.match(files.surfaceActions, /focusSurfaceInstance/, 'Surface registry must provide a switch/focus operation')
 assert.match(files.pluginSurfaceWindowComponent, /markSurfaceInstanceState\([\s\S]*['"]visible['"]/, 'Plugin surface window component must mark its surface visible')
 assert.match(files.pluginSurfaceWindowComponent, /markSurfaceInstanceState\([\s\S]*['"]hidden['"]/, 'Plugin surface window component must mark its surface hidden on teardown')
@@ -131,9 +192,15 @@ assert.doesNotMatch(
 
 assert.match(files.store, /LauncherHostSurfaceTarget/, 'app store must model launcher-hosted app surfaces')
 assert.match(files.store, /openLauncherHostSurface/, 'app store must expose launcher-hosted surface opener')
+assert.doesNotMatch(
+  files.store.match(/openPluginEditor:[\s\S]*?closePluginEditor:/)?.[0] ?? '',
+  /activeView:\s*['"]plugin-editor['"]|activeView:\s*['"]scripts['"]/,
+  'Plugin editor open/close must not navigate through the retired main-window ViewId model',
+)
 assert.match(files.globalLauncherHost, /launcherHostSurfaceTarget/, 'GlobalLauncherHost must read launcher-hosted surface target')
-assert.match(files.globalLauncherHost, /SettingsSurfaceView/, 'GlobalLauncherHost must render Settings as a launcher-hosted surface')
-assert.match(files.globalLauncherHost, /ScriptsSurfaceView/, 'GlobalLauncherHost must render Plugins as a launcher-hosted surface')
+assert.match(files.globalLauncherHost, /GlobalLauncherSystemSurfaceFrame/, 'GlobalLauncherHost must render app surfaces through a frame')
+assert.match(files.globalLauncherFrames, /SettingsSurface/, 'GlobalLauncher frame must render Settings as a launcher-hosted surface')
+assert.match(files.globalLauncherFrames, /PluginsSurface/, 'GlobalLauncher frame must render Plugins as a launcher-hosted surface')
 assert.doesNotMatch(files.pluginApi, /emitTo\(['"]main['"]/, 'launcher API must not route settings/plugins through the main window')
 assert.doesNotMatch(files.pluginApi, /show_and_focus_window/, 'launcher API must not focus the main window for settings/plugins')
 assert.doesNotMatch(files.app, /hiven:\/\/show-plugins-page|hiven:\/\/show-settings-page/, 'main window should not be the settings/plugins bridge')
@@ -172,5 +239,9 @@ assert.doesNotMatch(files.globalPinnedLauncher, /shouldOpenCommandPaletteInMainW
 assert.match(files.globalPinnedLauncher, /routeGlobalPinnedLauncherShortcut\(\)[\s\S]{0,120}showLauncherWindow\(\)/, 'global pinned launcher shortcut must directly open the launcher window')
 assert.doesNotMatch(files.globalLauncherHost, /emitTo\(['"]main['"]|hiven:\/\/run-pinned-action/, 'standalone launcher must not send pinned actions to a retired main window')
 assert.doesNotMatch(files.hostActions, /host:view:editor|show-main-panel|core-pane\.show-main-panel/, 'global launcher must not expose the retired main panel action')
+assert.doesNotMatch(files.workspaceTypes, /app\.showMainPanel/, 'workspace effects must not expose the retired main panel effect')
+assert.doesNotMatch(files.effectRunner, /app\.showMainPanel|setActiveView\(['"]editor['"]\)/, 'effect runner must not route through the retired main-window ViewId model')
+assert.doesNotMatch(files.pluginApi, /app\.showMainPanel|applyEffects\(\[\{ type: ['"]app\.showMainPanel['"]/, 'plugin launcher API must not route showMainPanel through the retired effect')
+assert.doesNotMatch(files.pluginHostCore, /app\.showMainPanel/, 'plugin core SDK must not mint the retired main panel effect')
 
 console.log('window architecture phase checks passed')

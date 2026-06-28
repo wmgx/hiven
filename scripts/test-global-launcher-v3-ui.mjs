@@ -19,8 +19,12 @@ function read(path) {
 
 const files = {
   packageJson: read('package.json'),
-  globalLauncher: read('src/components/GlobalLauncher.tsx'),
-  commandPalette: read('src/components/CommandPalette.tsx'),
+  globalLauncher: read('src/launcher/hosts/GlobalLauncherHost.tsx'),
+  globalLauncherFrames: read('src/components/launcher/GlobalLauncherFrames.tsx'),
+  launcherMixedList: read('src/components/launcher/LauncherMixedList.tsx'),
+  launcherResultChoiceRow: read('src/components/launcher/LauncherResultChoiceRow.tsx'),
+  commandPalette: read('src/launcher/hosts/EditorCommandBarHost.tsx'),
+  launcherDomainSearchStep: read('src/components/launcher/LauncherDomainSearchStep.tsx'),
   launcherParamStep: read('src/components/launcher/LauncherParamStep.tsx'),
   launcherController: read('src/workspace/launcher/controller.ts'),
   launcherTypes: read('src/workspace/launcher/types.ts'),
@@ -39,24 +43,25 @@ assert.match(files.globalLauncher, /resultSelectedIndex/, 'GlobalLauncher result
 assert.match(files.globalLauncher, /event\.key === 'ArrowDown'[\s\S]{0,320}setResultSelectedIndex/, 'GlobalLauncher result frame must support ArrowDown selection')
 assert.match(files.globalLauncher, /event\.key === 'ArrowUp'[\s\S]{0,320}setResultSelectedIndex/, 'GlobalLauncher result frame must support ArrowUp selection')
 assert.match(files.globalLauncher, /choices\[Math\.min\(resultSelectedIndex/, 'Enter should activate the selected result choice instead of always using the first row')
-assert.match(files.globalLauncher, /global-launcher-result-row/, 'GlobalLauncher result rows must have a stable v3 row styling hook')
-assert.match(files.globalLauncher, /ResultChoiceRow/, 'GlobalLauncher must render result choices through the shared v3 result row')
-assert.match(files.globalLauncher, /l-result-block/, 'GlobalLauncher must support the long text result fallback block')
+assert.match(files.launcherResultChoiceRow, /global-launcher-result-row/, 'GlobalLauncher result rows must have a stable v3 row styling hook')
+assert.match(files.globalLauncherFrames, /LauncherResultChoiceRow/, 'GlobalLauncher must render result choices through the shared v3 result row')
+assert.match(files.launcherResultChoiceRow, /l-result-block/, 'GlobalLauncher must support the long text result fallback block')
 assert.match(files.globalLauncher, /toggleResultChoice/, 'GlobalLauncher must support selectable multi-result rows')
-assert.match(files.globalLauncher, /global-launcher-header l-search/, 'GlobalLauncher must use the v3 search header structure')
-assert.match(files.globalLauncher, /className=\{`l-row/, 'GlobalLauncher list rows must use the v3 l-row structure')
-assert.match(files.globalLauncher, /global-launcher-footer l-foot/, 'GlobalLauncher must use the v3 footer structure')
-assert.match(files.globalLauncher, /launcher-kind-tag/, 'GlobalLauncher list rows must render right-side type tags')
-assert.match(files.globalLauncher, /kindApp/, 'GlobalLauncher must distinguish application rows')
-assert.match(files.globalLauncher, /kindCommand/, 'GlobalLauncher must distinguish command rows')
+assert.match(files.globalLauncherFrames, /global-launcher-header l-search/, 'GlobalLauncher must use the v3 search header structure')
+assert.match(files.launcherMixedList, /className=\{`l-row/, 'GlobalLauncher list rows must use the v3 l-row structure')
+assert.match(files.globalLauncherFrames, /global-launcher-footer l-foot/, 'GlobalLauncher must use the v3 footer structure')
+assert.match(files.launcherMixedList, /launcher-kind-tag/, 'GlobalLauncher list rows must render right-side type tags')
+assert.match(files.launcherMixedList, /kindApp/, 'GlobalLauncher must distinguish application rows')
+assert.match(files.launcherMixedList, /kindCommand/, 'GlobalLauncher must distinguish command rows')
 assert.match(files.globalLauncher, /GLOBAL_LAUNCHER_PANEL_WIDTH\s*=\s*680/, 'GlobalLauncher panel should be widened to 680px')
 assert.doesNotMatch(files.globalLauncher, /MAX_GLOBAL_LAUNCHER_RENDERED_ITEMS/, 'GlobalLauncher should not keep the old rendered item cap')
-assert.match(files.globalLauncher, /collectDynamicItems\(q,\s*['"]global-launcher['"],\s*locale/, 'GlobalLauncher should collect host dynamic items even for empty-query app mixing')
+assert.match(files.globalLauncher, /collectDynamicWhenEmpty:\s*true/, 'GlobalLauncher should collect host dynamic items even for empty-query app mixing')
 
 assert.match(files.commandPalette, /command-launcher-panel global-launcher-panel/, 'CommandPalette must use the same v3 launcher panel shell')
-assert.match(files.commandPalette, /global-launcher-header l-search/, 'CommandPalette must use the v3 search header')
-assert.match(files.commandPalette, /className=\{`l-row command-launcher-row/, 'CommandPalette list rows must use the v3 row structure')
-assert.match(files.commandPalette, /global-launcher-footer l-foot/, 'CommandPalette must use the v3 footer structure')
+assert.match(files.commandPalette, /<LauncherDomainSearchStep/, 'CommandPalette must use the shared v3 search step')
+assert.match(files.launcherDomainSearchStep, /global-launcher-header l-search/, 'CommandPalette shared search step must use the v3 search header')
+assert.match(files.commandPalette, /<LauncherDomainSearchStep/, 'CommandPalette must delegate v3 row rendering to shared launcher search step')
+assert.match(files.launcherDomainSearchStep, /global-launcher-footer l-foot/, 'CommandPalette shared search step must use the v3 footer structure')
 
 assert.match(files.launcherParamStep, /l-option-row/, 'Launcher param option rows must use the v3 option-list row')
 assert.match(files.launcherParamStep, /onMultiToggle/, 'Launcher multi-select params must toggle in place instead of confirming immediately')

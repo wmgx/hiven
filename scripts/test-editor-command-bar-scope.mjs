@@ -1,0 +1,31 @@
+#!/usr/bin/env node
+
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+const root = process.cwd()
+const read = (path) => readFileSync(join(root, path), 'utf8')
+
+const editorHost = read('src/launcher/hosts/EditorCommandBarHost.tsx')
+const launcherTypes = read('src/workspace/launcher/types.ts')
+const hostActions = read('src/workspace/launcher/hostActions.ts')
+const hostAppLauncher = read('src/workspace/appLauncher/hostAppLauncher.ts')
+const registry = read('src/workspace/launcher/registry.ts')
+
+assert.match(editorHost, /useLauncherSession\(\{[\s\S]*hostId:\s*['"]editor-command-bar['"]/, 'Editor command bar must identify as editor-command-bar')
+assert.match(editorHost, /staticItemFilter:\s*filterEditorCommandBarItems/, 'Editor command bar must apply an editor-local item filter')
+assert.match(editorHost, /function filterEditorCommandBarItems[\s\S]*plugin-settings:[\s\S]*return false/, 'Editor command bar must hide plugin settings entries')
+assert.match(editorHost, /item\.kind !== ['"]host['"][\s\S]*return true/, 'Editor command bar must keep plugin text/action items')
+assert.match(editorHost, /host:pane:/, 'Editor command bar must keep pane-local host controls')
+assert.match(editorHost, /host:global:search-all-hiven/, 'Editor command bar must allow the explicit Search all Hiven bridge')
+assert.doesNotMatch(editorHost, /hostId:\s*['"]command-palette['"]/, 'legacy command-palette id must not be used at runtime')
+
+assert.match(launcherTypes, /'editor-command-bar':\s*\{[\s\S]*presentation:\s*['"]editor-overlay['"]/, 'launcher host config must model editor overlay presentation')
+assert.doesNotMatch(launcherTypes.match(/'editor-command-bar':\s*\{[\s\S]*?capabilities:\s*\[([\s\S]*?)\]/)?.[1] ?? '', /app-search|system-power|settings|host-surfaces|plugin-surfaces/, 'editor command bar capabilities must exclude global navigation capabilities')
+assert.match(registry, /requiredCapabilities[\s\S]*launcherHostHasCapability/, 'registry must enforce host capability filtering')
+assert.match(hostActions, /systemKey:\s*['"]host:global:search-all-hiven['"][\s\S]*surfaces:\s*\[['"]editor-command-bar['"]\][\s\S]*showLauncherWindow\(\)/, 'Editor command bar must expose Search all Hiven as the only global bridge')
+assert.match(hostActions, /systemKey:\s*['"]host:system:restart['"][\s\S]*surfaces:\s*\[['"]global-launcher['"]\]/, 'system power actions must be global-launcher only')
+assert.match(hostAppLauncher, /surfaceId[\s\S]*global-launcher/, 'app launcher search must be scoped to the global launcher')
+
+console.log('editor command bar scope checks passed')
