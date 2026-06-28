@@ -8,7 +8,7 @@
  *   3. Plugin dynamic items — from `launcher.dynamicItems` and tool-less
  *      dynamic providers, guarded by query rules + per-provider error isolation.
  *
- * CommandPalette / GlobalLauncher never scan commands directly. Launcher
+ * Launcher hosts never scan commands directly. Launcher
  * entries must be declared as `launcher.items` or `tools`.
  */
 

@@ -4,7 +4,7 @@
  * Executes a plugin command referenced by a toolbar button using default
  * parameters and use-active input resolution. Toolbar buttons are "one-click
  * default action" entry points; commands that need parameter prompts should be
- * invoked from the command palette instead.
+ * invoked from the editor command bar instead.
  */
 
 import { pluginRegistry } from './pluginRegistry'
@@ -33,7 +33,7 @@ export async function runToolbarCommand(commandId: string, isDev = false): Promi
   if (!resolveResult.ok) {
     // Toolbar buttons do not prompt; surface a hint and bail.
     if (resolveResult.reason === 'fail') return false
-    showToast('This command needs more input. Use the command palette instead.', 'warning')
+    showToast('This command needs more input. Use the editor command bar instead.', 'warning')
     return false
   }
 

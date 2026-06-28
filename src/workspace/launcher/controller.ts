@@ -1,7 +1,7 @@
 /**
  * Launcher Controller
  *
- * Framework-agnostic state machine driving both CommandPalette and GlobalLauncher.
+ * Framework-agnostic state machine driving launcher hosts such as EditorCommandBar and GlobalLauncher.
  * The UI renders `controller.state` and calls intents (selectItem, submitInput,
  * activateChoice, back). The controller owns:
  *   - first-level selection

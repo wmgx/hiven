@@ -371,19 +371,19 @@ class PluginRegistryImpl {
     return this.production.panels.get(id) ?? this.dev.panels.get(id)
   }
 
-  // ─── Query all commands (for CommandPalette) ──────────────────────────────
+  // ─── Query all commands (legacy command registry inspection) ───────────────
 
   /** Get all production commands */
   getAllProductionCommands(): CommandEntry[] {
     return this.production.commands.getAll()
   }
 
-  /** Get all dev commands (shown with [DEV] in CommandPalette) */
+  /** Get all dev commands. */
   getAllDevCommands(): CommandEntry[] {
     return this.dev.commands.getAll()
   }
 
-  /** Get all commands from all sources (for CommandPalette listing) */
+  /** Get all commands from all sources. */
   getAllCommands(): Array<CommandEntry & { isDev: boolean }> {
     const result: Array<CommandEntry & { isDev: boolean }> = []
     for (const entry of this.production.commands.getAll()) {

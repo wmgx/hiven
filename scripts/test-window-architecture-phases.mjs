@@ -47,6 +47,9 @@ const files = {
   globalLauncherResultFrame: read('src/components/launcher/GlobalLauncherResultFrame.tsx'),
   launcherUsage: read('src/workspace/launcher/usage.ts'),
   launcherRegistry: read('src/workspace/launcher/registry.ts'),
+  launcherController: read('src/workspace/launcher/controller.ts'),
+  pluginRegistry: read('src/workspace/pluginRegistry.ts'),
+  toolbarCommandRunner: read('src/workspace/toolbarCommandRunner.ts'),
   globalLauncher: read('src/components/GlobalLauncher.tsx'),
   globalLauncherHost: read('src/launcher/hosts/GlobalLauncherHost.tsx'),
   surfaceRegistry: read('src/surfaces/registry.ts'),
@@ -131,6 +134,15 @@ assert.doesNotMatch(
 )
 assert.match(files.editorWindow, /ensurePluginRuntimeReady/, 'EditorWindow must use ensurePluginRuntimeReady')
 
+for (const [label, source] of Object.entries({
+  launcherController: files.launcherController,
+  launcherRegistry: files.launcherRegistry,
+  launcherTypes: files.launcherTypes,
+  pluginRegistry: files.pluginRegistry,
+  toolbarCommandRunner: files.toolbarCommandRunner,
+})) {
+  assert.doesNotMatch(source, /CommandPalette|command palette/, `${label} must not describe shared launcher behavior with retired CommandPalette naming`)
+}
 assert.match(files.launcherTypes, /export type LauncherHostId = ['"]global-launcher['"] \| ['"]editor-command-bar['"]/, 'launcher domain must model explicit host ids')
 assert.match(files.launcherTypes, /export type LauncherHostCapability/, 'launcher domain must model host capabilities')
 assert.match(files.launcherTypes, /export type LauncherHostConfig/, 'launcher domain must model launcher host config')

@@ -2,7 +2,7 @@
  * Launcher Domain Types
  *
  * The launcher is a host/workspace domain centered on `LauncherItem`, shared by
- * CommandPalette and GlobalLauncher. Plugins contribute launcher items (or tools
+ * EditorCommandBar and GlobalLauncher. Plugins contribute launcher items (or tools
  * that the host adapts into launcher items); the host owns identity, ranking,
  * usage, and the execution lifecycle.
  *
