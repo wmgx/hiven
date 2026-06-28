@@ -1,6 +1,6 @@
 import { useAppStore, type PluginSurfaceOpenTarget } from '../store'
 import { pluginRegistry } from './pluginRegistry'
-import { showLauncherWindow } from './windowManager/launcherWindow'
+import { resizeCurrentLauncherWindow, showLauncherWindow } from './windowManager/launcherWindow'
 import type { PluginDefinition } from './pluginTypes'
 
 const PENDING_OPEN_KEY = 'hiven-plugin-surface-open-request'
@@ -55,10 +55,10 @@ export async function requestOpenPluginSurfaceTool(target: PluginSurfaceOpenTarg
   const shell = resolveSurfaceShell(target)
   if (shell) {
     try {
-      const { getCurrentWindow, LogicalSize } = await import('@tauri-apps/api/window')
-      const width = Math.ceil((shell.defaultWidth ?? 660) + STANDALONE_LAUNCHER_HORIZONTAL_PADDING)
-      const height = Math.ceil((shell.defaultHeight ?? 480) + STANDALONE_LAUNCHER_VERTICAL_PADDING)
-      await getCurrentWindow().setSize(new LogicalSize(width, height))
+      await resizeCurrentLauncherWindow({
+        width: Math.ceil((shell.defaultWidth ?? 660) + STANDALONE_LAUNCHER_HORIZONTAL_PADDING),
+        height: Math.ceil((shell.defaultHeight ?? 480) + STANDALONE_LAUNCHER_VERTICAL_PADDING),
+      })
     } catch {
       // Non-critical: window will resize later via useLayoutEffect fallback
     }

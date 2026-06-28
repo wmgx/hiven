@@ -20,6 +20,12 @@ export async function hideLauncherWindow(): Promise<void> {
   markSurfaceInstanceState('launcher', 'hidden')
 }
 
+export async function resizeCurrentLauncherWindow(size: { width: number; height: number }): Promise<void> {
+  if (!isTauriRuntime()) return
+  const { getCurrentWindow, LogicalSize } = await import('@tauri-apps/api/window')
+  await getCurrentWindow().setSize(new LogicalSize(size.width, size.height))
+}
+
 function isTauriRuntime(): boolean {
   return Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
 }
