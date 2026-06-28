@@ -17,6 +17,13 @@ const commands = [
   ['npm', ['run', 'test:plugin-surface-shortcut-window']],
   ['npm', ['run', 'test:plugin-surface-shortcuts']],
   ['npm', ['run', 'test:workflow-object-model']],
+  ['npm', ['run', 'test:command-palette-page-policy']],
+  ['npm', ['run', 'test:command-palette-system-page-shortcuts']],
+  ['npm', ['run', 'test:pinned-action-completion-gaps']],
+  ['npm', ['run', 'test:pinned-runner-policy']],
+  ['npm', ['run', 'test:pinned-action-live-runner']],
+  ['npm', ['run', 'test:global-pinned-launcher']],
+  ['npm', ['run', 'test:clipboard-history-runtime']],
   ['npm', ['run', 'test:launcher-web-smoke']],
 ]
 

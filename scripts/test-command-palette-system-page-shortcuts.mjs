@@ -34,10 +34,16 @@ assert.match(hostActionsSource, /aliases:\s*\[[\s\S]*['"]settings['"][\s\S]*['"]
 
 const pluginApiSource = read('src/workspace/launcher/pluginApi.ts')
 const globalLauncherSource = read('src/components/GlobalLauncher.tsx')
+const globalLauncherHostSource = read('src/launcher/hosts/GlobalLauncherHost.tsx')
+const globalLauncherFramesSource = read('src/components/launcher/GlobalLauncherFrames.tsx')
 const appSource = read('src/App.tsx')
 assert.match(pluginApiSource, /openLauncherHostSurface\(['"]plugins['"]\)/, 'plugin launcher API should open Plugins as a launcher-hosted surface')
 assert.match(pluginApiSource, /openLauncherHostSurface\(['"]settings['"]\)/, 'plugin launcher API should open Settings as a launcher-hosted surface')
-assert.match(globalLauncherSource, /launcherHostSurfaceTarget/, 'GlobalLauncher should render launcher-hosted app surfaces')
+assert.match(globalLauncherSource, /GlobalLauncherHost/, 'GlobalLauncher should remain a thin host wrapper')
+assert.match(globalLauncherHostSource, /launcherHostSurfaceTarget/, 'GlobalLauncherHost should read launcher-hosted app surface state')
+assert.match(globalLauncherFramesSource, /GlobalLauncherSystemSurfaceFrame/, 'GlobalLauncher frames should render launcher-hosted app surfaces')
+assert.match(globalLauncherFramesSource, /SettingsSurface/, 'GlobalLauncher frames should render SettingsSurface')
+assert.match(globalLauncherFramesSource, /PluginsSurface/, 'GlobalLauncher frames should render PluginsSurface')
 assert.doesNotMatch(pluginApiSource, /hiven:\/\/show-plugins-page|hiven:\/\/show-settings-page|show_and_focus_window/, 'plugin launcher API must not route settings/plugins through the main window')
 assert.doesNotMatch(appSource, /hiven:\/\/show-plugins-page|hiven:\/\/show-settings-page/, 'main window must not be the settings/plugins bridge')
 
