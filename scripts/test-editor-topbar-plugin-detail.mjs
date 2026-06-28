@@ -20,7 +20,7 @@ function read(path) {
 const files = {
   packageJson: read('package.json'),
   editorView: read('src/views/EditorView.tsx'),
-  scriptsView: read('src/views/ScriptsView.tsx') + '\n' + read('src/surfaces/PluginsManagerSurfaceContent.tsx'),
+  scriptsView: read('src/surfaces/PluginsManagerSurfaceContent.tsx'),
   settingsSchemaRenderer: read('src/components/PluginSettingsSchemaRenderer.tsx'),
   globalLauncher: read('src/components/GlobalLauncher.tsx'),
   renderStatusBar: read('src/components/workspace/RenderStatusBar.tsx'),
@@ -29,7 +29,7 @@ const files = {
     : '',
   scriptsI18n: read('src/i18n/locales/scripts.ts'),
   css: read('src/index.css'),
-  settingsView: read('src/views/SettingsView.tsx') + '\n' + read('src/surfaces/SettingsSurfaceContent.tsx'),
+  settingsView: read('src/surfaces/SettingsSurfaceContent.tsx'),
   navI18n: read('src/i18n/locales/nav.ts'),
   paletteI18n: read('src/i18n/locales/palette.ts'),
   settingsI18n: read('src/i18n/locales/settings.ts'),

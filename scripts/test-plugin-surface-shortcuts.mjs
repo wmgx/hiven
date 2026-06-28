@@ -27,7 +27,7 @@ const files = {
   globalLauncherLayout: read('src/components/launcher/GlobalLauncherLayout.ts'),
   pluginSurfaceWindow: read('src/components/PluginSurfaceWindow.tsx'),
   pluginSurfaceRenderer: read('src/components/pluginSurface/PluginSurfaceRenderer.tsx'),
-  scriptsView: read('src/views/ScriptsView.tsx') + '\n' + read('src/surfaces/PluginsManagerSurfaceContent.tsx'),
+  scriptsView: read('src/surfaces/PluginsManagerSurfaceContent.tsx'),
   scriptsI18n: read('src/i18n/locales/scripts.ts'),
   tauriLib: read('src-tauri/src/lib.rs'),
 }

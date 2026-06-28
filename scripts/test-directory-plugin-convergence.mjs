@@ -17,8 +17,8 @@ function readIfExists(path) {
 
 const files = {
   packageJson: read('package.json'),
-  scriptsView: read('src/views/ScriptsView.tsx') + '\n' + read('src/surfaces/PluginsManagerSurfaceContent.tsx'),
-  settingsView: read('src/views/SettingsView.tsx') + '\n' + read('src/surfaces/SettingsSurfaceContent.tsx'),
+  scriptsView: read('src/surfaces/PluginsManagerSurfaceContent.tsx'),
+  settingsView: read('src/surfaces/SettingsSurfaceContent.tsx'),
   pluginRuntime: read('src/workspace/pluginRuntime.ts'),
   pluginStore: read('src/workspace/pluginStore.ts'),
   pluginTypes: read('src/workspace/pluginTypes.ts'),
@@ -28,7 +28,7 @@ const files = {
   pluginsSurface: readIfExists('src/surfaces/PluginsSurface.tsx'),
   pluginSurfaceRenderer: readIfExists('src/components/pluginSurface/PluginSurfaceRenderer.tsx'),
   tauriLib: read('src-tauri/src/lib.rs'),
-  pluginEditorView: readIfExists('src/views/PluginEditorView.tsx') + '\n' + readIfExists('src/surfaces/PluginEditorSurfaceContent.tsx'),
+  pluginEditorView: readIfExists('src/surfaces/PluginEditorSurfaceContent.tsx'),
   pluginDebugRunner: readIfExists('src/workspace/pluginDebugRunner.ts'),
   pluginHostSdk: readIfExists('src/pluginHostSdk.ts'),
   pluginScaffold: readIfExists('src/workspace/pluginScaffold.ts'),
@@ -351,7 +351,7 @@ check('Plugin cards expose read-only source viewer and external-editor entry', (
 })
 
 check('PluginEditorView is a read-only source viewer with directory tree and no debug/edit', () => {
-  assert.ok(files.pluginEditorView, 'src/views/PluginEditorView.tsx should exist')
+  assert.ok(files.pluginEditorView, 'PluginEditorSurfaceContent should exist')
   assert.match(files.pluginEditorView + files.pluginRuntime, /list_plugin_files|PluginFileTree|activeFile/i, 'plugin viewer should include directory tree/file switching')
   assert.match(files.pluginEditorView + files.pluginRuntime, /read_plugin_file/, 'plugin viewer should read selected plugin files')
   assert.match(files.pluginEditorView, /readOnly:\s*true/, 'PluginEditorView should render the editor read-only')

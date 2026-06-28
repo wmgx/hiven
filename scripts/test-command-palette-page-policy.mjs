@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const root = process.cwd()
@@ -33,6 +33,13 @@ function check(name, fn) {
 function assertHas(source, pattern, message) {
   assert.match(source, pattern, message)
 }
+
+
+check('Retired settings/plugins view wrappers are removed', () => {
+  for (const viewPath of ['src/views/SettingsView.tsx', 'src/views/ScriptsView.tsx', 'src/views/PluginEditorView.tsx']) {
+    assert.equal(existsSync(join(root, viewPath)), false, `${viewPath} should be removed after first-class surfaces replace main-window views`)
+  }
+})
 
 check('Store no longer exposes the retired main-window ViewId model', () => {
   assert.doesNotMatch(

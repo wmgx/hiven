@@ -24,7 +24,7 @@ const files = {
   tauriLib: read('src-tauri/src/lib.rs'),
   defaultCapability: read('src-tauri/capabilities/default.json'),
   store: read('src/store.ts'),
-  settingsView: read('src/views/SettingsView.tsx') + '\n' + read('src/surfaces/SettingsSurfaceContent.tsx'),
+  settingsView: read('src/surfaces/SettingsSurfaceContent.tsx'),
   app: read('src/App.tsx'),
   globalPinnedLauncherHotkeys: read('src/hotkeys/globalPinnedLauncher.ts'),
   shortcutRecorder: read('src/components/ShortcutRecorder.tsx'),

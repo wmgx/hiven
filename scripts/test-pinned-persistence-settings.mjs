@@ -17,7 +17,7 @@ function readI18n() {
 const files = {
   packageJson: read('package.json'),
   store: read('src/store.ts'),
-  settingsView: read('src/views/SettingsView.tsx') + '\n' + read('src/surfaces/SettingsSurfaceContent.tsx'),
+  settingsView: read('src/surfaces/SettingsSurfaceContent.tsx'),
   i18n: readI18n(),
 }
 
