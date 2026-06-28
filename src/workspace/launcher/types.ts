@@ -269,6 +269,8 @@ export type PluginLauncherApi = {
   insertText(text: string): Promise<void>
   copyText(text: string): Promise<void>
   openUrl(url: string): Promise<void>
+  showEditorWindow(): Promise<void>
+  /** @deprecated Use showEditorWindow. */
   showMainPanel(): Promise<void>
   showPluginsPage(): Promise<void>
   showSettingsPage(): Promise<void>

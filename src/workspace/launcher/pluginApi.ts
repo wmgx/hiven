@@ -98,7 +98,7 @@ async function writeClipboard(text: string): Promise<void> {
   }
 }
 
-async function showMainPanel(): Promise<void> {
+async function openEditorWindow(): Promise<void> {
   try {
     await showEditorWindow()
   } catch (error) {
@@ -236,7 +236,8 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
     openUrl: async (url: string) => {
       await openExternalUrl(url)
     },
-    showMainPanel,
+    showEditorWindow: openEditorWindow,
+    showMainPanel: openEditorWindow,
     showPluginsPage,
     showSettingsPage,
     createPane: (options) => createEditorPane(options),

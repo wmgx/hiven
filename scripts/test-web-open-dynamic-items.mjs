@@ -94,6 +94,7 @@ await items[0].execute({
     copyText: async () => {},
     openUrl: async (url) => { openedUrl = url },
     showMessage: () => {},
+    showEditorWindow: async () => {},
     showMainPanel: async () => {},
     showPluginsPage: async () => {},
     showSettingsPage: async () => {},
