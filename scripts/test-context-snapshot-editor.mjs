@@ -17,7 +17,7 @@ assert.match(contextBroker, /export type WorkContextSnapshot/, 'Context broker m
 assert.match(contextBroker, /foreground\?:\s*\{[\s\S]*appName\?:\s*string[\s\S]*processId\?:\s*number[\s\S]*windowTitle\?:\s*string/, 'snapshot must include foreground app fields')
 assert.match(contextBroker, /export const foregroundContextProvider/, 'default context broker must expose a foreground provider')
 assert.match(contextBroker, /current_foreground_app_context/, 'foreground provider must call the native foreground context command')
-assert.match(contextBroker, /\[foregroundContextProvider,\s*editorContextProvider,\s*clipboardContextProvider/, 'default snapshot must compose foreground, editor, and clipboard providers')
+assert.match(contextBroker, /\[foregroundContextProvider,\s*editorContextProvider,[\s\S]*clipboardContextProvider/, 'default snapshot must compose foreground, editor, optional external-selection, and clipboard providers')
 assert.match(contextBroker, /runtimeRegistry\.getCodeEditor\(state\.activePaneId\)/, 'editor provider must read live editor runtime')
 assert.match(contextBroker, /getValueInRange\(selection\)/, 'editor provider must read selected text from live selection')
 assert.match(contextBroker, /selectionRange:\s*TextRange/, 'editor provider must expose selection range')

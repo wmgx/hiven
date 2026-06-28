@@ -78,6 +78,7 @@
     "test:plugin-surface-shortcut-window": "node scripts/test-plugin-surface-shortcut-window.mjs",
     "test:output-router-text-targets": "node scripts/test-output-router-text-targets.mjs",
     "test:context-snapshot-editor": "node scripts/test-context-snapshot-editor.mjs",
+    "test:external-selection-context": "node scripts/test-external-selection-context.mjs",
     "test:workflow-object-model": "node scripts/test-workflow-object-model.mjs",
     "preview": "vite preview",
     "tauri": "tauri",

@@ -9,11 +9,12 @@ use std::os::raw::{c_char, c_int, c_void};
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
 use tauri::Emitter;
 use tauri::LogicalSize;
 use tauri::Manager;
+use tauri_plugin_clipboard_manager::ClipboardExt;
 use zip::ZipArchive;
 
 pub mod hotkeys;
@@ -30,11 +31,19 @@ const PLUGIN_SURFACE_WINDOW_DEFAULT_MIN_WIDTH: f64 = 320.0;
 const PLUGIN_SURFACE_WINDOW_DEFAULT_MIN_HEIGHT: f64 = 240.0;
 const PLUGIN_SURFACE_WINDOW_DEFAULT_DESTROY_TIMEOUT_MS: u64 = 120_000;
 static PREVIOUS_FOREGROUND_PROCESS_ID: OnceLock<Mutex<Option<u32>>> = OnceLock::new();
+static LAST_FOREGROUND_SELECTION_TEXT: OnceLock<Mutex<Option<ForegroundSelectionText>>> = OnceLock::new();
 static INSTALLED_APP_TARGETS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 static PLUGIN_KV_DB: OnceLock<Result<Mutex<Connection>, String>> = OnceLock::new();
 static PLUGIN_SURFACE_WINDOW_TOKENS: OnceLock<Mutex<HashMap<String, u64>>> = OnceLock::new();
 static SURFACE_REGISTRY: OnceLock<SurfaceRegistryState> = OnceLock::new();
 const MAX_APP_ICON_CACHE_WARM_COUNT: usize = 20;
+const FOREGROUND_SELECTION_CACHE_TTL: Duration = Duration::from_secs(30);
+
+#[derive(Clone)]
+struct ForegroundSelectionText {
+    text: String,
+    captured_at: Instant,
+}
 
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -257,6 +266,7 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
             .unwrap_or(false);
         if !was_visible {
             remember_previous_foreground_app();
+            capture_foreground_selection_text(&app_clone);
         }
 
         let window = if let Some(window) = existing_launcher {
@@ -764,6 +774,116 @@ fn remember_previous_foreground_app() {
     if let Ok(mut stored) = previous_foreground_process_id().lock() {
         *stored = previous;
     }
+}
+
+fn last_foreground_selection_state() -> &'static Mutex<Option<ForegroundSelectionText>> {
+    LAST_FOREGROUND_SELECTION_TEXT.get_or_init(|| Mutex::new(None))
+}
+
+#[tauri::command]
+async fn last_foreground_selection_text() -> Option<String> {
+    let mut stored = last_foreground_selection_state().lock().ok()?;
+    let selection = stored.as_ref()?;
+    if selection.captured_at.elapsed() > FOREGROUND_SELECTION_CACHE_TTL {
+        *stored = None;
+        return None;
+    }
+    Some(selection.text.clone())
+}
+
+fn capture_foreground_selection_text(app: &tauri::AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        if let Some(text) = capture_foreground_selection_text_impl(&app) {
+            if let Ok(mut stored) = last_foreground_selection_state().lock() {
+                *stored = Some(ForegroundSelectionText {
+                    text,
+                    captured_at: Instant::now(),
+                });
+            }
+        }
+    });
+}
+
+fn capture_foreground_selection_text_impl(app: &tauri::AppHandle) -> Option<String> {
+    let before = app.clipboard().read_text().ok();
+    simulate_copy_selection_impl().ok()?;
+    std::thread::sleep(Duration::from_millis(80));
+    let selected = app.clipboard().read_text().ok()?.trim().to_string();
+    if let Some(previous) = before {
+        let _ = app.clipboard().write_text(previous);
+    }
+    if selected.is_empty() {
+        None
+    } else {
+        Some(selected)
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn simulate_copy_selection_impl() -> Result<(), String> {
+    use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
+    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+
+    if !ax_is_trusted(false) {
+        return Err("Accessibility permission not granted".into());
+    }
+
+    const KEY_C: u16 = 8;
+    let src = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
+        .map_err(|_| "Failed to create event source")?;
+    let dn = CGEvent::new_keyboard_event(src.clone(), KEY_C, true)
+        .map_err(|_| "Failed to create key-down event")?;
+    let up = CGEvent::new_keyboard_event(src, KEY_C, false)
+        .map_err(|_| "Failed to create key-up event")?;
+    dn.set_flags(CGEventFlags::CGEventFlagCommand);
+    up.set_flags(CGEventFlags::CGEventFlagCommand);
+    dn.post(CGEventTapLocation::HID);
+    up.post(CGEventTapLocation::HID);
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn simulate_copy_selection_impl() -> Result<(), String> {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
+        VIRTUAL_KEY,
+    };
+
+    const VK_CONTROL: VIRTUAL_KEY = VIRTUAL_KEY(0x11);
+    const VK_C: VIRTUAL_KEY = VIRTUAL_KEY(0x43);
+
+    let make = |vk: VIRTUAL_KEY, flags: KEYBD_EVENT_FLAGS| INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: vk,
+                wScan: 0,
+                dwFlags: flags,
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    };
+
+    let inputs = [
+        make(VK_CONTROL, KEYBD_EVENT_FLAGS(0)),
+        make(VK_C, KEYBD_EVENT_FLAGS(0)),
+        make(VK_C, KEYEVENTF_KEYUP),
+        make(VK_CONTROL, KEYEVENTF_KEYUP),
+    ];
+
+    let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
+    if sent == 4 {
+        Ok(())
+    } else {
+        Err(format!("SendInput sent {} of 4 expected events", sent))
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn simulate_copy_selection_impl() -> Result<(), String> {
+    Err("Selection copy simulation is not supported on this platform".to_string())
 }
 
 fn restore_previous_foreground_app() {
@@ -3294,6 +3414,7 @@ pub fn run() {
             simulate_paste,
             current_foreground_app_name,
             current_foreground_app_context,
+            last_foreground_selection_text,
             discover_installed_apps,
             read_installed_app_icon_url,
             cache_installed_app_icons,

@@ -23,6 +23,12 @@ export type ClipboardContextSnapshot = {
   preview?: string
 }
 
+export type ExternalSelectionContextSnapshot = {
+  kind: 'text'
+  text: string
+  preview?: string
+}
+
 export type WorkContextSnapshot = {
   invocation: {
     source: WorkContextInvocationSource
@@ -34,6 +40,7 @@ export type WorkContextSnapshot = {
     windowTitle?: string
   }
   editor?: EditorContextSnapshot
+  externalSelection?: ExternalSelectionContextSnapshot
   clipboard?: ClipboardContextSnapshot
 }
 
@@ -104,6 +111,17 @@ export function readLocalEditorContextSnapshot(): EditorContextSnapshot | undefi
   }
 }
 
+
+export const externalSelectionContextProvider: ContextSnapshotProvider = {
+  id: 'external-selection',
+  getSnapshot: async () => {
+    const text = await readLastForegroundSelectionText()
+    return text
+      ? { externalSelection: { kind: 'text', text, preview: text.slice(0, 240) } }
+      : {}
+  },
+}
+
 export const clipboardContextProvider: ContextSnapshotProvider = {
   id: 'clipboard',
   getSnapshot: async () => {
@@ -130,8 +148,19 @@ export async function createDefaultWorkContextSnapshot(
 ): Promise<WorkContextSnapshot> {
   return createWorkContextSnapshot(
     { source, timestamp: Date.now() },
-    [foregroundContextProvider, editorContextProvider, clipboardContextProvider, ...providers],
+    [foregroundContextProvider, editorContextProvider, externalSelectionContextProvider, clipboardContextProvider, ...providers],
   )
+}
+
+
+async function readLastForegroundSelectionText(): Promise<string> {
+  if (!isTauriRuntime()) return ''
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    return await invoke<string | null>('last_foreground_selection_text') ?? ''
+  } catch {
+    return ''
+  }
 }
 
 async function readClipboardText(): Promise<string> {
