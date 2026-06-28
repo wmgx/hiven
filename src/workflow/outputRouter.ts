@@ -1,9 +1,9 @@
 import type { ActionResult, OutputTarget } from './outputTarget'
-import { useAppStore } from '../store'
 import { createPluginPaste } from '../workspace/pluginPaste'
 import { applyEffects } from '../workspace/effectRunner'
 import { createEditorPane, insertIntoEditor, openEditorPanel, replaceEditorSelection } from '../workspace/editorBridge'
 import { createPluginLauncherApi } from '../workspace/launcher/pluginApi'
+import { showPluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
 
 export type OutputRouterContext = {
   copy(text: string): Promise<void> | void
@@ -37,8 +37,8 @@ export function createDefaultOutputRouterContext(): OutputRouterContext {
         language: options?.language,
       })
     },
-    openPluginSurface: (options) => {
-      useAppStore.getState().openPluginSurfaceTool({
+    openPluginSurface: async (options) => {
+      await showPluginSurfaceWindow({
         source: options.source ?? 'builtin',
         pluginId: options.pluginId,
         surfaceId: options.surfaceId,

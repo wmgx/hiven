@@ -157,6 +157,8 @@ for (const kind of [
 }
 assert.match(files.outputRouter, /pasteToForegroundApp:[\s\S]*createPluginPaste\(\)\.pasteText\(text\)/, 'clipboard/text actions must be able to paste to the foreground app')
 assert.match(files.outputRouter, /openInEditor:[\s\S]*createEditorPane\(\{[\s\S]*text/, 'complex text must be routable into Editor')
+assert.match(files.outputRouter, /openPluginSurface:[\s\S]*showPluginSurfaceWindow\(\{/, 'plugin surface output targets must route through the plugin surface window manager')
+assert.doesNotMatch(files.outputRouter, /openPluginSurfaceTool|openGlobalLauncherOverlay|useAppStore\.getState\(\)\.openPluginSurfaceTool/, 'output router must not mutate launcher store to open plugin surfaces')
 assert.match(files.outputRouter, /attachEditorPanel:[\s\S]*openEditorPanel\(\{/, 'complex surfaces must be attachable into Editor panels')
 assert.match(files.clipboardSurface, /pasteText|paste-to-foreground-app|copyText/, 'clipboard history surface must expose copy/paste behavior')
 assert.match(files.tauriLib, /tauri::RunEvent::Reopen[\s\S]*show_launcher_window_for_hotkey/, 'closing visible windows must leave a background runtime that can reopen the launcher')
