@@ -156,6 +156,7 @@ assert.match(bgManager, /restartPluginBackground/, 'Must restart on settings cha
 const launcher = [
   read('src/components/GlobalLauncher.tsx'),
   read('src/launcher/hosts/GlobalLauncherHost.tsx'),
+  read('src/components/launcher/GlobalLauncherPanel.tsx'),
   read('src/components/launcher/GlobalLauncherFrames.tsx'),
   read('src/components/launcher/GlobalLauncherPluginSurfaceFrame.tsx'),
   read('src/components/launcher/GlobalLauncherKeyboard.ts'),

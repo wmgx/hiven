@@ -24,6 +24,7 @@ const files = {
   globalLauncher: [
     read('src/components/GlobalLauncher.tsx'),
     read('src/launcher/hosts/GlobalLauncherHost.tsx'),
+    read('src/components/launcher/GlobalLauncherPanel.tsx'),
     read('src/components/launcher/GlobalLauncherFrames.tsx'),
     read('src/components/launcher/GlobalLauncherKeyboard.ts'),
     read('src/components/launcher/GlobalLauncherLayout.ts'),

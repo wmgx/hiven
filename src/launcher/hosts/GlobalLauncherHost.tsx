@@ -1,17 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '../../store'
-import { t, type Locale } from '../../i18n'
+import { t } from '../../i18n'
 import { usePluginRegistryVersion } from '../../workspace/pluginRegistry'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../../utils/imeKeyboard'
 import { usePluginSettingsStore } from '../../workspace/pluginSettingsStore'
 import type { LauncherItem as DomainLauncherItem } from '../../workspace/launcher/types'
-import { LauncherView } from '../../components/launcher/LauncherView'
-import { GlobalLauncherFrameSwitch } from '../../components/launcher/GlobalLauncherFrames'
-import { getPlatformShortcutMeta, supportsParamCustomization } from '../../components/launcher/launcherParamShortcuts'
-import { handleGlobalLauncherKeyDown } from '../../components/launcher/GlobalLauncherKeyboard'
 import { useGlobalLauncherResultFrame } from '../../components/launcher/GlobalLauncherResults'
 import { buildGlobalLauncherItems, type GlobalLauncherItem } from '../../components/launcher/GlobalLauncherItems'
-import { buildGlobalLauncherPanelStyle, GLOBAL_LAUNCHER_SETTINGS_HEIGHT, STANDALONE_SURFACE_MAX_HEIGHT } from '../../components/launcher/GlobalLauncherLayout'
+import { buildGlobalLauncherPanelStyle } from '../../components/launcher/GlobalLauncherLayout'
 import { usePluginPermissionStore } from '../../workspace/pluginPermissions'
 import { useLauncherSession } from '../../workspace/launcher/useLauncherSession'
 import { useGlobalLauncherSurfaceRegistry } from '../../components/launcher/GlobalLauncherSurfaceRegistry'
@@ -26,6 +22,7 @@ import {
   type LauncherItemPermissionFrame,
 } from '../../components/launcher/GlobalLauncherSelection'
 import { useGlobalLauncherSurfaceFrame } from '../../components/launcher/GlobalLauncherSurfaceFrame'
+import { GlobalLauncherPanel } from '../../components/launcher/GlobalLauncherPanel'
 
 type LauncherItem = GlobalLauncherItem
 
@@ -373,90 +370,46 @@ export function GlobalLauncherHost() {
       style={{ pointerEvents: 'auto', visibility: 'visible', zIndex: 1100 }}
       onClick={(event) => { if (event.target === event.currentTarget) closeLauncher() }}
     >
-      <LauncherView
-        hostId="global-launcher"
-        ref={panelRef}
+      <GlobalLauncherPanel
+        panelRef={panelRef}
+        inputRef={inputRef}
+        controllerRef={controllerRef}
+        isImeComposingRef={isImeComposingRef}
+        isKeyboardNavRef={isKeyboardNavRef}
         busy={controllerState?.busy ?? false}
-        className="global-launcher-panel overflow-hidden outline-none palette-panel"
-        style={panelStyle}
-        tabIndex={-1}
-        onPointerDown={beginDrag}
-        onContextMenu={(event) => {
-          if (event.target instanceof HTMLElement && event.target.closest('input, textarea')) return
-          event.preventDefault()
-        }}
-        onKeyDown={(event) => handleGlobalLauncherKeyDown({
-          event,
-          isImeComposingRef,
-          launcherSettingsTarget,
-          closeSettingsDialog,
-          focusSearchInputAfterBack,
-          surfaceFrame,
-          leaveSurface,
-          itemPermissionFrame,
-          cancelItemPermissionPrompt,
-          controllerState,
-          controllerRef,
-          resultSelectedIndex,
-          setResultSelectedIndex,
-          toggleResultChoice,
-          closeLauncher,
-          isKeyboardNavRef,
-          visibleFilteredLength: visibleFiltered.length,
-          setSelectedIndex,
-          selectedItem,
-          isWorkflowObjectLauncherItem,
-          selectItem,
-        })}
-        onCompositionStart={handleCompositionStart}
-        onCompositionEnd={handleCompositionEnd}
-      >
-        <GlobalLauncherFrameSwitch
-          hostSurfaceTarget={hostSurfaceTarget}
-          hostSurfaceHeight={STANDALONE_SURFACE_MAX_HEIGHT}
-          launcherSettingsTarget={launcherSettingsTarget}
-          settingsHeight={GLOBAL_LAUNCHER_SETTINGS_HEIGHT}
-          surfaceFrame={surfaceFrame}
-          activeSurfaceFrame={activeSurfaceFrame}
-          itemPermissionFrame={itemPermissionFrame}
-          controllerState={controllerState}
-          inputRef={inputRef}
-          query={query}
-          searchPlaceholder={t(locale, 'palette.globalPlaceholder')}
-          visibleFiltered={visibleFiltered}
-          selectedItem={selectedItem}
-          locale={locale}
-          resultSelectedIndex={resultSelectedIndex}
-          selectedResultChoiceIds={selectedResultChoiceIds}
-          showCustomizeHint={selectedItem?.kind === 'domain' && supportsParamCustomization(selectedItem.domainItem)}
-          showWorkflowObjectHint={isWorkflowObjectLauncherItem(selectedItem)}
-          customizeShortcutLabel={getPlatformShortcutMeta().label}
-          onSettingsClose={() => {
-            closeSettingsDialog()
-            focusSearchInputAfterBack()
-          }}
-          onSurfaceBack={requestSurfaceBack}
-          onSurfaceClose={requestSurfaceClose}
-          onPermissionBack={cancelItemPermissionPrompt}
-          onPermissionGrant={grantItemPermissionsAndRun}
-          onParamQueryChange={(value) => controllerRef.current?.setParamQuery(value)}
-          onParamSelectedIndexChange={(index) => controllerRef.current?.setParamSelectedIndex(index)}
-          onParamCommit={(value) => { void controllerRef.current?.commitCurrentParam(value) }}
-          onParamMultiToggle={(value) => controllerRef.current?.toggleCurrentMultiParamValue(value)}
-          onFrameBack={() => {
-            controllerRef.current?.back()
-            focusSearchInputAfterBack()
-          }}
-          onCollectInputChange={(value) => controllerRef.current?.setInputText(value)}
-          onActivateResultChoice={activateResultChoice}
-          onHoverResultChoice={setResultSelectedIndex}
-          onToggleResultChoice={toggleResultChoice}
-          onSearchQueryChange={(value) => { setQuery(value); setSelectedIndex(0) }}
-          onSearchSelectItem={(item) => selectItem(item)}
-          onSearchHoverIndex={(index) => { if (!isKeyboardNavRef.current) setSelectedIndex(index) }}
-          onSearchMouseMove={() => { isKeyboardNavRef.current = false }}
-        />
-      </LauncherView>
+        panelStyle={panelStyle}
+        beginDrag={beginDrag}
+        launcherSettingsTarget={launcherSettingsTarget}
+        closeSettingsDialog={closeSettingsDialog}
+        focusSearchInputAfterBack={focusSearchInputAfterBack}
+        surfaceFrame={surfaceFrame}
+        activeSurfaceFrame={activeSurfaceFrame}
+        leaveSurface={leaveSurface}
+        itemPermissionFrame={itemPermissionFrame}
+        cancelItemPermissionPrompt={cancelItemPermissionPrompt}
+        grantItemPermissionsAndRun={grantItemPermissionsAndRun}
+        controllerState={controllerState}
+        resultSelectedIndex={resultSelectedIndex}
+        setResultSelectedIndex={setResultSelectedIndex}
+        selectedResultChoiceIds={selectedResultChoiceIds}
+        activateResultChoice={activateResultChoice}
+        toggleResultChoice={toggleResultChoice}
+        closeLauncher={closeLauncher}
+        visibleFiltered={visibleFiltered}
+        selectedItem={selectedItem}
+        setSelectedIndex={setSelectedIndex}
+        isWorkflowObjectLauncherItem={isWorkflowObjectLauncherItem}
+        selectItem={selectItem}
+        hostSurfaceTarget={hostSurfaceTarget}
+        query={query}
+        setQuery={setQuery}
+        locale={locale}
+        searchPlaceholder={t(locale, 'palette.globalPlaceholder')}
+        requestSurfaceBack={requestSurfaceBack}
+        requestSurfaceClose={requestSurfaceClose}
+        handleCompositionStart={handleCompositionStart}
+        handleCompositionEnd={handleCompositionEnd}
+      />
     </div>
   )
 }

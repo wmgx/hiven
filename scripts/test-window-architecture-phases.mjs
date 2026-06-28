@@ -41,6 +41,7 @@ const files = {
   launcherMixedList: read('src/components/launcher/LauncherMixedList.tsx'),
   launcherResultChoiceRow: read('src/components/launcher/LauncherResultChoiceRow.tsx'),
   globalLauncherFrames: read('src/components/launcher/GlobalLauncherFrames.tsx'),
+  globalLauncherPanel: read('src/components/launcher/GlobalLauncherPanel.tsx'),
   globalLauncherSearchFrame: read('src/components/launcher/GlobalLauncherSearchFrame.tsx'),
   globalLauncherPluginSurfaceFrame: read('src/components/launcher/GlobalLauncherPluginSurfaceFrame.tsx'),
   globalLauncherSystemSurfaceFrame: read('src/components/launcher/GlobalLauncherSystemSurfaceFrame.tsx'),
@@ -206,12 +207,14 @@ assert.match(files.editorCommandBarHost, /<LauncherDomainSearchStep/, 'EditorCom
 assert.match(files.editorCommandBarHost, /<LauncherCollectInputStep/, 'EditorCommandBarHost must use the shared collect-input step')
 assert.match(files.editorCommandBarHost, /<LauncherResultStep/, 'EditorCommandBarHost must use the shared result-choice step')
 assert.doesNotMatch(files.editorCommandBarHost, /function SearchStep|function CollectInputStep|function ResultStep|function LauncherActionItem/, 'EditorCommandBarHost must not carry duplicate launcher UI step implementations')
-assert.match(files.globalLauncherHost, /<LauncherView[\s\S]*hostId=['"]global-launcher['"]/, 'GlobalLauncherHost must render through the shared LauncherView')
+assert.match(files.globalLauncherPanel, /export function GlobalLauncherPanel/, 'GlobalLauncher panel rendering must live outside the host')
+assert.match(files.globalLauncherPanel, /<LauncherView[\s\S]*hostId=['"]global-launcher['"]/, 'GlobalLauncherPanel must render through the shared LauncherView')
+assert.match(files.globalLauncherPanel, /<GlobalLauncherFrameSwitch/, 'GlobalLauncherPanel must delegate frame selection to the frame switch')
+assert.doesNotMatch(files.globalLauncherHost, /<LauncherView|<GlobalLauncherFrameSwitch/, 'GlobalLauncherHost must delegate panel and frame rendering to GlobalLauncherPanel')
 assert.match(files.globalLauncherSearchFrame, /<LauncherMixedList/, 'GlobalLauncher search frame must use the shared mixed list')
 assert.match(files.globalLauncherResultFrame, /<LauncherResultChoiceRow/, 'GlobalLauncher result frame must use the shared result choice row')
 assert.match(files.globalLauncherSearchFrame + files.globalLauncherResultFrame, /<LauncherHintKey/, 'GlobalLauncher frames must use shared footer key hints')
 assert.match(files.globalLauncherResultFrame, /<LauncherHintText/, 'GlobalLauncher result frame must use shared footer text hints')
-assert.match(files.globalLauncherHost, /<GlobalLauncherFrameSwitch/, 'GlobalLauncherHost must delegate frame selection to the frame switch')
 assert.match(files.globalLauncherFrames, /<GlobalLauncherSystemSurfaceFrame/, 'GlobalLauncherFrameSwitch must delegate system surfaces to a frame component')
 assert.match(files.globalLauncherFrames, /<GlobalLauncherSettingsFrame/, 'GlobalLauncherFrameSwitch must delegate settings to a frame component')
 assert.match(files.globalLauncherFrames, /<GlobalLauncherPluginSurfaceFrame/, 'GlobalLauncherFrameSwitch must delegate plugin surfaces to a frame component')
