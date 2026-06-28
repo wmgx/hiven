@@ -202,6 +202,23 @@ const defaultTextActionProvider = {
       textAction('workflow.insert-editor', 'Insert into Editor', 'TextCursorInput', async () => (
         routeTextOutput(text, { kind: 'insert-into-editor' }, createDefaultOutputRouterContext())
       )),
+      textAction('workflow.draft-polite-reply', 'Draft Polite Reply', 'MessageSquareReply', async () => (
+        routeTextOutput(draftPoliteReply(text), { kind: 'paste-to-foreground-app' }, createDefaultOutputRouterContext())
+      )),
+      textAction('workflow.open-reply-draft-in-editor', 'Open Reply Draft in Editor', 'PanelTopOpen', async () => (
+        routeTextOutput(draftPoliteReply(text), {
+          kind: 'open-in-editor',
+          title: 'Reply Draft',
+          language: 'markdown',
+        }, createDefaultOutputRouterContext())
+      )),
+      textAction('workflow.extract-todos', 'Extract Todos', 'ListTodo', async () => (
+        routeTextOutput(extractTodoDraft(text), {
+          kind: 'open-in-editor',
+          title: 'Extracted Todos',
+          language: 'markdown',
+        }, createDefaultOutputRouterContext())
+      )),
       textAction('workflow.translate-in-surface', 'Translate in Surface', 'Languages', async () => (
         routeTextOutput(text, {
           kind: 'open-plugin-surface',
@@ -382,4 +399,34 @@ export function tryFormatJsonClipboardText(text: string): string | null {
   } catch {
     return null
   }
+}
+
+export function draftPoliteReply(text: string): string {
+  const normalized = normalizeChatText(text)
+  const hasQuestion = /[?？]\s*$/.test(normalized) || /\b(can|could|would|please|是否|能否|可以|需要|吗|么)\b/i.test(normalized)
+  const acknowledgement = hasQuestion
+    ? 'Thanks for the context. I can help with this.'
+    : 'Thanks for the update. I have received it.'
+  return [
+    acknowledgement,
+    '',
+    `My understanding: ${normalized}`,
+    '',
+    'Next step: I will follow up after checking the details.',
+  ].join('\n')
+}
+
+export function extractTodoDraft(text: string): string {
+  const normalized = normalizeChatText(text)
+  const lines = normalized
+    .split(/(?:\n|[。；;])/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  const candidates = lines.filter((line) => /todo|待办|action|跟进|确认|处理|修复|完成|需要|please|请/i.test(line))
+  const items = (candidates.length > 0 ? candidates : [normalized]).slice(0, 8)
+  return ['Action items:', ...items.map((item) => `- TODO: ${item}`)].join('\n')
+}
+
+function normalizeChatText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim()
 }

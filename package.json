@@ -88,7 +88,8 @@
     "test:refactor-gate": "node scripts/run-refactor-gate.mjs",
     "test:workflow-json-clipboard-story": "node scripts/test-workflow-json-clipboard-story.mjs",
     "test:workflow-translate-selection-story": "node scripts/test-workflow-translate-selection-story.mjs",
-    "test:workflow-clipboard-history-story": "node scripts/test-workflow-clipboard-history-story.mjs"
+    "test:workflow-clipboard-history-story": "node scripts/test-workflow-clipboard-history-story.mjs",
+    "test:workflow-chat-reply-story": "node scripts/test-workflow-chat-reply-story.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

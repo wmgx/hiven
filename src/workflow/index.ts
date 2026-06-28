@@ -14,7 +14,7 @@ export type {
 } from './workObject'
 export type { ContextRequirement, WorkAction, WorkActionProvider, WorkContext } from './workAction'
 export type { ActionResult, OutputTarget } from './outputTarget'
-export { registerDefaultWorkflowProviders, tryFormatJsonClipboardText } from './defaultWorkflowProviders'
+export { registerDefaultWorkflowProviders, tryFormatJsonClipboardText, draftPoliteReply, extractTodoDraft } from './defaultWorkflowProviders'
 export { getWorkflowObjectLauncherItems } from './workflowLauncherAdapter'
 export { createDefaultOutputRouterContext, routeTextOutput } from './outputRouter'
 export {
