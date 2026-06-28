@@ -1,6 +1,7 @@
 import { useAppStore, type PluginSurfaceOpenTarget } from '../store'
 import { pluginRegistry } from './pluginRegistry'
 import { resizeCurrentLauncherWindow, showLauncherWindow } from './windowManager/launcherWindow'
+import { LAUNCHER_WINDOW_LABEL } from './windowManager/windowLabels'
 import type { PluginDefinition } from './pluginTypes'
 
 const PENDING_OPEN_KEY = 'hiven-plugin-surface-open-request'
@@ -67,7 +68,7 @@ export async function requestOpenPluginSurfaceTool(target: PluginSurfaceOpenTarg
   await showLauncherWindow()
   try {
     const { emitTo } = await import('@tauri-apps/api/event')
-    await emitTo('launcher', 'hiven://open-plugin-surface', target)
+    await emitTo(LAUNCHER_WINDOW_LABEL, 'hiven://open-plugin-surface', target)
   } catch (error) {
     console.warn('[hiven] Failed to emit plugin surface open request:', error)
   }

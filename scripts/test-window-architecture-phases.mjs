@@ -10,6 +10,18 @@ function read(path) {
   return readFileSync(join(root, path), 'utf8')
 }
 
+
+const globalLauncherFrameFiles = [
+  'src/components/launcher/GlobalLauncherSearchFrame.tsx',
+  'src/components/launcher/GlobalLauncherPluginSurfaceFrame.tsx',
+  'src/components/launcher/GlobalLauncherSystemSurfaceFrame.tsx',
+  'src/components/launcher/GlobalLauncherSettingsFrame.tsx',
+  'src/components/launcher/GlobalLauncherResultFrame.tsx',
+]
+for (const framePath of globalLauncherFrameFiles) {
+  assert.ok(read(framePath).length > 0, `${framePath} must exist as an extracted frame module`)
+}
+
 const files = {
   packageJson: read('package.json'),
   app: read('src/App.tsx'),
@@ -28,6 +40,11 @@ const files = {
   launcherMixedList: read('src/components/launcher/LauncherMixedList.tsx'),
   launcherResultChoiceRow: read('src/components/launcher/LauncherResultChoiceRow.tsx'),
   globalLauncherFrames: read('src/components/launcher/GlobalLauncherFrames.tsx'),
+  globalLauncherSearchFrame: read('src/components/launcher/GlobalLauncherSearchFrame.tsx'),
+  globalLauncherPluginSurfaceFrame: read('src/components/launcher/GlobalLauncherPluginSurfaceFrame.tsx'),
+  globalLauncherSystemSurfaceFrame: read('src/components/launcher/GlobalLauncherSystemSurfaceFrame.tsx'),
+  globalLauncherSettingsFrame: read('src/components/launcher/GlobalLauncherSettingsFrame.tsx'),
+  globalLauncherResultFrame: read('src/components/launcher/GlobalLauncherResultFrame.tsx'),
   launcherUsage: read('src/workspace/launcher/usage.ts'),
   launcherRegistry: read('src/workspace/launcher/registry.ts'),
   globalLauncher: read('src/components/GlobalLauncher.tsx'),
@@ -41,6 +58,9 @@ const files = {
   windowManagerEditor: read('src/workspace/windowManager/editorWindow.ts'),
   windowManagerPluginSurfaces: read('src/workspace/windowManager/pluginSurfaceWindows.ts'),
   windowManagerLauncher: read('src/workspace/windowManager/launcherWindow.ts'),
+  globalLauncherSurfaceRegistry: read('src/components/launcher/GlobalLauncherSurfaceRegistry.ts'),
+  contextBroker: read('src/launcher/context/contextBroker.ts'),
+  defaultWorkflowProviders: read('src/workflow/defaultWorkflowProviders.ts'),
   windowLabels: read('src/workspace/windowManager/windowLabels.ts'),
   editorWindowApi: read('src/workspace/editorWindow.ts'),
   editorBridge: read('src/workspace/editorBridge.ts'),
@@ -110,15 +130,15 @@ assert.match(files.launcherFooterHints, /export function LauncherHintKey/, 'shar
 assert.match(files.launcherFooterHints, /export function LauncherHintText/, 'shared launcher UI must provide text-only footer hints')
 assert.match(files.launcherMixedList, /export function LauncherMixedList/, 'shared launcher UI must provide the mixed global list')
 assert.match(files.launcherResultChoiceRow, /export function LauncherResultChoiceRow/, 'shared launcher UI must provide global result choice rows')
-assert.match(files.globalLauncherFrames, /export function GlobalLauncherSystemSurfaceFrame/, 'global launcher frames must provide a system surface frame')
-assert.match(files.globalLauncherFrames, /export function GlobalLauncherSettingsFrame/, 'global launcher frames must provide a settings frame')
-assert.match(files.globalLauncherFrames, /export function GlobalLauncherPluginSurfaceFrame/, 'global launcher frames must provide a plugin surface frame')
-assert.match(files.globalLauncherFrames, /export function GlobalLauncherSearchFrame/, 'global launcher frames must provide a search frame')
+assert.match(files.globalLauncherSystemSurfaceFrame, /export function GlobalLauncherSystemSurfaceFrame/, 'global launcher system frame must live in its own module')
+assert.match(files.globalLauncherSettingsFrame, /export function GlobalLauncherSettingsFrame/, 'global launcher settings frame must live in its own module')
+assert.match(files.globalLauncherPluginSurfaceFrame, /export function GlobalLauncherPluginSurfaceFrame/, 'global launcher plugin surface frame must live in its own module')
+assert.match(files.globalLauncherSearchFrame, /export function GlobalLauncherSearchFrame/, 'global launcher search frame must live in its own module')
 assert.match(files.globalLauncherFrames, /export function GlobalLauncherCollectInputFrame/, 'global launcher frames must provide a collect-input frame')
-assert.match(files.globalLauncherFrames, /export function GlobalLauncherResultFrame/, 'global launcher frames must provide a result frame')
+assert.match(files.globalLauncherResultFrame, /export function GlobalLauncherResultFrame/, 'global launcher result frame must live in its own module')
 assert.match(files.globalLauncherFrames, /export function GlobalLauncherFrameSwitch/, 'global launcher frames must provide a frame switch to keep the host thin')
-assert.match(files.globalLauncherFrames, /surfaces\/SettingsSurface/, 'global launcher system frame must load SettingsSurface instead of the legacy view directly')
-assert.match(files.globalLauncherFrames, /surfaces\/PluginsSurface/, 'global launcher system frame must load PluginsSurface instead of the legacy view directly')
+assert.match(files.globalLauncherSystemSurfaceFrame, /surfaces\/SettingsSurface/, 'global launcher system frame must load SettingsSurface instead of the legacy view directly')
+assert.match(files.globalLauncherSystemSurfaceFrame, /surfaces\/PluginsSurface/, 'global launcher system frame must load PluginsSurface instead of the legacy view directly')
 assert.match(files.surfaceShell, /export function SurfaceShell/, 'app surfaces must share an explicit surface shell boundary')
 assert.match(files.surfaceShell, /data-surface-id/, 'surface shell must stamp a surface id for lifecycle/debug verification')
 assert.match(files.surfaceShell, /data-surface-kind/, 'surface shell must stamp a registry kind for lifecycle/debug verification')
@@ -139,10 +159,10 @@ assert.match(files.editorCommandBarHost, /<LauncherCollectInputStep/, 'EditorCom
 assert.match(files.editorCommandBarHost, /<LauncherResultStep/, 'EditorCommandBarHost must use the shared result-choice step')
 assert.doesNotMatch(files.editorCommandBarHost, /function SearchStep|function CollectInputStep|function ResultStep|function LauncherActionItem/, 'EditorCommandBarHost must not carry duplicate launcher UI step implementations')
 assert.match(files.globalLauncherHost, /<LauncherView[\s\S]*hostId=['"]global-launcher['"]/, 'GlobalLauncherHost must render through the shared LauncherView')
-assert.match(files.globalLauncherFrames, /<LauncherMixedList/, 'GlobalLauncher frames must use the shared mixed list')
-assert.match(files.globalLauncherFrames, /<LauncherResultChoiceRow/, 'GlobalLauncher frames must use the shared result choice row')
-assert.match(files.globalLauncherFrames, /<LauncherHintKey/, 'GlobalLauncher frames must use shared footer key hints')
-assert.match(files.globalLauncherFrames, /<LauncherHintText/, 'GlobalLauncher frames must use shared footer text hints')
+assert.match(files.globalLauncherSearchFrame, /<LauncherMixedList/, 'GlobalLauncher search frame must use the shared mixed list')
+assert.match(files.globalLauncherResultFrame, /<LauncherResultChoiceRow/, 'GlobalLauncher result frame must use the shared result choice row')
+assert.match(files.globalLauncherSearchFrame + files.globalLauncherResultFrame, /<LauncherHintKey/, 'GlobalLauncher frames must use shared footer key hints')
+assert.match(files.globalLauncherResultFrame, /<LauncherHintText/, 'GlobalLauncher result frame must use shared footer text hints')
 assert.match(files.globalLauncherHost, /<GlobalLauncherFrameSwitch/, 'GlobalLauncherHost must delegate frame selection to the frame switch')
 assert.match(files.globalLauncherFrames, /<GlobalLauncherSystemSurfaceFrame/, 'GlobalLauncherFrameSwitch must delegate system surfaces to a frame component')
 assert.match(files.globalLauncherFrames, /<GlobalLauncherSettingsFrame/, 'GlobalLauncherFrameSwitch must delegate settings to a frame component')
@@ -167,14 +187,21 @@ assert.match(files.tauriLib, /surface_registry_remove/, 'native runtime must exp
 assert.match(files.surfaceActions, /focusSurfaceInstance/, 'Surface registry must provide a switch/focus operation')
 assert.match(files.pluginSurfaceWindowComponent, /markSurfaceInstanceState\([\s\S]*['"]visible['"]/, 'Plugin surface window component must mark its surface visible')
 assert.match(files.pluginSurfaceWindowComponent, /markSurfaceInstanceState\([\s\S]*['"]hidden['"]/, 'Plugin surface window component must mark its surface hidden on teardown')
-assert.match(files.editorWindowComponent, /upsertSurfaceInstance\([\s\S]*id:\s*['"]editor['"]/, 'Editor window component must register itself as a surface')
-assert.match(files.editorWindowComponent, /markSurfaceInstanceState\(['"]editor['"],\s*['"]hidden['"]\)/, 'Editor window component must mark itself hidden on teardown')
+assert.match(files.editorWindowComponent, /upsertSurfaceInstance\([\s\S]*id:\s*EDITOR_WINDOW_LABEL/, 'Editor window component must register itself as a surface using the centralized label')
+assert.match(files.editorWindowComponent, /markSurfaceInstanceState\(EDITOR_WINDOW_LABEL,\s*['"]hidden['"]\)/, 'Editor window component must mark itself hidden on teardown using the centralized label')
 assert.match(files.windowManagerEditor, /function\s+showEditorWindow\(\)[\s\S]*requestOpenEditorWindow\(\)/, 'window manager must expose editor window open operations through a facade')
 assert.match(files.windowManagerEditor, /function\s+closeEditorWindow\(\)[\s\S]*requestCloseEditorWindow\(\)/, 'window manager must expose editor window close operations through a facade')
 assert.match(files.windowManagerPluginSurfaces, /function\s+showPluginSurfaceWindow\(target:[\s\S]*requestOpenPluginSurfaceWindow\(target\)/, 'window manager must expose plugin surface window operations through a facade')
 assert.match(files.windowManagerPluginSurfaces, /function\s+hidePluginSurfaceWindow\(target:[\s\S]*requestHidePluginSurfaceWindow\(target\)/, 'window manager must expose plugin surface window hide operations through a facade')
 assert.match(files.windowManagerLauncher, /showLauncherWindow/, 'window manager must expose launcher window operations')
 assert.match(files.windowLabels, /EDITOR_WINDOW_LABEL/, 'window manager must centralize window labels')
+assert.match(files.windowLabels, /LAUNCHER_WINDOW_LABEL/, 'window manager must centralize launcher window labels')
+assert.match(files.editorBridge, /emitTo\(EDITOR_WINDOW_LABEL,/, 'editor bridge must address the editor window through the centralized label')
+assert.match(files.contextBroker, /EDITOR_WINDOW_LABEL/, 'context broker must use the centralized editor window label')
+assert.match(files.defaultWorkflowProviders, /EDITOR_WINDOW_LABEL/, 'workflow providers must use the centralized editor window label')
+assert.match(files.windowManagerLauncher, /LAUNCHER_WINDOW_LABEL/, 'launcher window manager must use the centralized launcher label')
+assert.match(files.globalLauncherSurfaceRegistry, /LAUNCHER_WINDOW_LABEL/, 'global launcher surface registry must use the centralized launcher label')
+assert.doesNotMatch(files.globalLauncherSurfaceRegistry, /windowLabel:\s*standaloneLauncher \? ['"]launcher['"] : ['"]main['"]|windowLabel:\s*['"]main['"]/, 'global launcher surface registry must not retain retired main-window labels')
 assert.match(files.launcherUsage, /['"]editor-command-bar['"]:\s*\{\}/, 'launcher usage must have an editor-command-bar bucket')
 assert.match(files.launcherRegistry, /normalizeLauncherSurfaceId\(candidate\) === normalizedSurfaceId/, 'launcher registry must match legacy command-palette items against editor-command-bar host')
 assert.doesNotMatch(
@@ -217,8 +244,8 @@ assert.doesNotMatch(
 )
 assert.match(files.globalLauncherHost, /launcherHostSurfaceTarget/, 'GlobalLauncherHost must read launcher-hosted surface target')
 assert.match(files.globalLauncherFrames, /GlobalLauncherSystemSurfaceFrame/, 'GlobalLauncherFrameSwitch must render app surfaces through a frame')
-assert.match(files.globalLauncherFrames, /SettingsSurface/, 'GlobalLauncher frame must render Settings as a launcher-hosted surface')
-assert.match(files.globalLauncherFrames, /PluginsSurface/, 'GlobalLauncher frame must render Plugins as a launcher-hosted surface')
+assert.match(files.globalLauncherSystemSurfaceFrame, /SettingsSurface/, 'GlobalLauncher system frame must render Settings as a launcher-hosted surface')
+assert.match(files.globalLauncherSystemSurfaceFrame, /PluginsSurface/, 'GlobalLauncher system frame must render Plugins as a launcher-hosted surface')
 assert.doesNotMatch(files.pluginApi, /emitTo\(['"]main['"]/, 'launcher API must not route settings/plugins through the main window')
 assert.doesNotMatch(files.pluginApi, /show_and_focus_window/, 'launcher API must not focus the main window for settings/plugins')
 assert.doesNotMatch(files.app, /hiven:\/\/show-plugins-page|hiven:\/\/show-settings-page/, 'main window should not be the settings/plugins bridge')

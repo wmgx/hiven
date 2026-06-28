@@ -7,6 +7,18 @@ import { join } from 'node:path'
 const root = process.cwd()
 const read = (path) => readFileSync(join(root, path), 'utf8')
 
+
+const globalLauncherFrameFiles = [
+  'src/components/launcher/GlobalLauncherSearchFrame.tsx',
+  'src/components/launcher/GlobalLauncherPluginSurfaceFrame.tsx',
+  'src/components/launcher/GlobalLauncherSystemSurfaceFrame.tsx',
+  'src/components/launcher/GlobalLauncherSettingsFrame.tsx',
+  'src/components/launcher/GlobalLauncherResultFrame.tsx',
+]
+for (const framePath of globalLauncherFrameFiles) {
+  assert.ok(read(framePath).length > 0, `${framePath} must exist as an extracted frame module`)
+}
+
 const packageJson = JSON.parse(read('package.json'))
 const tauriConfig = JSON.parse(read('src-tauri/tauri.conf.json'))
 const capability = JSON.parse(read('src-tauri/capabilities/default.json'))
@@ -23,11 +35,18 @@ const files = {
   editorCommandBar: read('src/launcher/hosts/EditorCommandBarHost.tsx'),
   globalLauncher: read('src/components/GlobalLauncher.tsx'),
   globalLauncherHost: read('src/launcher/hosts/GlobalLauncherHost.tsx'),
+  globalLauncherSurfaceRegistry: read('src/components/launcher/GlobalLauncherSurfaceRegistry.ts'),
+  windowLabels: read('src/workspace/windowManager/windowLabels.ts'),
   launcherTypes: read('src/workspace/launcher/types.ts'),
   launcherRegistry: read('src/workspace/launcher/registry.ts'),
   launcherSession: read('src/workspace/launcher/useLauncherSession.ts'),
   launcherView: read('src/components/launcher/LauncherView.tsx'),
   launcherFrames: read('src/components/launcher/GlobalLauncherFrames.tsx'),
+  globalLauncherSearchFrame: read('src/components/launcher/GlobalLauncherSearchFrame.tsx'),
+  globalLauncherPluginSurfaceFrame: read('src/components/launcher/GlobalLauncherPluginSurfaceFrame.tsx'),
+  globalLauncherSystemSurfaceFrame: read('src/components/launcher/GlobalLauncherSystemSurfaceFrame.tsx'),
+  globalLauncherSettingsFrame: read('src/components/launcher/GlobalLauncherSettingsFrame.tsx'),
+  globalLauncherResultFrame: read('src/components/launcher/GlobalLauncherResultFrame.tsx'),
   hostProvider: read('src/workspace/launcher/hostProvider.ts'),
   hostActions: read('src/workspace/launcher/hostActions.ts'),
   editorBridge: read('src/workspace/editorBridge.ts'),
@@ -80,11 +99,11 @@ assert.match(files.globalLauncherHost, /useLauncherSession\(\{[\s\S]*hostId:\s*[
 assert.match(files.editorCommandBar, /useLauncherSession\(\{[\s\S]*hostId:\s*['"]editor-command-bar['"]/, 'Editor command bar must use the shared launcher session')
 assert.match(files.launcherSession, /new LauncherController/, 'shared launcher session must own controller lifecycle')
 assert.match(files.launcherView, /data-launcher-host/, 'shared LauncherView must stamp host identity')
-assert.match(files.launcherFrames, /GlobalLauncherSearchFrame/, 'global launcher host must delegate search UI to frame modules')
-assert.match(files.launcherFrames, /GlobalLauncherPluginSurfaceFrame/, 'global launcher host must delegate plugin surface UI to frame modules')
-assert.match(files.launcherFrames, /GlobalLauncherSystemSurfaceFrame/, 'global launcher host must delegate system surfaces to frame modules')
-assert.match(files.launcherFrames, /GlobalLauncherSettingsFrame/, 'global launcher host must delegate settings surfaces to frame modules')
-assert.match(files.launcherFrames, /GlobalLauncherResultFrame/, 'global launcher host must delegate result UI to frame modules')
+assert.match(files.globalLauncherSearchFrame, /GlobalLauncherSearchFrame/, 'global launcher search UI must live in an extracted frame module')
+assert.match(files.globalLauncherPluginSurfaceFrame, /GlobalLauncherPluginSurfaceFrame/, 'global launcher plugin surface UI must live in an extracted frame module')
+assert.match(files.globalLauncherSystemSurfaceFrame, /GlobalLauncherSystemSurfaceFrame/, 'global launcher system surfaces must live in an extracted frame module')
+assert.match(files.globalLauncherSettingsFrame, /GlobalLauncherSettingsFrame/, 'global launcher settings UI must live in an extracted frame module')
+assert.match(files.globalLauncherResultFrame, /GlobalLauncherResultFrame/, 'global launcher result UI must live in an extracted frame module')
 assert.match(files.launcherRegistry, /requiredCapabilities[\s\S]*launcherHostHasCapability/, 'launcher registry must enforce host capability filtering')
 
 // Editor command bar is local, with an explicit bridge to global launcher.
@@ -104,7 +123,7 @@ assert.match(files.tauriLib, /WebviewWindowBuilder::new\([\s\S]{0,180}"editor"[\
 assert.match(files.hostProvider, /getEditorWindowItems/, 'global launcher must provide an editor-opening item')
 assert.match(files.editorWindow, /<CommandPalette \/>/, 'EditorWindow must host the local editor command bar')
 assert.match(files.editorView, /<PanelHostV2 placement="left" \/>[\s\S]*<PanelHostV2 placement="bottom" \/>[\s\S]*<PanelHostV2 placement="right" \/>/, 'Editor must retain PanelHostV2 left/bottom/right')
-assert.match(files.editorWindow, /upsertSurfaceInstance\([\s\S]*id:\s*['"]editor['"]/, 'EditorWindow must register itself as a surface')
+assert.match(files.editorWindow, /upsertSurfaceInstance\([\s\S]*id:\s*EDITOR_WINDOW_LABEL/, 'EditorWindow must register itself as a surface using the centralized label')
 
 // Cross-window editor bridge.
 for (const action of ['getEditorContext', 'createEditorPane', 'replaceEditorSelection', 'insertIntoEditor', 'openEditorPanel']) {
@@ -115,6 +134,11 @@ for (const publisher of ['registerActiveEditorContext', 'updateActivePaneSnapsho
   assert.match(files.editorWindow, new RegExp(publisher), `EditorWindow must publish ${publisher}`)
 }
 assert.doesNotMatch(files.outputRouter, /useWorkspaceStore|getState\(\)\.createPane|getState\(\)\.openPanelV2/, 'caller windows must not mutate editor workspace state directly')
+assert.match(files.windowLabels, /EDITOR_WINDOW_LABEL/, 'window labels must centralize editor label constants')
+assert.match(files.windowLabels, /LAUNCHER_WINDOW_LABEL/, 'window labels must centralize launcher label constants')
+assert.match(files.editorBridge, /emitTo\(EDITOR_WINDOW_LABEL,/, 'editor bridge must use the centralized editor label')
+assert.match(files.globalLauncherSurfaceRegistry, /LAUNCHER_WINDOW_LABEL/, 'global launcher surface registry must use the centralized launcher label')
+assert.doesNotMatch(files.globalLauncherSurfaceRegistry, /windowLabel:\s*['"]main['"]|standaloneLauncher \? ['"]launcher['"] : ['"]main['"]/, 'surface registry must not publish retired main-window labels')
 
 // Plugin surfaces are independent windows and can be attached to editor panels.
 assert.match(files.main, /windowType === ['"]plugin-surface['"][\s\S]*PluginSurfaceWindow/, 'entrypoint must route ?window=plugin-surface to PluginSurfaceWindow')
@@ -139,8 +163,8 @@ assert.match(files.tauriLib, /struct\s+SurfaceRegistryState/, 'native runtime mu
 assert.match(files.surfaceActions, /focusSurfaceInstance/, 'surface registry must expose focus/switch operation')
 
 // Settings / Plugins / Plugin editor are first-class surfaces, not main-window views.
-assert.match(files.launcherFrames, /surfaces\/SettingsSurface/, 'launcher system frame must load SettingsSurface')
-assert.match(files.launcherFrames, /surfaces\/PluginsSurface/, 'launcher system frame must load PluginsSurface')
+assert.match(files.globalLauncherSystemSurfaceFrame, /surfaces\/SettingsSurface/, 'launcher system frame must load SettingsSurface')
+assert.match(files.globalLauncherSystemSurfaceFrame, /surfaces\/PluginsSurface/, 'launcher system frame must load PluginsSurface')
 assert.match(files.settingsSurface, /<SurfaceShell[\s\S]*id=['"]settings['"]/, 'Settings must render through SurfaceShell')
 assert.match(files.pluginsSurface, /<SurfaceShell[\s\S]*id=['"]plugins['"]/, 'Plugins must render through SurfaceShell')
 assert.match(files.pluginEditorSurface, /<SurfaceShell[\s\S]*id=['"]plugin-editor['"]/, 'Plugin editor must render through SurfaceShell')

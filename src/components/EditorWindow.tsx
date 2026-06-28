@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAppStore } from '../store'
 import { readLocalEditorContextSnapshot } from '../launcher/context/contextBroker'
 import { closeEditorWindow } from '../workspace/windowManager/editorWindow'
+import { EDITOR_WINDOW_LABEL } from '../workspace/windowManager/windowLabels'
 import { markSurfaceInstanceState, upsertSurfaceInstance } from '../surfaces/registry'
 import {
   registerActiveEditorContext,
@@ -30,20 +31,20 @@ export function EditorWindow() {
 
   useEffect(() => {
     upsertSurfaceInstance({
-      id: 'editor',
+      id: EDITOR_WINDOW_LABEL,
       kind: 'editor',
-      windowLabel: 'editor',
+      windowLabel: EDITOR_WINDOW_LABEL,
       title: 'Hiven Editor',
       state: 'visible',
       canReceiveText: true,
       canProvideText: true,
       canAttachToEditor: true,
     })
-    const onPageHide = () => markSurfaceInstanceState('editor', 'destroyed')
+    const onPageHide = () => markSurfaceInstanceState(EDITOR_WINDOW_LABEL, 'destroyed')
     window.addEventListener('pagehide', onPageHide)
     return () => {
       window.removeEventListener('pagehide', onPageHide)
-      markSurfaceInstanceState('editor', 'hidden')
+      markSurfaceInstanceState(EDITOR_WINDOW_LABEL, 'hidden')
     }
   }, [])
 

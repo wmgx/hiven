@@ -1,6 +1,7 @@
 import type { EditorContextSnapshot } from '../launcher/context/contextBroker'
 import type { SerializedRange } from './types'
 import { showEditorWindow } from './windowManager/editorWindow'
+import { EDITOR_WINDOW_LABEL } from './windowManager/windowLabels'
 
 export const EDITOR_BRIDGE_REQUEST_EVENT = 'hiven://editor-bridge-request'
 export const EDITOR_BRIDGE_RESPONSE_EVENT = 'hiven://editor-bridge-response'
@@ -161,7 +162,7 @@ async function sendEditorBridgeRequest<T extends EditorBridgeRequest['action']>(
 
   const { emitTo, listen } = await import('@tauri-apps/api/event')
   const responsePromise = await waitForEditorBridgeResponse(listen, request.requestId, options.timeoutMs ?? 1200)
-  await emitTo('editor', EDITOR_BRIDGE_REQUEST_EVENT, request)
+  await emitTo(EDITOR_WINDOW_LABEL, EDITOR_BRIDGE_REQUEST_EVENT, request)
   const response = await responsePromise
   if (!response.ok) throw new Error(response.error ?? `Editor bridge request failed: ${request.action}`)
   return response.value

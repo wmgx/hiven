@@ -20,7 +20,7 @@ assert.match(editorItems, /surfaces:\s*\[['"]global-launcher['"]\]/, 'Open Edito
 assert.match(editorItems, /requiredCapabilities:\s*\[['"]host-surfaces['"]\]/, 'Open Editor must require host-surface capability')
 assert.match(editorItems, /showEditorWindow\(\)/, 'Open Editor item must call the editor window manager facade')
 assert.doesNotMatch(editorItems, /requestOpenEditorWindow/, 'Open Editor item must not call the lower-level editor window lifecycle API directly')
-assert.match(editorWindowApi, /upsertSurfaceInstance\([\s\S]*id:\s*['"]editor['"]/, 'opening editor must update the surface registry')
+assert.match(editorWindowApi, /upsertSurfaceInstance\([\s\S]*id:\s*EDITOR_WINDOW_LABEL/, 'opening editor must update the surface registry using the centralized label')
 assert.match(editorBridge, /createEditorPane/, 'editor bridge must expose pane creation for open-in-editor requests')
 assert.match(outputRouter, /openInEditor:[\s\S]*createEditorPane\(\{[\s\S]*text,[\s\S]*title:[\s\S]*language:/, 'output router must support opening text into editor through the editor bridge')
 assert.match(defaultWorkflowProviders, /workflow\.open-in-editor[\s\S]*kind:\s*['"]open-in-editor['"]/, 'workflow text actions must expose Open in Editor')

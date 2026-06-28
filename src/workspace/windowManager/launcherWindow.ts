@@ -1,13 +1,14 @@
 import { invoke } from '@tauri-apps/api/core'
 import { markSurfaceInstanceState, upsertSurfaceInstance } from '../../surfaces/registry'
+import { LAUNCHER_WINDOW_LABEL } from './windowLabels'
 
 export async function showLauncherWindow(): Promise<void> {
   if (!isTauriRuntime()) return
   await invoke('show_launcher_window')
   upsertSurfaceInstance({
-    id: 'launcher',
+    id: LAUNCHER_WINDOW_LABEL,
     kind: 'launcher',
-    windowLabel: 'launcher',
+    windowLabel: LAUNCHER_WINDOW_LABEL,
     title: 'Hiven Launcher',
     state: 'visible',
     canReceiveText: true,
@@ -17,7 +18,7 @@ export async function showLauncherWindow(): Promise<void> {
 export async function hideLauncherWindow(): Promise<void> {
   if (!isTauriRuntime()) return
   await invoke('hide_launcher_window')
-  markSurfaceInstanceState('launcher', 'hidden')
+  markSurfaceInstanceState(LAUNCHER_WINDOW_LABEL, 'hidden')
 }
 
 export type LauncherWindowPosition = {

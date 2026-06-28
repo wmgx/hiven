@@ -4,6 +4,7 @@ import { getSurfaceInstances } from '../surfaces/registry'
 import { useAppStore } from '../store'
 import { getHostAppWorkObjects, launchHostAppObject } from '../workspace/appLauncher/hostAppLauncher'
 import { showEditorWindow } from '../workspace/windowManager/editorWindow'
+import { EDITOR_WINDOW_LABEL } from '../workspace/windowManager/windowLabels'
 import { showPluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
 import { PLUGIN_SURFACE_PANEL_ID } from '../components/pluginSurface/PluginSurfacePanel'
 import { registerClipboardHistoryWorkflowProvider } from './clipboardHistoryWorkflowProvider'
@@ -83,7 +84,7 @@ export const currentContextObjectProvider: WorkObjectProvider = {
         subtitle: snapshot.editor.language ?? snapshot.editor.activePaneId,
         icon: 'PanelTop',
         source: 'context.editor',
-        windowLabel: 'editor',
+        windowLabel: EDITOR_WINDOW_LABEL,
         paneId: snapshot.editor.activePaneId,
         language: snapshot.editor.language,
         updatedAt: snapshot.invocation.timestamp,
@@ -255,13 +256,13 @@ const defaultSurfaceActionProvider = {
         },
       ]
     }
-    if (input.type === 'window' && input.id === 'editor') {
+    if (input.type === 'window' && input.id === EDITOR_WINDOW_LABEL) {
       return defaultEditorDocumentActionProvider.getActions({
-        id: 'editor',
+        id: EDITOR_WINDOW_LABEL,
         type: 'editor-document',
         title: input.title,
         source: input.source,
-        windowLabel: 'editor',
+        windowLabel: EDITOR_WINDOW_LABEL,
         paneId: '',
       })
     }

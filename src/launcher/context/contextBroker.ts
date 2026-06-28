@@ -2,6 +2,7 @@ import type { TextRange } from '../../workspace/launcher/types'
 import { runtimeRegistry } from '../../workspace/runtimeRegistry'
 import { useWorkspaceStore } from '../../workspace/workspaceStore'
 import { getActiveEditorContextSnapshot, getEditorContext } from '../../workspace/editorBridge'
+import { EDITOR_WINDOW_LABEL } from '../../workspace/windowManager/windowLabels'
 
 export type WorkContextInvocationSource = 'global-hotkey' | 'editor-command-bar' | 'plugin-surface'
 
@@ -53,7 +54,7 @@ export async function createWorkContextSnapshot(
 }
 
 export const editorContextProvider: ContextSnapshotProvider = {
-  id: 'editor',
+  id: EDITOR_WINDOW_LABEL,
   getSnapshot: async () => {
     if (isEditorWindowRuntime()) {
       const editor = readLocalEditorContextSnapshot()
@@ -89,7 +90,7 @@ export function readLocalEditorContextSnapshot(): EditorContextSnapshot | undefi
     : undefined
 
   return {
-    windowLabel: 'editor',
+    windowLabel: EDITOR_WINDOW_LABEL,
     activePaneId: state.activePaneId,
     paneIds: state.paneOrder,
     language: pane.language ?? pane.detectedLanguage,

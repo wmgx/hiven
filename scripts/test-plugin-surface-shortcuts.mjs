@@ -23,6 +23,7 @@ const files = {
   launcherWindowManager: read('src/workspace/windowManager/launcherWindow.ts'),
   globalLauncher: read('src/launcher/hosts/GlobalLauncherHost.tsx') + '\n' + read('src/components/launcher/GlobalLauncherSurfaceFrame.ts'),
   globalLauncherFrames: read('src/components/launcher/GlobalLauncherFrames.tsx'),
+  globalLauncherPluginSurfaceFrame: read('src/components/launcher/GlobalLauncherPluginSurfaceFrame.tsx'),
   globalLauncherLayout: read('src/components/launcher/GlobalLauncherLayout.ts'),
   pluginSurfaceWindow: read('src/components/PluginSurfaceWindow.tsx'),
   pluginSurfaceRenderer: read('src/components/pluginSurface/PluginSurfaceRenderer.tsx'),
@@ -124,7 +125,7 @@ assert.match(
 )
 assert.match(files.pluginSurfaceWindow, /<PluginSurfaceRenderer/, 'plugin surface window must delegate plugin rendering to the shared renderer')
 assert.match(files.globalLauncherFrames, /<GlobalLauncherPluginSurfaceFrame/, 'global launcher frame switch must delegate plugin surface rendering to a frame')
-assert.match(files.globalLauncherFrames, /<PluginSurfaceRenderer/, 'global launcher surface frame must delegate plugin rendering to the shared renderer')
+assert.match(files.globalLauncherPluginSurfaceFrame, /<PluginSurfaceRenderer/, 'global launcher surface frame must delegate plugin rendering to the shared renderer')
 assert.match(files.pluginSurfaceRenderer, /ensurePluginRuntimeReady/, 'shared plugin surface renderer must bootstrap plugin runtime')
 assert.match(files.pluginSurfaceRenderer, /missingPluginPermissions/, 'shared plugin surface renderer must gate missing permissions')
 assert.match(files.pluginSurfaceRenderer, /beforeOpen/, 'shared plugin surface renderer must run beforeOpen before rendering')

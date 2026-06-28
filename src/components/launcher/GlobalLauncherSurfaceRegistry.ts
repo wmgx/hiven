@@ -3,6 +3,7 @@ import type { PluginSurfaceOpenTarget } from '../../store'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import { markSurfaceInstanceState, upsertSurfaceInstance } from '../../surfaces/registry'
 import { pluginSurfaceInstanceId } from '../../workspace/pluginSurfaceWindows'
+import { LAUNCHER_WINDOW_LABEL } from '../../workspace/windowManager/windowLabels'
 import type { PluginSurfaceTarget } from './GlobalLauncherSelection'
 
 type LauncherHostSurfaceTarget = 'settings' | 'plugins' | null
@@ -38,9 +39,9 @@ export function useGlobalLauncherSurfaceRegistry({
   useEffect(() => {
     if (!open) return
     upsertSurfaceInstance({
-      id: 'launcher',
+      id: LAUNCHER_WINDOW_LABEL,
       kind: 'launcher',
-      windowLabel: standaloneLauncher ? 'launcher' : 'main',
+      windowLabel: LAUNCHER_WINDOW_LABEL,
       title: 'Hiven Launcher',
       state: 'visible',
       canReceiveText: true,
@@ -49,7 +50,7 @@ export function useGlobalLauncherSurfaceRegistry({
 
   useEffect(() => {
     if (open) return
-    markSurfaceInstanceState('launcher', 'hidden')
+    markSurfaceInstanceState(LAUNCHER_WINDOW_LABEL, 'hidden')
     controllerReset()
   }, [controllerReset, open])
 
@@ -58,7 +59,7 @@ export function useGlobalLauncherSurfaceRegistry({
     upsertSurfaceInstance({
       id: `settings:${launcherSettingsTarget.source}:${launcherSettingsTarget.pluginId}`,
       kind: 'settings',
-      windowLabel: standaloneLauncher ? 'launcher' : 'main',
+      windowLabel: LAUNCHER_WINDOW_LABEL,
       title: 'Plugin Settings',
       pluginId: launcherSettingsTarget.pluginId,
       state: 'visible',
@@ -72,7 +73,7 @@ export function useGlobalLauncherSurfaceRegistry({
     upsertSurfaceInstance({
       id: `host-surface:${hostSurfaceTarget}`,
       kind: hostSurfaceTarget === 'plugins' ? 'plugins' : 'settings',
-      windowLabel: standaloneLauncher ? 'launcher' : 'main',
+      windowLabel: LAUNCHER_WINDOW_LABEL,
       title: hostSurfaceTarget === 'plugins' ? 'Plugins' : 'Settings',
       state: 'visible',
       canReceiveText: false,
@@ -85,7 +86,7 @@ export function useGlobalLauncherSurfaceRegistry({
     upsertSurfaceInstance({
       id: pluginSurfaceInstanceId(surfaceFrame),
       kind: 'plugin-surface',
-      windowLabel: standaloneLauncher ? 'launcher' : 'main',
+      windowLabel: LAUNCHER_WINDOW_LABEL,
       title: activeSurfaceFrame?.surface.title ?? surfaceFrame.surfaceId,
       pluginId: surfaceFrame.pluginId,
       surfaceId: surfaceFrame.surfaceId,

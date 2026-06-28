@@ -157,6 +157,7 @@ const launcher = [
   read('src/components/GlobalLauncher.tsx'),
   read('src/launcher/hosts/GlobalLauncherHost.tsx'),
   read('src/components/launcher/GlobalLauncherFrames.tsx'),
+  read('src/components/launcher/GlobalLauncherPluginSurfaceFrame.tsx'),
   read('src/components/launcher/GlobalLauncherKeyboard.ts'),
   read('src/components/launcher/GlobalLauncherClose.ts'),
   read('src/components/launcher/GlobalLauncherSelection.ts'),
