@@ -20,7 +20,7 @@ function read(path) {
 const files = {
   packageJson: read('package.json'),
   editorView: read('src/views/EditorView.tsx'),
-  scriptsView: read('src/surfaces/PluginsManagerSurfaceContent.tsx'),
+  pluginsSurfaceContent: read('src/surfaces/PluginsManagerSurfaceContent.tsx'),
   settingsSchemaRenderer: read('src/components/PluginSettingsSchemaRenderer.tsx'),
   globalLauncher: read('src/components/GlobalLauncher.tsx'),
   renderStatusBar: read('src/components/workspace/RenderStatusBar.tsx'),
@@ -29,7 +29,7 @@ const files = {
     : '',
   scriptsI18n: read('src/i18n/locales/scripts.ts'),
   css: read('src/index.css'),
-  settingsView: read('src/surfaces/SettingsSurfaceContent.tsx'),
+  settingsSurfaceContent: read('src/surfaces/SettingsSurfaceContent.tsx'),
   navI18n: read('src/i18n/locales/nav.ts'),
   paletteI18n: read('src/i18n/locales/palette.ts'),
   settingsI18n: read('src/i18n/locales/settings.ts'),
@@ -71,33 +71,33 @@ assert.match(files.schemaInline, /PluginSettingsSchemaRenderer/, 'PluginSettings
 assert.match(files.schemaInline, /contribution\.schema/, 'PluginSettingsInline must render only schema-capable settings inline')
 assert.match(files.schemaInline, /settingsModalTarget/, 'PluginSettingsInline must support schema-declared modal settings')
 
-assert.match(files.scriptsView, /PluginSettingsInline/, 'ScriptsView must render inline schema settings on plugin details')
-assert.match(files.scriptsView, /plugin-settings-inline-detail/, 'ScriptsView must wrap inline schema settings in a detail section')
-assert.match(files.scriptsView, /plugin-master-detail/, 'ScriptsView must render plugin management as a master-detail surface')
-assert.match(files.scriptsView, /listBundledPluginPackageSummaries/, 'ScriptsView browser preview must list bundled plugins without Tauri directory APIs')
-assert.match(files.scriptsView, /if \(!isTauri\(\)\)[\s\S]{0,220}setBuiltinPlugins\(listBundledPluginPackageSummaries\(\)\)/, 'ScriptsView non-Tauri path must render real bundled plugin details for visual QA')
-assert.match(files.scriptsView, /className=["']ptools["'][\s\S]*scripts-tab-count/, 'ScriptsView must render plugin toolbar controls and tab counts')
-assert.match(files.scriptsView, /className=["']ptools["']/, 'ScriptsView must use the design ptools header row')
-assert.doesNotMatch(files.scriptsView, /scripts-title|className=["']phead scripts-header["']|className=["']ptitle scripts-title["']/, 'ScriptsView must not render the old plugin page title/count header')
-assert.equal((files.scriptsView.match(/data-testid=["']plugin-new-button["']/g) ?? []).length, 1, 'ScriptsView top bar must expose exactly one add-plugin button')
-assert.doesNotMatch(files.scriptsView, /handleSideloadDev|handleCreatePlugin|scripts\.importDev|scripts\.new/, 'Add Plugin menu must only expose GitHub, zip, and directory imports')
-assert.doesNotMatch(files.scriptsView, /scripts-header-actions/, 'ScriptsView must not render the old multi-button header action group')
-assert.match(files.scriptsView, /selectedPluginKey/, 'ScriptsView must keep a selected plugin detail target')
-assert.match(files.scriptsView, /hasSchemaSettings/, 'ScriptsView must distinguish schema settings from legacy settings')
-assert.match(files.scriptsView, /hasLegacySettings/, 'ScriptsView must keep legacy settings button fallback')
-assert.match(files.scriptsView, /pluginDetailDescription/, 'Plugin detail must resolve a runtime description for the selected plugin')
-assert.match(files.scriptsView, /className=["']d-desc plugin-detail-description["']/, 'Plugin detail must render the plugin description as a dedicated description block')
-assert.match(files.scriptsView, /surfaceShortcutHintForPlugin/, 'Plugin master list must show shortcut hints instead of generic status text')
-assert.match(files.scriptsView, /function capabilityLabel\(/, 'ScriptsView must map raw plugin capability ids through localized labels')
-assert.match(files.scriptsView, /\{capabilityLabel\(capability,\s*locale\)\}/, 'ScriptsView capability badges must render localized labels')
+assert.match(files.pluginsSurfaceContent, /PluginSettingsInline/, 'PluginsManagerSurfaceContent must render inline schema settings on plugin details')
+assert.match(files.pluginsSurfaceContent, /plugin-settings-inline-detail/, 'PluginsManagerSurfaceContent must wrap inline schema settings in a detail section')
+assert.match(files.pluginsSurfaceContent, /plugin-master-detail/, 'PluginsManagerSurfaceContent must render plugin management as a master-detail surface')
+assert.match(files.pluginsSurfaceContent, /listBundledPluginPackageSummaries/, 'PluginsManagerSurfaceContent browser preview must list bundled plugins without Tauri directory APIs')
+assert.match(files.pluginsSurfaceContent, /if \(!isTauri\(\)\)[\s\S]{0,220}setBuiltinPlugins\(listBundledPluginPackageSummaries\(\)\)/, 'PluginsManagerSurfaceContent non-Tauri path must render real bundled plugin details for visual QA')
+assert.match(files.pluginsSurfaceContent, /className=["']ptools["'][\s\S]*scripts-tab-count/, 'PluginsManagerSurfaceContent must render plugin toolbar controls and tab counts')
+assert.match(files.pluginsSurfaceContent, /className=["']ptools["']/, 'PluginsManagerSurfaceContent must use the design ptools header row')
+assert.doesNotMatch(files.pluginsSurfaceContent, /scripts-title|className=["']phead scripts-header["']|className=["']ptitle scripts-title["']/, 'PluginsManagerSurfaceContent must not render the old plugin page title/count header')
+assert.equal((files.pluginsSurfaceContent.match(/data-testid=["']plugin-new-button["']/g) ?? []).length, 1, 'PluginsManagerSurfaceContent top bar must expose exactly one add-plugin button')
+assert.doesNotMatch(files.pluginsSurfaceContent, /handleSideloadDev|handleCreatePlugin|scripts\.importDev|scripts\.new/, 'Add Plugin menu must only expose GitHub, zip, and directory imports')
+assert.doesNotMatch(files.pluginsSurfaceContent, /scripts-header-actions/, 'PluginsManagerSurfaceContent must not render the old multi-button header action group')
+assert.match(files.pluginsSurfaceContent, /selectedPluginKey/, 'PluginsManagerSurfaceContent must keep a selected plugin detail target')
+assert.match(files.pluginsSurfaceContent, /hasSchemaSettings/, 'PluginsManagerSurfaceContent must distinguish schema settings from legacy settings')
+assert.match(files.pluginsSurfaceContent, /hasLegacySettings/, 'PluginsManagerSurfaceContent must keep legacy settings button fallback')
+assert.match(files.pluginsSurfaceContent, /pluginDetailDescription/, 'Plugin detail must resolve a runtime description for the selected plugin')
+assert.match(files.pluginsSurfaceContent, /className=["']d-desc plugin-detail-description["']/, 'Plugin detail must render the plugin description as a dedicated description block')
+assert.match(files.pluginsSurfaceContent, /surfaceShortcutHintForPlugin/, 'Plugin master list must show shortcut hints instead of generic status text')
+assert.match(files.pluginsSurfaceContent, /function capabilityLabel\(/, 'PluginsManagerSurfaceContent must map raw plugin capability ids through localized labels')
+assert.match(files.pluginsSurfaceContent, /\{capabilityLabel\(capability,\s*locale\)\}/, 'PluginsManagerSurfaceContent capability badges must render localized labels')
 assert.match(files.scriptsI18n, /['"]capability\.command['"]:\s*['"]Command['"]/, 'Scripts i18n must include the English command capability label')
 assert.match(files.scriptsI18n, /['"]capability\.instantSuggestion['"]:\s*['"]Instant suggestion['"]/, 'Scripts i18n must include the English instant suggestion capability label')
 assert.match(files.scriptsI18n, /['"]capability\.command['"]:\s*['"]命令['"]/, 'Scripts i18n must include the Chinese command capability label')
 assert.match(files.scriptsI18n, /['"]capability\.instantSuggestion['"]:\s*['"]即时建议['"]/, 'Scripts i18n must include the Chinese instant suggestion capability label')
 
 for (const [name, source] of Object.entries({
-  scriptsView: files.scriptsView,
-  settingsView: files.settingsView,
+  pluginsSurfaceContent: files.pluginsSurfaceContent,
+  settingsSurfaceContent: files.settingsSurfaceContent,
   settingsSchemaRenderer: files.settingsSchemaRenderer,
   globalLauncher: files.globalLauncher,
 })) {
@@ -129,12 +129,12 @@ assert.match(files.css, /::-webkit-scrollbar-thumb\s*\{[\s\S]{0,220}background:\
 assert.match(files.css, /\.psearch[\s\S]{0,120}height:\s*34px/, 'Plugin search input shell must align with toolbar button height')
 assert.match(files.css, /\.btn\s*\{[\s\S]{0,120}height:\s*34px/, 'Plugin toolbar buttons must align with the search input height')
 
-assert.match(files.settingsView, /className=["']settings-page body["']/, 'SettingsView must use the redesigned settings shell')
-assert.match(files.settingsView, /settings-version-control[\s\S]{0,180}<UpdateChecker compact/, 'Settings version row must place the compact update checker with the current version')
-assert.doesNotMatch(files.settingsView, /暗色 token 待补|Reserved for the dark token pass/, 'Settings dark theme copy must not claim the dark token pass is pending')
-assert.match(files.settingsView, /<SettingGroup title=/, 'SettingsView must render settings as grouped rows')
-assert.match(files.settingsView, /<SettingsListRow icon=/, 'SettingsView must render design srow rows')
-assert.doesNotMatch(files.settingsView, /<SettingCard/, 'SettingsView must not render the old grid card layout')
+assert.match(files.settingsSurfaceContent, /className=["']settings-page body["']/, 'SettingsSurfaceContent must use the redesigned settings shell')
+assert.match(files.settingsSurfaceContent, /settings-version-control[\s\S]{0,180}<UpdateChecker compact/, 'Settings version row must place the compact update checker with the current version')
+assert.doesNotMatch(files.settingsSurfaceContent, /暗色 token 待补|Reserved for the dark token pass/, 'Settings dark theme copy must not claim the dark token pass is pending')
+assert.match(files.settingsSurfaceContent, /<SettingGroup title=/, 'SettingsSurfaceContent must render settings as grouped rows')
+assert.match(files.settingsSurfaceContent, /<SettingsListRow icon=/, 'SettingsSurfaceContent must render design srow rows')
+assert.doesNotMatch(files.settingsSurfaceContent, /<SettingCard/, 'SettingsSurfaceContent must not render the old grid card layout')
 assert.match(files.css, /\.sscroll/, 'Settings page must have the design scrolling surface CSS')
 assert.match(files.css, /\.sgroup/, 'Settings page must have the design group CSS')
 assert.match(files.css, /\.srow/, 'Settings page must have the design row CSS')

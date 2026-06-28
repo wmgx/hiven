@@ -24,7 +24,7 @@ const files = {
   tauriLib: read('src-tauri/src/lib.rs'),
   defaultCapability: read('src-tauri/capabilities/default.json'),
   store: read('src/store.ts'),
-  settingsView: read('src/surfaces/SettingsSurfaceContent.tsx'),
+  settingsSurfaceContent: read('src/surfaces/SettingsSurfaceContent.tsx'),
   app: read('src/App.tsx'),
   globalPinnedLauncherHotkeys: read('src/hotkeys/globalPinnedLauncher.ts'),
   shortcutRecorder: read('src/components/ShortcutRecorder.tsx'),
@@ -147,49 +147,49 @@ for (const modifier of ['Command', 'Shift', 'Option']) {
   })
 }
 
-check('SettingsView renders a Hotkeys UI for the global pinned launcher shortcut', () => {
+check('SettingsSurfaceContent renders a Hotkeys UI for the global pinned launcher shortcut', () => {
   assertHas(
-    files.settingsView,
+    files.settingsSurfaceContent,
     /t\(['"]hotkeys['"]\)|settings\.hotkeys|Hotkeys|快捷键/,
-    'SettingsView should render a Hotkeys card',
+    'SettingsSurfaceContent should render a Hotkeys card',
   )
   assertHas(
-    files.settingsView,
+    files.settingsSurfaceContent,
     /globalPinnedLauncherShortcut/,
-    'SettingsView should read and update globalPinnedLauncherShortcut',
+    'SettingsSurfaceContent should read and update globalPinnedLauncherShortcut',
   )
   assertHas(
-    files.settingsView,
+    files.settingsSurfaceContent,
     /settings\.globalPinnedLauncherShortcut|settings\.openPinnedLauncherShortcut|pinned-only|Pinned Launcher|固定命令启动器/,
-    'SettingsView should label the global pinned launcher shortcut control',
+    'SettingsSurfaceContent should label the global pinned launcher shortcut control',
   )
 })
 
-check('SettingsView supports recording, disabled, and status display', () => {
+check('SettingsSurfaceContent supports recording, disabled, and status display', () => {
   assertHas(
     files.shortcutRecorder,
     /recordingShortcut|recordShortcut|isRecording|onKeyDown[\s\S]{0,240}accelerator/,
     'ShortcutRecorder should support recording an accelerator',
   )
   assertHas(
-    `${files.settingsView}\n${files.shortcutRecorder}`,
+    `${files.settingsSurfaceContent}\n${files.shortcutRecorder}`,
     /disabled|settings\.hotkeyDisabled|禁用/,
-    'SettingsView should expose a disabled option',
+    'SettingsSurfaceContent should expose a disabled option',
   )
   assertHas(
-    files.settingsView,
+    files.settingsSurfaceContent,
     /registrationStatus|registerStatus|statusText|settings\.hotkeyStatus/,
-    'SettingsView should show registration status or error text',
+    'SettingsSurfaceContent should show registration status or error text',
   )
   assertDoesNotHave(
-    files.settingsView,
+    files.settingsSurfaceContent,
     /shortcut\.registrationStatus\s*\?\?\s*t\(['"]hotkeyStatusPending['"]\)/,
-    'SettingsView should not render native registration status strings without i18n formatting',
+    'SettingsSurfaceContent should not render native registration status strings without i18n formatting',
   )
   assertHas(
-    files.settingsView,
+    files.settingsSurfaceContent,
     /formatHotkeyRegistrationStatus/,
-    'SettingsView should localize native registration status strings before rendering',
+    'SettingsSurfaceContent should localize native registration status strings before rendering',
   )
 })
 
@@ -215,7 +215,7 @@ check('Settings recording path can identify modifier-only double-modifier shortc
     'recording should convert modifier-only key events into double-modifier shortcut configs',
   )
   assertHas(
-    `${files.settingsView}\n${files.shortcutRecorder}`,
+    `${files.settingsSurfaceContent}\n${files.shortcutRecorder}`,
     /onRecord=\{onChange\}|onChange\(\s*(?:recordedShortcut(?:\.shortcut)?|shortcut|nextShortcut)\s*\)|onRecord=\{\(recordedShortcut\)\s*=>\s*updateSetting/,
     'recording handler should pass the recorded accelerator or double-modifier shortcut through onChange',
   )

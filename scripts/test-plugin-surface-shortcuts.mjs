@@ -27,7 +27,7 @@ const files = {
   globalLauncherLayout: read('src/components/launcher/GlobalLauncherLayout.ts'),
   pluginSurfaceWindow: read('src/components/PluginSurfaceWindow.tsx'),
   pluginSurfaceRenderer: read('src/components/pluginSurface/PluginSurfaceRenderer.tsx'),
-  scriptsView: read('src/surfaces/PluginsManagerSurfaceContent.tsx'),
+  pluginsSurfaceContent: read('src/surfaces/PluginsManagerSurfaceContent.tsx'),
   scriptsI18n: read('src/i18n/locales/scripts.ts'),
   tauriLib: read('src-tauri/src/lib.rs'),
 }
@@ -157,17 +157,17 @@ assert.match(files.globalLauncherLayout, /surfaceShell\?\.defaultHeight[\s\S]*ST
 assert.match(files.globalLauncherLayout, /surfaceShell\?\.defaultWidth[\s\S]*STANDALONE_SURFACE_MAX_WIDTH/, 'tool-shell surfaces must resize wider than the compact launcher list')
 assert.doesNotMatch(files.globalLauncher, /aria-label=["']Settings["'][\s\S]{0,160}<Settings/, 'surface host header must not duplicate the plugin settings action')
 
-assert.match(files.scriptsView, /plugin-surface-shortcut-row/, 'ScriptsView must render surface-level shortcut rows')
-assert.match(files.scriptsView, /requestOpenPluginSurfaceTool/, 'ScriptsView must open a surface directly')
-assert.match(files.scriptsView, /setPluginSurfaceShortcut/, 'ScriptsView must bind a surface shortcut')
-assert.match(files.scriptsView, /clearPluginSurfaceShortcut/, 'ScriptsView must clear a surface shortcut')
-assert.match(files.scriptsView, /globalShortcut\.register/, 'ScriptsView must grant only the global shortcut permission when binding')
+assert.match(files.pluginsSurfaceContent, /plugin-surface-shortcut-row/, 'PluginsManagerSurfaceContent must render surface-level shortcut rows')
+assert.match(files.pluginsSurfaceContent, /requestOpenPluginSurfaceTool/, 'PluginsManagerSurfaceContent must open a surface directly')
+assert.match(files.pluginsSurfaceContent, /setPluginSurfaceShortcut/, 'PluginsManagerSurfaceContent must bind a surface shortcut')
+assert.match(files.pluginsSurfaceContent, /clearPluginSurfaceShortcut/, 'PluginsManagerSurfaceContent must clear a surface shortcut')
+assert.match(files.pluginsSurfaceContent, /globalShortcut\.register/, 'PluginsManagerSurfaceContent must grant only the global shortcut permission when binding')
 
 const runtime = read('src/workspace/pluginRuntime.ts')
 assert.match(runtime, /clearPluginHostState/, 'plugin runtime must centralize host-state cleanup')
 assert.match(runtime, /clearPluginPrivateStorage/, 'installed plugin uninstall must clear private storage')
 assert.match(runtime, /clearPluginShortcuts/, 'plugin uninstall/remove must clear surface shortcuts')
-assert.match(files.scriptsView, /status\.blocked/, 'ScriptsView must display blocked plugin status when permissions are missing')
+assert.match(files.pluginsSurfaceContent, /status\.blocked/, 'PluginsManagerSurfaceContent must display blocked plugin status when permissions are missing')
 
 for (const key of [
   'surfaceOpen',

@@ -80,6 +80,25 @@ const files = {
   globalPinnedLauncher: read('src/hotkeys/globalPinnedLauncher.ts'),
 }
 
+
+const testScriptsUsingRetiredViewNames = [
+  'scripts/test-directory-plugin-convergence.mjs',
+  'scripts/test-editor-topbar-plugin-detail.mjs',
+  'scripts/test-plugin-surface-shortcuts.mjs',
+  'scripts/test-pinned-persistence-settings.mjs',
+  'scripts/test-global-hotkey-settings.mjs',
+  'scripts/test-shortcut-recorder-component.mjs',
+  'scripts/test-plugin-package-lifecycle.mjs',
+  'scripts/test-clipboard-history-boundary.mjs',
+]
+for (const scriptPath of testScriptsUsingRetiredViewNames) {
+  assert.doesNotMatch(
+    read(scriptPath),
+    /SettingsView|ScriptsView|PluginEditorView|settingsView|scriptsView|pluginEditorView/,
+    `${scriptPath} must describe plugin/settings code as surfaces, not retired views`,
+  )
+}
+
 const packageJson = JSON.parse(files.packageJson)
 assert.equal(
   packageJson.scripts?.['test:window-architecture-phases'],

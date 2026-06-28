@@ -15,8 +15,8 @@ assert.ok(existsSync(join(root, componentPath)), 'ShortcutRecorder component sho
 
 const files = {
   component: read(componentPath),
-  settingsView: read('src/surfaces/SettingsSurfaceContent.tsx'),
-  scriptsView: read('src/surfaces/PluginsManagerSurfaceContent.tsx'),
+  settingsSurfaceContent: read('src/surfaces/SettingsSurfaceContent.tsx'),
+  pluginsSurfaceContent: read('src/surfaces/PluginsManagerSurfaceContent.tsx'),
   css: read('src/index.css'),
 }
 
@@ -28,14 +28,14 @@ assert.match(files.component, /onClear/, 'ShortcutRecorder should support cleari
 assert.match(files.component, /formatAcceleratorLabel/, 'ShortcutRecorder should own platform-aware accelerator display')
 assert.match(files.component, /doubleModifierLabel/, 'ShortcutRecorder should own platform-aware double-modifier display')
 
-assert.match(files.settingsView, /<ShortcutRecorder[\s\S]*allowDoubleModifier/, 'SettingsView should use ShortcutRecorder for global launcher hotkeys')
-assert.doesNotMatch(files.settingsView, /chooseDoubleModifier/, 'SettingsView should not render separate double-modifier choice buttons')
-assert.doesNotMatch(files.settingsView, /onClick=\{\(\) => chooseDoubleModifier/, 'double-modifier shortcuts should be recorded instead of chosen')
+assert.match(files.settingsSurfaceContent, /<ShortcutRecorder[\s\S]*allowDoubleModifier/, 'SettingsSurfaceContent should use ShortcutRecorder for global launcher hotkeys')
+assert.doesNotMatch(files.settingsSurfaceContent, /chooseDoubleModifier/, 'SettingsSurfaceContent should not render separate double-modifier choice buttons')
+assert.doesNotMatch(files.settingsSurfaceContent, /onClick=\{\(\) => chooseDoubleModifier/, 'double-modifier shortcuts should be recorded instead of chosen')
 
-assert.match(files.scriptsView, /<ShortcutRecorder/, 'ScriptsView should use ShortcutRecorder for plugin surface shortcuts')
-assert.doesNotMatch(files.scriptsView, /<input[\s\S]{0,240}plugin-surface-shortcut-input/, 'plugin surface shortcuts should not use a manual text input')
-assert.doesNotMatch(files.scriptsView, /shortcutDrafts/, 'plugin surface shortcut binding should not keep text-entry drafts')
-assert.match(files.scriptsView, /grantPluginPermissions[\s\S]{0,320}setPluginSurfaceShortcut/, 'plugin surface recording should still grant global shortcut permission before binding')
+assert.match(files.pluginsSurfaceContent, /<ShortcutRecorder/, 'PluginsManagerSurfaceContent should use ShortcutRecorder for plugin surface shortcuts')
+assert.doesNotMatch(files.pluginsSurfaceContent, /<input[\s\S]{0,240}plugin-surface-shortcut-input/, 'plugin surface shortcuts should not use a manual text input')
+assert.doesNotMatch(files.pluginsSurfaceContent, /shortcutDrafts/, 'plugin surface shortcut binding should not keep text-entry drafts')
+assert.match(files.pluginsSurfaceContent, /grantPluginPermissions[\s\S]{0,320}setPluginSurfaceShortcut/, 'plugin surface recording should still grant global shortcut permission before binding')
 
 assert.match(files.css, /shortcut-recorder/, 'shared shortcut recorder styles should exist')
 
