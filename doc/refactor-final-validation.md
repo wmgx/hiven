@@ -188,25 +188,28 @@ Requirement: launcher/editor/plugin-surface entries must start without obvious r
 Automated evidence:
 
 - `scripts/test-tauri-debug-smoke.mjs`
+- `scripts/test-tauri-debug-runtime-state.mjs`
 - `scripts/test-window-entry-runtime-smoke.mjs`
 - `scripts/test-launcher-web-smoke.mjs`
 
-Current automated status: proven for debug-start failure signature scan and route module transformation.
+Current automated status: proven for debug-start failure signature scan, hidden-launcher/no-main runtime state, and route module transformation.
 
-## Observed debug smoke - 2026-06-29
+## Reproducible debug runtime-state smoke - 2026-06-29
 
-Command run from `/Users/bytedance/flux_text`:
+Command now available from `/Users/bytedance/flux_text`:
 
 ```bash
-npm run tauri -- dev
+npm run test:tauri-debug-runtime-state
 ```
 
-Observed runtime evidence:
+The script launches `npm run tauri -- dev`, observes the runtime state, and shuts the debug process down.
+
+Automated runtime evidence:
 
 - Vite dev server reached `VITE v8.1.0 ready`.
 - Tauri dev command reached `Running DevCommand`.
 - Rust binary reached `Running target/debug/hiven`.
-- macOS process check found `11858 target/debug/hiven`.
+- macOS process check observes `target/debug/hiven`.
 - System Events process check found `hiven windows=0` immediately after startup.
 - `src-tauri/tauri.conf.json` contains only one initial window label: `launcher`, with `visible: false`; no `main` window is declared.
 
@@ -214,7 +217,7 @@ Interpretation:
 
 - The debug app starts as a background/launcher runtime without opening a retired main window.
 - The process remains alive after startup, which supports the tray/background runtime requirement.
-- Attempted synthetic `Shift+Cmd+Space` via AppleScript did not make a launcher window observable in this non-interactive automation context; this does not disprove the feature, but it means the real global-shortcut/focus path still needs human desktop smoke validation.
+- This automated smoke intentionally stops at runtime-state observation; real global shortcut/focus/paste behavior still needs human desktop smoke validation.
 
 ## Manual debug smoke remaining
 

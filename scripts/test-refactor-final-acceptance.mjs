@@ -88,6 +88,12 @@ assert.equal(
 )
 assert.match(read('scripts/test-tauri-debug-smoke.mjs'), /Unhandled rejection\|ReferenceError\|TypeError\|panic\|panicked\|compilation failed\|error:/, 'debug smoke check must scan for startup/runtime failure signatures')
 assert.equal(
+  packageJson.scripts?.['test:tauri-debug-runtime-state'],
+  'node scripts/test-tauri-debug-runtime-state.mjs',
+  'package.json must expose a reusable Tauri debug runtime-state check',
+)
+assert.match(read('scripts/test-tauri-debug-runtime-state.mjs'), /target\/debug\/hiven[\s\S]*hiven windows=0[\s\S]*visible:\s*false/, 'debug runtime-state check must prove hidden-launcher startup and no visible main window')
+assert.equal(
   packageJson.scripts?.['test:window-entry-runtime-smoke'],
   'node scripts/test-window-entry-runtime-smoke.mjs',
   'package.json must expose a runtime smoke check for launcher/editor/plugin-surface entries',
@@ -133,7 +139,7 @@ assert.match(finalValidationDoc, /# Hiven Refactor Final Validation/, 'final val
 assert.match(finalValidationDoc, /Launcher ↔ Editor Bridge[\s\S]*Automated evidence[\s\S]*scripts\/test-editor-bridge-behavior\.mjs/, 'final validation doc must map launcher-editor bridge to evidence')
 assert.match(finalValidationDoc, /SurfaceRegistry[\s\S]*Automated evidence[\s\S]*scripts\/test-surface-registry-behavior\.mjs/, 'final validation doc must map SurfaceRegistry to evidence')
 assert.match(finalValidationDoc, /Manual debug smoke remaining[\s\S]*external app selected text[\s\S]*tray\/background/, 'final validation doc must call out remaining manual product smoke coverage')
-assert.match(finalValidationDoc, /Observed debug smoke - 2026-06-29[\s\S]*target\/debug\/hiven[\s\S]*hiven windows=0/, 'final validation doc must record the observed debug runtime smoke evidence')
+assert.match(finalValidationDoc, /Reproducible debug runtime-state smoke - 2026-06-29[\s\S]*target\/debug\/hiven[\s\S]*hiven windows=0/, 'final validation doc must record the reproducible debug runtime-state smoke evidence')
 
 // Product/behavior acceptance: startup and global entry.
 assert.ok(!tauriConfig.app.windows.some((window) => window.label === 'main'), 'startup must not declare a retired main window')

@@ -7,6 +7,7 @@ const commands = [
   ['npm', ['run', 'test:refactor-final-acceptance']],
   ['npm', ['run', 'test:background-lifecycle']],
   ['npm', ['run', 'test:tauri-debug-smoke']],
+  ['npm', ['run', 'test:tauri-debug-runtime-state']],
   ['npm', ['run', 'test:window-architecture-phases']],
   ['npm', ['run', 'test:no-main-window-startup']],
   ['npm', ['run', 'test:editor-window-launch']],
