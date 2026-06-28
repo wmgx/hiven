@@ -80,6 +80,12 @@ assert.equal(
   'node scripts/test-background-lifecycle.mjs',
   'package.json must expose the background lifecycle acceptance check',
 )
+assert.equal(
+  packageJson.scripts?.['test:tauri-debug-smoke'],
+  'node scripts/test-tauri-debug-smoke.mjs',
+  'package.json must expose a reusable Tauri debug smoke check',
+)
+assert.match(read('scripts/test-tauri-debug-smoke.mjs'), /Unhandled rejection\|ReferenceError\|TypeError\|panic\|panicked\|compilation failed\|error:/, 'debug smoke check must scan for startup/runtime failure signatures')
 
 // Product/behavior acceptance: startup and global entry.
 assert.ok(!tauriConfig.app.windows.some((window) => window.label === 'main'), 'startup must not declare a retired main window')
