@@ -166,6 +166,26 @@ function assertLauncherApiExposesPaneCreation() {
     /createPane:\s*\(options\)[\s\S]{0,160}useWorkspaceStore\.getState\(\)\.createPane\(options\)/,
     'Launcher PluginLauncherApi must not directly mutate editor workspace panes',
   )
+  assert.match(
+    pluginApi,
+    /function readActiveText[\s\S]*if \(!isEditorWindowRuntime\(\)\)[\s\S]*getActiveEditorContextSnapshot\(\)/,
+    'PluginLauncherApi must read active text from synced editor context outside the editor runtime',
+  )
+  assert.match(
+    pluginApi,
+    /function readSelectionText[\s\S]*if \(!isEditorWindowRuntime\(\)\)[\s\S]*getActiveEditorContextSnapshot\(\)/,
+    'PluginLauncherApi must read selection text from synced editor context outside the editor runtime',
+  )
+  assert.match(
+    pluginApi,
+    /isPanePanelOpen:\s*\([^)]*\)\s*=>\s*\{[\s\S]*if \(!isEditorWindowRuntime\(\)\) return false/,
+    'PluginLauncherApi must not inspect editor panel state from non-editor windows',
+  )
+  assert.match(
+    pluginApi,
+    /dispatchEffects:\s*\(effects:[^)]*\)\s*=>\s*\{[\s\S]*if \(!isEditorWindowRuntime\(\)\)[\s\S]*return \{ applied:\s*\[\], errors:/,
+    'PluginLauncherApi must reject direct effect dispatch outside the editor runtime',
+  )
 }
 
 function assertLauncherParamsAreLocalized() {

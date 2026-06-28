@@ -19,6 +19,7 @@ import { getPluginPermissionSnapshot, requirePluginPermissions } from '../plugin
 import { showEditorWindow } from '../windowManager/editorWindow'
 import {
   createEditorPane,
+  getActiveEditorContextSnapshot,
   getActiveEditorPaneSnapshot,
   insertIntoEditor,
   replaceEditorSelection,
@@ -35,10 +36,16 @@ export type PluginLauncherApiOptions = {
 }
 
 function readActiveText(): string {
+  if (!isEditorWindowRuntime()) {
+    return getActiveEditorContextSnapshot()?.selectedText ?? ''
+  }
   return useWorkspaceStore.getState().getActivePaneText()
 }
 
 function readSelectionText(): string {
+  if (!isEditorWindowRuntime()) {
+    return getActiveEditorContextSnapshot()?.selectedText ?? ''
+  }
   const state = useWorkspaceStore.getState()
   const editor = runtimeRegistry.getCodeEditor(state.activePaneId)
   if (!editor) return ''
@@ -183,6 +190,7 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
       }
     },
     isPanePanelOpen: (panelId: string) => {
+      if (!isEditorWindowRuntime()) return false
       const state = useWorkspaceStore.getState()
       const existing = state.panelInstancesV2[panelId]
       return existing?.scope?.type === 'pane' && existing.scope.paneId === state.activePaneId
@@ -232,7 +240,12 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
     showPluginsPage,
     showSettingsPage,
     createPane: (options) => createEditorPane(options),
-    dispatchEffects: (effects: FluxEffect[]) => applyEffects(effects),
+    dispatchEffects: (effects: FluxEffect[]) => {
+      if (!isEditorWindowRuntime()) {
+        return { applied: [], errors: ['dispatchEffects is only available in the editor window'] }
+      }
+      return applyEffects(effects)
+    },
     showMessage: (message: string, level = 'info') => {
       useAppStore.getState().setLastCommandStatus({
         title: message,
