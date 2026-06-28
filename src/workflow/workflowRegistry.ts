@@ -1,4 +1,4 @@
-import type { WorkAction, WorkActionProvider, WorkContext } from './workAction'
+import type { ContextRequirement, WorkAction, WorkActionProvider, WorkContext } from './workAction'
 import type { WorkObject, WorkObjectProvider } from './workObject'
 
 const objectProviders: WorkObjectProvider[] = []
@@ -49,9 +49,30 @@ export async function getWorkActions(input: WorkObject, ctx: WorkContext): Promi
       }
     }),
   )
-  return filterActionsForObjectType(groups.flat(), input)
+  return filterActionsForContextRequirements(filterActionsForObjectType(groups.flat(), input), ctx)
 }
 
 function filterActionsForObjectType(actions: WorkAction[], input: WorkObject): WorkAction[] {
   return actions.filter((action) => action.accepts.includes(input.type))
+}
+
+function filterActionsForContextRequirements(actions: WorkAction[], ctx: WorkContext): WorkAction[] {
+  return actions.filter(
+    (action) =>
+      !action.requiresContext ||
+      action.requiresContext.every((requirement) => contextRequirementSatisfied(requirement, ctx)),
+  )
+}
+
+function contextRequirementSatisfied(requirement: ContextRequirement, ctx: WorkContext): boolean {
+  switch (requirement.kind) {
+    case 'selected-text':
+      return Boolean(ctx.snapshot.editor?.selectedText || ctx.snapshot.externalSelection?.text)
+    case 'clipboard':
+      return Boolean(ctx.snapshot.clipboard)
+    case 'editor-pane':
+      return Boolean(ctx.snapshot.editor)
+    case 'foreground-app':
+      return Boolean(ctx.snapshot.foreground)
+  }
 }
