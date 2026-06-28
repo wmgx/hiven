@@ -57,6 +57,7 @@
     "test:plugin-ui-primitives": "node scripts/test-plugin-ui-primitives.mjs",
     "test:hiven-brand-migration": "node scripts/test-hiven-brand-migration.mjs",
     "test:plugin-text-output-contract": "node scripts/test-plugin-text-output-contract.mjs",
+    "test:plugin-paste-behavior": "node scripts/test-plugin-paste-behavior.mjs",
     "test:global-launcher-quick-text": "node scripts/test-global-launcher-quick-text.mjs",
     "test:core-plugin-externalization": "node scripts/test-core-plugin-externalization.mjs",
     "test:launcher-identity": "node scripts/test-launcher-identity.mjs",

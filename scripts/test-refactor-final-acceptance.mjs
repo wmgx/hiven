@@ -122,6 +122,12 @@ assert.equal(
   'package.json must expose launcher host capability routing behavior coverage',
 )
 assert.match(read('scripts/test-launcher-host-capability-routing-behavior.mjs'), /global-launcher[\s\S]*editor-command-bar[\s\S]*host:system:restart[\s\S]*host:global:search-all-hiven/, 'launcher host capability routing must prove global-only actions stay out of Editor Cmd\+K')
+assert.equal(
+  packageJson.scripts?.['test:plugin-paste-behavior'],
+  'node scripts/test-plugin-paste-behavior.mjs',
+  'package.json must expose plugin paste behavior coverage',
+)
+assert.match(read('scripts/test-plugin-paste-behavior.mjs'), /hide_launcher_window[\s\S]*simulate_paste[\s\S]*Accessibility permission[\s\S]*pasteFiles/, 'plugin paste behavior must prove foreground paste and fallback paths')
 
 // Product/behavior acceptance: startup and global entry.
 assert.ok(!tauriConfig.app.windows.some((window) => window.label === 'main'), 'startup must not declare a retired main window')
