@@ -86,6 +86,7 @@
     "test:editor-bridge-behavior": "node scripts/test-editor-bridge-behavior.mjs",
     "test:surface-registry-behavior": "node scripts/test-surface-registry-behavior.mjs",
     "test:plugin-surface-window-lifecycle-behavior": "node scripts/test-plugin-surface-window-lifecycle-behavior.mjs",
+    "test:output-router-behavior": "node scripts/test-output-router-behavior.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
     "test:settings-select-layout": "node scripts/test-settings-select-layout.mjs",
