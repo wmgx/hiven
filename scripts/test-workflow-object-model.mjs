@@ -81,6 +81,8 @@ assert.match(files.surfaceRegistry, /getSurfaceInstances/, 'Surface registry mus
 assert.match(files.surfaceActions, /focusSurfaceInstance/, 'Surface registry must expose a focus/switch action')
 assert.match(files.surfaceActions, /showEditorWindow/, 'Surface focus must route editor surfaces through the window manager')
 assert.match(files.surfaceActions, /showPluginSurfaceWindow/, 'Surface focus must route plugin surfaces through the window manager')
+assert.match(files.defaultWorkflowProviders, /workspace\/windowManager\/pluginSurfaceWindows/, 'workflow object plugin-surface window actions must route through the window manager')
+assert.doesNotMatch(files.defaultWorkflowProviders, /requestOpenPluginSurfaceWindow/, 'workflow object plugin-surface actions must not call the lower-level lifecycle API directly')
 assert.match(files.pluginSurfacePanel, /PLUGIN_SURFACE_PANEL_ID/, 'Editor attach bridge must define a stable plugin surface panel id')
 assert.match(files.pluginSurfacePanel, /<PluginSurfaceRenderer[\s\S]*presentation=['"]editor-panel['"]/, 'Editor attach bridge must render plugin surfaces through the shared renderer')
 assert.match(files.pluginSurfacePanelProvider, /id:\s*PLUGIN_SURFACE_PANEL_ID[\s\S]*registerProductionPlugin[\s\S]*\[panel\]/, 'Host runtime must register the plugin surface panel bridge as a V2 panel')

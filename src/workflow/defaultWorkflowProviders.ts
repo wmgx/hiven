@@ -224,8 +224,8 @@ const defaultSurfaceActionProvider = {
           icon: 'PanelTopOpen',
           accepts: ['plugin-surface'],
           run: async () => {
-            const { requestOpenPluginSurfaceWindow } = await import('../workspace/pluginSurfaceWindows')
-            await requestOpenPluginSurfaceWindow({
+            const { showPluginSurfaceWindow } = await import('../workspace/windowManager/pluginSurfaceWindows')
+            await showPluginSurfaceWindow({
               source: input.sourceKind,
               pluginId: input.pluginId,
               surfaceId: input.surfaceId,

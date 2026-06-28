@@ -1,7 +1,7 @@
 import { usePluginPermissionStore, getPluginPermissionSnapshot, missingPluginPermissions } from '../workspace/pluginPermissions'
 import { pluginRegistry } from '../workspace/pluginRegistry'
 import { requestOpenPluginSurfaceTool } from '../workspace/pluginSurfaceOpenRequest'
-import { getPluginSurfaceShortcutPresentation, requestOpenPluginSurfaceWindow } from '../workspace/pluginSurfaceWindows'
+import { getPluginSurfaceShortcutPresentation, showPluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
 import {
   pluginSurfaceShortcutKey,
   usePluginSurfaceShortcutStore,
@@ -161,7 +161,7 @@ async function registerShortcut(
 
 async function openSurfaceForShortcut(target: PluginSurfaceOpenTarget): Promise<void> {
   if (getPluginSurfaceShortcutPresentation(target) === 'window') {
-    await requestOpenPluginSurfaceWindow(target)
+    await showPluginSurfaceWindow(target)
     return
   }
   await requestOpenPluginSurfaceTool(target)
