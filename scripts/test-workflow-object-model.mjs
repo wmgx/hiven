@@ -62,6 +62,8 @@ assert.match(files.workflowRegistry, /registerWorkObjectProvider/, 'Workflow mus
 assert.match(files.workflowRegistry, /registerWorkActionProvider/, 'Workflow must have a WorkAction provider registry')
 assert.match(files.workflowRegistry, /collectWorkObjects/, 'Workflow must collect objects from registered providers')
 assert.match(files.workflowRegistry, /getWorkActions/, 'Workflow must collect actions from registered providers')
+assert.match(files.workflowRegistry, /filterActionsForObjectType/, 'Workflow action registry must centrally filter actions by accepted object type')
+assert.match(files.workflowRegistry, /action\.accepts\.includes\(input\.type\)/, 'Workflow action registry must enforce WorkAction.accepts against the current WorkObject.type')
 assert.match(files.defaultWorkflowProviders, /currentContextObjectProvider/, 'Workflow must expose current-context object provider')
 assert.match(files.defaultWorkflowProviders, /hostAppObjectProvider/, 'Workflow must expose app WorkObject provider')
 assert.match(files.defaultWorkflowProviders, /surfaceObjectProvider/, 'Workflow must expose surface WorkObject provider')

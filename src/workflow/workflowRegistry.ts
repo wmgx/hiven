@@ -49,5 +49,9 @@ export async function getWorkActions(input: WorkObject, ctx: WorkContext): Promi
       }
     }),
   )
-  return groups.flat()
+  return filterActionsForObjectType(groups.flat(), input)
+}
+
+function filterActionsForObjectType(actions: WorkAction[], input: WorkObject): WorkAction[] {
+  return actions.filter((action) => action.accepts.includes(input.type))
 }
