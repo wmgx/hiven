@@ -815,8 +815,16 @@ fn capture_foreground_selection_text(app: &tauri::AppHandle) {
 
 fn capture_foreground_selection_text_impl(app: &tauri::AppHandle) -> Option<String> {
     let before = app.clipboard().read_text().ok();
+    let before_change_count = read_clipboard_change_count(&app);
     simulate_copy_selection_impl().ok()?;
     std::thread::sleep(Duration::from_millis(80));
+    let after_change_count = read_clipboard_change_count(&app);
+    if before_change_count.is_some()
+        && after_change_count.is_some()
+        && before_change_count == after_change_count
+    {
+        return None;
+    }
     let selected = app.clipboard().read_text().ok()?.trim().to_string();
     if let Some(previous) = before {
         let _ = app.clipboard().write_text(previous);
@@ -826,6 +834,25 @@ fn capture_foreground_selection_text_impl(app: &tauri::AppHandle) -> Option<Stri
     } else {
         Some(selected)
     }
+}
+
+#[cfg(target_os = "macos")]
+fn read_clipboard_change_count(_app: &tauri::AppHandle) -> Option<i64> {
+    unsafe {
+        let pasteboard_cls = objc2::runtime::AnyClass::get(c"NSPasteboard")?;
+        let pasteboard: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![pasteboard_cls, generalPasteboard];
+        if pasteboard.is_null() {
+            return None;
+        }
+        let change_count: i64 = objc2::msg_send![pasteboard, changeCount];
+        Some(change_count)
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn read_clipboard_change_count(_app: &tauri::AppHandle) -> Option<i64> {
+    None
 }
 
 #[cfg(target_os = "macos")]

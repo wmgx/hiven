@@ -27,6 +27,8 @@ assert.match(files.tauriLib, /fn\s+capture_foreground_selection_text/, 'native r
 assert.match(files.tauriLib, /remember_previous_foreground_app\(\)[\s\S]{0,240}capture_foreground_selection_text\(&app_clone\)/, 'launcher hotkey path must capture selection immediately after remembering the foreground app')
 assert.match(files.tauriLib, /async\s+fn\s+last_foreground_selection_text\(\)/, 'frontend must be able to read the cached foreground selection')
 assert.match(files.tauriLib, /clear_foreground_selection_text\(\)/, 'native runtime must clear stale external selection when capture finds no selected text')
+assert.match(files.tauriLib, /read_clipboard_change_count\(&app\)/, 'native selection capture must compare clipboard change count before trusting copied text')
+assert.match(files.tauriLib, /before_change_count\.is_some\(\)[\s\S]*after_change_count\.is_some\(\)[\s\S]*before_change_count == after_change_count[\s\S]*return None/, 'unchanged clipboard must not be trusted only when clipboard change count is available')
 assert.match(files.tauriLib, /else\s*\{\s*clear_foreground_selection_text\(\)/, 'failed or empty capture must not leave a previous selected-text object visible')
 assert.match(files.tauriLib, /last_foreground_selection_text,/, 'Tauri invoke handler must register last_foreground_selection_text')
 assert.match(files.tauriLib, /new_keyboard_event[\s\S]{0,500}KEY_C[\s\S]{0,500}CGEventFlagCommand/, 'macOS capture must use Cmd+C against the foreground selection')
