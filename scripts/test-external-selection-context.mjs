@@ -26,6 +26,8 @@ assert.match(files.tauriLib, /static\s+LAST_FOREGROUND_SELECTION_TEXT/, 'native 
 assert.match(files.tauriLib, /fn\s+capture_foreground_selection_text/, 'native runtime must attempt to capture selected text before showing launcher')
 assert.match(files.tauriLib, /remember_previous_foreground_app\(\)[\s\S]{0,240}capture_foreground_selection_text\(&app_clone\)/, 'launcher hotkey path must capture selection immediately after remembering the foreground app')
 assert.match(files.tauriLib, /async\s+fn\s+last_foreground_selection_text\(\)/, 'frontend must be able to read the cached foreground selection')
+assert.match(files.tauriLib, /clear_foreground_selection_text\(\)/, 'native runtime must clear stale external selection when capture finds no selected text')
+assert.match(files.tauriLib, /else\s*\{\s*clear_foreground_selection_text\(\)/, 'failed or empty capture must not leave a previous selected-text object visible')
 assert.match(files.tauriLib, /last_foreground_selection_text,/, 'Tauri invoke handler must register last_foreground_selection_text')
 assert.match(files.tauriLib, /new_keyboard_event[\s\S]{0,500}KEY_C[\s\S]{0,500}CGEventFlagCommand/, 'macOS capture must use Cmd+C against the foreground selection')
 assert.match(files.contextBroker, /externalSelectionContextProvider/, 'Context Broker must expose external selection as a context provider')

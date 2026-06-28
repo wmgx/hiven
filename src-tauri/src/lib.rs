@@ -791,6 +791,12 @@ async fn last_foreground_selection_text() -> Option<String> {
     Some(selection.text.clone())
 }
 
+fn clear_foreground_selection_text() {
+    if let Ok(mut stored) = last_foreground_selection_state().lock() {
+        *stored = None;
+    }
+}
+
 fn capture_foreground_selection_text(app: &tauri::AppHandle) {
     let app = app.clone();
     std::thread::spawn(move || {
@@ -801,6 +807,8 @@ fn capture_foreground_selection_text(app: &tauri::AppHandle) {
                     captured_at: Instant::now(),
                 });
             }
+        } else {
+            clear_foreground_selection_text();
         }
     });
 }
