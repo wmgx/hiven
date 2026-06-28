@@ -59,6 +59,11 @@ function actionToChoice(action: WorkAction, object: WorkObject, ctx: WorkContext
     id: `${object.id}:${action.id}`,
     title: action.title,
     subtitle: object.title,
+    metadata: {
+      kind: 'workflow-action',
+      objectId: object.id,
+      actionId: action.id,
+    },
     primaryAction: async () => action.run(object, ctx),
   }
 }

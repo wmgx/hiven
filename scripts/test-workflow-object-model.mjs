@@ -76,6 +76,8 @@ assert.match(files.defaultWorkflowProviders, /routeTextOutput\(text,\s*\{\s*kind
 assert.match(files.workflowLauncherAdapter, /getWorkflowObjectLauncherItems/, 'Workflow objects must adapt into launcher items')
 assert.match(files.workflowLauncherAdapter, /workflow:object:/, 'Workflow object launcher items must have stable workflow object keys')
 assert.match(files.workflowLauncherAdapter, /getWorkActions\(object,\s*ctx\)/, 'Selecting a workflow object must expand to its actions')
+assert.match(files.workflowLauncherAdapter, /kind:\s*['"]workflow-action['"]/, 'Workflow object action choices must be explicitly typed for stable object-action UX')
+assert.match(files.workflowLauncherAdapter, /objectId:\s*object\.id[\s\S]*actionId:\s*action\.id/, 'Workflow object action choices must retain object/action identity')
 assert.match(files.hostProvider, /registerDefaultWorkflowProviders\(\)/, 'Host launcher provider must register default workflow providers')
 assert.match(files.hostProvider, /getWorkflowObjectLauncherItems/, 'Global launcher dynamic items must include workflow objects')
 assert.match(files.surfaceRegistry, /SurfaceInstance/, 'Surface registry must define surface instances for workflow objects')

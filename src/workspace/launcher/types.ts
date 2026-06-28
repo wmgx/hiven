@@ -210,6 +210,14 @@ export type LauncherResultAction = {
   run: LauncherResultActionHandler
 }
 
+export type WorkflowActionChoiceMetadata = {
+  kind: 'workflow-action'
+  objectId: string
+  actionId: string
+}
+
+export type LauncherResultChoiceMetadata = WorkflowActionChoiceMetadata
+
 export type LauncherResultChoice = {
   id: string
   title: string
@@ -217,6 +225,7 @@ export type LauncherResultChoice = {
   subtitle?: string
   subtitleI18n?: Partial<Record<Locale, string>>
   preview?: string
+  metadata?: LauncherResultChoiceMetadata
   primaryAction: LauncherResultActionHandler
   secondaryActions?: LauncherResultAction[]
 }
