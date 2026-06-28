@@ -147,6 +147,25 @@ function compressActiveEditorTextToThreeSentences(): boolean {
   return true
 }
 
+function formatActiveEditorTextAsBullets(): boolean {
+  const target = getActiveEditorTextTarget()
+  if (!target || !target.text.trim()) return false
+  const items = target.text
+    .split(/\r?\n|[。；;]/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+  if (items.length === 0) return false
+  replaceEditorTextTarget(target, items.map((item) => `- ${item}`).join('\n'))
+  return true
+}
+
+function quoteActiveEditorTextAsCodeBlock(): boolean {
+  const target = getActiveEditorTextTarget()
+  if (!target || !target.text.trim()) return false
+  replaceEditorTextTarget(target, ['```', target.text.trim(), '```'].join('\n'))
+  return true
+}
+
 function normalizeEditorActionText(text: string): string {
   return text.replace(/\s+/g, ' ').trim()
 }
@@ -454,6 +473,40 @@ export function getHostPaneControlItems(): LauncherItem[] {
       requiredCapabilities: ['text-input-actions'],
       pinnable: false,
       execute: async () => ({ ok: compressActiveEditorTextToThreeSentences() }),
+    },
+    {
+      systemKey: 'host:editor:format-bullets',
+      kind: 'host',
+      display: {
+        title: 'Format as Bullet List',
+        titleI18n: { zh: '整理成项目符号' },
+        subtitle: 'Turn the current selection or pane into a bullet list',
+        subtitleI18n: { zh: '将当前选区或面板内容整理成项目符号列表' },
+        icon: 'List',
+        aliases: ['bullet list', 'format bullets', '项目符号', '列表'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['editor-command-bar'],
+      requiredCapabilities: ['text-input-actions'],
+      pinnable: false,
+      execute: async () => ({ ok: formatActiveEditorTextAsBullets() }),
+    },
+    {
+      systemKey: 'host:editor:quote-code-block',
+      kind: 'host',
+      display: {
+        title: 'Quote as Code Block',
+        titleI18n: { zh: '引用为代码块' },
+        subtitle: 'Wrap the current selection or pane in a Markdown code block',
+        subtitleI18n: { zh: '将当前选区或面板内容包装为 Markdown 代码块' },
+        icon: 'CodeXml',
+        aliases: ['code block', 'quote code', '代码块', '引用'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['editor-command-bar'],
+      requiredCapabilities: ['text-input-actions'],
+      pinnable: false,
+      execute: async () => ({ ok: quoteActiveEditorTextAsCodeBlock() }),
     },
     {
       systemKey: 'host:editor:attach-translate-panel',
