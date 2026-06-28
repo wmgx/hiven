@@ -86,6 +86,12 @@ assert.equal(
   'package.json must expose a reusable Tauri debug smoke check',
 )
 assert.match(read('scripts/test-tauri-debug-smoke.mjs'), /Unhandled rejection\|ReferenceError\|TypeError\|panic\|panicked\|compilation failed\|error:/, 'debug smoke check must scan for startup/runtime failure signatures')
+assert.equal(
+  packageJson.scripts?.['test:window-entry-runtime-smoke'],
+  'node scripts/test-window-entry-runtime-smoke.mjs',
+  'package.json must expose a runtime smoke check for launcher/editor/plugin-surface entries',
+)
+assert.match(read('scripts/test-window-entry-runtime-smoke.mjs'), /window=launcher[\s\S]*window=editor[\s\S]*window=plugin-surface/, 'runtime smoke must exercise launcher, editor, and plugin surface routes')
 
 // Product/behavior acceptance: startup and global entry.
 assert.ok(!tauriConfig.app.windows.some((window) => window.label === 'main'), 'startup must not declare a retired main window')

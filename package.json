@@ -68,6 +68,7 @@
     "test:global-launcher-window-height": "node scripts/test-global-launcher-window-height.mjs",
     "test:launcher-plugin-contract": "node scripts/test-launcher-plugin-contract.mjs",
     "test:launcher-web-smoke": "node scripts/test-launcher-web-smoke.mjs",
+    "test:window-entry-runtime-smoke": "node scripts/test-window-entry-runtime-smoke.mjs",
     "test:window-architecture-phases": "node scripts/test-window-architecture-phases.mjs",
     "test:plugin-surface-window": "node scripts/test-plugin-surface-window.mjs",
     "test:editor-window-launch": "node scripts/test-editor-window-launch.mjs",

@@ -56,6 +56,7 @@ const commands = [
   ['npm', ['run', 'test:global-pinned-launcher']],
   ['npm', ['run', 'test:clipboard-history-runtime']],
   ['npm', ['run', 'test:launcher-web-smoke']],
+  ['npm', ['run', 'test:window-entry-runtime-smoke']],
 ]
 
 for (const [command, args] of commands) {
