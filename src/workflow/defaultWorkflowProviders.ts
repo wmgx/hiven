@@ -22,6 +22,7 @@ export function registerDefaultWorkflowProviders(): void {
   registerWorkObjectProvider(currentContextObjectProvider)
   registerWorkObjectProvider(hostAppObjectProvider)
   registerWorkObjectProvider(surfaceObjectProvider)
+  registerWorkActionProvider(jsonClipboardActionProvider)
   registerWorkActionProvider(defaultTextActionProvider)
   registerWorkActionProvider(defaultEditorDocumentActionProvider)
   registerWorkActionProvider(defaultAppActionProvider)
@@ -133,6 +134,47 @@ export const surfaceObjectProvider: WorkObjectProvider = {
         updatedAt: surface.lastActiveAt,
       }
     }),
+}
+
+
+const jsonClipboardActionProvider = {
+  id: 'workflow.json-clipboard-actions',
+  getActions: (input: WorkObject): WorkAction[] => {
+    if (input.type !== 'clipboard' || input.contentType !== 'text') return []
+    const text = textForObject(input)
+    const formatted = tryFormatJsonClipboardText(text)
+    if (!formatted) return []
+    return [
+      {
+        id: 'workflow.format-json-clipboard',
+        title: 'Format Clipboard JSON',
+        icon: 'Braces',
+        accepts: ['clipboard'],
+        defaultOutputTarget: 'open-in-editor',
+        run: async () => routeTextOutput(formatted, {
+          kind: 'open-in-editor',
+          language: 'json',
+          title: 'Formatted Clipboard JSON',
+        }, createDefaultOutputRouterContext()),
+      },
+      {
+        id: 'workflow.copy-formatted-json',
+        title: 'Copy Formatted JSON',
+        icon: 'Copy',
+        accepts: ['clipboard'],
+        defaultOutputTarget: 'copy',
+        run: async () => routeTextOutput(formatted, { kind: 'copy' }, createDefaultOutputRouterContext()),
+      },
+      {
+        id: 'workflow.paste-formatted-json',
+        title: 'Paste Formatted JSON',
+        icon: 'ClipboardPaste',
+        accepts: ['clipboard'],
+        defaultOutputTarget: 'paste-to-foreground-app',
+        run: async () => routeTextOutput(formatted, { kind: 'paste-to-foreground-app' }, createDefaultOutputRouterContext()),
+      },
+    ]
+  },
 }
 
 const defaultTextActionProvider = {
@@ -308,4 +350,14 @@ function languageForObject(input: WorkObject): string | undefined {
 
 function preview(text: string): string {
   return text.replace(/\s+/g, ' ').slice(0, 120)
+}
+
+export function tryFormatJsonClipboardText(text: string): string | null {
+  const trimmed = text.trim()
+  if (!trimmed) return null
+  try {
+    return JSON.stringify(JSON.parse(trimmed), null, 2)
+  } catch {
+    return null
+  }
 }
