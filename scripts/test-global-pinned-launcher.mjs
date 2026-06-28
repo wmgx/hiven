@@ -194,7 +194,7 @@ check('global launcher keeps keyboard selection visible while navigating', () =>
 check('main window supports Cmd or Ctrl K as an in-app global launcher shortcut', () => {
   assert.doesNotMatch(
     files.app,
-    /e\.key\.toLowerCase\(\)\s*===\s*['"]k['"][\s\S]{0,180}setCommandPaletteOpen\(true\)/,
+    /e\.key\.toLowerCase\(\)\s*===\s*['"]k['"][\s\S]{0,180}setEditorCommandBarOpen\(true\)/,
     'retired main window should not own a local Cmd/Ctrl+K command palette path',
   )
   assert.doesNotMatch(
@@ -750,7 +750,7 @@ check('global shortcut routes to in-app command palette when the editor window i
   )
   assert.doesNotMatch(
     files.globalPinnedLauncherHotkeys,
-    /getCurrentWindow\(\)\.isFocused\(\)|activeView|setCommandPaletteOpen\(true\)/,
+    /getCurrentWindow\(\)\.isFocused\(\)|activeView|setEditorCommandBarOpen\(true\)/,
     'global shortcut routing should no longer depend on the retired main/editor view shell',
   )
   assertHas(

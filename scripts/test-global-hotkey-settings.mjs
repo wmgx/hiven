@@ -293,7 +293,7 @@ check('shortcut recorder marks active hotkey recording sessions', () => {
   )
   assertDoesNotHave(
     files.app,
-    /setCommandPaletteOpen\(true\)|openGlobalLauncher\(['"]full['"]\)/,
+    /setEditorCommandBarOpen\(true\)|openGlobalLauncher\(['"]full['"]\)/,
     'launcher runtime should not retain retired app-level keydown launcher routes that can steal recorder input',
   )
 })

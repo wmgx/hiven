@@ -200,9 +200,9 @@ interface AppState {
   editorInstance: any | null
   setEditorInstance: (editor: any) => void
 
-  // Command Palette
-  commandPaletteOpen: boolean
-  setCommandPaletteOpen: (open: boolean) => void
+  // Editor command bar
+  editorCommandBarOpen: boolean
+  setEditorCommandBarOpen: (open: boolean) => void
   globalLauncherOpen: boolean
   globalLauncherMode: GlobalLauncherMode
   globalLauncherOverlay: boolean
@@ -287,8 +287,8 @@ function stripShortcutRuntimeStatus(shortcut: GlobalPinnedLauncherShortcut): Glo
 export const useAppStore = create<AppState>()(persist((set) => ({
   // Plugin management surfaces
   pluginEditor: null,
-  openPluginEditor: (plugin) => set({ pluginEditor: plugin, commandPaletteOpen: false }),
-  closePluginEditor: () => set({ pluginEditor: null, commandPaletteOpen: false }),
+  openPluginEditor: (plugin) => set({ pluginEditor: plugin, editorCommandBarOpen: false }),
+  closePluginEditor: () => set({ pluginEditor: null, editorCommandBarOpen: false }),
 
   // Pinned Action / Live Runner
   pinnedActions: [],
@@ -351,7 +351,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
       activePinnedActionId: pinnedId,
       pinnedRuntimes: nextRuntimes,
       pinnedTombstones: nextTombstones,
-      commandPaletteOpen: false,
+      editorCommandBarOpen: false,
     }
   }),
   openPinnedAction: (pinnedId) => {
@@ -428,9 +428,9 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   editorInstance: null,
   setEditorInstance: (editor) => set({ editorInstance: editor }),
 
-  // Command Palette
-  commandPaletteOpen: false,
-  setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
+  // Editor command bar
+  editorCommandBarOpen: false,
+  setEditorCommandBarOpen: (open) => set({ editorCommandBarOpen: open }),
   globalLauncherOpen: false,
   globalLauncherMode: 'full',
   globalLauncherOverlay: false,

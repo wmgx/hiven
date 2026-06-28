@@ -25,7 +25,7 @@ function isFindWidgetVisible(editor?: { getDomNode?: () => HTMLElement | null })
 }
 
 export function EditorView() {
-  const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
+  const setEditorCommandBarOpen = useAppStore((s) => s.setEditorCommandBarOpen)
   const setGlobalLauncherOpen = useAppStore((s) => s.setGlobalLauncherOpen)
   const wordWrap = useAppStore((s) => s.settings.wordWrap)
   const theme = useAppStore((s) => s.settings.theme)
@@ -186,7 +186,7 @@ export function EditorView() {
           <button
             type="button"
             className="btn btn-ghost btn-sm ft-btn ft-btn-ghost ft-btn-sm editor-topbar-run"
-            onClick={() => setCommandPaletteOpen(true)}
+            onClick={() => setEditorCommandBarOpen(true)}
             title={t('runActionWithShortcut', { shortcut: runActionShortcut })}
           >
             <Sparkles size={13} />

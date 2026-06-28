@@ -12,8 +12,8 @@ import type { LauncherItem as DomainLauncherItem } from '../../workspace/launche
 import { useLauncherSession } from '../../workspace/launcher/useLauncherSession'
 
 export function EditorCommandBarHost() {
-  const open = useAppStore((s) => s.commandPaletteOpen)
-  const setOpen = useAppStore((s) => s.setCommandPaletteOpen)
+  const open = useAppStore((s) => s.editorCommandBarOpen)
+  const setOpen = useAppStore((s) => s.setEditorCommandBarOpen)
   const pinPluginCommand = useAppStore((s) => s.pinPluginCommand)
   const locale = useAppStore((s) => s.locale)
 
