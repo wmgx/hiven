@@ -270,8 +270,6 @@ export type PluginLauncherApi = {
   copyText(text: string): Promise<void>
   openUrl(url: string): Promise<void>
   showEditorWindow(): Promise<void>
-  /** @deprecated Use showEditorWindow. */
-  showMainPanel(): Promise<void>
   showPluginsPage(): Promise<void>
   showSettingsPage(): Promise<void>
   createPane(options?: { text?: string; title?: string; language?: string; focus?: boolean; direction?: 'left' | 'right' | 'top' | 'bottom' }): Promise<string | undefined>

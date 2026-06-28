@@ -288,7 +288,9 @@ assert.doesNotMatch(files.workspaceTypes, /app\.showMainPanel/, 'workspace effec
 assert.doesNotMatch(files.effectRunner, /app\.showMainPanel|setActiveView\(['"]editor['"]\)/, 'effect runner must not route through the retired main-window ViewId model')
 assert.doesNotMatch(files.pluginApi, /app\.showMainPanel|applyEffects\(\[\{ type: ['"]app\.showMainPanel['"]/, 'plugin launcher API must not route showMainPanel through the retired effect')
 assert.match(files.launcherTypes, /showEditorWindow\(\): Promise<void>/, 'plugin launcher API must expose showEditorWindow instead of only retired main panel naming')
+assert.doesNotMatch(files.launcherTypes, /showMainPanel/, 'plugin launcher API must not expose the retired showMainPanel alias')
 assert.match(files.pluginApi, /showEditorWindow: openEditorWindow/, 'plugin launcher API must wire showEditorWindow to the editor window facade')
+assert.doesNotMatch(files.pluginApi, /showMainPanel/, 'plugin launcher API implementation must not keep the retired showMainPanel alias')
 assert.doesNotMatch(files.pluginHostCore, /app\.showMainPanel/, 'plugin core SDK must not mint the retired main panel effect')
 
 console.log('window architecture phase checks passed')

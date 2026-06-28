@@ -117,7 +117,6 @@ const api = {
   copyText: async (t) => { copied = t },
   openUrl: async () => {},
   showEditorWindow: async () => {},
-    showMainPanel: async () => {},
   dispatchEffects: () => ({ applied: [], errors: [] }),
   showMessage: () => {},
 }

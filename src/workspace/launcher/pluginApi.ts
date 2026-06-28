@@ -237,7 +237,6 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
       await openExternalUrl(url)
     },
     showEditorWindow: openEditorWindow,
-    showMainPanel: openEditorWindow,
     showPluginsPage,
     showSettingsPage,
     createPane: (options) => createEditorPane(options),

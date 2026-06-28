@@ -80,7 +80,6 @@ function makeApi() {
       copyText: async (t) => { calls.copied.push(t) },
       openUrl: async () => {},
       showEditorWindow: async () => {},
-    showMainPanel: async () => {},
       dispatchEffects: () => ({ applied: [], errors: [] }),
       showMessage: () => {},
     },

@@ -56,7 +56,7 @@ function createPinnedLauncherApi(inputText: string): PluginLauncherApi {
     insertText: async () => {},
     copyText: async () => {},
     openUrl: async () => {},
-    showMainPanel: async () => {},
+    showEditorWindow: async () => {},
     showPluginsPage: async () => {},
     showSettingsPage: async () => {},
     createPane: () => '',

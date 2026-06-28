@@ -95,7 +95,6 @@ await items[0].execute({
     openUrl: async (url) => { openedUrl = url },
     showMessage: () => {},
     showEditorWindow: async () => {},
-    showMainPanel: async () => {},
     showPluginsPage: async () => {},
     showSettingsPage: async () => {},
     createPane: () => 'pane-new',
