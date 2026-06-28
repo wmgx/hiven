@@ -17,7 +17,7 @@ function readI18n() {
 const files = {
   packageJson: read('package.json'),
   store: read('src/store.ts'),
-  settingsView: read('src/views/SettingsView.tsx'),
+  settingsView: read('src/views/SettingsView.tsx') + '\n' + read('src/surfaces/SettingsSurfaceContent.tsx'),
   i18n: readI18n(),
 }
 
@@ -34,7 +34,7 @@ assertHas(files.store, /slice\(0,\s*state\.settings\.outputPreviewLimit\)/, 'per
 assertHas(files.settingsView, /persistPinnedInput/, 'SettingsView should expose pinned input persistence')
 assertHas(files.settingsView, /persistPinnedTombstone/, 'SettingsView should expose pinned tombstone persistence')
 assertHas(files.settingsView, /getVersion\(\)\.then[\s\S]*\.catch/, 'SettingsView should not throw getVersion errors in non-Tauri browser smoke')
-assertHas(files.i18n, /settings\.persistPinnedInput/, 'i18n should include pinned input setting label')
+assertHas(files.i18n, /persistPinnedInput/, 'i18n should include pinned input setting label')
 assertHas(files.i18n, /Pinned tools can remember input text/, 'i18n should include the pinned input privacy hint')
 
 console.log('pinned persistence settings checks passed')

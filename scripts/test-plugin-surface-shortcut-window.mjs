@@ -11,7 +11,7 @@ const shortcutHotkeys = read('src/hotkeys/pluginSurfaceShortcuts.ts')
 const surfaceWindows = read('src/workspace/pluginSurfaceWindows.ts')
 const clipboardHistory = read('src/plugins/clipboard-history/index.tsx')
 const openRequest = read('src/workspace/pluginSurfaceOpenRequest.ts')
-const globalLauncher = read('src/launcher/hosts/GlobalLauncherHost.tsx')
+const globalLauncher = read('src/launcher/hosts/GlobalLauncherHost.tsx') + '\n' + read('src/components/launcher/GlobalLauncherSurfaceFrame.ts')
 
 assert.match(surfaceWindows, /getPluginSurfaceShortcutPresentation[\s\S]*shortcutPresentation === ['"]window['"]/, 'surface metadata must choose window presentation for shortcuts')
 assert.match(shortcutHotkeys, /getPluginSurfaceShortcutPresentation\(target\) === ['"]window['"][\s\S]*requestOpenPluginSurfaceWindow\(target\)/, 'shortcut handler must route window surfaces to independent windows')

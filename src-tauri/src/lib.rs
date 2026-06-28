@@ -33,7 +33,82 @@ static PREVIOUS_FOREGROUND_PROCESS_ID: OnceLock<Mutex<Option<u32>>> = OnceLock::
 static INSTALLED_APP_TARGETS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 static PLUGIN_KV_DB: OnceLock<Result<Mutex<Connection>, String>> = OnceLock::new();
 static PLUGIN_SURFACE_WINDOW_TOKENS: OnceLock<Mutex<HashMap<String, u64>>> = OnceLock::new();
+static SURFACE_REGISTRY: OnceLock<SurfaceRegistryState> = OnceLock::new();
 const MAX_APP_ICON_CACHE_WARM_COUNT: usize = 20;
+
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SurfaceInstanceRecord {
+    id: String,
+    kind: String,
+    window_label: String,
+    title: String,
+    plugin_id: Option<String>,
+    surface_id: Option<String>,
+    state: String,
+    can_receive_text: Option<bool>,
+    can_provide_text: Option<bool>,
+    can_attach_to_editor: Option<bool>,
+    last_active_at: u64,
+}
+
+#[derive(Default)]
+struct SurfaceRegistryState {
+    surfaces: Mutex<HashMap<String, SurfaceInstanceRecord>>,
+}
+
+fn surface_registry_state() -> &'static SurfaceRegistryState {
+    SURFACE_REGISTRY.get_or_init(SurfaceRegistryState::default)
+}
+
+#[tauri::command]
+fn surface_registry_snapshot() -> Result<Vec<SurfaceInstanceRecord>, String> {
+    let registry = surface_registry_state();
+    let surfaces = registry
+        .surfaces
+        .lock()
+        .map_err(|_| "surface registry lock poisoned".to_string())?;
+    let mut snapshot: Vec<SurfaceInstanceRecord> = surfaces.values().cloned().collect();
+    snapshot.sort_by(|a, b| b.last_active_at.cmp(&a.last_active_at));
+    Ok(snapshot)
+}
+
+#[tauri::command]
+fn surface_registry_upsert(surface: SurfaceInstanceRecord) -> Result<(), String> {
+    let registry = surface_registry_state();
+    registry
+        .surfaces
+        .lock()
+        .map_err(|_| "surface registry lock poisoned".to_string())?
+        .insert(surface.id.clone(), surface);
+    Ok(())
+}
+
+#[tauri::command(rename_all = "camelCase")]
+fn surface_registry_mark_state(id: String, state: String, last_active_at: u64) -> Result<(), String> {
+    let registry = surface_registry_state();
+    let mut surfaces = registry
+        .surfaces
+        .lock()
+        .map_err(|_| "surface registry lock poisoned".to_string())?;
+    if let Some(surface) = surfaces.get_mut(&id) {
+        surface.state = state;
+        surface.last_active_at = last_active_at;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn surface_registry_remove(id: String) -> Result<(), String> {
+    let registry = surface_registry_state();
+    registry
+        .surfaces
+        .lock()
+        .map_err(|_| "surface registry lock poisoned".to_string())?
+        .remove(&id);
+    Ok(())
+}
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -3202,6 +3277,10 @@ pub fn run() {
             cache_installed_app_icons,
             launch_installed_app,
             perform_system_power_action,
+            surface_registry_snapshot,
+            surface_registry_upsert,
+            surface_registry_mark_state,
+            surface_registry_remove,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

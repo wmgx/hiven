@@ -20,8 +20,7 @@ function read(path) {
 const files = {
   packageJson: read('package.json'),
   editorView: read('src/views/EditorView.tsx'),
-  scriptsView: read('src/views/ScriptsView.tsx'),
-  sidebar: read('src/components/Sidebar.tsx'),
+  scriptsView: read('src/views/ScriptsView.tsx') + '\n' + read('src/surfaces/PluginsManagerSurfaceContent.tsx'),
   settingsSchemaRenderer: read('src/components/PluginSettingsSchemaRenderer.tsx'),
   globalLauncher: read('src/components/GlobalLauncher.tsx'),
   renderStatusBar: read('src/components/workspace/RenderStatusBar.tsx'),
@@ -30,7 +29,7 @@ const files = {
     : '',
   scriptsI18n: read('src/i18n/locales/scripts.ts'),
   css: read('src/index.css'),
-  settingsView: read('src/views/SettingsView.tsx'),
+  settingsView: read('src/views/SettingsView.tsx') + '\n' + read('src/surfaces/SettingsSurfaceContent.tsx'),
   navI18n: read('src/i18n/locales/nav.ts'),
   paletteI18n: read('src/i18n/locales/palette.ts'),
   settingsI18n: read('src/i18n/locales/settings.ts'),
@@ -47,17 +46,17 @@ assert.equal(
 assert.match(files.editorView, /editor-topbar/, 'EditorView must render a dedicated editor topbar')
 assert.match(files.editorView, /editor-topbar-system/, 'EditorView must separate fixed host actions')
 assert.match(files.editorView, /editor-topbar-plugin-slot/, 'EditorView must keep a plugin contribution slot')
-assert.match(files.editorView, /getAction\(actionId\)/, 'Topbar host editor actions must prefer active editor actions')
-assert.match(files.editorView, /trigger\?\.\(['"]editor-topbar['"],\s*actionId,\s*null\)/, 'Topbar host editor actions must fall back to Monaco commands')
+assert.match(files.editorView, /getAction\?\.\(['"]editor\.action\.startFindReplaceAction['"]\)/, 'Topbar host editor actions must prefer active editor actions')
+assert.match(files.editorView, /trigger\?\.\(['"]editor-topbar['"],\s*['"]editor\.action\.startFindReplaceAction['"],\s*null\)/, 'Topbar host editor actions must fall back to Monaco commands')
 assert.doesNotMatch(files.editorView, /runEditorAction\(['"]undo['"]\)|<Undo2\b/, 'Topbar must not expose the removed undo action')
 assert.doesNotMatch(files.editorView, /runEditorAction\(['"]redo['"]\)|<Redo2\b/, 'Topbar must not expose the removed redo action')
 assert.doesNotMatch(files.editorView, /editor-topbar-status|status-dot ready|\{t\(['"]ready['"]\)\}/, 'Topbar must not show the removed ready status')
 assert.match(files.editorView, /updateSetting\(['"]wordWrap['"],\s*!wordWrap\)/, 'Topbar must expose host word-wrap toggle')
-assert.match(files.editorView, /runEditorAction\(['"]editor\.action\.startFindReplaceAction['"]\)/, 'Topbar must expose host find/replace action')
+assert.match(files.editorView, /onClick=\{toggleFindReplace\}/, 'Topbar must expose host find/replace action')
 assert.match(files.editorView, /createPane\(\{[\s\S]*direction:\s*['"]right['"]/, 'Topbar must expose host split-right action')
 assert.match(files.editorView, /createPane\(\{[\s\S]*direction:\s*['"]bottom['"]/, 'Topbar must expose host split-down action')
 assert.doesNotMatch(files.editorView, /title=\{t\(['"]closePane['"]\)\}[\s\S]{0,120}<X/, 'Topbar must not expose the close-pane action')
-assert.match(files.renderStatusBar, /statusbar-close[\s\S]{0,240}closeActiveSurfaceOrPane\(\)/, 'Statusbar must expose host close-pane/surface action')
+assert.match(files.editorView, /key === ['"]w['"][\s\S]{0,240}closeActiveSurfaceOrPane\(\)/, 'Editor shell must expose the host close-pane/surface action through the standard close shortcut')
 assert.match(files.editorView, /setGlobalLauncherOpen\(true,\s*['"]full['"]\)/, 'Topbar must expose the host global launcher action')
 assert.match(files.editorView, /setCommandPaletteOpen\(true\)/, 'Editor run-action affordance must preserve the in-app command palette')
 assert.match(files.editorView, /toolbarItems\.map/, 'EditorView must still render plugin toolbar contributions')
@@ -77,7 +76,7 @@ assert.match(files.scriptsView, /plugin-settings-inline-detail/, 'ScriptsView mu
 assert.match(files.scriptsView, /plugin-master-detail/, 'ScriptsView must render plugin management as a master-detail surface')
 assert.match(files.scriptsView, /listBundledPluginPackageSummaries/, 'ScriptsView browser preview must list bundled plugins without Tauri directory APIs')
 assert.match(files.scriptsView, /if \(!isTauri\(\)\)[\s\S]{0,220}setBuiltinPlugins\(listBundledPluginPackageSummaries\(\)\)/, 'ScriptsView non-Tauri path must render real bundled plugin details for visual QA')
-assert.match(files.scriptsView, /className=["']phead["'][\s\S]{0,220}className=["']ptitle["'][\s\S]{0,220}className=["']pcount["']/, 'ScriptsView must render the plugin page title and total count header')
+assert.match(files.scriptsView, /className=["']ptools["'][\s\S]*scripts-tab-count/, 'ScriptsView must render plugin toolbar controls and tab counts')
 assert.match(files.scriptsView, /className=["']ptools["']/, 'ScriptsView must use the design ptools header row')
 assert.doesNotMatch(files.scriptsView, /scripts-title|className=["']phead scripts-header["']|className=["']ptitle scripts-title["']/, 'ScriptsView must not render the old plugin page title/count header')
 assert.equal((files.scriptsView.match(/data-testid=["']plugin-new-button["']/g) ?? []).length, 1, 'ScriptsView top bar must expose exactly one add-plugin button')
@@ -99,7 +98,6 @@ assert.match(files.scriptsI18n, /['"]capability\.instantSuggestion['"]:\s*['"]�
 for (const [name, source] of Object.entries({
   scriptsView: files.scriptsView,
   settingsView: files.settingsView,
-  sidebar: files.sidebar,
   settingsSchemaRenderer: files.settingsSchemaRenderer,
   globalLauncher: files.globalLauncher,
 })) {
@@ -132,7 +130,7 @@ assert.match(files.css, /\.psearch[\s\S]{0,120}height:\s*34px/, 'Plugin search i
 assert.match(files.css, /\.btn\s*\{[\s\S]{0,120}height:\s*34px/, 'Plugin toolbar buttons must align with the search input height')
 
 assert.match(files.settingsView, /className=["']settings-page body["']/, 'SettingsView must use the redesigned settings shell')
-assert.match(files.settingsView, /phead[\s\S]{0,260}<UpdateChecker/, 'Settings page header must place the update checker button at the top right')
+assert.match(files.settingsView, /settings-version-control[\s\S]{0,180}<UpdateChecker compact/, 'Settings version row must place the compact update checker with the current version')
 assert.doesNotMatch(files.settingsView, /暗色 token 待补|Reserved for the dark token pass/, 'Settings dark theme copy must not claim the dark token pass is pending')
 assert.match(files.settingsView, /<SettingGroup title=/, 'SettingsView must render settings as grouped rows')
 assert.match(files.settingsView, /<SettingsListRow icon=/, 'SettingsView must render design srow rows')

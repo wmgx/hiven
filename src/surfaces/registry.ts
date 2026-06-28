@@ -32,6 +32,7 @@ const listeners = new Set<() => void>()
 const SURFACE_REGISTRY_EVENT = 'hiven://surface-registry-sync'
 const registrySourceId = `surface-registry-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 let syncListenerStarted = false
+let rustSnapshotRequested = false
 
 type SurfaceRegistryMutation =
   | { sourceId: string; type: 'upsert'; surface: SurfaceInstance }
@@ -48,6 +49,7 @@ export function upsertSurfaceInstance(input: Omit<SurfaceInstance, 'lastActiveAt
   }
   surfaces.set(input.id, surface)
   emit()
+  persistSurfaceRegistryMutation({ sourceId: registrySourceId, type: 'upsert', surface })
   broadcastSurfaceRegistryMutation({ sourceId: registrySourceId, type: 'upsert', surface })
 }
 
@@ -58,6 +60,7 @@ export function markSurfaceInstanceState(id: string, state: SurfaceInstanceState
   const lastActiveAt = Date.now()
   surfaces.set(id, { ...previous, state, lastActiveAt })
   emit()
+  persistSurfaceRegistryMutation({ sourceId: registrySourceId, type: 'mark-state', id, state, lastActiveAt })
   broadcastSurfaceRegistryMutation({ sourceId: registrySourceId, type: 'mark-state', id, state, lastActiveAt })
 }
 
@@ -65,6 +68,7 @@ export function removeSurfaceInstance(id: string): void {
   ensureSurfaceRegistrySync()
   surfaces.delete(id)
   emit()
+  persistSurfaceRegistryMutation({ sourceId: registrySourceId, type: 'remove', id })
   broadcastSurfaceRegistryMutation({ sourceId: registrySourceId, type: 'remove', id })
 }
 
@@ -84,6 +88,7 @@ export function useSurfaceRegistrySnapshot(): SurfaceRegistrySnapshot {
 
 function subscribe(listener: () => void): () => void {
   listeners.add(listener)
+  ensureSurfaceRegistrySync()
   return () => listeners.delete(listener)
 }
 
@@ -96,7 +101,9 @@ function emit(): void {
 }
 
 function ensureSurfaceRegistrySync(): void {
-  if (syncListenerStarted || !isTauriRuntime()) return
+  if (!isTauriRuntime()) return
+  hydrateSurfaceRegistryFromRust()
+  if (syncListenerStarted) return
   syncListenerStarted = true
   import('@tauri-apps/api/event')
     .then(({ listen }) => listen<unknown>(SURFACE_REGISTRY_EVENT, (event) => {
@@ -106,6 +113,25 @@ function ensureSurfaceRegistrySync(): void {
     }))
     .catch(() => {
       syncListenerStarted = false
+    })
+}
+
+function hydrateSurfaceRegistryFromRust(): void {
+  if (rustSnapshotRequested) return
+  rustSnapshotRequested = true
+  import('@tauri-apps/api/core')
+    .then(({ invoke }) => invoke<unknown[]>('surface_registry_snapshot'))
+    .then((snapshot) => {
+      let changed = false
+      for (const candidate of snapshot) {
+        if (!isSurfaceInstance(candidate)) continue
+        surfaces.set(candidate.id, candidate)
+        changed = true
+      }
+      if (changed) emit()
+    })
+    .catch(() => {
+      rustSnapshotRequested = false
     })
 }
 
@@ -129,6 +155,25 @@ function applyRemoteSurfaceRegistryMutation(mutation: SurfaceRegistryMutation): 
       break
   }
   emit()
+}
+
+function persistSurfaceRegistryMutation(mutation: SurfaceRegistryMutation): void {
+  if (!isTauriRuntime()) return
+  import('@tauri-apps/api/core')
+    .then(({ invoke }) => {
+      if (mutation.type === 'upsert') {
+        return invoke('surface_registry_upsert', { surface: mutation.surface })
+      }
+      if (mutation.type === 'mark-state') {
+        return invoke('surface_registry_mark_state', {
+          id: mutation.id,
+          state: mutation.state,
+          lastActiveAt: mutation.lastActiveAt,
+        })
+      }
+      return invoke('surface_registry_remove', { id: mutation.id })
+    })
+    .catch(() => undefined)
 }
 
 function broadcastSurfaceRegistryMutation(mutation: SurfaceRegistryMutation): void {

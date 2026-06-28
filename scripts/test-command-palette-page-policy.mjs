@@ -34,11 +34,11 @@ function assertHas(source, pattern, message) {
   assert.match(source, pattern, message)
 }
 
-check('ViewId includes the plugin editor and pinned runner pages under test', () => {
-  assertHas(
+check('Store no longer exposes the retired main-window ViewId model', () => {
+  assert.doesNotMatch(
     files.store,
-    /export\s+type\s+ViewId\s*=[^\n]*['"]plugin-editor['"][^\n]*['"]pinned-runner['"]/,
-    'ViewId should include plugin-editor and pinned-runner so this policy test covers both non-editor pages',
+    /export\s+type\s+ViewId\b|\bactiveView\b|\bsetActiveView\b/,
+    'ViewId/activeView/setActiveView should be retired after removing the main-window navigation shell',
   )
 })
 

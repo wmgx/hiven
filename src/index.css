@@ -27,7 +27,6 @@
   --space-4: 16px;
   --space-5: 20px;
   --space-6: 24px;
-  --sidebar-w: 44px; /* pure icon rail (simple style, icon only + tooltip; no text labels) */
   --statusbar-h: 28px;
   --command-palette-list-max-height: 300px;
   --command-palette-panel-max-height: 390px;
@@ -248,7 +247,6 @@ body[data-theme='light'],
   backdrop-filter: none;
 }
 
-.light .flux-sidebar,
 .light .statusbar {
   background: var(--bg-surface-2);
   border-color: var(--border);
@@ -258,21 +256,6 @@ body[data-theme='light'],
 
 .light .topbar {
   background: var(--bg-surface-2);
-}
-
-/* Pure icon rail — simple editor-focused style (left sidebar shows icons only; labels via tooltip). Matches accepted VS Code Light+ mock + "和之前一样简单风格，光显示 icon" requirement. */
-.light .flux-sidebar .sidebar-btn {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.light .flux-sidebar .sidebar-btn.active {
-  background: var(--accent-tint);
-  color: var(--accent);
-  box-shadow: none; /* clean tint, no dark-mode gradient/glow on light chrome */
 }
 
 /* Clean launcher and palette in light (matching mock) */
@@ -438,7 +421,6 @@ html[data-window='launcher'] #root {
 /* 控件类禁止文本选中（避免误选按钮文字等） */
 .flux-spatial-shell :is(
   button, [role="button"],
-  .sidebar-btn, .flux-sidebar,
   .drag-handle, [data-no-select],
   .icon, .no-select
 ) {
@@ -477,20 +459,6 @@ html[data-window='launcher'] #root {
   box-shadow: var(--glass-shine);
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
-}
-
-.flux-sidebar {
-  width: var(--sidebar-w);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 0;
-  flex-shrink: 0;
-  border-right: 1px solid var(--glass-border);
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px) saturate(1.4);
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
 }
 
 .statusbar {
@@ -906,94 +874,6 @@ html[data-window='launcher'] #root {
 .cmd-item.highlight {
   background: var(--color-accent-light);
   color: var(--color-text-primary);
-}
-
-/* ─── Sidebar Button ─── */
-.sidebar-btn {
-  position: relative;
-  overflow: hidden;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition:
-    background 0.2s var(--ease-out-expo),
-    color 0.15s ease,
-    box-shadow 0.2s var(--ease-out-expo),
-    transform 0.1s ease;
-}
-.sidebar-btn:hover {
-  background: var(--btn-ghost-hover);
-  color: var(--color-text-primary);
-}
-.sidebar-btn.active {
-  background: linear-gradient(135deg, var(--color-accent), var(--color-accent-hover));
-  color: #fff;
-  box-shadow: 0 0 12px var(--color-accent-glow);
-}
-.sidebar-btn:active {
-  transform: scale(0.9);
-  transition: transform 0.1s ease;
-}
-.sidebar-btn > * {
-  position: relative;
-  z-index: 1;
-}
-
-.sidebar-tooltip {
-  --sidebar-tooltip-bg: var(--color-text-primary);
-  --sidebar-tooltip-fg: var(--color-background-primary);
-  --sidebar-tooltip-border: var(--color-border-secondary);
-
-  position: fixed;
-  left: calc(var(--sidebar-w) + 8px);
-  top: 50%;
-  z-index: 9999;
-  max-width: 220px;
-  padding: 5px 8px;
-  border-radius: var(--radius-md);
-  border: 0.5px solid var(--sidebar-tooltip-border);
-  background: var(--sidebar-tooltip-bg);
-  color: var(--sidebar-tooltip-fg);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
-  font-size: var(--text-sm);
-  line-height: 1.25;
-  opacity: 0;
-  pointer-events: none;
-  transform: translate(2px, -50%);
-  transition:
-    opacity 0.12s ease,
-    transform 0.12s ease;
-  white-space: nowrap;
-}
-
-.sidebar-tooltip[data-theme='light'] {
-  --sidebar-tooltip-bg: #111113;
-  --sidebar-tooltip-fg: #ffffff;
-  --sidebar-tooltip-border: rgba(0, 0, 0, 0.08);
-}
-
-.sidebar-tooltip::before {
-  content: '';
-  position: absolute;
-  right: 100%;
-  top: 50%;
-  border: 5px solid transparent;
-  border-right-color: var(--sidebar-tooltip-bg);
-  transform: translateY(-50%);
-}
-
-.sidebar-nav-item:hover .sidebar-tooltip,
-.sidebar-nav-item:focus-within .sidebar-tooltip,
-.sidebar-tooltip.visible {
-  opacity: 1;
-  transform: translate(0, -50%);
 }
 
 /* ─── Keyframes ─── */

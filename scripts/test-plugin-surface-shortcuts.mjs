@@ -21,11 +21,12 @@ const files = {
   clipboardHistory: read('src/plugins/clipboard-history/index.tsx'),
   surfaceOpenRequest: read('src/workspace/pluginSurfaceOpenRequest.ts'),
   launcherWindowManager: read('src/workspace/windowManager/launcherWindow.ts'),
-  globalLauncher: read('src/launcher/hosts/GlobalLauncherHost.tsx'),
+  globalLauncher: read('src/launcher/hosts/GlobalLauncherHost.tsx') + '\n' + read('src/components/launcher/GlobalLauncherSurfaceFrame.ts'),
   globalLauncherFrames: read('src/components/launcher/GlobalLauncherFrames.tsx'),
+  globalLauncherLayout: read('src/components/launcher/GlobalLauncherLayout.ts'),
   pluginSurfaceWindow: read('src/components/PluginSurfaceWindow.tsx'),
   pluginSurfaceRenderer: read('src/components/pluginSurface/PluginSurfaceRenderer.tsx'),
-  scriptsView: read('src/views/ScriptsView.tsx'),
+  scriptsView: read('src/views/ScriptsView.tsx') + '\n' + read('src/surfaces/PluginsManagerSurfaceContent.tsx'),
   scriptsI18n: read('src/i18n/locales/scripts.ts'),
   tauriLib: read('src-tauri/src/lib.rs'),
 }
@@ -119,7 +120,7 @@ assert.match(
   'plugin surface window should capture Escape at document level so focused inputs cannot block close',
 )
 assert.match(files.pluginSurfaceWindow, /<PluginSurfaceRenderer/, 'plugin surface window must delegate plugin rendering to the shared renderer')
-assert.match(files.globalLauncher, /<GlobalLauncherPluginSurfaceFrame/, 'global launcher host must delegate plugin surface rendering to a frame')
+assert.match(files.globalLauncherFrames, /<GlobalLauncherPluginSurfaceFrame/, 'global launcher frame switch must delegate plugin surface rendering to a frame')
 assert.match(files.globalLauncherFrames, /<PluginSurfaceRenderer/, 'global launcher surface frame must delegate plugin rendering to the shared renderer')
 assert.match(files.pluginSurfaceRenderer, /ensurePluginRuntimeReady/, 'shared plugin surface renderer must bootstrap plugin runtime')
 assert.match(files.pluginSurfaceRenderer, /missingPluginPermissions/, 'shared plugin surface renderer must gate missing permissions')
@@ -148,8 +149,8 @@ assert.match(files.surfaceHotkeys, /shortcutSyncSignature\(state\.shortcuts\)\s*
 assert.match(files.globalLauncher, /pluginSurfaceToolTarget/, 'GlobalLauncher must read tool-shell target')
 assert.match(files.globalLauncher, /samePluginSurfaceTarget/, 'GlobalLauncher must distinguish tool-shell surfaces from launcher-list surfaces')
 assert.match(files.globalLauncher, /leaveSurface/, 'GlobalLauncher must route Esc/back by surface origin')
-assert.match(files.globalLauncher, /surfaceShell\?\.defaultHeight[\s\S]*STANDALONE_SURFACE_MAX_HEIGHT/, 'tool-shell surfaces must resize taller than the compact launcher list')
-assert.match(files.globalLauncher, /surfaceShell\?\.defaultWidth[\s\S]*STANDALONE_SURFACE_MAX_WIDTH/, 'tool-shell surfaces must resize wider than the compact launcher list')
+assert.match(files.globalLauncherLayout, /surfaceShell\?\.defaultHeight[\s\S]*STANDALONE_SURFACE_MAX_HEIGHT/, 'tool-shell surfaces must resize taller than the compact launcher list')
+assert.match(files.globalLauncherLayout, /surfaceShell\?\.defaultWidth[\s\S]*STANDALONE_SURFACE_MAX_WIDTH/, 'tool-shell surfaces must resize wider than the compact launcher list')
 assert.doesNotMatch(files.globalLauncher, /aria-label=["']Settings["'][\s\S]{0,160}<Settings/, 'surface host header must not duplicate the plugin settings action')
 
 assert.match(files.scriptsView, /plugin-surface-shortcut-row/, 'ScriptsView must render surface-level shortcut rows')

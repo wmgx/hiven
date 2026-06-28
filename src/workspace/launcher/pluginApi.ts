@@ -231,9 +231,7 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
     showMainPanel,
     showPluginsPage,
     showSettingsPage,
-    createPane: (options) => isEditorWindowRuntime()
-      ? useWorkspaceStore.getState().createPane(options)
-      : createEditorPane(options),
+    createPane: (options) => createEditorPane(options),
     dispatchEffects: (effects: FluxEffect[]) => applyEffects(effects),
     showMessage: (message: string, level = 'info') => {
       useAppStore.getState().setLastCommandStatus({

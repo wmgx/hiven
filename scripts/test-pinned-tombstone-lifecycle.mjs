@@ -62,16 +62,15 @@ assert.match(
 assert.equal(restoredEmpty.outputKind, 'stale', 'restored tombstone preview should remain stale')
 
 const storeSource = readFileSync('src/store.ts', 'utf8')
-const pinnedRunnerSource = readFileSync('src/views/PinnedRunnerView.tsx', 'utf8')
 assert.match(
   storeSource,
   /updatePinnedAction:[\s\S]*discardPinnedTombstoneAfterPatch\(patch\)[\s\S]*pinnedTombstones:\s*nextTombstones/,
   'store should discard an old tombstone from the pinned action update lifecycle',
 )
 assert.match(
-  pinnedRunnerSource,
-  /activationRunKey[\s\S]*pinnedRuntime\?\.lastActivatedAt[\s\S]*runKey = `\$\{pinned\.id\}\\0\$\{pinned\.inputText\}\\0\$\{paramsFingerprint\}\\0\$\{activationRunKey\}`/,
-  'pinned runner auto-run should rerun after pinned action activation even when input and params did not change',
+  storeSource,
+  /activatePinnedAction:[\s\S]*activePinnedActionId:\s*pinnedId[\s\S]*activatePinnedRuntime/,
+  'store should keep pinned action activation in the runtime layer after retiring the main-window PinnedRunnerView',
 )
 
 console.log('pinned tombstone lifecycle checks passed')

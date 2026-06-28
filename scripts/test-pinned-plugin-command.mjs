@@ -18,8 +18,8 @@ function assertNotHas(source, pattern, message) {
 const files = {
   packageJson: read('package.json'),
   store: read('src/store.ts'),
-  commandPalette: read('src/components/CommandPalette.tsx'),
-  pinnedRunner: read('src/views/PinnedRunnerView.tsx'),
+  editorCommandBarHost: read('src/launcher/hosts/EditorCommandBarHost.tsx'),
+  launcherDomainSearchStep: read('src/components/launcher/LauncherDomainSearchStep.tsx'),
   pluginCommandRunner: read('src/workspace/pluginCommandRunner.ts'),
   pinnedPluginCommandRunner: read('src/workspace/pinnedPluginCommandRunner.ts'),
 }
@@ -47,20 +47,17 @@ const pinnedCommand = { kind: 'plugin-command', actionId: 'tools.transform', plu
 assert.equal(samePinnedPluginCommandIdentity(pinnedCommand, { ...pinnedCommand, params: { flags: { sort: 'asc', trim: true }, mode: 'encode' } }), true, 'same plugin command params should focus an existing pinned action')
 assert.equal(samePinnedPluginCommandIdentity(pinnedCommand, { ...pinnedCommand, params: { mode: 'decode', flags: { trim: true, sort: 'asc' } } }), false, 'different plugin command params should create another pinned action')
 
-assertHas(files.commandPalette, /pinPluginCommand/, 'CommandPalette should pin plugin commands')
-assertHas(files.commandPalette, /data-testid="launcher-item-pin-action"[\s\S]*<Pin/, 'LauncherActionItem should render a pin button for pinnable launcher items')
-assertHas(files.commandPalette, /item\.pinnable\s*!==\s*false/, 'CommandPalette should hide the pin affordance when a launcher item opts out')
-assertHas(files.pinnedRunner, /pluginRegistry\.resolveCommand/, 'PinnedRunnerView should resolve plugin commands from the plugin registry')
-assertHas(files.pinnedRunner, /runPinnedPluginCommandToPatch[\s\S]*pinned,[\s\S]*params/, 'PinnedRunnerView should run plugin commands through the tested pinned command runner')
-assertHas(files.pinnedRunner, /collectStaticCandidates[\s\S]*pinned\.actionId/, 'PinnedRunnerView should resolve pinned launcher item keys when no legacy command exists')
-assertHas(files.pinnedRunner, /runPinnedLauncherItemToPatch/, 'PinnedRunnerView should run pinned launcher items through the launcher item runner')
+assertHas(files.editorCommandBarHost, /pinPluginCommand/, 'EditorCommandBarHost should pin plugin commands')
+assertHas(files.editorCommandBarHost, /onPinItem=\{pinLauncherItem\}/, 'EditorCommandBarHost should wire launcher pin affordances to plugin command pinning')
+assertHas(files.launcherDomainSearchStep, /data-testid="launcher-item-pin-action"[\s\S]*<Pin/, 'LauncherActionItem should render a pin button for pinnable launcher items')
+assertHas(files.launcherDomainSearchStep, /item\.pinnable\s*!==\s*false/, 'LauncherActionItem should hide the pin affordance when a launcher item opts out')
+assert.equal(fs.existsSync('src/views/PinnedRunnerView.tsx'), false, 'PinnedRunnerView should be retired with the main-window ViewId shell')
 
 assertHas(files.pinnedPluginCommandRunner, /runTextPluginCommand[\s\S]*inputText:\s*options\.pinned\.inputText/, 'pinned command runner should run plugin commands with the pinned input buffer')
 assertHas(files.pinnedPluginCommandRunner, /createPinnedLauncherApi[\s\S]*getActiveText:\s*\(\)\s*=>\s*inputText/, 'pinned launcher item runner should expose the pinned input buffer as launcher input')
 assertHas(files.pinnedPluginCommandRunner, /firstChoice\?\.preview\s*\?\?\s*firstChoice\?\.title/, 'pinned launcher item runner should persist output choices as pinned output text')
 assertHas(files.pluginCommandRunner, /buildTextPluginInputs[\s\S]*kind:\s*['"]text['"][\s\S]*inputText/, 'plugin command runner should resolve pinned text input slots')
 assertHas(files.pluginCommandRunner, /text\.replace[\s\S]*textReplace\.text/, 'plugin command runner should map text.replace effects into runner output')
-assertNotHas(files.pinnedRunner, /disabled=\{running\s*\|\|\s*!action\}/, 'Run Now should not disable plugin-command pinned actions')
 assertHas(files.pinnedPluginCommandRunner, /isDev:\s*options\.pinned\.isDev/, 'pinned command runner should preserve dev command context when normalizing plugin command effects')
 
 const stampedEffects = stampPluginCommandEffects([

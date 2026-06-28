@@ -1,8 +1,13 @@
 import { useAppStore } from '../store'
-import { ScriptsView } from '../views/ScriptsView'
 import { PluginEditorSurface } from './PluginEditorSurface'
+import { PluginsManagerSurfaceContent } from './PluginsManagerSurfaceContent'
+import { SurfaceShell } from './SurfaceShell'
 
 export function PluginsSurface() {
   const pluginEditor = useAppStore((s) => s.pluginEditor)
-  return pluginEditor ? <PluginEditorSurface /> : <ScriptsView />
+  return (
+    <SurfaceShell id="plugins" kind="plugins" title="Plugins">
+      {pluginEditor ? <PluginEditorSurface /> : <PluginsManagerSurfaceContent />}
+    </SurfaceShell>
+  )
 }

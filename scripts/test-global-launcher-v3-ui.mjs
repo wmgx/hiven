@@ -21,6 +21,8 @@ const files = {
   packageJson: read('package.json'),
   globalLauncher: read('src/launcher/hosts/GlobalLauncherHost.tsx'),
   globalLauncherFrames: read('src/components/launcher/GlobalLauncherFrames.tsx'),
+  globalLauncherKeyboard: read('src/components/launcher/GlobalLauncherKeyboard.ts'),
+  globalLauncherLayout: read('src/components/launcher/GlobalLauncherLayout.ts'),
   launcherMixedList: read('src/components/launcher/LauncherMixedList.tsx'),
   launcherResultChoiceRow: read('src/components/launcher/LauncherResultChoiceRow.tsx'),
   commandPalette: read('src/launcher/hosts/EditorCommandBarHost.tsx'),
@@ -40,9 +42,9 @@ assert.equal(
 )
 
 assert.match(files.globalLauncher, /resultSelectedIndex/, 'GlobalLauncher result frame must track a selected result row')
-assert.match(files.globalLauncher, /event\.key === 'ArrowDown'[\s\S]{0,320}setResultSelectedIndex/, 'GlobalLauncher result frame must support ArrowDown selection')
-assert.match(files.globalLauncher, /event\.key === 'ArrowUp'[\s\S]{0,320}setResultSelectedIndex/, 'GlobalLauncher result frame must support ArrowUp selection')
-assert.match(files.globalLauncher, /choices\[Math\.min\(resultSelectedIndex/, 'Enter should activate the selected result choice instead of always using the first row')
+assert.match(files.globalLauncherKeyboard, /event\.key === 'ArrowDown'[\s\S]{0,320}setResultSelectedIndex/, 'GlobalLauncher result frame must support ArrowDown selection')
+assert.match(files.globalLauncherKeyboard, /event\.key === 'ArrowUp'[\s\S]{0,320}setResultSelectedIndex/, 'GlobalLauncher result frame must support ArrowUp selection')
+assert.match(files.globalLauncherKeyboard, /choices\[Math\.min\(resultSelectedIndex/, 'Enter should activate the selected result choice instead of always using the first row')
 assert.match(files.launcherResultChoiceRow, /global-launcher-result-row/, 'GlobalLauncher result rows must have a stable v3 row styling hook')
 assert.match(files.globalLauncherFrames, /LauncherResultChoiceRow/, 'GlobalLauncher must render result choices through the shared v3 result row')
 assert.match(files.launcherResultChoiceRow, /l-result-block/, 'GlobalLauncher must support the long text result fallback block')
@@ -53,7 +55,7 @@ assert.match(files.globalLauncherFrames, /global-launcher-footer l-foot/, 'Globa
 assert.match(files.launcherMixedList, /launcher-kind-tag/, 'GlobalLauncher list rows must render right-side type tags')
 assert.match(files.launcherMixedList, /kindApp/, 'GlobalLauncher must distinguish application rows')
 assert.match(files.launcherMixedList, /kindCommand/, 'GlobalLauncher must distinguish command rows')
-assert.match(files.globalLauncher, /GLOBAL_LAUNCHER_PANEL_WIDTH\s*=\s*680/, 'GlobalLauncher panel should be widened to 680px')
+assert.match(files.globalLauncherLayout, /GLOBAL_LAUNCHER_PANEL_WIDTH\s*=\s*680/, 'GlobalLauncher panel should be widened to 680px')
 assert.doesNotMatch(files.globalLauncher, /MAX_GLOBAL_LAUNCHER_RENDERED_ITEMS/, 'GlobalLauncher should not keep the old rendered item cap')
 assert.match(files.globalLauncher, /collectDynamicWhenEmpty:\s*true/, 'GlobalLauncher should collect host dynamic items even for empty-query app mixing')
 

@@ -18,10 +18,18 @@ function assert(condition, message) {
   }
 }
 
-const commandPalette = read('src/components/CommandPalette.tsx')
+const commandPalette = [
+  read('src/components/CommandPalette.tsx'),
+  read('src/launcher/hosts/EditorCommandBarHost.tsx'),
+  read('src/components/launcher/LauncherDomainSearchStep.tsx'),
+].join('\n')
 const launcherParamStep = read('src/components/launcher/LauncherParamStep.tsx')
 const launcherParamShortcuts = read('src/components/launcher/launcherParamShortcuts.ts')
-const globalLauncher = read('src/components/GlobalLauncher.tsx')
+const globalLauncher = [
+  read('src/components/GlobalLauncher.tsx'),
+  read('src/launcher/hosts/GlobalLauncherHost.tsx'),
+  read('src/components/launcher/GlobalLauncherFrames.tsx'),
+].join('\n')
 const toolAdapter = read('src/workspace/launcher/toolAdapter.ts')
 const store = read('src/store.ts')
 const pluginTypes = read('src/workspace/pluginTypes.ts')
@@ -40,7 +48,7 @@ assert(/getPlatformShortcutMeta/.test(launcherParamShortcuts), 'shared launcher 
 assert(/isMacPlatform/.test(launcherParamShortcuts), 'shared launcher shortcut helper should detect macOS for Command shortcuts')
 assert(/event\.metaKey/.test(commandPalette) && /event\.ctrlKey/.test(commandPalette), 'CommandPalette should pass click modifier state for macOS and other platforms')
 assert(/shouldCustomizeParams/.test(launcherParamShortcuts), 'launcher should centralize customize modifier handling')
-assert(/selectItem\(item,\s*shouldCustomizeParams\(e\.metaKey,\s*e\.ctrlKey\)\)/.test(commandPalette), 'CommandPalette should support platform-aware Enter selection intent')
+assert(/selectItem\([^,]+,\s*shouldCustomizeParams\([^)]*\.metaKey,\s*[^)]*\.ctrlKey\)\)/.test(commandPalette), 'CommandPalette should support platform-aware selection intent')
 assert(/return\s+shortcutMeta\.modifier === 'meta' \? metaKey : ctrlKey/.test(launcherParamShortcuts), 'launcher should customize based on the platform modifier at selection time')
 assert(/supportsDefaultParamRun/.test(launcherParamShortcuts), 'launcher should gate default runs behind explicit default support')
 assert(/item\.requireParamSelection/.test(launcherParamShortcuts), 'launcher should block default runs for explicit parameter-selection tools')
@@ -76,7 +84,6 @@ const parameterizedPlugins = [
   'css',
   'csv',
   'date-time-assistant',
-  'extract',
   'hash',
   'html',
   'json',
@@ -122,7 +129,6 @@ for (const name of promptBeforeRunPlugins) {
 const defaultRunPlugins = [
   'css',
   'date-time-assistant',
-  'extract',
   'hash',
   'json',
   'lineAffix',

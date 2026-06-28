@@ -22,6 +22,7 @@ const files = {
   surfaceActions: read('src/surfaces/actions.ts'),
   hostProvider: read('src/workspace/launcher/hostProvider.ts'),
   globalLauncherHost: read('src/launcher/hosts/GlobalLauncherHost.tsx'),
+  globalLauncherKeyboard: read('src/components/launcher/GlobalLauncherKeyboard.ts'),
   pluginSurfacePanel: read('src/components/pluginSurface/PluginSurfacePanel.tsx'),
   pluginSurfacePanelProvider: read('src/workspace/pluginSurfacePanelProvider.ts'),
   clipboardHistoryWorkflow: read('src/workflow/clipboardHistoryWorkflowProvider.ts'),
@@ -87,7 +88,7 @@ assert.match(files.hostProvider, /registerPluginSurfacePanelProvider\(\)/, 'Host
 assert.match(files.clipboardHistoryWorkflow, /registerWorkObjectProvider/, 'Clipboard history plugin must register its own WorkObject provider')
 assert.match(files.clipboardHistoryWorkflow, /createClipboardHistoryRepository/, 'Clipboard history WorkObject provider must read real plugin history storage')
 assert.match(files.defaultWorkflowProviders, /registerClipboardHistoryWorkflowProvider\(\)/, 'Default workflow registration must activate clipboard history WorkObjects')
-assert.match(files.globalLauncherHost, /event\.key === ['"]Tab['"][\s\S]*isWorkflowObjectLauncherItem/, 'Global launcher must support Tab expansion for workflow objects')
+assert.match(files.globalLauncherKeyboard, /event\.key === ['"]Tab['"][\s\S]*isWorkflowObjectLauncherItem/, 'Global launcher must support Tab expansion for workflow objects')
 assert.match(files.outputRouter, /routeTextOutput/, 'OutputRouter must provide a text routing entry point')
 assert.match(files.outputRouter, /createDefaultOutputRouterContext/, 'OutputRouter must provide a default host-backed routing context')
 for (const targetKind of [

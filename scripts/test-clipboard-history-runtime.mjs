@@ -153,14 +153,25 @@ assert.match(bgManager, /restartPluginBackground/, 'Must restart on settings cha
 
 // ─── 5. GlobalLauncher surface rendering ─────────────────────────────────────
 
-const launcher = read('src/components/GlobalLauncher.tsx')
+const launcher = [
+  read('src/components/GlobalLauncher.tsx'),
+  read('src/launcher/hosts/GlobalLauncherHost.tsx'),
+  read('src/components/launcher/GlobalLauncherFrames.tsx'),
+  read('src/components/launcher/GlobalLauncherKeyboard.ts'),
+  read('src/components/launcher/GlobalLauncherClose.ts'),
+  read('src/components/launcher/GlobalLauncherSelection.ts'),
+  read('src/components/launcher/GlobalLauncherSurfaceRegistry.ts'),
+  read('src/components/launcher/GlobalLauncherSurfaceFrame.ts'),
+  read('src/components/launcher/GlobalLauncherItems.ts'),
+  read('src/components/pluginSurface/PluginSurfaceRenderer.tsx'),
+].join('\n')
 
 // Surface frame state
 assert.match(launcher, /surfaceFrame.*setSurfaceFrame/, 'Must have surfaceFrame state')
 
 // Intercepts plugin-surface items
 assert.match(launcher, /plugin-surface:/, 'Must check for plugin-surface systemKey')
-assert.match(launcher, /openPluginSurface\(\{\s*source,\s*pluginId,\s*surfaceId\s*\}\)/, 'Must open plugin surfaces through the pre-open activation path')
+assert.match(launcher, /openPluginSurface\(pluginSurfaceTarget\)|openPluginSurface\(\{\s*source,\s*pluginId,\s*surfaceId\s*\}\)/, 'Must open plugin surfaces through the pre-open activation path')
 
 // Renders surface component
 assert.match(launcher, /SurfaceComponent/, 'Must render surface component')
@@ -171,7 +182,7 @@ assert.match(launcher, /setSurfaceFrame\(target\)/, 'GlobalLauncher must activat
 // Passes all required props
 assert.match(launcher, /pluginId.*surfaceFrame/, 'Must pass pluginId from surfaceFrame')
 assert.match(launcher, /surfaceId.*surfaceFrame/, 'Must pass surfaceId from surfaceFrame')
-assert.match(launcher, /source.*surfaceFrame|surfaceFrame.*source/, 'Must keep source in surfaceFrame')
+assert.match(launcher, /source:\s*PluginSettingsSource|source.*surfaceFrame|surfaceFrame.*source/, 'Must keep source in surfaceFrame')
 assert.doesNotMatch(launcher, /resolvePluginSettings\('builtin'/, 'Must not hard-code builtin settings for surfaces')
 assert.match(launcher, /hostStorage\s*=\s*createPluginPrivateStorage/, 'Must create host storage once for surface API')
 assert.match(launcher, /storage:\s*hostStorage/, 'Must provide storage in host API')
@@ -184,8 +195,12 @@ assert.match(launcher, /global-launcher-surface-shell/, 'Must wrap surface body 
 assert.match(launcher, /surfaceFocusVersion|focusSurface/, 'Must hand focus to opened surface')
 
 // Host API methods
-assert.match(launcher, /close:\s*requestSurfaceClose/, 'Host must provide close() through the surface system API bridge')
-assert.match(launcher, /requestBack:\s*requestSurfaceBack/, 'Host must provide requestBack() through the surface system API bridge')
+assert.match(launcher, /onSurfaceClose=\{requestSurfaceClose\}/, 'Global launcher must wire surface close requests into the frame switch')
+assert.match(launcher, /onSurfaceBack=\{requestSurfaceBack\}/, 'Global launcher must wire surface back requests into the frame switch')
+assert.match(launcher, /onClose=\{onSurfaceClose\}/, 'Frame switch must pass host close handling into the plugin surface renderer')
+assert.match(launcher, /onBack=\{onSurfaceBack\}/, 'Frame switch must pass host back handling into the plugin surface renderer')
+assert.match(launcher, /close:\s*onClose/, 'Plugin surface renderer must expose close() through the host system API bridge')
+assert.match(launcher, /requestBack:\s*onBack/, 'Plugin surface renderer must expose requestBack() through the host system API bridge')
 assert.match(launcher, /PLUGIN_SURFACE_BACK_EVENT|hiven:plugin-surface-back/, 'Surface back API must route through a host-owned event')
 assert.match(launcher, /PLUGIN_SURFACE_CLOSE_EVENT|hiven:plugin-surface-close/, 'Surface close API must route through a host-owned event')
 assert.match(launcher, /openSettings:\s*\(\)/, 'Host must provide openSettings()')

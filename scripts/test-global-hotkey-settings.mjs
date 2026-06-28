@@ -24,7 +24,7 @@ const files = {
   tauriLib: read('src-tauri/src/lib.rs'),
   defaultCapability: read('src-tauri/capabilities/default.json'),
   store: read('src/store.ts'),
-  settingsView: read('src/views/SettingsView.tsx'),
+  settingsView: read('src/views/SettingsView.tsx') + '\n' + read('src/surfaces/SettingsSurfaceContent.tsx'),
   app: read('src/App.tsx'),
   globalPinnedLauncherHotkeys: read('src/hotkeys/globalPinnedLauncher.ts'),
   shortcutRecorder: read('src/components/ShortcutRecorder.tsx'),
@@ -216,7 +216,7 @@ check('Settings recording path can identify modifier-only double-modifier shortc
   )
   assertHas(
     `${files.settingsView}\n${files.shortcutRecorder}`,
-    /onRecord=\{onChange\}|onChange\(\s*(?:recordedShortcut(?:\.shortcut)?|shortcut|nextShortcut)\s*\)/,
+    /onRecord=\{onChange\}|onChange\(\s*(?:recordedShortcut(?:\.shortcut)?|shortcut|nextShortcut)\s*\)|onRecord=\{\(recordedShortcut\)\s*=>\s*updateSetting/,
     'recording handler should pass the recorded accelerator or double-modifier shortcut through onChange',
   )
 })
@@ -272,42 +272,37 @@ check('native double-modifier hotkey layer supports Command, Shift, and Option',
   )
 })
 
-check('native double-modifier registration requests macOS Accessibility trust', () => {
+check('native double-modifier registration avoids Accessibility-only event taps', () => {
   assertHas(
     files.tauriHotkeys,
-    /AXIsProcessTrustedWithOptions/,
-    'native double-modifier registration should ask macOS for Accessibility trust before creating the event tap',
+    /NSEvent global and local monitors installed|addGlobalMonitorForEventsMatchingMask/,
+    'native double-modifier registration should use NSEvent monitor based routing',
   )
-  assertHas(
+  assertDoesNotHave(
     files.tauriHotkeys,
-    /AXTrustedCheckOptionPrompt/,
-    'native Accessibility trust check should request the system prompt for GitHub/release installs',
-  )
-  assertHas(
-    files.tauriHotkeys,
-    /Accessibility permission is required for double-modifier global shortcuts/,
-    'native hotkey status should expose a recognizable Accessibility failure',
+    /AXIsProcessTrustedWithOptions|AXTrustedCheckOptionPrompt|Accessibility permission is required for double-modifier global shortcuts/,
+    'native double-modifier registration should not expose stale Accessibility event-tap requirements',
   )
 })
 
-check('App global keydown handler ignores shortcut recorder events', () => {
+check('shortcut recorder marks active hotkey recording sessions', () => {
   assertHas(
-    files.app,
-    /is(?:Global)?ShortcutRecordingEvent|isHotkeyRecordingEvent|data-(?:shortcut|hotkey)-recorder|__FLUXTEXT_HOTKEY_RECORDING__/,
-    'App should be able to identify active Settings shortcut recording events',
+    files.shortcutRecorder,
+    /__FLUXTEXT_HOTKEY_RECORDING__/,
+    'ShortcutRecorder should mark active recording sessions for any host-level key routing',
   )
-  assertHas(
+  assertDoesNotHave(
     files.app,
-    /if\s*\([^)]*(?:is(?:Global)?ShortcutRecordingEvent|isHotkeyRecordingEvent|data-(?:shortcut|hotkey)-recorder|__FLUXTEXT_HOTKEY_RECORDING__)[\s\S]{0,160}return/,
-    'App keydown capture handler should return before opening launchers/palette while Settings is recording',
+    /setCommandPaletteOpen\(true\)|openGlobalLauncher\(['"]full['"]\)/,
+    'launcher runtime should not retain retired app-level keydown launcher routes that can steal recorder input',
   )
 })
 
 check('launcher runtime installs the global pinned launcher hotkey coordinator', () => {
   assertHas(
     files.app,
-    /function LauncherWindowApp[\s\S]*installGlobalPinnedLauncherHotkeys\(\)/,
-    'LauncherWindowApp should install global pinned launcher hotkeys because launcher is the default runtime window',
+    /function LauncherRuntimeApp[\s\S]*installGlobalPinnedLauncherHotkeys\(\)/,
+    'LauncherRuntimeApp should install global pinned launcher hotkeys because launcher is the default runtime window',
   )
 })
 

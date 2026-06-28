@@ -1,5 +1,10 @@
-import { SettingsView } from '../views/SettingsView'
+import { SurfaceShell } from './SurfaceShell'
+import { SettingsSurfaceContent } from './SettingsSurfaceContent'
 
 export function SettingsSurface() {
-  return <SettingsView />
+  return (
+    <SurfaceShell id="settings" kind="settings" title="Settings">
+      <SettingsSurfaceContent />
+    </SurfaceShell>
+  )
 }

@@ -152,13 +152,19 @@ function assertTextDiffCanBeFoundAndFailureIsVisible() {
 function assertLauncherApiExposesPaneCreation() {
   assert.match(
     read('src/workspace/launcher/types.ts'),
-    /createPane\(options\?:\s*\{[\s\S]*direction\?:\s*['"]left['"]\s*\|\s*['"]right['"]\s*\|\s*['"]top['"]\s*\|\s*['"]bottom['"][\s\S]*\}\):\s*string/,
-    'PluginLauncherApi should expose generic pane creation for plugin-owned launcher flows',
+    /createPane\(options\?:\s*\{[\s\S]*direction\?:\s*['"]left['"]\s*\|\s*['"]right['"]\s*\|\s*['"]top['"]\s*\|\s*['"]bottom['"][\s\S]*\}\):\s*Promise<string \| undefined>/,
+    'PluginLauncherApi should expose async editor-pane creation for plugin-owned launcher flows',
   )
+  const pluginApi = read('src/workspace/launcher/pluginApi.ts')
   assert.match(
-    read('src/workspace/launcher/pluginApi.ts'),
-    /createPane:\s*\(options\)\s*=>\s*useWorkspaceStore\.getState\(\)\.createPane\(options\)/,
-    'PluginLauncherApi createPane should delegate to the workspace API',
+    pluginApi,
+    /createPane:\s*\(options\)\s*=>\s*createEditorPane\(options\)/,
+    'PluginLauncherApi createPane should route through the editor bridge',
+  )
+  assert.doesNotMatch(
+    pluginApi,
+    /createPane:\s*\(options\)[\s\S]{0,160}useWorkspaceStore\.getState\(\)\.createPane\(options\)/,
+    'Launcher PluginLauncherApi must not directly mutate editor workspace panes',
   )
 }
 

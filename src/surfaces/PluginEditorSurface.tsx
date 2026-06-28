@@ -1,5 +1,10 @@
-import { PluginEditorView } from '../views/PluginEditorView'
+import { PluginEditorSurfaceContent } from './PluginEditorSurfaceContent'
+import { SurfaceShell } from './SurfaceShell'
 
 export function PluginEditorSurface() {
-  return <PluginEditorView />
+  return (
+    <SurfaceShell id="plugin-editor" kind="plugins" title="Plugin Editor">
+      <PluginEditorSurfaceContent />
+    </SurfaceShell>
+  )
 }

@@ -15,7 +15,7 @@ function assertNotHas(source, pattern, message) {
 
 const files = {
   packageJson: read('package.json'),
-  scriptsView: read('src/views/ScriptsView.tsx'),
+  scriptsView: read('src/views/ScriptsView.tsx') + '\n' + read('src/surfaces/PluginsManagerSurfaceContent.tsx'),
   pluginRuntime: read('src/workspace/pluginRuntime.ts'),
   pluginTypes: read('src/workspace/pluginTypes.ts'),
   configInit: read('src/configInit.ts'),

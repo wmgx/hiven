@@ -22,8 +22,8 @@ const files = {
   workspaceTypes: read('src/workspace/types.ts'),
   effectRunner: read('src/workspace/effectRunner.ts'),
   pinnedRuntime: read('src/workspace/pinnedActionRuntime.ts'),
-  pinnedRunner: read('src/views/PinnedRunnerView.tsx'),
   pinnedFactory: read('src/workspace/pinnedActionFactory.ts'),
+  pinnedPluginCommandRunner: read('src/workspace/pinnedPluginCommandRunner.ts'),
 }
 
 assertHas(files.packageJson, /test:pinned-runner-policy/, 'package.json should expose pinned runner policy verifier')
@@ -43,14 +43,17 @@ assertHas(files.store, /pruneIdlePinnedRuntimes/, 'store should use pruneIdlePin
 assertHas(files.pinnedRuntime, /_tombstone|tombstone/, 'activatePinnedRuntime should accept tombstone data')
 assertHas(files.pinnedRuntime, /outputSummary[\s\S]*stale|stale[\s\S]*outputSummary/, 'tombstone restore should mark output summary stale instead of restoring full output')
 
-assertHas(files.app, /useEffect[\s\S]*prunePinnedRuntimes/, 'App should schedule idle runtime pruning outside the PinnedRunnerView lifecycle')
-assertNotHas(files.pinnedRunner, /setInterval\(\(\)\s*=>\s*prunePinnedRuntimes/, 'PinnedRunnerView should not own the root idle-prune scheduler')
+assertHas(files.app, /useEffect[\s\S]*prunePinnedRuntimes/, 'App should schedule idle runtime pruning outside any pinned runner UI lifecycle')
+assert.equal(fs.existsSync('src/views/PinnedRunnerView.tsx'), false, 'PinnedRunnerView should be retired with the main-window navigation shell')
+assert.equal(fs.existsSync('src/components/Sidebar.tsx'), false, 'Sidebar should be retired with the main-window navigation shell')
+assertNotHas(files.store, /export\s+type\s+ViewId\b|\bactiveView\b|\bsetActiveView\b/, 'Pinned runtime state must not reintroduce ViewId navigation')
+
 assertHas(files.pinnedFactory, /sideEffects\s*!==\s*['"]writes['"][\s\S]*trigger\s*!==\s*['"]manual['"]|trigger\s*!==\s*['"]manual['"][\s\S]*sideEffects\s*!==\s*['"]writes['"]/, 'writes side-effect commands should default to manual run')
 assertHas(files.pinnedFactory, /autoRun:\s*shouldAutoRunLiveAction\(command\.live\)/, 'pinned plugin commands should derive autoRun from live capability metadata')
 assertHas(files.store, /serializePinnedTombstones[\s\S]*tombstoneTtlDays[\s\S]*disposedAt/, 'persisted tombstones should be pruned by tombstoneTtlDays')
-assertHas(files.pinnedRunner, /liveTrigger[\s\S]*['"]on-blur['"]/, 'PinnedRunnerView should resolve live.trigger including on-blur')
-assertHas(files.pinnedRunner, /liveTrigger\s*===\s*['"]on-blur['"][\s\S]*return[\s\S]*window\.setTimeout|liveTrigger\s*!==\s*['"]on-blur['"][\s\S]*window\.setTimeout|window\.setTimeout[\s\S]*liveTrigger\s*!==\s*['"]on-blur['"]/, 'PinnedRunnerView should only debounce input changes for non on-blur triggers')
-assertHas(files.pinnedRunner, /onDidBlurEditorWidget[\s\S]*runPinnedAction|runPinnedAction[\s\S]*onDidBlurEditorWidget/, 'Pinned input editor should run on Monaco blur for on-blur live actions')
+assertHas(files.store, /activatePinnedAction:[\s\S]*activePinnedActionId:\s*pinnedId[\s\S]*activatePinnedRuntime/, 'pinned action activation should stay in the runtime layer')
+assertHas(files.pinnedPluginCommandRunner, /runPinnedPluginCommandToPatch[\s\S]*runTextPluginCommand/, 'pinned plugin commands should still run through the non-UI runner')
+assertHas(files.pinnedPluginCommandRunner, /runPinnedLauncherItemToPatch/, 'pinned launcher items should still run through the non-UI runner')
 
 const restoredPreview = restorePinnedFromTombstone({
   id: 'pinned-1',
@@ -81,21 +84,5 @@ const restoredPreview = restorePinnedFromTombstone({
   reason: 'idle-timeout',
 })
 assert.equal(restoredPreview.outputKind, 'stale', 'restored tombstone previews should be stale so Apply remains disabled')
-
-assertHas(files.pinnedRunner, /markPinnedOutputStale[\s\S]*outputKind:\s*['"]stale['"]/, 'Manual input or param edits should mark existing output stale')
-assertHas(files.pinnedRunner, /onClick=\{\(\)\s*=>\s*updateInputText\(['"]{2}\)\}[\s\S]*title=['"]Clear Input['"]/, 'Clear Input should share the stale-output input update path')
-assertHas(files.pinnedRunner, /const\s+canApplyOutput\s*=\s*!!pinned\?\.outputText[\s\S]*pinned\.outputKind\s*!==\s*['"]error['"][\s\S]*pinned\.outputKind\s*!==\s*['"]stale['"]/, 'PinnedRunnerView should not apply empty, error, or stale output')
-assertHas(files.pinnedRunner, /isCurrentPinnedRun[\s\S]*pendingRunId\s*!==\s*runId[\s\S]*disposed/, 'disposed or superseded pinned runs should not write stale output')
-assertHas(files.pinnedRunner, /import\s+Editor\s+from\s+['"]@monaco-editor\/react['"]/, 'PinnedRunnerView should use Monaco Editor for input/output buffers')
-assertHas(files.pinnedRunner, /runtimeRegistry\.registerCodeEditor\([^)]*editorId[^)]*editor/, 'PinnedRunnerView should register pinned input/output editors in the runtime registry')
-assertHas(files.pinnedRunner, /path=\{modelId\}/, 'PinnedRunnerView should bind Monaco models to pinned runtime model ids')
-assertNotHas(files.pinnedRunner, /<textarea\b/, 'PinnedRunnerView should not render textarea buffers once Monaco runtime buffers exist')
-assertHas(files.pinnedRunner, /disabled=\{!canApplyOutput\}/, 'Apply should be disabled for empty or error output')
-assertHas(files.pinnedRunner, /applyEffects\(\[\{\s*type:\s*['"]text\.replace['"][\s\S]*target:\s*['"]active-input['"]/, 'Apply should write through the Effect Runner text.replace path')
-assertHas(files.pinnedRunner, /applyEffects\(\[\{\s*type:\s*['"]pane\.create['"][\s\S]*text:\s*pinned\.outputText/, 'Send New Pane should write through the Effect Runner pane.create path')
-assertHas(files.pinnedRunner, /type:\s*['"]panel\.openV2['"][\s\S]*scope:\s*\{\s*type:\s*['"]pinned-action['"],\s*pinnedId:\s*pinned\.id\s*\}/, 'Custom controls should open a pinned-action scoped panel')
-assertNotHas(files.pinnedRunner, /onClick=\{\(\)\s*=>\s*applyOutputToActivePane\(pinned\.outputText\)\}/, 'Apply should not blindly write empty/error output to the active pane')
-assertNotHas(files.pinnedRunner, /useWorkspaceStore\(\(s\)\s*=>\s*s\.setActivePaneText\)/, 'PinnedRunnerView should not bypass Effect Runner for Apply')
-assertNotHas(files.pinnedRunner, /useWorkspaceStore\(\(s\)\s*=>\s*s\.createPane\)/, 'PinnedRunnerView should not bypass Effect Runner for Send New Pane')
 
 console.log('pinned runner policy checks passed')

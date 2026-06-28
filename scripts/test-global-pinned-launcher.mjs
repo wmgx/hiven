@@ -21,12 +21,30 @@ function readOptional(path) {
 
 const files = {
   packageJson: read('package.json'),
-  globalLauncher: read('src/components/GlobalLauncher.tsx'),
-  commandPalette: read('src/components/CommandPalette.tsx'),
+  globalLauncher: [
+    read('src/components/GlobalLauncher.tsx'),
+    read('src/launcher/hosts/GlobalLauncherHost.tsx'),
+    read('src/components/launcher/GlobalLauncherFrames.tsx'),
+    read('src/components/launcher/GlobalLauncherKeyboard.ts'),
+    read('src/components/launcher/GlobalLauncherLayout.ts'),
+    read('src/components/launcher/GlobalLauncherClose.ts'),
+    read('src/components/launcher/GlobalLauncherSelection.ts'),
+    read('src/components/launcher/GlobalLauncherSurfaceRegistry.ts'),
+    read('src/components/launcher/GlobalLauncherWindowLifecycle.ts'),
+    read('src/components/launcher/GlobalLauncherSurfaceFrame.ts'),
+    read('src/components/launcher/GlobalLauncherResults.ts'),
+    read('src/components/launcher/GlobalLauncherItems.ts'),
+    read('src/components/launcher/LauncherMixedList.tsx'),
+  ].join('\n'),
+  commandPalette: [
+    read('src/components/CommandPalette.tsx'),
+    read('src/launcher/hosts/EditorCommandBarHost.tsx'),
+  ].join('\n'),
   corePlugin: readOptional('src/workspace/corePlugin.ts'),
   hostActions: read('src/workspace/launcher/hostActions.ts'),
   builtinIndex: read('src/builtin-plugins/index.json'),
   app: read('src/App.tsx'),
+  launcherList: read('src/components/launcher/LauncherMixedList.tsx'),
   globalPinnedLauncherHotkeys: read('src/hotkeys/globalPinnedLauncher.ts'),
   main: read('src/main.tsx'),
   indexCss: read('src/index.css'),
@@ -105,23 +123,23 @@ check('main panel launcher command is contributed by host launcher actions', () 
   )
   assertHas(
     files.hostActions,
-    /systemKey:\s*['"]host:view:editor['"][\s\S]{0,520}showMainPanel\(\)/,
-    'host launcher actions should contribute the main panel command through the launcher API',
+    /systemKey:\s*['"]host:pane:new['"][\s\S]{0,520}createEditorPane\(\{/,
+    'host launcher actions should create editor panes through the editor bridge',
   )
   assertHas(
     files.hostActions,
-    /systemKey:\s*['"]host:view:editor['"][\s\S]{0,520}surfaces:\s*\[\s*['"]global-launcher['"]\s*\]/,
-    'main panel launcher action should only appear in the global launcher',
+    /systemKey:\s*['"]host:pane:new['"][\s\S]{0,520}surfaces:\s*\[\s*['"]global-launcher['"]\s*\]/,
+    'new pane launcher action should only appear in the global launcher',
+  )
+  assert.doesNotMatch(
+    files.hostActions,
+    /core-pane\.show-main-panel|show-main-panel/,
+    'retired main-panel usage keys should not be carried into editor-pane actions',
   )
   assertHas(
     files.hostActions,
-    /legacyUsageKeys:\s*\[[\s\S]*['"]show-main-panel['"][\s\S]*['"]core-pane\.show-main-panel['"][\s\S]*\]/,
-    'host main panel item should preserve usage ranking from the retired core-pane action',
-  )
-  assertHas(
-    files.app,
-    /listen\(['"]hiven:\/\/show-main-panel['"][\s\S]{0,260}setActiveView\(['"]editor['"]\)/,
-    'main window should handle show-main-panel requests from the standalone launcher',
+    /createEditorPane\(\{[\s\S]{0,160}focus:\s*true/,
+    'standalone launcher pane actions should route through the editor bridge',
   )
   assert.doesNotMatch(
     files.globalLauncher,
@@ -153,29 +171,29 @@ check('global launcher renders a single ranked list without category sections', 
   )
   assertHas(
     files.globalLauncher,
-    /<LauncherList[\s\S]{0,160}items=\{visibleFiltered\}/,
+    /items=\{visibleFiltered\}/,
     'GlobalLauncher should render the ranked filtered list directly',
   )
 })
 
 check('global launcher keeps keyboard selection visible while navigating', () => {
   assertHas(
-    files.globalLauncher,
-    /function\s+LauncherList[\s\S]*selected[\s\S]*<LauncherListItem/,
+    files.launcherList,
+    /function\s+LauncherMixedList[\s\S]*selected[\s\S]*<LauncherMixedListItem/,
     'LauncherList should render item rows through a component that can react when selected changes',
   )
   assertHas(
-    files.globalLauncher,
-    /function\s+LauncherListItem[\s\S]*useRef<HTMLButtonElement>[\s\S]*scrollIntoView\(\{\s*block:\s*['"]nearest['"]\s*\}\)/,
+    files.launcherList,
+    /function\s+LauncherMixedListItem[\s\S]*useRef<HTMLButtonElement>[\s\S]*scrollIntoView\(\{\s*block:\s*['"]nearest['"]\s*\}\)/,
     'GlobalLauncher selected rows should scroll into view as keyboard navigation changes selection',
   )
 })
 
 check('main window supports Cmd or Ctrl K as an in-app global launcher shortcut', () => {
-  assertHas(
+  assert.doesNotMatch(
     files.app,
-    /\(e\.metaKey\s*\|\|\s*e\.ctrlKey\)[\s\S]{0,180}!e\.shiftKey[\s\S]{0,180}e\.key\.toLowerCase\(\)\s*===\s*['"]k['"][\s\S]{0,180}setCommandPaletteOpen\(true\)/,
-    'MainApp should open the in-app launcher with Cmd/Ctrl+K when not recording shortcuts',
+    /e\.key\.toLowerCase\(\)\s*===\s*['"]k['"][\s\S]{0,180}setCommandPaletteOpen\(true\)/,
+    'retired main window should not own a local Cmd/Ctrl+K command palette path',
   )
   assert.doesNotMatch(
     files.app,
@@ -248,7 +266,7 @@ check('global launcher reuses shared search ranking logic', () => {
 check('selecting a pinned item still opens the pinned action', () => {
   assertHas(
     files.globalLauncher,
-    /item\.kind\s*===\s*['"]pinned['"][\s\S]{0,180}openPinnedAction\(item\.id\)|openPinnedAction\(item\.id\)[\s\S]{0,180}item\.kind\s*===\s*['"]pinned['"]/,
+    /item\.kind\s*===\s*['"]pinned['"][\s\S]{0,240}finishPinnedLauncherSelection\([\s\S]{0,240}pinnedId:\s*item\.id[\s\S]*openPinnedAction\(pinnedId\)/,
     'selecting a pinned launcher item should call openPinnedAction(item.id)',
   )
 })
@@ -261,7 +279,7 @@ check('standalone domain launcher items stay on the launcher controller path', (
   )
   assertHas(
     files.globalLauncher,
-    /item\.kind\s*===\s*['"]domain['"][\s\S]*executeDomainItem\(item\.domainItem[\s\S]*function\s+executeDomainItem[\s\S]*controller\.selectItem\(item(?:,\s*\{[\s\S]{0,80}\})?\)/,
+    /item\.kind\s*===\s*['"]domain['"][\s\S]*executeDomainItem\(item\.domainItem[\s\S]*function\s+executeDomainItem[\s\S]*executeGlobalLauncherDomainItem[\s\S]*controller\.selectItem\(item(?:,\s*\{[\s\S]{0,80}\})?\)/,
     'domain launcher items should execute through LauncherController so output keeps the launcher open',
   )
 })
@@ -292,13 +310,13 @@ check('App listens for the Tauri open-pinned-launcher event', () => {
   )
   assertHas(
     files.app,
-    /listen\([\s\S]{0,120}hiven:\/\/open-pinned-launcher|hiven:\/\/open-pinned-launcher[\s\S]{0,120}listen\(/,
-    'App should listen for the hiven://open-pinned-launcher event',
+    /listen\([\s\S]{0,120}hiven:\/\/launcher-open|hiven:\/\/launcher-open[\s\S]{0,120}listen\(/,
+    'App should listen for the hiven://launcher-open event',
   )
   assertHas(
     files.app,
-    /show_launcher_window/,
-    'Tauri event handler should open the standalone launcher window',
+    /openGlobalLauncherOverlay\(['"]pinned-only['"]\)/,
+    'launcher-open event handler should open the standalone launcher runtime overlay',
   )
 })
 
@@ -654,7 +672,7 @@ check('standalone launcher closes on Escape without bubbling to the app', () => 
   )
   assertHas(
     files.globalLauncher,
-    /invoke\(\s*['"]hide_launcher_window['"]\s*\)/,
+    /hideLauncherWindow\(\)/,
     'canceling the standalone launcher should only hide the launcher window',
   )
   assert.doesNotMatch(
@@ -667,7 +685,7 @@ check('standalone launcher closes on Escape without bubbling to the app', () => 
 check('standalone launcher closes when its window loses focus', () => {
   assertHas(
     files.globalLauncher,
-    /onFocusChanged\([\s\S]{0,220}payload:\s*focused[\s\S]{0,160}if\s*\(!focused\)\s*closeLauncher\(\)/,
+    /onFocusChanged\([\s\S]{0,220}payload:\s*focused[\s\S]{0,220}if\s*\(!focused[\s\S]{0,80}\)\s*closeLauncher\(\)/,
     'standalone launcher should hide itself when the launcher window loses focus',
   )
   assertHas(
@@ -677,7 +695,7 @@ check('standalone launcher closes when its window loses focus', () => {
   )
   assertHas(
     files.globalLauncher,
-    /if\s*\(open\)\s*return[\s\S]{0,220}setSurfaceFrame\(null\)/,
+    /if\s*\(open\)\s*return[\s\S]{0,320}controllerReset\(\)/,
     'closed launcher state should not retain a plugin surface for the next open',
   )
 })
@@ -698,20 +716,10 @@ check('global shortcut routes to in-app command palette when the editor window i
     /routeGlobalPinnedLauncherShortcut/,
     'global shortcut callbacks should share a foreground-aware launcher route',
   )
-  assertHas(
+  assert.doesNotMatch(
     files.globalPinnedLauncherHotkeys,
-    /getCurrentWindow\(\)\.isFocused\(\)/,
-    'global shortcut route should inspect whether the main window is currently focused',
-  )
-  assertHas(
-    files.globalPinnedLauncherHotkeys,
-    /activeView\s*!={1,2}\s*['"]editor['"][\s\S]{0,80}return\s+false/,
-    'global shortcut route should reject in-app command palette routing outside the editor view',
-  )
-  assertHas(
-    files.globalPinnedLauncherHotkeys,
-    /shouldOpenCommandPaletteInMainWindow\(\)[\s\S]{0,180}setCommandPaletteOpen\(true\)/,
-    'when the focused app window is the editor, global shortcut should open the in-app command palette',
+    /getCurrentWindow\(\)\.isFocused\(\)|activeView|setCommandPaletteOpen\(true\)/,
+    'global shortcut routing should no longer depend on the retired main/editor view shell',
   )
   assertHas(
     files.globalPinnedLauncherHotkeys,
@@ -733,15 +741,10 @@ check('native double-modifier opens standalone launcher directly when the main w
     /std::thread::spawn/,
     'native double-modifier callback should hand off routing work instead of doing window operations inside CGEventTap',
   )
-  assertHas(
+  assert.doesNotMatch(
     routePinnedLauncherFn,
-    /get_webview_window\("main"\)[\s\S]{0,180}is_focused\(\)/,
-    'native double-modifier routing should inspect whether the main window is focused',
-  )
-  assertHas(
-    routePinnedLauncherFn,
-    /if\s+main_window_focused[\s\S]{0,180}emit\(ROUTE_GLOBAL_PINNED_LAUNCHER_SHORTCUT_EVENT/,
-    'native double-modifier routing should preserve the in-app command palette route when the main window is focused',
+    /get_webview_window\("main"\)[\s\S]{0,180}is_focused\(\)|main_window_focused/,
+    'native double-modifier routing should no longer depend on the retired main window focus state',
   )
   assertHas(
     routePinnedLauncherFn,

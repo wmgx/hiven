@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 
 function read(path) {
@@ -31,14 +31,14 @@ const files = {
   app: read('src/App.tsx'),
   store: read('src/store.ts'),
   css: read('src/index.css'),
-  sidebar: read('src/components/Sidebar.tsx'),
   editor: read('src/views/EditorView.tsx'),
-  scripts: read('src/views/ScriptsView.tsx'),
-  settings: read('src/views/SettingsView.tsx'),
-  pinned: read('src/views/PinnedRunnerView.tsx'),
-  pluginEditor: read('src/views/PluginEditorView.tsx'),
+  scripts: read('src/views/ScriptsView.tsx') + '\n' + read('src/surfaces/PluginsManagerSurfaceContent.tsx'),
+  settings: read('src/views/SettingsView.tsx') + '\n' + read('src/surfaces/SettingsSurfaceContent.tsx'),
+  pluginEditor: read('src/views/PluginEditorView.tsx') + '\n' + read('src/surfaces/PluginEditorSurfaceContent.tsx'),
   commandPalette: read('src/components/CommandPalette.tsx'),
-  globalLauncher: read('src/components/GlobalLauncher.tsx'),
+  launcherDomainSearchStep: read('src/components/launcher/LauncherDomainSearchStep.tsx'),
+  launcherMixedList: read('src/components/launcher/LauncherMixedList.tsx'),
+  globalLauncher: read('src/launcher/hosts/GlobalLauncherHost.tsx') + '\n' + read('src/components/launcher/GlobalLauncherWindowLifecycle.ts'),
   paneEditor: read('src/components/workspace/PaneEditor.tsx'),
   dualEditor: read('src/kits/ui/DualEditorView.tsx'),
   monacoTheme: read('src/utils/monacoTheme.ts'),
@@ -61,13 +61,9 @@ has(files.app, /flux-spatial-shell/, 'App should wrap the launcher runtime in a 
 
 has(files.css, /body\[data-theme=['"]dark['"]\]/, 'CSS should define the dark theme token scope')
 has(files.css, /body\[data-theme=['"]light['"]\]/, 'CSS should define the light theme token scope')
-has(files.css, /--sidebar-w:\s*44px/, 'CSS should expose demo-compatible sidebar width')
 notHas(files.css, /\.flux-titlebar\b|\.flux-titlebar-logo\b|\.flux-titlebar-kbd\b|\.flux-titlebar-spacer\b/, 'CSS should not keep custom titlebar styles after the titlebar is removed')
-has(files.css, /\.flux-sidebar\b/, 'CSS should style the spatial sidebar')
-has(files.sidebar, /createPortal\([\s\S]{0,360}className=["']sidebar-tooltip visible["'][\s\S]{0,360}document\.body/, 'Sidebar tooltips should portal to body so editor chrome cannot cover them')
-has(files.sidebar, /data-theme=\{theme\}/, 'Portaled sidebar tooltips should carry the current app theme')
-has(files.css, /\.sidebar-tooltip\s*\{[\s\S]{0,180}position:\s*fixed;[\s\S]{0,180}z-index:\s*9999;/, 'Sidebar tooltips should render as viewport-level overlays')
-has(files.css, /\.sidebar-tooltip\[data-theme=['"]light['"]\]\s*\{[\s\S]{0,140}--sidebar-tooltip-bg:\s*#111113;/, 'Light theme sidebar tooltips should use a dark ink surface for contrast')
+assert.equal(existsSync('src/components/Sidebar.tsx'), false, 'retired main-window Sidebar component should be removed')
+assert.equal(existsSync('src/views/PinnedRunnerView.tsx'), false, 'retired main-window PinnedRunnerView component should be removed')
 has(files.css, /\.glass\b/, 'CSS should include the shared glass panel utility')
 has(files.css, /\.btn-primary\b/, 'CSS should include spec primary buttons')
 has(files.css, /\.toggle(?:\s|\{|,)/, 'CSS should include spec toggle controls')
@@ -78,17 +74,14 @@ notHas(files.editor, /status-dot ready|editor-topbar-status/, 'Editor topbar sho
 has(files.css, /\.status-dot\.running\b/, 'CSS should include running status dots')
 has(files.css, /\.status-dot\.error-dot\b/, 'CSS should include error status dots')
 
-has(files.sidebar, /className=.*flux-sidebar/s, 'Sidebar should use the spatial sidebar component')
-has(files.sidebar, /className=.*sidebar-btn/s, 'Sidebar buttons should use the spec sidebar button class')
 has(files.editor, /className=.*btn.*btn-ghost.*btn-sm/s, 'Editor toolbar action should use spec button classes')
 has(files.scripts, /seg-control sm/, 'Scripts view should use segmented controls for plugin tabs')
 has(files.scripts, /className=.*card/s, 'Scripts view plugin rows should use spec card classes')
 has(files.settings, /function ThemeSettings|settings\.theme/, 'Settings should expose theme controls')
 has(files.settings, /className=.*toggle/s, 'Settings toggles should use the spec toggle component')
-has(files.pinned, /pinned-cols|pinned-col/, 'Pinned runner should keep the demo two-column spatial layout classes')
 has(files.pluginEditor, /file-tree|tree-node/, 'Plugin editor should use file tree node component classes')
-has(files.commandPalette, /cmd-item/, 'Command palette should render spec command items')
-has(files.globalLauncher, /cmd-item/, 'Global launcher should render spec command items')
+has(files.commandPalette, /EditorCommandBarHost/, 'Command palette compatibility wrapper should delegate to the editor command bar host')
+has(files.launcherDomainSearchStep + files.launcherMixedList, /cmd-item/, 'Shared launcher rows should render spec command items')
 has(files.globalLauncher, /global-launcher-panel/, 'Global launcher should use a bounded panel component')
 has(files.globalLauncher, /startDragging\(\)/, 'Standalone global launcher should drag the native window instead of moving inside its own bounds')
 has(files.store, /globalLauncherWindowPosition\??:\s*GlobalLauncherPosition/, 'Global launcher should persist its dragged native window position separately from in-app panel position')

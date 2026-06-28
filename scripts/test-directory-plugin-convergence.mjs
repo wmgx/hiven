@@ -17,8 +17,8 @@ function readIfExists(path) {
 
 const files = {
   packageJson: read('package.json'),
-  scriptsView: read('src/views/ScriptsView.tsx'),
-  settingsView: read('src/views/SettingsView.tsx'),
+  scriptsView: read('src/views/ScriptsView.tsx') + '\n' + read('src/surfaces/PluginsManagerSurfaceContent.tsx'),
+  settingsView: read('src/views/SettingsView.tsx') + '\n' + read('src/surfaces/SettingsSurfaceContent.tsx'),
   pluginRuntime: read('src/workspace/pluginRuntime.ts'),
   pluginStore: read('src/workspace/pluginStore.ts'),
   pluginTypes: read('src/workspace/pluginTypes.ts'),
@@ -28,7 +28,7 @@ const files = {
   pluginsSurface: readIfExists('src/surfaces/PluginsSurface.tsx'),
   pluginSurfaceRenderer: readIfExists('src/components/pluginSurface/PluginSurfaceRenderer.tsx'),
   tauriLib: read('src-tauri/src/lib.rs'),
-  pluginEditorView: readIfExists('src/views/PluginEditorView.tsx'),
+  pluginEditorView: readIfExists('src/views/PluginEditorView.tsx') + '\n' + readIfExists('src/surfaces/PluginEditorSurfaceContent.tsx'),
   pluginDebugRunner: readIfExists('src/workspace/pluginDebugRunner.ts'),
   pluginHostSdk: readIfExists('src/pluginHostSdk.ts'),
   pluginScaffold: readIfExists('src/workspace/pluginScaffold.ts'),
@@ -361,7 +361,7 @@ check('PluginEditorView is a read-only source viewer with directory tree and no 
 
 check('Plugin management is hosted as a surface instead of main-window view content', () => {
   assert.doesNotMatch(files.app, /ViewContent|class\s+ViewErrorBoundary|<ScriptsView|<PluginEditorView/, 'Launcher runtime App should not mount legacy plugin view content')
-  assert.match(files.pluginsSurface, /<ScriptsView\s*\/>/, 'PluginsSurface should host the plugin manager view')
+  assert.match(files.pluginsSurface, /<PluginsManagerSurfaceContent\s*\/>/, 'PluginsSurface should host the plugin manager surface content')
   assert.match(files.pluginsSurface, /<PluginEditorSurface\s*\/>/, 'PluginsSurface should host the plugin editor surface')
   assert.match(files.pluginSurfaceRenderer, /PluginSurfaceErrorBoundary|surfaceState\.status === 'error'/, 'Plugin surface renderer should isolate plugin surface render failures')
 })

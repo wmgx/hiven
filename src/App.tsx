@@ -22,6 +22,8 @@ import './panels/register'
 registerHostLauncherProviders()
 registerBundledPluginPackages()
 
+const PINNED_RUNTIME_PRUNE_INTERVAL_MS = 60_000
+
 export default function App() {
   return <LauncherRuntimeApp />
 }
@@ -103,6 +105,13 @@ function LauncherRuntimeApp() {
 
   useEffect(() => installGlobalPinnedLauncherHotkeys(), [])
   useEffect(() => installPluginSurfaceShortcutHotkeys(), [])
+
+  useEffect(() => {
+    const prunePinnedRuntimes = () => useAppStore.getState().prunePinnedRuntimes()
+    prunePinnedRuntimes()
+    const timer = window.setInterval(prunePinnedRuntimes, PINNED_RUNTIME_PRUNE_INTERVAL_MS)
+    return () => window.clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
