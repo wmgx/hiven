@@ -69,6 +69,7 @@ const files = {
   hostActions: read('src/workspace/launcher/hostActions.ts'),
   registry: read('src/workspace/launcher/registry.ts'),
   pluginApi: read('src/workspace/launcher/pluginApi.ts'),
+  pluginSettingsStore: read('src/workspace/pluginSettingsStore.ts'),
   pluginHostCore: read('src/pluginHostCore.ts'),
   workspaceTypes: read('src/workspace/types.ts'),
   effectRunner: read('src/workspace/effectRunner.ts'),
@@ -172,6 +173,8 @@ assert.match(files.commandPalette, /return <EditorCommandBar \/>/, 'CommandPalet
 assert.match(files.editorWindow, /<EditorCommandBar \/>/, 'EditorWindow must host the local editor command bar directly')
 assert.doesNotMatch(files.editorWindow, /CommandPalette/, 'EditorWindow runtime must not mount the retired CommandPalette compatibility wrapper')
 assert.match(files.globalLauncher, /return <GlobalLauncherHost \/>/, 'GlobalLauncher must be a compatibility wrapper')
+assert.doesNotMatch(files.pluginSettingsStore, /surfaceId\?:\s*['"]command-palette['"]|['"]command-palette['"]\s*\|\s*['"]global-launcher['"]/, 'plugin settings context must not model retired command-palette surface ids')
+assert.match(files.pluginSettingsStore, /LauncherHostId/, 'plugin settings context must use launcher host ids')
 assert.doesNotMatch(files.store, /PaletteParamModel|command-palette parameter/, 'shared launcher param model must not use retired command palette naming')
 assert.match(files.store, /LauncherParamModel/, 'shared launcher param model must use launcher naming')
 assert.match(files.store, /editorCommandBarOpen:\s*boolean/, 'app store must model the editor command bar as editorCommandBarOpen')
