@@ -69,6 +69,14 @@ export async function startCurrentLauncherWindowDrag(): Promise<void> {
   await getCurrentWindow().startDragging()
 }
 
+export async function restoreCurrentLauncherOverlayWindow(options: { hide?: boolean } = {}): Promise<void> {
+  if (!isTauriRuntime()) return
+  const { getCurrentWindow } = await import('@tauri-apps/api/window')
+  const win = getCurrentWindow()
+  await win.setDecorations(true)
+  if (options.hide) await win.hide()
+}
+
 function isTauriRuntime(): boolean {
   return Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
 }

@@ -1,4 +1,4 @@
-import { hideLauncherWindow } from '../../workspace/windowManager/launcherWindow'
+import { hideLauncherWindow, restoreCurrentLauncherOverlayWindow } from '../../workspace/windowManager/launcherWindow'
 
 export async function closeGlobalLauncherWindow({
   standaloneLauncher,
@@ -26,10 +26,7 @@ export async function closeGlobalLauncherWindow({
 
   if (overlay) {
     try {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window')
-      const win = getCurrentWindow()
-      await win.setDecorations(true)
-      if (hideOverlayWindow) await win.hide()
+      await restoreCurrentLauncherOverlayWindow({ hide: hideOverlayWindow })
     } catch (error) {
       console.warn('[hiven] Failed to restore launcher window:', error)
     }
@@ -71,9 +68,7 @@ export async function finishPinnedLauncherSelection({
 
   if (overlay) {
     try {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window')
-      const win = getCurrentWindow()
-      await win.setDecorations(true)
+      await restoreCurrentLauncherOverlayWindow()
     } catch (error) {
       console.warn('[hiven] Failed to restore launcher window:', error)
     }

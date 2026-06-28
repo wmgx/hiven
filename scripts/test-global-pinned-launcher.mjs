@@ -687,6 +687,26 @@ check('standalone launcher closes on Escape without bubbling to the app', () => 
     /hideLauncherWindow\(\)/,
     'canceling the standalone launcher should only hide the launcher window',
   )
+  assertHas(
+    files.globalLauncher,
+    /restoreCurrentLauncherOverlayWindow\(\{\s*hide:\s*hideOverlayWindow\s*\}\)/,
+    'overlay launcher close should restore and optionally hide through the window manager',
+  )
+  assertHas(
+    files.globalLauncher,
+    /restoreCurrentLauncherOverlayWindow\(\)/,
+    'overlay pinned selection should restore decorations through the window manager',
+  )
+  assert.doesNotMatch(
+    read('src/components/launcher/GlobalLauncherClose.ts'),
+    /setDecorations\(|getCurrentWindow\(\)[\s\S]{0,120}hide\(\)/,
+    'GlobalLauncher close helpers should not directly manipulate Tauri window chrome',
+  )
+  assertHas(
+    files.launcherWindowManager,
+    /restoreCurrentLauncherOverlayWindow[\s\S]*setDecorations\(true\)[\s\S]*options\.hide[\s\S]*win\.hide\(\)/,
+    'launcher window manager should own overlay chrome restoration and hiding',
+  )
   assert.doesNotMatch(
     files.globalLauncher,
     /hideApp:\s*true/,
