@@ -59,6 +59,11 @@ assert.match(
   'text workflow actions must support attaching Translate to the editor panel with initial text',
 )
 assert.match(
+  files.defaultWorkflowProviders,
+  /textAction\(['"]workflow\.open-editor-with-translate-panel['"],[\s\S]*createEditorPane\(\{[\s\S]*text,[\s\S]*openEditorPanel\(\{[\s\S]*panelId:\s*PLUGIN_SURFACE_PANEL_ID[\s\S]*pluginId:\s*['"]translate['"][\s\S]*initialText:\s*text/,
+  'selected/current text must support opening Editor and attaching Translate panel in one workflow action',
+)
+assert.match(
   files.translateSurface,
   /const\s+initialText\s*=\s*props\.initialText\?\.trim\(\)/,
   'TranslateSurface must read initial text from plugin surface props',

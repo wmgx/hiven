@@ -3,6 +3,7 @@ import { focusSurfaceInstance } from '../surfaces/actions'
 import { getSurfaceInstances } from '../surfaces/registry'
 import { useAppStore } from '../store'
 import { getHostAppWorkObjects, launchHostAppObject } from '../workspace/appLauncher/hostAppLauncher'
+import { createEditorPane, openEditorPanel } from '../workspace/editorBridge'
 import { showEditorWindow } from '../workspace/windowManager/editorWindow'
 import { EDITOR_WINDOW_LABEL } from '../workspace/windowManager/windowLabels'
 import { showPluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
@@ -277,6 +278,27 @@ const defaultTextActionProvider = {
           },
         }, createDefaultOutputRouterContext())
       )),
+      textAction('workflow.open-editor-with-translate-panel', 'Open Editor with Translate Panel', 'PanelRightOpen', async () => {
+        await createEditorPane({
+          text,
+          title: input.title,
+          language: languageForObject(input),
+        })
+        await openEditorPanel({
+          panelId: PLUGIN_SURFACE_PANEL_ID,
+          placement: 'right',
+          inputs: {
+            text,
+            target: {
+              source: 'builtin',
+              pluginId: 'translate',
+              surfaceId: 'main',
+              initialText: text,
+            },
+          },
+        })
+        return { ok: true, text }
+      }),
       textAction('workflow.save-shelf', 'Save to Shelf', 'Archive', async () => (
         routeTextOutput(text, { kind: 'save-to-shelf' }, createDefaultOutputRouterContext())
       )),
