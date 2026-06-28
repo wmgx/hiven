@@ -77,6 +77,7 @@ const clipboardHistoryActionProvider = {
         icon: 'ClipboardPaste',
         accepts: ['clipboard'],
         defaultOutputTarget: 'paste-to-foreground-app',
+        requiresContext: [{ kind: 'foreground-app' }],
         run: async () => routeTextOutput(text, { kind: 'paste-to-foreground-app' }, createDefaultOutputRouterContext()),
       },
       {

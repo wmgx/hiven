@@ -187,6 +187,7 @@ const jsonClipboardActionProvider = {
         icon: 'ClipboardPaste',
         accepts: ['clipboard'],
         defaultOutputTarget: 'paste-to-foreground-app',
+        requiresContext: [{ kind: 'foreground-app' }],
         run: async () => routeTextOutput(formatted, { kind: 'paste-to-foreground-app' }, createDefaultOutputRouterContext()),
       },
     ]
@@ -202,9 +203,15 @@ const defaultTextActionProvider = {
       textAction('workflow.copy', 'Copy', 'Copy', 'copy', async () => (
         routeTextOutput(text, { kind: 'copy' }, createDefaultOutputRouterContext())
       )),
-      textAction('workflow.paste', 'Paste to Foreground App', 'ClipboardPaste', 'paste-to-foreground-app', async () => (
-        routeTextOutput(text, { kind: 'paste-to-foreground-app' }, createDefaultOutputRouterContext())
-      )),
+      {
+        id: 'workflow.paste',
+        title: 'Paste to Foreground App',
+        icon: 'ClipboardPaste',
+        accepts: ['text', 'clipboard', 'url'],
+        defaultOutputTarget: 'paste-to-foreground-app',
+        requiresContext: [{ kind: 'foreground-app' }],
+        run: async () => routeTextOutput(text, { kind: 'paste-to-foreground-app' }, createDefaultOutputRouterContext()),
+      },
       textAction('workflow.open-in-editor', 'Open in Editor', 'PanelTopOpen', 'open-in-editor', async () => (
         routeTextOutput(text, {
           kind: 'open-in-editor',
@@ -212,15 +219,38 @@ const defaultTextActionProvider = {
           title: input.title,
         }, createDefaultOutputRouterContext())
       )),
-      textAction('workflow.replace-selection', 'Replace Editor Selection', 'Replace', 'replace-editor-selection', async () => (
-        routeTextOutput(text, { kind: 'replace-editor-selection', range: ctx.snapshot.editor?.selectionRange }, createDefaultOutputRouterContext())
-      )),
-      textAction('workflow.insert-editor', 'Insert into Editor', 'TextCursorInput', 'insert-into-editor', async () => (
-        routeTextOutput(text, { kind: 'insert-into-editor' }, createDefaultOutputRouterContext())
-      )),
-      textAction('workflow.draft-polite-reply', 'Draft Polite Reply', 'MessageSquareReply', 'paste-to-foreground-app', async () => (
-        routeTextOutput(draftPoliteReply(text), { kind: 'paste-to-foreground-app' }, createDefaultOutputRouterContext())
-      )),
+      {
+        id: 'workflow.replace-selection',
+        title: 'Replace Editor Selection',
+        icon: 'Replace',
+        accepts: ['text', 'clipboard', 'url'],
+        defaultOutputTarget: 'replace-editor-selection',
+        requiresContext: [{ kind: 'editor-pane' }],
+        run: async () => routeTextOutput(text, {
+          kind: 'replace-editor-selection',
+          range: ctx.snapshot.editor?.selectionRange,
+        }, createDefaultOutputRouterContext()),
+      },
+      {
+        id: 'workflow.insert-editor',
+        title: 'Insert into Editor',
+        icon: 'TextCursorInput',
+        accepts: ['text', 'clipboard', 'url'],
+        defaultOutputTarget: 'insert-into-editor',
+        requiresContext: [{ kind: 'editor-pane' }],
+        run: async () => routeTextOutput(text, { kind: 'insert-into-editor' }, createDefaultOutputRouterContext()),
+      },
+      {
+        id: 'workflow.draft-polite-reply',
+        title: 'Draft Polite Reply',
+        icon: 'MessageSquareReply',
+        accepts: ['text', 'clipboard', 'url'],
+        defaultOutputTarget: 'paste-to-foreground-app',
+        requiresContext: [{ kind: 'foreground-app' }],
+        run: async () => routeTextOutput(draftPoliteReply(text), {
+          kind: 'paste-to-foreground-app',
+        }, createDefaultOutputRouterContext()),
+      },
       textAction('workflow.open-reply-draft-in-editor', 'Open Reply Draft in Editor', 'PanelTopOpen', 'open-in-editor', async () => (
         routeTextOutput(draftPoliteReply(text), {
           kind: 'open-in-editor',

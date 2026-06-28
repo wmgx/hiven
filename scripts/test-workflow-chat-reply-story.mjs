@@ -37,7 +37,7 @@ assert.match(
 )
 assert.match(
   files.defaultWorkflowProviders,
-  /textAction\(['"]workflow\.draft-polite-reply['"],\s*['"]Draft Polite Reply['"][\s\S]*routeTextOutput\(draftPoliteReply\(text\),[\s\S]*kind:\s*['"]paste-to-foreground-app['"]/,
+  /id:\s*['"]workflow\.draft-polite-reply['"][\s\S]*title:\s*['"]Draft Polite Reply['"][\s\S]*defaultOutputTarget:\s*['"]paste-to-foreground-app['"][\s\S]*routeTextOutput\(draftPoliteReply\(text\),[\s\S]*kind:\s*['"]paste-to-foreground-app['"]/,
   'text workflow actions must support drafting a polite reply and pasting it to the foreground app',
 )
 assert.match(
