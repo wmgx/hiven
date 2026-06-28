@@ -25,6 +25,21 @@ assert.match(launcherTypes, /'editor-command-bar':\s*\{[\s\S]*presentation:\s*['
 assert.doesNotMatch(launcherTypes.match(/'editor-command-bar':\s*\{[\s\S]*?capabilities:\s*\[([\s\S]*?)\]/)?.[1] ?? '', /app-search|system-power|settings|host-surfaces|plugin-surfaces/, 'editor command bar capabilities must exclude global navigation capabilities')
 assert.match(registry, /requiredCapabilities[\s\S]*launcherHostHasCapability/, 'registry must enforce host capability filtering')
 assert.match(hostActions, /systemKey:\s*['"]host:global:search-all-hiven['"][\s\S]*surfaces:\s*\[['"]editor-command-bar['"]\][\s\S]*showLauncherWindow\(\)/, 'Editor command bar must expose Search all Hiven as the only global bridge')
+
+const paneHostItems = [...hostActions.matchAll(/systemKey:\s*['"](host:pane:[^'"]+)['"][\s\S]*?surfaces:\s*\[([^\]]+)\]/g)]
+const editorLocalPaneItems = new Set([
+  'host:pane:close',
+  'host:pane:focus-next',
+  'host:pane:focus-previous',
+  'host:pane:toggle-sticky-scroll',
+  'host:pane:set-language',
+])
+for (const [, systemKey, surfaces] of paneHostItems) {
+  if (editorLocalPaneItems.has(systemKey)) {
+    assert.doesNotMatch(surfaces, /global-launcher/, `${systemKey} must stay editor-local and must not mutate editor state from the global launcher`)
+    assert.match(surfaces, /editor-command-bar|command-palette/, `${systemKey} must remain available from the editor command bar`)
+  }
+}
 assert.match(hostActions, /systemKey:\s*['"]host:system:restart['"][\s\S]*surfaces:\s*\[['"]global-launcher['"]\]/, 'system power actions must be global-launcher only')
 assert.match(hostAppLauncher, /surfaceId[\s\S]*global-launcher/, 'app launcher search must be scoped to the global launcher')
 
