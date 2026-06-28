@@ -83,7 +83,7 @@ export function LauncherResultStep({ frame, error, busy, onActivateChoice, onAct
           <span className="text-[13px] font-medium" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>{frame.sourceTitle}</span>
         )}
       </div>
-      <div className="command-palette-results global-launcher-body l-list">
+      <div className="launcher-results global-launcher-body l-list">
         {choices.map((choice, index) => {
           const isSelected = selectedChoiceIndex === index
           const isChecked = selectedChoiceIds.includes(choice.id)

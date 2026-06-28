@@ -36,6 +36,7 @@ const files = {
   launcherDomainSearchStep: read('src/components/launcher/LauncherDomainSearchStep.tsx'),
   launcherCollectInputStep: read('src/components/launcher/LauncherCollectInputStep.tsx'),
   launcherResultStep: read('src/components/launcher/LauncherResultStep.tsx'),
+  css: read('src/index.css'),
   launcherFooterHints: read('src/components/launcher/LauncherFooterHints.tsx'),
   launcherMixedList: read('src/components/launcher/LauncherMixedList.tsx'),
   launcherResultChoiceRow: read('src/components/launcher/LauncherResultChoiceRow.tsx'),
@@ -154,6 +155,10 @@ assert.match(files.launcherSession, /export function useLauncherSession/, 'launc
 assert.match(files.launcherSession, /new LauncherController/, 'shared launcher session must own controller initialization')
 assert.match(files.launcherSession, /collectDynamicItems/, 'shared launcher session must own dynamic item collection')
 assert.match(files.launcherSession, /rankLauncherItems/, 'shared launcher session must own launcher ranking')
+assert.doesNotMatch(files.launcherDomainSearchStep + files.launcherResultStep, /command-palette-results/, 'shared launcher UI must not emit retired command-palette result classes')
+assert.doesNotMatch(files.css, /command-palette-results|--command-palette-list-max-height|--command-palette-panel-max-height|CommandPalette|command palette/, 'shared launcher CSS must not use retired command palette naming')
+assert.match(files.css, /--launcher-list-max-height/, 'shared launcher CSS must expose launcher list height token')
+assert.match(files.css, /--launcher-panel-max-height/, 'shared launcher CSS must expose launcher panel height token')
 assert.match(files.launcherView, /data-launcher-host/, 'shared LauncherView must stamp the active host id')
 assert.match(files.launcherDomainSearchStep, /export function LauncherDomainSearchStep/, 'shared launcher UI must provide the search/list step')
 assert.match(files.launcherCollectInputStep, /export function LauncherCollectInputStep/, 'shared launcher UI must provide the collect-input step')

@@ -396,21 +396,21 @@ check('standalone launcher rehydrates persisted settings before opening', () => 
   )
 })
 
-check('launcher panel height matches the in-app command palette list height', () => {
+check('launcher panel height matches the shared launcher list height', () => {
   assertHas(
     files.indexCss,
-    /--command-palette-list-max-height:\s*300px/,
-    'CSS should expose the in-app command palette list height as a shared token',
+    /--launcher-list-max-height:\s*300px/,
+    'CSS should expose the shared launcher list height token',
   )
   assertHas(
     files.indexCss,
-    /\.command-palette-results[\s\S]{0,120}max-height:\s*var\(--command-palette-list-max-height\)/,
-    'in-app CommandPalette should use the shared command palette list height',
+    /\.launcher-results[\s\S]{0,120}max-height:\s*var\(--launcher-list-max-height\)/,
+    'shared launcher result lists should use the shared launcher list height',
   )
   assertHas(
     files.indexCss,
-    /\.global-launcher-body[\s\S]{0,180}max-height:\s*var\(--command-palette-list-max-height\)/,
-    'GlobalLauncher should use the same scrollable list height as CommandPalette',
+    /\.global-launcher-body[\s\S]{0,180}max-height:\s*var\(--launcher-list-max-height\)/,
+    'GlobalLauncher should use the same scrollable list height as shared launcher lists',
   )
 })
 

@@ -25,7 +25,8 @@ const files = {
   globalLauncherLayout: read('src/components/launcher/GlobalLauncherLayout.ts'),
   launcherMixedList: read('src/components/launcher/LauncherMixedList.tsx'),
   launcherResultChoiceRow: read('src/components/launcher/LauncherResultChoiceRow.tsx'),
-  commandPalette: read('src/launcher/hosts/EditorCommandBarHost.tsx'),
+  commandPalette: read('src/components/CommandPalette.tsx'),
+  editorCommandBarHost: read('src/launcher/hosts/EditorCommandBarHost.tsx'),
   launcherDomainSearchStep: read('src/components/launcher/LauncherDomainSearchStep.tsx'),
   launcherParamStep: read('src/components/launcher/LauncherParamStep.tsx'),
   launcherController: read('src/workspace/launcher/controller.ts'),
@@ -59,11 +60,11 @@ assert.match(files.globalLauncherLayout, /GLOBAL_LAUNCHER_PANEL_WIDTH\s*=\s*680/
 assert.doesNotMatch(files.globalLauncher, /MAX_GLOBAL_LAUNCHER_RENDERED_ITEMS/, 'GlobalLauncher should not keep the old rendered item cap')
 assert.match(files.globalLauncher, /collectDynamicWhenEmpty:\s*true/, 'GlobalLauncher should collect host dynamic items even for empty-query app mixing')
 
-assert.match(files.commandPalette, /command-launcher-panel global-launcher-panel/, 'CommandPalette must use the same v3 launcher panel shell')
-assert.match(files.commandPalette, /<LauncherDomainSearchStep/, 'CommandPalette must use the shared v3 search step')
-assert.match(files.launcherDomainSearchStep, /global-launcher-header l-search/, 'CommandPalette shared search step must use the v3 search header')
-assert.match(files.commandPalette, /<LauncherDomainSearchStep/, 'CommandPalette must delegate v3 row rendering to shared launcher search step')
-assert.match(files.launcherDomainSearchStep, /global-launcher-footer l-foot/, 'CommandPalette shared search step must use the v3 footer structure')
+assert.match(files.commandPalette, /EditorCommandBar/, 'CommandPalette compatibility wrapper must delegate to EditorCommandBar')
+assert.match(files.editorCommandBarHost, /<LauncherDomainSearchStep/, 'EditorCommandBarHost must use the shared v3 search step')
+assert.match(files.launcherDomainSearchStep, /global-launcher-header l-search/, 'Shared launcher search step must use the v3 search header')
+assert.match(files.editorCommandBarHost, /<LauncherDomainSearchStep/, 'EditorCommandBarHost must delegate v3 row rendering to shared launcher search step')
+assert.match(files.launcherDomainSearchStep, /global-launcher-footer l-foot/, 'Shared launcher search step must use the v3 footer structure')
 
 assert.match(files.launcherParamStep, /l-option-row/, 'Launcher param option rows must use the v3 option-list row')
 assert.match(files.launcherParamStep, /onMultiToggle/, 'Launcher multi-select params must toggle in place instead of confirming immediately')

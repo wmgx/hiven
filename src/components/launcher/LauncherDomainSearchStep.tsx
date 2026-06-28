@@ -53,7 +53,7 @@ export function LauncherDomainSearchStep({
           {error}
         </div>
       )}
-      <div className="command-palette-results global-launcher-body l-list" onMouseMove={() => { isKeyboardNavRef.current = false }}>
+      <div className="launcher-results global-launcher-body l-list" onMouseMove={() => { isKeyboardNavRef.current = false }}>
         {items.map((item, index) => (
           <LauncherDomainListItem
             key={item.systemKey}

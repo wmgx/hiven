@@ -28,8 +28,8 @@
   --space-5: 20px;
   --space-6: 24px;
   --statusbar-h: 28px;
-  --command-palette-list-max-height: 300px;
-  --command-palette-panel-max-height: 390px;
+  --launcher-list-max-height: 300px;
+  --launcher-panel-max-height: 390px;
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --hiven-color-bg-primary: var(--color-background-primary);
   --hiven-color-bg-secondary: var(--color-background-secondary);
@@ -410,7 +410,7 @@ html[data-window='launcher'] #root {
   .cmd-item, .lnch-item,
   .statusbar, .topbar,
   .flux-content, .pane-title, .panel-title,
-  .global-launcher-body, .command-palette-results,
+  .global-launcher-body, .launcher-results,
   .text-primary, .text-secondary, .text-tertiary,
   label, p, span:not(button span)
 ) {
@@ -1034,7 +1034,7 @@ html[data-window='launcher'] .global-launcher-overlay.open {
 .global-launcher-panel {
   position: fixed;
   width: min(630px, calc(100vw - 24px));
-  max-height: min(var(--command-palette-panel-max-height), calc(100vh - 24px));
+  max-height: min(var(--launcher-panel-max-height), calc(100vh - 24px));
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
@@ -1071,15 +1071,15 @@ html[data-window='launcher'] .global-launcher-panel :is(input, textarea, select,
 .global-launcher-body {
   flex: 1;
   min-height: 0;
-  max-height: var(--command-palette-list-max-height);
+  max-height: var(--launcher-list-max-height);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   touch-action: pan-y;
 }
 
-.command-palette-results {
-  max-height: var(--command-palette-list-max-height);
+.launcher-results {
+  max-height: var(--launcher-list-max-height);
   overflow-y: auto;
 }
 
@@ -3937,7 +3937,7 @@ html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-lau
   -webkit-backdrop-filter: none;
 }
 
-/* 应用内 CommandPalette（in-app launcher）面板也使用干净不模糊的样式，匹配简单风格 */
+/* Editor command bar 与 Global Launcher 面板使用干净不模糊的样式，匹配简单风格 */
 .flux-spatial-shell .palette-panel {
   border: 0.5px solid var(--color-border-secondary) !important;
   background: var(--bg-surface) !important;  /* pure surface like editor content (white in light, solid dark in dark), keeps launcher crisp */
@@ -4139,7 +4139,7 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
 .global-launcher-body.l-list,
 .l-list {
   padding: 6px 0 4px;
-  max-height: var(--command-palette-list-max-height);
+  max-height: var(--launcher-list-max-height);
   overflow-x: hidden;
   overflow-y: auto;
   background: var(--panel);
