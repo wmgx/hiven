@@ -60,6 +60,7 @@
     "test:global-launcher-quick-text": "node scripts/test-global-launcher-quick-text.mjs",
     "test:core-plugin-externalization": "node scripts/test-core-plugin-externalization.mjs",
     "test:launcher-identity": "node scripts/test-launcher-identity.mjs",
+    "test:launcher-host-capability-routing-behavior": "node scripts/test-launcher-host-capability-routing-behavior.mjs",
     "test:launcher-usage": "node scripts/test-launcher-usage.mjs",
     "test:launcher-ranking": "node scripts/test-launcher-ranking.mjs",
     "test:launcher-registry": "node scripts/test-launcher-registry.mjs",

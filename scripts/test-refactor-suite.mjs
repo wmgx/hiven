@@ -48,6 +48,7 @@ const commands = [
   ['npm', ['run', 'test:launcher-back-focus']],
   ['npm', ['run', 'test:launcher-controller']],
   ['npm', ['run', 'test:launcher-identity']],
+  ['npm', ['run', 'test:launcher-host-capability-routing-behavior']],
   ['npm', ['run', 'test:launcher-plugin-contract']],
   ['npm', ['run', 'test:launcher-ranking']],
   ['npm', ['run', 'test:launcher-registry']],

@@ -116,6 +116,12 @@ assert.equal(
   'package.json must expose clipboard history surface paste story coverage',
 )
 assert.match(read('scripts/test-clipboard-history-surface-paste-story.mjs'), /Enter[\s\S]*pasteText[\s\S]*pasteImage[\s\S]*pasteFiles[\s\S]*host\.close/, 'clipboard history surface paste story must prove Enter routes selected items to paste APIs and closes')
+assert.equal(
+  packageJson.scripts?.['test:launcher-host-capability-routing-behavior'],
+  'node scripts/test-launcher-host-capability-routing-behavior.mjs',
+  'package.json must expose launcher host capability routing behavior coverage',
+)
+assert.match(read('scripts/test-launcher-host-capability-routing-behavior.mjs'), /global-launcher[\s\S]*editor-command-bar[\s\S]*host:system:restart[\s\S]*host:global:search-all-hiven/, 'launcher host capability routing must prove global-only actions stay out of Editor Cmd\+K')
 
 // Product/behavior acceptance: startup and global entry.
 assert.ok(!tauriConfig.app.windows.some((window) => window.label === 'main'), 'startup must not declare a retired main window')
