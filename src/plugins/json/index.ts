@@ -3,6 +3,7 @@
  */
 
 import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
+import { JsonSurface } from './JsonSurface'
 
 function runJson(text: string, mode: unknown): string {
   const obj = JSON.parse(text)
@@ -13,6 +14,28 @@ function runJson(text: string, mode: unknown): string {
 }
 
 export const jsonPlugin = definePlugin({
+  ui: {
+    surfaces: [
+      {
+        id: 'main',
+        kind: 'custom-view',
+        title: 'JSON',
+        titleI18n: { zh: 'JSON' },
+        icon: 'Braces',
+        aliases: ['json', 'json-format', 'pretty-json'],
+        component: JsonSurface,
+        entry: { launcher: true, shortcutBindable: true },
+        shell: {
+          defaultWidth: 860,
+          defaultHeight: 620,
+          minWidth: 640,
+          minHeight: 420,
+          closeOnBlur: false,
+          resizable: true,
+        },
+      },
+    ],
+  },
   tools: [
     {
       id: 'json.run',
@@ -37,7 +60,7 @@ export const jsonPlugin = definePlugin({
         try {
           return ctx.output.replaceActiveText(runJson(ctx.input.text, ctx.params.mode))
         } catch (e: any) {
-          return ctx.output.error(`Error: ${e.message}`)
+          return ctx.output.error('Error: ' + e.message)
         }
       },
       surfaces: { launcher: true, panel: true, pinnable: true },
@@ -73,7 +96,7 @@ export const jsonPlugin = definePlugin({
         try {
           return textOutput(runJson(text, ctx.params.mode))
         } catch (e: any) {
-          return textError(`Error: ${e.message}`)
+          return textError('Error: ' + e.message)
         }
       },
     },

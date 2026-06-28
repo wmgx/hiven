@@ -219,6 +219,28 @@ const defaultTextActionProvider = {
           language: 'markdown',
         }, createDefaultOutputRouterContext())
       )),
+      textAction('workflow.open-json-surface', 'Open JSON Surface', 'Braces', async () => (
+        routeTextOutput(text, {
+          kind: 'open-plugin-surface',
+          source: 'builtin',
+          pluginId: 'json',
+          surfaceId: 'main',
+          initialText: text,
+        }, createDefaultOutputRouterContext())
+      )),
+      textAction('workflow.attach-json-panel', 'Attach JSON Panel', 'Braces', async () => (
+        routeTextOutput(text, {
+          kind: 'attach-editor-panel',
+          panelId: PLUGIN_SURFACE_PANEL_ID,
+          placement: 'right',
+          pluginSurfaceTarget: {
+            source: 'builtin',
+            pluginId: 'json',
+            surfaceId: 'main',
+            initialText: text,
+          },
+        }, createDefaultOutputRouterContext())
+      )),
       textAction('workflow.translate-in-surface', 'Translate in Surface', 'Languages', async () => (
         routeTextOutput(text, {
           kind: 'open-plugin-surface',

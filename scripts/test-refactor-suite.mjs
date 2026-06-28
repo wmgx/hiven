@@ -21,6 +21,7 @@ const commands = [
   ['npm', ['run', 'test:workflow-translate-selection-story']],
   ['npm', ['run', 'test:workflow-clipboard-history-story']],
   ['npm', ['run', 'test:workflow-chat-reply-story']],
+  ['npm', ['run', 'test:workflow-json-panel-story']],
   ['npm', ['run', 'test:command-palette-page-policy']],
   ['npm', ['run', 'test:command-palette-system-page-shortcuts']],
   ['npm', ['run', 'test:command-palette-extension-settings']],
