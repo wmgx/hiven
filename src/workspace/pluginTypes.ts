@@ -566,6 +566,7 @@ export type PluginSurfaceProps<TSettings = unknown> = {
   t: (key: string, vars?: Record<string, string | number>) => string
   settings: TSettings
   permissions: PluginPermissionSnapshot
+  initialText?: string
   host: PluginSurfaceHostApi
 }
 
@@ -577,6 +578,7 @@ export type PluginSurfaceOpenContext<TSettings = unknown> = {
   t: (key: string, vars?: Record<string, string | number>) => string
   settings: TSettings
   permissions: PluginPermissionSnapshot
+  initialText?: string
   storage: PluginPrivateStorageApi
   clipboard: PluginClipboardApi
   paste: PluginPasteApi

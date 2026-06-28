@@ -167,6 +167,7 @@ export type PluginSurfaceOpenTarget = {
   source: 'builtin' | 'installed' | 'dev'
   pluginId: string
   surfaceId: string
+  initialText?: string
 }
 
 export type LauncherHostSurfaceTarget = 'settings' | 'plugins'

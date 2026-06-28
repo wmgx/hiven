@@ -7,7 +7,7 @@ export type OutputTarget =
   | { kind: 'replace-editor-selection'; windowId?: string; paneId?: string; range?: TextRange }
   | { kind: 'insert-into-editor'; windowId?: string; paneId?: string }
   | { kind: 'open-in-editor'; language?: string; title?: string }
-  | { kind: 'open-plugin-surface'; pluginId: string; surfaceId: string; source?: 'builtin' | 'installed' | 'dev' }
+  | { kind: 'open-plugin-surface'; pluginId: string; surfaceId: string; source?: 'builtin' | 'installed' | 'dev'; initialText?: string }
   | { kind: 'attach-editor-panel'; panelId: string; placement: 'right' | 'bottom' | 'left'; pluginSurfaceTarget?: PluginSurfaceOpenTarget }
   | { kind: 'save-to-shelf' }
 

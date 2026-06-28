@@ -42,6 +42,7 @@ export function createDefaultOutputRouterContext(): OutputRouterContext {
         source: options.source ?? 'builtin',
         pluginId: options.pluginId,
         surfaceId: options.surfaceId,
+        initialText: options.initialText ?? (text ? text : undefined),
       })
     },
     attachEditorPanel: async (text, options) => {

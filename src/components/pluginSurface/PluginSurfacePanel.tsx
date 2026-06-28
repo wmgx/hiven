@@ -13,7 +13,7 @@ type PluginSurfacePanelInputs = {
 
 export function PluginSurfacePanel({ inputs, host }: PanelPropsV2<PluginSurfacePanelInputs>) {
   const locale = useAppStore((s) => s.locale)
-  const target = useMemo(() => normalizeTarget(inputs?.target), [inputs])
+  const target = useMemo(() => normalizeTarget(inputs?.target, inputs), [inputs])
   const title = usePluginSurfaceTitle(target, locale)
 
   if (!target) {
@@ -45,7 +45,7 @@ export function PluginSurfacePanel({ inputs, host }: PanelPropsV2<PluginSurfaceP
   )
 }
 
-function normalizeTarget(value: unknown): PluginSurfaceOpenTarget | null {
+function normalizeTarget(value: unknown, inputs?: PluginSurfacePanelInputs): PluginSurfaceOpenTarget | null {
   const target = value as Partial<PluginSurfaceOpenTarget> | undefined
   if (!target) return null
   if (target.source !== 'builtin' && target.source !== 'installed' && target.source !== 'dev') return null
@@ -54,5 +54,6 @@ function normalizeTarget(value: unknown): PluginSurfaceOpenTarget | null {
     source: target.source,
     pluginId: target.pluginId,
     surfaceId: target.surfaceId,
+    initialText: inputs?.text ?? (typeof target.initialText === 'string' ? target.initialText : undefined),
   }
 }

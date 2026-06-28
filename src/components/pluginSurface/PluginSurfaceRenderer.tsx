@@ -98,6 +98,7 @@ export function PluginSurfaceRenderer({
           t: pluginT,
           settings,
           permissions,
+          initialText: target.initialText,
           storage,
           clipboard: createPluginClipboard(target.pluginId, permissions, storage),
           paste: createPluginPaste(permissions, storage),
@@ -162,6 +163,7 @@ export function PluginSurfaceRenderer({
           t={pluginT}
           settings={settings}
           permissions={surfaceState.permissions}
+          initialText={target.initialText}
           host={{
             close: onClose,
             requestBack: onBack,

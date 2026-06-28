@@ -202,6 +202,28 @@ const defaultTextActionProvider = {
       textAction('workflow.insert-editor', 'Insert into Editor', 'TextCursorInput', async () => (
         routeTextOutput(text, { kind: 'insert-into-editor' }, createDefaultOutputRouterContext())
       )),
+      textAction('workflow.translate-in-surface', 'Translate in Surface', 'Languages', async () => (
+        routeTextOutput(text, {
+          kind: 'open-plugin-surface',
+          source: 'builtin',
+          pluginId: 'translate',
+          surfaceId: 'main',
+          initialText: text,
+        }, createDefaultOutputRouterContext())
+      )),
+      textAction('workflow.attach-translate-panel', 'Attach Translate Panel', 'PanelRightOpen', async () => (
+        routeTextOutput(text, {
+          kind: 'attach-editor-panel',
+          panelId: PLUGIN_SURFACE_PANEL_ID,
+          placement: 'right',
+          pluginSurfaceTarget: {
+            source: 'builtin',
+            pluginId: 'translate',
+            surfaceId: 'main',
+            initialText: text,
+          },
+        }, createDefaultOutputRouterContext())
+      )),
       textAction('workflow.save-shelf', 'Save to Shelf', 'Archive', async () => (
         routeTextOutput(text, { kind: 'save-to-shelf' }, createDefaultOutputRouterContext())
       )),
