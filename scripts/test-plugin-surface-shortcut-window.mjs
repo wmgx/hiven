@@ -15,7 +15,7 @@ const openRequest = read('src/workspace/pluginSurfaceOpenRequest.ts')
 const globalLauncher = read('src/launcher/hosts/GlobalLauncherHost.tsx') + '\n' + read('src/components/launcher/GlobalLauncherSurfaceFrame.ts')
 
 assert.match(surfaceWindows, /getPluginSurfaceShortcutPresentation[\s\S]*shortcutPresentation === ['"]window['"]/, 'surface metadata must choose window presentation for shortcuts')
-assert.match(windowManager, /requestOpenPluginSurfaceWindow as showPluginSurfaceWindow/, 'window manager must expose plugin surface open lifecycle')
+assert.match(windowManager, /function\s+showPluginSurfaceWindow\(target:[\s\S]*requestOpenPluginSurfaceWindow\(target\)/, 'window manager must expose plugin surface open lifecycle through a facade')
 assert.match(shortcutHotkeys, /getPluginSurfaceShortcutPresentation\(target\) === ['"]window['"][\s\S]*showPluginSurfaceWindow\(target\)/, 'shortcut handler must route window surfaces through the window manager')
 assert.doesNotMatch(shortcutHotkeys, /requestOpenPluginSurfaceWindow/, 'shortcut handler must not call the lower-level plugin surface lifecycle API directly')
 assert.match(shortcutHotkeys, /requestOpenPluginSurfaceTool\(target\)/, 'shortcut handler must keep launcher presentation fallback')

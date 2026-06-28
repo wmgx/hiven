@@ -33,7 +33,7 @@ assert.doesNotMatch(windowComponent, /requestHidePluginSurfaceWindow\(target\)/,
 assert.doesNotMatch(windowComponent, /getCurrentWindow\(\)\.hide/, 'PluginSurfaceWindow must not directly hide the current native window')
 assert.match(windowComponent, /hideCurrentPluginSurfaceWindow\(\)/, 'invalid plugin surface fallback must route current-window hiding through the window manager')
 assert.match(surfaceLifecycle, /invoke\(['"]hide_plugin_surface_window['"]/, 'frontend surface lifecycle must call the native hide command')
-assert.match(windowManager, /requestHidePluginSurfaceWindow as hidePluginSurfaceWindow/, 'window manager must expose a hide alias for plugin surface windows')
+assert.match(windowManager, /function\s+hidePluginSurfaceWindow\(target:[\s\S]*requestHidePluginSurfaceWindow\(target\)/, 'window manager must expose a hide facade for plugin surface windows')
 assert.match(windowManager, /hideCurrentPluginSurfaceWindow[\s\S]*getCurrentWindow\(\)\.hide/, 'window manager must own current plugin surface window fallback hiding')
 assert.match(surfaceLifecycle, /markSurfaceInstanceState\(pluginSurfaceInstanceId\(target\),\s*['"]hidden['"]\)/, 'hiding a plugin surface window must mark the surface hidden')
 assert.match(windowComponent, /<PluginSurfaceRenderer[\s\S]*presentation=['"]plugin-surface-window['"]/, 'plugin surface window must reuse shared renderer')
