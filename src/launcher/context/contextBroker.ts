@@ -6,6 +6,9 @@ import { EDITOR_WINDOW_LABEL } from '../../workspace/windowManager/windowLabels'
 
 export type WorkContextInvocationSource = 'global-hotkey' | 'editor-command-bar' | 'plugin-surface'
 
+const FOREGROUND_SELECTION_READ_ATTEMPTS = 3
+const FOREGROUND_SELECTION_READ_RETRY_MS = 60
+
 export type EditorContextSnapshot = {
   windowLabel: 'editor'
   activePaneId: string
@@ -157,10 +160,21 @@ async function readLastForegroundSelectionText(): Promise<string> {
   if (!isTauriRuntime()) return ''
   try {
     const { invoke } = await import('@tauri-apps/api/core')
-    return await invoke<string | null>('last_foreground_selection_text') ?? ''
+    for (let attempt = 0; attempt < FOREGROUND_SELECTION_READ_ATTEMPTS; attempt += 1) {
+      const text = await invoke<string | null>('last_foreground_selection_text') ?? ''
+      if (text) return text
+      if (attempt < FOREGROUND_SELECTION_READ_ATTEMPTS - 1) {
+        await delay(FOREGROUND_SELECTION_READ_RETRY_MS)
+      }
+    }
+    return ''
   } catch {
     return ''
   }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
 async function readClipboardText(): Promise<string> {

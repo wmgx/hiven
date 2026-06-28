@@ -32,6 +32,8 @@ assert.match(files.tauriLib, /last_foreground_selection_text,/, 'Tauri invoke ha
 assert.match(files.tauriLib, /new_keyboard_event[\s\S]{0,500}KEY_C[\s\S]{0,500}CGEventFlagCommand/, 'macOS capture must use Cmd+C against the foreground selection')
 assert.match(files.contextBroker, /externalSelectionContextProvider/, 'Context Broker must expose external selection as a context provider')
 assert.match(files.contextBroker, /last_foreground_selection_text/, 'Context Broker must read cached selection through the Tauri command')
+assert.match(files.contextBroker, /FOREGROUND_SELECTION_READ_RETRY_MS/, 'Context Broker must tolerate native async selection capture latency')
+assert.match(files.contextBroker, /for \(let attempt = 0; attempt < FOREGROUND_SELECTION_READ_ATTEMPTS; attempt \+= 1\)/, 'Context Broker must retry the native selection cache briefly before falling back')
 assert.match(files.contextBroker, /externalSelection\?:/, 'WorkContextSnapshot must model external selection separately from editor selection')
 assert.match(files.contextBroker, /externalSelectionContextProvider[\s\S]*clipboardContextProvider/, 'default context snapshot must collect external selection before generic clipboard fallback')
 assert.match(files.defaultWorkflowProviders, /snapshot\.externalSelection\?\.text/, 'workflow context objects must prefer external selected text as a text object')
