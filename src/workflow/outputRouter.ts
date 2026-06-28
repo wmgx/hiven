@@ -11,7 +11,7 @@ export type OutputRouterContext = {
   replaceEditorSelection(text: string, options?: Extract<OutputTarget, { kind: 'replace-editor-selection' }>): Promise<void> | void
   insertIntoEditor(text: string, options?: Extract<OutputTarget, { kind: 'insert-into-editor' }>): Promise<void> | void
   openInEditor(text: string, options?: Extract<OutputTarget, { kind: 'open-in-editor' }>): Promise<void> | void
-  openPluginSurface(options: Extract<OutputTarget, { kind: 'open-plugin-surface' }>): Promise<void> | void
+  openPluginSurface(text: string, options: Extract<OutputTarget, { kind: 'open-plugin-surface' }>): Promise<void> | void
   attachEditorPanel(text: string, options: Extract<OutputTarget, { kind: 'attach-editor-panel' }>): Promise<void> | void
   saveToShelf(text: string): Promise<void> | void
 }
@@ -37,12 +37,12 @@ export function createDefaultOutputRouterContext(): OutputRouterContext {
         language: options?.language,
       })
     },
-    openPluginSurface: async (options) => {
+    openPluginSurface: async (text, options) => {
       await showPluginSurfaceWindow({
         source: options.source ?? 'builtin',
         pluginId: options.pluginId,
         surfaceId: options.surfaceId,
-        initialText: options.initialText ?? (text ? text : undefined),
+        initialText: options.initialText ?? text,
       })
     },
     attachEditorPanel: async (text, options) => {
@@ -85,7 +85,7 @@ export async function routeTextOutput(
       await ctx.openInEditor(text, target)
       return { ok: true, text, outputTarget: target }
     case 'open-plugin-surface':
-      await ctx.openPluginSurface(target)
+      await ctx.openPluginSurface(text, target)
       return { ok: true, text, outputTarget: target }
     case 'attach-editor-panel':
       await ctx.attachEditorPanel(text, target)

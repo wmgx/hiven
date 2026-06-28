@@ -96,6 +96,10 @@ assert.match(files.tauriLib, /show_launcher_window_for_hotkey/, 'native runtime 
 assert.match(files.globalLauncher, /return <GlobalLauncherHost \/>/, 'GlobalLauncher must be a thin compatibility wrapper')
 assert.match(files.commandPalette, /return <EditorCommandBar \/>/, 'CommandPalette must be a thin compatibility wrapper around EditorCommandBar')
 assert.match(files.globalLauncherHost, /useLauncherSession\(\{[\s\S]*hostId:\s*['"]global-launcher['"]/, 'Global launcher host must use the shared launcher session')
+for (const closeCall of files.globalLauncherHost.matchAll(/closeGlobalLauncherWindow\(\{([\s\S]*?)\n    \}\)/g)) {
+  const overlayOptions = closeCall[1].match(/\boverlay,/g) ?? []
+  assert.ok(overlayOptions.length <= 1, 'Global launcher close paths must not pass duplicate overlay options')
+}
 assert.match(files.editorCommandBar, /useLauncherSession\(\{[\s\S]*hostId:\s*['"]editor-command-bar['"]/, 'Editor command bar must use the shared launcher session')
 assert.match(files.launcherSession, /new LauncherController/, 'shared launcher session must own controller lifecycle')
 assert.match(files.launcherView, /data-launcher-host/, 'shared LauncherView must stamp host identity')
