@@ -22,6 +22,7 @@ for (const framePath of globalLauncherFrameFiles) {
 const packageJson = JSON.parse(read('package.json'))
 const tauriConfig = JSON.parse(read('src-tauri/tauri.conf.json'))
 const capability = JSON.parse(read('src-tauri/capabilities/default.json'))
+const finalValidationDoc = read('doc/refactor-final-validation.md')
 
 const files = {
   app: read('src/App.tsx'),
@@ -128,6 +129,10 @@ assert.equal(
   'package.json must expose plugin paste behavior coverage',
 )
 assert.match(read('scripts/test-plugin-paste-behavior.mjs'), /hide_launcher_window[\s\S]*simulate_paste[\s\S]*Accessibility permission[\s\S]*pasteFiles/, 'plugin paste behavior must prove foreground paste and fallback paths')
+assert.match(finalValidationDoc, /# Hiven Refactor Final Validation/, 'final validation doc must exist')
+assert.match(finalValidationDoc, /Launcher ↔ Editor Bridge[\s\S]*Automated evidence[\s\S]*scripts\/test-editor-bridge-behavior\.mjs/, 'final validation doc must map launcher-editor bridge to evidence')
+assert.match(finalValidationDoc, /SurfaceRegistry[\s\S]*Automated evidence[\s\S]*scripts\/test-surface-registry-behavior\.mjs/, 'final validation doc must map SurfaceRegistry to evidence')
+assert.match(finalValidationDoc, /Manual debug smoke remaining[\s\S]*external app selected text[\s\S]*tray\/background/, 'final validation doc must call out remaining manual product smoke coverage')
 
 // Product/behavior acceptance: startup and global entry.
 assert.ok(!tauriConfig.app.windows.some((window) => window.label === 'main'), 'startup must not declare a retired main window')
