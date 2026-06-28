@@ -172,6 +172,8 @@ assert.match(files.commandPalette, /return <EditorCommandBar \/>/, 'CommandPalet
 assert.match(files.editorWindow, /<EditorCommandBar \/>/, 'EditorWindow must host the local editor command bar directly')
 assert.doesNotMatch(files.editorWindow, /CommandPalette/, 'EditorWindow runtime must not mount the retired CommandPalette compatibility wrapper')
 assert.match(files.globalLauncher, /return <GlobalLauncherHost \/>/, 'GlobalLauncher must be a compatibility wrapper')
+assert.doesNotMatch(files.store, /PaletteParamModel|command-palette parameter/, 'shared launcher param model must not use retired command palette naming')
+assert.match(files.store, /LauncherParamModel/, 'shared launcher param model must use launcher naming')
 assert.match(files.store, /editorCommandBarOpen:\s*boolean/, 'app store must model the editor command bar as editorCommandBarOpen')
 assert.doesNotMatch(files.store, /commandPaletteOpen|setCommandPaletteOpen/, 'app store must not expose retired command palette state names')
 assert.doesNotMatch(files.editorCommandBarHost, /commandPaletteOpen|setCommandPaletteOpen/, 'EditorCommandBarHost must not depend on retired command palette store state names')

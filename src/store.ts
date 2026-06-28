@@ -99,8 +99,8 @@ export type PluginEditorState = {
   source?: 'builtin' | 'installed' | 'dev'
 }
 
-/** UI model for a command-palette parameter form field (used to normalize plugin CommandParam for rendering). */
-export interface PaletteParamModel {
+/** UI model for a launcher parameter field (used to normalize plugin CommandParam for rendering). */
+export interface LauncherParamModel {
   key: string
   label: string
   labelI18n?: Partial<Record<Locale, string>>
