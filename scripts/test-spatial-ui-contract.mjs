@@ -52,12 +52,12 @@ has(files.packageJson, /"test:spatial-ui-contract":\s*"node scripts\/test-spatia
 
 has(files.store, /theme:\s*['"]dark['"]\s*\|\s*['"]light['"]/, 'settings should type a persisted dark/light theme')
 has(files.store, /theme:\s*['"]dark['"]/, 'default settings should include a dark theme')
-has(files.app, /data-theme=\{settings\.theme\}/, 'App should apply persisted theme through data-theme')
-has(files.app, /setTheme\(settings\.theme\)/, 'App should sync the native Tauri window theme with the persisted theme')
+has(files.app, /data-theme=\{theme\}/, 'App should apply persisted theme through data-theme')
+has(files.app, /setTheme\(theme\)/, 'App should sync the native Tauri app theme with the persisted theme')
 notHas(files.app, /<FluxTitlebar\b|function FluxTitlebar|className=["']flux-titlebar/, 'App should not render a custom top titlebar')
 has(files.editor, /updateSetting\(['"]theme['"]/, 'Editor toolbar should provide the in-app theme toggle')
 has(files.editor, /\{t\(['"]runAction['"]\)\}[\s\S]{0,640}theme === ['"]dark['"] \? <Sun/, 'Theme toggle should sit after the run action in the editor toolbar')
-has(files.app, /flux-spatial-shell/, 'App should wrap the main UI in a spatial shell')
+has(files.app, /flux-spatial-shell/, 'App should wrap the launcher runtime in a spatial shell')
 
 has(files.css, /body\[data-theme=['"]dark['"]\]/, 'CSS should define the dark theme token scope')
 has(files.css, /body\[data-theme=['"]light['"]\]/, 'CSS should define the light theme token scope')
@@ -125,10 +125,8 @@ has(files.css, /\.margin-view-overlays \.current-line[\s\S]{0,100}background:\s*
 
 {
   const config = JSON.parse(files.tauriConfig)
-  const main = config.app?.windows?.find((window) => window.label === 'main')
   const launcher = config.app?.windows?.find((window) => window.label === 'launcher')
-  assert.equal(main?.transparent, false, 'main window should be opaque so the native titlebar area follows app color')
-  assert.equal(main?.theme, 'Dark', 'main native titlebar should start in dark mode with the default app theme')
+  assert.ok(!config.app?.windows?.some((window) => window.label === 'main'), 'retired main window should not be declared')
   assert.equal(launcher?.transparent, true, 'launcher window should be transparent around the opaque rounded panel')
 }
 

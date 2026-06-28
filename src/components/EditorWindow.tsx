@@ -1,18 +1,13 @@
 import { useEffect, useState } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useAppStore } from '../store'
-import { initConfigDir } from '../configInit'
-import { loadInstalledPluginsFromStore } from '../workspace/pluginRuntime'
-import { registerBundledPluginPackages } from '../workspace/bundledPluginLoader'
-import { registerHostLauncherProviders } from '../workspace/launcher/hostProvider'
+import { markSurfaceInstanceState, upsertSurfaceInstance } from '../surfaces/registry'
+import { ensurePluginRuntimeReady } from '../workspace/pluginRuntimeBootstrap'
 import { EditorView } from '../views/EditorView'
 import { CommandPalette } from './CommandPalette'
 import { PluginSettingsDialog } from './PluginSettingsDialog'
 import './EditorWindow.css'
 import '../panels/register'
-
-registerHostLauncherProviders()
-registerBundledPluginPackages()
 
 export function EditorWindow() {
   const theme = useAppStore((s) => s.settings.theme)
@@ -21,9 +16,27 @@ export function EditorWindow() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    upsertSurfaceInstance({
+      id: 'editor',
+      kind: 'editor',
+      windowLabel: 'editor',
+      title: 'Hiven Editor',
+      state: 'visible',
+      canReceiveText: true,
+      canProvideText: true,
+      canAttachToEditor: true,
+    })
+    const onPageHide = () => markSurfaceInstanceState('editor', 'destroyed')
+    window.addEventListener('pagehide', onPageHide)
+    return () => {
+      window.removeEventListener('pagehide', onPageHide)
+      markSurfaceInstanceState('editor', 'hidden')
+    }
+  }, [])
+
+  useEffect(() => {
     let disposed = false
-    initConfigDir()
-      .then(() => loadInstalledPluginsFromStore())
+    ensurePluginRuntimeReady()
       .catch((err) => {
         if (!disposed) setError(err instanceof Error ? err.message : String(err))
       })

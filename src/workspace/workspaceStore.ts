@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
 import { migrateLocalStorageKey } from '../utils/persistMigration'
 import type {
   PaneId,
@@ -23,7 +23,17 @@ import type {
 
 const DEFAULT_PANE_ID = 'pane-main'
 
-migrateLocalStorageKey('fluxtext-workspace', 'hiven-workspace')
+function isEditorWindowWorkspaceSession(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get('window') === 'editor'
+  } catch {
+    return false
+  }
+}
+
+if (!isEditorWindowWorkspaceSession()) {
+  migrateLocalStorageKey('fluxtext-workspace', 'hiven-workspace')
+}
 
 function generatePaneId(): PaneId {
   return `pane-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
@@ -512,6 +522,9 @@ export const useWorkspaceStore = create<WorkspaceSlice>()(persist(
   }),
   {
     name: 'hiven-workspace',
+    storage: createJSONStorage(() => (
+      isEditorWindowWorkspaceSession() ? window.sessionStorage : window.localStorage
+    )),
     partialize: (state) => ({
       panes: Object.fromEntries(
         Object.entries(state.panes).map(([id, pane]) => [

@@ -33,6 +33,7 @@ export type ViewId = 'editor' | 'scripts' | 'plugin-editor' | 'pinned-runner' | 
 
 export type ActionUsageSource =
   | 'command-palette'
+  | 'editor-command-bar'
   | 'global-launcher'
   | 'pinned-runner'
 
@@ -170,6 +171,8 @@ export type PluginSurfaceOpenTarget = {
   surfaceId: string
 }
 
+export type LauncherHostSurfaceTarget = 'settings' | 'plugins'
+
 interface AppState {
   // Navigation
   activeView: ViewId
@@ -213,6 +216,9 @@ interface AppState {
   pluginSurfaceToolTarget: PluginSurfaceOpenTarget | null
   openPluginSurfaceTool: (target: PluginSurfaceOpenTarget) => void
   clearPluginSurfaceTool: () => void
+  launcherHostSurfaceTarget: LauncherHostSurfaceTarget | null
+  openLauncherHostSurface: (target: LauncherHostSurfaceTarget) => void
+  clearLauncherHostSurface: () => void
 
   // Last command status
   lastCommandStatus: LastCommandStatus | null
@@ -446,15 +452,19 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   globalLauncherMode: 'full',
   globalLauncherOverlay: false,
   pluginSurfaceToolTarget: null,
+  launcherHostSurfaceTarget: null,
   setGlobalLauncherOpen: (open, mode) => set((state) => ({
     globalLauncherOpen: open,
     globalLauncherMode: mode ?? (open ? state.globalLauncherMode : 'full'),
     globalLauncherOverlay: open ? state.globalLauncherOverlay : false,
+    ...(open ? {} : { launcherHostSurfaceTarget: null }),
   })),
   openGlobalLauncher: (mode) => set({ globalLauncherOpen: true, globalLauncherMode: mode }),
   openGlobalLauncherOverlay: (mode) => set({ globalLauncherOpen: true, globalLauncherMode: mode, globalLauncherOverlay: true }),
   openPluginSurfaceTool: (target) => set({ pluginSurfaceToolTarget: target }),
   clearPluginSurfaceTool: () => set({ pluginSurfaceToolTarget: null }),
+  openLauncherHostSurface: (target) => set({ launcherHostSurfaceTarget: target, globalLauncherOpen: true, globalLauncherMode: 'full' }),
+  clearLauncherHostSurface: () => set({ launcherHostSurfaceTarget: null }),
 
   // Last command status
   lastCommandStatus: null,
@@ -463,6 +473,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   // Source-scoped usage
   actionUsageBySource: {
     'command-palette': { recentActionNames: [], actionUsageCounts: {} },
+    'editor-command-bar': { recentActionNames: [], actionUsageCounts: {} },
     'global-launcher': { recentActionNames: [], actionUsageCounts: {} },
     'pinned-runner': { recentActionNames: [], actionUsageCounts: {} },
   },
@@ -573,6 +584,10 @@ export const useAppStore = create<AppState>()(persist((set) => ({
           recentActionNames: persistedState.recentActionNames ?? [],
           actionUsageCounts: persistedState.actionUsageCounts ?? {},
         },
+        'editor-command-bar': {
+          recentActionNames: persistedState.recentActionNames ?? [],
+          actionUsageCounts: persistedState.actionUsageCounts ?? {},
+        },
         'global-launcher': { recentActionNames: [], actionUsageCounts: {} },
         'pinned-runner': { recentActionNames: [], actionUsageCounts: {} },
       }
@@ -587,6 +602,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     const hasPersistedLauncherUsage =
       persistedLauncherUsage != null &&
       (Object.keys(persistedLauncherUsage['command-palette'] ?? {}).length > 0 ||
+        Object.keys(persistedLauncherUsage['editor-command-bar'] ?? {}).length > 0 ||
         Object.keys(persistedLauncherUsage['global-launcher'] ?? {}).length > 0)
     if (hasPersistedLauncherUsage) {
       merged.launcherUsageBySurface = {

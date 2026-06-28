@@ -20,8 +20,10 @@ const files = {
   pluginTypes: read('src/workspace/pluginTypes.ts'),
   clipboardHistory: read('src/plugins/clipboard-history/index.tsx'),
   surfaceOpenRequest: read('src/workspace/pluginSurfaceOpenRequest.ts'),
-  globalLauncher: read('src/components/GlobalLauncher.tsx'),
+  launcherWindowManager: read('src/workspace/windowManager/launcherWindow.ts'),
+  globalLauncher: read('src/launcher/hosts/GlobalLauncherHost.tsx'),
   pluginSurfaceWindow: read('src/components/PluginSurfaceWindow.tsx'),
+  pluginSurfaceRenderer: read('src/components/pluginSurface/PluginSurfaceRenderer.tsx'),
   scriptsView: read('src/views/ScriptsView.tsx'),
   scriptsI18n: read('src/i18n/locales/scripts.ts'),
   tauriLib: read('src-tauri/src/lib.rs'),
@@ -42,19 +44,20 @@ assert.match(files.store, /source: 'builtin' \| 'installed' \| 'dev'/, 'surface 
 assert.match(files.surfaceShortcutStore, /registrationStatus/, 'surface shortcut store must persist registration status')
 assert.match(files.surfaceShortcutStore, /clearPluginShortcuts/, 'surface shortcut store must clear all shortcuts for an uninstalled plugin')
 
-assert.match(files.surfaceOpenRequest, /show_launcher_window/, 'surface open request must show the launcher/tool shell window')
+assert.match(files.surfaceOpenRequest, /showLauncherWindow\(\)/, 'surface open request must show the launcher/tool shell window through the window manager')
+assert.match(files.launcherWindowManager, /show_launcher_window/, 'launcher window manager must call the native show launcher command')
 assert.match(files.surfaceOpenRequest, /hiven:\/\/open-plugin-surface/, 'surface open request must emit the open surface event')
 assert.match(files.surfaceOpenRequest, /localStorage\.setItem/, 'surface open request must persist a pending target for newly created launcher windows')
 
 assert.match(files.app, /installPluginSurfaceShortcutHotkeys/, 'app must import plugin surface shortcut hotkeys')
 assert.match(
   files.app,
-  /function LauncherWindowApp[\s\S]*installPluginSurfaceShortcutHotkeys\(\)/,
+  /function LauncherRuntimeApp[\s\S]*installPluginSurfaceShortcutHotkeys\(\)/,
   'launcher runtime must install plugin surface shortcut hotkeys because launcher is the default runtime window',
 )
 assert.match(files.app, /consumePendingPluginSurfaceOpenTarget/, 'launcher window must consume pending surface open targets')
 assert.match(files.app, /hiven:\/\/open-plugin-surface/, 'launcher window must listen for plugin surface open events')
-assert.match(files.app, /function LauncherWindowApp[\s\S]*<PluginSettingsDialog \/>/, 'launcher window must render plugin settings dialogs opened from a surface')
+assert.match(files.app, /function LauncherRuntimeApp[\s\S]*<PluginSettingsDialog \/>/, 'launcher runtime must render plugin settings dialogs opened from a surface')
 assert.match(
   files.tauriLib,
   /show_and_focus_plugin_surface_window\(&app,\s*&window\)/,
@@ -92,15 +95,13 @@ assert.match(
   /id:\s*'main'[\s\S]*?shell:\s*\{[\s\S]*?rendersTitlebar:\s*true/,
   'clipboard history main surface should declare that it renders its own titlebar',
 )
-const readyPluginSurfaceWindowRender =
-  files.pluginSurfaceWindow.match(/const title = localized[\s\S]*?\n}\n\nfunction parseTargetFromUrl/)?.[0] ?? ''
 assert.match(
-  readyPluginSurfaceWindowRender,
-  /const\s+usesPluginTitlebar\s*=\s*surfaceState\.surface\.shell\?\.rendersTitlebar\s*===\s*true/,
+  files.pluginSurfaceWindow,
+  /usePluginSurfaceRendersTitlebar\(target\)/,
   'plugin surface window should read shell.rendersTitlebar for host chrome decisions',
 )
 const hostTitlebarBranch =
-  readyPluginSurfaceWindowRender.match(/!\s*usesPluginTitlebar\s*&&\s*\(([\s\S]*?)\n\s*\)\}/)?.[1] ?? ''
+  files.pluginSurfaceWindow.match(/!\s*usesPluginTitlebar\s*&&\s*\(([\s\S]*?)\n\s*\)\}/)?.[1] ?? ''
 assert.match(
   hostTitlebarBranch,
   /plugin-surface-window-titlebar/,
@@ -116,6 +117,14 @@ assert.match(
   /document\.addEventListener\(['"]keydown['"],\s*onKeyDown,\s*true\)/,
   'plugin surface window should capture Escape at document level so focused inputs cannot block close',
 )
+assert.match(files.pluginSurfaceWindow, /<PluginSurfaceRenderer/, 'plugin surface window must delegate plugin rendering to the shared renderer')
+assert.match(files.globalLauncher, /<PluginSurfaceRenderer/, 'global launcher surface frame must delegate plugin rendering to the shared renderer')
+assert.match(files.pluginSurfaceRenderer, /ensurePluginRuntimeReady/, 'shared plugin surface renderer must bootstrap plugin runtime')
+assert.match(files.pluginSurfaceRenderer, /missingPluginPermissions/, 'shared plugin surface renderer must gate missing permissions')
+assert.match(files.pluginSurfaceRenderer, /beforeOpen/, 'shared plugin surface renderer must run beforeOpen before rendering')
+assert.match(files.pluginSurfaceRenderer, /createPluginPrivateStorage/, 'shared plugin surface renderer must provide plugin storage host API')
+assert.match(files.pluginSurfaceRenderer, /createPluginClipboard/, 'shared plugin surface renderer must provide clipboard host API')
+assert.match(files.pluginSurfaceRenderer, /createPluginNetwork/, 'shared plugin surface renderer must provide network host API')
 
 assert.doesNotMatch(files.globalPinnedHotkeys, /unregisterAll\(/, 'global pinned hotkey sync must not unregister plugin surface shortcuts')
 assert.match(files.surfaceHotkeys, /isRegistered\(accelerator\)/, 'surface hotkey installer must detect conflicts')

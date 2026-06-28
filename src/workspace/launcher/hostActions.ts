@@ -78,6 +78,7 @@ export function getHostSystemPowerItems(): LauncherItem[] {
       },
       behavior: { type: 'perform' },
       surfaces: ['global-launcher'],
+      requiredCapabilities: ['system-power'],
       pinnable: false,
       execute: async () => performSystemPowerAction('restart'),
     },
@@ -94,6 +95,7 @@ export function getHostSystemPowerItems(): LauncherItem[] {
       },
       behavior: { type: 'perform' },
       surfaces: ['global-launcher'],
+      requiredCapabilities: ['system-power'],
       pinnable: false,
       execute: async () => performSystemPowerAction('shutdown'),
     },
@@ -110,6 +112,7 @@ export function getHostSystemPowerItems(): LauncherItem[] {
       },
       behavior: { type: 'perform' },
       surfaces: ['global-launcher'],
+      requiredCapabilities: ['system-power'],
       pinnable: false,
       execute: async () => performSystemPowerAction('lock-screen'),
     },
@@ -118,26 +121,6 @@ export function getHostSystemPowerItems(): LauncherItem[] {
 
 export function getHostPaneControlItems(): LauncherItem[] {
   return [
-    {
-      systemKey: 'host:view:editor',
-      kind: 'host',
-      display: {
-        title: 'Editor',
-        titleI18n: { zh: '编辑器' },
-        subtitle: 'Open the main workspace',
-        subtitleI18n: { zh: '打开主工作区' },
-        icon: 'PanelTopOpen',
-        aliases: ['main', 'home', 'editor', 'main-panel', '主面板', '编辑器'],
-      },
-      behavior: { type: 'perform' },
-      surfaces: ['global-launcher'],
-      pinnable: false,
-      legacyUsageKeys: ['show-main-panel', 'core-pane.show-main-panel'],
-      execute: async (ctx) => {
-        await ctx.api.showMainPanel()
-        return { ok: true }
-      },
-    },
     {
       systemKey: 'host:view:plugins',
       kind: 'host',
@@ -150,12 +133,13 @@ export function getHostPaneControlItems(): LauncherItem[] {
         aliases: ['plugin', 'plugins', 'extension', 'extensions', 'scripts', 'plugin manager', '插件', '扩展'],
       },
       behavior: { type: 'perform' },
-      surfaces: ['command-palette', 'global-launcher'],
+      surfaces: ['global-launcher'],
+      requiredCapabilities: ['settings'],
       pinnable: false,
       legacyUsageKeys: ['show-plugins-page'],
       execute: async (ctx) => {
         await ctx.api.showPluginsPage()
-        return { ok: true }
+        return { ok: true, keepOpen: true }
       },
     },
     {
@@ -170,12 +154,13 @@ export function getHostPaneControlItems(): LauncherItem[] {
         aliases: ['setting', 'settings', 'preference', 'preferences', 'app settings', '设置', '偏好设置'],
       },
       behavior: { type: 'perform' },
-      surfaces: ['command-palette', 'global-launcher'],
+      surfaces: ['global-launcher'],
+      requiredCapabilities: ['settings'],
       pinnable: false,
       legacyUsageKeys: ['show-settings-page'],
       execute: async (ctx) => {
         await ctx.api.showSettingsPage()
-        return { ok: true }
+        return { ok: true, keepOpen: true }
       },
     },
     {
@@ -191,6 +176,7 @@ export function getHostPaneControlItems(): LauncherItem[] {
       },
       behavior: { type: 'perform' },
       surfaces: ['global-launcher'],
+      requiredCapabilities: ['pane-actions'],
       pinnable: false,
       execute: async () => {
         useWorkspaceStore.getState().createPane({ text: '', focus: true, direction: 'right' })
@@ -210,6 +196,7 @@ export function getHostPaneControlItems(): LauncherItem[] {
       },
       behavior: { type: 'perform' },
       surfaces: ['global-launcher'],
+      requiredCapabilities: ['pane-actions'],
       pinnable: false,
       execute: async () => {
         useWorkspaceStore.getState().createPane({ text: '', focus: true, direction: 'right' })
@@ -229,6 +216,7 @@ export function getHostPaneControlItems(): LauncherItem[] {
       },
       behavior: { type: 'perform' },
       surfaces: ['global-launcher'],
+      requiredCapabilities: ['pane-actions'],
       pinnable: false,
       execute: async () => {
         useWorkspaceStore.getState().createPane({ text: '', focus: true, direction: 'bottom' })
@@ -248,6 +236,7 @@ export function getHostPaneControlItems(): LauncherItem[] {
       },
       behavior: { type: 'perform' },
       surfaces: ['global-launcher'],
+      requiredCapabilities: ['pane-actions'],
       pinnable: false,
       execute: async () => {
         useWorkspaceStore.getState().closeActiveSurfaceOrPane()
@@ -265,6 +254,7 @@ export function getHostPaneControlItems(): LauncherItem[] {
       },
       behavior: { type: 'perform' },
       surfaces: ['global-launcher'],
+      requiredCapabilities: ['pane-actions'],
       pinnable: false,
       execute: async () => {
         focusRelativePane(1)
@@ -282,6 +272,7 @@ export function getHostPaneControlItems(): LauncherItem[] {
       },
       behavior: { type: 'perform' },
       surfaces: ['global-launcher'],
+      requiredCapabilities: ['pane-actions'],
       pinnable: false,
       execute: async () => {
         focusRelativePane(-1)
@@ -301,6 +292,7 @@ export function getHostPaneControlItems(): LauncherItem[] {
       },
       behavior: { type: 'perform' },
       surfaces: ['command-palette'],
+      requiredCapabilities: ['pane-actions'],
       pinnable: false,
       legacyUsageKeys: ['core-pane.toggle-sticky-scroll'],
       execute: async (ctx) => {
@@ -329,6 +321,7 @@ export function getHostPaneControlItems(): LauncherItem[] {
       },
       behavior: { type: 'perform' },
       surfaces: ['command-palette'],
+      requiredCapabilities: ['pane-actions', 'parameter-customization'],
       pinnable: false,
       legacyUsageKeys: ['core-pane.set-language'],
       params: [

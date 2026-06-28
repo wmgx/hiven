@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { pluginRegistry } from './pluginRegistry'
+import { upsertSurfaceInstance } from '../surfaces/registry'
 import type { PluginSurfaceOpenTarget } from '../store'
 import type { PluginDefinition, PluginSurfaceShortcutPresentation, PluginUiSurfaceContribution } from './pluginTypes'
 
@@ -44,6 +45,26 @@ export async function requestOpenPluginSurfaceWindow(target: PluginSurfaceOpenTa
     closeOnBlur,
     destroyTimeoutMs,
   })
+  upsertSurfaceInstance({
+    id: pluginSurfaceInstanceId(target),
+    kind: 'plugin-surface',
+    windowLabel: pluginSurfaceWindowLabel(target),
+    title: surface?.title ?? target.surfaceId,
+    pluginId: target.pluginId,
+    surfaceId: target.surfaceId,
+    state: 'visible',
+    canReceiveText: true,
+    canProvideText: true,
+    canAttachToEditor: true,
+  })
+}
+
+export function pluginSurfaceInstanceId(target: PluginSurfaceOpenTarget): string {
+  return `plugin-surface:${target.source}:${target.pluginId}:${target.surfaceId}`
+}
+
+export function pluginSurfaceWindowLabel(target: PluginSurfaceOpenTarget): string {
+  return `plugin-surface:${target.source}:${target.pluginId}:${target.surfaceId}`
 }
 
 function resolvePluginSurface(target: PluginSurfaceOpenTarget): WindowCapableSurface | null {

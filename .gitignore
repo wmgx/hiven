@@ -36,4 +36,10 @@ temp/
 .omc/
 .agents/
 .claude/
+.trae/
 CLAUDE-FABLE-*-simplified.md
+
+# Local design drafts
+hiven-editor-focused-draft/
+hiven-interactive-redesign-draft/
+hiven-interactive-redesign/

@@ -18,11 +18,12 @@ import type {
   LauncherUsageRecord,
   SystemLauncherItemKey,
 } from './types'
-import { LAUNCHER_SURFACE_IDS } from './types'
+import { LAUNCHER_SURFACE_IDS, normalizeLauncherSurfaceId } from './types'
 
 export function emptyUsageBySurface(): LauncherUsageBySurface {
   return {
     'command-palette': {},
+    'editor-command-bar': {},
     'global-launcher': {},
   }
 }
@@ -37,7 +38,8 @@ export function recordSelection(
   itemKey: SystemLauncherItemKey,
   now: number,
 ): LauncherUsageBySurface {
-  const bucket = usage[surfaceId] ?? {}
+  const normalizedSurfaceId = normalizeLauncherSurfaceId(surfaceId)
+  const bucket = usage[normalizedSurfaceId] ?? usage[surfaceId] ?? {}
   const prev = bucket[itemKey]
   const nextRecord: LauncherUsageRecord = {
     count: (prev?.count ?? 0) + 1,
@@ -45,7 +47,7 @@ export function recordSelection(
   }
   return {
     ...usage,
-    [surfaceId]: { ...bucket, [itemKey]: nextRecord },
+    [normalizedSurfaceId]: { ...bucket, [itemKey]: nextRecord },
   }
 }
 
@@ -54,14 +56,16 @@ export function getUsageRecord(
   surfaceId: LauncherSurfaceId,
   itemKey: SystemLauncherItemKey,
 ): LauncherUsageRecord | undefined {
-  return usage[surfaceId]?.[itemKey]
+  const normalizedSurfaceId = normalizeLauncherSurfaceId(surfaceId)
+  return usage[normalizedSurfaceId]?.[itemKey] ?? usage[surfaceId]?.[itemKey]
 }
 
 export function getUsageBucket(
   usage: LauncherUsageBySurface,
   surfaceId: LauncherSurfaceId,
 ): LauncherUsageBucket {
-  return usage[surfaceId] ?? {}
+  const normalizedSurfaceId = normalizeLauncherSurfaceId(surfaceId)
+  return usage[normalizedSurfaceId] ?? usage[surfaceId] ?? {}
 }
 
 // ─── Legacy Migration ────────────────────────────────────────────────────────
@@ -77,7 +81,7 @@ export type LegacyActionUsageBucket = {
 }
 
 export type LegacyActionUsageBySource = Partial<
-  Record<'command-palette' | 'global-launcher' | 'pinned-runner', LegacyActionUsageBucket>
+  Record<'command-palette' | 'editor-command-bar' | 'global-launcher' | 'pinned-runner', LegacyActionUsageBucket>
 >
 
 /**
@@ -131,6 +135,10 @@ export function migrateLegacyUsage(
   if (!legacy) return result
   for (const surfaceId of LAUNCHER_SURFACE_IDS) {
     result[surfaceId] = migrateLegacyBucket(legacy[surfaceId], mapKey, baseTime)
+  }
+  result['editor-command-bar'] = {
+    ...result['command-palette'],
+    ...result['editor-command-bar'],
   }
   return result
 }

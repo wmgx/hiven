@@ -24,6 +24,7 @@ import type {
   LauncherSurfaceId,
   PluginToolContribution,
 } from './types'
+import { launcherHostHasCapability, normalizeLauncherSurfaceId } from './types'
 import {
   getPluginLauncherItemKey,
   getPluginToolItemKey,
@@ -70,8 +71,12 @@ export function getHostLauncherItems(): LauncherItem[] {
 // ─── Surface filtering ───────────────────────────────────────────────────────
 
 function appearsOnSurface(item: LauncherItem, surfaceId: LauncherSurfaceId): boolean {
-  if (!item.surfaces || item.surfaces.length === 0) return true
-  return item.surfaces.includes(surfaceId)
+  const normalizedSurfaceId = normalizeLauncherSurfaceId(surfaceId)
+  const appears = !item.surfaces || item.surfaces.length === 0
+    ? true
+    : item.surfaces.some((candidate) => normalizeLauncherSurfaceId(candidate) === normalizedSurfaceId)
+  if (!appears) return false
+  return (item.requiredCapabilities ?? []).every((capability) => launcherHostHasCapability(normalizedSurfaceId, capability))
 }
 
 // ─── Plugin static items ─────────────────────────────────────────────────────
@@ -155,7 +160,8 @@ function resolvePluginSettingsItem(
       aliases: ['settings', 'preferences', 'extension settings', 'plugin settings', '设置', '偏好设置', pluginId],
     },
     behavior: { type: 'perform' },
-    surfaces: ['command-palette', 'global-launcher'],
+    surfaces: ['global-launcher'],
+    requiredCapabilities: ['settings'],
     pinnable: false,
     execute: async (ctx) => {
       const settingsState = usePluginSettingsStore.getState()
@@ -238,6 +244,7 @@ export function collectStaticPluginItems(): LauncherItem[] {
         },
         behavior: { type: 'perform' },
         surfaces: ['global-launcher'],
+        requiredCapabilities: ['plugin-surfaces'],
         pinnable: false,
         execute: async () => {
           // Surface opening is handled by the host when this item is selected.

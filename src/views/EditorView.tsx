@@ -12,7 +12,7 @@ import { runtimeRegistry } from '../workspace/runtimeRegistry'
 import { resolveIcon } from '../utils/resolveIcon'
 import { useT } from '../i18n'
 import { formatGlobalPinnedLauncherShortcutLabel } from '../hotkeys/shortcutDisplay'
-import { Command, PanelBottom, PanelRight, Search, Sparkles, WrapText } from 'lucide-react'
+import { Command, Moon, PanelBottom, PanelRight, Search, Sparkles, Sun, WrapText } from 'lucide-react'
 
 function isEditableSelectAllTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
@@ -28,10 +28,12 @@ export function EditorView() {
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
   const setGlobalLauncherOpen = useAppStore((s) => s.setGlobalLauncherOpen)
   const wordWrap = useAppStore((s) => s.settings.wordWrap)
+  const theme = useAppStore((s) => s.settings.theme)
   const updateSetting = useAppStore((s) => s.updateSetting)
   const locale = useAppStore((s) => s.locale)
   const globalPinnedLauncherShortcut = useAppStore((s) => s.settings.globalPinnedLauncherShortcut)
   const t = useT('editor')
+  const navT = useT('nav')
   const closeActiveSurfaceOrPane = useWorkspaceStore((s) => s.closeActiveSurfaceOrPane)
   const createPane = useWorkspaceStore((s) => s.createPane)
   const pluginRegistryVersion = usePluginRegistryVersion()
@@ -44,6 +46,7 @@ export function EditorView() {
     .filter((item) => (item.contribution.placement ?? 'editor-top-right') === 'editor-top-right')
     .sort((a, b) => (a.contribution.order ?? 0) - (b.contribution.order ?? 0))
   const runActionShortcut = formatGlobalPinnedLauncherShortcutLabel(globalPinnedLauncherShortcut, locale)
+  const themeLabel = navT(theme === 'dark' ? 'switchToLightTheme' : 'switchToDarkTheme')
   const getActiveCodeEditor = () => {
     const workspace = useWorkspaceStore.getState()
     return workspace.activePaneId
@@ -188,6 +191,13 @@ export function EditorView() {
           >
             <Sparkles size={13} />
             <span>{t('runAction')}</span>
+          </button>
+          <button
+            className="editor-topbar-button"
+            onClick={() => updateSetting('theme', theme === 'dark' ? 'light' : 'dark')}
+            title={themeLabel}
+          >
+            {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
           </button>
         </div>
       </div>

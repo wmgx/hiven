@@ -20,6 +20,10 @@ pub mod hotkeys;
 
 const LAUNCHER_COMPACT_WIDTH: f64 = 660.0;
 const LAUNCHER_COMPACT_HEIGHT: f64 = 294.0;
+const EDITOR_WINDOW_WIDTH: f64 = 1100.0;
+const EDITOR_WINDOW_HEIGHT: f64 = 720.0;
+const EDITOR_WINDOW_MIN_WIDTH: f64 = 800.0;
+const EDITOR_WINDOW_MIN_HEIGHT: f64 = 500.0;
 const PLUGIN_SURFACE_WINDOW_DEFAULT_WIDTH: f64 = 900.0;
 const PLUGIN_SURFACE_WINDOW_DEFAULT_HEIGHT: f64 = 640.0;
 const PLUGIN_SURFACE_WINDOW_DEFAULT_MIN_WIDTH: f64 = 320.0;
@@ -162,43 +166,6 @@ fn perform_system_power_action(action: SystemPowerAction) -> Result<(), String> 
 }
 
 #[tauri::command]
-fn show_and_focus_window(app: tauri::AppHandle) {
-    #[cfg(target_os = "macos")]
-    {
-        let app_clone = app.clone();
-        let _ = app.run_on_main_thread(move || {
-            show_and_focus_main_window(&app_clone);
-        });
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        show_and_focus_main_window(&app);
-    }
-}
-
-fn show_and_focus_main_window(app: &tauri::AppHandle) {
-    use tauri::Manager;
-
-    // Clear saved foreground app so that a subsequent hide_launcher_window
-    // won't restore focus away from the main window we're about to show.
-    if let Ok(mut stored) = previous_foreground_process_id().lock() {
-        *stored = None;
-    }
-
-    if let Some(window) = app.get_webview_window("launcher") {
-        let _ = window.hide();
-    }
-
-    activate_app();
-
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
-    }
-}
-
-#[tauri::command]
 async fn show_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
     show_launcher_window_for_hotkey(app)
 }
@@ -325,6 +292,51 @@ async fn hide_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
         }
     })
     .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn show_editor_window(app: tauri::AppHandle) -> Result<(), String> {
+    let window = if let Some(window) = app.get_webview_window("editor") {
+        let _ = window.set_size(LogicalSize::new(EDITOR_WINDOW_WIDTH, EDITOR_WINDOW_HEIGHT));
+        window
+    } else {
+        tauri::WebviewWindowBuilder::new(
+            &app,
+            "editor",
+            tauri::WebviewUrl::App("index.html?window=editor".into()),
+        )
+        .title("Hiven Editor")
+        .inner_size(EDITOR_WINDOW_WIDTH, EDITOR_WINDOW_HEIGHT)
+        .min_inner_size(EDITOR_WINDOW_MIN_WIDTH, EDITOR_WINDOW_MIN_HEIGHT)
+        .decorations(false)
+        .transparent(false)
+        .resizable(true)
+        .focused(true)
+        .skip_taskbar(false)
+        .center()
+        .build()
+        .map_err(|error| error.to_string())?
+    };
+
+    show_and_focus_editor_window(&app, &window)
+}
+
+fn show_and_focus_editor_window(
+    app: &tauri::AppHandle,
+    window: &tauri::WebviewWindow,
+) -> Result<(), String> {
+    let window_clone = window.clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let result = (|| {
+            window_clone.show().map_err(|error| error.to_string())?;
+            let _ = window_clone.unminimize();
+            window_clone.set_focus().map_err(|error| error.to_string())
+        })();
+        let _ = tx.send(result);
+    })
+    .map_err(|error| error.to_string())?;
+    rx.recv().map_err(|error| error.to_string())?
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -1673,15 +1685,6 @@ fn activate_process(pid: u32) {
 
 #[cfg(not(target_os = "macos"))]
 fn activate_process(_pid: u32) {}
-
-fn activate_app() {
-    #[cfg(target_os = "macos")]
-    unsafe {
-        let cls = objc2::runtime::AnyClass::get(c"NSApplication").unwrap();
-        let ns_app: *mut objc2::runtime::AnyObject = objc2::msg_send![cls, sharedApplication];
-        let _: () = objc2::msg_send![ns_app, activateIgnoringOtherApps: true];
-    }
-}
 
 /// 配置根目录: ~/.local/hiven
 fn config_dir() -> Result<PathBuf, String> {
@@ -3159,9 +3162,9 @@ pub fn run() {
             fetch_github_directory,
             hotkeys::register_double_modifier_hotkey,
             hotkeys::unregister_double_modifier_hotkey,
-            show_and_focus_window,
             show_launcher_window,
             hide_launcher_window,
+            show_editor_window,
             show_plugin_surface_window,
             simulate_paste,
             current_foreground_app_name,
@@ -3177,7 +3180,7 @@ pub fn run() {
             let _ = (&app, &event); // suppress unused warnings on non-macOS
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = event {
-                show_and_focus_main_window(app);
+                let _ = show_launcher_window_for_hotkey(app.clone());
             }
         });
 }

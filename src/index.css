@@ -27,7 +27,7 @@
   --space-4: 16px;
   --space-5: 20px;
   --space-6: 24px;
-  --sidebar-w: 48px; /* pure icon rail (simple style, icon only + tooltip; no text labels) */
+  --sidebar-w: 44px; /* pure icon rail (simple style, icon only + tooltip; no text labels) */
   --statusbar-h: 28px;
   --command-palette-list-max-height: 300px;
   --command-palette-panel-max-height: 390px;
@@ -50,6 +50,67 @@
   --hiven-space-2: 8px;
   --hiven-space-3: 12px;
   --hiven-space-4: 16px;
+}
+
+.plugin-surface-panel {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-background-primary);
+  color: var(--color-text-primary);
+}
+
+.plugin-surface-panel-titlebar {
+  height: 34px;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px 0 12px;
+  border-bottom: 1px solid var(--color-border-tertiary);
+  background: var(--color-background-secondary);
+}
+
+.plugin-surface-panel-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.plugin-surface-panel-close {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}
+
+.plugin-surface-panel-close:hover {
+  background: var(--color-background-tertiary);
+  color: var(--color-text-primary);
+}
+
+.plugin-surface-panel-body {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.plugin-surface-panel-message {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
 }
 
 body[data-theme='dark'],

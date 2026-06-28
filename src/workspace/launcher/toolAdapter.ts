@@ -24,6 +24,7 @@ import type {
   ResolvedTextInput,
   TextInputMode,
 } from './types'
+import { normalizeLauncherSurfaceId } from './types'
 import { emptyResult, textResult, replaceActiveTextResult, errorResult, choicesResult, REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID } from './output'
 import type { Locale } from '../../i18n'
 
@@ -112,7 +113,7 @@ export function adaptToolToLauncherItem(
       }),
     )
     if (
-      ctx.surfaceId === 'command-palette' &&
+      normalizeLauncherSurfaceId(ctx.surfaceId) === 'editor-command-bar' &&
       result.ok &&
       result.output?.choices.length === 1 &&
       result.output.choices[0]?.id === REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID

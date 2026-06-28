@@ -58,7 +58,8 @@ async function main() {
     assert.match(mainSource, /windowType === ['"]editor['"]/, 'main entry should keep editor routing')
 
     const appSource = readFileSync('src/App.tsx', 'utf8')
-    assert.match(appSource, /isLauncherWindow\(\)\s*\?\s*<LauncherWindowApp \/>/, 'App should route launcher windows to LauncherWindowApp')
+    assert.match(appSource, /return\s+<LauncherRuntimeApp \/>/, 'App should mount the launcher runtime directly')
+    assert.doesNotMatch(appSource, /isLauncherWindow\(\)|function MainApp/, 'App should not keep a retired main-window branch')
     assert.match(appSource, /openGlobalLauncherOverlay\(['"]pinned-only['"]\)/, 'launcher window should open the standalone pinned launcher flow')
   } catch (error) {
     error.message = `${error.message}\n\nvite output:\n${output}`

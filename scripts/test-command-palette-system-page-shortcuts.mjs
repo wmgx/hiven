@@ -32,11 +32,13 @@ assert.match(hostActionsSource, /showSettingsPage\(\)/, 'settings shortcut shoul
 assert.match(hostActionsSource, /aliases:\s*\[[\s\S]*['"]plugins['"][\s\S]*['"]插件['"]/, 'plugins shortcut should be searchable by English and Chinese terms')
 assert.match(hostActionsSource, /aliases:\s*\[[\s\S]*['"]settings['"][\s\S]*['"]设置['"]/, 'settings shortcut should be searchable by English and Chinese terms')
 
-const appSource = read('src/App.tsx')
 const pluginApiSource = read('src/workspace/launcher/pluginApi.ts')
-assert.match(pluginApiSource, /hiven:\/\/show-plugins-page/, 'plugin launcher API should route standalone plugins page requests to the main window')
-assert.match(pluginApiSource, /hiven:\/\/show-settings-page/, 'plugin launcher API should route standalone settings page requests to the main window')
-assert.match(appSource, /listen\(['"]hiven:\/\/show-plugins-page['"][\s\S]{0,260}setActiveView\(['"]scripts['"]\)/, 'main window should handle plugins page requests from the standalone launcher')
-assert.match(appSource, /listen\(['"]hiven:\/\/show-settings-page['"][\s\S]{0,260}setActiveView\(['"]settings['"]\)/, 'main window should handle settings page requests from the standalone launcher')
+const globalLauncherSource = read('src/components/GlobalLauncher.tsx')
+const appSource = read('src/App.tsx')
+assert.match(pluginApiSource, /openLauncherHostSurface\(['"]plugins['"]\)/, 'plugin launcher API should open Plugins as a launcher-hosted surface')
+assert.match(pluginApiSource, /openLauncherHostSurface\(['"]settings['"]\)/, 'plugin launcher API should open Settings as a launcher-hosted surface')
+assert.match(globalLauncherSource, /launcherHostSurfaceTarget/, 'GlobalLauncher should render launcher-hosted app surfaces')
+assert.doesNotMatch(pluginApiSource, /hiven:\/\/show-plugins-page|hiven:\/\/show-settings-page|show_and_focus_window/, 'plugin launcher API must not route settings/plugins through the main window')
+assert.doesNotMatch(appSource, /hiven:\/\/show-plugins-page|hiven:\/\/show-settings-page/, 'main window must not be the settings/plugins bridge')
 
 console.log('command palette system page shortcut checks passed')

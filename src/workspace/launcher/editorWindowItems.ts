@@ -16,6 +16,7 @@ export function getEditorWindowItems(): LauncherItem[] {
       },
       behavior: { type: 'perform' },
       surfaces: ['global-launcher'],
+      requiredCapabilities: ['host-surfaces'],
       pinnable: false,
       staticPriority: 120,
       execute: async () => {

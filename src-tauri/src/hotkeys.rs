@@ -3,8 +3,6 @@ use std::time::Duration;
 #[cfg(target_os = "macos")]
 use std::time::Instant;
 
-use tauri::Emitter;
-
 /// Debug: append a line to /tmp/hiven-hotkey.log for diagnosing release builds.
 #[cfg(target_os = "macos")]
 pub(crate) fn hotkey_log(msg: &str) {
@@ -18,8 +16,6 @@ pub(crate) fn hotkey_log(msg: &str) {
     }
 }
 
-const ROUTE_GLOBAL_PINNED_LAUNCHER_SHORTCUT_EVENT: &str =
-    "hiven://route-global-pinned-launcher-shortcut";
 const DEFAULT_DOUBLE_MODIFIER_THRESHOLD_MS: u64 = 500;
 
 #[derive(Clone, Debug, serde::Serialize)]
@@ -369,7 +365,7 @@ fn start_double_modifier_listener(state: Arc<DoubleModifierHotkeyState>, app: ta
         use windows::Win32::System::LibraryLoader::GetModuleHandleW;
         use windows::Win32::UI::WindowsAndMessaging::{
             DispatchMessageW, GetMessageW, SetWindowsHookExW, TranslateMessage,
-            UnhookWindowsHookEx, WH_KEYBOARD_LL, MSG,
+            UnhookWindowsHookEx, MSG, WH_KEYBOARD_LL,
         };
 
         let hmod = unsafe { GetModuleHandleW(None).unwrap_or_default() };
@@ -377,7 +373,12 @@ fn start_double_modifier_listener(state: Arc<DoubleModifierHotkeyState>, app: ta
         let hinstance: HINSTANCE = unsafe { std::mem::transmute(hmod) };
 
         let hook = unsafe {
-            SetWindowsHookExW(WH_KEYBOARD_LL, Some(low_level_keyboard_proc), Some(hinstance), 0)
+            SetWindowsHookExW(
+                WH_KEYBOARD_LL,
+                Some(low_level_keyboard_proc),
+                Some(hinstance),
+                0,
+            )
         };
         let hook = match hook {
             Ok(h) => h,
@@ -459,7 +460,11 @@ unsafe extern "system" fn low_level_keyboard_proc(
 
                 if is_target && (is_down || is_up) {
                     let has_others = windows_has_other_modifiers(modifier);
-                    let phase = if is_down { KeyPhase::Down } else { KeyPhase::Up };
+                    let phase = if is_down {
+                        KeyPhase::Down
+                    } else {
+                        KeyPhase::Up
+                    };
                     let event = KeyEvent::new(
                         Key::Modifier,
                         phase,
@@ -518,7 +523,7 @@ fn windows_is_any_modifier_vk(vk: u32) -> bool {
         | 0xA2  // VK_LCONTROL
         | 0xA3  // VK_RCONTROL
         | 0xA4  // VK_LMENU
-        | 0xA5  // VK_RMENU
+        | 0xA5 // VK_RMENU
     )
 }
 
@@ -545,20 +550,11 @@ fn windows_has_other_modifiers(modifier: DoubleModifier) -> bool {
 
 #[cfg(target_os = "windows")]
 fn windows_route_pinned_launcher(app: tauri::AppHandle) {
-    use tauri::Manager;
-    let main_focused = app
-        .get_webview_window("main")
-        .and_then(|w| w.is_focused().ok())
-        .unwrap_or(false);
-    if main_focused {
-        let _ = app.emit(
-            ROUTE_GLOBAL_PINNED_LAUNCHER_SHORTCUT_EVENT,
-            (),
-        );
-        return;
-    }
     if let Err(e) = crate::show_launcher_window_for_hotkey(app) {
-        eprintln!("[hiven] Failed to show launcher from double modifier hotkey: {}", e);
+        eprintln!(
+            "[hiven] Failed to show launcher from double modifier hotkey: {}",
+            e
+        );
     }
 }
 
@@ -567,8 +563,8 @@ fn windows_route_pinned_launcher(app: tauri::AppHandle) {
 #[cfg(target_os = "macos")]
 fn start_nsevent_listener(state: Arc<DoubleModifierHotkeyState>, app: tauri::AppHandle) {
     use block2::RcBlock;
-    use objc2::runtime::{AnyClass, AnyObject};
     use objc2::msg_send;
+    use objc2::runtime::{AnyClass, AnyObject};
 
     // NSEventMaskFlagsChanged = 1<<12, NSEventMaskKeyDown = 1<<10
     let mask: u64 = (1u64 << 12) | (1u64 << 10);
@@ -613,18 +609,9 @@ fn start_nsevent_listener(state: Arc<DoubleModifierHotkeyState>, app: tauri::App
         if event_type == FLAGS_CHANGED {
             let flags: u64 = unsafe { msg_send![event, modifierFlags] };
             let (mod_now, has_other) = match modifier {
-                DoubleModifier::Command => (
-                    flags & CMD != 0,
-                    flags & (CTRL | SHIFT | OPTION) != 0,
-                ),
-                DoubleModifier::Shift => (
-                    flags & SHIFT != 0,
-                    flags & (CTRL | CMD | OPTION) != 0,
-                ),
-                DoubleModifier::Option => (
-                    flags & OPTION != 0,
-                    flags & (CTRL | CMD | SHIFT) != 0,
-                ),
+                DoubleModifier::Command => (flags & CMD != 0, flags & (CTRL | SHIFT | OPTION) != 0),
+                DoubleModifier::Shift => (flags & SHIFT != 0, flags & (CTRL | CMD | OPTION) != 0),
+                DoubleModifier::Option => (flags & OPTION != 0, flags & (CTRL | CMD | SHIFT) != 0),
             };
             if ls
                 .double_modifier
@@ -679,19 +666,7 @@ fn start_nsevent_listener(state: Arc<DoubleModifierHotkeyState>, app: tauri::App
 
 #[cfg(target_os = "macos")]
 fn route_pinned_launcher_hotkey(app: tauri::AppHandle) {
-    use tauri::Manager;
-
     hotkey_log("route_pinned_launcher_hotkey entered");
-
-    let main_window_focused = app
-        .get_webview_window("main")
-        .and_then(|window| window.is_focused().ok())
-        .unwrap_or(false);
-    hotkey_log(&format!("main_window_focused = {}", main_window_focused));
-    if main_window_focused {
-        let _ = app.emit(ROUTE_GLOBAL_PINNED_LAUNCHER_SHORTCUT_EVENT, ());
-        return;
-    }
 
     hotkey_log("calling show_launcher_window_for_hotkey");
     if let Err(error) = crate::show_launcher_window_for_hotkey(app) {
@@ -798,12 +773,7 @@ mod double_modifier_tests {
         let mut listener =
             DoubleModifierListenerState::new(Duration::from_millis(300), DoubleModifier::Command);
 
-        assert!(!listener.handle_flags_changed(
-            DoubleModifier::Command,
-            true,
-            false,
-            timestamp(0),
-        ));
+        assert!(!listener.handle_flags_changed(DoubleModifier::Command, true, false, timestamp(0),));
         assert!(!listener.handle_flags_changed(
             DoubleModifier::Command,
             false,
@@ -842,12 +812,7 @@ mod double_modifier_tests {
         let mut listener =
             DoubleModifierListenerState::new(Duration::from_millis(300), DoubleModifier::Command);
 
-        assert!(!listener.handle_flags_changed(
-            DoubleModifier::Command,
-            true,
-            false,
-            timestamp(0),
-        ));
+        assert!(!listener.handle_flags_changed(DoubleModifier::Command, true, false, timestamp(0),));
         assert!(!listener.handle_flags_changed(
             DoubleModifier::Command,
             false,

@@ -22,16 +22,84 @@ import type { EffectRunnerResult } from '../effectRunner'
 
 // ─── System Surfaces ───────────────────────────────────────────────────────
 
-/** The two system launcher surfaces in the first version. */
-export type LauncherSurfaceId = 'command-palette' | 'global-launcher'
+export type LauncherHostId = 'global-launcher' | 'editor-command-bar'
+
+/** `command-palette` is retained as a legacy alias for `editor-command-bar`. */
+export type LauncherSurfaceId = LauncherHostId | 'command-palette'
+
+export type LauncherHostCapability =
+  | 'app-search'
+  | 'plugin-surfaces'
+  | 'host-surfaces'
+  | 'settings'
+  | 'pinned-actions'
+  | 'text-input-actions'
+  | 'pane-actions'
+  | 'system-power'
+  | 'parameter-customization'
+
+export type LauncherHostDescriptor = {
+  id: LauncherHostId
+  capabilities: readonly LauncherHostCapability[]
+}
+
+export type LauncherHostConfig = LauncherHostDescriptor & {
+  presentation: 'spotlight-window' | 'editor-overlay'
+  placeholderKey: 'globalPlaceholder' | 'placeholder'
+}
+
+export const LAUNCHER_HOSTS: Record<LauncherHostId, LauncherHostConfig> = {
+  'global-launcher': {
+    id: 'global-launcher',
+    presentation: 'spotlight-window',
+    placeholderKey: 'globalPlaceholder',
+    capabilities: [
+      'app-search',
+      'plugin-surfaces',
+      'host-surfaces',
+      'settings',
+      'pinned-actions',
+      'text-input-actions',
+      'pane-actions',
+      'system-power',
+      'parameter-customization',
+    ],
+  },
+  'editor-command-bar': {
+    id: 'editor-command-bar',
+    presentation: 'editor-overlay',
+    placeholderKey: 'placeholder',
+    capabilities: [
+      'text-input-actions',
+      'pane-actions',
+      'parameter-customization',
+    ],
+  },
+}
+
+export function launcherHostHasCapability(
+  hostId: LauncherHostId,
+  capability: LauncherHostCapability,
+): boolean {
+  return LAUNCHER_HOSTS[hostId].capabilities.includes(capability)
+}
+
+export function getLauncherHostConfig(hostId: LauncherHostId): LauncherHostConfig {
+  return LAUNCHER_HOSTS[hostId]
+}
 
 export const LAUNCHER_SURFACE_IDS: readonly LauncherSurfaceId[] = [
   'command-palette',
+  'editor-command-bar',
   'global-launcher',
 ] as const
 
 export function isLauncherSurfaceId(value: unknown): value is LauncherSurfaceId {
-  return value === 'command-palette' || value === 'global-launcher'
+  return value === 'command-palette' || value === 'editor-command-bar' || value === 'global-launcher'
+}
+
+export function normalizeLauncherSurfaceId(surfaceId: LauncherSurfaceId): LauncherHostId {
+  return surfaceId === 'command-palette' ? 'editor-command-bar' : surfaceId
 }
 
 // ─── System Identity ───────────────────────────────────────────────────────
@@ -329,6 +397,8 @@ export type LauncherItem = {
   legacyUsageKeys?: string[]
   /** Host-owned parameter schema for system adapters that support Cmd/Ctrl+Enter customization. */
   params?: LauncherParamSpec[]
+  requiredCapabilities?: LauncherHostCapability[]
+  preferredCapabilities?: LauncherHostCapability[]
   /** Explicit default values used when entering the parameter form. */
   defaultParams?: Record<string, unknown>
   /** Host-owned execution policy: defaults can prefill UI but must not skip parameter selection. */

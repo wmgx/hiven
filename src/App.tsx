@@ -1,15 +1,7 @@
-import { Component, lazy, type ReactNode, Suspense, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { useAppStore } from './store'
-import type { GlobalLauncherPosition, ViewId } from './store'
-import { translate } from './i18n'
+import type { GlobalLauncherPosition } from './store'
 import { initConfigDir } from './configInit'
-import { Sidebar } from './components/Sidebar'
-const EditorView = lazy(() => import('./views/EditorView').then(m => ({ default: m.EditorView })))
-const ScriptsView = lazy(() => import('./views/ScriptsView').then(m => ({ default: m.ScriptsView })))
-const PluginEditorView = lazy(() => import('./views/PluginEditorView').then(m => ({ default: m.PluginEditorView })))
-const PinnedRunnerView = lazy(() => import('./views/PinnedRunnerView').then(m => ({ default: m.PinnedRunnerView })))
-const SettingsView = lazy(() => import('./views/SettingsView').then(m => ({ default: m.SettingsView })))
-import { CommandPalette } from './components/CommandPalette'
 import { GlobalLauncher } from './components/GlobalLauncher'
 import { PluginSettingsDialog } from './components/PluginSettingsDialog'
 import { loadInstalledPluginsFromStore } from './workspace/pluginRuntime'
@@ -30,69 +22,27 @@ import './panels/register'
 registerHostLauncherProviders()
 registerBundledPluginPackages()
 
-const VIEW_INDEX: Record<ViewId, number> = { editor: 0, scripts: 1, 'plugin-editor': 2, 'pinned-runner': 3, settings: 4 }
-
-class ViewErrorBoundary extends Component<
-  { viewId: ViewId; children: ReactNode },
-  { error: Error | null; viewId: ViewId }
-> {
-  state = { error: null, viewId: this.props.viewId }
-
-  static getDerivedStateFromError(error: Error) {
-    return { error }
-  }
-
-  static getDerivedStateFromProps(props: { viewId: ViewId }, state: { error: Error | null; viewId: ViewId }) {
-    if (props.viewId !== state.viewId) {
-      return { error: null, viewId: props.viewId }
-    }
-    return null
-  }
-
-  componentDidCatch(error: Error) {
-    console.error('[hiven] View render failed:', error)
-  }
-
-  render() {
-    if (this.state.error) {
-      return (
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6" style={{ color: 'var(--color-text-tertiary)' }}>
-          <div className="scripts-title">View failed to render</div>
-          <div className="max-w-[640px] text-center text-[12px]" style={{ color: 'var(--color-error-text)' }}>
-            {this.state.error.message}
-          </div>
-          <button className="scripts-btn" onClick={() => this.setState({ error: null })}>Retry</button>
-        </div>
-      )
-    }
-    return this.props.children
-  }
-}
-
-function ViewContent({ viewId }: { viewId: ViewId }) {
-  return (
-    <Suspense fallback={<div className="view-loading" />}>
-      {viewId === 'editor' && <EditorView />}
-      {viewId === 'scripts' && <ScriptsView />}
-      {viewId === 'plugin-editor' && <PluginEditorView />}
-      {viewId === 'pinned-runner' && <PinnedRunnerView />}
-      {viewId === 'settings' && <SettingsView />}
-    </Suspense>
-  )
-}
-
 export default function App() {
-  return isLauncherWindow() ? <LauncherWindowApp /> : <MainApp />
+  return <LauncherRuntimeApp />
 }
 
-function MainApp() {
-  const activeView = useAppStore((s) => s.activeView)
-  const locale = useAppStore((s) => s.locale)
-  const settings = useAppStore((s) => s.settings)
-  const fontSize = settings.fontSize
-  const prunePinnedRuntimes = useAppStore((s) => s.prunePinnedRuntimes)
-  const prevViewRef = useRef<ViewId>(activeView)
-  const containerRef = useRef<HTMLDivElement>(null)
+function LauncherRuntimeApp() {
+  const fontSize = useAppStore((s) => s.settings.fontSize)
+  const theme = useAppStore((s) => s.settings.theme)
+  const launcherWindowPosition = useAppStore((s) => s.settings.globalLauncherWindowPosition)
+  const launcherProgrammaticMoveRef = useRef(false)
+  const launcherProgrammaticMoveResetRef = useRef<number | undefined>(undefined)
+
+  const suppressNextLauncherMovePersistence = () => {
+    launcherProgrammaticMoveRef.current = true
+    if (launcherProgrammaticMoveResetRef.current !== undefined) {
+      window.clearTimeout(launcherProgrammaticMoveResetRef.current)
+    }
+    launcherProgrammaticMoveResetRef.current = window.setTimeout(() => {
+      launcherProgrammaticMoveRef.current = false
+      launcherProgrammaticMoveResetRef.current = undefined
+    }, 600)
+  }
 
   useEffect(() => {
     let disposed = false
@@ -114,8 +64,8 @@ function MainApp() {
       if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
         try {
           await loadInstalledPluginsFromStore()
-        } catch (e) {
-          console.error('[hiven] Failed to load plugins:', e)
+        } catch (error) {
+          console.error('[hiven] Failed to load plugins:', error)
         }
       }
 
@@ -126,8 +76,8 @@ function MainApp() {
         initializePluginBackgrounds()
         cleanupSettingsWatcher = setupBackgroundSettingsWatcher()
         cleanupPermissionWatcher = setupBackgroundPermissionWatcher()
-      } catch (err) {
-        console.error('[hiven] Failed to initialize plugin backgrounds:', err)
+      } catch (error) {
+        console.error('[hiven] Failed to initialize plugin backgrounds:', error)
       }
     })
 
@@ -138,261 +88,6 @@ function MainApp() {
       void stopAllPluginBackgrounds()
     }
   }, [])
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((window as unknown as { __FLUXTEXT_HOTKEY_RECORDING__?: boolean }).__FLUXTEXT_HOTKEY_RECORDING__) return
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'k') {
-        e.preventDefault()
-        e.stopPropagation()
-        useAppStore.getState().setCommandPaletteOpen(true)
-        return
-      }
-    }
-    window.addEventListener('keydown', handler, true)
-    return () => window.removeEventListener('keydown', handler, true)
-  }, [])
-
-  useEffect(() => {
-    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
-    let disposed = false
-    let unlisten: (() => void) | undefined
-    import('@tauri-apps/api/event')
-      .then(({ listen }) => listen('hiven://open-pinned-launcher', () => {
-        void (async () => {
-          const { invoke } = await import('@tauri-apps/api/core')
-          await invoke('show_launcher_window')
-        })()
-      }))
-      .then((cleanup) => {
-        if (disposed) cleanup()
-        else unlisten = cleanup
-      })
-      .catch((error) => {
-        console.warn('[hiven] Failed to listen for pinned launcher event:', error)
-      })
-    return () => {
-      disposed = true
-      unlisten?.()
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
-    let disposed = false
-    let unlisten: (() => void) | undefined
-    import('@tauri-apps/api/event')
-      .then(({ listen }) => listen('hiven://route-global-pinned-launcher-shortcut', () => {
-        void routeGlobalPinnedLauncherShortcut()
-      }))
-      .then((cleanup) => {
-        if (disposed) cleanup()
-        else unlisten = cleanup
-      })
-      .catch((error) => {
-        console.warn('[hiven] Failed to listen for global launcher route event:', error)
-      })
-    return () => {
-      disposed = true
-      unlisten?.()
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
-    let disposed = false
-    let unlisten: (() => void) | undefined
-    import('@tauri-apps/api/event')
-      .then(({ listen }) => listen('hiven://show-main-panel', () => {
-        const state = useAppStore.getState()
-        state.setActiveView('editor')
-        state.setCommandPaletteOpen(false)
-        state.setGlobalLauncherOpen(false)
-      }))
-      .then((cleanup) => {
-        if (disposed) cleanup()
-        else unlisten = cleanup
-      })
-      .catch((error) => {
-        console.warn('[hiven] Failed to listen for show main panel event:', error)
-      })
-    return () => {
-      disposed = true
-      unlisten?.()
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
-    let disposed = false
-    let unlistenPlugins: (() => void) | undefined
-    let unlistenSettings: (() => void) | undefined
-    import('@tauri-apps/api/event')
-      .then(async ({ listen }) => {
-        unlistenPlugins = await listen('hiven://show-plugins-page', () => {
-          const state = useAppStore.getState()
-          state.setActiveView('scripts')
-          state.setCommandPaletteOpen(false)
-          state.setGlobalLauncherOpen(false)
-        })
-        unlistenSettings = await listen('hiven://show-settings-page', () => {
-          const state = useAppStore.getState()
-          state.setActiveView('settings')
-          state.setCommandPaletteOpen(false)
-          state.setGlobalLauncherOpen(false)
-        })
-      })
-      .then(() => {
-        if (disposed) {
-          unlistenPlugins?.()
-          unlistenSettings?.()
-        }
-      })
-      .catch((error) => {
-        console.warn('[hiven] Failed to listen for launcher page events:', error)
-      })
-    return () => {
-      disposed = true
-      unlistenPlugins?.()
-      unlistenSettings?.()
-    }
-  }, [])
-
-  useEffect(() => installGlobalPinnedLauncherHotkeys(), [])
-  useEffect(() => installPluginSurfaceShortcutHotkeys(), [])
-
-  useEffect(() => {
-    const viewTitle =
-      activeView === 'scripts'
-        ? translate(locale, 'scripts', 'title')
-        : activeView === 'settings'
-          ? translate(locale, 'settings', 'title')
-          : ''
-    const nextTitle = viewTitle ? `Hiven - ${viewTitle}` : 'Hiven'
-    document.title = nextTitle
-    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
-    import('@tauri-apps/api/window')
-      .then(({ getCurrentWindow }) => getCurrentWindow().setTitle(nextTitle))
-      .catch((error) => {
-        console.warn('[hiven] Failed to sync native window title:', error)
-      })
-  }, [activeView, locale])
-
-  useEffect(() => {
-    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
-    let disposed = false
-    let unlisten: (() => void) | undefined
-    import('@tauri-apps/api/event')
-      .then(({ listen }) => listen<{ id: string }>('hiven://run-pinned-action', (event) => {
-        void (async () => {
-          const { invoke } = await import('@tauri-apps/api/core')
-          await invoke('show_and_focus_window')
-          useAppStore.getState().openPinnedAction(event.payload.id)
-        })()
-      }))
-      .then((cleanup) => {
-        if (disposed) cleanup()
-        else unlisten = cleanup
-      })
-      .catch((error) => {
-        console.warn('[hiven] Failed to listen for launcher action event:', error)
-      })
-    return () => {
-      disposed = true
-      unlisten?.()
-    }
-  }, [])
-
-  useEffect(() => {
-    const timer = window.setInterval(() => prunePinnedRuntimes(), 30_000)
-    return () => window.clearInterval(timer)
-  }, [prunePinnedRuntimes])
-
-  useEffect(() => {
-    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
-    let disposed = false
-    import('@tauri-apps/api/app')
-      .then(async ({ setTheme }) => {
-        if (disposed) return
-        await setTheme(settings.theme)
-      })
-      .catch((error) => {
-        console.warn('[hiven] Failed to sync native window theme:', error)
-      })
-    return () => {
-      disposed = true
-    }
-  }, [settings.theme])
-
-  // Direction-aware view transition
-  useEffect(() => {
-    const el = containerRef.current?.firstElementChild as HTMLElement | null
-    if (!el) return
-    const prevIdx = VIEW_INDEX[prevViewRef.current]
-    const nextIdx = VIEW_INDEX[activeView]
-    const goingUp = nextIdx < prevIdx
-
-    // Set initial state
-    el.classList.add(goingUp ? 'view-enter-up' : 'view-enter')
-    // Trigger transition on next frame
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        el.classList.remove('view-enter', 'view-enter-up')
-        el.classList.add(goingUp ? 'view-enter-up-active' : 'view-enter-active')
-        // Clean up after transition
-        const cleanup = () => {
-          el.classList.remove('view-enter-active', 'view-enter-up-active')
-          el.removeEventListener('transitionend', cleanup)
-        }
-        el.addEventListener('transitionend', cleanup)
-      })
-    })
-
-    prevViewRef.current = activeView
-  }, [activeView])
-
-  const globalLauncherOverlay = useAppStore((s) => s.globalLauncherOverlay)
-
-  return (
-    <div
-      className="flux-spatial-shell"
-      data-theme={settings.theme}
-      style={{ fontSize }}
-    >
-      <div className="flux-main">
-        {!globalLauncherOverlay && <Sidebar />}
-        {!globalLauncherOverlay && (
-          <main className="flux-content view-container" ref={containerRef}>
-            <ViewErrorBoundary viewId={activeView}>
-              <ViewContent viewId={activeView} />
-            </ViewErrorBoundary>
-          </main>
-        )}
-      </div>
-      {!globalLauncherOverlay && activeView === 'editor' && <CommandPalette />}
-      <GlobalLauncher />
-      <PluginSettingsDialog />
-    </div>
-  )
-}
-
-function LauncherWindowApp() {
-  const fontSize = useAppStore((s) => s.settings.fontSize)
-  const theme = useAppStore((s) => s.settings.theme)
-  const launcherWindowPosition = useAppStore((s) => s.settings.globalLauncherWindowPosition)
-  const launcherProgrammaticMoveRef = useRef(false)
-  const launcherProgrammaticMoveResetRef = useRef<number | undefined>(undefined)
-
-  const suppressNextLauncherMovePersistence = () => {
-    launcherProgrammaticMoveRef.current = true
-    if (launcherProgrammaticMoveResetRef.current !== undefined) {
-      window.clearTimeout(launcherProgrammaticMoveResetRef.current)
-    }
-    launcherProgrammaticMoveResetRef.current = window.setTimeout(() => {
-      launcherProgrammaticMoveRef.current = false
-      launcherProgrammaticMoveResetRef.current = undefined
-    }, 600)
-  }
 
   useEffect(() => () => {
     if (launcherProgrammaticMoveResetRef.current !== undefined) {
@@ -408,6 +103,22 @@ function LauncherWindowApp() {
 
   useEffect(() => installGlobalPinnedLauncherHotkeys(), [])
   useEffect(() => installPluginSurfaceShortcutHotkeys(), [])
+
+  useEffect(() => {
+    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+    let disposed = false
+    import('@tauri-apps/api/app')
+      .then(async ({ setTheme }) => {
+        if (disposed) return
+        await setTheme(theme)
+      })
+      .catch((error) => {
+        console.warn('[hiven] Failed to sync native window theme:', error)
+      })
+    return () => {
+      disposed = true
+    }
+  }, [theme])
 
   useEffect(() => {
     if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
@@ -439,11 +150,6 @@ function LauncherWindowApp() {
           useAppStore.getState().openPluginSurfaceTool(pendingSurfaceTarget)
         }
         useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
-        // The window is centered on the cursor's monitor natively in
-        // `center_launcher_window` before this event fires. Only override that
-        // centering with a previously dragged position while it is still fresh
-        // (within the TTL and on the same screen); otherwise the launcher falls
-        // back to centered so it never gets stranded where it was last left.
         if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
         const settings = useAppStore.getState().settings
         const saved = settings.globalLauncherWindowPositionSource === 'user'
@@ -535,7 +241,6 @@ function LauncherWindowApp() {
             useAppStore.getState().updateSetting('globalLauncherWindowPositionSource', 'user')
           }
 
-          // Throttle: only persist position at most every 150ms
           lastMovePayload = position
           if (moveThrottleTimer !== undefined) return
           moveThrottleTimer = setTimeout(async () => {
@@ -616,15 +321,8 @@ async function rehydratePersistedAppState() {
   }
 }
 
-function isLauncherWindow() {
-  return new URLSearchParams(window.location.search).get('window') === 'launcher'
-}
-
 const LAUNCHER_POSITION_TTL_MS = 2 * 60 * 1000
 
-// A dragged launcher position is only honored briefly (TTL) and on the same
-// screen it was saved on; once stale it is ignored so the launcher reverts to
-// being centered on the cursor's monitor.
 function isLauncherPositionFresh(position: GlobalLauncherPosition): boolean {
   if (position.lastDraggedAt == null) return false
   if (Date.now() - position.lastDraggedAt >= LAUNCHER_POSITION_TTL_MS) return false

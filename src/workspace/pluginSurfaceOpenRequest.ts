@@ -1,5 +1,6 @@
 import { useAppStore, type PluginSurfaceOpenTarget } from '../store'
 import { pluginRegistry } from './pluginRegistry'
+import { showLauncherWindow } from './windowManager/launcherWindow'
 import type { PluginDefinition } from './pluginTypes'
 
 const PENDING_OPEN_KEY = 'hiven-plugin-surface-open-request'
@@ -63,8 +64,7 @@ export async function requestOpenPluginSurfaceTool(target: PluginSurfaceOpenTarg
     }
   }
 
-  const { invoke } = await import('@tauri-apps/api/core')
-  await invoke('show_launcher_window')
+  await showLauncherWindow()
   try {
     const { emitTo } = await import('@tauri-apps/api/event')
     await emitTo('launcher', 'hiven://open-plugin-surface', target)

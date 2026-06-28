@@ -1,6 +1,7 @@
 import { searchableFieldsMatch, type SearchableFields } from '../searchRanking'
 import type { Locale } from '../../i18n'
 import type { DiscoveredApp, LauncherItem, LauncherSurfaceId } from '../launcher/types'
+import type { AppWorkObject } from '../../workflow/workObject'
 
 const HOST_APP_INDEX_CACHE_KEY = 'hiven:host-app-launcher:index:v1'
 const APP_INDEX_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
@@ -67,6 +68,10 @@ async function launchInstalledApp(appId: string): Promise<void> {
   if (!isTauriRuntime()) throw new Error('Application launch is only available in the desktop runtime.')
   const { invoke } = await import('@tauri-apps/api/core')
   await invoke('launch_installed_app', { appId })
+}
+
+export async function launchHostAppObject(appId: string): Promise<void> {
+  await launchInstalledApp(appId)
 }
 
 function normalizeAppName(name: string): string {
@@ -164,6 +169,7 @@ export function getHostAppLauncherStaticItems(): LauncherItem[] {
       },
       behavior: { type: 'perform' },
       surfaces: ['global-launcher'],
+      requiredCapabilities: ['app-search'],
       pinnable: false,
       execute: async () => {
         const result = await refreshApplicationIndex({ force: true })
@@ -200,6 +206,7 @@ export async function getHostAppLauncherDynamicItems({
     },
     behavior: { type: 'perform' },
     surfaces: ['global-launcher'],
+    requiredCapabilities: ['app-search'],
     pinnable: false,
     ranking: {
       installedAt: app.installedAt,
@@ -213,4 +220,20 @@ export async function getHostAppLauncherDynamicItems({
       }
     },
   }))
+}
+
+export function getHostAppWorkObjects(query: string, locale: Locale): AppWorkObject[] {
+  return readCache().apps
+    .filter((app) => appMatchesQuery(app, query, locale))
+    .map((app) => ({
+      id: `app:${app.appId}`,
+      type: 'app',
+      title: app.name,
+      subtitle: app.displayPath || sourceLabel(app),
+      icon: appIconRef(app.appId),
+      source: 'host.app-index',
+      bundleId: app.appId,
+      executablePath: app.displayPath,
+      createdAt: app.installedAt,
+    }))
 }

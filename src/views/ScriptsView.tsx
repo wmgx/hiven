@@ -1230,16 +1230,16 @@ export function ScriptsView() {
         </div>
       </div>
 
-      <div className="ptabs scripts-tabs">
-        <button className={`ptab scripts-tab ${activeTab === 'builtin' ? 'on active' : ''}`} onClick={() => setActiveTab('builtin')}>
+      <div className="ptabs scripts-tabs seg-control sm">
+        <button className={`ptab scripts-tab seg-item ${activeTab === 'builtin' ? 'on active' : ''}`} onClick={() => setActiveTab('builtin')}>
           {t(locale, 'scripts.tabBuiltin')}
           <span className="pt-n scripts-tab-count">{builtinPlugins.length}</span>
         </button>
-        <button className={`ptab scripts-tab ${activeTab === 'installed' ? 'on active' : ''}`} onClick={() => setActiveTab('installed')}>
+        <button className={`ptab scripts-tab seg-item ${activeTab === 'installed' ? 'on active' : ''}`} onClick={() => setActiveTab('installed')}>
           {t(locale, 'scripts.tabInstalled')}
           <span className="pt-n scripts-tab-count">{installedList.length}</span>
         </button>
-        <button className={`ptab scripts-tab ${activeTab === 'dev' ? 'on active' : ''}`} onClick={() => setActiveTab('dev')}>
+        <button className={`ptab scripts-tab seg-item ${activeTab === 'dev' ? 'on active' : ''}`} onClick={() => setActiveTab('dev')}>
           {t(locale, 'scripts.tabDev')}
           <span className="pt-n scripts-tab-count">{devList.length}</span>
         </button>

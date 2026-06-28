@@ -203,13 +203,12 @@ assert.match(appTsx, /initializePluginBackgrounds/, 'App must call initializePlu
 assert.match(appTsx, /setupBackgroundSettingsWatcher/, 'App must call setupBackgroundSettingsWatcher')
 assert.match(appTsx, /setupBackgroundPermissionWatcher/, 'App must call setupBackgroundPermissionWatcher')
 assert.match(appTsx, /stopAllPluginBackgrounds/, 'App must stop backgrounds during app/window cleanup')
-const beforeMainApp = appTsx.split('function MainApp')[0] ?? appTsx
-assert.doesNotMatch(beforeMainApp, /initializePluginBackgrounds\(\)|setupBackgroundSettingsWatcher\(\)|setupBackgroundPermissionWatcher\(\)/, 'Backgrounds must not initialize at module scope because launcher windows import App.tsx too')
-const mainAppBody = appTsx.match(/function MainApp\(\)[\s\S]*?function LauncherWindowApp\(\)/)?.[0] ?? ''
-assert.match(mainAppBody, /initializePluginBackgrounds\(\)/, 'MainApp should initialize plugin backgrounds')
-assert.match(mainAppBody, /cleanupSettingsWatcher\?\.\(\)|cleanupPermissionWatcher\?\.\(\)/, 'MainApp should retain and clean up background watcher subscriptions')
-const launcherWindowBody = appTsx.match(/function LauncherWindowApp\(\)[\s\S]*?function shouldAllowLauncherListWheel/)?.[0] ?? ''
-assert.doesNotMatch(launcherWindowBody, /initializePluginBackgrounds\(\)|setupBackgroundSettingsWatcher\(\)|setupBackgroundPermissionWatcher\(\)/, 'LauncherWindowApp must not run plugin backgrounds')
+const beforeLauncherRuntimeApp = appTsx.split('function LauncherRuntimeApp')[0] ?? appTsx
+assert.doesNotMatch(beforeLauncherRuntimeApp, /initializePluginBackgrounds\(\)|setupBackgroundSettingsWatcher\(\)|setupBackgroundPermissionWatcher\(\)/, 'Backgrounds must not initialize at module scope')
+const launcherRuntimeBody = appTsx.match(/function LauncherRuntimeApp\(\)[\s\S]*?function shouldAllowLauncherListWheel/)?.[0] ?? ''
+assert.match(launcherRuntimeBody, /initializePluginBackgrounds\(\)/, 'launcher runtime should initialize plugin backgrounds')
+assert.match(launcherRuntimeBody, /cleanupSettingsWatcher\?\.\(\)|cleanupPermissionWatcher\?\.\(\)/, 'launcher runtime should retain and clean up background watcher subscriptions')
+assert.doesNotMatch(appTsx, /function MainApp\(\)/, 'retired MainApp must not own plugin backgrounds')
 
 // ─── 7. Vite dev server module verification ─────────────────────────────────
 
