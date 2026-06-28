@@ -98,6 +98,12 @@ assert.equal(
   'package.json must expose the current-context object/action/output routing story check',
 )
 assert.match(read('scripts/test-workflow-context-routing-story.mjs'), /context:external-selected-text[\s\S]*workflow\.open-editor-with-translate-panel[\s\S]*attach-editor-panel/, 'context routing story must prove context objects expand into editor/plugin output actions')
+assert.equal(
+  packageJson.scripts?.['test:editor-command-bar-local-actions-behavior'],
+  'node scripts/test-editor-command-bar-local-actions-behavior.mjs',
+  'package.json must expose editor command bar local action behavior coverage',
+)
+assert.match(read('scripts/test-editor-command-bar-local-actions-behavior.mjs'), /host:editor:format-bullets[\s\S]*host:editor:quote-code-block[\s\S]*host:editor:json-minify[\s\S]*host:editor:json-to-yaml[\s\S]*host:editor:json-extract-fields/, 'editor command bar local action behavior must cover text and JSON mutations')
 
 // Product/behavior acceptance: startup and global entry.
 assert.ok(!tauriConfig.app.windows.some((window) => window.label === 'main'), 'startup must not declare a retired main window')

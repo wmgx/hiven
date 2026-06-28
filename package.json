@@ -75,6 +75,7 @@
     "test:no-main-window-startup": "node scripts/test-no-main-window-startup.mjs",
     "test:editor-command-bar-scope": "node scripts/test-editor-command-bar-scope.mjs",
     "test:editor-command-bar-attach-surfaces": "node scripts/test-editor-command-bar-attach-surfaces.mjs",
+    "test:editor-command-bar-local-actions-behavior": "node scripts/test-editor-command-bar-local-actions-behavior.mjs",
     "test:global-launcher-open-editor": "node scripts/test-global-launcher-open-editor.mjs",
     "test:plugin-surface-shortcut-window": "node scripts/test-plugin-surface-shortcut-window.mjs",
     "test:output-router-text-targets": "node scripts/test-output-router-text-targets.mjs",
