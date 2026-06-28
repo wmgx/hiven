@@ -64,6 +64,7 @@ const files = {
   windowManagerPluginSurfaces: read('src/workspace/windowManager/pluginSurfaceWindows.ts'),
   windowManagerLauncher: read('src/workspace/windowManager/launcherWindow.ts'),
   globalLauncherSurfaceRegistry: read('src/components/launcher/GlobalLauncherSurfaceRegistry.ts'),
+  globalLauncherSelectionController: read('src/components/launcher/useGlobalLauncherSelectionController.ts'),
   contextBroker: read('src/launcher/context/contextBroker.ts'),
   defaultWorkflowProviders: read('src/workflow/defaultWorkflowProviders.ts'),
   windowLabels: read('src/workspace/windowManager/windowLabels.ts'),
@@ -221,6 +222,12 @@ assert.match(files.globalLauncherFrames, /<GlobalLauncherPluginSurfaceFrame/, 'G
 assert.match(files.globalLauncherFrames, /<GlobalLauncherSearchFrame/, 'GlobalLauncherFrameSwitch must delegate search rendering to a frame component')
 assert.match(files.globalLauncherFrames, /<GlobalLauncherCollectInputFrame/, 'GlobalLauncherFrameSwitch must delegate collect-input rendering to a frame component')
 assert.match(files.globalLauncherFrames, /<GlobalLauncherResultFrame/, 'GlobalLauncherFrameSwitch must delegate result rendering to a frame component')
+assert.match(files.globalLauncherSelectionController, /export function useGlobalLauncherSelectionController/, 'GlobalLauncher item selection must live in a dedicated controller hook')
+assert.match(files.globalLauncherSelectionController, /resolvePluginSurfaceTarget/, 'selection controller must own plugin surface interception')
+assert.match(files.globalLauncherSelectionController, /finishPinnedLauncherSelection/, 'selection controller must own pinned launcher completion')
+assert.match(files.globalLauncherSelectionController, /grantGlobalLauncherItemPermissions/, 'selection controller must own permission grant continuation')
+assert.match(files.globalLauncherHost, /useGlobalLauncherSelectionController/, 'GlobalLauncherHost must use the selection controller hook')
+assert.doesNotMatch(files.globalLauncherHost, /const selectItem\s*=|function executeDomainItem|function grantItemPermissionsAndRun|function cancelItemPermissionPrompt|resolvePluginSurfaceTarget|finishPinnedLauncherSelection|grantGlobalLauncherItemPermissions/, 'GlobalLauncherHost must not inline item selection, permission continuation, or pinned completion logic')
 assert.doesNotMatch(files.globalLauncherHost, /function LauncherList|const LauncherListItem|function ResultChoiceRow|function HintKey|function HintText|function getLauncherItemKindLabel|function isLongResultText|function HostSurfaceView|<PluginSettingsContent|<PluginSurfaceRenderer|<LauncherMixedList|<LauncherResultChoiceRow|<LauncherHintKey|<LauncherHintText|<Search className=/, 'GlobalLauncherHost must not carry duplicate shared launcher UI primitives or extracted frames')
 assert.match(files.surfaceRegistry, /export type SurfaceInstance/, 'Surface registry must model surface instances')
 assert.match(files.surfaceRegistry, /upsertSurfaceInstance/, 'Surface registry must upsert surface instances')

@@ -164,6 +164,7 @@ const launcher = [
   read('src/components/launcher/GlobalLauncherSelection.ts'),
   read('src/components/launcher/GlobalLauncherSurfaceRegistry.ts'),
   read('src/components/launcher/GlobalLauncherSurfaceFrame.ts'),
+  read('src/components/launcher/useGlobalLauncherSelectionController.ts'),
   read('src/components/launcher/GlobalLauncherItems.ts'),
   read('src/components/pluginSurface/PluginSurfaceRenderer.tsx'),
 ].join('\n')

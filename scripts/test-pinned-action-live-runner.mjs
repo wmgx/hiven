@@ -19,6 +19,7 @@ const files = {
   store: read('src/store.ts'),
   app: read('src/App.tsx'),
   globalLauncherHost: read('src/launcher/hosts/GlobalLauncherHost.tsx'),
+  globalLauncherSelectionController: read('src/components/launcher/useGlobalLauncherSelectionController.ts'),
   globalLauncherClose: read('src/components/launcher/GlobalLauncherClose.ts'),
   pinnedRuntime: read('src/workspace/pinnedActionRuntime.ts'),
   pinnedFactory: read('src/workspace/pinnedActionFactory.ts'),
@@ -80,7 +81,7 @@ check('Retired main-window pinned runner shell is gone', () => {
   assert.doesNotMatch(files.store, /export\s+type\s+ViewId\b|\bactiveView\b|\bsetActiveView\b/, 'store should not keep the retired ViewId navigation model')
   assert.doesNotMatch(files.app, /PinnedRunnerView|<Sidebar\b|function ViewContent/, 'App should not mount retired pinned runner navigation')
   assert.doesNotMatch(files.globalLauncherHost, /setActiveView/, 'GlobalLauncherHost should not switch retired workspace views')
-  assertSourceHas(files.globalLauncherHost, /finishPinnedLauncherSelection/, 'GlobalLauncherHost should delegate pinned action activation from search results')
+  assertSourceHas(files.globalLauncherHost + files.globalLauncherSelectionController, /finishPinnedLauncherSelection/, 'GlobalLauncherHost should delegate pinned action activation from search results')
   assertSourceHas(files.globalLauncherClose, /openPinnedAction\(pinnedId\)/, 'GlobalLauncher close helper should activate pinned actions from search results')
 })
 

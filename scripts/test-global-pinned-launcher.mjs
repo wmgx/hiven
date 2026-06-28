@@ -34,6 +34,7 @@ const files = {
     read('src/components/launcher/GlobalLauncherWindowLifecycle.ts'),
     read('src/workspace/windowManager/launcherWindow.ts'),
     read('src/components/launcher/GlobalLauncherSurfaceFrame.ts'),
+    read('src/components/launcher/useGlobalLauncherSelectionController.ts'),
     read('src/components/launcher/GlobalLauncherResults.ts'),
     read('src/components/launcher/GlobalLauncherItems.ts'),
     read('src/components/launcher/LauncherMixedList.tsx'),
@@ -269,8 +270,13 @@ check('global launcher reuses shared search ranking logic', () => {
 check('selecting a pinned item still opens the pinned action', () => {
   assertHas(
     files.globalLauncher,
-    /item\.kind\s*===\s*['"]pinned['"][\s\S]{0,240}finishPinnedLauncherSelection\([\s\S]{0,240}pinnedId:\s*item\.id[\s\S]*openPinnedAction\(pinnedId\)/,
-    'selecting a pinned launcher item should call openPinnedAction(item.id)',
+    /item\.kind\s*===\s*['"]pinned['"][\s\S]{0,260}finishPinnedLauncherSelection\([\s\S]{0,260}pinnedId:\s*item\.id[\s\S]{0,260}openPinnedAction,/,
+    'selecting a pinned launcher item should route pinned item ids through finishPinnedLauncherSelection',
+  )
+  assertHas(
+    files.globalLauncher,
+    /function\s+finishPinnedLauncherSelection[\s\S]*openPinnedAction\(pinnedId\)/,
+    'finishPinnedLauncherSelection should call openPinnedAction(pinnedId)',
   )
 })
 
@@ -282,7 +288,12 @@ check('standalone domain launcher items stay on the launcher controller path', (
   )
   assertHas(
     files.globalLauncher,
-    /item\.kind\s*===\s*['"]domain['"][\s\S]*executeDomainItem\(item\.domainItem[\s\S]*function\s+executeDomainItem[\s\S]*executeGlobalLauncherDomainItem[\s\S]*controller\.selectItem\(item(?:,\s*\{[\s\S]{0,80}\})?\)/,
+    /item\.kind\s*===\s*['"]domain['"][\s\S]*executeDomainItem\(item\.domainItem/,
+    'domain launcher selection should route domain items to executeDomainItem',
+  )
+  assertHas(
+    files.globalLauncher,
+    /executeGlobalLauncherDomainItem[\s\S]*controller\.selectItem\(item(?:,\s*\{[\s\S]{0,80}\})?\)/,
     'domain launcher items should execute through LauncherController so output keeps the launcher open',
   )
 })

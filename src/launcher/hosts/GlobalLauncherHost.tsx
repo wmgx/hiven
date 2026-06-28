@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useAppStore } from '../../store'
 import { t } from '../../i18n'
 import { usePluginRegistryVersion } from '../../workspace/pluginRegistry'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../../utils/imeKeyboard'
 import { usePluginSettingsStore } from '../../workspace/pluginSettingsStore'
-import type { LauncherItem as DomainLauncherItem } from '../../workspace/launcher/types'
 import { useGlobalLauncherResultFrame } from '../../components/launcher/GlobalLauncherResults'
 import { buildGlobalLauncherItems, type GlobalLauncherItem } from '../../components/launcher/GlobalLauncherItems'
 import { buildGlobalLauncherPanelStyle } from '../../components/launcher/GlobalLauncherLayout'
@@ -12,19 +11,11 @@ import { usePluginPermissionStore } from '../../workspace/pluginPermissions'
 import { useLauncherSession } from '../../workspace/launcher/useLauncherSession'
 import { useGlobalLauncherSurfaceRegistry } from '../../components/launcher/GlobalLauncherSurfaceRegistry'
 import { useCloseStandaloneLauncherOnBlur, useFocusGlobalLauncherSurfaceShell, useGlobalLauncherNativeDrag, useStandaloneLauncherResize } from '../../components/launcher/GlobalLauncherWindowLifecycle'
-import { closeGlobalLauncherWindow, finishPinnedLauncherSelection } from '../../components/launcher/GlobalLauncherClose'
-import {
-  buildItemPermissionFrame,
-  executeGlobalLauncherDomainItem,
-  grantGlobalLauncherItemPermissions,
-  isWorkflowObjectLauncherItem,
-  resolvePluginSurfaceTarget,
-  type LauncherItemPermissionFrame,
-} from '../../components/launcher/GlobalLauncherSelection'
+import { closeGlobalLauncherWindow } from '../../components/launcher/GlobalLauncherClose'
+import { isWorkflowObjectLauncherItem } from '../../components/launcher/GlobalLauncherSelection'
 import { useGlobalLauncherSurfaceFrame } from '../../components/launcher/GlobalLauncherSurfaceFrame'
 import { GlobalLauncherPanel } from '../../components/launcher/GlobalLauncherPanel'
-
-type LauncherItem = GlobalLauncherItem
+import { useGlobalLauncherSelectionController } from '../../components/launcher/useGlobalLauncherSelectionController'
 
 export function GlobalLauncherHost() {
   const open = useAppStore((s) => s.globalLauncherOpen)
@@ -46,7 +37,6 @@ export function GlobalLauncherHost() {
   const settingsDialogTarget = usePluginSettingsStore((s) => s.settingsDialogTarget)
   const closeSettingsDialog = usePluginSettingsStore((s) => s.closeSettingsDialog)
   const closeAfterActionRef = useRef<() => void>(() => {})
-  const [itemPermissionFrame, setItemPermissionFrame] = useState<LauncherItemPermissionFrame | null>(null)
   const isKeyboardNavRef = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -235,60 +225,24 @@ export function GlobalLauncherHost() {
     controllerState,
   })
 
-  const selectItem = (item: LauncherItem | undefined, customizeParams = false) => {
-    if (!item) return
-
-    if (item.kind === 'domain') {
-      const pluginSurfaceTarget = resolvePluginSurfaceTarget(item.domainItem)
-      if (pluginSurfaceTarget) {
-        clearPluginSurfaceTool()
-        void openPluginSurface(pluginSurfaceTarget)
-        return
-      }
-
-      const permissionFrame = buildItemPermissionFrame(item.domainItem, customizeParams)
-      if (permissionFrame) {
-        setItemPermissionFrame(permissionFrame)
-        return
-      }
-
-      executeDomainItem(item.domainItem, customizeParams)
-      return
-    }
-
-    if (item.kind === 'pinned') {
-      void finishPinnedLauncherSelection({
-        pinnedId: item.id,
-        standaloneLauncher,
-        overlay,
-        openPinnedAction,
-        restoreFocus,
-        setOpen,
-      })
-    }
-  }
-
-  function executeDomainItem(item: DomainLauncherItem, customizeParams = false) {
-    executeGlobalLauncherDomainItem({
-      item,
-      controller: controllerRef.current,
-      customizeParams,
-    })
-  }
-
-  function grantItemPermissionsAndRun() {
-    if (!itemPermissionFrame) return
-    grantGlobalLauncherItemPermissions(itemPermissionFrame, grantPluginPermissions)
-    const item = itemPermissionFrame.item
-    const customizeParams = itemPermissionFrame.customizeParams
-    setItemPermissionFrame(null)
-    executeDomainItem(item, customizeParams)
-  }
-
-  function cancelItemPermissionPrompt() {
-    setItemPermissionFrame(null)
-    focusSearchInputAfterBack()
-  }
+  const {
+    itemPermissionFrame,
+    setItemPermissionFrame,
+    selectItem,
+    grantItemPermissionsAndRun,
+    cancelItemPermissionPrompt,
+  } = useGlobalLauncherSelectionController({
+    controllerRef,
+    standaloneLauncher,
+    overlay,
+    openPinnedAction,
+    restoreFocus,
+    setOpen,
+    clearPluginSurfaceTool,
+    openPluginSurface,
+    grantPluginPermissions,
+    focusSearchInputAfterBack,
+  })
 
   const handleHostEscape = useCallback((event: KeyboardEvent) => {
     if (event.key !== 'Escape') return
