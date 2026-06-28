@@ -18,7 +18,7 @@ import { runtimeRegistry } from '../workspace/runtimeRegistry'
 import type { SerializedRange } from '../workspace/types'
 import { useWorkspaceStore } from '../workspace/workspaceStore'
 import { EditorView } from '../views/EditorView'
-import { CommandPalette } from './CommandPalette'
+import { EditorCommandBar } from './EditorCommandBar'
 import { PluginSettingsDialog } from './PluginSettingsDialog'
 import './EditorWindow.css'
 import '../panels/register'
@@ -120,7 +120,7 @@ export function EditorWindow() {
           <EditorView />
         )}
       </div>
-      <CommandPalette />
+      <EditorCommandBar />
       <PluginSettingsDialog />
     </div>
   )

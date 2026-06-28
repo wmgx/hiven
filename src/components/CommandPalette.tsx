@@ -1,5 +1,5 @@
-import { EditorCommandBarHost } from '../launcher/hosts/EditorCommandBarHost'
+import { EditorCommandBar } from './EditorCommandBar'
 
 export function CommandPalette() {
-  return <EditorCommandBarHost />
+  return <EditorCommandBar />
 }

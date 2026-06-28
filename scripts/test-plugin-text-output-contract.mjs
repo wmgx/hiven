@@ -40,7 +40,7 @@ assert.match(pluginCommandRunner, /text\.replace/, 'runner should keep legacy te
 assert.match(toolAdapter, /tool\.run/, 'launcher tool adapter should execute explicit tool contributions')
 assert.match(toolAdapter, /ctx\.params|params,/, 'launcher tool adapter should pass customized params to tools')
 assert.doesNotMatch(toolAdapter, /runTextPluginCommand|CommandContribution/, 'launcher tool adapter must not wrap command contributions')
-assert.match(commandPalette, /EditorCommandBarHost/, 'command palette should delegate to EditorCommandBarHost')
+assert.match(commandPalette, /EditorCommandBar/, 'command palette should delegate to EditorCommandBar')
 assert.match(editorCommandBarHost, /useLauncherSession/, 'editor command bar host should delegate launcher text output to the shared session')
 assert.match(launcherSession, /LauncherController/, 'shared launcher session should delegate launcher text output to LauncherController')
 assert.match(launcherSession, /createPluginLauncherApi/, 'shared launcher session should use the shared launcher API for host-neutral text output actions')

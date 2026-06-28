@@ -47,7 +47,8 @@ assert.match(tauriLib, /show_and_focus_editor_window[\s\S]*set_focus/, 'show_edi
 assert.ok(capability.windows.includes('editor'), 'capability scope must allow the editor window')
 
 assert.match(editorWindow, /<EditorView \/>/, 'EditorWindow must host EditorView')
-assert.match(editorWindow, /<CommandPalette \/>/, 'EditorWindow must host the editor command bar')
+assert.match(editorWindow, /<EditorCommandBar \/>/, 'EditorWindow must host the editor command bar directly')
+assert.doesNotMatch(editorWindow, /CommandPalette/, 'EditorWindow must not mount the retired CommandPalette compatibility wrapper')
 assert.match(editorWindow, /ensurePluginRuntimeReady/, 'EditorWindow must use shared plugin runtime bootstrap')
 assert.match(editorWindow, /registerEditorBridgeHandlers/, 'EditorWindow must register bridge handlers')
 assert.match(editorWindow, /applyCreateEditorPane[\s\S]*createPane/, 'EditorWindow must create editor panes from bridge requests in its own store')

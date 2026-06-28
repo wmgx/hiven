@@ -12,7 +12,7 @@ const editorCommandBarHost = readFileSync('src/launcher/hosts/EditorCommandBarHo
 const globalLauncherHost = readFileSync('src/launcher/hosts/GlobalLauncherHost.tsx', 'utf8')
 const globalLauncherKeyboard = readFileSync('src/components/launcher/GlobalLauncherKeyboard.ts', 'utf8')
 
-assert.match(commandPalette, /EditorCommandBarHost/, 'CommandPalette should delegate to EditorCommandBarHost')
+assert.match(commandPalette, /EditorCommandBar/, 'CommandPalette should delegate to EditorCommandBar')
 assert.match(
   editorCommandBarHost,
   /function focusSearchInputAfterBack\(\)[\s\S]{0,180}requestAnimationFrame\(\(\) => inputRef\.current\?\.focus\(\)\)/,

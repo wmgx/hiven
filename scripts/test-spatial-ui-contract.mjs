@@ -80,7 +80,7 @@ has(files.scripts, /className=.*card/s, 'Scripts view plugin rows should use spe
 has(files.settings, /function ThemeSettings|settings\.theme/, 'Settings should expose theme controls')
 has(files.settings, /className=.*toggle/s, 'Settings toggles should use the spec toggle component')
 has(files.pluginEditor, /file-tree|tree-node/, 'Plugin editor should use file tree node component classes')
-has(files.commandPalette, /EditorCommandBarHost/, 'Command palette compatibility wrapper should delegate to the editor command bar host')
+has(files.commandPalette, /EditorCommandBar/, 'Command palette compatibility wrapper should delegate to EditorCommandBar')
 has(files.launcherDomainSearchStep + files.launcherMixedList, /cmd-item/, 'Shared launcher rows should render spec command items')
 has(files.globalLauncher, /global-launcher-panel/, 'Global launcher should use a bounded panel component')
 has(files.globalLauncher, /startCurrentLauncherWindowDrag|startDragging\(\)/, 'Standalone global launcher should drag the native window instead of moving inside its own bounds')

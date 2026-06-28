@@ -94,7 +94,7 @@ assert.match(files.tauriLib, /show_launcher_window_for_hotkey/, 'native runtime 
 
 // Shared launcher architecture.
 assert.match(files.globalLauncher, /return <GlobalLauncherHost \/>/, 'GlobalLauncher must be a thin compatibility wrapper')
-assert.match(files.commandPalette, /return <EditorCommandBarHost \/>/, 'CommandPalette must be a thin editor command bar wrapper')
+assert.match(files.commandPalette, /return <EditorCommandBar \/>/, 'CommandPalette must be a thin compatibility wrapper around EditorCommandBar')
 assert.match(files.globalLauncherHost, /useLauncherSession\(\{[\s\S]*hostId:\s*['"]global-launcher['"]/, 'Global launcher host must use the shared launcher session')
 assert.match(files.editorCommandBar, /useLauncherSession\(\{[\s\S]*hostId:\s*['"]editor-command-bar['"]/, 'Editor command bar must use the shared launcher session')
 assert.match(files.launcherSession, /new LauncherController/, 'shared launcher session must own controller lifecycle')
@@ -121,7 +121,8 @@ assert.doesNotMatch(files.editorBridge, /requestOpenEditorWindow/, 'editor bridg
 assert.match(files.tauriLib, /async fn show_editor_window/, 'native runtime must expose editor window creation')
 assert.match(files.tauriLib, /WebviewWindowBuilder::new\([\s\S]{0,180}"editor"[\s\S]{0,260}index\.html\?window=editor/, 'native runtime must create an independent editor window')
 assert.match(files.hostProvider, /getEditorWindowItems/, 'global launcher must provide an editor-opening item')
-assert.match(files.editorWindow, /<CommandPalette \/>/, 'EditorWindow must host the local editor command bar')
+assert.match(files.editorWindow, /<EditorCommandBar \/>/, 'EditorWindow must host the local editor command bar directly')
+assert.doesNotMatch(files.editorWindow, /CommandPalette/, 'EditorWindow runtime must not mount the retired CommandPalette compatibility wrapper')
 assert.match(files.editorView, /<PanelHostV2 placement="left" \/>[\s\S]*<PanelHostV2 placement="bottom" \/>[\s\S]*<PanelHostV2 placement="right" \/>/, 'Editor must retain PanelHostV2 left/bottom/right')
 assert.match(files.editorWindow, /upsertSurfaceInstance\([\s\S]*id:\s*EDITOR_WINDOW_LABEL/, 'EditorWindow must register itself as a surface using the centralized label')
 

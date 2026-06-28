@@ -58,7 +58,7 @@ assert.match(
 )
 
 // CommandPalette and GlobalLauncher are thin wrappers; their hosts consume dynamic items through the shared session.
-assert.match(commandPalette, /EditorCommandBarHost/, 'CommandPalette should delegate to EditorCommandBarHost')
+assert.match(commandPalette, /EditorCommandBar/, 'CommandPalette should delegate to EditorCommandBar')
 assert.match(globalLauncher, /GlobalLauncherHost/, 'GlobalLauncher should delegate to GlobalLauncherHost')
 assert.match(editorCommandBarHost, /useLauncherSession\(\{[\s\S]*hostId:\s*['"]editor-command-bar['"]/, 'EditorCommandBarHost should use the shared launcher session')
 assert.match(globalLauncherHost, /useLauncherSession\(\{[\s\S]*hostId:\s*['"]global-launcher['"]/, 'GlobalLauncherHost should use the shared launcher session')

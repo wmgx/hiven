@@ -52,8 +52,8 @@ check('Store no longer exposes the retired main-window ViewId model', () => {
 check('App does not register Cmd/Ctrl+K for the in-app command palette', () => {
   assert.doesNotMatch(
     files.app,
-    /\(e\.metaKey\s*\|\|\s*e\.ctrlKey\)[\s\S]{0,120}key\s*={2,3}\s*['"]k['"][\s\S]{0,260}setCommandPaletteOpen\(true\)/,
-    'App should not open CommandPalette from a hard-coded Cmd/Ctrl+K listener',
+    /\(e\.metaKey\s*\|\|\s*e\.ctrlKey\)[\s\S]{0,120}key\s*={2,3}\s*['"]k['"][\s\S]{0,260}setEditorCommandBarOpen\(true\)/,
+    'App should not open EditorCommandBar from a hard-coded Cmd/Ctrl+K listener',
   )
 })
 
@@ -65,15 +65,15 @@ check('Monaco editor does not register CtrlCmd+K for the command palette', () =>
   )
 })
 
-check('CommandPalette is only hosted by the editor window surface', () => {
+check('Editor command bar is only hosted by the editor window surface', () => {
   assert.doesNotMatch(
     files.app,
-    /<CommandPalette\s*\/>/,
+    /<EditorCommandBar\s*\/>/,
     'Launcher runtime App must not render the editor command bar',
   )
   assertHas(
     files.editorWindow,
-    /<CommandPalette\s*\/>/,
+    /<EditorCommandBar\s*\/>/,
     'EditorWindow should own the editor command bar',
   )
 })
