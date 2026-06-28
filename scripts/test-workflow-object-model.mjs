@@ -25,6 +25,8 @@ const files = {
   globalLauncherKeyboard: read('src/components/launcher/GlobalLauncherKeyboard.ts'),
   pluginSurfacePanel: read('src/components/pluginSurface/PluginSurfacePanel.tsx'),
   pluginSurfacePanelProvider: read('src/workspace/pluginSurfacePanelProvider.ts'),
+  workflowOutputShelfPanel: read('src/components/workflow/WorkflowOutputShelfPanel.tsx'),
+  workflowOutputShelfPanelProvider: read('src/workspace/workflowOutputShelfPanelProvider.ts'),
   clipboardHistoryWorkflow: read('src/workflow/clipboardHistoryWorkflowProvider.ts'),
   clipboardHistoryPlugin: read('src/plugins/clipboard-history/index.tsx'),
 }
@@ -88,6 +90,9 @@ assert.match(files.pluginSurfacePanel, /PLUGIN_SURFACE_PANEL_ID/, 'Editor attach
 assert.match(files.pluginSurfacePanel, /<PluginSurfaceRenderer[\s\S]*presentation=['"]editor-panel['"]/, 'Editor attach bridge must render plugin surfaces through the shared renderer')
 assert.match(files.pluginSurfacePanelProvider, /id:\s*PLUGIN_SURFACE_PANEL_ID[\s\S]*registerProductionPlugin[\s\S]*\[panel\]/, 'Host runtime must register the plugin surface panel bridge as a V2 panel')
 assert.match(files.hostProvider, /registerPluginSurfacePanelProvider\(\)/, 'Host launcher bootstrap must register the plugin surface panel provider')
+assert.match(files.workflowOutputShelfPanel, /WORKFLOW_OUTPUT_SHELF_PANEL_ID\s*=\s*['"]workflow-output-shelf['"]/, 'Workflow output shelf must define a stable V2 panel id')
+assert.match(files.workflowOutputShelfPanelProvider, /id:\s*WORKFLOW_OUTPUT_SHELF_PANEL_ID[\s\S]*registerProductionPlugin[\s\S]*\[panel\]/, 'Host runtime must register the workflow output shelf as a V2 panel')
+assert.match(files.hostProvider, /registerWorkflowOutputShelfPanelProvider\(\)/, 'Host launcher bootstrap must register the workflow output shelf panel provider')
 assert.match(files.clipboardHistoryWorkflow, /registerWorkObjectProvider/, 'Clipboard history plugin must register its own WorkObject provider')
 assert.match(files.clipboardHistoryWorkflow, /createClipboardHistoryRepository/, 'Clipboard history WorkObject provider must read real plugin history storage')
 assert.match(files.defaultWorkflowProviders, /registerClipboardHistoryWorkflowProvider\(\)/, 'Default workflow registration must activate clipboard history WorkObjects')

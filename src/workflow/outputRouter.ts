@@ -1,9 +1,9 @@
 import type { ActionResult, OutputTarget } from './outputTarget'
 import { createPluginPaste } from '../workspace/pluginPaste'
-import { applyEffects } from '../workspace/effectRunner'
 import { createEditorPane, insertIntoEditor, openEditorPanel, replaceEditorSelection } from '../workspace/editorBridge'
 import { createPluginLauncherApi } from '../workspace/launcher/pluginApi'
 import { showPluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
+import { WORKFLOW_OUTPUT_SHELF_PANEL_ID } from '../components/workflow/WorkflowOutputShelfPanel'
 
 export type OutputRouterContext = {
   copy(text: string): Promise<void> | void
@@ -51,15 +51,13 @@ export function createDefaultOutputRouterContext(): OutputRouterContext {
         inputs: { text, target: options.pluginSurfaceTarget },
       })
     },
-    saveToShelf: (text) => {
-      applyEffects([{
-        type: 'panel.open',
-        panelId: 'workflow-output-shelf',
+    saveToShelf: async (text) => {
+      await openEditorPanel({
+        panelId: WORKFLOW_OUTPUT_SHELF_PANEL_ID,
         placement: 'right',
-        scope: { type: 'workspace' },
+        inputs: { text },
         title: 'Output Shelf',
-        props: { text },
-      }])
+      })
     },
   }
 }

@@ -11,9 +11,11 @@ import {
 import { getEditorWindowItems } from './editorWindowItems'
 import { getHostPaneControlItems, getHostSystemPowerItems } from './hostActions'
 import { registerPluginSurfacePanelProvider } from '../pluginSurfacePanelProvider'
+import { registerWorkflowOutputShelfPanelProvider } from '../workflowOutputShelfPanelProvider'
 
 export function registerHostLauncherProviders(): void {
   registerPluginSurfacePanelProvider()
+  registerWorkflowOutputShelfPanelProvider()
   registerDefaultWorkflowProviders()
   setHostLauncherItemsProvider(() => [
     ...getEditorWindowItems(),

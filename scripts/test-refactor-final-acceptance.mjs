@@ -38,6 +38,8 @@ const files = {
   pluginSurfaceRenderer: read('src/components/pluginSurface/PluginSurfaceRenderer.tsx'),
   pluginSurfacePanel: read('src/components/pluginSurface/PluginSurfacePanel.tsx'),
   pluginSurfacePanelProvider: read('src/workspace/pluginSurfacePanelProvider.ts'),
+  workflowOutputShelfPanel: read('src/components/workflow/WorkflowOutputShelfPanel.tsx'),
+  workflowOutputShelfPanelProvider: read('src/workspace/workflowOutputShelfPanelProvider.ts'),
   surfaceRegistry: read('src/surfaces/registry.ts'),
   surfaceActions: read('src/surfaces/actions.ts'),
   settingsSurface: read('src/surfaces/SettingsSurface.tsx'),
@@ -160,6 +162,10 @@ assert.match(files.outputRouter, /openInEditor:[\s\S]*createEditorPane\(\{[\s\S]
 assert.match(files.outputRouter, /openPluginSurface:[\s\S]*showPluginSurfaceWindow\(\{/, 'plugin surface output targets must route through the plugin surface window manager')
 assert.doesNotMatch(files.outputRouter, /openPluginSurfaceTool|openGlobalLauncherOverlay|useAppStore\.getState\(\)\.openPluginSurfaceTool/, 'output router must not mutate launcher store to open plugin surfaces')
 assert.match(files.outputRouter, /attachEditorPanel:[\s\S]*openEditorPanel\(\{/, 'complex surfaces must be attachable into Editor panels')
+assert.match(files.outputRouter, /saveToShelf:[\s\S]*openEditorPanel\(\{[\s\S]*WORKFLOW_OUTPUT_SHELF_PANEL_ID/, 'save-to-shelf output targets must route through the editor bridge')
+assert.doesNotMatch(files.outputRouter, /applyEffects|type:\s*['"]panel\.open['"]/, 'output router must not directly mutate editor panels')
+assert.match(files.workflowOutputShelfPanel, /WORKFLOW_OUTPUT_SHELF_PANEL_ID\s*=\s*['"]workflow-output-shelf['"]/, 'workflow output shelf must define a stable panel id')
+assert.match(files.workflowOutputShelfPanelProvider, /registerProductionPlugin[\s\S]*\[panel\]/, 'workflow output shelf must be registered as a V2 panel')
 assert.match(files.clipboardSurface, /pasteText|paste-to-foreground-app|copyText/, 'clipboard history surface must expose copy/paste behavior')
 assert.match(files.tauriLib, /tauri::RunEvent::Reopen[\s\S]*show_launcher_window_for_hotkey/, 'closing visible windows must leave a background runtime that can reopen the launcher')
 assert.doesNotMatch(files.tauriLib, /RunEvent::ExitRequested[\s\S]*app\.exit|process::exit|std::process::exit/, 'runtime must not explicitly exit when all visible windows are closed')
