@@ -193,6 +193,29 @@ Automated evidence:
 
 Current automated status: proven for debug-start failure signature scan and route module transformation.
 
+## Observed debug smoke - 2026-06-29
+
+Command run from `/Users/bytedance/flux_text`:
+
+```bash
+npm run tauri -- dev
+```
+
+Observed runtime evidence:
+
+- Vite dev server reached `VITE v8.1.0 ready`.
+- Tauri dev command reached `Running DevCommand`.
+- Rust binary reached `Running target/debug/hiven`.
+- macOS process check found `11858 target/debug/hiven`.
+- System Events process check found `hiven windows=0` immediately after startup.
+- `src-tauri/tauri.conf.json` contains only one initial window label: `launcher`, with `visible: false`; no `main` window is declared.
+
+Interpretation:
+
+- The debug app starts as a background/launcher runtime without opening a retired main window.
+- The process remains alive after startup, which supports the tray/background runtime requirement.
+- Attempted synthetic `Shift+Cmd+Space` via AppleScript did not make a launcher window observable in this non-interactive automation context; this does not disprove the feature, but it means the real global-shortcut/focus path still needs human desktop smoke validation.
+
 ## Manual debug smoke remaining
 
 These are not marked as fully proven by automation because they depend on the real macOS foreground application, Accessibility permission state, global shortcut registration, focus behavior, and tray behavior.

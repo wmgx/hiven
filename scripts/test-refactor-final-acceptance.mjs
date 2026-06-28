@@ -133,6 +133,7 @@ assert.match(finalValidationDoc, /# Hiven Refactor Final Validation/, 'final val
 assert.match(finalValidationDoc, /Launcher ↔ Editor Bridge[\s\S]*Automated evidence[\s\S]*scripts\/test-editor-bridge-behavior\.mjs/, 'final validation doc must map launcher-editor bridge to evidence')
 assert.match(finalValidationDoc, /SurfaceRegistry[\s\S]*Automated evidence[\s\S]*scripts\/test-surface-registry-behavior\.mjs/, 'final validation doc must map SurfaceRegistry to evidence')
 assert.match(finalValidationDoc, /Manual debug smoke remaining[\s\S]*external app selected text[\s\S]*tray\/background/, 'final validation doc must call out remaining manual product smoke coverage')
+assert.match(finalValidationDoc, /Observed debug smoke - 2026-06-29[\s\S]*target\/debug\/hiven[\s\S]*hiven windows=0/, 'final validation doc must record the observed debug runtime smoke evidence')
 
 // Product/behavior acceptance: startup and global entry.
 assert.ok(!tauriConfig.app.windows.some((window) => window.label === 'main'), 'startup must not declare a retired main window')
