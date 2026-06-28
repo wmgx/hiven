@@ -63,14 +63,20 @@ function actionToChoice(action: WorkAction, object: WorkObject, ctx: WorkContext
   return {
     id: `${object.id}:${action.id}`,
     title: action.title,
-    subtitle: object.title,
+    subtitle: actionChoiceSubtitle(action, object),
     metadata: {
       kind: 'workflow-action',
       objectId: object.id,
       actionId: action.id,
+      outputTarget: action.defaultOutputTarget,
     },
     primaryAction: async () => action.run(object, ctx),
   }
+}
+
+function actionChoiceSubtitle(action: WorkAction, object: WorkObject): string {
+  const output = action.defaultOutputTarget ? ` · Output: ${action.defaultOutputTarget}` : ''
+  return `${object.title}${output}`
 }
 
 function objectMatchesQuery(object: WorkObject, query: string, locale: Locale): boolean {

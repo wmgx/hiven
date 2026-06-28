@@ -220,6 +220,7 @@ export type WorkflowActionChoiceMetadata = {
   kind: 'workflow-action'
   objectId: string
   actionId: string
+  outputTarget?: string
 }
 
 export type LauncherItemMetadata = WorkflowObjectItemMetadata
