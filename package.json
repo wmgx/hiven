@@ -80,6 +80,7 @@
     "test:context-snapshot-editor": "node scripts/test-context-snapshot-editor.mjs",
     "test:external-selection-context": "node scripts/test-external-selection-context.mjs",
     "test:workflow-object-model": "node scripts/test-workflow-object-model.mjs",
+    "test:workflow-registry-behavior": "node scripts/test-workflow-registry-behavior.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
     "test:settings-select-layout": "node scripts/test-settings-select-layout.mjs",
