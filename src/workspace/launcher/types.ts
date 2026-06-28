@@ -210,11 +210,19 @@ export type LauncherResultAction = {
   run: LauncherResultActionHandler
 }
 
+export type WorkflowObjectItemMetadata = {
+  kind: 'workflow-object'
+  objectId: string
+  objectType: string
+}
+
 export type WorkflowActionChoiceMetadata = {
   kind: 'workflow-action'
   objectId: string
   actionId: string
 }
+
+export type LauncherItemMetadata = WorkflowObjectItemMetadata
 
 export type LauncherResultChoiceMetadata = WorkflowActionChoiceMetadata
 
@@ -408,6 +416,7 @@ export type LauncherItem = {
   params?: LauncherParamSpec[]
   requiredCapabilities?: LauncherHostCapability[]
   preferredCapabilities?: LauncherHostCapability[]
+  metadata?: LauncherItemMetadata
   /** Explicit default values used when entering the parameter form. */
   defaultParams?: Record<string, unknown>
   /** Host-owned execution policy: defaults can prefill UI but must not skip parameter selection. */

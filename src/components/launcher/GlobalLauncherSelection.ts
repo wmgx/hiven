@@ -81,7 +81,7 @@ export function grantGlobalLauncherItemPermissions(frame: LauncherItemPermission
 }
 
 export function isWorkflowObjectLauncherItem(item?: LauncherMixedItem): boolean {
-  return item?.kind === 'domain' && item.domainItem.systemKey.startsWith('workflow:object:')
+  return item?.kind === 'domain' && (item.domainItem.metadata?.kind === 'workflow-object' || item.domainItem.systemKey.startsWith('workflow:object:'))
 }
 
 export function getPluginSurfaceDefinition(target: PluginSurfaceTarget): {

@@ -31,13 +31,18 @@ function workObjectToLauncherItem(object: WorkObject): LauncherItem {
     kind: 'dynamic',
     display: {
       title: object.title,
-      subtitle: objectSubtitle(object),
+      subtitle: objectActionSubtitle(object),
       icon: resolveIconForWorkObject(object),
       aliases: aliasesForObject(object),
     },
     behavior: { type: 'perform' },
     surfaces: ['global-launcher'],
     pinnable: false,
+    metadata: {
+      kind: 'workflow-object',
+      objectId: object.id,
+      objectType: object.type,
+    },
     execute: async () => {
       const ctx: WorkContext = {
         snapshot: await createDefaultWorkContextSnapshot('global-hotkey'),
@@ -90,11 +95,10 @@ function aliasesForObject(object: WorkObject): string[] {
   return aliases.filter((value): value is string => Boolean(value))
 }
 
-function objectSubtitle(object: WorkObject): string {
+function objectActionSubtitle(object: WorkObject): string {
   const base = object.subtitle ? ` · ${object.subtitle}` : ''
-  return `Object: ${object.type}${base}`
+  return `Object: ${object.type}${base} · Press Tab for actions`
 }
-
 function isDefaultContextObject(object: WorkObject): boolean {
   return object.source.startsWith('context.')
 }
