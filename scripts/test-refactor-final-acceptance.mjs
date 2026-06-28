@@ -104,6 +104,12 @@ assert.equal(
   'package.json must expose editor command bar local action behavior coverage',
 )
 assert.match(read('scripts/test-editor-command-bar-local-actions-behavior.mjs'), /host:editor:format-bullets[\s\S]*host:editor:quote-code-block[\s\S]*host:editor:json-minify[\s\S]*host:editor:json-to-yaml[\s\S]*host:editor:json-extract-fields/, 'editor command bar local action behavior must cover text and JSON mutations')
+assert.equal(
+  packageJson.scripts?.['test:plugin-surface-shortcut-lifecycle-story'],
+  'node scripts/test-plugin-surface-shortcut-lifecycle-story.mjs',
+  'package.json must expose plugin surface shortcut-to-window lifecycle story coverage',
+)
+assert.match(read('scripts/test-plugin-surface-shortcut-lifecycle-story.mjs'), /shortcutPresentation[\s\S]*showPluginSurfaceWindow[\s\S]*requestOpenPluginSurfaceTool[\s\S]*plugin-surface:builtin:clipboard-history:main/, 'plugin shortcut lifecycle story must prove window and launcher presentation routing')
 
 // Product/behavior acceptance: startup and global entry.
 assert.ok(!tauriConfig.app.windows.some((window) => window.label === 'main'), 'startup must not declare a retired main window')

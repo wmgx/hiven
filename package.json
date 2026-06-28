@@ -88,6 +88,7 @@
     "test:editor-bridge-behavior": "node scripts/test-editor-bridge-behavior.mjs",
     "test:surface-registry-behavior": "node scripts/test-surface-registry-behavior.mjs",
     "test:plugin-surface-window-lifecycle-behavior": "node scripts/test-plugin-surface-window-lifecycle-behavior.mjs",
+    "test:plugin-surface-shortcut-lifecycle-story": "node scripts/test-plugin-surface-shortcut-lifecycle-story.mjs",
     "test:output-router-behavior": "node scripts/test-output-router-behavior.mjs",
     "test:context-broker-behavior": "node scripts/test-context-broker-behavior.mjs",
     "test:current-context-work-objects-behavior": "node scripts/test-current-context-work-objects-behavior.mjs",
