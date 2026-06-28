@@ -84,6 +84,7 @@
     "test:workflow-launcher-adapter-behavior": "node scripts/test-workflow-launcher-adapter-behavior.mjs",
     "test:global-launcher-workflow-tab-behavior": "node scripts/test-global-launcher-workflow-tab-behavior.mjs",
     "test:editor-bridge-behavior": "node scripts/test-editor-bridge-behavior.mjs",
+    "test:surface-registry-behavior": "node scripts/test-surface-registry-behavior.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
     "test:settings-select-layout": "node scripts/test-settings-select-layout.mjs",
