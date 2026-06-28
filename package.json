@@ -81,6 +81,7 @@
     "test:external-selection-context": "node scripts/test-external-selection-context.mjs",
     "test:workflow-object-model": "node scripts/test-workflow-object-model.mjs",
     "test:workflow-registry-behavior": "node scripts/test-workflow-registry-behavior.mjs",
+    "test:workflow-launcher-adapter-behavior": "node scripts/test-workflow-launcher-adapter-behavior.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
     "test:settings-select-layout": "node scripts/test-settings-select-layout.mjs",

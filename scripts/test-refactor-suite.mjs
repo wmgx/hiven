@@ -20,6 +20,7 @@ const commands = [
   ['npm', ['run', 'test:plugin-surface-shortcuts']],
   ['npm', ['run', 'test:workflow-object-model']],
   ['npm', ['run', 'test:workflow-registry-behavior']],
+  ['npm', ['run', 'test:workflow-launcher-adapter-behavior']],
   ['npm', ['run', 'test:workflow-json-clipboard-story']],
   ['npm', ['run', 'test:workflow-translate-selection-story']],
   ['npm', ['run', 'test:workflow-clipboard-history-story']],
