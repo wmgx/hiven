@@ -14,6 +14,7 @@ import { installGlobalPinnedLauncherHotkeys, routeGlobalPinnedLauncherShortcut }
 import { installPluginSurfaceShortcutHotkeys } from './hotkeys/pluginSurfaceShortcuts'
 import { consumePendingPluginSurfaceOpenTarget, isPluginSurfaceOpenTarget } from './workspace/pluginSurfaceOpenRequest'
 import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from './workspace/launcherWindowEvents'
+import { onCurrentLauncherWindowMoved, setCurrentLauncherWindowPosition, type LauncherWindowMovedPosition } from './workspace/windowManager/launcherWindow'
 
 // Register built-in panels
 import './panels/register'
@@ -166,10 +167,8 @@ function LauncherRuntimeApp() {
           : undefined
         if (!saved || !isLauncherPositionFresh(saved)) return
         try {
-          const { LogicalPosition } = await import('@tauri-apps/api/dpi')
-          const { getCurrentWindow } = await import('@tauri-apps/api/window')
           suppressNextLauncherMovePersistence()
-          await getCurrentWindow().setPosition(new LogicalPosition(saved.x, saved.y))
+          await setCurrentLauncherWindowPosition({ x: saved.x, y: saved.y })
         } catch (error) {
           console.warn('[hiven] Failed to restore launcher window position:', error)
         }
@@ -225,45 +224,37 @@ function LauncherRuntimeApp() {
     let moveThrottleTimer: ReturnType<typeof setTimeout> | undefined
     let lastMovePayload: unknown = null
 
-    import('@tauri-apps/api/window')
-      .then(async ({ getCurrentWindow }) => {
-        const win = getCurrentWindow()
-        return win.onMoved(async ({ payload: position }) => {
-          if (launcherProgrammaticMoveRef.current) {
-            launcherProgrammaticMoveRef.current = false
-            if (launcherProgrammaticMoveResetRef.current !== undefined) {
-              window.clearTimeout(launcherProgrammaticMoveResetRef.current)
-              launcherProgrammaticMoveResetRef.current = undefined
-            }
-            return
-          }
-          const persistLauncherWindowPosition = async (nextPosition: typeof position) => {
-            const scaleFactor = await win.scaleFactor()
-            const logicalPosition = nextPosition.toLogical(scaleFactor)
-            useAppStore.getState().updateSetting('globalLauncherWindowPosition', {
-              x: logicalPosition.x,
-              y: logicalPosition.y,
-              lastDraggedAt: Date.now(),
-              screenWidth: window.screen.width,
-              screenHeight: window.screen.height,
-            })
-            useAppStore.getState().updateSetting('globalLauncherWindowPositionSource', 'user')
-          }
+    onCurrentLauncherWindowMoved(async (position, { toLogical }) => {
+      if (launcherProgrammaticMoveRef.current) {
+        launcherProgrammaticMoveRef.current = false
+        if (launcherProgrammaticMoveResetRef.current !== undefined) {
+          window.clearTimeout(launcherProgrammaticMoveResetRef.current)
+          launcherProgrammaticMoveResetRef.current = undefined
+        }
+        return
+      }
 
-          lastMovePayload = position
-          if (moveThrottleTimer !== undefined) return
-          moveThrottleTimer = setTimeout(async () => {
-            moveThrottleTimer = undefined
-            const pos = lastMovePayload as typeof position
-            if (!pos) return
-            try {
-              await persistLauncherWindowPosition(pos)
-            } catch (error) {
-              console.warn('[hiven] Failed to persist launcher window position:', error)
-            }
-          }, 150)
-        })
-      })
+      lastMovePayload = position
+      if (moveThrottleTimer !== undefined) return
+      moveThrottleTimer = setTimeout(async () => {
+        moveThrottleTimer = undefined
+        const pos = lastMovePayload as LauncherWindowMovedPosition | null
+        if (!pos) return
+        try {
+          const logicalPosition = await toLogical(pos)
+          useAppStore.getState().updateSetting('globalLauncherWindowPosition', {
+            x: logicalPosition.x,
+            y: logicalPosition.y,
+            lastDraggedAt: Date.now(),
+            screenWidth: window.screen.width,
+            screenHeight: window.screen.height,
+          })
+          useAppStore.getState().updateSetting('globalLauncherWindowPositionSource', 'user')
+        } catch (error) {
+          console.warn('[hiven] Failed to persist launcher window position:', error)
+        }
+      }, 150)
+    })
       .then((cleanup) => {
         if (disposed) cleanup()
         else unlisten = cleanup

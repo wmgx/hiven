@@ -46,6 +46,7 @@ const files = {
   app: read('src/App.tsx'),
   launcherList: read('src/components/launcher/LauncherMixedList.tsx'),
   globalPinnedLauncherHotkeys: read('src/hotkeys/globalPinnedLauncher.ts'),
+  launcherWindowManager: read('src/workspace/windowManager/launcherWindow.ts'),
   main: read('src/main.tsx'),
   indexCss: read('src/index.css'),
   store: read('src/store.ts'),
@@ -425,13 +426,23 @@ check('launcher panel drags the native launcher window and persists moved positi
   )
   assertHas(
     files.app,
-    /onMoved\([\s\S]{0,760}updateSetting\(['"]globalLauncherWindowPosition['"]/,
+    /onCurrentLauncherWindowMoved\([\s\S]{0,760}updateSetting\(['"]globalLauncherWindowPosition['"]/,
     'LauncherWindowApp should persist native launcher movement from the Tauri window moved event',
   )
   assertHas(
     files.app,
-    /setPosition\(new LogicalPosition\(saved\.x,\s*saved\.y\)\)/,
-    'LauncherWindowApp should restore the persisted launcher window position before reuse',
+    /setCurrentLauncherWindowPosition\(\{\s*x:\s*saved\.x,\s*y:\s*saved\.y\s*\}\)/,
+    'LauncherWindowApp should restore the persisted launcher window position through the window manager before reuse',
+  )
+  assertHas(
+    files.launcherWindowManager,
+    /setCurrentLauncherWindowPosition[\s\S]*setPosition\(new LogicalPosition/,
+    'launcher window manager should own native launcher position restoration',
+  )
+  assertHas(
+    files.launcherWindowManager,
+    /onCurrentLauncherWindowMoved[\s\S]*onMoved/,
+    'launcher window manager should own native launcher movement subscriptions',
   )
 })
 
@@ -589,7 +600,7 @@ check('native launcher opens centered only when there is no persisted window pos
   const launcherOpen = files.app.match(/const\s+openLauncher\s*=\s*[^=]*=>\s*\{[\s\S]*?\n\s{4}\}/)?.[0] ?? ''
   assert.ok(launcherOpen, 'LauncherWindowApp should define an openLauncher handler')
   const restoreBranchIndex = launcherOpen.indexOf('if (!saved || !isLauncherPositionFresh(saved)) return')
-  const restoreIndex = launcherOpen.indexOf('setPosition(new LogicalPosition(saved.x, saved.y))')
+  const restoreIndex = launcherOpen.indexOf('setCurrentLauncherWindowPosition({ x: saved.x, y: saved.y })')
   const centerIndex = files.tauriLib.indexOf('center_launcher_window(&window)')
   assert.ok(restoreBranchIndex >= 0, 'openLauncher should branch on the persisted launcher window position')
   assert.ok(restoreIndex >= 0, 'openLauncher should restore the persisted launcher position')
@@ -626,12 +637,12 @@ check('programmatic launcher positioning is not persisted as a user drag', () =>
   )
   assertHas(
     files.app,
-    /suppressNextLauncherMovePersistence\(\)[\s\S]{0,220}setPosition\(new LogicalPosition\(saved\.x,\s*saved\.y\)\)/,
+    /suppressNextLauncherMovePersistence\(\)[\s\S]{0,220}setCurrentLauncherWindowPosition\(\{\s*x:\s*saved\.x,\s*y:\s*saved\.y\s*\}\)/,
     'restoring a saved launcher position should suppress the resulting programmatic move event',
   )
   assertHas(
     files.app,
-    /onMoved\([\s\S]{0,520}launcherProgrammaticMoveRef\.current[\s\S]{0,420}return/,
+    /onCurrentLauncherWindowMoved\([\s\S]{0,520}launcherProgrammaticMoveRef\.current[\s\S]{0,420}return/,
     'launcher movement persistence should ignore programmatic positioning events',
   )
   assertHas(

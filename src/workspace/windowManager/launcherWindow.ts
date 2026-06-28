@@ -20,6 +20,35 @@ export async function hideLauncherWindow(): Promise<void> {
   markSurfaceInstanceState('launcher', 'hidden')
 }
 
+export type LauncherWindowPosition = {
+  x: number
+  y: number
+}
+
+export type LauncherWindowMovedPosition = {
+  toLogical(scaleFactor: number): LauncherWindowPosition
+}
+
+export async function setCurrentLauncherWindowPosition(position: LauncherWindowPosition): Promise<void> {
+  if (!isTauriRuntime()) return
+  const { LogicalPosition } = await import('@tauri-apps/api/dpi')
+  const { getCurrentWindow } = await import('@tauri-apps/api/window')
+  await getCurrentWindow().setPosition(new LogicalPosition(position.x, position.y))
+}
+
+export async function onCurrentLauncherWindowMoved(
+  onMoved: (position: LauncherWindowMovedPosition, helpers: { toLogical: (position: LauncherWindowMovedPosition) => Promise<LauncherWindowPosition> }) => void | Promise<void>,
+): Promise<() => void> {
+  if (!isTauriRuntime()) return () => {}
+  const { getCurrentWindow } = await import('@tauri-apps/api/window')
+  const win = getCurrentWindow()
+  return win.onMoved(async ({ payload: position }) => {
+    await onMoved(position as LauncherWindowMovedPosition, {
+      toLogical: async (nextPosition) => nextPosition.toLogical(await win.scaleFactor()),
+    })
+  })
+}
+
 export async function resizeCurrentLauncherWindow(size: { width: number; height: number }): Promise<void> {
   if (!isTauriRuntime()) return
   const { getCurrentWindow, LogicalSize } = await import('@tauri-apps/api/window')
