@@ -1,6 +1,6 @@
 import type { EditorContextSnapshot } from '../launcher/context/contextBroker'
 import type { SerializedRange } from './types'
-import { requestOpenEditorWindow } from './editorWindow'
+import { showEditorWindow } from './windowManager/editorWindow'
 
 export const EDITOR_BRIDGE_REQUEST_EVENT = 'hiven://editor-bridge-request'
 export const EDITOR_BRIDGE_RESPONSE_EVENT = 'hiven://editor-bridge-response'
@@ -155,7 +155,7 @@ async function sendEditorBridgeRequest<T extends EditorBridgeRequest['action']>(
 ): Promise<unknown> {
   const request = createEditorBridgeRequest(action, payload)
   if (options.persistForEditorStartup) persistPendingEditorBridgeRequest(request)
-  if (options.openEditorFirst) await requestOpenEditorWindow()
+  if (options.openEditorFirst) await showEditorWindow()
 
   if (!isTauriRuntime()) return undefined
 

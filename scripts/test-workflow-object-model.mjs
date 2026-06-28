@@ -83,6 +83,8 @@ assert.match(files.surfaceRegistry, /getSurfaceInstances/, 'Surface registry mus
 assert.match(files.surfaceActions, /focusSurfaceInstance/, 'Surface registry must expose a focus/switch action')
 assert.match(files.surfaceActions, /showEditorWindow/, 'Surface focus must route editor surfaces through the window manager')
 assert.match(files.surfaceActions, /showPluginSurfaceWindow/, 'Surface focus must route plugin surfaces through the window manager')
+assert.match(files.defaultWorkflowProviders, /import \{ showEditorWindow \} from ['"]\.\.\/workspace\/windowManager\/editorWindow['"]/, 'workflow object editor actions must statically import the editor window manager route')
+assert.doesNotMatch(files.defaultWorkflowProviders, /requestOpenEditorWindow/, 'workflow object editor actions must not call the lower-level lifecycle API directly')
 assert.match(files.defaultWorkflowProviders, /import \{ showPluginSurfaceWindow \} from ['"]\.\.\/workspace\/windowManager\/pluginSurfaceWindows['"]/, 'workflow object plugin-surface window actions must statically import the window manager route')
 assert.doesNotMatch(files.defaultWorkflowProviders, /import\(['"]\.\.\/workspace\/windowManager\/pluginSurfaceWindows['"]\)/, 'workflow object plugin-surface actions must not dynamically import an already-static window manager chunk')
 assert.doesNotMatch(files.defaultWorkflowProviders, /requestOpenPluginSurfaceWindow/, 'workflow object plugin-surface actions must not call the lower-level lifecycle API directly')

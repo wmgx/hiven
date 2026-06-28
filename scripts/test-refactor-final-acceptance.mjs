@@ -97,6 +97,8 @@ assert.match(files.hostActions, /systemKey:\s*['"]host:system:restart['"][\s\S]*
 // Editor is an independent system surface, not a main-window view.
 assert.match(files.main, /windowType === ['"]editor['"][\s\S]*EditorWindow/, 'entrypoint must route ?window=editor to EditorWindow')
 assert.match(files.editorWindowApi, /invoke\(['"]show_editor_window['"]\)/, 'editor window lifecycle must be native-managed')
+assert.match(files.editorBridge, /showEditorWindow\(\)/, 'editor bridge must open editor windows through the window manager facade')
+assert.doesNotMatch(files.editorBridge, /requestOpenEditorWindow/, 'editor bridge must not call the lower-level editor lifecycle API directly')
 assert.match(files.tauriLib, /async fn show_editor_window/, 'native runtime must expose editor window creation')
 assert.match(files.tauriLib, /WebviewWindowBuilder::new\([\s\S]{0,180}"editor"[\s\S]{0,260}index\.html\?window=editor/, 'native runtime must create an independent editor window')
 assert.match(files.hostProvider, /getEditorWindowItems/, 'global launcher must provide an editor-opening item')

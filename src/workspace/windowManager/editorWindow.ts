@@ -1,1 +1,12 @@
-export { requestOpenEditorWindow as showEditorWindow, requestCloseEditorWindow as closeEditorWindow } from '../editorWindow'
+import {
+  requestCloseEditorWindow,
+  requestOpenEditorWindow,
+} from '../editorWindow'
+
+export async function showEditorWindow(): Promise<void> {
+  await requestOpenEditorWindow()
+}
+
+export async function closeEditorWindow(): Promise<void> {
+  await requestCloseEditorWindow()
+}

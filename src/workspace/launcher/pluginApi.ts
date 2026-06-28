@@ -16,7 +16,7 @@ import { applyEffects, openExternalUrl } from '../effectRunner'
 import { useAppStore } from '../../store'
 import { createPluginPrivateStorage } from '../pluginStorage'
 import { getPluginPermissionSnapshot, requirePluginPermissions } from '../pluginPermissions'
-import { requestOpenEditorWindow } from '../editorWindow'
+import { showEditorWindow } from '../windowManager/editorWindow'
 import {
   createEditorPane,
   getActiveEditorPaneSnapshot,
@@ -93,7 +93,7 @@ async function writeClipboard(text: string): Promise<void> {
 
 async function showMainPanel(): Promise<void> {
   try {
-    await requestOpenEditorWindow()
+    await showEditorWindow()
   } catch (error) {
     console.warn('[launcher] failed to show editor window:', error)
   }

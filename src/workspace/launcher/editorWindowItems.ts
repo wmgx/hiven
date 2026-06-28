@@ -1,5 +1,5 @@
 import type { LauncherItem } from './types'
-import { requestOpenEditorWindow } from '../editorWindow'
+import { showEditorWindow } from '../windowManager/editorWindow'
 
 export function getEditorWindowItems(): LauncherItem[] {
   return [
@@ -20,7 +20,7 @@ export function getEditorWindowItems(): LauncherItem[] {
       pinnable: false,
       staticPriority: 120,
       execute: async () => {
-        await requestOpenEditorWindow()
+        await showEditorWindow()
         return { ok: true }
       },
     },

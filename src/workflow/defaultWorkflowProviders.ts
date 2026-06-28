@@ -3,7 +3,7 @@ import { focusSurfaceInstance } from '../surfaces/actions'
 import { getSurfaceInstances } from '../surfaces/registry'
 import { useAppStore } from '../store'
 import { getHostAppWorkObjects, launchHostAppObject } from '../workspace/appLauncher/hostAppLauncher'
-import { requestOpenEditorWindow } from '../workspace/editorWindow'
+import { showEditorWindow } from '../workspace/windowManager/editorWindow'
 import { showPluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
 import { PLUGIN_SURFACE_PANEL_ID } from '../components/pluginSurface/PluginSurfacePanel'
 import { registerClipboardHistoryWorkflowProvider } from './clipboardHistoryWorkflowProvider'
@@ -177,7 +177,7 @@ const defaultEditorDocumentActionProvider = {
         icon: 'PanelTopOpen',
         accepts: ['editor-document'],
         run: async () => {
-          await requestOpenEditorWindow()
+          await showEditorWindow()
           return { ok: true }
         },
       },
