@@ -1,8 +1,10 @@
 import { useWorkspaceStore } from '../workspaceStore'
 import { translate } from '../../i18n'
-import { createEditorPane } from '../editorBridge'
+import { createEditorPane, openEditorPanel } from '../editorBridge'
 import { showLauncherWindow } from '../windowManager/launcherWindow'
 import type { LauncherItem, LauncherParamOption } from './types'
+import { runtimeRegistry } from '../runtimeRegistry'
+import { PLUGIN_SURFACE_PANEL_ID } from '../../components/pluginSurface/PluginSurfacePanel'
 
 type SystemPowerAction = 'restart' | 'shutdown' | 'lock-screen'
 
@@ -52,6 +54,36 @@ function setActivePaneLanguage(requested: unknown): void {
   const normalized = EDITOR_LANGUAGE_VALUES.has(language) ? language : 'plaintext'
   state.updatePaneLanguage(paneId, normalized)
   useWorkspaceStore.getState().updatePaneLanguageSource(paneId, 'manual')
+}
+
+function getActiveEditorSurfaceText(): string | undefined {
+  const state = useWorkspaceStore.getState()
+  const paneId = state.activePaneId
+  const pane = state.panes[paneId]
+  const editor = runtimeRegistry.getCodeEditor(paneId)
+  const selection = editor?.getSelection?.()
+  const selectedText = selection && !selection.isEmpty?.()
+    ? editor?.getModel?.()?.getValueInRange(selection)
+    : undefined
+  const text = selectedText ?? pane?.text ?? ''
+  return text ? text : undefined
+}
+
+async function attachBuiltinPluginSurfacePanel(pluginId: string, withInitialText = false): Promise<void> {
+  const text = withInitialText ? getActiveEditorSurfaceText() : undefined
+  await openEditorPanel({
+    panelId: PLUGIN_SURFACE_PANEL_ID,
+    placement: 'right',
+    inputs: {
+      text,
+      target: {
+        source: 'builtin',
+        pluginId,
+        surfaceId: 'main',
+        initialText: text,
+      },
+    },
+  })
 }
 
 async function performSystemPowerAction(action: SystemPowerAction): Promise<{ ok: boolean; message?: string }> {
@@ -242,6 +274,66 @@ export function getHostPaneControlItems(): LauncherItem[] {
       pinnable: false,
       execute: async () => {
         await createEditorPane({ text: '', focus: true, direction: 'bottom' })
+        return { ok: true }
+      },
+    },
+    {
+      systemKey: 'host:editor:attach-translate-panel',
+      kind: 'host',
+      display: {
+        title: 'Attach Translate Panel',
+        titleI18n: { zh: '附着翻译面板' },
+        subtitle: 'Attach Translate to the current editor',
+        subtitleI18n: { zh: '将翻译 Surface 附着到当前编辑器' },
+        icon: 'Languages',
+        aliases: ['translate panel', 'attach translate', '翻译面板'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['editor-command-bar'],
+      requiredCapabilities: ['pane-actions'],
+      pinnable: false,
+      execute: async () => {
+        await attachBuiltinPluginSurfacePanel('translate', true)
+        return { ok: true }
+      },
+    },
+    {
+      systemKey: 'host:editor:attach-clipboard-panel',
+      kind: 'host',
+      display: {
+        title: 'Attach Clipboard Panel',
+        titleI18n: { zh: '附着剪贴板面板' },
+        subtitle: 'Attach Clipboard History to the current editor',
+        subtitleI18n: { zh: '将剪贴板历史 Surface 附着到当前编辑器' },
+        icon: 'Clipboard',
+        aliases: ['clipboard panel', 'attach clipboard', '剪贴板面板'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['editor-command-bar'],
+      requiredCapabilities: ['pane-actions'],
+      pinnable: false,
+      execute: async () => {
+        await attachBuiltinPluginSurfacePanel('clipboard-history')
+        return { ok: true }
+      },
+    },
+    {
+      systemKey: 'host:editor:attach-json-panel',
+      kind: 'host',
+      display: {
+        title: 'Attach JSON Panel',
+        titleI18n: { zh: '附着 JSON 面板' },
+        subtitle: 'Attach JSON to the current editor',
+        subtitleI18n: { zh: '将 JSON Surface 附着到当前编辑器' },
+        icon: 'Braces',
+        aliases: ['json panel', 'attach json', 'json 面板'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['editor-command-bar'],
+      requiredCapabilities: ['pane-actions'],
+      pinnable: false,
+      execute: async () => {
+        await attachBuiltinPluginSurfacePanel('json', true)
         return { ok: true }
       },
     },

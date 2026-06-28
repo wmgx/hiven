@@ -10,6 +10,7 @@ const commands = [
   ['npm', ['run', 'test:no-main-window-startup']],
   ['npm', ['run', 'test:editor-window-launch']],
   ['npm', ['run', 'test:editor-command-bar-scope']],
+  ['npm', ['run', 'test:editor-command-bar-attach-surfaces']],
   ['npm', ['run', 'test:global-launcher-open-editor']],
   ['npm', ['run', 'test:context-snapshot-editor']],
   ['npm', ['run', 'test:output-router-text-targets']],
