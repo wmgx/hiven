@@ -482,6 +482,27 @@ async fn show_plugin_surface_window(
     show_and_focus_plugin_surface_window(&app, &window)
 }
 
+#[tauri::command(rename_all = "camelCase")]
+async fn hide_plugin_surface_window(
+    app: tauri::AppHandle,
+    source: String,
+    plugin_id: String,
+    surface_id: String,
+    destroy_timeout_ms: Option<u64>,
+) -> Result<(), String> {
+    let label = plugin_surface_window_label(&source, &plugin_id, &surface_id);
+    let destroy_timeout_ms =
+        destroy_timeout_ms.unwrap_or(PLUGIN_SURFACE_WINDOW_DEFAULT_DESTROY_TIMEOUT_MS);
+    let token = touch_plugin_surface_window(&label);
+    let Some(window) = app.get_webview_window(&label) else {
+        return Ok(());
+    };
+    window.hide().map_err(|error| error.to_string())?;
+    restore_launcher_level(&app);
+    schedule_plugin_surface_window_destroy(app, label, token, destroy_timeout_ms);
+    Ok(())
+}
+
 fn plugin_surface_window_label(source: &str, plugin_id: &str, surface_id: &str) -> String {
     format!("plugin-surface:{source}:{plugin_id}:{surface_id}")
 }
@@ -3269,6 +3290,7 @@ pub fn run() {
             show_editor_window,
             close_editor_window,
             show_plugin_surface_window,
+            hide_plugin_surface_window,
             simulate_paste,
             current_foreground_app_name,
             current_foreground_app_context,

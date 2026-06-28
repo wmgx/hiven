@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { pluginRegistry } from './pluginRegistry'
-import { upsertSurfaceInstance } from '../surfaces/registry'
+import { markSurfaceInstanceState, upsertSurfaceInstance } from '../surfaces/registry'
 import type { PluginSurfaceOpenTarget } from '../store'
 import type { PluginDefinition, PluginSurfaceShortcutPresentation, PluginUiSurfaceContribution } from './pluginTypes'
 
@@ -57,6 +57,21 @@ export async function requestOpenPluginSurfaceWindow(target: PluginSurfaceOpenTa
     canProvideText: true,
     canAttachToEditor: true,
   })
+}
+
+export async function requestHidePluginSurfaceWindow(target: PluginSurfaceOpenTarget): Promise<void> {
+  if (!isTauriRuntime()) return
+
+  const surface = resolvePluginSurface(target)
+  const destroyTimeoutMs = surface?.shell?.destroyTimeout ?? DEFAULT_DESTROY_TIMEOUT_MS
+
+  await invoke('hide_plugin_surface_window', {
+    pluginId: target.pluginId,
+    surfaceId: target.surfaceId,
+    source: target.source,
+    destroyTimeoutMs,
+  })
+  markSurfaceInstanceState(pluginSurfaceInstanceId(target), 'hidden')
 }
 
 export function pluginSurfaceInstanceId(target: PluginSurfaceOpenTarget): string {

@@ -3,7 +3,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useAppStore, type PluginSurfaceOpenTarget } from '../store'
 import type { PluginSettingsSource } from '../workspace/pluginSettingsStore'
 import { markSurfaceInstanceState } from '../surfaces/registry'
-import { pluginSurfaceInstanceId } from '../workspace/pluginSurfaceWindows'
+import { pluginSurfaceInstanceId, requestHidePluginSurfaceWindow } from '../workspace/pluginSurfaceWindows'
 import { PluginSettingsDialog } from './PluginSettingsDialog'
 import { PluginSurfaceRenderer, usePluginSurfaceRendersTitlebar, usePluginSurfaceTitle } from './pluginSurface/PluginSurfaceRenderer'
 import './PluginSurfaceWindow.css'
@@ -32,7 +32,7 @@ export function PluginSurfaceWindow() {
       if (event.key !== 'Escape') return
       event.preventDefault()
       event.stopPropagation()
-      void hideCurrentWindow()
+      void hideCurrentWindow(target)
     }
     window.addEventListener('keydown', onKeyDown, true)
     document.addEventListener('keydown', onKeyDown, true)
@@ -40,7 +40,7 @@ export function PluginSurfaceWindow() {
       window.removeEventListener('keydown', onKeyDown, true)
       document.removeEventListener('keydown', onKeyDown, true)
     }
-  }, [])
+  }, [target])
 
   if (!target) {
     return <WindowMessage title="Invalid plugin surface target" />
@@ -52,7 +52,7 @@ export function PluginSurfaceWindow() {
         {!usesPluginTitlebar && (
           <div className="plugin-surface-window-titlebar" data-tauri-drag-region>
             <div className="plugin-surface-window-title" data-tauri-drag-region>{title || 'Plugin Surface'}</div>
-            <button className="plugin-surface-window-close" type="button" onClick={() => { void hideCurrentWindow() }}>×</button>
+            <button className="plugin-surface-window-close" type="button" onClick={() => { void hideCurrentWindow(target) }}>×</button>
           </div>
         )}
         <div className="plugin-surface-window-body">
@@ -61,8 +61,8 @@ export function PluginSurfaceWindow() {
             locale={locale}
             presentation="plugin-surface-window"
             contextSurfaceId="plugin-surface-window"
-            onBack={() => { void hideCurrentWindow() }}
-            onClose={() => { void hideCurrentWindow() }}
+            onBack={() => { void hideCurrentWindow(target) }}
+            onClose={() => { void hideCurrentWindow(target) }}
           />
         </div>
       </div>
@@ -88,8 +88,12 @@ function isTauriRuntime(): boolean {
   return Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
 }
 
-async function hideCurrentWindow(): Promise<void> {
+async function hideCurrentWindow(target?: PluginSurfaceOpenTarget | null): Promise<void> {
   if (isTauriRuntime()) {
+    if (target) {
+      await requestHidePluginSurfaceWindow(target).catch(() => undefined)
+      return
+    }
     await getCurrentWindow().hide().catch(() => undefined)
     return
   }
