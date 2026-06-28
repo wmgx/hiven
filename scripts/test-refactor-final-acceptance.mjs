@@ -110,6 +110,12 @@ assert.equal(
   'package.json must expose plugin surface shortcut-to-window lifecycle story coverage',
 )
 assert.match(read('scripts/test-plugin-surface-shortcut-lifecycle-story.mjs'), /shortcutPresentation[\s\S]*showPluginSurfaceWindow[\s\S]*requestOpenPluginSurfaceTool[\s\S]*plugin-surface:builtin:clipboard-history:main/, 'plugin shortcut lifecycle story must prove window and launcher presentation routing')
+assert.equal(
+  packageJson.scripts?.['test:clipboard-history-surface-paste-story'],
+  'node scripts/test-clipboard-history-surface-paste-story.mjs',
+  'package.json must expose clipboard history surface paste story coverage',
+)
+assert.match(read('scripts/test-clipboard-history-surface-paste-story.mjs'), /Enter[\s\S]*pasteText[\s\S]*pasteImage[\s\S]*pasteFiles[\s\S]*host\.close/, 'clipboard history surface paste story must prove Enter routes selected items to paste APIs and closes')
 
 // Product/behavior acceptance: startup and global entry.
 assert.ok(!tauriConfig.app.windows.some((window) => window.label === 'main'), 'startup must not declare a retired main window')

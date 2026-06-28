@@ -58,6 +58,7 @@ const commands = [
   ['npm', ['run', 'test:pinned-action-live-runner']],
   ['npm', ['run', 'test:global-pinned-launcher']],
   ['npm', ['run', 'test:clipboard-history-runtime']],
+  ['npm', ['run', 'test:clipboard-history-surface-paste-story']],
   ['npm', ['run', 'test:launcher-web-smoke']],
   ['npm', ['run', 'test:window-entry-runtime-smoke']],
 ]

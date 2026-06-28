@@ -34,6 +34,7 @@
     "test:clipboard-history-settings": "node scripts/test-clipboard-history-settings.mjs",
     "test:clipboard-history-logic": "node scripts/test-clipboard-history-logic.mts",
     "test:clipboard-history-runtime": "node scripts/test-clipboard-history-runtime.mjs",
+    "test:clipboard-history-surface-paste-story": "node scripts/test-clipboard-history-surface-paste-story.mjs",
     "test:clipboard-history-integration": "node scripts/test-clipboard-history-integration.mjs",
     "test:clipboard-history": "npm run test:clipboard-history-storage && npm run test:clipboard-history-boundary && npm run test:clipboard-history-settings && npm run test:clipboard-history-runtime && npm run test:clipboard-history-integration",
     "test:plugin-goal-suite": "node scripts/test-plugin-goal-suite.mjs",
