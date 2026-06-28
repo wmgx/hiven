@@ -1,5 +1,3 @@
-import { getCurrentWindow } from '@tauri-apps/api/window'
-
 export {
   getPluginSurfaceShortcutPresentation,
   pluginSurfaceInstanceId,
@@ -9,5 +7,6 @@ export {
 } from '../pluginSurfaceWindows'
 
 export async function hideCurrentPluginSurfaceWindow(): Promise<void> {
+  const { getCurrentWindow } = await import('@tauri-apps/api/window')
   await getCurrentWindow().hide()
 }

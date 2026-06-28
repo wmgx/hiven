@@ -4,6 +4,7 @@ import { getSurfaceInstances } from '../surfaces/registry'
 import { useAppStore } from '../store'
 import { getHostAppWorkObjects, launchHostAppObject } from '../workspace/appLauncher/hostAppLauncher'
 import { requestOpenEditorWindow } from '../workspace/editorWindow'
+import { showPluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
 import { PLUGIN_SURFACE_PANEL_ID } from '../components/pluginSurface/PluginSurfacePanel'
 import { registerClipboardHistoryWorkflowProvider } from './clipboardHistoryWorkflowProvider'
 import { createDefaultOutputRouterContext, routeTextOutput } from './outputRouter'
@@ -224,7 +225,6 @@ const defaultSurfaceActionProvider = {
           icon: 'PanelTopOpen',
           accepts: ['plugin-surface'],
           run: async () => {
-            const { showPluginSurfaceWindow } = await import('../workspace/windowManager/pluginSurfaceWindows')
             await showPluginSurfaceWindow({
               source: input.sourceKind,
               pluginId: input.pluginId,

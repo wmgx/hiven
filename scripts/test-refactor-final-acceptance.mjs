@@ -119,6 +119,8 @@ assert.match(files.pluginSurfacePanel, /PLUGIN_SURFACE_PANEL_ID/, 'attached plug
 assert.match(files.pluginSurfacePanel, /<PluginSurfaceRenderer[\s\S]*presentation=['"]editor-panel['"]/, 'attached plugin panel must reuse shared surface renderer')
 assert.match(files.pluginSurfacePanelProvider, /registerProductionPlugin[\s\S]*\[panel\]/, 'plugin surface panel bridge must be registered with PanelHostV2')
 assert.match(files.workflowProviders, /workflow\.attach-plugin-surface-editor-panel/, 'workflow actions must expose attach-to-editor-panel for plugin surfaces')
+assert.match(files.workflowProviders, /import \{ showPluginSurfaceWindow \} from ['"]\.\.\/workspace\/windowManager\/pluginSurfaceWindows['"]/, 'workflow plugin-surface window actions must use a static window manager import')
+assert.doesNotMatch(files.workflowProviders, /import\(['"]\.\.\/workspace\/windowManager\/pluginSurfaceWindows['"]\)/, 'workflow plugin-surface window actions must not dynamically import an already-static window manager chunk')
 
 // Surface registry is stable across windows.
 assert.match(files.surfaceRegistry, /SURFACE_REGISTRY_EVENT/, 'surface registry must synchronize through Tauri events')
