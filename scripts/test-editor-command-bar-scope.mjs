@@ -25,6 +25,11 @@ assert.match(launcherTypes, /'editor-command-bar':\s*\{[\s\S]*presentation:\s*['
 assert.doesNotMatch(launcherTypes.match(/'editor-command-bar':\s*\{[\s\S]*?capabilities:\s*\[([\s\S]*?)\]/)?.[1] ?? '', /app-search|system-power|settings|host-surfaces|plugin-surfaces/, 'editor command bar capabilities must exclude global navigation capabilities')
 assert.match(registry, /requiredCapabilities[\s\S]*launcherHostHasCapability/, 'registry must enforce host capability filtering')
 assert.match(hostActions, /systemKey:\s*['"]host:global:search-all-hiven['"][\s\S]*surfaces:\s*\[['"]editor-command-bar['"]\][\s\S]*showLauncherWindow\(\)/, 'Editor command bar must expose Search all Hiven as the only global bridge')
+assert.match(hostActions, /function\s+rewriteActiveEditorTextPolitely\(\)[\s\S]*replaceEditorTextTarget/, 'Editor command bar must provide a local polite rewrite helper')
+assert.match(hostActions, /function\s+compressActiveEditorTextToThreeSentences\(\)[\s\S]*replaceEditorTextTarget/, 'Editor command bar must provide a local three-sentence compression helper')
+assert.match(hostActions, /systemKey:\s*['"]host:editor:rewrite-politely['"][\s\S]*surfaces:\s*\[['"]editor-command-bar['"]\][\s\S]*rewriteActiveEditorTextPolitely\(\)/, 'Editor command bar must expose polite rewrite as an editor-local action')
+assert.match(hostActions, /systemKey:\s*['"]host:editor:compress-three-sentences['"][\s\S]*surfaces:\s*\[['"]editor-command-bar['"]\][\s\S]*compressActiveEditorTextToThreeSentences\(\)/, 'Editor command bar must expose three-sentence compression as an editor-local action')
+assert.match(editorHost, /item\.systemKey\.startsWith\(['"]host:editor:['"]\)/, 'EditorCommandBarHost filter must keep all editor-local host actions')
 
 const paneHostItems = [...hostActions.matchAll(/systemKey:\s*['"](host:pane:[^'"]+)['"][\s\S]*?surfaces:\s*\[([^\]]+)\]/g)]
 const editorLocalPaneItems = new Set([

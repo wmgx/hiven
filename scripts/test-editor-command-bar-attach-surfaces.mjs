@@ -55,8 +55,8 @@ assert.doesNotMatch(
 )
 assert.match(
   files.editorHost,
-  /host:editor:attach-/,
-  'EditorCommandBarHost filter must keep explicit editor attach surface actions',
+  /item\.systemKey\.startsWith\(['"]host:editor:['"]\)/,
+  'EditorCommandBarHost filter must keep explicit editor-local surface actions',
 )
 assert.match(
   files.outputRouter,

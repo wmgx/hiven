@@ -1,8 +1,9 @@
 import { useWorkspaceStore } from '../workspaceStore'
 import { translate } from '../../i18n'
 import { createEditorPane, openEditorPanel } from '../editorBridge'
+import { applyEffects } from '../effectRunner'
 import { showLauncherWindow } from '../windowManager/launcherWindow'
-import type { LauncherItem, LauncherParamOption } from './types'
+import type { LauncherItem, LauncherParamOption, TextRange } from './types'
 import { runtimeRegistry } from '../runtimeRegistry'
 import { PLUGIN_SURFACE_PANEL_ID } from '../../components/pluginSurface/PluginSurfacePanel'
 
@@ -84,6 +85,70 @@ async function attachBuiltinPluginSurfacePanel(pluginId: string, withInitialText
       },
     },
   })
+}
+
+function getActiveEditorTextTarget(): { text: string; paneId: string; range?: TextRange } | undefined {
+  const state = useWorkspaceStore.getState()
+  const paneId = state.activePaneId
+  const pane = state.panes[paneId]
+  if (!pane) return undefined
+  const editor = runtimeRegistry.getCodeEditor(paneId)
+  const selection = editor?.getSelection?.()
+  const selectedText = selection && !selection.isEmpty?.()
+    ? editor?.getModel?.()?.getValueInRange(selection)
+    : undefined
+  if (selectedText) {
+    return {
+      text: selectedText,
+      paneId,
+      range: {
+        startLineNumber: selection.startLineNumber,
+        startColumn: selection.startColumn,
+        endLineNumber: selection.endLineNumber,
+        endColumn: selection.endColumn,
+      },
+    }
+  }
+  return { text: pane.text ?? '', paneId }
+}
+
+function replaceEditorTextTarget(target: { text: string; paneId: string; range?: TextRange }, text: string): void {
+  applyEffects([{
+    type: 'text.replace',
+    target: target.range ? { paneId: target.paneId, range: target.range } : { paneId: target.paneId },
+    text,
+  }])
+}
+
+function rewriteActiveEditorTextPolitely(): boolean {
+  const target = getActiveEditorTextTarget()
+  if (!target || !target.text.trim()) return false
+  const normalized = normalizeEditorActionText(target.text)
+  const rewritten = [
+    'Thanks for the context.',
+    '',
+    normalized,
+    '',
+    'I will follow up after checking the details.',
+  ].join('\n')
+  replaceEditorTextTarget(target, rewritten)
+  return true
+}
+
+function compressActiveEditorTextToThreeSentences(): boolean {
+  const target = getActiveEditorTextTarget()
+  if (!target || !target.text.trim()) return false
+  const sentences = normalizeEditorActionText(target.text)
+    .split(/(?<=[.!?。！？])\s+|[\n]+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+  const compressed = sentences.slice(0, 3).join(' ')
+  replaceEditorTextTarget(target, compressed || normalizeEditorActionText(target.text))
+  return true
+}
+
+function normalizeEditorActionText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim()
 }
 
 async function performSystemPowerAction(action: SystemPowerAction): Promise<{ ok: boolean; message?: string }> {
@@ -276,6 +341,40 @@ export function getHostPaneControlItems(): LauncherItem[] {
         await createEditorPane({ text: '', focus: true, direction: 'bottom' })
         return { ok: true }
       },
+    },
+    {
+      systemKey: 'host:editor:rewrite-politely',
+      kind: 'host',
+      display: {
+        title: 'Rewrite More Politely',
+        titleI18n: { zh: '改得更礼貌' },
+        subtitle: 'Rewrite the current selection or pane in a polite tone',
+        subtitleI18n: { zh: '将当前选区或面板内容改写得更礼貌' },
+        icon: 'MessageSquareReply',
+        aliases: ['polite', 'rewrite politely', '礼貌', '润色'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['editor-command-bar'],
+      requiredCapabilities: ['text-input-actions'],
+      pinnable: false,
+      execute: async () => ({ ok: rewriteActiveEditorTextPolitely() }),
+    },
+    {
+      systemKey: 'host:editor:compress-three-sentences',
+      kind: 'host',
+      display: {
+        title: 'Compress to Three Sentences',
+        titleI18n: { zh: '压缩成三句话' },
+        subtitle: 'Compress the current selection or pane to three sentences',
+        subtitleI18n: { zh: '将当前选区或面板内容压缩成三句话' },
+        icon: 'ListCollapse',
+        aliases: ['compress', 'three sentences', 'summary', '三句话', '压缩'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['editor-command-bar'],
+      requiredCapabilities: ['text-input-actions'],
+      pinnable: false,
+      execute: async () => ({ ok: compressActiveEditorTextToThreeSentences() }),
     },
     {
       systemKey: 'host:editor:attach-translate-panel',
