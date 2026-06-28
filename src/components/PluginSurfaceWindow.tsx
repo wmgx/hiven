@@ -1,10 +1,9 @@
 import { useEffect, useMemo } from 'react'
-import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useAppStore, type PluginSurfaceOpenTarget } from '../store'
 import type { PluginSettingsSource } from '../workspace/pluginSettingsStore'
 import { markSurfaceInstanceState } from '../surfaces/registry'
 import { pluginSurfaceInstanceId } from '../workspace/pluginSurfaceWindows'
-import { hidePluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
+import { hideCurrentPluginSurfaceWindow, hidePluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
 import { PluginSettingsDialog } from './PluginSettingsDialog'
 import { PluginSurfaceRenderer, usePluginSurfaceRendersTitlebar, usePluginSurfaceTitle } from './pluginSurface/PluginSurfaceRenderer'
 import './PluginSurfaceWindow.css'
@@ -95,7 +94,7 @@ async function hideCurrentWindow(target?: PluginSurfaceOpenTarget | null): Promi
       await hidePluginSurfaceWindow(target).catch(() => undefined)
       return
     }
-    await getCurrentWindow().hide().catch(() => undefined)
+    await hideCurrentPluginSurfaceWindow().catch(() => undefined)
     return
   }
   window.close()
