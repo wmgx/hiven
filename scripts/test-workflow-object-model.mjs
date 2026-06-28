@@ -75,6 +75,8 @@ assert.match(files.defaultWorkflowProviders, /Attach to Editor Panel/, 'Plugin s
 assert.match(files.defaultWorkflowProviders, /PLUGIN_SURFACE_PANEL_ID/, 'Plugin surface attach action must route through the shared editor panel bridge')
 assert.match(files.defaultWorkflowProviders, /routeTextOutput\(text,\s*\{\s*kind:\s*['"]paste-to-foreground-app['"]/, 'Default text actions must support paste to foreground app')
 assert.match(files.defaultWorkflowProviders, /routeTextOutput\(text,\s*\{\s*kind:\s*['"]open-in-editor['"]/, 'Default text actions must support open in editor')
+assert.match(files.defaultWorkflowProviders, /textAction\([\s\S]*defaultOutputTarget:\s*OutputTarget\['kind'\]/, 'Text action helper must require explicit default output target metadata')
+assert.match(files.defaultWorkflowProviders, /workflow\.save-shelf[\s\S]*['"]save-to-shelf['"]/, 'Save to Shelf action must declare save-to-shelf as its default output target')
 assert.match(files.workflowLauncherAdapter, /getWorkflowObjectLauncherItems/, 'Workflow objects must adapt into launcher items')
 assert.match(files.workflowLauncherAdapter, /workflow:object:/, 'Workflow object launcher items must have stable workflow object keys')
 assert.match(files.workflowLauncherAdapter, /metadata:\s*\{[\s\S]*kind:\s*['"]workflow-object['"][\s\S]*objectId:\s*object\.id/, 'Workflow object launcher items must retain object identity metadata')

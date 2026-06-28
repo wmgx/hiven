@@ -10,6 +10,7 @@ import { showPluginSurfaceWindow } from '../workspace/windowManager/pluginSurfac
 import { PLUGIN_SURFACE_PANEL_ID } from '../components/pluginSurface/PluginSurfacePanel'
 import { registerClipboardHistoryWorkflowProvider } from './clipboardHistoryWorkflowProvider'
 import { createDefaultOutputRouterContext, routeTextOutput } from './outputRouter'
+import type { OutputTarget } from './outputTarget'
 import { registerWorkActionProvider, registerWorkObjectProvider } from './workflowRegistry'
 import type { WorkAction, WorkContext } from './workAction'
 import type { WorkObject, WorkObjectProvider } from './workObject'
@@ -198,43 +199,43 @@ const defaultTextActionProvider = {
     const text = textForObject(input)
     if (!text) return []
     return [
-      textAction('workflow.copy', 'Copy', 'Copy', async () => (
+      textAction('workflow.copy', 'Copy', 'Copy', 'copy', async () => (
         routeTextOutput(text, { kind: 'copy' }, createDefaultOutputRouterContext())
       )),
-      textAction('workflow.paste', 'Paste to Foreground App', 'ClipboardPaste', async () => (
+      textAction('workflow.paste', 'Paste to Foreground App', 'ClipboardPaste', 'paste-to-foreground-app', async () => (
         routeTextOutput(text, { kind: 'paste-to-foreground-app' }, createDefaultOutputRouterContext())
       )),
-      textAction('workflow.open-in-editor', 'Open in Editor', 'PanelTopOpen', async () => (
+      textAction('workflow.open-in-editor', 'Open in Editor', 'PanelTopOpen', 'open-in-editor', async () => (
         routeTextOutput(text, {
           kind: 'open-in-editor',
           language: languageForObject(input),
           title: input.title,
         }, createDefaultOutputRouterContext())
       )),
-      textAction('workflow.replace-selection', 'Replace Editor Selection', 'Replace', async () => (
+      textAction('workflow.replace-selection', 'Replace Editor Selection', 'Replace', 'replace-editor-selection', async () => (
         routeTextOutput(text, { kind: 'replace-editor-selection', range: ctx.snapshot.editor?.selectionRange }, createDefaultOutputRouterContext())
       )),
-      textAction('workflow.insert-editor', 'Insert into Editor', 'TextCursorInput', async () => (
+      textAction('workflow.insert-editor', 'Insert into Editor', 'TextCursorInput', 'insert-into-editor', async () => (
         routeTextOutput(text, { kind: 'insert-into-editor' }, createDefaultOutputRouterContext())
       )),
-      textAction('workflow.draft-polite-reply', 'Draft Polite Reply', 'MessageSquareReply', async () => (
+      textAction('workflow.draft-polite-reply', 'Draft Polite Reply', 'MessageSquareReply', 'paste-to-foreground-app', async () => (
         routeTextOutput(draftPoliteReply(text), { kind: 'paste-to-foreground-app' }, createDefaultOutputRouterContext())
       )),
-      textAction('workflow.open-reply-draft-in-editor', 'Open Reply Draft in Editor', 'PanelTopOpen', async () => (
+      textAction('workflow.open-reply-draft-in-editor', 'Open Reply Draft in Editor', 'PanelTopOpen', 'open-in-editor', async () => (
         routeTextOutput(draftPoliteReply(text), {
           kind: 'open-in-editor',
           title: 'Reply Draft',
           language: 'markdown',
         }, createDefaultOutputRouterContext())
       )),
-      textAction('workflow.extract-todos', 'Extract Todos', 'ListTodo', async () => (
+      textAction('workflow.extract-todos', 'Extract Todos', 'ListTodo', 'open-in-editor', async () => (
         routeTextOutput(extractTodoDraft(text), {
           kind: 'open-in-editor',
           title: 'Extracted Todos',
           language: 'markdown',
         }, createDefaultOutputRouterContext())
       )),
-      textAction('workflow.open-json-surface', 'Open JSON Surface', 'Braces', async () => (
+      textAction('workflow.open-json-surface', 'Open JSON Surface', 'Braces', 'open-plugin-surface', async () => (
         routeTextOutput(text, {
           kind: 'open-plugin-surface',
           source: 'builtin',
@@ -243,7 +244,7 @@ const defaultTextActionProvider = {
           initialText: text,
         }, createDefaultOutputRouterContext())
       )),
-      textAction('workflow.attach-json-panel', 'Attach JSON Panel', 'Braces', async () => (
+      textAction('workflow.attach-json-panel', 'Attach JSON Panel', 'Braces', 'attach-editor-panel', async () => (
         routeTextOutput(text, {
           kind: 'attach-editor-panel',
           panelId: PLUGIN_SURFACE_PANEL_ID,
@@ -256,7 +257,7 @@ const defaultTextActionProvider = {
           },
         }, createDefaultOutputRouterContext())
       )),
-      textAction('workflow.translate-in-surface', 'Translate in Surface', 'Languages', async () => (
+      textAction('workflow.translate-in-surface', 'Translate in Surface', 'Languages', 'open-plugin-surface', async () => (
         routeTextOutput(text, {
           kind: 'open-plugin-surface',
           source: 'builtin',
@@ -265,7 +266,7 @@ const defaultTextActionProvider = {
           initialText: text,
         }, createDefaultOutputRouterContext())
       )),
-      textAction('workflow.attach-translate-panel', 'Attach Translate Panel', 'PanelRightOpen', async () => (
+      textAction('workflow.attach-translate-panel', 'Attach Translate Panel', 'PanelRightOpen', 'attach-editor-panel', async () => (
         routeTextOutput(text, {
           kind: 'attach-editor-panel',
           panelId: PLUGIN_SURFACE_PANEL_ID,
@@ -278,7 +279,7 @@ const defaultTextActionProvider = {
           },
         }, createDefaultOutputRouterContext())
       )),
-      textAction('workflow.open-editor-with-translate-panel', 'Open Editor with Translate Panel', 'PanelRightOpen', async () => {
+      textAction('workflow.open-editor-with-translate-panel', 'Open Editor with Translate Panel', 'PanelRightOpen', 'open-in-editor', async () => {
         await createEditorPane({
           text,
           title: input.title,
@@ -299,7 +300,7 @@ const defaultTextActionProvider = {
         })
         return { ok: true, text }
       }),
-      textAction('workflow.save-shelf', 'Save to Shelf', 'Archive', async () => (
+      textAction('workflow.save-shelf', 'Save to Shelf', 'Archive', 'save-to-shelf', async () => (
         routeTextOutput(text, { kind: 'save-to-shelf' }, createDefaultOutputRouterContext())
       )),
     ]
@@ -427,9 +428,10 @@ function textAction(
   id: string,
   title: string,
   icon: string,
+  defaultOutputTarget: OutputTarget['kind'],
   run: WorkAction['run'],
 ): WorkAction {
-  return { id, title, icon, accepts: ['text', 'clipboard', 'url'], run }
+  return { id, title, icon, accepts: ['text', 'clipboard', 'url'], defaultOutputTarget, run }
 }
 
 function textForObject(input: WorkObject): string {
