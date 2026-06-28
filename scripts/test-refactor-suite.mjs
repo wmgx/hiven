@@ -24,6 +24,7 @@ const commands = [
   ['npm', ['run', 'test:global-launcher-workflow-tab-behavior']],
   ['npm', ['run', 'test:editor-bridge-behavior']],
   ['npm', ['run', 'test:surface-registry-behavior']],
+  ['npm', ['run', 'test:plugin-surface-window-lifecycle-behavior']],
   ['npm', ['run', 'test:workflow-json-clipboard-story']],
   ['npm', ['run', 'test:workflow-translate-selection-story']],
   ['npm', ['run', 'test:workflow-clipboard-history-story']],
