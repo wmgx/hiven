@@ -26,6 +26,7 @@ const commands = [
   ['npm', ['run', 'test:surface-registry-behavior']],
   ['npm', ['run', 'test:plugin-surface-window-lifecycle-behavior']],
   ['npm', ['run', 'test:output-router-behavior']],
+  ['npm', ['run', 'test:context-broker-behavior']],
   ['npm', ['run', 'test:workflow-json-clipboard-story']],
   ['npm', ['run', 'test:workflow-translate-selection-story']],
   ['npm', ['run', 'test:workflow-clipboard-history-story']],

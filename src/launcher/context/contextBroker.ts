@@ -58,8 +58,12 @@ export async function createWorkContextSnapshot(
 ): Promise<WorkContextSnapshot> {
   const snapshot: WorkContextSnapshot = { invocation }
   for (const provider of providers) {
-    const partial = await provider.getSnapshot()
-    Object.assign(snapshot, partial)
+    try {
+      const partial = await provider.getSnapshot()
+      Object.assign(snapshot, partial)
+    } catch (error) {
+      console.warn(`[context] snapshot provider "${provider.id}" failed:`, error)
+    }
   }
   return snapshot
 }
