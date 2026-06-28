@@ -171,6 +171,7 @@ assert.match(files.editorWindowComponent, /upsertSurfaceInstance\([\s\S]*id:\s*[
 assert.match(files.editorWindowComponent, /markSurfaceInstanceState\(['"]editor['"],\s*['"]hidden['"]\)/, 'Editor window component must mark itself hidden on teardown')
 assert.match(files.windowManagerEditor, /showEditorWindow/, 'window manager must expose editor window operations')
 assert.match(files.windowManagerPluginSurfaces, /showPluginSurfaceWindow/, 'window manager must expose plugin surface window operations')
+assert.match(files.windowManagerPluginSurfaces, /hidePluginSurfaceWindow/, 'window manager must expose plugin surface window hide operations')
 assert.match(files.windowManagerLauncher, /showLauncherWindow/, 'window manager must expose launcher window operations')
 assert.match(files.windowLabels, /EDITOR_WINDOW_LABEL/, 'window manager must centralize window labels')
 assert.match(files.launcherUsage, /['"]editor-command-bar['"]:\s*\{\}/, 'launcher usage must have an editor-command-bar bucket')

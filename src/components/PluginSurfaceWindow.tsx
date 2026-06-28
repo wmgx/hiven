@@ -3,7 +3,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useAppStore, type PluginSurfaceOpenTarget } from '../store'
 import type { PluginSettingsSource } from '../workspace/pluginSettingsStore'
 import { markSurfaceInstanceState } from '../surfaces/registry'
-import { pluginSurfaceInstanceId, requestHidePluginSurfaceWindow } from '../workspace/pluginSurfaceWindows'
+import { pluginSurfaceInstanceId } from '../workspace/pluginSurfaceWindows'
+import { hidePluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
 import { PluginSettingsDialog } from './PluginSettingsDialog'
 import { PluginSurfaceRenderer, usePluginSurfaceRendersTitlebar, usePluginSurfaceTitle } from './pluginSurface/PluginSurfaceRenderer'
 import './PluginSurfaceWindow.css'
@@ -91,7 +92,7 @@ function isTauriRuntime(): boolean {
 async function hideCurrentWindow(target?: PluginSurfaceOpenTarget | null): Promise<void> {
   if (isTauriRuntime()) {
     if (target) {
-      await requestHidePluginSurfaceWindow(target).catch(() => undefined)
+      await hidePluginSurfaceWindow(target).catch(() => undefined)
       return
     }
     await getCurrentWindow().hide().catch(() => undefined)
