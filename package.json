@@ -103,6 +103,7 @@
     "test:workflow-translate-selection-story": "node scripts/test-workflow-translate-selection-story.mjs",
     "test:workflow-clipboard-history-story": "node scripts/test-workflow-clipboard-history-story.mjs",
     "test:workflow-chat-reply-story": "node scripts/test-workflow-chat-reply-story.mjs",
+    "test:workflow-context-routing-story": "node scripts/test-workflow-context-routing-story.mjs",
     "test:workflow-json-panel-story": "node scripts/test-workflow-json-panel-story.mjs"
   },
   "dependencies": {

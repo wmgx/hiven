@@ -92,6 +92,12 @@ assert.equal(
   'package.json must expose a runtime smoke check for launcher/editor/plugin-surface entries',
 )
 assert.match(read('scripts/test-window-entry-runtime-smoke.mjs'), /window=launcher[\s\S]*window=editor[\s\S]*window=plugin-surface/, 'runtime smoke must exercise launcher, editor, and plugin surface routes')
+assert.equal(
+  packageJson.scripts?.['test:workflow-context-routing-story'],
+  'node scripts/test-workflow-context-routing-story.mjs',
+  'package.json must expose the current-context object/action/output routing story check',
+)
+assert.match(read('scripts/test-workflow-context-routing-story.mjs'), /context:external-selected-text[\s\S]*workflow\.open-editor-with-translate-panel[\s\S]*attach-editor-panel/, 'context routing story must prove context objects expand into editor/plugin output actions')
 
 // Product/behavior acceptance: startup and global entry.
 assert.ok(!tauriConfig.app.windows.some((window) => window.label === 'main'), 'startup must not declare a retired main window')
