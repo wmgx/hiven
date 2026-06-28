@@ -84,7 +84,8 @@
     "test:json-semantic-diff": "node scripts/test-json-semantic-diff.mjs",
     "test:refactor-final-acceptance": "node scripts/test-refactor-final-acceptance.mjs",
     "test:background-lifecycle": "node scripts/test-background-lifecycle.mjs",
-    "test:refactor-suite": "node scripts/test-refactor-suite.mjs"
+    "test:refactor-suite": "node scripts/test-refactor-suite.mjs",
+    "test:refactor-gate": "node scripts/run-refactor-gate.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
