@@ -8,6 +8,7 @@ import ts from 'typescript'
 const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
 const refactorSuite = readFileSync('scripts/test-refactor-suite.mjs', 'utf8')
 const tauriLib = readFileSync('src-tauri/src/lib.rs', 'utf8')
+const pluginSurfaceWindowComponent = readFileSync('src/components/PluginSurfaceWindow.tsx', 'utf8')
 
 assert.equal(
   packageJson.scripts?.['test:plugin-surface-window-lifecycle-behavior'],
@@ -24,6 +25,8 @@ assert.match(tauriLib, /show_and_focus_plugin_surface_window\(&app,\s*&window\)\
 assert.match(tauriLib, /async fn hide_plugin_surface_window[\s\S]*surface_registry_mark_record_state\(&label,\s*["']hidden["']/, 'native plugin surface hide must persist hidden state in Rust registry')
 assert.match(tauriLib, /WindowEvent::Focused\(false\) if close_on_blur[\s\S]*surface_registry_mark_record_state\(&label,\s*["']hidden["']/, 'native focus-lost hide must persist hidden state in Rust registry')
 assert.match(tauriLib, /WindowEvent::Destroyed[\s\S]*surface_registry_upsert_record[\s\S]*["']destroyed["']/, 'native plugin surface destroy must persist destroyed state in Rust registry')
+assert.match(pluginSurfaceWindowComponent, /upsertSurfaceInstance\([\s\S]*kind:\s*['"]plugin-surface['"]/, 'PluginSurfaceWindow must upsert its own surface record when mounted')
+assert.match(pluginSurfaceWindowComponent, /pluginSurfaceWindowLabel\(target\)/, 'PluginSurfaceWindow must register with the same window label as the native lifecycle')
 
 function loadModule(path, globals = {}) {
   let src = readFileSync(path, 'utf8')

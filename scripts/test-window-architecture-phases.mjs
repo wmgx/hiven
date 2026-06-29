@@ -269,7 +269,7 @@ assert.match(files.surfaceActions, /openLauncherHostSurface\(['"]settings['"]\)/
 assert.match(files.surfaceActions, /openLauncherHostSurface\(['"]plugins['"]\)/, 'Surface focus must reopen Plugins through the launcher host surface')
 assert.match(files.surfaceActions, /surface\.kind === ['"]plugin-editor['"][\s\S]*openLauncherHostSurface\(['"]plugins['"]\)/, 'Surface focus must route PluginEditor instances back to the Plugins host surface')
 assert.match(files.surfaceActions, /requestOpenPluginEditorSurface\(\{[\s\S]*folderPath:\s*surface\.folderPath/, 'Surface focus must restore PluginEditor instances through the plugin editor bridge')
-assert.match(files.pluginSurfaceWindowComponent, /markSurfaceInstanceState\([\s\S]*['"]visible['"]/, 'Plugin surface window component must mark its surface visible')
+assert.match(files.pluginSurfaceWindowComponent, /upsertSurfaceInstance\([\s\S]*kind:\s*['"]plugin-surface['"]/, 'Plugin surface window component must upsert its own registry record')
 assert.match(files.pluginSurfaceWindowComponent, /markSurfaceInstanceState\([\s\S]*['"]hidden['"]/, 'Plugin surface window component must mark its surface hidden on teardown')
 assert.match(files.editorWindowComponent, /upsertSurfaceInstance\([\s\S]*id:\s*EDITOR_WINDOW_LABEL/, 'Editor window component must register itself as a surface using the centralized label')
 assert.match(files.editorWindowComponent, /markSurfaceInstanceState\(EDITOR_WINDOW_LABEL,\s*['"]hidden['"]\)/, 'Editor window component must mark itself hidden on teardown using the centralized label')

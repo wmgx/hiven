@@ -247,6 +247,7 @@ assert.match(files.tauriLib, /async fn hide_plugin_surface_window/, 'native runt
 assert.match(files.pluginSurfaceWindowManager, /function\s+showPluginSurfaceWindow\(target:[\s\S]*requestOpenPluginSurfaceWindow\(target\)/, 'window manager must expose plugin surface open lifecycle through a facade')
 assert.match(files.pluginSurfaceWindowManager, /function\s+hidePluginSurfaceWindow\(target:[\s\S]*requestHidePluginSurfaceWindow\(target\)/, 'window manager must expose plugin surface hide lifecycle through a facade')
 assert.match(files.pluginSurfaceHotkeys, /getPluginSurfaceShortcutPresentation\(target\) === ['"]window['"][\s\S]*showPluginSurfaceWindow\(target\)/, 'plugin surface shortcuts must route window surfaces to independent windows')
+assert.match(files.pluginSurfaceWindow, /upsertSurfaceInstance\([\s\S]*kind:\s*['"]plugin-surface['"]/, 'independent plugin surface windows must self-register in the surface registry')
 assert.match(files.pluginSurfaceWindow, /<PluginSurfaceRenderer[\s\S]*presentation=['"]plugin-surface-window['"]/, 'independent plugin surface windows must reuse shared renderer')
 assert.match(files.pluginSurfacePanel, /PLUGIN_SURFACE_PANEL_ID/, 'attached plugin panel must define a stable panel id')
 assert.match(files.pluginSurfacePanel, /<PluginSurfaceRenderer[\s\S]*presentation=['"]editor-panel['"]/, 'attached plugin panel must reuse shared surface renderer')

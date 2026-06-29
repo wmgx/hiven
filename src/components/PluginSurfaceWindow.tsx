@@ -1,8 +1,8 @@
 import { useEffect, useMemo } from 'react'
 import { useAppStore, type PluginSurfaceOpenTarget } from '../store'
 import type { PluginSettingsSource } from '../workspace/pluginSettingsStore'
-import { markSurfaceInstanceState } from '../surfaces/registry'
-import { pluginSurfaceInstanceId } from '../workspace/pluginSurfaceWindows'
+import { markSurfaceInstanceState, upsertSurfaceInstance } from '../surfaces/registry'
+import { pluginSurfaceInstanceId, pluginSurfaceWindowLabel } from '../workspace/pluginSurfaceWindows'
 import { hideCurrentPluginSurfaceWindow, hidePluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
 import { PluginSettingsDialog } from './PluginSettingsDialog'
 import { PluginSurfaceRenderer, usePluginSurfaceRendersTitlebar, usePluginSurfaceTitle } from './pluginSurface/PluginSurfaceRenderer'
@@ -18,14 +18,25 @@ export function PluginSurfaceWindow() {
   useEffect(() => {
     if (!target) return
     const instanceId = pluginSurfaceInstanceId(target)
-    markSurfaceInstanceState(instanceId, 'visible')
+    upsertSurfaceInstance({
+      id: instanceId,
+      kind: 'plugin-surface',
+      windowLabel: pluginSurfaceWindowLabel(target),
+      title: title || target.surfaceId,
+      pluginId: target.pluginId,
+      surfaceId: target.surfaceId,
+      state: 'visible',
+      canReceiveText: true,
+      canProvideText: true,
+      canAttachToEditor: true,
+    })
     const onPageHide = () => markSurfaceInstanceState(instanceId, 'destroyed')
     window.addEventListener('pagehide', onPageHide)
     return () => {
       window.removeEventListener('pagehide', onPageHide)
       markSurfaceInstanceState(instanceId, 'hidden')
     }
-  }, [target])
+  }, [target, title])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
