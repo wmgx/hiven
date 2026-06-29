@@ -49,6 +49,14 @@ check('Store no longer exposes the retired main-window ViewId model', () => {
   )
 })
 
+check('Store no longer keeps editor document or runtime instance state', () => {
+  assert.doesNotMatch(
+    files.store,
+    /\beditorText\b|\bsetEditorText\b|\beditorInstance\b|\bsetEditorInstance\b/,
+    'Editor text and Monaco instances must stay inside the editor window workspace/runtime registries, not AppState',
+  )
+})
+
 check('App does not register Cmd/Ctrl+K for the in-app command palette', () => {
   assert.doesNotMatch(
     files.app,

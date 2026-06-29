@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Locale } from './i18n'
-import { useWorkspaceStore } from './workspace/workspaceStore'
 import {
   DEFAULT_PINNED_RUNTIME_CONFIG,
   activatePinnedRuntime,
@@ -194,12 +193,6 @@ interface AppState {
   updatePinnedRuntime: (pinnedId: string, patch: Partial<PinnedRuntime>) => void
   releasePinnedRuntime: (pinnedId: string, reason?: PinnedTombstone['reason']) => void
   prunePinnedRuntimes: (now?: number) => void
-
-  // Editor
-  editorText: string
-  setEditorText: (text: string) => void
-  editorInstance: any | null
-  setEditorInstance: (editor: any) => void
 
   // Editor command bar
   editorCommandBarOpen: boolean
@@ -418,16 +411,6 @@ export const useAppStore = create<AppState>()(persist((set) => ({
       },
     }
   }),
-
-  // Editor (bridged to workspace store for backwards compat)
-  editorText: '',
-  setEditorText: (text) => {
-    set({ editorText: text })
-    // Sync to workspace store
-    useWorkspaceStore.getState().setActivePaneText(text)
-  },
-  editorInstance: null,
-  setEditorInstance: (editor) => set({ editorInstance: editor }),
 
   // Editor command bar
   editorCommandBarOpen: false,

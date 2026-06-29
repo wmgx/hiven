@@ -26,7 +26,6 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
   const setPaneSelection = useWorkspaceStore((s) => s.setPaneSelection)
   const closePane = useWorkspaceStore((s) => s.closePane)
   const layout = useWorkspaceStore((s) => s.layout)
-  const setEditorInstance = useAppStore((s) => s.setEditorInstance)
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
   const settings = useAppStore((s) => s.settings)
   const locale = useAppStore((s) => s.locale)
@@ -82,9 +81,6 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
       editorRef.current = null
       pasteDetectionRef.current = null
       runtimeRegistry.unregisterCodeEditor(paneId)
-      if (useWorkspaceStore.getState().activePaneId === paneId) {
-        useAppStore.getState().setEditorInstance(null)
-      }
     }
   }, [paneId])
 
@@ -155,13 +151,9 @@ export function PaneEditor({ paneId }: PaneEditorProps) {
             installMonacoHoverOverlay(editor)
             editorRef.current = editor
             runtimeRegistry.registerCodeEditor(paneId, editor)
-            if (activePaneId === paneId) {
-              setEditorInstance(editor)
-            }
             // Track focus
             disposables.add(editor.onDidFocusEditorText(() => {
               setActivePaneId(paneId)
-              setEditorInstance(editor)
             }))
             // Track cursor position
             disposables.add(editor.onDidChangeCursorPosition((e: MonacoEditor.ICursorPositionChangedEvent) => {

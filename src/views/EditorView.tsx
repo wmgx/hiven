@@ -49,9 +49,7 @@ export function EditorView() {
   const themeLabel = navT(theme === 'dark' ? 'switchToLightTheme' : 'switchToDarkTheme')
   const getActiveCodeEditor = () => {
     const workspace = useWorkspaceStore.getState()
-    return workspace.activePaneId
-      ? runtimeRegistry.getCodeEditor(workspace.activePaneId)
-      : useAppStore.getState().editorInstance
+    return workspace.activePaneId ? runtimeRegistry.getCodeEditor(workspace.activePaneId) : null
   }
   const toggleFindReplace = () => {
     const editor = getActiveCodeEditor()
@@ -101,9 +99,7 @@ export function EditorView() {
       if (hasPrimaryModifier && key === 'a') {
         if (isEditableSelectAllTarget(e.target)) return
         const workspace = useWorkspaceStore.getState()
-        const editor = workspace.activePaneId
-          ? runtimeRegistry.getCodeEditor(workspace.activePaneId)
-          : useAppStore.getState().editorInstance
+        const editor = workspace.activePaneId ? runtimeRegistry.getCodeEditor(workspace.activePaneId) : null
         if (!editor) return
         e.preventDefault()
         e.stopPropagation()

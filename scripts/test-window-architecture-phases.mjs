@@ -300,6 +300,11 @@ assert.doesNotMatch(
   /activeView:\s*['"]plugin-editor['"]|activeView:\s*['"]scripts['"]/,
   'Plugin editor open/close must not navigate through the retired main-window ViewId model',
 )
+assert.doesNotMatch(
+  files.store,
+  /\beditorText\b|\bsetEditorText\b|\beditorInstance\b|\bsetEditorInstance\b/,
+  'App store must not mirror editor document text or Monaco runtime instances across windows',
+)
 assert.match(files.globalLauncherHost, /launcherHostSurfaceTarget/, 'GlobalLauncherHost must read launcher-hosted surface target')
 assert.match(files.globalLauncherFrames, /GlobalLauncherSystemSurfaceFrame/, 'GlobalLauncherFrameSwitch must render app surfaces through a frame')
 assert.match(files.globalLauncherSystemSurfaceFrame, /SettingsSurface/, 'GlobalLauncher system frame must render Settings as a launcher-hosted surface')
