@@ -21,8 +21,13 @@ assert.match(
 
 assert.match(
   openRequest,
-  /export function openLauncherHostedPluginSurface\(target: PluginSurfaceOpenTarget\): void \{[\s\S]*openPluginSurfaceTool\(target\)[\s\S]*openGlobalLauncherOverlay\('pinned-only'\)/,
-  'launcher-hosted plugin surfaces must have one explicit bridge that owns AppStore writes',
+  /export function openLauncherHostedPluginSurface\(target: PluginSurfaceOpenTarget\): void \{[\s\S]*clearPendingPluginSurfaceOpenTarget\(\)[\s\S]*openPluginSurfaceTool\(target\)[\s\S]*openGlobalLauncherOverlay\('pinned-only'\)/,
+  'launcher-hosted plugin surfaces must have one explicit bridge that clears pending requests and owns AppStore writes',
+)
+assert.match(
+  openRequest,
+  /export function clearPendingPluginSurfaceOpenTarget\(\): void \{[\s\S]*localStorage\.removeItem\(PENDING_OPEN_KEY\)/,
+  'launcher-hosted plugin surface delivery must clear persisted pending opens to avoid stale replay',
 )
 assert.match(
   app,

@@ -43,7 +43,16 @@ export function consumePendingPluginSurfaceOpenTarget(): PluginSurfaceOpenTarget
   }
 }
 
+export function clearPendingPluginSurfaceOpenTarget(): void {
+  try {
+    localStorage.removeItem(PENDING_OPEN_KEY)
+  } catch {
+    // Ignore storage failures; launcher-local delivery already has the request.
+  }
+}
+
 export function openLauncherHostedPluginSurface(target: PluginSurfaceOpenTarget): void {
+  clearPendingPluginSurfaceOpenTarget()
   useAppStore.getState().openPluginSurfaceTool(target)
   useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
 }
