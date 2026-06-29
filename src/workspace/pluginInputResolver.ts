@@ -42,9 +42,10 @@ export function resolvePluginInputs(
     return { ok: true, inputs: {} }
   }
 
-  if (!isEditorWindowRuntime() && canReadEditorContextSnapshot()) {
-    const editorContext = getActiveEditorContextSnapshot()
+  if (!isEditorWindowRuntime()) {
+    const editorContext = canReadEditorContextSnapshot() ? getActiveEditorContextSnapshot() : undefined
     if (editorContext) return resolveFromEditorContext(slots, resolution, editorContext, context)
+    return resolveWithoutEditorContext(slots, resolution, context)
   }
 
   const state = useWorkspaceStore.getState()
@@ -59,6 +60,30 @@ export function resolvePluginInputs(
     default:
       return { ok: true, inputs: {} }
   }
+}
+
+
+function resolveWithoutEditorContext(
+  slots: InputSlot[],
+  resolution: InputResolution,
+  context?: ResolverContext,
+): InputResolveResult {
+  const clipboardSlots = slots.filter((slot) => slot.kind === 'clipboard')
+  const nonClipboardSlots = slots.filter((slot) => slot.kind !== 'clipboard')
+
+  if (clipboardSlots.length > 0 && context?.clipboardText === undefined) {
+    return { ok: false, reason: 'needs-clipboard', slots }
+  }
+
+  if (nonClipboardSlots.length > 0) {
+    return handleFallback(resolution, slots, 'Need editor context for plugin inputs')
+  }
+
+  const inputs: ResolvedInputs = {}
+  for (const slot of clipboardSlots) {
+    inputs[slot.key] = { kind: 'text', text: context?.clipboardText ?? '', paneId: undefined } satisfies TextInput
+  }
+  return { ok: true, inputs }
 }
 
 function resolveFromEditorContext(

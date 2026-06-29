@@ -7,8 +7,14 @@ const source = readFileSync('src/workspace/inputResolver.ts', 'utf8')
 
 assert.match(
   source,
-  /if \(!isEditorWindowRuntime\(\) && canReadEditorContextSnapshot\(\)\)[\s\S]*getActiveEditorContextSnapshot\(\)[\s\S]*resolveEditorContextInput/,
-  'generic input resolver must use synced editor context outside the editor runtime',
+  /if \(!isEditorWindowRuntime\(\)\)[\s\S]*getActiveEditorContextSnapshot\(\)[\s\S]*resolveEditorContextInput[\s\S]*resolveMissingEditorContextInput/,
+  'generic input resolver must use synced editor context outside the editor runtime and avoid local workspace fallback when it is missing',
+)
+
+assert.match(
+  source,
+  /function resolveMissingEditorContextInput[\s\S]*mode:\s*['"]workspace['"][\s\S]*panes:\s*\[\][\s\S]*text:\s*['"]/,
+  'generic input resolver must return empty workspace input when non-editor windows have no editor snapshot',
 )
 
 assert.match(

@@ -10,9 +10,9 @@ import { getActiveEditorContextSnapshot } from './editorBridge'
 import type { EditorContextSnapshot } from '../launcher/context/contextBroker'
 
 export function resolveInput(policy?: InputPolicy): CommandInput {
-  if (!isEditorWindowRuntime() && canReadEditorContextSnapshot()) {
-    const editorContext = getActiveEditorContextSnapshot()
-    if (editorContext) return resolveEditorContextInput(editorContext, policy)
+  if (!isEditorWindowRuntime()) {
+    const editorContext = canReadEditorContextSnapshot() ? getActiveEditorContextSnapshot() : undefined
+    return editorContext ? resolveEditorContextInput(editorContext, policy) : resolveMissingEditorContextInput(policy)
   }
 
   const state = useWorkspaceStore.getState()
@@ -87,6 +87,14 @@ function resolveEditorContextInput(editorContext: EditorContextSnapshot, policy?
     text: editorContext.activeText || '',
     paneId: editorContext.activePaneId,
   }
+}
+
+
+function resolveMissingEditorContextInput(policy?: InputPolicy): CommandInput {
+  if (policy?.prefer === 'workspace') {
+    return { mode: 'workspace', paneId: '', panes: [], text: '' }
+  }
+  return { mode: policy?.prefer === 'selection' ? 'selection' : 'whole-pane', text: '', paneId: '' }
 }
 
 function isEditorWindowRuntime(): boolean {

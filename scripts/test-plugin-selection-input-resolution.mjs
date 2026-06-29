@@ -19,8 +19,13 @@ assert(
 )
 
 assert(
-  /if \(!isEditorWindowRuntime\(\) && canReadEditorContextSnapshot\(\)\)[\s\S]*getActiveEditorContextSnapshot\(\)[\s\S]*resolveFromEditorContext/.test(source),
-  'Plugin input resolver should use synced editor context outside the editor runtime',
+  /if \(!isEditorWindowRuntime\(\)\)[\s\S]*getActiveEditorContextSnapshot\(\)[\s\S]*resolveFromEditorContext[\s\S]*resolveWithoutEditorContext/.test(source),
+  'Plugin input resolver should use synced editor context outside the editor runtime and avoid local workspace fallback when it is missing',
+)
+
+assert(
+  /function resolveWithoutEditorContext[\s\S]*Need editor context for plugin inputs[\s\S]*clipboardSlots/.test(source),
+  'Plugin input resolver should fail or use clipboard only instead of reading launcher-local workspace without editor context',
 )
 
 assert(
