@@ -13,6 +13,7 @@
  *   - Cache busting: append ?t=<timestamp> to entry URL on every reload
  */
 
+import { cleanupEditorPluginContributions } from './editorBridge'
 import { pluginRegistry } from './pluginRegistry'
 import { useWorkspaceStore } from './workspaceStore'
 import { usePluginStore } from './pluginStore'
@@ -140,6 +141,34 @@ function clearPluginHostState(source: PluginSettingsSource, pluginId: string, op
   usePluginSettingsStore.getState().removePluginSettings(source, pluginId)
   if (options.clearStorage) {
     clearPluginPrivateStorage(source, pluginId)
+  }
+}
+
+function cleanupPluginEditorContributions(pluginId: string, panelIds: string[]): void {
+  if (isEditorWindowRuntime()) {
+    cleanupLocalEditorPluginContributions(pluginId, panelIds)
+    return
+  }
+
+  cleanupEditorPluginContributions({ pluginId, panelIds })
+    .catch((error) => {
+      console.warn(`[hiven] Failed to clean editor contributions for plugin "${pluginId}" through EditorBridge:`, error)
+    })
+}
+
+function cleanupLocalEditorPluginContributions(pluginId: string, panelIds: string[]): void {
+  const ws = useWorkspaceStore.getState()
+  ws.clearPaneRenderersForPlugin(pluginId)
+  for (const panelId of panelIds) {
+    ws.closePanelV2(panelId)
+  }
+}
+
+function isEditorWindowRuntime(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get('window') === 'editor'
+  } catch {
+    return false
   }
 }
 
@@ -492,14 +521,8 @@ export function disablePlugin(pluginId: string): void {
   const panelIds = pluginRegistry.getPluginPanelIds(pluginId)
   pluginRegistry.unregisterProductionPlugin(pluginId)
 
-  // Clean up pane renderers using this plugin
-  const ws = useWorkspaceStore.getState()
-  ws.clearPaneRenderersForPlugin(pluginId)
-
-  // Clean up panels using this plugin
-  for (const panelId of panelIds) {
-    ws.closePanelV2(panelId)
-  }
+  // Clean up editor-owned pane renderers and panels through the editor runtime.
+  cleanupPluginEditorContributions(pluginId, panelIds)
 
   updatePluginStatus(pluginId, 'disabled')
   showToast(`Plugin "${record.displayName}" disabled`, 'info')
@@ -666,11 +689,7 @@ export async function reloadDevPlugin(pluginId: string): Promise<void> {
   void stopPluginBackground(pluginId, 'dev')
   pluginRegistry.unregisterDevPlugin(pluginId)
 
-  const ws = useWorkspaceStore.getState()
-  ws.clearPaneRenderersForPlugin(pluginId)
-  for (const panelId of panelIds) {
-    ws.closePanelV2(panelId)
-  }
+  cleanupPluginEditorContributions(pluginId, panelIds)
 
   try {
     const packageMeta = await loadManifest(record.folderPath)
@@ -770,11 +789,7 @@ export function removeDevPlugin(pluginId: string): void {
   void stopPluginBackground(pluginId, 'dev')
   pluginRegistry.unregisterDevPlugin(pluginId)
 
-  const ws = useWorkspaceStore.getState()
-  ws.clearPaneRenderersForPlugin(pluginId)
-  for (const panelId of panelIds) {
-    ws.closePanelV2(panelId)
-  }
+  cleanupPluginEditorContributions(pluginId, panelIds)
 
   clearPluginHostState('dev', pluginId, { clearStorage: true })
   removeFromStore(pluginId)

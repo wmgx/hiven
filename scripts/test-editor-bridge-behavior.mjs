@@ -131,6 +131,7 @@ const paneSnapshot = {
   await bridge.replaceEditorSelection('new text', { paneId: 'pane-1', range: { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 4 } })
   await bridge.insertIntoEditor('inserted', { paneId: 'pane-2' })
   await bridge.openEditorPanel({ panelId: 'plugin-surface', placement: 'right', paneId: 'pane-1', inputs: { text: 'payload' }, title: 'Panel' })
+  await bridge.cleanupEditorPluginContributions({ pluginId: 'plugin-a', panelIds: ['panel-a'] })
 
   assert.deepEqual(JSON.parse(JSON.stringify(readPending(storage).map((request) => ({ action: request.action, payload: request.payload })))), [
     {
@@ -158,6 +159,7 @@ const paneSnapshot = {
     { requestId: 'req-replace', action: 'replaceEditorSelection', createdAt: now - 100, expiresAt: now + 4_900, payload: { text: 'replacement' } },
     { requestId: 'req-insert', action: 'insertIntoEditor', createdAt: now - 100, expiresAt: now + 4_900, payload: { text: 'inserted' } },
     { requestId: 'req-panel', action: 'openEditorPanel', createdAt: now - 100, expiresAt: now + 4_900, payload: { panelId: 'panel', placement: 'right' } },
+    { requestId: 'req-cleanup', action: 'cleanupEditorPluginContributions', createdAt: now - 100, expiresAt: now + 4_900, payload: { pluginId: 'plugin-a', panelIds: ['panel-a'] } },
     { requestId: 'req-invalid', action: 'unknownAction', createdAt: now - 100, expiresAt: now + 4_900, payload: {} },
   ]))
   const { bridge } = loadEditorBridge({ storage })
@@ -174,6 +176,7 @@ const paneSnapshot = {
     replaceEditorSelection: (input) => { calls.push(['replaceEditorSelection', input]) },
     insertIntoEditor: (input) => { calls.push(['insertIntoEditor', input]) },
     openEditorPanel: (input) => { calls.push(['openEditorPanel', input]) },
+    cleanupEditorPluginContributions: (input) => { calls.push(['cleanupEditorPluginContributions', input]) },
   })
 
   assert.equal(typeof unlisten, 'function')
@@ -183,6 +186,7 @@ const paneSnapshot = {
     ['replaceEditorSelection', { text: 'replacement' }],
     ['insertIntoEditor', { text: 'inserted' }],
     ['openEditorPanel', { panelId: 'panel', placement: 'right' }],
+    ['cleanupEditorPluginContributions', { pluginId: 'plugin-a', panelIds: ['panel-a'] }],
   ], 'editor bridge handlers must consume pending valid requests and ignore invalid ones')
   assert.equal(storage.getItem('hiven:editor-bridge-pending-requests'), null, 'registerEditorBridgeHandlers must clear consumed pending requests')
 }

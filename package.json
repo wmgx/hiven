@@ -113,7 +113,8 @@
     "test:workflow-clipboard-history-story": "node scripts/test-workflow-clipboard-history-story.mjs",
     "test:workflow-chat-reply-story": "node scripts/test-workflow-chat-reply-story.mjs",
     "test:workflow-context-routing-story": "node scripts/test-workflow-context-routing-story.mjs",
-    "test:workflow-json-panel-story": "node scripts/test-workflow-json-panel-story.mjs"
+    "test:workflow-json-panel-story": "node scripts/test-workflow-json-panel-story.mjs",
+    "test:plugin-runtime-editor-cleanup-boundary": "node scripts/test-plugin-runtime-editor-cleanup-boundary.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

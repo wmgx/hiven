@@ -36,6 +36,11 @@ export type EditorBridgePanelInput = {
   title?: string
 }
 
+export type EditorBridgePluginCleanupInput = {
+  pluginId: string
+  panelIds: string[]
+}
+
 export type EditorPaneSnapshot = {
   activePaneId: string
   previousActivePaneId?: string
@@ -53,6 +58,7 @@ export type EditorBridgeRequest =
   | BridgeEnvelope<'replaceEditorSelection', EditorBridgeTextInput>
   | BridgeEnvelope<'insertIntoEditor', EditorBridgeTextInput>
   | BridgeEnvelope<'openEditorPanel', EditorBridgePanelInput>
+  | BridgeEnvelope<'cleanupEditorPluginContributions', EditorBridgePluginCleanupInput>
 
 export type EditorBridgeResponse = {
   requestId: string
@@ -67,6 +73,7 @@ export type EditorBridgeHandlers = {
   replaceEditorSelection(input: EditorBridgeTextInput): void
   insertIntoEditor(input: EditorBridgeTextInput): void
   openEditorPanel(input: EditorBridgePanelInput): void
+  cleanupEditorPluginContributions(input: EditorBridgePluginCleanupInput): void
 }
 
 type BridgeEnvelope<T extends string, P> = {
@@ -133,6 +140,10 @@ export async function openEditorPanel(input: EditorBridgePanelInput): Promise<vo
     persistForEditorStartup: true,
     openEditorFirst: true,
   })
+}
+
+export async function cleanupEditorPluginContributions(input: EditorBridgePluginCleanupInput): Promise<void> {
+  await sendEditorBridgeRequest('cleanupEditorPluginContributions', input)
 }
 
 export function registerActiveEditorContext(snapshot: EditorContextSnapshot): void {
@@ -259,6 +270,9 @@ async function handleEditorBridgeRequest(request: EditorBridgeRequest, handlers:
         break
       case 'openEditorPanel':
         handlers.openEditorPanel(request.payload)
+        break
+      case 'cleanupEditorPluginContributions':
+        handlers.cleanupEditorPluginContributions(request.payload)
         break
     }
     await emitEditorBridgeResponse({ requestId: request.requestId, ok: true, value })
@@ -388,7 +402,8 @@ function isEditorBridgeRequest(value: unknown): value is EditorBridgeRequest {
     request.action === 'createEditorPane' ||
     request.action === 'replaceEditorSelection' ||
     request.action === 'insertIntoEditor' ||
-    request.action === 'openEditorPanel'
+    request.action === 'openEditorPanel' ||
+    request.action === 'cleanupEditorPluginContributions'
 }
 
 function isEditorBridgeRequestExpired(request: EditorBridgeRequest): boolean {
@@ -397,7 +412,7 @@ function isEditorBridgeRequestExpired(request: EditorBridgeRequest): boolean {
 
 function getEditorBridgeActionTimeoutMs(action: EditorBridgeRequest['action']): number {
   if (action === 'getEditorContext') return EDITOR_BRIDGE_CONTEXT_TIMEOUT_MS
-  if (action === 'createEditorPane' || action === 'replaceEditorSelection' || action === 'insertIntoEditor' || action === 'openEditorPanel') {
+  if (action === 'createEditorPane' || action === 'replaceEditorSelection' || action === 'insertIntoEditor' || action === 'openEditorPanel' || action === 'cleanupEditorPluginContributions') {
     return EDITOR_BRIDGE_MUTATION_TIMEOUT_MS
   }
   return EDITOR_BRIDGE_DEFAULT_TIMEOUT_MS

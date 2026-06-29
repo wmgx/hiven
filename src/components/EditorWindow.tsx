@@ -9,6 +9,7 @@ import {
   updateActivePaneSnapshot,
   type EditorBridgeCreatePaneInput,
   type EditorBridgePanelInput,
+  type EditorBridgePluginCleanupInput,
   type EditorBridgeTextInput,
 } from '../workspace/editorBridge'
 import { readLocalEditorContextSnapshot } from '../workspace/editorContextSnapshot'
@@ -70,6 +71,7 @@ export function EditorWindow() {
       replaceEditorSelection: (input) => applyReplaceEditorSelection(input),
       insertIntoEditor: (input) => applyInsertIntoEditor(input),
       openEditorPanel: (input) => applyOpenEditorPanel(input),
+      cleanupEditorPluginContributions: (input) => applyCleanupEditorPluginContributions(input),
     })
       .then((registeredCleanup) => {
         if (disposed) registeredCleanup()
@@ -187,6 +189,14 @@ function applyOpenEditorPanel(input: EditorBridgePanelInput): void {
     title: input.title,
     scope: { type: 'pane', paneId },
   })
+}
+
+function applyCleanupEditorPluginContributions(input: EditorBridgePluginCleanupInput): void {
+  const workspace = useWorkspaceStore.getState()
+  workspace.clearPaneRenderersForPlugin(input.pluginId)
+  for (const panelId of input.panelIds) {
+    workspace.closePanelV2(panelId)
+  }
 }
 
 function getActiveSelectionRange(paneId: string): SerializedRange | undefined {
