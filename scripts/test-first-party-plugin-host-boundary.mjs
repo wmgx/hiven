@@ -92,7 +92,7 @@ assert.match(
 )
 assert.match(
   jsFilter,
-  /execute\(ctx\)[\s\S]*ctx\.api\.isPanePanelOpen\(PANEL_ID\)[\s\S]*ctx\.api\.dispatchEffects/,
+  /execute\(ctx\)[\s\S]*ctx\.api\.getPaneSnapshot\(\)\.activePaneId[\s\S]*ctx\.api\.dispatchEffects\(ctx\.api\.isPanePanelOpen\(PANEL_ID\)/,
   'js-filter launcher item toggle must use the launcher plugin API instead of workspace internals',
 )
 assert.match(
@@ -119,7 +119,7 @@ assert.match(
 )
 assert.match(
   regexTester,
-  /execute\(ctx\)[\s\S]*ctx\.api\.getPaneSnapshot\(\)\.activePaneId[\s\S]*placement: ['"]pane-bottom['"][\s\S]*scope: \{ type: ['"]pane['"] as const, paneId:/,
+  /execute\(ctx\)[\s\S]*ctx\.api\.dispatchEffects\(\[\{[\s\S]*placement: ['"]pane-bottom['"][\s\S]*scope: \{ type: ['"]pane['"] as const, paneId: ctx\.api\.getPaneSnapshot\(\)\.activePaneId \}/,
   'regex-tester launcher item must open a pane-scoped panel through launcher API context',
 )
 

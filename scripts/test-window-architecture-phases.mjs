@@ -47,6 +47,7 @@ const files = {
   globalLauncherSystemSurfaceFrame: read('src/components/launcher/GlobalLauncherSystemSurfaceFrame.tsx'),
   globalLauncherSettingsFrame: read('src/components/launcher/GlobalLauncherSettingsFrame.tsx'),
   globalLauncherResultFrame: read('src/components/launcher/GlobalLauncherResultFrame.tsx'),
+  globalLauncherCollectInputFrame: read('src/components/launcher/GlobalLauncherCollectInputFrame.tsx'),
   launcherUsage: read('src/workspace/launcher/usage.ts'),
   launcherRegistry: read('src/workspace/launcher/registry.ts'),
   launcherController: read('src/workspace/launcher/controller.ts'),
@@ -189,7 +190,7 @@ assert.match(files.globalLauncherSystemSurfaceFrame, /export function GlobalLaun
 assert.match(files.globalLauncherSettingsFrame, /export function GlobalLauncherSettingsFrame/, 'global launcher settings frame must live in its own module')
 assert.match(files.globalLauncherPluginSurfaceFrame, /export function GlobalLauncherPluginSurfaceFrame/, 'global launcher plugin surface frame must live in its own module')
 assert.match(files.globalLauncherSearchFrame, /export function GlobalLauncherSearchFrame/, 'global launcher search frame must live in its own module')
-assert.match(files.globalLauncherFrames, /export function GlobalLauncherCollectInputFrame/, 'global launcher frames must provide a collect-input frame')
+assert.match(files.globalLauncherCollectInputFrame, /export function GlobalLauncherCollectInputFrame/, 'global launcher collect-input frame must live in its own module')
 assert.match(files.globalLauncherResultFrame, /export function GlobalLauncherResultFrame/, 'global launcher result frame must live in its own module')
 assert.match(files.globalLauncherFrames, /export function GlobalLauncherFrameSwitch/, 'global launcher frames must provide a frame switch to keep the host thin')
 assert.match(files.globalLauncherSystemSurfaceFrame, /surfaces\/SettingsSurface/, 'global launcher system frame must load SettingsSurface instead of the legacy view directly')
@@ -201,7 +202,7 @@ assert.match(files.settingsSurface, /export function SettingsSurface/, 'settings
 assert.match(files.settingsSurface, /<SurfaceShell[\s\S]*id=['"]settings['"]/, 'settings surface must render inside the explicit surface shell boundary')
 assert.match(files.pluginsSurface, /export function PluginsSurface/, 'plugins must have a first-class surface wrapper')
 assert.match(files.pluginsSurface, /<SurfaceShell[\s\S]*id=['"]plugins['"]/, 'plugins surface must render inside the explicit surface shell boundary')
-assert.match(files.pluginsSurface, /<PluginEditorSurface \/>/, 'plugins surface must host plugin editor inside the surface boundary')
+assert.match(files.pluginsSurface, /<PluginEditorSurface[\s\S]*pluginEditor=\{pluginEditor\}/, 'plugins surface must host plugin editor inside the surface boundary')
 assert.match(files.pluginEditorSurface, /export function PluginEditorSurface/, 'plugin editor must have a first-class surface wrapper')
 assert.match(files.pluginEditorSurface, /<SurfaceShell[\s\S]*id=['"]plugin-editor['"]/, 'plugin editor surface must render inside the explicit surface shell boundary')
 assert.match(files.pluginEditorSurface, /kind=['"]plugin-editor['"]/, 'plugin editor surface must publish its own registry kind instead of masquerading as Plugins')
@@ -265,9 +266,9 @@ assert.match(files.tauriLib, /fn\s+surface_registry_snapshot/, 'native runtime m
 assert.match(files.tauriLib, /surface_registry_mark_state/, 'native runtime must expose a surface registry mark-state command')
 assert.match(files.tauriLib, /surface_registry_remove/, 'native runtime must expose a surface registry remove command')
 assert.match(files.surfaceActions, /focusSurfaceInstance/, 'Surface registry must provide a switch/focus operation')
-assert.match(files.surfaceActions, /openLauncherHostSurface\(['"]settings['"]\)/, 'Surface focus must reopen Settings through the launcher host surface')
-assert.match(files.surfaceActions, /openLauncherHostSurface\(['"]plugins['"]\)/, 'Surface focus must reopen Plugins through the launcher host surface')
-assert.match(files.surfaceActions, /surface\.kind === ['"]plugin-editor['"][\s\S]*openLauncherHostSurface\(['"]plugins['"]\)/, 'Surface focus must route PluginEditor instances back to the Plugins host surface')
+assert.match(files.surfaceActions, /requestOpenLauncherHostSurface\(['"]settings['"]\)/, 'Surface focus must reopen Settings through the launcher host surface')
+assert.match(files.surfaceActions, /requestOpenLauncherHostSurface\(['"]plugins['"]\)/, 'Surface focus must reopen Plugins through the launcher host surface')
+assert.match(files.surfaceActions, /surface\.kind === ['"]plugin-editor['"][\s\S]*requestOpenLauncherHostSurface\(['"]plugins['"]\)/, 'Surface focus must route PluginEditor instances back to the Plugins host surface')
 assert.match(files.surfaceActions, /requestOpenPluginEditorSurface\(\{[\s\S]*folderPath:\s*surface\.folderPath/, 'Surface focus must restore PluginEditor instances through the plugin editor bridge')
 assert.match(files.pluginSurfaceWindowComponent, /upsertSurfaceInstance\([\s\S]*kind:\s*['"]plugin-surface['"]/, 'Plugin surface window component must upsert its own registry record')
 assert.match(files.pluginSurfaceWindowComponent, /markSurfaceInstanceState\([\s\S]*['"]hidden['"]/, 'Plugin surface window component must mark its surface hidden on teardown')

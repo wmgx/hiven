@@ -53,7 +53,7 @@ assert.match(
 )
 assert.match(
   files.workflowIndex,
-  /tryFormatJsonClipboardText[\s\S]*minifyJsonText[\s\S]*convertJsonTextToYaml[\s\S]*extractJsonFieldPaths/,
+  /tryFormatJsonClipboardText[\s\S]*convertJsonTextToYaml[\s\S]*extractJsonFieldPaths[\s\S]*minifyJsonText/,
   'workflow index must export JSON clipboard and editor JSON transforms for focused verification and future providers',
 )
 assert.match(

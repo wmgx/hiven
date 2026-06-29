@@ -90,6 +90,7 @@ function loadTsModule(path, globals = {}) {
     exports: moduleExports,
     module: { exports: moduleExports },
     console,
+    URLSearchParams,
     ...globals,
   }
   vm.runInNewContext(out, sandbox, { filename: path })
@@ -139,6 +140,7 @@ const sandbox = {
   exports: moduleExports,
   module: { exports: moduleExports },
   console,
+  URLSearchParams,
   window: editorWindowRuntime,
   useWorkspaceStore: {
     getState: () => storeState,

@@ -24,7 +24,7 @@ assert.match(tauriLib, /SURFACE_REGISTRY_EVENT/, 'native plugin surface lifecycl
 assert.match(tauriLib, /show_and_focus_plugin_surface_window\(&app,\s*&window\)\?[\s\S]*surface_registry_upsert_record\(surface\.clone\(\)\)\?/, 'native plugin surface show must persist visible state in Rust registry')
 assert.match(tauriLib, /async fn hide_plugin_surface_window[\s\S]*surface_registry_mark_record_state\(&label,\s*["']hidden["']/, 'native plugin surface hide must persist hidden state in Rust registry')
 assert.match(tauriLib, /WindowEvent::Focused\(false\) if close_on_blur[\s\S]*surface_registry_mark_record_state\(&label,\s*["']hidden["']/, 'native focus-lost hide must persist hidden state in Rust registry')
-assert.match(tauriLib, /WindowEvent::Destroyed[\s\S]*surface_registry_upsert_record[\s\S]*["']destroyed["']/, 'native plugin surface destroy must persist destroyed state in Rust registry')
+assert.match(tauriLib, /WindowEvent::Destroyed[\s\S]*["']destroyed["'][\s\S]*surface_registry_upsert_record/, 'native plugin surface destroy must persist destroyed state in Rust registry')
 assert.match(pluginSurfaceWindowComponent, /upsertSurfaceInstance\([\s\S]*kind:\s*['"]plugin-surface['"]/, 'PluginSurfaceWindow must upsert its own surface record when mounted')
 assert.match(pluginSurfaceWindowComponent, /pluginSurfaceWindowLabel\(target\)/, 'PluginSurfaceWindow must register with the same window label as the native lifecycle')
 

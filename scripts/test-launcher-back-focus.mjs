@@ -10,6 +10,7 @@ const commandPalette = readFileSync('src/components/CommandPalette.tsx', 'utf8')
 const globalLauncher = readFileSync('src/components/GlobalLauncher.tsx', 'utf8')
 const editorCommandBarHost = readFileSync('src/launcher/hosts/EditorCommandBarHost.tsx', 'utf8')
 const globalLauncherHost = readFileSync('src/launcher/hosts/GlobalLauncherHost.tsx', 'utf8')
+const globalLauncherHostLifecycle = readFileSync('src/components/launcher/GlobalLauncherHostLifecycle.ts', 'utf8')
 const globalLauncherKeyboard = readFileSync('src/components/launcher/GlobalLauncherKeyboard.ts', 'utf8')
 
 assert.match(commandPalette, /EditorCommandBar/, 'CommandPalette should delegate to EditorCommandBar')
@@ -27,12 +28,12 @@ assert.ok(
 
 assert.match(globalLauncher, /GlobalLauncherHost/, 'GlobalLauncher should delegate to GlobalLauncherHost')
 assert.match(
-  globalLauncherHost,
-  /function focusSearchInputAfterBack\(\)[\s\S]{0,180}requestAnimationFrame\(\(\) => inputRef\.current\?\.focus\(\)\)/,
-  'GlobalLauncherHost should centralize focus restoration after launcher back navigation',
+  globalLauncherHostLifecycle,
+  /focusSearchInputAfterBack\s*=\s*useCallback\(\(\) => \{[\s\S]{0,180}requestAnimationFrame\(\(\) => inputRef\.current\?\.focus\(\)\)/,
+  'GlobalLauncher lifecycle helper should centralize focus restoration after launcher back navigation',
 )
-const globalLauncherBackHandlers = (globalLauncherHost + '\n' + globalLauncherKeyboard).match(/controllerRef\.current\?\.back(?:\?\.)?\(\)/g) ?? []
-const globalLauncherFocusHandlers = (globalLauncherHost + '\n' + globalLauncherKeyboard).match(/focusSearchInputAfterBack\(\)/g) ?? []
+const globalLauncherBackHandlers = (globalLauncherHost + '\n' + globalLauncherHostLifecycle + '\n' + globalLauncherKeyboard).match(/controllerRef\.current\?\.back(?:\?\.)?\(\)/g) ?? []
+const globalLauncherFocusHandlers = (globalLauncherHost + '\n' + globalLauncherHostLifecycle + '\n' + globalLauncherKeyboard).match(/focusSearchInputAfterBack\(\)/g) ?? []
 assert.ok(
   globalLauncherBackHandlers.length >= 3 && globalLauncherFocusHandlers.length >= 3,
   'GlobalLauncher controller back handlers should restore search input focus through a shared helper',

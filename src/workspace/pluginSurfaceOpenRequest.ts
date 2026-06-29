@@ -64,18 +64,8 @@ export async function requestOpenPluginSurfaceTool(target: PluginSurfaceOpenTarg
     return
   }
 
-  // Pre-size the launcher window to the target surface dimensions before showing,
-  // so there's no compact→surface resize jump visible to the user.
-  const shell = resolveSurfaceShell(target)
-  if (shell) {
-    try {
-      await resizeCurrentLauncherWindow({
-        width: Math.ceil((shell.defaultWidth ?? 660) + STANDALONE_LAUNCHER_HORIZONTAL_PADDING),
-        height: Math.ceil((shell.defaultHeight ?? 480) + STANDALONE_LAUNCHER_VERTICAL_PADDING),
-      })
-    } catch {
-      // Non-critical: window will resize later via useLayoutEffect fallback
-    }
+  if (isLauncherWindowRuntime()) {
+    await preSizeCurrentLauncherWindowForPluginSurface(target)
   }
 
   await showLauncherWindow()
@@ -99,8 +89,33 @@ export function isPluginSurfaceOpenTarget(value: unknown): value is PluginSurfac
   )
 }
 
+
+async function preSizeCurrentLauncherWindowForPluginSurface(target: PluginSurfaceOpenTarget): Promise<void> {
+  // Pre-size only when this code is already running in the launcher window.
+  // Other webviews must not call current-window resizing, because that
+  // would resize the caller window instead of the launcher.
+  const shell = resolveSurfaceShell(target)
+  if (!shell) return
+  try {
+    await resizeCurrentLauncherWindow({
+      width: Math.ceil((shell.defaultWidth ?? 660) + STANDALONE_LAUNCHER_HORIZONTAL_PADDING),
+      height: Math.ceil((shell.defaultHeight ?? 480) + STANDALONE_LAUNCHER_VERTICAL_PADDING),
+    })
+  } catch {
+    // Non-critical: window will resize later via useLayoutEffect fallback.
+  }
+}
+
 function isTauriRuntime(): boolean {
   return Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
+}
+
+function isLauncherWindowRuntime(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get('window') === 'launcher'
+  } catch {
+    return false
+  }
 }
 
 function resolveSurfaceShell(target: PluginSurfaceOpenTarget): { defaultWidth?: number; defaultHeight?: number } | null {

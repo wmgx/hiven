@@ -22,7 +22,7 @@ assert.match(tauriLib, /WebviewUrl::App\(url\.into\(\)\)/, 'plugin surface windo
 assert.match(tauriLib, /WindowEvent::Focused\(false\) if close_on_blur[\s\S]*window\.hide\(\)/, 'closeOnBlur surfaces must hide on blur')
 assert.match(tauriLib, /WindowEvent::Focused\(false\) if close_on_blur[\s\S]*surface_registry_mark_record_state\(&label,\s*["']hidden["']/, 'closeOnBlur hide must update the Rust SurfaceRegistry state')
 assert.match(tauriLib, /schedule_plugin_surface_window_destroy[\s\S]*Duration::from_millis\(destroy_timeout_ms\)[\s\S]*window\.destroy\(\)/, 'hidden plugin surface windows must destroy after destroyTimeout')
-assert.match(tauriLib, /WindowEvent::Destroyed[\s\S]*surface_registry_upsert_record[\s\S]*["']destroyed["']/, 'destroyed plugin surface windows must update the Rust SurfaceRegistry state')
+assert.match(tauriLib, /WindowEvent::Destroyed[\s\S]*["']destroyed["'][\s\S]*surface_registry_upsert_record/, 'destroyed plugin surface windows must update the Rust SurfaceRegistry state')
 assert.match(tauriLib, /touch_plugin_surface_window\(&label\)/, 'reopening a plugin surface must cancel stale destroy timers')
 assert.match(tauriLib, /show_and_focus_plugin_surface_window\(&app,\s*&window\)/, 'plugin surface windows must show and focus via native helper')
 assert.match(tauriLib, /show_and_focus_plugin_surface_window\(&app,\s*&window\)\?[\s\S]*surface_registry_upsert_record\(surface\.clone\(\)\)\?/, 'showing a plugin surface window must persist a visible Rust SurfaceRegistry record')

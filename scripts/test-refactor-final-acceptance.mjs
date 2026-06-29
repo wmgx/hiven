@@ -262,11 +262,11 @@ assert.match(files.surfaceRegistry, /surface_registry_snapshot/, 'surface regist
 assert.match(files.surfaceRegistry, /surface_registry_upsert/, 'surface registry must persist upserts to Rust state')
 assert.match(files.tauriLib, /struct\s+SurfaceRegistryState/, 'native runtime must own Rust-side surface registry state')
 assert.match(files.surfaceActions, /focusSurfaceInstance/, 'surface registry must expose focus/switch operation')
-assert.match(files.surfaceActions, /openLauncherHostSurface\(['"]settings['"]\)/, 'surface focus must reopen Settings as a launcher-hosted surface')
-assert.match(files.surfaceActions, /openLauncherHostSurface\(['"]plugins['"]\)/, 'surface focus must reopen Plugins as a launcher-hosted surface')
-assert.match(files.surfaceActions, /surface\.kind === ['"]plugin-editor['"][\s\S]*openLauncherHostSurface\(['"]plugins['"]\)/, 'surface focus must route PluginEditor instances back to the Plugins host surface')
+assert.match(files.surfaceActions, /requestOpenLauncherHostSurface\(['"]settings['"]\)/, 'surface focus must reopen Settings as a launcher-hosted surface')
+assert.match(files.surfaceActions, /requestOpenLauncherHostSurface\(['"]plugins['"]\)/, 'surface focus must reopen Plugins as a launcher-hosted surface')
+assert.match(files.surfaceActions, /surface\.kind === ['"]plugin-editor['"][\s\S]*requestOpenLauncherHostSurface\(['"]plugins['"]\)/, 'surface focus must route PluginEditor instances back to the Plugins host surface')
 assert.match(files.surfaceActions, /requestOpenPluginEditorSurface\(\{[\s\S]*folderPath:\s*surface\.folderPath/, 'surface focus must restore PluginEditor instances through the plugin editor bridge')
-assert.match(files.surfaceActions, /openSettingsDialog\(\{[\s\S]*presentation:\s*['"]global-launcher['"]/, 'surface focus must reopen plugin settings surfaces inside the global launcher')
+assert.match(files.surfaceActions, /requestOpenLauncherPluginSettingsSurface\([\s\S]*sourceFromSettingsSurfaceInstanceId\(surface\.id\)[\s\S]*surface\.pluginId/, 'surface focus must reopen plugin settings surfaces inside the global launcher')
 
 // Settings / Plugins / Plugin editor are first-class surfaces, not main-window views.
 assert.match(files.globalLauncherSystemSurfaceFrame, /surfaces\/SettingsSurface/, 'launcher system frame must load SettingsSurface')

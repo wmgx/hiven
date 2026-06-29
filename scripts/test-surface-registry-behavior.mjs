@@ -18,7 +18,8 @@ const tauriLib = readFileSync('src-tauri/src/lib.rs', 'utf8')
 assert.match(tauriLib, /fn validate_surface_instance_kind/, 'Rust surface registry must validate surface kind inputs')
 assert.match(tauriLib, /fn validate_surface_instance_state/, 'Rust surface registry must validate surface state inputs')
 assert.match(tauriLib, /validate_surface_instance_kind\(&surface\.kind\)\?[\s\S]*validate_surface_instance_state\(&surface\.state\)\?/, 'Rust surface upsert must reject invalid kind/state values')
-assert.match(tauriLib, /surface_registry_mark_state[\s\S]*validate_surface_instance_state\(&state\)\?/, 'Rust surface mark-state must reject invalid state values')
+assert.match(tauriLib, /surface_registry_mark_state[\s\S]*surface_registry_mark_record_state\(&id, &state, last_active_at\)/, 'Rust surface mark-state command must route through the validated mark-state helper')
+assert.match(tauriLib, /fn surface_registry_mark_record_state[\s\S]*validate_surface_instance_state\(state\)\?/, 'Rust surface mark-state helper must reject invalid state values')
 assert.match(
   refactorSuite,
   /test:surface-registry-behavior/,

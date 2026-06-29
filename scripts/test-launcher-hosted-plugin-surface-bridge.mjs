@@ -30,6 +30,21 @@ assert.match(
   'launcher-hosted plugin surface delivery must clear persisted pending opens to avoid stale replay',
 )
 assert.match(
+  openRequest,
+  /if \(isLauncherWindowRuntime\(\)\) \{[\s\S]*preSizeCurrentLauncherWindowForPluginSurface\(target\)/,
+  'launcher-hosted plugin surface pre-sizing must only run when already in the launcher runtime',
+)
+assert.match(
+  openRequest,
+  /async function preSizeCurrentLauncherWindowForPluginSurface[\s\S]*const shell = resolveSurfaceShell\(target\)[\s\S]*await resizeCurrentLauncherWindow/,
+  'launcher runtime pre-size helper may resize only the current launcher window',
+)
+assert.doesNotMatch(
+  openRequest.match(/requestOpenPluginSurfaceTool[\s\S]*?await showLauncherWindow\(\)/)?.[0] ?? '',
+  /resizeCurrentLauncherWindow|resolveSurfaceShell/,
+  'non-launcher webviews must not resize or resolve surface shell before showing the launcher',
+)
+assert.match(
   app,
   /openLauncherHostedPluginSurface/,
   'App must route plugin surface open events through the launcher-hosted surface bridge',

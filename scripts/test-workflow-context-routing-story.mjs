@@ -67,7 +67,7 @@ const providerSandbox = loadTsModule('src/workflow/defaultWorkflowProviders.ts',
   launchHostAppObject: async () => {},
   createEditorPane: async (input) => {
     editorPanes.push(input)
-    return { ok: true }
+    return 'pane-created'
   },
   openEditorPanel: async (input) => {
     editorPanels.push(input)
@@ -175,6 +175,7 @@ assert.deepEqual(JSON.parse(JSON.stringify(editorPanes.at(-1))), {
 assert.deepEqual(JSON.parse(JSON.stringify(editorPanels.at(-1))), {
   panelId: 'plugin-surface',
   placement: 'right',
+  paneId: 'pane-created',
   inputs: {
     text: 'Hello from browser selection',
     target: {

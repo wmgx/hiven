@@ -48,8 +48,8 @@ assert.match(files.surfaceShortcutStore, /registrationStatus/, 'surface shortcut
 assert.match(files.surfaceShortcutStore, /clearPluginShortcuts/, 'surface shortcut store must clear all shortcuts for an uninstalled plugin')
 
 assert.match(files.surfaceOpenRequest, /showLauncherWindow\(\)/, 'surface open request must show the launcher/tool shell window through the window manager')
-assert.match(files.surfaceOpenRequest, /resizeCurrentLauncherWindow\(\{/, 'surface open request must pre-size launcher through the window manager')
-assert.doesNotMatch(files.surfaceOpenRequest, /getCurrentWindow\(\)\.setSize|new LogicalSize/, 'surface open request must not resize the Tauri window directly')
+assert.match(files.surfaceOpenRequest, /isLauncherWindowRuntime\(\)[\s\S]*preSizeCurrentLauncherWindowForPluginSurface/, 'surface open request must pre-size only from the launcher runtime')
+assert.doesNotMatch(files.surfaceOpenRequest, /getCurrentWindow\(\)\.setSize/, 'surface open request must not resize the Tauri window directly')
 assert.match(files.launcherWindowManager, /show_launcher_window/, 'launcher window manager must call the native show launcher command')
 assert.match(files.launcherWindowManager, /resizeCurrentLauncherWindow[\s\S]*setSize\(new LogicalSize/, 'launcher window manager must own launcher window resizing')
 assert.match(files.surfaceOpenRequest, /hiven:\/\/open-plugin-surface/, 'surface open request must emit the open surface event')

@@ -52,6 +52,14 @@ const registry = loadLauncherRegistry({
   createPluginLauncherApi: () => ({}),
   createPluginLauncherStorage: () => ({}),
   adaptToolToLauncherItem: () => null,
+  requestOpenLauncherPluginSettingsSurface: async (source, pluginId) => {
+    openedSettingsTargets.push({
+      source,
+      pluginId,
+      presentation: 'global-launcher',
+      context: { surfaceId: 'global-launcher' },
+    })
+  },
   usePluginSettingsStore: {
     getState: () => ({
       openSettingsDialog: (target) => openedSettingsTargets.push(target),

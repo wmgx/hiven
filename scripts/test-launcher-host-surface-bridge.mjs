@@ -57,7 +57,7 @@ assert.match(
 )
 assert.match(
   bridge,
-  /openLauncherHostSurfaceRequestLocally[\s\S]*request\.kind === ['"]plugin-settings['"][\s\S]*usePluginSettingsStore\.getState\(\)\.openSettingsDialog\([\s\S]*presentation: ['"]global-launcher['"]/,
+  /openLauncherHostSurfaceRequestLocally[\s\S]*if \(request\.kind === ['"]host-surface['"]\)[\s\S]*usePluginSettingsStore\.getState\(\)\.openSettingsDialog\([\s\S]*presentation: ['"]global-launcher['"]/,
   'plugin settings dialog mutation must be isolated to the launcher-local bridge handler',
 )
 

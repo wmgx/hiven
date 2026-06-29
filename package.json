@@ -120,7 +120,8 @@
     "test:surface-coordinator-window-boundary": "node scripts/test-surface-coordinator-window-boundary.mjs",
     "test:plugin-editor-surface-open-lifecycle": "node scripts/test-plugin-editor-surface-open-lifecycle.mjs",
     "test:launcher-host-surface-bridge": "node scripts/test-launcher-host-surface-bridge.mjs",
-    "test:first-party-plugin-host-boundary": "node scripts/test-first-party-plugin-host-boundary.mjs"
+    "test:first-party-plugin-host-boundary": "node scripts/test-first-party-plugin-host-boundary.mjs",
+    "test:clipboard-object-block": "node scripts/test-clipboard-object-block.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
