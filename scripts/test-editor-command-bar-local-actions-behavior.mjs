@@ -97,6 +97,24 @@ function loadTsModule(path, globals = {}) {
 }
 
 const editorTextTransforms = loadTsModule('src/workflow/editorTextTransforms.ts')
+const editorActionGlobals = {
+  useWorkspaceStore: {
+    getState: () => storeState,
+  },
+  openEditorPanel: async (input) => { openedPanels.push(input) },
+  applyEffects: (nextEffects) => { effects.push(...nextEffects) },
+  ...editorTextTransforms,
+  runtimeRegistry: {
+    getCodeEditor: () => ({
+      getSelection: () => selection,
+      getModel: () => ({
+        getValueInRange: () => selectedText,
+      }),
+    }),
+  },
+  PLUGIN_SURFACE_PANEL_ID: 'plugin-surface',
+}
+const hostEditorActions = loadTsModule('src/workspace/launcher/hostEditorActions.ts', editorActionGlobals)
 let src = readFileSync('src/workspace/launcher/hostActions.ts', 'utf8')
 src = src.replace(/import\s+type\s*\{[\s\S]*?\}\s*from\s*'[^']*'\s*;?\s*\n?/g, '')
 src = src.replace(/import\s*\{[\s\S]*?\}\s*from\s*'[^']*'\s*;?\s*\n?/g, '')
@@ -117,19 +135,8 @@ const sandbox = {
   },
   translate: (_locale, entry) => entry,
   createEditorPane: async () => {},
-  openEditorPanel: async (input) => { openedPanels.push(input) },
-  applyEffects: (nextEffects) => { effects.push(...nextEffects) },
   showLauncherWindow: async () => {},
-  ...editorTextTransforms,
-  runtimeRegistry: {
-    getCodeEditor: () => ({
-      getSelection: () => selection,
-      getModel: () => ({
-        getValueInRange: () => selectedText,
-      }),
-    }),
-  },
-  PLUGIN_SURFACE_PANEL_ID: 'plugin-surface',
+  getHostEditorActionItems: hostEditorActions.getHostEditorActionItems,
 }
 vm.runInNewContext(out, sandbox, { filename: 'hostActions.ts' })
 

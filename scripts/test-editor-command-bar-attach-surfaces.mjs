@@ -11,6 +11,7 @@ const files = {
   packageJson: read('package.json'),
   refactorSuite: read('scripts/test-refactor-suite.mjs'),
   hostActions: read('src/workspace/launcher/hostActions.ts'),
+  hostEditorActions: read('src/workspace/launcher/hostEditorActions.ts'),
   editorHost: read('src/launcher/hosts/EditorCommandBarHost.tsx'),
   outputRouter: read('src/workflow/outputRouter.ts'),
 }
@@ -31,32 +32,32 @@ for (const [systemKey, title, pluginId] of [
   ['host:editor:attach-clipboard-panel', 'Attach Clipboard Panel', 'clipboard-history'],
   ['host:editor:attach-json-panel', 'Attach JSON Panel', 'json'],
 ]) {
-  const start = files.hostActions.indexOf(`systemKey: '${systemKey}'`)
+  const start = files.hostEditorActions.indexOf(`systemKey: '${systemKey}'`)
   assert.notEqual(start, -1, `${title} must exist as an explicit editor-local command bar action`)
-  const block = files.hostActions.slice(start, files.hostActions.indexOf('\n    {', start + 1))
+  const block = files.hostEditorActions.slice(start, files.hostEditorActions.indexOf('\n    {', start + 1))
   assert.match(block, new RegExp(`title:\\s*['"]${title}['"]`), `${title} must have a stable label`)
   assert.match(block, /surfaces:\s*\[['"]editor-command-bar['"]\]/, `${title} must be scoped to the editor command bar`)
   assert.match(block, new RegExp(`attachBuiltinPluginSurfacePanel\\(['"]${pluginId}['"]`), `${title} must attach ${pluginId}`)
 }
 assert.match(
-  files.hostActions,
+  files.hostEditorActions,
   /PLUGIN_SURFACE_PANEL_ID/,
   'editor-local attach commands must use the shared plugin surface panel bridge',
 )
 assert.match(
-  files.hostActions,
+  files.hostEditorActions,
   /openEditorPanel\(\{[\s\S]*panelId:\s*PLUGIN_SURFACE_PANEL_ID[\s\S]*placement:\s*['"]right['"][\s\S]*pluginId/,
   'attach commands must route through the explicit editor bridge instead of mutating workspace panels directly',
 )
 assert.doesNotMatch(
-  files.hostActions,
+  files.hostEditorActions,
   /host:editor:attach-(?:translate|clipboard|json)-panel[\s\S]{0,500}useWorkspaceStore\.getState\(\)\.openPanelV2/,
   'editor-local attach commands must not bypass the editor bridge',
 )
 assert.match(
-  files.editorHost,
+  read('src/workspace/launcher/types.ts'),
   /item\.systemKey\.startsWith\(['"]host:editor:['"]\)/,
-  'EditorCommandBarHost filter must keep explicit editor-local surface actions',
+  'Editor command bar filter must keep explicit editor-local surface actions',
 )
 assert.match(
   files.outputRouter,

@@ -12,7 +12,7 @@ const files = {
   defaultWorkflowProviders: read('src/workflow/defaultWorkflowProviders.ts'),
   editorTextTransforms: read('src/workflow/editorTextTransforms.ts'),
   workflowIndex: read('src/workflow/index.ts'),
-  hostActions: read('src/workspace/launcher/hostActions.ts'),
+  hostEditorActions: read('src/workspace/launcher/hostEditorActions.ts'),
 }
 
 const packageJson = JSON.parse(files.packageJson)
@@ -77,7 +77,7 @@ for (const [systemKey, title] of [
   ['host:editor:json-extract-fields', 'Extract JSON Fields'],
 ]) {
   assert.match(
-    files.hostActions,
+    files.hostEditorActions,
     new RegExp(`systemKey:\\s*['\"]${systemKey}['\"][\\s\\S]*title:\\s*['\"]${title}['\"][\\s\\S]*surfaces:\\s*\\[['\"]editor-command-bar['\"]\\]`),
     `${title} must be available as an editor-local command bar action`,
   )

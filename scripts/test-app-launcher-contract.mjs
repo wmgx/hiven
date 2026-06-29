@@ -65,7 +65,8 @@ assert.match(files.hostActions, /host:pane:focus-next/, 'pane controls must expo
 assert.match(files.hostActions, /host:pane:focus-previous/, 'pane controls must expose focus-previous')
 assert.match(files.hostActions, /host:pane:toggle-sticky-scroll/, 'pane controls must expose sticky-scroll toggle')
 assert.match(files.hostActions, /host:pane:set-language/, 'pane controls must expose language selection')
-assert.match(files.hostActions, /useWorkspaceStore\.getState\(\)\.createPane/, 'pane controls must use host workspace APIs directly')
+assert.match(files.hostActions, /createEditorPane\(\{/, 'pane creation controls must route through the editor bridge')
+assert.doesNotMatch(files.hostActions, /useWorkspaceStore\.getState\(\)\.createPane/, 'pane creation controls must not mutate a local cross-window workspace store')
 assert.doesNotMatch(files.hostActions, /definePlugin|PluginLauncherApi|pluginRegistry/, 'pane controls must not be implemented as a plugin')
 assert.equal(existsSync(join(root, 'src/plugins/core-pane')), false, 'core-pane plugin package should be retired')
 
