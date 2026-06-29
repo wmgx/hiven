@@ -97,7 +97,8 @@ const rustPluginSurface = {
   canProvideText: true,
 }
 
-const { registry, calls, listeners } = loadSurfaceRegistry({ rustSnapshot: [rustEditorSurface, rustPluginSurface, { id: 'invalid' }] })
+const rustSnapshot = [rustEditorSurface, rustPluginSurface, { id: 'invalid' }]
+const { registry, calls, listeners } = loadSurfaceRegistry({ rustSnapshot })
 assert.deepEqual(JSON.parse(JSON.stringify(registry.getSurfaceInstances())), [], 'first access starts async Rust hydration and returns current in-memory state')
 await flushAsyncWork()
 assert.deepEqual(
@@ -187,6 +188,29 @@ assert.equal(registry.getSurfaceInstance('plugin-surface:builtin:json:main').las
 
 listeners.get(SURFACE_REGISTRY_EVENT)({ payload: { sourceId: 'remote-window', type: 'remove', id: 'plugin-surface:builtin:json:main' } })
 assert.equal(registry.getSurfaceInstance('plugin-surface:builtin:json:main'), undefined, 'remote remove mutations must delete local registry state')
+
+rustSnapshot.push({
+  id: 'plugin-surface:builtin:translate:main',
+  kind: 'plugin-surface',
+  windowLabel: 'plugin-surface:builtin:translate:main',
+  title: 'Translate',
+  pluginId: 'translate',
+  surfaceId: 'main',
+  state: 'hidden',
+  lastActiveAt: 60,
+})
+listeners.get(SURFACE_REGISTRY_EVENT)({
+  payload: {
+    sourceId: 'remote-window',
+    type: 'mark-state',
+    id: 'plugin-surface:builtin:translate:main',
+    state: 'hidden',
+    lastActiveAt: 60,
+  },
+})
+await flushAsyncWork()
+assert.equal(calls.invoke.filter((call) => call.command === 'surface_registry_snapshot').length, 2, 'unknown remote mark-state mutations must force a Rust snapshot refresh')
+assert.equal(registry.getSurfaceInstance('plugin-surface:builtin:translate:main').title, 'Translate', 'forced snapshot refresh must recover unknown remotely-marked surfaces')
 
 registry.removeSurfaceInstance('launcher')
 await flushAsyncWork()

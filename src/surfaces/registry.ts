@@ -116,8 +116,8 @@ function ensureSurfaceRegistrySync(): void {
     })
 }
 
-function hydrateSurfaceRegistryFromRust(): void {
-  if (rustSnapshotRequested) return
+function hydrateSurfaceRegistryFromRust(force = false): void {
+  if (rustSnapshotRequested && !force) return
   rustSnapshotRequested = true
   import('@tauri-apps/api/core')
     .then(({ invoke }) => invoke<unknown[]>('surface_registry_snapshot'))
@@ -142,7 +142,10 @@ function applyRemoteSurfaceRegistryMutation(mutation: SurfaceRegistryMutation): 
       break
     case 'mark-state': {
       const previous = surfaces.get(mutation.id)
-      if (!previous) return
+      if (!previous) {
+        hydrateSurfaceRegistryFromRust(true)
+        return
+      }
       surfaces.set(mutation.id, {
         ...previous,
         state: mutation.state,
