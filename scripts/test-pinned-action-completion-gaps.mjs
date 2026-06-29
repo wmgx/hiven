@@ -47,7 +47,7 @@ assertHas(files.i18n, /globalPinned/, 'i18n should define a localized GlobalLaun
 assertHas(globalLauncher, /t\(locale,\s*['"]palette\.globalPinned['"]\)/, 'GlobalLauncher should localize the pinned section label')
 assertNotHas(globalLauncher, /t\(locale,\s*['"]palette\.globalViews['"]\)/, 'GlobalLauncher should not keep the retired workspace views section')
 assertHas(globalLauncher, /searchPlaceholder=\{t\(locale,\s*['"]palette\.globalPlaceholder['"]\)\}/, 'GlobalLauncher host should pass a localized placeholder into the frame switch')
-assertHas(globalLauncher, /placeholder=\{placeholder\}/, 'GlobalLauncher search frame should render the provided placeholder')
+assertHas(globalLauncher, /placeholder=\{(?:placeholder|resolvedPlaceholder)\}/, 'GlobalLauncher search frame should render the provided placeholder')
 assertHas(files.launcherMixedList, /\|\s*\{\s*kind:\s*['"]pinned['"]/, 'GlobalLauncher list should model pinned items explicitly')
 assertHas(files.launcherMixedList, /resolveIcon\(item\.icon,\s*16,\s*item\.title\)/, 'GlobalLauncher pinned items should resolve icon names instead of rendering raw icon strings')
 assertHas(globalLauncher, /openPinnedAction|activatePinnedAction/, 'GlobalLauncher should jump to pinned action runners')

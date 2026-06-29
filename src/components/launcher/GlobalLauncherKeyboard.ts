@@ -26,6 +26,7 @@ export function handleGlobalLauncherKeyDown({
   selectedItem,
   isWorkflowObjectLauncherItem,
   selectItem,
+  handleClipboardBackspace,
 }: {
   event: ReactKeyboardEvent<HTMLElement>
   isImeComposingRef: MutableRefObject<boolean>
@@ -51,6 +52,7 @@ export function handleGlobalLauncherKeyDown({
   selectedItem?: LauncherMixedItem
   isWorkflowObjectLauncherItem: (item?: LauncherMixedItem) => boolean
   selectItem: (item: LauncherMixedItem | undefined, customizeParams?: boolean) => void
+  handleClipboardBackspace?: (queryEmpty: boolean) => boolean
 }) {
   if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
   if (event.defaultPrevented) return
@@ -158,6 +160,14 @@ export function handleGlobalLauncherKeyDown({
     event.preventDefault()
     selectItem(selectedItem)
     return
+  }
+  if (event.key === 'Backspace' && handleClipboardBackspace) {
+    const input = event.target as HTMLInputElement | null
+    const queryEmpty = !input?.value
+    if (queryEmpty && handleClipboardBackspace(true)) {
+      event.preventDefault()
+      return
+    }
   }
   if (event.key === 'Enter') {
     event.preventDefault()

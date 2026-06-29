@@ -11,6 +11,7 @@ import { GlobalLauncherSystemSurfaceFrame } from './GlobalLauncherSystemSurfaceF
 import { GlobalLauncherSettingsFrame } from './GlobalLauncherSettingsFrame'
 import { GlobalLauncherPluginSurfaceFrame } from './GlobalLauncherPluginSurfaceFrame'
 import { GlobalLauncherSearchFrame } from './GlobalLauncherSearchFrame'
+import type { ClipboardObjectBlockState } from '../../launcher/clipboard/useClipboardObjectBlock'
 import { GlobalLauncherResultFrame } from './GlobalLauncherResultFrame'
 import { GlobalLauncherPermissionFrame, type GlobalLauncherPermissionFrameState } from './GlobalLauncherPermissionFrame'
 import { GlobalLauncherCollectInputFrame } from './GlobalLauncherCollectInputFrame'
@@ -57,6 +58,7 @@ export function GlobalLauncherFrameSwitch({
   onSearchSelectItem,
   onSearchHoverIndex,
   onSearchMouseMove,
+  clipboardBlock,
 }: {
   hostSurfaceTarget: LauncherHostSurfaceTarget | null
   hostSurfaceHeight: number
@@ -95,6 +97,7 @@ export function GlobalLauncherFrameSwitch({
   onSearchSelectItem: (item: LauncherMixedItem) => void
   onSearchHoverIndex: (index: number) => void
   onSearchMouseMove: () => void
+  clipboardBlock: ClipboardObjectBlockState
 }) {
   if (hostSurfaceTarget) {
     return <GlobalLauncherSystemSurfaceFrame target={hostSurfaceTarget} height={hostSurfaceHeight} />
@@ -209,6 +212,7 @@ export function GlobalLauncherFrameSwitch({
       inputRef={inputRef}
       query={query}
       placeholder={searchPlaceholder}
+      clipboardBlock={clipboardBlock}
       error={controllerState?.error}
       items={visibleFiltered}
       selectedItem={selectedItem}

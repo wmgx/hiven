@@ -14,8 +14,10 @@ import { isStandaloneLauncherWindow, useGlobalLauncherCollectInputPreview, useGl
 import { closeGlobalLauncherWindow } from '../../components/launcher/GlobalLauncherClose'
 import { isWorkflowObjectLauncherItem } from '../../components/launcher/GlobalLauncherSelection'
 import { useGlobalLauncherSurfaceFrame } from '../../components/launcher/GlobalLauncherSurfaceFrame'
+import { readLauncherClipboard } from '../clipboard/readLauncherClipboard'
 import { GlobalLauncherPanel } from '../../components/launcher/GlobalLauncherPanel'
 import { useGlobalLauncherSelectionController } from '../../components/launcher/useGlobalLauncherSelectionController'
+import { useClipboardObjectBlock } from '../clipboard/useClipboardObjectBlock'
 
 export function GlobalLauncherHost() {
   const open = useAppStore((s) => s.globalLauncherOpen)
@@ -59,6 +61,11 @@ export function GlobalLauncherHost() {
     open,
     requestClose: () => closeAfterActionRef.current(),
     collectDynamicWhenEmpty: true,
+  })
+
+  const clipboardBlock = useClipboardObjectBlock({
+    open,
+    readClipboard: readLauncherClipboard,
   })
 
   const {
@@ -297,6 +304,7 @@ export function GlobalLauncherHost() {
         requestSurfaceClose={requestSurfaceClose}
         handleCompositionStart={handleCompositionStart}
         handleCompositionEnd={handleCompositionEnd}
+        clipboardBlock={clipboardBlock}
       />
     </div>
   )

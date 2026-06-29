@@ -11,6 +11,7 @@ import { LauncherView } from './LauncherView'
 import { getPlatformShortcutMeta, supportsParamCustomization } from './launcherParamShortcuts'
 import { handleGlobalLauncherKeyDown } from './GlobalLauncherKeyboard'
 import type { GlobalLauncherItem } from './GlobalLauncherItems'
+import type { ClipboardObjectBlockState } from '../../launcher/clipboard/useClipboardObjectBlock'
 import { GLOBAL_LAUNCHER_SETTINGS_HEIGHT, STANDALONE_SURFACE_MAX_HEIGHT } from './GlobalLauncherLayout'
 
 type GlobalLauncherPanelProps = {
@@ -52,6 +53,7 @@ type GlobalLauncherPanelProps = {
   requestSurfaceClose: () => void
   handleCompositionStart: () => void
   handleCompositionEnd: () => void
+  clipboardBlock: ClipboardObjectBlockState
 }
 
 export function GlobalLauncherPanel({
@@ -93,6 +95,7 @@ export function GlobalLauncherPanel({
   requestSurfaceClose,
   handleCompositionStart,
   handleCompositionEnd,
+  clipboardBlock,
 }: GlobalLauncherPanelProps) {
   return (
     <LauncherView
@@ -129,6 +132,7 @@ export function GlobalLauncherPanel({
         selectedItem,
         isWorkflowObjectLauncherItem,
         selectItem,
+        handleClipboardBackspace: clipboardBlock?.handleBackspace,
       })}
       onCompositionStart={handleCompositionStart}
       onCompositionEnd={handleCompositionEnd}
@@ -177,6 +181,7 @@ export function GlobalLauncherPanel({
         onSearchSelectItem={(item) => selectItem(item)}
         onSearchHoverIndex={(index) => { if (!isKeyboardNavRef.current) setSelectedIndex(index) }}
         onSearchMouseMove={() => { isKeyboardNavRef.current = false }}
+        clipboardBlock={clipboardBlock}
       />
     </LauncherView>
   )
