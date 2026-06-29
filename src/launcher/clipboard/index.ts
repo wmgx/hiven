@@ -38,3 +38,9 @@ export {
   recommendActionsForBlock,
   getSearchOnlyActions,
 } from './actionRecommendation'
+
+export {
+  type ClipboardObjectBlockMode,
+  type ClipboardObjectBlockState,
+  useClipboardObjectBlock,
+} from './useClipboardObjectBlock'

@@ -1,0 +1,146 @@
+/**
+ * useClipboardObjectBlock — React hook for Global Launcher clipboard integration.
+ *
+ * Responsibilities:
+ *  1. On launcher open: read system clipboard, build ClipboardSnapshot.
+ *  2. Apply freshness rules to decide whether to auto-attach ObjectBlock.
+ *  3. Expose Backspace-to-select-to-delete interaction state.
+ *  4. Expose mode: 'object-action' | 'search-only'.
+ *  5. Expose recent clipboard hint when in 2–10 min window.
+ */
+
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { LauncherObjectBlock, RecentClipboardHint } from './objectBlock'
+import {
+  buildRecentClipboardHint,
+  createClipboardObjectBlock,
+} from './objectBlock'
+import {
+  clearClipboardSnapshot,
+  createClipboardSnapshotFromUnknownAge,
+  getLastClipboardSnapshot,
+  updateClipboardSnapshot,
+  type ClipboardSnapshot,
+} from './clipboardSnapshot'
+
+export type ClipboardObjectBlockMode = 'object-action' | 'search-only'
+
+export type ClipboardObjectBlockState = {
+  mode: ClipboardObjectBlockMode
+  block: LauncherObjectBlock | null
+  hint: RecentClipboardHint | null
+  removeBlock: () => void
+  selectBlockForDelete: () => void
+  handleBackspace: (queryEmpty: boolean) => boolean
+  attachHintAsBlock: () => void
+}
+
+export function useClipboardObjectBlock(params: {
+  open: boolean
+  readClipboard: () => Promise<string>
+}): ClipboardObjectBlockState {
+  const { open, readClipboard } = params
+  const [block, setBlock] = useState<LauncherObjectBlock | null>(null)
+  const [hint, setHint] = useState<RecentClipboardHint | null>(null)
+  const didReadRef = useRef(false)
+
+  // On open: read clipboard and determine mode.
+  useEffect(() => {
+    if (!open) {
+      didReadRef.current = false
+      return
+    }
+    if (didReadRef.current) return
+    didReadRef.current = true
+
+    void (async () => {
+      try {
+        const text = await readClipboard()
+        if (!text) {
+          setBlock(null)
+          setHint(null)
+          return
+        }
+
+        const lastSnapshot = getLastClipboardSnapshot()
+        let snapshot: ClipboardSnapshot
+
+        if (lastSnapshot && lastSnapshot.text === text) {
+          // Same text — update lastSeenAt
+          snapshot = updateClipboardSnapshot(text)
+        } else if (lastSnapshot) {
+          // Different text — new clipboard content
+          snapshot = updateClipboardSnapshot(text)
+        } else {
+          // First time — unknown age
+          snapshot = createClipboardSnapshotFromUnknownAge(text)
+        }
+
+        const newBlock = createClipboardObjectBlock(snapshot)
+        setBlock(newBlock)
+        setHint(newBlock ? null : buildRecentClipboardHint(snapshot))
+      } catch {
+        setBlock(null)
+        setHint(null)
+      }
+    })()
+  }, [open, readClipboard])
+
+  // When launcher closes, clear block state
+  useEffect(() => {
+    if (!open) {
+      setBlock(null)
+      setHint(null)
+    }
+  }, [open])
+
+  const removeBlock = useCallback(() => {
+    setBlock(null)
+  }, [])
+
+  const selectBlockForDelete = useCallback(() => {
+    setBlock((prev) => prev ? { ...prev, selectedForDelete: true } : null)
+  }, [])
+
+  /**
+   * Handle Backspace key when query is empty:
+   *  - First press: select block for delete
+   *  - Second press: delete block
+   * Returns true if Backspace was consumed.
+   */
+  const handleBackspace = useCallback((queryEmpty: boolean): boolean => {
+    if (!queryEmpty) return false
+    if (!block) return false
+    if (block.selectedForDelete) {
+      setBlock(null)
+      return true
+    }
+    setBlock({ ...block, selectedForDelete: true })
+    return true
+  }, [block])
+
+  const attachHintAsBlock = useCallback(() => {
+    if (!hint) return
+    const snapshot = getLastClipboardSnapshot()
+    if (!snapshot) return
+    // Force-create block by using current time (override freshness for manual attach)
+    const now = Date.now()
+    const forcedBlock = createClipboardObjectBlock({ ...snapshot, changedAt: now, ageConfidence: 'known' }, now)
+    if (forcedBlock) {
+      setBlock(forcedBlock)
+      setHint(null)
+    }
+  }, [hint])
+
+  const mode: ClipboardObjectBlockMode = block ? 'object-action' : 'search-only'
+
+  return {
+    mode,
+    block,
+    hint,
+    removeBlock,
+    selectBlockForDelete,
+    handleBackspace,
+    attachHintAsBlock,
+  }
+}
