@@ -18,11 +18,15 @@ export function requestOpenPluginEditorSurface(pluginEditor: PluginEditorState):
 
 export function subscribePluginEditorSurfaceOpen(listener: (pluginEditor: PluginEditorState) => void): () => void {
   listeners.add(listener)
-  drainPersistedPluginEditorOpenRequests()
-  drainPendingPluginEditorOpenRequests()
 
   let disposed = false
   let unlistenTauri: (() => void) | undefined
+  const drainQueuedOpens = () => {
+    if (disposed) return
+    drainPersistedPluginEditorOpenRequests()
+    drainPendingPluginEditorOpenRequests()
+  }
+
   if (isTauriRuntime()) {
     import('@tauri-apps/api/event')
       .then(({ listen }) => listen<unknown>(PLUGIN_EDITOR_SURFACE_OPEN_EVENT, (event) => {
@@ -33,9 +37,14 @@ export function subscribePluginEditorSurfaceOpen(listener: (pluginEditor: Plugin
           unlisten()
         } else {
           unlistenTauri = unlisten
+          drainQueuedOpens()
         }
       })
-      .catch(() => undefined)
+      .catch(() => {
+        drainQueuedOpens()
+      })
+  } else {
+    drainQueuedOpens()
   }
 
   return () => {

@@ -32,8 +32,18 @@ assert.match(
 )
 assert.match(
   bridge,
-  /subscribePluginEditorSurfaceOpen[\s\S]*drainPersistedPluginEditorOpenRequests\(\)[\s\S]*drainPendingPluginEditorOpenRequests\(\)/,
+  /const drainQueuedOpens = \(\) => \{[\s\S]*drainPersistedPluginEditorOpenRequests\(\)[\s\S]*drainPendingPluginEditorOpenRequests\(\)/,
   'plugin editor subscribers must drain persisted requests before in-memory requests',
+)
+assert.match(
+  bridge,
+  /listen<unknown>\(PLUGIN_EDITOR_SURFACE_OPEN_EVENT[\s\S]*unlistenTauri = unlisten[\s\S]*drainQueuedOpens\(\)/,
+  'Tauri subscribers must install the live event listener before draining pending plugin editor opens',
+)
+assert.match(
+  bridge,
+  /catch\(\(\) => \{[\s\S]*drainQueuedOpens\(\)/,
+  'plugin editor subscribers must still drain queued opens if Tauri listener registration fails',
 )
 
 assert.match(
