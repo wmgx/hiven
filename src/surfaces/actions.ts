@@ -1,4 +1,6 @@
 import { getSurfaceInstance, markSurfaceInstanceState, type SurfaceInstance } from './registry'
+import { useAppStore } from '../store'
+import { usePluginSettingsStore, type PluginSettingsSource } from '../workspace/pluginSettingsStore'
 import { showEditorWindow } from '../workspace/windowManager/editorWindow'
 import { showLauncherWindow } from '../workspace/windowManager/launcherWindow'
 import { showPluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
@@ -19,6 +21,29 @@ export async function focusSurfaceInstance(surfaceOrId: SurfaceInstance | string
     return true
   }
 
+  if (surface.kind === 'settings') {
+    await showLauncherWindow()
+    if (surface.pluginId) {
+      usePluginSettingsStore.getState().openSettingsDialog({
+        source: sourceFromSettingsSurfaceInstanceId(surface.id),
+        pluginId: surface.pluginId,
+        presentation: 'global-launcher',
+        context: { surfaceId: 'global-launcher' },
+      })
+    } else {
+      useAppStore.getState().openLauncherHostSurface('settings')
+    }
+    markSurfaceInstanceState(surface.id, 'visible')
+    return true
+  }
+
+  if (surface.kind === 'plugins') {
+    await showLauncherWindow()
+    useAppStore.getState().openLauncherHostSurface('plugins')
+    markSurfaceInstanceState(surface.id, 'visible')
+    return true
+  }
+
   if (surface.kind === 'plugin-surface' && surface.pluginId && surface.surfaceId) {
     const source = sourceFromPluginSurfaceInstanceId(surface.id)
     await showPluginSurfaceWindow({
@@ -34,6 +59,11 @@ export async function focusSurfaceInstance(surfaceOrId: SurfaceInstance | string
 }
 
 function sourceFromPluginSurfaceInstanceId(id: string): 'builtin' | 'installed' | 'dev' {
+  const source = id.split(':')[1]
+  return source === 'installed' || source === 'dev' ? source : 'builtin'
+}
+
+function sourceFromSettingsSurfaceInstanceId(id: string): PluginSettingsSource {
   const source = id.split(':')[1]
   return source === 'installed' || source === 'dev' ? source : 'builtin'
 }

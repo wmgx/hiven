@@ -243,6 +243,8 @@ assert.match(files.tauriLib, /fn\s+surface_registry_snapshot/, 'native runtime m
 assert.match(files.tauriLib, /surface_registry_mark_state/, 'native runtime must expose a surface registry mark-state command')
 assert.match(files.tauriLib, /surface_registry_remove/, 'native runtime must expose a surface registry remove command')
 assert.match(files.surfaceActions, /focusSurfaceInstance/, 'Surface registry must provide a switch/focus operation')
+assert.match(files.surfaceActions, /openLauncherHostSurface\(['"]settings['"]\)/, 'Surface focus must reopen Settings through the launcher host surface')
+assert.match(files.surfaceActions, /openLauncherHostSurface\(['"]plugins['"]\)/, 'Surface focus must reopen Plugins through the launcher host surface')
 assert.match(files.pluginSurfaceWindowComponent, /markSurfaceInstanceState\([\s\S]*['"]visible['"]/, 'Plugin surface window component must mark its surface visible')
 assert.match(files.pluginSurfaceWindowComponent, /markSurfaceInstanceState\([\s\S]*['"]hidden['"]/, 'Plugin surface window component must mark its surface hidden on teardown')
 assert.match(files.editorWindowComponent, /upsertSurfaceInstance\([\s\S]*id:\s*EDITOR_WINDOW_LABEL/, 'Editor window component must register itself as a surface using the centralized label')
