@@ -60,6 +60,7 @@ const commands = [
   ['npm', ['run', 'test:workspace-public-api-window-boundary']],
   ['npm', ['run', 'test:effect-runner-window-boundary']],
   ['npm', ['run', 'test:monaco-bridge-window-boundary']],
+  ['npm', ['run', 'test:surface-coordinator-window-boundary']],
   ['npm', ['run', 'test:plugin-runtime-editor-cleanup-boundary']],
   ['npm', ['run', 'test:plugin-paste-behavior']],
   ['npm', ['run', 'test:pinned-action-completion-gaps']],

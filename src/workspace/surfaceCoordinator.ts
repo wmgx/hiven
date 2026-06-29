@@ -14,6 +14,18 @@ import type {
 import { useWorkspaceStore } from './workspaceStore'
 import { runtimeRegistry } from './runtimeRegistry'
 
+function isEditorWindowRuntime(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get('window') === 'editor'
+  } catch {
+    return false
+  }
+}
+
+function readEditorOccupancies(): Record<string, SurfaceOccupancy> {
+  return isEditorWindowRuntime() ? useWorkspaceStore.getState().occupancies : {}
+}
+
 // ─── Conflict Detection ─────────────────────────────────────────────────────
 
 export interface ConflictInfo {
@@ -30,8 +42,7 @@ export function detectConflicts(
   newClaims: SurfaceClaim[],
   newOwnerId: string
 ): ConflictInfo[] {
-  const state = useWorkspaceStore.getState()
-  const occupancies = state.occupancies
+  const occupancies = readEditorOccupancies()
   const conflicts: ConflictInfo[] = []
 
   for (const claim of newClaims) {
@@ -89,6 +100,7 @@ export function resolveConflict(
  * Register a new surface occupancy.
  */
 export function registerOccupancy(occupancy: SurfaceOccupancy) {
+  if (!isEditorWindowRuntime()) return
   const state = useWorkspaceStore.getState()
   const occupancies = { ...state.occupancies, [occupancy.id]: occupancy }
   useWorkspaceStore.setState({ occupancies })
@@ -98,6 +110,7 @@ export function registerOccupancy(occupancy: SurfaceOccupancy) {
  * Release an occupancy and clean up associated resources.
  */
 export function releaseOccupancy(occupancyId: string) {
+  if (!isEditorWindowRuntime()) return
   const state = useWorkspaceStore.getState()
   const occupancy = state.occupancies[occupancyId]
   if (!occupancy) return
@@ -115,6 +128,7 @@ export function releaseOccupancy(occupancyId: string) {
  * Execute exit policy for an occupancy.
  */
 export function executeExitPolicy(occupancyId: string): boolean {
+  if (!isEditorWindowRuntime()) return true
   const state = useWorkspaceStore.getState()
   const occupancy = state.occupancies[occupancyId]
   if (!occupancy) return true
@@ -164,8 +178,7 @@ export const WORKSPACE_MAIN_SURFACE: SurfaceId = 'workspace:main'
  * Get all occupancies for a given surface.
  */
 export function getOccupanciesForSurface(surfaceId: SurfaceId): SurfaceOccupancy[] {
-  const state = useWorkspaceStore.getState()
-  return Object.values(state.occupancies).filter((occ) =>
+  return Object.values(readEditorOccupancies()).filter((occ) =>
     occ.surfaces.some((s) => s.surfaceId === surfaceId)
   )
 }
@@ -174,16 +187,14 @@ export function getOccupanciesForSurface(surfaceId: SurfaceId): SurfaceOccupancy
  * Get all occupancies owned by a specific owner.
  */
 export function getOccupanciesByOwner(ownerId: string): SurfaceOccupancy[] {
-  const state = useWorkspaceStore.getState()
-  return Object.values(state.occupancies).filter((occ) => occ.ownerId === ownerId)
+  return Object.values(readEditorOccupancies()).filter((occ) => occ.ownerId === ownerId)
 }
 
 /**
  * Check if a surface is currently occupied exclusively.
  */
 export function isSurfaceExclusivelyOccupied(surfaceId: SurfaceId): boolean {
-  const state = useWorkspaceStore.getState()
-  return Object.values(state.occupancies).some((occ) =>
+  return Object.values(readEditorOccupancies()).some((occ) =>
     occ.surfaces.some((s) => s.surfaceId === surfaceId && s.mode === 'exclusive')
   )
 }
