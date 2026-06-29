@@ -122,7 +122,8 @@
     "test:launcher-host-surface-bridge": "node scripts/test-launcher-host-surface-bridge.mjs",
     "test:first-party-plugin-host-boundary": "node scripts/test-first-party-plugin-host-boundary.mjs",
     "test:clipboard-object-block": "node scripts/test-clipboard-object-block.mjs",
-    "test:clipboard-object-block-ui": "node scripts/test-clipboard-object-block-ui.mjs"
+    "test:clipboard-object-block-ui": "node scripts/test-clipboard-object-block-ui.mjs",
+    "test:clipboard-object-block-integration": "node scripts/test-clipboard-object-block-integration.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

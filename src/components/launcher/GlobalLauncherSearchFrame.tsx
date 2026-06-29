@@ -7,6 +7,8 @@ import { LauncherMixedList, type LauncherMixedItem } from './LauncherMixedList'
 import type { ClipboardObjectBlockState } from '../../launcher/clipboard/useClipboardObjectBlock'
 import { ObjectBlockToken } from './ObjectBlockToken'
 import { RecentClipboardHint } from './RecentClipboardHint'
+import { RecommendedActionRow } from './RecommendedActionRow'
+import { recommendActionsForBlock, type RecommendedAction } from '../../launcher/clipboard/actionRecommendation'
 
 export function GlobalLauncherSearchFrame({
   inputRef,
@@ -44,6 +46,7 @@ export function GlobalLauncherSearchFrame({
   const block = clipboardBlock?.block ?? null
   const hint = clipboardBlock?.hint ?? null
   const resolvedPlaceholder = block ? t(locale, 'palette.objectActionPlaceholder') : placeholder
+  const recommendedActions: RecommendedAction[] = block ? recommendActionsForBlock(block) : []
 
   return (
     <>
@@ -74,13 +77,27 @@ export function GlobalLauncherSearchFrame({
         />
       )}
       <div className="global-launcher-body l-list" onMouseMove={onMouseMove}>
-        <LauncherMixedList
-          items={items}
-          selected={selectedItem}
-          locale={locale}
-          onSelect={onSelectItem}
-          onHoverIndex={onHoverIndex}
-        />
+        {block && recommendedActions.length > 0 && !query ? (
+          <div className="recommended-actions-list" data-testid="recommended-actions-list">
+            {recommendedActions.map((action, index) => (
+              <RecommendedActionRow
+                key={action.id}
+                action={action}
+                selected={index === 0}
+                onSelect={() => {}}
+                onHover={() => {}}
+              />
+            ))}
+          </div>
+        ) : (
+          <LauncherMixedList
+            items={items}
+            selected={selectedItem}
+            locale={locale}
+            onSelect={onSelectItem}
+            onHoverIndex={onHoverIndex}
+          />
+        )}
       </div>
       <div className="global-launcher-footer l-foot">
         <LauncherHintKey keys="↑↓" label={t(locale, 'palette.select')} />
