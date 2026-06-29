@@ -27,6 +27,11 @@ assert.match(
 )
 assert.match(
   bridge,
+  /PLUGIN_EDITOR_SURFACE_PENDING_TTL_MS\s*=\s*30_000/,
+  'plugin editor pending opens must expire so stale cross-window focus does not replay forever',
+)
+assert.match(
+  bridge,
   /requestOpenPluginEditorSurface[\s\S]*persistPendingPluginEditorOpen\(pluginEditor\)[\s\S]*dispatchPluginEditorOpen\(pluginEditor\)[\s\S]*emit\(PLUGIN_EDITOR_SURFACE_OPEN_EVENT, pluginEditor\)/,
   'plugin editor open requests must be persisted before same-webview and Tauri event delivery',
 )
@@ -54,13 +59,23 @@ assert.match(
 
 assert.match(
   bridge,
-  /function dispatchPluginEditorOpen[\s\S]*if \(listeners\.size === 0\)[\s\S]*pendingPluginEditorOpenRequests\.push\(pluginEditor\)[\s\S]*removePendingPluginEditorOpen\(pluginEditor\)[\s\S]*for \(const listener of listeners\)/,
+  /function dispatchPluginEditorOpen[\s\S]*if \(listeners\.size === 0\)[\s\S]*enqueuePendingPluginEditorOpen\(pluginEditor\)[\s\S]*removePendingPluginEditorOpen\(pluginEditor\)[\s\S]*for \(const listener of listeners\)/,
   'delivered plugin editor opens must clear persistent pending entries',
 )
 assert.match(
   bridge,
-  /function readPendingPluginEditorOpens[\s\S]*window\.localStorage\.getItem\(PLUGIN_EDITOR_SURFACE_PENDING_KEY\)[\s\S]*parsed\.filter\(isPluginEditorState\)/,
-  'pending plugin editor opens must be validated when read from cross-window local storage',
+  /function enqueuePendingPluginEditorOpen[\s\S]*isPendingPluginEditorOpenFresh[\s\S]*pluginEditorOpenKey\(item\.pluginEditor\) !== key[\s\S]*createdAt: Date\.now\(\)/,
+  'in-memory plugin editor opens must be deduped and timestamped while waiting for PluginsSurface',
+)
+assert.match(
+  bridge,
+  /function readPendingPluginEditorOpens[\s\S]*window\.localStorage\.getItem\(PLUGIN_EDITOR_SURFACE_PENDING_KEY\)[\s\S]*normalizePendingPluginEditorOpen[\s\S]*filter\(isPendingPluginEditorOpenFresh\)/,
+  'pending plugin editor opens must be validated and TTL-filtered when read from cross-window local storage',
+)
+assert.match(
+  bridge,
+  /function normalizePendingPluginEditorOpen[\s\S]*isPluginEditorState\(value\)[\s\S]*pluginEditor: value[\s\S]*createdAt: Date\.now\(\)/,
+  'legacy plugin editor pending opens must be migrated into timestamped envelopes',
 )
 assert.match(
   bridge,

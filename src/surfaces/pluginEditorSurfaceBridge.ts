@@ -3,8 +3,14 @@ import type { PluginEditorState } from './pluginEditorState'
 export const PLUGIN_EDITOR_SURFACE_OPEN_EVENT = 'hiven://plugin-editor-surface-open'
 
 const PLUGIN_EDITOR_SURFACE_PENDING_KEY = 'hiven:plugin-editor-surface-pending-opens'
+const PLUGIN_EDITOR_SURFACE_PENDING_TTL_MS = 30_000
 const listeners = new Set<(pluginEditor: PluginEditorState) => void>()
-const pendingPluginEditorOpenRequests: PluginEditorState[] = []
+const pendingPluginEditorOpenRequests: PendingPluginEditorOpen[] = []
+
+type PendingPluginEditorOpen = {
+  pluginEditor: PluginEditorState
+  createdAt: number
+}
 
 export function requestOpenPluginEditorSurface(pluginEditor: PluginEditorState): void {
   persistPendingPluginEditorOpen(pluginEditor)
@@ -56,17 +62,28 @@ export function subscribePluginEditorSurfaceOpen(listener: (pluginEditor: Plugin
 
 function dispatchPluginEditorOpen(pluginEditor: PluginEditorState): void {
   if (listeners.size === 0) {
-    pendingPluginEditorOpenRequests.push(pluginEditor)
+    enqueuePendingPluginEditorOpen(pluginEditor)
     return
   }
   removePendingPluginEditorOpen(pluginEditor)
   for (const listener of listeners) listener(pluginEditor)
 }
 
+function enqueuePendingPluginEditorOpen(pluginEditor: PluginEditorState): void {
+  const key = pluginEditorOpenKey(pluginEditor)
+  pendingPluginEditorOpenRequests.splice(
+    0,
+    pendingPluginEditorOpenRequests.length,
+    ...pendingPluginEditorOpenRequests
+      .filter((item) => isPendingPluginEditorOpenFresh(item) && pluginEditorOpenKey(item.pluginEditor) !== key),
+    { pluginEditor, createdAt: Date.now() },
+  )
+}
+
 function drainPendingPluginEditorOpenRequests(): void {
-  const pending = pendingPluginEditorOpenRequests.splice(0)
-  for (const pluginEditor of pending) {
-    dispatchPluginEditorOpen(pluginEditor)
+  const pending = pendingPluginEditorOpenRequests.splice(0).filter(isPendingPluginEditorOpenFresh)
+  for (const item of pending) {
+    dispatchPluginEditorOpen(item.pluginEditor)
   }
 }
 
@@ -74,8 +91,8 @@ function drainPersistedPluginEditorOpenRequests(): void {
   const pending = readPendingPluginEditorOpens()
   if (pending.length === 0) return
   writePendingPluginEditorOpens([])
-  for (const pluginEditor of pending) {
-    dispatchPluginEditorOpen(pluginEditor)
+  for (const item of pending) {
+    dispatchPluginEditorOpen(item.pluginEditor)
   }
 }
 
@@ -83,8 +100,8 @@ function persistPendingPluginEditorOpen(pluginEditor: PluginEditorState): void {
   const pending = readPendingPluginEditorOpens()
   const key = pluginEditorOpenKey(pluginEditor)
   writePendingPluginEditorOpens([
-    ...pending.filter((item) => pluginEditorOpenKey(item) !== key),
-    pluginEditor,
+    ...pending.filter((item) => pluginEditorOpenKey(item.pluginEditor) !== key),
+    { pluginEditor, createdAt: Date.now() },
   ])
 }
 
@@ -92,22 +109,39 @@ function removePendingPluginEditorOpen(pluginEditor: PluginEditorState): void {
   const pending = readPendingPluginEditorOpens()
   if (pending.length === 0) return
   const key = pluginEditorOpenKey(pluginEditor)
-  writePendingPluginEditorOpens(pending.filter((item) => pluginEditorOpenKey(item) !== key))
+  writePendingPluginEditorOpens(pending.filter((item) => pluginEditorOpenKey(item.pluginEditor) !== key))
 }
 
-function readPendingPluginEditorOpens(): PluginEditorState[] {
+function readPendingPluginEditorOpens(): PendingPluginEditorOpen[] {
   try {
     const raw = window.localStorage.getItem(PLUGIN_EDITOR_SURFACE_PENDING_KEY)
     if (!raw) return []
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) return []
-    return parsed.filter(isPluginEditorState)
+    const pending = parsed.map(normalizePendingPluginEditorOpen).filter((item): item is PendingPluginEditorOpen => Boolean(item))
+    const fresh = pending.filter(isPendingPluginEditorOpenFresh)
+    if (fresh.length !== pending.length) writePendingPluginEditorOpens(fresh)
+    return fresh
   } catch {
     return []
   }
 }
 
-function writePendingPluginEditorOpens(pending: PluginEditorState[]): void {
+function normalizePendingPluginEditorOpen(value: unknown): PendingPluginEditorOpen | null {
+  if (isPluginEditorState(value)) {
+    return { pluginEditor: value, createdAt: Date.now() }
+  }
+  const candidate = value as Partial<PendingPluginEditorOpen> | undefined
+  if (!candidate || typeof candidate !== 'object') return null
+  if (!isPluginEditorState(candidate.pluginEditor) || typeof candidate.createdAt !== 'number') return null
+  return { pluginEditor: candidate.pluginEditor, createdAt: candidate.createdAt }
+}
+
+function isPendingPluginEditorOpenFresh(value: PendingPluginEditorOpen): boolean {
+  return Number.isFinite(value.createdAt) && Date.now() - value.createdAt <= PLUGIN_EDITOR_SURFACE_PENDING_TTL_MS
+}
+
+function writePendingPluginEditorOpens(pending: PendingPluginEditorOpen[]): void {
   try {
     if (pending.length === 0) {
       window.localStorage.removeItem(PLUGIN_EDITOR_SURFACE_PENDING_KEY)
