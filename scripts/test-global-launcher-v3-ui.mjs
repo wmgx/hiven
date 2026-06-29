@@ -23,6 +23,8 @@ const files = {
   globalLauncherFrames: read('src/components/launcher/GlobalLauncherFrames.tsx'),
   globalLauncherHostLifecycle: read('src/components/launcher/GlobalLauncherHostLifecycle.ts'),
   globalLauncherPermissionFrame: read('src/components/launcher/GlobalLauncherPermissionFrame.tsx'),
+  globalLauncherCollectInputFrame: read('src/components/launcher/GlobalLauncherCollectInputFrame.tsx'),
+  globalLauncherResultFrame: read('src/components/launcher/GlobalLauncherResultFrame.tsx'),
   globalLauncherKeyboard: read('src/components/launcher/GlobalLauncherKeyboard.ts'),
   globalLauncherLayout: read('src/components/launcher/GlobalLauncherLayout.ts'),
   launcherMixedList: read('src/components/launcher/LauncherMixedList.tsx'),
@@ -49,12 +51,12 @@ assert.match(files.globalLauncherKeyboard, /event\.key === 'ArrowDown'[\s\S]{0,3
 assert.match(files.globalLauncherKeyboard, /event\.key === 'ArrowUp'[\s\S]{0,320}setResultSelectedIndex/, 'GlobalLauncher result frame must support ArrowUp selection')
 assert.match(files.globalLauncherKeyboard, /choices\[Math\.min\(resultSelectedIndex/, 'Enter should activate the selected result choice instead of always using the first row')
 assert.match(files.launcherResultChoiceRow, /global-launcher-result-row/, 'GlobalLauncher result rows must have a stable v3 row styling hook')
-assert.match(files.globalLauncherFrames, /LauncherResultChoiceRow/, 'GlobalLauncher must render result choices through the shared v3 result row')
+assert.match(files.globalLauncherResultFrame, /LauncherResultChoiceRow/, 'GlobalLauncher result frame must render result choices through the shared v3 result row')
 assert.match(files.launcherResultChoiceRow, /l-result-block/, 'GlobalLauncher must support the long text result fallback block')
 assert.match(files.globalLauncher, /toggleResultChoice/, 'GlobalLauncher must support selectable multi-result rows')
-assert.match(files.globalLauncherFrames, /global-launcher-header l-search/, 'GlobalLauncher must use the v3 search header structure')
+assert.match(files.globalLauncherCollectInputFrame, /global-launcher-header l-search/, 'GlobalLauncher collect-input frame must use the v3 search header structure')
 assert.match(files.launcherMixedList, /className=\{`l-row/, 'GlobalLauncher list rows must use the v3 l-row structure')
-assert.match(files.globalLauncherFrames, /global-launcher-footer l-foot/, 'GlobalLauncher must use the v3 footer structure')
+assert.match(files.globalLauncherCollectInputFrame, /global-launcher-footer l-foot/, 'GlobalLauncher collect-input frame must use the v3 footer structure')
 assert.match(files.launcherMixedList, /launcher-kind-tag/, 'GlobalLauncher list rows must render right-side type tags')
 assert.match(files.launcherMixedList, /kindApp/, 'GlobalLauncher must distinguish application rows')
 assert.match(files.launcherMixedList, /kindCommand/, 'GlobalLauncher must distinguish command rows')
@@ -69,6 +71,9 @@ assert.match(files.globalLauncherHostLifecycle, /useGlobalLauncherCollectInputPr
 assert.match(files.globalLauncherFrames, /<GlobalLauncherPermissionFrame/, 'GlobalLauncher frame switch must delegate permission rendering to a dedicated frame component')
 assert.doesNotMatch(files.globalLauncherFrames, /PluginSurfacePermissionGate/, 'GlobalLauncher frame switch must not render plugin permission gate inline')
 assert.match(files.globalLauncherPermissionFrame, /PluginSurfacePermissionGate/, 'GlobalLauncher permission frame must own plugin permission gate rendering')
+assert.match(files.globalLauncherFrames, /<GlobalLauncherCollectInputFrame/, 'GlobalLauncher frame switch must delegate collect-input rendering to a dedicated frame component')
+assert.doesNotMatch(files.globalLauncherFrames, /LauncherResultChoiceRow|LauncherHintText|resolveIcon/, 'GlobalLauncher frame switch must not render collect-input UI internals inline')
+assert.match(files.globalLauncherCollectInputFrame, /LauncherResultChoiceRow[\s\S]*previewChoices/, 'GlobalLauncher collect-input frame must own preview result rows')
 
 assert.match(files.commandPalette, /EditorCommandBar/, 'CommandPalette compatibility wrapper must delegate to EditorCommandBar')
 assert.match(files.editorCommandBarHost, /<LauncherDomainSearchStep/, 'EditorCommandBarHost must use the shared v3 search step')
