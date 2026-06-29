@@ -23,6 +23,9 @@ assert.match(editorBridgeSource, /EDITOR_BRIDGE_READY_EVENT/, 'editor bridge mus
 assert.match(editorBridgeSource, /waitForEditorBridgeReady/, 'editor bridge requests must wait for editor readiness before delivery')
 assert.match(editorBridgeSource, /emitEditorBridgeReady/, 'editor bridge handlers must publish readiness after registration')
 assert.match(editorBridgeSource, /clearPendingEditorBridgeRequest\(request\.requestId\)/, 'failed delivery must clear pending requests to avoid late execution')
+assert.match(editorBridgeSource, /expiresAt:\s*createdAt\s*\+\s*Math\.max\(timeoutMs,\s*0\)/, 'editor bridge requests must carry an execution expiry')
+assert.match(editorBridgeSource, /isEditorBridgeRequestExpired\(request\)/, 'editor bridge handlers must reject expired pending requests before executing mutations')
+assert.match(editorBridgeSource, /EDITOR_BRIDGE_MUTATION_TIMEOUT_MS\s*=\s*5_000/, 'editor mutations must use a longer explicit timeout than context polling')
 
 function createStorage() {
   const map = new Map()
@@ -104,6 +107,8 @@ const paneSnapshot = {
   assert.deepEqual(JSON.parse(JSON.stringify(pending[0].payload)), { text: 'hello', title: 'Draft', language: 'markdown' })
   assert.equal(typeof pending[0].requestId, 'string')
   assert.equal(typeof pending[0].createdAt, 'number')
+  assert.equal(typeof pending[0].expiresAt, 'number')
+  assert.ok(pending[0].expiresAt > pending[0].createdAt, 'pending bridge requests must expire after their creation time')
 }
 
 {
@@ -145,13 +150,15 @@ const paneSnapshot = {
 
 {
   const storage = createStorage()
+  const now = Date.now()
   storage.setItem('hiven:editor-bridge-pending-requests', JSON.stringify([
-    { requestId: 'req-context', action: 'getEditorContext', createdAt: Date.now() - 100, payload: undefined },
-    { requestId: 'req-create', action: 'createEditorPane', createdAt: Date.now() - 100, payload: { text: 'pending' } },
-    { requestId: 'req-replace', action: 'replaceEditorSelection', createdAt: Date.now() - 100, payload: { text: 'replacement' } },
-    { requestId: 'req-insert', action: 'insertIntoEditor', createdAt: Date.now() - 100, payload: { text: 'inserted' } },
-    { requestId: 'req-panel', action: 'openEditorPanel', createdAt: Date.now() - 100, payload: { panelId: 'panel', placement: 'right' } },
-    { requestId: 'req-invalid', action: 'unknownAction', createdAt: Date.now() - 100, payload: {} },
+    { requestId: 'req-expired-replace', action: 'replaceEditorSelection', createdAt: now - 10_000, expiresAt: now - 5_000, payload: { text: 'expired replacement' } },
+    { requestId: 'req-context', action: 'getEditorContext', createdAt: now - 100, expiresAt: now + 900, payload: undefined },
+    { requestId: 'req-create', action: 'createEditorPane', createdAt: now - 100, expiresAt: now + 4_900, payload: { text: 'pending' } },
+    { requestId: 'req-replace', action: 'replaceEditorSelection', createdAt: now - 100, expiresAt: now + 4_900, payload: { text: 'replacement' } },
+    { requestId: 'req-insert', action: 'insertIntoEditor', createdAt: now - 100, expiresAt: now + 4_900, payload: { text: 'inserted' } },
+    { requestId: 'req-panel', action: 'openEditorPanel', createdAt: now - 100, expiresAt: now + 4_900, payload: { panelId: 'panel', placement: 'right' } },
+    { requestId: 'req-invalid', action: 'unknownAction', createdAt: now - 100, expiresAt: now + 4_900, payload: {} },
   ]))
   const { bridge } = loadEditorBridge({ storage })
   const calls = []

@@ -10,6 +10,9 @@ export const EDITOR_ACTIVE_CONTEXT_EVENT = 'hiven://editor-active-context'
 const EDITOR_BRIDGE_PENDING_REQUESTS_KEY = 'hiven:editor-bridge-pending-requests'
 const EDITOR_BRIDGE_READY_AT_KEY = 'hiven:editor-bridge-ready-at'
 const EDITOR_BRIDGE_READY_TTL_MS = 5_000
+const EDITOR_BRIDGE_DEFAULT_TIMEOUT_MS = 1_200
+const EDITOR_BRIDGE_CONTEXT_TIMEOUT_MS = 500
+const EDITOR_BRIDGE_MUTATION_TIMEOUT_MS = 5_000
 
 export type EditorBridgeCreatePaneInput = {
   text?: string
@@ -71,6 +74,7 @@ type BridgeEnvelope<T extends string, P> = {
   action: T
   payload: P
   createdAt: number
+  expiresAt: number
 }
 
 type BridgeRequestOptions = {
@@ -85,7 +89,7 @@ let activeContextListenerStarted = false
 
 export async function getEditorContext(options: { timeoutMs?: number } = {}): Promise<EditorContextSnapshot | undefined> {
   try {
-    const response = await sendEditorBridgeRequest('getEditorContext', undefined, { timeoutMs: options.timeoutMs ?? 500 })
+    const response = await sendEditorBridgeRequest('getEditorContext', undefined, { timeoutMs: options.timeoutMs ?? EDITOR_BRIDGE_CONTEXT_TIMEOUT_MS })
     return isEditorContextSnapshot(response) ? response : activeEditorContextSnapshot
   } catch {
     return activeEditorContextSnapshot
@@ -160,11 +164,13 @@ async function sendEditorBridgeRequest<T extends EditorBridgeRequest['action']>(
   payload: Extract<EditorBridgeRequest, { action: T }>['payload'],
   options: BridgeRequestOptions = {},
 ): Promise<unknown> {
-  const request = createEditorBridgeRequest(action, payload)
+  const timeoutMs = options.timeoutMs ?? getEditorBridgeActionTimeoutMs(action)
+  let request: Extract<EditorBridgeRequest, { action: T }> | undefined
   let persisted = false
   try {
     if (options.openEditorFirst) await showEditorWindow()
-    if (options.openEditorFirst && isTauriRuntime()) await waitForEditorBridgeReady(options.timeoutMs ?? 1200)
+    if (options.openEditorFirst && isTauriRuntime()) await waitForEditorBridgeReady(timeoutMs)
+    request = createEditorBridgeRequest(action, payload, timeoutMs)
     if (options.persistForEditorStartup) {
       persistPendingEditorBridgeRequest(request)
       persisted = true
@@ -173,13 +179,13 @@ async function sendEditorBridgeRequest<T extends EditorBridgeRequest['action']>(
     if (!isTauriRuntime()) return undefined
 
     const { emitTo, listen } = await import('@tauri-apps/api/event')
-    const responsePromise = await waitForEditorBridgeResponse(listen, request.requestId, options.timeoutMs ?? 1200)
+    const responsePromise = await waitForEditorBridgeResponse(listen, request.requestId, timeoutMs)
     await emitTo(EDITOR_WINDOW_LABEL, EDITOR_BRIDGE_REQUEST_EVENT, request)
     const response = await responsePromise
     if (!response.ok) throw new Error(response.error ?? `Editor bridge request failed: ${request.action}`)
     return response.value
   } catch (error) {
-    if (persisted) clearPendingEditorBridgeRequest(request.requestId)
+    if (persisted && request) clearPendingEditorBridgeRequest(request.requestId)
     throw error
   }
 }
@@ -219,18 +225,24 @@ async function waitForEditorBridgeReady(timeoutMs: number): Promise<void> {
 function createEditorBridgeRequest<T extends EditorBridgeRequest['action']>(
   action: T,
   payload: Extract<EditorBridgeRequest, { action: T }>['payload'],
+  timeoutMs: number,
 ): Extract<EditorBridgeRequest, { action: T }> {
+  const createdAt = Date.now()
   return {
-    requestId: `editor-bridge-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    requestId: `editor-bridge-${createdAt.toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     action,
     payload,
-    createdAt: Date.now(),
+    createdAt,
+    expiresAt: createdAt + Math.max(timeoutMs, 0),
   } as Extract<EditorBridgeRequest, { action: T }>
 }
 
 async function handleEditorBridgeRequest(request: EditorBridgeRequest, handlers: EditorBridgeHandlers): Promise<void> {
   clearPendingEditorBridgeRequest(request.requestId)
   try {
+    if (isEditorBridgeRequestExpired(request)) {
+      throw new Error(`Editor bridge request expired before execution: ${request.action}`)
+    }
     let value: unknown
     switch (request.action) {
       case 'getEditorContext':
@@ -334,7 +346,7 @@ function ensureActiveEditorContextListener(): void {
 function persistPendingEditorBridgeRequest(request: EditorBridgeRequest): void {
   try {
     const pending = readPendingEditorBridgeRequests()
-      .filter((candidate) => Date.now() - candidate.createdAt < 30_000)
+      .filter((candidate) => !isEditorBridgeRequestExpired(candidate))
     pending.push(request)
     localStorage.setItem(EDITOR_BRIDGE_PENDING_REQUESTS_KEY, JSON.stringify(pending))
   } catch {
@@ -362,7 +374,7 @@ function readPendingEditorBridgeRequests(): EditorBridgeRequest[] {
     const raw = localStorage.getItem(EDITOR_BRIDGE_PENDING_REQUESTS_KEY)
     if (!raw) return []
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed.filter(isEditorBridgeRequest) : []
+    return Array.isArray(parsed) ? parsed.filter(isEditorBridgeRequest).filter((request) => !isEditorBridgeRequestExpired(request)) : []
   } catch {
     return []
   }
@@ -371,12 +383,24 @@ function readPendingEditorBridgeRequests(): EditorBridgeRequest[] {
 function isEditorBridgeRequest(value: unknown): value is EditorBridgeRequest {
   const request = value as Partial<EditorBridgeRequest> | undefined
   if (!request || typeof request !== 'object') return false
-  if (typeof request.requestId !== 'string' || typeof request.createdAt !== 'number') return false
+  if (typeof request.requestId !== 'string' || typeof request.createdAt !== 'number' || typeof request.expiresAt !== 'number') return false
   return request.action === 'getEditorContext' ||
     request.action === 'createEditorPane' ||
     request.action === 'replaceEditorSelection' ||
     request.action === 'insertIntoEditor' ||
     request.action === 'openEditorPanel'
+}
+
+function isEditorBridgeRequestExpired(request: EditorBridgeRequest): boolean {
+  return Date.now() > request.expiresAt
+}
+
+function getEditorBridgeActionTimeoutMs(action: EditorBridgeRequest['action']): number {
+  if (action === 'getEditorContext') return EDITOR_BRIDGE_CONTEXT_TIMEOUT_MS
+  if (action === 'createEditorPane' || action === 'replaceEditorSelection' || action === 'insertIntoEditor' || action === 'openEditorPanel') {
+    return EDITOR_BRIDGE_MUTATION_TIMEOUT_MS
+  }
+  return EDITOR_BRIDGE_DEFAULT_TIMEOUT_MS
 }
 
 function isEditorBridgeResponse(value: unknown): value is EditorBridgeResponse {
