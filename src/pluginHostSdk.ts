@@ -14,6 +14,7 @@ import {
   parseJson,
 } from './kits/diff/jsonSemanticDiff'
 import type { PaneId } from './workspace/types'
+import { getActiveEditorContextSnapshot, subscribeActiveEditorState } from './workspace/editorBridge'
 import type { MonacoDisposable } from './utils/monacoDisposables'
 import {
   createPluginHostCoreSdk,
@@ -138,10 +139,31 @@ function createPluginHostHooks(): PluginHostHooks {
   return {
     useSettings: () => useAppStore((s) => s.settings),
     useLocale: () => useAppStore((s) => s.locale),
-    usePaneText: (paneId) => useWorkspaceStore((s) => s.panes[paneId]?.text),
+    usePaneText: (paneId) => {
+      const localText = useWorkspaceStore((s) => isEditorWindowRuntime() ? s.panes[paneId]?.text : undefined)
+      const activeEditorText = React.useSyncExternalStore(
+        subscribeActiveEditorState,
+        () => getMirroredEditorPaneText(paneId),
+        () => undefined,
+      )
+      return isEditorWindowRuntime() ? localText : activeEditorText
+    },
     useT: (pluginId) => {
       const locale = useAppStore((s) => s.locale)
       return makePluginT(pluginId, locale)
     },
+  }
+}
+
+function getMirroredEditorPaneText(paneId: PaneId): string | undefined {
+  const snapshot = getActiveEditorContextSnapshot()
+  return snapshot?.activePaneId === paneId ? snapshot.activeText : undefined
+}
+
+function isEditorWindowRuntime(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get('window') === 'editor'
+  } catch {
+    return false
   }
 }

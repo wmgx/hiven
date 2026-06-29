@@ -7,6 +7,7 @@ const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
 const refactorSuite = readFileSync('scripts/test-refactor-suite.mjs', 'utf8')
 const pluginTypes = readFileSync('src/workspace/pluginTypes.ts', 'utf8')
 const pluginHostSdk = readFileSync('src/pluginHostSdk.ts', 'utf8')
+const editorBridge = readFileSync('src/workspace/editorBridge.ts', 'utf8')
 const pluginSdk = readFileSync('src/plugin-sdk.ts', 'utf8')
 const panelHost = readFileSync('src/components/workspace/PanelHostV2.tsx', 'utf8')
 const paneBottomPanels = readFileSync('src/components/workspace/PaneBottomPanels.tsx', 'utf8')
@@ -54,6 +55,26 @@ assert.match(
   'plugin host SDK must expose Monaco disposable helpers instead of requiring first-party plugins to deep-import utils',
 )
 assert.match(
+  pluginHostSdk,
+  /usePaneText: \(paneId\) => \{[\s\S]*isEditorWindowRuntime\(\) \? s\.panes\[paneId\]\?\.text : undefined[\s\S]*React\.useSyncExternalStore\([\s\S]*subscribeActiveEditorState[\s\S]*getMirroredEditorPaneText\(paneId\)/,
+  'plugin host pane text hook must not read shadow workspace state outside the editor window',
+)
+assert.match(
+  pluginHostSdk,
+  /getMirroredEditorPaneText\(paneId: PaneId\)[\s\S]*snapshot\?\.activePaneId === paneId \? snapshot\.activeText : undefined/,
+  'plugin host pane text hook must use mirrored editor context for non-editor windows',
+)
+assert.match(
+  editorBridge,
+  /export function subscribeActiveEditorState\(subscriber: \(\) => void\): \(\) => void[\s\S]*activeEditorStateSubscribers\.add\(subscriber\)/,
+  'editor bridge must expose a subscription hook for mirrored editor state consumers',
+)
+assert.match(
+  editorBridge,
+  /function notifyActiveEditorStateSubscribers\(\): void[\s\S]*for \(const subscriber of activeEditorStateSubscribers\)/,
+  'editor bridge must notify mirrored editor state subscribers when snapshots change',
+)
+assert.match(
   jsFilter,
   /kits\.monacoDisposables\.disposeAll\(editorDisposablesRef\.current\)[\s\S]*kits\.monacoDisposables\.createBucket\(\)/,
   'js-filter must use host SDK Monaco disposable helpers',
@@ -83,13 +104,18 @@ assert.match(
 
 assert.doesNotMatch(
   regexTester,
-  /useWorkspaceStore|workspaceStore/,
-  'regex-tester plugin wrapper must not import editor workspace internals directly',
+  /useWorkspaceStore|workspaceStore|runtimeRegistry|\.\.\/\.\.\//,
+  'regex-tester plugin must not import editor workspace internals directly',
 )
 assert.match(
   regexTester,
-  /function RegexTesterPluginPanel\(\{ panelId, host, paneId \}: PanelPropsV2<unknown>\)[\s\S]*activePaneId=\{paneId \?\? ['"]['"]\}/,
-  'regex-tester plugin wrapper must receive pane scope through PanelPropsV2',
+  /function RegexTesterPluginPanel\(\{ host, paneId \}: PanelPropsV2<unknown>\)[\s\S]*hooks\.usePaneText\(paneId \?\? ['"]['"]\) \?\? ['"]['"]/,
+  'regex-tester plugin panel must receive pane scope through PanelPropsV2 and read text through host SDK hooks',
+)
+assert.match(
+  regexTester,
+  /function evaluateRegex\(pattern: string, flags: string, paneText: string\)[\s\S]*function toMatchResult\(paneText: string, match: RegExpExecArray\)/,
+  'regex-tester plugin must own its product logic instead of importing legacy framework panels',
 )
 assert.match(
   regexTester,

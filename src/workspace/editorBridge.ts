@@ -93,6 +93,7 @@ type BridgeRequestOptions = {
 let activeEditorContextSnapshot: EditorContextSnapshot | undefined
 let activeEditorPaneSnapshot: EditorPaneSnapshot | undefined
 let activeContextListenerStarted = false
+const activeEditorStateSubscribers = new Set<() => void>()
 
 export async function getEditorContext(options: { timeoutMs?: number } = {}): Promise<EditorContextSnapshot | undefined> {
   try {
@@ -111,6 +112,14 @@ export function getActiveEditorContextSnapshot(): EditorContextSnapshot | undefi
 export function getActiveEditorPaneSnapshot(): EditorPaneSnapshot | undefined {
   ensureActiveEditorContextListener()
   return activeEditorPaneSnapshot
+}
+
+export function subscribeActiveEditorState(subscriber: () => void): () => void {
+  ensureActiveEditorContextListener()
+  activeEditorStateSubscribers.add(subscriber)
+  return () => {
+    activeEditorStateSubscribers.delete(subscriber)
+  }
 }
 
 export async function createEditorPane(input: EditorBridgeCreatePaneInput = {}): Promise<string | undefined> {
@@ -148,11 +157,13 @@ export async function cleanupEditorPluginContributions(input: EditorBridgePlugin
 
 export function registerActiveEditorContext(snapshot: EditorContextSnapshot): void {
   activeEditorContextSnapshot = snapshot
+  notifyActiveEditorStateSubscribers()
   emitActiveEditorState({ editor: snapshot })
 }
 
 export function updateActivePaneSnapshot(snapshot: EditorPaneSnapshot): void {
   activeEditorPaneSnapshot = snapshot
+  notifyActiveEditorStateSubscribers()
   emitActiveEditorState({ pane: snapshot })
 }
 
@@ -349,12 +360,30 @@ function ensureActiveEditorContextListener(): void {
   import('@tauri-apps/api/event')
     .then(({ listen }) => listen<unknown>(EDITOR_ACTIVE_CONTEXT_EVENT, (event) => {
       const payload = event.payload as { editor?: unknown; pane?: unknown }
-      if (isEditorContextSnapshot(payload.editor)) activeEditorContextSnapshot = payload.editor
-      if (isEditorPaneSnapshot(payload.pane)) activeEditorPaneSnapshot = payload.pane
+      let changed = false
+      if (isEditorContextSnapshot(payload.editor)) {
+        activeEditorContextSnapshot = payload.editor
+        changed = true
+      }
+      if (isEditorPaneSnapshot(payload.pane)) {
+        activeEditorPaneSnapshot = payload.pane
+        changed = true
+      }
+      if (changed) notifyActiveEditorStateSubscribers()
     }))
     .catch(() => {
       activeContextListenerStarted = false
     })
+}
+
+function notifyActiveEditorStateSubscribers(): void {
+  for (const subscriber of activeEditorStateSubscribers) {
+    try {
+      subscriber()
+    } catch {
+      // Keep one broken subscriber from blocking other mirrored editor state consumers.
+    }
+  }
 }
 
 function persistPendingEditorBridgeRequest(request: EditorBridgeRequest): void {
