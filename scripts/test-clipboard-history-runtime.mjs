@@ -167,6 +167,7 @@ const launcher = [
   read('src/components/launcher/useGlobalLauncherSelectionController.ts'),
   read('src/components/launcher/GlobalLauncherItems.ts'),
   read('src/components/pluginSurface/PluginSurfaceRenderer.tsx'),
+  read('src/components/launcher/GlobalLauncherHostLifecycle.ts'),
 ].join('\n')
 
 // Surface frame state

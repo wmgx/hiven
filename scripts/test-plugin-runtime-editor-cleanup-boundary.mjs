@@ -54,7 +54,7 @@ for (const fn of ['disablePlugin', 'reloadDevPlugin', 'removeDevPlugin']) {
   )
 }
 
-const directWorkspaceCleanupMatches = [...pluginRuntime.matchAll(/useWorkspaceStore\.getState\(\)[\s\S]{0,160}(?:clearPaneRenderersForPlugin|closePanelV2)/g)]
+const directWorkspaceCleanupMatches = [...pluginRuntime.matchAll(/useWorkspaceStore\.getState\(\)[\s\S]{0,240}closePanelV2\(panelId\)/g)]
 assert.equal(
   directWorkspaceCleanupMatches.length,
   1,

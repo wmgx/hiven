@@ -38,6 +38,8 @@ const files = {
     read('src/components/launcher/GlobalLauncherResults.ts'),
     read('src/components/launcher/GlobalLauncherItems.ts'),
     read('src/components/launcher/LauncherMixedList.tsx'),
+    read('src/components/launcher/GlobalLauncherSearchFrame.tsx'),
+    read('src/components/launcher/GlobalLauncherHostLifecycle.ts'),
   ].join('\n'),
   commandPalette: [
     read('src/components/CommandPalette.tsx'),

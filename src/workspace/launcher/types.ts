@@ -436,6 +436,7 @@ export function isEditorCommandBarItem(item: LauncherItem): boolean {
   return (
     item.systemKey.startsWith('host:pane:') ||
     item.systemKey.startsWith('host:editor:') ||
+    item.systemKey.startsWith('host:text:') ||
     item.systemKey === 'host:global:search-all-hiven'
   )
 }

@@ -42,7 +42,7 @@ const globalLauncherPath = 'src/launcher/hosts/GlobalLauncherHost.tsx'
 const globalLauncherFramesPath = 'src/components/launcher/GlobalLauncherFrames.tsx'
 assert.ok(fs.existsSync(globalLauncherPath), 'GlobalLauncher host should exist')
 assert.ok(fs.existsSync(globalLauncherFramesPath), 'GlobalLauncher frames should exist')
-const globalLauncher = `${read(globalLauncherPath)}\n${read(globalLauncherFramesPath)}\n${read('src/components/launcher/GlobalLauncherItems.ts')}`
+const globalLauncher = `${read(globalLauncherPath)}\n${read(globalLauncherFramesPath)}\n${read('src/components/launcher/GlobalLauncherSearchFrame.tsx')}\n${read('src/components/launcher/GlobalLauncherItems.ts')}`
 assertHas(files.i18n, /globalPinned/, 'i18n should define a localized GlobalLauncher pinned section label')
 assertHas(globalLauncher, /t\(locale,\s*['"]palette\.globalPinned['"]\)/, 'GlobalLauncher should localize the pinned section label')
 assertNotHas(globalLauncher, /t\(locale,\s*['"]palette\.globalViews['"]\)/, 'GlobalLauncher should not keep the retired workspace views section')
