@@ -233,24 +233,34 @@ async function sendEditorBridgeRequest<T extends EditorBridgeRequest['action']>(
   const timeoutMs = options.timeoutMs ?? getEditorBridgeActionTimeoutMs(action)
   let request: Extract<EditorBridgeRequest, { action: T }> | undefined
   let persisted = false
+  let responsePromise: Promise<EditorBridgeResponse> | undefined
   try {
-    if (options.openEditorFirst) await showEditorWindow()
-    if (options.openEditorFirst && isTauriRuntime()) await waitForEditorBridgeReady(timeoutMs)
     request = createEditorBridgeRequest(action, payload, timeoutMs)
+
+    const tauriEvents = isTauriRuntime()
+      ? await import('@tauri-apps/api/event')
+      : undefined
+    if (tauriEvents) {
+      responsePromise = await waitForEditorBridgeResponse(tauriEvents.listen, request.requestId, timeoutMs)
+    }
+
     if (options.persistForEditorStartup) {
       persistPendingEditorBridgeRequest(request)
       persisted = true
     }
+    if (options.openEditorFirst) await showEditorWindow()
+    if (options.openEditorFirst && tauriEvents) await waitForEditorBridgeReady(timeoutMs)
 
-    if (!isTauriRuntime()) return undefined
+    if (!tauriEvents || !responsePromise) return undefined
 
-    const { emitTo, listen } = await import('@tauri-apps/api/event')
-    const responsePromise = await waitForEditorBridgeResponse(listen, request.requestId, timeoutMs)
-    await emitTo(EDITOR_WINDOW_LABEL, EDITOR_BRIDGE_REQUEST_EVENT, request)
+    if (!persisted || isPendingEditorBridgeRequest(request.requestId)) {
+      await tauriEvents.emitTo(EDITOR_WINDOW_LABEL, EDITOR_BRIDGE_REQUEST_EVENT, request)
+    }
     const response = await responsePromise
     if (!response.ok) throw new Error(response.error ?? `Editor bridge request failed: ${request.action}`)
     return response.value
   } catch (error) {
+    responsePromise?.catch(() => undefined)
     if (persisted && request) clearPendingEditorBridgeRequest(request.requestId)
     throw error
   }
@@ -557,6 +567,11 @@ function consumePendingEditorBridgeRequests(handle: (request: EditorBridgeReques
   const pending = readPendingEditorBridgeRequests()
   localStorage.removeItem(EDITOR_BRIDGE_PENDING_REQUESTS_KEY)
   for (const request of pending) handle(request)
+}
+
+
+function isPendingEditorBridgeRequest(requestId: string): boolean {
+  return readPendingEditorBridgeRequests().some((request) => request.requestId === requestId)
 }
 
 function clearPendingEditorBridgeRequest(requestId: string): void {

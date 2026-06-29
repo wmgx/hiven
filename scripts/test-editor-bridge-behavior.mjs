@@ -21,6 +21,7 @@ assert.match(
 const editorBridgeSource = readFileSync('src/workspace/editorBridge.ts', 'utf8')
 assert.match(editorBridgeSource, /EDITOR_BRIDGE_READY_EVENT/, 'editor bridge must define an editor-ready event')
 assert.match(editorBridgeSource, /waitForEditorBridgeReady/, 'editor bridge requests must wait for editor readiness before delivery')
+assert.match(editorBridgeSource, /request = createEditorBridgeRequest[\s\S]*waitForEditorBridgeResponse[\s\S]*persistPendingEditorBridgeRequest\(request\)[\s\S]*showEditorWindow\(\)[\s\S]*waitForEditorBridgeReady/, 'startup-sensitive editor bridge requests must be queued before opening the editor window')
 assert.match(editorBridgeSource, /emitEditorBridgeReady/, 'editor bridge handlers must publish readiness after registration')
 assert.match(editorBridgeSource, /clearPendingEditorBridgeRequest\(request\.requestId\)/, 'failed delivery must clear pending requests to avoid late execution')
 assert.match(editorBridgeSource, /expiresAt:\s*createdAt\s*\+\s*Math\.max\(timeoutMs,\s*0\)/, 'editor bridge requests must carry an execution expiry')
@@ -31,6 +32,7 @@ assert.match(editorBridgeSource, /EDITOR_ACTIVE_PANE_SNAPSHOT_KEY/, 'editor brid
 assert.match(editorBridgeSource, /EDITOR_ACTIVE_SNAPSHOT_TTL_MS\s*=\s*30_000/, 'persisted active editor snapshots must expire quickly enough to avoid stale cross-window context')
 assert.match(editorBridgeSource, /createPersistedActiveSnapshotEnvelope/, 'persisted active editor snapshots must include a timestamp envelope')
 assert.match(editorBridgeSource, /isActiveSnapshotFresh/, 'stale persisted active editor snapshots must be rejected')
+assert.match(editorBridgeSource, /isPendingEditorBridgeRequest/, 'live delivery must skip startup requests already consumed from the pending queue')
 assert.match(editorBridgeSource, /clearActiveEditorSnapshots/, 'editor bridge must expose active snapshot cleanup for editor window teardown')
 assert.match(editorBridgeSource, /emitActiveEditorState\(\{ editor: null, pane: null \}\)/, 'editor bridge snapshot cleanup must broadcast null snapshots to other windows')
 
