@@ -206,11 +206,11 @@ function assertLauncherParamsAreLocalized() {
     'launcher item params should be localized, including labels and select options',
   )
 
-  const hostActions = read('src/workspace/launcher/hostActions.ts')
-  assert.match(hostActions, /host:pane:set-language/, 'host launcher actions should own pane language selection')
-  assert.match(hostActions, /labelI18n:\s*\{\s*zh:\s*['"]语言['"]\s*\}/, 'host language param should provide Chinese label text')
-  assert.match(hostActions, /labelI18n:\s*\{\s*zh:\s*['"]自动检测['"]\s*\}/, 'host language auto option should provide Chinese label text')
-  assert.match(hostActions, /labelI18n:\s*\{\s*zh:\s*['"]纯文本['"]\s*\}/, 'host language plaintext option should provide Chinese label text')
+  const hostEditorActions = read('src/workspace/launcher/hostEditorActions.ts')
+  assert.match(hostEditorActions, /host:pane:set-language/, 'editor-local host actions should own pane language selection')
+  assert.match(hostEditorActions, /labelI18n:\s*\{\s*zh:\s*['"]语言['"]\s*\}/, 'host language param should provide Chinese label text')
+  assert.match(hostEditorActions, /labelI18n:\s*\{\s*zh:\s*['"]自动检测['"]\s*\}/, 'host language auto option should provide Chinese label text')
+  assert.match(hostEditorActions, /labelI18n:\s*\{\s*zh:\s*['"]纯文本['"]\s*\}/, 'host language plaintext option should provide Chinese label text')
 }
 
 function assertLauncherSystemMessagesAreLocalized() {

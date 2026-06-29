@@ -41,7 +41,7 @@ assert.match(hostEditorActions, /systemKey:\s*['"]host:editor:format-bullets['"]
 assert.match(hostEditorActions, /systemKey:\s*['"]host:editor:quote-code-block['"][\s\S]*title:\s*['"]Quote as Code Block['"][\s\S]*surfaces:\s*\[['"]editor-command-bar['"]\][\s\S]*quoteActiveEditorTextAsCodeBlock\(\)/, 'Editor command bar must expose code-block quote as an editor-local action')
 assert.match(launcherTypes, /item\.systemKey\.startsWith\(['"]host:editor:['"]\)/, 'Editor command bar filter must keep all editor-local host actions')
 
-const paneHostItems = [...hostActions.matchAll(/systemKey:\s*['"](host:pane:[^'"]+)['"][\s\S]*?surfaces:\s*\[([^\]]+)\]/g)]
+const paneHostItems = [...`${hostActions}\n${hostEditorActions}`.matchAll(/systemKey:\s*['"](host:pane:[^'"]+)['"][\s\S]*?surfaces:\s*\[([^\]]+)\]/g)]
 const editorLocalPaneItems = new Set([
   'host:pane:close',
   'host:pane:focus-next',

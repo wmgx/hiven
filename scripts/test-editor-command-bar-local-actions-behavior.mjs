@@ -103,6 +103,7 @@ const editorActionGlobals = {
   },
   openEditorPanel: async (input) => { openedPanels.push(input) },
   applyEffects: (nextEffects) => { effects.push(...nextEffects) },
+  translate: (_locale, _namespace, key) => key,
   ...editorTextTransforms,
   runtimeRegistry: {
     getCodeEditor: () => ({

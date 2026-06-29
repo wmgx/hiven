@@ -33,7 +33,7 @@ const paneEditor = read('src/components/workspace/PaneEditor.tsx')
 const dualEditor = read('src/kits/ui/DualEditorView.tsx')
 const textDiff = read('src/plugins/textDiff/TextDiffRenderer.tsx')
 const corePlugin = readOptional('src/workspace/corePlugin.ts')
-const hostActions = read('src/workspace/launcher/hostActions.ts')
+const hostEditorActions = read('src/workspace/launcher/hostEditorActions.ts')
 
 assert(!/settings:\s*\{[\s\S]*stickyScroll:\s*boolean/.test(store), 'App settings should not expose global stickyScroll')
 assert(/stickyScroll\?:\s*boolean/.test(types), 'EditorPane should expose per-pane stickyScroll')
@@ -51,7 +51,7 @@ assert(/stickyScroll:\s*\{\s*enabled:\s*rightStickyScrollEnabled\s*\}/s.test(dua
 assert(/leftStickyScrollEnabled=\{originalPane\.stickyScroll\s*===\s*true\}/.test(textDiff), 'TextDiffRenderer should pass original pane stickyScroll')
 assert(/rightStickyScrollEnabled=\{modifiedPane\.stickyScroll\s*===\s*true\}/.test(textDiff), 'TextDiffRenderer should pass modified pane stickyScroll')
 assert(!/core\.toggle-sticky-scroll/.test(corePlugin), 'Internal core plugin should not register a sticky-scroll command')
-assert(/host:pane:toggle-sticky-scroll/.test(hostActions), 'Host launcher actions should expose sticky-scroll toggle')
-assert(/updatePaneStickyScroll\(state\.activePaneId,\s*next\)/.test(hostActions), 'Host sticky-scroll toggle should update only the active pane')
+assert(/host:pane:toggle-sticky-scroll/.test(hostEditorActions), 'Editor-local host actions should expose sticky-scroll toggle')
+assert(/updatePaneStickyScroll\(state\.activePaneId,\s*next\)/.test(hostEditorActions), 'Editor-local sticky-scroll toggle should update only the active pane')
 
 console.log('sticky scroll toggle checks passed')

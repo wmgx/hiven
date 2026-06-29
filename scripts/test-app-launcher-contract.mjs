@@ -21,6 +21,7 @@ const files = {
   registry: read('src/workspace/launcher/registry.ts'),
   hostProvider: read('src/workspace/launcher/hostProvider.ts'),
   hostActions: read('src/workspace/launcher/hostActions.ts'),
+  hostEditorActions: read('src/workspace/launcher/hostEditorActions.ts'),
   hostAppLauncher: read('src/workspace/appLauncher/hostAppLauncher.ts'),
   app: read('src/App.tsx'),
   resolveIcon: read('src/utils/resolveIcon.tsx'),
@@ -60,11 +61,11 @@ assert.match(files.hostProvider, /setHostLauncherDynamicItemsProvider\(getHostAp
 assert.match(files.hostActions, /host:pane:new/, 'pane controls must expose a host new-pane item')
 assert.match(files.hostActions, /host:pane:split-right/, 'pane controls must expose a split-right item')
 assert.match(files.hostActions, /host:pane:split-down/, 'pane controls must expose a split-down item')
-assert.match(files.hostActions, /host:pane:close/, 'pane controls must expose a close-pane item')
-assert.match(files.hostActions, /host:pane:focus-next/, 'pane controls must expose focus-next')
-assert.match(files.hostActions, /host:pane:focus-previous/, 'pane controls must expose focus-previous')
-assert.match(files.hostActions, /host:pane:toggle-sticky-scroll/, 'pane controls must expose sticky-scroll toggle')
-assert.match(files.hostActions, /host:pane:set-language/, 'pane controls must expose language selection')
+assert.match(files.hostEditorActions, /host:pane:close/, 'editor-local pane controls must expose a close-pane item')
+assert.match(files.hostEditorActions, /host:pane:focus-next/, 'editor-local pane controls must expose focus-next')
+assert.match(files.hostEditorActions, /host:pane:focus-previous/, 'editor-local pane controls must expose focus-previous')
+assert.match(files.hostEditorActions, /host:pane:toggle-sticky-scroll/, 'editor-local pane controls must expose sticky-scroll toggle')
+assert.match(files.hostEditorActions, /host:pane:set-language/, 'editor-local pane controls must expose language selection')
 assert.match(files.hostActions, /createEditorPane\(\{/, 'pane creation controls must route through the editor bridge')
 assert.doesNotMatch(files.hostActions, /useWorkspaceStore\.getState\(\)\.createPane/, 'pane creation controls must not mutate a local cross-window workspace store')
 assert.doesNotMatch(files.hostActions, /definePlugin|PluginLauncherApi|pluginRegistry/, 'pane controls must not be implemented as a plugin')
