@@ -26,7 +26,7 @@ export function subscribePluginEditorSurfaceOpen(listener: (pluginEditor: Plugin
   if (isTauriRuntime()) {
     import('@tauri-apps/api/event')
       .then(({ listen }) => listen<unknown>(PLUGIN_EDITOR_SURFACE_OPEN_EVENT, (event) => {
-        if (isPluginEditorState(event.payload)) listener(event.payload)
+        if (isPluginEditorState(event.payload)) dispatchPluginEditorOpen(event.payload)
       }))
       .then((unlisten) => {
         if (disposed) {

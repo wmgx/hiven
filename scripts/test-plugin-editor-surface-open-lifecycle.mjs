@@ -35,6 +35,13 @@ assert.match(
   /subscribePluginEditorSurfaceOpen[\s\S]*drainPersistedPluginEditorOpenRequests\(\)[\s\S]*drainPendingPluginEditorOpenRequests\(\)/,
   'plugin editor subscribers must drain persisted requests before in-memory requests',
 )
+
+assert.match(
+  bridge,
+  /listen<unknown>\(PLUGIN_EDITOR_SURFACE_OPEN_EVENT[\s\S]*isPluginEditorState\(event\.payload\)[\s\S]*dispatchPluginEditorOpen\(event\.payload\)/,
+  'Tauri plugin editor open events must use the same dispatch path so persistent pending entries are cleared',
+)
+
 assert.match(
   bridge,
   /function dispatchPluginEditorOpen[\s\S]*if \(listeners\.size === 0\)[\s\S]*pendingPluginEditorOpenRequests\.push\(pluginEditor\)[\s\S]*removePendingPluginEditorOpen\(pluginEditor\)[\s\S]*for \(const listener of listeners\)/,
@@ -58,8 +65,8 @@ assert.match(
 )
 assert.match(
   actions,
-  /kind === ['"]plugin-editor['"][\s\S]*showLauncherWindow\(\)[\s\S]*openLauncherHostSurface\(['"]plugins['"]\)[\s\S]*requestOpenPluginEditorSurface\(/,
-  'focusing a plugin-editor surface must reopen the launcher-hosted plugins surface and request the editor sub-surface',
+  /kind === ['"]plugin-editor['"][\s\S]*requestOpenLauncherHostSurface\(['"]plugins['"]\)[\s\S]*requestOpenPluginEditorSurface\(/,
+  'focusing a plugin-editor surface must bridge to the launcher-hosted plugins surface and request the editor sub-surface',
 )
 
 console.log('plugin editor surface open lifecycle checks passed')
