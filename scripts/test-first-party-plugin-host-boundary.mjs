@@ -6,9 +6,12 @@ import { readFileSync } from 'node:fs'
 const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
 const refactorSuite = readFileSync('scripts/test-refactor-suite.mjs', 'utf8')
 const pluginTypes = readFileSync('src/workspace/pluginTypes.ts', 'utf8')
+const pluginHostSdk = readFileSync('src/pluginHostSdk.ts', 'utf8')
 const panelHost = readFileSync('src/components/workspace/PanelHostV2.tsx', 'utf8')
 const paneBottomPanels = readFileSync('src/components/workspace/PaneBottomPanels.tsx', 'utf8')
 const jsFilter = readFileSync('src/plugins/jsFilter/index.tsx', 'utf8')
+const regexTester = readFileSync('src/plugins/regex-tester/index.tsx', 'utf8')
+const architectureCheck = readFileSync('scripts/check-architecture.mjs', 'utf8')
 
 assert.equal(
   packageJson.scripts?.['test:first-party-plugin-host-boundary'],
@@ -36,9 +39,21 @@ assert.match(
   /paneId=\{instance\.scope\?\.type === ['"]pane['"] \? instance\.scope\.paneId : undefined\}/,
   'pane-bottom panel host must pass pane-scoped panel ids through PanelPropsV2',
 )
+
+assert.match(
+  pluginHostSdk,
+  /monacoDisposables:[\s\S]*createBucket: typeof createMonacoDisposableBucket[\s\S]*disposeAll: typeof disposeAllMonacoDisposables/,
+  'plugin host SDK must expose Monaco disposable helpers instead of requiring first-party plugins to deep-import utils',
+)
+assert.match(
+  jsFilter,
+  /kits\.monacoDisposables\.disposeAll\(editorDisposablesRef\.current\)[\s\S]*kits\.monacoDisposables\.createBucket\(\)/,
+  'js-filter must use host SDK Monaco disposable helpers',
+)
+
 assert.doesNotMatch(
   jsFilter,
-  /useWorkspaceStore|workspaceStore|runtimeRegistry/,
+  /useWorkspaceStore|workspaceStore|runtimeRegistry|\.\.\/\.\.\//,
   'js-filter plugin must not import editor workspace internals directly',
 )
 assert.match(
@@ -55,6 +70,44 @@ assert.match(
   jsFilter,
   /run\(ctx\)[\s\S]*const paneId = \(ctx\.inputs\.input as PaneInput\)\.paneId[\s\S]*type: ['"]panel\.openV2['"]/,
   'js-filter command fallback must open its pane-scoped panel from resolved plugin inputs without reading workspace state',
+)
+
+
+assert.doesNotMatch(
+  regexTester,
+  /useWorkspaceStore|workspaceStore/,
+  'regex-tester plugin wrapper must not import editor workspace internals directly',
+)
+assert.match(
+  regexTester,
+  /function RegexTesterPluginPanel\(\{ panelId, host, paneId \}: PanelPropsV2<unknown>\)[\s\S]*activePaneId=\{paneId \?\? ['"]['"]\}/,
+  'regex-tester plugin wrapper must receive pane scope through PanelPropsV2',
+)
+assert.match(
+  regexTester,
+  /execute\(ctx\)[\s\S]*ctx\.api\.getPaneSnapshot\(\)\.activePaneId[\s\S]*placement: ['"]pane-bottom['"][\s\S]*scope: \{ type: ['"]pane['"] as const, paneId:/,
+  'regex-tester launcher item must open a pane-scoped panel through launcher API context',
+)
+
+
+assert.match(
+  regexTester,
+  /inputs: \[\{ key: ['"]input['"], label: ['"]Input['"], kind: ['"]pane['"] as const, required: true \}\][\s\S]*run\(ctx\)[\s\S]*const paneId = \(ctx\.inputs\.input as PaneInput\)\.paneId[\s\S]*scope: \{ type: ['"]pane['"] as const, paneId \}/,
+  'regex-tester command fallback must resolve pane scope from plugin inputs instead of launcher-only APIs',
+)
+
+
+
+assert.match(
+  architectureCheck,
+  /checkPluginCrossImports[\s\S]*only block plugin→plugin escapes here[\s\S]*isWithin\(resolved, pluginsDir\)/,
+  'plugin cross-import architecture check must not confuse host helper imports with plugin-to-plugin imports',
+)
+
+assert.doesNotMatch(
+  architectureCheck,
+  /legacyAllowList = new Set\(\[[^\]]*['"]jsFilter['"]|legacyAllowList = new Set\(\[[^\]]*['"]regex-tester['"]/,
+  'js-filter and regex-tester must not remain in plugin host deep-import architecture allowlists',
 )
 
 console.log('first-party plugin host boundary checks passed')

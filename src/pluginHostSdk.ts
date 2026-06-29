@@ -6,6 +6,7 @@ import { makePluginT, type PluginT } from './i18n/pluginI18nRegistry'
 import type { Locale } from './i18n'
 import { DualEditorView } from './kits/ui/DualEditorView'
 import { computeTextLineDiff } from './kits/diff/lineDiff'
+import { createMonacoDisposableBucket, disposeAllMonacoDisposables } from './utils/monacoDisposables'
 import {
   buildDiffTree,
   buildJsonDiffViewModel,
@@ -13,6 +14,7 @@ import {
   parseJson,
 } from './kits/diff/jsonSemanticDiff'
 import type { PaneId } from './workspace/types'
+import type { MonacoDisposable } from './utils/monacoDisposables'
 import {
   createPluginHostCoreSdk,
   type PluginHostEffects,
@@ -30,6 +32,10 @@ type HostSettings = ReturnType<typeof useAppStore.getState>['settings']
 /** Reusable rendering kits exposed to plugins (replaces relative `../../kits/*` imports). */
 export type PluginHostKits = {
   DualEditorView: typeof DualEditorView
+  monacoDisposables: {
+    createBucket: typeof createMonacoDisposableBucket
+    disposeAll: typeof disposeAllMonacoDisposables
+  }
   diff: {
     computeTextLineDiff: typeof computeTextLineDiff
     buildDiffTree: typeof buildDiffTree
@@ -47,6 +53,8 @@ export type PluginHostHooks = {
   /** Namespaced translate bound to the current locale (reactive). */
   useT: (pluginId: string) => PluginT
 }
+
+export type { MonacoDisposable }
 
 export type PluginHostI18n = {
   /** Build a namespaced translate function for a given locale (non-reactive). */
@@ -112,6 +120,10 @@ export function getPluginHostSdk(): PluginHostSdk {
 function createPluginHostKits(): PluginHostKits {
   return {
     DualEditorView,
+    monacoDisposables: {
+      createBucket: createMonacoDisposableBucket,
+      disposeAll: disposeAllMonacoDisposables,
+    },
     diff: {
       computeTextLineDiff,
       buildDiffTree,

@@ -8,8 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Editor from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
-import { definePlugin, getPluginHostSdk, type PanelPropsV2, type PaneInput } from '@hiven/plugin'
-import { createMonacoDisposableBucket, disposeAllMonacoDisposables, type MonacoDisposable } from '../../utils/monacoDisposables'
+import { definePlugin, getPluginHostSdk, type PanelPropsV2, type PaneInput, type MonacoDisposable } from '@hiven/plugin'
 
 const PLUGIN_ID = 'js-filter'
 const PANEL_ID = 'js-filter.panel'
@@ -199,7 +198,7 @@ function toMonacoSuggestions(
 }
 
 function JsFilterPanel({ host, paneId }: PanelPropsV2) {
-  const { hooks, effects } = getPluginHostSdk()
+  const { hooks, effects, kits } = getPluginHostSdk()
   const t = hooks.useT(PLUGIN_ID)
   const settings = hooks.useSettings()
   const [expression, setExpression] = useState('')
@@ -219,7 +218,7 @@ function JsFilterPanel({ host, paneId }: PanelPropsV2) {
 
   useEffect(() => {
     return () => {
-      disposeAllMonacoDisposables(editorDisposablesRef.current)
+      kits.monacoDisposables.disposeAll(editorDisposablesRef.current)
       editorRef.current = null
       completionDisposableRef.current?.dispose()
       completionDisposableRef.current = null
@@ -291,8 +290,8 @@ function JsFilterPanel({ host, paneId }: PanelPropsV2) {
           path="js-filter://expression.js"
           onChange={(value) => setExpression(value ?? '')}
           onMount={(editor) => {
-            disposeAllMonacoDisposables(editorDisposablesRef.current)
-            const disposables = createMonacoDisposableBucket()
+            kits.monacoDisposables.disposeAll(editorDisposablesRef.current)
+            const disposables = kits.monacoDisposables.createBucket()
             editorDisposablesRef.current = [disposables]
             editorRef.current = editor
             completionDisposableRef.current?.dispose()
