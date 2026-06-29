@@ -3,6 +3,15 @@ import { translate } from '../../i18n'
 import { createEditorPane, openEditorPanel } from '../editorBridge'
 import { applyEffects } from '../effectRunner'
 import { showLauncherWindow } from '../windowManager/launcherWindow'
+import {
+  compressTextToThreeSentences,
+  convertJsonTextToYaml,
+  extractJsonFieldPaths,
+  formatTextAsBullets,
+  minifyJsonText,
+  quoteTextAsCodeBlock,
+  rewriteTextPolitely,
+} from '../../workflow/editorTextTransforms'
 import type { LauncherItem, LauncherParamOption, TextRange } from './types'
 import { runtimeRegistry } from '../runtimeRegistry'
 import { PLUGIN_SURFACE_PANEL_ID } from '../../components/pluginSurface/PluginSurfacePanel'
@@ -123,130 +132,58 @@ function replaceEditorTextTarget(target: { text: string; paneId: string; range?:
 function rewriteActiveEditorTextPolitely(): boolean {
   const target = getActiveEditorTextTarget()
   if (!target || !target.text.trim()) return false
-  const normalized = normalizeEditorActionText(target.text)
-  const rewritten = [
-    'Thanks for the context.',
-    '',
-    normalized,
-    '',
-    'I will follow up after checking the details.',
-  ].join('\n')
-  replaceEditorTextTarget(target, rewritten)
+  replaceEditorTextTarget(target, rewriteTextPolitely(target.text))
   return true
 }
 
 function compressActiveEditorTextToThreeSentences(): boolean {
   const target = getActiveEditorTextTarget()
   if (!target || !target.text.trim()) return false
-  const sentences = normalizeEditorActionText(target.text)
-    .split(/(?<=[.!?。！？])\s+|[\n]+/)
-    .map((part) => part.trim())
-    .filter(Boolean)
-  const compressed = sentences.slice(0, 3).join(' ')
-  replaceEditorTextTarget(target, compressed || normalizeEditorActionText(target.text))
+  replaceEditorTextTarget(target, compressTextToThreeSentences(target.text))
   return true
 }
 
 function formatActiveEditorTextAsBullets(): boolean {
   const target = getActiveEditorTextTarget()
   if (!target || !target.text.trim()) return false
-  const items = target.text
-    .split(/\r?\n|[。；;]/)
-    .map((part) => part.trim())
-    .filter(Boolean)
-  if (items.length === 0) return false
-  replaceEditorTextTarget(target, items.map((item) => `- ${item}`).join('\n'))
+  const formatted = formatTextAsBullets(target.text)
+  if (!formatted) return false
+  replaceEditorTextTarget(target, formatted)
   return true
 }
 
 function quoteActiveEditorTextAsCodeBlock(): boolean {
   const target = getActiveEditorTextTarget()
   if (!target || !target.text.trim()) return false
-  replaceEditorTextTarget(target, ['```', target.text.trim(), '```'].join('\n'))
+  replaceEditorTextTarget(target, quoteTextAsCodeBlock(target.text))
   return true
-}
-
-function normalizeEditorActionText(text: string): string {
-  return text.replace(/\s+/g, ' ').trim()
 }
 
 function minifyActiveEditorJson(): boolean {
   const target = getActiveEditorTextTarget()
   if (!target || !target.text.trim()) return false
-  try {
-    const parsed = JSON.parse(target.text)
-    replaceEditorTextTarget(target, JSON.stringify(parsed))
-    return true
-  } catch {
-    return false
-  }
+  const minified = minifyJsonText(target.text)
+  if (!minified) return false
+  replaceEditorTextTarget(target, minified)
+  return true
 }
 
 function convertActiveEditorJsonToYaml(): boolean {
   const target = getActiveEditorTextTarget()
   if (!target || !target.text.trim()) return false
-  try {
-    const parsed = JSON.parse(target.text)
-    replaceEditorTextTarget(target, jsonToYaml(parsed))
-    return true
-  } catch {
-    return false
-  }
+  const yaml = convertJsonTextToYaml(target.text)
+  if (!yaml) return false
+  replaceEditorTextTarget(target, yaml)
+  return true
 }
 
 function extractActiveEditorJsonFields(): boolean {
   const target = getActiveEditorTextTarget()
   if (!target || !target.text.trim()) return false
-  try {
-    const parsed = JSON.parse(target.text)
-    const fields = collectJsonFields(parsed)
-    replaceEditorTextTarget(target, fields.join('\n'))
-    return true
-  } catch {
-    return false
-  }
-}
-
-function jsonToYaml(value: unknown, indent = 0): string {
-  const pad = '  '.repeat(indent)
-  if (Array.isArray(value)) {
-    if (value.length === 0) return '[]'
-    return value.map((item) => `${pad}- ${formatYamlValue(item, indent + 1)}`).join('\n')
-  }
-  if (value && typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>)
-    if (entries.length === 0) return '{}'
-    return entries.map(([key, item]) => {
-      if (item && typeof item === 'object') return `${pad}${key}:\n${jsonToYaml(item, indent + 1)}`
-      return `${pad}${key}: ${formatYamlScalar(item)}`
-    }).join('\n')
-  }
-  return `${pad}${formatYamlScalar(value)}`
-}
-
-function formatYamlValue(value: unknown, indent: number): string {
-  if (value && typeof value === 'object') return `\n${jsonToYaml(value, indent)}`
-  return formatYamlScalar(value)
-}
-
-function formatYamlScalar(value: unknown): string {
-  if (typeof value === 'string') return JSON.stringify(value)
-  if (value === null) return 'null'
-  return String(value)
-}
-
-function collectJsonFields(value: unknown, prefix = ''): string[] {
-  if (Array.isArray(value)) {
-    return value.flatMap((item, index) => collectJsonFields(item, `${prefix}[${index}]`))
-  }
-  if (!value || typeof value !== 'object') return prefix ? [prefix] : []
-  const keys = Object.keys(value as Record<string, unknown>)
-  if (keys.length === 0 && prefix) return [prefix]
-  return keys.flatMap((key) => {
-    const path = prefix ? `${prefix}.${key}` : key
-    const child = (value as Record<string, unknown>)[key]
-    return child && typeof child === 'object' ? collectJsonFields(child, path) : [path]
-  })
+  const fields = extractJsonFieldPaths(target.text)
+  if (!fields) return false
+  replaceEditorTextTarget(target, fields.join('\n'))
+  return true
 }
 
 async function performSystemPowerAction(action: SystemPowerAction): Promise<{ ok: boolean; message?: string }> {

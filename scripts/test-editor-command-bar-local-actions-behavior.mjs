@@ -74,6 +74,29 @@ function latestReplaceText() {
   return effect.text
 }
 
+function loadTsModule(path, globals = {}) {
+  let src = readFileSync(path, 'utf8')
+  src = src.replace(/import\s+type\s*\{[\s\S]*?\}\s*from\s*'[^']*'\s*;?\s*\n?/g, '')
+  src = src.replace(/import\s*\{[\s\S]*?\}\s*from\s*'[^']*'\s*;?\s*\n?/g, '')
+  const out = ts.transpileModule(src, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2023,
+      esModuleInterop: true,
+    },
+  }).outputText
+  const moduleExports = {}
+  const sandbox = {
+    exports: moduleExports,
+    module: { exports: moduleExports },
+    console,
+    ...globals,
+  }
+  vm.runInNewContext(out, sandbox, { filename: path })
+  return sandbox.module.exports
+}
+
+const editorTextTransforms = loadTsModule('src/workflow/editorTextTransforms.ts')
 let src = readFileSync('src/workspace/launcher/hostActions.ts', 'utf8')
 src = src.replace(/import\s+type\s*\{[\s\S]*?\}\s*from\s*'[^']*'\s*;?\s*\n?/g, '')
 src = src.replace(/import\s*\{[\s\S]*?\}\s*from\s*'[^']*'\s*;?\s*\n?/g, '')
@@ -97,6 +120,7 @@ const sandbox = {
   openEditorPanel: async (input) => { openedPanels.push(input) },
   applyEffects: (nextEffects) => { effects.push(...nextEffects) },
   showLauncherWindow: async () => {},
+  ...editorTextTransforms,
   runtimeRegistry: {
     getCodeEditor: () => ({
       getSelection: () => selection,

@@ -15,6 +15,15 @@ export type {
 export type { ContextRequirement, WorkAction, WorkActionProvider, WorkContext } from './workAction'
 export type { ActionResult, OutputTarget } from './outputTarget'
 export { registerDefaultWorkflowProviders, tryFormatJsonClipboardText, draftPoliteReply, extractTodoDraft } from './defaultWorkflowProviders'
+export {
+  compressTextToThreeSentences,
+  convertJsonTextToYaml,
+  extractJsonFieldPaths,
+  formatTextAsBullets,
+  minifyJsonText,
+  quoteTextAsCodeBlock,
+  rewriteTextPolitely,
+} from './editorTextTransforms'
 export { getWorkflowObjectLauncherItems } from './workflowLauncherAdapter'
 export { createDefaultOutputRouterContext, routeTextOutput } from './outputRouter'
 export {

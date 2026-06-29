@@ -10,6 +10,7 @@ const read = (path) => readFileSync(join(root, path), 'utf8')
 const files = {
   packageJson: read('package.json'),
   defaultWorkflowProviders: read('src/workflow/defaultWorkflowProviders.ts'),
+  editorTextTransforms: read('src/workflow/editorTextTransforms.ts'),
   workflowIndex: read('src/workflow/index.ts'),
   hostActions: read('src/workspace/launcher/hostActions.ts'),
 }
@@ -52,23 +53,23 @@ assert.match(
 )
 assert.match(
   files.workflowIndex,
-  /tryFormatJsonClipboardText/,
-  'workflow index must export JSON clipboard formatting for focused verification and future providers',
+  /tryFormatJsonClipboardText[\s\S]*minifyJsonText[\s\S]*convertJsonTextToYaml[\s\S]*extractJsonFieldPaths/,
+  'workflow index must export JSON clipboard and editor JSON transforms for focused verification and future providers',
 )
 assert.match(
-  files.hostActions,
-  /function\s+minifyActiveEditorJson\(\)[\s\S]*JSON\.stringify\(parsed\)/,
-  'Editor command bar must provide a local JSON minify helper',
+  files.editorTextTransforms,
+  /export\s+function\s+minifyJsonText\(text:\s*string\):\s*string\s*\|\s*null[\s\S]*JSON\.stringify\(JSON\.parse\(text\)\)/,
+  'Editor JSON minify must live in the workflow transform layer',
 )
 assert.match(
-  files.hostActions,
-  /function\s+convertActiveEditorJsonToYaml\(\)[\s\S]*jsonToYaml/,
-  'Editor command bar must provide a local JSON to YAML helper',
+  files.editorTextTransforms,
+  /export\s+function\s+convertJsonTextToYaml\(text:\s*string\):\s*string\s*\|\s*null[\s\S]*jsonToYaml\(JSON\.parse\(text\)\)/,
+  'Editor JSON to YAML must live in the workflow transform layer',
 )
 assert.match(
-  files.hostActions,
-  /function\s+extractActiveEditorJsonFields\(\)[\s\S]*Object\.keys/,
-  'Editor command bar must provide a local JSON field extraction helper',
+  files.editorTextTransforms,
+  /export\s+function\s+extractJsonFieldPaths\(text:\s*string\):\s*string\[\]\s*\|\s*null[\s\S]*collectJsonFields\(JSON\.parse\(text\)\)/,
+  'Editor JSON field extraction must live in the workflow transform layer',
 )
 for (const [systemKey, title] of [
   ['host:editor:json-minify', 'Compress JSON to Single Line'],
