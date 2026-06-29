@@ -44,3 +44,18 @@ export {
   type ClipboardObjectBlockState,
   useClipboardObjectBlock,
 } from './useClipboardObjectBlock'
+
+export {
+  type ActionExecutionContext,
+  type ActionExecutionResult,
+  type ActionExecutionHandlers,
+  executeRecommendedAction,
+  getOutputTargetLabel,
+  getActionOutputTargets,
+  OUTPUT_TARGET_LABELS,
+} from './actionExecutor'
+
+export {
+  type EditorObjectBlockState,
+  useEditorObjectBlock,
+} from './useEditorObjectBlock'

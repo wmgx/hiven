@@ -1,4 +1,4 @@
-import type { RefObject } from 'react'
+import { useState, type RefObject } from 'react'
 import { Search } from 'lucide-react'
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
@@ -8,7 +8,8 @@ import type { ClipboardObjectBlockState } from '../../launcher/clipboard/useClip
 import { ObjectBlockToken } from './ObjectBlockToken'
 import { RecentClipboardHint } from './RecentClipboardHint'
 import { RecommendedActionRow } from './RecommendedActionRow'
-import { recommendActionsForBlock, type RecommendedAction } from '../../launcher/clipboard/actionRecommendation'
+import { OutputTargetExpansion } from './OutputTargetExpansion'
+import { recommendActionsForBlock, type RecommendedAction, type RecommendedOutputTarget } from '../../launcher/clipboard/actionRecommendation'
 
 export function GlobalLauncherSearchFrame({
   inputRef,
@@ -26,6 +27,7 @@ export function GlobalLauncherSearchFrame({
   onSelectItem,
   onHoverIndex,
   onMouseMove,
+  onExecuteAction,
 }: {
   inputRef: RefObject<HTMLInputElement | null>
   query: string
@@ -42,11 +44,14 @@ export function GlobalLauncherSearchFrame({
   onSelectItem: (item: LauncherMixedItem) => void
   onHoverIndex: (index: number) => void
   onMouseMove: () => void
+  onExecuteAction?: (action: RecommendedAction, target: RecommendedOutputTarget) => void
 }) {
   const block = clipboardBlock?.block ?? null
   const hint = clipboardBlock?.hint ?? null
   const resolvedPlaceholder = block ? t(locale, 'palette.objectActionPlaceholder') : placeholder
   const recommendedActions: RecommendedAction[] = block ? recommendActionsForBlock(block) : []
+  const [expandedAction, setExpandedAction] = useState<RecommendedAction | null>(null)
+  const [targetIndex, setTargetIndex] = useState(0)
 
   return (
     <>
@@ -79,15 +84,25 @@ export function GlobalLauncherSearchFrame({
       <div className="global-launcher-body l-list" onMouseMove={onMouseMove}>
         {block && recommendedActions.length > 0 && !query ? (
           <div className="recommended-actions-list" data-testid="recommended-actions-list">
-            {recommendedActions.map((action, index) => (
-              <RecommendedActionRow
-                key={action.id}
-                action={action}
-                selected={index === 0}
-                onSelect={() => {}}
-                onHover={() => {}}
+            {expandedAction ? (
+              <OutputTargetExpansion
+                action={expandedAction}
+                selectedIndex={targetIndex}
+                onSelect={(target) => { onExecuteAction?.(expandedAction, target); setExpandedAction(null) }}
+                onHover={setTargetIndex}
+                onBack={() => setExpandedAction(null)}
               />
-            ))}
+            ) : (
+              recommendedActions.map((action, index) => (
+                <RecommendedActionRow
+                  key={action.id}
+                  action={action}
+                  selected={index === 0}
+                  onSelect={() => onExecuteAction?.(action, action.defaultOutput)}
+                  onHover={() => {}}
+                />
+              ))
+            )}
           </div>
         ) : (
           <LauncherMixedList

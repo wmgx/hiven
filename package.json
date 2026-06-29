@@ -125,7 +125,8 @@
     "test:clipboard-object-block-ui": "node scripts/test-clipboard-object-block-ui.mjs",
     "test:clipboard-object-block-integration": "node scripts/test-clipboard-object-block-integration.mjs",
     "test:editor-object-block": "node scripts/test-editor-object-block.mjs",
-    "test:clipboard-direction-adjustment": "node scripts/test-clipboard-direction-adjustment.mjs"
+    "test:clipboard-direction-adjustment": "node scripts/test-clipboard-direction-adjustment.mjs",
+    "test:output-target-expansion": "node scripts/test-output-target-expansion.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
