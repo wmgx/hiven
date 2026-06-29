@@ -60,6 +60,16 @@ check('Store no longer keeps editor document or runtime instance state', () => {
     /\bmigrateLegacyEditorText\b|legacy editorText/,
     'Workspace store should not keep the retired app-store editorText migration path',
   )
+  assert.match(
+    read('src/workspace/workspaceStore.ts'),
+    /createWorkspaceSessionStorage[\s\S]*isEditorWindowWorkspaceSession\(\)[\s\S]*window\.sessionStorage[\s\S]*workspaceRuntimeStorage/,
+    'Workspace persistence must be editor-window session scoped and use runtime memory outside editor windows',
+  )
+  assert.doesNotMatch(
+    read('src/workspace/workspaceStore.ts'),
+    /isEditorWindowWorkspaceSession\(\)\s*\?\s*window\.sessionStorage\s*:\s*window\.localStorage/,
+    'Launcher/background runtimes must not persist a shadow editor workspace in localStorage',
+  )
 })
 
 check('App does not register Cmd/Ctrl+K for the in-app command palette', () => {

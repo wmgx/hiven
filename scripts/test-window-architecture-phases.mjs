@@ -307,6 +307,16 @@ assert.doesNotMatch(
   /\beditorText\b|\bsetEditorText\b|\beditorInstance\b|\bsetEditorInstance\b/,
   'App store must not mirror editor document text or Monaco runtime instances across windows',
 )
+assert.match(
+  files.workspaceStore,
+  /createWorkspaceSessionStorage[\s\S]*isEditorWindowWorkspaceSession\(\)[\s\S]*window\.sessionStorage[\s\S]*workspaceRuntimeStorage/,
+  'workspace store persistence must be editor-window session scoped and memory-only outside editor windows',
+)
+assert.doesNotMatch(
+  files.workspaceStore,
+  /isEditorWindowWorkspaceSession\(\)\s*\?\s*window\.sessionStorage\s*:\s*window\.localStorage/,
+  'launcher/background runtimes must not persist a shadow editor workspace in localStorage',
+)
 assert.match(files.globalLauncherHost, /launcherHostSurfaceTarget/, 'GlobalLauncherHost must read launcher-hosted surface target')
 assert.match(files.globalLauncherFrames, /GlobalLauncherSystemSurfaceFrame/, 'GlobalLauncherFrameSwitch must render app surfaces through a frame')
 assert.match(files.globalLauncherSystemSurfaceFrame, /SettingsSurface/, 'GlobalLauncher system frame must render Settings as a launcher-hosted surface')

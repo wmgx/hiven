@@ -22,6 +22,7 @@ import type {
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const DEFAULT_PANE_ID = 'pane-main'
+const workspaceRuntimeStorage = new Map<string, string>()
 
 function isEditorWindowWorkspaceSession(): boolean {
   try {
@@ -31,8 +32,19 @@ function isEditorWindowWorkspaceSession(): boolean {
   }
 }
 
-if (!isEditorWindowWorkspaceSession()) {
-  migrateLocalStorageKey('fluxtext-workspace', 'hiven-workspace')
+function createWorkspaceSessionStorage(): Storage {
+  if (isEditorWindowWorkspaceSession()) {
+    migrateLocalStorageKey('fluxtext-workspace', 'hiven-workspace')
+    return window.sessionStorage
+  }
+  return {
+    getItem: (key) => workspaceRuntimeStorage.get(key) ?? null,
+    setItem: (key, value) => { workspaceRuntimeStorage.set(key, value) },
+    removeItem: (key) => { workspaceRuntimeStorage.delete(key) },
+    clear: () => { workspaceRuntimeStorage.clear() },
+    key: (index) => Array.from(workspaceRuntimeStorage.keys())[index] ?? null,
+    get length() { return workspaceRuntimeStorage.size },
+  } as Storage
 }
 
 function generatePaneId(): PaneId {
@@ -522,9 +534,7 @@ export const useWorkspaceStore = create<WorkspaceSlice>()(persist(
   }),
   {
     name: 'hiven-workspace',
-    storage: createJSONStorage(() => (
-      isEditorWindowWorkspaceSession() ? window.sessionStorage : window.localStorage
-    )),
+    storage: createJSONStorage(createWorkspaceSessionStorage),
     partialize: (state) => ({
       panes: Object.fromEntries(
         Object.entries(state.panes).map(([id, pane]) => [
