@@ -52,6 +52,10 @@ export function upsertSurfaceInstance(input: Omit<SurfaceInstance, 'lastActiveAt
     ...input,
     lastActiveAt: input.lastActiveAt ?? Date.now(),
   }
+  if (!isSurfaceInstance(surface)) {
+    console.warn('[hiven] Ignoring invalid surface registry upsert:', input)
+    return
+  }
   surfaces.set(input.id, surface)
   emit()
   persistSurfaceRegistryMutation({ sourceId: registrySourceId, type: 'upsert', surface })
@@ -60,6 +64,10 @@ export function upsertSurfaceInstance(input: Omit<SurfaceInstance, 'lastActiveAt
 
 export function markSurfaceInstanceState(id: string, state: SurfaceInstanceState): void {
   ensureSurfaceRegistrySync()
+  if (!isSurfaceInstanceState(state)) {
+    console.warn('[hiven] Ignoring invalid surface registry state:', state)
+    return
+  }
   const previous = surfaces.get(id)
   if (!previous) return
   const lastActiveAt = Date.now()

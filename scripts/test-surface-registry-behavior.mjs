@@ -26,6 +26,18 @@ assert.match(
 )
 
 const SURFACE_REGISTRY_EVENT = 'hiven://surface-registry-sync'
+
+assert.match(
+  surfaceRegistrySource,
+  /upsertSurfaceInstance[\s\S]*if \(!isSurfaceInstance\(surface\)\)[\s\S]*Ignoring invalid surface registry upsert[\s\S]*return[\s\S]*surfaces\.set/,
+  'frontend surface upsert must validate records before mutating the local mirror',
+)
+assert.match(
+  surfaceRegistrySource,
+  /markSurfaceInstanceState[\s\S]*if \(!isSurfaceInstanceState\(state\)\)[\s\S]*Ignoring invalid surface registry state[\s\S]*return[\s\S]*surfaces\.set/,
+  'frontend surface state updates must validate state before mutating the local mirror',
+)
+
 assert.match(surfaceRegistrySource, /SURFACE_INSTANCE_KINDS/, 'frontend surface registry must validate surface kind values')
 assert.match(surfaceRegistrySource, /SURFACE_INSTANCE_STATES/, 'frontend surface registry must validate surface state values')
 assert.match(surfaceRegistrySource, /isSurfaceInstanceKind\(surface\.kind\)[\s\S]*isSurfaceInstanceState\(surface\.state\)/, 'frontend surface registry must reject invalid snapshot and mutation surface records')
