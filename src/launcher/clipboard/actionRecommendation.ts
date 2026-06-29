@@ -7,6 +7,7 @@
  */
 
 import type { LauncherObjectBlock, ObjectBlockKind } from './objectBlock'
+import { discoverActionsForBlock, type DiscoveredPluginAction } from './pluginActionManifest'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -220,4 +221,33 @@ export function getSearchOnlyActions(): RecommendedAction[] {
       defaultOutput: 'open-plugin-surface',
     },
   ]
+}
+
+
+// ─── Merged recommendation (static + plugin manifest) ─────────────────────────
+
+export function recommendActionsWithPlugins(block: LauncherObjectBlock): RecommendedAction[] {
+  const staticActions = recommendActionsForBlock(block)
+
+  const discovered = discoverActionsForBlock({
+    kind: block.kind,
+    source: block.source as 'clipboard' | 'editor-selection' | 'editor-document',
+    textLength: block.preview?.length ?? 0,
+    isSecret: block.secretMasked ?? false,
+  })
+
+  // Convert discovered plugin actions to RecommendedAction format
+  const pluginActions: RecommendedAction[] = discovered
+    .filter((d) => !staticActions.some((s) => s.id === d.id))
+    .map((d): RecommendedAction => ({
+      id: d.id,
+      title: d.title,
+      titleZh: d.titleZh,
+      icon: d.icon,
+      pluginId: d.pluginId,
+      defaultOutput: d.defaultOutput,
+      alternativeOutputs: d.outputTargets.filter((t) => t !== d.defaultOutput),
+    }))
+
+  return [...staticActions, ...pluginActions]
 }

@@ -59,3 +59,19 @@ export {
   type EditorObjectBlockState,
   useEditorObjectBlock,
 } from './useEditorObjectBlock'
+
+export {
+  type PluginActionAccepts,
+  type PluginActionPresentation,
+  type PluginActionManifestEntry,
+  type PluginActionManifest,
+  type DiscoveredPluginAction,
+  registerPluginActionManifest,
+  unregisterPluginActionManifest,
+  getPluginActionManifest,
+  getAllPluginActionManifests,
+  clearPluginActionManifests,
+  discoverActionsForBlock,
+} from './pluginActionManifest'
+
+export { recommendActionsWithPlugins } from './actionRecommendation'
