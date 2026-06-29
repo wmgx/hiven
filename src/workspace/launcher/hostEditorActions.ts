@@ -42,6 +42,20 @@ const EDITOR_LANGUAGE_VALUES = new Set(
     .filter((value) => value !== 'auto'),
 )
 
+const EDITOR_WINDOW_REQUIRED_MESSAGE = 'Editor command actions can only run in the editor window'
+
+function isEditorWindowRuntime(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get('window') === 'editor'
+  } catch {
+    return false
+  }
+}
+
+function guardEditorWindowRuntime(): { ok: false; message: string } | undefined {
+  return isEditorWindowRuntime() ? undefined : { ok: false, message: EDITOR_WINDOW_REQUIRED_MESSAGE }
+}
+
 function focusRelativePane(delta: 1 | -1): void {
   const state = useWorkspaceStore.getState()
   const index = state.paneOrder.indexOf(state.activePaneId)
@@ -201,6 +215,8 @@ export function getHostEditorActionItems(): LauncherItem[] {
       requiredCapabilities: ['pane-actions'],
       pinnable: false,
       execute: async () => {
+        const guard = guardEditorWindowRuntime()
+        if (guard) return guard
         useWorkspaceStore.getState().closeActiveSurfaceOrPane()
         return { ok: true }
       },
@@ -219,6 +235,8 @@ export function getHostEditorActionItems(): LauncherItem[] {
       requiredCapabilities: ['pane-actions'],
       pinnable: false,
       execute: async () => {
+        const guard = guardEditorWindowRuntime()
+        if (guard) return guard
         focusRelativePane(1)
         return { ok: true }
       },
@@ -237,6 +255,8 @@ export function getHostEditorActionItems(): LauncherItem[] {
       requiredCapabilities: ['pane-actions'],
       pinnable: false,
       execute: async () => {
+        const guard = guardEditorWindowRuntime()
+        if (guard) return guard
         focusRelativePane(-1)
         return { ok: true }
       },
@@ -258,6 +278,8 @@ export function getHostEditorActionItems(): LauncherItem[] {
       pinnable: false,
       legacyUsageKeys: ['core-pane.toggle-sticky-scroll'],
       execute: async (ctx) => {
+        const guard = guardEditorWindowRuntime()
+        if (guard) return guard
         const state = useWorkspaceStore.getState()
         const pane = state.panes[state.activePaneId]
         if (!pane) return { ok: false, message: translate(ctx.locale, 'workspace', 'pane.noActive') }
@@ -299,10 +321,14 @@ export function getHostEditorActionItems(): LauncherItem[] {
       ],
       requireParamSelection: true,
       execute: async () => {
+        const guard = guardEditorWindowRuntime()
+        if (guard) return guard
         setActivePaneLanguage('auto')
         return { ok: true }
       },
       executeWithParams: async (_ctx, params) => {
+        const guard = guardEditorWindowRuntime()
+        if (guard) return guard
         setActivePaneLanguage(params.language)
         return { ok: true }
       },
@@ -322,7 +348,7 @@ export function getHostEditorActionItems(): LauncherItem[] {
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['text-input-actions'],
       pinnable: false,
-      execute: async () => ({ ok: rewriteActiveEditorTextPolitely() }),
+      execute: async () => guardEditorWindowRuntime() ?? { ok: rewriteActiveEditorTextPolitely() },
     },
     {
       systemKey: 'host:editor:compress-three-sentences',
@@ -339,7 +365,7 @@ export function getHostEditorActionItems(): LauncherItem[] {
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['text-input-actions'],
       pinnable: false,
-      execute: async () => ({ ok: compressActiveEditorTextToThreeSentences() }),
+      execute: async () => guardEditorWindowRuntime() ?? { ok: compressActiveEditorTextToThreeSentences() },
     },
     {
       systemKey: 'host:editor:format-bullets',
@@ -356,7 +382,7 @@ export function getHostEditorActionItems(): LauncherItem[] {
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['text-input-actions'],
       pinnable: false,
-      execute: async () => ({ ok: formatActiveEditorTextAsBullets() }),
+      execute: async () => guardEditorWindowRuntime() ?? { ok: formatActiveEditorTextAsBullets() },
     },
     {
       systemKey: 'host:editor:quote-code-block',
@@ -373,7 +399,7 @@ export function getHostEditorActionItems(): LauncherItem[] {
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['text-input-actions'],
       pinnable: false,
-      execute: async () => ({ ok: quoteActiveEditorTextAsCodeBlock() }),
+      execute: async () => guardEditorWindowRuntime() ?? { ok: quoteActiveEditorTextAsCodeBlock() },
     },
     {
       systemKey: 'host:editor:attach-translate-panel',
@@ -391,6 +417,8 @@ export function getHostEditorActionItems(): LauncherItem[] {
       requiredCapabilities: ['pane-actions'],
       pinnable: false,
       execute: async () => {
+        const guard = guardEditorWindowRuntime()
+        if (guard) return guard
         await attachBuiltinPluginSurfacePanel('translate', true)
         return { ok: true }
       },
@@ -411,6 +439,8 @@ export function getHostEditorActionItems(): LauncherItem[] {
       requiredCapabilities: ['pane-actions'],
       pinnable: false,
       execute: async () => {
+        const guard = guardEditorWindowRuntime()
+        if (guard) return guard
         await attachBuiltinPluginSurfacePanel('clipboard-history')
         return { ok: true }
       },
@@ -430,7 +460,7 @@ export function getHostEditorActionItems(): LauncherItem[] {
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['text-input-actions'],
       pinnable: false,
-      execute: async () => ({ ok: minifyActiveEditorJson() }),
+      execute: async () => guardEditorWindowRuntime() ?? { ok: minifyActiveEditorJson() },
     },
     {
       systemKey: 'host:editor:json-to-yaml',
@@ -447,7 +477,7 @@ export function getHostEditorActionItems(): LauncherItem[] {
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['text-input-actions'],
       pinnable: false,
-      execute: async () => ({ ok: convertActiveEditorJsonToYaml() }),
+      execute: async () => guardEditorWindowRuntime() ?? { ok: convertActiveEditorJsonToYaml() },
     },
     {
       systemKey: 'host:editor:json-extract-fields',
@@ -464,7 +494,7 @@ export function getHostEditorActionItems(): LauncherItem[] {
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['text-input-actions'],
       pinnable: false,
-      execute: async () => ({ ok: extractActiveEditorJsonFields() }),
+      execute: async () => guardEditorWindowRuntime() ?? { ok: extractActiveEditorJsonFields() },
     },
     {
       systemKey: 'host:editor:attach-json-panel',
@@ -482,6 +512,8 @@ export function getHostEditorActionItems(): LauncherItem[] {
       requiredCapabilities: ['pane-actions'],
       pinnable: false,
       execute: async () => {
+        const guard = guardEditorWindowRuntime()
+        if (guard) return guard
         await attachBuiltinPluginSurfacePanel('json', true)
         return { ok: true }
       },

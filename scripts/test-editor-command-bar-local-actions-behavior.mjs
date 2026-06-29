@@ -97,7 +97,11 @@ function loadTsModule(path, globals = {}) {
 }
 
 const editorTextTransforms = loadTsModule('src/workflow/editorTextTransforms.ts')
+const editorWindowRuntime = { location: { search: '?window=editor' } }
+const launcherWindowRuntime = { location: { search: '?window=launcher' } }
+
 const editorActionGlobals = {
+  window: editorWindowRuntime,
   useWorkspaceStore: {
     getState: () => storeState,
   },
@@ -115,6 +119,10 @@ const editorActionGlobals = {
   },
   PLUGIN_SURFACE_PANEL_ID: 'plugin-surface',
 }
+const hostEditorActionsSource = readFileSync('src/workspace/launcher/hostEditorActions.ts', 'utf8')
+assert.match(hostEditorActionsSource, /guardEditorWindowRuntime/, 'editor command actions must guard against non-editor runtimes')
+assert.match(hostEditorActionsSource, /Editor command actions can only run in the editor window/, 'editor command guard must return an explicit failure message')
+
 const hostEditorActions = loadTsModule('src/workspace/launcher/hostEditorActions.ts', editorActionGlobals)
 let src = readFileSync('src/workspace/launcher/hostActions.ts', 'utf8')
 src = src.replace(/import\s+type\s*\{[\s\S]*?\}\s*from\s*'[^']*'\s*;?\s*\n?/g, '')
@@ -131,6 +139,7 @@ const sandbox = {
   exports: moduleExports,
   module: { exports: moduleExports },
   console,
+  window: editorWindowRuntime,
   useWorkspaceStore: {
     getState: () => storeState,
   },
@@ -201,5 +210,15 @@ assert.deepEqual(plain(openedPanels.at(-1)), {
     },
   },
 })
+
+const guardedHostEditorActions = loadTsModule('src/workspace/launcher/hostEditorActions.ts', {
+  ...editorActionGlobals,
+  window: launcherWindowRuntime,
+})
+const guardedFormatResult = await findItem(guardedHostEditorActions.getHostEditorActionItems(), 'host:editor:format-bullets').execute({})
+assert.deepEqual(plain(guardedFormatResult), {
+  ok: false,
+  message: 'Editor command actions can only run in the editor window',
+}, 'editor command actions must reject accidental execution outside the editor window')
 
 console.log('editor command bar local action behavior checks passed')
