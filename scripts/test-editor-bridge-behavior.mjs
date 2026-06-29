@@ -28,6 +28,9 @@ assert.match(editorBridgeSource, /isEditorBridgeRequestExpired\(request\)/, 'edi
 assert.match(editorBridgeSource, /EDITOR_BRIDGE_MUTATION_TIMEOUT_MS\s*=\s*5_000/, 'editor mutations must use a longer explicit timeout than context polling')
 assert.match(editorBridgeSource, /EDITOR_ACTIVE_CONTEXT_SNAPSHOT_KEY/, 'editor bridge must persist active editor context snapshots for newly-created webviews')
 assert.match(editorBridgeSource, /EDITOR_ACTIVE_PANE_SNAPSHOT_KEY/, 'editor bridge must persist active pane snapshots for newly-created webviews')
+assert.match(editorBridgeSource, /EDITOR_ACTIVE_SNAPSHOT_TTL_MS\s*=\s*30_000/, 'persisted active editor snapshots must expire quickly enough to avoid stale cross-window context')
+assert.match(editorBridgeSource, /createPersistedActiveSnapshotEnvelope/, 'persisted active editor snapshots must include a timestamp envelope')
+assert.match(editorBridgeSource, /isActiveSnapshotFresh/, 'stale persisted active editor snapshots must be rejected')
 assert.match(editorBridgeSource, /clearActiveEditorSnapshots/, 'editor bridge must expose active snapshot cleanup for editor window teardown')
 assert.match(editorBridgeSource, /emitActiveEditorState\(\{ editor: null, pane: null \}\)/, 'editor bridge snapshot cleanup must broadcast null snapshots to other windows')
 
@@ -57,6 +60,7 @@ function loadEditorBridge({ storage = createStorage(), showEditorWindow = async 
     exports: moduleExports,
     module: { exports: moduleExports },
     console,
+    Date,
     localStorage: storage,
     window: {
       clearTimeout,
@@ -115,6 +119,22 @@ const paneSnapshot = {
   assert.ok(pending[0].expiresAt > pending[0].createdAt, 'pending bridge requests must expire after their creation time')
 }
 
+
+{
+  const storage = createStorage()
+  const realDateNow = Date.now
+  const { bridge } = loadEditorBridge({ storage })
+  bridge.registerActiveEditorContext(activeContext)
+  bridge.updateActivePaneSnapshot(paneSnapshot)
+  try {
+    Date.now = () => realDateNow() + 31_000
+    assert.equal(bridge.getActiveEditorContextSnapshot(), undefined, 'stale in-memory active editor context snapshots must be ignored')
+    assert.equal(bridge.getActiveEditorPaneSnapshot(), undefined, 'stale in-memory active pane snapshots must be ignored')
+  } finally {
+    Date.now = realDateNow
+  }
+}
+
 {
   const storage = createStorage()
   const { bridge } = loadEditorBridge({ storage })
@@ -123,8 +143,12 @@ const paneSnapshot = {
   bridge.registerActiveEditorContext(activeContext)
   bridge.updateActivePaneSnapshot(paneSnapshot)
 
-  assert.deepEqual(JSON.parse(storage.getItem('hiven:editor-active-context-snapshot')), activeContext, 'active editor context registration must persist a shared snapshot')
-  assert.deepEqual(JSON.parse(storage.getItem('hiven:editor-active-pane-snapshot')), paneSnapshot, 'active pane snapshot updates must persist a shared snapshot')
+  const persistedContextEnvelope = JSON.parse(storage.getItem('hiven:editor-active-context-snapshot'))
+  const persistedPaneEnvelope = JSON.parse(storage.getItem('hiven:editor-active-pane-snapshot'))
+  assert.equal(typeof persistedContextEnvelope.updatedAt, 'number', 'persisted active editor context must carry an updatedAt timestamp')
+  assert.deepEqual(persistedContextEnvelope.snapshot, activeContext, 'active editor context registration must persist a shared snapshot envelope')
+  assert.equal(typeof persistedPaneEnvelope.updatedAt, 'number', 'persisted active pane snapshot must carry an updatedAt timestamp')
+  assert.deepEqual(persistedPaneEnvelope.snapshot, paneSnapshot, 'active pane snapshot updates must persist a shared snapshot envelope')
   assert.equal(subscriberCalls, 2, 'active editor snapshot subscribers must be notified for context and pane updates')
 
   const { bridge: reloadedBridge } = loadEditorBridge({ storage })
@@ -138,6 +162,37 @@ const paneSnapshot = {
   assert.equal(bridge.getActiveEditorPaneSnapshot(), undefined, 'clearing active editor snapshots must clear in-memory pane state')
   assert.equal(subscriberCalls, 3, 'active editor snapshot subscribers must be notified when snapshots are cleared')
   unsubscribe()
+}
+
+{
+  const storage = createStorage()
+  const now = Date.now()
+  storage.setItem('hiven:editor-active-context-snapshot', JSON.stringify({ updatedAt: now - 1_000, snapshot: activeContext }))
+  storage.setItem('hiven:editor-active-pane-snapshot', JSON.stringify({ updatedAt: now - 1_000, snapshot: paneSnapshot }))
+  const { bridge } = loadEditorBridge({ storage })
+  assert.deepEqual(JSON.parse(JSON.stringify(bridge.getActiveEditorContextSnapshot())), activeContext, 'fresh persisted active editor context snapshots must hydrate')
+  assert.deepEqual(JSON.parse(JSON.stringify(bridge.getActiveEditorPaneSnapshot())), paneSnapshot, 'fresh persisted active pane snapshots must hydrate')
+}
+
+{
+  const storage = createStorage()
+  const now = Date.now()
+  storage.setItem('hiven:editor-active-context-snapshot', JSON.stringify({ updatedAt: now - 60_000, snapshot: activeContext }))
+  storage.setItem('hiven:editor-active-pane-snapshot', JSON.stringify({ updatedAt: now - 60_000, snapshot: paneSnapshot }))
+  const { bridge } = loadEditorBridge({ storage })
+  assert.equal(bridge.getActiveEditorContextSnapshot(), undefined, 'stale persisted active editor context snapshots must be ignored')
+  assert.equal(bridge.getActiveEditorPaneSnapshot(), undefined, 'stale persisted active pane snapshots must be ignored')
+  assert.equal(storage.getItem('hiven:editor-active-context-snapshot'), null, 'stale persisted active editor context snapshots must be removed')
+  assert.equal(storage.getItem('hiven:editor-active-pane-snapshot'), null, 'stale persisted active pane snapshots must be removed')
+}
+
+{
+  const storage = createStorage()
+  storage.setItem('hiven:editor-active-context-snapshot', JSON.stringify(activeContext))
+  storage.setItem('hiven:editor-active-pane-snapshot', JSON.stringify(paneSnapshot))
+  const { bridge } = loadEditorBridge({ storage })
+  assert.equal(bridge.getActiveEditorContextSnapshot(), undefined, 'legacy persisted active editor context snapshots without timestamp must be ignored')
+  assert.equal(bridge.getActiveEditorPaneSnapshot(), undefined, 'legacy persisted active pane snapshots without timestamp must be ignored')
 }
 
 {

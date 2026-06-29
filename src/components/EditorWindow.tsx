@@ -97,7 +97,13 @@ export function EditorWindow() {
     const unsubscribe = useWorkspaceStore.subscribe(() => {
       publishEditorSnapshots()
     })
-    return unsubscribe
+    const snapshotHeartbeat = window.setInterval(() => {
+      publishEditorSnapshots()
+    }, 1_000)
+    return () => {
+      unsubscribe()
+      window.clearInterval(snapshotHeartbeat)
+    }
   }, [ready, error])
 
   useEffect(() => {

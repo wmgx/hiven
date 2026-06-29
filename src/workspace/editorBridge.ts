@@ -12,6 +12,7 @@ const EDITOR_ACTIVE_CONTEXT_SNAPSHOT_KEY = 'hiven:editor-active-context-snapshot
 const EDITOR_ACTIVE_PANE_SNAPSHOT_KEY = 'hiven:editor-active-pane-snapshot'
 const EDITOR_BRIDGE_READY_AT_KEY = 'hiven:editor-bridge-ready-at'
 const EDITOR_BRIDGE_READY_TTL_MS = 5_000
+const EDITOR_ACTIVE_SNAPSHOT_TTL_MS = 30_000
 const EDITOR_BRIDGE_DEFAULT_TIMEOUT_MS = 1_200
 const EDITOR_BRIDGE_CONTEXT_TIMEOUT_MS = 500
 const EDITOR_BRIDGE_MUTATION_TIMEOUT_MS = 5_000
@@ -92,8 +93,15 @@ type BridgeRequestOptions = {
   openEditorFirst?: boolean
 }
 
+type PersistedActiveSnapshotEnvelope<T> = {
+  updatedAt: number
+  snapshot: T
+}
+
 let activeEditorContextSnapshot: EditorContextSnapshot | undefined
+let activeEditorContextSnapshotUpdatedAt = 0
 let activeEditorPaneSnapshot: EditorPaneSnapshot | undefined
+let activeEditorPaneSnapshotUpdatedAt = 0
 let activeContextListenerStarted = false
 const activeEditorStateSubscribers = new Set<() => void>()
 
@@ -108,13 +116,31 @@ export async function getEditorContext(options: { timeoutMs?: number } = {}): Pr
 
 export function getActiveEditorContextSnapshot(): EditorContextSnapshot | undefined {
   ensureActiveEditorContextListener()
-  if (!activeEditorContextSnapshot) activeEditorContextSnapshot = readPersistedActiveEditorContextSnapshot()
+  if (activeEditorContextSnapshot && isActiveSnapshotFresh(activeEditorContextSnapshotUpdatedAt)) return activeEditorContextSnapshot
+  if (activeEditorContextSnapshot) {
+    activeEditorContextSnapshot = undefined
+    activeEditorContextSnapshotUpdatedAt = 0
+    removePersistedActiveEditorContextSnapshot()
+  }
+  const persisted = readPersistedActiveEditorContextSnapshot()
+  if (!persisted) return undefined
+  activeEditorContextSnapshot = persisted.snapshot
+  activeEditorContextSnapshotUpdatedAt = persisted.updatedAt
   return activeEditorContextSnapshot
 }
 
 export function getActiveEditorPaneSnapshot(): EditorPaneSnapshot | undefined {
   ensureActiveEditorContextListener()
-  if (!activeEditorPaneSnapshot) activeEditorPaneSnapshot = readPersistedActiveEditorPaneSnapshot()
+  if (activeEditorPaneSnapshot && isActiveSnapshotFresh(activeEditorPaneSnapshotUpdatedAt)) return activeEditorPaneSnapshot
+  if (activeEditorPaneSnapshot) {
+    activeEditorPaneSnapshot = undefined
+    activeEditorPaneSnapshotUpdatedAt = 0
+    removePersistedActiveEditorPaneSnapshot()
+  }
+  const persisted = readPersistedActiveEditorPaneSnapshot()
+  if (!persisted) return undefined
+  activeEditorPaneSnapshot = persisted.snapshot
+  activeEditorPaneSnapshotUpdatedAt = persisted.updatedAt
   return activeEditorPaneSnapshot
 }
 
@@ -161,21 +187,25 @@ export async function cleanupEditorPluginContributions(input: EditorBridgePlugin
 
 export function registerActiveEditorContext(snapshot: EditorContextSnapshot): void {
   activeEditorContextSnapshot = snapshot
-  persistActiveEditorContextSnapshot(snapshot)
+  activeEditorContextSnapshotUpdatedAt = Date.now()
+  persistActiveEditorContextSnapshot(snapshot, activeEditorContextSnapshotUpdatedAt)
   notifyActiveEditorStateSubscribers()
   emitActiveEditorState({ editor: snapshot })
 }
 
 export function updateActivePaneSnapshot(snapshot: EditorPaneSnapshot): void {
   activeEditorPaneSnapshot = snapshot
-  persistActiveEditorPaneSnapshot(snapshot)
+  activeEditorPaneSnapshotUpdatedAt = Date.now()
+  persistActiveEditorPaneSnapshot(snapshot, activeEditorPaneSnapshotUpdatedAt)
   notifyActiveEditorStateSubscribers()
   emitActiveEditorState({ pane: snapshot })
 }
 
 export function clearActiveEditorSnapshots(): void {
   activeEditorContextSnapshot = undefined
+  activeEditorContextSnapshotUpdatedAt = 0
   activeEditorPaneSnapshot = undefined
+  activeEditorPaneSnapshotUpdatedAt = 0
   removePersistedActiveEditorSnapshots()
   notifyActiveEditorStateSubscribers()
   emitActiveEditorState({ editor: null, pane: null })
@@ -377,20 +407,24 @@ function ensureActiveEditorContextListener(): void {
       let changed = false
       if (payload.editor === null) {
         activeEditorContextSnapshot = undefined
+        activeEditorContextSnapshotUpdatedAt = 0
         removePersistedActiveEditorContextSnapshot()
         changed = true
       } else if (isEditorContextSnapshot(payload.editor)) {
         activeEditorContextSnapshot = payload.editor
-        persistActiveEditorContextSnapshot(payload.editor)
+        activeEditorContextSnapshotUpdatedAt = Date.now()
+        persistActiveEditorContextSnapshot(payload.editor, activeEditorContextSnapshotUpdatedAt)
         changed = true
       }
       if (payload.pane === null) {
         activeEditorPaneSnapshot = undefined
+        activeEditorPaneSnapshotUpdatedAt = 0
         removePersistedActiveEditorPaneSnapshot()
         changed = true
       } else if (isEditorPaneSnapshot(payload.pane)) {
         activeEditorPaneSnapshot = payload.pane
-        persistActiveEditorPaneSnapshot(payload.pane)
+        activeEditorPaneSnapshotUpdatedAt = Date.now()
+        persistActiveEditorPaneSnapshot(payload.pane, activeEditorPaneSnapshotUpdatedAt)
         changed = true
       }
       if (changed) notifyActiveEditorStateSubscribers()
@@ -410,42 +444,81 @@ function notifyActiveEditorStateSubscribers(): void {
   }
 }
 
-function persistActiveEditorContextSnapshot(snapshot: EditorContextSnapshot): void {
+function persistActiveEditorContextSnapshot(snapshot: EditorContextSnapshot, updatedAt = Date.now()): void {
   try {
-    localStorage.setItem(EDITOR_ACTIVE_CONTEXT_SNAPSHOT_KEY, JSON.stringify(snapshot))
+    localStorage.setItem(EDITOR_ACTIVE_CONTEXT_SNAPSHOT_KEY, JSON.stringify(createPersistedActiveSnapshotEnvelope(snapshot, updatedAt)))
   } catch {
     // Live events are enough for already-running windows.
   }
 }
 
-function persistActiveEditorPaneSnapshot(snapshot: EditorPaneSnapshot): void {
+function persistActiveEditorPaneSnapshot(snapshot: EditorPaneSnapshot, updatedAt = Date.now()): void {
   try {
-    localStorage.setItem(EDITOR_ACTIVE_PANE_SNAPSHOT_KEY, JSON.stringify(snapshot))
+    localStorage.setItem(EDITOR_ACTIVE_PANE_SNAPSHOT_KEY, JSON.stringify(createPersistedActiveSnapshotEnvelope(snapshot, updatedAt)))
   } catch {
     // Live events are enough for already-running windows.
   }
 }
 
-function readPersistedActiveEditorContextSnapshot(): EditorContextSnapshot | undefined {
+function readPersistedActiveEditorContextSnapshot(): PersistedActiveSnapshotEnvelope<EditorContextSnapshot> | undefined {
+  return readPersistedActiveSnapshot(
+    EDITOR_ACTIVE_CONTEXT_SNAPSHOT_KEY,
+    isEditorContextSnapshot,
+    removePersistedActiveEditorContextSnapshot,
+  )
+}
+
+function readPersistedActiveEditorPaneSnapshot(): PersistedActiveSnapshotEnvelope<EditorPaneSnapshot> | undefined {
+  return readPersistedActiveSnapshot(
+    EDITOR_ACTIVE_PANE_SNAPSHOT_KEY,
+    isEditorPaneSnapshot,
+    removePersistedActiveEditorPaneSnapshot,
+  )
+}
+
+function createPersistedActiveSnapshotEnvelope<T>(snapshot: T, updatedAt = Date.now()): PersistedActiveSnapshotEnvelope<T> {
+  return {
+    updatedAt,
+    snapshot,
+  }
+}
+
+function readPersistedActiveSnapshot<T>(
+  key: string,
+  isSnapshot: (value: unknown) => value is T,
+  remove: () => void,
+): PersistedActiveSnapshotEnvelope<T> | undefined {
   try {
-    const raw = localStorage.getItem(EDITOR_ACTIVE_CONTEXT_SNAPSHOT_KEY)
+    const raw = localStorage.getItem(key)
     if (!raw) return undefined
     const parsed = JSON.parse(raw)
-    return isEditorContextSnapshot(parsed) ? parsed : undefined
+    if (!isPersistedActiveSnapshotEnvelope(parsed, isSnapshot) || !isActiveSnapshotFresh(parsed.updatedAt)) {
+      remove()
+      return undefined
+    }
+    return parsed
   } catch {
+    remove()
     return undefined
   }
 }
 
-function readPersistedActiveEditorPaneSnapshot(): EditorPaneSnapshot | undefined {
-  try {
-    const raw = localStorage.getItem(EDITOR_ACTIVE_PANE_SNAPSHOT_KEY)
-    if (!raw) return undefined
-    const parsed = JSON.parse(raw)
-    return isEditorPaneSnapshot(parsed) ? parsed : undefined
-  } catch {
-    return undefined
-  }
+function isPersistedActiveSnapshotEnvelope<T>(
+  value: unknown,
+  isSnapshot: (snapshot: unknown) => snapshot is T,
+): value is PersistedActiveSnapshotEnvelope<T> {
+  const envelope = value as Partial<PersistedActiveSnapshotEnvelope<T>> | undefined
+  return Boolean(
+    envelope &&
+    typeof envelope === 'object' &&
+    typeof envelope.updatedAt === 'number' &&
+    Number.isFinite(envelope.updatedAt) &&
+    isSnapshot(envelope.snapshot),
+  )
+}
+
+function isActiveSnapshotFresh(updatedAt: number): boolean {
+  return Number.isFinite(updatedAt) && Date.now() - updatedAt <= EDITOR_ACTIVE_SNAPSHOT_TTL_MS
 }
 
 function removePersistedActiveEditorSnapshots(): void {

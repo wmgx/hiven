@@ -58,6 +58,8 @@ assert.match(editorWindow, /applyCreateEditorPane[\s\S]*createPane/, 'EditorWind
 assert.match(editorWindow, /applyOpenEditorPanel[\s\S]*openPanelV2/, 'EditorWindow must attach panels from bridge requests in its own store')
 assert.match(editorWindow, /registerActiveEditorContext/, 'EditorWindow must publish active editor context')
 assert.match(editorWindow, /updateActivePaneSnapshot/, 'EditorWindow must publish active pane snapshots')
+assert.match(editorWindow, /window\.setInterval\(\(\) => \{[\s\S]*publishEditorSnapshots\(\)[\s\S]*\}, 1_000\)/, 'EditorWindow must refresh active editor snapshots on a heartbeat')
+assert.match(editorWindow, /window\.clearInterval\(snapshotHeartbeat\)/, 'EditorWindow must clear the active snapshot heartbeat on teardown')
 assert.match(editorWindow, /pagehide[\s\S]*clearActiveEditorSnapshots/, 'EditorWindow must clear active editor snapshots on pagehide')
 assert.match(editorWindow, /return \(\) => \{[\s\S]*clearActiveEditorSnapshots\(\)[\s\S]*markSurfaceInstanceState\(EDITOR_WINDOW_LABEL, ['"]hidden['"]\)/, 'EditorWindow must clear active editor snapshots on unmount before marking hidden')
 assert.match(editorWindow, /Cmd|metaKey|ctrlKey|key\.toLowerCase\(\) !== ['"]w['"]/, 'EditorWindow must support primary-W close handling')
