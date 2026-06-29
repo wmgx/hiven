@@ -59,9 +59,16 @@ export function applyEffects(
   conflictPolicy: ConflictPolicy = 'ask'
 ): EffectRunnerResult {
   const result: EffectRunnerResult = { applied: [], errors: [] }
+  const runnableEffects = effects.filter((effect) => {
+    if (!isEditorWindowRuntime() && isEditorWorkspaceEffect(effect)) {
+      result.errors.push(`Editor workspace effects can only run in the editor window: ${effect.type}`)
+      return false
+    }
+    return true
+  })
 
   // Step 1-3: Check for surface conflicts (for presentation/panel effects)
-  const surfaceEffects = effects.filter(
+  const surfaceEffects = runnableEffects.filter(
     (e) => e.type === 'presentation.open' || e.type === 'panel.open'
   )
 
@@ -88,7 +95,7 @@ export function applyEffects(
   }
 
   // Step 4-6: Apply effects
-  for (const effect of effects) {
+  for (const effect of runnableEffects) {
     try {
       switch (effect.type) {
         case 'text.replace':
@@ -157,6 +164,24 @@ export function applyEffects(
   }
 
   return result
+}
+
+function isEditorWorkspaceEffect(effect: FluxEffect): boolean {
+  switch (effect.type) {
+    case 'app.openExternal':
+    case 'status.message':
+      return false
+    default:
+      return true
+  }
+}
+
+function isEditorWindowRuntime(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get('window') === 'editor'
+  } catch {
+    return false
+  }
 }
 
 /**

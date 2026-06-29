@@ -32,6 +32,7 @@ const files = {
   pluginSurfaceHotkeys: read('src/hotkeys/pluginSurfaceShortcuts.ts'),
   pluginCommandExecutor: read('src/workspace/pluginCommandExecutor.ts'),
   toolbarCommandRunner: read('src/workspace/toolbarCommandRunner.ts'),
+  effectRunner: read('src/workspace/effectRunner.ts'),
   editorWindow: read('src/components/EditorWindow.tsx'),
   editorView: read('src/views/EditorView.tsx'),
   commandPalette: read('src/components/CommandPalette.tsx'),
@@ -151,6 +152,11 @@ assert.equal(
   'node scripts/test-workspace-public-api-window-boundary.mjs',
   'package.json must expose workspace public API window-boundary coverage',
 )
+assert.equal(
+  packageJson.scripts?.['test:effect-runner-window-boundary'],
+  'node scripts/test-effect-runner-window-boundary.mjs',
+  'package.json must expose effect runner window-boundary coverage',
+)
 assert.match(read('scripts/test-plugin-paste-behavior.mjs'), /hide_launcher_window[\s\S]*simulate_paste[\s\S]*Accessibility permission[\s\S]*pasteFiles/, 'plugin paste behavior must prove foreground paste and fallback paths')
 assert.match(finalValidationDoc, /# Hiven Refactor Final Validation/, 'final validation doc must exist')
 assert.match(finalValidationDoc, /Launcher ↔ Editor Bridge[\s\S]*Automated evidence[\s\S]*scripts\/test-editor-bridge-behavior\.mjs/, 'final validation doc must map launcher-editor bridge to evidence')
@@ -225,6 +231,7 @@ assert.match(files.pluginInputResolver, /Need editor pane snapshots for multiple
 assert.match(files.inputResolver, /if \(!isEditorWindowRuntime\(\) && canReadEditorContextSnapshot\(\)\)[\s\S]*getActiveEditorContextSnapshot\(\)[\s\S]*resolveEditorContextInput/, 'generic input resolver must use synced editor context outside the editor runtime')
 assert.match(files.workspacePublicApi, /function readEditorContextSnapshot\(\)[\s\S]*getActiveEditorContextSnapshot\(\)/, 'workspace public API must read synced editor context outside editor windows')
 assert.match(files.workspacePublicApi, /export function executeEffects\(effects: FluxEffect\[\]\)[\s\S]*Workspace effects can only be executed in the editor window/, 'workspace public API must not execute effects outside the editor window')
+assert.match(files.effectRunner, /runnableEffects[\s\S]*Editor workspace effects can only run in the editor window[\s\S]*for \(const effect of runnableEffects\)/, 'effect runner must reject editor workspace effects outside the editor window')
 assert.match(files.pluginCommandExecutor, /if \(!isEditorWindowRuntime\(\)\)[\s\S]*Plugin command effects can only be applied in the editor window/, 'plugin command executor must not apply editor effects outside the editor window')
 assert.match(files.toolbarCommandRunner, /if \(!isEditorWindowRuntime\(\)\)[\s\S]*Plugin toolbar effects can only run in the editor window/, 'toolbar command runner must not apply editor effects outside the editor window')
 assert.match(files.windowLabels, /EDITOR_WINDOW_LABEL/, 'window labels must centralize editor label constants')

@@ -141,6 +141,7 @@ assert.match(files.pluginInputResolver, /Need editor pane snapshots for multiple
 assert.match(files.inputResolver, /if \(!isEditorWindowRuntime\(\) && canReadEditorContextSnapshot\(\)\)[\s\S]*getActiveEditorContextSnapshot\(\)[\s\S]*resolveEditorContextInput/, 'generic input resolver must use editor context snapshots outside the editor runtime')
 assert.match(files.workspacePublicApi, /function readEditorContextSnapshot\(\)[\s\S]*getActiveEditorContextSnapshot\(\)/, 'workspace public API must use synced editor context outside the editor runtime')
 assert.match(files.workspacePublicApi, /export function executeEffects\(effects: FluxEffect\[\]\)[\s\S]*Workspace effects can only be executed in the editor window/, 'workspace public API must not execute effects outside the editor window')
+assert.match(files.effectRunner, /runnableEffects[\s\S]*Editor workspace effects can only run in the editor window[\s\S]*for \(const effect of runnableEffects\)/, 'effect runner must reject editor workspace effects outside the editor runtime')
 
 assert.match(files.workspaceStore, /isEditorWindowWorkspaceSession/, 'workspace store must detect editor window sessions')
 assert.match(files.workspaceStore, /createJSONStorage/, 'workspace store must explicitly choose storage per runtime window')
