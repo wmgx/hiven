@@ -34,6 +34,8 @@ assert.match(editorBridge, /emitTo\(EDITOR_WINDOW_LABEL,/, 'editor bridge must a
 assert.match(editorBridge, /registerActiveEditorContext/, 'editor bridge must publish active context updates')
 assert.match(editorBridge, /typeof snapshot\.activeText === ['"]string['"]/, 'editor bridge must validate activeText before accepting synced editor context')
 assert.match(editorBridge, /updateActivePaneSnapshot/, 'editor bridge must publish active pane snapshot updates')
+assert.match(editorBridge, /readPersistedActiveEditorContextSnapshot/, 'editor bridge must hydrate active editor context from persisted snapshots')
+assert.match(editorBridge, /readPersistedActiveEditorPaneSnapshot/, 'editor bridge must hydrate active pane context from persisted snapshots')
 assert.match(contextBroker, /readClipboardText/, 'clipboard provider must read clipboard text')
 assert.match(tauriLib, /struct ForegroundAppContext/, 'native runtime must serialize foreground context')
 assert.match(tauriLib, /async fn current_foreground_app_context/, 'native runtime must expose current_foreground_app_context')

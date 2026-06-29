@@ -8,6 +8,8 @@ export const EDITOR_BRIDGE_RESPONSE_EVENT = 'hiven://editor-bridge-response'
 export const EDITOR_BRIDGE_READY_EVENT = 'hiven://editor-bridge-ready'
 export const EDITOR_ACTIVE_CONTEXT_EVENT = 'hiven://editor-active-context'
 const EDITOR_BRIDGE_PENDING_REQUESTS_KEY = 'hiven:editor-bridge-pending-requests'
+const EDITOR_ACTIVE_CONTEXT_SNAPSHOT_KEY = 'hiven:editor-active-context-snapshot'
+const EDITOR_ACTIVE_PANE_SNAPSHOT_KEY = 'hiven:editor-active-pane-snapshot'
 const EDITOR_BRIDGE_READY_AT_KEY = 'hiven:editor-bridge-ready-at'
 const EDITOR_BRIDGE_READY_TTL_MS = 5_000
 const EDITOR_BRIDGE_DEFAULT_TIMEOUT_MS = 1_200
@@ -98,19 +100,21 @@ const activeEditorStateSubscribers = new Set<() => void>()
 export async function getEditorContext(options: { timeoutMs?: number } = {}): Promise<EditorContextSnapshot | undefined> {
   try {
     const response = await sendEditorBridgeRequest('getEditorContext', undefined, { timeoutMs: options.timeoutMs ?? EDITOR_BRIDGE_CONTEXT_TIMEOUT_MS })
-    return isEditorContextSnapshot(response) ? response : activeEditorContextSnapshot
+    return isEditorContextSnapshot(response) ? response : getActiveEditorContextSnapshot()
   } catch {
-    return activeEditorContextSnapshot
+    return getActiveEditorContextSnapshot()
   }
 }
 
 export function getActiveEditorContextSnapshot(): EditorContextSnapshot | undefined {
   ensureActiveEditorContextListener()
+  if (!activeEditorContextSnapshot) activeEditorContextSnapshot = readPersistedActiveEditorContextSnapshot()
   return activeEditorContextSnapshot
 }
 
 export function getActiveEditorPaneSnapshot(): EditorPaneSnapshot | undefined {
   ensureActiveEditorContextListener()
+  if (!activeEditorPaneSnapshot) activeEditorPaneSnapshot = readPersistedActiveEditorPaneSnapshot()
   return activeEditorPaneSnapshot
 }
 
@@ -157,14 +161,24 @@ export async function cleanupEditorPluginContributions(input: EditorBridgePlugin
 
 export function registerActiveEditorContext(snapshot: EditorContextSnapshot): void {
   activeEditorContextSnapshot = snapshot
+  persistActiveEditorContextSnapshot(snapshot)
   notifyActiveEditorStateSubscribers()
   emitActiveEditorState({ editor: snapshot })
 }
 
 export function updateActivePaneSnapshot(snapshot: EditorPaneSnapshot): void {
   activeEditorPaneSnapshot = snapshot
+  persistActiveEditorPaneSnapshot(snapshot)
   notifyActiveEditorStateSubscribers()
   emitActiveEditorState({ pane: snapshot })
+}
+
+export function clearActiveEditorSnapshots(): void {
+  activeEditorContextSnapshot = undefined
+  activeEditorPaneSnapshot = undefined
+  removePersistedActiveEditorSnapshots()
+  notifyActiveEditorStateSubscribers()
+  emitActiveEditorState({ editor: null, pane: null })
 }
 
 export async function registerEditorBridgeHandlers(handlers: EditorBridgeHandlers): Promise<() => void> {
@@ -347,7 +361,7 @@ function hasRecentEditorBridgeReady(): boolean {
   }
 }
 
-function emitActiveEditorState(payload: { editor?: EditorContextSnapshot; pane?: EditorPaneSnapshot }): void {
+function emitActiveEditorState(payload: { editor?: EditorContextSnapshot | null; pane?: EditorPaneSnapshot | null }): void {
   if (!isTauriRuntime()) return
   import('@tauri-apps/api/event')
     .then(({ emit }) => emit(EDITOR_ACTIVE_CONTEXT_EVENT, payload))
@@ -361,12 +375,22 @@ function ensureActiveEditorContextListener(): void {
     .then(({ listen }) => listen<unknown>(EDITOR_ACTIVE_CONTEXT_EVENT, (event) => {
       const payload = event.payload as { editor?: unknown; pane?: unknown }
       let changed = false
-      if (isEditorContextSnapshot(payload.editor)) {
+      if (payload.editor === null) {
+        activeEditorContextSnapshot = undefined
+        removePersistedActiveEditorContextSnapshot()
+        changed = true
+      } else if (isEditorContextSnapshot(payload.editor)) {
         activeEditorContextSnapshot = payload.editor
+        persistActiveEditorContextSnapshot(payload.editor)
         changed = true
       }
-      if (isEditorPaneSnapshot(payload.pane)) {
+      if (payload.pane === null) {
+        activeEditorPaneSnapshot = undefined
+        removePersistedActiveEditorPaneSnapshot()
+        changed = true
+      } else if (isEditorPaneSnapshot(payload.pane)) {
         activeEditorPaneSnapshot = payload.pane
+        persistActiveEditorPaneSnapshot(payload.pane)
         changed = true
       }
       if (changed) notifyActiveEditorStateSubscribers()
@@ -383,6 +407,65 @@ function notifyActiveEditorStateSubscribers(): void {
     } catch {
       // Keep one broken subscriber from blocking other mirrored editor state consumers.
     }
+  }
+}
+
+function persistActiveEditorContextSnapshot(snapshot: EditorContextSnapshot): void {
+  try {
+    localStorage.setItem(EDITOR_ACTIVE_CONTEXT_SNAPSHOT_KEY, JSON.stringify(snapshot))
+  } catch {
+    // Live events are enough for already-running windows.
+  }
+}
+
+function persistActiveEditorPaneSnapshot(snapshot: EditorPaneSnapshot): void {
+  try {
+    localStorage.setItem(EDITOR_ACTIVE_PANE_SNAPSHOT_KEY, JSON.stringify(snapshot))
+  } catch {
+    // Live events are enough for already-running windows.
+  }
+}
+
+function readPersistedActiveEditorContextSnapshot(): EditorContextSnapshot | undefined {
+  try {
+    const raw = localStorage.getItem(EDITOR_ACTIVE_CONTEXT_SNAPSHOT_KEY)
+    if (!raw) return undefined
+    const parsed = JSON.parse(raw)
+    return isEditorContextSnapshot(parsed) ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function readPersistedActiveEditorPaneSnapshot(): EditorPaneSnapshot | undefined {
+  try {
+    const raw = localStorage.getItem(EDITOR_ACTIVE_PANE_SNAPSHOT_KEY)
+    if (!raw) return undefined
+    const parsed = JSON.parse(raw)
+    return isEditorPaneSnapshot(parsed) ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function removePersistedActiveEditorSnapshots(): void {
+  removePersistedActiveEditorContextSnapshot()
+  removePersistedActiveEditorPaneSnapshot()
+}
+
+function removePersistedActiveEditorContextSnapshot(): void {
+  try {
+    localStorage.removeItem(EDITOR_ACTIVE_CONTEXT_SNAPSHOT_KEY)
+  } catch {
+    // Ignore unavailable storage.
+  }
+}
+
+function removePersistedActiveEditorPaneSnapshot(): void {
+  try {
+    localStorage.removeItem(EDITOR_ACTIVE_PANE_SNAPSHOT_KEY)
+  } catch {
+    // Ignore unavailable storage.
   }
 }
 

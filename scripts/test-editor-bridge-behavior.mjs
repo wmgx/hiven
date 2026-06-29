@@ -26,6 +26,10 @@ assert.match(editorBridgeSource, /clearPendingEditorBridgeRequest\(request\.requ
 assert.match(editorBridgeSource, /expiresAt:\s*createdAt\s*\+\s*Math\.max\(timeoutMs,\s*0\)/, 'editor bridge requests must carry an execution expiry')
 assert.match(editorBridgeSource, /isEditorBridgeRequestExpired\(request\)/, 'editor bridge handlers must reject expired pending requests before executing mutations')
 assert.match(editorBridgeSource, /EDITOR_BRIDGE_MUTATION_TIMEOUT_MS\s*=\s*5_000/, 'editor mutations must use a longer explicit timeout than context polling')
+assert.match(editorBridgeSource, /EDITOR_ACTIVE_CONTEXT_SNAPSHOT_KEY/, 'editor bridge must persist active editor context snapshots for newly-created webviews')
+assert.match(editorBridgeSource, /EDITOR_ACTIVE_PANE_SNAPSHOT_KEY/, 'editor bridge must persist active pane snapshots for newly-created webviews')
+assert.match(editorBridgeSource, /clearActiveEditorSnapshots/, 'editor bridge must expose active snapshot cleanup for editor window teardown')
+assert.match(editorBridgeSource, /emitActiveEditorState\(\{ editor: null, pane: null \}\)/, 'editor bridge snapshot cleanup must broadcast null snapshots to other windows')
 
 function createStorage() {
   const map = new Map()
@@ -109,6 +113,31 @@ const paneSnapshot = {
   assert.equal(typeof pending[0].createdAt, 'number')
   assert.equal(typeof pending[0].expiresAt, 'number')
   assert.ok(pending[0].expiresAt > pending[0].createdAt, 'pending bridge requests must expire after their creation time')
+}
+
+{
+  const storage = createStorage()
+  const { bridge } = loadEditorBridge({ storage })
+  let subscriberCalls = 0
+  const unsubscribe = bridge.subscribeActiveEditorState(() => { subscriberCalls += 1 })
+  bridge.registerActiveEditorContext(activeContext)
+  bridge.updateActivePaneSnapshot(paneSnapshot)
+
+  assert.deepEqual(JSON.parse(storage.getItem('hiven:editor-active-context-snapshot')), activeContext, 'active editor context registration must persist a shared snapshot')
+  assert.deepEqual(JSON.parse(storage.getItem('hiven:editor-active-pane-snapshot')), paneSnapshot, 'active pane snapshot updates must persist a shared snapshot')
+  assert.equal(subscriberCalls, 2, 'active editor snapshot subscribers must be notified for context and pane updates')
+
+  const { bridge: reloadedBridge } = loadEditorBridge({ storage })
+  assert.deepEqual(JSON.parse(JSON.stringify(reloadedBridge.getActiveEditorContextSnapshot())), activeContext, 'new webviews must hydrate active editor context from the persisted snapshot')
+  assert.deepEqual(JSON.parse(JSON.stringify(reloadedBridge.getActiveEditorPaneSnapshot())), paneSnapshot, 'new webviews must hydrate active pane state from the persisted snapshot')
+
+  bridge.clearActiveEditorSnapshots()
+  assert.equal(storage.getItem('hiven:editor-active-context-snapshot'), null, 'clearing active editor snapshots must remove persisted context')
+  assert.equal(storage.getItem('hiven:editor-active-pane-snapshot'), null, 'clearing active editor snapshots must remove persisted pane state')
+  assert.equal(bridge.getActiveEditorContextSnapshot(), undefined, 'clearing active editor snapshots must clear in-memory context')
+  assert.equal(bridge.getActiveEditorPaneSnapshot(), undefined, 'clearing active editor snapshots must clear in-memory pane state')
+  assert.equal(subscriberCalls, 3, 'active editor snapshot subscribers must be notified when snapshots are cleared')
+  unsubscribe()
 }
 
 {

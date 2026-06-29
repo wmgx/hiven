@@ -4,6 +4,7 @@ import { closeEditorWindow } from '../workspace/windowManager/editorWindow'
 import { EDITOR_WINDOW_LABEL } from '../workspace/windowManager/windowLabels'
 import { markSurfaceInstanceState, upsertSurfaceInstance } from '../surfaces/registry'
 import {
+  clearActiveEditorSnapshots,
   registerActiveEditorContext,
   registerEditorBridgeHandlers,
   updateActivePaneSnapshot,
@@ -41,10 +42,14 @@ export function EditorWindow() {
       canProvideText: true,
       canAttachToEditor: true,
     })
-    const onPageHide = () => markSurfaceInstanceState(EDITOR_WINDOW_LABEL, 'destroyed')
+    const onPageHide = () => {
+      clearActiveEditorSnapshots()
+      markSurfaceInstanceState(EDITOR_WINDOW_LABEL, 'destroyed')
+    }
     window.addEventListener('pagehide', onPageHide)
     return () => {
       window.removeEventListener('pagehide', onPageHide)
+      clearActiveEditorSnapshots()
       markSurfaceInstanceState(EDITOR_WINDOW_LABEL, 'hidden')
     }
   }, [])
