@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useAppStore } from '../../store'
 import { t } from '../../i18n'
 import { usePluginRegistryVersion } from '../../workspace/pluginRegistry'
-import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../../utils/imeKeyboard'
 import { usePluginSettingsStore } from '../../workspace/pluginSettingsStore'
 import { useGlobalLauncherResultFrame } from '../../components/launcher/GlobalLauncherResults'
 import { buildGlobalLauncherItems, type GlobalLauncherItem } from '../../components/launcher/GlobalLauncherItems'
@@ -11,6 +10,7 @@ import { usePluginPermissionStore } from '../../workspace/pluginPermissions'
 import { useLauncherSession } from '../../workspace/launcher/useLauncherSession'
 import { useGlobalLauncherSurfaceRegistry } from '../../components/launcher/GlobalLauncherSurfaceRegistry'
 import { useCloseStandaloneLauncherOnBlur, useFocusGlobalLauncherSurfaceShell, useGlobalLauncherNativeDrag, useStandaloneLauncherResize } from '../../components/launcher/GlobalLauncherWindowLifecycle'
+import { isStandaloneLauncherWindow, useGlobalLauncherCollectInputPreview, useGlobalLauncherFocusSession, useGlobalLauncherHostEscape, useGlobalLauncherImeComposition } from '../../components/launcher/GlobalLauncherHostLifecycle'
 import { closeGlobalLauncherWindow } from '../../components/launcher/GlobalLauncherClose'
 import { isWorkflowObjectLauncherItem } from '../../components/launcher/GlobalLauncherSelection'
 import { useGlobalLauncherSurfaceFrame } from '../../components/launcher/GlobalLauncherSurfaceFrame'
@@ -28,7 +28,6 @@ export function GlobalLauncherHost() {
   const actionUsageCounts = useAppStore((s) => s.actionUsageBySource['global-launcher'].actionUsageCounts)
   const locale = useAppStore((s) => s.locale)
   const pluginRegistryVersion = usePluginRegistryVersion()
-  const pluginPermissionVersion = usePluginPermissionStore((s) => s.version)
   const grantPluginPermissions = usePluginPermissionStore((s) => s.grantPermissions)
   const pluginSurfaceToolTarget = useAppStore((s) => s.pluginSurfaceToolTarget)
   const clearPluginSurfaceTool = useAppStore((s) => s.clearPluginSurfaceTool)
@@ -40,8 +39,7 @@ export function GlobalLauncherHost() {
   const isKeyboardNavRef = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
-  const isImeComposingRef = useRef(false)
-  const previousFocusRef = useRef<HTMLElement | null>(null)
+  const { isImeComposingRef, handleCompositionStart, handleCompositionEnd } = useGlobalLauncherImeComposition()
   const standaloneLauncher = isStandaloneLauncherWindow()
   const launcherSettingsTarget = settingsDialogTarget?.presentation === 'global-launcher'
     ? settingsDialogTarget
@@ -62,16 +60,6 @@ export function GlobalLauncherHost() {
     requestClose: () => closeAfterActionRef.current(),
     collectDynamicWhenEmpty: true,
   })
-
-  useEffect(() => {
-    if (!open) return
-    previousFocusRef.current = document.activeElement as HTMLElement | null
-    requestAnimationFrame(() => {
-      setQuery('')
-      setSelectedIndex(0)
-      inputRef.current?.focus()
-    })
-  }, [open])
 
   const {
     surfaceFrame,
@@ -117,13 +105,12 @@ export function GlobalLauncherHost() {
     })
   }, [actionUsageCounts, locale, mode, pinnedActions, pluginRegistryVersion, query, rankedLauncherItems, recentActionNames])
 
-  const restoreFocus = useCallback(() => {
-    const el = previousFocusRef.current
-    if (el && typeof el.focus === 'function') {
-      requestAnimationFrame(() => el.focus())
-    }
-    previousFocusRef.current = null
-  }, [])
+  const { restoreFocus, focusSearchInputAfterBack } = useGlobalLauncherFocusSession({
+    open,
+    inputRef,
+    setQuery,
+    setSelectedIndex,
+  })
 
   const resetLauncherSession = useCallback(() => {
     clearPluginSurfaceTool()
@@ -188,30 +175,12 @@ export function GlobalLauncherHost() {
     activeResultFrame: activeResultFrame?.kind === 'result' ? activeResultFrame : null,
   })
 
-  function focusSearchInputAfterBack() {
-    requestAnimationFrame(() => inputRef.current?.focus())
-  }
-
-  // Focus input when entering collect-input frame
-  useEffect(() => {
-    if (!open || !controllerState || controllerState.frames.length <= 1) return
-    const topFrame = controllerState.frames[controllerState.frames.length - 1]
-    if (topFrame.kind !== 'collect-input') return
-    requestAnimationFrame(() => inputRef.current?.focus())
-  }, [open, controllerState])
-
-  useEffect(() => {
-    if (!open || !controllerState || controllerState.frames.length <= 1) return
-    if (controllerState.busy) return
-    const topFrame = controllerState.frames[controllerState.frames.length - 1]
-    if (topFrame.kind !== 'collect-input') return
-    if (topFrame.item.behavior.type !== 'perform' || topFrame.item.inputPolicy == null) return
-    if (topFrame.previewInputText === topFrame.inputText) return
-    const timer = window.setTimeout(() => {
-      void controllerRef.current?.previewInput()
-    }, 180)
-    return () => window.clearTimeout(timer)
-  }, [controllerState, open])
+  useGlobalLauncherCollectInputPreview({
+    open,
+    controllerState,
+    controllerRef,
+    inputRef,
+  })
 
   useStandaloneLauncherResize({
     open,
@@ -244,57 +213,22 @@ export function GlobalLauncherHost() {
     focusSearchInputAfterBack,
   })
 
-  const handleHostEscape = useCallback((event: KeyboardEvent) => {
-    if (event.key !== 'Escape') return
-    if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
-    if (event.key === 'Escape' && launcherSettingsTarget) {
-      event.preventDefault()
-      event.stopPropagation()
-      closeSettingsDialog()
-      focusSearchInputAfterBack()
-      return
-    }
-    if (settingsDialogTarget) return
-    event.preventDefault()
-    event.stopPropagation()
-
-    if (surfaceFrame) {
-      leaveSurface()
-      return
-    }
-
-    if (hostSurfaceTarget) {
-      clearLauncherHostSurface()
-      focusSearchInputAfterBack()
-      return
-    }
-
-    if (itemPermissionFrame) {
-      cancelItemPermissionPrompt()
-      return
-    }
-
-    if (controllerRef.current?.back()) {
-      focusSearchInputAfterBack()
-      return
-    }
-
-    closeLauncher()
-  }, [clearLauncherHostSurface, closeLauncher, closeSettingsDialog, hostSurfaceTarget, itemPermissionFrame, launcherSettingsTarget, leaveSurface, settingsDialogTarget, surfaceFrame])
-
-  useEffect(() => {
-    if (!open) return
-    window.addEventListener('keydown', handleHostEscape, true)
-    return () => window.removeEventListener('keydown', handleHostEscape, true)
-  }, [handleHostEscape, open])
-
-  function handleCompositionStart() {
-    startImeComposition(isImeComposingRef)
-  }
-
-  function handleCompositionEnd() {
-    finishImeComposition(isImeComposingRef)
-  }
+  useGlobalLauncherHostEscape({
+    open,
+    isImeComposingRef,
+    launcherSettingsTarget,
+    closeSettingsDialog,
+    settingsDialogTarget,
+    surfaceFrame,
+    leaveSurface,
+    hostSurfaceTarget,
+    clearLauncherHostSurface,
+    itemPermissionFrame,
+    cancelItemPermissionPrompt,
+    controllerRef,
+    closeLauncher,
+    focusSearchInputAfterBack,
+  })
 
   const beginDrag = useGlobalLauncherNativeDrag(standaloneLauncher)
 
@@ -366,8 +300,4 @@ export function GlobalLauncherHost() {
       />
     </div>
   )
-}
-
-function isStandaloneLauncherWindow() {
-  return new URLSearchParams(window.location.search).get('window') === 'launcher'
 }

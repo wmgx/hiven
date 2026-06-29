@@ -21,6 +21,7 @@ const files = {
   packageJson: read('package.json'),
   globalLauncher: read('src/launcher/hosts/GlobalLauncherHost.tsx'),
   globalLauncherFrames: read('src/components/launcher/GlobalLauncherFrames.tsx'),
+  globalLauncherHostLifecycle: read('src/components/launcher/GlobalLauncherHostLifecycle.ts'),
   globalLauncherKeyboard: read('src/components/launcher/GlobalLauncherKeyboard.ts'),
   globalLauncherLayout: read('src/components/launcher/GlobalLauncherLayout.ts'),
   launcherMixedList: read('src/components/launcher/LauncherMixedList.tsx'),
@@ -59,6 +60,11 @@ assert.match(files.launcherMixedList, /kindCommand/, 'GlobalLauncher must distin
 assert.match(files.globalLauncherLayout, /GLOBAL_LAUNCHER_PANEL_WIDTH\s*=\s*680/, 'GlobalLauncher panel should be widened to 680px')
 assert.doesNotMatch(files.globalLauncher, /MAX_GLOBAL_LAUNCHER_RENDERED_ITEMS/, 'GlobalLauncher should not keep the old rendered item cap')
 assert.match(files.globalLauncher, /collectDynamicWhenEmpty:\s*true/, 'GlobalLauncher should collect host dynamic items even for empty-query app mixing')
+assert.match(files.globalLauncher, /useGlobalLauncherHostEscape/, 'GlobalLauncherHost must delegate host Escape handling to a lifecycle helper')
+assert.match(files.globalLauncher, /useGlobalLauncherCollectInputPreview/, 'GlobalLauncherHost must delegate collect-input preview lifecycle to a helper')
+assert.match(files.globalLauncher, /useGlobalLauncherFocusSession/, 'GlobalLauncherHost must delegate focus capture and restoration to a helper')
+assert.match(files.globalLauncherHostLifecycle, /useGlobalLauncherHostEscape[\s\S]*window\.addEventListener\('keydown', handleHostEscape, true\)/, 'GlobalLauncher lifecycle helper must own host-level Escape subscription')
+assert.match(files.globalLauncherHostLifecycle, /useGlobalLauncherCollectInputPreview[\s\S]*previewInput/, 'GlobalLauncher lifecycle helper must own collect-input preview scheduling')
 
 assert.match(files.commandPalette, /EditorCommandBar/, 'CommandPalette compatibility wrapper must delegate to EditorCommandBar')
 assert.match(files.editorCommandBarHost, /<LauncherDomainSearchStep/, 'EditorCommandBarHost must use the shared v3 search step')
