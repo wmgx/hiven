@@ -2,11 +2,11 @@
 
 Source design: `/Users/bytedance/Downloads/hiven_refactor_design_2026-06-26 (1).md`.
 
-This document is the final acceptance matrix for the workbench-window refactor. It separates proven automated evidence from the product smoke items that still require a human-operated macOS desktop check.
+This document is the final acceptance matrix for the workbench-window refactor. It separates automated evidence coverage from the product smoke items that still require a human-operated macOS desktop check.
 
 ## Validation summary
 
-Status: architecture and automated acceptance are green; manual product smoke is the only remaining evidence gap before claiming full product completion.
+Status: automated coverage exists, but the current worktree has continued no-validation iterations and must rerun the refactor gate before claiming build/CI completion. Manual product smoke remains the final product evidence gap.
 
 Automated gate used as the authoritative build/check proof:
 
@@ -38,7 +38,7 @@ Automated evidence:
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 - `git diff --check`
 
-Current automated status: proven by the refactor gate.
+Current automated status: covered by the refactor gate; must be rerun on the current worktree.
 
 ### Launcher ↔ Editor Bridge
 
@@ -62,7 +62,7 @@ Automated evidence:
 - `scripts/test-workflow-context-routing-story.mjs`
 - `scripts/test-refactor-final-acceptance.mjs`
 
-Current automated status: proven for API shape, editor publication, output routing, and direct-store-mutation guardrails.
+Current automated status: covered for API shape, editor publication, output routing, and direct-store-mutation guardrails.
 
 ### SurfaceRegistry
 
@@ -81,7 +81,7 @@ Automated evidence:
 - `scripts/test-plugin-surface-window-lifecycle-behavior.mjs`
 - `scripts/test-refactor-final-acceptance.mjs`
 
-Current automated status: proven for Rust-backed state shape, sync commands, event propagation, and window lifecycle updates.
+Current automated status: covered for Rust-backed state shape, sync commands, event propagation, and window lifecycle updates.
 
 ### GlobalLauncherHost split
 
@@ -100,7 +100,7 @@ Automated evidence:
 - `scripts/test-refactor-final-acceptance.mjs`
 - `npm run check:architecture`
 
-Current automated status: proven by file existence, import/usage checks, and architecture gate.
+Current automated status: covered by file existence, import/usage checks, and architecture gate.
 
 ### Settings / Plugins / PluginEditor as surfaces
 
@@ -118,7 +118,7 @@ Automated evidence:
 - `scripts/test-window-architecture-phases.mjs`
 - `scripts/test-no-main-window-startup.mjs`
 
-Current automated status: proven for surface wrappers and no-main-window routing.
+Current automated status: covered for surface wrappers and no-main-window routing.
 
 ### Editor independent window
 
@@ -131,7 +131,7 @@ Automated evidence:
 - `scripts/test-window-entry-runtime-smoke.mjs`
 - `scripts/test-refactor-final-acceptance.mjs`
 
-Current automated status: proven for entry routing, native window command, global launcher open-editor path, context snapshot, and PanelHostV2 retention.
+Current automated status: covered for entry routing, native window command, global launcher open-editor path, context snapshot, and PanelHostV2 retention.
 
 ### Plugin surface independent window lifecycle
 
@@ -146,7 +146,7 @@ Automated evidence:
 - `scripts/test-plugin-surface-shortcut-lifecycle-story.mjs`
 - `scripts/test-window-entry-runtime-smoke.mjs`
 
-Current automated status: proven for window labels, shortcut presentation routing, hide/destroy lifecycle, renderer reuse, and plugin-surface entry startup.
+Current automated status: covered for window labels, shortcut presentation routing, hide/destroy lifecycle, renderer reuse, and plugin-surface entry startup.
 
 Additional hardening:
 
@@ -172,7 +172,7 @@ Automated evidence:
 - `scripts/test-workflow-context-routing-story.mjs`
 - `scripts/test-workflow-json-panel-story.mjs`
 
-Current automated status: proven for current context objects, clipboard/editor document objects, workflow action expansion, output routing, and editor/plugin surface handoff.
+Current automated status: covered for current context objects, clipboard/editor document objects, workflow action expansion, output routing, and editor/plugin surface handoff.
 
 ### Foreground paste / clipboard history
 
@@ -185,7 +185,7 @@ Automated evidence:
 - `scripts/test-output-router-behavior.mjs`
 - `scripts/test-workflow-clipboard-history-story.mjs`
 
-Current automated status: proven for text/image/files paste API behavior, `hide_launcher_window`, `simulate_paste`, Accessibility-permission fallback message, stale-selection prevention, and host close behavior.
+Current automated status: covered for text/image/files paste API behavior, `hide_launcher_window`, `simulate_paste`, Accessibility-permission fallback message, stale-selection prevention, and host close behavior.
 
 ### Runtime smoke
 
@@ -198,7 +198,7 @@ Automated evidence:
 - `scripts/test-window-entry-runtime-smoke.mjs`
 - `scripts/test-launcher-web-smoke.mjs`
 
-Current automated status: proven for debug-start failure signature scan, hidden-launcher/no-main runtime state, and route module transformation.
+Current automated status: covered for debug-start failure signature scan, hidden-launcher/no-main runtime state, and route module transformation.
 
 ## Reproducible debug runtime-state smoke - 2026-06-29
 
@@ -239,7 +239,7 @@ Manual checklist before declaring full product acceptance:
 6. close all visible windows → tray/background remains alive; global shortcut or reopen event can show the launcher again.
 7. deny Accessibility permission → paste action leaves content copied and surfaces the explicit fallback message.
 
-Manual status: pending human-operated debug smoke. Automated evidence is strong enough for CI/build confidence, but not enough to claim every product interaction has been manually accepted.
+Manual status: pending human-operated debug smoke. Automated evidence is structured for CI/build confidence after rerunning the gate, but it is not enough to claim every product interaction has been manually accepted.
 
 ## Final claim rule
 

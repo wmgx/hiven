@@ -139,6 +139,7 @@ assert.match(finalValidationDoc, /# Hiven Refactor Final Validation/, 'final val
 assert.match(finalValidationDoc, /Launcher ↔ Editor Bridge[\s\S]*Automated evidence[\s\S]*scripts\/test-editor-bridge-behavior\.mjs/, 'final validation doc must map launcher-editor bridge to evidence')
 assert.match(finalValidationDoc, /SurfaceRegistry[\s\S]*Automated evidence[\s\S]*scripts\/test-surface-registry-behavior\.mjs/, 'final validation doc must map SurfaceRegistry to evidence')
 assert.match(finalValidationDoc, /Manual debug smoke remaining[\s\S]*external app selected text[\s\S]*tray\/background/, 'final validation doc must call out remaining manual product smoke coverage')
+assert.match(finalValidationDoc, /must rerun the refactor gate before claiming build\/CI completion/, 'final validation doc must not overclaim current gate status after no-validation iterations')
 assert.match(finalValidationDoc, /Reproducible debug runtime-state smoke - 2026-06-29[\s\S]*target\/debug\/hiven[\s\S]*hiven windows=0/, 'final validation doc must record the reproducible debug runtime-state smoke evidence')
 
 // Product/behavior acceptance: startup and global entry.
