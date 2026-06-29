@@ -44,7 +44,19 @@ export async function runToolbarCommand(commandId: string, isDev = false): Promi
     ownerPluginId: entry.meta.pluginId,
   })
   if (effects.length > 0) {
+    if (!isEditorWindowRuntime()) {
+      showToast('Plugin toolbar effects can only run in the editor window', 'error')
+      return false
+    }
     applyEffects(effects)
   }
   return true
+}
+
+function isEditorWindowRuntime(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get('window') === 'editor'
+  } catch {
+    return false
+  }
 }

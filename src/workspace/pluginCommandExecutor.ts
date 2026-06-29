@@ -54,6 +54,15 @@ export async function runPluginCommandEntry(
       ownerPluginId: entry.meta.pluginId,
     })
     if (effects.length > 0) {
+      if (!isEditorWindowRuntime()) {
+        useAppStore.getState().setLastCommandStatus({
+          title: displayTitle,
+          status: 'error',
+          message: 'Plugin command effects can only be applied in the editor window',
+          updatedAt: Date.now(),
+        })
+        return false
+      }
       const runResult = applyEffects(effects)
       if (runResult.errors.length > 0) {
         useAppStore.getState().setLastCommandStatus({
@@ -74,6 +83,14 @@ export async function runPluginCommandEntry(
       message: error instanceof Error ? error.message : String(error),
       updatedAt: Date.now(),
     })
+    return false
+  }
+}
+
+function isEditorWindowRuntime(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get('window') === 'editor'
+  } catch {
     return false
   }
 }

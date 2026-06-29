@@ -52,6 +52,7 @@ const files = {
   launcherController: read('src/workspace/launcher/controller.ts'),
   pluginRegistry: read('src/workspace/pluginRegistry.ts'),
   toolbarCommandRunner: read('src/workspace/toolbarCommandRunner.ts'),
+  pluginCommandExecutor: read('src/workspace/pluginCommandExecutor.ts'),
   globalLauncher: read('src/components/GlobalLauncher.tsx'),
   globalLauncherHost: read('src/launcher/hosts/GlobalLauncherHost.tsx'),
   surfaceRegistry: read('src/surfaces/registry.ts'),
@@ -128,6 +129,8 @@ assert.match(files.editorBridge, /insertIntoEditor/, 'editor bridge must support
 assert.match(files.editorBridge, /openEditorPanel/, 'editor bridge must support launcher-to-editor panel opening')
 assert.match(files.editorBridge, /registerActiveEditorContext/, 'editor bridge must support editor-to-launcher active context registration')
 assert.match(files.editorBridge, /updateActivePaneSnapshot/, 'editor bridge must support editor-to-launcher pane snapshot updates')
+assert.match(files.pluginCommandExecutor, /if \(!isEditorWindowRuntime\(\)\)[\s\S]*Plugin command effects can only be applied in the editor window/, 'plugin command executor must not apply editor effects outside the editor window')
+assert.match(files.toolbarCommandRunner, /if \(!isEditorWindowRuntime\(\)\)[\s\S]*Plugin toolbar effects can only run in the editor window/, 'toolbar command runner must not apply editor effects outside the editor window')
 assert.match(files.pluginApi, /activeEditorTextTarget[\s\S]*paneId:\s*snapshot\.activePaneId[\s\S]*range:\s*snapshot\.selectionRange/, 'plugin launcher API must use editor context snapshots for non-editor pane/range targets')
 assert.match(files.pluginApi, /replaceEditorSelection\(text,\s*activeEditorTextTarget\(\)\)/, 'plugin launcher API must replace editor text through the bridge with pane/range context')
 assert.match(files.pluginApi, /insertIntoEditor\(text,\s*activeEditorTextTarget\(\)\)/, 'plugin launcher API must insert editor text through the bridge with pane/range context')

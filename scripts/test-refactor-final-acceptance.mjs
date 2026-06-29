@@ -30,6 +30,8 @@ const files = {
   tauriLib: read('src-tauri/src/lib.rs'),
   globalHotkey: read('src/hotkeys/globalPinnedLauncher.ts'),
   pluginSurfaceHotkeys: read('src/hotkeys/pluginSurfaceShortcuts.ts'),
+  pluginCommandExecutor: read('src/workspace/pluginCommandExecutor.ts'),
+  toolbarCommandRunner: read('src/workspace/toolbarCommandRunner.ts'),
   editorWindow: read('src/components/EditorWindow.tsx'),
   editorView: read('src/views/EditorView.tsx'),
   commandPalette: read('src/components/CommandPalette.tsx'),
@@ -208,6 +210,8 @@ assert.match(files.pluginApi, /replaceEditorSelection\(text,\s*activeEditorTextT
 assert.match(files.pluginApi, /insertIntoEditor\(text,\s*activeEditorTextTarget\(\)\)/, 'plugin launcher API insertText must cross into editor via EditorBridge with context')
 assert.match(files.pluginInputResolver, /if \(!isEditorWindowRuntime\(\) && canReadEditorContextSnapshot\(\)\)[\s\S]*getActiveEditorContextSnapshot\(\)[\s\S]*resolveFromEditorContext/, 'plugin input resolver must use synced editor context outside the editor runtime')
 assert.match(files.pluginInputResolver, /Need editor pane snapshots for multiple pane inputs/, 'plugin input resolver must not guess multi-pane inputs from launcher-local shadow workspace state')
+assert.match(files.pluginCommandExecutor, /if \(!isEditorWindowRuntime\(\)\)[\s\S]*Plugin command effects can only be applied in the editor window/, 'plugin command executor must not apply editor effects outside the editor window')
+assert.match(files.toolbarCommandRunner, /if \(!isEditorWindowRuntime\(\)\)[\s\S]*Plugin toolbar effects can only run in the editor window/, 'toolbar command runner must not apply editor effects outside the editor window')
 assert.match(files.windowLabels, /EDITOR_WINDOW_LABEL/, 'window labels must centralize editor label constants')
 assert.match(files.windowLabels, /LAUNCHER_WINDOW_LABEL/, 'window labels must centralize launcher label constants')
 assert.match(files.editorBridge, /emitTo\(EDITOR_WINDOW_LABEL,/, 'editor bridge must use the centralized editor label')

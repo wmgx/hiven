@@ -17,6 +17,7 @@ const commandPalette = read('src/components/CommandPalette.tsx')
 const editorCommandBarHost = read('src/launcher/hosts/EditorCommandBarHost.tsx')
 const launcherSession = read('src/workspace/launcher/useLauncherSession.ts')
 const pluginCommandExecutor = read('src/workspace/pluginCommandExecutor.ts')
+const toolbarCommandRunner = read('src/workspace/toolbarCommandRunner.ts')
 const packageJson = read('package.json')
 
 assert.match(packageJson, /test:plugin-text-output-contract/, 'package.json should expose the text output contract verifier')
@@ -45,5 +46,7 @@ assert.match(editorCommandBarHost, /useLauncherSession/, 'editor command bar hos
 assert.match(launcherSession, /LauncherController/, 'shared launcher session should delegate launcher text output to LauncherController')
 assert.match(launcherSession, /createPluginLauncherApi/, 'shared launcher session should use the shared launcher API for host-neutral text output actions')
 assert.match(pluginCommandExecutor, /effectsFromPluginCommandResult/, 'direct plugin command executor should apply host-neutral text output')
+assert.match(pluginCommandExecutor, /if \(!isEditorWindowRuntime\(\)\)[\s\S]*Plugin command effects can only be applied in the editor window/, 'direct plugin command executor must not apply effects outside the editor window')
+assert.match(toolbarCommandRunner, /if \(!isEditorWindowRuntime\(\)\)[\s\S]*Plugin toolbar effects can only run in the editor window/, 'toolbar command runner must not apply effects outside the editor window')
 
 console.log('plugin text output contract checks passed')
