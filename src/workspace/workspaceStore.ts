@@ -5,7 +5,7 @@
 
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
-import { migrateLocalStorageKey } from '../utils/persistMigration'
+import { migrateStorageKey } from '../utils/persistMigration'
 import type {
   PaneId,
   EditorPane,
@@ -34,8 +34,13 @@ function isEditorWindowWorkspaceSession(): boolean {
 
 function createWorkspaceSessionStorage(): Storage {
   if (isEditorWindowWorkspaceSession()) {
-    migrateLocalStorageKey('fluxtext-workspace', 'hiven-workspace')
-    return window.sessionStorage
+    const storage = window.sessionStorage
+    try {
+      migrateStorageKey(storage, 'fluxtext-workspace', 'hiven-workspace')
+    } catch {
+      // Workspace migration is best-effort; editor sessions can always start fresh.
+    }
+    return storage
   }
   return {
     getItem: (key) => workspaceRuntimeStorage.get(key) ?? null,
