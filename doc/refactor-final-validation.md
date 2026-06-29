@@ -148,6 +148,12 @@ Automated evidence:
 
 Current automated status: proven for window labels, shortcut presentation routing, hide/destroy lifecycle, renderer reuse, and plugin-surface entry startup.
 
+Additional hardening:
+
+- Native `show_plugin_surface_window` now persists and broadcasts a visible Rust `SurfaceRegistry` record after the window is shown.
+- Native `hide_plugin_surface_window` and close-on-blur hiding now persist and broadcast hidden state.
+- Native destroyed events now persist and broadcast a destroyed plugin-surface record, so other WebviewWindow registry mirrors can recover even if the React cleanup path does not run.
+
 ### Object → Action → Surface → Output Target
 
 Requirement: Hiven must route from current objects to actions, then to editor/plugin surfaces or output targets.

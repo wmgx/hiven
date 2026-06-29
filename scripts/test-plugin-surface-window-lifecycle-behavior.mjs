@@ -7,6 +7,7 @@ import ts from 'typescript'
 
 const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
 const refactorSuite = readFileSync('scripts/test-refactor-suite.mjs', 'utf8')
+const tauriLib = readFileSync('src-tauri/src/lib.rs', 'utf8')
 
 assert.equal(
   packageJson.scripts?.['test:plugin-surface-window-lifecycle-behavior'],
@@ -18,6 +19,11 @@ assert.match(
   /test:plugin-surface-window-lifecycle-behavior/,
   'refactor suite must include plugin surface window lifecycle behavior coverage',
 )
+assert.match(tauriLib, /SURFACE_REGISTRY_EVENT/, 'native plugin surface lifecycle must use the shared SurfaceRegistry event channel')
+assert.match(tauriLib, /show_and_focus_plugin_surface_window\(&app,\s*&window\)\?[\s\S]*surface_registry_upsert_record\(surface\.clone\(\)\)\?/, 'native plugin surface show must persist visible state in Rust registry')
+assert.match(tauriLib, /async fn hide_plugin_surface_window[\s\S]*surface_registry_mark_record_state\(&label,\s*["']hidden["']/, 'native plugin surface hide must persist hidden state in Rust registry')
+assert.match(tauriLib, /WindowEvent::Focused\(false\) if close_on_blur[\s\S]*surface_registry_mark_record_state\(&label,\s*["']hidden["']/, 'native focus-lost hide must persist hidden state in Rust registry')
+assert.match(tauriLib, /WindowEvent::Destroyed[\s\S]*surface_registry_upsert_record[\s\S]*["']destroyed["']/, 'native plugin surface destroy must persist destroyed state in Rust registry')
 
 function loadModule(path, globals = {}) {
   let src = readFileSync(path, 'utf8')

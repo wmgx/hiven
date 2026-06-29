@@ -36,6 +36,7 @@ static INSTALLED_APP_TARGETS: OnceLock<Mutex<HashMap<String, String>>> = OnceLoc
 static PLUGIN_KV_DB: OnceLock<Result<Mutex<Connection>, String>> = OnceLock::new();
 static PLUGIN_SURFACE_WINDOW_TOKENS: OnceLock<Mutex<HashMap<String, u64>>> = OnceLock::new();
 static SURFACE_REGISTRY: OnceLock<SurfaceRegistryState> = OnceLock::new();
+const SURFACE_REGISTRY_EVENT: &str = "hiven://surface-registry-sync";
 const MAX_APP_ICON_CACHE_WARM_COUNT: usize = 20;
 const FOREGROUND_SELECTION_CACHE_TTL: Duration = Duration::from_secs(30);
 
@@ -85,6 +86,95 @@ fn validate_surface_instance_state(state: &str) -> Result<(), String> {
     }
 }
 
+fn now_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn surface_registry_upsert_record(surface: SurfaceInstanceRecord) -> Result<(), String> {
+    validate_surface_instance_kind(&surface.kind)?;
+    validate_surface_instance_state(&surface.state)?;
+    let registry = surface_registry_state();
+    registry
+        .surfaces
+        .lock()
+        .map_err(|_| "surface registry lock poisoned".to_string())?
+        .insert(surface.id.clone(), surface);
+    Ok(())
+}
+
+fn surface_registry_mark_record_state(
+    id: &str,
+    state: &str,
+    last_active_at: u64,
+) -> Result<(), String> {
+    validate_surface_instance_state(state)?;
+    let registry = surface_registry_state();
+    let mut surfaces = registry
+        .surfaces
+        .lock()
+        .map_err(|_| "surface registry lock poisoned".to_string())?;
+    if let Some(surface) = surfaces.get_mut(id) {
+        surface.state = state.to_string();
+        surface.last_active_at = last_active_at;
+    }
+    Ok(())
+}
+
+fn emit_surface_registry_mark_state(
+    app: &tauri::AppHandle,
+    id: &str,
+    state: &str,
+    last_active_at: u64,
+) {
+    let _ = app.emit(
+        SURFACE_REGISTRY_EVENT,
+        serde_json::json!({
+            "sourceId": "rust-surface-registry",
+            "type": "mark-state",
+            "id": id,
+            "state": state,
+            "lastActiveAt": last_active_at,
+        }),
+    );
+}
+
+fn emit_surface_registry_upsert(app: &tauri::AppHandle, surface: &SurfaceInstanceRecord) {
+    let _ = app.emit(
+        SURFACE_REGISTRY_EVENT,
+        serde_json::json!({
+            "sourceId": "rust-surface-registry",
+            "type": "upsert",
+            "surface": surface,
+        }),
+    );
+}
+
+fn plugin_surface_registry_record(
+    label: String,
+    source: String,
+    plugin_id: String,
+    surface_id: String,
+    title: String,
+    state: &str,
+) -> SurfaceInstanceRecord {
+    SurfaceInstanceRecord {
+        id: label.clone(),
+        kind: "plugin-surface".to_string(),
+        window_label: label,
+        title,
+        plugin_id: Some(plugin_id),
+        surface_id: Some(surface_id),
+        state: state.to_string(),
+        can_receive_text: Some(true),
+        can_provide_text: Some(true),
+        can_attach_to_editor: Some(true),
+        last_active_at: now_millis(),
+    }
+}
+
 #[tauri::command]
 fn surface_registry_snapshot() -> Result<Vec<SurfaceInstanceRecord>, String> {
     let registry = surface_registry_state();
@@ -99,30 +189,12 @@ fn surface_registry_snapshot() -> Result<Vec<SurfaceInstanceRecord>, String> {
 
 #[tauri::command]
 fn surface_registry_upsert(surface: SurfaceInstanceRecord) -> Result<(), String> {
-    validate_surface_instance_kind(&surface.kind)?;
-    validate_surface_instance_state(&surface.state)?;
-    let registry = surface_registry_state();
-    registry
-        .surfaces
-        .lock()
-        .map_err(|_| "surface registry lock poisoned".to_string())?
-        .insert(surface.id.clone(), surface);
-    Ok(())
+    surface_registry_upsert_record(surface)
 }
 
 #[tauri::command(rename_all = "camelCase")]
 fn surface_registry_mark_state(id: String, state: String, last_active_at: u64) -> Result<(), String> {
-    validate_surface_instance_state(&state)?;
-    let registry = surface_registry_state();
-    let mut surfaces = registry
-        .surfaces
-        .lock()
-        .map_err(|_| "surface registry lock poisoned".to_string())?;
-    if let Some(surface) = surfaces.get_mut(&id) {
-        surface.state = state;
-        surface.last_active_at = last_active_at;
-    }
-    Ok(())
+    surface_registry_mark_record_state(&id, &state, last_active_at)
 }
 
 #[tauri::command]
@@ -483,7 +555,7 @@ async fn show_plugin_surface_window(
     } else {
         let window =
             tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App(url.into()))
-                .title(title)
+                .title(title.clone())
                 .inner_size(width, height)
                 .min_inner_size(min_width, min_height)
                 .decorations(false)
@@ -500,13 +572,28 @@ async fn show_plugin_surface_window(
             &window,
             app.clone(),
             label.clone(),
+            source.clone(),
+            plugin_id.clone(),
+            surface_id.clone(),
+            title.clone(),
             close_on_blur,
             destroy_timeout_ms,
         );
         window
     };
 
-    show_and_focus_plugin_surface_window(&app, &window)
+    show_and_focus_plugin_surface_window(&app, &window)?;
+    let surface = plugin_surface_registry_record(
+        label,
+        source,
+        plugin_id,
+        surface_id,
+        title,
+        "visible",
+    );
+    surface_registry_upsert_record(surface.clone())?;
+    emit_surface_registry_upsert(&app, &surface);
+    Ok(())
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -526,6 +613,9 @@ async fn hide_plugin_surface_window(
     };
     window.hide().map_err(|error| error.to_string())?;
     restore_launcher_level(&app);
+    let last_active_at = now_millis();
+    surface_registry_mark_record_state(&label, "hidden", last_active_at)?;
+    emit_surface_registry_mark_state(&app, &label, "hidden", last_active_at);
     schedule_plugin_surface_window_destroy(app, label, token, destroy_timeout_ms);
     Ok(())
 }
@@ -586,6 +676,10 @@ fn attach_plugin_surface_window_events(
     window: &tauri::WebviewWindow,
     app: tauri::AppHandle,
     label: String,
+    source: String,
+    plugin_id: String,
+    surface_id: String,
+    title: String,
     close_on_blur: bool,
     destroy_timeout_ms: u64,
 ) {
@@ -596,6 +690,9 @@ fn attach_plugin_surface_window_events(
                 let _ = window.hide();
             }
             restore_launcher_level(&app);
+            let last_active_at = now_millis();
+            let _ = surface_registry_mark_record_state(&label, "hidden", last_active_at);
+            emit_surface_registry_mark_state(&app, &label, "hidden", last_active_at);
             schedule_plugin_surface_window_destroy(
                 app.clone(),
                 label.clone(),
@@ -606,6 +703,21 @@ fn attach_plugin_surface_window_events(
         tauri::WindowEvent::Destroyed => {
             clear_plugin_surface_window_token(&label);
             restore_launcher_level(&app);
+            let last_active_at = now_millis();
+            let destroyed_surface = plugin_surface_registry_record(
+                label.clone(),
+                source.clone(),
+                plugin_id.clone(),
+                surface_id.clone(),
+                title.clone(),
+                "destroyed",
+            );
+            let destroyed_surface = SurfaceInstanceRecord {
+                last_active_at,
+                ..destroyed_surface
+            };
+            let _ = surface_registry_upsert_record(destroyed_surface.clone());
+            emit_surface_registry_upsert(&app, &destroyed_surface);
         }
         _ => {}
     });
