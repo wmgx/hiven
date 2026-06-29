@@ -37,7 +37,8 @@ assert.match(files.contextBroker, /last_foreground_selection_text/, 'Context Bro
 assert.match(files.contextBroker, /FOREGROUND_SELECTION_READ_RETRY_MS/, 'Context Broker must tolerate native async selection capture latency')
 assert.match(files.contextBroker, /for \(let attempt = 0; attempt < FOREGROUND_SELECTION_READ_ATTEMPTS; attempt \+= 1\)/, 'Context Broker must retry the native selection cache briefly before falling back')
 assert.match(files.contextBroker, /externalSelection\?:/, 'WorkContextSnapshot must model external selection separately from editor selection')
-assert.match(files.contextBroker, /externalSelectionContextProvider[\s\S]*clipboardContextProvider/, 'default context snapshot must collect external selection before generic clipboard fallback')
+assert.match(files.contextBroker, /externalSelectionContextProvider/, 'external selection provider must still be exported for explicit use')
+assert.doesNotMatch(files.contextBroker, /\[foregroundContextProvider[\s\S]{0,60}externalSelectionContextProvider[\s\S]{0,60}clipboardContextProvider[\s\S]{0,20}\.\.\. *providers\]/, 'default context snapshot must NOT include external selection (clipboard-first design)')
 assert.match(files.defaultWorkflowProviders, /snapshot\.externalSelection\?\.text/, 'workflow context objects must prefer external selected text as a text object')
 assert.match(files.defaultWorkflowProviders, /source:\s*['"]context\.external-selection['"]/, 'external selected text object must have a stable source')
 

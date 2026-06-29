@@ -1,5 +1,7 @@
 import { useEffect, useRef, type KeyboardEvent } from 'react'
 import { useAppStore } from '../../store'
+import { useWorkspaceStore } from '../../workspace/workspaceStore'
+import { runtimeRegistry } from '../../workspace/runtimeRegistry'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../../utils/imeKeyboard'
 import type { CollectInputFrame, ParamInputFrame, ResultFrame } from '../../workspace/launcher/controller'
 import { LauncherParamStep } from '../../components/launcher/LauncherParamStep'
@@ -11,6 +13,10 @@ import { LauncherResultStep } from '../../components/launcher/LauncherResultStep
 import type { LauncherItem as DomainLauncherItem } from '../../workspace/launcher/types'
 import { filterEditorCommandBarItems } from '../../workspace/launcher/types'
 import { useLauncherSession } from '../../workspace/launcher/useLauncherSession'
+import { useEditorObjectBlock } from '../clipboard/useEditorObjectBlock'
+import { ObjectBlockToken } from '../../components/launcher/ObjectBlockToken'
+import { recommendActionsForBlock, type RecommendedAction } from '../clipboard/actionRecommendation'
+import { RecommendedActionRow } from '../../components/launcher/RecommendedActionRow'
 
 export function EditorCommandBarHost() {
   const open = useAppStore((s) => s.editorCommandBarOpen)
@@ -37,6 +43,20 @@ export function EditorCommandBarHost() {
     requestClose: closePalette,
     staticItemFilter: filterEditorCommandBarItems,
   })
+
+  const editorBlock = useEditorObjectBlock({
+    open,
+    getSelectionText: () => {
+      const state = useWorkspaceStore.getState()
+      const editor = runtimeRegistry.getCodeEditor(state.activePaneId)
+      if (!editor) return ''
+      const sel = editor.getSelection?.()
+      if (!sel || sel.isEmpty?.()) return ''
+      return editor.getModel?.()?.getValueInRange(sel) ?? ''
+    },
+    getActiveText: () => useWorkspaceStore.getState().getActivePaneText(),
+  })
+  const editorRecommendedActions: RecommendedAction[] = editorBlock.block ? recommendActionsForBlock(editorBlock.block) : []
 
   useEffect(() => {
     if (!open) return
@@ -114,6 +134,13 @@ export function EditorCommandBarHost() {
       setSelectedIndex((index) => Math.max(index - 1, 0))
       return
     }
+    if (event.key === 'Backspace') {
+      const input = event.target as HTMLInputElement | null
+      if (!input?.value && editorBlock.handleBackspace(true)) {
+        event.preventDefault()
+        return
+      }
+    }
     if (event.key === 'Enter') {
       event.preventDefault()
       selectItem(rankedLauncherItems[selectedIndex], shouldCustomizeParams(event.metaKey, event.ctrlKey))
@@ -146,7 +173,34 @@ export function EditorCommandBarHost() {
         onCompositionStart={handleCompositionStart}
         onCompositionEnd={handleCompositionEnd}
       >
-        {!inControllerFrame && (
+        {!inControllerFrame && editorBlock.block && !query && editorRecommendedActions.length > 0 && (
+          <>
+            <div className="global-launcher-header l-search" style={{ borderBottom: '1px solid var(--border)' }}>
+              <ObjectBlockToken
+                block={editorBlock.block}
+                onRemove={() => editorBlock.removeBlock()}
+              />
+              <input
+                ref={inputRef}
+                value={query}
+                onChange={(event) => { setQuery(event.target.value); setSelectedIndex(0) }}
+                placeholder="输入动作或搜索…"
+              />
+            </div>
+            <div className="global-launcher-body l-list" data-testid="editor-recommended-actions">
+              {editorRecommendedActions.map((action, index) => (
+                <RecommendedActionRow
+                  key={action.id}
+                  action={action}
+                  selected={index === 0}
+                  onSelect={() => {}}
+                  onHover={() => {}}
+                />
+              ))}
+            </div>
+          </>
+        )}
+        {!inControllerFrame && (!editorBlock.block || !!query || editorRecommendedActions.length === 0) && (
           <LauncherDomainSearchStep
             inputRef={inputRef}
             query={query}

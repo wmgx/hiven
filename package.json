@@ -123,7 +123,9 @@
     "test:first-party-plugin-host-boundary": "node scripts/test-first-party-plugin-host-boundary.mjs",
     "test:clipboard-object-block": "node scripts/test-clipboard-object-block.mjs",
     "test:clipboard-object-block-ui": "node scripts/test-clipboard-object-block-ui.mjs",
-    "test:clipboard-object-block-integration": "node scripts/test-clipboard-object-block-integration.mjs"
+    "test:clipboard-object-block-integration": "node scripts/test-clipboard-object-block-integration.mjs",
+    "test:editor-object-block": "node scripts/test-editor-object-block.mjs",
+    "test:clipboard-direction-adjustment": "node scripts/test-clipboard-direction-adjustment.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

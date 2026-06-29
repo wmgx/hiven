@@ -119,7 +119,9 @@ export async function createDefaultWorkContextSnapshot(
 ): Promise<WorkContextSnapshot> {
   return createWorkContextSnapshot(
     { source, timestamp: Date.now() },
-    [foregroundContextProvider, editorContextProvider, externalSelectionContextProvider, clipboardContextProvider, ...providers],
+    // NOTE: externalSelectionContextProvider intentionally removed from defaults.
+    // Global Launcher no longer auto-reads external app selection (clipboard-first design).
+    [foregroundContextProvider, editorContextProvider, clipboardContextProvider, ...providers],
   )
 }
 
