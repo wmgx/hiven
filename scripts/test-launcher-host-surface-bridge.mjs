@@ -9,6 +9,7 @@ const bridge = readFileSync('src/workspace/launcherHostSurfaceBridge.ts', 'utf8'
 const app = readFileSync('src/App.tsx', 'utf8')
 const launcherPluginApi = readFileSync('src/workspace/launcher/pluginApi.ts', 'utf8')
 const surfaceActions = readFileSync('src/surfaces/actions.ts', 'utf8')
+const pluginsManagerSurface = readFileSync('src/surfaces/PluginsManagerSurfaceContent.tsx', 'utf8')
 
 assert.equal(
   packageJson.scripts?.['test:launcher-host-surface-bridge'],
@@ -68,8 +69,8 @@ assert.match(
 
 assert.match(
   app,
-  /consumePendingLauncherHostSurfaceOpen\(\)[\s\S]*consumePendingPluginSurfaceOpenTarget\(\)[\s\S]*openLauncherHostSurfaceRequestLocally\(pendingHostSurfaceTarget\)/,
-  'launcher startup must prefer pending host surfaces before generic plugin surface requests',
+  /consumePendingLauncherHostSurfaceOpen\(\)[\s\S]*if \(pendingHostSurfaceTarget\) \{[\s\S]*openLauncherHostSurfaceRequestLocally\(pendingHostSurfaceTarget\)[\s\S]*\} else \{[\s\S]*consumePendingPluginSurfaceOpenTarget\(\)/,
+  'launcher startup must not consume plugin surface requests until host surface requests are absent',
 )
 
 assert.match(
@@ -102,6 +103,18 @@ assert.match(
   /requestOpenLauncherHostSurface\(['"]plugins['"]\)/,
   'surface focus for plugins/plugin-editor must use the launcher host surface bridge',
 )
+
+assert.match(
+  pluginsManagerSurface,
+  /function openPluginsSurfaceSettings\(pluginId: string, source: PluginSettingsSource\)[\s\S]*presentation: ['"]global-launcher['"][\s\S]*context: \{ surfaceId: ['"]global-launcher['"] \}/,
+  'PluginsSurface settings buttons must open plugin settings as launcher-hosted settings surfaces',
+)
+assert.doesNotMatch(
+  pluginsManagerSurface,
+  /onClick=\{\(\) => usePluginSettingsStore\.getState\(\)\.openSettingsDialog/,
+  'PluginsSurface must not scatter raw plugin settings dialog mutations across action buttons',
+)
+
 assert.doesNotMatch(
   surfaceActions,
   /useAppStore|usePluginSettingsStore|getState\(\)\.openLauncherHostSurface|openSettingsDialog/,

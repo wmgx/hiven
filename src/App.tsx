@@ -157,13 +157,15 @@ function LauncherRuntimeApp() {
       void (async () => {
         await rehydratePersistedAppState()
         const pendingHostSurfaceTarget = consumePendingLauncherHostSurfaceOpen()
-        const pendingSurfaceTarget = consumePendingPluginSurfaceOpenTarget()
         if (pendingHostSurfaceTarget) {
           openLauncherHostSurfaceRequestLocally(pendingHostSurfaceTarget)
-        } else if (pendingSurfaceTarget) {
-          openLauncherHostedPluginSurface(pendingSurfaceTarget)
         } else {
-          useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
+          const pendingSurfaceTarget = consumePendingPluginSurfaceOpenTarget()
+          if (pendingSurfaceTarget) {
+            openLauncherHostedPluginSurface(pendingSurfaceTarget)
+          } else {
+            useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
+          }
         }
         if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
         const settings = useAppStore.getState().settings

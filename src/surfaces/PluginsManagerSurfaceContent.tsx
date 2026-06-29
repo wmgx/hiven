@@ -92,6 +92,15 @@ function isTauri() {
   return !!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
 }
 
+function openPluginsSurfaceSettings(pluginId: string, source: PluginSettingsSource) {
+  usePluginSettingsStore.getState().openSettingsDialog({
+    pluginId,
+    source,
+    presentation: 'global-launcher',
+    context: { surfaceId: 'global-launcher' },
+  })
+}
+
 function sourceLabel(plugin: InstalledPlugin | DevPlugin, locale: 'zh' | 'en') {
   const source = plugin.source ?? 'local'
   if (source === 'github') return t(locale, 'scripts.source.github')
@@ -546,7 +555,7 @@ export function PluginsManagerSurfaceContent({ onOpenPluginEditor }: PluginsMana
             {hasLegacySettings && (
               <IconButton
                 title={t(locale, 'scripts.settings')}
-                onClick={() => usePluginSettingsStore.getState().openSettingsDialog({ pluginId: plugin.pluginId, source: 'installed' })}
+                onClick={() => openPluginsSurfaceSettings(plugin.pluginId, 'installed')}
               >
                 <Settings size={13} />
               </IconButton>
@@ -633,7 +642,7 @@ export function PluginsManagerSurfaceContent({ onOpenPluginEditor }: PluginsMana
             {hasLegacySettings && (
               <IconButton
                 title={t(locale, 'scripts.settings')}
-                onClick={() => usePluginSettingsStore.getState().openSettingsDialog({ pluginId: plugin.pluginId, source: 'dev' })}
+                onClick={() => openPluginsSurfaceSettings(plugin.pluginId, 'dev')}
               >
                 <Settings size={13} />
               </IconButton>
@@ -702,7 +711,7 @@ export function PluginsManagerSurfaceContent({ onOpenPluginEditor }: PluginsMana
             {hasLegacySettings && (
               <IconButton
                 title={t(locale, 'scripts.settings')}
-                onClick={() => usePluginSettingsStore.getState().openSettingsDialog({ pluginId: plugin.pluginId, source: 'builtin' })}
+                onClick={() => openPluginsSurfaceSettings(plugin.pluginId, 'builtin')}
               >
                 <Settings size={13} />
               </IconButton>
@@ -949,7 +958,7 @@ export function PluginsManagerSurfaceContent({ onOpenPluginEditor }: PluginsMana
           {hasLegacySettings && (
             <IconButton
               title={t(locale, 'scripts.settings')}
-              onClick={() => usePluginSettingsStore.getState().openSettingsDialog({ pluginId: plugin.pluginId, source: 'builtin' })}
+              onClick={() => openPluginsSurfaceSettings(plugin.pluginId, 'builtin')}
             >
               <Settings size={13} />
             </IconButton>
@@ -972,7 +981,7 @@ export function PluginsManagerSurfaceContent({ onOpenPluginEditor }: PluginsMana
           {hasLegacySettings && (
             <IconButton
               title={t(locale, 'scripts.settings')}
-              onClick={() => usePluginSettingsStore.getState().openSettingsDialog({ pluginId: plugin.pluginId, source: 'installed' })}
+              onClick={() => openPluginsSurfaceSettings(plugin.pluginId, 'installed')}
             >
               <Settings size={13} />
             </IconButton>
@@ -1030,7 +1039,7 @@ export function PluginsManagerSurfaceContent({ onOpenPluginEditor }: PluginsMana
         {hasLegacySettings && (
           <IconButton
             title={t(locale, 'scripts.settings')}
-            onClick={() => usePluginSettingsStore.getState().openSettingsDialog({ pluginId: plugin.pluginId, source: 'dev' })}
+            onClick={() => openPluginsSurfaceSettings(plugin.pluginId, 'dev')}
           >
             <Settings size={13} />
           </IconButton>
