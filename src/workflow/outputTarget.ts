@@ -8,7 +8,7 @@ export type OutputTarget =
   | { kind: 'insert-into-editor'; windowId?: string; paneId?: string }
   | { kind: 'open-in-editor'; language?: string; title?: string }
   | { kind: 'open-plugin-surface'; pluginId: string; surfaceId: string; source?: 'builtin' | 'installed' | 'dev'; initialText?: string }
-  | { kind: 'attach-editor-panel'; panelId: string; placement: 'right' | 'bottom' | 'left'; pluginSurfaceTarget?: PluginSurfaceOpenTarget }
+  | { kind: 'attach-editor-panel'; panelId: string; placement: 'right' | 'bottom' | 'left'; paneId?: string; pluginSurfaceTarget?: PluginSurfaceOpenTarget }
   | { kind: 'save-to-shelf' }
 
 export type ActionResult =

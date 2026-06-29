@@ -28,6 +28,7 @@ export type EditorBridgeTextInput = {
 export type EditorBridgePanelInput = {
   panelId: string
   placement: 'right' | 'bottom' | 'left' | 'pane-bottom'
+  paneId?: string
   inputs?: unknown
   title?: string
 }

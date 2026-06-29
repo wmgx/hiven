@@ -179,12 +179,13 @@ function applyInsertIntoEditor(input: EditorBridgeTextInput): void {
 
 function applyOpenEditorPanel(input: EditorBridgePanelInput): void {
   const workspace = useWorkspaceStore.getState()
+  const paneId = input.paneId && workspace.panes[input.paneId] ? input.paneId : workspace.activePaneId
   workspace.openPanelV2({
     panelId: input.panelId,
     placement: input.placement,
     inputs: input.inputs,
     title: input.title,
-    scope: { type: 'pane', paneId: workspace.activePaneId },
+    scope: { type: 'pane', paneId },
   })
 }
 

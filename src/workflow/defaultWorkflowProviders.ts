@@ -310,7 +310,7 @@ const defaultTextActionProvider = {
         }, createDefaultOutputRouterContext())
       )),
       textAction('workflow.open-editor-with-translate-panel', 'Open Editor with Translate Panel', 'PanelRightOpen', 'open-in-editor', async () => {
-        await createEditorPane({
+        const paneId = await createEditorPane({
           text,
           title: input.title,
           language: languageForObject(input),
@@ -318,6 +318,7 @@ const defaultTextActionProvider = {
         await openEditorPanel({
           panelId: PLUGIN_SURFACE_PANEL_ID,
           placement: 'right',
+          paneId,
           inputs: {
             text,
             target: {

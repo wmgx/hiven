@@ -67,7 +67,7 @@ const targets = [
   { kind: 'insert-into-editor', paneId: 'pane-2' },
   { kind: 'open-in-editor', title: 'Draft', language: 'markdown' },
   { kind: 'open-plugin-surface', source: 'builtin', pluginId: 'translate', surfaceId: 'main', initialText: 'provided' },
-  { kind: 'attach-editor-panel', panelId: 'plugin-surface', placement: 'right', pluginSurfaceTarget: { source: 'builtin', pluginId: 'json', surfaceId: 'main' } },
+  { kind: 'attach-editor-panel', panelId: 'plugin-surface', placement: 'right', paneId: 'pane-1', pluginSurfaceTarget: { source: 'builtin', pluginId: 'json', surfaceId: 'main' } },
   { kind: 'save-to-shelf' },
 ]
 
@@ -108,6 +108,7 @@ assert.deepEqual(JSON.parse(JSON.stringify(calls)), [
   ['default.openPanel', {
     panelId: 'plugin-surface',
     placement: 'right',
+    paneId: 'pane-1',
     inputs: { text: 'panel text', target: { source: 'builtin', pluginId: 'json', surfaceId: 'main' } },
   }],
   ['default.openPanel', {

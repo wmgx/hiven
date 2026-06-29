@@ -49,6 +49,7 @@ export function createDefaultOutputRouterContext(): OutputRouterContext {
       await openEditorPanel({
         panelId: options.panelId,
         placement: options.placement,
+        paneId: options.paneId,
         inputs: { text, target: options.pluginSurfaceTarget },
       })
     },

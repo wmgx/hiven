@@ -125,7 +125,7 @@ const paneSnapshot = {
   const { bridge } = loadEditorBridge({ storage })
   await bridge.replaceEditorSelection('new text', { paneId: 'pane-1', range: { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 4 } })
   await bridge.insertIntoEditor('inserted', { paneId: 'pane-2' })
-  await bridge.openEditorPanel({ panelId: 'plugin-surface', placement: 'right', inputs: { text: 'payload' }, title: 'Panel' })
+  await bridge.openEditorPanel({ panelId: 'plugin-surface', placement: 'right', paneId: 'pane-1', inputs: { text: 'payload' }, title: 'Panel' })
 
   assert.deepEqual(JSON.parse(JSON.stringify(readPending(storage).map((request) => ({ action: request.action, payload: request.payload })))), [
     {
@@ -138,7 +138,7 @@ const paneSnapshot = {
     },
     {
       action: 'openEditorPanel',
-      payload: { panelId: 'plugin-surface', placement: 'right', inputs: { text: 'payload' }, title: 'Panel' },
+      payload: { panelId: 'plugin-surface', placement: 'right', paneId: 'pane-1', inputs: { text: 'payload' }, title: 'Panel' },
     },
   ], 'launcher-to-editor text/panel operations must persist ordered pending requests')
 }
