@@ -6,8 +6,15 @@
 import type { CommandInput, InputPolicy, PaneId, SerializedRange } from './types'
 import { useWorkspaceStore } from './workspaceStore'
 import { runtimeRegistry } from './runtimeRegistry'
+import { getActiveEditorContextSnapshot } from './editorBridge'
+import type { EditorContextSnapshot } from '../launcher/context/contextBroker'
 
 export function resolveInput(policy?: InputPolicy): CommandInput {
+  if (!isEditorWindowRuntime() && canReadEditorContextSnapshot()) {
+    const editorContext = getActiveEditorContextSnapshot()
+    if (editorContext) return resolveEditorContextInput(editorContext, policy)
+  }
+
   const state = useWorkspaceStore.getState()
   const activePaneId = state.activePaneId
   const pane = state.panes[activePaneId]
@@ -54,6 +61,44 @@ export function resolveInput(policy?: InputPolicy): CommandInput {
     text: pane.text,
     paneId: activePaneId,
   }
+}
+
+function resolveEditorContextInput(editorContext: EditorContextSnapshot, policy?: InputPolicy): CommandInput {
+  if (policy?.prefer === 'workspace') {
+    return {
+      mode: 'workspace',
+      paneId: editorContext.activePaneId,
+      panes: editorContext.paneIds,
+      text: editorContext.activeText || '',
+    }
+  }
+
+  if (editorContext.selectedText && policy?.prefer !== 'whole-pane') {
+    return {
+      mode: 'selection',
+      text: editorContext.selectedText,
+      range: editorContext.selectionRange,
+      paneId: editorContext.activePaneId,
+    }
+  }
+
+  return {
+    mode: 'whole-pane',
+    text: editorContext.activeText || '',
+    paneId: editorContext.activePaneId,
+  }
+}
+
+function isEditorWindowRuntime(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get('window') === 'editor'
+  } catch {
+    return false
+  }
+}
+
+function canReadEditorContextSnapshot(): boolean {
+  return typeof window !== 'undefined'
 }
 
 function resolveWorkspaceInput(

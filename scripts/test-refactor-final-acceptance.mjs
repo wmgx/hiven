@@ -45,6 +45,7 @@ const files = {
   launcherSession: read('src/workspace/launcher/useLauncherSession.ts'),
   pluginApi: read('src/workspace/launcher/pluginApi.ts'),
   pluginInputResolver: read('src/workspace/pluginInputResolver.ts'),
+  inputResolver: read('src/workspace/inputResolver.ts'),
   launcherView: read('src/components/launcher/LauncherView.tsx'),
   launcherFrames: read('src/components/launcher/GlobalLauncherFrames.tsx'),
   globalLauncherSearchFrame: read('src/components/launcher/GlobalLauncherSearchFrame.tsx'),
@@ -139,6 +140,11 @@ assert.equal(
   'node scripts/test-plugin-paste-behavior.mjs',
   'package.json must expose plugin paste behavior coverage',
 )
+assert.equal(
+  packageJson.scripts?.['test:input-resolver-editor-context'],
+  'node scripts/test-input-resolver-editor-context.mjs',
+  'package.json must expose input resolver editor-context coverage',
+)
 assert.match(read('scripts/test-plugin-paste-behavior.mjs'), /hide_launcher_window[\s\S]*simulate_paste[\s\S]*Accessibility permission[\s\S]*pasteFiles/, 'plugin paste behavior must prove foreground paste and fallback paths')
 assert.match(finalValidationDoc, /# Hiven Refactor Final Validation/, 'final validation doc must exist')
 assert.match(finalValidationDoc, /Launcher ↔ Editor Bridge[\s\S]*Automated evidence[\s\S]*scripts\/test-editor-bridge-behavior\.mjs/, 'final validation doc must map launcher-editor bridge to evidence')
@@ -210,6 +216,7 @@ assert.match(files.pluginApi, /replaceEditorSelection\(text,\s*activeEditorTextT
 assert.match(files.pluginApi, /insertIntoEditor\(text,\s*activeEditorTextTarget\(\)\)/, 'plugin launcher API insertText must cross into editor via EditorBridge with context')
 assert.match(files.pluginInputResolver, /if \(!isEditorWindowRuntime\(\) && canReadEditorContextSnapshot\(\)\)[\s\S]*getActiveEditorContextSnapshot\(\)[\s\S]*resolveFromEditorContext/, 'plugin input resolver must use synced editor context outside the editor runtime')
 assert.match(files.pluginInputResolver, /Need editor pane snapshots for multiple pane inputs/, 'plugin input resolver must not guess multi-pane inputs from launcher-local shadow workspace state')
+assert.match(files.inputResolver, /if \(!isEditorWindowRuntime\(\) && canReadEditorContextSnapshot\(\)\)[\s\S]*getActiveEditorContextSnapshot\(\)[\s\S]*resolveEditorContextInput/, 'generic input resolver must use synced editor context outside the editor runtime')
 assert.match(files.pluginCommandExecutor, /if \(!isEditorWindowRuntime\(\)\)[\s\S]*Plugin command effects can only be applied in the editor window/, 'plugin command executor must not apply editor effects outside the editor window')
 assert.match(files.toolbarCommandRunner, /if \(!isEditorWindowRuntime\(\)\)[\s\S]*Plugin toolbar effects can only run in the editor window/, 'toolbar command runner must not apply editor effects outside the editor window')
 assert.match(files.windowLabels, /EDITOR_WINDOW_LABEL/, 'window labels must centralize editor label constants')
