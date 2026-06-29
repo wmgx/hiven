@@ -27,6 +27,7 @@ import {
 import { t } from '../i18n'
 import type { Locale } from '../i18n'
 import { localized, useAppStore } from '../store'
+import type { PluginEditorState } from './pluginEditorState'
 import { checkBuiltinPluginsUpdate, getConfigDir } from '../configInit'
 import { listBundledPluginPackageSummaries } from '../workspace/bundledPluginLoader'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../utils/imeKeyboard'
@@ -199,9 +200,12 @@ function pluginMatchesQuery(
   return searchableFieldsMatch(pluginSearchFields(plugin), query, locale)
 }
 
-export function PluginsManagerSurfaceContent() {
+type PluginsManagerSurfaceContentProps = {
+  onOpenPluginEditor: (pluginEditor: PluginEditorState) => void
+}
+
+export function PluginsManagerSurfaceContent({ onOpenPluginEditor }: PluginsManagerSurfaceContentProps) {
   const locale = useAppStore((s) => s.locale)
-  const openPluginEditor = useAppStore((s) => s.openPluginEditor)
   const pluginRegistryVersion = usePluginRegistryVersion()
   const pluginSurfaceShortcuts = usePluginSurfaceShortcutStore((s) => s.shortcuts)
   const setPluginSurfaceShortcut = usePluginSurfaceShortcutStore((s) => s.setShortcut)
@@ -549,7 +553,7 @@ export function PluginsManagerSurfaceContent() {
             )}
             <IconButton
               title={t(locale, 'scripts.actionOpenEditor')}
-              onClick={() => openPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'installed' })}
+              onClick={() => onOpenPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'installed' })}
             >
               <FolderOpen size={13} />
             </IconButton>
@@ -636,7 +640,7 @@ export function PluginsManagerSurfaceContent() {
             )}
             <IconButton
               title={t(locale, 'scripts.actionOpenEditor')}
-              onClick={() => openPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'dev' })}
+              onClick={() => onOpenPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'dev' })}
             >
               <FolderOpen size={13} />
             </IconButton>
@@ -705,7 +709,7 @@ export function PluginsManagerSurfaceContent() {
             )}
             <IconButton
               title={t(locale, 'scripts.actionOpenEditor')}
-              onClick={() => openPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'builtin', readOnly: true })}
+              onClick={() => onOpenPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'builtin', readOnly: true })}
             >
               <FolderOpen size={13} />
             </IconButton>
@@ -952,7 +956,7 @@ export function PluginsManagerSurfaceContent() {
           )}
           <IconButton
             title={t(locale, 'scripts.actionOpenEditor')}
-            onClick={() => openPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'builtin', readOnly: true })}
+            onClick={() => onOpenPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'builtin', readOnly: true })}
           >
             <FolderOpen size={13} />
           </IconButton>
@@ -975,7 +979,7 @@ export function PluginsManagerSurfaceContent() {
           )}
           <IconButton
             title={t(locale, 'scripts.actionOpenEditor')}
-            onClick={() => openPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'installed' })}
+            onClick={() => onOpenPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'installed' })}
           >
             <FolderOpen size={13} />
           </IconButton>
@@ -1033,7 +1037,7 @@ export function PluginsManagerSurfaceContent() {
         )}
         <IconButton
           title={t(locale, 'scripts.actionOpenEditor')}
-          onClick={() => openPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'dev' })}
+          onClick={() => onOpenPluginEditor({ pluginId: plugin.pluginId, folderPath: plugin.folderPath, source: 'dev' })}
         >
           <FolderOpen size={13} />
         </IconButton>

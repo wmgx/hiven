@@ -296,9 +296,9 @@ assert.doesNotMatch(
 assert.match(files.store, /LauncherHostSurfaceTarget/, 'app store must model launcher-hosted app surfaces')
 assert.match(files.store, /openLauncherHostSurface/, 'app store must expose launcher-hosted surface opener')
 assert.doesNotMatch(
-  files.store.match(/openPluginEditor:[\s\S]*?closePluginEditor:/)?.[0] ?? '',
-  /activeView:\s*['"]plugin-editor['"]|activeView:\s*['"]scripts['"]/,
-  'Plugin editor open/close must not navigate through the retired main-window ViewId model',
+  files.store,
+  /\bpluginEditor\b|\bopenPluginEditor\b|\bclosePluginEditor\b/,
+  'Plugin editor surface state must stay inside PluginsSurface instead of the shared app store',
 )
 assert.doesNotMatch(
   files.store,

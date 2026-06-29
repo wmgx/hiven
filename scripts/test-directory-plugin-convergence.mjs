@@ -335,12 +335,12 @@ check('Plugin main view includes builtin, installed, and dev package tabs', () =
 check('Plugin cards expose read-only source viewer and external-editor entry', () => {
   assert.match(
     files.pluginsSurfaceContent,
-    /renderInstalled[\s\S]*openPluginEditor\(\{\s*pluginId:\s*plugin\.pluginId[\s\S]*source:\s*['"]installed['"]/,
+    /renderInstalled[\s\S]*onOpenPluginEditor\(\{\s*pluginId:\s*plugin\.pluginId[\s\S]*source:\s*['"]installed['"]/,
     'installed plugin cards should open the read-only source viewer',
   )
   assert.match(
     files.pluginsSurfaceContent,
-    /renderBuiltin[\s\S]*openPluginEditor\(\{\s*pluginId:\s*plugin\.pluginId[\s\S]*source:\s*['"]builtin['"][\s\S]*readOnly:\s*true/,
+    /renderBuiltin[\s\S]*onOpenPluginEditor\(\{\s*pluginId:\s*plugin\.pluginId[\s\S]*source:\s*['"]builtin['"][\s\S]*readOnly:\s*true/,
     'builtin plugin cards should open the read-only source viewer',
   )
   assert.match(

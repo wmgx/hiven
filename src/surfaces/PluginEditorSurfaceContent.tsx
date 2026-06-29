@@ -6,6 +6,7 @@ import { useT } from '../i18n'
 import { listPluginFiles, readPluginFile } from '../workspace/pluginRuntime'
 import type { PluginFileTree } from '../workspace/pluginTypes'
 import { getFluxMonacoTheme, registerFluxMonacoThemes } from '../utils/monacoTheme'
+import type { PluginEditorState } from './pluginEditorState'
 
 function flattenFileTree(nodes: PluginFileTree[]): PluginFileTree[] {
   const result: PluginFileTree[] = []
@@ -88,10 +89,12 @@ function TreeNode({
   )
 }
 
-export function PluginEditorSurfaceContent() {
-  const pluginEditor = useAppStore((s) => s.pluginEditor)
-  const closePluginEditor = useAppStore((s) => s.closePluginEditor)
-  const locale = useAppStore((s) => s.locale)
+type PluginEditorSurfaceContentProps = {
+  pluginEditor: PluginEditorState
+  onClose: () => void
+}
+
+export function PluginEditorSurfaceContent({ pluginEditor, onClose }: PluginEditorSurfaceContentProps) {
   const theme = useAppStore((s) => s.settings.theme)
   const t = useT('pluginEditor')
   const [fileTree, setFileTree] = useState<PluginFileTree[]>([])
@@ -135,23 +138,13 @@ export function PluginEditorSurfaceContent() {
   useEffect(() => {
     void refreshTree()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pluginEditor?.folderPath])
-
-  if (!pluginEditor) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-3" style={{ color: 'var(--color-text-tertiary)' }}>
-        <FolderTree size={36} strokeWidth={1.5} />
-        <span>{t('noSelection')}</span>
-        <button className="scripts-btn" onClick={closePluginEditor}>{t('backToPlugins')}</button>
-      </div>
-    )
-  }
+  }, [pluginEditor.folderPath])
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="scripts-header px-4 py-3" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
         <div className="flex items-center gap-2 min-w-0">
-          <button className="script-action-btn" title={t('back')} onClick={closePluginEditor}>
+          <button className="script-action-btn" title={t('back')} onClick={onClose}>
             <ArrowLeft size={14} />
           </button>
           <span className="scripts-title">{t('title')}</span>

@@ -90,14 +90,6 @@ export type PinnedTombstoneOutputSummary = {
   }
 }
 
-export type PluginEditorState = {
-  pluginId: string
-  folderPath: string
-  activeFile?: string
-  readOnly?: boolean
-  source?: 'builtin' | 'installed' | 'dev'
-}
-
 /** UI model for a launcher parameter field (used to normalize plugin CommandParam for rendering). */
 export interface LauncherParamModel {
   key: string
@@ -172,11 +164,6 @@ export type PluginSurfaceOpenTarget = {
 export type LauncherHostSurfaceTarget = 'settings' | 'plugins'
 
 interface AppState {
-  // Plugin management surfaces
-  pluginEditor: PluginEditorState | null
-  openPluginEditor: (plugin: PluginEditorState) => void
-  closePluginEditor: () => void
-
   // Pinned Action / Live Runner
   pinnedActions: PinnedAction[]
   activePinnedActionId: string | null
@@ -279,11 +266,6 @@ function stripShortcutRuntimeStatus(shortcut: GlobalPinnedLauncherShortcut): Glo
 }
 
 export const useAppStore = create<AppState>()(persist((set) => ({
-  // Plugin management surfaces
-  pluginEditor: null,
-  openPluginEditor: (plugin) => set({ pluginEditor: plugin, editorCommandBarOpen: false }),
-  closePluginEditor: () => set({ pluginEditor: null, editorCommandBarOpen: false }),
-
   // Pinned Action / Live Runner
   pinnedActions: [],
   activePinnedActionId: null,
