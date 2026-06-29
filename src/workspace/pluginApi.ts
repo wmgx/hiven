@@ -72,21 +72,29 @@ export interface WorkspaceApi {
 
 export const workspaceApi: WorkspaceApi = {
   getActivePaneId() {
-    return readEditorContextSnapshot()?.activePaneId ?? useWorkspaceStore.getState().activePaneId
+    const snapshot = readEditorContextSnapshot()
+    if (snapshot) return snapshot.activePaneId
+    return isEditorWindowRuntime() ? useWorkspaceStore.getState().activePaneId : ''
   },
   getActivePaneText() {
-    return readEditorContextSnapshot()?.activeText ?? useWorkspaceStore.getState().getActivePaneText()
+    const snapshot = readEditorContextSnapshot()
+    if (snapshot) return snapshot.activeText
+    return isEditorWindowRuntime() ? useWorkspaceStore.getState().getActivePaneText() : ''
   },
   getPaneText(paneId) {
     const snapshot = readEditorContextSnapshot()
     if (snapshot) return snapshot.activePaneId === paneId ? snapshot.activeText : undefined
-    return useWorkspaceStore.getState().panes[paneId]?.text
+    return isEditorWindowRuntime() ? useWorkspaceStore.getState().panes[paneId]?.text : undefined
   },
   getPaneIds() {
-    return readEditorPaneSnapshot()?.paneIds ?? readEditorContextSnapshot()?.paneIds ?? useWorkspaceStore.getState().paneOrder
+    const snapshot = readEditorPaneSnapshot() ?? readEditorContextSnapshot()
+    if (snapshot) return snapshot.paneIds
+    return isEditorWindowRuntime() ? useWorkspaceStore.getState().paneOrder : []
   },
   getPaneTitle(paneId) {
-    return readEditorPaneSnapshot()?.panes[paneId]?.title ?? useWorkspaceStore.getState().panes[paneId]?.title
+    const snapshot = readEditorPaneSnapshot()
+    if (snapshot) return snapshot.panes[paneId]?.title
+    return isEditorWindowRuntime() ? useWorkspaceStore.getState().panes[paneId]?.title : undefined
   },
 }
 

@@ -19,32 +19,32 @@ assert.match(
 
 assert.match(
   source,
-  /getActivePaneId\(\)[\s\S]*readEditorContextSnapshot\(\)\?\.activePaneId[\s\S]*useWorkspaceStore\.getState\(\)\.activePaneId/,
-  'workspace public API getActivePaneId must prefer synced editor context outside editor windows',
+  /getActivePaneId\(\)[\s\S]*if \(snapshot\) return snapshot\.activePaneId[\s\S]*isEditorWindowRuntime\(\) \? useWorkspaceStore\.getState\(\)\.activePaneId : ''/,
+  'workspace public API getActivePaneId must not read launcher-local shadow workspace when no editor snapshot exists',
 )
 
 assert.match(
   source,
-  /getActivePaneText\(\)[\s\S]*readEditorContextSnapshot\(\)\?\.activeText[\s\S]*useWorkspaceStore\.getState\(\)\.getActivePaneText\(\)/,
-  'workspace public API getActivePaneText must prefer synced editor context outside editor windows',
+  /getActivePaneText\(\)[\s\S]*if \(snapshot\) return snapshot\.activeText[\s\S]*isEditorWindowRuntime\(\) \? useWorkspaceStore\.getState\(\)\.getActivePaneText\(\) : ''/,
+  'workspace public API getActivePaneText must not read launcher-local shadow workspace when no editor snapshot exists',
 )
 
 assert.match(
   source,
-  /getPaneText\(paneId\)[\s\S]*if \(snapshot\) return snapshot\.activePaneId === paneId \? snapshot\.activeText : undefined/,
-  'workspace public API getPaneText must not read non-active pane text from launcher-local shadow workspace when editor context exists',
+  /getPaneText\(paneId\)[\s\S]*if \(snapshot\) return snapshot\.activePaneId === paneId \? snapshot\.activeText : undefined[\s\S]*isEditorWindowRuntime\(\) \? useWorkspaceStore\.getState\(\)\.panes\[paneId\]\?\.text : undefined/,
+  'workspace public API getPaneText must not read pane text from launcher-local shadow workspace',
 )
 
 assert.match(
   source,
-  /getPaneIds\(\)[\s\S]*readEditorPaneSnapshot\(\)\?\.paneIds[\s\S]*readEditorContextSnapshot\(\)\?\.paneIds[\s\S]*useWorkspaceStore\.getState\(\)\.paneOrder/,
-  'workspace public API getPaneIds must prefer synced editor pane snapshots outside editor windows',
+  /getPaneIds\(\)[\s\S]*readEditorPaneSnapshot\(\) \?\? readEditorContextSnapshot\(\)[\s\S]*if \(snapshot\) return snapshot\.paneIds[\s\S]*isEditorWindowRuntime\(\) \? useWorkspaceStore\.getState\(\)\.paneOrder : \[\]/,
+  'workspace public API getPaneIds must not read launcher-local pane order when no editor snapshot exists',
 )
 
 assert.match(
   source,
-  /getPaneTitle\(paneId\)[\s\S]*readEditorPaneSnapshot\(\)\?\.panes\[paneId\]\?\.title[\s\S]*useWorkspaceStore\.getState\(\)\.panes\[paneId\]\?\.title/,
-  'workspace public API getPaneTitle must prefer synced editor pane snapshots outside editor windows',
+  /getPaneTitle\(paneId\)[\s\S]*if \(snapshot\) return snapshot\.panes\[paneId\]\?\.title[\s\S]*isEditorWindowRuntime\(\) \? useWorkspaceStore\.getState\(\)\.panes\[paneId\]\?\.title : undefined/,
+  'workspace public API getPaneTitle must not read launcher-local pane titles when no editor snapshot exists',
 )
 
 assert.match(

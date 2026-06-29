@@ -77,8 +77,22 @@ function activeEditorTextTarget(): { paneId?: string; range?: SerializedRange } 
   }
 }
 
+function emptyPaneSnapshot() {
+  return {
+    activePaneId: '',
+    previousActivePaneId: undefined,
+    paneIds: [],
+    panes: {},
+    renderers: {},
+  }
+}
+
 function isEditorWindowRuntime(): boolean {
-  return new URLSearchParams(window.location.search).get('window') === 'editor'
+  try {
+    return new URLSearchParams(window.location.search).get('window') === 'editor'
+  } catch {
+    return false
+  }
 }
 
 async function readClipboard(): Promise<string> {
@@ -161,14 +175,13 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
     getPaneSnapshot: () => {
       if (!isEditorWindowRuntime()) {
         const snapshot = getActiveEditorPaneSnapshot()
-        if (snapshot) {
-          return {
-            activePaneId: snapshot.activePaneId,
-            previousActivePaneId: snapshot.previousActivePaneId,
-            paneIds: snapshot.paneIds,
-            panes: snapshot.panes,
-            renderers: {},
-          }
+        if (!snapshot) return emptyPaneSnapshot()
+        return {
+          activePaneId: snapshot.activePaneId,
+          previousActivePaneId: snapshot.previousActivePaneId,
+          paneIds: snapshot.paneIds,
+          panes: snapshot.panes,
+          renderers: {},
         }
       }
       const state = useWorkspaceStore.getState()

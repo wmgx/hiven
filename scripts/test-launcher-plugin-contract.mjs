@@ -198,6 +198,17 @@ function assertLauncherApiExposesPaneCreation() {
   )
   assert.match(
     pluginApi,
+    /function emptyPaneSnapshot\(\)[\s\S]*activePaneId:\s*['"][\s\S]*paneIds:\s*\[\][\s\S]*renderers:\s*\{\}/,
+    'PluginLauncherApi must expose an empty pane snapshot fallback instead of reading launcher-local workspace state',
+  )
+  assert.match(
+    pluginApi,
+    /getPaneSnapshot:[\s\S]*if \(!snapshot\) return emptyPaneSnapshot\(\)[\s\S]*const state = useWorkspaceStore\.getState\(\)/,
+    'PluginLauncherApi getPaneSnapshot must only read workspaceStore inside the editor runtime branch',
+  )
+
+  assert.match(
+    pluginApi,
     /isPanePanelOpen:\s*\([^)]*\)\s*=>\s*\{[\s\S]*if \(!isEditorWindowRuntime\(\)\) return false/,
     'PluginLauncherApi must not inspect editor panel state from non-editor windows',
   )
