@@ -117,7 +117,8 @@
     "test:plugin-runtime-editor-cleanup-boundary": "node scripts/test-plugin-runtime-editor-cleanup-boundary.mjs",
     "test:launcher-hosted-plugin-surface-bridge": "node scripts/test-launcher-hosted-plugin-surface-bridge.mjs",
     "test:monaco-bridge-window-boundary": "node scripts/test-monaco-bridge-window-boundary.mjs",
-    "test:surface-coordinator-window-boundary": "node scripts/test-surface-coordinator-window-boundary.mjs"
+    "test:surface-coordinator-window-boundary": "node scripts/test-surface-coordinator-window-boundary.mjs",
+    "test:plugin-editor-surface-open-lifecycle": "node scripts/test-plugin-editor-surface-open-lifecycle.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
