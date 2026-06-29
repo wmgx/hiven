@@ -10,6 +10,7 @@ const app = readFileSync('src/App.tsx', 'utf8')
 const launcherPluginApi = readFileSync('src/workspace/launcher/pluginApi.ts', 'utf8')
 const surfaceActions = readFileSync('src/surfaces/actions.ts', 'utf8')
 const pluginsManagerSurface = readFileSync('src/surfaces/PluginsManagerSurfaceContent.tsx', 'utf8')
+const launcherRegistry = readFileSync('src/workspace/launcher/registry.ts', 'utf8')
 
 assert.equal(
   packageJson.scripts?.['test:launcher-host-surface-bridge'],
@@ -78,6 +79,18 @@ assert.match(
   /listen\(LAUNCHER_HOST_SURFACE_OPEN_EVENT[\s\S]*isLauncherHostSurfaceOpenRequest\(event\.payload\)[\s\S]*openLauncherHostSurfaceRequestLocally\(event\.payload\)/,
   'launcher runtime must handle host surface/plugin settings bridge events locally',
 )
+
+assert.match(
+  launcherRegistry,
+  /resolvePluginSettingsItem[\s\S]*requestOpenLauncherPluginSettingsSurface\(settingsSource, pluginId\)[\s\S]*keepOpen: ctx\.surfaceId === ['"]global-launcher['"]/,
+  'plugin settings launcher items must route through the launcher host surface bridge',
+)
+assert.doesNotMatch(
+  launcherRegistry,
+  /resolvePluginSettingsItem[\s\S]*usePluginSettingsStore|getState\(\)\.openSettingsDialog/,
+  'plugin settings launcher items must not mutate settings dialog state in the caller webview',
+)
+
 assert.match(
   launcherPluginApi,
   /showPluginsPage[\s\S]*requestOpenLauncherHostSurface\(['"]plugins['"]\)/,

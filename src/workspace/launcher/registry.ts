@@ -15,7 +15,7 @@
 import type { Locale } from '../../i18n'
 import { makePluginT } from '../../i18n/pluginI18nRegistry'
 import { pluginRegistry } from '../pluginRegistry'
-import { usePluginSettingsStore } from '../pluginSettingsStore'
+import { requestOpenLauncherPluginSettingsSurface } from '../launcherHostSurfaceBridge'
 import type { ContributionSource, PluginDefinition } from '../pluginTypes'
 import type {
   LauncherDynamicItemProvider,
@@ -164,23 +164,8 @@ function resolvePluginSettingsItem(
     requiredCapabilities: ['settings'],
     pinnable: false,
     execute: async (ctx) => {
-      const settingsState = usePluginSettingsStore.getState()
-      if (ctx.surfaceId === 'global-launcher') {
-        settingsState.openSettingsDialog({
-          pluginId,
-          source: settingsSource,
-          presentation: 'global-launcher',
-          context: { surfaceId: ctx.surfaceId },
-        })
-        return { ok: true, keepOpen: true }
-      }
-      settingsState.openSettingsDialog({
-        pluginId,
-        source: settingsSource,
-        presentation: 'dialog',
-        context: { surfaceId: ctx.surfaceId },
-      })
-      return { ok: true }
+      await requestOpenLauncherPluginSettingsSurface(settingsSource, pluginId)
+      return { ok: true, keepOpen: ctx.surfaceId === 'global-launcher' }
     },
   }
 }
