@@ -118,6 +118,11 @@ assert.doesNotMatch(
   'global context broker must not read editor window store/runtime registry directly',
 )
 assert.match(
+  contextBrokerSource,
+  /function isEditorWindowRuntime\(\)[\s\S]*try[\s\S]*window\.location\.search[\s\S]*catch/,
+  'context broker editor runtime detection must be safe in non-window test/runtime contexts',
+)
+assert.match(
   refactorSuite,
   /test:context-broker-behavior/,
   'refactor suite must include context broker behavior coverage',

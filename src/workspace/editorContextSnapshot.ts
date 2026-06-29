@@ -5,6 +5,7 @@ import { useWorkspaceStore } from './workspaceStore'
 import { EDITOR_WINDOW_LABEL } from './windowManager/windowLabels'
 
 export function readLocalEditorContextSnapshot(): EditorContextSnapshot | undefined {
+  if (!isEditorWindowRuntime()) return undefined
   const state = useWorkspaceStore.getState()
   const pane = state.panes[state.activePaneId]
   if (!pane) return undefined
@@ -35,5 +36,14 @@ export function readLocalEditorContextSnapshot(): EditorContextSnapshot | undefi
     cursor: position
       ? { line: position.lineNumber, column: position.column }
       : undefined,
+  }
+}
+
+
+function isEditorWindowRuntime(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get('window') === 'editor'
+  } catch {
+    return false
   }
 }

@@ -146,7 +146,7 @@ assert.match(files.contextBroker, /editorContextProvider/, 'Context broker must 
 assert.match(files.contextBroker, /clipboardContextProvider/, 'Context broker must expose a real clipboard context provider')
 assert.match(files.contextBroker, /createDefaultWorkContextSnapshot/, 'Context broker must compose default context providers')
 assert.doesNotMatch(files.contextBroker, /useWorkspaceStore|runtimeRegistry/, 'Context broker must not directly read another window runtime state')
-assert.match(files.editorContextSnapshot, /runtimeRegistry\.getCodeEditor/, 'Editor context snapshot module must read live editor runtime state inside the editor window')
+assert.match(files.editorContextSnapshot, /if \(!isEditorWindowRuntime\(\)\) return undefined[\s\S]*runtimeRegistry\.getCodeEditor/, 'Editor context snapshot module must guard live editor runtime reads to the editor window')
 assert.match(files.workflowIndex, /routeTextOutput/, 'workflow index must re-export router entry points')
 assert.match(files.workflowIndex, /createDefaultOutputRouterContext/, 'workflow index must re-export default output router context')
 assert.match(files.workflowIndex, /createDefaultWorkContextSnapshot/, 'workflow index must re-export default context snapshot')

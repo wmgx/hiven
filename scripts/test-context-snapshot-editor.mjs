@@ -21,7 +21,7 @@ assert.match(contextBroker, /current_foreground_app_context/, 'foreground provid
 assert.match(contextBroker, /\[foregroundContextProvider,\s*editorContextProvider,[\s\S]*clipboardContextProvider/, 'default snapshot must compose foreground, editor, optional external-selection, and clipboard providers')
 assert.doesNotMatch(contextBroker, /useWorkspaceStore|runtimeRegistry/, 'global context broker must not directly read editor window store/runtime')
 assert.match(contextBroker, /readLocalEditorContextSnapshot/, 'editor-window runtime should delegate local reads to the editor snapshot module')
-assert.match(editorContextSnapshot, /runtimeRegistry\.getCodeEditor\(state\.activePaneId\)/, 'editor snapshot module must read live editor runtime')
+assert.match(editorContextSnapshot, /if \(!isEditorWindowRuntime\(\)\) return undefined[\s\S]*runtimeRegistry\.getCodeEditor\(state\.activePaneId\)/, 'editor snapshot module must guard local editor runtime reads')
 assert.match(editorContextSnapshot, /getValueInRange\(selection\)/, 'editor snapshot module must read selected text from live selection')
 assert.match(editorContextSnapshot, /selectionRange:\s*TextRange/, 'editor snapshot module must expose selection range')
 assert.match(contextBroker, /activeText:\s*string/, 'editor context snapshot must require active pane text for cross-window launcher APIs')

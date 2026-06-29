@@ -175,5 +175,9 @@ function isTauriRuntime(): boolean {
 }
 
 function isEditorWindowRuntime(): boolean {
-  return new URLSearchParams(window.location.search).get('window') === 'editor'
+  try {
+    return new URLSearchParams(window.location.search).get('window') === 'editor'
+  } catch {
+    return false
+  }
 }
