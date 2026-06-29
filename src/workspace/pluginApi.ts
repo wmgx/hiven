@@ -13,7 +13,7 @@ import { panelRegistry, type PanelContribution } from './panelRegistry'
 import { useWorkspaceStore } from './workspaceStore'
 import { applyEffects } from './effectRunner'
 import { monacoBridge, presentationApi } from './monacoBridge'
-import { getActiveEditorContextSnapshot } from './editorBridge'
+import { getActiveEditorContextSnapshot, getActiveEditorPaneSnapshot, type EditorPaneSnapshot } from './editorBridge'
 import type { EditorContextSnapshot } from '../launcher/context/contextBroker'
 
 // ─── Extension Context ──────────────────────────────────────────────────────
@@ -79,14 +79,14 @@ export const workspaceApi: WorkspaceApi = {
   },
   getPaneText(paneId) {
     const snapshot = readEditorContextSnapshot()
-    if (snapshot?.activePaneId === paneId) return snapshot.activeText
+    if (snapshot) return snapshot.activePaneId === paneId ? snapshot.activeText : undefined
     return useWorkspaceStore.getState().panes[paneId]?.text
   },
   getPaneIds() {
-    return readEditorContextSnapshot()?.paneIds ?? useWorkspaceStore.getState().paneOrder
+    return readEditorPaneSnapshot()?.paneIds ?? readEditorContextSnapshot()?.paneIds ?? useWorkspaceStore.getState().paneOrder
   },
   getPaneTitle(paneId) {
-    return useWorkspaceStore.getState().panes[paneId]?.title
+    return readEditorPaneSnapshot()?.panes[paneId]?.title ?? useWorkspaceStore.getState().panes[paneId]?.title
   },
 }
 
@@ -102,6 +102,11 @@ export function executeEffects(effects: FluxEffect[]) {
 function readEditorContextSnapshot(): EditorContextSnapshot | undefined {
   if (isEditorWindowRuntime()) return undefined
   return getActiveEditorContextSnapshot()
+}
+
+function readEditorPaneSnapshot(): EditorPaneSnapshot | undefined {
+  if (isEditorWindowRuntime()) return undefined
+  return getActiveEditorPaneSnapshot()
 }
 
 function isEditorWindowRuntime(): boolean {

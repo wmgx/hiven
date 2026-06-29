@@ -7,13 +7,13 @@ const source = readFileSync('src/workspace/pluginApi.ts', 'utf8')
 
 assert.match(
   source,
-  /getActiveEditorContextSnapshot/,
-  'workspace public API must import synced editor context snapshots',
+  /getActiveEditorContextSnapshot[\s\S]*getActiveEditorPaneSnapshot/,
+  'workspace public API must import synced editor context and pane snapshots',
 )
 
 assert.match(
   source,
-  /function readEditorContextSnapshot\(\)[\s\S]*if \(isEditorWindowRuntime\(\)\) return undefined[\s\S]*getActiveEditorContextSnapshot\(\)/,
+  /function readEditorContextSnapshot\(\)[\s\S]*if \(isEditorWindowRuntime\(\)\) return undefined[\s\S]*getActiveEditorContextSnapshot\(\)[\s\S]*function readEditorPaneSnapshot\(\)[\s\S]*getActiveEditorPaneSnapshot\(\)/,
   'workspace public API must only read synced editor context outside the editor runtime',
 )
 
@@ -31,8 +31,20 @@ assert.match(
 
 assert.match(
   source,
-  /getPaneIds\(\)[\s\S]*readEditorContextSnapshot\(\)\?\.paneIds[\s\S]*useWorkspaceStore\.getState\(\)\.paneOrder/,
-  'workspace public API getPaneIds must prefer synced editor context outside editor windows',
+  /getPaneText\(paneId\)[\s\S]*if \(snapshot\) return snapshot\.activePaneId === paneId \? snapshot\.activeText : undefined/,
+  'workspace public API getPaneText must not read non-active pane text from launcher-local shadow workspace when editor context exists',
+)
+
+assert.match(
+  source,
+  /getPaneIds\(\)[\s\S]*readEditorPaneSnapshot\(\)\?\.paneIds[\s\S]*readEditorContextSnapshot\(\)\?\.paneIds[\s\S]*useWorkspaceStore\.getState\(\)\.paneOrder/,
+  'workspace public API getPaneIds must prefer synced editor pane snapshots outside editor windows',
+)
+
+assert.match(
+  source,
+  /getPaneTitle\(paneId\)[\s\S]*readEditorPaneSnapshot\(\)\?\.panes\[paneId\]\?\.title[\s\S]*useWorkspaceStore\.getState\(\)\.panes\[paneId\]\?\.title/,
+  'workspace public API getPaneTitle must prefer synced editor pane snapshots outside editor windows',
 )
 
 assert.match(
