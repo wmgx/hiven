@@ -68,6 +68,15 @@ function activeSelectionRange(): SerializedRange | undefined {
   }
 }
 
+function activeEditorTextTarget(): { paneId?: string; range?: SerializedRange } {
+  const snapshot = getActiveEditorContextSnapshot()
+  if (!snapshot) return {}
+  return {
+    paneId: snapshot.activePaneId,
+    range: snapshot.selectionRange,
+  }
+}
+
 function isEditorWindowRuntime(): boolean {
   return new URLSearchParams(window.location.search).get('window') === 'editor'
 }
@@ -198,7 +207,7 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
     getClipboardText: () => readClipboard(),
     replaceActiveText: async (text: string) => {
       if (!isEditorWindowRuntime()) {
-        await replaceEditorSelection(text)
+        await replaceEditorSelection(text, activeEditorTextTarget())
         return
       }
       const range = activeSelectionRange()
@@ -211,7 +220,7 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
     },
     insertText: async (text: string) => {
       if (!isEditorWindowRuntime()) {
-        await insertIntoEditor(text)
+        await insertIntoEditor(text, activeEditorTextTarget())
         return
       }
       const range = activeSelectionRange()

@@ -127,6 +127,9 @@ assert.match(files.editorBridge, /insertIntoEditor/, 'editor bridge must support
 assert.match(files.editorBridge, /openEditorPanel/, 'editor bridge must support launcher-to-editor panel opening')
 assert.match(files.editorBridge, /registerActiveEditorContext/, 'editor bridge must support editor-to-launcher active context registration')
 assert.match(files.editorBridge, /updateActivePaneSnapshot/, 'editor bridge must support editor-to-launcher pane snapshot updates')
+assert.match(files.pluginApi, /activeEditorTextTarget[\s\S]*paneId:\s*snapshot\.activePaneId[\s\S]*range:\s*snapshot\.selectionRange/, 'plugin launcher API must use editor context snapshots for non-editor pane/range targets')
+assert.match(files.pluginApi, /replaceEditorSelection\(text,\s*activeEditorTextTarget\(\)\)/, 'plugin launcher API must replace editor text through the bridge with pane/range context')
+assert.match(files.pluginApi, /insertIntoEditor\(text,\s*activeEditorTextTarget\(\)\)/, 'plugin launcher API must insert editor text through the bridge with pane/range context')
 
 assert.match(files.workspaceStore, /isEditorWindowWorkspaceSession/, 'workspace store must detect editor window sessions')
 assert.match(files.workspaceStore, /createJSONStorage/, 'workspace store must explicitly choose storage per runtime window')

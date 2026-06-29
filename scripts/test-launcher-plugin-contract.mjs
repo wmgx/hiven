@@ -183,6 +183,21 @@ function assertLauncherApiExposesPaneCreation() {
   )
   assert.match(
     pluginApi,
+    /function activeEditorTextTarget\(\)[\s\S]*getActiveEditorContextSnapshot\(\)[\s\S]*paneId:\s*snapshot\.activePaneId[\s\S]*range:\s*snapshot\.selectionRange/,
+    'PluginLauncherApi must derive editor pane/range targets from the synced editor context outside the editor runtime',
+  )
+  assert.match(
+    pluginApi,
+    /replaceActiveText:[\s\S]*if \(!isEditorWindowRuntime\(\)\)[\s\S]*replaceEditorSelection\(text,\s*activeEditorTextTarget\(\)\)/,
+    'PluginLauncherApi replaceActiveText must route non-editor calls through EditorBridge with pane/range context',
+  )
+  assert.match(
+    pluginApi,
+    /insertText:[\s\S]*if \(!isEditorWindowRuntime\(\)\)[\s\S]*insertIntoEditor\(text,\s*activeEditorTextTarget\(\)\)/,
+    'PluginLauncherApi insertText must route non-editor calls through EditorBridge with pane/range context',
+  )
+  assert.match(
+    pluginApi,
     /isPanePanelOpen:\s*\([^)]*\)\s*=>\s*\{[\s\S]*if \(!isEditorWindowRuntime\(\)\) return false/,
     'PluginLauncherApi must not inspect editor panel state from non-editor windows',
   )

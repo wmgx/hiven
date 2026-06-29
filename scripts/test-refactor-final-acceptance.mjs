@@ -41,6 +41,7 @@ const files = {
   launcherTypes: read('src/workspace/launcher/types.ts'),
   launcherRegistry: read('src/workspace/launcher/registry.ts'),
   launcherSession: read('src/workspace/launcher/useLauncherSession.ts'),
+  pluginApi: read('src/workspace/launcher/pluginApi.ts'),
   launcherView: read('src/components/launcher/LauncherView.tsx'),
   launcherFrames: read('src/components/launcher/GlobalLauncherFrames.tsx'),
   globalLauncherSearchFrame: read('src/components/launcher/GlobalLauncherSearchFrame.tsx'),
@@ -201,6 +202,9 @@ for (const publisher of ['registerActiveEditorContext', 'updateActivePaneSnapsho
   assert.match(files.editorWindow, new RegExp(publisher), `EditorWindow must publish ${publisher}`)
 }
 assert.doesNotMatch(files.outputRouter, /useWorkspaceStore|getState\(\)\.createPane|getState\(\)\.openPanelV2/, 'caller windows must not mutate editor workspace state directly')
+assert.match(files.pluginApi, /activeEditorTextTarget[\s\S]*paneId:\s*snapshot\.activePaneId[\s\S]*range:\s*snapshot\.selectionRange/, 'plugin launcher API must derive non-editor editor targets from active editor context')
+assert.match(files.pluginApi, /replaceEditorSelection\(text,\s*activeEditorTextTarget\(\)\)/, 'plugin launcher API replaceActiveText must cross into editor via EditorBridge with context')
+assert.match(files.pluginApi, /insertIntoEditor\(text,\s*activeEditorTextTarget\(\)\)/, 'plugin launcher API insertText must cross into editor via EditorBridge with context')
 assert.match(files.windowLabels, /EDITOR_WINDOW_LABEL/, 'window labels must centralize editor label constants')
 assert.match(files.windowLabels, /LAUNCHER_WINDOW_LABEL/, 'window labels must centralize launcher label constants')
 assert.match(files.editorBridge, /emitTo\(EDITOR_WINDOW_LABEL,/, 'editor bridge must use the centralized editor label')
