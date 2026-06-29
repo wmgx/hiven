@@ -9,7 +9,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Editor from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import { definePlugin, getPluginHostSdk, type PanelPropsV2, type PaneInput } from '@hiven/plugin'
-import { useWorkspaceStore } from '../../workspace/workspaceStore'
 import { createMonacoDisposableBucket, disposeAllMonacoDisposables, type MonacoDisposable } from '../../utils/monacoDisposables'
 
 const PLUGIN_ID = 'js-filter'
@@ -199,7 +198,7 @@ function toMonacoSuggestions(
   })
 }
 
-function JsFilterPanel({ host }: PanelPropsV2) {
+function JsFilterPanel({ host, paneId }: PanelPropsV2) {
   const { hooks, effects } = getPluginHostSdk()
   const t = hooks.useT(PLUGIN_ID)
   const settings = hooks.useSettings()
@@ -211,8 +210,7 @@ function JsFilterPanel({ host }: PanelPropsV2) {
   const executeRef = useRef<() => void>(() => {})
   const completionDisposableRef = useRef<ReturnType<typeof monaco.languages.registerCompletionItemProvider> | null>(null)
 
-  const activePaneId = useWorkspaceStore((s) => s.activePaneId)
-  const paneText = hooks.usePaneText(activePaneId)
+  const paneText = hooks.usePaneText(paneId ?? '') ?? ''
   const parsedJson = useMemo(() => parseJson(paneText), [paneText])
 
   useEffect(() => {
@@ -439,14 +437,6 @@ export const jsFilterPlugin = definePlugin({
       inputResolution: { strategy: 'use-active', fallback: 'fail' },
       run(ctx) {
         const paneId = (ctx.inputs.input as PaneInput).paneId
-        // 检查当前 pane 是否已有该面板打开（通过 workspace store 判断）
-        const ws = useWorkspaceStore.getState()
-        const existing = ws.panelInstancesV2[PANEL_ID]
-        if (existing && existing.scope?.type === 'pane' && existing.scope.paneId === paneId) {
-          // 已打开，关闭它
-          return { effects: [{ type: 'panel.closeV2' as const, panelId: PANEL_ID }] }
-        }
-        // 未打开或是其他 pane 的，打开给当前 pane
         return {
           effects: [{
             type: 'panel.openV2' as const,

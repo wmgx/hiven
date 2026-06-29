@@ -56,6 +56,7 @@ function PaneBottomPanelInstance({ instance }: { instance: PanelInstanceV2 }) {
         <PanelComponent
           inputs={instance.inputs}
           panelId={instance.panelId}
+          paneId={instance.scope?.type === 'pane' ? instance.scope.paneId : undefined}
           host={host}
         />
       </div>

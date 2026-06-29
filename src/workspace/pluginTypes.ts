@@ -191,6 +191,8 @@ export type PanelHostApi = {
 export type PanelPropsV2<TInputs = unknown> = {
   inputs: TInputs
   panelId: string
+  /** Pane id when this panel is rendered inside a pane-scoped panel surface. */
+  paneId?: PaneId
   host: PanelHostApi
 }
 
