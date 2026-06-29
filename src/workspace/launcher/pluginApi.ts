@@ -14,6 +14,7 @@ import { useWorkspaceStore } from '../workspaceStore'
 import { runtimeRegistry } from '../runtimeRegistry'
 import { applyEffects, openExternalUrl } from '../effectRunner'
 import { useAppStore } from '../../store'
+import { requestOpenLauncherHostSurface } from '../launcherHostSurfaceBridge'
 import { createPluginPrivateStorage } from '../pluginStorage'
 import { getPluginPermissionSnapshot, requirePluginPermissions } from '../pluginPermissions'
 import { showEditorWindow } from '../windowManager/editorWindow'
@@ -130,11 +131,11 @@ async function openEditorWindow(): Promise<void> {
 }
 
 async function showPluginsPage(): Promise<void> {
-  useAppStore.getState().openLauncherHostSurface('plugins')
+  await requestOpenLauncherHostSurface('plugins')
 }
 
 async function showSettingsPage(): Promise<void> {
-  useAppStore.getState().openLauncherHostSurface('settings')
+  await requestOpenLauncherHostSurface('settings')
 }
 
 /**

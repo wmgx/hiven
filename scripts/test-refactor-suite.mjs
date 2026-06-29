@@ -31,6 +31,7 @@ const commands = [
   ['npm', ['run', 'test:plugin-editor-surface-open-lifecycle']],
   ['npm', ['run', 'test:plugin-surface-shortcut-lifecycle-story']],
   ['npm', ['run', 'test:launcher-hosted-plugin-surface-bridge']],
+  ['npm', ['run', 'test:launcher-host-surface-bridge']],
   ['npm', ['run', 'test:output-router-behavior']],
   ['npm', ['run', 'test:context-broker-behavior']],
   ['npm', ['run', 'test:current-context-work-objects-behavior']],

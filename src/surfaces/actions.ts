@@ -1,9 +1,9 @@
 import { getSurfaceInstance, markSurfaceInstanceState, type SurfaceInstance } from './registry'
-import { useAppStore } from '../store'
-import { usePluginSettingsStore, type PluginSettingsSource } from '../workspace/pluginSettingsStore'
+import type { PluginSettingsSource } from '../workspace/pluginSettingsStore'
 import { showEditorWindow } from '../workspace/windowManager/editorWindow'
 import { showLauncherWindow } from '../workspace/windowManager/launcherWindow'
 import { showPluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
+import { requestOpenLauncherHostSurface, requestOpenLauncherPluginSettingsSurface } from '../workspace/launcherHostSurfaceBridge'
 import { requestOpenPluginEditorSurface } from './pluginEditorSurfaceBridge'
 
 export async function focusSurfaceInstance(surfaceOrId: SurfaceInstance | string): Promise<boolean> {
@@ -23,31 +23,26 @@ export async function focusSurfaceInstance(surfaceOrId: SurfaceInstance | string
   }
 
   if (surface.kind === 'settings') {
-    await showLauncherWindow()
     if (surface.pluginId) {
-      usePluginSettingsStore.getState().openSettingsDialog({
-        source: sourceFromSettingsSurfaceInstanceId(surface.id),
-        pluginId: surface.pluginId,
-        presentation: 'global-launcher',
-        context: { surfaceId: 'global-launcher' },
-      })
+      await requestOpenLauncherPluginSettingsSurface(
+        sourceFromSettingsSurfaceInstanceId(surface.id),
+        surface.pluginId,
+      )
     } else {
-      useAppStore.getState().openLauncherHostSurface('settings')
+      await requestOpenLauncherHostSurface('settings')
     }
     markSurfaceInstanceState(surface.id, 'visible')
     return true
   }
 
   if (surface.kind === 'plugins') {
-    await showLauncherWindow()
-    useAppStore.getState().openLauncherHostSurface('plugins')
+    await requestOpenLauncherHostSurface('plugins')
     markSurfaceInstanceState(surface.id, 'visible')
     return true
   }
 
   if (surface.kind === 'plugin-editor') {
-    await showLauncherWindow()
-    useAppStore.getState().openLauncherHostSurface('plugins')
+    await requestOpenLauncherHostSurface('plugins')
     if (surface.pluginId && surface.folderPath) {
       const source = sourceFromPluginEditorSurfaceInstanceId(surface.id)
       requestOpenPluginEditorSurface({

@@ -13,6 +13,7 @@ import { registerHostLauncherProviders } from './workspace/launcher/hostProvider
 import { installGlobalPinnedLauncherHotkeys, routeGlobalPinnedLauncherShortcut } from './hotkeys/globalPinnedLauncher'
 import { installPluginSurfaceShortcutHotkeys } from './hotkeys/pluginSurfaceShortcuts'
 import { consumePendingPluginSurfaceOpenTarget, isPluginSurfaceOpenTarget, openLauncherHostedPluginSurface } from './workspace/pluginSurfaceOpenRequest'
+import { LAUNCHER_HOST_SURFACE_OPEN_EVENT, consumePendingLauncherHostSurfaceOpen, isLauncherHostSurfaceOpenRequest, isLauncherHostSurfaceTarget, openLauncherHostSurfaceLocally, openLauncherHostSurfaceRequestLocally } from './workspace/launcherHostSurfaceBridge'
 import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from './workspace/launcherWindowEvents'
 import { onCurrentLauncherWindowMoved, setCurrentLauncherWindowPosition, type LauncherWindowMovedPosition } from './workspace/windowManager/launcherWindow'
 
@@ -155,8 +156,11 @@ function LauncherRuntimeApp() {
     const openLauncher = () => {
       void (async () => {
         await rehydratePersistedAppState()
+        const pendingHostSurfaceTarget = consumePendingLauncherHostSurfaceOpen()
         const pendingSurfaceTarget = consumePendingPluginSurfaceOpenTarget()
-        if (pendingSurfaceTarget) {
+        if (pendingHostSurfaceTarget) {
+          openLauncherHostSurfaceRequestLocally(pendingHostSurfaceTarget)
+        } else if (pendingSurfaceTarget) {
           openLauncherHostedPluginSurface(pendingSurfaceTarget)
         } else {
           useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
@@ -188,6 +192,34 @@ function LauncherRuntimeApp() {
       })
       .catch((error) => {
         console.warn('[hiven] Failed to listen for launcher open event:', error)
+      })
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [])
+
+
+  useEffect(() => {
+    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    import('@tauri-apps/api/event')
+      .then(({ listen }) => listen(LAUNCHER_HOST_SURFACE_OPEN_EVENT, (event) => {
+        if (isLauncherHostSurfaceOpenRequest(event.payload)) {
+          openLauncherHostSurfaceRequestLocally(event.payload)
+          return
+        }
+        if (isLauncherHostSurfaceTarget(event.payload)) {
+          openLauncherHostSurfaceLocally(event.payload)
+        }
+      }))
+      .then((cleanup) => {
+        if (disposed) cleanup()
+        else unlisten = cleanup
+      })
+      .catch((error) => {
+        console.warn('[hiven] Failed to listen for launcher host surface open event:', error)
       })
     return () => {
       disposed = true
