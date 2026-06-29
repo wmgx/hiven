@@ -54,6 +54,7 @@ assert.equal(launcherTypes.launcherHostHasCapability('editor-command-bar', 'sett
 assert.equal(launcherTypes.launcherHostHasCapability('editor-command-bar', 'plugin-surfaces'), false)
 assert.equal(launcherTypes.launcherHostHasCapability('editor-command-bar', 'system-power'), false)
 assert.equal(launcherTypes.normalizeLauncherSurfaceId('command-palette'), 'editor-command-bar')
+assert.equal(typeof launcherTypes.filterEditorCommandBarItems, 'function', 'launcher domain must expose editor command bar item filtering')
 
 const hostItems = [
   {
@@ -217,6 +218,16 @@ assert.deepEqual(
   plain(registry.filterDynamicForSurface(dynamicItems, 'editor-command-bar').map((item) => item.systemKey)),
   ['dynamic:text'],
   'dynamic items must use the same host capability filtering as static items',
+)
+assert.deepEqual(
+  plain(launcherTypes.filterEditorCommandBarItems(hostItems).map((item) => item.systemKey).sort()),
+  [
+    'host:editor:format-bullets',
+    'host:global:search-all-hiven',
+    'host:pane:close',
+    'host:text:copy',
+  ].sort(),
+  'editor command bar local filter must keep editor/pane/shared text items and the explicit global bridge only',
 )
 
 console.log('launcher host capability routing behavior checks passed')

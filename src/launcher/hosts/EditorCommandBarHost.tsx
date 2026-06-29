@@ -9,6 +9,7 @@ import { LauncherCollectInputStep } from '../../components/launcher/LauncherColl
 import { LauncherDomainSearchStep } from '../../components/launcher/LauncherDomainSearchStep'
 import { LauncherResultStep } from '../../components/launcher/LauncherResultStep'
 import type { LauncherItem as DomainLauncherItem } from '../../workspace/launcher/types'
+import { filterEditorCommandBarItems } from '../../workspace/launcher/types'
 import { useLauncherSession } from '../../workspace/launcher/useLauncherSession'
 
 export function EditorCommandBarHost() {
@@ -211,12 +212,4 @@ export function EditorCommandBarHost() {
       </LauncherView>
     </div>
   )
-}
-
-function filterEditorCommandBarItems(items: DomainLauncherItem[]): DomainLauncherItem[] {
-  return items.filter((item) => {
-    if (item.systemKey.startsWith('plugin-settings:')) return false
-    if (item.kind !== 'host') return true
-    return item.systemKey.startsWith('host:pane:') || item.systemKey.startsWith('host:editor:') || item.systemKey === 'host:global:search-all-hiven'
-  })
 }

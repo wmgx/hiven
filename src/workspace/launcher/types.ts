@@ -426,6 +426,20 @@ export type LauncherItem = {
   executeWithParams?: LauncherExecuteWithParamsHandler
 }
 
+export function filterEditorCommandBarItems(items: LauncherItem[]): LauncherItem[] {
+  return items.filter(isEditorCommandBarItem)
+}
+
+export function isEditorCommandBarItem(item: LauncherItem): boolean {
+  if (item.systemKey.startsWith('plugin-settings:')) return false
+  if (item.kind !== 'host') return true
+  return (
+    item.systemKey.startsWith('host:pane:') ||
+    item.systemKey.startsWith('host:editor:') ||
+    item.systemKey === 'host:global:search-all-hiven'
+  )
+}
+
 // ─── Pinned Reference ─────────────────────────────────────────────────────────
 
 /** Pinned entries reference launcher items; they are not searchable items. */
