@@ -42,6 +42,7 @@ const files = {
   launcherRegistry: read('src/workspace/launcher/registry.ts'),
   launcherSession: read('src/workspace/launcher/useLauncherSession.ts'),
   pluginApi: read('src/workspace/launcher/pluginApi.ts'),
+  pluginInputResolver: read('src/workspace/pluginInputResolver.ts'),
   launcherView: read('src/components/launcher/LauncherView.tsx'),
   launcherFrames: read('src/components/launcher/GlobalLauncherFrames.tsx'),
   globalLauncherSearchFrame: read('src/components/launcher/GlobalLauncherSearchFrame.tsx'),
@@ -205,6 +206,8 @@ assert.doesNotMatch(files.outputRouter, /useWorkspaceStore|getState\(\)\.createP
 assert.match(files.pluginApi, /activeEditorTextTarget[\s\S]*paneId:\s*snapshot\.activePaneId[\s\S]*range:\s*snapshot\.selectionRange/, 'plugin launcher API must derive non-editor editor targets from active editor context')
 assert.match(files.pluginApi, /replaceEditorSelection\(text,\s*activeEditorTextTarget\(\)\)/, 'plugin launcher API replaceActiveText must cross into editor via EditorBridge with context')
 assert.match(files.pluginApi, /insertIntoEditor\(text,\s*activeEditorTextTarget\(\)\)/, 'plugin launcher API insertText must cross into editor via EditorBridge with context')
+assert.match(files.pluginInputResolver, /if \(!isEditorWindowRuntime\(\) && canReadEditorContextSnapshot\(\)\)[\s\S]*getActiveEditorContextSnapshot\(\)[\s\S]*resolveFromEditorContext/, 'plugin input resolver must use synced editor context outside the editor runtime')
+assert.match(files.pluginInputResolver, /Need editor pane snapshots for multiple pane inputs/, 'plugin input resolver must not guess multi-pane inputs from launcher-local shadow workspace state')
 assert.match(files.windowLabels, /EDITOR_WINDOW_LABEL/, 'window labels must centralize editor label constants')
 assert.match(files.windowLabels, /LAUNCHER_WINDOW_LABEL/, 'window labels must centralize launcher label constants')
 assert.match(files.editorBridge, /emitTo\(EDITOR_WINDOW_LABEL,/, 'editor bridge must use the centralized editor label')

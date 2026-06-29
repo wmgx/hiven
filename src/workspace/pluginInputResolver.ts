@@ -16,6 +16,8 @@ import type { InputSlot, InputResolution, ResolvedInputs, PaneInput, TextInput }
 import { useWorkspaceStore } from './workspaceStore'
 import { runtimeRegistry } from './runtimeRegistry'
 import { showToast } from './toast'
+import { getActiveEditorContextSnapshot } from './editorBridge'
+import type { EditorContextSnapshot } from '../launcher/context/contextBroker'
 
 export type InputResolveResult =
   | { ok: true; inputs: ResolvedInputs }
@@ -40,6 +42,11 @@ export function resolvePluginInputs(
     return { ok: true, inputs: {} }
   }
 
+  if (!isEditorWindowRuntime() && canReadEditorContextSnapshot()) {
+    const editorContext = getActiveEditorContextSnapshot()
+    if (editorContext) return resolveFromEditorContext(slots, resolution, editorContext, context)
+  }
+
   const state = useWorkspaceStore.getState()
 
   switch (resolution.strategy) {
@@ -52,6 +59,108 @@ export function resolvePluginInputs(
     default:
       return { ok: true, inputs: {} }
   }
+}
+
+function resolveFromEditorContext(
+  slots: InputSlot[],
+  resolution: InputResolution,
+  editorContext: EditorContextSnapshot,
+  context?: ResolverContext,
+): InputResolveResult {
+  switch (resolution.strategy) {
+    case 'use-active':
+      return resolveUseActiveFromEditorContext(slots, resolution, editorContext, context)
+    case 'auto-fill':
+      return resolveAutoFillFromEditorContext(slots, resolution, editorContext, context)
+    case 'always-prompt':
+      return { ok: false, reason: 'prompt', slots }
+    default:
+      return { ok: true, inputs: {} }
+  }
+}
+
+function resolveUseActiveFromEditorContext(
+  slots: InputSlot[],
+  resolution: InputResolution,
+  editorContext: EditorContextSnapshot,
+  context?: ResolverContext,
+): InputResolveResult {
+  const inputs: ResolvedInputs = {}
+  for (const slot of slots) {
+    if (slot.kind === 'clipboard') {
+      if (context?.clipboardText === undefined) {
+        return { ok: false, reason: 'needs-clipboard', slots }
+      }
+      inputs[slot.key] = { kind: 'text', text: context.clipboardText, paneId: undefined } satisfies TextInput
+      continue
+    }
+    if (slot.kind === 'text') {
+      const selectedText = editorContext.selectedText ?? ''
+      const text = selectedText || editorContext.activeText || ''
+      inputs[slot.key] = {
+        kind: 'text',
+        text,
+        paneId: selectedText ? undefined : editorContext.activePaneId,
+      } satisfies TextInput
+      continue
+    }
+    if (slot.kind === 'pane') {
+      inputs[slot.key] = paneInputFromEditorContext(editorContext)
+    }
+  }
+  return { ok: true, inputs }
+}
+
+function resolveAutoFillFromEditorContext(
+  slots: InputSlot[],
+  resolution: InputResolution,
+  editorContext: EditorContextSnapshot,
+  context?: ResolverContext,
+): InputResolveResult {
+  const inputs: ResolvedInputs = {}
+  const clipboardSlots = slots.filter((slot) => slot.kind === 'clipboard')
+  for (const slot of clipboardSlots) {
+    if (context?.clipboardText === undefined) {
+      return { ok: false, reason: 'needs-clipboard', slots }
+    }
+    inputs[slot.key] = { kind: 'text', text: context.clipboardText, paneId: undefined } satisfies TextInput
+  }
+
+  const nonClipboardSlots = slots.filter((slot) => slot.kind !== 'clipboard')
+  const paneSlots = nonClipboardSlots.filter((slot) => slot.kind === 'pane')
+  const textSlots = nonClipboardSlots.filter((slot) => slot.kind === 'text')
+
+  for (const slot of textSlots) {
+    inputs[slot.key] = { kind: 'text', text: editorContext.activeText || '', paneId: editorContext.activePaneId } satisfies TextInput
+  }
+
+  if (paneSlots.length === 0) return { ok: true, inputs }
+  if (paneSlots.length === 1) {
+    inputs[paneSlots[0].key] = paneInputFromEditorContext(editorContext)
+    return { ok: true, inputs }
+  }
+  return handleFallback(resolution, slots, 'Need editor pane snapshots for multiple pane inputs')
+}
+
+function paneInputFromEditorContext(editorContext: EditorContextSnapshot): PaneInput {
+  return {
+    kind: 'pane',
+    paneId: editorContext.activePaneId,
+    text: editorContext.activeText || '',
+    language: editorContext.language,
+  }
+}
+
+function isEditorWindowRuntime(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get('window') === 'editor'
+  } catch {
+    return false
+  }
+}
+
+function canReadEditorContextSnapshot(): boolean {
+  return typeof window !== 'undefined'
 }
 
 // ─── Strategy: use-active ─────────────────────────────────────────────────────

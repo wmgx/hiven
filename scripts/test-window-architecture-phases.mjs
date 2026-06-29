@@ -76,6 +76,7 @@ const files = {
   hostActions: read('src/workspace/launcher/hostActions.ts'),
   registry: read('src/workspace/launcher/registry.ts'),
   pluginApi: read('src/workspace/launcher/pluginApi.ts'),
+  pluginInputResolver: read('src/workspace/pluginInputResolver.ts'),
   pluginSettingsStore: read('src/workspace/pluginSettingsStore.ts'),
   pluginHostCore: read('src/pluginHostCore.ts'),
   workspaceTypes: read('src/workspace/types.ts'),
@@ -130,6 +131,8 @@ assert.match(files.editorBridge, /updateActivePaneSnapshot/, 'editor bridge must
 assert.match(files.pluginApi, /activeEditorTextTarget[\s\S]*paneId:\s*snapshot\.activePaneId[\s\S]*range:\s*snapshot\.selectionRange/, 'plugin launcher API must use editor context snapshots for non-editor pane/range targets')
 assert.match(files.pluginApi, /replaceEditorSelection\(text,\s*activeEditorTextTarget\(\)\)/, 'plugin launcher API must replace editor text through the bridge with pane/range context')
 assert.match(files.pluginApi, /insertIntoEditor\(text,\s*activeEditorTextTarget\(\)\)/, 'plugin launcher API must insert editor text through the bridge with pane/range context')
+assert.match(files.pluginInputResolver, /if \(!isEditorWindowRuntime\(\) && canReadEditorContextSnapshot\(\)\)[\s\S]*getActiveEditorContextSnapshot\(\)[\s\S]*resolveFromEditorContext/, 'plugin input resolver must use editor context snapshots outside the editor runtime')
+assert.match(files.pluginInputResolver, /Need editor pane snapshots for multiple pane inputs/, 'plugin input resolver must not infer multi-pane inputs from launcher-local workspace state')
 
 assert.match(files.workspaceStore, /isEditorWindowWorkspaceSession/, 'workspace store must detect editor window sessions')
 assert.match(files.workspaceStore, /createJSONStorage/, 'workspace store must explicitly choose storage per runtime window')
