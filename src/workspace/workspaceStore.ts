@@ -198,7 +198,7 @@ interface WorkspaceSlice {
   clearPaneRenderer: (paneId: PaneId) => void
   clearPaneRenderersForPlugin: (pluginId: string) => void
 
-  // Compat: legacy editorText getter
+  // Active pane text helper
   getActivePaneText: () => string
 }
 
@@ -564,27 +564,6 @@ export const useWorkspaceStore = create<WorkspaceSlice>()(persist(
         layout: normalizeLayout(persisted.layout, nextPaneOrder),
       } as WorkspaceSlice
     },
-    // Migration from legacy editorText
-    migrate: (persisted: unknown, version: number) => {
-      if (version === 0 || !persisted) {
-        return persisted
-      }
-      return persisted
-    },
     version: 1,
   }
 ))
-
-/**
- * Migrate legacy editorText from the old store into workspace pane.
- * Call this once at app startup.
- */
-export function migrateLegacyEditorText(legacyText: string) {
-  const state = useWorkspaceStore.getState()
-  const activePaneId = state.activePaneId
-  const pane = state.panes[activePaneId]
-  // Only migrate if current pane is empty (fresh init)
-  if (pane && !pane.text && legacyText) {
-    state.setActivePaneText(legacyText)
-  }
-}

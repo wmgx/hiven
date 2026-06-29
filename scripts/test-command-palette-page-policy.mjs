@@ -55,6 +55,11 @@ check('Store no longer keeps editor document or runtime instance state', () => {
     /\beditorText\b|\bsetEditorText\b|\beditorInstance\b|\bsetEditorInstance\b/,
     'Editor text and Monaco instances must stay inside the editor window workspace/runtime registries, not AppState',
   )
+  assert.doesNotMatch(
+    read('src/workspace/workspaceStore.ts'),
+    /\bmigrateLegacyEditorText\b|legacy editorText/,
+    'Workspace store should not keep the retired app-store editorText migration path',
+  )
 })
 
 check('App does not register Cmd/Ctrl+K for the in-app command palette', () => {
