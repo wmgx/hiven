@@ -43,11 +43,15 @@ export function consumePendingPluginSurfaceOpenTarget(): PluginSurfaceOpenTarget
   }
 }
 
+export function openLauncherHostedPluginSurface(target: PluginSurfaceOpenTarget): void {
+  useAppStore.getState().openPluginSurfaceTool(target)
+  useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
+}
+
 export async function requestOpenPluginSurfaceTool(target: PluginSurfaceOpenTarget): Promise<void> {
   writePendingPluginSurfaceOpenTarget(target)
   if (!isTauriRuntime()) {
-    useAppStore.getState().openPluginSurfaceTool(target)
-    useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
+    openLauncherHostedPluginSurface(target)
     return
   }
 

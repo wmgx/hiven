@@ -12,7 +12,7 @@ import { refreshHostApplicationIndexOnStartup } from './workspace/appLauncher/ho
 import { registerHostLauncherProviders } from './workspace/launcher/hostProvider'
 import { installGlobalPinnedLauncherHotkeys, routeGlobalPinnedLauncherShortcut } from './hotkeys/globalPinnedLauncher'
 import { installPluginSurfaceShortcutHotkeys } from './hotkeys/pluginSurfaceShortcuts'
-import { consumePendingPluginSurfaceOpenTarget, isPluginSurfaceOpenTarget } from './workspace/pluginSurfaceOpenRequest'
+import { consumePendingPluginSurfaceOpenTarget, isPluginSurfaceOpenTarget, openLauncherHostedPluginSurface } from './workspace/pluginSurfaceOpenRequest'
 import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from './workspace/launcherWindowEvents'
 import { onCurrentLauncherWindowMoved, setCurrentLauncherWindowPosition, type LauncherWindowMovedPosition } from './workspace/windowManager/launcherWindow'
 
@@ -157,9 +157,10 @@ function LauncherRuntimeApp() {
         await rehydratePersistedAppState()
         const pendingSurfaceTarget = consumePendingPluginSurfaceOpenTarget()
         if (pendingSurfaceTarget) {
-          useAppStore.getState().openPluginSurfaceTool(pendingSurfaceTarget)
+          openLauncherHostedPluginSurface(pendingSurfaceTarget)
+        } else {
+          useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
         }
-        useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
         if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
         const settings = useAppStore.getState().settings
         const saved = settings.globalLauncherWindowPositionSource === 'user'
@@ -201,8 +202,7 @@ function LauncherRuntimeApp() {
     import('@tauri-apps/api/event')
       .then(({ listen }) => listen('hiven://open-plugin-surface', (event) => {
         if (!isPluginSurfaceOpenTarget(event.payload)) return
-        useAppStore.getState().openPluginSurfaceTool(event.payload)
-        useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
+        openLauncherHostedPluginSurface(event.payload)
       }))
       .then((cleanup) => {
         if (disposed) cleanup()

@@ -29,6 +29,7 @@ const commands = [
   ['npm', ['run', 'test:surface-registry-behavior']],
   ['npm', ['run', 'test:plugin-surface-window-lifecycle-behavior']],
   ['npm', ['run', 'test:plugin-surface-shortcut-lifecycle-story']],
+  ['npm', ['run', 'test:launcher-hosted-plugin-surface-bridge']],
   ['npm', ['run', 'test:output-router-behavior']],
   ['npm', ['run', 'test:context-broker-behavior']],
   ['npm', ['run', 'test:current-context-work-objects-behavior']],
