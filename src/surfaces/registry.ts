@@ -6,6 +6,7 @@ export type SurfaceInstanceKind =
   | 'plugin-surface'
   | 'settings'
   | 'plugins'
+  | 'plugin-editor'
 
 export type SurfaceInstanceState = 'visible' | 'hidden' | 'destroyed'
 
@@ -39,7 +40,7 @@ type SurfaceRegistryMutation =
   | { sourceId: string; type: 'mark-state'; id: string; state: SurfaceInstanceState; lastActiveAt: number }
   | { sourceId: string; type: 'remove'; id: string }
 
-const SURFACE_INSTANCE_KINDS = new Set<SurfaceInstanceKind>(['launcher', 'editor', 'plugin-surface', 'settings', 'plugins'])
+const SURFACE_INSTANCE_KINDS = new Set<SurfaceInstanceKind>(['launcher', 'editor', 'plugin-surface', 'settings', 'plugins', 'plugin-editor'])
 const SURFACE_INSTANCE_STATES = new Set<SurfaceInstanceState>(['visible', 'hidden', 'destroyed'])
 
 export function upsertSurfaceInstance(input: Omit<SurfaceInstance, 'lastActiveAt'> & { lastActiveAt?: number }): void {

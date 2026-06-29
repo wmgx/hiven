@@ -74,7 +74,7 @@ fn surface_registry_state() -> &'static SurfaceRegistryState {
 
 fn validate_surface_instance_kind(kind: &str) -> Result<(), String> {
     match kind {
-        "launcher" | "editor" | "plugin-surface" | "settings" | "plugins" => Ok(()),
+        "launcher" | "editor" | "plugin-surface" | "settings" | "plugins" | "plugin-editor" => Ok(()),
         _ => Err(format!("invalid surface kind: {}", kind)),
     }
 }

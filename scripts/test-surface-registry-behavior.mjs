@@ -100,10 +100,22 @@ const rustPluginSurface = {
   lastActiveAt: 20,
   canProvideText: true,
 }
+const rustPluginEditorSurface = {
+  id: 'host-surface:plugin-editor:installed:hello',
+  kind: 'plugin-editor',
+  windowLabel: 'launcher',
+  title: 'Plugin Editor - hello',
+  pluginId: 'hello',
+  surfaceId: 'src/index.ts',
+  state: 'visible',
+  lastActiveAt: 30,
+  canProvideText: true,
+}
 
 const rustSnapshot = [
   rustEditorSurface,
   rustPluginSurface,
+  rustPluginEditorSurface,
   { id: 'invalid' },
   {
     id: 'invalid-kind',
@@ -127,7 +139,7 @@ assert.deepEqual(JSON.parse(JSON.stringify(registry.getSurfaceInstances())), [],
 await flushAsyncWork()
 assert.deepEqual(
   JSON.parse(JSON.stringify(registry.getSurfaceInstances().map((surface) => surface.id))),
-  ['plugin-surface:builtin:clipboard-history:main', 'editor'],
+  ['host-surface:plugin-editor:installed:hello', 'plugin-surface:builtin:clipboard-history:main', 'editor'],
   'surface registry must hydrate valid Rust snapshot records and sort by lastActiveAt descending',
 )
 assert.deepEqual(
@@ -166,6 +178,19 @@ assert.deepEqual(
 )
 assert.equal(calls.emit.at(-1).event, SURFACE_REGISTRY_EVENT, 'upsertSurfaceInstance must broadcast a cross-window mutation')
 assert.equal(calls.emit.at(-1).payload.type, 'upsert')
+
+registry.upsertSurfaceInstance({
+  id: 'host-surface:plugin-editor:dev:json-tools',
+  kind: 'plugin-editor',
+  windowLabel: 'launcher',
+  title: 'Plugin Editor - json-tools',
+  pluginId: 'json-tools',
+  surfaceId: 'src/index.ts',
+  state: 'visible',
+  lastActiveAt: 35,
+})
+await flushAsyncWork()
+assert.equal(registry.getSurfaceInstance('host-surface:plugin-editor:dev:json-tools').kind, 'plugin-editor', 'plugin-editor surfaces must be first-class registry records')
 
 registry.markSurfaceInstanceState('launcher', 'hidden')
 await flushAsyncWork()

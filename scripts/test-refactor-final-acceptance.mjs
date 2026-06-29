@@ -229,6 +229,7 @@ assert.match(files.tauriLib, /struct\s+SurfaceRegistryState/, 'native runtime mu
 assert.match(files.surfaceActions, /focusSurfaceInstance/, 'surface registry must expose focus/switch operation')
 assert.match(files.surfaceActions, /openLauncherHostSurface\(['"]settings['"]\)/, 'surface focus must reopen Settings as a launcher-hosted surface')
 assert.match(files.surfaceActions, /openLauncherHostSurface\(['"]plugins['"]\)/, 'surface focus must reopen Plugins as a launcher-hosted surface')
+assert.match(files.surfaceActions, /surface\.kind === ['"]plugin-editor['"][\s\S]*openLauncherHostSurface\(['"]plugins['"]\)/, 'surface focus must route PluginEditor instances back to the Plugins host surface')
 assert.match(files.surfaceActions, /openSettingsDialog\(\{[\s\S]*presentation:\s*['"]global-launcher['"]/, 'surface focus must reopen plugin settings surfaces inside the global launcher')
 
 // Settings / Plugins / Plugin editor are first-class surfaces, not main-window views.
@@ -237,6 +238,8 @@ assert.match(files.globalLauncherSystemSurfaceFrame, /surfaces\/PluginsSurface/,
 assert.match(files.settingsSurface, /<SurfaceShell[\s\S]*id=['"]settings['"]/, 'Settings must render through SurfaceShell')
 assert.match(files.pluginsSurface, /<SurfaceShell[\s\S]*id=['"]plugins['"]/, 'Plugins must render through SurfaceShell')
 assert.match(files.pluginEditorSurface, /<SurfaceShell[\s\S]*id=['"]plugin-editor['"]/, 'Plugin editor must render through SurfaceShell')
+assert.match(files.pluginEditorSurface, /kind=['"]plugin-editor['"]/, 'Plugin editor must expose its own surface kind')
+assert.match(files.pluginEditorSurface, /upsertSurfaceInstance\([\s\S]*kind:\s*['"]plugin-editor['"]/, 'Plugin editor must register as a first-class surface instance')
 
 // Unified output routing supports short tasks and long-task handoff.
 for (const kind of [

@@ -44,6 +44,13 @@ export async function focusSurfaceInstance(surfaceOrId: SurfaceInstance | string
     return true
   }
 
+  if (surface.kind === 'plugin-editor') {
+    await showLauncherWindow()
+    useAppStore.getState().openLauncherHostSurface('plugins')
+    markSurfaceInstanceState(surface.id, 'visible')
+    return true
+  }
+
   if (surface.kind === 'plugin-surface' && surface.pluginId && surface.surfaceId) {
     const source = sourceFromPluginSurfaceInstanceId(surface.id)
     await showPluginSurfaceWindow({
