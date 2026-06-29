@@ -39,6 +39,9 @@ type SurfaceRegistryMutation =
   | { sourceId: string; type: 'mark-state'; id: string; state: SurfaceInstanceState; lastActiveAt: number }
   | { sourceId: string; type: 'remove'; id: string }
 
+const SURFACE_INSTANCE_KINDS = new Set<SurfaceInstanceKind>(['launcher', 'editor', 'plugin-surface', 'settings', 'plugins'])
+const SURFACE_INSTANCE_STATES = new Set<SurfaceInstanceState>(['visible', 'hidden', 'destroyed'])
+
 export function upsertSurfaceInstance(input: Omit<SurfaceInstance, 'lastActiveAt'> & { lastActiveAt?: number }): void {
   ensureSurfaceRegistrySync()
   const previous = surfaces.get(input.id)
@@ -193,7 +196,7 @@ function isSurfaceRegistryMutation(value: unknown): value is SurfaceRegistryMuta
   if (mutation.type === 'mark-state') {
     return typeof mutation.id === 'string' &&
       typeof mutation.lastActiveAt === 'number' &&
-      (mutation.state === 'visible' || mutation.state === 'hidden' || mutation.state === 'destroyed')
+      isSurfaceInstanceState(mutation.state)
   }
   return mutation.type === 'remove' && typeof mutation.id === 'string'
 }
@@ -203,11 +206,19 @@ function isSurfaceInstance(value: unknown): value is SurfaceInstance {
   return Boolean(surface &&
     typeof surface === 'object' &&
     typeof surface.id === 'string' &&
-    typeof surface.kind === 'string' &&
+    isSurfaceInstanceKind(surface.kind) &&
     typeof surface.windowLabel === 'string' &&
     typeof surface.title === 'string' &&
-    typeof surface.state === 'string' &&
+    isSurfaceInstanceState(surface.state) &&
     typeof surface.lastActiveAt === 'number')
+}
+
+function isSurfaceInstanceKind(value: unknown): value is SurfaceInstanceKind {
+  return typeof value === 'string' && SURFACE_INSTANCE_KINDS.has(value as SurfaceInstanceKind)
+}
+
+function isSurfaceInstanceState(value: unknown): value is SurfaceInstanceState {
+  return typeof value === 'string' && SURFACE_INSTANCE_STATES.has(value as SurfaceInstanceState)
 }
 
 function isTauriRuntime(): boolean {

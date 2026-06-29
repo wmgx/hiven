@@ -7,6 +7,7 @@ import ts from 'typescript'
 
 const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
 const refactorSuite = readFileSync('scripts/test-refactor-suite.mjs', 'utf8')
+const surfaceRegistrySource = readFileSync('src/surfaces/registry.ts', 'utf8')
 
 assert.equal(
   packageJson.scripts?.['test:surface-registry-behavior'],
@@ -25,6 +26,9 @@ assert.match(
 )
 
 const SURFACE_REGISTRY_EVENT = 'hiven://surface-registry-sync'
+assert.match(surfaceRegistrySource, /SURFACE_INSTANCE_KINDS/, 'frontend surface registry must validate surface kind values')
+assert.match(surfaceRegistrySource, /SURFACE_INSTANCE_STATES/, 'frontend surface registry must validate surface state values')
+assert.match(surfaceRegistrySource, /isSurfaceInstanceKind\(surface\.kind\)[\s\S]*isSurfaceInstanceState\(surface\.state\)/, 'frontend surface registry must reject invalid snapshot and mutation surface records')
 
 async function flushAsyncWork() {
   await Promise.resolve()
@@ -33,7 +37,7 @@ async function flushAsyncWork() {
 }
 
 function loadSurfaceRegistry({ rustSnapshot = [] } = {}) {
-  let src = readFileSync('src/surfaces/registry.ts', 'utf8')
+  let src = surfaceRegistrySource
   src = src.replace(/import\s+\{\s*useSyncExternalStore\s*\}\s+from\s+['"]react['"]\s*;?\s*\n?/, '')
   src = src.replace(/import\(['"]@tauri-apps\/api\/core['"]\)/g, 'Promise.resolve(__tauriCore)')
   src = src.replace(/import\(['"]@tauri-apps\/api\/event['"]\)/g, 'Promise.resolve(__tauriEvent)')
@@ -97,7 +101,27 @@ const rustPluginSurface = {
   canProvideText: true,
 }
 
-const rustSnapshot = [rustEditorSurface, rustPluginSurface, { id: 'invalid' }]
+const rustSnapshot = [
+  rustEditorSurface,
+  rustPluginSurface,
+  { id: 'invalid' },
+  {
+    id: 'invalid-kind',
+    kind: 'main-window',
+    windowLabel: 'main',
+    title: 'Main',
+    state: 'visible',
+    lastActiveAt: 999,
+  },
+  {
+    id: 'invalid-state',
+    kind: 'editor',
+    windowLabel: 'editor',
+    title: 'Editor',
+    state: 'active',
+    lastActiveAt: 998,
+  },
+]
 const { registry, calls, listeners } = loadSurfaceRegistry({ rustSnapshot })
 assert.deepEqual(JSON.parse(JSON.stringify(registry.getSurfaceInstances())), [], 'first access starts async Rust hydration and returns current in-memory state')
 await flushAsyncWork()
@@ -173,6 +197,22 @@ listeners.get(SURFACE_REGISTRY_EVENT)({
   },
 })
 assert.equal(registry.getSurfaceInstance('plugin-surface:builtin:json:main').title, 'JSON', 'remote upsert mutations must update local registry state')
+
+listeners.get(SURFACE_REGISTRY_EVENT)({
+  payload: {
+    sourceId: 'remote-window',
+    type: 'upsert',
+    surface: {
+      id: 'plugin-surface:builtin:bad:main',
+      kind: 'floating-widget',
+      windowLabel: 'plugin-surface:builtin:bad:main',
+      title: 'Bad',
+      state: 'visible',
+      lastActiveAt: 45,
+    },
+  },
+})
+assert.equal(registry.getSurfaceInstance('plugin-surface:builtin:bad:main'), undefined, 'remote upsert mutations with invalid kind must be ignored')
 
 listeners.get(SURFACE_REGISTRY_EVENT)({
   payload: {
