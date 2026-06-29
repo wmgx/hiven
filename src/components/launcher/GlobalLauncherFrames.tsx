@@ -7,22 +7,17 @@ import type { CollectInputFrame, ParamInputFrame, ResultFrame } from '../../work
 import { resolveDisplayTitle } from '../../workspace/launcher/display'
 import type { LauncherResultChoice } from '../../workspace/launcher/types'
 import { resolveIcon } from '../../utils/resolveIcon'
-import { PluginSurfacePermissionGate } from '../pluginSurface/PluginSurfaceRenderer'
 import { LauncherHintKey, LauncherHintText } from './LauncherFooterHints'
 import { LauncherParamStep, resolveParamValueLabel } from './LauncherParamStep'
 import type { LauncherMixedItem } from './LauncherMixedList'
 import { LauncherResultChoiceRow } from './LauncherResultChoiceRow'
-import type { PluginPermission, PluginUiSurfaceContribution } from '../../workspace/pluginTypes'
+import type { PluginUiSurfaceContribution } from '../../workspace/pluginTypes'
 import { GlobalLauncherSystemSurfaceFrame } from './GlobalLauncherSystemSurfaceFrame'
 import { GlobalLauncherSettingsFrame } from './GlobalLauncherSettingsFrame'
 import { GlobalLauncherPluginSurfaceFrame } from './GlobalLauncherPluginSurfaceFrame'
 import { GlobalLauncherSearchFrame } from './GlobalLauncherSearchFrame'
 import { GlobalLauncherResultFrame } from './GlobalLauncherResultFrame'
-
-
-export type GlobalLauncherPermissionFrame = {
-  permissions: PluginPermission[]
-}
+import { GlobalLauncherPermissionFrame, type GlobalLauncherPermissionFrameState } from './GlobalLauncherPermissionFrame'
 
 export type GlobalLauncherActiveSurfaceFrame = {
   surface: PluginUiSurfaceContribution
@@ -73,7 +68,7 @@ export function GlobalLauncherFrameSwitch({
   settingsHeight: number
   surfaceFrame: PluginSurfaceOpenTarget | null
   activeSurfaceFrame: GlobalLauncherActiveSurfaceFrame | null
-  itemPermissionFrame: GlobalLauncherPermissionFrame | null
+  itemPermissionFrame: GlobalLauncherPermissionFrameState | null
   controllerState: { frames: Array<CollectInputFrame | ParamInputFrame | ResultFrame | { kind: string }>; error?: string | null; busy: boolean } | null | undefined
   inputRef: RefObject<HTMLInputElement | null>
   query: string
@@ -138,14 +133,12 @@ export function GlobalLauncherFrameSwitch({
 
   if (itemPermissionFrame) {
     return (
-      <div className="global-launcher-body" style={{ height: 260 }}>
-        <PluginSurfacePermissionGate
-          permissions={itemPermissionFrame.permissions}
-          locale={locale}
-          onBack={onPermissionBack}
-          onGrant={onPermissionGrant}
-        />
-      </div>
+      <GlobalLauncherPermissionFrame
+        frame={itemPermissionFrame}
+        locale={locale}
+        onBack={onPermissionBack}
+        onGrant={onPermissionGrant}
+      />
     )
   }
 

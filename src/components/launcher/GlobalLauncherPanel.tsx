@@ -5,7 +5,8 @@ import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import type { LauncherController, LauncherControllerState, ResultFrame } from '../../workspace/launcher/controller'
 import type { LauncherResultChoice } from '../../workspace/launcher/types'
 import type { GlobalLauncherActiveSurfaceFrame } from './GlobalLauncherFrames'
-import { GlobalLauncherFrameSwitch, type GlobalLauncherPermissionFrame } from './GlobalLauncherFrames'
+import { GlobalLauncherFrameSwitch } from './GlobalLauncherFrames'
+import type { GlobalLauncherPermissionFrameState } from './GlobalLauncherPermissionFrame'
 import { LauncherView } from './LauncherView'
 import { getPlatformShortcutMeta, supportsParamCustomization } from './launcherParamShortcuts'
 import { handleGlobalLauncherKeyDown } from './GlobalLauncherKeyboard'
@@ -27,7 +28,7 @@ type GlobalLauncherPanelProps = {
   surfaceFrame: PluginSurfaceOpenTarget | null
   activeSurfaceFrame: GlobalLauncherActiveSurfaceFrame | null
   leaveSurface: () => void
-  itemPermissionFrame: GlobalLauncherPermissionFrame | null
+  itemPermissionFrame: GlobalLauncherPermissionFrameState | null
   cancelItemPermissionPrompt: () => void
   grantItemPermissionsAndRun: () => void
   controllerState: LauncherControllerState | null | undefined
