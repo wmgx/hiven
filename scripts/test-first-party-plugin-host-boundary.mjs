@@ -7,6 +7,7 @@ const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
 const refactorSuite = readFileSync('scripts/test-refactor-suite.mjs', 'utf8')
 const pluginTypes = readFileSync('src/workspace/pluginTypes.ts', 'utf8')
 const pluginHostSdk = readFileSync('src/pluginHostSdk.ts', 'utf8')
+const pluginSdk = readFileSync('src/plugin-sdk.ts', 'utf8')
 const panelHost = readFileSync('src/components/workspace/PanelHostV2.tsx', 'utf8')
 const paneBottomPanels = readFileSync('src/components/workspace/PaneBottomPanels.tsx', 'utf8')
 const jsFilter = readFileSync('src/plugins/jsFilter/index.tsx', 'utf8')
@@ -38,6 +39,13 @@ assert.match(
   paneBottomPanels,
   /paneId=\{instance\.scope\?\.type === ['"]pane['"] \? instance\.scope\.paneId : undefined\}/,
   'pane-bottom panel host must pass pane-scoped panel ids through PanelPropsV2',
+)
+
+
+assert.match(
+  pluginSdk,
+  /MonacoDisposable/,
+  '@hiven/plugin must re-export MonacoDisposable for first-party plugin type-only imports',
 )
 
 assert.match(

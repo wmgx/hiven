@@ -20,6 +20,7 @@ export type {
   PluginHostKits,
   PluginHostHooks,
   PluginHostI18n,
+  MonacoDisposable,
   TextCommandDefinition,
 } from './pluginHostSdk'
 export type { Locale } from './i18n'
