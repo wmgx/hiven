@@ -56,6 +56,7 @@ const commands = [
   ['npm', ['run', 'test:launcher-usage']],
   ['npm', ['run', 'test:plugin-text-output-contract']],
   ['npm', ['run', 'test:input-resolver-editor-context']],
+  ['npm', ['run', 'test:workspace-public-api-window-boundary']],
   ['npm', ['run', 'test:plugin-paste-behavior']],
   ['npm', ['run', 'test:pinned-action-completion-gaps']],
   ['npm', ['run', 'test:pinned-runner-policy']],

@@ -7,13 +7,14 @@
  */
 
 import type { Disposable } from './runtimeRegistry'
-import type { PaneId, FluxEffect, PanelPlacement, PanelBinding } from './types'
+import type { PaneId, FluxEffect } from './types'
 import { presentationRegistry, type PresentationRendererDef } from './presentationRegistry'
 import { panelRegistry, type PanelContribution } from './panelRegistry'
 import { useWorkspaceStore } from './workspaceStore'
 import { applyEffects } from './effectRunner'
 import { monacoBridge, presentationApi } from './monacoBridge'
-import { runtimeRegistry } from './runtimeRegistry'
+import { getActiveEditorContextSnapshot } from './editorBridge'
+import type { EditorContextSnapshot } from '../launcher/context/contextBroker'
 
 // ─── Extension Context ──────────────────────────────────────────────────────
 
@@ -71,16 +72,18 @@ export interface WorkspaceApi {
 
 export const workspaceApi: WorkspaceApi = {
   getActivePaneId() {
-    return useWorkspaceStore.getState().activePaneId
+    return readEditorContextSnapshot()?.activePaneId ?? useWorkspaceStore.getState().activePaneId
   },
   getActivePaneText() {
-    return useWorkspaceStore.getState().getActivePaneText()
+    return readEditorContextSnapshot()?.activeText ?? useWorkspaceStore.getState().getActivePaneText()
   },
   getPaneText(paneId) {
+    const snapshot = readEditorContextSnapshot()
+    if (snapshot?.activePaneId === paneId) return snapshot.activeText
     return useWorkspaceStore.getState().panes[paneId]?.text
   },
   getPaneIds() {
-    return useWorkspaceStore.getState().paneOrder
+    return readEditorContextSnapshot()?.paneIds ?? useWorkspaceStore.getState().paneOrder
   },
   getPaneTitle(paneId) {
     return useWorkspaceStore.getState().panes[paneId]?.title
@@ -90,7 +93,23 @@ export const workspaceApi: WorkspaceApi = {
 // ─── Effect API (for extensions to execute effects) ──────────────────────────
 
 export function executeEffects(effects: FluxEffect[]) {
+  if (!isEditorWindowRuntime()) {
+    return { applied: [], errors: ['Workspace effects can only be executed in the editor window'] }
+  }
   return applyEffects(effects)
+}
+
+function readEditorContextSnapshot(): EditorContextSnapshot | undefined {
+  if (isEditorWindowRuntime()) return undefined
+  return getActiveEditorContextSnapshot()
+}
+
+function isEditorWindowRuntime(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get('window') === 'editor'
+  } catch {
+    return false
+  }
 }
 
 // ─── Re-exports for convenience ─────────────────────────────────────────────
