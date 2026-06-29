@@ -65,6 +65,7 @@ const files = {
   settingsSurface: read('src/surfaces/SettingsSurface.tsx'),
   pluginsSurface: read('src/surfaces/PluginsSurface.tsx'),
   pluginEditorSurface: read('src/surfaces/PluginEditorSurface.tsx'),
+  pluginEditorSurfaceBridge: read('src/surfaces/pluginEditorSurfaceBridge.ts'),
   outputTarget: read('src/workflow/outputTarget.ts'),
   outputRouter: read('src/workflow/outputRouter.ts'),
   workflowProviders: read('src/workflow/defaultWorkflowProviders.ts'),
@@ -230,6 +231,7 @@ assert.match(files.surfaceActions, /focusSurfaceInstance/, 'surface registry mus
 assert.match(files.surfaceActions, /openLauncherHostSurface\(['"]settings['"]\)/, 'surface focus must reopen Settings as a launcher-hosted surface')
 assert.match(files.surfaceActions, /openLauncherHostSurface\(['"]plugins['"]\)/, 'surface focus must reopen Plugins as a launcher-hosted surface')
 assert.match(files.surfaceActions, /surface\.kind === ['"]plugin-editor['"][\s\S]*openLauncherHostSurface\(['"]plugins['"]\)/, 'surface focus must route PluginEditor instances back to the Plugins host surface')
+assert.match(files.surfaceActions, /requestOpenPluginEditorSurface\(\{[\s\S]*folderPath:\s*surface\.folderPath/, 'surface focus must restore PluginEditor instances through the plugin editor bridge')
 assert.match(files.surfaceActions, /openSettingsDialog\(\{[\s\S]*presentation:\s*['"]global-launcher['"]/, 'surface focus must reopen plugin settings surfaces inside the global launcher')
 
 // Settings / Plugins / Plugin editor are first-class surfaces, not main-window views.
@@ -240,6 +242,10 @@ assert.match(files.pluginsSurface, /<SurfaceShell[\s\S]*id=['"]plugins['"]/, 'Pl
 assert.match(files.pluginEditorSurface, /<SurfaceShell[\s\S]*id=['"]plugin-editor['"]/, 'Plugin editor must render through SurfaceShell')
 assert.match(files.pluginEditorSurface, /kind=['"]plugin-editor['"]/, 'Plugin editor must expose its own surface kind')
 assert.match(files.pluginEditorSurface, /upsertSurfaceInstance\([\s\S]*kind:\s*['"]plugin-editor['"]/, 'Plugin editor must register as a first-class surface instance')
+assert.match(files.pluginEditorSurface, /folderPath:\s*pluginEditor\.folderPath/, 'Plugin editor surface records must preserve folderPath for focus restoration')
+assert.match(files.pluginsSurface, /subscribePluginEditorSurfaceOpen\(setPluginEditor\)/, 'PluginsSurface must restore plugin editor focus requests without storing pluginEditor in AppState')
+assert.match(files.pluginEditorSurfaceBridge, /PLUGIN_EDITOR_SURFACE_OPEN_EVENT[\s\S]*emit\(PLUGIN_EDITOR_SURFACE_OPEN_EVENT/, 'Plugin editor focus bridge must broadcast open requests across Tauri windows')
+assert.match(files.pluginEditorSurfaceBridge, /pendingPluginEditorOpenRequests[\s\S]*drainPendingPluginEditorOpenRequests/, 'Plugin editor focus bridge must queue requests until PluginsSurface mounts')
 
 // Unified output routing supports short tasks and long-task handoff.
 for (const kind of [

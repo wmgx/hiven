@@ -107,6 +107,7 @@ const rustPluginEditorSurface = {
   title: 'Plugin Editor - hello',
   pluginId: 'hello',
   surfaceId: 'src/index.ts',
+  folderPath: '/tmp/hiven/plugins/installed/hello',
   state: 'visible',
   lastActiveAt: 30,
   canProvideText: true,
@@ -186,11 +187,13 @@ registry.upsertSurfaceInstance({
   title: 'Plugin Editor - json-tools',
   pluginId: 'json-tools',
   surfaceId: 'src/index.ts',
+  folderPath: '/tmp/hiven/plugins/dev/json-tools',
   state: 'visible',
   lastActiveAt: 35,
 })
 await flushAsyncWork()
 assert.equal(registry.getSurfaceInstance('host-surface:plugin-editor:dev:json-tools').kind, 'plugin-editor', 'plugin-editor surfaces must be first-class registry records')
+assert.equal(registry.getSurfaceInstance('host-surface:plugin-editor:dev:json-tools').folderPath, '/tmp/hiven/plugins/dev/json-tools', 'plugin-editor registry records must preserve the plugin folder path for focus restoration')
 
 registry.markSurfaceInstanceState('launcher', 'hidden')
 await flushAsyncWork()

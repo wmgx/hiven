@@ -20,6 +20,7 @@ export function PluginEditorSurface({ pluginEditor, onClose }: PluginEditorSurfa
       title: `Plugin Editor - ${pluginEditor.pluginId}`,
       pluginId: pluginEditor.pluginId,
       surfaceId: pluginEditor.activeFile ?? 'plugin-editor',
+      folderPath: pluginEditor.folderPath,
       state: 'visible',
       canReceiveText: false,
       canProvideText: true,

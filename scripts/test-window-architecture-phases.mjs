@@ -58,6 +58,7 @@ const files = {
   settingsSurface: read('src/surfaces/SettingsSurface.tsx'),
   pluginsSurface: read('src/surfaces/PluginsSurface.tsx'),
   pluginEditorSurface: read('src/surfaces/PluginEditorSurface.tsx'),
+  pluginEditorSurfaceBridge: read('src/surfaces/pluginEditorSurfaceBridge.ts'),
   surfaceShell: read('src/surfaces/SurfaceShell.tsx'),
   surfaceActions: read('src/surfaces/actions.ts'),
   windowManagerEditor: read('src/workspace/windowManager/editorWindow.ts'),
@@ -190,6 +191,10 @@ assert.match(files.pluginEditorSurface, /export function PluginEditorSurface/, '
 assert.match(files.pluginEditorSurface, /<SurfaceShell[\s\S]*id=['"]plugin-editor['"]/, 'plugin editor surface must render inside the explicit surface shell boundary')
 assert.match(files.pluginEditorSurface, /kind=['"]plugin-editor['"]/, 'plugin editor surface must publish its own registry kind instead of masquerading as Plugins')
 assert.match(files.pluginEditorSurface, /upsertSurfaceInstance\([\s\S]*kind:\s*['"]plugin-editor['"]/, 'plugin editor surface must register itself as a first-class surface instance')
+assert.match(files.pluginEditorSurface, /folderPath:\s*pluginEditor\.folderPath/, 'plugin editor surface records must preserve folderPath for focus restoration')
+assert.match(files.pluginsSurface, /subscribePluginEditorSurfaceOpen\(setPluginEditor\)/, 'PluginsSurface must handle plugin editor focus/open requests inside its local state boundary')
+assert.match(files.pluginEditorSurfaceBridge, /PLUGIN_EDITOR_SURFACE_OPEN_EVENT[\s\S]*emit\(PLUGIN_EDITOR_SURFACE_OPEN_EVENT/, 'plugin editor focus bridge must broadcast open requests across Tauri windows')
+assert.match(files.pluginEditorSurfaceBridge, /pendingPluginEditorOpenRequests[\s\S]*drainPendingPluginEditorOpenRequests/, 'plugin editor focus bridge must queue requests until PluginsSurface mounts')
 assert.match(files.commandPalette, /return <EditorCommandBar \/>/, 'CommandPalette must be a compatibility wrapper around EditorCommandBar')
 assert.match(files.editorWindow, /<EditorCommandBar \/>/, 'EditorWindow must host the local editor command bar directly')
 assert.doesNotMatch(files.editorWindow, /CommandPalette/, 'EditorWindow runtime must not mount the retired CommandPalette compatibility wrapper')
@@ -248,6 +253,7 @@ assert.match(files.surfaceActions, /focusSurfaceInstance/, 'Surface registry mus
 assert.match(files.surfaceActions, /openLauncherHostSurface\(['"]settings['"]\)/, 'Surface focus must reopen Settings through the launcher host surface')
 assert.match(files.surfaceActions, /openLauncherHostSurface\(['"]plugins['"]\)/, 'Surface focus must reopen Plugins through the launcher host surface')
 assert.match(files.surfaceActions, /surface\.kind === ['"]plugin-editor['"][\s\S]*openLauncherHostSurface\(['"]plugins['"]\)/, 'Surface focus must route PluginEditor instances back to the Plugins host surface')
+assert.match(files.surfaceActions, /requestOpenPluginEditorSurface\(\{[\s\S]*folderPath:\s*surface\.folderPath/, 'Surface focus must restore PluginEditor instances through the plugin editor bridge')
 assert.match(files.pluginSurfaceWindowComponent, /markSurfaceInstanceState\([\s\S]*['"]visible['"]/, 'Plugin surface window component must mark its surface visible')
 assert.match(files.pluginSurfaceWindowComponent, /markSurfaceInstanceState\([\s\S]*['"]hidden['"]/, 'Plugin surface window component must mark its surface hidden on teardown')
 assert.match(files.editorWindowComponent, /upsertSurfaceInstance\([\s\S]*id:\s*EDITOR_WINDOW_LABEL/, 'Editor window component must register itself as a surface using the centralized label')

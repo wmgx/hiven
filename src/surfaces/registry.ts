@@ -17,6 +17,7 @@ export type SurfaceInstance = {
   title: string
   pluginId?: string
   surfaceId?: string
+  folderPath?: string
   state: SurfaceInstanceState
   canReceiveText?: boolean
   canProvideText?: boolean

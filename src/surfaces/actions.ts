@@ -4,6 +4,7 @@ import { usePluginSettingsStore, type PluginSettingsSource } from '../workspace/
 import { showEditorWindow } from '../workspace/windowManager/editorWindow'
 import { showLauncherWindow } from '../workspace/windowManager/launcherWindow'
 import { showPluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
+import { requestOpenPluginEditorSurface } from './pluginEditorSurfaceBridge'
 
 export async function focusSurfaceInstance(surfaceOrId: SurfaceInstance | string): Promise<boolean> {
   const surface = typeof surfaceOrId === 'string' ? getSurfaceInstance(surfaceOrId) : surfaceOrId
@@ -47,6 +48,16 @@ export async function focusSurfaceInstance(surfaceOrId: SurfaceInstance | string
   if (surface.kind === 'plugin-editor') {
     await showLauncherWindow()
     useAppStore.getState().openLauncherHostSurface('plugins')
+    if (surface.pluginId && surface.folderPath) {
+      const source = sourceFromPluginEditorSurfaceInstanceId(surface.id)
+      requestOpenPluginEditorSurface({
+        pluginId: surface.pluginId,
+        folderPath: surface.folderPath,
+        activeFile: surface.surfaceId === 'plugin-editor' ? undefined : surface.surfaceId,
+        source,
+        readOnly: source === 'builtin',
+      })
+    }
     markSurfaceInstanceState(surface.id, 'visible')
     return true
   }
@@ -73,4 +84,9 @@ function sourceFromPluginSurfaceInstanceId(id: string): 'builtin' | 'installed' 
 function sourceFromSettingsSurfaceInstanceId(id: string): PluginSettingsSource {
   const source = id.split(':')[1]
   return source === 'installed' || source === 'dev' ? source : 'builtin'
+}
+
+function sourceFromPluginEditorSurfaceInstanceId(id: string): 'builtin' | 'installed' | 'dev' {
+  const source = id.split(':')[2]
+  return source === 'builtin' || source === 'dev' ? source : 'installed'
 }
