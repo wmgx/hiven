@@ -191,6 +191,15 @@ export function applyEffectsAfterConfirmation(
   effects: FluxEffect[],
   conflictsToReplace: ConflictInfo[]
 ): EffectRunnerResult {
+  if (!isEditorWindowRuntime() && effects.some(isEditorWorkspaceEffect)) {
+    return {
+      applied: [],
+      errors: effects
+        .filter(isEditorWorkspaceEffect)
+        .map((effect) => `Editor workspace effects can only run in the editor window: ${effect.type}`),
+    }
+  }
+
   // Release all conflicting occupancies
   for (const conflict of conflictsToReplace) {
     releaseOccupancy(conflict.existingOccupancy.id)
