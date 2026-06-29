@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, rmSync, readFileSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 const root = process.cwd()
 const tempDir = join(root, 'temp')
@@ -15,6 +15,15 @@ const timeoutMs = Number(process.env.HIVEN_TAURI_RUNTIME_STATE_TIMEOUT_MS ?? 25_
 const settleMs = Number(process.env.HIVEN_TAURI_RUNTIME_STATE_SETTLE_MS ?? 1_500)
 const shutdownMs = Number(process.env.HIVEN_TAURI_RUNTIME_STATE_SHUTDOWN_MS ?? 2_000)
 const suspiciousPattern = /Unhandled rejection|ReferenceError|TypeError|panic|panicked|compilation failed|error:/i
+const npmCommand = process.env.npm_execpath ? process.execPath : 'npm'
+const npmArgs = process.env.npm_execpath
+  ? [process.env.npm_execpath, 'run', 'tauri', '--', 'dev']
+  : ['run', 'tauri', '--', 'dev']
+const pathEntries = [
+  process.env.npm_node_execpath ? dirname(process.env.npm_node_execpath) : '',
+  '/opt/homebrew/bin',
+  process.env.PATH ?? '',
+].filter(Boolean)
 
 const tauriConfig = JSON.parse(readFileSync(join(root, 'src-tauri/tauri.conf.json'), 'utf8'))
 const windows = tauriConfig.app?.windows ?? []
@@ -23,13 +32,14 @@ assert.equal(windows[0].label, 'launcher', 'initial runtime window must be launc
 assert.equal(windows[0].visible, false, 'initial launcher runtime window must be hidden') // visible: false
 assert.ok(!windows.some((window) => window.label === 'main'), 'debug runtime-state smoke must not find a retired main window in config')
 
-const child = spawn('npm', ['run', 'tauri', '--', 'dev'], {
+const child = spawn(npmCommand, npmArgs, {
   cwd: root,
   detached: true,
   stdio: ['ignore', 'pipe', 'pipe'],
   env: {
     ...process.env,
     NO_COLOR: process.env.NO_COLOR ?? '1',
+    PATH: pathEntries.join(':'),
   },
 })
 

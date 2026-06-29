@@ -66,10 +66,18 @@ const commands = [
   ['npm', ['run', 'test:window-entry-runtime-smoke']],
 ]
 
+function resolveCommand(command, args) {
+  if (command === 'npm' && process.env.npm_execpath) {
+    return [process.execPath, [process.env.npm_execpath, ...args]]
+  }
+  return [command, args]
+}
+
 for (const [command, args] of commands) {
   const label = [command, ...args].join(' ')
   console.log(`\n[refactor-suite] ${label}`)
-  const result = spawnSync(command, args, { stdio: 'inherit' })
+  const [resolvedCommand, resolvedArgs] = resolveCommand(command, args)
+  const result = spawnSync(resolvedCommand, resolvedArgs, { stdio: 'inherit' })
   if (result.error) {
     console.error(`[refactor-suite] failed to run ${label}:`, result.error)
     process.exit(1)

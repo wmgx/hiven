@@ -71,6 +71,20 @@ fn surface_registry_state() -> &'static SurfaceRegistryState {
     SURFACE_REGISTRY.get_or_init(SurfaceRegistryState::default)
 }
 
+fn validate_surface_instance_kind(kind: &str) -> Result<(), String> {
+    match kind {
+        "launcher" | "editor" | "plugin-surface" | "settings" | "plugins" => Ok(()),
+        _ => Err(format!("invalid surface kind: {}", kind)),
+    }
+}
+
+fn validate_surface_instance_state(state: &str) -> Result<(), String> {
+    match state {
+        "visible" | "hidden" | "destroyed" => Ok(()),
+        _ => Err(format!("invalid surface state: {}", state)),
+    }
+}
+
 #[tauri::command]
 fn surface_registry_snapshot() -> Result<Vec<SurfaceInstanceRecord>, String> {
     let registry = surface_registry_state();
@@ -85,6 +99,8 @@ fn surface_registry_snapshot() -> Result<Vec<SurfaceInstanceRecord>, String> {
 
 #[tauri::command]
 fn surface_registry_upsert(surface: SurfaceInstanceRecord) -> Result<(), String> {
+    validate_surface_instance_kind(&surface.kind)?;
+    validate_surface_instance_state(&surface.state)?;
     let registry = surface_registry_state();
     registry
         .surfaces
@@ -96,6 +112,7 @@ fn surface_registry_upsert(surface: SurfaceInstanceRecord) -> Result<(), String>
 
 #[tauri::command(rename_all = "camelCase")]
 fn surface_registry_mark_state(id: String, state: String, last_active_at: u64) -> Result<(), String> {
+    validate_surface_instance_state(&state)?;
     let registry = surface_registry_state();
     let mut surfaces = registry
         .surfaces

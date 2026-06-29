@@ -45,6 +45,7 @@ function loadContextBroker(globals = {}) {
 
 const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
 const refactorSuite = readFileSync('scripts/test-refactor-suite.mjs', 'utf8')
+const contextBrokerSource = readFileSync('src/launcher/context/contextBroker.ts', 'utf8')
 
 const broker = loadContextBroker({ console: { ...console, warn: () => undefined } })
 const invocation = { source: 'global-hotkey', timestamp: 123 }
@@ -110,6 +111,11 @@ assert.equal(
   packageJson.scripts?.['test:context-broker-behavior'],
   'node scripts/test-context-broker-behavior.mjs',
   'package.json must expose test:context-broker-behavior',
+)
+assert.doesNotMatch(
+  contextBrokerSource,
+  /useWorkspaceStore|runtimeRegistry/,
+  'global context broker must not read editor window store/runtime registry directly',
 )
 assert.match(
   refactorSuite,

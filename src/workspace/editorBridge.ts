@@ -5,8 +5,11 @@ import { EDITOR_WINDOW_LABEL } from './windowManager/windowLabels'
 
 export const EDITOR_BRIDGE_REQUEST_EVENT = 'hiven://editor-bridge-request'
 export const EDITOR_BRIDGE_RESPONSE_EVENT = 'hiven://editor-bridge-response'
+export const EDITOR_BRIDGE_READY_EVENT = 'hiven://editor-bridge-ready'
 export const EDITOR_ACTIVE_CONTEXT_EVENT = 'hiven://editor-active-context'
 const EDITOR_BRIDGE_PENDING_REQUESTS_KEY = 'hiven:editor-bridge-pending-requests'
+const EDITOR_BRIDGE_READY_AT_KEY = 'hiven:editor-bridge-ready-at'
+const EDITOR_BRIDGE_READY_TTL_MS = 5_000
 
 export type EditorBridgeCreatePaneInput = {
   text?: string
@@ -143,10 +146,12 @@ export async function registerEditorBridgeHandlers(handlers: EditorBridgeHandler
   if (!isTauriRuntime()) return () => undefined
 
   const { listen } = await import('@tauri-apps/api/event')
-  return listen<unknown>(EDITOR_BRIDGE_REQUEST_EVENT, (event) => {
+  const unlisten = await listen<unknown>(EDITOR_BRIDGE_REQUEST_EVENT, (event) => {
     if (!isEditorBridgeRequest(event.payload)) return
     void handleEditorBridgeRequest(event.payload, handlers)
   })
+  await emitEditorBridgeReady()
+  return unlisten
 }
 
 async function sendEditorBridgeRequest<T extends EditorBridgeRequest['action']>(
@@ -155,17 +160,59 @@ async function sendEditorBridgeRequest<T extends EditorBridgeRequest['action']>(
   options: BridgeRequestOptions = {},
 ): Promise<unknown> {
   const request = createEditorBridgeRequest(action, payload)
-  if (options.persistForEditorStartup) persistPendingEditorBridgeRequest(request)
-  if (options.openEditorFirst) await showEditorWindow()
+  let persisted = false
+  try {
+    if (options.openEditorFirst) await showEditorWindow()
+    if (options.openEditorFirst && isTauriRuntime()) await waitForEditorBridgeReady(options.timeoutMs ?? 1200)
+    if (options.persistForEditorStartup) {
+      persistPendingEditorBridgeRequest(request)
+      persisted = true
+    }
 
-  if (!isTauriRuntime()) return undefined
+    if (!isTauriRuntime()) return undefined
 
-  const { emitTo, listen } = await import('@tauri-apps/api/event')
-  const responsePromise = await waitForEditorBridgeResponse(listen, request.requestId, options.timeoutMs ?? 1200)
-  await emitTo(EDITOR_WINDOW_LABEL, EDITOR_BRIDGE_REQUEST_EVENT, request)
-  const response = await responsePromise
-  if (!response.ok) throw new Error(response.error ?? `Editor bridge request failed: ${request.action}`)
-  return response.value
+    const { emitTo, listen } = await import('@tauri-apps/api/event')
+    const responsePromise = await waitForEditorBridgeResponse(listen, request.requestId, options.timeoutMs ?? 1200)
+    await emitTo(EDITOR_WINDOW_LABEL, EDITOR_BRIDGE_REQUEST_EVENT, request)
+    const response = await responsePromise
+    if (!response.ok) throw new Error(response.error ?? `Editor bridge request failed: ${request.action}`)
+    return response.value
+  } catch (error) {
+    if (persisted) clearPendingEditorBridgeRequest(request.requestId)
+    throw error
+  }
+}
+
+async function waitForEditorBridgeReady(timeoutMs: number): Promise<void> {
+  if (hasRecentEditorBridgeReady()) return
+  const { listen } = await import('@tauri-apps/api/event')
+  await new Promise<void>((resolve, reject) => {
+    let settled = false
+    let unlistenReady: (() => void) | undefined
+    const timer = window.setTimeout(() => {
+      if (settled) return
+      settled = true
+      unlistenReady?.()
+      reject(new Error('Timed out waiting for editor bridge ready'))
+    }, timeoutMs)
+    listen<unknown>(EDITOR_BRIDGE_READY_EVENT, () => {
+      if (settled) return
+      settled = true
+      window.clearTimeout(timer)
+      unlistenReady?.()
+      resolve()
+    })
+      .then((unlisten) => {
+        unlistenReady = unlisten
+        if (settled) unlisten()
+      })
+      .catch((error) => {
+        if (settled) return
+        settled = true
+        window.clearTimeout(timer)
+        reject(error)
+      })
+  })
 }
 
 function createEditorBridgeRequest<T extends EditorBridgeRequest['action']>(
@@ -239,6 +286,27 @@ async function emitEditorBridgeResponse(response: EditorBridgeResponse): Promise
   if (!isTauriRuntime()) return
   const { emit } = await import('@tauri-apps/api/event')
   await emit(EDITOR_BRIDGE_RESPONSE_EVENT, response)
+}
+
+async function emitEditorBridgeReady(): Promise<void> {
+  const readyAt = Date.now()
+  try {
+    localStorage.setItem(EDITOR_BRIDGE_READY_AT_KEY, String(readyAt))
+  } catch {
+    // The live event is enough for already-running windows.
+  }
+  if (!isTauriRuntime()) return
+  const { emit } = await import('@tauri-apps/api/event')
+  await emit(EDITOR_BRIDGE_READY_EVENT, { windowLabel: EDITOR_WINDOW_LABEL, readyAt })
+}
+
+function hasRecentEditorBridgeReady(): boolean {
+  try {
+    const readyAt = Number(localStorage.getItem(EDITOR_BRIDGE_READY_AT_KEY) ?? 0)
+    return Number.isFinite(readyAt) && Date.now() - readyAt < EDITOR_BRIDGE_READY_TTL_MS
+  } catch {
+    return false
+  }
 }
 
 function emitActiveEditorState(payload: { editor?: EditorContextSnapshot; pane?: EditorPaneSnapshot }): void {

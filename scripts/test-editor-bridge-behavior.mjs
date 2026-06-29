@@ -18,6 +18,11 @@ assert.match(
   /test:editor-bridge-behavior/,
   'refactor suite must include editor bridge behavior coverage',
 )
+const editorBridgeSource = readFileSync('src/workspace/editorBridge.ts', 'utf8')
+assert.match(editorBridgeSource, /EDITOR_BRIDGE_READY_EVENT/, 'editor bridge must define an editor-ready event')
+assert.match(editorBridgeSource, /waitForEditorBridgeReady/, 'editor bridge requests must wait for editor readiness before delivery')
+assert.match(editorBridgeSource, /emitEditorBridgeReady/, 'editor bridge handlers must publish readiness after registration')
+assert.match(editorBridgeSource, /clearPendingEditorBridgeRequest\(request\.requestId\)/, 'failed delivery must clear pending requests to avoid late execution')
 
 function createStorage() {
   const map = new Map()
@@ -99,6 +104,20 @@ const paneSnapshot = {
   assert.deepEqual(JSON.parse(JSON.stringify(pending[0].payload)), { text: 'hello', title: 'Draft', language: 'markdown' })
   assert.equal(typeof pending[0].requestId, 'string')
   assert.equal(typeof pending[0].createdAt, 'number')
+}
+
+{
+  const { bridge, storage } = loadEditorBridge({
+    showEditorWindow: async () => {
+      throw new Error('editor window failed to open')
+    },
+  })
+  await assert.rejects(
+    () => bridge.createEditorPane({ text: 'must not run later' }),
+    /editor window failed to open/,
+    'createEditorPane must report editor-open failures',
+  )
+  assert.deepEqual(readPending(storage), [], 'failed editor startup must not leave a pending request that can execute later')
 }
 
 {

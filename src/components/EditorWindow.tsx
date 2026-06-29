@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { useAppStore } from '../store'
-import { readLocalEditorContextSnapshot } from '../launcher/context/contextBroker'
 import { closeEditorWindow } from '../workspace/windowManager/editorWindow'
 import { EDITOR_WINDOW_LABEL } from '../workspace/windowManager/windowLabels'
 import { markSurfaceInstanceState, upsertSurfaceInstance } from '../surfaces/registry'
@@ -12,6 +11,7 @@ import {
   type EditorBridgePanelInput,
   type EditorBridgeTextInput,
 } from '../workspace/editorBridge'
+import { readLocalEditorContextSnapshot } from '../workspace/editorContextSnapshot'
 import { applyEffects } from '../workspace/effectRunner'
 import { ensurePluginRuntimeReady } from '../workspace/pluginRuntimeBootstrap'
 import { runtimeRegistry } from '../workspace/runtimeRegistry'

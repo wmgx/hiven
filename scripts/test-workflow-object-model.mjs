@@ -18,6 +18,7 @@ const files = {
   workflowLauncherAdapter: read('src/workflow/workflowLauncherAdapter.ts'),
   workflowIndex: read('src/workflow/index.ts'),
   contextBroker: read('src/launcher/context/contextBroker.ts'),
+  editorContextSnapshot: read('src/workspace/editorContextSnapshot.ts'),
   surfaceRegistry: read('src/surfaces/registry.ts'),
   surfaceActions: read('src/surfaces/actions.ts'),
   hostProvider: read('src/workspace/launcher/hostProvider.ts'),
@@ -141,7 +142,8 @@ assert.match(files.contextBroker, /createWorkContextSnapshot/, 'Context broker m
 assert.match(files.contextBroker, /editorContextProvider/, 'Context broker must expose a real editor context provider')
 assert.match(files.contextBroker, /clipboardContextProvider/, 'Context broker must expose a real clipboard context provider')
 assert.match(files.contextBroker, /createDefaultWorkContextSnapshot/, 'Context broker must compose default context providers')
-assert.match(files.contextBroker, /runtimeRegistry\.getCodeEditor/, 'Editor context provider must read live editor runtime state')
+assert.doesNotMatch(files.contextBroker, /useWorkspaceStore|runtimeRegistry/, 'Context broker must not directly read another window runtime state')
+assert.match(files.editorContextSnapshot, /runtimeRegistry\.getCodeEditor/, 'Editor context snapshot module must read live editor runtime state inside the editor window')
 assert.match(files.workflowIndex, /routeTextOutput/, 'workflow index must re-export router entry points')
 assert.match(files.workflowIndex, /createDefaultOutputRouterContext/, 'workflow index must re-export default output router context')
 assert.match(files.workflowIndex, /createDefaultWorkContextSnapshot/, 'workflow index must re-export default context snapshot')

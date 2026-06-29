@@ -11,10 +11,19 @@ const commands = [
   ['npm', ['run', 'build']],
 ]
 
+function resolveCommand(command, args) {
+  if ((command === 'npm' || command === 'npx') && process.env.npm_execpath) {
+    if (command === 'npx') return [process.execPath, [process.env.npm_execpath, 'exec', '--', ...args]]
+    return [process.execPath, [process.env.npm_execpath, ...args]]
+  }
+  return [command, args]
+}
+
 for (const [command, args] of commands) {
   const label = [command, ...args].join(' ')
   console.log(`\n[refactor-gate] ${label}`)
-  const result = spawnSync(command, args, { stdio: 'inherit' })
+  const [resolvedCommand, resolvedArgs] = resolveCommand(command, args)
+  const result = spawnSync(resolvedCommand, resolvedArgs, { stdio: 'inherit' })
   if (result.error) {
     console.error(`[refactor-gate] failed to run ${label}:`, result.error)
     process.exit(1)

@@ -13,6 +13,11 @@ assert.equal(
   'node scripts/test-surface-registry-behavior.mjs',
   'package.json must expose test:surface-registry-behavior',
 )
+const tauriLib = readFileSync('src-tauri/src/lib.rs', 'utf8')
+assert.match(tauriLib, /fn validate_surface_instance_kind/, 'Rust surface registry must validate surface kind inputs')
+assert.match(tauriLib, /fn validate_surface_instance_state/, 'Rust surface registry must validate surface state inputs')
+assert.match(tauriLib, /validate_surface_instance_kind\(&surface\.kind\)\?[\s\S]*validate_surface_instance_state\(&surface\.state\)\?/, 'Rust surface upsert must reject invalid kind/state values')
+assert.match(tauriLib, /surface_registry_mark_state[\s\S]*validate_surface_instance_state\(&state\)\?/, 'Rust surface mark-state must reject invalid state values')
 assert.match(
   refactorSuite,
   /test:surface-registry-behavior/,

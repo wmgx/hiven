@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { spawn } from 'node:child_process'
 
 const root = process.cwd()
@@ -14,14 +14,24 @@ const logPath = join(tempDir, `tauri-debug-smoke-${Date.now()}.log`)
 const timeoutMs = Number(process.env.HIVEN_TAURI_SMOKE_TIMEOUT_MS ?? 25_000)
 const shutdownMs = Number(process.env.HIVEN_TAURI_SMOKE_SHUTDOWN_MS ?? 2_000)
 const suspiciousPattern = /Unhandled rejection|ReferenceError|TypeError|panic|panicked|compilation failed|error:/i
+const npmCommand = process.env.npm_execpath ? process.execPath : 'npm'
+const npmArgs = process.env.npm_execpath
+  ? [process.env.npm_execpath, 'run', 'tauri', '--', 'dev']
+  : ['run', 'tauri', '--', 'dev']
+const pathEntries = [
+  process.env.npm_node_execpath ? dirname(process.env.npm_node_execpath) : '',
+  '/opt/homebrew/bin',
+  process.env.PATH ?? '',
+].filter(Boolean)
 
-const child = spawn('npm', ['run', 'tauri', '--', 'dev'], {
+const child = spawn(npmCommand, npmArgs, {
   cwd: root,
   detached: true,
   stdio: ['ignore', 'pipe', 'pipe'],
   env: {
     ...process.env,
     NO_COLOR: process.env.NO_COLOR ?? '1',
+    PATH: pathEntries.join(':'),
   },
 })
 
