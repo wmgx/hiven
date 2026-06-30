@@ -34,12 +34,12 @@ export function RecentClipboardHint({
     >
       <div className="hint-icon">📋</div>
       <div className="hint-body">
-        <span className="hint-title">
+        {preview && (
+          <span className="hint-title">{preview}</span>
+        )}
+        <span className="hint-subtitle">
           {hint.ageLabel}复制 · {kindLabel}
         </span>
-        {preview && (
-          <span className="hint-preview">{preview}</span>
-        )}
       </div>
       <button
         type="button"
