@@ -8,7 +8,6 @@ import { showEditorWindow } from '../workspace/windowManager/editorWindow'
 import { EDITOR_WINDOW_LABEL } from '../workspace/windowManager/windowLabels'
 import { showPluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
 import { PLUGIN_SURFACE_PANEL_ID } from '../components/pluginSurface/PluginSurfacePanel'
-import { registerClipboardHistoryWorkflowProvider } from './clipboardHistoryWorkflowProvider'
 import { createDefaultOutputRouterContext, routeTextOutput } from './outputRouter'
 import type { OutputTarget } from './outputTarget'
 import { registerWorkActionProvider, registerWorkObjectProvider } from './workflowRegistry'
@@ -20,7 +19,6 @@ let registered = false
 export function registerDefaultWorkflowProviders(): void {
   if (registered) return
   registered = true
-  registerClipboardHistoryWorkflowProvider()
   registerWorkObjectProvider(currentContextObjectProvider)
   registerWorkObjectProvider(hostAppObjectProvider)
   registerWorkObjectProvider(surfaceObjectProvider)
@@ -62,33 +60,6 @@ export const currentContextObjectProvider: WorkObjectProvider = {
         source: 'context.editor-selection',
         text: selectedText,
         language: snapshot.editor?.language,
-        updatedAt: snapshot.invocation.timestamp,
-      })
-    }
-
-    const clipboardText = snapshot.clipboard?.kind === 'text'
-      ? snapshot.clipboard.text?.trim()
-      : ''
-    if (clipboardText) {
-      objects.push({
-        id: 'context:clipboard-text',
-        type: 'clipboard',
-        title: 'Clipboard Text',
-        subtitle: preview(clipboardText),
-        icon: 'Clipboard',
-        source: 'context.clipboard',
-        contentType: 'text',
-        preview: clipboardText,
-        updatedAt: snapshot.invocation.timestamp,
-      })
-      objects.push({
-        id: 'context:clipboard-text-as-text',
-        type: 'text',
-        title: 'Clipboard as Text',
-        subtitle: preview(clipboardText),
-        icon: 'Text',
-        source: 'context.clipboard',
-        text: clipboardText,
         updatedAt: snapshot.invocation.timestamp,
       })
     }
