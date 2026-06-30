@@ -158,6 +158,7 @@ export function GlobalLauncherSearchFrame({
             items={items}
             selected={selectedItem}
             locale={locale}
+            truncate={!query}
             onSelect={onSelectItem}
             onHoverIndex={onHoverIndex}
           />

@@ -8,23 +8,33 @@ export type LauncherMixedItem =
   | { kind: 'domain'; id: string; title: string; subtitle: string; icon?: string; aliases?: string[]; domainItem: DomainLauncherItem }
   | { kind: 'pinned'; id: string; title: string; subtitle: string; icon?: string; aliases?: string[]; actionId: string }
 
+/** Maximum items rendered in the list when no query is active. */
+export const MAX_VISIBLE_IDLE = 20
+
 export function LauncherMixedList({
   items,
   selected,
   locale,
+  truncate = false,
   onSelect,
   onHoverIndex,
 }: {
   items: LauncherMixedItem[]
   selected?: LauncherMixedItem
   locale: Locale
+  /** When true, cap visible items and show a "type to refine" hint. */
+  truncate?: boolean
   onSelect: (item: LauncherMixedItem) => void
   onHoverIndex?: (index: number) => void
 }) {
   if (items.length === 0) return null
+
+  const shouldTruncate = truncate && items.length > MAX_VISIBLE_IDLE
+  const visible = shouldTruncate ? items.slice(0, MAX_VISIBLE_IDLE) : items
+
   return (
     <>
-      {items.map((item, index) => {
+      {visible.map((item, index) => {
         const isSelected = selected?.kind === item.kind && selected.id === item.id
         return (
           <LauncherMixedListItem
@@ -37,6 +47,11 @@ export function LauncherMixedList({
           />
         )
       })}
+      {shouldTruncate && (
+        <div className="launcher-more-hint">
+          {t(locale, 'palette.moreResultsHint')}
+        </div>
+      )}
     </>
   )
 }

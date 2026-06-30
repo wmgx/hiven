@@ -14,6 +14,7 @@ import type { GlobalLauncherItem } from './GlobalLauncherItems'
 import type { ClipboardObjectBlockState } from '../../launcher/clipboard/useClipboardObjectBlock'
 import type { RecommendedAction, RecommendedOutputTarget } from '../../launcher/clipboard/actionRecommendation'
 import { GLOBAL_LAUNCHER_SETTINGS_HEIGHT, STANDALONE_SURFACE_MAX_HEIGHT } from './GlobalLauncherLayout'
+import { MAX_VISIBLE_IDLE } from './LauncherMixedList'
 
 type GlobalLauncherPanelProps = {
   panelRef: RefObject<HTMLDivElement | null>
@@ -143,7 +144,9 @@ export function GlobalLauncherPanel({
         toggleResultChoice,
         closeLauncher,
         isKeyboardNavRef,
-        visibleFilteredLength: visibleFiltered.length,
+        visibleFilteredLength: !query && visibleFiltered.length > MAX_VISIBLE_IDLE
+          ? MAX_VISIBLE_IDLE
+          : visibleFiltered.length,
         setSelectedIndex,
         selectedItem,
         isWorkflowObjectLauncherItem,

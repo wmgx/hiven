@@ -63,6 +63,7 @@ export default {
     'hasInput': 'input',
     'boolYes': 'Yes',
     'boolNo': 'No',
+    'moreResultsHint': 'Type to refine results…',
   },
   zh: {
     'search': '搜索操作...',
@@ -128,5 +129,6 @@ export default {
     'hasInput': '输入',
     'boolYes': '是',
     'boolNo': '否',
+    'moreResultsHint': '输入关键词以缩小范围…',
   },
 }

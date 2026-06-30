@@ -4149,6 +4149,14 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
   background: var(--panel);
 }
 
+.launcher-more-hint {
+  padding: 8px 20px 10px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-3);
+  user-select: none;
+}
+
 .l-results {
   padding: 6px 0 2px;
   background: var(--panel);
@@ -4163,9 +4171,11 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
   padding: 0 12px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all 0.14s;
+  transition: background 0.14s, color 0.14s;
   color: var(--text);
   background: transparent;
+  will-change: background;
+  contain: inline-size style;
 }
 
 .l-row:hover:not(.sel) {
@@ -4174,7 +4184,7 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
 
 .l-row.sel,
 .l-row.selected {
-  height: 50px;
+  height: 42px;
   background: var(--accent-soft) !important;
 }
 
@@ -4245,22 +4255,11 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
 
 .l-row .r-desc {
   display: block;
-  max-height: 0;
-  margin-top: 0;
   overflow: hidden;
   color: var(--text-3);
   font-size: 12px;
-  opacity: 0;
   text-overflow: ellipsis;
-  transition: all 0.14s;
   white-space: nowrap;
-}
-
-.l-row.sel .r-desc,
-.l-row.selected .r-desc {
-  max-height: 18px;
-  margin-top: 2px;
-  opacity: 1;
 }
 
 .l-row .r-tag,

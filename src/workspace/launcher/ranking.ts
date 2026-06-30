@@ -124,15 +124,27 @@ export function scoreLauncherItem(ctx: RankContext, item: LauncherItem): number 
  * Rank items for a surface. In query-present mode, non-matching items are
  * dropped. In query-empty mode all items are kept and ordered by usage + pinned
  * + static priority. Stable: ties preserve input order.
+ *
+ * The result is capped at MAX_RANKED_RESULTS to avoid scoring and sorting
+ * hundreds of items when only ~15 are visible in the launcher viewport.
  */
+const MAX_RANKED_RESULTS = 50
+
 export function rankLauncherItems(ctx: RankContext, items: LauncherItem[]): LauncherItem[] {
   const q = ctx.query.trim().toLowerCase()
   const candidates = q
     ? items.filter((item) => itemMatchesQuery(item, q, ctx.locale))
     : items.slice()
 
-  return candidates
-    .map((item, index) => ({ item, index, score: scoreLauncherItem(ctx, item) }))
-    .sort((a, b) => (b.score - a.score) || (a.index - b.index))
-    .map((entry) => entry.item)
+  // When there are far more candidates than can be displayed, score all but
+  // only fully sort a partial set (partial sort via selection-like approach).
+  const scored = candidates.map((item, index) => ({ item, index, score: scoreLauncherItem(ctx, item) }))
+  scored.sort((a, b) => (b.score - a.score) || (a.index - b.index))
+
+  const limit = Math.min(scored.length, MAX_RANKED_RESULTS)
+  const result: LauncherItem[] = new Array(limit)
+  for (let i = 0; i < limit; i++) {
+    result[i] = scored[i].item
+  }
+  return result
 }

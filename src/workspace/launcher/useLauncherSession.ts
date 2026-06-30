@@ -149,11 +149,15 @@ export function useLauncherSession({
     return () => window.clearTimeout(timer)
   }, [dynamicItems.length, open, query])
 
-  const rankedItems = useMemo<LauncherItem[]>(() => {
+  // Collect static candidates separately — they only change with pluginRegistryVersion,
+  // not on every keystroke.
+  const staticCandidates = useMemo<LauncherItem[]>(() => {
     void pluginRegistryVersion
-    const staticCandidates = staticItemFilter
-      ? staticItemFilter(collectStaticCandidates(normalizedHostId))
-      : collectStaticCandidates(normalizedHostId)
+    const raw = collectStaticCandidates(normalizedHostId)
+    return staticItemFilter ? staticItemFilter(raw) : raw
+  }, [normalizedHostId, pluginRegistryVersion, staticItemFilter])
+
+  const rankedItems = useMemo<LauncherItem[]>(() => {
     return rankLauncherItems(
       {
         query: query.trim(),
@@ -169,10 +173,9 @@ export function useLauncherSession({
     launcherUsageBySurface,
     locale,
     normalizedHostId,
-    pluginRegistryVersion,
     query,
     rankingNow,
-    staticItemFilter,
+    staticCandidates,
   ])
 
   return {
