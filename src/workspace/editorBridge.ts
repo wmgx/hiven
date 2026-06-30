@@ -240,22 +240,29 @@ async function sendEditorBridgeRequest<T extends EditorBridgeRequest['action']>(
     const tauriEvents = isTauriRuntime()
       ? await import('@tauri-apps/api/event')
       : undefined
-    if (tauriEvents) {
-      responsePromise = await waitForEditorBridgeResponse(tauriEvents.listen, request.requestId, timeoutMs)
-    }
 
     if (options.persistForEditorStartup) {
       persistPendingEditorBridgeRequest(request)
       persisted = true
     }
-    if (options.openEditorFirst) await showEditorWindow()
-    if (options.openEditorFirst && tauriEvents) await waitForEditorBridgeReady(timeoutMs)
+
+    // Fire-and-forget path: persist the request, open the editor window, and
+    // return immediately. The editor window will consume the request from
+    // localStorage on startup. This avoids waiting for response which times
+    // out when the editor window is not yet ready.
+    if (options.openEditorFirst && persisted) {
+      await showEditorWindow()
+      return undefined
+    }
+
+    // Live path: editor already running, emit and wait for response.
+    if (tauriEvents) {
+      responsePromise = await waitForEditorBridgeResponse(tauriEvents.listen, request.requestId, timeoutMs)
+    }
 
     if (!tauriEvents || !responsePromise) return undefined
 
-    if (!persisted || isPendingEditorBridgeRequest(request.requestId)) {
-      await tauriEvents.emitTo(EDITOR_WINDOW_LABEL, EDITOR_BRIDGE_REQUEST_EVENT, request)
-    }
+    await tauriEvents.emit(EDITOR_BRIDGE_REQUEST_EVENT, request)
     const response = await responsePromise
     if (!response.ok) throw new Error(response.error ?? `Editor bridge request failed: ${request.action}`)
     return response.value

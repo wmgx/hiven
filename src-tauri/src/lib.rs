@@ -726,9 +726,10 @@ async fn hide_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn show_editor_window(app: tauri::AppHandle) -> Result<(), String> {
-    // Always open a new editor window
-    open_new_editor_window(app).await.map(|_| ())
+async fn show_editor_window(app: tauri::AppHandle) -> Result<String, String> {
+    // Always open a new editor window and return its label so the frontend
+    // bridge can target it directly.
+    open_new_editor_window(app).await
 }
 
 #[tauri::command]

@@ -151,6 +151,20 @@ export function EditorWindow() {
 
 function applyCreateEditorPane(input: EditorBridgeCreatePaneInput): string | undefined {
   const workspace = useWorkspaceStore.getState()
+
+  // If there's a single empty pane, reuse it instead of creating a new one.
+  if (workspace.paneOrder.length === 1) {
+    const existingId = workspace.paneOrder[0]
+    const existingPane = workspace.panes[existingId]
+    if (existingPane && !existingPane.text) {
+      workspace.setPaneText(existingId, input.text ?? '')
+      if (input.language) {
+        workspace.updatePaneLanguage(existingId, input.language)
+      }
+      return existingId
+    }
+  }
+
   return workspace.createPane({
     text: input.text ?? '',
     title: input.title,
@@ -251,6 +265,22 @@ function publishEditorSnapshots(): void {
       ]),
     ),
   })
+  // Update surface title with active pane text preview for launcher discoverability
+  const activePane = state.panes[state.activePaneId]
+  if (activePane) {
+    const preview = (activePane.text ?? '').replace(/[\r\n]+/g, ' ').slice(0, 20).trim()
+    const label = getEditorWindowLabel()
+    upsertSurfaceInstance({
+      id: label,
+      kind: 'editor',
+      windowLabel: label,
+      title: preview || 'Hiven Editor',
+      state: 'visible',
+      canReceiveText: true,
+      canProvideText: true,
+      canAttachToEditor: true,
+    })
+  }
 }
 
 async function closeCurrentWindow(): Promise<void> {

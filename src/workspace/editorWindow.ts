@@ -1,9 +1,20 @@
 import { invoke } from '@tauri-apps/api/core'
 import { markSurfaceInstanceState, upsertSurfaceInstance } from '../surfaces/registry'
 
-export async function requestOpenEditorWindow(): Promise<void> {
-  if (!isTauriRuntime()) return
-  await invoke('show_editor_window')
+export async function requestOpenEditorWindow(): Promise<string | undefined> {
+  if (!isTauriRuntime()) return undefined
+  const label = await invoke<string>('show_editor_window')
+  upsertSurfaceInstance({
+    id: label,
+    kind: 'editor',
+    windowLabel: label,
+    title: 'Hiven Editor',
+    state: 'visible',
+    canReceiveText: true,
+    canProvideText: true,
+    canAttachToEditor: true,
+  })
+  return label
 }
 
 export async function requestOpenNewEditorWindow(): Promise<string | undefined> {

@@ -150,6 +150,8 @@ export type LauncherItemDisplay = {
   icon?: IconRef
   /** Extra search terms (aliases) used by ranking but not shown as primary. */
   aliases?: string[]
+  /** Custom kind label shown as the tag pill. Overrides the default derived label. */
+  kindLabel?: string
 }
 
 // ─── Behavior (lifecycle types) ──────────────────────────────────────────────
@@ -287,7 +289,7 @@ export type PluginLauncherApi = {
   insertText(text: string): Promise<void>
   copyText(text: string): Promise<void>
   openUrl(url: string): Promise<void>
-  showEditorWindow(): Promise<void>
+  showEditorWindow(): Promise<string | undefined>
   showPluginsPage(): Promise<void>
   showSettingsPage(): Promise<void>
   createPane(options?: { text?: string; title?: string; language?: string; focus?: boolean; direction?: 'left' | 'right' | 'top' | 'bottom' }): Promise<string | undefined>

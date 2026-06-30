@@ -6,8 +6,8 @@ import {
   requestOpenNewEditorWindow,
 } from '../editorWindow'
 
-export async function showEditorWindow(): Promise<void> {
-  await requestOpenEditorWindow()
+export async function showEditorWindow(): Promise<string | undefined> {
+  return await requestOpenEditorWindow()
 }
 
 export async function openNewEditorWindow(): Promise<string | undefined> {
