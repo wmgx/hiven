@@ -22,6 +22,8 @@ export type ClipboardDetectedType =
   | 'jwt'
   | 'timestamp'
   | 'secret-like'
+  | 'yaml'
+  | 'query-string'
 
 export type ClipboardSnapshot = {
   text: string
@@ -82,6 +84,12 @@ export function detectClipboardType(text: string): ClipboardDetectedType {
   if (/\bselect\b[\s\S]+\bfrom\b|\binsert\s+into\b|\bupdate\b[\s\S]+\bset\b/i.test(trimmed)) return 'sql'
   if (looksLikeDelimitedTable(trimmed)) return 'csv'
 
+  // YAML (must come after JSON check — JSON is also valid YAML)
+  if (looksLikeYaml(trimmed)) return 'yaml'
+
+  // Query String
+  if (looksLikeQueryString(trimmed)) return 'query-string'
+
   // Command
   if (/^(?:ssh|curl|npm|git|brew|pip|docker|kubectl|cargo|go |apt)\b/i.test(trimmed)) return 'command'
 
@@ -102,6 +110,22 @@ function looksLikeDelimitedTable(text: string): boolean {
   const lines = text.split(/\r?\n/).filter(Boolean)
   if (lines.length < 2) return false
   return [',', '\t', ';', '|'].some((delimiter) => lines.every((line) => line.includes(delimiter)))
+}
+
+function looksLikeYaml(text: string): boolean {
+  // YAML typically starts with --- or has multiple key: value lines
+  if (text.startsWith('---')) return true
+  const lines = text.split(/\r?\n/).filter(Boolean)
+  if (lines.length < 2) return false
+  // At least 2 lines matching "key: value" pattern (not URL-like colons)
+  const kvCount = lines.filter((l) => /^[\w.-]+:\s+\S/.test(l)).length
+  return kvCount >= 2
+}
+
+function looksLikeQueryString(text: string): boolean {
+  // Matches "key=value&key=value" pattern (at least 2 pairs)
+  const qs = text.startsWith('?') ? text.slice(1) : text
+  return /^[\w%+.-]+=[\w%+.*-]*(?:&[\w%+.-]+=[\w%+.*-]*)+$/.test(qs)
 }
 
 // ─── Snapshot creation / update ────────────────────────────────────────────────

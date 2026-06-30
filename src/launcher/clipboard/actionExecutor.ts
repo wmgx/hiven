@@ -159,6 +159,12 @@ async function transformActionText(action: RecommendedAction, text: string): Pro
     case 'decode-jwt': {
       return decodeJwt(text)
     }
+    case 'yaml-to-json': {
+      return yamlToJson(text)
+    }
+    case 'query-string-to-json': {
+      return queryStringToJson(text)
+    }
     case 'format-css':
     case 'format-sql':
     case 'format-xml':
@@ -288,4 +294,36 @@ function formatYamlScalar(value: unknown): string {
   if (typeof value === 'string') return JSON.stringify(value)
   if (value === null) return 'null'
   return String(value)
+}
+
+function yamlToJson(text: string): string {
+  // Lightweight YAML-to-JSON for simple key:value YAML (no nested structures)
+  // Handles the common case; complex YAML should go through the plugin's js-yaml
+  try {
+    const lines = text.split(/\r?\n/).filter(Boolean)
+    const obj: Record<string, string> = {}
+    for (const line of lines) {
+      if (line.startsWith('---') || line.startsWith('#')) continue
+      const match = line.match(/^([\w.-]+):\s*(.*)$/)
+      if (match) {
+        obj[match[1]] = match[2]
+      }
+    }
+    return JSON.stringify(obj, null, 2)
+  } catch {
+    return text
+  }
+}
+
+function queryStringToJson(text: string): string {
+  try {
+    let qs = text.trim()
+    if (qs.startsWith('?')) qs = qs.slice(1)
+    const params = new URLSearchParams(qs)
+    const obj: Record<string, string> = {}
+    params.forEach((v, k) => { obj[k] = v })
+    return JSON.stringify(obj, null, 2)
+  } catch {
+    return text
+  }
 }

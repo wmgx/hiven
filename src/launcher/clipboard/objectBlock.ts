@@ -100,6 +100,8 @@ const KIND_LABELS: Record<ObjectBlockKind, string> = {
   csv: 'CSV',
   jwt: 'JWT',
   timestamp: 'Timestamp',
+  yaml: 'YAML',
+  'query-string': 'Query String',
 }
 
 export function getKindLabel(kind: ObjectBlockKind): string {

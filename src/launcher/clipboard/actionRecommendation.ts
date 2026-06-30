@@ -260,6 +260,44 @@ const COMMAND_ACTIONS: RecommendedAction[] = [
   },
 ]
 
+const YAML_ACTIONS: RecommendedAction[] = [
+  {
+    id: 'yaml-to-json',
+    title: 'Convert YAML to JSON',
+    titleZh: 'YAML 转 JSON',
+    pluginId: 'yaml',
+    provider: 'YAML',
+    defaultOutput: 'copy',
+    alternativeOutputs: ['open-editor'],
+  },
+  {
+    id: 'open-clipboard-editor',
+    title: 'Open Clipboard in Editor',
+    titleZh: '打开剪贴板到编辑器',
+    provider: 'Editor',
+    defaultOutput: 'open-editor',
+  },
+]
+
+const QUERY_STRING_ACTIONS: RecommendedAction[] = [
+  {
+    id: 'query-string-to-json',
+    title: 'Query String → JSON',
+    titleZh: 'Query String 转 JSON',
+    pluginId: 'queryString',
+    provider: 'Query String',
+    defaultOutput: 'copy',
+    alternativeOutputs: ['open-editor'],
+  },
+  {
+    id: 'open-clipboard-editor',
+    title: 'Open Clipboard in Editor',
+    titleZh: '打开剪贴板到编辑器',
+    provider: 'Editor',
+    defaultOutput: 'open-editor',
+  },
+]
+
 const SECRET_ACTIONS: RecommendedAction[] = [
   // Secret content: suppressed network actions, only local open
   {
@@ -372,6 +410,8 @@ const CLIPBOARD_ACTIONS_BY_KIND: Record<ObjectBlockKind, RecommendedAction[]> = 
   xml: FORMATTER_ACTIONS_BY_KIND.xml ?? FALLBACK_ACTIONS,
   jwt: FORMATTER_ACTIONS_BY_KIND.jwt ?? FALLBACK_ACTIONS,
   timestamp: FORMATTER_ACTIONS_BY_KIND.timestamp ?? FALLBACK_ACTIONS,
+  yaml: YAML_ACTIONS,
+  'query-string': QUERY_STRING_ACTIONS,
 }
 
 const EDITOR_ACTIONS_BY_KIND: Partial<Record<ObjectBlockKind, RecommendedAction[]>> = {
