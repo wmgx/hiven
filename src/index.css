@@ -1075,8 +1075,10 @@ html[data-window='launcher'] .global-launcher-panel :is(input, textarea, select,
   max-height: var(--launcher-list-max-height);
   overflow-x: hidden;
   overflow-y: auto;
+  overflow-y: overlay;
   overscroll-behavior: contain;
   touch-action: pan-y;
+  scrollbar-width: thin;
 }
 
 .launcher-results {
@@ -4155,7 +4157,7 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 6px 10px 4px 14px;
+  margin: 6px 8px 4px;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
   background: var(--accent-soft);
