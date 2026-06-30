@@ -120,13 +120,13 @@ export function GlobalLauncherSearchFrame({
           {error}
         </div>
       )}
-      {hint && !block && (
-        <RecentClipboardHint
-          hint={hint}
-          onAttach={() => clipboardBlock?.attachHintAsBlock()}
-        />
-      )}
       <div className="global-launcher-body l-list" onMouseMove={onMouseMove}>
+        {hint && !block && (
+          <RecentClipboardHint
+            hint={hint}
+            onAttach={() => clipboardBlock?.attachHintAsBlock()}
+          />
+        )}
         {block ? (
           <div className="recommended-actions-list" data-testid="recommended-actions-list">
             {expandedAction ? (

@@ -1,13 +1,20 @@
 /**
- * RecentClipboardHint — Weak hint shown when clipboard is 2–10 min old.
+ * RecentClipboardHint — Recommendation card shown when clipboard is 2–10 min old.
  *
  * Design: hiven_clipboard_object_block_recommendation_ai_task.md §9.3
  *
- * UI: "最近剪贴板 · 6 分钟前 · 使用这段内容"
+ * Renders as a subtle card at the top of the launcher list with content preview.
  */
 
 import type { RecentClipboardHint as HintType } from '../../launcher/clipboard/objectBlock'
 import { getKindLabel } from '../../launcher/clipboard/objectBlock'
+
+function truncatePreview(text: string, maxLen = 60): string {
+  const firstLine = text.split('\n')[0] ?? ''
+  const trimmed = firstLine.trim()
+  if (trimmed.length <= maxLen) return trimmed
+  return trimmed.slice(0, maxLen) + '…'
+}
 
 export function RecentClipboardHint({
   hint,
@@ -16,20 +23,30 @@ export function RecentClipboardHint({
   hint: HintType
   onAttach: () => void
 }) {
+  const preview = truncatePreview(hint.snapshot.text)
+  const kindLabel = getKindLabel(hint.kind)
+
   return (
     <div
       className="recent-clipboard-hint"
       data-testid="recent-clipboard-hint"
+      onClick={onAttach}
     >
-      <span className="hint-label">
-        最近剪贴板 · {getKindLabel(hint.kind)} · {hint.ageLabel}
-      </span>
+      <div className="hint-icon">📋</div>
+      <div className="hint-body">
+        <span className="hint-title">
+          {hint.ageLabel}复制 · {kindLabel}
+        </span>
+        {preview && (
+          <span className="hint-preview">{preview}</span>
+        )}
+      </div>
       <button
         type="button"
         className="hint-action"
-        onClick={onAttach}
+        onClick={(e) => { e.stopPropagation(); onAttach() }}
       >
-        使用这段内容
+        使用
       </button>
     </div>
   )
