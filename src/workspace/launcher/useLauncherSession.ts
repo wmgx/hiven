@@ -138,9 +138,7 @@ export function useLauncherSession({
     dynamicQueryRef.current = q
     const timer = window.setTimeout(async () => {
       if (dynamicQueryRef.current !== q) return
-      console.log('[launcher-session] collectDynamicItems', { q, clipboardText, normalizedHostId })
       const items = await collectDynamicItems(q, normalizedHostId, locale, getPluginSettings, clipboardText)
-      console.log('[launcher-session] dynamic items collected:', items.length)
       if (dynamicQueryRef.current !== q) return
       setDynamicItems(filterDynamicForSurface(items, normalizedHostId))
     }, q ? 150 : 0)
