@@ -40,6 +40,7 @@ const INSTALL_FRESHNESS_WEIGHT = 70 // decays over INSTALL_FRESHNESS_WINDOW_MS
 const INSTALL_FRESHNESS_WINDOW_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 const PINNED_BOOST = 40 // mild; far below a one-tier (1000) jump
 const MAX_STATIC_PRIORITY = 300 // host-only ceiling, still < 1000
+const TEXT_MATCH_BOOST = 800 // strong boost when tool can process the content; below match tier (1000) so an exact name match still wins
 
 export type RankContext = {
   query: string
@@ -49,6 +50,8 @@ export type RankContext = {
   now: number
   /** Set of system item keys that are pinned (referenced by a pinned entry). */
   pinnedKeys?: Set<SystemLauncherItemKey>
+  /** Text to test against textMatch (clipboard content or raw user input). */
+  contentText?: string
 }
 
 function toSearchableFields(item: LauncherItem, locale: Locale): SearchableFields {
@@ -117,7 +120,14 @@ export function installFreshnessScore(ctx: RankContext, item: LauncherItem): num
 export function scoreLauncherItem(ctx: RankContext, item: LauncherItem): number {
   const q = ctx.query.trim().toLowerCase()
   const matchScore = scoreSearchableFields(toSearchableFields(item, ctx.locale), q, ctx.locale, [], {})
-  return matchScore + usageScore(ctx, item) + pinnedBoost(ctx, item) + staticPriority(item) + installFreshnessScore(ctx, item)
+  const textMatchBoost = ctx.contentText && item.textMatch
+    ? (safeTextMatch(item.textMatch, ctx.contentText) ? TEXT_MATCH_BOOST : 0)
+    : 0
+  return matchScore + usageScore(ctx, item) + pinnedBoost(ctx, item) + staticPriority(item) + installFreshnessScore(ctx, item) + textMatchBoost
+}
+
+function safeTextMatch(matcher: (text: string) => boolean, text: string): boolean {
+  try { return matcher(text) } catch { return false }
 }
 
 /**
@@ -133,7 +143,7 @@ const MAX_RANKED_RESULTS = 50
 export function rankLauncherItems(ctx: RankContext, items: LauncherItem[]): LauncherItem[] {
   const q = ctx.query.trim().toLowerCase()
   const candidates = q
-    ? items.filter((item) => itemMatchesQuery(item, q, ctx.locale))
+    ? items.filter((item) => itemMatchesQuery(item, q, ctx.locale) || itemMatchesContent(item, ctx.contentText))
     : items.slice()
 
   // When there are far more candidates than can be displayed, score all but
@@ -147,4 +157,10 @@ export function rankLauncherItems(ctx: RankContext, items: LauncherItem[]): Laun
     result[i] = scored[i].item
   }
   return result
+}
+
+/** Check if the item's textMatch function matches the content text. */
+function itemMatchesContent(item: LauncherItem, contentText?: string): boolean {
+  if (!contentText || !item.textMatch) return false
+  return safeTextMatch(item.textMatch, contentText)
 }

@@ -83,6 +83,30 @@ function decodeJwt(text: string): string {
   return `// Header\n${JSON.stringify(header, null, 2)}\n\n// Payload\n${JSON.stringify(payload, null, 2)}`
 }
 
+// ─── Content Matchers ─────────────────────────────────────────────────────────
+
+function isBase64(text: string): boolean {
+  const t = text.trim()
+  if (t.length < 4) return false
+  return /^[A-Za-z0-9+/\n\r]+=*$/.test(t) && t.length % 4 <= 1
+}
+
+function isUrlEncoded(text: string): boolean {
+  return /%[0-9A-Fa-f]{2}/.test(text)
+}
+
+function hasHtmlEntities(text: string): boolean {
+  return /&(?:amp|lt|gt|quot|#39|#\d+|#x[0-9a-f]+);/i.test(text)
+}
+
+function hasEscapeSequences(text: string): boolean {
+  return /\\[nrt"'\\]/.test(text)
+}
+
+function isJwt(text: string): boolean {
+  return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(text.trim())
+}
+
 // ─── Plugin Definition ────────────────────────────────────────────────────────
 
 export const encodeDecodePlugin = definePlugin({
@@ -94,6 +118,7 @@ export const encodeDecodePlugin = definePlugin({
       icon: 'Binary',
       aliases: ['base64 encode', 'base64编码', 'b64 encode', 'btoa'],
       inputPolicy: { mode: 'auto' },
+      textMatch: (text) => !isBase64(text), // text is NOT base64 → offer to encode
       run(ctx) {
         try { return ctx.output.text(base64Encode(ctx.input.text)) }
         catch (e: any) { return ctx.output.error(`Error: ${e.message}`) }
@@ -107,6 +132,7 @@ export const encodeDecodePlugin = definePlugin({
       icon: 'Binary',
       aliases: ['base64 decode', 'base64解码', 'b64 decode', 'atob'],
       inputPolicy: { mode: 'auto' },
+      textMatch: isBase64,
       run(ctx) {
         try { return ctx.output.text(base64Decode(ctx.input.text)) }
         catch (e: any) { return ctx.output.error(`Error: ${e.message}`) }
@@ -133,6 +159,7 @@ export const encodeDecodePlugin = definePlugin({
       icon: 'Link',
       aliases: ['urldecode', 'url解码', 'percent decode'],
       inputPolicy: { mode: 'auto' },
+      textMatch: isUrlEncoded,
       run(ctx) {
         try { return ctx.output.text(urlDecode(ctx.input.text)) }
         catch (e: any) { return ctx.output.error(`Error: ${e.message}`) }
@@ -156,6 +183,7 @@ export const encodeDecodePlugin = definePlugin({
       icon: 'FileCode',
       aliases: ['html-entities decode', 'html-unescape', 'html解码'],
       inputPolicy: { mode: 'auto' },
+      textMatch: hasHtmlEntities,
       run(ctx) { return ctx.output.text(htmlDecode(ctx.input.text)) },
       surfaces: { launcher: true, panel: true, pinnable: true },
     },
@@ -176,6 +204,7 @@ export const encodeDecodePlugin = definePlugin({
       icon: 'Quote',
       aliases: ['unescape', 'stripslashes', '反转义', 'remove slashes'],
       inputPolicy: { mode: 'auto' },
+      textMatch: hasEscapeSequences,
       run(ctx) { return ctx.output.text(unescapeSlashes(ctx.input.text)) },
       surfaces: { launcher: true, panel: true, pinnable: true },
     },
@@ -186,6 +215,7 @@ export const encodeDecodePlugin = definePlugin({
       icon: 'Key',
       aliases: ['jwt-decode', 'json-web-token', 'jwt解码'],
       inputPolicy: { mode: 'auto' },
+      textMatch: isJwt,
       run(ctx) {
         try { return ctx.output.text(decodeJwt(ctx.input.text)) }
         catch (e: any) { return ctx.output.error(`Error: ${e.message}`) }

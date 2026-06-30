@@ -160,6 +160,8 @@ export function useLauncherSession({
   }, [normalizedHostId, pluginRegistryVersion, staticItemFilter])
 
   const rankedItems = useMemo<LauncherItem[]>(() => {
+    // contentText for textMatch: use query if user typed something, else clipboard
+    const contentText = query.trim() || clipboardText || undefined
     return rankLauncherItems(
       {
         query: query.trim(),
@@ -167,10 +169,12 @@ export function useLauncherSession({
         surfaceId: normalizedHostId,
         usage: launcherUsageBySurface,
         now: rankingNow,
+        contentText,
       },
       [...staticCandidates, ...dynamicItems],
     )
   }, [
+    clipboardText,
     dynamicItems,
     launcherUsageBySurface,
     locale,

@@ -428,6 +428,8 @@ export type LauncherItem = {
   defaultParams?: Record<string, unknown>
   /** Host-owned execution policy: defaults can prefill UI but must not skip parameter selection. */
   requireParamSelection?: boolean
+  /** Content matcher: returns true if this tool can process the given text. Boosted in ranking. */
+  textMatch?: (text: string) => boolean
   execute: LauncherExecuteHandler
   executeWithParams?: LauncherExecuteWithParamsHandler
 }
@@ -518,6 +520,12 @@ export type PluginToolContribution<TSettings = unknown> = {
   defaultParams?: Record<string, unknown>
   /** When true, launcher selection prompts for params even when defaults exist. */
   requireParamSelection?: boolean
+  /**
+   * Content matcher: returns true if this tool can process the given text.
+   * Used for both clipboard content and direct user input in the launcher.
+   * Matched tools are boosted to the top of the command list.
+   */
+  textMatch?: (text: string) => boolean
   run(ctx: PluginToolContext<TSettings>): Promise<PluginToolResult> | PluginToolResult
   surfaces?: PluginToolSurfaces
 }
