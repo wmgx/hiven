@@ -1,8 +1,6 @@
 {
-  "command.run.title": "CSS Formatter",
-  "command.run.description": "Format or minify CSS",
-  "input.text.label": "Input",
-  "param.mode.label": "Mode",
-  "param.mode.option.pretty.label": "Pretty",
-  "param.mode.option.compact.label": "Compact"
+  "command.prettify.title": "CSS Prettify",
+  "command.prettify.description": "Format CSS with indentation",
+  "command.compact.title": "CSS Compact",
+  "command.compact.description": "Minify CSS (remove whitespace and comments)"
 }

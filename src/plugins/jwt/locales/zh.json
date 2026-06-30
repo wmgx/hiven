@@ -1,5 +1,4 @@
 {
-  "command.run.title": "JWT 解码",
-  "command.run.description": "解码 JWT 令牌",
-  "input.text.label": "输入"
+  "command.decode.title": "JWT 解码",
+  "command.decode.description": "解码 JWT 令牌，展示 Header 和 Payload"
 }

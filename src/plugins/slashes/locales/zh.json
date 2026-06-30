@@ -1,8 +1,6 @@
 {
-  "command.run.title": "转义/反转义",
-  "command.run.description": "转义或反转义特殊字符",
-  "input.text.label": "输入",
-  "param.mode.label": "模式",
-  "param.mode.option.escape.label": "转义",
-  "param.mode.option.unescape.label": "反转义"
+  "command.escape.title": "转义",
+  "command.escape.description": "转义特殊字符（引号、换行、制表符等）",
+  "command.unescape.title": "反转义",
+  "command.unescape.description": "反转义特殊字符（还原 \\n \\t \\\" 等）"
 }

@@ -1,12 +1,14 @@
 /**
- * First-party Hash plugin (migrated from legacy builtin action).
+ * First-party Hash plugin.
+ *
+ * Exposes three independent tools (SHA-256, SHA-1, SHA-512) — no sub-selection needed.
  */
 
-import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
+import { definePlugin } from '@hiven/plugin'
 
-async function runHash(text: string, algorithm: unknown): Promise<string> {
+async function computeHash(text: string, algorithm: string): Promise<string> {
   const data = new TextEncoder().encode(text)
-  const hashBuffer = await crypto.subtle.digest(algorithm as string, data)
+  const hashBuffer = await crypto.subtle.digest(algorithm, data)
   const hashArray = Array.from(new Uint8Array(hashBuffer))
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
 }
@@ -14,69 +16,52 @@ async function runHash(text: string, algorithm: unknown): Promise<string> {
 export const hashPlugin = definePlugin({
   tools: [
     {
-      id: 'hash.run',
-      title: 'command.run.title',
-      subtitle: 'command.run.description',
+      id: 'hash.sha256',
+      title: 'command.sha256.title',
+      subtitle: 'command.sha256.description',
       icon: 'Hash',
-      aliases: ['md5', 'sha1', 'sha256', 'sha512'],
+      aliases: ['sha256', 'sha-256'],
       inputPolicy: { mode: 'auto' },
-      params: [
-        {
-          key: 'algorithm',
-          label: 'param.algorithm.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.algorithm.option.SHA-256.label', value: 'SHA-256' },
-            { label: 'param.algorithm.option.SHA-1.label', value: 'SHA-1' },
-            { label: 'param.algorithm.option.SHA-512.label', value: 'SHA-512' },
-          ],
-          default: 'SHA-256',
-        },
-      ],
       async run(ctx) {
         try {
-          return ctx.output.replaceActiveText(await runHash(ctx.input.text, ctx.params.algorithm))
+          return ctx.output.text(await computeHash(ctx.input.text, 'SHA-256'))
         } catch (e: any) {
           return ctx.output.error(`Error: ${e.message}`)
         }
       },
-      surfaces: { launcher: true, panel: true, pinnable: false },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
-  ],
-  commands: [
     {
-      id: 'hash.run',
-      title: 'command.run.title',
-      description: 'command.run.description',
+      id: 'hash.sha1',
+      title: 'command.sha1.title',
+      subtitle: 'command.sha1.description',
       icon: 'Hash',
-      aliases: ['md5', 'sha1', 'sha256', 'sha512'],
-      live: { live: { enabled: true, trigger: 'on-input', sideEffects: 'none', debounceMs: 250 } },
-      params: [
-        {
-          key: 'algorithm',
-          label: 'param.algorithm.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.algorithm.option.SHA-256.label', value: 'SHA-256' },
-            { label: 'param.algorithm.option.SHA-1.label', value: 'SHA-1' },
-            { label: 'param.algorithm.option.SHA-512.label', value: 'SHA-512' },
-          ],
-          default: 'SHA-256',
-        },
-      ],
-      inputs: [
-        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
-      ],
-      inputResolution: { strategy: 'use-active', fallback: 'fail' },
+      aliases: ['sha1', 'sha-1'],
+      inputPolicy: { mode: 'auto' },
       async run(ctx) {
-        const input = ctx.inputs.input as TextInput
-        const text = input?.kind === 'text' ? input.text : ''
         try {
-          return textOutput(await runHash(text, ctx.params.algorithm))
+          return ctx.output.text(await computeHash(ctx.input.text, 'SHA-1'))
         } catch (e: any) {
-          return textError(`Error: ${e.message}`)
+          return ctx.output.error(`Error: ${e.message}`)
         }
       },
+      surfaces: { launcher: true, panel: true, pinnable: true },
+    },
+    {
+      id: 'hash.sha512',
+      title: 'command.sha512.title',
+      subtitle: 'command.sha512.description',
+      icon: 'Hash',
+      aliases: ['sha512', 'sha-512'],
+      inputPolicy: { mode: 'auto' },
+      async run(ctx) {
+        try {
+          return ctx.output.text(await computeHash(ctx.input.text, 'SHA-512'))
+        } catch (e: any) {
+          return ctx.output.error(`Error: ${e.message}`)
+        }
+      },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
   ],
 })

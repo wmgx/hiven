@@ -1,8 +1,10 @@
 /**
- * First-party Text Statistics plugin (migrated from legacy builtin action).
+ * First-party Text Statistics plugin.
+ *
+ * Single tool — counts lines, words, characters.
  */
 
-import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
+import { definePlugin } from '@hiven/plugin'
 
 function runCount(text: string): string {
   const lines = text.split('\n').length
@@ -19,31 +21,12 @@ export const countPlugin = definePlugin({
       title: 'command.run.title',
       subtitle: 'command.run.description',
       icon: 'BarChart',
-      aliases: ['stats', 'wc'],
+      aliases: ['stats', 'wc', '文本统计', '字数统计'],
       inputPolicy: { mode: 'auto' },
       run(ctx) {
         return ctx.output.text(runCount(ctx.input.text))
       },
-      surfaces: { launcher: true, panel: true, pinnable: false },
-    },
-  ],
-  commands: [
-    {
-      id: 'count.run',
-      title: 'command.run.title',
-      description: 'command.run.description',
-      icon: 'BarChart',
-      aliases: ['stats', 'wc'],
-      live: { live: { enabled: true, trigger: 'on-input', sideEffects: 'none', debounceMs: 250 } },
-      inputs: [
-        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
-      ],
-      inputResolution: { strategy: 'use-active', fallback: 'fail' },
-      run(ctx) {
-        const input = ctx.inputs.input as TextInput
-        const text = input?.kind === 'text' ? input.text : ''
-        return textOutput(runCount(text))
-      },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
   ],
 })

@@ -1,18 +1,21 @@
 /**
- * First-party HTML Encode/Decode plugin (migrated from legacy builtin action).
+ * First-party HTML Entity Encode/Decode plugin.
+ *
+ * Exposes two independent tools (encode + decode) — no sub-selection needed.
  */
 
-import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
+import { definePlugin } from '@hiven/plugin'
 
-function runHtml(text: string, mode: unknown): string {
-  if (mode === 'encode') {
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;')
-  }
+function htmlEncode(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function htmlDecode(text: string): string {
   return text
     .replace(/&#39;/g, "'")
     .replace(/&quot;/g, '"')
@@ -24,59 +27,28 @@ function runHtml(text: string, mode: unknown): string {
 export const htmlPlugin = definePlugin({
   tools: [
     {
-      id: 'html.run',
-      title: 'command.run.title',
-      subtitle: 'command.run.description',
+      id: 'html.encode',
+      title: 'command.encode.title',
+      subtitle: 'command.encode.description',
       icon: 'FileCode',
-      aliases: ['html-entities', 'html-escape'],
+      aliases: ['html-entities encode', 'html-escape', 'html编码'],
       inputPolicy: { mode: 'auto' },
-      requireParamSelection: true,
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.encode.label', value: 'encode' },
-            { label: 'param.mode.option.decode.label', value: 'decode' },
-          ],
-          default: 'encode',
-        },
-      ],
       run(ctx) {
-        return ctx.output.replaceActiveText(runHtml(ctx.input.text, ctx.params.mode))
+        return ctx.output.text(htmlEncode(ctx.input.text))
       },
-      surfaces: { launcher: false, panel: true, pinnable: false },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
-  ],
-  commands: [
     {
-      id: 'html.run',
-      title: 'command.run.title',
-      description: 'command.run.description',
+      id: 'html.decode',
+      title: 'command.decode.title',
+      subtitle: 'command.decode.description',
       icon: 'FileCode',
-      aliases: ['html-entities', 'html-escape'],
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.encode.label', value: 'encode' },
-            { label: 'param.mode.option.decode.label', value: 'decode' },
-          ],
-          default: 'encode',
-        },
-      ],
-      inputs: [
-        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
-      ],
-      inputResolution: { strategy: 'use-active', fallback: 'fail' },
+      aliases: ['html-entities decode', 'html-unescape', 'html解码'],
+      inputPolicy: { mode: 'auto' },
       run(ctx) {
-        const input = ctx.inputs.input as TextInput
-        const text = input?.kind === 'text' ? input.text : ''
-        return textOutput(runHtml(text, ctx.params.mode))
+        return ctx.output.text(htmlDecode(ctx.input.text))
       },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
   ],
 })

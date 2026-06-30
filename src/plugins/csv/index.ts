@@ -1,25 +1,27 @@
 /**
- * First-party CSV / TSV Convert plugin (migrated from legacy builtin action).
+ * First-party CSV / TSV Convert plugin.
+ *
+ * Exposes independent tools for each conversion direction — no sub-selection needed.
+ * Surface UI preserved for later enhancement.
  */
 
-import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
+import { definePlugin } from '@hiven/plugin'
 import { CsvSurface } from './CsvSurface'
 
-function runCsv(text: string, mode: unknown): string {
-  if (mode === 'csv2json' || mode === 'tsv2json') {
-    const sep = mode === 'tsv2json' ? '\t' : ','
-    const lines = text.trim().split('\n')
-    if (lines.length < 2) return '[]'
-    const headers = lines[0].split(sep).map((h: string) => h.trim())
-    const result = lines.slice(1).map(line => {
-      const vals = line.split(sep)
-      const obj: Record<string, string> = {}
-      headers.forEach((h: string, i: number) => { obj[h] = (vals[i] || '').trim() })
-      return obj
-    })
-    return JSON.stringify(result, null, 2)
-  }
-  const sep = mode === 'json2tsv' ? '\t' : ','
+function csvToJson(text: string, sep: string): string {
+  const lines = text.trim().split('\n')
+  if (lines.length < 2) return '[]'
+  const headers = lines[0].split(sep).map((h: string) => h.trim())
+  const result = lines.slice(1).map(line => {
+    const vals = line.split(sep)
+    const obj: Record<string, string> = {}
+    headers.forEach((h: string, i: number) => { obj[h] = (vals[i] || '').trim() })
+    return obj
+  })
+  return JSON.stringify(result, null, 2)
+}
+
+function jsonToCsv(text: string, sep: string): string {
   const arr = JSON.parse(text)
   if (!Array.isArray(arr) || arr.length === 0) return ''
   const headers = Object.keys(arr[0])
@@ -55,72 +57,68 @@ export const csvPlugin = definePlugin({
   },
   tools: [
     {
-      id: 'csv.run',
-      title: 'command.run.title',
-      subtitle: 'command.run.description',
+      id: 'csv.toJson',
+      title: 'command.csvToJson.title',
+      subtitle: 'command.csvToJson.description',
       icon: 'Table',
-      aliases: ['csv-json', 'tsv-json'],
+      aliases: ['csv to json', 'csv2json', 'csv转json'],
       inputPolicy: { mode: 'auto' },
-      requireParamSelection: true,
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.csv2json.label', value: 'csv2json' },
-            { label: 'param.mode.option.json2csv.label', value: 'json2csv' },
-            { label: 'param.mode.option.tsv2json.label', value: 'tsv2json' },
-            { label: 'param.mode.option.json2tsv.label', value: 'json2tsv' },
-          ],
-          default: 'csv2json',
-        },
-      ],
       run(ctx) {
         try {
-          return ctx.output.replaceActiveText(runCsv(ctx.input.text, ctx.params.mode))
+          return ctx.output.text(csvToJson(ctx.input.text, ','))
         } catch (e: any) {
-          return ctx.output.error('Error: ' + e.message)
+          return ctx.output.error(`Error: ${e.message}`)
         }
       },
-      surfaces: { launcher: false, panel: true, pinnable: false },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
-  ],
-  commands: [
     {
-      id: 'csv.run',
-      title: 'command.run.title',
-      description: 'command.run.description',
+      id: 'csv.fromJson',
+      title: 'command.jsonToCsv.title',
+      subtitle: 'command.jsonToCsv.description',
       icon: 'Table',
-      aliases: ['csv-json', 'tsv-json'],
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.csv2json.label', value: 'csv2json' },
-            { label: 'param.mode.option.json2csv.label', value: 'json2csv' },
-            { label: 'param.mode.option.tsv2json.label', value: 'tsv2json' },
-            { label: 'param.mode.option.json2tsv.label', value: 'json2tsv' },
-          ],
-          default: 'csv2json',
-        },
-      ],
-      inputs: [
-        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
-      ],
-      inputResolution: { strategy: 'use-active', fallback: 'fail' },
+      aliases: ['json to csv', 'json2csv', 'json转csv'],
+      inputPolicy: { mode: 'auto' },
       run(ctx) {
-        const input = ctx.inputs.input as TextInput
-        const text = input?.kind === 'text' ? input.text : ''
-        const mode = ctx.params.mode
         try {
-          return textOutput(runCsv(text, mode))
+          return ctx.output.text(jsonToCsv(ctx.input.text, ','))
         } catch (e: any) {
-          return textError('Error: ' + e.message)
+          return ctx.output.error(`Error: ${e.message}`)
         }
       },
+      surfaces: { launcher: true, panel: true, pinnable: true },
+    },
+    {
+      id: 'csv.tsvToJson',
+      title: 'command.tsvToJson.title',
+      subtitle: 'command.tsvToJson.description',
+      icon: 'Table',
+      aliases: ['tsv to json', 'tsv2json', 'tsv转json'],
+      inputPolicy: { mode: 'auto' },
+      run(ctx) {
+        try {
+          return ctx.output.text(csvToJson(ctx.input.text, '\t'))
+        } catch (e: any) {
+          return ctx.output.error(`Error: ${e.message}`)
+        }
+      },
+      surfaces: { launcher: true, panel: true, pinnable: true },
+    },
+    {
+      id: 'csv.jsonToTsv',
+      title: 'command.jsonToTsv.title',
+      subtitle: 'command.jsonToTsv.description',
+      icon: 'Table',
+      aliases: ['json to tsv', 'json2tsv', 'json转tsv'],
+      inputPolicy: { mode: 'auto' },
+      run(ctx) {
+        try {
+          return ctx.output.text(jsonToCsv(ctx.input.text, '\t'))
+        } catch (e: any) {
+          return ctx.output.error(`Error: ${e.message}`)
+        }
+      },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
   ],
 })

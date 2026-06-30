@@ -4155,7 +4155,7 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 6px 12px 4px;
+  margin: 6px 8px 4px;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
   background: var(--accent-soft);
@@ -4229,6 +4229,7 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
 }
 
 .l-row {
+  width: calc(100% - 16px);
   height: 42px;
   display: flex;
   align-items: center;

@@ -1,82 +1,76 @@
 /**
- * First-party Case Convert plugin (migrated from legacy builtin action).
+ * First-party Case Convert plugin.
+ *
+ * Exposes five independent tools — no sub-selection needed.
  */
 
-import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
-
-function runCase(text: string, mode: unknown): string {
-  switch (mode) {
-    case 'upper': return text.toUpperCase()
-    case 'lower': return text.toLowerCase()
-    case 'title': return text.replace(/\b\w/g, c => c.toUpperCase())
-    case 'camel': return text.replace(/[-_\s]+(.)?/g, (_, c) => c ? c.toUpperCase() : '')
-    case 'snake': return text.replace(/[\s-]+/g, '_').replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase()
-    default: return text
-  }
-}
+import { definePlugin } from '@hiven/plugin'
 
 export const casePlugin = definePlugin({
   tools: [
     {
-      id: 'case.run',
-      title: 'command.run.title',
-      subtitle: 'command.run.description',
+      id: 'case.upper',
+      title: 'command.upper.title',
+      subtitle: 'command.upper.description',
       icon: 'CaseSensitive',
-      aliases: ['uppercase', 'lowercase', 'titlecase'],
+      aliases: ['uppercase', 'UPPER', '转大写'],
       inputPolicy: { mode: 'auto' },
-      requireParamSelection: true,
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.upper.label', value: 'upper' },
-            { label: 'param.mode.option.lower.label', value: 'lower' },
-            { label: 'param.mode.option.title.label', value: 'title' },
-            { label: 'param.mode.option.camel.label', value: 'camel' },
-            { label: 'param.mode.option.snake.label', value: 'snake' },
-          ],
-          default: 'upper',
-        },
-      ],
       run(ctx) {
-        return ctx.output.replaceActiveText(runCase(ctx.input.text, ctx.params.mode))
+        return ctx.output.text(ctx.input.text.toUpperCase())
       },
-      surfaces: { launcher: true, panel: true, pinnable: false },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
-  ],
-  commands: [
     {
-      id: 'case.run',
-      title: 'command.run.title',
-      description: 'command.run.description',
+      id: 'case.lower',
+      title: 'command.lower.title',
+      subtitle: 'command.lower.description',
       icon: 'CaseSensitive',
-      aliases: ['uppercase', 'lowercase', 'titlecase'],
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.upper.label', value: 'upper' },
-            { label: 'param.mode.option.lower.label', value: 'lower' },
-            { label: 'param.mode.option.title.label', value: 'title' },
-            { label: 'param.mode.option.camel.label', value: 'camel' },
-            { label: 'param.mode.option.snake.label', value: 'snake' },
-          ],
-          default: 'upper',
-        },
-      ],
-      inputs: [
-        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
-      ],
-      inputResolution: { strategy: 'use-active', fallback: 'fail' },
+      aliases: ['lowercase', '转小写'],
+      inputPolicy: { mode: 'auto' },
       run(ctx) {
-        const input = ctx.inputs.input as TextInput
-        const text = input?.kind === 'text' ? input.text : ''
-        return textOutput(runCase(text, ctx.params.mode))
+        return ctx.output.text(ctx.input.text.toLowerCase())
       },
+      surfaces: { launcher: true, panel: true, pinnable: true },
+    },
+    {
+      id: 'case.title',
+      title: 'command.title.title',
+      subtitle: 'command.title.description',
+      icon: 'CaseSensitive',
+      aliases: ['titlecase', 'capitalize', '转标题'],
+      inputPolicy: { mode: 'auto' },
+      run(ctx) {
+        return ctx.output.text(ctx.input.text.replace(/\b\w/g, c => c.toUpperCase()))
+      },
+      surfaces: { launcher: true, panel: true, pinnable: true },
+    },
+    {
+      id: 'case.camel',
+      title: 'command.camel.title',
+      subtitle: 'command.camel.description',
+      icon: 'CaseSensitive',
+      aliases: ['camelCase', 'camelcase', '转驼峰'],
+      inputPolicy: { mode: 'auto' },
+      run(ctx) {
+        return ctx.output.text(
+          ctx.input.text.replace(/[-_\s]+(.)?/g, (_, c) => c ? c.toUpperCase() : ''),
+        )
+      },
+      surfaces: { launcher: true, panel: true, pinnable: true },
+    },
+    {
+      id: 'case.snake',
+      title: 'command.snake.title',
+      subtitle: 'command.snake.description',
+      icon: 'CaseSensitive',
+      aliases: ['snake_case', 'snakecase', '转下划线'],
+      inputPolicy: { mode: 'auto' },
+      run(ctx) {
+        return ctx.output.text(
+          ctx.input.text.replace(/[\s-]+/g, '_').replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase(),
+        )
+      },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
   ],
 })

@@ -1,8 +1,6 @@
 {
-  "command.run.title": "XML Formatter",
-  "command.run.description": "Format or minify XML/HTML",
-  "input.text.label": "Input",
-  "param.mode.label": "Mode",
-  "param.mode.option.pretty.label": "Pretty",
-  "param.mode.option.compact.label": "Compact"
+  "command.prettify.title": "XML Prettify",
+  "command.prettify.description": "Format XML with indentation",
+  "command.compact.title": "XML Compact",
+  "command.compact.description": "Minify XML (remove whitespace)"
 }

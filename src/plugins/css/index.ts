@@ -1,18 +1,12 @@
 /**
- * First-party CSS Formatter plugin (migrated from legacy builtin action).
+ * First-party CSS Formatter plugin.
+ *
+ * Exposes two independent tools (prettify + compact) — no sub-selection needed.
  */
 
-import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
+import { definePlugin } from '@hiven/plugin'
 
-function runCss(text: string, mode: unknown): string {
-  if (mode === 'compact') {
-    return text
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/\s+/g, ' ')
-      .replace(/\s*([{}:;,])\s*/g, '$1')
-      .replace(/;}/g, '}')
-      .trim()
-  }
+function cssPrettify(text: string): string {
   return text
     .replace(/\s*\{\s*/g, ' {\n  ')
     .replace(/\s*\}\s*/g, '\n}\n')
@@ -22,61 +16,40 @@ function runCss(text: string, mode: unknown): string {
     .trim()
 }
 
+function cssCompact(text: string): string {
+  return text
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*([{}:;,])\s*/g, '$1')
+    .replace(/;}/g, '}')
+    .trim()
+}
+
 export const cssPlugin = definePlugin({
   tools: [
     {
-      id: 'css.run',
-      title: 'command.run.title',
-      subtitle: 'command.run.description',
+      id: 'css.prettify',
+      title: 'command.prettify.title',
+      subtitle: 'command.prettify.description',
       icon: 'Paintbrush',
-      aliases: ['css-format', 'css-minify'],
+      aliases: ['css format', 'css格式化', 'css beautify'],
       inputPolicy: { mode: 'auto' },
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.pretty.label', value: 'pretty' },
-            { label: 'param.mode.option.compact.label', value: 'compact' },
-          ],
-          default: 'pretty',
-        },
-      ],
       run(ctx) {
-        return ctx.output.replaceActiveText(runCss(ctx.input.text, ctx.params.mode))
+        return ctx.output.text(cssPrettify(ctx.input.text))
       },
-      surfaces: { launcher: true, panel: true, pinnable: false },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
-  ],
-  commands: [
     {
-      id: 'css.run',
-      title: 'command.run.title',
-      description: 'command.run.description',
+      id: 'css.compact',
+      title: 'command.compact.title',
+      subtitle: 'command.compact.description',
       icon: 'Paintbrush',
-      aliases: ['css-format', 'css-minify'],
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.pretty.label', value: 'pretty' },
-            { label: 'param.mode.option.compact.label', value: 'compact' },
-          ],
-          default: 'pretty',
-        },
-      ],
-      inputs: [
-        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
-      ],
-      inputResolution: { strategy: 'use-active', fallback: 'fail' },
+      aliases: ['css minify', 'css压缩', 'css compress'],
+      inputPolicy: { mode: 'auto' },
       run(ctx) {
-        const input = ctx.inputs.input as TextInput
-        const text = input?.kind === 'text' ? input.text : ''
-        return textOutput(runCss(text, ctx.params.mode))
+        return ctx.output.text(cssCompact(ctx.input.text))
       },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
   ],
 })

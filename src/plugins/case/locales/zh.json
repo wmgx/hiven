@@ -1,11 +1,12 @@
 {
-  "command.run.title": "大小写转换",
-  "command.run.description": "转换文本大小写",
-  "input.text.label": "输入",
-  "param.mode.label": "转换为",
-  "param.mode.option.upper.label": "大写",
-  "param.mode.option.lower.label": "小写",
-  "param.mode.option.title.label": "首字母大写",
-  "param.mode.option.camel.label": "camelCase",
-  "param.mode.option.snake.label": "snake_case"
+  "command.upper.title": "转大写",
+  "command.upper.description": "将文本转为大写",
+  "command.lower.title": "转小写",
+  "command.lower.description": "将文本转为小写",
+  "command.title.title": "转首字母大写",
+  "command.title.description": "将每个单词首字母转为大写",
+  "command.camel.title": "转驼峰",
+  "command.camel.description": "将文本转为 camelCase",
+  "command.snake.title": "转下划线",
+  "command.snake.description": "将文本转为 snake_case"
 }

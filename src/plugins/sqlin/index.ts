@@ -1,74 +1,48 @@
 /**
- * First-party Lines to SQL IN plugin (migrated from legacy builtin action).
+ * First-party Lines to SQL IN plugin.
+ *
+ * Exposes two independent tools (string + number) — no sub-selection needed.
  */
 
-import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
+import { definePlugin } from '@hiven/plugin'
 
-function runSqlIn(text: string, mode: unknown): string {
+function sqlInString(text: string): string {
   const lines = text.split('\n').filter(l => l.trim() !== '')
-  if (mode === 'number') {
-    const values = lines.map(l => l.trim())
-    return '(' + values.join(',') + ')'
-  }
   const values = lines.map(l => "'" + l.trim().replace(/'/g, "''") + "'")
+  return '(' + values.join(',') + ')'
+}
+
+function sqlInNumber(text: string): string {
+  const lines = text.split('\n').filter(l => l.trim() !== '')
+  const values = lines.map(l => l.trim())
   return '(' + values.join(',') + ')'
 }
 
 export const sqlinPlugin = definePlugin({
   tools: [
     {
-      id: 'sqlin.run',
-      title: 'command.run.title',
-      subtitle: 'command.run.description',
+      id: 'sqlin.string',
+      title: 'command.string.title',
+      subtitle: 'command.string.description',
       icon: 'Database',
-      aliases: ['sql-in', 'lines-to-sql'],
+      aliases: ['sql in string', 'sql-in', 'lines to sql', '生成IN字符串'],
       inputPolicy: { mode: 'auto' },
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.string.label', value: 'string' },
-            { label: 'param.mode.option.number.label', value: 'number' },
-          ],
-          default: 'string',
-        },
-      ],
       run(ctx) {
-        return ctx.output.replaceActiveText(runSqlIn(ctx.input.text, ctx.params.mode))
+        return ctx.output.text(sqlInString(ctx.input.text))
       },
-      surfaces: { launcher: true, panel: true, pinnable: false },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
-  ],
-  commands: [
     {
-      id: 'sqlin.run',
-      title: 'command.run.title',
-      description: 'command.run.description',
+      id: 'sqlin.number',
+      title: 'command.number.title',
+      subtitle: 'command.number.description',
       icon: 'Database',
-      aliases: ['sql-in', 'lines-to-sql'],
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.string.label', value: 'string' },
-            { label: 'param.mode.option.number.label', value: 'number' },
-          ],
-          default: 'string',
-        },
-      ],
-      inputs: [
-        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
-      ],
-      inputResolution: { strategy: 'use-active', fallback: 'fail' },
+      aliases: ['sql in number', 'sql-in-num', '生成IN数字'],
+      inputPolicy: { mode: 'auto' },
       run(ctx) {
-        const input = ctx.inputs.input as TextInput
-        const text = input?.kind === 'text' ? input.text : ''
-        return textOutput(runSqlIn(text, ctx.params.mode))
+        return ctx.output.text(sqlInNumber(ctx.input.text))
       },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
   ],
 })

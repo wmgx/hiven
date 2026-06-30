@@ -1,19 +1,22 @@
 /**
- * First-party Add/Remove Slashes plugin (migrated from legacy builtin action).
+ * First-party Escape/Unescape Slashes plugin.
+ *
+ * Exposes two independent tools (escape + unescape) — no sub-selection needed.
  */
 
-import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
+import { definePlugin } from '@hiven/plugin'
 
-function runSlashes(text: string, mode: unknown): string {
-  if (mode === 'escape') {
-    return text
-      .replace(/\\/g, '\\\\')
-      .replace(/'/g, "\\'")
-      .replace(/"/g, '\\"')
-      .replace(/\n/g, '\\n')
-      .replace(/\r/g, '\\r')
-      .replace(/\t/g, '\\t')
-  }
+function escapeSlashes(text: string): string {
+  return text
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/\t/g, '\\t')
+}
+
+function unescapeSlashes(text: string): string {
   return text
     .replace(/\\t/g, '\t')
     .replace(/\\r/g, '\r')
@@ -26,59 +29,28 @@ function runSlashes(text: string, mode: unknown): string {
 export const slashesPlugin = definePlugin({
   tools: [
     {
-      id: 'slashes.run',
-      title: 'command.run.title',
-      subtitle: 'command.run.description',
+      id: 'slashes.escape',
+      title: 'command.escape.title',
+      subtitle: 'command.escape.description',
       icon: 'Quote',
-      aliases: ['escape', 'unescape', 'addslashes', 'stripslashes'],
+      aliases: ['escape', 'addslashes', '转义', 'add slashes'],
       inputPolicy: { mode: 'auto' },
-      requireParamSelection: true,
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.escape.label', value: 'escape' },
-            { label: 'param.mode.option.unescape.label', value: 'unescape' },
-          ],
-          default: 'escape',
-        },
-      ],
       run(ctx) {
-        return ctx.output.replaceActiveText(runSlashes(ctx.input.text, ctx.params.mode))
+        return ctx.output.text(escapeSlashes(ctx.input.text))
       },
-      surfaces: { launcher: false, panel: true, pinnable: false },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
-  ],
-  commands: [
     {
-      id: 'slashes.run',
-      title: 'command.run.title',
-      description: 'command.run.description',
+      id: 'slashes.unescape',
+      title: 'command.unescape.title',
+      subtitle: 'command.unescape.description',
       icon: 'Quote',
-      aliases: ['escape', 'unescape', 'addslashes', 'stripslashes'],
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.escape.label', value: 'escape' },
-            { label: 'param.mode.option.unescape.label', value: 'unescape' },
-          ],
-          default: 'escape',
-        },
-      ],
-      inputs: [
-        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
-      ],
-      inputResolution: { strategy: 'use-active', fallback: 'fail' },
+      aliases: ['unescape', 'stripslashes', '反转义', 'remove slashes'],
+      inputPolicy: { mode: 'auto' },
       run(ctx) {
-        const input = ctx.inputs.input as TextInput
-        const text = input?.kind === 'text' ? input.text : ''
-        return textOutput(runSlashes(text, ctx.params.mode))
+        return ctx.output.text(unescapeSlashes(ctx.input.text))
       },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
   ],
 })

@@ -1,10 +1,12 @@
 /**
- * First-party JWT Decode plugin (migrated from legacy builtin action).
+ * First-party JWT Decode plugin.
+ *
+ * Single tool — decodes JWT token header and payload.
  */
 
-import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
+import { definePlugin } from '@hiven/plugin'
 
-function runJwt(text: string): string {
+function decodeJwt(text: string): string {
   const parts = text.trim().split('.')
   if (parts.length !== 3) throw new Error('Invalid JWT (expected 3 parts)')
   const decode = (s: string) => {
@@ -19,43 +21,20 @@ function runJwt(text: string): string {
 export const jwtPlugin = definePlugin({
   tools: [
     {
-      id: 'jwt.run',
-      title: 'command.run.title',
-      subtitle: 'command.run.description',
+      id: 'jwt.decode',
+      title: 'command.decode.title',
+      subtitle: 'command.decode.description',
       icon: 'Key',
-      aliases: ['jwt-decode', 'json-web-token'],
+      aliases: ['jwt-decode', 'json-web-token', 'jwt解码'],
       inputPolicy: { mode: 'auto' },
       run(ctx) {
         try {
-          return ctx.output.replaceActiveText(runJwt(ctx.input.text))
+          return ctx.output.text(decodeJwt(ctx.input.text))
         } catch (e: any) {
           return ctx.output.error(`Error: ${e.message}`)
         }
       },
-      surfaces: { launcher: true, panel: true, pinnable: false },
-    },
-  ],
-  commands: [
-    {
-      id: 'jwt.run',
-      title: 'command.run.title',
-      description: 'command.run.description',
-      icon: 'Key',
-      aliases: ['jwt-decode', 'json-web-token'],
-      params: [],
-      inputs: [
-        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
-      ],
-      inputResolution: { strategy: 'use-active', fallback: 'fail' },
-      run(ctx) {
-        const input = ctx.inputs.input as TextInput
-        const text = input?.kind === 'text' ? input.text : ''
-        try {
-          return textOutput(runJwt(text))
-        } catch (e: any) {
-          return textError(`Error: ${e.message}`)
-        }
-      },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
   ],
 })

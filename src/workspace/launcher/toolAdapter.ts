@@ -55,10 +55,13 @@ function manualTextInput(text: string, mode: TextInputMode): ResolvedTextInput {
   return { kind: 'text', text, mode, source: text ? 'manual' : 'empty' }
 }
 
-function makeOutput(api: PluginLauncherApi, locale: Locale, copyReplaceOutput = false): PluginToolOutput {
+function makeOutput(api: PluginLauncherApi, locale: Locale, surfaceId: string): PluginToolOutput {
+  const isGlobal = normalizeLauncherSurfaceId(surfaceId) === 'global-launcher'
   return {
-    text: (value: string) => textResult(value, api, locale),
-    replaceActiveText: (value: string) => copyReplaceOutput
+    text: (value: string) => isGlobal
+      ? textResult(value, api, locale)
+      : replaceActiveTextResult(value, api, locale),
+    replaceActiveText: (value: string) => isGlobal
       ? textResult(value, api, locale)
       : replaceActiveTextResult(value, api, locale),
     error: (message: string) => errorResult(message),
@@ -109,7 +112,7 @@ export function adaptToolToLauncherItem(
         api: ctx.api,
         storage: ctx.storage,
         t: ctx.t,
-        output: makeOutput(ctx.api, ctx.locale, hasManualInput && ctx.surfaceId === 'global-launcher'),
+        output: makeOutput(ctx.api, ctx.locale, ctx.surfaceId ?? ''),
       }),
     )
     if (

@@ -1,81 +1,52 @@
 /**
- * First-party URL Encode/Decode plugin (migrated from legacy builtin action).
+ * First-party URL Encode/Decode plugin.
+ *
+ * Exposes two independent tools (encode + decode) — no sub-selection needed.
  */
 
-import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
+import { definePlugin } from '@hiven/plugin'
 
-function runUrl(text: string, mode: unknown): string {
-  if (mode === 'encode') {
-    return encodeURIComponent(text)
-  }
+function urlEncode(text: string): string {
+  return encodeURIComponent(text)
+}
+
+function urlDecode(text: string): string {
   return decodeURIComponent(text.trim())
 }
 
 export const urlPlugin = definePlugin({
   tools: [
     {
-      id: 'url.run',
-      title: 'command.run.title',
-      subtitle: 'command.run.description',
+      id: 'url.encode',
+      title: 'command.encode.title',
+      subtitle: 'command.encode.description',
       icon: 'Link',
-      aliases: ['urlencode', 'urldecode'],
+      aliases: ['urlencode', 'url编码', 'percent encode'],
       inputPolicy: { mode: 'auto' },
-      requireParamSelection: true,
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.encode.label', value: 'encode' },
-            { label: 'param.mode.option.decode.label', value: 'decode' },
-          ],
-          default: 'encode',
-        },
-      ],
       run(ctx) {
         try {
-          return ctx.output.replaceActiveText(runUrl(ctx.input.text, ctx.params.mode))
+          return ctx.output.text(urlEncode(ctx.input.text))
         } catch (e: any) {
           return ctx.output.error(`Error: ${e.message}`)
         }
       },
-      surfaces: { launcher: false, panel: true, pinnable: false },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
-  ],
-  commands: [
     {
-      id: 'url.run',
-      title: 'command.run.title',
-      description: 'command.run.description',
+      id: 'url.decode',
+      title: 'command.decode.title',
+      subtitle: 'command.decode.description',
       icon: 'Link',
-      aliases: ['urlencode', 'urldecode'],
-      live: { live: { enabled: true, trigger: 'on-input', sideEffects: 'none', debounceMs: 250 } },
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.encode.label', value: 'encode' },
-            { label: 'param.mode.option.decode.label', value: 'decode' },
-          ],
-          default: 'encode',
-        },
-      ],
-      inputs: [
-        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
-      ],
-      inputResolution: { strategy: 'use-active', fallback: 'fail' },
+      aliases: ['urldecode', 'url解码', 'percent decode'],
+      inputPolicy: { mode: 'auto' },
       run(ctx) {
-        const input = ctx.inputs.input as TextInput
-        const text = input?.kind === 'text' ? input.text : ''
         try {
-          return textOutput(runUrl(text, ctx.params.mode))
+          return ctx.output.text(urlDecode(ctx.input.text))
         } catch (e: any) {
-          return textError(`Error: ${e.message}`)
+          return ctx.output.error(`Error: ${e.message}`)
         }
       },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
   ],
 })

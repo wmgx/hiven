@@ -1,8 +1,6 @@
 {
-  "command.run.title": "Base64 Encode/Decode",
-  "command.run.description": "Base64 encode or decode text",
-  "input.text.label": "Input",
-  "param.mode.label": "Mode",
-  "param.mode.option.encode.label": "Encode",
-  "param.mode.option.decode.label": "Decode"
+  "command.encode.title": "Base64 Encode",
+  "command.encode.description": "Encode text to Base64",
+  "command.decode.title": "Base64 Decode",
+  "command.decode.description": "Decode Base64 text to original"
 }

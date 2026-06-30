@@ -1,73 +1,44 @@
 /**
- * First-party Markdown Quote plugin (migrated from legacy builtin action).
+ * First-party Markdown Quote plugin.
+ *
+ * Exposes two independent tools (add + remove) — no sub-selection needed.
  */
 
-import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
+import { definePlugin } from '@hiven/plugin'
 
-function runMdquote(text: string, mode: unknown): string {
-  const lines = text.split('\n')
-  if (mode === 'remove') {
-    return lines.map(l => l.replace(/^>\s?/, '')).join('\n')
-  }
-  return lines.map(l => '> ' + l).join('\n')
+function addQuote(text: string): string {
+  return text.split('\n').map(l => '> ' + l).join('\n')
+}
+
+function removeQuote(text: string): string {
+  return text.split('\n').map(l => l.replace(/^>\s?/, '')).join('\n')
 }
 
 export const mdquotePlugin = definePlugin({
   tools: [
     {
-      id: 'mdquote.run',
-      title: 'command.run.title',
-      subtitle: 'command.run.description',
+      id: 'mdquote.add',
+      title: 'command.add.title',
+      subtitle: 'command.add.description',
       icon: 'MessageSquareQuote',
-      aliases: ['blockquote', 'quote'],
+      aliases: ['blockquote', 'add quote', '添加引用'],
       inputPolicy: { mode: 'auto' },
-      requireParamSelection: true,
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.add.label', value: 'add' },
-            { label: 'param.mode.option.remove.label', value: 'remove' },
-          ],
-          default: 'add',
-        },
-      ],
       run(ctx) {
-        return ctx.output.replaceActiveText(runMdquote(ctx.input.text, ctx.params.mode))
+        return ctx.output.text(addQuote(ctx.input.text))
       },
-      surfaces: { launcher: true, panel: true, pinnable: false },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
-  ],
-  commands: [
     {
-      id: 'mdquote.run',
-      title: 'command.run.title',
-      description: 'command.run.description',
+      id: 'mdquote.remove',
+      title: 'command.remove.title',
+      subtitle: 'command.remove.description',
       icon: 'MessageSquareQuote',
-      aliases: ['blockquote', 'quote'],
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.add.label', value: 'add' },
-            { label: 'param.mode.option.remove.label', value: 'remove' },
-          ],
-          default: 'add',
-        },
-      ],
-      inputs: [
-        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
-      ],
-      inputResolution: { strategy: 'use-active', fallback: 'fail' },
+      aliases: ['remove quote', 'unquote', '移除引用'],
+      inputPolicy: { mode: 'auto' },
       run(ctx) {
-        const input = ctx.inputs.input as TextInput
-        const text = input?.kind === 'text' ? input.text : ''
-        return textOutput(runMdquote(text, ctx.params.mode))
+        return ctx.output.text(removeQuote(ctx.input.text))
       },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
   ],
 })

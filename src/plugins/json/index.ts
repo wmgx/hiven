@@ -1,16 +1,19 @@
 /**
- * First-party JSON Formatter plugin (migrated from legacy builtin action).
+ * First-party JSON Formatter plugin.
+ *
+ * Exposes two independent tools (prettify + compact) — no sub-selection needed.
+ * Surface UI preserved as Cmd+Enter target.
  */
 
-import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
+import { definePlugin } from '@hiven/plugin'
 import { JsonSurface } from './JsonSurface'
 
-function runJson(text: string, mode: unknown): string {
-  const obj = JSON.parse(text)
-  if (mode === 'compact') {
-    return JSON.stringify(obj)
-  }
-  return JSON.stringify(obj, null, 2)
+function jsonPrettify(text: string): string {
+  return JSON.stringify(JSON.parse(text), null, 2)
+}
+
+function jsonCompact(text: string): string {
+  return JSON.stringify(JSON.parse(text))
 }
 
 export const jsonPlugin = definePlugin({
@@ -38,67 +41,36 @@ export const jsonPlugin = definePlugin({
   },
   tools: [
     {
-      id: 'json.run',
-      title: 'command.run.title',
-      subtitle: 'command.run.description',
+      id: 'json.prettify',
+      title: 'command.prettify.title',
+      subtitle: 'command.prettify.description',
       icon: 'Braces',
-      aliases: ['json-format', 'pretty-json'],
+      aliases: ['json format', 'json格式化', 'pretty json', 'json beautify'],
       inputPolicy: { mode: 'auto' },
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.pretty.label', value: 'pretty' },
-            { label: 'param.mode.option.compact.label', value: 'compact' },
-          ],
-          default: 'pretty',
-        },
-      ],
       run(ctx) {
         try {
-          return ctx.output.replaceActiveText(runJson(ctx.input.text, ctx.params.mode))
+          return ctx.output.text(jsonPrettify(ctx.input.text))
         } catch (e: any) {
-          return ctx.output.error('Error: ' + e.message)
+          return ctx.output.error(`Error: ${e.message}`)
         }
       },
-      surfaces: { launcher: true, panel: true, pinnable: false },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
-  ],
-  commands: [
     {
-      id: 'json.run',
-      title: 'command.run.title',
-      description: 'command.run.description',
+      id: 'json.compact',
+      title: 'command.compact.title',
+      subtitle: 'command.compact.description',
       icon: 'Braces',
-      aliases: ['json-format', 'pretty-json'],
-      live: { live: { enabled: true, trigger: 'on-input', sideEffects: 'none', debounceMs: 250 } },
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.pretty.label', value: 'pretty' },
-            { label: 'param.mode.option.compact.label', value: 'compact' },
-          ],
-          default: 'pretty',
-        },
-      ],
-      inputs: [
-        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
-      ],
-      inputResolution: { strategy: 'use-active', fallback: 'fail' },
+      aliases: ['json minify', 'json压缩', 'compact json', 'json compress'],
+      inputPolicy: { mode: 'auto' },
       run(ctx) {
-        const input = ctx.inputs.input as TextInput
-        const text = input?.kind === 'text' ? input.text : ''
         try {
-          return textOutput(runJson(text, ctx.params.mode))
+          return ctx.output.text(jsonCompact(ctx.input.text))
         } catch (e: any) {
-          return textError('Error: ' + e.message)
+          return ctx.output.error(`Error: ${e.message}`)
         }
       },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
   ],
 })

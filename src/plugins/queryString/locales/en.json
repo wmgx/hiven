@@ -1,8 +1,6 @@
 {
-  "command.run.title": "JSON ↔ Query String",
-  "command.run.description": "Convert between JSON and URL query string",
-  "input.text.label": "Input",
-  "param.mode.label": "Mode",
-  "param.mode.option.json2qs.label": "JSON → Query",
-  "param.mode.option.qs2json.label": "Query → JSON"
+  "command.toJson.title": "Query String → JSON",
+  "command.toJson.description": "Convert URL query string to JSON object",
+  "command.fromJson.title": "JSON → Query String",
+  "command.fromJson.description": "Convert JSON object to URL query string"
 }

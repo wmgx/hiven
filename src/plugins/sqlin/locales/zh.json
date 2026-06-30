@@ -1,8 +1,6 @@
 {
-  "command.run.title": "行转 SQL IN",
-  "command.run.description": "将多行文本转为 SQL IN 子句",
-  "input.text.label": "输入",
-  "param.mode.label": "模式",
-  "param.mode.option.string.label": "字符串",
-  "param.mode.option.number.label": "数字"
+  "command.string.title": "生成 IN (字符串)",
+  "command.string.description": "将多行文本转为 SQL IN 子句（字符串模式）",
+  "command.number.title": "生成 IN (数字)",
+  "command.number.description": "将多行文本转为 SQL IN 子句（数字模式）"
 }

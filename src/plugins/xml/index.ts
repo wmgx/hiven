@@ -1,13 +1,12 @@
 /**
- * First-party XML Formatter plugin (migrated from legacy builtin action).
+ * First-party XML Formatter plugin.
+ *
+ * Exposes two independent tools (prettify + compact) — no sub-selection needed.
  */
 
-import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
+import { definePlugin } from '@hiven/plugin'
 
-function runXml(text: string, mode: unknown): string {
-  if (mode === 'compact') {
-    return text.replace(/>\s+</g, '><').replace(/\s+/g, ' ').trim()
-  }
+function xmlPrettify(text: string): string {
   let formatted = ''
   let indent = 0
   const nodes = text.replace(/>\s+</g, '><').trim().split(/(<[^>]+>)/g).filter(Boolean)
@@ -19,61 +18,35 @@ function runXml(text: string, mode: unknown): string {
   return formatted.trim()
 }
 
+function xmlCompact(text: string): string {
+  return text.replace(/>\s+</g, '><').replace(/\s+/g, ' ').trim()
+}
+
 export const xmlPlugin = definePlugin({
   tools: [
     {
-      id: 'xml.run',
-      title: 'command.run.title',
-      subtitle: 'command.run.description',
+      id: 'xml.prettify',
+      title: 'command.prettify.title',
+      subtitle: 'command.prettify.description',
       icon: 'Code',
-      aliases: ['xml-format', 'xml-minify', 'html-format'],
+      aliases: ['xml format', 'xml格式化', 'xml beautify'],
       inputPolicy: { mode: 'auto' },
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.pretty.label', value: 'pretty' },
-            { label: 'param.mode.option.compact.label', value: 'compact' },
-          ],
-          default: 'pretty',
-        },
-      ],
       run(ctx) {
-        return ctx.output.replaceActiveText(runXml(ctx.input.text, ctx.params.mode))
+        return ctx.output.text(xmlPrettify(ctx.input.text))
       },
-      surfaces: { launcher: true, panel: true, pinnable: false },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
-  ],
-  commands: [
     {
-      id: 'xml.run',
-      title: 'command.run.title',
-      description: 'command.run.description',
+      id: 'xml.compact',
+      title: 'command.compact.title',
+      subtitle: 'command.compact.description',
       icon: 'Code',
-      aliases: ['xml-format', 'xml-minify', 'html-format'],
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.pretty.label', value: 'pretty' },
-            { label: 'param.mode.option.compact.label', value: 'compact' },
-          ],
-          default: 'pretty',
-        },
-      ],
-      inputs: [
-        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
-      ],
-      inputResolution: { strategy: 'use-active', fallback: 'fail' },
+      aliases: ['xml minify', 'xml压缩', 'xml compress'],
+      inputPolicy: { mode: 'auto' },
       run(ctx) {
-        const input = ctx.inputs.input as TextInput
-        const text = input?.kind === 'text' ? input.text : ''
-        return textOutput(runXml(text, ctx.params.mode))
+        return ctx.output.text(xmlCompact(ctx.input.text))
       },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
   ],
 })

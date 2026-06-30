@@ -1,11 +1,12 @@
 {
-  "command.run.title": "Change Case",
-  "command.run.description": "Convert text case",
-  "input.text.label": "Input",
-  "param.mode.label": "Convert To",
-  "param.mode.option.upper.label": "UPPERCASE",
-  "param.mode.option.lower.label": "lowercase",
-  "param.mode.option.title.label": "Title Case",
-  "param.mode.option.camel.label": "camelCase",
-  "param.mode.option.snake.label": "snake_case"
+  "command.upper.title": "UPPERCASE",
+  "command.upper.description": "Convert text to uppercase",
+  "command.lower.title": "lowercase",
+  "command.lower.description": "Convert text to lowercase",
+  "command.title.title": "Title Case",
+  "command.title.description": "Capitalize first letter of each word",
+  "command.camel.title": "camelCase",
+  "command.camel.description": "Convert text to camelCase",
+  "command.snake.title": "snake_case",
+  "command.snake.description": "Convert text to snake_case"
 }

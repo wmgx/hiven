@@ -1,8 +1,6 @@
 {
-  "command.run.title": "URL Encode/Decode",
-  "command.run.description": "URL encode or decode text",
-  "input.text.label": "Input",
-  "param.mode.label": "Mode",
-  "param.mode.option.encode.label": "Encode",
-  "param.mode.option.decode.label": "Decode"
+  "command.encode.title": "URL Encode",
+  "command.encode.description": "Encode text with encodeURIComponent",
+  "command.decode.title": "URL Decode",
+  "command.decode.description": "Decode URL-encoded text with decodeURIComponent"
 }

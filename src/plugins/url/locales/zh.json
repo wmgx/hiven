@@ -1,8 +1,6 @@
 {
-  "command.run.title": "URL 编解码",
-  "command.run.description": "URL 编码或解码文本",
-  "input.text.label": "输入",
-  "param.mode.label": "模式",
-  "param.mode.option.encode.label": "编码",
-  "param.mode.option.decode.label": "解码"
+  "command.encode.title": "URL 编码",
+  "command.encode.description": "对文本进行 URL 编码（encodeURIComponent）",
+  "command.decode.title": "URL 解码",
+  "command.decode.description": "对 URL 编码文本进行解码（decodeURIComponent）"
 }

@@ -1,8 +1,6 @@
 {
-  "command.run.title": "SQL Formatter",
-  "command.run.description": "Format or minify SQL",
-  "input.text.label": "Input",
-  "param.mode.label": "Mode",
-  "param.mode.option.pretty.label": "Pretty",
-  "param.mode.option.compact.label": "Compact"
+  "command.prettify.title": "SQL Prettify",
+  "command.prettify.description": "Format SQL with indentation",
+  "command.compact.title": "SQL Compact",
+  "command.compact.description": "Minify SQL (remove comments, single line)"
 }

@@ -1,8 +1,6 @@
 {
-  "command.run.title": "JSON Formatter",
-  "command.run.description": "Pretty-print or compact JSON",
-  "input.text.label": "Input",
-  "param.mode.label": "Mode",
-  "param.mode.option.pretty.label": "Pretty",
-  "param.mode.option.compact.label": "Compact"
+  "command.prettify.title": "JSON Prettify",
+  "command.prettify.description": "Pretty-print JSON with indentation",
+  "command.compact.title": "JSON Compact",
+  "command.compact.description": "Minify JSON to single line"
 }

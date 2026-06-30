@@ -1,115 +1,52 @@
 /**
- * First-party Base64 Encode/Decode plugin (migrated from legacy builtin action).
+ * First-party Base64 Encode/Decode plugin.
+ *
+ * Exposes two independent tools (encode + decode) — no sub-selection needed.
  */
 
-import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
-import { EncodeDecodeSurface } from './EncodeDecodeSurface'
+import { definePlugin } from '@hiven/plugin'
 
-function runBase64(text: string, mode: unknown): string {
-  if (mode === 'encode') {
-    return btoa(unescape(encodeURIComponent(text)))
-  }
+function base64Encode(text: string): string {
+  return btoa(unescape(encodeURIComponent(text)))
+}
+
+function base64Decode(text: string): string {
   return decodeURIComponent(escape(atob(text.trim())))
 }
 
 export const base64Plugin = definePlugin({
-  ui: {
-    surfaces: [
-      {
-        id: 'main',
-        kind: 'custom-view',
-        title: 'Encode / Decode Tools',
-        titleI18n: { zh: 'Encode / Decode Tools' },
-        icon: 'Binary',
-        aliases: [
-          'encode',
-          'decode',
-          'base64',
-          'url encode',
-          'url decode',
-          'html encode',
-          'html decode',
-          'escape',
-          'unescape',
-          'slashes',
-        ],
-        component: EncodeDecodeSurface,
-        entry: { launcher: true, shortcutBindable: true },
-        shell: {
-          defaultWidth: 900,
-          defaultHeight: 620,
-          minWidth: 680,
-          minHeight: 440,
-          closeOnBlur: false,
-          resizable: true,
-        },
-      },
-    ],
-  },
   tools: [
     {
-      id: 'base64.run',
-      title: 'command.run.title',
-      subtitle: 'command.run.description',
+      id: 'base64.encode',
+      title: 'command.encode.title',
+      subtitle: 'command.encode.description',
       icon: 'Binary',
-      aliases: ['encode', 'decode'],
+      aliases: ['base64 encode', 'base64编码', 'b64 encode', 'btoa'],
       inputPolicy: { mode: 'auto' },
-      requireParamSelection: true,
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.encode.label', value: 'encode' },
-            { label: 'param.mode.option.decode.label', value: 'decode' },
-          ],
-          default: 'encode',
-        },
-      ],
       run(ctx) {
         try {
-          return ctx.output.replaceActiveText(runBase64(ctx.input.text, ctx.params.mode))
+          return ctx.output.text(base64Encode(ctx.input.text))
         } catch (e: any) {
-          return ctx.output.error('Error: ' + e.message)
+          return ctx.output.error(`Error: ${e.message}`)
         }
       },
-      surfaces: { launcher: false, panel: true, pinnable: false },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
-  ],
-  commands: [
     {
-      id: 'base64.run',
-      title: 'command.run.title',
-      description: 'command.run.description',
+      id: 'base64.decode',
+      title: 'command.decode.title',
+      subtitle: 'command.decode.description',
       icon: 'Binary',
-      aliases: ['encode', 'decode'],
-      live: { live: { enabled: true, trigger: 'on-input', sideEffects: 'none', debounceMs: 250 } },
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.encode.label', value: 'encode' },
-            { label: 'param.mode.option.decode.label', value: 'decode' },
-          ],
-          default: 'encode',
-        },
-      ],
-      inputs: [
-        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
-      ],
-      inputResolution: { strategy: 'use-active', fallback: 'fail' },
+      aliases: ['base64 decode', 'base64解码', 'b64 decode', 'atob'],
+      inputPolicy: { mode: 'auto' },
       run(ctx) {
-        const input = ctx.inputs.input as TextInput
-        const text = input?.kind === 'text' ? input.text : ''
         try {
-          return textOutput(runBase64(text, ctx.params.mode))
+          return ctx.output.text(base64Decode(ctx.input.text))
         } catch (e: any) {
-          return textError('Error: ' + e.message)
+          return ctx.output.error(`Error: ${e.message}`)
         }
       },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
   ],
 })

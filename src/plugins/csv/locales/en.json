@@ -1,10 +1,10 @@
 {
-  "command.run.title": "CSV / TSV Converter",
-  "command.run.description": "Convert between CSV/TSV and JSON",
-  "input.text.label": "Input",
-  "param.mode.label": "Mode",
-  "param.mode.option.csv2json.label": "CSV → JSON",
-  "param.mode.option.json2csv.label": "JSON → CSV",
-  "param.mode.option.tsv2json.label": "TSV → JSON",
-  "param.mode.option.json2tsv.label": "JSON → TSV"
+  "command.csvToJson.title": "CSV → JSON",
+  "command.csvToJson.description": "Convert CSV to JSON array",
+  "command.jsonToCsv.title": "JSON → CSV",
+  "command.jsonToCsv.description": "Convert JSON array to CSV",
+  "command.tsvToJson.title": "TSV → JSON",
+  "command.tsvToJson.description": "Convert TSV to JSON array",
+  "command.jsonToTsv.title": "JSON → TSV",
+  "command.jsonToTsv.description": "Convert JSON array to TSV"
 }

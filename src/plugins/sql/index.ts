@@ -1,72 +1,49 @@
 /**
- * First-party SQL Formatter plugin (migrated from legacy builtin action).
+ * First-party SQL Formatter plugin.
+ *
+ * Exposes two independent tools (prettify + compact) — no sub-selection needed.
  */
 
-import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
+import { definePlugin } from '@hiven/plugin'
 import { format } from 'sql-formatter'
 
-function runSql(text: string, mode: unknown): string {
-  if (mode === 'compact') {
-    return text.replace(/--[^\n]*/g, '').replace(/\s+/g, ' ').trim()
-  }
+function sqlPrettify(text: string): string {
   return format(text)
+}
+
+function sqlCompact(text: string): string {
+  return text.replace(/--[^\n]*/g, '').replace(/\s+/g, ' ').trim()
 }
 
 export const sqlPlugin = definePlugin({
   tools: [
     {
-      id: 'sql.run',
-      title: 'command.run.title',
-      subtitle: 'command.run.description',
+      id: 'sql.prettify',
+      title: 'command.prettify.title',
+      subtitle: 'command.prettify.description',
       icon: 'Database',
-      aliases: ['sql-format', 'sql-minify'],
+      aliases: ['sql format', 'sql格式化', 'sql beautify'],
       inputPolicy: { mode: 'auto' },
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.pretty.label', value: 'pretty' },
-            { label: 'param.mode.option.compact.label', value: 'compact' },
-          ],
-          default: 'pretty',
-        },
-      ],
       run(ctx) {
-        return ctx.output.replaceActiveText(runSql(ctx.input.text, ctx.params.mode))
+        try {
+          return ctx.output.text(sqlPrettify(ctx.input.text))
+        } catch (e: any) {
+          return ctx.output.error(`Error: ${e.message}`)
+        }
       },
-      surfaces: { launcher: true, panel: true, pinnable: false },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
-  ],
-  commands: [
     {
-      id: 'sql.run',
-      title: 'command.run.title',
-      description: 'command.run.description',
+      id: 'sql.compact',
+      title: 'command.compact.title',
+      subtitle: 'command.compact.description',
       icon: 'Database',
-      aliases: ['sql-format', 'sql-minify'],
-      params: [
-        {
-          key: 'mode',
-          label: 'param.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.mode.option.pretty.label', value: 'pretty' },
-            { label: 'param.mode.option.compact.label', value: 'compact' },
-          ],
-          default: 'pretty',
-        },
-      ],
-      inputs: [
-        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
-      ],
-      inputResolution: { strategy: 'use-active', fallback: 'fail' },
+      aliases: ['sql minify', 'sql压缩', 'sql compress'],
+      inputPolicy: { mode: 'auto' },
       run(ctx) {
-        const input = ctx.inputs.input as TextInput
-        const text = input?.kind === 'text' ? input.text : ''
-        return textOutput(runSql(text, ctx.params.mode))
+        return ctx.output.text(sqlCompact(ctx.input.text))
       },
+      surfaces: { launcher: true, panel: true, pinnable: true },
     },
   ],
 })
