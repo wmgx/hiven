@@ -123,9 +123,9 @@ export function useClipboardObjectBlock(params: {
     if (!hint) return
     const snapshot = getLastClipboardSnapshot()
     if (!snapshot) return
-    // Force-create block by using current time (override freshness for manual attach)
+    // Force-create block bypassing freshness, preserving original changedAt for accurate age display
     const now = Date.now()
-    const forcedBlock = createClipboardObjectBlock({ ...snapshot, changedAt: now, ageConfidence: 'known' }, now)
+    const forcedBlock = createClipboardObjectBlock(snapshot, now, { forceAttach: true })
     if (forcedBlock) {
       setBlock(forcedBlock)
       setHint(null)

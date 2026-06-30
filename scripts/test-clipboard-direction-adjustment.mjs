@@ -111,7 +111,8 @@ assert.match(tokenSrc, /再按 Backspace 删除/, '#7: token shows delete hint w
 
 // ─── #8: Object Block shows recommended actions, not clipboard as search ───────
 assert.match(searchFrame, /recommendActionsForBlock/, '#8: recommended actions computed from block')
-assert.match(searchFrame, /block && recommendedActions\.length > 0 && !query/, '#8: actions shown only with block + no query')
+assert.match(searchFrame, /block \? \(/, '#8: actions shown when block exists (object-action mode)')
+assert.match(searchFrame, /filteredActions/, '#8: actions filtered by query')
 assert.match(searchFrame, /RecommendedActionRow/, '#8: actions rendered as RecommendedActionRow')
 
 // ─── #9: Action labels use descriptive text, not plugin name as primary ────────

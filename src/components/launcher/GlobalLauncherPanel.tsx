@@ -12,6 +12,7 @@ import { getPlatformShortcutMeta, supportsParamCustomization } from './launcherP
 import { handleGlobalLauncherKeyDown } from './GlobalLauncherKeyboard'
 import type { GlobalLauncherItem } from './GlobalLauncherItems'
 import type { ClipboardObjectBlockState } from '../../launcher/clipboard/useClipboardObjectBlock'
+import type { RecommendedAction, RecommendedOutputTarget } from '../../launcher/clipboard/actionRecommendation'
 import { GLOBAL_LAUNCHER_SETTINGS_HEIGHT, STANDALONE_SURFACE_MAX_HEIGHT } from './GlobalLauncherLayout'
 
 type GlobalLauncherPanelProps = {
@@ -41,7 +42,7 @@ type GlobalLauncherPanelProps = {
   closeLauncher: () => void
   visibleFiltered: GlobalLauncherItem[]
   selectedItem?: GlobalLauncherItem
-  setSelectedIndex: (index: number) => void
+  setSelectedIndex: (index: number | ((index: number) => number)) => void
   isWorkflowObjectLauncherItem: (item: GlobalLauncherItem | undefined) => boolean
   selectItem: (item: GlobalLauncherItem | undefined, customizeParams?: boolean) => void
   hostSurfaceTarget: LauncherHostSurfaceTarget | null
@@ -54,7 +55,15 @@ type GlobalLauncherPanelProps = {
   handleCompositionStart: () => void
   handleCompositionEnd: () => void
   clipboardBlock: ClipboardObjectBlockState
+  onExecuteObjectAction?: (action: RecommendedAction, target: RecommendedOutputTarget) => void
+  objectActionCount?: number
+  selectedActionIndex?: number
+  setSelectedActionIndex?: (index: number | ((index: number) => number)) => void
+  onObjectActionController?: (controller: { expand: () => void; execute: (keepOpen?: boolean) => void } | null) => void
+  expandSelectedObjectAction?: () => void
+  executeSelectedObjectAction?: (keepOpen?: boolean) => void
 }
+
 
 export function GlobalLauncherPanel({
   panelRef,
@@ -96,6 +105,13 @@ export function GlobalLauncherPanel({
   handleCompositionStart,
   handleCompositionEnd,
   clipboardBlock,
+  onExecuteObjectAction,
+  objectActionCount = 0,
+  selectedActionIndex,
+  setSelectedActionIndex,
+  onObjectActionController,
+  expandSelectedObjectAction,
+  executeSelectedObjectAction,
 }: GlobalLauncherPanelProps) {
   return (
     <LauncherView
@@ -133,6 +149,11 @@ export function GlobalLauncherPanel({
         isWorkflowObjectLauncherItem,
         selectItem,
         handleClipboardBackspace: clipboardBlock?.handleBackspace,
+        hasObjectActions: Boolean(clipboardBlock?.block && objectActionCount > 0),
+        objectActionCount,
+        setSelectedObjectActionIndex: setSelectedActionIndex,
+        expandSelectedObjectAction,
+        executeSelectedObjectAction,
       })}
       onCompositionStart={handleCompositionStart}
       onCompositionEnd={handleCompositionEnd}
@@ -182,6 +203,10 @@ export function GlobalLauncherPanel({
         onSearchHoverIndex={(index) => { if (!isKeyboardNavRef.current) setSelectedIndex(index) }}
         onSearchMouseMove={() => { isKeyboardNavRef.current = false }}
         clipboardBlock={clipboardBlock}
+        onExecuteAction={onExecuteObjectAction}
+        selectedActionIndex={selectedActionIndex}
+        onSelectedActionIndexChange={setSelectedActionIndex}
+        onObjectActionController={onObjectActionController}
       />
     </LauncherView>
   )

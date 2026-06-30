@@ -1,4 +1,4 @@
-import { useState, type RefObject } from 'react'
+import { useEffect, useMemo, useState, type RefObject } from 'react'
 import { Search } from 'lucide-react'
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
@@ -28,6 +28,9 @@ export function GlobalLauncherSearchFrame({
   onHoverIndex,
   onMouseMove,
   onExecuteAction,
+  selectedActionIndex = 0,
+  onSelectedActionIndexChange,
+  onObjectActionController,
 }: {
   inputRef: RefObject<HTMLInputElement | null>
   query: string
@@ -45,6 +48,9 @@ export function GlobalLauncherSearchFrame({
   onHoverIndex: (index: number) => void
   onMouseMove: () => void
   onExecuteAction?: (action: RecommendedAction, target: RecommendedOutputTarget) => void
+  selectedActionIndex?: number
+  onSelectedActionIndexChange?: (index: number) => void
+  onObjectActionController?: (controller: { expand: () => void; execute: (keepOpen?: boolean) => void } | null) => void
 }) {
   const block = clipboardBlock?.block ?? null
   const hint = clipboardBlock?.hint ?? null
@@ -52,6 +58,40 @@ export function GlobalLauncherSearchFrame({
   const recommendedActions: RecommendedAction[] = block ? recommendActionsForBlock(block) : []
   const [expandedAction, setExpandedAction] = useState<RecommendedAction | null>(null)
   const [targetIndex, setTargetIndex] = useState(0)
+
+  // Filter recommended actions by query when in object-action mode
+  const filteredActions = useMemo(() => {
+    if (!query) return recommendedActions
+    const lowerQuery = query.toLowerCase()
+    return recommendedActions.filter((action) =>
+      action.title.toLowerCase().includes(lowerQuery) ||
+      action.titleZh.toLowerCase().includes(lowerQuery) ||
+      action.id.toLowerCase().includes(lowerQuery) ||
+      (action.subtitle?.toLowerCase().includes(lowerQuery) ?? false) ||
+      (action.provider?.toLowerCase().includes(lowerQuery) ?? false)
+    )
+  }, [recommendedActions, query])
+
+  const activeAction = filteredActions[Math.min(selectedActionIndex, Math.max(0, filteredActions.length - 1))]
+
+  // Clamp selected action index when filtered list changes
+  useEffect(() => {
+    if (filteredActions.length > 0 && selectedActionIndex >= filteredActions.length) {
+      onSelectedActionIndexChange?.(Math.max(0, filteredActions.length - 1))
+    }
+  }, [filteredActions.length, selectedActionIndex, onSelectedActionIndexChange])
+
+  useEffect(() => {
+    if (!block || !activeAction) {
+      onObjectActionController?.(null)
+      return
+    }
+    onObjectActionController?.({
+      expand: () => { setExpandedAction(activeAction); setTargetIndex(0) },
+      execute: (keepOpen = false) => onExecuteAction?.(activeAction, keepOpen ? 'copy-and-keep-open' : activeAction.defaultOutput),
+    })
+    return () => onObjectActionController?.(null)
+  }, [activeAction, block, onExecuteAction, onObjectActionController])
 
   return (
     <>
@@ -66,6 +106,11 @@ export function GlobalLauncherSearchFrame({
         <input
           ref={inputRef}
           value={query}
+          inputMode="latin"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          lang="en"
           onChange={(event) => onQueryChange(event.target.value)}
           placeholder={resolvedPlaceholder}
         />
@@ -82,7 +127,7 @@ export function GlobalLauncherSearchFrame({
         />
       )}
       <div className="global-launcher-body l-list" onMouseMove={onMouseMove}>
-        {block && recommendedActions.length > 0 && !query ? (
+        {block ? (
           <div className="recommended-actions-list" data-testid="recommended-actions-list">
             {expandedAction ? (
               <OutputTargetExpansion
@@ -92,16 +137,20 @@ export function GlobalLauncherSearchFrame({
                 onHover={setTargetIndex}
                 onBack={() => setExpandedAction(null)}
               />
-            ) : (
-              recommendedActions.map((action, index) => (
+            ) : filteredActions.length > 0 ? (
+              filteredActions.map((action, index) => (
                 <RecommendedActionRow
                   key={action.id}
                   action={action}
-                  selected={index === 0}
+                  selected={index === selectedActionIndex}
                   onSelect={() => onExecuteAction?.(action, action.defaultOutput)}
-                  onHover={() => {}}
+                  onHover={() => onSelectedActionIndexChange?.(index)}
                 />
               ))
+            ) : (
+              <div className="px-3.5 py-3 text-[12px] text-center" style={{ color: 'var(--color-text-tertiary)' }}>
+                {t(locale, 'palette.noMatchingActions')}
+              </div>
             )}
           </div>
         ) : (

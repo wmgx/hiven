@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useAppStore } from '../../store'
 import { useWorkspaceStore } from '../../workspace/workspaceStore'
 import { runtimeRegistry } from '../../workspace/runtimeRegistry'
@@ -15,13 +15,18 @@ import { filterEditorCommandBarItems } from '../../workspace/launcher/types'
 import { useLauncherSession } from '../../workspace/launcher/useLauncherSession'
 import { useEditorObjectBlock } from '../clipboard/useEditorObjectBlock'
 import { ObjectBlockToken } from '../../components/launcher/ObjectBlockToken'
-import { recommendActionsForBlock, type RecommendedAction } from '../clipboard/actionRecommendation'
+import { recommendActionsForBlock, type RecommendedAction, type RecommendedOutputTarget } from '../clipboard/actionRecommendation'
+import { executeRecommendedAction } from '../clipboard/actionExecutor'
 import { RecommendedActionRow } from '../../components/launcher/RecommendedActionRow'
+import { OutputTargetExpansion } from '../../components/launcher/OutputTargetExpansion'
+import { writeClipboardText } from '../../workspace/pluginClipboard'
+import { createEditorPane, insertIntoEditor, openEditorPanel, replaceEditorSelection } from '../../workspace/editorBridge'
+import { PLUGIN_SURFACE_PANEL_ID } from '../../components/pluginSurface/PluginSurfacePanel'
+import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 
 export function EditorCommandBarHost() {
   const open = useAppStore((s) => s.editorCommandBarOpen)
   const setOpen = useAppStore((s) => s.setEditorCommandBarOpen)
-  const pinPluginCommand = useAppStore((s) => s.pinPluginCommand)
   const locale = useAppStore((s) => s.locale)
 
   const inputRef = useRef<HTMLInputElement>(null)
@@ -29,6 +34,9 @@ export function EditorCommandBarHost() {
   const isKeyboardNavRef = useRef(false)
   const isImeComposingRef = useRef(false)
   const previousFocusRef = useRef<HTMLElement | null>(null)
+  const [selectedObjectActionIndex, setSelectedObjectActionIndex] = useState(0)
+  const [expandedAction, setExpandedAction] = useState<RecommendedAction | null>(null)
+  const [expandedTargetIndex, setExpandedTargetIndex] = useState(0)
   const {
     query,
     setQuery,
@@ -57,6 +65,14 @@ export function EditorCommandBarHost() {
     getActiveText: () => useWorkspaceStore.getState().getActivePaneText(),
   })
   const editorRecommendedActions: RecommendedAction[] = editorBlock.block ? recommendActionsForBlock(editorBlock.block) : []
+
+  useEffect(() => {
+    setSelectedObjectActionIndex((index) => Math.min(index, Math.max(0, editorRecommendedActions.length - 1)))
+  }, [editorRecommendedActions.length])
+
+  useEffect(() => {
+    if (!open) setExpandedAction(null)
+  }, [open])
 
   useEffect(() => {
     if (!open) return
@@ -98,40 +114,92 @@ export function EditorCommandBarHost() {
     void controllerRef.current?.selectItem(item, { customizeParams })
   }
 
-  function pinLauncherItem(item: DomainLauncherItem) {
-    if (item.pinnable === false) return
-    pinPluginCommand({
-      kind: 'plugin-command',
-      actionId: item.systemKey,
-      pluginId: item.pluginId ?? '',
-      title: item.display.title,
-      titleI18n: item.display.titleI18n,
-      icon: item.display.icon,
-      isDev: item.source === 'dev',
-      live: { pinnable: true },
+  const executeEditorObjectAction = useCallback(async (action: RecommendedAction, target: RecommendedOutputTarget) => {
+    const block = editorBlock.block
+    if (!block) return
+
+    const result = await executeRecommendedAction({ block, action, target }, {
+      copyText: writeClipboardText,
+      copyAndKeepOpen: writeClipboardText,
+      openInEditor: async (text, options) => {
+        await createEditorPane({ text, title: options?.title, language: options?.language, direction: 'right' })
+      },
+      openPluginSurface: async (pluginId) => {
+        await openEditorPanel({
+          panelId: PLUGIN_SURFACE_PANEL_ID,
+          placement: 'right',
+          inputs: { target: { source: 'builtin' as PluginSettingsSource, pluginId, surfaceId: 'main', initialText: block.payloadText ?? block.preview ?? '' } },
+        })
+      },
+      replaceSelection: async (text) => {
+        await replaceEditorSelection(text)
+      },
+      replacePane: async (text) => {
+        const paneId = useWorkspaceStore.getState().activePaneId
+        await replaceEditorSelection(text, { paneId })
+      },
+      newPane: async (text, options) => {
+        await createEditorPane({ text, title: options?.title, language: options?.language, direction: 'right' })
+      },
+      insertBelow: async (text) => {
+        await insertIntoEditor(`\n${text}`)
+      },
+      openBottomPanel: async (actionId) => {
+        const panelId = actionId === 'json-expression' ? 'js-filter.panel' : actionId
+        await openEditorPanel({ panelId, placement: 'pane-bottom' })
+      },
+      setRenderer: async (actionId, text) => {
+        await openEditorPanel({ panelId: actionId, placement: 'pane-bottom', inputs: { text } })
+      },
     })
-    closePalette()
-  }
+
+    if (result.ok && target !== 'copy-and-keep-open') closePalette()
+  }, [editorBlock.block])
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
     if (inControllerFrame) return
 
+    const hasObjectActionList = Boolean(editorBlock.block && !query && editorRecommendedActions.length > 0)
+    if (hasObjectActionList && expandedAction && (event.key === 'Escape' || event.key === 'ArrowLeft')) {
+      event.preventDefault()
+      setExpandedAction(null)
+      return
+    }
     if (event.key === 'Escape') {
       event.preventDefault()
       closePalette()
       return
     }
+    if (hasObjectActionList && !expandedAction && (event.key === 'Tab' || event.key === 'ArrowRight')) {
+      event.preventDefault()
+      const action = editorRecommendedActions[Math.min(selectedObjectActionIndex, Math.max(0, editorRecommendedActions.length - 1))]
+      if (action) { setExpandedAction(action); setExpandedTargetIndex(0) }
+      return
+    }
     if (event.key === 'ArrowDown') {
       event.preventDefault()
       isKeyboardNavRef.current = true
-      setSelectedIndex((index) => Math.min(index + 1, Math.max(0, rankedLauncherItems.length - 1)))
+      if (hasObjectActionList) {
+        if (expandedAction) {
+          const targetCount = 1 + (expandedAction.alternativeOutputs?.length ?? 0)
+          setExpandedTargetIndex((index) => Math.min(index + 1, Math.max(0, targetCount - 1)))
+        }
+        else setSelectedObjectActionIndex((index) => Math.min(index + 1, Math.max(0, editorRecommendedActions.length - 1)))
+      } else {
+        setSelectedIndex((index) => Math.min(index + 1, Math.max(0, rankedLauncherItems.length - 1)))
+      }
       return
     }
     if (event.key === 'ArrowUp') {
       event.preventDefault()
       isKeyboardNavRef.current = true
-      setSelectedIndex((index) => Math.max(index - 1, 0))
+      if (hasObjectActionList) {
+        if (expandedAction) setExpandedTargetIndex((index) => Math.max(index - 1, 0))
+        else setSelectedObjectActionIndex((index) => Math.max(index - 1, 0))
+      } else {
+        setSelectedIndex((index) => Math.max(index - 1, 0))
+      }
       return
     }
     if (event.key === 'Backspace') {
@@ -143,6 +211,18 @@ export function EditorCommandBarHost() {
     }
     if (event.key === 'Enter') {
       event.preventDefault()
+      const hasObjectActionList = Boolean(editorBlock.block && !query && editorRecommendedActions.length > 0)
+      if (hasObjectActionList) {
+        if (expandedAction) {
+          const targets = [expandedAction.defaultOutput, ...(expandedAction.alternativeOutputs ?? [])]
+          const target = targets[Math.min(expandedTargetIndex, Math.max(0, targets.length - 1))]
+          if (target) void executeEditorObjectAction(expandedAction, target)
+          return
+        }
+        const action = editorRecommendedActions[Math.min(selectedObjectActionIndex, Math.max(0, editorRecommendedActions.length - 1))]
+        if (action) void executeEditorObjectAction(action, event.metaKey || event.ctrlKey ? 'copy-and-keep-open' : action.defaultOutput)
+        return
+      }
       selectItem(rankedLauncherItems[selectedIndex], shouldCustomizeParams(event.metaKey, event.ctrlKey))
     }
   }
@@ -183,18 +263,31 @@ export function EditorCommandBarHost() {
               <input
                 ref={inputRef}
                 value={query}
+                inputMode="latin"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                lang="en"
                 onChange={(event) => { setQuery(event.target.value); setSelectedIndex(0) }}
                 placeholder="输入动作或搜索…"
               />
             </div>
             <div className="global-launcher-body l-list" data-testid="editor-recommended-actions">
-              {editorRecommendedActions.map((action, index) => (
+              {expandedAction ? (
+                <OutputTargetExpansion
+                  action={expandedAction}
+                  selectedIndex={expandedTargetIndex}
+                  onSelect={(target) => { void executeEditorObjectAction(expandedAction, target); setExpandedAction(null) }}
+                  onHover={setExpandedTargetIndex}
+                  onBack={() => setExpandedAction(null)}
+                />
+              ) : editorRecommendedActions.map((action, index) => (
                 <RecommendedActionRow
                   key={action.id}
                   action={action}
-                  selected={index === 0}
-                  onSelect={() => {}}
-                  onHover={() => {}}
+                  selected={index === selectedObjectActionIndex}
+                  onSelect={() => { void executeEditorObjectAction(action, action.defaultOutput) }}
+                  onHover={() => setSelectedObjectActionIndex(index)}
                 />
               ))}
             </div>
@@ -208,7 +301,6 @@ export function EditorCommandBarHost() {
             items={rankedLauncherItems}
             selectedIndex={selectedIndex}
             selectItem={selectItem}
-            onPinItem={pinLauncherItem}
             setSelectedIndex={setSelectedIndex}
             isKeyboardNavRef={isKeyboardNavRef}
             locale={locale}

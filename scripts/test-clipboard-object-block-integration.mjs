@@ -83,8 +83,13 @@ assert.match(
 )
 assert.match(
   searchFrame,
-  /block && recommendedActions\.length > 0 && !query/,
-  'SearchFrame must only show recommended actions when block exists and query is empty',
+  /block \? \(/,
+  'SearchFrame must show recommended actions when block exists (object-action mode)',
+)
+assert.match(
+  searchFrame,
+  /filteredActions/,
+  'SearchFrame must filter recommended actions by query',
 )
 
 // ─── Keyboard Backspace handling ───────────────────────────────────────────────
