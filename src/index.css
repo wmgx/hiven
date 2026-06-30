@@ -6041,6 +6041,17 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
 }
 
+.object-block-token:has(.object-block-content) {
+  display: inline-grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 1px 6px;
+  padding: 5px 8px 5px 10px;
+  border-radius: 12px;
+  white-space: normal;
+}
+
 .object-block-token.selected-for-delete,
 .object-block-token[data-state='selected-for-deletion'] {
   border-color: var(--accent);
@@ -6048,10 +6059,27 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
-.object-block-label {
+.object-block-content {
+  grid-column: 1;
+  grid-row: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.object-block-meta {
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 400;
 }
 
 .object-block-masked,
@@ -6078,6 +6106,12 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   cursor: pointer;
   font-size: 14px;
   line-height: 1;
+}
+
+.object-block-token:has(.object-block-content) .object-block-remove {
+  grid-column: 2;
+  grid-row: 1 / -1;
+  align-self: center;
 }
 
 .object-block-remove:hover {

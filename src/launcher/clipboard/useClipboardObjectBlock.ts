@@ -18,7 +18,9 @@ import {
 import {
   clearClipboardSnapshot,
   createClipboardSnapshotFromUnknownAge,
+  dismissClipboardBlock,
   getLastClipboardSnapshot,
+  isClipboardDismissed,
   updateClipboardSnapshot,
   type ClipboardSnapshot,
 } from './clipboardSnapshot'
@@ -76,7 +78,7 @@ export function useClipboardObjectBlock(params: {
           snapshot = createClipboardSnapshotFromUnknownAge(text)
         }
 
-        const newBlock = createClipboardObjectBlock(snapshot)
+        const newBlock = isClipboardDismissed(snapshot) ? null : createClipboardObjectBlock(snapshot)
         setBlock(newBlock)
         setHint(newBlock ? null : buildRecentClipboardHint(snapshot))
       } catch {
@@ -95,6 +97,8 @@ export function useClipboardObjectBlock(params: {
   }, [open])
 
   const removeBlock = useCallback(() => {
+    const snapshot = getLastClipboardSnapshot()
+    if (snapshot) dismissClipboardBlock(snapshot)
     setBlock(null)
   }, [])
 
@@ -112,6 +116,8 @@ export function useClipboardObjectBlock(params: {
     if (!queryEmpty) return false
     if (!block) return false
     if (block.selectedForDelete) {
+      const snapshot = getLastClipboardSnapshot()
+      if (snapshot) dismissClipboardBlock(snapshot)
       setBlock(null)
       return true
     }

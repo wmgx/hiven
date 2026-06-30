@@ -178,3 +178,29 @@ export function isClipboardExpired(snapshot: ClipboardSnapshot, now: number = Da
   if (snapshot.changedAt === undefined) return true
   return now - snapshot.changedAt > RECENT_CLIPBOARD_HINT_TTL_MS
 }
+
+// ─── Dismiss cooldown ─────────────────────────────────────────────────────────
+
+/** How long after dismissing a clipboard block it won't auto-attach again. */
+export const DISMISS_COOLDOWN_MS = 2 * 60 * 1000
+
+type DismissRecord = { hash: string; dismissedAt: number }
+
+let lastDismiss: DismissRecord | null = null
+
+/** Record that user dismissed a clipboard block (clicked ×). */
+export function dismissClipboardBlock(snapshot: ClipboardSnapshot): void {
+  lastDismiss = { hash: snapshot.hash, dismissedAt: Date.now() }
+}
+
+/** Check if a snapshot was recently dismissed and still in cooldown. */
+export function isClipboardDismissed(snapshot: ClipboardSnapshot, now: number = Date.now()): boolean {
+  if (!lastDismiss) return false
+  if (lastDismiss.hash !== snapshot.hash) return false
+  return now - lastDismiss.dismissedAt <= DISMISS_COOLDOWN_MS
+}
+
+/** Clear dismiss state (e.g. for testing). */
+export function clearDismissState(): void {
+  lastDismiss = null
+}

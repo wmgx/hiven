@@ -12,6 +12,12 @@
 
 import type { LauncherObjectBlock } from '../../launcher/clipboard/objectBlock'
 
+function truncatePreview(text: string, maxLen: number): string {
+  const singleLine = text.replace(/[\r\n]+/g, ' ').trim()
+  if (singleLine.length <= maxLen) return singleLine
+  return singleLine.slice(0, maxLen) + '…'
+}
+
 export function ObjectBlockToken({
   block,
   onRemove,
@@ -29,14 +35,18 @@ export function ObjectBlockToken({
       data-selected={selected ? 'true' : undefined}
       data-state={selected ? 'selected-for-deletion' : block.state}
     >
-      <span className="object-block-label">
+      {!block.secretMasked && block.preview ? (
+        <span className="object-block-content">{truncatePreview(block.preview, 30)}</span>
+      ) : block.secretMasked ? (
+        <span className="object-block-masked">内容已隐藏</span>
+      ) : (
+        <span className="object-block-content">{block.title}</span>
+      )}
+      <span className="object-block-meta">
         {block.title}
         {block.subtitle && <> · {block.subtitle}</>}
         {block.ageLabel && <> · {block.ageLabel}</>}
       </span>
-      {block.secretMasked && (
-        <span className="object-block-masked">内容已隐藏</span>
-      )}
       {block.state === 'snapshot' && (
         <span className="object-block-badge">snapshot</span>
       )}
