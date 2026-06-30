@@ -1,6 +1,0 @@
-{
-  "command.encode.title": "URL 编码",
-  "command.encode.description": "对文本进行 URL 编码（encodeURIComponent）",
-  "command.decode.title": "URL 解码",
-  "command.decode.description": "对 URL 编码文本进行解码（decodeURIComponent）"
-}

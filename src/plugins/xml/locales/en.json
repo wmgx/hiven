@@ -1,6 +1,0 @@
-{
-  "command.prettify.title": "XML Prettify",
-  "command.prettify.description": "Format XML with indentation",
-  "command.compact.title": "XML Compact",
-  "command.compact.description": "Minify XML (remove whitespace)"
-}

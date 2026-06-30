@@ -1,6 +1,0 @@
-{
-  "command.encode.title": "Base64 Encode",
-  "command.encode.description": "Encode text to Base64",
-  "command.decode.title": "Base64 Decode",
-  "command.decode.description": "Decode Base64 text to original"
-}

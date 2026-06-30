@@ -1,6 +1,0 @@
-{
-  "command.encode.title": "Base64 编码",
-  "command.encode.description": "将文本进行 Base64 编码",
-  "command.decode.title": "Base64 解码",
-  "command.decode.description": "将 Base64 文本解码为原始文本"
-}

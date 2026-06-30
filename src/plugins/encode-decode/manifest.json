@@ -1,0 +1,7 @@
+{
+  "pluginId": "encode-decode",
+  "displayName": "Encode / Decode",
+  "displayNameI18n": { "zh": "编解码" },
+  "version": "2.0.0",
+  "capabilities": ["command"]
+}

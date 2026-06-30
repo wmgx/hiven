@@ -1,0 +1,20 @@
+{
+  "base64.encode.title": "Base64 Encode",
+  "base64.encode.description": "Encode text to Base64",
+  "base64.decode.title": "Base64 Decode",
+  "base64.decode.description": "Decode Base64 text to original",
+  "url.encode.title": "URL Encode",
+  "url.encode.description": "Encode text with encodeURIComponent",
+  "url.decode.title": "URL Decode",
+  "url.decode.description": "Decode URL-encoded text with decodeURIComponent",
+  "html.encode.title": "HTML Entity Encode",
+  "html.encode.description": "Encode HTML special characters to entities",
+  "html.decode.title": "HTML Entity Decode",
+  "html.decode.description": "Decode HTML entities back to characters",
+  "slashes.escape.title": "Escape",
+  "slashes.escape.description": "Escape special characters (quotes, newlines, tabs)",
+  "slashes.unescape.title": "Unescape",
+  "slashes.unescape.description": "Unescape special characters (restore \\n \\t \\\" etc.)",
+  "jwt.decode.title": "JWT Decode",
+  "jwt.decode.description": "Decode JWT token header and payload"
+}

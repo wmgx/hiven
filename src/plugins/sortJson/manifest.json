@@ -1,7 +1,0 @@
-{
-  "pluginId": "sort-json",
-  "displayName": "Sort JSON Keys",
-  "displayNameI18n": { "zh": "JSON Key 排序" },
-  "version": "1.0.1",
-  "capabilities": ["command"]
-}

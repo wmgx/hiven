@@ -1,6 +1,0 @@
-{
-  "command.escape.title": "Escape",
-  "command.escape.description": "Escape special characters (quotes, newlines, tabs)",
-  "command.unescape.title": "Unescape",
-  "command.unescape.description": "Unescape special characters (restore \\n \\t \\\" etc.)"
-}

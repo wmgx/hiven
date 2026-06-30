@@ -1,6 +1,0 @@
-{
-  "command.encode.title": "URL Encode",
-  "command.encode.description": "Encode text with encodeURIComponent",
-  "command.decode.title": "URL Decode",
-  "command.decode.description": "Decode URL-encoded text with decodeURIComponent"
-}

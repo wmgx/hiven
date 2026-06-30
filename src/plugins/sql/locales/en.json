@@ -1,6 +1,0 @@
-{
-  "command.prettify.title": "SQL Prettify",
-  "command.prettify.description": "Format SQL with indentation",
-  "command.compact.title": "SQL Compact",
-  "command.compact.description": "Minify SQL (remove comments, single line)"
-}

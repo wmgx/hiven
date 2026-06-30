@@ -1,6 +1,0 @@
-{
-  "command.encode.title": "HTML 实体编码",
-  "command.encode.description": "将 HTML 特殊字符转为实体（如 < → &lt;）",
-  "command.decode.title": "HTML 实体解码",
-  "command.decode.description": "将 HTML 实体还原为字符（如 &lt; → <）"
-}

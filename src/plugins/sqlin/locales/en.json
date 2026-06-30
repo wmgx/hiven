@@ -1,6 +1,0 @@
-{
-  "command.string.title": "SQL IN (String)",
-  "command.string.description": "Convert lines to SQL IN clause (string mode)",
-  "command.number.title": "SQL IN (Number)",
-  "command.number.description": "Convert lines to SQL IN clause (number mode)"
-}

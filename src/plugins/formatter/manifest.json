@@ -1,0 +1,7 @@
+{
+  "pluginId": "formatter",
+  "displayName": "Formatter",
+  "displayNameI18n": { "zh": "格式化" },
+  "version": "2.0.0",
+  "capabilities": ["command"]
+}

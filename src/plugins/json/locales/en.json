@@ -1,6 +1,0 @@
-{
-  "command.prettify.title": "JSON Prettify",
-  "command.prettify.description": "Pretty-print JSON with indentation",
-  "command.compact.title": "JSON Compact",
-  "command.compact.description": "Minify JSON to single line"
-}

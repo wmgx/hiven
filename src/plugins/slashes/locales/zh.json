@@ -1,6 +1,0 @@
-{
-  "command.escape.title": "转义",
-  "command.escape.description": "转义特殊字符（引号、换行、制表符等）",
-  "command.unescape.title": "反转义",
-  "command.unescape.description": "反转义特殊字符（还原 \\n \\t \\\" 等）"
-}

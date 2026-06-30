@@ -1,6 +1,0 @@
-{
-  "command.encode.title": "HTML Entity Encode",
-  "command.encode.description": "Encode HTML special characters to entities (e.g. < → &lt;)",
-  "command.decode.title": "HTML Entity Decode",
-  "command.decode.description": "Decode HTML entities back to characters (e.g. &lt; → <)"
-}

@@ -1,0 +1,12 @@
+{
+  "json.prettify.title": "JSON Prettify",
+  "json.prettify.description": "Pretty-print JSON with indentation",
+  "json.compact.title": "JSON Compact",
+  "json.compact.description": "Minify JSON to single line",
+  "sortJson.title": "Sort JSON Keys",
+  "sortJson.description": "Sort JSON object keys alphabetically",
+  "queryString.toJson.title": "Query String → JSON",
+  "queryString.toJson.description": "Convert URL query string to JSON object",
+  "queryString.fromJson.title": "JSON → Query String",
+  "queryString.fromJson.description": "Convert JSON object to URL query string"
+}

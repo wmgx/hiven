@@ -1,6 +1,0 @@
-{
-  "command.prettify.title": "CSS 格式化",
-  "command.prettify.description": "美化 CSS（缩进换行）",
-  "command.compact.title": "CSS 压缩",
-  "command.compact.description": "压缩 CSS（去空格注释）"
-}

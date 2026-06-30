@@ -1,4 +1,0 @@
-{
-  "command.decode.title": "JWT Decode",
-  "command.decode.description": "Decode JWT token header and payload"
-}

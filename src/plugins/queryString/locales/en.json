@@ -1,6 +1,0 @@
-{
-  "command.toJson.title": "Query String → JSON",
-  "command.toJson.description": "Convert URL query string to JSON object",
-  "command.fromJson.title": "JSON → Query String",
-  "command.fromJson.description": "Convert JSON object to URL query string"
-}

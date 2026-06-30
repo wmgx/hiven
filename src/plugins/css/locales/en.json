@@ -1,6 +1,0 @@
-{
-  "command.prettify.title": "CSS Prettify",
-  "command.prettify.description": "Format CSS with indentation",
-  "command.compact.title": "CSS Compact",
-  "command.compact.description": "Minify CSS (remove whitespace and comments)"
-}

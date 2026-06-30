@@ -1,6 +1,0 @@
-{
-  "command.toJson.title": "Query String → JSON",
-  "command.toJson.description": "将 URL 查询字符串转为 JSON 对象",
-  "command.fromJson.title": "JSON → Query String",
-  "command.fromJson.description": "将 JSON 对象转为 URL 查询字符串"
-}

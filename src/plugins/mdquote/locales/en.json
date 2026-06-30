@@ -1,6 +1,0 @@
-{
-  "command.add.title": "Add Blockquote",
-  "command.add.description": "Add Markdown blockquote prefix (> ) to each line",
-  "command.remove.title": "Remove Blockquote",
-  "command.remove.description": "Remove Markdown blockquote prefix from each line"
-}

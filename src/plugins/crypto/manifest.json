@@ -1,0 +1,7 @@
+{
+  "pluginId": "crypto",
+  "displayName": "Crypto",
+  "displayNameI18n": { "zh": "加密" },
+  "version": "2.0.0",
+  "capabilities": ["command"]
+}

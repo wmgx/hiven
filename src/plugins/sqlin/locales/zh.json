@@ -1,6 +1,0 @@
-{
-  "command.string.title": "生成 IN (字符串)",
-  "command.string.description": "将多行文本转为 SQL IN 子句（字符串模式）",
-  "command.number.title": "生成 IN (数字)",
-  "command.number.description": "将多行文本转为 SQL IN 子句（数字模式）"
-}

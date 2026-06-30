@@ -1,6 +1,0 @@
-{
-  "command.add.title": "添加引用",
-  "command.add.description": "为每行添加 Markdown 引用前缀（> ）",
-  "command.remove.title": "移除引用",
-  "command.remove.description": "移除每行的 Markdown 引用前缀"
-}

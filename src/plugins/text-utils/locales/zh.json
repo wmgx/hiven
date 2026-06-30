@@ -1,0 +1,8 @@
+{
+  "case.upper.title": "转大写", "case.upper.description": "将文本转为大写",
+  "case.lower.title": "转小写", "case.lower.description": "将文本转为小写",
+  "case.title.title": "转首字母大写", "case.title.description": "将每个单词首字母转为大写",
+  "case.camel.title": "转驼峰", "case.camel.description": "将文本转为 camelCase",
+  "case.snake.title": "转下划线", "case.snake.description": "将文本转为 snake_case",
+  "count.title": "文本统计", "count.description": "统计行数、单词数、字符数"
+}

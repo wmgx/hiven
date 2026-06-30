@@ -1,6 +1,0 @@
-{
-  "command.prettify.title": "XML 格式化",
-  "command.prettify.description": "美化 XML（缩进换行）",
-  "command.compact.title": "XML 压缩",
-  "command.compact.description": "压缩 XML（去空白）"
-}
