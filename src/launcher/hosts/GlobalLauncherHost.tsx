@@ -56,21 +56,12 @@ export function GlobalLauncherHost() {
     ? settingsDialogTarget
     : null
   const hostSurfaceTarget = launcherHostSurfaceTarget
-  // Read clipboard text directly for dynamicItems — independent of Object Block freshness rules
-  const [clipboardText, setClipboardText] = useState<string | undefined>(undefined)
-  useEffect(() => {
-    if (!open) { setClipboardText(undefined); return }
-    let cancelled = false
-    readLauncherClipboard().then((text) => {
-      if (!cancelled && text?.trim()) setClipboardText(text.trim())
-    }).catch(() => {})
-    return () => { cancelled = true }
-  }, [open])
-
   const clipboardBlock = useClipboardObjectBlock({
     open,
     readClipboard: readLauncherClipboard,
   })
+  // Only use clipboard for recommendations when the Object Block is showing (fresh enough)
+  const clipboardText = clipboardBlock.block?.payloadText ?? undefined
 
   const {
     query,
