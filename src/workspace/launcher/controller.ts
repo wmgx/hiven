@@ -608,6 +608,11 @@ export class LauncherController {
       return
     }
     if (isOutputResult(result)) {
+      // Single choice: execute directly without entering result frame
+      if (result.output.choices.length === 1) {
+        void this.runChoiceAction(() => result.output.choices[0].primaryAction(), result.output.choices[0].title)
+        return
+      }
       // Success with output: enter result-choice mode (keep open).
       this.setState({
         busy: false,

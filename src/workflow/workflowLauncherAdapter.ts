@@ -1,5 +1,5 @@
 import { searchableFieldsMatch, type SearchableFields } from '../workspace/searchRanking'
-import type { Locale } from '../i18n'
+import { t, type Locale } from '../i18n'
 import type { LauncherItem, LauncherResultChoice } from '../workspace/launcher/types'
 import { resolveIconForWorkObject } from './workObjectDisplay'
 import { createDefaultWorkContextSnapshot } from '../launcher/context/contextBroker'
@@ -22,18 +22,19 @@ export async function getWorkflowObjectLauncherItems({
     .filter((object) => normalizedQuery ? objectMatchesQuery(object, normalizedQuery, locale) : isDefaultContextObject(object))
     .slice(0, MAX_OBJECT_ITEMS)
 
-  return visibleObjects.map(workObjectToLauncherItem)
+  return visibleObjects.map((object) => workObjectToLauncherItem(object, locale))
 }
 
-function workObjectToLauncherItem(object: WorkObject): LauncherItem {
+function workObjectToLauncherItem(object: WorkObject, locale: Locale): LauncherItem {
   return {
     systemKey: `workflow:object:${object.id}`,
     kind: 'dynamic',
     display: {
       title: object.title,
-      subtitle: objectActionSubtitle(object),
+      subtitle: object.subtitle,
       icon: resolveIconForWorkObject(object),
       aliases: aliasesForObject(object),
+      kindLabel: kindLabelForObject(object, locale),
     },
     behavior: { type: 'perform' },
     surfaces: ['global-launcher'],
@@ -48,6 +49,11 @@ function workObjectToLauncherItem(object: WorkObject): LauncherItem {
         snapshot: await createDefaultWorkContextSnapshot('global-hotkey'),
       }
       const actions = await getWorkActions(object, ctx)
+      // When only one action is available, execute it directly without a secondary selection step
+      if (actions.length === 1) {
+        const result = await actions[0].run(object, ctx)
+        return { ok: result?.ok !== false }
+      }
       return {
         ok: true,
         output: {
@@ -101,10 +107,11 @@ function aliasesForObject(object: WorkObject): string[] {
   return aliases.filter((value): value is string => Boolean(value))
 }
 
-function objectActionSubtitle(object: WorkObject): string {
-  const base = object.subtitle ? ` · ${object.subtitle}` : ''
-  return `Object: ${object.type}${base} · Press Tab for actions`
+function kindLabelForObject(object: WorkObject, locale: Locale): string | undefined {
+  if (object.type === 'window' && object.id.startsWith('editor')) return t(locale, 'palette.kindEditor')
+  return undefined
 }
+
 function isDefaultContextObject(object: WorkObject): boolean {
   return object.source.startsWith('context.')
 }

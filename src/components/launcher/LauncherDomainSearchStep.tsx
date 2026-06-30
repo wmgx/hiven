@@ -103,9 +103,11 @@ function LauncherDomainListItem({
   const subtitle = resolveDisplaySubtitle(item.display, locale)
   const shortcutMeta = getPlatformShortcutMeta()
   const showParamShortcut = supportsParamCustomization(item)
-  const tag = item.display.icon?.startsWith('app-icon:')
-    ? t(locale, 'palette.kindApp')
-    : t(locale, 'palette.kindCommand')
+  const tag = item.display.kindLabel
+    ? item.display.kindLabel
+    : item.display.icon?.startsWith('app-icon:')
+      ? t(locale, 'palette.kindApp')
+      : t(locale, 'palette.kindCommand')
 
   useEffect(() => {
     if (selected) ref.current?.scrollIntoView({ block: 'nearest' })

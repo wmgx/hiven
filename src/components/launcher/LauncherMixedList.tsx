@@ -100,6 +100,9 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
 })
 
 function getLauncherItemKindLabel(item: LauncherMixedItem, locale: Locale) {
+  if (item.kind === 'domain' && item.domainItem.display.kindLabel) {
+    return item.domainItem.display.kindLabel
+  }
   if (item.kind === 'pinned') return t(locale, 'palette.kindPinned')
   if (isAppIconRef(item.icon)) return t(locale, 'palette.kindApp')
   return t(locale, 'palette.kindCommand')
