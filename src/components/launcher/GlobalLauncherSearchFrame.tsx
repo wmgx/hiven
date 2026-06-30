@@ -127,34 +127,7 @@ export function GlobalLauncherSearchFrame({
             onAttach={() => clipboardBlock?.attachHintAsBlock()}
           />
         )}
-        {block ? (
-          <div className="recommended-actions-list" data-testid="recommended-actions-list">
-            {expandedAction ? (
-              <OutputTargetExpansion
-                action={expandedAction}
-                selectedIndex={targetIndex}
-                onSelect={(target) => { onExecuteAction?.(expandedAction, target); setExpandedAction(null) }}
-                onHover={setTargetIndex}
-                onBack={() => setExpandedAction(null)}
-              />
-            ) : filteredActions.length > 0 ? (
-              filteredActions.map((action, index) => (
-                <RecommendedActionRow
-                  key={action.id}
-                  action={action}
-                  selected={index === selectedActionIndex}
-                  onSelect={() => onExecuteAction?.(action, action.defaultOutput)}
-                  onHover={() => onSelectedActionIndexChange?.(index)}
-                />
-              ))
-            ) : (
-              <div className="px-3.5 py-3 text-[12px] text-center" style={{ color: 'var(--color-text-tertiary)' }}>
-                {t(locale, 'palette.noMatchingActions')}
-              </div>
-            )}
-          </div>
-        ) : (
-          <LauncherMixedList
+        <LauncherMixedList
             items={items}
             selected={selectedItem}
             locale={locale}
@@ -162,7 +135,6 @@ export function GlobalLauncherSearchFrame({
             onSelect={onSelectItem}
             onHoverIndex={onHoverIndex}
           />
-        )}
       </div>
       <div className="global-launcher-footer l-foot">
         <LauncherHintKey keys="↑↓" label={t(locale, 'palette.select')} />

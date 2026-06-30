@@ -41,6 +41,7 @@ const INSTALL_FRESHNESS_WINDOW_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 const PINNED_BOOST = 40 // mild; far below a one-tier (1000) jump
 const MAX_STATIC_PRIORITY = 300 // host-only ceiling, still < 1000
 const TEXT_MATCH_BOOST = 800 // strong boost when tool can process the content; below match tier (1000) so an exact name match still wins
+const DYNAMIC_ITEM_BOOST = 900 // dynamic items are plugin-asserted matches; rank above static items without text match
 
 export type RankContext = {
   query: string
@@ -123,7 +124,8 @@ export function scoreLauncherItem(ctx: RankContext, item: LauncherItem): number 
   const textMatchBoost = ctx.contentText && item.textMatch
     ? (safeTextMatch(item.textMatch, ctx.contentText) ? TEXT_MATCH_BOOST : 0)
     : 0
-  return matchScore + usageScore(ctx, item) + pinnedBoost(ctx, item) + staticPriority(item) + installFreshnessScore(ctx, item) + textMatchBoost
+  const dynamicBoost = item.kind === 'dynamic' ? DYNAMIC_ITEM_BOOST : 0
+  return matchScore + usageScore(ctx, item) + pinnedBoost(ctx, item) + staticPriority(item) + installFreshnessScore(ctx, item) + textMatchBoost + dynamicBoost
 }
 
 function safeTextMatch(matcher: (text: string) => boolean, text: string): boolean {

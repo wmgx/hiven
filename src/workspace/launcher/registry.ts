@@ -309,6 +309,7 @@ export async function collectDynamicItems(
   if (!q && !clipboardText) return hostDynamicItems
 
   const providers = collectDynamicProviders()
+  console.log('[registry] collectDynamicItems providers:', providers.length, 'q:', q, 'clipboard:', clipboardText?.slice(0, 30))
   const results = await Promise.all(
     providers.map(async ({ provider, pluginId, source }) => {
       try {
