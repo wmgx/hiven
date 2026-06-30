@@ -37,7 +37,7 @@ export const mdquotePlugin = definePlugin({
       run(ctx) {
         return ctx.output.replaceActiveText(runMdquote(ctx.input.text, ctx.params.mode))
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true, pinnable: false },
     },
   ],
   commands: [

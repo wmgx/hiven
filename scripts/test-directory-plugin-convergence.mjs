@@ -361,8 +361,8 @@ check('PluginEditorSurfaceContent is a read-only source viewer with directory tr
 
 check('Plugin management is hosted as a surface instead of main-window view content', () => {
   assert.doesNotMatch(files.app, /ViewContent|class\s+ViewErrorBoundary|<PluginsManagerSurfaceContent|<PluginEditorSurfaceContent/, 'Launcher runtime App should not mount legacy plugin view content')
-  assert.match(files.pluginsSurface, /<PluginsManagerSurfaceContent\s*\/>/, 'PluginsSurface should host the plugin manager surface content')
-  assert.match(files.pluginsSurface, /<PluginEditorSurface\s*\/>/, 'PluginsSurface should host the plugin editor surface')
+  assert.match(files.pluginsSurface, /<PluginsManagerSurfaceContent[\s\S]*onOpenPluginEditor=\{setPluginEditor\}/, 'PluginsSurface should host the plugin manager surface content and wire plugin editor opens')
+  assert.match(files.pluginsSurface, /<PluginEditorSurface[\s\S]*pluginEditor=\{pluginEditor\}[\s\S]*onClose=\{/, 'PluginsSurface should host the plugin editor surface with local close state')
   assert.match(files.pluginSurfaceRenderer, /PluginSurfaceErrorBoundary|surfaceState\.status === 'error'/, 'Plugin surface renderer should isolate plugin surface render failures')
 })
 

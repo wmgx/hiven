@@ -48,7 +48,7 @@ export const slashesPlugin = definePlugin({
       run(ctx) {
         return ctx.output.replaceActiveText(runSlashes(ctx.input.text, ctx.params.mode))
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: false, panel: true, pinnable: false },
     },
   ],
   commands: [

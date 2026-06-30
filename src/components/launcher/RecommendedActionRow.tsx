@@ -1,21 +1,15 @@
 /**
  * RecommendedActionRow — A single recommended action in the object-action list.
  *
- * Design: hiven_clipboard_object_block_recommendation_ai_task.md §3
+ * Step 5 design language:
+ *   格式化剪贴板 JSON                              Enter
+ *   来自 JSON Tools · 复制结果 · Tab 预览
  *
- * UI:
- *   格式化剪贴板 JSON
- *   来自 JSON Tools · 输出：复制 / 打开到编辑器
+ * Provider is product identity. Raw plugin ids stay implementation details.
  */
 
 import type { RecommendedAction } from '../../launcher/clipboard/actionRecommendation'
-
-const OUTPUT_LABELS: Record<string, string> = {
-  copy: '复制',
-  'paste-to-foreground': '粘贴到当前应用',
-  'open-editor': '打开到编辑器',
-  'open-plugin-surface': '打开工具',
-}
+import { getOutputTargetLabel } from '../../launcher/clipboard/actionExecutor'
 
 export function RecommendedActionRow({
   action,
@@ -28,9 +22,8 @@ export function RecommendedActionRow({
   onSelect: () => void
   onHover: () => void
 }) {
-  const outputLabels = [action.defaultOutput, ...(action.alternativeOutputs ?? [])]
-    .map((t) => OUTPUT_LABELS[t] ?? t)
-    .join(' / ')
+  const provider = action.provider ?? action.pluginId
+  const outputLabel = getOutputTargetLabel(action.defaultOutput)
 
   return (
     <div
@@ -41,9 +34,11 @@ export function RecommendedActionRow({
       onMouseEnter={onHover}
     >
       <span className="action-title">{action.titleZh}</span>
+      <span className="action-key-hint">Enter</span>
       <span className="action-meta">
-        {action.pluginId && <span className="action-plugin">来自 {action.pluginId}</span>}
-        <span className="action-outputs">输出：{outputLabels}</span>
+        {provider && <span className="action-provider">来自 {provider}</span>}
+        <span className="action-default-output">{outputLabel}</span>
+        {(action.alternativeOutputs?.length ?? 0) > 0 && <span className="action-preview-hint">Tab 输出</span>}
       </span>
     </div>
   )

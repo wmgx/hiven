@@ -27,6 +27,11 @@ export function handleGlobalLauncherKeyDown({
   isWorkflowObjectLauncherItem,
   selectItem,
   handleClipboardBackspace,
+  hasObjectActions,
+  objectActionCount,
+  setSelectedObjectActionIndex,
+  expandSelectedObjectAction,
+  executeSelectedObjectAction,
 }: {
   event: ReactKeyboardEvent<HTMLElement>
   isImeComposingRef: MutableRefObject<boolean>
@@ -53,6 +58,11 @@ export function handleGlobalLauncherKeyDown({
   isWorkflowObjectLauncherItem: (item?: LauncherMixedItem) => boolean
   selectItem: (item: LauncherMixedItem | undefined, customizeParams?: boolean) => void
   handleClipboardBackspace?: (queryEmpty: boolean) => boolean
+  hasObjectActions?: boolean
+  objectActionCount?: number
+  setSelectedObjectActionIndex?: (updater: number | ((index: number) => number)) => void
+  expandSelectedObjectAction?: () => void
+  executeSelectedObjectAction?: (keepOpen?: boolean) => void
 }) {
   if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
   if (event.defaultPrevented) return
@@ -146,15 +156,39 @@ export function handleGlobalLauncherKeyDown({
     closeLauncher()
     return
   }
+  if (hasObjectActions && event.key === 'ArrowDown') {
+    event.preventDefault()
+    isKeyboardNavRef.current = true
+    setSelectedObjectActionIndex?.((index) => Math.min(index + 1, Math.max(0, (objectActionCount ?? 0) - 1)))
+    return
+  }
+  if (hasObjectActions && event.key === 'ArrowUp') {
+    event.preventDefault()
+    isKeyboardNavRef.current = true
+    setSelectedObjectActionIndex?.((index) => Math.max(index - 1, 0))
+    return
+  }
+  if (hasObjectActions && (event.key === 'Tab' || event.key === 'ArrowRight')) {
+    event.preventDefault()
+    expandSelectedObjectAction?.()
+    return
+  }
+  if (hasObjectActions && event.key === 'Enter') {
+    event.preventDefault()
+    executeSelectedObjectAction?.(event.metaKey || event.ctrlKey)
+    return
+  }
   if (event.key === 'ArrowDown') {
     event.preventDefault()
     isKeyboardNavRef.current = true
     setSelectedIndex((index) => Math.min(index + 1, Math.max(0, visibleFilteredLength - 1)))
+    return
   }
   if (event.key === 'ArrowUp') {
     event.preventDefault()
     isKeyboardNavRef.current = true
     setSelectedIndex((index) => Math.max(index - 1, 0))
+    return
   }
   if (event.key === 'Tab' && isWorkflowObjectLauncherItem(selectedItem)) {
     event.preventDefault()

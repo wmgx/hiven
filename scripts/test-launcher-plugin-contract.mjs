@@ -89,7 +89,7 @@ function assertBuiltinVersionsMatchManifests() {
 }
 
 function assertTextDiffCanBeFoundAndFailureIsVisible() {
-  const textDiff = read('src/plugins/textDiff/index.ts')
+  const textDiff = read('src/plugins/textDiff/index.tsx')
   assert.match(
     textDiff,
     /id:\s*['"]text-diff\.compare['"][\s\S]*aliases:\s*\[[\s\S]*['"]diff['"]/,

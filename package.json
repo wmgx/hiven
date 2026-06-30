@@ -127,7 +127,14 @@
     "test:editor-object-block": "node scripts/test-editor-object-block.mjs",
     "test:clipboard-direction-adjustment": "node scripts/test-clipboard-direction-adjustment.mjs",
     "test:output-target-expansion": "node scripts/test-output-target-expansion.mjs",
-    "test:plugin-action-manifest": "node scripts/test-plugin-action-manifest.mjs"
+    "test:plugin-action-manifest": "node scripts/test-plugin-action-manifest.mjs",
+    "test:design-language-migration": "node scripts/test-design-language-migration.mjs",
+    "test:object-block-expanded-model": "node scripts/test-object-block-expanded-model.mjs",
+    "test:plugin-product-convergence": "node scripts/test-plugin-product-convergence.mjs",
+    "test:step5-no-pin-and-csv-surface": "node scripts/test-step5-no-pin-and-csv-surface.mjs",
+    "test:step5-calculator-and-diff-panels": "node scripts/test-step5-calculator-and-diff-panels.mjs",
+    "test:launcher-latin-query-input": "node scripts/test-launcher-latin-query-input.mjs",
+    "test:launcher-default-english-input-source": "node scripts/test-launcher-default-english-input-source.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -168,5 +175,6 @@
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.2",
     "vite": "^8.0.10"
-  }
+  },
+  "packageManager": "pnpm@10.33.2+sha512.a90faf6feeab71ad6c6e57f94e0fe1a12f5dcc22cd754db40ae9593eb6a3e0b6b12e3540218bb37ae083404b1f2ce6db2a4121e979829b4aff94b99f49da1cf8"
 }

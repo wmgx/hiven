@@ -21,6 +21,16 @@ export async function hideLauncherWindow(): Promise<void> {
   markSurfaceInstanceState(LAUNCHER_WINDOW_LABEL, 'hidden')
 }
 
+export async function prepareLauncherInputSource(): Promise<void> {
+  if (!isTauriRuntime()) return
+  await invoke('prepare_launcher_input_source')
+}
+
+export async function restoreLauncherInputSource(): Promise<void> {
+  if (!isTauriRuntime()) return
+  await invoke('restore_launcher_input_source')
+}
+
 export type LauncherWindowPosition = {
   x: number
   y: number

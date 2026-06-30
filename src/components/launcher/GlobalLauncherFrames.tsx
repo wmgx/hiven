@@ -12,6 +12,7 @@ import { GlobalLauncherSettingsFrame } from './GlobalLauncherSettingsFrame'
 import { GlobalLauncherPluginSurfaceFrame } from './GlobalLauncherPluginSurfaceFrame'
 import { GlobalLauncherSearchFrame } from './GlobalLauncherSearchFrame'
 import type { ClipboardObjectBlockState } from '../../launcher/clipboard/useClipboardObjectBlock'
+import type { RecommendedAction, RecommendedOutputTarget } from '../../launcher/clipboard/actionRecommendation'
 import { GlobalLauncherResultFrame } from './GlobalLauncherResultFrame'
 import { GlobalLauncherPermissionFrame, type GlobalLauncherPermissionFrameState } from './GlobalLauncherPermissionFrame'
 import { GlobalLauncherCollectInputFrame } from './GlobalLauncherCollectInputFrame'
@@ -59,6 +60,10 @@ export function GlobalLauncherFrameSwitch({
   onSearchHoverIndex,
   onSearchMouseMove,
   clipboardBlock,
+  onExecuteAction,
+  selectedActionIndex,
+  onSelectedActionIndexChange,
+  onObjectActionController,
 }: {
   hostSurfaceTarget: LauncherHostSurfaceTarget | null
   hostSurfaceHeight: number
@@ -98,6 +103,10 @@ export function GlobalLauncherFrameSwitch({
   onSearchHoverIndex: (index: number) => void
   onSearchMouseMove: () => void
   clipboardBlock: ClipboardObjectBlockState
+  onExecuteAction?: (action: RecommendedAction, target: RecommendedOutputTarget) => void
+  selectedActionIndex?: number
+  onSelectedActionIndexChange?: (index: number) => void
+  onObjectActionController?: (controller: { expand: () => void; execute: (keepOpen?: boolean) => void } | null) => void
 }) {
   if (hostSurfaceTarget) {
     return <GlobalLauncherSystemSurfaceFrame target={hostSurfaceTarget} height={hostSurfaceHeight} />
@@ -224,6 +233,10 @@ export function GlobalLauncherFrameSwitch({
       onSelectItem={onSearchSelectItem}
       onHoverIndex={onSearchHoverIndex}
       onMouseMove={onSearchMouseMove}
+      onExecuteAction={onExecuteAction}
+      selectedActionIndex={selectedActionIndex}
+      onSelectedActionIndexChange={onSelectedActionIndexChange}
+      onObjectActionController={onObjectActionController}
     />
   )
 }

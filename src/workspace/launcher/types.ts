@@ -394,6 +394,8 @@ export type LauncherItem = {
   systemKey: SystemLauncherItemKey
   kind: LauncherItemContributionKind
   pluginId?: string
+  /** Product-level provider name, e.g. JSON Tools, not the raw plugin id. */
+  productProvider?: string
   source?: 'builtin' | 'installed' | 'dev'
   display: LauncherItemDisplay
   behavior: LauncherBehavior
@@ -436,8 +438,7 @@ export function isEditorCommandBarItem(item: LauncherItem): boolean {
   return (
     item.systemKey.startsWith('host:pane:') ||
     item.systemKey.startsWith('host:editor:') ||
-    item.systemKey.startsWith('host:text:') ||
-    item.systemKey === 'host:global:search-all-hiven'
+    item.systemKey.startsWith('host:text:')
   )
 }
 

@@ -118,7 +118,7 @@ assert.equal(
   'node scripts/test-editor-command-bar-local-actions-behavior.mjs',
   'package.json must expose editor command bar local action behavior coverage',
 )
-assert.match(read('scripts/test-editor-command-bar-local-actions-behavior.mjs'), /host:editor:format-bullets[\s\S]*host:editor:quote-code-block[\s\S]*host:editor:json-minify[\s\S]*host:editor:json-to-yaml[\s\S]*host:editor:json-extract-fields/, 'editor command bar local action behavior must cover text and JSON mutations')
+assert.match(read('scripts/test-editor-command-bar-local-actions-behavior.mjs'), /host:editor:format-bullets[\s\S]*host:editor:quote-code-block[\s\S]*host:editor:json-minify[\s\S]*host:editor:json-to-yaml[\s\S]*host:editor:json-expression/, 'editor command bar local action behavior must cover text and JSON actions')
 assert.equal(
   packageJson.scripts?.['test:plugin-surface-shortcut-lifecycle-story'],
   'node scripts/test-plugin-surface-shortcut-lifecycle-story.mjs',
@@ -136,7 +136,7 @@ assert.equal(
   'node scripts/test-launcher-host-capability-routing-behavior.mjs',
   'package.json must expose launcher host capability routing behavior coverage',
 )
-assert.match(read('scripts/test-launcher-host-capability-routing-behavior.mjs'), /global-launcher[\s\S]*editor-command-bar[\s\S]*host:system:restart[\s\S]*host:global:search-all-hiven/, 'launcher host capability routing must prove global-only actions stay out of Editor Cmd\+K')
+assert.match(read('scripts/test-launcher-host-capability-routing-behavior.mjs'), /global-launcher[\s\S]*editor-command-bar[\s\S]*host:system:restart[\s\S]*Search all Hiven bridge/, 'launcher host capability routing must prove global-only actions stay out of Editor Cmd\+K')
 assert.equal(
   packageJson.scripts?.['test:plugin-paste-behavior'],
   'node scripts/test-plugin-paste-behavior.mjs',
@@ -198,7 +198,7 @@ assert.match(files.launcherRegistry, /requiredCapabilities[\s\S]*launcherHostHas
 assert.match(files.launcherTypes, /'editor-command-bar':\s*\{[\s\S]*presentation:\s*['"]editor-overlay['"]/, 'editor command bar must be modeled as editor overlay')
 assert.doesNotMatch(files.launcherTypes.match(/'editor-command-bar':\s*\{[\s\S]*?capabilities:\s*\[([\s\S]*?)\]/)?.[1] ?? '', /app-search|system-power|settings|host-surfaces|plugin-surfaces/, 'editor command bar must exclude global navigation capabilities')
 assert.match(files.editorCommandBar, /staticItemFilter:\s*filterEditorCommandBarItems/, 'editor command bar must filter to editor-local actions')
-assert.match(files.hostActions, /systemKey:\s*['"]host:global:search-all-hiven['"][\s\S]*surfaces:\s*\[['"]editor-command-bar['"]\][\s\S]*showLauncherWindow\(\)/, 'editor command bar must expose Search all Hiven as the explicit global bridge')
+assert.doesNotMatch(files.hostActions, /systemKey:\s*['"]host:global:search-all-hiven['"]/, 'editor command bar must not expose Search all Hiven as a global bridge')
 assert.match(files.hostActions, /systemKey:\s*['"]host:system:restart['"][\s\S]*surfaces:\s*\[['"]global-launcher['"]\]/, 'system power actions must be global-only')
 
 // Editor is an independent system surface, not a main-window view.

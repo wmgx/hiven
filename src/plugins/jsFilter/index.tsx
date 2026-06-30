@@ -1,6 +1,6 @@
 /**
- * First-party JS Filter plugin.
- * Provides a compact pane-bottom bar for evaluating JS expressions against JSON content.
+ * First-party JSON Tools Expression panel.
+ * Provides a compact pane-bottom bar for evaluating JSON expressions against pane content.
  * The bar is per-pane and toggled via the command.
  */
 /* eslint-disable react-refresh/only-export-components */
@@ -229,7 +229,7 @@ export const jsFilterPlugin = definePlugin({
           title: 'command.open.title',
           subtitle: 'command.open.description',
           icon: 'Code2',
-          aliases: ['js-filter', 'jq', 'json-filter', 'expression'],
+          aliases: ['json-expression', 'jq', 'json-filter', 'expression'],
         },
         surfaces: ['command-palette'],
         pinnable: false,
@@ -255,7 +255,7 @@ export const jsFilterPlugin = definePlugin({
       title: 'command.open.title',
       description: 'command.open.description',
       icon: 'Code2',
-      aliases: ['js-filter', 'jq', 'json-filter', 'expression'],
+      aliases: ['json-expression', 'jq', 'json-filter', 'expression'],
       live: { pinnable: false },
       inputs: [{ key: 'input', label: 'Input', kind: 'pane' as const, required: true }],
       inputResolution: { strategy: 'use-active', fallback: 'fail' },
@@ -276,8 +276,8 @@ export const jsFilterPlugin = definePlugin({
   panels: [
     {
       id: PANEL_ID,
-      title: 'JS Filter',
-      titleI18n: { zh: 'JS 过滤器', en: 'JS Filter' },
+      title: 'JSON Tools · Expression',
+      titleI18n: { zh: 'JSON Tools · 表达式', en: 'JSON Tools · Expression' },
       defaultPlacement: 'pane-bottom',
       height: 'auto',
       component: JsFilterPanel,

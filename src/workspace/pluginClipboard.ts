@@ -43,7 +43,7 @@ async function readClipboardText(): Promise<string> {
   }
 }
 
-async function writeClipboardText(text: string): Promise<void> {
+export async function writeClipboardText(text: string): Promise<void> {
   try {
     const { writeText } = await import('@tauri-apps/plugin-clipboard-manager')
     await writeText(text)

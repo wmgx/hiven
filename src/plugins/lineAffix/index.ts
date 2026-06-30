@@ -41,7 +41,7 @@ export const lineAffixPlugin = definePlugin({
       run(ctx) {
         return ctx.output.replaceActiveText(prependLines(ctx.input.text, (ctx.params.prefix ?? '- ') as string))
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true, pinnable: false },
     },
     {
       id: 'line-affix.append',
@@ -61,7 +61,7 @@ export const lineAffixPlugin = definePlugin({
       run(ctx) {
         return ctx.output.replaceActiveText(appendLines(ctx.input.text, (ctx.params.suffix ?? ',') as string))
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true, pinnable: false },
     },
     {
       id: 'line-affix.wrap',
@@ -91,7 +91,7 @@ export const lineAffixPlugin = definePlugin({
           (ctx.params.right ?? '"') as string,
         ))
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true, pinnable: false },
     },
   ],
   commands: [

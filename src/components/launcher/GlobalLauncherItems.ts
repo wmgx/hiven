@@ -1,9 +1,7 @@
-import { localized } from '../../store'
 import { t, type Locale } from '../../i18n'
 import { resolveDisplaySubtitle, resolveDisplayTitle } from '../../workspace/launcher/display'
 import type { LauncherItem as DomainLauncherItem } from '../../workspace/launcher/types'
 import { scoreSearchableFields, searchableFieldsMatch, type SearchableFields } from '../../workspace/searchRanking'
-import type { PinnedAction } from '../../store'
 import type { LauncherMixedItem } from './LauncherMixedList'
 
 export type GlobalLauncherItem = LauncherMixedItem
@@ -25,13 +23,11 @@ export function buildGlobalLauncherItems({
   recentActionNames: string[]
   actionUsageCounts: Record<string, number>
 }): GlobalLauncherItem[] {
-  const pinnedItems = buildPinnedItems({ mode, pinnedActions, locale })
-  const q = query.trim().toLowerCase()
-  const pinnedBase = q ? pinnedItems.filter((item) => launcherItemMatchesQuery(item, q, locale)) : pinnedItems
-  const sortedPinned = [...pinnedBase].sort((a, b) =>
-    scoreLauncherItem(b, q, locale, recentActionNames, actionUsageCounts) -
-    scoreLauncherItem(a, q, locale, recentActionNames, actionUsageCounts)
-  )
+  void mode
+  void pinnedActions
+  void query
+  void recentActionNames
+  void actionUsageCounts
 
   const domainItems: GlobalLauncherItem[] = rankedLauncherItems.map((domainItem) => ({
     kind: 'domain' as const,
@@ -43,30 +39,7 @@ export function buildGlobalLauncherItems({
     domainItem,
   }))
 
-  return [...domainItems, ...sortedPinned]
-}
-
-function buildPinnedItems({
-  mode,
-  pinnedActions,
-  locale,
-}: {
-  mode: string
-  pinnedActions: PinnedAction[]
-  locale: Locale
-}): GlobalLauncherItem[] {
-  const pinnedLabel = t(locale, 'palette.globalPinned')
-  const pinned = pinnedActions.map((item) => ({
-    kind: 'pinned' as const,
-    id: item.id,
-    title: localized(item.title, item.titleI18n, locale),
-    subtitle: pinnedLabel,
-    icon: item.icon,
-    actionId: item.actionId,
-  }))
-
-  if ('pinned-only' === mode) return pinned
-  return pinned
+  return domainItems
 }
 
 function launcherItemMatchesQuery(item: GlobalLauncherItem, q: string, locale: Locale): boolean {

@@ -3,6 +3,7 @@
  */
 
 import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
+import { CsvSurface } from './CsvSurface'
 
 function runCsv(text: string, mode: unknown): string {
   if (mode === 'csv2json' || mode === 'tsv2json') {
@@ -30,6 +31,28 @@ function runCsv(text: string, mode: unknown): string {
 }
 
 export const csvPlugin = definePlugin({
+  ui: {
+    surfaces: [
+      {
+        id: 'main',
+        kind: 'custom-view',
+        title: 'CSV Tools',
+        titleI18n: { zh: 'CSV Tools' },
+        icon: 'Table',
+        aliases: ['csv', 'tsv', 'table convert', '表格转换'],
+        component: CsvSurface,
+        entry: { launcher: true, shortcutBindable: true, shortcutPresentation: 'window' },
+        shell: {
+          defaultWidth: 960,
+          defaultHeight: 680,
+          minWidth: 720,
+          minHeight: 520,
+          closeOnBlur: false,
+          resizable: true,
+        },
+      },
+    ],
+  },
   tools: [
     {
       id: 'csv.run',
@@ -57,10 +80,10 @@ export const csvPlugin = definePlugin({
         try {
           return ctx.output.replaceActiveText(runCsv(ctx.input.text, ctx.params.mode))
         } catch (e: any) {
-          return ctx.output.error(`Error: ${e.message}`)
+          return ctx.output.error('Error: ' + e.message)
         }
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: false, panel: true, pinnable: false },
     },
   ],
   commands: [
@@ -95,7 +118,7 @@ export const csvPlugin = definePlugin({
         try {
           return textOutput(runCsv(text, mode))
         } catch (e: any) {
-          return textError(`Error: ${e.message}`)
+          return textError('Error: ' + e.message)
         }
       },
     },

@@ -37,6 +37,7 @@ import {
 import { createPluginLauncherApi, createPluginLauncherStorage } from './pluginApi'
 import { resolvePluginSettingsSource } from './pluginSource'
 import { adaptToolToLauncherItem } from './toolAdapter'
+import { applyProductProviderToLauncherItem, resolvePluginProductMetadata } from '../pluginProductCatalog'
 
 const DYNAMIC_QUERY_MAX_LENGTH = 500
 const DYNAMIC_PROVIDER_TIMEOUT_MS = 1000
@@ -92,7 +93,8 @@ function resolveStaticItemFromContribution(
       `[launcher] plugin "${pluginId}" item "${contribution.id}" has unknown surfaces: ${unknownSurfaces.join(', ')} (ignored)`,
     )
   }
-  return {
+  const productMetadata = resolvePluginProductMetadata(pluginId)
+  return applyProductProviderToLauncherItem({
     systemKey: getPluginLauncherItemKey(pluginId, contribution.id),
     kind: 'plugin',
     pluginId,
@@ -100,7 +102,7 @@ function resolveStaticItemFromContribution(
     display: contribution.display,
     behavior: contribution.behavior ?? { type: 'perform' },
     surfaces: sanitizeSurfaces(contribution.surfaces),
-    pinnable: contribution.pinnable ?? true,
+    pinnable: false,
     inputPolicy: contribution.inputPolicy,
     params: contribution.params,
     defaultParams: contribution.defaultParams,
@@ -110,7 +112,8 @@ function resolveStaticItemFromContribution(
     // Prefer matching launcher item ids to old command ids during migration.
     legacyUsageKeys: [contribution.id],
     execute: contribution.execute,
-  }
+    productProvider: productMetadata.provider,
+  })
 }
 
 function resolveToolItem(
@@ -120,11 +123,11 @@ function resolveToolItem(
 ): LauncherItem | null {
   const launcherOpt = tool.surfaces?.launcher
   if (launcherOpt === false || launcherOpt == null) return null
-  return adaptToolToLauncherItem(tool, {
+  return applyProductProviderToLauncherItem(adaptToolToLauncherItem(tool, {
     pluginId,
     source: resolvePluginSettingsSource(pluginId, source),
     systemKey: getPluginToolItemKey(pluginId, tool.id),
-  })
+  }))
 }
 
 function withSettingsSuffix(title: string, suffix: string): string {
@@ -216,7 +219,7 @@ export function collectStaticPluginItems(): LauncherItem[] {
     for (const surface of surfaces) {
       if (surface.entry?.launcher === false) continue
       const settingsSource = resolvePluginSettingsSource(pluginId, source)
-      const item: LauncherItem = {
+      const item: LauncherItem = applyProductProviderToLauncherItem({
         systemKey: getPluginSurfaceItemKey(settingsSource, pluginId, surface.id),
         kind: 'plugin',
         pluginId,
@@ -237,7 +240,7 @@ export function collectStaticPluginItems(): LauncherItem[] {
           // and render the surface component directly.
           return { ok: true }
         },
-      }
+      })
       items.push(item)
     }
 

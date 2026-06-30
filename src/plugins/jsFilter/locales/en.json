@@ -1,7 +1,7 @@
 {
-  "command.open.title": "JS Filter",
-  "command.open.description": "Toggle JS expression filter bar",
-  "panel.placeholder": "JS filter; e.g. .key.subkey, [0][1], .map(x=>x.val)",
+  "command.open.title": "JSON Tools · Expression",
+  "command.open.description": "Open the JSON expression bottom bar",
+  "panel.placeholder": "JSON expression; e.g. .key.subkey, [0][1], .map(x=>x.val)",
   "panel.execute": "Run",
   "panel.error.notJson": "Current content is not valid JSON",
   "panel.error.expression": "Expression error: {0}"

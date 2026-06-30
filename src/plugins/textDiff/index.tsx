@@ -4,6 +4,8 @@
 
 import { definePlugin, type LauncherExecutionContext, type PaneInput } from '@hiven/plugin'
 import { TextDiffRenderer } from './TextDiffRenderer'
+import { TextDiffSurface } from './TextDiffSurface'
+import './style.css'
 
 type PaneSnapshot = {
   activePaneId: string
@@ -23,12 +25,24 @@ type PaneSnapshot = {
 
 type TextDiffLauncherContext = LauncherExecutionContext
 
-type DiffSource =
-  | { kind: 'pane'; paneId: string }
-  | { kind: 'clipboard' }
-  | { kind: 'empty' }
+type TextSource = {
+  sourceId: string
+  kind: 'editor-pane' | 'clipboard' | 'empty' | 'snapshot'
+  editorWindowId?: string
+  paneId?: string
+  title: string
+  language?: string
+  lineCount?: number
+  modified?: boolean
+  lastActiveAt?: number
+  snapshotAt?: number
+  contentProvider: 'live' | 'snapshot'
+  text?: string
+}
 
-function textDiffEffects(originalPaneId: string, modifiedPaneId: string) {
+type DiffSource = TextSource
+
+function textDiffEffects(originalPaneId: string, modifiedPaneId: string, sourceMeta?: { original?: TextSource; modified?: TextSource }) {
   return [{
     type: 'pane.setRenderer' as const,
     paneId: originalPaneId,
@@ -36,6 +50,7 @@ function textDiffEffects(originalPaneId: string, modifiedPaneId: string) {
     inputs: {
       original: { kind: 'pane' as const, paneId: originalPaneId },
       modified: { kind: 'pane' as const, paneId: modifiedPaneId },
+      sourceMeta,
     },
     ownerPluginId: 'text-diff',
     ownerContributionId: 'text-diff.compare',
@@ -48,10 +63,10 @@ function clearExistingTextDiffEffects(snapshot: PaneSnapshot) {
     .map(([paneId]) => ({ type: 'pane.clearRenderer' as const, paneId }))
 }
 
-function runTextDiff(ctx: TextDiffLauncherContext, snapshot: PaneSnapshot, originalPaneId: string, modifiedPaneId: string) {
+function runTextDiff(ctx: TextDiffLauncherContext, snapshot: PaneSnapshot, originalPaneId: string, modifiedPaneId: string, sourceMeta?: { original?: TextSource; modified?: TextSource }) {
   const result = ctx.api.dispatchEffects([
     ...clearExistingTextDiffEffects(snapshot),
-    ...textDiffEffects(originalPaneId, modifiedPaneId),
+    ...textDiffEffects(originalPaneId, modifiedPaneId, sourceMeta),
   ])
   if (result.errors.length > 0) return { ok: false as const, message: result.errors[0] }
   return { ok: true as const }
@@ -59,7 +74,7 @@ function runTextDiff(ctx: TextDiffLauncherContext, snapshot: PaneSnapshot, origi
 
 function paneLabel(snapshot: PaneSnapshot, paneId: string): string {
   const index = snapshot.paneIds.indexOf(paneId)
-  return snapshot.panes[paneId]?.title || `Pane ${index >= 0 ? index + 1 : paneId}`
+  return snapshot.panes[paneId]?.title || 'Pane ' + (index >= 0 ? index + 1 : paneId)
 }
 
 function activePaneId(snapshot: PaneSnapshot): string | null {
@@ -67,11 +82,11 @@ function activePaneId(snapshot: PaneSnapshot): string | null {
 }
 
 function sourceId(source: DiffSource): string {
-  return source.kind === 'pane' ? `pane:${source.paneId}` : source.kind
+  return source.sourceId
 }
 
-function sourceLanguage(snapshot: PaneSnapshot, source: DiffSource): string | undefined {
-  return source.kind === 'pane' ? snapshot.panes[source.paneId]?.language : undefined
+function sourceLanguage(_snapshot: PaneSnapshot, source: DiffSource): string | undefined {
+  return source.language
 }
 
 async function materializeSourcePane(
@@ -79,7 +94,10 @@ async function materializeSourcePane(
   source: DiffSource,
   language: string,
 ): Promise<string> {
-  if (source.kind === 'pane') return source.paneId
+  if (source.kind === 'editor-pane' && source.paneId) return source.paneId
+  if (source.kind === 'snapshot') {
+    return ctx.api.createPane({ text: source.text ?? '', title: source.title, language, focus: true, direction: 'right' })
+  }
   if (source.kind === 'clipboard') {
     const text = await ctx.api.getClipboardText()
     return ctx.api.createPane({ text, language, focus: true, direction: 'right' })
@@ -94,7 +112,7 @@ async function runTextDiffForSources(ctx: TextDiffLauncherContext, original: Dif
   snapshot = ctx.api.getPaneSnapshot()
   const modifiedLanguage = sourceLanguage(snapshot, modified) || snapshot.panes[originalPaneId]?.language || originalLanguage
   const modifiedPaneId = await materializeSourcePane(ctx, modified, modifiedLanguage)
-  return runTextDiff(ctx, ctx.api.getPaneSnapshot(), originalPaneId, modifiedPaneId)
+  return runTextDiff(ctx, ctx.api.getPaneSnapshot(), originalPaneId, modifiedPaneId, { original, modified })
 }
 
 function buildSourceChoiceOutput(ctx: TextDiffLauncherContext, snapshot: PaneSnapshot) {
@@ -130,18 +148,70 @@ function buildSourceChoiceOutput(ctx: TextDiffLauncherContext, snapshot: PaneSna
 }
 
 function selectableSources(snapshot: PaneSnapshot): DiffSource[] {
-  const paneSources = snapshot.paneIds.map((paneId) => ({ kind: 'pane' as const, paneId }))
-  if (snapshot.paneIds.length === 1) return [...paneSources, { kind: 'clipboard' }, { kind: 'empty' }]
-  return paneSources
+  const paneSources = snapshot.paneIds.map((paneId) => paneTextSource(snapshot, paneId, 'editor-pane' as const))
+  if (snapshot.paneIds.length === 1) return [...paneSources, clipboardTextSource(ctxFallbackTitle('Clipboard')), emptyTextSource()]
+  const active = activePaneId(snapshot)
+  const crossEditorSnapshots = snapshot.paneIds
+    .filter((paneId) => paneId !== active)
+    .map((paneId) => paneTextSource(snapshot, paneId, 'snapshot' as const))
+  return [...paneSources, ...crossEditorSnapshots]
 }
 
-function sourceLabel(ctx: TextDiffLauncherContext, snapshot: PaneSnapshot, source: DiffSource): string {
-  if (source.kind === 'pane') return paneLabel(snapshot, source.paneId)
+function paneTextSource(snapshot: PaneSnapshot, paneId: string, kind: 'editor-pane' | 'snapshot'): TextSource {
+  const title = paneLabel(snapshot, paneId)
+  return {
+    sourceId: kind === 'snapshot' ? 'snapshot:' + paneId : 'pane:' + paneId,
+    kind,
+    paneId,
+    title: kind === 'snapshot' ? title + ' · snapshot' : title,
+    language: snapshot.panes[paneId]?.language,
+    snapshotAt: kind === 'snapshot' ? Date.now() : undefined,
+    contentProvider: kind === 'snapshot' ? 'snapshot' : 'live',
+  }
+}
+
+function clipboardTextSource(title: string): TextSource {
+  return { sourceId: 'clipboard', kind: 'clipboard', title, contentProvider: 'snapshot', snapshotAt: Date.now() }
+}
+
+function emptyTextSource(): TextSource {
+  return { sourceId: 'empty', kind: 'empty', title: 'Empty', contentProvider: 'snapshot' }
+}
+
+function ctxFallbackTitle(title: string): string {
+  return title
+}
+
+function sourceLabel(ctx: TextDiffLauncherContext, _snapshot: PaneSnapshot, source: DiffSource): string {
   if (source.kind === 'clipboard') return ctx.t('choice.clipboard')
-  return ctx.t('choice.createEmptyPane')
+  if (source.kind === 'empty') return ctx.t('choice.createEmptyPane')
+  if (source.kind === 'snapshot') return source.title
+  return source.title
 }
 
 export const textDiffPlugin = definePlugin({
+  ui: {
+    surfaces: [
+      {
+        id: 'main',
+        kind: 'custom-view',
+        title: 'Text Diff',
+        titleI18n: { zh: 'Text Diff' },
+        icon: 'GitCompare',
+        aliases: ['diff', 'compare', 'text diff', 'text-diff', '对比', '文本对比'],
+        component: TextDiffSurface,
+        entry: { launcher: true, shortcutBindable: true },
+        shell: {
+          defaultWidth: 980,
+          defaultHeight: 680,
+          minWidth: 720,
+          minHeight: 500,
+          closeOnBlur: false,
+          resizable: true,
+        },
+      },
+    ],
+  },
   launcher: {
     items: [
       {

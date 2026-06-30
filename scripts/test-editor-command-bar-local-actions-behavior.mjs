@@ -184,34 +184,19 @@ assert.equal(latestReplaceText(), [
   '    id: 1',
 ].join('\n'))
 
-await findItem(items, 'host:editor:json-extract-fields').execute({})
-assert.equal(latestReplaceText(), [
-  'name',
-  'nested.count',
-  'items[0].id',
-].join('\n'))
+await findItem(items, 'host:editor:json-expression').execute({})
+assert.deepEqual(plain(openedPanels.at(-1)), {
+  panelId: 'js-filter.panel',
+  placement: 'pane-bottom',
+})
 
 syncPaneText('{ bad json')
 const invalidJsonResult = await findItem(items, 'host:editor:json-minify').execute({})
 assert.deepEqual(plain(invalidJsonResult), { ok: false })
 assert.notEqual(latestReplaceText(), '{ bad json')
 
-syncPaneText('translate this text')
-clearSelection()
-await findItem(items, 'host:editor:attach-translate-panel').execute({})
-assert.deepEqual(plain(openedPanels.at(-1)), {
-  panelId: 'plugin-surface',
-  placement: 'right',
-  inputs: {
-    text: 'translate this text',
-    target: {
-      source: 'builtin',
-      pluginId: 'translate',
-      surfaceId: 'main',
-      initialText: 'translate this text',
-    },
-  },
-})
+assert.equal(items.some((item) => item.systemKey === 'host:editor:attach-translate-panel'), false)
+assert.equal(items.some((item) => item.systemKey === 'host:editor:attach-clipboard-panel'), false)
 
 const guardedHostEditorActions = loadTsModule('src/workspace/launcher/hostEditorActions.ts', {
   ...editorActionGlobals,

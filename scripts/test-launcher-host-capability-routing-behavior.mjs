@@ -98,13 +98,6 @@ const hostItems = [
     requiredCapabilities: ['pane-actions'],
   },
   {
-    systemKey: 'host:global:search-all-hiven',
-    kind: 'host',
-    display: { title: 'Search all Hiven...' },
-    behavior: { type: 'perform' },
-    surfaces: ['editor-command-bar'],
-  },
-  {
     systemKey: 'host:text:copy',
     kind: 'host',
     display: { title: 'Copy' },
@@ -158,6 +151,8 @@ const registry = loadTsModule('src/workspace/launcher/registry.ts', {
   createPluginLauncherStorage: () => ({}),
   resolvePluginSettingsSource: (_pluginId, source) => source,
   adaptToolToLauncherItem: () => null,
+  applyProductProviderToLauncherItem: (item) => item,
+  resolvePluginProductMetadata: (pluginId) => ({ productId: pluginId, provider: pluginId, mergedPluginIds: [pluginId] }),
 })
 
 registry.setHostLauncherItemsProvider(() => hostItems)
@@ -178,11 +173,10 @@ assert.deepEqual(plain(globalKeys), [
 
 assert.deepEqual(plain(editorKeys), [
   'host:editor:format-bullets',
-  'host:global:search-all-hiven',
   'host:pane:close',
   'host:text:copy',
   'plugin:translate:launcher:editor-tool',
-].sort(), 'editor-command-bar should receive only editor-local/shared text actions plus Search all Hiven')
+].sort(), 'editor-command-bar should receive only editor-local/shared text actions')
 assert.deepEqual(plain(legacyEditorKeys), plain(editorKeys), 'legacy command-palette must normalize to editor-command-bar capability routing')
 
 for (const globalOnlyKey of [
@@ -194,7 +188,7 @@ for (const globalOnlyKey of [
 ]) {
   assert.ok(!editorKeys.includes(globalOnlyKey), `${globalOnlyKey} must stay out of Editor Cmd+K`)
 }
-assert.ok(editorKeys.includes('host:global:search-all-hiven'), 'Editor Cmd+K must keep the explicit Search all Hiven bridge')
+assert.ok(!editorKeys.includes('host:global:search-all-hiven'), 'Editor Cmd+K must not include the Search all Hiven bridge')
 
 const dynamicItems = [
   {
@@ -223,11 +217,10 @@ assert.deepEqual(
   plain(launcherTypes.filterEditorCommandBarItems(hostItems).map((item) => item.systemKey).sort()),
   [
     'host:editor:format-bullets',
-    'host:global:search-all-hiven',
     'host:pane:close',
     'host:text:copy',
   ].sort(),
-  'editor command bar local filter must keep editor/pane/shared text items and the explicit global bridge only',
+  'editor command bar local filter must keep editor/pane/shared text items only',
 )
 
 console.log('launcher host capability routing behavior checks passed')

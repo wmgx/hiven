@@ -28,8 +28,6 @@ assert.match(
   'refactor suite must include editor command bar attach-surface coverage',
 )
 for (const [systemKey, title, pluginId] of [
-  ['host:editor:attach-translate-panel', 'Attach Translate Panel', 'translate'],
-  ['host:editor:attach-clipboard-panel', 'Attach Clipboard Panel', 'clipboard-history'],
   ['host:editor:attach-json-panel', 'Attach JSON Panel', 'json'],
 ]) {
   const start = files.hostEditorActions.indexOf(`systemKey: '${systemKey}'`)
@@ -38,6 +36,16 @@ for (const [systemKey, title, pluginId] of [
   assert.match(block, new RegExp(`title:\\s*['"]${title}['"]`), `${title} must have a stable label`)
   assert.match(block, /surfaces:\s*\[['"]editor-command-bar['"]\]/, `${title} must be scoped to the editor command bar`)
   assert.match(block, new RegExp(`attachBuiltinPluginSurfacePanel\\(['"]${pluginId}['"]`), `${title} must attach ${pluginId}`)
+}
+for (const forbiddenKey of [
+  'host:editor:attach-translate-panel',
+  'host:editor:attach-clipboard-panel',
+]) {
+  assert.doesNotMatch(
+    files.hostEditorActions,
+    new RegExp(`systemKey:\\s*['"]${forbiddenKey}['"]`),
+    `${forbiddenKey} must not be exposed in Editor Cmd+K`,
+  )
 }
 assert.match(
   files.hostEditorActions,

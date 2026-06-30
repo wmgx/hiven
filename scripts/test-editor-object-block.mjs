@@ -68,7 +68,7 @@ assert.ok(!editorJsonActions.some(a => a.id === 'translate-clipboard'), 'should 
 assert.ok(!editorJsonActions.some(a => a.id === 'format-clipboard-json'), 'should NOT recommend clipboard format')
 
 const editorTextActions = recommendation.recommendActionsForBlock({ ...editorBlock, source: 'editor-selection', kind: 'text' })
-assert.ok(editorTextActions.some(a => a.id === 'translate-selection'), 'editor text should recommend translate selection')
+assert.ok(!editorTextActions.some(a => a.id === 'translate-selection'), 'editor text should NOT recommend translate selection')
 
 // ─── Static contract: EditorCommandBarHost ─────────────────────────────────────
 const editorCmdBarHost = readFileSync('src/launcher/hosts/EditorCommandBarHost.tsx', 'utf8')
@@ -78,6 +78,11 @@ assert.match(editorCmdBarHost, /RecommendedActionRow/, 'Editor Cmd+K must render
 assert.match(editorCmdBarHost, /recommendActionsForBlock/, 'Editor Cmd+K must call recommendActionsForBlock')
 assert.match(editorCmdBarHost, /editorBlock\.handleBackspace/, 'Editor Cmd+K must handle Backspace for block deletion')
 assert.match(editorCmdBarHost, /data-testid="editor-recommended-actions"/, 'Editor Cmd+K must expose recommended actions test id')
+assert.match(editorCmdBarHost, /executeRecommendedAction/, 'Editor Cmd+K object actions must execute through the shared action executor')
+assert.match(editorCmdBarHost, /replaceEditorSelection/, 'Editor Cmd+K default transform output should replace editor selection or pane')
+assert.match(editorCmdBarHost, /js-filter\.panel/, 'JSON expression action should open the JSON Tools expression bottom panel')
+assert.match(editorCmdBarHost, /OutputTargetExpansion/, 'Editor Cmd+K should support output target expansion')
+assert.match(editorCmdBarHost, /setSelectedObjectActionIndex/, 'Editor Cmd+K should maintain object-action selection separately from normal launcher items')
 
 // ─── Regression: no clipboard freshness in editor ──────────────────────────────
 assert.doesNotMatch(editorCmdBarHost, /shouldAutoAttachClipboard|FRESH_CLIPBOARD_TTL/, 'Editor Cmd+K must not use clipboard freshness rules')

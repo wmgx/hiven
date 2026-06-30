@@ -14,10 +14,21 @@ const logPath = join(tempDir, `tauri-debug-smoke-${Date.now()}.log`)
 const timeoutMs = Number(process.env.HIVEN_TAURI_SMOKE_TIMEOUT_MS ?? 25_000)
 const shutdownMs = Number(process.env.HIVEN_TAURI_SMOKE_SHUTDOWN_MS ?? 2_000)
 const suspiciousPattern = /Unhandled rejection|ReferenceError|TypeError|panic|panicked|compilation failed|error:/i
-const npmCommand = process.env.npm_execpath ? process.execPath : 'npm'
-const npmArgs = process.env.npm_execpath
-  ? [process.env.npm_execpath, 'run', 'tauri', '--', 'dev']
-  : ['run', 'tauri', '--', 'dev']
+const packageManagerPath = process.env.npm_execpath ?? ''
+const userAgent = process.env.npm_config_user_agent ?? ''
+const isPnpm = /pnpm/i.test(packageManagerPath) || /pnpm\//i.test(userAgent)
+const npmCommand = packageManagerPath
+  ? process.execPath
+  : isPnpm
+    ? 'pnpm'
+    : 'npm'
+const npmArgs = packageManagerPath
+  ? isPnpm
+    ? [packageManagerPath, 'run', 'tauri', 'dev']
+    : [packageManagerPath, 'run', 'tauri', '--', 'dev']
+  : isPnpm
+    ? ['run', 'tauri', 'dev']
+    : ['run', 'tauri', '--', 'dev']
 const pathEntries = [
   process.env.npm_node_execpath ? dirname(process.env.npm_node_execpath) : '',
   '/opt/homebrew/bin',

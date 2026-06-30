@@ -3,6 +3,7 @@
  */
 
 import { definePlugin, textOutput, textError, type TextInput } from '@hiven/plugin'
+import { EncodeDecodeSurface } from './EncodeDecodeSurface'
 
 function runBase64(text: string, mode: unknown): string {
   if (mode === 'encode') {
@@ -12,6 +13,39 @@ function runBase64(text: string, mode: unknown): string {
 }
 
 export const base64Plugin = definePlugin({
+  ui: {
+    surfaces: [
+      {
+        id: 'main',
+        kind: 'custom-view',
+        title: 'Encode / Decode Tools',
+        titleI18n: { zh: 'Encode / Decode Tools' },
+        icon: 'Binary',
+        aliases: [
+          'encode',
+          'decode',
+          'base64',
+          'url encode',
+          'url decode',
+          'html encode',
+          'html decode',
+          'escape',
+          'unescape',
+          'slashes',
+        ],
+        component: EncodeDecodeSurface,
+        entry: { launcher: true, shortcutBindable: true },
+        shell: {
+          defaultWidth: 900,
+          defaultHeight: 620,
+          minWidth: 680,
+          minHeight: 440,
+          closeOnBlur: false,
+          resizable: true,
+        },
+      },
+    ],
+  },
   tools: [
     {
       id: 'base64.run',
@@ -37,10 +71,10 @@ export const base64Plugin = definePlugin({
         try {
           return ctx.output.replaceActiveText(runBase64(ctx.input.text, ctx.params.mode))
         } catch (e: any) {
-          return ctx.output.error(`Error: ${e.message}`)
+          return ctx.output.error('Error: ' + e.message)
         }
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: false, panel: true, pinnable: false },
     },
   ],
   commands: [
@@ -73,7 +107,7 @@ export const base64Plugin = definePlugin({
         try {
           return textOutput(runBase64(text, ctx.params.mode))
         } catch (e: any) {
-          return textError(`Error: ${e.message}`)
+          return textError('Error: ' + e.message)
         }
       },
     },

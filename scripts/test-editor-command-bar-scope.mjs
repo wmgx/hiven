@@ -21,13 +21,13 @@ assert.match(launcherTypes, /function filterEditorCommandBarItems[\s\S]*isEditor
 assert.match(launcherTypes, /function isEditorCommandBarItem[\s\S]*plugin-settings:[\s\S]*return false/, 'Editor command bar must hide plugin settings entries')
 assert.match(launcherTypes, /item\.kind !== ['"]host['"][\s\S]*return true/, 'Editor command bar must keep plugin text/action items')
 assert.match(launcherTypes, /host:pane:/, 'Editor command bar must keep pane-local host controls')
-assert.match(launcherTypes, /host:global:search-all-hiven/, 'Editor command bar must allow the explicit Search all Hiven bridge')
+assert.doesNotMatch(launcherTypes, /host:global:search-all-hiven/, 'Editor command bar must not include a Search all Hiven bridge')
 assert.doesNotMatch(editorHost, /hostId:\s*['"]command-palette['"]/, 'legacy command-palette id must not be used at runtime')
 
 assert.match(launcherTypes, /'editor-command-bar':\s*\{[\s\S]*presentation:\s*['"]editor-overlay['"]/, 'launcher host config must model editor overlay presentation')
 assert.doesNotMatch(launcherTypes.match(/'editor-command-bar':\s*\{[\s\S]*?capabilities:\s*\[([\s\S]*?)\]/)?.[1] ?? '', /app-search|system-power|settings|host-surfaces|plugin-surfaces/, 'editor command bar capabilities must exclude global navigation capabilities')
 assert.match(registry, /requiredCapabilities[\s\S]*launcherHostHasCapability/, 'registry must enforce host capability filtering')
-assert.match(hostActions, /systemKey:\s*['"]host:global:search-all-hiven['"][\s\S]*surfaces:\s*\[['"]editor-command-bar['"]\][\s\S]*showLauncherWindow\(\)/, 'Editor command bar must expose Search all Hiven as the only global bridge')
+assert.doesNotMatch(hostActions, /systemKey:\s*['"]host:global:search-all-hiven['"]/, 'Search all Hiven must not be exposed inside Editor Cmd+K')
 assert.match(hostActions, /getHostEditorActionItems/, 'hostActions must aggregate editor-local action items from a dedicated module')
 assert.match(hostEditorActions, /function\s+rewriteActiveEditorTextPolitely\(\)[\s\S]*replaceEditorTextTarget/, 'Editor command bar must provide a local polite rewrite helper')
 assert.match(hostEditorActions, /function\s+compressActiveEditorTextToThreeSentences\(\)[\s\S]*replaceEditorTextTarget/, 'Editor command bar must provide a local three-sentence compression helper')
@@ -40,6 +40,8 @@ assert.match(hostEditorActions, /systemKey:\s*['"]host:editor:compress-three-sen
 assert.match(hostEditorActions, /systemKey:\s*['"]host:editor:format-bullets['"][\s\S]*title:\s*['"]Format as Bullet List['"][\s\S]*surfaces:\s*\[['"]editor-command-bar['"]\][\s\S]*formatActiveEditorTextAsBullets\(\)/, 'Editor command bar must expose bullet-list formatting as an editor-local action')
 assert.match(hostEditorActions, /systemKey:\s*['"]host:editor:quote-code-block['"][\s\S]*title:\s*['"]Quote as Code Block['"][\s\S]*surfaces:\s*\[['"]editor-command-bar['"]\][\s\S]*quoteActiveEditorTextAsCodeBlock\(\)/, 'Editor command bar must expose code-block quote as an editor-local action')
 assert.match(launcherTypes, /item\.systemKey\.startsWith\(['"]host:editor:['"]\)/, 'Editor command bar filter must keep all editor-local host actions')
+assert.doesNotMatch(hostEditorActions, /host:editor:attach-(?:translate|clipboard)-panel/, 'Editor Cmd+K must not expose Translate or Clipboard History attachment commands')
+assert.match(hostEditorActions, /systemKey:\s*['"]host:editor:json-expression['"][\s\S]*openEditorPanel\(\{\s*panelId:\s*['"]js-filter\.panel['"],\s*placement:\s*['"]pane-bottom['"]/, 'JSON Expression must open the JSON Tools expression bottom panel')
 
 const paneHostItems = [...`${hostActions}\n${hostEditorActions}`.matchAll(/systemKey:\s*['"](host:pane:[^'"]+)['"][\s\S]*?surfaces:\s*\[([^\]]+)\]/g)]
 const editorLocalPaneItems = new Set([

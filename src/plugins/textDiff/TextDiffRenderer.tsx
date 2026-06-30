@@ -26,10 +26,21 @@ import './style.css'
 
 const PLUGIN_ID = 'text-diff'
 
+type TextSourceMeta = {
+  kind?: 'editor-pane' | 'clipboard' | 'empty' | 'snapshot'
+  title?: string
+  snapshotAt?: number
+  contentProvider?: 'live' | 'snapshot'
+}
+
 type TextDiffInputs = {
   original: PaneInput
   modified: PaneInput
   renderMode?: 'side-by-side' | 'inline'
+  sourceMeta?: {
+    original?: TextSourceMeta
+    modified?: TextSourceMeta
+  }
 }
 
 export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>) {
@@ -44,6 +55,8 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
   const modifiedPaneId = modifiedPane?.paneId
   const originalText = originalPane?.text ?? ''
   const modifiedText = modifiedPane?.text ?? ''
+  const originalMeta = inputs?.sourceMeta?.original
+  const modifiedMeta = inputs?.sourceMeta?.modified
 
   const layout = normalizeAutoDiffLayout(inputs?.renderMode)
   const semanticAvailable = useMemo(
@@ -145,9 +158,14 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
       <SurfaceToolbar className="text-diff-toolbar">
         <div className="text-diff-title-group">
           <span className="text-diff-title">{t('textDiff.title')}</span>
-          <span className="text-diff-source" title={`${originalPane.title} ↔ ${modifiedPane.title}`}>
-            {originalPane.title} ↔ {modifiedPane.title}
+          <span className="text-diff-source" title={`${originalMeta?.title ?? originalPane.title} ↔ ${modifiedMeta?.title ?? modifiedPane.title}`}>
+            {originalMeta?.title ?? originalPane.title} ↔ {modifiedMeta?.title ?? modifiedPane.title}
           </span>
+          {(originalMeta?.contentProvider === 'snapshot' || modifiedMeta?.contentProvider === 'snapshot') && (
+            <span className="text-diff-snapshot-badge">
+              snapshot
+            </span>
+          )}
         </div>
 
         <SegmentedControl

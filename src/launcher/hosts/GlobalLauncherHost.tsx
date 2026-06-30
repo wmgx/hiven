@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '../../store'
 import { t } from '../../i18n'
 import { usePluginRegistryVersion } from '../../workspace/pluginRegistry'
@@ -18,6 +18,13 @@ import { readLauncherClipboard } from '../clipboard/readLauncherClipboard'
 import { GlobalLauncherPanel } from '../../components/launcher/GlobalLauncherPanel'
 import { useGlobalLauncherSelectionController } from '../../components/launcher/useGlobalLauncherSelectionController'
 import { useClipboardObjectBlock } from '../clipboard/useClipboardObjectBlock'
+import { executeRecommendedAction } from '../clipboard/actionExecutor'
+import { recommendActionsForBlock, type RecommendedAction, type RecommendedOutputTarget } from '../clipboard/actionRecommendation'
+import { writeClipboardText } from '../../workspace/pluginClipboard'
+import { createEditorPane, replaceEditorSelection, insertIntoEditor, openEditorPanel } from '../../workspace/editorBridge'
+import { open as openUrl } from '@tauri-apps/plugin-shell'
+import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
+import { prepareLauncherInputSource, restoreLauncherInputSource } from '../../workspace/windowManager/launcherWindow'
 
 export function GlobalLauncherHost() {
   const open = useAppStore((s) => s.globalLauncherOpen)
@@ -41,6 +48,8 @@ export function GlobalLauncherHost() {
   const isKeyboardNavRef = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  const [selectedObjectActionIndex, setSelectedObjectActionIndex] = useState(0)
+  const objectActionControllerRef = useRef<{ expand: () => void; execute: (keepOpen?: boolean) => void } | null>(null)
   const { isImeComposingRef, handleCompositionStart, handleCompositionEnd } = useGlobalLauncherImeComposition()
   const standaloneLauncher = isStandaloneLauncherWindow()
   const launcherSettingsTarget = settingsDialogTarget?.presentation === 'global-launcher'
@@ -67,6 +76,23 @@ export function GlobalLauncherHost() {
     open,
     readClipboard: readLauncherClipboard,
   })
+  const objectActions = clipboardBlock.block ? recommendActionsForBlock(clipboardBlock.block) : []
+
+  useEffect(() => {
+    if (!open) return
+    void prepareLauncherInputSource().catch((error) => {
+      console.warn('[hiven] Failed to prepare launcher input source:', error)
+    })
+    return () => {
+      void restoreLauncherInputSource().catch((error) => {
+        console.warn('[hiven] Failed to restore launcher input source:', error)
+      })
+    }
+  }, [open])
+
+  useEffect(() => {
+    setSelectedObjectActionIndex((index) => Math.min(index, Math.max(0, objectActions.length - 1)))
+  }, [objectActions.length])
 
   const {
     surfaceFrame,
@@ -237,6 +263,45 @@ export function GlobalLauncherHost() {
     focusSearchInputAfterBack,
   })
 
+
+  const executeObjectAction = useCallback(async (action: RecommendedAction, target: RecommendedOutputTarget) => {
+    const block = clipboardBlock.block
+    if (!block) return
+
+    const result = await executeRecommendedAction({ block, action, target }, {
+      copyText: writeClipboardText,
+      copyAndKeepOpen: writeClipboardText,
+      openInEditor: async (text, options) => {
+        await createEditorPane({ text, title: options?.title, language: options?.language })
+      },
+      openPluginSurface: async (pluginId) => {
+        await openPluginSurface({ source: 'builtin' as PluginSettingsSource, pluginId, surfaceId: 'main' })
+      },
+      openUrl: async (url) => {
+        await openUrl(url)
+      },
+      replaceSelection: async (text) => {
+        await replaceEditorSelection(text)
+      },
+      newPane: async (text, options) => {
+        await createEditorPane({ text, title: options?.title, language: options?.language })
+      },
+      insertBelow: async (text) => {
+        await insertIntoEditor(text)
+      },
+      openBottomPanel: async (actionId, text) => {
+        await openEditorPanel({ panelId: actionId, inputs: { text } })
+      },
+      setRenderer: async (actionId, text) => {
+        await openEditorPanel({ panelId: actionId, inputs: { text } })
+      },
+    })
+
+    if (result.ok && target !== 'copy-and-keep-open') {
+      closeLauncherAfterAction()
+    }
+  }, [clipboardBlock.block, closeLauncherAfterAction, openPluginSurface])
+
   const beginDrag = useGlobalLauncherNativeDrag(standaloneLauncher)
 
   // The launcher is always horizontally centered. In the standalone window the
@@ -305,6 +370,13 @@ export function GlobalLauncherHost() {
         handleCompositionStart={handleCompositionStart}
         handleCompositionEnd={handleCompositionEnd}
         clipboardBlock={clipboardBlock}
+        onExecuteObjectAction={executeObjectAction}
+        objectActionCount={objectActions.length}
+        selectedActionIndex={selectedObjectActionIndex}
+        setSelectedActionIndex={(value) => setSelectedObjectActionIndex(value)}
+        onObjectActionController={(controller) => { objectActionControllerRef.current = controller }}
+        expandSelectedObjectAction={() => objectActionControllerRef.current?.expand()}
+        executeSelectedObjectAction={(keepOpen) => objectActionControllerRef.current?.execute(keepOpen)}
       />
     </div>
   )

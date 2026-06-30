@@ -2,7 +2,6 @@ import { PLUGIN_SURFACE_PANEL_ID } from '../../components/pluginSurface/PluginSu
 import {
   compressTextToThreeSentences,
   convertJsonTextToYaml,
-  extractJsonFieldPaths,
   formatTextAsBullets,
   minifyJsonText,
   quoteTextAsCodeBlock,
@@ -185,15 +184,6 @@ function convertActiveEditorJsonToYaml(): boolean {
   const yaml = convertJsonTextToYaml(target.text)
   if (!yaml) return false
   replaceEditorTextTarget(target, yaml)
-  return true
-}
-
-function extractActiveEditorJsonFields(): boolean {
-  const target = getActiveEditorTextTarget()
-  if (!target || !target.text.trim()) return false
-  const fields = extractJsonFieldPaths(target.text)
-  if (!fields) return false
-  replaceEditorTextTarget(target, fields.join('\n'))
   return true
 }
 
@@ -402,50 +392,6 @@ export function getHostEditorActionItems(): LauncherItem[] {
       execute: async () => guardEditorWindowRuntime() ?? { ok: quoteActiveEditorTextAsCodeBlock() },
     },
     {
-      systemKey: 'host:editor:attach-translate-panel',
-      kind: 'host',
-      display: {
-        title: 'Attach Translate Panel',
-        titleI18n: { zh: '附着翻译面板' },
-        subtitle: 'Attach Translate to the current editor',
-        subtitleI18n: { zh: '将翻译 Surface 附着到当前编辑器' },
-        icon: 'Languages',
-        aliases: ['translate panel', 'attach translate', '翻译面板'],
-      },
-      behavior: { type: 'perform' },
-      surfaces: ['editor-command-bar'],
-      requiredCapabilities: ['pane-actions'],
-      pinnable: false,
-      execute: async () => {
-        const guard = guardEditorWindowRuntime()
-        if (guard) return guard
-        await attachBuiltinPluginSurfacePanel('translate', true)
-        return { ok: true }
-      },
-    },
-    {
-      systemKey: 'host:editor:attach-clipboard-panel',
-      kind: 'host',
-      display: {
-        title: 'Attach Clipboard Panel',
-        titleI18n: { zh: '附着剪贴板面板' },
-        subtitle: 'Attach Clipboard History to the current editor',
-        subtitleI18n: { zh: '将剪贴板历史 Surface 附着到当前编辑器' },
-        icon: 'Clipboard',
-        aliases: ['clipboard panel', 'attach clipboard', '剪贴板面板'],
-      },
-      behavior: { type: 'perform' },
-      surfaces: ['editor-command-bar'],
-      requiredCapabilities: ['pane-actions'],
-      pinnable: false,
-      execute: async () => {
-        const guard = guardEditorWindowRuntime()
-        if (guard) return guard
-        await attachBuiltinPluginSurfacePanel('clipboard-history')
-        return { ok: true }
-      },
-    },
-    {
       systemKey: 'host:editor:json-minify',
       kind: 'host',
       display: {
@@ -480,21 +426,27 @@ export function getHostEditorActionItems(): LauncherItem[] {
       execute: async () => guardEditorWindowRuntime() ?? { ok: convertActiveEditorJsonToYaml() },
     },
     {
-      systemKey: 'host:editor:json-extract-fields',
+      systemKey: 'host:editor:json-expression',
       kind: 'host',
       display: {
-        title: 'Extract JSON Fields',
-        titleI18n: { zh: '提取 JSON 字段' },
-        subtitle: 'List field paths from the current JSON selection or pane',
-        subtitleI18n: { zh: '列出当前 JSON 选区或面板内容的字段路径' },
+        title: 'JSON Tools · Expression',
+        titleI18n: { zh: 'JSON Tools · 表达式' },
+        subtitle: 'Extract JSON with an expression in a bottom panel',
+        subtitleI18n: { zh: '在底部面板中用表达式提取 JSON' },
         icon: 'ListTree',
-        aliases: ['json fields', 'extract fields', '字段', '提取字段'],
+        aliases: ['json expression', 'json fields', 'extract fields', '字段', '表达式', '提取字段'],
       },
       behavior: { type: 'perform' },
       surfaces: ['editor-command-bar'],
-      requiredCapabilities: ['text-input-actions'],
+      requiredCapabilities: ['pane-actions'],
       pinnable: false,
-      execute: async () => guardEditorWindowRuntime() ?? { ok: extractActiveEditorJsonFields() },
+      legacyUsageKeys: ['host:editor:json-extract-fields'],
+      execute: async () => {
+        const guard = guardEditorWindowRuntime()
+        if (guard) return guard
+        await openEditorPanel({ panelId: 'js-filter.panel', placement: 'pane-bottom' })
+        return { ok: true }
+      },
     },
     {
       systemKey: 'host:editor:attach-json-panel',

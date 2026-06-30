@@ -24,7 +24,7 @@ export const countPlugin = definePlugin({
       run(ctx) {
         return ctx.output.text(runCount(ctx.input.text))
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true, pinnable: false },
     },
   ],
   commands: [

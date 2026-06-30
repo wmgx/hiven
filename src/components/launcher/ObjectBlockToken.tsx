@@ -27,6 +27,7 @@ export function ObjectBlockToken({
       data-source={block.source}
       data-kind={block.kind}
       data-selected={selected ? 'true' : undefined}
+      data-state={selected ? 'selected-for-deletion' : block.state}
     >
       <span className="object-block-label">
         {block.title}
@@ -34,7 +35,13 @@ export function ObjectBlockToken({
         {block.ageLabel && <> · {block.ageLabel}</>}
       </span>
       {block.secretMasked && (
-        <span className="object-block-masked">预览已隐藏</span>
+        <span className="object-block-masked">内容已隐藏</span>
+      )}
+      {block.state === 'snapshot' && (
+        <span className="object-block-badge">snapshot</span>
+      )}
+      {block.validity === 'invalid' && (
+        <span className="object-block-badge">invalid</span>
       )}
       {selected && (
         <span className="object-block-delete-hint">再按 Backspace 删除</span>

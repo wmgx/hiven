@@ -15,6 +15,13 @@ export type ClipboardDetectedType =
   | 'command'
   | 'secret'
   | 'unknown'
+  | 'sql'
+  | 'css'
+  | 'xml'
+  | 'csv'
+  | 'jwt'
+  | 'timestamp'
+  | 'secret-like'
 
 export type ClipboardSnapshot = {
   text: string
@@ -55,13 +62,25 @@ export function detectClipboardType(text: string): ClipboardDetectedType {
   if (!trimmed) return 'unknown'
 
   // Secret detection (high priority — before JSON/URL)
-  if (/(?:sk-|token|password|Authorization|Bearer)/i.test(trimmed)) return 'secret'
+  if (/(?:sk-|token|password|Authorization|Bearer)/i.test(trimmed)) return 'secret-like'
 
   // JSON
   if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && isValidJson(trimmed)) return 'json'
 
   // URL
   if (/^https?:\/\//i.test(trimmed)) return 'url'
+
+  // JWT
+  if (/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(trimmed)) return 'jwt'
+
+  // Timestamp
+  if (/^\d{10,13}$/.test(trimmed)) return 'timestamp'
+
+  // XML / CSS / CSV / SQL heuristics
+  if (/^<\?xml|^<[A-Za-z][\s\S]*>$/.test(trimmed)) return 'xml'
+  if (/^[.#]?[A-Za-z0-9_-]+\s*\{[\s\S]*\}$/.test(trimmed)) return 'css'
+  if (/\bselect\b[\s\S]+\bfrom\b|\binsert\s+into\b|\bupdate\b[\s\S]+\bset\b/i.test(trimmed)) return 'sql'
+  if (looksLikeDelimitedTable(trimmed)) return 'csv'
 
   // Command
   if (/^(?:ssh|curl|npm|git|brew|pip|docker|kubectl|cargo|go |apt)\b/i.test(trimmed)) return 'command'
@@ -77,6 +96,12 @@ function isValidJson(text: string): boolean {
   } catch {
     return false
   }
+}
+
+function looksLikeDelimitedTable(text: string): boolean {
+  const lines = text.split(/\r?\n/).filter(Boolean)
+  if (lines.length < 2) return false
+  return [',', '\t', ';', '|'].some((delimiter) => lines.every((line) => line.includes(delimiter)))
 }
 
 // ─── Snapshot creation / update ────────────────────────────────────────────────

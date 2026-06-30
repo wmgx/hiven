@@ -83,7 +83,7 @@ export function adaptToolToLauncherItem(
 ): LauncherItem {
   const launcherOpt = tool.surfaces?.launcher
   const launcherOptions = typeof launcherOpt === 'object' ? launcherOpt : undefined
-  const pinnable = launcherOptions?.pinnable ?? tool.surfaces?.pinnable ?? true
+  const pinnable = false
   const mode: TextInputMode = tool.inputPolicy?.mode ?? 'auto'
   const defaultParams = { ...(tool.defaultParams ?? {}) }
   for (const param of tool.params ?? []) {

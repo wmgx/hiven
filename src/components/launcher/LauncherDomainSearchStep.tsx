@@ -1,5 +1,5 @@
 import { useEffect, useRef, type MouseEvent, type MutableRefObject, type RefObject } from 'react'
-import { Pin, Search } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { t, type Locale } from '../../i18n'
 import { resolveIcon } from '../../utils/resolveIcon'
 import { resolveDisplaySubtitle, resolveDisplayTitle } from '../../workspace/launcher/display'
@@ -14,7 +14,6 @@ export function LauncherDomainSearchStep({
   items,
   selectedIndex,
   selectItem,
-  onPinItem,
   setSelectedIndex,
   isKeyboardNavRef,
   locale,
@@ -27,7 +26,6 @@ export function LauncherDomainSearchStep({
   items: LauncherItem[]
   selectedIndex: number
   selectItem: (item: LauncherItem, customizeParams?: boolean) => void
-  onPinItem: (item: LauncherItem) => void
   setSelectedIndex: (index: number) => void
   isKeyboardNavRef: MutableRefObject<boolean>
   locale: Locale
@@ -42,6 +40,11 @@ export function LauncherDomainSearchStep({
           ref={inputRef}
           placeholder={t(locale, 'palette.globalPlaceholder')}
           value={query}
+          inputMode="latin"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          lang="en"
           onChange={(event) => setQuery(event.target.value)}
         />
         {busy && (
@@ -60,7 +63,6 @@ export function LauncherDomainSearchStep({
             item={item}
             selected={selectedIndex === index}
             onClick={(event) => selectItem(item, shouldCustomizeParams(event.metaKey, event.ctrlKey))}
-            onPin={() => onPinItem(item)}
             onMouseEnter={() => { if (!isKeyboardNavRef.current) setSelectedIndex(index) }}
             locale={locale}
           />
@@ -87,21 +89,18 @@ function LauncherDomainListItem({
   item,
   selected,
   onClick,
-  onPin,
   onMouseEnter,
   locale,
 }: {
   item: LauncherItem
   selected: boolean
   onClick: (event: MouseEvent<HTMLDivElement>) => void
-  onPin: () => void
   onMouseEnter: () => void
   locale: Locale
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const title = resolveDisplayTitle(item.display, locale)
   const subtitle = resolveDisplaySubtitle(item.display, locale)
-  const canPin = item.pinnable !== false
   const shortcutMeta = getPlatformShortcutMeta()
   const showParamShortcut = supportsParamCustomization(item)
   const tag = item.display.icon?.startsWith('app-icon:')
@@ -142,21 +141,6 @@ function LauncherDomainListItem({
         </span>
       )}
       <span className="r-tag launcher-kind-tag">{tag}</span>
-      {canPin && (
-        <button
-          data-testid="launcher-item-pin-action"
-          className="w-6 h-6 rounded-md border-none bg-transparent cursor-pointer flex items-center justify-center shrink-0"
-          title={t(locale, 'palette.pinAction')}
-          style={{ color: selected ? 'var(--color-accent-hover)' : 'var(--color-text-tertiary)' }}
-          onClick={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            onPin()
-          }}
-        >
-          <Pin size={13} />
-        </button>
-      )}
       {selected && <span className="r-kbd">↵</span>}
     </div>
   )

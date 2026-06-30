@@ -343,7 +343,7 @@ export const dateTimeAssistantPlugin = definePlugin({
       run(ctx) {
         return ctx.output.replaceActiveText(convertTimestampText(ctx.input.text, ctx.params, ctx.input.source === 'all'))
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true, pinnable: false },
     },
   ],
   commands: [

@@ -38,6 +38,8 @@ export type PluginActionManifestEntry = {
   title: string
   titleZh: string
   icon?: string
+  /** Product-level provider label shown to users, e.g. JSON Tools. */
+  provider?: string
   accepts: PluginActionAccepts
   outputTargets: RecommendedOutputTarget[]
   defaultOutput: RecommendedOutputTarget

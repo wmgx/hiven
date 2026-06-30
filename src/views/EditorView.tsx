@@ -9,6 +9,7 @@ import { ToastContainer } from '../components/workspace/ToastContainer'
 import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
 import { runToolbarCommand } from '../workspace/toolbarCommandRunner'
 import { runtimeRegistry } from '../workspace/runtimeRegistry'
+import { showLauncherWindow } from '../workspace/windowManager/launcherWindow'
 import { resolveIcon } from '../utils/resolveIcon'
 import { useT } from '../i18n'
 import { formatGlobalPinnedLauncherShortcutLabel } from '../hotkeys/shortcutDisplay'
@@ -26,7 +27,6 @@ function isFindWidgetVisible(editor?: { getDomNode?: () => HTMLElement | null })
 
 export function EditorView() {
   const setEditorCommandBarOpen = useAppStore((s) => s.setEditorCommandBarOpen)
-  const setGlobalLauncherOpen = useAppStore((s) => s.setGlobalLauncherOpen)
   const wordWrap = useAppStore((s) => s.settings.wordWrap)
   const theme = useAppStore((s) => s.settings.theme)
   const updateSetting = useAppStore((s) => s.updateSetting)
@@ -142,7 +142,7 @@ export function EditorView() {
           <span className="editor-topbar-divider" />
           <button
             className="editor-topbar-button"
-            onClick={() => setGlobalLauncherOpen(true, 'full')}
+            onClick={() => { void showLauncherWindow() }}
             title={t('openLauncher')}
           >
             <Command size={14} />

@@ -1,5 +1,5 @@
 /**
- * JS Filter completion helpers — extracted from index to satisfy architecture boundary.
+ * JSON Tools Expression completion helpers — extracted from index to satisfy architecture boundary.
  */
 import * as monaco from 'monaco-editor'
 

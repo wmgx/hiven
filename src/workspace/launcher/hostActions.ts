@@ -1,5 +1,4 @@
 import { createEditorPane } from '../editorBridge'
-import { showLauncherWindow } from '../windowManager/launcherWindow'
 import type { LauncherItem } from './types'
 import { getHostEditorActionItems } from './hostEditorActions'
 
@@ -74,26 +73,6 @@ export function getHostSystemPowerItems(): LauncherItem[] {
 
 export function getHostPaneControlItems(): LauncherItem[] {
   return [
-    {
-      systemKey: 'host:global:search-all-hiven',
-      kind: 'host',
-      display: {
-        title: 'Search all Hiven...',
-        titleI18n: { zh: '搜索整个 Hiven...' },
-        subtitle: 'Open the global launcher',
-        subtitleI18n: { zh: '打开全局 Launcher' },
-        icon: 'Search',
-        aliases: ['global search', 'search all', 'launcher', 'all hiven', '全局搜索', '启动器'],
-      },
-      behavior: { type: 'perform' },
-      surfaces: ['editor-command-bar'],
-      pinnable: false,
-      staticPriority: 110,
-      execute: async () => {
-        await showLauncherWindow()
-        return { ok: true }
-      },
-    },
     {
       systemKey: 'host:view:plugins',
       kind: 'host',

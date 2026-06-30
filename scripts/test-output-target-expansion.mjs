@@ -27,7 +27,10 @@ function transpileAndRun(path, globals = {}) {
   return sandbox.module.exports
 }
 
-const executor = transpileAndRun('src/launcher/clipboard/actionExecutor.ts')
+const executor = transpileAndRun('src/launcher/clipboard/actionExecutor.ts', {
+  btoa: (value) => Buffer.from(value, 'binary').toString('base64'),
+  atob: (value) => Buffer.from(value, 'base64').toString('binary'),
+})
 
 // ─── getActionOutputTargets ────────────────────────────────────────────────────
 const jsonAction = {
@@ -36,22 +39,22 @@ const jsonAction = {
   titleZh: '格式化剪贴板 JSON',
   pluginId: 'json-tools',
   defaultOutput: 'copy',
-  alternativeOutputs: ['open-editor', 'paste-to-foreground'],
+  alternativeOutputs: ['open-editor'],
 }
 const targets = executor.getActionOutputTargets(jsonAction)
-assert.deepEqual(JSON.parse(JSON.stringify(targets)), ['copy', 'open-editor', 'paste-to-foreground'], 'should return default + alternatives')
+assert.deepEqual(JSON.parse(JSON.stringify(targets)), ['copy', 'open-editor'], 'should return default + alternatives')
 
 // ─── getOutputTargetLabel ──────────────────────────────────────────────────────
 assert.equal(executor.getOutputTargetLabel('copy', 'zh'), '复制结果')
-assert.equal(executor.getOutputTargetLabel('paste-to-foreground', 'zh'), '粘贴到当前应用')
-assert.equal(executor.getOutputTargetLabel('open-editor', 'zh'), '打开到编辑器')
-assert.equal(executor.getOutputTargetLabel('open-plugin-surface', 'zh'), '打开工具')
+assert.equal(executor.getOutputTargetLabel('copy-and-keep-open', 'zh'), '复制并保持打开')
+assert.equal(executor.getOutputTargetLabel('open-url', 'zh'), '打开 URL')
+assert.equal(executor.getOutputTargetLabel('open-editor', 'zh'), '打开到 Editor')
+assert.equal(executor.getOutputTargetLabel('open-plugin-surface', 'zh'), '打开工具窗口')
 
 // ─── executeRecommendedAction: format JSON → copy ──────────────────────────────
 let copiedText = ''
 const handlers = {
   copyText: async (text) => { copiedText = text },
-  pasteToForeground: async () => {},
   openInEditor: async () => {},
   openPluginSurface: async () => {},
 }
@@ -72,6 +75,28 @@ const result2 = await executor.executeRecommendedAction(
 )
 assert.equal(result2.ok, true)
 assert.equal(copiedText, '{"x":1}', 'minify should compact JSON')
+
+// ─── executeRecommendedAction: encode/decode and timestamp transforms ───────────
+copiedText = ''
+await executor.executeRecommendedAction(
+  { block: { preview: 'hello world' }, action: { id: 'base64-encode', titleZh: 'Base64 编码', defaultOutput: 'copy' }, target: 'copy' },
+  handlers,
+)
+assert.equal(copiedText, 'aGVsbG8gd29ybGQ=', 'base64 encode should transform text')
+
+copiedText = ''
+await executor.executeRecommendedAction(
+  { block: { preview: 'a%20b' }, action: { id: 'url-decode', titleZh: 'URL decode', defaultOutput: 'copy' }, target: 'copy' },
+  handlers,
+)
+assert.equal(copiedText, 'a b', 'URL decode should transform text')
+
+copiedText = ''
+await executor.executeRecommendedAction(
+  { block: { preview: '1700000000' }, action: { id: 'convert-timestamp', titleZh: '转换时间戳', defaultOutput: 'copy' }, target: 'copy' },
+  handlers,
+)
+assert.match(copiedText, /^2023-11-/, 'timestamp conversion should produce datetime text')
 
 // ─── executeRecommendedAction: open editor ─────────────────────────────────────
 let editorText = ''

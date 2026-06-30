@@ -32,7 +32,7 @@ export const jwtPlugin = definePlugin({
           return ctx.output.error(`Error: ${e.message}`)
         }
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true, pinnable: false },
     },
   ],
   commands: [
