@@ -41,13 +41,7 @@ export function RecentClipboardHint({
           {hint.ageLabel}复制 · {kindLabel}
         </span>
       </div>
-      <button
-        type="button"
-        className="hint-action"
-        onClick={(e) => { e.stopPropagation(); onAttach() }}
-      >
-        使用
-      </button>
+      <div className="hint-enter">↵</div>
     </div>
   )
 }
