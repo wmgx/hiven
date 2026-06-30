@@ -54,7 +54,9 @@ export function GlobalLauncherSearchFrame({
 }) {
   const block = clipboardBlock?.block ?? null
   const hint = clipboardBlock?.hint ?? null
-  const resolvedPlaceholder = block ? t(locale, 'palette.objectActionPlaceholder') : placeholder
+  const resolvedPlaceholder = block
+    ? t(locale, 'palette.objectActionPlaceholder', { source: block.title })
+    : placeholder
   const recommendedActions: RecommendedAction[] = [] // Disabled: recommendations now come from plugin dynamicItems + textMatch
   const [expandedAction, setExpandedAction] = useState<RecommendedAction | null>(null)
   const [targetIndex, setTargetIndex] = useState(0)

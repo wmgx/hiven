@@ -22,7 +22,7 @@ export type LauncherItemPermissionFrame = {
 }
 
 type LauncherControllerSelection = {
-  selectItem(item: DomainLauncherItem, options?: { customizeParams?: boolean }): Promise<void> | void
+  selectItem(item: DomainLauncherItem, options?: { customizeParams?: boolean; objectBlockText?: string }): Promise<void> | void
 }
 
 export function resolvePluginSurfaceTarget(item: DomainLauncherItem): PluginSurfaceTarget | null {
@@ -47,20 +47,22 @@ export function executeGlobalLauncherDomainItem({
   item,
   controller,
   customizeParams = false,
+  objectBlockText,
 }: {
   item: DomainLauncherItem
   controller: LauncherControllerSelection | null | undefined
   customizeParams?: boolean
+  objectBlockText?: string
 }) {
   if (!controller) {
     console.warn('[hiven] Cannot select domain launcher item before controller is ready:', item.systemKey)
     return
   }
   if (!customizeParams && !supportsDefaultParamRun(item)) {
-    void controller.selectItem(item, { customizeParams: true })
+    void controller.selectItem(item, { customizeParams: true, objectBlockText })
     return
   }
-  void controller.selectItem(item, { customizeParams })
+  void controller.selectItem(item, { customizeParams, objectBlockText })
 }
 
 export function buildItemPermissionFrame(item: DomainLauncherItem, customizeParams: boolean): LauncherItemPermissionFrame | null {

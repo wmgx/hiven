@@ -42,11 +42,6 @@ export function ObjectBlockToken({
       ) : (
         <span className="object-block-content">{block.title}</span>
       )}
-      <span className="object-block-meta">
-        {block.title}
-        {block.subtitle && <> · {block.subtitle}</>}
-        {block.ageLabel && <> · {block.ageLabel}</>}
-      </span>
       {block.state === 'snapshot' && (
         <span className="object-block-badge">snapshot</span>
       )}

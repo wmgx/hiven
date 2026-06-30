@@ -22,6 +22,7 @@ type UseGlobalLauncherSelectionControllerInput = {
   openPluginSurface: (target: ReturnType<typeof resolvePluginSurfaceTarget>) => void | Promise<void>
   grantPluginPermissions: (pluginId: string, permissions: string[]) => void
   focusSearchInputAfterBack: () => void
+  objectBlockText?: string
 }
 
 export function useGlobalLauncherSelectionController({
@@ -35,6 +36,7 @@ export function useGlobalLauncherSelectionController({
   openPluginSurface,
   grantPluginPermissions,
   focusSearchInputAfterBack,
+  objectBlockText,
 }: UseGlobalLauncherSelectionControllerInput) {
   const [itemPermissionFrame, setItemPermissionFrame] = useState<LauncherItemPermissionFrame | null>(null)
 
@@ -43,8 +45,9 @@ export function useGlobalLauncherSelectionController({
       item,
       controller: controllerRef.current,
       customizeParams,
+      objectBlockText,
     })
-  }, [controllerRef])
+  }, [controllerRef, objectBlockText])
 
   const selectItem = useCallback((item: GlobalLauncherItem | undefined, customizeParams = false) => {
     if (!item) return

@@ -54,6 +54,8 @@ export type ParamInputFrame = {
   paramIndex: number
   query: string
   selectedIndex: number
+  /** Carried from selectItem options; used to skip collect-input after params. */
+  objectBlockText?: string
 }
 
 export type ResultFrame = {
@@ -120,6 +122,8 @@ export type SelectOptions = {
   recordUsage?: boolean
   /** Enter a system-owned parameter form instead of running default params. */
   customizeParams?: boolean
+  /** Pre-existing text from Object Block; when provided, skip collect-input and use directly. */
+  objectBlockText?: string
 }
 
 // ─── Controller ───────────────────────────────────────────────────────────
@@ -208,7 +212,7 @@ export class LauncherController {
     return value === undefined || value === null ? '' : String(value)
   }
 
-  private paramFrameFor(item: LauncherItem, params = this.defaultParamsFor(item), paramIndex = 0): ParamInputFrame {
+  private paramFrameFor(item: LauncherItem, params = this.defaultParamsFor(item), paramIndex = 0, objectBlockText?: string): ParamInputFrame {
     const param = item.params?.[paramIndex]
     return {
       kind: 'param-input',
@@ -217,6 +221,7 @@ export class LauncherController {
       paramIndex,
       query: this.queryFor(param, params),
       selectedIndex: this.selectedIndexFor(param, params),
+      objectBlockText,
     }
   }
 
@@ -263,7 +268,7 @@ export class LauncherController {
         this.deps.recordSelection(this.deps.surfaceId, item)
       }
       this.setState({
-        frames: [...this.state.frames, this.paramFrameFor(item)],
+        frames: [...this.state.frames, this.paramFrameFor(item, undefined, 0, options.objectBlockText)],
       })
       return
     }
@@ -279,6 +284,17 @@ export class LauncherController {
     }
 
     if (this.shouldCollectTextInput(item)) {
+      // If Object Block text is available, skip collect-input and execute directly.
+      if (options.objectBlockText) {
+        if (this.shouldRecord(item, options)) {
+          this.deps.recordSelection(this.deps.surfaceId, item)
+        }
+        await this.runAndHandle(
+          () => Promise.resolve(item.execute(this.buildExecutionContext(item, options.objectBlockText))),
+          this.itemTitle(item),
+        )
+        return
+      }
       if (this.shouldRecord(item, options)) {
         this.deps.recordSelection(this.deps.surfaceId, item)
       }
@@ -399,7 +415,7 @@ export class LauncherController {
     const nextIndex = top.paramIndex + 1
     if (nextIndex < (top.item.params?.length ?? 0)) {
       const frames = this.state.frames.slice(0, -1)
-      frames.push(this.paramFrameFor(top.item, params, nextIndex))
+      frames.push(this.paramFrameFor(top.item, params, nextIndex, top.objectBlockText))
       this.setState({ frames, error: null })
       return
     }
@@ -422,6 +438,14 @@ export class LauncherController {
     }
 
     if (this.shouldCollectTextInput(top.item)) {
+      // If Object Block text is available, skip collect-input and execute directly with params.
+      if (top.objectBlockText) {
+        await this.runAndHandle(
+          () => Promise.resolve(top.item.executeWithParams?.(this.buildExecutionContext(top.item, top.objectBlockText), top.params) ?? top.item.execute(this.buildExecutionContext(top.item, top.objectBlockText))),
+          this.itemTitle(top.item),
+        )
+        return
+      }
       const frames = this.state.frames.slice(0, -1)
       frames.push(this.collectInputFrameFor(top.item, top.params))
       this.setState({ frames, error: null })

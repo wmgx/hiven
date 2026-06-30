@@ -248,6 +248,7 @@ export function GlobalLauncherHost() {
     openPluginSurface,
     grantPluginPermissions,
     focusSearchInputAfterBack,
+    objectBlockText: clipboardBlock.block?.payloadText ?? undefined,
   })
 
   useGlobalLauncherHostEscape({
