@@ -4254,12 +4254,18 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
 }
 
 .l-row .r-desc {
-  display: block;
+  display: none;
   overflow: hidden;
   color: var(--text-3);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.l-row.sel .r-desc,
+.l-row.selected .r-desc {
+  display: block;
+  margin-top: 2px;
 }
 
 .l-row .r-tag,
