@@ -288,7 +288,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 /**
  * Run dynamic providers for a query. Returns resolved dynamic LauncherItems.
  * Guards:
- *  - Empty query → host dynamic providers may run; plugin dynamic providers do not.
+ *  - Empty query AND no clipboardText → host dynamic providers only; plugin providers skip.
  *  - Query longer than DYNAMIC_QUERY_MAX_LENGTH → skip.
  *  - Each provider isolated by try/catch + timeout; one failure cannot break
  *    the launcher or other providers.
@@ -298,6 +298,7 @@ export async function collectDynamicItems(
   surfaceId: LauncherSurfaceId,
   locale: Locale,
   getSettings: (pluginId: string, source: ContributionSource) => unknown,
+  clipboardText?: string,
 ): Promise<LauncherItem[]> {
   const q = query.trim()
   if (q.length > DYNAMIC_QUERY_MAX_LENGTH) return []
@@ -305,7 +306,7 @@ export async function collectDynamicItems(
   const hostDynamicItems = hostDynamicItemsProvider
     ? await Promise.resolve(hostDynamicItemsProvider({ query: q, surfaceId, locale }))
     : []
-  if (!q) return hostDynamicItems
+  if (!q && !clipboardText) return hostDynamicItems
 
   const providers = collectDynamicProviders()
   const results = await Promise.all(
@@ -317,6 +318,7 @@ export async function collectDynamicItems(
         const raw = await withTimeout(
           Promise.resolve(provider({
             query: q,
+            clipboardText,
             surfaceId,
             locale,
             settings,

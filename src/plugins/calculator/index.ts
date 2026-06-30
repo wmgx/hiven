@@ -455,11 +455,12 @@ const definition: PluginDefinition = {
   ],
   launcher: {
     dynamicItems(ctx: LauncherDynamicContext): LauncherItemContribution[] {
-      const result = safeCalculate(ctx.query)
+      const input = ctx.query || ctx.clipboardText || ''
+      const result = safeCalculate(input)
       if (result === null) return []
       return [{
         id: 'calc-result',
-        display: { title: `${ctx.query.trim()} = ${result}`, subtitle: ctx.query, icon: 'Calculator' },
+        display: { title: `${input.trim()} = ${result}`, subtitle: input, icon: 'Calculator' },
         behavior: { type: 'perform' },
         async execute(ctx2) {
           await ctx2.api.copyText(result)

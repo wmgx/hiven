@@ -26,6 +26,7 @@ type UseLauncherSessionOptions = {
   requestClose: () => void
   staticItemFilter?: (items: LauncherItem[]) => LauncherItem[]
   collectDynamicWhenEmpty?: boolean
+  clipboardText?: string
 }
 
 export type LauncherSession = {
@@ -47,6 +48,7 @@ export function useLauncherSession({
   requestClose,
   staticItemFilter,
   collectDynamicWhenEmpty = false,
+  clipboardText,
 }: UseLauncherSessionOptions): LauncherSession {
   const normalizedHostId = normalizeLauncherSurfaceId(hostId)
   const locale = useAppStore((s) => s.locale)
@@ -127,7 +129,7 @@ export function useLauncherSession({
   useEffect(() => {
     if (!open) return
     const q = query.trim()
-    if (!q && !collectDynamicWhenEmpty) {
+    if (!q && !collectDynamicWhenEmpty && !clipboardText) {
       setDynamicItems([])
       dynamicQueryRef.current = ''
       return
@@ -136,12 +138,12 @@ export function useLauncherSession({
     dynamicQueryRef.current = q
     const timer = window.setTimeout(async () => {
       if (dynamicQueryRef.current !== q) return
-      const items = await collectDynamicItems(q, normalizedHostId, locale, getPluginSettings)
+      const items = await collectDynamicItems(q, normalizedHostId, locale, getPluginSettings, clipboardText)
       if (dynamicQueryRef.current !== q) return
       setDynamicItems(filterDynamicForSurface(items, normalizedHostId))
     }, q ? 150 : 0)
     return () => window.clearTimeout(timer)
-  }, [collectDynamicWhenEmpty, locale, normalizedHostId, open, query])
+  }, [clipboardText, collectDynamicWhenEmpty, locale, normalizedHostId, open, query])
 
   useEffect(() => {
     if (!open) return

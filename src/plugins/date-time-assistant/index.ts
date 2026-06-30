@@ -369,19 +369,21 @@ export const dateTimeAssistantPlugin = definePlugin({
   ],
   launcher: {
     dynamicItems(ctx: LauncherDynamicContext): LauncherItemContribution[] {
+      const input = ctx.query || ctx.clipboardText || ''
+      if (!input) return []
       const now = new Date()
-      const parsed = parseDateTimeQuery(ctx.query, now)
-      const dateTimestampResults = parseDateForTimestampSuggestions(ctx.query)
+      const parsed = parseDateTimeQuery(input, now)
+      const dateTimestampResults = parseDateForTimestampSuggestions(input)
       if (!parsed && dateTimestampResults.length === 0) return []
 
       // "now" expressions produce multiple items (timestamp + datetime)
-      const nowParsed = parseNowExpression(ctx.query, now)
+      const nowParsed = parseNowExpression(input, now)
       if (nowParsed) {
         const separatorIndex = parsed.value.indexOf(' | ')
         if (separatorIndex >= 0) {
           const timestampValue = parsed.value.slice(0, separatorIndex)
           const dateTimeValue = parsed.value.slice(separatorIndex + 3)
-          const trimmed = ctx.query.trim()
+          const trimmed = input.trim()
           return [
             {
               id: 'dt-now-timestamp',
@@ -406,7 +408,7 @@ export const dateTimeAssistantPlugin = definePlugin({
       }
 
       if (dateTimestampResults.length > 0) {
-        const trimmed = ctx.query.trim()
+        const trimmed = input.trim()
         return dateTimestampResults.map((result, index) => ({
           id: `dt-date-timestamp-${index}`,
           display: { title: `${trimmed} -> ${result.display}`, subtitle: resultKindLabel(result.kind, ctx.locale), icon: 'Clock' },
@@ -419,7 +421,7 @@ export const dateTimeAssistantPlugin = definePlugin({
       }
 
       // Single result (timestamp conversion, date offset, tomorrow, etc.)
-      const trimmed = ctx.query.trim()
+      const trimmed = input.trim()
       return [{
         id: 'dt-result',
         display: { title: `${trimmed} -> ${parsed.display}`, subtitle: resultKindLabel(parsed.kind, ctx.locale), icon: 'Clock' },

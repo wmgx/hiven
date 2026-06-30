@@ -102,7 +102,6 @@ const KIND_LABELS: Record<ObjectBlockKind, string> = {
   timestamp: 'Timestamp',
   yaml: 'YAML',
   'query-string': 'Query String',
-  expression: 'Expression',
 }
 
 export function getKindLabel(kind: ObjectBlockKind): string {

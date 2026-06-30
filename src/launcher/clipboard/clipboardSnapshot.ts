@@ -24,7 +24,6 @@ export type ClipboardDetectedType =
   | 'secret-like'
   | 'yaml'
   | 'query-string'
-  | 'expression'
 
 export type ClipboardSnapshot = {
   text: string
@@ -79,9 +78,6 @@ export function detectClipboardType(text: string): ClipboardDetectedType {
   // Timestamp
   if (/^\d{10,13}$/.test(trimmed)) return 'timestamp'
 
-  // Arithmetic expression (e.g. 1+1, 2*3, (4+5)/2)
-  if (looksLikeExpression(trimmed)) return 'expression'
-
   // XML / CSS / CSV / SQL heuristics
   if (/^<\?xml|^<[A-Za-z][\s\S]*>$/.test(trimmed)) return 'xml'
   if (/^[.#]?[A-Za-z0-9_-]+\s*\{[\s\S]*\}$/.test(trimmed)) return 'css'
@@ -130,13 +126,6 @@ function looksLikeQueryString(text: string): boolean {
   // Matches "key=value&key=value" pattern (at least 2 pairs)
   const qs = text.startsWith('?') ? text.slice(1) : text
   return /^[\w%+.-]+=[\w%+.*-]*(?:&[\w%+.-]+=[\w%+.*-]*)+$/.test(qs)
-}
-
-function looksLikeExpression(text: string): boolean {
-  // Arithmetic expression: contains operators and only valid math characters
-  // Must have at least one operator (+, -, *, /) between number-like tokens
-  if (text.length > 200) return false
-  return /^[\d\s+\-*/().,%]+$/.test(text) && /[+\-*/]/.test(text) && /\d/.test(text)
 }
 
 // ─── Snapshot creation / update ────────────────────────────────────────────────

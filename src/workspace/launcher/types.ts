@@ -369,6 +369,8 @@ export type LauncherItemContribution<TSettings = unknown> = {
 
 export type LauncherDynamicContext = {
   query: string
+  /** Clipboard text available when the launcher opened. Plugins can use this to provide instant results. */
+  clipboardText?: string
   surfaceId: LauncherSurfaceId
   locale: Locale
   settings: unknown

@@ -56,6 +56,12 @@ export function GlobalLauncherHost() {
     ? settingsDialogTarget
     : null
   const hostSurfaceTarget = launcherHostSurfaceTarget
+  const clipboardBlock = useClipboardObjectBlock({
+    open,
+    readClipboard: readLauncherClipboard,
+  })
+  const clipboardText = clipboardBlock.block?.payloadText ?? undefined
+
   const {
     query,
     setQuery,
@@ -70,12 +76,9 @@ export function GlobalLauncherHost() {
     open,
     requestClose: () => closeAfterActionRef.current(),
     collectDynamicWhenEmpty: true,
+    clipboardText,
   })
 
-  const clipboardBlock = useClipboardObjectBlock({
-    open,
-    readClipboard: readLauncherClipboard,
-  })
   const objectActions = clipboardBlock.block ? recommendActionsForBlock(clipboardBlock.block) : []
 
   useEffect(() => {

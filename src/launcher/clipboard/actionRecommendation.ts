@@ -298,25 +298,6 @@ const QUERY_STRING_ACTIONS: RecommendedAction[] = [
   },
 ]
 
-const EXPRESSION_ACTIONS: RecommendedAction[] = [
-  {
-    id: 'calculate-expression',
-    title: 'Calculate',
-    titleZh: '计算',
-    pluginId: 'calculator',
-    provider: 'Calculator',
-    defaultOutput: 'copy',
-    alternativeOutputs: ['open-editor'],
-  },
-  {
-    id: 'open-clipboard-editor',
-    title: 'Open Clipboard in Editor',
-    titleZh: '打开剪贴板到编辑器',
-    provider: 'Editor',
-    defaultOutput: 'open-editor',
-  },
-]
-
 const SECRET_ACTIONS: RecommendedAction[] = [
   // Secret content: suppressed network actions, only local open
   {
@@ -431,7 +412,6 @@ const CLIPBOARD_ACTIONS_BY_KIND: Record<ObjectBlockKind, RecommendedAction[]> = 
   timestamp: FORMATTER_ACTIONS_BY_KIND.timestamp ?? FALLBACK_ACTIONS,
   yaml: YAML_ACTIONS,
   'query-string': QUERY_STRING_ACTIONS,
-  expression: EXPRESSION_ACTIONS,
 }
 
 const EDITOR_ACTIONS_BY_KIND: Partial<Record<ObjectBlockKind, RecommendedAction[]>> = {

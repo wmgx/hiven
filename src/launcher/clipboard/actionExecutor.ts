@@ -165,9 +165,6 @@ async function transformActionText(action: RecommendedAction, text: string): Pro
     case 'query-string-to-json': {
       return queryStringToJson(text)
     }
-    case 'calculate-expression': {
-      return calculateExpression(text)
-    }
     case 'format-css':
     case 'format-sql':
     case 'format-xml':
@@ -326,21 +323,6 @@ function queryStringToJson(text: string): string {
     const obj: Record<string, string> = {}
     params.forEach((v, k) => { obj[k] = v })
     return JSON.stringify(obj, null, 2)
-  } catch {
-    return text
-  }
-}
-
-function calculateExpression(text: string): string {
-  try {
-    // Sanitize: only allow digits, operators, parens, dots, commas, spaces
-    const sanitized = text.trim().replace(/,/g, '')
-    if (!/^[\d\s+\-*/().]+$/.test(sanitized)) return text
-    // Use Function for safe arithmetic eval (no access to scope)
-    const result = new Function(`"use strict"; return (${sanitized})`)()
-    if (typeof result !== 'number' || !Number.isFinite(result)) return text
-    // Format: avoid floating point noise
-    return Number.isInteger(result) ? String(result) : parseFloat(result.toPrecision(15)).toString()
   } catch {
     return text
   }
