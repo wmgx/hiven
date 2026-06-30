@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAppStore } from '../store'
 import { closeEditorWindow } from '../workspace/windowManager/editorWindow'
-import { EDITOR_WINDOW_LABEL } from '../workspace/windowManager/windowLabels'
 import { markSurfaceInstanceState, upsertSurfaceInstance } from '../surfaces/registry'
 import {
   clearActiveEditorSnapshots,
@@ -25,17 +24,28 @@ import { PluginSettingsDialog } from './PluginSettingsDialog'
 import './EditorWindow.css'
 import '../panels/register'
 
+function getEditorWindowLabel(): string {
+  try {
+    // In Tauri runtime, get the actual window label from the webview
+    const tauriInternals = (window as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWebview?: { label?: string } } } }).__TAURI_INTERNALS__
+    return tauriInternals?.metadata?.currentWebview?.label ?? 'editor'
+  } catch {
+    return 'editor'
+  }
+}
+
 export function EditorWindow() {
   const theme = useAppStore((s) => s.settings.theme)
   const fontSize = useAppStore((s) => s.settings.fontSize)
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [windowLabel] = useState(getEditorWindowLabel)
 
   useEffect(() => {
     upsertSurfaceInstance({
-      id: EDITOR_WINDOW_LABEL,
+      id: windowLabel,
       kind: 'editor',
-      windowLabel: EDITOR_WINDOW_LABEL,
+      windowLabel: windowLabel,
       title: 'Hiven Editor',
       state: 'visible',
       canReceiveText: true,
@@ -44,15 +54,15 @@ export function EditorWindow() {
     })
     const onPageHide = () => {
       clearActiveEditorSnapshots()
-      markSurfaceInstanceState(EDITOR_WINDOW_LABEL, 'destroyed')
+      markSurfaceInstanceState(windowLabel, 'destroyed')
     }
     window.addEventListener('pagehide', onPageHide)
     return () => {
       window.removeEventListener('pagehide', onPageHide)
       clearActiveEditorSnapshots()
-      markSurfaceInstanceState(EDITOR_WINDOW_LABEL, 'hidden')
+      markSurfaceInstanceState(windowLabel, 'hidden')
     }
-  }, [])
+  }, [windowLabel])
 
   useEffect(() => {
     let disposed = false
@@ -245,7 +255,8 @@ function publishEditorSnapshots(): void {
 
 async function closeCurrentWindow(): Promise<void> {
   if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
-    await closeEditorWindow().catch(() => undefined)
+    const label = getEditorWindowLabel()
+    await closeEditorWindow(label).catch(() => undefined)
     return
   }
   window.close()

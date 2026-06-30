@@ -5,7 +5,7 @@ export const GLOBAL_LAUNCHER_PANEL_WIDTH = 'calc(100vw / 3)'
 export const GLOBAL_LAUNCHER_PANEL_WIDTH_PX = 680
 export const STANDALONE_LAUNCHER_WIDTH = 728
 export const STANDALONE_LAUNCHER_MIN_HEIGHT = 294
-export const STANDALONE_LAUNCHER_MAX_HEIGHT = 390
+export const STANDALONE_LAUNCHER_MAX_HEIGHT = 480
 export const STANDALONE_SURFACE_MAX_WIDTH = 920
 export const STANDALONE_SURFACE_MAX_HEIGHT = 760
 export const STANDALONE_LAUNCHER_VERTICAL_PADDING = 24
@@ -81,7 +81,7 @@ export function computeStandaloneLauncherSize({
   const isSurfaceLike = Boolean(surfaceShell || launcherSettingsTarget || hostSurfaceTarget)
 
   // Height: surface-like modes compute dynamically; the default launcher
-  // uses the full window height (already 1/3 screen set by native code).
+  // measures the panel content and clamps to MAX_HEIGHT.
   const height = isSurfaceLike
     ? clamp(
         Math.ceil(
@@ -95,7 +95,11 @@ export function computeStandaloneLauncherSize({
         STANDALONE_LAUNCHER_MIN_HEIGHT,
         STANDALONE_SURFACE_MAX_HEIGHT,
       )
-    : window.innerHeight
+    : clamp(
+        Math.ceil(measureStandaloneLauncherPanelHeight(panel) + STANDALONE_LAUNCHER_VERTICAL_PADDING),
+        STANDALONE_LAUNCHER_MIN_HEIGHT,
+        STANDALONE_LAUNCHER_MAX_HEIGHT,
+      )
 
   // For width: in surface/settings mode use their fixed width + padding;
   // otherwise preserve the current window width (already set to 1/3 screen by

@@ -21,6 +21,8 @@ pub mod hotkeys;
 
 const LAUNCHER_COMPACT_WIDTH: f64 = 660.0;
 const LAUNCHER_COMPACT_HEIGHT: f64 = 294.0;
+const LAUNCHER_MAX_WIDTH: f64 = 860.0;
+const LAUNCHER_MAX_HEIGHT: f64 = 480.0;
 const EDITOR_WINDOW_WIDTH: f64 = 1100.0;
 const EDITOR_WINDOW_HEIGHT: f64 = 720.0;
 const EDITOR_WINDOW_MIN_WIDTH: f64 = 800.0;
@@ -525,16 +527,17 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
         };
 
         if !was_visible {
-            // Use 1/3 of screen width and 1/3 of screen height so the launcher
-            // appears at its final size immediately — no visible resize after showing.
+            // Use 1/3 of screen width for the launcher; height is fixed with a
+            // max cap so the launcher never becomes unreasonably tall on large
+            // monitors.
             let (compact_width, compact_height) = monitor_under_cursor(&window)
                 .or_else(|| window.current_monitor().ok().flatten())
                 .or_else(|| window.primary_monitor().ok().flatten())
                 .map(|mon| {
                     let scale = mon.scale_factor();
                     let logical_w = mon.size().width as f64 / scale;
-                    let logical_h = mon.size().height as f64 / scale;
-                    ((logical_w / 3.0).round(), (logical_h / 3.0).round())
+                    let w = (logical_w / 3.0).round().clamp(LAUNCHER_COMPACT_WIDTH, LAUNCHER_MAX_WIDTH);
+                    (w, LAUNCHER_MAX_HEIGHT)
                 })
                 .unwrap_or((LAUNCHER_COMPACT_WIDTH, LAUNCHER_COMPACT_HEIGHT));
             if let Err(error) = window.set_size(LogicalSize::new(
@@ -576,7 +579,7 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
 /// Compute the launcher logical width for a given monitor (1/3 of screen).
 fn launcher_logical_width_for_monitor(monitor: &tauri::Monitor) -> f64 {
     let logical_w = monitor.size().width as f64 / monitor.scale_factor();
-    (logical_w / 3.0).round()
+    (logical_w / 3.0).round().clamp(LAUNCHER_COMPACT_WIDTH, LAUNCHER_MAX_WIDTH)
 }
 
 fn center_launcher_window(window: &tauri::WebviewWindow) {
@@ -590,26 +593,87 @@ fn center_launcher_window(window: &tauri::WebviewWindow) {
     let mon_size = monitor.size();
     // Read the current window size (already set by the compact-resize step
     // before show) so we don't resize again and cause flicker.
-    let (win_w, win_h) = window
+    let (win_w, _win_h) = window
         .outer_size()
         .map(|s| (s.width as i32, s.height as i32))
         .unwrap_or_else(|_| {
             let lw = launcher_logical_width_for_monitor(&monitor);
-            ((lw * scale).round() as i32, (LAUNCHER_COMPACT_HEIGHT * scale).round() as i32)
+            ((lw * scale).round() as i32, (LAUNCHER_MAX_HEIGHT * scale).round() as i32)
         });
 
     let x = mon_pos.x + ((mon_size.width as i32 - win_w) / 2).max(0);
-    // Center vertically on screen (the window is now 1/3 of screen height,
-    // so centering places it nicely in the middle).
-    let y = mon_pos.y + ((mon_size.height as i32 - win_h) / 2).max(0);
+    // Position in the upper portion of the screen (1/5 from top, Spotlight-style)
+    let y = mon_pos.y + (mon_size.height as i32 / 5).max(0);
+
+    // Use NSWindow setFrameTopLeftPoint: directly for reliable cross-screen
+    // positioning. Tauri's set_position can fail to move alwaysOnTop windows
+    // across monitors on macOS.
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(ns_window) = window.ns_window() {
+            if !ns_window.is_null() {
+                unsafe {
+                    let ns_window = ns_window as *mut objc2::runtime::AnyObject;
+                    // macOS screen coordinates: origin at bottom-left of primary screen.
+                    // Tauri physical coords: origin at top-left. We need to convert.
+                    let primary_height = window.primary_monitor()
+                        .ok()
+                        .flatten()
+                        .map(|m| m.size().height as f64)
+                        .unwrap_or(mon_size.height as f64);
+                    let ns_x = x as f64 / scale;
+                    let ns_y = (primary_height - y as f64) / scale;
+
+                    // setFrameTopLeftPoint: takes a CGPoint/NSPoint {x, y}
+                    // which is repr(C) two f64s. Pass as two separate args
+                    // encoded as a single NSPoint via raw msg_send.
+                    let sel = objc2::sel!(setFrameTopLeftPoint:);
+                    let point: [f64; 2] = [ns_x, ns_y];
+                    let _: () = objc2::runtime::MessageReceiver::send_message(
+                        ns_window,
+                        sel,
+                        (point,),
+                    );
+                }
+                return;
+            }
+        }
+    }
 
     if let Err(error) = window.set_position(tauri::PhysicalPosition::new(x, y)) {
         eprintln!("[hiven] Failed to center launcher window: {}", error);
     }
 }
 
-/// Find the monitor that currently contains the mouse cursor (physical coords).
+/// Find the monitor that currently contains the mouse cursor.
+/// Uses CGEvent on macOS for reliable global cursor position even when
+/// the launcher window is hidden.
 fn monitor_under_cursor(window: &tauri::WebviewWindow) -> Option<tauri::Monitor> {
+    // First try CGEvent-based approach (works even when window is hidden)
+    if let Some(cursor_points) = global_cursor_position() {
+        if let Ok(monitors) = window.available_monitors() {
+            // On macOS, CGEvent.location() returns points (logical coords).
+            // Tauri's monitor.position() is PhysicalPosition (pixels).
+            // Compare in logical space by dividing monitor physical coords by scale.
+            let found = monitors.into_iter().find(|monitor| {
+                let scale = monitor.scale_factor();
+                let pos = monitor.position();
+                let size = monitor.size();
+                let lx = pos.x as f64 / scale;
+                let ly = pos.y as f64 / scale;
+                let lw = size.width as f64 / scale;
+                let lh = size.height as f64 / scale;
+                cursor_points.x >= lx
+                    && cursor_points.x < lx + lw
+                    && cursor_points.y >= ly
+                    && cursor_points.y < ly + lh
+            });
+            if found.is_some() {
+                return found;
+            }
+        }
+    }
+    // Fallback: Tauri's cursor_position (requires visible window)
     let cursor = window.cursor_position().ok()?;
     let monitors = window.available_monitors().ok()?;
     monitors.into_iter().find(|monitor| {
@@ -620,6 +684,26 @@ fn monitor_under_cursor(window: &tauri::WebviewWindow) -> Option<tauri::Monitor>
             && cursor.y >= pos.y as f64
             && cursor.y < pos.y as f64 + size.height as f64
     })
+}
+
+#[cfg(target_os = "macos")]
+fn global_cursor_position() -> Option<tauri::PhysicalPosition<f64>> {
+    // Use CoreGraphics to get the mouse location in global display coordinates.
+    // CGEventGetLocation returns physical pixel coordinates relative to the
+    // top-left corner of the main display — the same coordinate space that
+    // Tauri's monitor.position() uses.
+    use core_graphics::event::CGEvent;
+    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+
+    let source = CGEventSource::new(CGEventSourceStateID::CombinedSessionState).ok()?;
+    let event = CGEvent::new(source).ok()?;
+    let point = event.location();
+    Some(tauri::PhysicalPosition::new(point.x, point.y))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn global_cursor_position() -> Option<tauri::PhysicalPosition<f64>> {
+    None
 }
 
 #[tauri::command]
@@ -643,37 +727,65 @@ async fn hide_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 async fn show_editor_window(app: tauri::AppHandle) -> Result<(), String> {
-    let window = if let Some(window) = app.get_webview_window("editor") {
-        let _ = window.set_size(LogicalSize::new(EDITOR_WINDOW_WIDTH, EDITOR_WINDOW_HEIGHT));
-        window
-    } else {
-        tauri::WebviewWindowBuilder::new(
-            &app,
-            "editor",
-            tauri::WebviewUrl::App("index.html?window=editor".into()),
-        )
-        .title("Hiven Editor")
-        .inner_size(EDITOR_WINDOW_WIDTH, EDITOR_WINDOW_HEIGHT)
-        .min_inner_size(EDITOR_WINDOW_MIN_WIDTH, EDITOR_WINDOW_MIN_HEIGHT)
-        .decorations(false)
-        .transparent(false)
-        .resizable(true)
-        .focused(true)
-        .skip_taskbar(false)
-        .center()
-        .build()
-        .map_err(|error| error.to_string())?
-    };
+    // Always open a new editor window
+    open_new_editor_window(app).await.map(|_| ())
+}
 
+#[tauri::command]
+async fn open_new_editor_window(app: tauri::AppHandle) -> Result<String, String> {
+    let label = new_editor_window_label();
+    let window = tauri::WebviewWindowBuilder::new(
+        &app,
+        &label,
+        tauri::WebviewUrl::App("index.html?window=editor".into()),
+    )
+    .title("Hiven Editor")
+    .inner_size(EDITOR_WINDOW_WIDTH, EDITOR_WINDOW_HEIGHT)
+    .min_inner_size(EDITOR_WINDOW_MIN_WIDTH, EDITOR_WINDOW_MIN_HEIGHT)
+    .decorations(false)
+    .transparent(false)
+    .resizable(true)
+    .focused(true)
+    .skip_taskbar(false)
+    .build()
+    .map_err(|error| error.to_string())?;
+
+    show_and_focus_editor_window(&app, &window)?;
+    Ok(label)
+}
+
+#[tauri::command]
+async fn focus_editor_window(app: tauri::AppHandle, label: String) -> Result<(), String> {
+    let Some(window) = app.get_webview_window(&label) else {
+        return Err(format!("Editor window not found: {}", label));
+    };
     show_and_focus_editor_window(&app, &window)
 }
 
 #[tauri::command]
-async fn close_editor_window(app: tauri::AppHandle) -> Result<(), String> {
-    let Some(window) = app.get_webview_window("editor") else {
+async fn close_editor_window(app: tauri::AppHandle, label: Option<String>) -> Result<(), String> {
+    let label = label.unwrap_or_else(|| "editor".to_string());
+    let Some(window) = app.get_webview_window(&label) else {
         return Ok(());
     };
     window.close().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn list_editor_windows(app: tauri::AppHandle) -> Vec<String> {
+    app.webview_windows()
+        .keys()
+        .filter(|label| label.starts_with("editor"))
+        .cloned()
+        .collect()
+}
+
+fn new_editor_window_label() -> String {
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    format!("editor:{ts}")
 }
 
 fn show_and_focus_editor_window(
@@ -933,6 +1045,9 @@ fn show_and_focus_plugin_surface_window(app: &tauri::AppHandle, window: &tauri::
 
 #[cfg(target_os = "macos")]
 fn demote_launcher_level(app: &tauri::AppHandle) {
+    // NSWindow setLevel: must be called on the main thread.
+    // When called from within an existing run_on_main_thread closure this is a
+    // no-overhead re-dispatch (macOS main-queue dispatch_sync from main is fine).
     if let Some(launcher) = app.get_webview_window("launcher") {
         if let Ok(ns_window) = launcher.ns_window() {
             if !ns_window.is_null() {
@@ -951,17 +1066,23 @@ fn demote_launcher_level(_app: &tauri::AppHandle) {}
 
 #[cfg(target_os = "macos")]
 fn restore_launcher_level(app: &tauri::AppHandle) {
-    if let Some(launcher) = app.get_webview_window("launcher") {
-        if let Ok(ns_window) = launcher.ns_window() {
-            if !ns_window.is_null() {
-                unsafe {
-                    let ns_window = ns_window as *mut objc2::runtime::AnyObject;
-                    const STATUS_WINDOW_LEVEL: i64 = 25;
-                    let _: () = objc2::msg_send![ns_window, setLevel: STATUS_WINDOW_LEVEL];
+    let app_clone = app.clone();
+    // Must run on main thread: NSWindow setLevel: is an AppKit API.
+    // This function may be called from tokio workers or window-event callbacks,
+    // so we always dispatch to the main thread to avoid EXC_BREAKPOINT crashes.
+    let _ = app.run_on_main_thread(move || {
+        if let Some(launcher) = app_clone.get_webview_window("launcher") {
+            if let Ok(ns_window) = launcher.ns_window() {
+                if !ns_window.is_null() {
+                    unsafe {
+                        let ns_window = ns_window as *mut objc2::runtime::AnyObject;
+                        const STATUS_WINDOW_LEVEL: i64 = 25;
+                        let _: () = objc2::msg_send![ns_window, setLevel: STATUS_WINDOW_LEVEL];
+                    }
                 }
             }
         }
-    }
+    });
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -3766,7 +3887,10 @@ pub fn run() {
             show_launcher_window,
             hide_launcher_window,
             show_editor_window,
+            open_new_editor_window,
+            focus_editor_window,
             close_editor_window,
+            list_editor_windows,
             show_plugin_surface_window,
             hide_plugin_surface_window,
             simulate_paste,
