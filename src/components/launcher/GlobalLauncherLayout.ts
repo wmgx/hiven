@@ -1,7 +1,8 @@
 import type { CSSProperties } from 'react'
 import type { PluginUiSurfaceContribution } from '../../workspace/pluginTypes'
 
-export const GLOBAL_LAUNCHER_PANEL_WIDTH = 680
+export const GLOBAL_LAUNCHER_PANEL_WIDTH = 'calc(100vw / 3)'
+export const GLOBAL_LAUNCHER_PANEL_WIDTH_PX = 680
 export const STANDALONE_LAUNCHER_WIDTH = 728
 export const STANDALONE_LAUNCHER_MIN_HEIGHT = 294
 export const STANDALONE_LAUNCHER_MAX_HEIGHT = 390
@@ -28,6 +29,13 @@ export function buildGlobalLauncherPanelStyle({
   surfaceShell?: LauncherSurfaceShell
   standaloneLauncher: boolean
 }): GlobalLauncherPanelStyle {
+  // In standalone window mode, the Tauri window is already sized to 1/3 screen
+  // width, so the panel fills the window. In overlay mode, use calc(100vw / 3)
+  // to occupy 1/3 of the host window.
+  const defaultPanelWidth = standaloneLauncher
+    ? 'calc(100vw - 24px)'
+    : GLOBAL_LAUNCHER_PANEL_WIDTH
+
   return {
     background: 'var(--panel, #ffffff)',
     border: '1px solid var(--border, #ececed)',
@@ -38,7 +46,7 @@ export function buildGlobalLauncherPanelStyle({
       ? `${GLOBAL_LAUNCHER_SETTINGS_WIDTH}px`
       : surfaceShell?.defaultWidth
       ? `${surfaceShell.defaultWidth}px`
-      : `${GLOBAL_LAUNCHER_PANEL_WIDTH}px`,
+      : defaultPanelWidth,
     width: hostSurfaceTarget
       ? `min(${STANDALONE_SURFACE_MAX_WIDTH}px, calc(100vw - 24px))`
       : launcherSettingsTarget
@@ -71,29 +79,39 @@ export function computeStandaloneLauncherSize({
   surfaceShell?: LauncherSurfaceShell
 }) {
   const isSurfaceLike = Boolean(surfaceShell || launcherSettingsTarget || hostSurfaceTarget)
-  const desiredPanelHeight = hostSurfaceTarget
-    ? STANDALONE_SURFACE_MAX_HEIGHT
-    : launcherSettingsTarget
-    ? GLOBAL_LAUNCHER_SETTINGS_HEIGHT
-    : surfaceShell?.defaultHeight
-    ? surfaceShell.defaultHeight
-    : measureStandaloneLauncherPanelHeight(panel)
-  const height = clamp(
-    Math.ceil(desiredPanelHeight + STANDALONE_LAUNCHER_VERTICAL_PADDING),
-    STANDALONE_LAUNCHER_MIN_HEIGHT,
-    isSurfaceLike ? STANDALONE_SURFACE_MAX_HEIGHT : STANDALONE_LAUNCHER_MAX_HEIGHT,
-  )
 
+  // Height: surface-like modes compute dynamically; the default launcher
+  // uses the full window height (already 1/3 screen set by native code).
+  const height = isSurfaceLike
+    ? clamp(
+        Math.ceil(
+          (hostSurfaceTarget
+            ? STANDALONE_SURFACE_MAX_HEIGHT
+            : launcherSettingsTarget
+            ? GLOBAL_LAUNCHER_SETTINGS_HEIGHT
+            : surfaceShell?.defaultHeight ?? measureStandaloneLauncherPanelHeight(panel)
+          ) + STANDALONE_LAUNCHER_VERTICAL_PADDING,
+        ),
+        STANDALONE_LAUNCHER_MIN_HEIGHT,
+        STANDALONE_SURFACE_MAX_HEIGHT,
+      )
+    : window.innerHeight
+
+  // For width: in surface/settings mode use their fixed width + padding;
+  // otherwise preserve the current window width (already set to 1/3 screen by
+  // native code) to avoid any flicker from re-computing a different value.
+  // Since the window has no decorations, window.innerWidth === logical window width.
+  const currentWindowWidth = window.innerWidth
   const desiredPanelWidth = hostSurfaceTarget
-    ? STANDALONE_SURFACE_MAX_WIDTH
+    ? STANDALONE_SURFACE_MAX_WIDTH + STANDALONE_LAUNCHER_HORIZONTAL_PADDING
     : launcherSettingsTarget
-    ? GLOBAL_LAUNCHER_SETTINGS_WIDTH
-    : surfaceShell?.defaultWidth ?? GLOBAL_LAUNCHER_PANEL_WIDTH
-  const width = clamp(
-    Math.ceil(desiredPanelWidth + STANDALONE_LAUNCHER_HORIZONTAL_PADDING),
-    STANDALONE_LAUNCHER_WIDTH,
-    isSurfaceLike ? STANDALONE_SURFACE_MAX_WIDTH : STANDALONE_LAUNCHER_WIDTH,
-  )
+    ? GLOBAL_LAUNCHER_SETTINGS_WIDTH + STANDALONE_LAUNCHER_HORIZONTAL_PADDING
+    : surfaceShell?.defaultWidth
+    ? surfaceShell.defaultWidth + STANDALONE_LAUNCHER_HORIZONTAL_PADDING
+    : currentWindowWidth
+  const maxWidth = isSurfaceLike ? STANDALONE_SURFACE_MAX_WIDTH + STANDALONE_LAUNCHER_HORIZONTAL_PADDING : currentWindowWidth
+  const minWidth = isSurfaceLike ? STANDALONE_LAUNCHER_WIDTH : currentWindowWidth
+  const width = clamp(Math.ceil(desiredPanelWidth), minWidth, maxWidth)
 
   return { width, height }
 }

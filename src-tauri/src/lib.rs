@@ -31,9 +31,11 @@ const PLUGIN_SURFACE_WINDOW_DEFAULT_MIN_WIDTH: f64 = 320.0;
 const PLUGIN_SURFACE_WINDOW_DEFAULT_MIN_HEIGHT: f64 = 240.0;
 const PLUGIN_SURFACE_WINDOW_DEFAULT_DESTROY_TIMEOUT_MS: u64 = 120_000;
 static PREVIOUS_FOREGROUND_PROCESS_ID: OnceLock<Mutex<Option<u32>>> = OnceLock::new();
+#[cfg(target_os = "macos")]
+static PREVIOUS_LAUNCHER_INPUT_SOURCE_ID: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 static LAST_FOREGROUND_SELECTION_TEXT: OnceLock<Mutex<Option<ForegroundSelectionText>>> = OnceLock::new();
 static INSTALLED_APP_TARGETS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
-static PLUGIN_KV_DB: OnceLock<Result<Mutex<Connection>, String>> = OnceLock::new();
+static PLUGIN_KV_DB: OnceLock<Result<Mutex<PluginKvDb>, String>> = OnceLock::new();
 static PLUGIN_SURFACE_WINDOW_TOKENS: OnceLock<Mutex<HashMap<String, u64>>> = OnceLock::new();
 static SURFACE_REGISTRY: OnceLock<SurfaceRegistryState> = OnceLock::new();
 const SURFACE_REGISTRY_EVENT: &str = "hiven://surface-registry-sync";
@@ -155,7 +157,7 @@ fn emit_surface_registry_upsert(app: &tauri::AppHandle, surface: &SurfaceInstanc
 
 fn plugin_surface_registry_record(
     label: String,
-    source: String,
+    _source: String,
     plugin_id: String,
     surface_id: String,
     title: String,
@@ -231,6 +233,143 @@ unsafe extern "C" {
     fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void;
     fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
     fn dlclose(handle: *mut c_void) -> c_int;
+}
+
+
+#[cfg(target_os = "macos")]
+fn previous_launcher_input_source_id() -> &'static Mutex<Option<String>> {
+    PREVIOUS_LAUNCHER_INPUT_SOURCE_ID.get_or_init(|| Mutex::new(None))
+}
+
+#[cfg(target_os = "macos")]
+fn current_keyboard_input_source_id() -> Option<String> {
+    use core_foundation::base::{CFType, TCFType};
+    use core_foundation::string::{CFString, CFStringRef};
+
+    #[link(name = "Carbon", kind = "framework")]
+    extern "C" {
+        static kTISPropertyInputSourceID: CFStringRef;
+        fn TISCopyCurrentKeyboardInputSource() -> *const c_void;
+        fn TISGetInputSourceProperty(input_source: *const c_void, property_key: CFStringRef) -> *const c_void;
+    }
+
+    unsafe {
+        let source = TISCopyCurrentKeyboardInputSource();
+        if source.is_null() {
+            return None;
+        }
+        let _source_owner = CFType::wrap_under_create_rule(source as core_foundation::base::CFTypeRef);
+        let property = TISGetInputSourceProperty(source, kTISPropertyInputSourceID);
+        if property.is_null() {
+            return None;
+        }
+        let source_id = CFString::wrap_under_get_rule(property as CFStringRef).to_string();
+        Some(source_id)
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn select_keyboard_input_source_by_id(source_id: &str) -> Result<(), String> {
+    use core_foundation::array::{CFArray, CFArrayRef};
+    use core_foundation::base::{CFTypeRef, TCFType};
+    use core_foundation::dictionary::{CFDictionary, CFDictionaryRef};
+    use core_foundation::string::{CFString, CFStringRef};
+
+    #[link(name = "Carbon", kind = "framework")]
+    extern "C" {
+        static kTISPropertyInputSourceID: CFStringRef;
+        fn TISCreateInputSourceList(
+            properties: CFDictionaryRef,
+            include_all_installed: bool,
+        ) -> CFArrayRef;
+        fn TISSelectInputSource(input_source: *const c_void) -> c_int;
+    }
+
+    let source_id = CFString::new(source_id);
+    let key = unsafe { CFString::wrap_under_get_rule(kTISPropertyInputSourceID) };
+    let properties = CFDictionary::from_CFType_pairs(&[(key.as_CFType(), source_id.as_CFType())]);
+    let list_ref = unsafe { TISCreateInputSourceList(properties.as_concrete_TypeRef(), true) };
+    if list_ref.is_null() {
+        return Err("Unable to query macOS input sources".to_string());
+    }
+
+    let list = unsafe { CFArray::<CFTypeRef>::wrap_under_create_rule(list_ref) };
+    let Some(input_source) = list.get(0) else {
+        return Err(format!("macOS input source is not installed: {}", source_id));
+    };
+    let status = unsafe { TISSelectInputSource(*input_source as *const c_void) };
+    if status == 0 {
+        Ok(())
+    } else {
+        Err(format!("TISSelectInputSource failed with status {}", status))
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn switch_to_default_english_input_source() -> Result<(), String> {
+    const ABC_INPUT_SOURCE_ID: &str = "com.apple.keylayout.ABC";
+    let previous = current_keyboard_input_source_id();
+    if let Ok(mut stored) = previous_launcher_input_source_id().lock() {
+        if stored.is_none() {
+            *stored = previous.filter(|source_id| source_id != ABC_INPUT_SOURCE_ID);
+        }
+    }
+    select_keyboard_input_source_by_id(ABC_INPUT_SOURCE_ID)
+}
+
+#[cfg(target_os = "macos")]
+fn restore_launcher_previous_input_source() -> Result<(), String> {
+    let previous = previous_launcher_input_source_id()
+        .lock()
+        .map_err(|_| "launcher input source lock poisoned".to_string())?
+        .take();
+    if let Some(source_id) = previous {
+        select_keyboard_input_source_by_id(&source_id)
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn switch_to_default_english_input_source() -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn restore_launcher_previous_input_source() -> Result<(), String> {
+    Ok(())
+}
+
+#[tauri::command]
+async fn prepare_launcher_input_source(app: tauri::AppHandle) -> Result<(), String> {
+    run_launcher_input_source_on_main_thread(app, switch_to_default_english_input_source)
+}
+
+#[tauri::command]
+async fn restore_launcher_input_source(app: tauri::AppHandle) -> Result<(), String> {
+    run_launcher_input_source_on_main_thread(app, restore_launcher_previous_input_source)
+}
+
+#[cfg(target_os = "macos")]
+fn run_launcher_input_source_on_main_thread(
+    app: tauri::AppHandle,
+    operation: fn() -> Result<(), String>,
+) -> Result<(), String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let _ = tx.send(operation());
+    })
+    .map_err(|error| error.to_string())?;
+    rx.recv()
+        .unwrap_or_else(|_| Err("launcher input source operation did not complete".to_string()))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn run_launcher_input_source_on_main_thread(
+    _app: tauri::AppHandle,
+    operation: fn() -> Result<(), String>,
+) -> Result<(), String> {
+    operation()
 }
 
 #[cfg(target_os = "macos")]
@@ -386,14 +525,31 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
         };
 
         if !was_visible {
+            // Use 1/3 of screen width and 1/3 of screen height so the launcher
+            // appears at its final size immediately — no visible resize after showing.
+            let (compact_width, compact_height) = monitor_under_cursor(&window)
+                .or_else(|| window.current_monitor().ok().flatten())
+                .or_else(|| window.primary_monitor().ok().flatten())
+                .map(|mon| {
+                    let scale = mon.scale_factor();
+                    let logical_w = mon.size().width as f64 / scale;
+                    let logical_h = mon.size().height as f64 / scale;
+                    ((logical_w / 3.0).round(), (logical_h / 3.0).round())
+                })
+                .unwrap_or((LAUNCHER_COMPACT_WIDTH, LAUNCHER_COMPACT_HEIGHT));
             if let Err(error) = window.set_size(LogicalSize::new(
-                LAUNCHER_COMPACT_WIDTH,
-                LAUNCHER_COMPACT_HEIGHT,
+                compact_width,
+                compact_height,
             )) {
                 eprintln!(
                     "[hiven] Failed to compact launcher window before show: {}",
                     error
                 );
+            }
+        }
+        if !was_visible {
+            if let Err(error) = switch_to_default_english_input_source() {
+                eprintln!("[hiven] Failed to switch launcher input source to default English: {}", error);
             }
         }
         if let Err(error) = show_launcher_window_without_app_activation(&window) {
@@ -417,6 +573,12 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
 /// since the launcher config carries no position. The cursor's monitor is used
 /// rather than `current_monitor()` so the launcher follows the active screen
 /// instead of wherever the hidden window happened to live.
+/// Compute the launcher logical width for a given monitor (1/3 of screen).
+fn launcher_logical_width_for_monitor(monitor: &tauri::Monitor) -> f64 {
+    let logical_w = monitor.size().width as f64 / monitor.scale_factor();
+    (logical_w / 3.0).round()
+}
+
 fn center_launcher_window(window: &tauri::WebviewWindow) {
     let monitor = monitor_under_cursor(window)
         .or_else(|| window.current_monitor().ok().flatten())
@@ -426,14 +588,20 @@ fn center_launcher_window(window: &tauri::WebviewWindow) {
     let scale = monitor.scale_factor();
     let mon_pos = monitor.position();
     let mon_size = monitor.size();
-    let win_w = (LAUNCHER_COMPACT_WIDTH * scale).round() as i32;
-    let win_h = (LAUNCHER_COMPACT_HEIGHT * scale).round() as i32;
+    // Read the current window size (already set by the compact-resize step
+    // before show) so we don't resize again and cause flicker.
+    let (win_w, win_h) = window
+        .outer_size()
+        .map(|s| (s.width as i32, s.height as i32))
+        .unwrap_or_else(|_| {
+            let lw = launcher_logical_width_for_monitor(&monitor);
+            ((lw * scale).round() as i32, (LAUNCHER_COMPACT_HEIGHT * scale).round() as i32)
+        });
 
     let x = mon_pos.x + ((mon_size.width as i32 - win_w) / 2).max(0);
-    // Keep the panel in the upper third so it stays anchored as the window
-    // grows downward to fit results.
-    let upper = ((mon_size.height as i32 - win_h) as f64 * 0.30).round() as i32;
-    let y = mon_pos.y + upper.max(0);
+    // Center vertically on screen (the window is now 1/3 of screen height,
+    // so centering places it nicely in the middle).
+    let y = mon_pos.y + ((mon_size.height as i32 - win_h) / 2).max(0);
 
     if let Err(error) = window.set_position(tauri::PhysicalPosition::new(x, y)) {
         eprintln!("[hiven] Failed to center launcher window: {}", error);
@@ -461,6 +629,9 @@ async fn hide_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
     let app_clone = app.clone();
     app.run_on_main_thread(move || {
         if let Some(window) = app_clone.get_webview_window("launcher") {
+            if let Err(error) = restore_launcher_previous_input_source() {
+                eprintln!("[hiven] Failed to restore launcher input source: {}", error);
+            }
             restore_previous_foreground_app();
             if let Err(error) = window.hide() {
                 eprintln!("[hiven] Failed to hide launcher window: {}", error);
@@ -2369,6 +2540,12 @@ struct PluginKvPruneResult {
     removed_items: i64,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
+struct PluginKvDb {
+    path: PathBuf,
+    connection: Connection,
+}
+
 fn validate_plugin_storage_source(source: &str) -> Result<(), String> {
     match source {
         "builtin" | "installed" | "dev" => Ok(()),
@@ -2404,8 +2581,8 @@ fn plugin_kv_db_path() -> Result<PathBuf, String> {
     Ok(dir.join("plugin-storage.sqlite"))
 }
 
-fn init_plugin_kv_db() -> Result<Mutex<Connection>, String> {
-    let connection = Connection::open(plugin_kv_db_path()?).map_err(|e| e.to_string())?;
+fn open_plugin_kv_db(path: PathBuf) -> Result<PluginKvDb, String> {
+    let connection = Connection::open(&path).map_err(|e| e.to_string())?;
     connection
         .execute_batch(
             r#"
@@ -2423,14 +2600,27 @@ fn init_plugin_kv_db() -> Result<Mutex<Connection>, String> {
                 "#,
         )
         .map_err(|e| e.to_string())?;
-    Ok(Mutex::new(connection))
+    Ok(PluginKvDb { path, connection })
 }
 
-fn get_plugin_kv_db() -> Result<&'static Mutex<Connection>, String> {
-    PLUGIN_KV_DB
+fn init_plugin_kv_db() -> Result<Mutex<PluginKvDb>, String> {
+    open_plugin_kv_db(plugin_kv_db_path()?).map(Mutex::new)
+}
+
+fn get_plugin_kv_db() -> Result<&'static Mutex<PluginKvDb>, String> {
+    let db = PLUGIN_KV_DB
         .get_or_init(init_plugin_kv_db)
         .as_ref()
-        .map_err(|e| e.clone())
+        .map_err(|e| e.clone())?;
+    #[cfg(test)]
+    {
+        let current_path = plugin_kv_db_path()?;
+        let mut guard = db.lock().map_err(|e| e.to_string())?;
+        if guard.path != current_path {
+            *guard = open_plugin_kv_db(current_path)?;
+        }
+    }
+    Ok(db)
 }
 
 fn validate_plugin_kv_namespace(source: &str, plugin_id: &str) -> Result<(), String> {
@@ -2509,7 +2699,7 @@ fn plugin_kv_get(source: String, plugin_id: String, key: String) -> Result<Optio
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     validate_plugin_kv_key(&key)?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
-    db.query_row(
+    db.connection.query_row(
         "SELECT value_json FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 AND key = ?3",
         params![source, plugin_id, key],
         |row| row.get::<_, String>(0),
@@ -2531,7 +2721,7 @@ fn plugin_kv_set(
         i64::try_from(value_json.len()).map_err(|_| "Plugin KV value is too large".to_string())?;
     let updated_at = current_millis_i64()?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
-    db.execute(
+    db.connection.execute(
             r#"
             INSERT INTO plugin_kv (source, plugin_id, key, value_json, byte_size, updated_at)
             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
@@ -2551,7 +2741,7 @@ fn plugin_kv_delete(source: String, plugin_id: String, key: String) -> Result<()
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     validate_plugin_kv_key(&key)?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
-    db.execute(
+    db.connection.execute(
             "DELETE FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 AND key = ?3",
             params![source, plugin_id, key],
         )
@@ -2572,7 +2762,7 @@ fn plugin_kv_list(
         }
     }
     let connection = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
-    let mut statement = connection
+    let mut statement = connection.connection
         .prepare(
             "SELECT key, updated_at FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 ORDER BY updated_at DESC, key ASC",
         )
@@ -2604,7 +2794,7 @@ fn plugin_kv_list(
 fn plugin_kv_usage(source: String, plugin_id: String) -> Result<PluginKvUsage, String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
-    let (bytes, item_count): (i64, i64) = db
+    let (bytes, item_count): (i64, i64) = db.connection
         .query_row(
             "SELECT COALESCE(SUM(byte_size), 0), COUNT(*) FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2",
             params![source, plugin_id],
@@ -2626,7 +2816,7 @@ fn plugin_kv_prune(
     validate_plugin_kv_prune_policy(max_items, max_bytes, max_age_days)?;
 
     let mut connection = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
-    let transaction = connection.transaction().map_err(|e| e.to_string())?;
+    let transaction = connection.connection.transaction().map_err(|e| e.to_string())?;
     let mut removed_bytes = 0;
     let mut removed_items = 0;
 
@@ -2715,7 +2905,7 @@ fn plugin_kv_prune(
 fn plugin_kv_clear(source: String, plugin_id: String) -> Result<(), String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
-    db.execute(
+    db.connection.execute(
             "DELETE FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2",
             params![source, plugin_id],
         )
@@ -3571,6 +3761,8 @@ pub fn run() {
             fetch_github_directory,
             hotkeys::register_double_modifier_hotkey,
             hotkeys::unregister_double_modifier_hotkey,
+            prepare_launcher_input_source,
+            restore_launcher_input_source,
             show_launcher_window,
             hide_launcher_window,
             show_editor_window,
@@ -3989,14 +4181,17 @@ HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\App Paths\Example.e
                 r#""old""#.to_string(),
             )
             .expect("old plugin KV fixture should be written");
-            let connection = get_plugin_kv_db().expect("plugin KV DB should open");
-            let connection = connection.lock().expect("plugin KV DB lock should not be poisoned");
-            connection
-                .execute(
-                    "UPDATE plugin_kv SET updated_at = 1 WHERE source = ?1 AND plugin_id = ?2 AND key = ?3",
-                    params!["builtin", "clipboard-history", "old"],
-                )
-                .expect("old plugin KV fixture should be backdated");
+            {
+                let connection = get_plugin_kv_db().expect("plugin KV DB should open");
+                let connection = connection.lock().expect("plugin KV DB lock should not be poisoned");
+                connection
+                    .connection
+                    .execute(
+                        "UPDATE plugin_kv SET updated_at = 1 WHERE source = ?1 AND plugin_id = ?2 AND key = ?3",
+                        params!["builtin", "clipboard-history", "old"],
+                    )
+                    .expect("old plugin KV fixture should be backdated");
+            }
 
             let result = plugin_kv_prune(
                 "builtin".to_string(),
