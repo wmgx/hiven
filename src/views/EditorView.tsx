@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAppStore, localized } from '../store'
 import { useWorkspaceStore } from '../workspace/workspaceStore'
+import { DiffPageView } from '../plugins/textDiff/DiffPageView'
 import { WorkspaceShell } from '../components/workspace/WorkspaceShell'
 import { RenderStatusBar } from '../components/workspace/RenderStatusBar'
 import { PanelHost } from '../components/workspace/PanelHost'
@@ -26,6 +27,17 @@ function isFindWidgetVisible(editor?: { getDomNode?: () => HTMLElement | null })
 }
 
 export function EditorView() {
+  const activeFullscreenView = useWorkspaceStore((s) => s.activeFullscreenView)
+
+  // Fullscreen view takes over the entire editor area
+  if (activeFullscreenView?.type === 'diff') {
+    return <DiffPageView source={activeFullscreenView} />
+  }
+
+  return <EditorViewContent />
+}
+
+function EditorViewContent() {
   const setEditorCommandBarOpen = useAppStore((s) => s.setEditorCommandBarOpen)
   const wordWrap = useAppStore((s) => s.settings.wordWrap)
   const theme = useAppStore((s) => s.settings.theme)

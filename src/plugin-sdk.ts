@@ -127,3 +127,4 @@ export type {
   StatusEffect,
   TextReplaceEffect,
 } from './workspace/types'
+export type { DiffSource, FullscreenView } from './workspace/workspaceStore'

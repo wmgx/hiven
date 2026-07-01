@@ -1,15 +1,14 @@
 /**
- * Text Diff plugin renderer.
- * Owns the plain text comparison UI and delegates only the line highlight
- * calculation to host-injected diff kits.
+ * DiffPageView - Fullscreen diff page that replaces EditorView.
+ * Opened via workspace store's openDiffPage(), closed via ESC.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   getPluginHostSdk,
   detectExternalEditorLanguage,
-  type PaneInput,
-  type RendererProps,
+  type DiffSource,
+  type FullscreenView,
 } from '@hiven/plugin'
 import {
   SegmentedControl,
@@ -17,48 +16,43 @@ import {
   ToolbarButton,
 } from '@hiven/plugin-ui'
 import { CloseIcon } from '@hiven/plugin-ui/icons'
-import {
-  canUseSemanticJsonDiff,
-  isAutoDiffExitKey,
-  normalizeAutoDiffLayout,
-} from './autoDiffMode'
+import { canUseSemanticJsonDiff, isAutoDiffExitKey } from './autoDiffMode'
 import './style.css'
 
 const PLUGIN_ID = 'text-diff'
 
-type TextSourceMeta = {
-  kind?: 'editor-pane' | 'clipboard' | 'empty' | 'snapshot'
-  title?: string
-  snapshotAt?: number
-  contentProvider?: 'live' | 'snapshot'
+type DiffPageProps = {
+  source: FullscreenView & { type: 'diff' }
 }
 
-type TextDiffInputs = {
-  original: PaneInput
-  modified: PaneInput
-  renderMode?: 'side-by-side' | 'inline'
-  sourceMeta?: {
-    original?: TextSourceMeta
-    modified?: TextSourceMeta
+function useDiffSourceText(source: DiffSource): [string, (text: string) => void] {
+  const { hooks } = getPluginHostSdk()
+  const paneText = hooks.usePaneText(source.kind === 'editor-pane' ? source.paneId! : '')
+  const [localText, setLocalText] = useState(source.text ?? '')
+  const { setPaneText } = hooks.useWorkspaceActions()
+
+  if (source.kind === 'editor-pane') {
+    const text = paneText ?? ''
+    const setText = useCallback((newText: string) => {
+      if (source.paneId) setPaneText(source.paneId, newText)
+    }, [source.paneId, setPaneText])
+    return [text, setText]
   }
+
+  return [localText, setLocalText]
 }
 
-export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>) {
+export function DiffPageView({ source }: DiffPageProps) {
   const { kits, hooks } = getPluginHostSdk()
   const { DualEditorView, diff } = kits
   const t = hooks.useT(PLUGIN_ID)
   const settings = hooks.useSettings()
+  const { clearActiveFullscreenView } = hooks.useWorkspaceActions()
 
-  const originalPane = inputs?.original
-  const modifiedPane = inputs?.modified
-  const originalPaneId = originalPane?.paneId
-  const modifiedPaneId = modifiedPane?.paneId
-  const originalText = originalPane?.text ?? ''
-  const modifiedText = modifiedPane?.text ?? ''
-  const originalMeta = inputs?.sourceMeta?.original
-  const modifiedMeta = inputs?.sourceMeta?.modified
+  const [originalText, setOriginalText] = useDiffSourceText(source.original)
+  const [modifiedText, setModifiedText] = useDiffSourceText(source.modified)
 
-  const layout = normalizeAutoDiffLayout(inputs?.renderMode)
+  // JSON semantic mode
   const semanticAvailable = useMemo(
     () => canUseSemanticJsonDiff(originalText, modifiedText),
     [originalText, modifiedText],
@@ -67,13 +61,13 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
   const selectedMode = semanticEnabled ? 'json-semantic' : 'text-line'
   const renderMode = semanticEnabled && semanticAvailable ? 'json-semantic' : 'text'
 
+  // Compute diff
   const viewModel = useMemo(
-    () => semanticAvailable
-      ? diff.buildJsonDiffViewModel(originalText, modifiedText)
-      : null,
+    () => semanticAvailable ? diff.buildJsonDiffViewModel(originalText, modifiedText) : null,
     [semanticAvailable, originalText, modifiedText, diff],
   )
   const changes = viewModel?.changes ?? []
+
   const { leftText, rightText, leftHighlights, rightHighlights } = useMemo(() => {
     if (renderMode === 'json-semantic') {
       const origParsed = diff.parseJson(originalText)
@@ -100,70 +94,47 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
     const { leftHighlights, rightHighlights } = diff.computeTextLineDiff(originalText, modifiedText)
     return { leftText: originalText, rightText: modifiedText, leftHighlights, rightHighlights }
   }, [renderMode, originalText, modifiedText, diff])
+
   const diffCount = renderMode === 'json-semantic'
     ? changes.length
     : Math.max(leftHighlights.length, rightHighlights.length)
+
+  // Language detection
   const editorLanguage = useMemo(
     () => renderMode === 'json-semantic'
       ? 'json'
       : detectExternalEditorLanguage(
         [originalText, modifiedText],
-        [originalPane?.language, modifiedPane?.language],
+        [source.original.language, source.modified.language],
       ),
-    [renderMode, originalText, modifiedText, originalPane?.language, modifiedPane?.language],
+    [renderMode, originalText, modifiedText, source.original.language, source.modified.language],
   )
 
+  // ESC to close
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // Don't close if user is in a Monaco find widget or similar input
+      const target = event.target as HTMLElement | null
+      if (target?.closest?.('input, textarea, [role="combobox"]')) return
       if (!isAutoDiffExitKey(event.key)) return
       event.preventDefault()
-      host.close()
+      clearActiveFullscreenView()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [host])
-
-  useEffect(() => {
-    if (semanticEnabled && !semanticAvailable) {
-      host.setStatus(t('diff.jsonInvalid'), 'error')
-      return
-    }
-    if (diffCount > 0) {
-      host.setStatus(t('diff.changeCount', { count: diffCount }))
-      return
-    }
-    host.setStatus(semanticEnabled ? t('diff.semanticNoChanges') : t('diff.lineNoChanges'))
-  }, [diffCount, host, semanticAvailable, semanticEnabled, t])
-
-  const handleOriginalFocus = useCallback(() => {
-    if (originalPaneId) host.focusPane(originalPaneId)
-  }, [originalPaneId, host])
-
-  const handleModifiedFocus = useCallback(() => {
-    if (modifiedPaneId) host.focusPane(modifiedPaneId)
-  }, [modifiedPaneId, host])
-
-  const handleOriginalChange = useCallback((text: string) => {
-    if (originalPaneId) host.updatePaneText(originalPaneId, text)
-  }, [originalPaneId, host])
-
-  const handleModifiedChange = useCallback((text: string) => {
-    if (modifiedPaneId) host.updatePaneText(modifiedPaneId, text)
-  }, [modifiedPaneId, host])
-
-  if (!originalPane || !modifiedPane) return null
+  }, [clearActiveFullscreenView])
 
   return (
-    <div className="text-diff-surface">
+    <div className="text-diff-surface text-diff-fullscreen-page">
       <SurfaceToolbar className="text-diff-toolbar">
         <div className="text-diff-title-group">
           <span className="text-diff-title">{t('textDiff.title')}</span>
-          <span className="text-diff-source" title={`${originalMeta?.title ?? originalPane.title} ↔ ${modifiedMeta?.title ?? modifiedPane.title}`}>
-            {originalMeta?.title ?? originalPane.title} ↔ {modifiedMeta?.title ?? modifiedPane.title}
+          <span className="text-diff-source" title={`${source.original.title} ↔ ${source.modified.title}`}>
+            {source.original.title} ↔ {source.modified.title}
           </span>
-          {(originalMeta?.contentProvider === 'snapshot' || modifiedMeta?.contentProvider === 'snapshot') && (
-            <span className="text-diff-snapshot-badge">
-              snapshot
+          {diffCount > 0 && (
+            <span className="text-diff-change-count">
+              {t('diff.changeCount', { count: diffCount })}
             </span>
           )}
         </div>
@@ -188,7 +159,7 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
         <ToolbarButton
           type="button"
           className="text-diff-exit-button"
-          onClick={host.close}
+          onClick={clearActiveFullscreenView}
           title={t('diff.exit')}
           aria-label={t('diff.exit')}
         >
@@ -202,18 +173,14 @@ export function TextDiffRenderer({ inputs, host }: RendererProps<TextDiffInputs>
           rightText={rightText}
           leftHighlights={leftHighlights}
           rightHighlights={rightHighlights}
-          layout={layout}
+          layout="side-by-side"
           language={editorLanguage}
-          onLeftFocus={handleOriginalFocus}
-          onRightFocus={handleModifiedFocus}
-          onLeftChange={handleOriginalChange}
-          onRightChange={handleModifiedChange}
+          onLeftChange={setOriginalText}
+          onRightChange={setModifiedText}
           fontSize={settings.fontSize}
           lineNumbers={settings.lineNumbers}
           wordWrap={settings.wordWrap}
           monacoTheme={settings.theme === 'dark' ? 'flux-vscode-dark' : 'flux-vscode-light'}
-          leftStickyScrollEnabled={originalPane.stickyScroll === true}
-          rightStickyScrollEnabled={modifiedPane.stickyScroll === true}
         />
       </div>
     </div>

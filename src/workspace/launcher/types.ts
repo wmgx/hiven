@@ -18,6 +18,7 @@ import type { ComponentType } from 'react'
 import type { Locale } from '../../i18n'
 import type { PluginPrivateStorageApi } from '../pluginTypes'
 import type { FluxEffect } from '../types'
+import type { DiffSource } from '../workspaceStore'
 import type { EffectRunnerResult } from '../effectRunner'
 
 // ─── System Surfaces ───────────────────────────────────────────────────────
@@ -295,6 +296,7 @@ export type PluginLauncherApi = {
   createPane(options?: { text?: string; title?: string; language?: string; focus?: boolean; direction?: 'left' | 'right' | 'top' | 'bottom' }): Promise<string | undefined>
   dispatchEffects(effects: FluxEffect[]): EffectRunnerResult
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
+  openDiffPage(payload: { original: DiffSource; modified: DiffSource }): void
   apps: PluginAppsApi
 }
 

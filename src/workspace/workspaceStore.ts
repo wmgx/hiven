@@ -19,6 +19,23 @@ import type {
   PanelInstanceV2,
 } from './types'
 
+// ─── Fullscreen View Types ──────────────────────────────────────────────────
+
+export type DiffSource = {
+  sourceId: string
+  kind: 'editor-pane' | 'clipboard' | 'empty'
+  paneId?: string
+  title: string
+  language?: string
+  text?: string
+}
+
+export type FullscreenView = {
+  type: 'diff'
+  original: DiffSource
+  modified: DiffSource
+}
+
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const DEFAULT_PANE_ID = 'pane-main'
@@ -179,6 +196,9 @@ interface WorkspaceSlice {
   // Plugin system: panel instances V2 (single-instance by panelId)
   panelInstancesV2: Record<string, PanelInstanceV2>
 
+  // Fullscreen view (diff page, etc.)
+  activeFullscreenView: FullscreenView | null
+
   // Actions
   setActivePaneText: (text: string) => void
   setPaneText: (paneId: PaneId, text: string) => void
@@ -217,6 +237,10 @@ interface WorkspaceSlice {
 
   // Active pane text helper
   getActivePaneText: () => string
+
+  // Fullscreen view actions
+  openDiffPage: (payload: { original: DiffSource; modified: DiffSource }) => void
+  clearActiveFullscreenView: () => void
 }
 
 // ─── Store ──────────────────────────────────────────────────────────────────
@@ -248,6 +272,7 @@ export const useWorkspaceStore = create<WorkspaceSlice>()(persist(
     renderStacks: {},
     paneRenderers: {},
     panelInstancesV2: {},
+    activeFullscreenView: null,
 
     setActivePaneText: (text) => {
       const { activePaneId, panes } = get()
@@ -433,6 +458,14 @@ export const useWorkspaceStore = create<WorkspaceSlice>()(persist(
     getActivePaneText: () => {
       const { activePaneId, panes } = get()
       return panes[activePaneId]?.text || ''
+    },
+
+    openDiffPage: (payload) => {
+      set({ activeFullscreenView: { type: 'diff', ...payload } })
+    },
+
+    clearActiveFullscreenView: () => {
+      set({ activeFullscreenView: null })
     },
 
     openPresentation: (session) => {
