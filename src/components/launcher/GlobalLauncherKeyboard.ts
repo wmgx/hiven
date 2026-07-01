@@ -27,6 +27,8 @@ export function handleGlobalLauncherKeyDown({
   isWorkflowObjectLauncherItem,
   selectItem,
   handleClipboardBackspace,
+  hasClipboardHint,
+  attachHintAsBlock,
   hasObjectActions,
   objectActionCount,
   setSelectedObjectActionIndex,
@@ -58,6 +60,8 @@ export function handleGlobalLauncherKeyDown({
   isWorkflowObjectLauncherItem: (item?: LauncherMixedItem) => boolean
   selectItem: (item: LauncherMixedItem | undefined, customizeParams?: boolean) => void
   handleClipboardBackspace?: (queryEmpty: boolean) => boolean
+  hasClipboardHint?: boolean
+  attachHintAsBlock?: () => void
   hasObjectActions?: boolean
   objectActionCount?: number
   setSelectedObjectActionIndex?: (updater: number | ((index: number) => number)) => void
@@ -202,6 +206,11 @@ export function handleGlobalLauncherKeyDown({
       event.preventDefault()
       return
     }
+  }
+  if (event.key === 'Enter' && hasClipboardHint && attachHintAsBlock) {
+    event.preventDefault()
+    attachHintAsBlock()
+    return
   }
   if (event.key === 'Enter') {
     event.preventDefault()

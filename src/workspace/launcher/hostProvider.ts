@@ -8,6 +8,7 @@ import {
   setHostLauncherDynamicItemsProvider,
   setHostLauncherItemsProvider,
 } from './registry'
+import { measureLauncherPerf } from './perf'
 import { getEditorWindowItems } from './editorWindowItems'
 import { getHostPaneControlItems, getHostSystemPowerItems } from './hostActions'
 import { registerPluginSurfacePanelProvider } from '../pluginSurfacePanelProvider'
@@ -23,8 +24,20 @@ export function registerHostLauncherProviders(): void {
     ...getHostSystemPowerItems(),
     ...getHostAppLauncherStaticItems(),
   ])
-  setHostLauncherDynamicItemsProvider(async (ctx) => [
-    ...await getWorkflowObjectLauncherItems(ctx),
-    ...await getHostAppLauncherDynamicItems(ctx),
-  ])
+  setHostLauncherDynamicItemsProvider(async (ctx) => {
+    const [workflowItems, appItems] = await Promise.all([
+      measureLauncherPerf('host-provider:workflow-items', () => getWorkflowObjectLauncherItems(ctx), (items) => ({
+        queryLength: ctx.query.trim().length,
+        itemCount: items.length,
+      })),
+      measureLauncherPerf('host-provider:app-items', () => getHostAppLauncherDynamicItems(ctx), (items) => ({
+        queryLength: ctx.query.trim().length,
+        itemCount: items.length,
+      })),
+    ])
+    return [
+      ...workflowItems,
+      ...appItems,
+    ]
+  })
 }

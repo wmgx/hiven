@@ -43,11 +43,28 @@ static SURFACE_REGISTRY: OnceLock<SurfaceRegistryState> = OnceLock::new();
 const SURFACE_REGISTRY_EVENT: &str = "hiven://surface-registry-sync";
 const MAX_APP_ICON_CACHE_WARM_COUNT: usize = 20;
 const FOREGROUND_SELECTION_CACHE_TTL: Duration = Duration::from_secs(30);
+const LAUNCHER_PERF_ENV: &str = "HIVEN_LAUNCHER_PERF";
 
 #[derive(Clone)]
 struct ForegroundSelectionText {
     text: String,
     captured_at: Instant,
+}
+
+fn launcher_perf_enabled() -> bool {
+    std::env::var(LAUNCHER_PERF_ENV).ok().as_deref() == Some("1")
+}
+
+fn log_launcher_perf(label: &str, started_at: Instant, detail: impl AsRef<str>) {
+    if !launcher_perf_enabled() {
+        return;
+    }
+    eprintln!(
+        "[hiven:launcher-perf] {} durationMs={} {}",
+        label,
+        started_at.elapsed().as_millis(),
+        detail.as_ref()
+    );
 }
 
 
@@ -489,18 +506,25 @@ async fn show_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
 pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(), String> {
     use tauri::Manager;
 
+    let total_started_at = Instant::now();
     let app_clone = app.clone();
     app.run_on_main_thread(move || {
+        let main_thread_started_at = Instant::now();
         let existing_launcher = app_clone.get_webview_window("launcher");
         let was_visible = existing_launcher
             .as_ref()
             .and_then(|window| window.is_visible().ok())
             .unwrap_or(false);
         if !was_visible {
+            let started_at = Instant::now();
             remember_previous_foreground_app();
+            log_launcher_perf("native:remember-foreground-app", started_at, "");
+            let started_at = Instant::now();
             capture_foreground_selection_text(&app_clone);
+            log_launcher_perf("native:capture-selection-dispatch", started_at, "");
         }
 
+        let started_at = Instant::now();
         let window = if let Some(window) = existing_launcher {
             window
         } else {
@@ -525,8 +549,10 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
                 }
             }
         };
+        log_launcher_perf("native:get-or-create-window", started_at, format!("wasVisible={}", was_visible));
 
         if !was_visible {
+            let started_at = Instant::now();
             // Use 1/3 of screen width for the launcher; height is fixed with a
             // max cap so the launcher never becomes unreasonably tall on large
             // monitors.
@@ -549,25 +575,37 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
                     error
                 );
             }
+            log_launcher_perf("native:resize-before-show", started_at, format!("width={} height={}", compact_width, compact_height));
         }
         if !was_visible {
+            let started_at = Instant::now();
             if let Err(error) = switch_to_default_english_input_source() {
                 eprintln!("[hiven] Failed to switch launcher input source to default English: {}", error);
             }
+            log_launcher_perf("native:switch-input-source", started_at, "");
         }
+        let started_at = Instant::now();
         if let Err(error) = show_launcher_window_without_app_activation(&window) {
             eprintln!("[hiven] Failed to show launcher window: {}", error);
             return;
         }
+        log_launcher_perf("native:show-window", started_at, "");
         if !was_visible {
             // Position AFTER showing: on macOS a `set_position` on a hidden
             // window gets clobbered by the window's initial frame when it is
             // ordered front, leaving it at the OS default (bottom-right) spot.
+            let started_at = Instant::now();
             center_launcher_window(&window);
+            log_launcher_perf("native:center-window", started_at, "");
+            let started_at = Instant::now();
             let _ = window.emit("hiven://launcher-open", ());
+            log_launcher_perf("native:emit-launcher-open", started_at, "");
         }
+        log_launcher_perf("native:main-thread-open", main_thread_started_at, format!("wasVisible={}", was_visible));
     })
-    .map_err(|error| error.to_string())
+    .map_err(|error| error.to_string())?;
+    log_launcher_perf("native:show-launcher-window-for-hotkey", total_started_at, "");
+    Ok(())
 }
 
 /// Position the launcher window horizontally centered and in the upper portion
@@ -1224,15 +1262,19 @@ fn clear_foreground_selection_text() {
 fn capture_foreground_selection_text(app: &tauri::AppHandle) {
     let app = app.clone();
     std::thread::spawn(move || {
+        let started_at = Instant::now();
         if let Some(text) = capture_foreground_selection_text_impl(&app) {
+            let text_len = text.len();
             if let Ok(mut stored) = last_foreground_selection_state().lock() {
                 *stored = Some(ForegroundSelectionText {
                     text,
                     captured_at: Instant::now(),
                 });
             }
+            log_launcher_perf("native:capture-selection-worker", started_at, format!("hasText=true textLength={}", text_len));
         } else {
             clear_foreground_selection_text();
+            log_launcher_perf("native:capture-selection-worker", started_at, "hasText=false");
         }
     });
 }

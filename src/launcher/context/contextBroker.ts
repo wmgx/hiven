@@ -2,6 +2,7 @@ import type { TextRange } from '../../workspace/launcher/types'
 import { getActiveEditorContextSnapshot, getEditorContext } from '../../workspace/editorBridge'
 import { readLocalEditorContextSnapshot } from '../../workspace/editorContextSnapshot'
 import { EDITOR_WINDOW_LABEL } from '../../workspace/windowManager/windowLabels'
+import { launcherPerfNow, logLauncherPerfDuration } from '../../workspace/launcher/perf'
 
 export type WorkContextInvocationSource = 'global-hotkey' | 'editor-command-bar' | 'plugin-surface'
 
@@ -57,10 +58,20 @@ export async function createWorkContextSnapshot(
 ): Promise<WorkContextSnapshot> {
   const snapshot: WorkContextSnapshot = { invocation }
   for (const provider of providers) {
+    const startedAt = launcherPerfNow()
     try {
       const partial = await provider.getSnapshot()
       Object.assign(snapshot, partial)
+      logLauncherPerfDuration('context:snapshot-provider', startedAt, {
+        providerId: provider.id,
+        keys: Object.keys(partial),
+      })
     } catch (error) {
+      logLauncherPerfDuration('context:snapshot-provider', startedAt, {
+        providerId: provider.id,
+        failed: true,
+        message: error instanceof Error ? error.message : String(error),
+      })
       console.warn(`[context] snapshot provider "${provider.id}" failed:`, error)
     }
   }

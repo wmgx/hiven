@@ -35,6 +35,7 @@ import {
   findUnknownSurfaces,
 } from './identity'
 import { createPluginLauncherApi, createPluginLauncherStorage } from './pluginApi'
+import { launcherPerfNow, logLauncherPerfDuration, measureLauncherPerf } from './perf'
 import { resolvePluginSettingsSource } from './pluginSource'
 import { adaptToolToLauncherItem } from './toolAdapter'
 import { applyProductProviderToLauncherItem, resolvePluginProductMetadata } from '../pluginProductCatalog'
@@ -304,13 +305,22 @@ export async function collectDynamicItems(
   if (q.length > DYNAMIC_QUERY_MAX_LENGTH) return []
 
   const hostDynamicItems = hostDynamicItemsProvider
-    ? await Promise.resolve(hostDynamicItemsProvider({ query: q, surfaceId, locale }))
+    ? await measureLauncherPerf(
+      'registry:host-dynamic-items',
+      () => Promise.resolve(hostDynamicItemsProvider({ query: q, surfaceId, locale })),
+      (items) => ({
+        surfaceId,
+        queryLength: q.length,
+        itemCount: items.length,
+      }),
+    )
     : []
   if (!q && !clipboardText) return hostDynamicItems
 
   const providers = collectDynamicProviders()
   const results = await Promise.all(
     providers.map(async ({ provider, pluginId, source }) => {
+      const startedAt = launcherPerfNow()
       try {
         const settings = getSettings(pluginId, source)
         const settingsSource = resolvePluginSettingsSource(pluginId, source)
@@ -331,8 +341,23 @@ export async function collectDynamicItems(
           DYNAMIC_PROVIDER_TIMEOUT_MS,
         )
         if (!Array.isArray(raw)) return []
-        return raw.map((contribution) => resolveDynamicItem(contribution, pluginId, source))
+        const items = raw.map((contribution) => resolveDynamicItem(contribution, pluginId, source))
+        logLauncherPerfDuration('registry:plugin-dynamic-provider', startedAt, {
+          pluginId,
+          source,
+          queryLength: q.length,
+          rawCount: raw.length,
+          itemCount: items.filter((item): item is LauncherItem => item != null).length,
+        })
+        return items
       } catch (error) {
+        logLauncherPerfDuration('registry:plugin-dynamic-provider', startedAt, {
+          pluginId,
+          source,
+          queryLength: q.length,
+          failed: true,
+          message: error instanceof Error ? error.message : String(error),
+        })
         console.warn(`[launcher] dynamic provider "${pluginId}" failed:`, error)
         return []
       }

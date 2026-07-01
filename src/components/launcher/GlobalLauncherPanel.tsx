@@ -152,6 +152,8 @@ export function GlobalLauncherPanel({
         isWorkflowObjectLauncherItem,
         selectItem,
         handleClipboardBackspace: clipboardBlock?.handleBackspace,
+        hasClipboardHint: Boolean(clipboardBlock?.hint && !clipboardBlock?.block),
+        attachHintAsBlock: clipboardBlock?.attachHintAsBlock,
         hasObjectActions: Boolean(clipboardBlock?.block && objectActionCount > 0),
         objectActionCount,
         setSelectedObjectActionIndex: setSelectedActionIndex,

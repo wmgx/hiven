@@ -24,6 +24,7 @@ import {
   updateClipboardSnapshot,
   type ClipboardSnapshot,
 } from './clipboardSnapshot'
+import { launcherPerfNow, logLauncherPerfDuration } from '../../workspace/launcher/perf'
 
 export type ClipboardObjectBlockMode = 'object-action' | 'search-only'
 
@@ -56,8 +57,13 @@ export function useClipboardObjectBlock(params: {
     didReadRef.current = true
 
     void (async () => {
+      const startedAt = launcherPerfNow()
       try {
         const text = await readClipboard()
+        logLauncherPerfDuration('clipboard-object-block:read', startedAt, {
+          hasText: Boolean(text),
+          textLength: text.length,
+        })
         if (!text) {
           setBlock(null)
           setHint(null)
@@ -82,6 +88,7 @@ export function useClipboardObjectBlock(params: {
         setBlock(newBlock)
         setHint(newBlock ? null : buildRecentClipboardHint(snapshot))
       } catch {
+        logLauncherPerfDuration('clipboard-object-block:read', startedAt, { failed: true })
         setBlock(null)
         setHint(null)
       }

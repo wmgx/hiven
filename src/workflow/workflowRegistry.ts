@@ -1,5 +1,6 @@
 import type { ContextRequirement, WorkAction, WorkActionProvider, WorkContext } from './workAction'
 import type { WorkObject, WorkObjectProvider } from './workObject'
+import { launcherPerfNow, logLauncherPerfDuration } from '../workspace/launcher/perf'
 
 const objectProviders: WorkObjectProvider[] = []
 const actionProviders: WorkActionProvider[] = []
@@ -27,9 +28,20 @@ export function getWorkActionProviders(): readonly WorkActionProvider[] {
 export async function collectWorkObjects(): Promise<WorkObject[]> {
   const groups = await Promise.all(
     objectProviders.map(async (provider) => {
+      const startedAt = launcherPerfNow()
       try {
-        return await Promise.resolve(provider.collect())
+        const objects = await Promise.resolve(provider.collect())
+        logLauncherPerfDuration('workflow:object-provider', startedAt, {
+          providerId: provider.id,
+          objectCount: objects.length,
+        })
+        return objects
       } catch (error) {
+        logLauncherPerfDuration('workflow:object-provider', startedAt, {
+          providerId: provider.id,
+          failed: true,
+          message: error instanceof Error ? error.message : String(error),
+        })
         console.warn(`[workflow] object provider "${provider.id}" failed:`, error)
         return []
       }
