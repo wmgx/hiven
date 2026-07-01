@@ -1,6 +1,6 @@
 import { type RefObject } from 'react'
 import type { Locale } from '../../i18n'
-import type { LauncherHostSurfaceTarget, PluginSurfaceOpenTarget } from '../../store'
+import { localized, type LauncherHostSurfaceTarget, type PluginSurfaceOpenTarget } from '../../store'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import type { CollectInputFrame, ParamInputFrame, ResultFrame } from '../../workspace/launcher/controller'
 import type { LauncherResultChoice } from '../../workspace/launcher/types'
@@ -128,11 +128,16 @@ export function GlobalLauncherFrameSwitch({
     if (!activeSurfaceFrame) {
       return <div className="p-4 text-center text-[12px]" style={{ color: 'var(--color-text-tertiary)' }}>Surface not found</div>
     }
+    const shell = activeSurfaceFrame.surface.shell
+    const breadcrumbTitle = shell?.breadcrumbTitle
+      ? localized(shell.breadcrumbTitle, shell.breadcrumbTitleI18n, locale)
+      : undefined
     return (
       <GlobalLauncherPluginSurfaceFrame
         target={surfaceFrame}
         locale={locale}
-        shellHeight={activeSurfaceFrame.surface.shell?.defaultHeight ?? 480}
+        shellHeight={shell?.defaultHeight ?? 480}
+        breadcrumbTitle={breadcrumbTitle}
         onBack={onSurfaceBack}
         onClose={onSurfaceClose}
       />
