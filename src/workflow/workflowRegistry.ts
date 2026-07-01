@@ -79,7 +79,8 @@ function filterActionsForContextRequirements(actions: WorkAction[], ctx: WorkCon
 function contextRequirementSatisfied(requirement: ContextRequirement, ctx: WorkContext): boolean {
   switch (requirement.kind) {
     case 'selected-text':
-      return Boolean(ctx.snapshot.editor?.selectedText || ctx.snapshot.externalSelection?.text)
+      // [DISABLED] externalSelection check — only editor selection is active now
+      return Boolean(ctx.snapshot.editor?.selectedText)
     case 'clipboard':
       return Boolean(ctx.snapshot.clipboard)
     case 'editor-pane':

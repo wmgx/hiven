@@ -35,6 +35,7 @@ const PLUGIN_SURFACE_WINDOW_DEFAULT_DESTROY_TIMEOUT_MS: u64 = 120_000;
 static PREVIOUS_FOREGROUND_PROCESS_ID: OnceLock<Mutex<Option<u32>>> = OnceLock::new();
 #[cfg(target_os = "macos")]
 static PREVIOUS_LAUNCHER_INPUT_SOURCE_ID: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+#[allow(dead_code)]
 static LAST_FOREGROUND_SELECTION_TEXT: OnceLock<Mutex<Option<ForegroundSelectionText>>> = OnceLock::new();
 static INSTALLED_APP_TARGETS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 static PLUGIN_KV_DB: OnceLock<Result<Mutex<PluginKvDb>, String>> = OnceLock::new();
@@ -42,10 +43,12 @@ static PLUGIN_SURFACE_WINDOW_TOKENS: OnceLock<Mutex<HashMap<String, u64>>> = Onc
 static SURFACE_REGISTRY: OnceLock<SurfaceRegistryState> = OnceLock::new();
 const SURFACE_REGISTRY_EVENT: &str = "hiven://surface-registry-sync";
 const MAX_APP_ICON_CACHE_WARM_COUNT: usize = 20;
+#[allow(dead_code)]
 const FOREGROUND_SELECTION_CACHE_TTL: Duration = Duration::from_secs(30);
 const LAUNCHER_PERF_ENV: &str = "HIVEN_LAUNCHER_PERF";
 
 #[derive(Clone)]
+#[allow(dead_code)]
 struct ForegroundSelectionText {
     text: String,
     captured_at: Instant,
@@ -519,9 +522,10 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
             let started_at = Instant::now();
             remember_previous_foreground_app();
             log_launcher_perf("native:remember-foreground-app", started_at, "");
-            let started_at = Instant::now();
-            capture_foreground_selection_text(&app_clone);
-            log_launcher_perf("native:capture-selection-dispatch", started_at, "");
+            // [DISABLED] External selection capture — logic preserved, entry point disabled.
+            // let started_at = Instant::now();
+            // capture_foreground_selection_text(&app_clone);
+            // log_launcher_perf("native:capture-selection-dispatch", started_at, "");
         }
 
         let started_at = Instant::now();
@@ -1238,11 +1242,13 @@ fn remember_previous_foreground_app() {
     }
 }
 
+#[allow(dead_code)]
 fn last_foreground_selection_state() -> &'static Mutex<Option<ForegroundSelectionText>> {
     LAST_FOREGROUND_SELECTION_TEXT.get_or_init(|| Mutex::new(None))
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 async fn last_foreground_selection_text() -> Option<String> {
     let mut stored = last_foreground_selection_state().lock().ok()?;
     let selection = stored.as_ref()?;
@@ -1253,12 +1259,15 @@ async fn last_foreground_selection_text() -> Option<String> {
     Some(selection.text.clone())
 }
 
+#[allow(dead_code)]
 fn clear_foreground_selection_text() {
     if let Ok(mut stored) = last_foreground_selection_state().lock() {
         *stored = None;
     }
 }
 
+// [DISABLED] External selection capture — all functions below are preserved but currently unused.
+#[allow(dead_code)]
 fn capture_foreground_selection_text(app: &tauri::AppHandle) {
     let app = app.clone();
     std::thread::spawn(move || {
@@ -1279,6 +1288,7 @@ fn capture_foreground_selection_text(app: &tauri::AppHandle) {
     });
 }
 
+#[allow(dead_code)]
 fn capture_foreground_selection_text_impl(app: &tauri::AppHandle) -> Option<String> {
     let before = app.clipboard().read_text().ok();
     let before_change_count = read_clipboard_change_count(&app);
@@ -1303,6 +1313,7 @@ fn capture_foreground_selection_text_impl(app: &tauri::AppHandle) -> Option<Stri
 }
 
 #[cfg(target_os = "macos")]
+#[allow(dead_code)]
 fn read_clipboard_change_count(_app: &tauri::AppHandle) -> Option<i64> {
     unsafe {
         let pasteboard_cls = objc2::runtime::AnyClass::get(c"NSPasteboard")?;
@@ -1317,11 +1328,13 @@ fn read_clipboard_change_count(_app: &tauri::AppHandle) -> Option<i64> {
 }
 
 #[cfg(not(target_os = "macos"))]
+#[allow(dead_code)]
 fn read_clipboard_change_count(_app: &tauri::AppHandle) -> Option<i64> {
     None
 }
 
 #[cfg(target_os = "macos")]
+#[allow(dead_code)]
 fn simulate_copy_selection_impl() -> Result<(), String> {
     use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
     use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
@@ -1345,6 +1358,7 @@ fn simulate_copy_selection_impl() -> Result<(), String> {
 }
 
 #[cfg(target_os = "windows")]
+#[allow(dead_code)]
 fn simulate_copy_selection_impl() -> Result<(), String> {
     use windows::Win32::UI::Input::KeyboardAndMouse::{
         SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
@@ -1383,6 +1397,7 @@ fn simulate_copy_selection_impl() -> Result<(), String> {
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[allow(dead_code)]
 fn simulate_copy_selection_impl() -> Result<(), String> {
     Err("Selection copy simulation is not supported on this platform".to_string())
 }
@@ -3939,7 +3954,8 @@ pub fn run() {
             simulate_paste,
             current_foreground_app_name,
             current_foreground_app_context,
-            last_foreground_selection_text,
+            // [DISABLED] External selection capture — command preserved, entry point disabled.
+            // last_foreground_selection_text,
             discover_installed_apps,
             read_installed_app_icon_url,
             cache_installed_app_icons,

@@ -94,15 +94,16 @@ export const editorContextProvider: ContextSnapshotProvider = {
   },
 }
 
-export const externalSelectionContextProvider: ContextSnapshotProvider = {
-  id: 'external-selection',
-  getSnapshot: async () => {
-    const text = await readLastForegroundSelectionText()
-    return text
-      ? { externalSelection: { kind: 'text', text, preview: text.slice(0, 240) } }
-      : {}
-  },
-}
+// [DISABLED] External selection capture — logic preserved, export disabled.
+// export const externalSelectionContextProvider: ContextSnapshotProvider = {
+//   id: 'external-selection',
+//   getSnapshot: async () => {
+//     const text = await readLastForegroundSelectionText()
+//     return text
+//       ? { externalSelection: { kind: 'text', text, preview: text.slice(0, 240) } }
+//       : {}
+//   },
+// }
 
 export const clipboardContextProvider: ContextSnapshotProvider = {
   id: 'clipboard',

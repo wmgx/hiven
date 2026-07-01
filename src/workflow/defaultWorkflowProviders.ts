@@ -35,19 +35,20 @@ export const currentContextObjectProvider: WorkObjectProvider = {
     const snapshot = await createDefaultWorkContextSnapshot('global-hotkey')
     const objects: WorkObject[] = []
 
-    const externalSelectionText = snapshot.externalSelection?.text?.trim()
-    if (externalSelectionText) {
-      objects.push({
-        id: 'context:external-selected-text',
-        type: 'text',
-        title: 'Selected Text',
-        subtitle: preview(externalSelectionText),
-        icon: 'TextSelect',
-        source: 'context.external-selection',
-        text: externalSelectionText,
-        updatedAt: snapshot.invocation.timestamp,
-      })
-    }
+    // [DISABLED] External selection object — logic preserved, entry point disabled.
+    // const externalSelectionText = snapshot.externalSelection?.text?.trim()
+    // if (externalSelectionText) {
+    //   objects.push({
+    //     id: 'context:external-selected-text',
+    //     type: 'text',
+    //     title: 'Selected Text',
+    //     subtitle: preview(externalSelectionText),
+    //     icon: 'TextSelect',
+    //     source: 'context.external-selection',
+    //     text: externalSelectionText,
+    //     updatedAt: snapshot.invocation.timestamp,
+    //   })
+    // }
 
     const selectedText = snapshot.editor?.selectedText?.trim()
     if (selectedText) {
