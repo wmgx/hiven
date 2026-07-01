@@ -90,6 +90,7 @@ export function useGlobalLauncherCollectInputPreview({
 
 export function useGlobalLauncherHostEscape({
   open,
+  mode,
   isImeComposingRef,
   launcherSettingsTarget,
   closeSettingsDialog,
@@ -105,6 +106,7 @@ export function useGlobalLauncherHostEscape({
   focusSearchInputAfterBack,
 }: {
   open: boolean
+  mode?: string
   isImeComposingRef: RefObject<boolean>
   launcherSettingsTarget: { pluginId: string; source: PluginSettingsSource } | null
   closeSettingsDialog: () => void
@@ -122,6 +124,15 @@ export function useGlobalLauncherHostEscape({
   const handleHostEscape = useCallback((event: KeyboardEvent) => {
     if (event.key !== 'Escape') return
     if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
+
+    // Quick Editor mode: Escape closes the launcher directly
+    if (mode === 'quick-editor') {
+      event.preventDefault()
+      event.stopPropagation()
+      closeLauncher()
+      return
+    }
+
     if (event.key === 'Escape' && launcherSettingsTarget) {
       event.preventDefault()
       event.stopPropagation()
@@ -167,6 +178,7 @@ export function useGlobalLauncherHostEscape({
     itemPermissionFrame,
     launcherSettingsTarget,
     leaveSurface,
+    mode,
     settingsDialogTarget,
     surfaceFrame,
   ])

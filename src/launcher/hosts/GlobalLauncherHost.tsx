@@ -26,6 +26,8 @@ import { createEditorPane, replaceEditorSelection, insertIntoEditor, openEditorP
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import { prepareLauncherInputSource, restoreLauncherInputSource } from '../../workspace/windowManager/launcherWindow'
+import { QuickEditorPanel } from '../../components/quickEditor/QuickEditorPanel'
+import { STANDALONE_QUICK_EDITOR_WIDTH, STANDALONE_LAUNCHER_VERTICAL_PADDING } from '../../components/launcher/GlobalLauncherLayout'
 
 export function GlobalLauncherHost() {
   const {
@@ -266,6 +268,7 @@ export function GlobalLauncherHost() {
 
   useGlobalLauncherHostEscape({
     open,
+    mode,
     isImeComposingRef,
     launcherSettingsTarget,
     closeSettingsDialog,
@@ -341,6 +344,37 @@ export function GlobalLauncherHost() {
   })
 
   if (!open) return null
+
+  // Quick Editor mode: render dedicated editor panel instead of launcher search
+  if (mode === 'quick-editor') {
+    const quickEditorPanelStyle = {
+      background: 'var(--panel, #ffffff)',
+      border: '1px solid var(--border, #ececed)',
+      borderRadius: 'var(--radius, 10px)',
+      width: standaloneLauncher
+        ? `calc(100vw - 24px)`
+        : `${STANDALONE_QUICK_EDITOR_WIDTH}px`,
+      maxWidth: `${STANDALONE_QUICK_EDITOR_WIDTH}px`,
+      height: `calc(100vh - ${STANDALONE_LAUNCHER_VERTICAL_PADDING}px)`,
+      maxHeight: '720px',
+      position: 'fixed' as const,
+      left: '50%',
+      top: 12,
+      transform: 'translateX(-50%)',
+      overflow: 'hidden',
+    }
+    return (
+      <div
+        className="fixed inset-0 palette-overlay global-launcher-overlay open"
+        style={{ pointerEvents: 'auto', visibility: 'visible', zIndex: 1100 }}
+        onClick={(event) => { if (event.target === event.currentTarget) closeLauncher() }}
+      >
+        <div ref={panelRef} style={quickEditorPanelStyle} onPointerDown={beginDrag}>
+          <QuickEditorPanel />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div
