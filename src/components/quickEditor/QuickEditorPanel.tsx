@@ -5,6 +5,7 @@ import type { editor as MonacoEditor } from 'monaco-editor'
 import { useQuickEditorStore } from '../../workspace/quickEditor/quickEditorStore'
 import { useAppStore } from '../../store'
 import { QuickEditorToolbar } from './QuickEditorToolbar'
+import { QuickEditorCommandOverlay } from './QuickEditorCommandOverlay'
 import { getFluxMonacoTheme, registerFluxMonacoThemes } from '../../utils/monacoTheme'
 
 export function QuickEditorPanel() {
@@ -48,7 +49,7 @@ export function QuickEditorPanel() {
   }, [text])
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="relative flex flex-col h-full overflow-hidden">
       <QuickEditorToolbar />
       <div className="flex-1 min-h-0">
         <Editor
@@ -111,6 +112,7 @@ export function QuickEditorPanel() {
           theme={getFluxMonacoTheme(theme)}
         />
       </div>
+      <QuickEditorCommandOverlay />
     </div>
   )
 }
