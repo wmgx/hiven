@@ -13,6 +13,7 @@ import {
   collectStaticCandidates,
   filterDynamicForSurface,
 } from './registry'
+import { logLauncherPerf, logLauncherPerfDuration, launcherPerfNow, measureLauncherPerfSync } from './perf'
 import type {
   LauncherHostId,
   LauncherItem,
@@ -61,10 +62,10 @@ export function useLauncherSession({
   const [controllerState, setControllerState] = useState<LauncherControllerState | null>(null)
   const [controller, setController] = useState<LauncherController | null>(null)
   const [dynamicItems, setDynamicItems] = useState<LauncherItem[]>([])
-  const [rankingNow, setRankingNow] = useState(0)
   const controllerRef = useRef<LauncherController | null>(null)
   const dynamicQueryRef = useRef('')
   const requestCloseRef = useRef(requestClose)
+  const prevControllerStateRef = useRef<LauncherControllerState | null>(null)
 
   useEffect(() => {
     requestCloseRef.current = requestClose
@@ -80,6 +81,8 @@ export function useLauncherSession({
 
   useEffect(() => {
     if (!open) return
+    const openedAt = launcherPerfNow()
+    logLauncherPerf('session:open', { surfaceId: normalizedHostId })
     let cancelled = false
     queueMicrotask(() => {
       if (cancelled) return
@@ -116,15 +119,25 @@ export function useLauncherSession({
             recordLauncherSelection(surfaceId, item.systemKey)
           },
           requestClose: () => requestCloseRef.current(),
-          onChange: (state) => setControllerState({ ...state }),
+          onChange: (state) => {
+            const prev = prevControllerStateRef.current
+            if (prev && prev.busy === state.busy && prev.error === state.error && prev.frames === state.frames) {
+              return
+            }
+            prevControllerStateRef.current = state
+            setControllerState(state)
+          },
         })
         controllerRef.current = nextController
         setController(nextController)
       }
       controllerRef.current.reset()
+      logLauncherPerfDuration('session:open:controller-reset', openedAt, { surfaceId: normalizedHostId })
     })
     return () => { cancelled = true }
   }, [locale, normalizedHostId, open, recordLauncherSelection])
+
+  const dynamicAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -136,43 +149,63 @@ export function useLauncherSession({
     }
 
     dynamicQueryRef.current = q
-    const timer = window.setTimeout(async () => {
+    const timer = window.setTimeout(() => {
       if (dynamicQueryRef.current !== q) return
-      const items = await collectDynamicItems(q, normalizedHostId, locale, getPluginSettings, clipboardText)
-      if (dynamicQueryRef.current !== q) return
-      setDynamicItems(filterDynamicForSurface(items, normalizedHostId))
+      // Abort the previous in-flight request
+      dynamicAbortRef.current?.abort()
+      const abortController = new AbortController()
+      dynamicAbortRef.current = abortController
+      const startedAt = launcherPerfNow()
+      collectDynamicItems(q, normalizedHostId, locale, getPluginSettings, clipboardText)
+        .then((items) => {
+          if (abortController.signal.aborted) return
+          logLauncherPerfDuration('session:dynamic-items', startedAt, {
+            surfaceId: normalizedHostId,
+            queryLength: q.length,
+            hasClipboardText: Boolean(clipboardText),
+            itemCount: items.length,
+          })
+          if (dynamicQueryRef.current !== q) return
+          setDynamicItems(filterDynamicForSurface(items, normalizedHostId))
+        })
+        .catch(() => { /* aborted or failed — ignore */ })
     }, q ? 150 : 0)
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      dynamicAbortRef.current?.abort()
+    }
   }, [clipboardText, collectDynamicWhenEmpty, locale, normalizedHostId, open, query])
-
-  useEffect(() => {
-    if (!open) return
-    const timer = window.setTimeout(() => setRankingNow(Date.now()), 0)
-    return () => window.clearTimeout(timer)
-  }, [dynamicItems.length, open, query])
 
   // Collect static candidates separately — they only change with pluginRegistryVersion,
   // not on every keystroke.
   const staticCandidates = useMemo<LauncherItem[]>(() => {
     void pluginRegistryVersion
-    const raw = collectStaticCandidates(normalizedHostId)
+    const raw = measureLauncherPerfSync('session:static-candidates', () => collectStaticCandidates(normalizedHostId), () => ({
+      surfaceId: normalizedHostId,
+    }))
     return staticItemFilter ? staticItemFilter(raw) : raw
   }, [normalizedHostId, pluginRegistryVersion, staticItemFilter])
 
   const rankedItems = useMemo<LauncherItem[]>(() => {
     // contentText for textMatch: use query if user typed something, else clipboard
     const contentText = query.trim() || clipboardText || undefined
-    return rankLauncherItems(
+    return measureLauncherPerfSync('session:rank-items', () => rankLauncherItems(
       {
         query: query.trim(),
         locale,
         surfaceId: normalizedHostId,
         usage: launcherUsageBySurface,
-        now: rankingNow,
+        now: Date.now(),
         contentText,
       },
       [...staticCandidates, ...dynamicItems],
-    )
+    ), (items) => ({
+      surfaceId: normalizedHostId,
+      queryLength: query.trim().length,
+      hasClipboardText: Boolean(clipboardText),
+      inputCount: staticCandidates.length + dynamicItems.length,
+      resultCount: items.length,
+    }))
   }, [
     clipboardText,
     dynamicItems,
@@ -180,7 +213,6 @@ export function useLauncherSession({
     locale,
     normalizedHostId,
     query,
-    rankingNow,
     staticCandidates,
   ])
 

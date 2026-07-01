@@ -55,6 +55,25 @@ export type RankContext = {
   contentText?: string
 }
 
+/**
+ * Per-ranking-call cache for toSearchableFields results.
+ * Avoids repeated object allocation for the same item within a single ranking pass.
+ */
+let searchableFieldsCache: WeakMap<LauncherItem, SearchableFields> | null = null
+let searchableFieldsCacheLocale: Locale | null = null
+
+function getCachedSearchableFields(item: LauncherItem, locale: Locale): SearchableFields {
+  if (searchableFieldsCache && searchableFieldsCacheLocale === locale) {
+    const cached = searchableFieldsCache.get(item)
+    if (cached) return cached
+  }
+  const fields = toSearchableFields(item, locale)
+  if (searchableFieldsCache && searchableFieldsCacheLocale === locale) {
+    searchableFieldsCache.set(item, fields)
+  }
+  return fields
+}
+
 function toSearchableFields(item: LauncherItem, locale: Locale): SearchableFields {
   return {
     id: item.systemKey,
@@ -71,7 +90,7 @@ function toSearchableFields(item: LauncherItem, locale: Locale): SearchableField
 export function itemMatchesQuery(item: LauncherItem, query: string, locale: Locale): boolean {
   const q = query.trim().toLowerCase()
   if (!q) return true
-  return searchableFieldsMatch(toSearchableFields(item, locale), q, locale)
+  return searchableFieldsMatch(getCachedSearchableFields(item, locale), q, locale)
 }
 
 /** Bounded usage contribution for a surface. Always < 1000. */
@@ -120,7 +139,7 @@ export function installFreshnessScore(ctx: RankContext, item: LauncherItem): num
  */
 export function scoreLauncherItem(ctx: RankContext, item: LauncherItem): number {
   const q = ctx.query.trim().toLowerCase()
-  const matchScore = scoreSearchableFields(toSearchableFields(item, ctx.locale), q, ctx.locale, [], {})
+  const matchScore = scoreSearchableFields(getCachedSearchableFields(item, ctx.locale), q, ctx.locale, [], {})
   const textMatchBoost = ctx.contentText && item.textMatch
     ? (safeTextMatch(item.textMatch, ctx.contentText) ? TEXT_MATCH_BOOST : 0)
     : 0
@@ -128,8 +147,15 @@ export function scoreLauncherItem(ctx: RankContext, item: LauncherItem): number 
   return matchScore + usageScore(ctx, item) + pinnedBoost(ctx, item) + staticPriority(item) + installFreshnessScore(ctx, item) + textMatchBoost + dynamicBoost
 }
 
+/** Maximum text length passed to plugin textMatch to prevent runaway matching. */
+const TEXT_MATCH_MAX_LENGTH = 1000
+
 function safeTextMatch(matcher: (text: string) => boolean, text: string): boolean {
-  try { return matcher(text) } catch { return false }
+  try {
+    // Truncate excessively long text to prevent slow regex/matching in plugins
+    const input = text.length > TEXT_MATCH_MAX_LENGTH ? text.slice(0, TEXT_MATCH_MAX_LENGTH) : text
+    return matcher(input)
+  } catch { return false }
 }
 
 /**
@@ -139,26 +165,108 @@ function safeTextMatch(matcher: (text: string) => boolean, text: string): boolea
  *
  * The result is capped at MAX_RANKED_RESULTS to avoid scoring and sorting
  * hundreds of items when only ~15 are visible in the launcher viewport.
+ *
+ * Uses a partial sort (quickselect-partition) when candidates exceed the limit,
+ * avoiding a full O(n log n) sort for the entire array.
  */
 const MAX_RANKED_RESULTS = 50
 
+type ScoredItem = { item: LauncherItem; index: number; score: number }
+
 export function rankLauncherItems(ctx: RankContext, items: LauncherItem[]): LauncherItem[] {
+  // Initialize per-call cache
+  searchableFieldsCache = new WeakMap()
+  searchableFieldsCacheLocale = ctx.locale
+
   const q = ctx.query.trim().toLowerCase()
   const candidates = q
     ? items.filter((item) => itemMatchesQuery(item, q, ctx.locale) || itemMatchesContent(item, ctx.contentText))
     : items.slice()
 
-  // When there are far more candidates than can be displayed, score all but
-  // only fully sort a partial set (partial sort via selection-like approach).
-  const scored = candidates.map((item, index) => ({ item, index, score: scoreLauncherItem(ctx, item) }))
-  scored.sort((a, b) => (b.score - a.score) || (a.index - b.index))
+  const scored: ScoredItem[] = candidates.map((item, index) => ({ item, index, score: scoreLauncherItem(ctx, item) }))
 
   const limit = Math.min(scored.length, MAX_RANKED_RESULTS)
+
+  if (scored.length <= limit) {
+    // Small enough — full sort is fine
+    scored.sort((a, b) => (b.score - a.score) || (a.index - b.index))
+  } else {
+    // Partial sort: partition the top `limit` items, then sort only those
+    partialSortTopK(scored, limit)
+  }
+
   const result: LauncherItem[] = new Array(limit)
   for (let i = 0; i < limit; i++) {
     result[i] = scored[i].item
   }
+
+  // Clear per-call cache
+  searchableFieldsCache = null
+  searchableFieldsCacheLocale = null
+
   return result
+}
+
+/**
+ * In-place partial sort: ensures scored[0..k) contain the top-k items in
+ * descending score order (ties broken by ascending index for stability).
+ * Uses quickselect to partition, then sorts only the top-k portion.
+ */
+function partialSortTopK(arr: ScoredItem[], k: number): void {
+  quickselect(arr, 0, arr.length - 1, k)
+  // Sort only the top-k portion
+  const top = arr.slice(0, k)
+  top.sort((a, b) => (b.score - a.score) || (a.index - b.index))
+  for (let i = 0; i < k; i++) arr[i] = top[i]
+}
+
+function scoredCompare(a: ScoredItem, b: ScoredItem): number {
+  return (b.score - a.score) || (a.index - b.index)
+}
+
+/**
+ * Quickselect: rearranges arr so that arr[0..k) contains the top-k elements
+ * (not necessarily sorted). Average O(n).
+ */
+function quickselect(arr: ScoredItem[], lo: number, hi: number, k: number): void {
+  while (lo < hi) {
+    const pivotIndex = medianOfThree(arr, lo, hi)
+    const p = partition(arr, lo, hi, pivotIndex)
+    if (p === k) return
+    if (p < k) {
+      lo = p + 1
+    } else {
+      hi = p - 1
+    }
+  }
+}
+
+function medianOfThree(arr: ScoredItem[], lo: number, hi: number): number {
+  const mid = (lo + hi) >>> 1
+  if (scoredCompare(arr[lo], arr[mid]) > 0) swap(arr, lo, mid)
+  if (scoredCompare(arr[lo], arr[hi]) > 0) swap(arr, lo, hi)
+  if (scoredCompare(arr[mid], arr[hi]) > 0) swap(arr, mid, hi)
+  return mid
+}
+
+function partition(arr: ScoredItem[], lo: number, hi: number, pivotIndex: number): number {
+  const pivot = arr[pivotIndex]
+  swap(arr, pivotIndex, hi)
+  let store = lo
+  for (let i = lo; i < hi; i++) {
+    if (scoredCompare(arr[i], pivot) < 0) {
+      swap(arr, i, store)
+      store++
+    }
+  }
+  swap(arr, store, hi)
+  return store
+}
+
+function swap(arr: ScoredItem[], i: number, j: number): void {
+  const tmp = arr[i]
+  arr[i] = arr[j]
+  arr[j] = tmp
 }
 
 /** Check if the item's textMatch function matches the content text. */

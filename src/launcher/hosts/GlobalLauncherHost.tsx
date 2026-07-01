@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '../../store'
+import { useShallow } from 'zustand/react/shallow'
 import { t } from '../../i18n'
 import { usePluginRegistryVersion } from '../../workspace/pluginRegistry'
 import { usePluginSettingsStore } from '../../workspace/pluginSettingsStore'
@@ -27,21 +28,33 @@ import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import { prepareLauncherInputSource, restoreLauncherInputSource } from '../../workspace/windowManager/launcherWindow'
 
 export function GlobalLauncherHost() {
-  const open = useAppStore((s) => s.globalLauncherOpen)
-  const mode = useAppStore((s) => s.globalLauncherMode)
-  const overlay = useAppStore((s) => s.globalLauncherOverlay)
+  const {
+    open,
+    mode,
+    overlay,
+    pinnedActions,
+    recentActionNames,
+    actionUsageCounts,
+    locale,
+    pluginSurfaceToolTarget,
+    launcherHostSurfaceTarget,
+  } = useAppStore(useShallow((s) => ({
+    open: s.globalLauncherOpen,
+    mode: s.globalLauncherMode,
+    overlay: s.globalLauncherOverlay,
+    pinnedActions: s.pinnedActions,
+    recentActionNames: s.actionUsageBySource['global-launcher'].recentActionNames,
+    actionUsageCounts: s.actionUsageBySource['global-launcher'].actionUsageCounts,
+    locale: s.locale,
+    pluginSurfaceToolTarget: s.pluginSurfaceToolTarget,
+    launcherHostSurfaceTarget: s.launcherHostSurfaceTarget,
+  })))
   const setOpen = useAppStore((s) => s.setGlobalLauncherOpen)
   const openPinnedAction = useAppStore((s) => s.openPinnedAction)
-  const pinnedActions = useAppStore((s) => s.pinnedActions)
-  const recentActionNames = useAppStore((s) => s.actionUsageBySource['global-launcher'].recentActionNames)
-  const actionUsageCounts = useAppStore((s) => s.actionUsageBySource['global-launcher'].actionUsageCounts)
-  const locale = useAppStore((s) => s.locale)
+  const clearPluginSurfaceTool = useAppStore((s) => s.clearPluginSurfaceTool)
+  const clearLauncherHostSurface = useAppStore((s) => s.clearLauncherHostSurface)
   const pluginRegistryVersion = usePluginRegistryVersion()
   const grantPluginPermissions = usePluginPermissionStore((s) => s.grantPermissions)
-  const pluginSurfaceToolTarget = useAppStore((s) => s.pluginSurfaceToolTarget)
-  const clearPluginSurfaceTool = useAppStore((s) => s.clearPluginSurfaceTool)
-  const launcherHostSurfaceTarget = useAppStore((s) => s.launcherHostSurfaceTarget)
-  const clearLauncherHostSurface = useAppStore((s) => s.clearLauncherHostSurface)
   const settingsDialogTarget = usePluginSettingsStore((s) => s.settingsDialogTarget)
   const closeSettingsDialog = usePluginSettingsStore((s) => s.closeSettingsDialog)
   const closeAfterActionRef = useRef<() => void>(() => {})

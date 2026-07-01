@@ -84,7 +84,7 @@ export function useStandaloneLauncherResize({
         .catch((error) => {
           console.warn('[hiven] Failed to resize launcher window:', error)
         })
-    }, 50)
+    }, 150)
 
     return () => window.clearTimeout(timer)
   }, [
