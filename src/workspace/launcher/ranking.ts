@@ -179,8 +179,11 @@ export function rankLauncherItems(ctx: RankContext, items: LauncherItem[]): Laun
   searchableFieldsCacheLocale = ctx.locale
 
   const q = ctx.query.trim().toLowerCase()
+  // When query is present, filter strictly by name/keyword match only.
+  // contentText (textMatch) only contributes to scoring, not filtering —
+  // otherwise tools like Base64 that accept any text would appear for every query.
   const candidates = q
-    ? items.filter((item) => itemMatchesQuery(item, q, ctx.locale) || itemMatchesContent(item, ctx.contentText))
+    ? items.filter((item) => itemMatchesQuery(item, q, ctx.locale))
     : items.slice()
 
   const scored: ScoredItem[] = candidates.map((item, index) => ({ item, index, score: scoreLauncherItem(ctx, item) }))

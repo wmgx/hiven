@@ -187,8 +187,9 @@ export function useLauncherSession({
   }, [normalizedHostId, pluginRegistryVersion, staticItemFilter])
 
   const rankedItems = useMemo<LauncherItem[]>(() => {
-    // contentText for textMatch: use query if user typed something, else clipboard
-    const contentText = query.trim() || clipboardText || undefined
+    // contentText for textMatch: Object Block takes precedence (it IS the text to process);
+    // only fall back to query when no Object Block is present.
+    const contentText = clipboardText ?? (query.trim() || undefined)
     return measureLauncherPerfSync('session:rank-items', () => rankLauncherItems(
       {
         query: query.trim(),
