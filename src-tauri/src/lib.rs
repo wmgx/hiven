@@ -32,6 +32,11 @@ const PLUGIN_SURFACE_WINDOW_DEFAULT_HEIGHT: f64 = 640.0;
 const PLUGIN_SURFACE_WINDOW_DEFAULT_MIN_WIDTH: f64 = 320.0;
 const PLUGIN_SURFACE_WINDOW_DEFAULT_MIN_HEIGHT: f64 = 240.0;
 const PLUGIN_SURFACE_WINDOW_DEFAULT_DESTROY_TIMEOUT_MS: u64 = 120_000;
+const QUICK_EDITOR_WINDOW_LABEL: &str = "quick-editor";
+const QUICK_EDITOR_WINDOW_WIDTH: f64 = 720.0;
+const QUICK_EDITOR_WINDOW_HEIGHT: f64 = 520.0;
+const QUICK_EDITOR_WINDOW_MIN_WIDTH: f64 = 480.0;
+const QUICK_EDITOR_WINDOW_MIN_HEIGHT: f64 = 320.0;
 static PREVIOUS_FOREGROUND_PROCESS_ID: OnceLock<Mutex<Option<u32>>> = OnceLock::new();
 #[cfg(target_os = "macos")]
 static PREVIOUS_LAUNCHER_INPUT_SOURCE_ID: OnceLock<Mutex<Option<String>>> = OnceLock::new();
@@ -833,6 +838,45 @@ fn list_editor_windows(app: tauri::AppHandle) -> Vec<String> {
         .filter(|label| label.starts_with("editor"))
         .cloned()
         .collect()
+}
+
+#[tauri::command]
+async fn show_quick_editor_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(QUICK_EDITOR_WINDOW_LABEL) {
+        window.show().map_err(|e| e.to_string())?;
+        window.set_focus().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+
+    let window = tauri::WebviewWindowBuilder::new(
+        &app,
+        QUICK_EDITOR_WINDOW_LABEL,
+        tauri::WebviewUrl::App("index.html?window=quick-editor".into()),
+    )
+    .title("Quick Editor")
+    .inner_size(QUICK_EDITOR_WINDOW_WIDTH, QUICK_EDITOR_WINDOW_HEIGHT)
+    .min_inner_size(QUICK_EDITOR_WINDOW_MIN_WIDTH, QUICK_EDITOR_WINDOW_MIN_HEIGHT)
+    .decorations(false)
+    .transparent(true)
+    .shadow(false)
+    .resizable(true)
+    .focused(true)
+    .skip_taskbar(false)
+    .center()
+    .build()
+    .map_err(|e| e.to_string())?;
+
+    window.show().map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn close_quick_editor_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(QUICK_EDITOR_WINDOW_LABEL) {
+        window.close().map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 fn new_editor_window_label() -> String {
@@ -3980,6 +4024,8 @@ pub fn run() {
             focus_editor_window,
             close_editor_window,
             list_editor_windows,
+            show_quick_editor_window,
+            close_quick_editor_window,
             show_plugin_surface_window,
             hide_plugin_surface_window,
             plugin_surface_payload_set,
