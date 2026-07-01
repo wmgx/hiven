@@ -78,6 +78,7 @@ export function useStandaloneLauncherResize({
         hostSurfaceTarget,
         launcherSettingsTarget,
         surfaceShell,
+        mode: mode as string | undefined,
       })
       window.dispatchEvent(new CustomEvent(LAUNCHER_PROGRAMMATIC_MOVE_EVENT))
       void resizeCurrentLauncherWindow({ width: nextWidth, height: nextHeight })
