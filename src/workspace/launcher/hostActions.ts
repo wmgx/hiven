@@ -1,4 +1,5 @@
 import { createEditorPane } from '../editorBridge'
+import { useAppStore } from '../../store'
 import type { LauncherItem } from './types'
 import { getHostEditorActionItems } from './hostEditorActions'
 
@@ -176,5 +177,25 @@ export function getHostPaneControlItems(): LauncherItem[] {
       },
     },
     ...getHostEditorActionItems(),
+    {
+      systemKey: 'host:view:quick-editor',
+      kind: 'host',
+      display: {
+        title: 'Quick Editor',
+        titleI18n: { zh: '快捷编辑器' },
+        subtitle: 'Open inline editor',
+        subtitleI18n: { zh: '打开内嵌编辑器' },
+        icon: 'SquarePen',
+        aliases: ['quick editor', 'editor', 'scratch', 'scratchpad', 'notepad', '编辑器', '快捷编辑', '记事本', '草稿'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['global-launcher'],
+      requiredCapabilities: ['pane-actions'],
+      pinnable: false,
+      execute: async () => {
+        useAppStore.getState().openQuickEditor()
+        return { ok: true, keepOpen: true }
+      },
+    },
   ]
 }
