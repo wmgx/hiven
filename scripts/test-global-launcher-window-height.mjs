@@ -20,7 +20,9 @@ function read(path) {
 
 const files = {
   packageJson: read('package.json'),
+  globalLauncherGeometry: read('src/components/launcher/GlobalLauncherGeometry.ts'),
   globalLauncherLayout: read('src/components/launcher/GlobalLauncherLayout.ts'),
+  globalLauncherWindowLifecycle: read('src/components/launcher/GlobalLauncherWindowLifecycle.ts'),
   indexCss: read('src/index.css'),
   tauriLib: read('src-tauri/src/lib.rs'),
 }
@@ -114,15 +116,33 @@ if (nativeCompactHeight < minimumUsableLauncherHeight) {
 }
 
 assert.match(
-  files.globalLauncherLayout,
+  files.globalLauncherGeometry,
   /STANDALONE_LAUNCHER_MAX_HEIGHT\s*-\s*STANDALONE_LAUNCHER_VERTICAL_PADDING\s*-\s*header\.offsetHeight\s*-\s*footer\.offsetHeight/,
   'standalone launcher height measurement should restore the list area available at max window height',
 )
 
 assert.match(
-  files.globalLauncherLayout,
-  /Math\.max\(\s*readCssPixelValue\(getComputedStyle\(body\)\.maxHeight,\s*STANDALONE_LAUNCHER_LIST_MAX_HEIGHT\),\s*listMaxHeightAtExpandedWindow,\s*STANDALONE_LAUNCHER_LIST_MAX_HEIGHT,\s*\)/,
+  files.globalLauncherGeometry,
+  /bodyMaxHeight:\s*Math\.min\(body\.scrollHeight,\s*maxBodyHeight\)/,
   'standalone launcher height measurement should not let the current shrunken window viewport cap future growth',
+)
+
+assert.match(
+  files.globalLauncherWindowLifecycle,
+  /computeStandaloneLauncherGeometry[\s\S]*applyStandaloneLauncherGeometry[\s\S]*resizeCurrentLauncherWindow/,
+  'standalone launcher resize lifecycle should use a single geometry calculation for CSS and native size',
+)
+
+assert.doesNotMatch(
+  files.indexCss,
+  /html\[data-window='launcher'\]\s+\.global-launcher-panel\.palette-panel\s*\{[\s\S]*?--launcher-list-max-height:\s*calc\(100vh - 130px\)/,
+  'standalone launcher CSS must not derive list max height from the current native window height',
+)
+
+assert.match(
+  files.indexCss,
+  /max-height:\s*var\(--launcher-body-max-height,\s*var\(--launcher-list-max-height\)\)/,
+  'launcher body should accept geometry-owned body max height',
 )
 
 if (failures.length > 0) {

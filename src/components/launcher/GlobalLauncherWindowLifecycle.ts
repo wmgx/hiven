@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from '../../workspace/launcherWindowEvents'
 import { onCurrentLauncherWindowFocusChanged, resizeCurrentLauncherWindow, startCurrentLauncherWindowDrag } from '../../workspace/windowManager/launcherWindow'
-import { computeStandaloneLauncherSize } from './GlobalLauncherLayout'
+import { applyStandaloneLauncherGeometry, computeStandaloneLauncherGeometry } from './GlobalLauncherLayout'
 
 type SurfaceShellConfig = {
   closeOnBlur?: boolean
@@ -70,24 +70,37 @@ export function useStandaloneLauncherResize({
     if (!open || !standaloneLauncher) return
     if (!isTauriRuntime()) return
 
+    let disposed = false
+    let lastSizeKey = ''
     const timer = window.setTimeout(() => {
-      const panel = panelRef.current
-      if (!panel) return
-      const { width: nextWidth, height: nextHeight } = computeStandaloneLauncherSize({
-        panel,
-        hostSurfaceTarget,
-        launcherSettingsTarget,
-        surfaceShell,
-        mode: mode as string | undefined,
-      })
-      window.dispatchEvent(new CustomEvent(LAUNCHER_PROGRAMMATIC_MOVE_EVENT))
-      void resizeCurrentLauncherWindow({ width: nextWidth, height: nextHeight })
-        .catch((error) => {
-          console.warn('[hiven] Failed to resize launcher window:', error)
+      window.requestAnimationFrame(() => {
+        if (disposed) return
+        const panel = panelRef.current
+        if (!panel) return
+        const geometry = computeStandaloneLauncherGeometry({
+          panel,
+          hostSurfaceTarget,
+          launcherSettingsTarget,
+          surfaceShell,
+          mode: mode as string | undefined,
         })
-    }, 150)
+        applyStandaloneLauncherGeometry(panel, geometry)
 
-    return () => window.clearTimeout(timer)
+        const sizeKey = `${geometry.width}:${geometry.height}`
+        if (sizeKey === lastSizeKey) return
+        lastSizeKey = sizeKey
+        window.dispatchEvent(new CustomEvent(LAUNCHER_PROGRAMMATIC_MOVE_EVENT))
+        void resizeCurrentLauncherWindow({ width: geometry.width, height: geometry.height })
+          .catch((error) => {
+            console.warn('[hiven] Failed to resize launcher window:', error)
+          })
+      })
+    }, 80)
+
+    return () => {
+      disposed = true
+      window.clearTimeout(timer)
+    }
   }, [
     visibleFilteredLength,
     mode,

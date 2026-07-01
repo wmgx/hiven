@@ -1039,6 +1039,7 @@ html[data-window='launcher'] .global-launcher-overlay.open {
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
+  transition: height 120ms ease, max-height 120ms ease;
   -webkit-user-select: none;
   user-select: none;
 }
@@ -1072,15 +1073,16 @@ html[data-window='launcher'] .global-launcher-panel :is(input, textarea, select,
 .global-launcher-body {
   flex: 1;
   min-height: 0;
-  max-height: var(--launcher-list-max-height);
+  max-height: var(--launcher-body-max-height, var(--launcher-list-max-height));
   overflow-x: hidden;
   overflow-y: auto;
+  transition: max-height 120ms ease;
   overscroll-behavior: contain;
   touch-action: pan-y;
 }
 
 .launcher-results {
-  max-height: var(--launcher-list-max-height);
+  max-height: var(--launcher-body-max-height, var(--launcher-list-max-height));
   overflow-y: auto;
 }
 
@@ -4038,7 +4040,6 @@ body[data-theme='dark'] .global-launcher-panel.palette-panel {
 html[data-window='launcher'] .global-launcher-panel.palette-panel {
   --launcher-panel-width: calc(100vw - 24px);
   --launcher-panel-max-height: calc(100vh - 24px);
-  --launcher-list-max-height: calc(100vh - 130px);
   border-color: transparent !important;
   box-shadow: none !important;
 }
@@ -4143,7 +4144,7 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
 .global-launcher-body.l-list,
 .l-list {
   padding: 6px 0 4px;
-  max-height: var(--launcher-list-max-height);
+  max-height: var(--launcher-body-max-height, var(--launcher-list-max-height));
   overflow-x: hidden;
   overflow-y: auto;
   background: var(--panel);
