@@ -1490,6 +1490,56 @@ fn read_clipboard_content(app: tauri::AppHandle) -> ClipboardContent {
 }
 
 #[cfg(target_os = "macos")]
+#[tauri::command]
+fn write_clipboard_files(paths: Vec<String>) -> Result<(), String> {
+    unsafe {
+        let pasteboard_cls = objc2::runtime::AnyClass::get(c"NSPasteboard")
+            .ok_or("NSPasteboard class not found")?;
+        let pasteboard: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![pasteboard_cls, generalPasteboard];
+        if pasteboard.is_null() {
+            return Err("Failed to get generalPasteboard".into());
+        }
+
+        let _: i64 = objc2::msg_send![pasteboard, clearContents];
+
+        let nsmut_array_cls = objc2::runtime::AnyClass::get(c"NSMutableArray")
+            .ok_or("NSMutableArray class not found")?;
+        let nsurl_cls = objc2::runtime::AnyClass::get(c"NSURL")
+            .ok_or("NSURL class not found")?;
+        let ns_string_cls = objc2::runtime::AnyClass::get(c"NSString")
+            .ok_or("NSString class not found")?;
+
+        let urls: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![nsmut_array_cls, arrayWithCapacity: paths.len()];
+
+        for path in &paths {
+            let c_path = CString::new(path.as_str()).map_err(|e| e.to_string())?;
+            let ns_path: *mut objc2::runtime::AnyObject =
+                objc2::msg_send![ns_string_cls, stringWithUTF8String: c_path.as_ptr()];
+            let url: *mut objc2::runtime::AnyObject =
+                objc2::msg_send![nsurl_cls, fileURLWithPath: ns_path];
+            let _: () = objc2::msg_send![urls, addObject: url];
+        }
+
+        let success: bool = objc2::msg_send![pasteboard, writeObjects: urls];
+        if success {
+            Ok(())
+        } else {
+            Err("NSPasteboard writeObjects failed".into())
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+fn write_clipboard_files(app: tauri::AppHandle, paths: Vec<String>) -> Result<(), String> {
+    app.clipboard()
+        .write_text(paths.join("\n"))
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "macos")]
 #[allow(dead_code)]
 fn simulate_copy_selection_impl() -> Result<(), String> {
     use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
@@ -4113,6 +4163,7 @@ pub fn run() {
             current_foreground_app_name,
             current_foreground_app_context,
             read_clipboard_content,
+            write_clipboard_files,
             // [DISABLED] External selection capture — command preserved, entry point disabled.
             // last_foreground_selection_text,
             discover_installed_apps,
