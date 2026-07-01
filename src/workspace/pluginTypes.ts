@@ -548,6 +548,8 @@ export type PluginSurfaceShell = {
   destroyTimeout?: number
   resizable?: boolean
   rendersTitlebar?: boolean
+  breadcrumbTitle?: string
+  breadcrumbTitleI18n?: Partial<Record<Locale, string>>
 }
 
 export type PluginSurfaceHostApi = {
