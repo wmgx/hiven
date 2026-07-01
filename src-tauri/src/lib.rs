@@ -1539,6 +1539,11 @@ fn write_clipboard_files(app: tauri::AppHandle, paths: Vec<String>) -> Result<()
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn clipboard_change_count(app: tauri::AppHandle) -> Option<i64> {
+    read_clipboard_change_count(&app)
+}
+
 #[cfg(target_os = "macos")]
 #[allow(dead_code)]
 fn simulate_copy_selection_impl() -> Result<(), String> {
@@ -4164,6 +4169,7 @@ pub fn run() {
             current_foreground_app_context,
             read_clipboard_content,
             write_clipboard_files,
+            clipboard_change_count,
             // [DISABLED] External selection capture — command preserved, entry point disabled.
             // last_foreground_selection_text,
             discover_installed_apps,
