@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
+import { useCallback, useLayoutEffect, useRef, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from '../../workspace/launcherWindowEvents'
 import { onCurrentLauncherWindowFocusChanged, resizeCurrentLauncherWindow, startCurrentLauncherWindowDrag } from '../../workspace/windowManager/launcherWindow'
 import { applyStandaloneLauncherGeometry, computeStandaloneLauncherGeometry } from './GlobalLauncherLayout'
@@ -22,6 +22,12 @@ export function useCloseStandaloneLauncherOnBlur({
   closeOnBlur?: boolean
   closeLauncher: () => void
 }) {
+  const closeOnBlurRef = useRef(closeOnBlur)
+
+  useLayoutEffect(() => {
+    closeOnBlurRef.current = closeOnBlur
+  }, [closeOnBlur])
+
   useLayoutEffect(() => {
     if (!open || !standaloneLauncher) return
     if (!isTauriRuntime()) return
@@ -29,7 +35,7 @@ export function useCloseStandaloneLauncherOnBlur({
     let disposed = false
     let unlisten: (() => void) | undefined
     onCurrentLauncherWindowFocusChanged((focused) => {
-      if (!focused && closeOnBlur !== false) closeLauncher()
+      if (!focused && closeOnBlurRef.current !== false) closeLauncher()
     })
       .then((cleanup) => {
         if (disposed) cleanup()
@@ -42,7 +48,7 @@ export function useCloseStandaloneLauncherOnBlur({
       disposed = true
       unlisten?.()
     }
-  }, [closeLauncher, closeOnBlur, open, standaloneLauncher])
+  }, [closeLauncher, open, standaloneLauncher])
 }
 
 export function useStandaloneLauncherResize({

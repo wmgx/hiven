@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect } from 'react'
+import { useRef, useCallback, useEffect, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import Editor from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import type { editor as MonacoEditor } from 'monaco-editor'
@@ -24,6 +24,7 @@ export function QuickEditorPanel() {
   const setScrollPosition = useQuickEditorStore((s) => s.setScrollPosition)
 
   const settings = useAppStore((s) => s.settings)
+  const openQuickEditorCommand = useAppStore((s) => s.openQuickEditorCommand)
 
   const handleChange = useCallback((value: string | undefined) => {
     if (value !== undefined) {
@@ -31,6 +32,13 @@ export function QuickEditorPanel() {
       setText(value)
     }
   }, [setText])
+
+  const handleKeyDownCapture = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'k') return
+    event.preventDefault()
+    event.stopPropagation()
+    openQuickEditorCommand()
+  }, [openQuickEditorCommand])
 
   // Sync external text changes (e.g. from command execution) without resetting cursor
   useEffect(() => {
@@ -60,7 +68,7 @@ export function QuickEditorPanel() {
   }, [])
 
   return (
-    <div className="relative flex flex-col h-full overflow-hidden">
+    <div className="relative flex flex-col h-full overflow-hidden" onKeyDownCapture={handleKeyDownCapture}>
       <QuickEditorToolbar />
       <div className="flex-1 min-h-0">
         <Editor

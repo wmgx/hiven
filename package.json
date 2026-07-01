@@ -121,6 +121,7 @@
     "test:plugin-editor-surface-open-lifecycle": "node scripts/test-plugin-editor-surface-open-lifecycle.mjs",
     "test:launcher-host-surface-bridge": "node scripts/test-launcher-host-surface-bridge.mjs",
     "test:first-party-plugin-host-boundary": "node scripts/test-first-party-plugin-host-boundary.mjs",
+    "test:quick-editor-launcher-behavior": "node scripts/test-quick-editor-launcher-behavior.mjs",
     "test:clipboard-object-block": "node scripts/test-clipboard-object-block.mjs",
     "test:clipboard-object-block-ui": "node scripts/test-clipboard-object-block-ui.mjs",
     "test:clipboard-object-block-integration": "node scripts/test-clipboard-object-block-integration.mjs",

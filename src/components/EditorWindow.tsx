@@ -8,6 +8,7 @@ import {
   registerEditorBridgeHandlers,
   updateActivePaneSnapshot,
   type EditorBridgeCreatePaneInput,
+  type EditorBridgeDiffPageInput,
   type EditorBridgePanelInput,
   type EditorBridgePluginCleanupInput,
   type EditorBridgeTextInput,
@@ -87,6 +88,7 @@ export function EditorWindow() {
       insertIntoEditor: (input) => applyInsertIntoEditor(input),
       openEditorPanel: (input) => applyOpenEditorPanel(input),
       cleanupEditorPluginContributions: (input) => applyCleanupEditorPluginContributions(input),
+      openDiffPage: (input) => applyOpenDiffPage(input),
     })
       .then((registeredCleanup) => {
         if (disposed) registeredCleanup()
@@ -232,6 +234,10 @@ function applyCleanupEditorPluginContributions(input: EditorBridgePluginCleanupI
   for (const panelId of input.panelIds) {
     workspace.closePanelV2(panelId)
   }
+}
+
+function applyOpenDiffPage(input: EditorBridgeDiffPageInput): void {
+  useWorkspaceStore.getState().openDiffPage(input)
 }
 
 function getActiveSelectionRange(paneId: string): SerializedRange | undefined {

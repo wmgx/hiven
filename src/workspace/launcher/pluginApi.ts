@@ -23,6 +23,7 @@ import {
   getActiveEditorContextSnapshot,
   getActiveEditorPaneSnapshot,
   insertIntoEditor,
+  openEditorDiffPage,
   replaceEditorSelection,
 } from '../editorBridge'
 import type { FluxEffect, SerializedRange } from '../types'
@@ -286,7 +287,11 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
       })
     },
     openDiffPage: (payload) => {
-      useWorkspaceStore.getState().openDiffPage(payload)
+      if (isEditorWindowRuntime()) {
+        useWorkspaceStore.getState().openDiffPage(payload)
+      } else {
+        void openEditorDiffPage(payload)
+      }
     },
     apps: createPluginAppsApi(options),
   }

@@ -193,6 +193,13 @@ export async function cleanupEditorPluginContributions(input: EditorBridgePlugin
   await sendEditorBridgeRequest('cleanupEditorPluginContributions', input)
 }
 
+export async function openEditorDiffPage(input: EditorBridgeDiffPageInput): Promise<void> {
+  await sendEditorBridgeRequest('openDiffPage', input, {
+    persistForEditorStartup: true,
+    openEditorFirst: true,
+  })
+}
+
 export function registerActiveEditorContext(snapshot: EditorContextSnapshot): void {
   activeEditorContextSnapshot = snapshot
   activeEditorContextSnapshotUpdatedAt = Date.now()
@@ -353,6 +360,9 @@ async function handleEditorBridgeRequest(request: EditorBridgeRequest, handlers:
         break
       case 'cleanupEditorPluginContributions':
         handlers.cleanupEditorPluginContributions(request.payload)
+        break
+      case 'openDiffPage':
+        handlers.openDiffPage(request.payload)
         break
     }
     await emitEditorBridgeResponse({ requestId: request.requestId, ok: true, value })
@@ -618,7 +628,8 @@ function isEditorBridgeRequest(value: unknown): value is EditorBridgeRequest {
     request.action === 'replaceEditorSelection' ||
     request.action === 'insertIntoEditor' ||
     request.action === 'openEditorPanel' ||
-    request.action === 'cleanupEditorPluginContributions'
+    request.action === 'cleanupEditorPluginContributions' ||
+    request.action === 'openDiffPage'
 }
 
 function isEditorBridgeRequestExpired(request: EditorBridgeRequest): boolean {
@@ -627,7 +638,7 @@ function isEditorBridgeRequestExpired(request: EditorBridgeRequest): boolean {
 
 function getEditorBridgeActionTimeoutMs(action: EditorBridgeRequest['action']): number {
   if (action === 'getEditorContext') return EDITOR_BRIDGE_CONTEXT_TIMEOUT_MS
-  if (action === 'createEditorPane' || action === 'replaceEditorSelection' || action === 'insertIntoEditor' || action === 'openEditorPanel' || action === 'cleanupEditorPluginContributions') {
+  if (action === 'createEditorPane' || action === 'replaceEditorSelection' || action === 'insertIntoEditor' || action === 'openEditorPanel' || action === 'cleanupEditorPluginContributions' || action === 'openDiffPage') {
     return EDITOR_BRIDGE_MUTATION_TIMEOUT_MS
   }
   return EDITOR_BRIDGE_DEFAULT_TIMEOUT_MS
