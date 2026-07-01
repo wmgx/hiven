@@ -38,9 +38,7 @@ export function QuickEditorCommandOverlay() {
 
   const handleKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Escape') {
-      e.preventDefault()
-      e.stopPropagation()
-      closeCommand()
+      // Handled by container onKeyDown
       return
     }
     if (e.key === 'ArrowDown') {
@@ -61,7 +59,7 @@ export function QuickEditorCommandOverlay() {
       }
       return
     }
-  }, [closeCommand, controllerRef, rankedItems, selectedIndex, setSelectedIndex])
+  }, [controllerRef, rankedItems, selectedIndex, setSelectedIndex])
 
   if (!open) return null
 
@@ -71,8 +69,16 @@ export function QuickEditorCommandOverlay() {
     <div
       className="absolute inset-0 z-50 flex flex-col overflow-hidden"
       style={{
-        background: 'var(--color-background-primary)',
+        background: 'var(--color-background-primary, var(--panel, #fff))',
         borderRadius: 'inherit',
+      }}
+      onKeyDown={(e) => {
+        // Prevent Escape from bubbling to the global handler
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          e.stopPropagation()
+          closeCommand()
+        }
       }}
     >
       {/* Search input */}

@@ -7,9 +7,12 @@ import { useAppStore } from '../../store'
 import { QuickEditorToolbar } from './QuickEditorToolbar'
 import { QuickEditorCommandOverlay } from './QuickEditorCommandOverlay'
 import { getFluxMonacoTheme, registerFluxMonacoThemes } from '../../utils/monacoTheme'
+import { installMonacoHoverOverlay } from '../../utils/monacoHoverOverlay'
+import { createMonacoDisposableBucket } from '../../utils/monacoDisposables'
 
 export function QuickEditorPanel() {
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
+  const monacoDisposablesRef = useRef<ReturnType<typeof createMonacoDisposableBucket> | null>(null)
   const isLocalChangeRef = useRef(false)
 
   const text = useQuickEditorStore((s) => s.text)
@@ -20,8 +23,7 @@ export function QuickEditorPanel() {
   const setCursorPosition = useQuickEditorStore((s) => s.setCursorPosition)
   const setScrollPosition = useQuickEditorStore((s) => s.setScrollPosition)
 
-  const theme = useAppStore((s) => s.settings.theme)
-  const fontSize = useAppStore((s) => s.settings.fontSize)
+  const settings = useAppStore((s) => s.settings)
 
   const handleChange = useCallback((value: string | undefined) => {
     if (value !== undefined) {
@@ -48,6 +50,15 @@ export function QuickEditorPanel() {
     }
   }, [text])
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      monacoDisposablesRef.current?.dispose()
+      monacoDisposablesRef.current = null
+      editorRef.current = null
+    }
+  }, [])
+
   return (
     <div className="relative flex flex-col h-full overflow-hidden">
       <QuickEditorToolbar />
@@ -60,6 +71,10 @@ export function QuickEditorPanel() {
           onChange={handleChange}
           onMount={(editor) => {
             registerFluxMonacoThemes(monaco)
+            monacoDisposablesRef.current?.dispose()
+            const disposables = createMonacoDisposableBucket()
+            monacoDisposablesRef.current = disposables
+            installMonacoHoverOverlay(editor)
             editorRef.current = editor
 
             // Restore cursor & scroll
@@ -68,48 +83,74 @@ export function QuickEditorPanel() {
             editor.focus()
 
             // Track cursor
-            editor.onDidChangeCursorPosition((e) => {
+            disposables.add(editor.onDidChangeCursorPosition((e) => {
               setCursorPosition({
                 lineNumber: e.position.lineNumber,
                 column: e.position.column,
               })
-            })
+            }))
 
             // Track scroll
-            editor.onDidScrollChange((e) => {
+            disposables.add(editor.onDidScrollChange((e) => {
               setScrollPosition({
                 scrollTop: e.scrollTop,
                 scrollLeft: e.scrollLeft,
               })
-            })
+            }))
 
             // ⌘K → open command overlay
-            editor.addCommand(
-              monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK,
-              () => {
+            disposables.add(editor.addAction({
+              id: 'quick-editor-command',
+              label: 'Quick Editor Command',
+              keybindings: [
+                monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK,
+              ],
+              run: () => {
                 useAppStore.getState().openQuickEditorCommand()
-              }
-            )
+              },
+            }))
+
+            // ⌘F / ⌘H → find and replace
+            disposables.add(editor.addAction({
+              id: 'find-and-replace',
+              label: 'Find and Replace',
+              keybindings: [
+                monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF,
+                monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyF,
+                monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyH,
+              ],
+              run: (ed: MonacoEditor.IStandaloneCodeEditor) => {
+                ed.getAction('editor.action.startFindReplaceAction')?.run()
+              },
+            }))
+
+            disposables.add(editor.onDidDispose(() => {
+              if (editorRef.current === editor) editorRef.current = null
+              if (monacoDisposablesRef.current === disposables) monacoDisposablesRef.current = null
+              disposables.dispose()
+            }))
           }}
           options={{
-            fontSize,
+            fontSize: settings.fontSize,
+            lineNumbers: settings.lineNumbers ? 'on' : 'off',
+            wordWrap: settings.wordWrap ? 'on' : 'off',
             minimap: { enabled: false },
-            lineNumbers: 'on',
-            wordWrap: 'on',
+            find: { addExtraSpaceOnTop: false },
             scrollBeyondLastLine: false,
-            padding: { top: 8, bottom: 8 },
             renderLineHighlight: 'line',
             overviewRulerLanes: 0,
             hideCursorInOverviewRuler: true,
-            automaticLayout: true,
-            tabSize: 2,
             folding: true,
+            stickyScroll: { enabled: false },
             glyphMargin: false,
             lineDecorationsWidth: 8,
             lineNumbersMinChars: 3,
+            padding: { top: 12, bottom: 12 },
             fontFamily: 'var(--font-mono)',
+            automaticLayout: true,
+            tabSize: 2,
           }}
-          theme={getFluxMonacoTheme(theme)}
+          theme={getFluxMonacoTheme(settings.theme)}
         />
       </div>
       <QuickEditorCommandOverlay />
