@@ -1,0 +1,75 @@
+.system-settings-surface {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.system-settings-sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 180px;
+  min-width: 180px;
+  padding: 12px 8px;
+  border-right: 1px solid var(--border);
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.system-settings-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, color 0.15s;
+  width: 100%;
+}
+
+.system-settings-tab:hover {
+  background: var(--color-bg-hover);
+}
+
+.system-settings-tab.active {
+  background: var(--color-bg-active);
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+.system-settings-tab-icon {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: inherit;
+  opacity: 0.7;
+}
+
+.system-settings-tab.active .system-settings-tab-icon {
+  opacity: 1;
+}
+
+.system-settings-tab-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.system-settings-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.system-settings-content > .settings-page.body,
+.system-settings-content > .scripts-content.body {
+  height: 100%;
+  overflow: hidden;
+}
