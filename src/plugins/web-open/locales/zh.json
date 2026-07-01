@@ -15,5 +15,8 @@
   "testOpen": "测试打开",
   "disabledMessage": "网页快开已关闭",
   "defaultBaiduTitle": "百度搜索",
-  "defaultBaiduPlaceholder": "输入搜索关键词"
+  "defaultBaiduPlaceholder": "输入搜索关键词",
+  "matchPattern": "快捷匹配正则",
+  "matchPatternDescription": "输入匹配该正则时，跳过二次输入直接打开。",
+  "directOpenTitle": "直接打开链接"
 }

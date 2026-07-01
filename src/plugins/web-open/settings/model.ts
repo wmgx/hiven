@@ -6,6 +6,7 @@ export type WebQuickOpenEntry = {
   urlTemplate: string
   encodeQuery: boolean
   emptyQueryBehavior: 'block' | 'open'
+  matchPattern?: string
 }
 
 export type WebQuickOpenSettings = {

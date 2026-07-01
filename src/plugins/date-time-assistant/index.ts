@@ -369,7 +369,7 @@ export const dateTimeAssistantPlugin = definePlugin({
   ],
   launcher: {
     dynamicItems(ctx: LauncherDynamicContext): LauncherItemContribution[] {
-      const input = ctx.query || ctx.clipboardText || ''
+      const input = ctx.query
       if (!input) return []
       const now = new Date()
       const parsed = parseDateTimeQuery(input, now)

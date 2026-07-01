@@ -327,7 +327,7 @@ export async function collectDynamicItems(
         const requestedPermissions = pluginRegistry.getPluginPermissions(pluginId, settingsSource)
         const raw = await withTimeout(
           Promise.resolve(provider({
-            query: q,
+            query: q || clipboardText?.trim() || '',
             clipboardText,
             surfaceId,
             locale,

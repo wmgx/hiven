@@ -14,6 +14,7 @@ import {
   DEFAULT_WEB_QUICK_OPEN_SETTINGS,
   type WebQuickOpenSettings,
 } from './settings/model'
+import { extractDomain, getFaviconIcon, FALLBACK_ICON } from './faviconCache'
 
 function buildEntryLauncherItem(entry: WebQuickOpenSettings['entries'][number]): LauncherItemContribution<WebQuickOpenSettings> {
   const aliases = Array.isArray(entry.aliases) ? entry.aliases : []
@@ -81,14 +82,84 @@ function isUnchangedDefaultEntry(entry: WebQuickOpenSettings['entries'][number])
   )
 }
 
-function buildDynamicLauncherItems(ctx: LauncherDynamicContext): LauncherItemContribution[] {
+function isValidUrl(text: string): boolean {
+  return /^https?:\/\//i.test(text.trim())
+}
+
+function testMatchPattern(pattern: string, input: string): boolean {
+  try {
+    return new RegExp(pattern).test(input)
+  } catch {
+    return false
+  }
+}
+
+async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<LauncherItemContribution[]> {
   const settings = ctx.settings as WebQuickOpenSettings | undefined
   if (settings?.enabled === false) return []
   const entries = settings?.entries ?? DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries
-  return entries
+  const query = ctx.query.trim()
+  if (!query) return []
+
+  const results: LauncherItemContribution[] = []
+
+  // A. Pattern-matched entries → perform (one-step open)
+  for (const entry of entries) {
+    if (!entry.matchPattern) continue
+    if (!testMatchPattern(entry.matchPattern, query)) continue
+
+    const url = buildWebQuickOpenUrl(entry.urlTemplate, query, entry.encodeQuery)
+    const domain = extractDomain(url)
+    const icon = domain
+      ? await getFaviconIcon(domain, ctx.storage, ctx.source, ctx.pluginId)
+      : FALLBACK_ICON
+
+    results.push({
+      id: `${entry.id}-quick`,
+      display: {
+        title: entry.title || entry.urlTemplate,
+        subtitle: url,
+        icon,
+      },
+      behavior: { type: 'perform' as const },
+      async execute(execCtx) {
+        await execCtx.api.openUrl(url)
+        return { ok: true }
+      },
+    })
+  }
+
+  // B. Direct URL open
+  if (isValidUrl(query)) {
+    const domain = extractDomain(query)
+    const icon = domain
+      ? await getFaviconIcon(domain, ctx.storage, ctx.source, ctx.pluginId)
+      : FALLBACK_ICON
+
+    results.push({
+      id: 'direct-url-open',
+      display: {
+        title: ctx.t('directOpenTitle'),
+        subtitle: query,
+        icon,
+      },
+      behavior: { type: 'perform' as const },
+      async execute(execCtx) {
+        await execCtx.api.openUrl(query)
+        return { ok: true }
+      },
+    })
+  }
+
+  // C. Existing behavior: user-customized entries matching by keyword
+  const keywordMatches = entries
     .filter((entry) => !isUnchangedDefaultEntry(entry))
     .filter((entry) => entryMatchesQuery(entry, ctx.query))
     .map((entry) => buildEntryLauncherItem(entry) as LauncherItemContribution)
+
+  results.push(...keywordMatches)
+
+  return results
 }
 
 function migrateWebQuickOpenSettings(stored: unknown): WebQuickOpenSettings {
@@ -110,6 +181,7 @@ function migrateWebQuickOpenSettings(stored: unknown): WebQuickOpenSettings {
         urlTemplate: String(source.urlTemplate || 'https://example.com/search?q={query}'),
         encodeQuery: typeof source.encodeQuery === 'boolean' ? source.encodeQuery : true,
         emptyQueryBehavior: source.emptyQueryBehavior === 'open' ? 'open' : 'block',
+        matchPattern: typeof source.matchPattern === 'string' ? source.matchPattern : undefined,
       }
     }),
   }
@@ -119,7 +191,7 @@ export default definePlugin<WebQuickOpenSettings>({
   settings: {
     title: 'Web Quick Open',
     titleI18n: { zh: '网页快开' },
-    version: 2,
+    version: 3,
     defaultValue: DEFAULT_WEB_QUICK_OPEN_SETTINGS,
     migrate: migrateWebQuickOpenSettings,
     schema: {
@@ -167,6 +239,7 @@ export default definePlugin<WebQuickOpenSettings>({
                 urlTemplate: 'https://example.com/search?q={query}',
                 encodeQuery: true,
                 emptyQueryBehavior: 'block',
+                matchPattern: '',
               },
               fields: [
                 {
@@ -197,6 +270,17 @@ export default definePlugin<WebQuickOpenSettings>({
                   descriptionI18n: { zh: '{query} 会被命令面板中输入的查询内容替换。' },
                   placeholder: 'https://www.google.com/search?q={query}',
                   placeholderI18n: { zh: 'https://www.google.com/search?q={query}' },
+                  mono: true,
+                },
+                {
+                  kind: 'text',
+                  key: 'matchPattern',
+                  label: 'Quick match pattern',
+                  labelI18n: { zh: '快捷匹配正则' },
+                  description: 'When input matches this regex, open directly without secondary input.',
+                  descriptionI18n: { zh: '输入匹配该正则时，跳过二次输入直接打开。' },
+                  placeholder: '^\\d{9}$',
+                  placeholderI18n: { zh: '^\\d{9}$' },
                   mono: true,
                 },
                 {

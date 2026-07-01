@@ -15,5 +15,8 @@
   "testOpen": "Test open",
   "disabledMessage": "Web Quick Open is disabled",
   "defaultBaiduTitle": "Baidu Search",
-  "defaultBaiduPlaceholder": "Enter search keywords"
+  "defaultBaiduPlaceholder": "Enter search keywords",
+  "matchPattern": "Quick match pattern",
+  "matchPatternDescription": "When input matches this regex, open directly without secondary input.",
+  "directOpenTitle": "Open link directly"
 }

@@ -455,7 +455,7 @@ const definition: PluginDefinition = {
   ],
   launcher: {
     dynamicItems(ctx: LauncherDynamicContext): LauncherItemContribution[] {
-      const input = ctx.query || ctx.clipboardText || ''
+      const input = ctx.query
       const result = safeCalculate(input)
       if (result === null) return []
       return [{
