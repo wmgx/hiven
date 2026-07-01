@@ -139,7 +139,7 @@ export type LastCommandStatus = {
 }
 
 export type AppTheme = 'dark' | 'light'
-export type GlobalLauncherMode = 'full' | 'pinned-only'
+export type GlobalLauncherMode = 'full' | 'pinned-only' | 'quick-editor'
 export type GlobalPinnedLauncherDoubleModifier = 'Command' | 'Shift' | 'Option'
 export type GlobalLauncherPosition = {
   x: number;
@@ -196,6 +196,14 @@ interface AppState {
   launcherHostSurfaceTarget: LauncherHostSurfaceTarget | null
   openLauncherHostSurface: (target: LauncherHostSurfaceTarget) => void
   clearLauncherHostSurface: () => void
+
+  // Quick Editor
+  quickEditorCommandOpen: boolean
+  openQuickEditor: () => void
+  closeQuickEditor: () => void
+  toggleQuickEditor: () => void
+  openQuickEditorCommand: () => void
+  closeQuickEditorCommand: () => void
 
   // Last command status
   lastCommandStatus: LastCommandStatus | null
@@ -414,6 +422,21 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   clearPluginSurfaceTool: () => set({ pluginSurfaceToolTarget: null }),
   openLauncherHostSurface: (target) => set({ launcherHostSurfaceTarget: target, globalLauncherOpen: true, globalLauncherMode: 'full' }),
   clearLauncherHostSurface: () => set({ launcherHostSurfaceTarget: null }),
+
+  // Quick Editor
+  quickEditorCommandOpen: false,
+  openQuickEditor: () => set({ globalLauncherOpen: true, globalLauncherMode: 'quick-editor' }),
+  closeQuickEditor: () => set({ globalLauncherMode: 'full', quickEditorCommandOpen: false }),
+  toggleQuickEditor: () => {
+    const { globalLauncherOpen, globalLauncherMode } = get()
+    if (globalLauncherOpen && globalLauncherMode === 'quick-editor') {
+      get().closeQuickEditor()
+    } else {
+      get().openQuickEditor()
+    }
+  },
+  openQuickEditorCommand: () => set({ quickEditorCommandOpen: true }),
+  closeQuickEditorCommand: () => set({ quickEditorCommandOpen: false }),
 
   // Last command status
   lastCommandStatus: null,
