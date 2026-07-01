@@ -82,3 +82,16 @@
   color: var(--color-text-tertiary);
   font-size: 11px;
 }
+
+.plugin-surface-window-message__indicator {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--color-text-tertiary, rgba(128, 128, 128, 0.3));
+  border-top-color: var(--color-accent, #6366f1);
+  animation: plugin-surface-spin 0.8s linear infinite;
+}
+
+@keyframes plugin-surface-spin {
+  to { transform: rotate(360deg); }
+}

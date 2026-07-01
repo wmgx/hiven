@@ -11,6 +11,7 @@ import { DEFAULT_CLIPBOARD_HISTORY_SETTINGS } from './settings/model'
 import { ClipboardHistorySurface } from './surfaces/ClipboardHistorySurface'
 import { clipboardHistoryBackground } from './background/clipboardHistoryBackground'
 import { createClipboardHistoryRepository } from './storage/clipboardHistoryRepository'
+import { getCachedIndex } from './storage/clipboardHistoryCache'
 
 const MB = 1024 * 1024
 
@@ -144,6 +145,8 @@ export default definePlugin<ClipboardHistorySettings>({
         aliases: ['clipboard', 'paste', 'history', '剪贴板', '粘贴板', '剪切板'],
         component: ClipboardHistorySurface,
         async beforeOpen(ctx) {
+          // 缓存已被 background 预热时直接跳过阻塞性 IPC，Surface 会自行从缓存同步读取
+          if (getCachedIndex()) return
           await createClipboardHistoryRepository(ctx.storage).getFreshListItems()
         },
         entry: {

@@ -96,15 +96,18 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
   useEffect(() => {
     if (!settings.enabled) return
+    // 初次挂载时刷新一次
     void repository.getFreshListItems()
       .then(applyListItems)
       .catch(() => {})
-    const intervalId = window.setInterval(() => {
+    // 窗口获焦时刷新，替代固定 1s 轮询
+    const handleFocus = () => {
       void repository.getFreshListItems()
         .then(applyListItems)
         .catch(() => {})
-    }, 1000)
-    return () => window.clearInterval(intervalId)
+    }
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
   }, [repository, settings.enabled, applyListItems])
 
   useEffect(() => {
@@ -268,8 +271,21 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const renderContent = () => {
     if (loading) {
       return (
-        <div className="clipboard-history-state">
-          {t('state.loading')}
+        <div className="clipboard-history-main">
+          <div className="clipboard-history-list-pane">
+            <div className="clipboard-history-list-toolbar">
+              <div className="clipboard-history-skeleton-bar clipboard-history-skeleton-filter" />
+            </div>
+            <div className="clipboard-history-list" style={{ overflow: 'hidden', flex: 1 }}>
+              {Array.from({ length: 7 }, (_, i) => (
+                <div key={i} className="clipboard-history-skeleton-item" style={{ animationDelay: `${i * 80}ms` }} />
+              ))}
+            </div>
+          </div>
+          <div className="clipboard-history-skeleton-preview">
+            <div className="clipboard-history-skeleton-bar clipboard-history-skeleton-preview-title" />
+            <div className="clipboard-history-skeleton-bar clipboard-history-skeleton-preview-body" />
+          </div>
         </div>
       )
     }

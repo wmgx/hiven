@@ -234,6 +234,7 @@ export function PluginSurfacePermissionGate({
 function PluginSurfaceMessage({ title, message }: { title: string; message?: string }) {
   return (
     <div className="plugin-surface-window-message">
+      <div className="plugin-surface-window-message__indicator" />
       <div>{title}</div>
       {message && <small>{message}</small>}
     </div>

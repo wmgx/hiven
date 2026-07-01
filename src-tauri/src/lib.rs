@@ -40,6 +40,8 @@ static LAST_FOREGROUND_SELECTION_TEXT: OnceLock<Mutex<Option<ForegroundSelection
 static INSTALLED_APP_TARGETS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 static PLUGIN_KV_DB: OnceLock<Result<Mutex<PluginKvDb>, String>> = OnceLock::new();
 static PLUGIN_SURFACE_WINDOW_TOKENS: OnceLock<Mutex<HashMap<String, u64>>> = OnceLock::new();
+static PLUGIN_SURFACE_PAYLOADS: OnceLock<Mutex<HashMap<String, PluginSurfacePayload>>> =
+    OnceLock::new();
 static SURFACE_REGISTRY: OnceLock<SurfaceRegistryState> = OnceLock::new();
 const SURFACE_REGISTRY_EVENT: &str = "hiven://surface-registry-sync";
 const MAX_APP_ICON_CACHE_WARM_COUNT: usize = 20;
@@ -52,6 +54,16 @@ const LAUNCHER_PERF_ENV: &str = "HIVEN_LAUNCHER_PERF";
 struct ForegroundSelectionText {
     text: String,
     captured_at: Instant,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PluginSurfacePayload {
+    initial_text: Option<String>,
+}
+
+fn plugin_surface_payloads() -> &'static Mutex<HashMap<String, PluginSurfacePayload>> {
+    PLUGIN_SURFACE_PAYLOADS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 fn launcher_perf_enabled() -> bool {
@@ -976,6 +988,25 @@ fn url_query_encode(value: &str) -> String {
 
 fn plugin_surface_window_tokens() -> &'static Mutex<HashMap<String, u64>> {
     PLUGIN_SURFACE_WINDOW_TOKENS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[tauri::command(rename_all = "camelCase")]
+fn plugin_surface_payload_set(label: String, payload: PluginSurfacePayload) -> Result<(), String> {
+    plugin_surface_payloads()
+        .lock()
+        .map_err(|_| "plugin surface payload lock poisoned".to_string())?
+        .insert(label, payload);
+    Ok(())
+}
+
+#[tauri::command(rename_all = "camelCase")]
+fn plugin_surface_payload_consume(
+    label: String,
+) -> Result<Option<PluginSurfacePayload>, String> {
+    let mut payloads = plugin_surface_payloads()
+        .lock()
+        .map_err(|_| "plugin surface payload lock poisoned".to_string())?;
+    Ok(payloads.remove(&label))
 }
 
 fn touch_plugin_surface_window(label: &str) -> u64 {
