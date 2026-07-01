@@ -49,7 +49,7 @@ export const textDiffPlugin = definePlugin({
           icon: 'git-compare',
           aliases: ['diff', 'compare', 'text diff', 'text-diff', 'duibi', 'wenben duibi'],
         },
-        surfaces: ['command-palette'],
+        surfaces: ['command-palette', 'global-launcher'],
         pinnable: false,
         execute(ctx) {
           const snapshot = ctx.api.getPaneSnapshot()
