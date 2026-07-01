@@ -4230,7 +4230,7 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
 
 .l-row {
   width: calc(100% - 16px);
-  height: 42px;
+  height: 50px;
   display: flex;
   align-items: center;
   gap: 11px;
@@ -4251,7 +4251,7 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
 
 .l-row.sel,
 .l-row.selected {
-  height: 42px;
+  height: 50px;
   background: var(--accent-soft) !important;
 }
 
