@@ -173,152 +173,20 @@
   text-transform: uppercase;
 }
 
-.text-diff-tool-surface {
+.text-diff-fullscreen-page {
+  width: 100%;
   height: 100%;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  color: var(--color-text-primary);
-  background: var(--color-background-primary);
 }
 
-.text-diff-tool-surface__header {
-  min-height: 48px;
-  display: flex;
+.text-diff-change-count {
+  flex: 0 0 auto;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 14px;
-  border-bottom: 1px solid var(--color-border-tertiary);
-  background: var(--color-background-secondary);
-}
-
-.text-diff-tool-surface__header strong,
-.text-diff-tool-surface__header span {
-  display: block;
-}
-
-.text-diff-tool-surface__header strong {
-  font-size: 13px;
-  font-weight: 650;
-}
-
-.text-diff-tool-surface__header span {
-  margin-top: 2px;
-  color: var(--color-text-tertiary);
-  font-size: 11px;
-}
-
-.text-diff-tool-surface button {
-  min-width: 58px;
-  border: 1px solid var(--color-border-secondary);
-  border-radius: 6px;
-  padding: 5px 9px;
-  background: var(--color-background-primary);
-  color: var(--color-text-primary);
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.text-diff-tool-surface__body {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(280px, 0.9fr);
-}
-
-.text-diff-tool-surface__pane,
-.text-diff-tool-surface__preview {
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  border-right: 1px solid var(--color-border-tertiary);
-}
-
-.text-diff-tool-surface__preview {
-  border-right: 0;
-}
-
-.text-diff-tool-surface__pane > span,
-.text-diff-tool-surface__preview > span {
-  height: 30px;
-  display: flex;
-  align-items: center;
-  padding: 0 10px;
-  color: var(--color-text-secondary);
-  border-bottom: 1px solid var(--color-border-tertiary);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.text-diff-tool-surface textarea {
-  flex: 1;
-  min-height: 0;
-  margin: 0;
-  padding: 10px;
-  border: 0;
-  outline: 0;
-  resize: none;
-  overflow: auto;
-  background: var(--color-background-primary);
-  color: var(--color-text-primary);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.text-diff-tool-surface__rows {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.text-diff-tool-surface__row {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) minmax(0, 1fr);
-  gap: 8px;
-  padding: 5px 8px;
-  border-bottom: 1px solid var(--color-border-tertiary);
-}
-
-.text-diff-tool-surface__row span {
-  color: var(--color-text-tertiary);
-}
-
-.text-diff-tool-surface__row code {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--color-text-primary);
-  text-overflow: ellipsis;
-  white-space: pre;
-}
-
-.text-diff-tool-surface__row.is-changed {
-  background: color-mix(in srgb, var(--color-warning-bg) 58%, transparent);
-}
-
-.text-diff-tool-surface__row.is-added {
-  background: color-mix(in srgb, var(--color-success-bg) 58%, transparent);
-}
-
-.text-diff-tool-surface__row.is-removed {
-  background: color-mix(in srgb, var(--color-error-bg) 36%, transparent);
-}
-
-@media (max-width: 860px) {
-  .text-diff-tool-surface__body {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .text-diff-tool-surface__pane,
-  .text-diff-tool-surface__preview {
-    min-height: 200px;
-    border-right: 0;
-    border-bottom: 1px solid var(--color-border-tertiary);
-  }
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  color: var(--hiven-color-text-tertiary);
+  background: var(--hiven-color-bg-secondary);
+  font-size: 10px;
+  font-weight: 500;
 }

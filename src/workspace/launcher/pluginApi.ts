@@ -285,6 +285,9 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
         updatedAt: Date.now(),
       })
     },
+    openDiffPage: (payload) => {
+      useWorkspaceStore.getState().openDiffPage(payload)
+    },
     apps: createPluginAppsApi(options),
   }
 }

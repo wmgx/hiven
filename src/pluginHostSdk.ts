@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { definePlugin } from './workspace/definePlugin'
 import { useAppStore } from './store'
-import { useWorkspaceStore } from './workspace/workspaceStore'
+import { useWorkspaceStore, type DiffSource } from './workspace/workspaceStore'
 import { makePluginT, type PluginT } from './i18n/pluginI18nRegistry'
 import type { Locale } from './i18n'
 import { DualEditorView } from './kits/ui/DualEditorView'
@@ -53,6 +53,13 @@ export type PluginHostHooks = {
   usePaneText: (paneId: PaneId) => string | undefined
   /** Namespaced translate bound to the current locale (reactive). */
   useT: (pluginId: string) => PluginT
+  /** Subscribe to the active fullscreen view state. */
+  useActiveFullscreenView: () => { type: 'diff'; original: DiffSource; modified: DiffSource } | null
+  /** Get workspace actions for fullscreen view and pane text management. */
+  useWorkspaceActions: () => {
+    setPaneText: (paneId: string, text: string) => void
+    clearActiveFullscreenView: () => void
+  }
 }
 
 export type { MonacoDisposable }
@@ -151,6 +158,14 @@ function createPluginHostHooks(): PluginHostHooks {
     useT: (pluginId) => {
       const locale = useAppStore((s) => s.locale)
       return makePluginT(pluginId, locale)
+    },
+    useActiveFullscreenView: () => {
+      return useWorkspaceStore((s) => s.activeFullscreenView)
+    },
+    useWorkspaceActions: () => {
+      const setPaneText = useWorkspaceStore((s) => s.setPaneText)
+      const clearActiveFullscreenView = useWorkspaceStore((s) => s.clearActiveFullscreenView)
+      return { setPaneText, clearActiveFullscreenView }
     },
   }
 }
