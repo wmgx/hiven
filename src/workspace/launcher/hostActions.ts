@@ -1,4 +1,5 @@
 import { createEditorPane } from '../editorBridge'
+import { requestOpenPluginSurfaceTool } from '../pluginSurfaceOpenRequest'
 import type { LauncherItem } from './types'
 import { getHostEditorActionItems } from './hostEditorActions'
 
@@ -89,8 +90,12 @@ export function getHostPaneControlItems(): LauncherItem[] {
       requiredCapabilities: ['settings'],
       pinnable: false,
       legacyUsageKeys: ['show-plugins-page'],
-      execute: async (ctx) => {
-        await ctx.api.showPluginsPage()
+      execute: async () => {
+        await requestOpenPluginSurfaceTool({
+          source: 'builtin',
+          pluginId: 'system-settings',
+          surfaceId: 'main',
+        })
         return { ok: true, keepOpen: true }
       },
     },
@@ -110,8 +115,12 @@ export function getHostPaneControlItems(): LauncherItem[] {
       requiredCapabilities: ['settings'],
       pinnable: false,
       legacyUsageKeys: ['show-settings-page'],
-      execute: async (ctx) => {
-        await ctx.api.showSettingsPage()
+      execute: async () => {
+        await requestOpenPluginSurfaceTool({
+          source: 'builtin',
+          pluginId: 'system-settings',
+          surfaceId: 'main',
+        })
         return { ok: true, keepOpen: true }
       },
     },
