@@ -90,6 +90,9 @@ export const textDiffPlugin = definePlugin({
                     }
                   }
 
+                  // Ensure editor window is visible (needed when invoked from global launcher)
+                  await ctx.api.showEditorWindow()
+
                   ctx.api.openDiffPage({ original: selected[0], modified: selected[1] })
                   return { ok: true as const }
                 },

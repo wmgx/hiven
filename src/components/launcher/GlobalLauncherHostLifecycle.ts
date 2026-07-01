@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, type RefObject } from 'react'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import type { LauncherControllerState } from '../../workspace/launcher/controller'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../../utils/imeKeyboard'
+import { useAppStore } from '../../store'
 
 export function isStandaloneLauncherWindow() {
   return new URLSearchParams(window.location.search).get('window') === 'launcher'
@@ -129,9 +130,7 @@ export function useGlobalLauncherHostEscape({
     if (mode === 'quick-editor') {
       event.preventDefault()
       event.stopPropagation()
-      // Dynamic import is not ideal in a keydown handler, read directly from store
-      const store = await import('../../store')
-      const state = store.useAppStore.getState()
+      const state = useAppStore.getState()
       if (state.quickEditorCommandOpen) {
         state.closeQuickEditorCommand()
       } else {
