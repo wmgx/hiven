@@ -770,11 +770,11 @@ async fn hide_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
             if let Err(error) = restore_launcher_previous_input_source() {
                 eprintln!("[hiven] Failed to restore launcher input source: {}", error);
             }
-            restore_previous_foreground_app();
             if let Err(error) = window.hide() {
                 eprintln!("[hiven] Failed to hide launcher window: {}", error);
             }
         }
+        restore_previous_foreground_app();
     })
     .map_err(|error| error.to_string())
 }
