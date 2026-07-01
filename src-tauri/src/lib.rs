@@ -1392,50 +1392,28 @@ fn read_clipboard_content(_app: tauri::AppHandle) -> ClipboardContent {
             return ClipboardContent::Empty;
         }
 
-        // Check for public.file-url
+        // Check for files via NSFilenamesPboardType (returns NSArray<NSString> directly)
         let ns_string_cls = match objc2::runtime::AnyClass::get(c"NSString") {
             Some(cls) => cls,
             None => return ClipboardContent::Empty,
         };
-        let file_url_type: *mut objc2::runtime::AnyObject =
-            objc2::msg_send![ns_string_cls, stringWithUTF8String: c"public.file-url".as_ptr()];
-        let has_file_url: bool = objc2::msg_send![types, containsObject: file_url_type];
+        let filenames_type: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![ns_string_cls, stringWithUTF8String: c"NSFilenamesPboardType".as_ptr()];
+        let has_filenames: bool = objc2::msg_send![types, containsObject: filenames_type];
 
-        if has_file_url {
-            // Read file URLs using readObjectsForClasses:options:
-            let nsurl_cls = match objc2::runtime::AnyClass::get(c"NSURL") {
-                Some(cls) => cls,
-                None => return ClipboardContent::Empty,
-            };
-            let ns_array_cls = match objc2::runtime::AnyClass::get(c"NSArray") {
-                Some(cls) => cls,
-                None => return ClipboardContent::Empty,
-            };
-            let class_array: *mut objc2::runtime::AnyObject =
-                objc2::msg_send![ns_array_cls, arrayWithObject: nsurl_cls];
-            let null_opts: *const objc2::runtime::AnyObject = std::ptr::null();
-            let urls: *mut objc2::runtime::AnyObject =
-                objc2::msg_send![pasteboard, readObjectsForClasses: class_array, options: null_opts];
-
-            let mut paths: Vec<String> = Vec::new();
-            if !urls.is_null() {
-                let count: usize = objc2::msg_send![urls, count];
+        if has_filenames {
+            let plist: *mut objc2::runtime::AnyObject =
+                objc2::msg_send![pasteboard, propertyListForType: filenames_type];
+            if !plist.is_null() {
+                let count: usize = objc2::msg_send![plist, count];
+                let mut paths: Vec<String> = Vec::with_capacity(count);
                 for i in 0..count {
-                    let url: *mut objc2::runtime::AnyObject =
-                        objc2::msg_send![urls, objectAtIndex: i];
-                    if url.is_null() {
+                    let item: *mut objc2::runtime::AnyObject =
+                        objc2::msg_send![plist, objectAtIndex: i];
+                    if item.is_null() {
                         continue;
                     }
-                    let is_file: bool = objc2::msg_send![url, isFileURL];
-                    if !is_file {
-                        continue;
-                    }
-                    let path_obj: *mut objc2::runtime::AnyObject =
-                        objc2::msg_send![url, path];
-                    if path_obj.is_null() {
-                        continue;
-                    }
-                    let utf8: *const c_char = objc2::msg_send![path_obj, UTF8String];
+                    let utf8: *const c_char = objc2::msg_send![item, UTF8String];
                     if utf8.is_null() {
                         continue;
                     }
@@ -1444,21 +1422,24 @@ fn read_clipboard_content(_app: tauri::AppHandle) -> ClipboardContent {
                         paths.push(path_str);
                     }
                 }
-            }
-            if !paths.is_empty() {
-                return ClipboardContent::Files { paths };
+                if !paths.is_empty() {
+                    return ClipboardContent::Files { paths };
+                }
             }
         }
 
         // Check for image types (public.tiff, public.png)
-        let tiff_type: *mut objc2::runtime::AnyObject =
-            objc2::msg_send![ns_string_cls, stringWithUTF8String: c"public.tiff".as_ptr()];
-        let png_type: *mut objc2::runtime::AnyObject =
-            objc2::msg_send![ns_string_cls, stringWithUTF8String: c"public.png".as_ptr()];
-        let has_tiff: bool = objc2::msg_send![types, containsObject: tiff_type];
-        let has_png: bool = objc2::msg_send![types, containsObject: png_type];
-        if has_tiff || has_png {
-            return ClipboardContent::Image;
+        // Skip if NSFilenamesPboardType was present — tiff would be the file icon, not a real image
+        if !has_filenames {
+            let tiff_type: *mut objc2::runtime::AnyObject =
+                objc2::msg_send![ns_string_cls, stringWithUTF8String: c"public.tiff".as_ptr()];
+            let png_type: *mut objc2::runtime::AnyObject =
+                objc2::msg_send![ns_string_cls, stringWithUTF8String: c"public.png".as_ptr()];
+            let has_tiff: bool = objc2::msg_send![types, containsObject: tiff_type];
+            let has_png: bool = objc2::msg_send![types, containsObject: png_type];
+            if has_tiff || has_png {
+                return ClipboardContent::Image;
+            }
         }
 
         // Check for plain text
