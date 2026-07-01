@@ -1,5 +1,6 @@
 import type { EditorContextSnapshot } from '../launcher/context/contextBroker'
 import type { SerializedRange } from './types'
+import type { DiffSource } from './workspaceStore'
 import { showEditorWindow } from './windowManager/editorWindow'
 import { EDITOR_WINDOW_LABEL } from './windowManager/windowLabels'
 
@@ -55,6 +56,11 @@ export type EditorPaneSnapshot = {
   }>
 }
 
+export type EditorBridgeDiffPageInput = {
+  original: DiffSource
+  modified: DiffSource
+}
+
 export type EditorBridgeRequest =
   | BridgeEnvelope<'getEditorContext', undefined>
   | BridgeEnvelope<'createEditorPane', EditorBridgeCreatePaneInput>
@@ -62,6 +68,7 @@ export type EditorBridgeRequest =
   | BridgeEnvelope<'insertIntoEditor', EditorBridgeTextInput>
   | BridgeEnvelope<'openEditorPanel', EditorBridgePanelInput>
   | BridgeEnvelope<'cleanupEditorPluginContributions', EditorBridgePluginCleanupInput>
+  | BridgeEnvelope<'openDiffPage', EditorBridgeDiffPageInput>
 
 export type EditorBridgeResponse = {
   requestId: string
@@ -77,6 +84,7 @@ export type EditorBridgeHandlers = {
   insertIntoEditor(input: EditorBridgeTextInput): void
   openEditorPanel(input: EditorBridgePanelInput): void
   cleanupEditorPluginContributions(input: EditorBridgePluginCleanupInput): void
+  openDiffPage(input: EditorBridgeDiffPageInput): void
 }
 
 type BridgeEnvelope<T extends string, P> = {

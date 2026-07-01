@@ -88,7 +88,7 @@ const headerMinHeight = readCssPx(headerBlock, 'min-height')
 const rowHeight = readCssPx(rowBlock, 'height')
 const selectedRowHeight = readCssPx(selectedRowBlock, 'height')
 const footerVisibleHeight = readCssVerticalPadding(footerBlock) + readCssPx(footerBlock, 'font-size')
-const nativeMargin = readNumberConstant(files.globalLauncherLayout, 'STANDALONE_LAUNCHER_VERTICAL_PADDING')
+const nativeMargin = readNumberConstant(files.globalLauncherGeometry, 'STANDALONE_LAUNCHER_VERTICAL_PADDING')
 const minRowsBeyondSelected = 3
 const minimumUsableLauncherHeight = Math.ceil(
   headerMinHeight +
@@ -99,7 +99,7 @@ const minimumUsableLauncherHeight = Math.ceil(
   nativeMargin,
 )
 
-const frontendMinHeight = readNumberConstant(files.globalLauncherLayout, 'STANDALONE_LAUNCHER_MIN_HEIGHT')
+const frontendMinHeight = readNumberConstant(files.globalLauncherGeometry, 'STANDALONE_LAUNCHER_MIN_HEIGHT')
 const nativeCompactHeight = readNumberConstant(files.tauriLib, 'LAUNCHER_COMPACT_HEIGHT')
 const failures = []
 
@@ -123,7 +123,7 @@ assert.match(
 
 assert.match(
   files.globalLauncherGeometry,
-  /bodyMaxHeight:\s*Math\.min\(body\.scrollHeight,\s*maxBodyHeight\)/,
+  /const\s+bodyMaxHeight\s*=\s*Math\.min\(body\.scrollHeight,\s*maxBodyHeight\)/,
   'standalone launcher height measurement should not let the current shrunken window viewport cap future growth',
 )
 

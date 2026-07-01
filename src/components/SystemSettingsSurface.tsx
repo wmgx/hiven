@@ -34,16 +34,8 @@ export function SystemSettingsSurface(_props: PluginSurfaceProps) {
         ))}
       </div>
       <div className="system-settings-content">
-        {activeTab === 'settings' && (
-          <div className="settings-page body">
-            <SettingsContent />
-          </div>
-        )}
-        {activeTab === 'plugins' && (
-          <div className="scripts-content body">
-            <PluginsContent onOpenPluginEditor={requestOpenPluginEditorSurface} />
-          </div>
-        )}
+        {activeTab === 'settings' && <SettingsContent />}
+        {activeTab === 'plugins' && <PluginsContent onOpenPluginEditor={requestOpenPluginEditorSurface} />}
       </div>
     </div>
   )

@@ -85,7 +85,7 @@ export function computeStandaloneLauncherGeometry({
   return {
     width,
     height,
-    bodyMaxHeight: measured.bodyMaxHeight,
+    bodyMaxHeight: isSurfaceLike ? undefined : measured.bodyMaxHeight,
   }
 }
 

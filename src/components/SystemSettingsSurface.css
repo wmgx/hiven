@@ -64,30 +64,12 @@
   flex: 1;
   min-width: 0;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
-.system-settings-content > .settings-page.body {
-  flex: 1;
-  min-height: 0;
+.system-settings-content > .plugins-content-inner {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-}
-
-.system-settings-content > .scripts-content.body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.system-settings-content .plugins-content-inner {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
+  min-height: 100%;
 }
