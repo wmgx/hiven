@@ -35,6 +35,14 @@ export async function requestOpenPluginSurfaceWindow(target: PluginSurfaceOpenTa
   const height = shell?.defaultHeight ?? DEFAULT_HEIGHT
   const closeOnBlur = shell?.closeOnBlur !== false
   const destroyTimeoutMs = shell?.destroyTimeout ?? DEFAULT_DESTROY_TIMEOUT_MS
+  const label = pluginSurfaceWindowLabel(target)
+
+  if (target.initialText) {
+    await invoke('plugin_surface_payload_set', {
+      label,
+      payload: { initialText: target.initialText },
+    })
+  }
 
   await invoke('show_plugin_surface_window', {
     pluginId: target.pluginId,

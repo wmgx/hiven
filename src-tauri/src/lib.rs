@@ -3982,6 +3982,8 @@ pub fn run() {
             list_editor_windows,
             show_plugin_surface_window,
             hide_plugin_surface_window,
+            plugin_surface_payload_set,
+            plugin_surface_payload_consume,
             simulate_paste,
             current_foreground_app_name,
             current_foreground_app_context,

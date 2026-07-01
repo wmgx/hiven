@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAppStore, type PluginSurfaceOpenTarget } from '../store'
 import type { PluginSettingsSource } from '../workspace/pluginSettingsStore'
 import { markSurfaceInstanceState, upsertSurfaceInstance } from '../surfaces/registry'
@@ -11,9 +11,22 @@ import './PluginSurfaceWindow.css'
 export function PluginSurfaceWindow() {
   const locale = useAppStore((s) => s.locale)
   const theme = useAppStore((s) => s.settings.theme)
-  const target = useMemo(() => parseTargetFromUrl(), [])
+  const baseTarget = useMemo(() => parseTargetFromUrl(), [])
+  const [target, setTarget] = useState<PluginSurfaceOpenTarget | null>(null)
+  const [targetReady, setTargetReady] = useState(false)
   const title = usePluginSurfaceTitle(target, locale)
   const usesPluginTitlebar = usePluginSurfaceRendersTitlebar(target)
+
+  useEffect(() => {
+    if (!baseTarget) {
+      setTargetReady(true)
+      return
+    }
+    consumePluginSurfacePayload(baseTarget).then((resolved) => {
+      setTarget(resolved)
+      setTargetReady(true)
+    })
+  }, [baseTarget])
 
   useEffect(() => {
     if (!target) return
@@ -52,6 +65,10 @@ export function PluginSurfaceWindow() {
       document.removeEventListener('keydown', onKeyDown, true)
     }
   }, [target])
+
+  if (!targetReady) {
+    return null
+  }
 
   if (!target) {
     return <WindowMessage title="Invalid plugin surface target" />
@@ -126,4 +143,24 @@ function WindowMessage({ title, message }: { title: string; message?: string }) 
       </div>
     </div>
   )
+}
+
+async function consumePluginSurfacePayload(
+  target: PluginSurfaceOpenTarget,
+): Promise<PluginSurfaceOpenTarget> {
+  if (!isTauriRuntime()) return target
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    const label = pluginSurfaceWindowLabel(target)
+    const payload = await invoke<{ initialText?: string } | null>(
+      'plugin_surface_payload_consume',
+      { label },
+    )
+    if (payload?.initialText) {
+      return { ...target, initialText: payload.initialText }
+    }
+  } catch {
+    // ignore — payload may not exist
+  }
+  return target
 }
