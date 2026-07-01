@@ -119,9 +119,15 @@ export function createPluginPaste(
     async pasteFiles(paths: string[]): Promise<PluginPasteResult> {
       requirePermissions(['clipboard.write', 'clipboard.files', 'accessibility.paste'])
       try {
-        await writeTextToClipboard(paths.join('\n'))
+        const { invoke } = await import('@tauri-apps/api/core')
+        await invoke('write_clipboard_files', { paths })
       } catch {
-        return { ok: false, fallback: 'none', message: 'Failed to write file paths to clipboard' }
+        // Fallback: write as text
+        try {
+          await writeTextToClipboard(paths.join('\n'))
+        } catch {
+          return { ok: false, fallback: 'none', message: 'Failed to write file paths to clipboard' }
+        }
       }
 
       return pasteAfterClipboardWrite('File paths copied to clipboard. Enable accessibility permissions for direct paste.')
