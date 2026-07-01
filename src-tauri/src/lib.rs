@@ -213,6 +213,15 @@ fn plugin_surface_registry_record(
     }
 }
 
+#[derive(serde::Serialize, Clone)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+enum ClipboardContent {
+    Files { paths: Vec<String> },
+    Image,
+    Text { text: String },
+    Empty,
+}
+
 #[tauri::command]
 fn surface_registry_snapshot() -> Result<Vec<SurfaceInstanceRecord>, String> {
     let registry = surface_registry_state();
@@ -1362,6 +1371,122 @@ fn read_clipboard_change_count(_app: &tauri::AppHandle) -> Option<i64> {
 #[allow(dead_code)]
 fn read_clipboard_change_count(_app: &tauri::AppHandle) -> Option<i64> {
     None
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn read_clipboard_content(_app: tauri::AppHandle) -> ClipboardContent {
+    unsafe {
+        let pasteboard_cls = match objc2::runtime::AnyClass::get(c"NSPasteboard") {
+            Some(cls) => cls,
+            None => return ClipboardContent::Empty,
+        };
+        let pasteboard: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![pasteboard_cls, generalPasteboard];
+        if pasteboard.is_null() {
+            return ClipboardContent::Empty;
+        }
+
+        let types: *mut objc2::runtime::AnyObject = objc2::msg_send![pasteboard, types];
+        if types.is_null() {
+            return ClipboardContent::Empty;
+        }
+
+        // Check for public.file-url
+        let ns_string_cls = match objc2::runtime::AnyClass::get(c"NSString") {
+            Some(cls) => cls,
+            None => return ClipboardContent::Empty,
+        };
+        let file_url_type: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![ns_string_cls, stringWithUTF8String: c"public.file-url".as_ptr()];
+        let has_file_url: bool = objc2::msg_send![types, containsObject: file_url_type];
+
+        if has_file_url {
+            // Read file URLs using readObjectsForClasses:options:
+            let nsurl_cls = match objc2::runtime::AnyClass::get(c"NSURL") {
+                Some(cls) => cls,
+                None => return ClipboardContent::Empty,
+            };
+            let ns_array_cls = match objc2::runtime::AnyClass::get(c"NSArray") {
+                Some(cls) => cls,
+                None => return ClipboardContent::Empty,
+            };
+            let class_array: *mut objc2::runtime::AnyObject =
+                objc2::msg_send![ns_array_cls, arrayWithObject: nsurl_cls];
+            let null_opts: *const objc2::runtime::AnyObject = std::ptr::null();
+            let urls: *mut objc2::runtime::AnyObject =
+                objc2::msg_send![pasteboard, readObjectsForClasses: class_array, options: null_opts];
+
+            let mut paths: Vec<String> = Vec::new();
+            if !urls.is_null() {
+                let count: usize = objc2::msg_send![urls, count];
+                for i in 0..count {
+                    let url: *mut objc2::runtime::AnyObject =
+                        objc2::msg_send![urls, objectAtIndex: i];
+                    if url.is_null() {
+                        continue;
+                    }
+                    let is_file: bool = objc2::msg_send![url, isFileURL];
+                    if !is_file {
+                        continue;
+                    }
+                    let path_obj: *mut objc2::runtime::AnyObject =
+                        objc2::msg_send![url, path];
+                    if path_obj.is_null() {
+                        continue;
+                    }
+                    let utf8: *const c_char = objc2::msg_send![path_obj, UTF8String];
+                    if utf8.is_null() {
+                        continue;
+                    }
+                    let path_str = CStr::from_ptr(utf8).to_string_lossy().into_owned();
+                    if !path_str.is_empty() {
+                        paths.push(path_str);
+                    }
+                }
+            }
+            if !paths.is_empty() {
+                return ClipboardContent::Files { paths };
+            }
+        }
+
+        // Check for image types (public.tiff, public.png)
+        let tiff_type: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![ns_string_cls, stringWithUTF8String: c"public.tiff".as_ptr()];
+        let png_type: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![ns_string_cls, stringWithUTF8String: c"public.png".as_ptr()];
+        let has_tiff: bool = objc2::msg_send![types, containsObject: tiff_type];
+        let has_png: bool = objc2::msg_send![types, containsObject: png_type];
+        if has_tiff || has_png {
+            return ClipboardContent::Image;
+        }
+
+        // Check for plain text
+        let text_type: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![ns_string_cls, stringWithUTF8String: c"public.utf8-plain-text".as_ptr()];
+        let text_str: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![pasteboard, stringForType: text_type];
+        if !text_str.is_null() {
+            let utf8: *const c_char = objc2::msg_send![text_str, UTF8String];
+            if !utf8.is_null() {
+                let text = CStr::from_ptr(utf8).to_string_lossy().into_owned();
+                if !text.is_empty() {
+                    return ClipboardContent::Text { text };
+                }
+            }
+        }
+
+        ClipboardContent::Empty
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+fn read_clipboard_content(app: tauri::AppHandle) -> ClipboardContent {
+    match app.clipboard().read_text() {
+        Ok(text) if !text.is_empty() => ClipboardContent::Text { text },
+        _ => ClipboardContent::Empty,
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -3987,6 +4112,7 @@ pub fn run() {
             simulate_paste,
             current_foreground_app_name,
             current_foreground_app_context,
+            read_clipboard_content,
             // [DISABLED] External selection capture — command preserved, entry point disabled.
             // last_foreground_selection_text,
             discover_installed_apps,
