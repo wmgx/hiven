@@ -113,6 +113,18 @@ if (nativeCompactHeight < minimumUsableLauncherHeight) {
   )
 }
 
+assert.match(
+  files.globalLauncherLayout,
+  /STANDALONE_LAUNCHER_MAX_HEIGHT\s*-\s*STANDALONE_LAUNCHER_VERTICAL_PADDING\s*-\s*header\.offsetHeight\s*-\s*footer\.offsetHeight/,
+  'standalone launcher height measurement should restore the list area available at max window height',
+)
+
+assert.match(
+  files.globalLauncherLayout,
+  /Math\.max\(\s*readCssPixelValue\(getComputedStyle\(body\)\.maxHeight,\s*STANDALONE_LAUNCHER_LIST_MAX_HEIGHT\),\s*listMaxHeightAtExpandedWindow,\s*STANDALONE_LAUNCHER_LIST_MAX_HEIGHT,\s*\)/,
+  'standalone launcher height measurement should not let the current shrunken window viewport cap future growth',
+)
+
 if (failures.length > 0) {
   console.error(`global launcher window height checks failed (${failures.length}):`)
   for (const failure of failures) console.error(`- ${failure}`)

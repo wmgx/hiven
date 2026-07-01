@@ -4,7 +4,7 @@ import type { PluginUiSurfaceContribution } from '../../workspace/pluginTypes'
 export const GLOBAL_LAUNCHER_PANEL_WIDTH = 'calc(100vw / 3)'
 export const GLOBAL_LAUNCHER_PANEL_WIDTH_PX = 680
 export const STANDALONE_LAUNCHER_WIDTH = 728
-export const STANDALONE_LAUNCHER_MIN_HEIGHT = 294
+export const STANDALONE_LAUNCHER_MIN_HEIGHT = 318
 export const STANDALONE_LAUNCHER_MAX_HEIGHT = 560
 export const STANDALONE_SURFACE_MAX_WIDTH = 920
 export const STANDALONE_SURFACE_MAX_HEIGHT = 760
@@ -142,7 +142,16 @@ export function measureStandaloneLauncherPanelHeight(panel: HTMLElement) {
   if (!header || !footer) return panel.getBoundingClientRect().height
 
   if (!body) return panel.getBoundingClientRect().height
-  const bodyMaxHeight = readCssPixelValue(getComputedStyle(body).maxHeight, STANDALONE_LAUNCHER_LIST_MAX_HEIGHT)
+  const listMaxHeightAtExpandedWindow =
+    STANDALONE_LAUNCHER_MAX_HEIGHT -
+    STANDALONE_LAUNCHER_VERTICAL_PADDING -
+    header.offsetHeight -
+    footer.offsetHeight
+  const bodyMaxHeight = Math.max(
+    readCssPixelValue(getComputedStyle(body).maxHeight, STANDALONE_LAUNCHER_LIST_MAX_HEIGHT),
+    listMaxHeightAtExpandedWindow,
+    STANDALONE_LAUNCHER_LIST_MAX_HEIGHT,
+  )
   return header.offsetHeight + Math.min(body.scrollHeight, bodyMaxHeight) + footer.offsetHeight
 }
 

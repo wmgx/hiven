@@ -48,12 +48,15 @@ export function useGlobalLauncherSurfaceFrame({
   }, [surfaceFrame, pluginRegistryVersion])
 
   const leaveSurface = useCallback(() => {
-    if (surfaceFrame && pluginSurfaceToolTarget && samePluginSurfaceTarget(surfaceFrame, pluginSurfaceToolTarget)) {
+    // If the surface has a breadcrumb header, "back" always returns to the launcher list
+    // (rather than closing the entire launcher), regardless of how it was opened.
+    const hasBreadcrumb = activeSurfaceFrame?.surface.shell?.breadcrumbTitle
+    if (!hasBreadcrumb && surfaceFrame && pluginSurfaceToolTarget && samePluginSurfaceTarget(surfaceFrame, pluginSurfaceToolTarget)) {
       closeLauncher()
       return
     }
     setSurfaceFrame(null)
-  }, [closeLauncher, pluginSurfaceToolTarget, surfaceFrame])
+  }, [activeSurfaceFrame, closeLauncher, pluginSurfaceToolTarget, surfaceFrame])
 
   const closeSurface = useCallback(() => {
     setSurfaceFrame(null)

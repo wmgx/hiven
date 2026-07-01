@@ -35,6 +35,7 @@ function buildSourceList(ctx: TextDiffLauncherContext, snapshot: PaneSnapshot): 
   return [
     ...paneSources,
     { sourceId: 'clipboard', kind: 'clipboard' as const, title: ctx.t('choice.clipboard') },
+    { sourceId: 'empty', kind: 'empty' as const, title: ctx.t('choice.createEmptyPane') },
   ]
 }
 

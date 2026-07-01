@@ -125,11 +125,18 @@ export function useGlobalLauncherHostEscape({
     if (event.key !== 'Escape') return
     if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
 
-    // Quick Editor mode: Escape closes the launcher directly
+    // Quick Editor mode: Escape closes command overlay first, then launcher
     if (mode === 'quick-editor') {
       event.preventDefault()
       event.stopPropagation()
-      closeLauncher()
+      // Dynamic import is not ideal in a keydown handler, read directly from store
+      const store = await import('../../store')
+      const state = store.useAppStore.getState()
+      if (state.quickEditorCommandOpen) {
+        state.closeQuickEditorCommand()
+      } else {
+        closeLauncher()
+      }
       return
     }
 

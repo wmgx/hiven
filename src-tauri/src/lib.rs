@@ -20,7 +20,7 @@ use zip::ZipArchive;
 pub mod hotkeys;
 
 const LAUNCHER_COMPACT_WIDTH: f64 = 660.0;
-const LAUNCHER_COMPACT_HEIGHT: f64 = 294.0;
+const LAUNCHER_COMPACT_HEIGHT: f64 = 318.0;
 const LAUNCHER_MAX_WIDTH: f64 = 860.0;
 const LAUNCHER_MAX_HEIGHT: f64 = 560.0;
 const EDITOR_WINDOW_WIDTH: f64 = 1100.0;
