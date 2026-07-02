@@ -71,13 +71,13 @@ assert.match(
 )
 assert.match(
   files.tauriLib,
-  /fn show_and_focus_plugin_surface_window[\s\S]*demote_launcher_level[\s\S]*window\.show\(\)[\s\S]*set_focus\(\)/,
-  'plugin surface window helper must demote launcher level then show and focus',
+  /fn show_and_focus_plugin_surface_window[\s\S]*window\.show\(\)[\s\S]*set_focus\(\)/,
+  'plugin surface window helper must show and focus the window without launcher level juggling',
 )
-assert.match(
+assert.doesNotMatch(
   files.tauriLib,
-  /fn restore_launcher_level[\s\S]*STATUS_WINDOW_LEVEL/,
-  'launcher level must be restored after plugin surface window closes',
+  /fn (?:restore_launcher_level|demote_launcher_level)\b|setLevel:|alwaysOnTop/,
+  'launcher runtime must not retain fixed topmost window level logic',
 )
 assert.doesNotMatch(
   files.tauriLib.match(/async fn show_plugin_surface_window[\s\S]*?\n}\n\nfn plugin_surface_window_label/)?.[0] ?? '',

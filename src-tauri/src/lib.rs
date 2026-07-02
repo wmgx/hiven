@@ -669,8 +669,7 @@ fn center_launcher_window(window: &tauri::WebviewWindow) {
     let y = mon_pos.y + (mon_size.height as i32 / 5).max(0);
 
     // Use NSWindow setFrameTopLeftPoint: directly for reliable cross-screen
-    // positioning. Tauri's set_position can fail to move alwaysOnTop windows
-    // across monitors on macOS.
+    // positioning across monitors on macOS.
     #[cfg(target_os = "macos")]
     {
         if let Ok(ns_window) = window.ns_window() {
@@ -1000,7 +999,6 @@ async fn hide_plugin_surface_window(
         return Ok(());
     };
     window.hide().map_err(|error| error.to_string())?;
-    restore_launcher_level(&app);
     let last_active_at = now_millis();
     surface_registry_mark_record_state(&label, "hidden", last_active_at)?;
     emit_surface_registry_mark_state(&app, &label, "hidden", last_active_at);
@@ -1096,7 +1094,6 @@ fn attach_plugin_surface_window_events(
             if let Some(window) = app.get_webview_window(&label) {
                 let _ = window.hide();
             }
-            restore_launcher_level(&app);
             let last_active_at = now_millis();
             let _ = surface_registry_mark_record_state(&label, "hidden", last_active_at);
             emit_surface_registry_mark_state(&app, &label, "hidden", last_active_at);
@@ -1109,7 +1106,6 @@ fn attach_plugin_surface_window_events(
         }
         tauri::WindowEvent::Destroyed => {
             clear_plugin_surface_window_token(&label);
-            restore_launcher_level(&app);
             let last_active_at = now_millis();
             let destroyed_surface = plugin_surface_registry_record(
                 label.clone(),
@@ -1149,12 +1145,10 @@ fn schedule_plugin_surface_window_destroy(
 }
 
 fn show_and_focus_plugin_surface_window(app: &tauri::AppHandle, window: &tauri::WebviewWindow) -> Result<(), String> {
-    let app_clone = app.clone();
     let window_clone = window.clone();
     let (tx, rx) = std::sync::mpsc::channel();
     app.run_on_main_thread(move || {
         let result = (|| {
-            demote_launcher_level(&app_clone);
             window_clone.show().map_err(|error| error.to_string())?;
             let _ = window_clone.unminimize();
             window_clone.set_focus().map_err(|error| error.to_string())
@@ -1164,51 +1158,6 @@ fn show_and_focus_plugin_surface_window(app: &tauri::AppHandle, window: &tauri::
     .map_err(|error| error.to_string())?;
     rx.recv().map_err(|error| error.to_string())?
 }
-
-#[cfg(target_os = "macos")]
-fn demote_launcher_level(app: &tauri::AppHandle) {
-    // NSWindow setLevel: must be called on the main thread.
-    // When called from within an existing run_on_main_thread closure this is a
-    // no-overhead re-dispatch (macOS main-queue dispatch_sync from main is fine).
-    if let Some(launcher) = app.get_webview_window("launcher") {
-        if let Ok(ns_window) = launcher.ns_window() {
-            if !ns_window.is_null() {
-                unsafe {
-                    let ns_window = ns_window as *mut objc2::runtime::AnyObject;
-                    const NORMAL_WINDOW_LEVEL: i64 = 0;
-                    let _: () = objc2::msg_send![ns_window, setLevel: NORMAL_WINDOW_LEVEL];
-                }
-            }
-        }
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-fn demote_launcher_level(_app: &tauri::AppHandle) {}
-
-#[cfg(target_os = "macos")]
-fn restore_launcher_level(app: &tauri::AppHandle) {
-    let app_clone = app.clone();
-    // Must run on main thread: NSWindow setLevel: is an AppKit API.
-    // This function may be called from tokio workers or window-event callbacks,
-    // so we always dispatch to the main thread to avoid EXC_BREAKPOINT crashes.
-    let _ = app.run_on_main_thread(move || {
-        if let Some(launcher) = app_clone.get_webview_window("launcher") {
-            if let Ok(ns_window) = launcher.ns_window() {
-                if !ns_window.is_null() {
-                    unsafe {
-                        let ns_window = ns_window as *mut objc2::runtime::AnyObject;
-                        const STATUS_WINDOW_LEVEL: i64 = 25;
-                        let _: () = objc2::msg_send![ns_window, setLevel: STATUS_WINDOW_LEVEL];
-                    }
-                }
-            }
-        }
-    });
-}
-
-#[cfg(not(target_os = "macos"))]
-fn restore_launcher_level(_app: &tauri::AppHandle) {}
 
 #[tauri::command]
 async fn simulate_paste() -> Result<(), String> {
@@ -1568,16 +1517,9 @@ fn promote_window_to_nonactivating_panel(ns_window: *mut std::ffi::c_void) {
         ];
 
         // NSPanel-specific configuration for non-activating behavior
-        let _: () = objc2::msg_send![ns_window, setFloatingPanel: true];
+        let _: () = objc2::msg_send![ns_window, setFloatingPanel: false];
         let _: () = objc2::msg_send![ns_window, setHidesOnDeactivate: false];
         let _: () = objc2::msg_send![ns_window, setBecomesKeyOnlyIfNeeded: false];
-
-        // Explicitly set the window level above normal and floating windows so
-        // the launcher appears on top even when the app is fully in the background.
-        // kCGStatusWindowLevel (25) is sufficient — it sits above main-menu level
-        // (24) and all regular app windows, matching Spotlight/Raycast behavior.
-        const STATUS_WINDOW_LEVEL: i64 = 25;
-        let _: () = objc2::msg_send![ns_window, setLevel: STATUS_WINDOW_LEVEL];
 
         // Allow the panel to appear on all Spaces (follows user across desktops)
         let behavior: usize = objc2::msg_send![ns_window, collectionBehavior];
