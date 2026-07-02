@@ -99,6 +99,7 @@ export function GlobalLauncherHost() {
 
   useEffect(() => {
     if (!open) return
+    if (mode === 'quick-editor') return
     void prepareLauncherInputSource().catch((error) => {
       console.warn('[hiven] Failed to prepare launcher input source:', error)
     })
@@ -107,7 +108,7 @@ export function GlobalLauncherHost() {
         console.warn('[hiven] Failed to restore launcher input source:', error)
       })
     }
-  }, [open])
+  }, [mode, open])
 
   useEffect(() => {
     setSelectedObjectActionIndex((index) => Math.min(index, Math.max(0, objectActions.length - 1)))

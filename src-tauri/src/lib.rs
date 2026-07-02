@@ -525,14 +525,14 @@ async fn show_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 async fn show_quick_editor_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
-    show_launcher_window_for_hotkey_with_event(app, "hiven://quick-editor-open")
+    show_launcher_window_for_hotkey_with_event(app, "hiven://quick-editor-open", false)
 }
 
 pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(), String> {
-    show_launcher_window_for_hotkey_with_event(app, "hiven://launcher-open")
+    show_launcher_window_for_hotkey_with_event(app, "hiven://launcher-open", true)
 }
 
-fn show_launcher_window_for_hotkey_with_event(app: tauri::AppHandle, open_event: &'static str) -> Result<(), String> {
+fn show_launcher_window_for_hotkey_with_event(app: tauri::AppHandle, open_event: &'static str, prepare_input_source: bool) -> Result<(), String> {
     use tauri::Manager;
 
     let total_started_at = Instant::now();
@@ -607,7 +607,7 @@ fn show_launcher_window_for_hotkey_with_event(app: tauri::AppHandle, open_event:
             }
             log_launcher_perf("native:resize-before-show", started_at, format!("width={} height={}", compact_width, compact_height));
         }
-        if !was_visible {
+        if !was_visible && prepare_input_source {
             let started_at = Instant::now();
             if let Err(error) = switch_to_default_english_input_source() {
                 eprintln!("[hiven] Failed to switch launcher input source to default English: {}", error);

@@ -20,6 +20,7 @@ const launcherTypes = read('src/workspace/launcher/types.ts')
 const quickEditorActions = read('src/workspace/quickEditor/quickEditorActions.ts')
 const app = read('src/App.tsx')
 const store = read('src/store.ts')
+const tauriLib = read('src-tauri/src/lib.rs')
 
 assert.equal(
   packageJson.scripts?.['test:quick-editor-launcher-behavior'],
@@ -145,6 +146,24 @@ assert.match(
   app,
   /toggleQuickEditor\(\)/,
   'native Quick Editor hotkey event should route through the Quick Editor toggle state machine',
+)
+
+assert.match(
+  tauriLib,
+  /show_quick_editor_launcher_window[\s\S]*show_launcher_window_for_hotkey_with_event\(app,\s*['"]hiven:\/\/quick-editor-open['"],\s*false\)/,
+  'native Quick Editor open path should not force the launcher English input source',
+)
+
+assert.match(
+  tauriLib,
+  /show_launcher_window_for_hotkey[\s\S]*show_launcher_window_for_hotkey_with_event\(app,\s*['"]hiven:\/\/launcher-open['"],\s*true\)/,
+  'normal launcher open path should keep preparing the search input source',
+)
+
+assert.match(
+  globalLauncherHost,
+  /if\s*\(\s*mode\s*===\s*['"]quick-editor['"]\s*\)\s*return[\s\S]*prepareLauncherInputSource\(\)/,
+  'Quick Editor mode should not invoke the launcher search input-source preparation effect',
 )
 
 console.log('Quick Editor launcher behavior checks passed')
