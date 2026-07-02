@@ -289,7 +289,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 /**
  * Run dynamic providers for a query. Returns resolved dynamic LauncherItems.
  * Guards:
- *  - Empty query AND no clipboardText → host dynamic providers only; plugin providers skip.
+ *  - Empty resolved input text → host dynamic providers only; plugin providers skip.
  *  - Query longer than DYNAMIC_QUERY_MAX_LENGTH → skip.
  *  - Each provider isolated by try/catch + timeout; one failure cannot break
  *    the launcher or other providers.
@@ -299,10 +299,11 @@ export async function collectDynamicItems(
   surfaceId: LauncherSurfaceId,
   locale: Locale,
   getSettings: (pluginId: string, source: ContributionSource) => unknown,
-  clipboardText?: string,
+  inputText?: string,
 ): Promise<LauncherItem[]> {
   const q = query.trim()
-  if (q.length > DYNAMIC_QUERY_MAX_LENGTH) return []
+  const resolvedInputText = (q || inputText?.trim() || '')
+  if (resolvedInputText.length > DYNAMIC_QUERY_MAX_LENGTH) return []
 
   const hostDynamicItems = hostDynamicItemsProvider
     ? await measureLauncherPerf(
@@ -315,7 +316,7 @@ export async function collectDynamicItems(
       }),
     )
     : []
-  if (!q && !clipboardText) return hostDynamicItems
+  if (!resolvedInputText) return hostDynamicItems
 
   const providers = collectDynamicProviders()
   const results = await Promise.all(
@@ -327,8 +328,7 @@ export async function collectDynamicItems(
         const requestedPermissions = pluginRegistry.getPluginPermissions(pluginId, settingsSource)
         const raw = await withTimeout(
           Promise.resolve(provider({
-            query: q || clipboardText?.trim() || '',
-            clipboardText,
+            query: resolvedInputText,
             surfaceId,
             locale,
             settings,

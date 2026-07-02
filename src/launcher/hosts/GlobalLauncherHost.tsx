@@ -73,7 +73,7 @@ export function GlobalLauncherHost() {
     readClipboard: readLauncherClipboard,
   })
   // Only use clipboard for recommendations when the Object Block is showing (fresh enough)
-  const clipboardText = clipboardBlock.block?.payloadText ?? undefined
+  const objectBlockText = clipboardBlock.block?.payloadText ?? undefined
 
   const {
     query,
@@ -89,7 +89,7 @@ export function GlobalLauncherHost() {
     open,
     requestClose: () => closeAfterActionRef.current(),
     collectDynamicWhenEmpty: true,
-    clipboardText,
+    objectBlockText,
   })
 
   const objectActions: RecommendedAction[] = [] // Disabled: recommendations now come from plugin dynamicItems + textMatch

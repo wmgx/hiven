@@ -28,7 +28,7 @@ type UseLauncherSessionOptions = {
   requestClose: () => void
   staticItemFilter?: (items: LauncherItem[]) => LauncherItem[]
   collectDynamicWhenEmpty?: boolean
-  clipboardText?: string
+  objectBlockText?: string
   makeApi?: (api: PluginLauncherApi, item?: LauncherItem) => PluginLauncherApi
 }
 
@@ -51,7 +51,7 @@ export function useLauncherSession({
   requestClose,
   staticItemFilter,
   collectDynamicWhenEmpty = false,
-  clipboardText,
+  objectBlockText,
   makeApi,
 }: UseLauncherSessionOptions): LauncherSession {
   const normalizedHostId = normalizeLauncherSurfaceId(hostId)
@@ -146,7 +146,8 @@ export function useLauncherSession({
   useEffect(() => {
     if (!open) return
     const q = query.trim()
-    if (!q && !collectDynamicWhenEmpty && !clipboardText) {
+    const inputText = q || objectBlockText?.trim() || ''
+    if (!inputText && !collectDynamicWhenEmpty) {
       setDynamicItems([])
       dynamicQueryRef.current = ''
       return
@@ -160,13 +161,13 @@ export function useLauncherSession({
       const abortController = new AbortController()
       dynamicAbortRef.current = abortController
       const startedAt = launcherPerfNow()
-      collectDynamicItems(q, normalizedHostId, locale, getPluginSettings, clipboardText)
+      collectDynamicItems(q, normalizedHostId, locale, getPluginSettings, inputText)
         .then((items) => {
           if (abortController.signal.aborted) return
           logLauncherPerfDuration('session:dynamic-items', startedAt, {
             surfaceId: normalizedHostId,
             queryLength: q.length,
-            hasClipboardText: Boolean(clipboardText),
+            hasObjectBlockText: Boolean(objectBlockText),
             itemCount: items.length,
           })
           if (dynamicQueryRef.current !== q) return
@@ -178,7 +179,7 @@ export function useLauncherSession({
       window.clearTimeout(timer)
       dynamicAbortRef.current?.abort()
     }
-  }, [clipboardText, collectDynamicWhenEmpty, locale, normalizedHostId, open, query])
+  }, [collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query])
 
   // Collect static candidates separately — they only change with pluginRegistryVersion,
   // not on every keystroke.
@@ -193,7 +194,7 @@ export function useLauncherSession({
   const rankedItems = useMemo<LauncherItem[]>(() => {
     // contentText for textMatch: Object Block takes precedence (it IS the text to process);
     // only fall back to query when no Object Block is present.
-    const contentText = clipboardText ?? (query.trim() || undefined)
+    const contentText = objectBlockText ?? (query.trim() || undefined)
     return measureLauncherPerfSync('session:rank-items', () => rankLauncherItems(
       {
         query: query.trim(),
@@ -207,16 +208,16 @@ export function useLauncherSession({
     ), (items) => ({
       surfaceId: normalizedHostId,
       queryLength: query.trim().length,
-      hasClipboardText: Boolean(clipboardText),
+      hasObjectBlockText: Boolean(objectBlockText),
       inputCount: staticCandidates.length + dynamicItems.length,
       resultCount: items.length,
     }))
   }, [
-    clipboardText,
     dynamicItems,
     launcherUsageBySurface,
     locale,
     normalizedHostId,
+    objectBlockText,
     query,
     staticCandidates,
   ])

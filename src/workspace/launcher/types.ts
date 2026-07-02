@@ -381,9 +381,8 @@ export type LauncherItemContribution<TSettings = unknown> = {
 // ─── Dynamic Items ───────────────────────────────────────────────────────────
 
 export type LauncherDynamicContext = {
+  /** Host-resolved input text. Plugins do not need to know whether it came from typed query or Object Block. */
   query: string
-  /** Clipboard text available when the launcher opened. Plugins can use this to provide instant results. */
-  clipboardText?: string
   surfaceId: LauncherSurfaceId
   locale: Locale
   settings: unknown
