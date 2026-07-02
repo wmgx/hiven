@@ -21,6 +21,7 @@ const quickEditorActions = read('src/workspace/quickEditor/quickEditorActions.ts
 const app = read('src/App.tsx')
 const store = read('src/store.ts')
 const tauriLib = read('src-tauri/src/lib.rs')
+const globalPinnedHotkeys = read('src/hotkeys/globalPinnedLauncher.ts')
 
 assert.equal(
   packageJson.scripts?.['test:quick-editor-launcher-behavior'],
@@ -88,6 +89,12 @@ assert.match(
   'Cmd/Ctrl+K should suppress transient native blur before opening the command overlay',
 )
 
+assert.doesNotMatch(
+  quickEditorPanel,
+  /show_quick_editor_launcher_window|hiven:\/\/quick-editor-open|toggleQuickEditor\(\)/,
+  'Quick Editor internal Cmd/Ctrl+K must not route through the global launcher open/toggle path',
+)
+
 assert.match(
   blurGuard,
   /suppressStandaloneLauncherBlur[\s\S]*shouldSuppressStandaloneLauncherBlur/,
@@ -136,27 +143,27 @@ assert.match(
   'Quick Editor effect router should apply text.replace to the persisted Quick Editor text',
 )
 
-assert.match(
+assert.doesNotMatch(
   app,
-  /hiven:\/\/quick-editor-open/,
-  'App should listen for the native Quick Editor hotkey event',
+  /hiven:\/\/quick-editor-open|toggleQuickEditor\(\)/,
+  'App should not install a native/global Quick Editor toggle listener for Cmd/Ctrl+K',
+)
+
+assert.doesNotMatch(
+  tauriLib,
+  /show_quick_editor_launcher_window|hiven:\/\/quick-editor-open/,
+  'native layer should not expose a global Quick Editor hotkey path',
 )
 
 assert.match(
-  app,
-  /toggleQuickEditor\(\)/,
-  'native Quick Editor hotkey event should route through the Quick Editor toggle state machine',
+  globalPinnedHotkeys,
+  /globalLauncherOpen\s*&&\s*state\.globalLauncherMode\s*===\s*['"]quick-editor['"][\s\S]*openQuickEditorCommand\(\)[\s\S]*return[\s\S]*showLauncherWindow\(\)/,
+  'global Cmd/Ctrl+K routing should become the Quick Editor internal command overlay while Quick Editor is already open',
 )
 
 assert.match(
   tauriLib,
-  /show_quick_editor_launcher_window[\s\S]*show_launcher_window_for_hotkey_with_event\(app,\s*['"]hiven:\/\/quick-editor-open['"],\s*false\)/,
-  'native Quick Editor open path should not force the launcher English input source',
-)
-
-assert.match(
-  tauriLib,
-  /show_launcher_window_for_hotkey[\s\S]*show_launcher_window_for_hotkey_with_event\(app,\s*['"]hiven:\/\/launcher-open['"],\s*true\)/,
+  /show_launcher_window_for_hotkey[\s\S]*show_launcher_window_for_hotkey_with_event\(app,\s*['"]hiven:\/\/launcher-open['"]\)/,
   'normal launcher open path should keep preparing the search input source',
 )
 

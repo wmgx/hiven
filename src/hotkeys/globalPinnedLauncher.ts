@@ -178,6 +178,11 @@ async function showLauncherWindow() {
 }
 
 export async function routeGlobalPinnedLauncherShortcut() {
+  const state = useAppStore.getState()
+  if (state.globalLauncherOpen && state.globalLauncherMode === 'quick-editor') {
+    state.openQuickEditorCommand()
+    return
+  }
   await showLauncherWindow()
 }
 
