@@ -31,6 +31,7 @@ export function useCloseStandaloneLauncherOnBlur({
   useLayoutEffect(() => {
     if (!open || !standaloneLauncher) return
     if (!isTauriRuntime()) return
+    if (closeOnBlurRef.current === false) return
 
     let disposed = false
     let unlisten: (() => void) | undefined
@@ -49,7 +50,7 @@ export function useCloseStandaloneLauncherOnBlur({
       disposed = true
       unlisten?.()
     }
-  }, [closeLauncher, open, standaloneLauncher])
+  }, [closeOnBlur, closeLauncher, open, standaloneLauncher])
 }
 
 export function useStandaloneLauncherResize({
