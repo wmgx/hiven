@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, type FocusEvent } from 'react'
 import { useAppStore } from '../../store'
 import { useLauncherSession } from '../../workspace/launcher/useLauncherSession'
 import { filterEditorCommandBarItems } from '../../workspace/launcher/types'
@@ -21,6 +21,9 @@ export function QuickEditorCommandOverlay() {
   const tQuickEditor = useT('quickEditor')
   const inputRef = useRef<HTMLInputElement>(null)
   const isKeyboardNavRef = useRef(false)
+  const internalPointerDownRef = useRef(false)
+  const internalPointerResetRef = useRef<number | null>(null)
+  const blurCloseFrameRef = useRef<number | null>(null)
   const { isImeComposingRef, handleCompositionStart, handleCompositionEnd } = useGlobalLauncherImeComposition()
 
   const {
@@ -87,28 +90,51 @@ export function QuickEditorCommandOverlay() {
     }
   }, [open, setQuery, setSelectedIndex])
 
+  useEffect(() => () => {
+    if (internalPointerResetRef.current !== null) window.clearTimeout(internalPointerResetRef.current)
+    if (blurCloseFrameRef.current !== null) window.cancelAnimationFrame(blurCloseFrameRef.current)
+  }, [])
+
   if (!open) return null
 
   const isDetached = isQuickEditorDetachedWindow()
 
+  const markInternalPointerDown = () => {
+    internalPointerDownRef.current = true
+    if (internalPointerResetRef.current !== null) window.clearTimeout(internalPointerResetRef.current)
+    internalPointerResetRef.current = window.setTimeout(() => {
+      internalPointerDownRef.current = false
+      internalPointerResetRef.current = null
+    }, 0)
+  }
+
+  const closeOnFocusLeave = (event: FocusEvent<HTMLDivElement>) => {
+    const panel = event.currentTarget
+    const nextTarget = event.relatedTarget
+    if (nextTarget instanceof Node && panel.contains(nextTarget)) return
+    if (blurCloseFrameRef.current !== null) window.cancelAnimationFrame(blurCloseFrameRef.current)
+    blurCloseFrameRef.current = window.requestAnimationFrame(() => {
+      blurCloseFrameRef.current = null
+      const activeElement = document.activeElement
+      if (internalPointerDownRef.current) return
+      if (activeElement && panel.contains(activeElement)) return
+      closeCommand()
+    })
+  }
+
   const overlayContent = (
     <div
-      className={isDetached
-        ? 'z-50 flex flex-col overflow-hidden'
-        : 'absolute inset-0 z-50 flex flex-col overflow-hidden'}
-      style={isDetached
-        ? {
-            background: 'var(--color-background-primary, var(--panel, #fff))',
-            border: '1px solid var(--color-border-secondary, var(--border, #e0e0e0))',
-            borderRadius: '10px',
-            width: 'min(520px, 90vw)',
-            maxHeight: 'min(420px, 70vh)',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08)',
-          }
-        : {
-            background: 'var(--color-background-primary, var(--panel, #fff))',
-            borderRadius: 'inherit',
-          }}
+      data-launcher-host="quick-editor-command"
+      className="quick-editor-command-panel z-50 flex flex-col overflow-hidden"
+      tabIndex={-1}
+      onPointerDownCapture={markInternalPointerDown}
+      onBlur={closeOnFocusLeave}
+      onKeyDownCapture={(event) => {
+        if (event.key !== 'Escape' || isImeComposingRef.current) return
+        event.preventDefault()
+        event.stopPropagation()
+        closeCommand()
+      }}
       onKeyDown={(event) => handleGlobalLauncherKeyDown({
         event,
         isImeComposingRef,
@@ -186,13 +212,16 @@ export function QuickEditorCommandOverlay() {
   if (isDetached) {
     return (
       <div
-        className="absolute inset-0 z-50 flex items-start justify-center pt-[10%]"
-        onClick={(e) => { if (e.target === e.currentTarget) closeCommand() }}
+        className="quick-editor-command-layer quick-editor-command-layer--detached absolute inset-0 z-50"
       >
         {overlayContent}
       </div>
     )
   }
 
-  return overlayContent
+  return (
+    <div className="quick-editor-command-layer absolute inset-0 z-50">
+      {overlayContent}
+    </div>
+  )
 }
