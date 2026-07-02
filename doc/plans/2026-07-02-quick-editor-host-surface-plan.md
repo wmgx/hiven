@@ -1,6 +1,6 @@
 # Quick Editor Host Surface 化实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 把 Quick Editor 从 launcher 的 `mode='quick-editor'` 寄生分支迁移为标准 host surface，删除整个 `globalLauncherMode` 死状态，新增通用 Escape 接管协议与两段式退出，命令 overlay 复用 launcher 统一组件与键盘/IME 管线，补齐 Detach 独立窗口。
 
@@ -20,7 +20,7 @@
 - Create: `scripts/test-quick-editor-host-surface.mjs`
 - Modify: `package.json`（scripts 增加一行）
 
-- [ ] **Step 1: 写合同测试**
+- [x] **Step 1: 写合同测试**
 
 创建 `scripts/test-quick-editor-host-surface.mjs`：
 
@@ -130,7 +130,7 @@ assert.doesNotMatch(files.toolbar, /closeQuickEditor\(\)/, 'toolbar must not cal
 console.log('test-quick-editor-host-surface: all assertions passed')
 ```
 
-- [ ] **Step 2: 注册 package.json script**
+- [x] **Step 2: 注册 package.json script**
 
 在 `package.json` 的 `scripts` 中（`"test:app-launcher-contract"` 一行之后）加入：
 
@@ -138,12 +138,12 @@ console.log('test-quick-editor-host-surface: all assertions passed')
 "test:quick-editor-host-surface": "node scripts/test-quick-editor-host-surface.mjs",
 ```
 
-- [ ] **Step 3: 运行确认失败（红）**
+- [x] **Step 3: 运行确认失败（红）**
 
 Run: `npm run test:quick-editor-host-surface`
 Expected: FAIL —— 第一条失败应为 `store must not define launcher mode state`（`src/store.ts` 当前仍含 `globalLauncherMode`）。
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add scripts/test-quick-editor-host-surface.mjs package.json
@@ -159,7 +159,7 @@ git commit -m "test(quick-editor): add host surface architecture contract (red)"
 - Modify: `src/components/launcher/GlobalLauncherHostLifecycle.ts:92-196`
 - Modify: `src/components/launcher/GlobalLauncherKeyboard.ts:86-94`
 
-- [ ] **Step 1: 新建 interceptor 模块**
+- [x] **Step 1: 新建 interceptor 模块**
 
 创建 `src/components/launcher/launcherEscapeInterceptor.ts`：
 
@@ -198,7 +198,7 @@ export function useLauncherEscapeInterceptor(handler: LauncherEscapeInterceptor 
 }
 ```
 
-- [ ] **Step 2: host Escape 链接入 interceptor 并删除 quick-editor 特判**
+- [x] **Step 2: host Escape 链接入 interceptor 并删除 quick-editor 特判**
 
 修改 `src/components/launcher/GlobalLauncherHostLifecycle.ts`：
 
@@ -236,7 +236,7 @@ import { runLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
 
 注意：本任务**不**删除 `mode` 参数本身（其余 mode 引用在 Task 5 一并移除，保持中间态可构建）；但 `handleHostEscape` 的 `useCallback` 依赖数组中的 `mode` 保留不动即可。
 
-- [ ] **Step 3: Panel 键盘链让位给 interceptor**
+- [x] **Step 3: Panel 键盘链让位给 interceptor**
 
 修改 `src/components/launcher/GlobalLauncherKeyboard.ts`：
 
@@ -276,12 +276,12 @@ import { hasLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
   }
 ```
 
-- [ ] **Step 4: 构建验证**
+- [x] **Step 4: 构建验证**
 
 Run: `npm run build`
 Expected: 构建成功。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/components/launcher/launcherEscapeInterceptor.ts src/components/launcher/GlobalLauncherHostLifecycle.ts src/components/launcher/GlobalLauncherKeyboard.ts
@@ -295,7 +295,7 @@ git commit -m "feat(launcher): add generic escape interceptor protocol"
 **Files:**
 - Create: `src/i18n/locales/quickEditor.ts`
 
-- [ ] **Step 1: 新建 locale 文件**
+- [x] **Step 1: 新建 locale 文件**
 
 创建 `src/i18n/locales/quickEditor.ts`（`src/i18n/index.ts` 的 `import.meta.glob` 会以文件名自动注册为 `quickEditor` namespace）：
 
@@ -320,7 +320,7 @@ export default {
 }
 ```
 
-- [ ] **Step 2: 构建验证 + 提交**
+- [x] **Step 2: 构建验证 + 提交**
 
 Run: `npm run build`
 Expected: 构建成功。
@@ -341,7 +341,7 @@ git commit -m "feat(quick-editor): add i18n namespace"
 - Modify: `src/views/QuickEditorDetachedView.tsx`
 - Modify: `src/launcher/hosts/GlobalLauncherHost.tsx:378-380`（临时接线，Task 5 删除）
 
-- [ ] **Step 1: 新建两段式 Escape hook**
+- [x] **Step 1: 新建两段式 Escape hook**
 
 创建 `src/components/quickEditor/useQuickEditorEscape.ts`：
 
@@ -419,7 +419,7 @@ export function useQuickEditorEscape(onExit: () => void) {
 }
 ```
 
-- [ ] **Step 2: QuickEditorPanel 接入 hook 与 hint UI**
+- [x] **Step 2: QuickEditorPanel 接入 hook 与 hint UI**
 
 修改 `src/components/quickEditor/QuickEditorPanel.tsx`：
 
@@ -462,7 +462,7 @@ JSX 中 `<QuickEditorCommandOverlay />` 一行之前插入 hint（与 overlay �
       )}
 ```
 
-- [ ] **Step 3: QuickEditorToolbar 改 Detach 语义 + i18n + detached 关闭按钮**
+- [x] **Step 3: QuickEditorToolbar 改 Detach 语义 + i18n + detached 关闭按钮**
 
 用以下内容整体替换 `src/components/quickEditor/QuickEditorToolbar.tsx`：
 
@@ -563,7 +563,7 @@ export function QuickEditorToolbar() {
 }
 ```
 
-- [ ] **Step 4: QuickEditorDetachedView 移除自绘 Escape**
+- [x] **Step 4: QuickEditorDetachedView 移除自绘 Escape**
 
 用以下内容整体替换 `src/views/QuickEditorDetachedView.tsx`：
 
@@ -599,7 +599,7 @@ export function QuickEditorDetachedView() {
 }
 ```
 
-- [ ] **Step 5: Host 的旧渲染分支临时补参（Task 5 将整体删除该分支）**
+- [x] **Step 5: Host 的旧渲染分支临时补参（Task 5 将整体删除该分支）**
 
 修改 `src/launcher/hosts/GlobalLauncherHost.tsx` 第 379 行，`<QuickEditorPanel />` 改为：
 
@@ -607,12 +607,12 @@ export function QuickEditorDetachedView() {
           <QuickEditorPanel onRequestExit={closeLauncher} />
 ```
 
-- [ ] **Step 6: 构建验证**
+- [x] **Step 6: 构建验证**
 
 Run: `npm run build`
 Expected: 构建成功。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add src/components/quickEditor/useQuickEditorEscape.ts src/components/quickEditor/QuickEditorPanel.tsx src/components/quickEditor/QuickEditorToolbar.tsx src/views/QuickEditorDetachedView.tsx src/launcher/hosts/GlobalLauncherHost.tsx
@@ -641,7 +641,7 @@ git commit -m "feat(quick-editor): two-stage escape hook and host-agnostic exit 
 - Modify: `src/launcher/hosts/GlobalLauncherHost.tsx`
 - Modify: `src/hotkeys/globalPinnedLauncher.ts:24-32,88-98,193-201`
 
-- [ ] **Step 1: quickEditorWindow 增加探测函数**
+- [x] **Step 1: quickEditorWindow 增加探测函数**
 
 在 `src/workspace/windowManager/quickEditorWindow.ts` 末尾追加：
 
@@ -659,7 +659,7 @@ export async function isQuickEditorWindowOpen(): Promise<boolean> {
 }
 ```
 
-- [ ] **Step 2: 新建 host surface shell 配置表**
+- [x] **Step 2: 新建 host surface shell 配置表**
 
 创建 `src/components/launcher/hostSurfaceShell.ts`：
 
@@ -686,7 +686,7 @@ export function getHostSurfaceShell(
 }
 ```
 
-- [ ] **Step 3: store.ts 删除 mode、扩展 surface target**
+- [x] **Step 3: store.ts 删除 mode、扩展 surface target**
 
 修改 `src/store.ts`：
 
@@ -804,12 +804,12 @@ export type LauncherHostSurfaceTarget = 'settings' | 'plugins' | 'system-setting
   closeQuickEditorCommand: () => set({ quickEditorCommandOpen: false }),
 ```
 
-- [ ] **Step 4: 更新 openGlobalLauncherOverlay 调用点**
+- [x] **Step 4: 更新 openGlobalLauncherOverlay 调用点**
 
 `src/App.tsx:167`：`openGlobalLauncherOverlay('pinned-only')` → `openGlobalLauncherOverlay()`
 `src/workspace/pluginSurfaceOpenRequest.ts:57`：同样改为 `openGlobalLauncherOverlay()`
 
-- [ ] **Step 5: hostActions 入口改为 surface / 聚焦独立窗口**
+- [x] **Step 5: hostActions 入口改为 surface / 聚焦独立窗口**
 
 修改 `src/workspace/launcher/hostActions.ts`：文件顶部 import 区加入
 
@@ -850,11 +850,11 @@ import { isQuickEditorWindowOpen, showQuickEditorWindow } from '../windowManager
     },
 ```
 
-- [ ] **Step 6: GlobalLauncherItems 删 mode 参数**
+- [x] **Step 6: GlobalLauncherItems 删 mode 参数**
 
 修改 `src/components/launcher/GlobalLauncherItems.ts`：删除签名中的 `mode`（第 10 行解构、第 18 行类型 `mode: string`）与第 26 行 `void mode`。
 
-- [ ] **Step 7: Geometry / Layout 删 mode 与 Quick Editor 常量**
+- [x] **Step 7: Geometry / Layout 删 mode 与 Quick Editor 常量**
 
 `src/components/launcher/GlobalLauncherGeometry.ts`：
 
@@ -864,15 +864,15 @@ import { isQuickEditorWindowOpen, showQuickEditorWindow } from '../windowManager
 
 `src/components/launcher/GlobalLauncherLayout.ts`：删除 re-export 中的 `STANDALONE_QUICK_EDITOR_HEIGHT`、`STANDALONE_QUICK_EDITOR_MAX_HEIGHT`、`STANDALONE_QUICK_EDITOR_WIDTH` 三行（21-23）。
 
-- [ ] **Step 8: WindowLifecycle resize 删 mode**
+- [x] **Step 8: WindowLifecycle resize 删 mode**
 
 修改 `src/components/launcher/GlobalLauncherWindowLifecycle.ts` 的 `useStandaloneLauncherResize`：删除参数 `mode`（解构第 64 行、类型第 74 行）、`computeStandaloneLauncherGeometry` 调用中的 `mode: mode as string | undefined`（第 93 行）、依赖数组中的 `mode`（第 114 行）。
 
-- [ ] **Step 9: HostLifecycle 删 mode 参数**
+- [x] **Step 9: HostLifecycle 删 mode 参数**
 
 修改 `src/components/launcher/GlobalLauncherHostLifecycle.ts` 的 `useGlobalLauncherHostEscape`：删除解构参数 `mode`、类型 `mode?: string`、`useCallback` 依赖数组中的 `mode`。
 
-- [ ] **Step 10: SystemSurfaceFrame 渲染 Quick Editor**
+- [x] **Step 10: SystemSurfaceFrame 渲染 Quick Editor**
 
 修改 `src/components/launcher/GlobalLauncherSystemSurfaceFrame.tsx`：顶部 import 加
 
@@ -903,7 +903,7 @@ import { QuickEditorPanel } from '../quickEditor/QuickEditorPanel'
   }
 ```
 
-- [ ] **Step 11: GlobalLauncherHost 大清理**
+- [x] **Step 11: GlobalLauncherHost 大清理**
 
 修改 `src/launcher/hosts/GlobalLauncherHost.tsx`：
 
@@ -927,7 +927,7 @@ import { getHostSurfaceShell } from '../../components/launcher/hostSurfaceShell'
 7. `useGlobalLauncherHostEscape` 调用（第 275-291 行）删除 `mode,` 一行。
 8. 删除第 354-383 行整个 `if (mode === 'quick-editor') { ... }` 渲染分支（含注释）。
 
-- [ ] **Step 12: globalPinnedLauncher 三处 mode 检查改为 surface target**
+- [x] **Step 12: globalPinnedLauncher 三处 mode 检查改为 surface target**
 
 修改 `src/hotkeys/globalPinnedLauncher.ts`：
 
@@ -963,17 +963,17 @@ export async function routeGlobalPinnedLauncherShortcut() {
 }
 ```
 
-- [ ] **Step 13: 全仓孤儿引用扫描**
+- [x] **Step 13: 全仓孤儿引用扫描**
 
 Run: `grep -rn "globalLauncherMode\|GlobalLauncherMode\|openQuickEditor()\|closeQuickEditor()\|toggleQuickEditor\|STANDALONE_QUICK_EDITOR" src/`
 Expected: 无输出（`openQuickEditorCommand` 不在匹配范围，属正常保留）。
 
-- [ ] **Step 14: 构建验证**
+- [x] **Step 14: 构建验证**
 
 Run: `npm run build && npm run check:architecture`
 Expected: 均通过。
 
-- [ ] **Step 15: 提交**
+- [x] **Step 15: 提交**
 
 ```bash
 git add -A src/
@@ -987,7 +987,7 @@ git commit -m "refactor(quick-editor): migrate to launcher host surface, drop gl
 **Files:**
 - Modify: `src/components/quickEditor/QuickEditorCommandOverlay.tsx`（整体重写，273 → 约 130 行）
 
-- [ ] **Step 1: 重写 overlay**
+- [x] **Step 1: 重写 overlay**
 
 用以下内容整体替换 `src/components/quickEditor/QuickEditorCommandOverlay.tsx`：
 
@@ -1165,12 +1165,12 @@ export function QuickEditorCommandOverlay() {
 }
 ```
 
-- [ ] **Step 2: 构建验证**
+- [x] **Step 2: 构建验证**
 
 Run: `npm run build`
 Expected: 构建成功。
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add src/components/quickEditor/QuickEditorCommandOverlay.tsx
@@ -1181,12 +1181,12 @@ git commit -m "refactor(quick-editor): command overlay reuses launcher search fr
 
 ### Task 7: 全量验证与收尾（主 agent / 验收 agent）
 
-- [ ] **Step 1: 合同测试转绿**
+- [x] **Step 1: 合同测试转绿**
 
 Run: `npm run test:quick-editor-host-surface`
 Expected: `test-quick-editor-host-surface: all assertions passed`
 
-- [ ] **Step 2: 项目验证命令**
+- [x] **Step 2: 项目验证命令**
 
 ```bash
 git status --short --ignored
@@ -1197,7 +1197,7 @@ npm run build
 
 Expected: 全部通过；`git status` 中除本次改动与既有的 `src-tauri/*.dylib` 未跟踪文件外无意外产物。
 
-- [ ] **Step 3: 真机手动验证（`npm run dev` + Tauri 环境）**
+- [x] **Step 3: 真机手动验证（`npm run dev` + Tauri 环境）**
 
 按设计文档验证清单逐项执行：
 
@@ -1211,11 +1211,11 @@ Expected: 全部通过；`git status` 中除本次改动与既有的 `src-tauri/
 8. 全局快捷键在 surface 激活时打开命令 overlay；关窗重开回到命令列表
 9. 中英文 locale 切换后所有 Quick Editor 文案正确
 
-- [ ] **Step 4: 若第 2 条仍复现窗口消失**
+- [x] **Step 4: 若第 2 条仍复现窗口消失**
 
 按设计文档风险节处理：不回滚本次重构，单独立案调查 NSPanel 层面残留（`src-tauri/src/lib.rs:1546-1593` 的 `HivenKeyablePanel` 与 Cmd 修饰键交互），detached 普通窗口为逃生舱。
 
-- [ ] **Step 5: 收尾提交（如有验证期修补）**
+- [x] **Step 5: 收尾提交（如有验证期修补）**
 
 ```bash
 git add -A

@@ -88,7 +88,7 @@ export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void 
 
   return (
     <div className="relative flex flex-col h-full overflow-hidden" onKeyDownCapture={handleKeyDownCapture}>
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0" data-no-drag>
         <Editor
           height="100%"
           defaultValue={text}

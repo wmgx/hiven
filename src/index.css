@@ -1048,7 +1048,7 @@ html[data-window='launcher'] .global-launcher-panel {
   -webkit-app-region: drag;
 }
 
-html[data-window='launcher'] .global-launcher-panel :is(input, textarea, select, button, a, [role='button'], [data-no-drag]) {
+html[data-window='launcher'] .global-launcher-panel :is(input, textarea, select, button, a, [role='button'], [data-no-drag], .monaco-editor) {
   -webkit-app-region: no-drag;
 }
 

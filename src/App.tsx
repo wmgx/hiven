@@ -304,6 +304,11 @@ function LauncherRuntimeApp() {
 
   useEffect(() => {
     const handleLauncherWheel = (event: WheelEvent) => {
+      // Monaco editor manages its own scrolling — never intercept wheel events
+      // inside an editor instance (capture-phase stopPropagation would block it).
+      const target = event.target instanceof Element ? event.target : null
+      if (target?.closest('.monaco-editor')) return
+
       if (shouldAllowLauncherListWheel(event)) {
         event.stopPropagation()
         return

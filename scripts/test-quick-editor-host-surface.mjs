@@ -13,6 +13,7 @@ function read(path) {
 const files = {
   packageJson: read('package.json'),
   store: read('src/store.ts'),
+  css: read('src/index.css'),
   host: read('src/launcher/hosts/GlobalLauncherHost.tsx'),
   systemSurfaceFrame: read('src/components/launcher/GlobalLauncherSystemSurfaceFrame.tsx'),
   hostActions: read('src/workspace/launcher/hostActions.ts'),
@@ -99,5 +100,15 @@ assert.doesNotMatch(files.toolbar, /"Quick Editor"|'Quick Editor'|>Quick Editor<
 assert.match(files.panel, /useQuickEditorEscape/, 'panel must own the two-stage escape state machine')
 assert.doesNotMatch(files.detachedView, /addEventListener\('keydown'/, 'detached view must not roll its own escape handling')
 assert.doesNotMatch(files.toolbar, /closeQuickEditor\(\)/, 'toolbar must not call the removed closeQuickEditor action')
+
+// ── 10. embedded Monaco keeps its own mouse and wheel semantics ───────────
+assert.match(
+  files.appTsx,
+  /target\?\.closest\(['"]\.monaco-editor['"]\)[\s\S]{0,40}return/,
+  'launcher wheel capture must not intercept Monaco editor scrolling',
+)
+assert.match(files.panel, /data-no-drag/, 'quick editor Monaco host must opt out of launcher drag handling')
+assert.match(files.windowLifecycle, /\.monaco-editor/, 'launcher JS drag handling must preserve Monaco mouse events')
+assert.match(files.css, /html\[data-window=['"]launcher['"]\]\s+\.global-launcher-panel\s+:is\([\s\S]{0,220}\.monaco-editor[\s\S]{0,120}-webkit-app-region:\s*no-drag/, 'standalone launcher native drag fallback must exempt Monaco editor')
 
 console.log('test-quick-editor-host-surface: all assertions passed')
