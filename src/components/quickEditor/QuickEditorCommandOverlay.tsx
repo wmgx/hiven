@@ -8,6 +8,7 @@ import { useGlobalLauncherResultFrame } from '../launcher/GlobalLauncherResults'
 import { buildGlobalLauncherItems, type GlobalLauncherItem } from '../launcher/GlobalLauncherItems'
 import { handleGlobalLauncherKeyDown } from '../launcher/GlobalLauncherKeyboard'
 import { useGlobalLauncherImeComposition } from '../launcher/GlobalLauncherHostLifecycle'
+import { isQuickEditorDetachedWindow } from '../../workspace/windowManager/quickEditorWindow'
 import { useT } from '../../i18n'
 import type { ClipboardObjectBlockState } from '../../launcher/clipboard/useClipboardObjectBlock'
 
@@ -88,13 +89,26 @@ export function QuickEditorCommandOverlay() {
 
   if (!open) return null
 
-  return (
+  const isDetached = isQuickEditorDetachedWindow()
+
+  const overlayContent = (
     <div
-      className="absolute inset-0 z-50 flex flex-col overflow-hidden"
-      style={{
-        background: 'var(--color-background-primary, var(--panel, #fff))',
-        borderRadius: 'inherit',
-      }}
+      className={isDetached
+        ? 'z-50 flex flex-col overflow-hidden'
+        : 'absolute inset-0 z-50 flex flex-col overflow-hidden'}
+      style={isDetached
+        ? {
+            background: 'var(--color-background-primary, var(--panel, #fff))',
+            border: '1px solid var(--color-border-secondary, var(--border, #e0e0e0))',
+            borderRadius: '10px',
+            width: 'min(520px, 90vw)',
+            maxHeight: 'min(420px, 70vh)',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08)',
+          }
+        : {
+            background: 'var(--color-background-primary, var(--panel, #fff))',
+            borderRadius: 'inherit',
+          }}
       onKeyDown={(event) => handleGlobalLauncherKeyDown({
         event,
         isImeComposingRef,
@@ -168,4 +182,17 @@ export function QuickEditorCommandOverlay() {
       />
     </div>
   )
+
+  if (isDetached) {
+    return (
+      <div
+        className="absolute inset-0 z-50 flex items-start justify-center pt-[10%]"
+        onClick={(e) => { if (e.target === e.currentTarget) closeCommand() }}
+      >
+        {overlayContent}
+      </div>
+    )
+  }
+
+  return overlayContent
 }

@@ -46,8 +46,14 @@
   font-weight: 400;
 }
 
-.surface-breadcrumb-close {
+.surface-breadcrumb-actions {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.surface-breadcrumb-close {
   display: inline-flex;
   align-items: center;
   justify-content: center;

@@ -5,6 +5,7 @@ import { t } from '../../i18n'
 import { SurfaceBreadcrumbHeader } from '../SurfaceBreadcrumbHeader'
 import { SystemSettingsSurface } from '../SystemSettingsSurface'
 import { QuickEditorPanel } from '../quickEditor/QuickEditorPanel'
+import { QuickEditorBreadcrumbActions } from '../quickEditor/QuickEditorBreadcrumbActions'
 
 const SettingsSurface = lazy(() => import('../../surfaces/SettingsSurface').then((mod) => ({ default: mod.SettingsSurface })))
 const PluginsSurface = lazy(() => import('../../surfaces/PluginsSurface').then((mod) => ({ default: mod.PluginsSurface })))
@@ -36,6 +37,7 @@ export function GlobalLauncherSystemSurfaceFrame({
           title={t(locale, 'quickEditor.title')}
           onBack={onBack}
           onClose={onClose}
+          actions={<QuickEditorBreadcrumbActions />}
         />
         <div className="global-launcher-body" style={{ height: bodyHeight, maxHeight: bodyHeight, overflow: 'hidden' }}>
           <QuickEditorPanel onRequestExit={onBack} />

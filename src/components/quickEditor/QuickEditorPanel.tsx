@@ -1,10 +1,9 @@
-import { useRef, useCallback, useEffect, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useRef, useCallback, useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import Editor from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import type { editor as MonacoEditor } from 'monaco-editor'
 import { useQuickEditorStore } from '../../workspace/quickEditor/quickEditorStore'
 import { useAppStore } from '../../store'
-import { QuickEditorToolbar } from './QuickEditorToolbar'
 import { QuickEditorCommandOverlay } from './QuickEditorCommandOverlay'
 import { getFluxMonacoTheme, registerFluxMonacoThemes } from '../../utils/monacoTheme'
 import { installMonacoHoverOverlay } from '../../utils/monacoHoverOverlay'
@@ -12,12 +11,16 @@ import { createMonacoDisposableBucket } from '../../utils/monacoDisposables'
 import { suppressStandaloneLauncherBlur } from '../../workspace/launcherBlurGuard'
 import { useQuickEditorEscape } from './useQuickEditorEscape'
 import { isQuickEditorDetachedWindow } from '../../workspace/windowManager/quickEditorWindow'
+import { getLanguageOptionLabel } from '../../workspace/languageOptions'
+import { quickEditorImperative } from './quickEditorImperative'
 import { useT } from '../../i18n'
 
 export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void }) {
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
   const monacoDisposablesRef = useRef<ReturnType<typeof createMonacoDisposableBucket> | null>(null)
   const isLocalChangeRef = useRef(false)
+  const [cursorInfo, setCursorInfo] = useState({ line: 1, col: 1 })
+  const [selectedCharCount, setSelectedCharCount] = useState(0)
 
   const text = useQuickEditorStore((s) => s.text)
   const language = useQuickEditorStore((s) => s.language)
@@ -28,11 +31,17 @@ export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void 
   const setScrollPosition = useQuickEditorStore((s) => s.setScrollPosition)
 
   const settings = useAppStore((s) => s.settings)
+  const locale = useAppStore((s) => s.locale)
   const openQuickEditorCommand = useAppStore((s) => s.openQuickEditorCommand)
 
   const { exitHintVisible } = useQuickEditorEscape(onRequestExit)
   const tQuickEditor = useT('quickEditor')
+  const tEditor = useT('editor')
   const isDetached = isQuickEditorDetachedWindow()
+  const languageLabel = getLanguageOptionLabel(language, locale)
+
+  const lineCount = text.split('\n').length
+  const charCount = text.length
 
   const handleChange = useCallback((value: string | undefined) => {
     if (value !== undefined) {
@@ -73,12 +82,12 @@ export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void 
       monacoDisposablesRef.current?.dispose()
       monacoDisposablesRef.current = null
       editorRef.current = null
+      quickEditorImperative.unregisterFind()
     }
   }, [])
 
   return (
     <div className="relative flex flex-col h-full overflow-hidden" onKeyDownCapture={handleKeyDownCapture}>
-      <QuickEditorToolbar />
       <div className="flex-1 min-h-0">
         <Editor
           height="100%"
@@ -94,17 +103,32 @@ export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void 
             installMonacoHoverOverlay(editor)
             editorRef.current = editor
 
+            // Register find trigger for external callers (breadcrumb/topbar button)
+            quickEditorImperative.registerFind(() => {
+              editor.getAction('editor.action.startFindReplaceAction')?.run()
+            })
+
             // Restore cursor & scroll
             editor.setPosition(cursorPosition)
             editor.setScrollPosition(scrollPosition)
             editor.focus()
 
-            // Track cursor
+            // Track cursor for status bar
             disposables.add(editor.onDidChangeCursorPosition((e) => {
+              setCursorInfo({ line: e.position.lineNumber, col: e.position.column })
               setCursorPosition({
                 lineNumber: e.position.lineNumber,
                 column: e.position.column,
               })
+            }))
+
+            // Track selection for status bar
+            disposables.add(editor.onDidChangeCursorSelection((e) => {
+              const sel = e.selection
+              const model = editor.getModel()
+              if (!model) return
+              const selected = model.getValueInRange(sel)
+              setSelectedCharCount(selected.length)
             }))
 
             // Track scroll
@@ -146,6 +170,7 @@ export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void 
               if (editorRef.current === editor) editorRef.current = null
               if (monacoDisposablesRef.current === disposables) monacoDisposablesRef.current = null
               disposables.dispose()
+              quickEditorImperative.unregisterFind()
             }))
           }}
           options={{
@@ -173,7 +198,7 @@ export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void 
       </div>
       {exitHintVisible && (
         <div
-          className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 z-40 px-2.5 py-1 rounded text-[11px]"
+          className="pointer-events-none absolute bottom-8 left-1/2 -translate-x-1/2 z-40 px-2.5 py-1 rounded text-[11px]"
           style={{
             background: 'var(--color-background-tertiary)',
             color: 'var(--color-text-secondary)',
@@ -183,6 +208,33 @@ export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void 
           {isDetached ? tQuickEditor('escCloseHint') : tQuickEditor('escExitHint')}
         </div>
       )}
+      {/* Status bar */}
+      <div
+        className="h-[22px] flex items-center px-2 gap-2 shrink-0 overflow-hidden whitespace-nowrap text-[10px]"
+        style={{
+          borderTop: '0.5px solid var(--color-border-tertiary)',
+          background: 'var(--color-background-secondary)',
+          color: 'var(--color-text-tertiary)',
+        }}
+      >
+        <span className="shrink-0">
+          {tEditor('line')} {cursorInfo.line}, {tEditor('column')} {cursorInfo.col}
+        </span>
+        <span className="shrink-0">
+          {lineCount} {tEditor('lines')}
+        </span>
+        <span className="shrink-0">
+          {charCount} {tEditor('chars')}
+        </span>
+        {selectedCharCount > 0 && (
+          <span className="shrink-0">
+            {selectedCharCount} {tEditor('selectedChars')}
+          </span>
+        )}
+        <span className="ml-auto shrink-0">
+          {languageLabel}
+        </span>
+      </div>
       <QuickEditorCommandOverlay />
     </div>
   )
