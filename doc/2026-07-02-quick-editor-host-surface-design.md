@@ -122,7 +122,7 @@ store（`src/store.ts`）：
 | `GlobalLauncherHostLifecycle.ts:130-139` | Escape mode 特判 | 删，interceptor 协议 |
 | `globalPinnedLauncher.ts:27-29, 90-98, 195` | mode 检查 ×3 | 条件改为 hostSurfaceTarget |
 | `store.ts` | `globalLauncherMode` 全套 | 整个删除（含 full/pinned-only） |
-| `GlobalLauncherKeyboard.ts:171-176` | quick-editor 检查 | 删 |
+| `GlobalLauncherKeyboard.ts:86-94` | hostSurfaceTarget 的 Escape 直接返回列表 | interceptor 活动时让位（否则击穿两段式 Esc） |
 
 ### 7. i18n 与错误处理
 
