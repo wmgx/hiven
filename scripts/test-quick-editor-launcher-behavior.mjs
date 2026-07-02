@@ -12,6 +12,7 @@ function read(path) {
 
 const packageJson = JSON.parse(read('package.json'))
 const lifecycle = read('src/components/launcher/GlobalLauncherWindowLifecycle.ts')
+const hostLifecycle = read('src/components/launcher/GlobalLauncherHostLifecycle.ts')
 const quickEditorPanel = read('src/components/quickEditor/QuickEditorPanel.tsx')
 const quickEditorOverlay = read('src/components/quickEditor/QuickEditorCommandOverlay.tsx')
 const blurGuard = read('src/workspace/launcherBlurGuard.ts')
@@ -162,6 +163,24 @@ assert.match(
 )
 
 assert.match(
+  globalPinnedHotkeys,
+  /quickEditorActive\s*!==\s*previousQuickEditorActive[\s\S]*syncShortcut\(next\)/,
+  'global Cmd/Ctrl+K accelerator should be re-synced when Quick Editor opens or closes',
+)
+
+assert.match(
+  globalPinnedHotkeys,
+  /isQuickEditorCommandAccelerator\(shortcut\.accelerator\)[\s\S]*Handled by Quick Editor[\s\S]*return/,
+  'global Cmd/Ctrl+K accelerator should be unregistered while Quick Editor owns Cmd/Ctrl+K',
+)
+
+assert.match(
+  globalPinnedHotkeys,
+  /suppressStandaloneLauncherBlur\(\)[\s\S]*openQuickEditorCommand\(\)/,
+  'global Cmd/Ctrl+K routing into Quick Editor should suppress transient standalone blur before opening the overlay',
+)
+
+assert.match(
   tauriLib,
   /show_launcher_window_for_hotkey[\s\S]*show_launcher_window_for_hotkey_with_event\(app,\s*['"]hiven:\/\/launcher-open['"]\)/,
   'normal launcher open path should keep preparing the search input source',
@@ -171,6 +190,30 @@ assert.match(
   globalLauncherHost,
   /if\s*\(\s*mode\s*===\s*['"]quick-editor['"]\s*\)\s*return[\s\S]*prepareLauncherInputSource\(\)/,
   'Quick Editor mode should not invoke the launcher search input-source preparation effect',
+)
+
+assert.match(
+  quickEditorOverlay,
+  /controllerRef\.current\?\.back\?\.\(\)[\s\S]*requestAnimationFrame\(\(\)\s*=>\s*inputRef\.current\?\.focus\(\)\)[\s\S]*closeCommand\(\)/,
+  'Quick Editor command overlay Escape should go back one controller frame before closing the overlay',
+)
+
+assert.match(
+  quickEditorOverlay,
+  /GlobalLauncherFrameSwitch/,
+  'Quick Editor command overlay should render launcher controller frames so Escape can return to previous command steps',
+)
+
+assert.match(
+  quickEditorOverlay,
+  /topFrame\?\.kind\s*===\s*['"]param-input['"][\s\S]*return/,
+  'Quick Editor overlay root Enter handler should let parameter frames own Enter and Escape',
+)
+
+assert.match(
+  hostLifecycle,
+  /mode\s*===\s*['"]quick-editor['"][\s\S]*quickEditorCommandOpen[\s\S]*return[\s\S]*closeLauncher\(\)/,
+  'Quick Editor host Escape should leave Escape to the command overlay while it is open',
 )
 
 console.log('Quick Editor launcher behavior checks passed')

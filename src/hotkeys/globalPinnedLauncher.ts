@@ -1,4 +1,5 @@
 import { useAppStore, type GlobalPinnedLauncherShortcut } from '../store'
+import { suppressStandaloneLauncherBlur } from '../workspace/launcherBlurGuard'
 
 type GlobalShortcutApi = typeof import('@tauri-apps/plugin-global-shortcut')
 type TauriCoreApi = typeof import('@tauri-apps/api/core')
@@ -23,7 +24,9 @@ export function installGlobalPinnedLauncherHotkeys() {
   unsubscribeStore = useAppStore.subscribe((state, previousState) => {
     const next = state.settings.globalPinnedLauncherShortcut
     const previous = previousState.settings.globalPinnedLauncherShortcut
-    if (shortcutIdentity(next) !== shortcutIdentity(previous)) {
+    const quickEditorActive = state.globalLauncherOpen && state.globalLauncherMode === 'quick-editor'
+    const previousQuickEditorActive = previousState.globalLauncherOpen && previousState.globalLauncherMode === 'quick-editor'
+    if (shortcutIdentity(next) !== shortcutIdentity(previous) || quickEditorActive !== previousQuickEditorActive) {
       void syncShortcut(next)
     }
   })
@@ -83,6 +86,16 @@ async function syncShortcutNow(shortcut: GlobalPinnedLauncherShortcut, generatio
   await unregisterCurrentAccelerator()
   await unregisterDoubleModifier()
   if (generation !== syncGeneration) return
+
+  if (
+    useAppStore.getState().globalLauncherOpen &&
+    useAppStore.getState().globalLauncherMode === 'quick-editor' &&
+    shortcut.kind === 'accelerator' &&
+    isQuickEditorCommandAccelerator(shortcut.accelerator)
+  ) {
+    updateShortcutStatus(shortcut, 'Handled by Quick Editor')
+    return
+  }
 
   if (shortcut.kind === 'disabled') {
     updateShortcutStatus(shortcut, 'Disabled')
@@ -180,6 +193,7 @@ async function showLauncherWindow() {
 export async function routeGlobalPinnedLauncherShortcut() {
   const state = useAppStore.getState()
   if (state.globalLauncherOpen && state.globalLauncherMode === 'quick-editor') {
+    suppressStandaloneLauncherBlur()
     state.openQuickEditorCommand()
     return
   }
@@ -202,6 +216,21 @@ function updateShortcutStatus(
 
 function normalizeAccelerator(accelerator: string) {
   return accelerator.replace(/\bCmd\b/g, 'Command')
+}
+
+function isQuickEditorCommandAccelerator(accelerator: string) {
+  const parts = normalizeAccelerator(accelerator)
+    .split('+')
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean)
+  return parts.includes('k') && parts.some((part) => (
+    part === 'command' ||
+    part === 'cmd' ||
+    part === 'control' ||
+    part === 'ctrl' ||
+    part === 'cmdorctrl' ||
+    part === 'commandorcontrol'
+  ))
 }
 
 function shortcutIdentity(shortcut: GlobalPinnedLauncherShortcut) {

@@ -128,14 +128,13 @@ export function useGlobalLauncherHostEscape({
 
     // Quick Editor mode: Escape closes command overlay first, then launcher
     if (mode === 'quick-editor') {
-      event.preventDefault()
-      event.stopPropagation()
       const state = useAppStore.getState()
       if (state.quickEditorCommandOpen) {
-        state.closeQuickEditorCommand()
-      } else {
-        closeLauncher()
+        return
       }
+      event.preventDefault()
+      event.stopPropagation()
+      closeLauncher()
       return
     }
 
