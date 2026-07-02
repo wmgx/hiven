@@ -376,7 +376,7 @@ export function GlobalLauncherHost() {
         onClick={(event) => { if (event.target === event.currentTarget) closeLauncher() }}
       >
         <div ref={panelRef} style={quickEditorPanelStyle} onPointerDown={beginDrag}>
-          <QuickEditorPanel />
+          <QuickEditorPanel onRequestExit={closeLauncher} />
         </div>
       </div>
     )

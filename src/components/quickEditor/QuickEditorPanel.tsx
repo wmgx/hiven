@@ -10,8 +10,11 @@ import { getFluxMonacoTheme, registerFluxMonacoThemes } from '../../utils/monaco
 import { installMonacoHoverOverlay } from '../../utils/monacoHoverOverlay'
 import { createMonacoDisposableBucket } from '../../utils/monacoDisposables'
 import { suppressStandaloneLauncherBlur } from '../../workspace/launcherBlurGuard'
+import { useQuickEditorEscape } from './useQuickEditorEscape'
+import { isQuickEditorDetachedWindow } from '../../workspace/windowManager/quickEditorWindow'
+import { useT } from '../../i18n'
 
-export function QuickEditorPanel() {
+export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void }) {
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
   const monacoDisposablesRef = useRef<ReturnType<typeof createMonacoDisposableBucket> | null>(null)
   const isLocalChangeRef = useRef(false)
@@ -26,6 +29,10 @@ export function QuickEditorPanel() {
 
   const settings = useAppStore((s) => s.settings)
   const openQuickEditorCommand = useAppStore((s) => s.openQuickEditorCommand)
+
+  const { exitHintVisible } = useQuickEditorEscape(onRequestExit)
+  const tQuickEditor = useT('quickEditor')
+  const isDetached = isQuickEditorDetachedWindow()
 
   const handleChange = useCallback((value: string | undefined) => {
     if (value !== undefined) {
@@ -164,6 +171,18 @@ export function QuickEditorPanel() {
           theme={getFluxMonacoTheme(settings.theme)}
         />
       </div>
+      {exitHintVisible && (
+        <div
+          className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 z-40 px-2.5 py-1 rounded text-[11px]"
+          style={{
+            background: 'var(--color-background-tertiary)',
+            color: 'var(--color-text-secondary)',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12)',
+          }}
+        >
+          {isDetached ? tQuickEditor('escCloseHint') : tQuickEditor('escExitHint')}
+        </div>
+      )}
       <QuickEditorCommandOverlay />
     </div>
   )

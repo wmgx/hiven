@@ -1,26 +1,42 @@
 import { useCallback } from 'react'
-import { ExternalLink } from 'lucide-react'
+import { ExternalLink, X } from 'lucide-react'
 import { useQuickEditorStore } from '../../workspace/quickEditor/quickEditorStore'
 import { getLanguageOptionLabel } from '../../workspace/languageOptions'
 import { useAppStore } from '../../store'
-import { showQuickEditorWindow, isQuickEditorDetachedWindow } from '../../workspace/windowManager/quickEditorWindow'
+import { useT } from '../../i18n'
+import {
+  closeQuickEditorWindow,
+  isQuickEditorDetachedWindow,
+  showQuickEditorWindow,
+} from '../../workspace/windowManager/quickEditorWindow'
+import { hideLauncherWindow } from '../../workspace/windowManager/launcherWindow'
+import { isStandaloneLauncherWindow } from '../launcher/GlobalLauncherHostLifecycle'
 
 export function QuickEditorToolbar() {
   const language = useQuickEditorStore((s) => s.language)
   const locale = useAppStore((s) => s.locale)
-  const closeQuickEditor = useAppStore((s) => s.closeQuickEditor)
+  const t = useT('quickEditor')
   const languageLabel = getLanguageOptionLabel(language, locale)
   const isDetached = isQuickEditorDetachedWindow()
 
   const handleDetach = useCallback(async () => {
     try {
       await showQuickEditorWindow()
-      // Close the inline editor after detach
-      closeQuickEditor()
+      // The editor now lives in the detached window; put the launcher away.
+      useAppStore.getState().setGlobalLauncherOpen(false)
+      if (isStandaloneLauncherWindow()) {
+        await hideLauncherWindow()
+      }
     } catch (error) {
       console.warn('[hiven] Failed to detach quick editor:', error)
     }
-  }, [closeQuickEditor])
+  }, [])
+
+  const handleCloseWindow = useCallback(() => {
+    void closeQuickEditorWindow().catch((error) => {
+      console.warn('[hiven] Failed to close quick editor window:', error)
+    })
+  }, [])
 
   return (
     <div
@@ -36,7 +52,7 @@ export function QuickEditorToolbar() {
           className="text-[11px] font-medium"
           style={{ color: 'var(--color-text-secondary)' }}
         >
-          Quick Editor
+          {t('title')}
         </span>
       </div>
       <div className="flex items-center gap-1">
@@ -51,12 +67,25 @@ export function QuickEditorToolbar() {
             type="button"
             className="flex items-center justify-center w-5 h-5 rounded transition-colors"
             style={{ color: 'var(--color-text-tertiary)' }}
-            title="Detach to window"
+            title={t('detach')}
             onClick={handleDetach}
             onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--color-text-primary)' }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--color-text-tertiary)' }}
           >
             <ExternalLink size={12} />
+          </button>
+        )}
+        {isDetached && (
+          <button
+            type="button"
+            className="flex items-center justify-center w-5 h-5 rounded transition-colors"
+            style={{ color: 'var(--color-text-tertiary)' }}
+            title={t('closeWindow')}
+            onClick={handleCloseWindow}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--color-text-primary)' }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--color-text-tertiary)' }}
+          >
+            <X size={12} />
           </button>
         )}
       </div>
