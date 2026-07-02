@@ -3,6 +3,7 @@ import type { CollectInputFrame, ResultFrame } from '../../workspace/launcher/co
 import type { LauncherMixedItem } from './LauncherMixedList'
 import { shouldCustomizeParams } from './launcherParamShortcuts'
 import { shouldIgnoreImeKeyDown } from '../../utils/imeKeyboard'
+import { hasLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
 
 export function handleGlobalLauncherKeyDown({
   event,
@@ -84,7 +85,9 @@ export function handleGlobalLauncherKeyDown({
   if (launcherSettingsTarget) return
 
   if (hostSurfaceTarget) {
-    if (event.key === 'Escape') {
+    // Pages that registered an escape interceptor own Escape entirely
+    // (the window-capture host chain already consulted it).
+    if (event.key === 'Escape' && !hasLauncherEscapeInterceptor()) {
       event.preventDefault()
       event.stopPropagation()
       clearLauncherHostSurface?.()

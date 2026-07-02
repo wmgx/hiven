@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, type RefObject } from 'react'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import type { LauncherControllerState } from '../../workspace/launcher/controller'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../../utils/imeKeyboard'
-import { useAppStore } from '../../store'
+import { runLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
 
 export function isStandaloneLauncherWindow() {
   return new URLSearchParams(window.location.search).get('window') === 'launcher'
@@ -126,17 +126,11 @@ export function useGlobalLauncherHostEscape({
     if (event.key !== 'Escape') return
     if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
 
-    // Quick Editor mode: Escape closes command overlay first, then launcher
-    if (mode === 'quick-editor') {
-      const state = useAppStore.getState()
-      if (state.quickEditorCommandOpen) {
-        return
-      }
-      event.preventDefault()
-      event.stopPropagation()
-      closeLauncher()
-      return
-    }
+    // TODO(escape-migration): migrate the settings / plugin surface / host
+    // surface / permission branches below onto the launcherEscapeInterceptor
+    // protocol so each page owns its escape handling; the default chain should
+    // eventually shrink to: IME check → interceptor → controller.back → close.
+    if (runLauncherEscapeInterceptor(event)) return
 
     if (event.key === 'Escape' && launcherSettingsTarget) {
       event.preventDefault()
