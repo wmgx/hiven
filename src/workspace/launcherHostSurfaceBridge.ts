@@ -87,7 +87,7 @@ export function isLauncherHostSurfaceOpenRequest(value: unknown): value is Launc
 }
 
 export function isLauncherHostSurfaceTarget(value: unknown): value is LauncherHostSurfaceTarget {
-  return value === 'settings' || value === 'plugins'
+  return value === 'settings' || value === 'plugins' || value === 'system-settings' || value === 'system-plugins'
 }
 
 function clearPendingLauncherHostSurfaceOpen(): void {

@@ -1,12 +1,10 @@
 import { useEffect } from 'react'
-import type { PluginSurfaceOpenTarget } from '../../store'
+import type { LauncherHostSurfaceTarget, PluginSurfaceOpenTarget } from '../../store'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import { markSurfaceInstanceState, upsertSurfaceInstance } from '../../surfaces/registry'
 import { pluginSurfaceInstanceId } from '../../workspace/pluginSurfaceWindows'
 import { LAUNCHER_WINDOW_LABEL } from '../../workspace/windowManager/windowLabels'
 import type { PluginSurfaceTarget } from './GlobalLauncherSelection'
-
-type LauncherHostSurfaceTarget = 'settings' | 'plugins' | null
 
 type LauncherSettingsTarget = {
   source: PluginSettingsSource
@@ -70,11 +68,13 @@ export function useGlobalLauncherSurfaceRegistry({
 
   useEffect(() => {
     if (!open || !hostSurfaceTarget) return
+    const kind = hostSurfaceTarget === 'plugins' || hostSurfaceTarget === 'system-plugins' ? 'plugins' : 'settings'
+    const title = hostSurfaceTarget === 'plugins' || hostSurfaceTarget === 'system-plugins' ? 'Plugins' : 'Settings'
     upsertSurfaceInstance({
       id: `host-surface:${hostSurfaceTarget}`,
-      kind: hostSurfaceTarget === 'plugins' ? 'plugins' : 'settings',
+      kind,
       windowLabel: LAUNCHER_WINDOW_LABEL,
-      title: hostSurfaceTarget === 'plugins' ? 'Plugins' : 'Settings',
+      title,
       state: 'visible',
       canReceiveText: false,
       canProvideText: false,

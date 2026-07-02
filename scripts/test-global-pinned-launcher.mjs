@@ -601,7 +601,7 @@ check('standalone launcher locks webview document panning while preserving list 
   )
   assertHas(
     files.app,
-    /function\s+findLauncherWheelScroller[\s\S]{0,900}while\s*\(candidate\)[\s\S]{0,900}parentElement\?\.closest\(['"][\s\S]{0,180}data-launcher-scrollable[\s\S]{0,180}\)/,
+    /function\s+findLauncherWheelScroller[\s\S]{0,900}closest\(['"]\.global-launcher-body['"]\)[\s\S]{0,900}while\s*\(candidate\)[\s\S]{0,900}data-launcher-scrollable[\s\S]{0,900}parentElement/,
     'LauncherWindowApp should climb past nested non-scrolling surface elements to find the actual scroll container',
   )
   assertHas(

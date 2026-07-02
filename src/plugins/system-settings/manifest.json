@@ -1,9 +1,0 @@
-{
-  "pluginId": "system-settings",
-  "displayName": "System Settings",
-  "displayNameI18n": {
-    "zh": "系统设置"
-  },
-  "version": "1.0.0",
-  "capabilities": ["ui"]
-}

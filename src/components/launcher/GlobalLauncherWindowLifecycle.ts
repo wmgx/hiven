@@ -1,4 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
+import type { LauncherHostSurfaceTarget } from '../../store'
 import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from '../../workspace/launcherWindowEvents'
 import { onCurrentLauncherWindowFocusChanged, resizeCurrentLauncherWindow, startCurrentLauncherWindowDrag } from '../../workspace/windowManager/launcherWindow'
 import { shouldSuppressStandaloneLauncherBlur } from '../../workspace/launcherBlurGuard'
@@ -7,8 +8,6 @@ import { applyStandaloneLauncherGeometry, computeStandaloneLauncherGeometry } fr
 type SurfaceShellConfig = {
   closeOnBlur?: boolean
 } | undefined
-
-type LauncherHostSurfaceTarget = 'settings' | 'plugins' | null
 
 type LauncherSettingsTarget = unknown
 
@@ -67,7 +66,7 @@ export function useStandaloneLauncherResize({
   open: boolean
   standaloneLauncher: boolean
   panelRef: RefObject<HTMLDivElement | null>
-  hostSurfaceTarget: LauncherHostSurfaceTarget
+  hostSurfaceTarget: LauncherHostSurfaceTarget | null
   launcherSettingsTarget: LauncherSettingsTarget
   surfaceShell: SurfaceShellConfig
   visibleFilteredLength: number

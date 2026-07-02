@@ -1,5 +1,5 @@
 import { createEditorPane } from '../editorBridge'
-import { requestOpenPluginSurfaceTool } from '../pluginSurfaceOpenRequest'
+import { requestOpenLauncherHostSurface } from '../launcherHostSurfaceBridge'
 import { useAppStore } from '../../store'
 import type { LauncherItem } from './types'
 import { getHostEditorActionItems } from './hostEditorActions'
@@ -92,11 +92,7 @@ export function getHostPaneControlItems(): LauncherItem[] {
       pinnable: false,
       legacyUsageKeys: ['show-plugins-page'],
       execute: async () => {
-        await requestOpenPluginSurfaceTool({
-          source: 'builtin',
-          pluginId: 'system-settings',
-          surfaceId: 'main',
-        })
+        await requestOpenLauncherHostSurface('system-plugins')
         return { ok: true, keepOpen: true }
       },
     },
@@ -117,11 +113,7 @@ export function getHostPaneControlItems(): LauncherItem[] {
       pinnable: false,
       legacyUsageKeys: ['show-settings-page'],
       execute: async () => {
-        await requestOpenPluginSurfaceTool({
-          source: 'builtin',
-          pluginId: 'system-settings',
-          surfaceId: 'main',
-        })
+        await requestOpenLauncherHostSurface('system-settings')
         return { ok: true, keepOpen: true }
       },
     },

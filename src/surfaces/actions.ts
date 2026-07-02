@@ -3,7 +3,7 @@ import type { PluginSettingsSource } from '../workspace/pluginSettingsStore'
 import { showEditorWindow } from '../workspace/windowManager/editorWindow'
 import { showLauncherWindow } from '../workspace/windowManager/launcherWindow'
 import { showPluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
-import { requestOpenLauncherPluginSettingsSurface } from '../workspace/launcherHostSurfaceBridge'
+import { requestOpenLauncherHostSurface, requestOpenLauncherPluginSettingsSurface } from '../workspace/launcherHostSurfaceBridge'
 import { requestOpenPluginSurfaceTool } from '../workspace/pluginSurfaceOpenRequest'
 import { requestOpenPluginEditorSurface } from './pluginEditorSurfaceBridge'
 
@@ -30,32 +30,20 @@ export async function focusSurfaceInstance(surfaceOrId: SurfaceInstance | string
         surface.pluginId,
       )
     } else {
-      await requestOpenPluginSurfaceTool({
-        source: 'builtin',
-        pluginId: 'system-settings',
-        surfaceId: 'main',
-      })
+      await requestOpenLauncherHostSurface('system-settings')
     }
     markSurfaceInstanceState(surface.id, 'visible')
     return true
   }
 
   if (surface.kind === 'plugins') {
-    await requestOpenPluginSurfaceTool({
-      source: 'builtin',
-      pluginId: 'system-settings',
-      surfaceId: 'main',
-    })
+    await requestOpenLauncherHostSurface('system-plugins')
     markSurfaceInstanceState(surface.id, 'visible')
     return true
   }
 
   if (surface.kind === 'plugin-editor') {
-    await requestOpenPluginSurfaceTool({
-      source: 'builtin',
-      pluginId: 'system-settings',
-      surfaceId: 'main',
-    })
+    await requestOpenLauncherHostSurface('system-plugins')
     if (surface.pluginId && surface.folderPath) {
       const source = sourceFromPluginEditorSurfaceInstanceId(surface.id)
       requestOpenPluginEditorSurface({

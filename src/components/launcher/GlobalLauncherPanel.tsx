@@ -47,6 +47,7 @@ type GlobalLauncherPanelProps = {
   isWorkflowObjectLauncherItem: (item: GlobalLauncherItem | undefined) => boolean
   selectItem: (item: GlobalLauncherItem | undefined, customizeParams?: boolean) => void
   hostSurfaceTarget: LauncherHostSurfaceTarget | null
+  clearLauncherHostSurface: () => void
   query: string
   setQuery: (value: string) => void
   locale: Locale
@@ -97,6 +98,7 @@ export function GlobalLauncherPanel({
   isWorkflowObjectLauncherItem,
   selectItem,
   hostSurfaceTarget,
+  clearLauncherHostSurface,
   query,
   setQuery,
   locale,
@@ -133,6 +135,8 @@ export function GlobalLauncherPanel({
         launcherSettingsTarget,
         closeSettingsDialog,
         focusSearchInputAfterBack,
+        hostSurfaceTarget,
+        clearLauncherHostSurface,
         surfaceFrame,
         leaveSurface,
         itemPermissionFrame,

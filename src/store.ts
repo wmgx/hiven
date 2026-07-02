@@ -161,7 +161,7 @@ export type PluginSurfaceOpenTarget = {
   initialText?: string
 }
 
-export type LauncherHostSurfaceTarget = 'settings' | 'plugins'
+export type LauncherHostSurfaceTarget = 'settings' | 'plugins' | 'system-settings' | 'system-plugins'
 
 interface AppState {
   // Pinned Action / Live Runner
@@ -418,9 +418,9 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   })),
   openGlobalLauncher: (mode) => set({ globalLauncherOpen: true, globalLauncherMode: mode }),
   openGlobalLauncherOverlay: (mode) => set({ globalLauncherOpen: true, globalLauncherMode: mode, globalLauncherOverlay: true }),
-  openPluginSurfaceTool: (target) => set({ pluginSurfaceToolTarget: target }),
+  openPluginSurfaceTool: (target) => set({ pluginSurfaceToolTarget: target, launcherHostSurfaceTarget: null }),
   clearPluginSurfaceTool: () => set({ pluginSurfaceToolTarget: null }),
-  openLauncherHostSurface: (target) => set({ launcherHostSurfaceTarget: target, globalLauncherOpen: true, globalLauncherMode: 'full' }),
+  openLauncherHostSurface: (target) => set({ launcherHostSurfaceTarget: target, pluginSurfaceToolTarget: null, globalLauncherOpen: true, globalLauncherMode: 'full' }),
   clearLauncherHostSurface: () => set({ launcherHostSurfaceTarget: null }),
 
   // Quick Editor

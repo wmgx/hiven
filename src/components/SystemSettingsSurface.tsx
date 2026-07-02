@@ -4,13 +4,12 @@ import { useT } from '../i18n'
 import { SettingsContent } from '../surfaces/SettingsContent'
 import { PluginsContent } from '../surfaces/PluginsContent'
 import { requestOpenPluginEditorSurface } from '../surfaces/pluginEditorSurfaceBridge'
-import type { PluginSurfaceProps } from '../workspace/pluginTypes'
 import './SystemSettingsSurface.css'
 
 type TabId = 'settings' | 'plugins'
 
-export function SystemSettingsSurface(_props: PluginSurfaceProps) {
-  const [activeTab, setActiveTab] = useState<TabId>('settings')
+export function SystemSettingsSurface({ initialTab = 'settings' }: { initialTab?: TabId }) {
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab)
   const t = useT('systemSettings')
 
   const tabs: { id: TabId; icon: React.ReactNode; label: string }[] = [
@@ -20,7 +19,7 @@ export function SystemSettingsSurface(_props: PluginSurfaceProps) {
 
   return (
     <div className="system-settings-surface">
-      <div className="system-settings-sidebar">
+      <div className="system-settings-sidebar" data-launcher-scrollable>
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -33,7 +32,7 @@ export function SystemSettingsSurface(_props: PluginSurfaceProps) {
           </button>
         ))}
       </div>
-      <div className="system-settings-content">
+      <div className="system-settings-content" data-launcher-scrollable>
         {activeTab === 'settings' && <SettingsContent />}
         {activeTab === 'plugins' && <PluginsContent onOpenPluginEditor={requestOpenPluginEditorSurface} />}
       </div>

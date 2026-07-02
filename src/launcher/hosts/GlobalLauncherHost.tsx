@@ -188,6 +188,11 @@ export function GlobalLauncherHost() {
     })
   }, [overlay, resetLauncherSession, setOpen, standaloneLauncher, restoreFocus])
 
+  const leaveHostSurface = useCallback(() => {
+    clearLauncherHostSurface()
+    focusSearchInputAfterBack()
+  }, [clearLauncherHostSurface, focusSearchInputAfterBack])
+
   // Close launcher after a command has been executed (don't hide the main window)
   const closeLauncherAfterAction = useCallback(() => {
     resetLauncherSession()
@@ -413,12 +418,13 @@ export function GlobalLauncherHost() {
         isWorkflowObjectLauncherItem={isWorkflowObjectLauncherItem}
         selectItem={selectItem}
         hostSurfaceTarget={hostSurfaceTarget}
+        clearLauncherHostSurface={clearLauncherHostSurface}
         query={query}
         setQuery={setQuery}
         locale={locale}
         searchPlaceholder={t(locale, 'palette.globalPlaceholder')}
-        requestSurfaceBack={requestSurfaceBack}
-        requestSurfaceClose={requestSurfaceClose}
+        requestSurfaceBack={hostSurfaceTarget ? leaveHostSurface : requestSurfaceBack}
+        requestSurfaceClose={hostSurfaceTarget ? closeLauncher : requestSurfaceClose}
         handleCompositionStart={handleCompositionStart}
         handleCompositionEnd={handleCompositionEnd}
         clipboardBlock={clipboardBlock}

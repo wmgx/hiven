@@ -14,7 +14,7 @@ import { useWorkspaceStore } from '../workspaceStore'
 import { runtimeRegistry } from '../runtimeRegistry'
 import { applyEffects, openExternalUrl } from '../effectRunner'
 import { useAppStore } from '../../store'
-import { requestOpenPluginSurfaceTool } from '../pluginSurfaceOpenRequest'
+import { requestOpenLauncherHostSurface } from '../launcherHostSurfaceBridge'
 import { createPluginPrivateStorage } from '../pluginStorage'
 import { getPluginPermissionSnapshot, requirePluginPermissions } from '../pluginPermissions'
 import { showEditorWindow } from '../windowManager/editorWindow'
@@ -132,19 +132,11 @@ async function openEditorWindow(): Promise<void> {
 }
 
 async function showPluginsPage(): Promise<void> {
-  await requestOpenPluginSurfaceTool({
-    source: 'builtin',
-    pluginId: 'system-settings',
-    surfaceId: 'main',
-  })
+  await requestOpenLauncherHostSurface('system-plugins')
 }
 
 async function showSettingsPage(): Promise<void> {
-  await requestOpenPluginSurfaceTool({
-    source: 'builtin',
-    pluginId: 'system-settings',
-    surfaceId: 'main',
-  })
+  await requestOpenLauncherHostSurface('system-settings')
 }
 
 /**

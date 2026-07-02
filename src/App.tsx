@@ -366,10 +366,14 @@ function shouldAllowLauncherListWheel(event: WheelEvent) {
 }
 
 function findLauncherWheelScroller(target: Element | null, deltaY: number): HTMLElement | null {
-  let candidate = target?.closest('[data-launcher-scrollable], .global-launcher-body') as HTMLElement | null
+  const launcherBody = target?.closest('.global-launcher-body') as HTMLElement | null
+  let candidate = target instanceof HTMLElement ? target : target?.parentElement ?? null
   while (candidate) {
-    if (canScrollLauncherElement(candidate, deltaY)) return candidate
-    candidate = candidate.parentElement?.closest('[data-launcher-scrollable], .global-launcher-body') as HTMLElement | null
+    const isExplicitLauncherScroller = candidate.matches('[data-launcher-scrollable], .global-launcher-body')
+    const isNestedLauncherScroller = launcherBody?.contains(candidate) ?? false
+    if ((isExplicitLauncherScroller || isNestedLauncherScroller) && canScrollLauncherElement(candidate, deltaY)) return candidate
+    if (candidate === launcherBody) return null
+    candidate = candidate.parentElement
   }
   return null
 }

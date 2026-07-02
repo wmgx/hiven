@@ -10,6 +10,8 @@ export function handleGlobalLauncherKeyDown({
   launcherSettingsTarget,
   closeSettingsDialog,
   focusSearchInputAfterBack,
+  hostSurfaceTarget,
+  clearLauncherHostSurface,
   surfaceFrame,
   leaveSurface,
   itemPermissionFrame,
@@ -40,6 +42,8 @@ export function handleGlobalLauncherKeyDown({
   launcherSettingsTarget: unknown
   closeSettingsDialog: () => void
   focusSearchInputAfterBack: () => void
+  hostSurfaceTarget?: unknown
+  clearLauncherHostSurface?: () => void
   surfaceFrame: unknown
   leaveSurface: () => void
   itemPermissionFrame: unknown
@@ -78,6 +82,16 @@ export function handleGlobalLauncherKeyDown({
     return
   }
   if (launcherSettingsTarget) return
+
+  if (hostSurfaceTarget) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      clearLauncherHostSurface?.()
+      focusSearchInputAfterBack()
+    }
+    return
+  }
 
   if (surfaceFrame) {
     if (event.key === 'Escape') {

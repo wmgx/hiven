@@ -109,7 +109,14 @@ export function GlobalLauncherFrameSwitch({
   onObjectActionController?: (controller: { expand: () => void; execute: (keepOpen?: boolean) => void } | null) => void
 }) {
   if (hostSurfaceTarget) {
-    return <GlobalLauncherSystemSurfaceFrame target={hostSurfaceTarget} height={hostSurfaceHeight} />
+    return (
+      <GlobalLauncherSystemSurfaceFrame
+        target={hostSurfaceTarget}
+        height={hostSurfaceHeight}
+        onBack={onSurfaceBack}
+        onClose={onSurfaceClose}
+      />
+    )
   }
 
   if (launcherSettingsTarget) {
