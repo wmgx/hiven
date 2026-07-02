@@ -213,7 +213,7 @@ export function GlobalLauncherHost() {
   useCloseStandaloneLauncherOnBlur({
     open,
     standaloneLauncher,
-    closeOnBlur: mode === 'quick-editor' ? true : activeSurfaceFrame?.surface.shell?.closeOnBlur,
+    closeOnBlur: mode === 'quick-editor' ? false : activeSurfaceFrame?.surface.shell?.closeOnBlur,
     closeLauncher,
   })
 
