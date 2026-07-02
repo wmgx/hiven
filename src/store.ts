@@ -139,7 +139,6 @@ export type LastCommandStatus = {
 }
 
 export type AppTheme = 'dark' | 'light'
-export type GlobalLauncherMode = 'full' | 'pinned-only' | 'quick-editor'
 export type GlobalPinnedLauncherDoubleModifier = 'Command' | 'Shift' | 'Option'
 export type GlobalLauncherPosition = {
   x: number;
@@ -161,7 +160,7 @@ export type PluginSurfaceOpenTarget = {
   initialText?: string
 }
 
-export type LauncherHostSurfaceTarget = 'settings' | 'plugins' | 'system-settings' | 'system-plugins'
+export type LauncherHostSurfaceTarget = 'settings' | 'plugins' | 'system-settings' | 'system-plugins' | 'quick-editor'
 
 interface AppState {
   // Pinned Action / Live Runner
@@ -185,11 +184,9 @@ interface AppState {
   editorCommandBarOpen: boolean
   setEditorCommandBarOpen: (open: boolean) => void
   globalLauncherOpen: boolean
-  globalLauncherMode: GlobalLauncherMode
   globalLauncherOverlay: boolean
-  setGlobalLauncherOpen: (open: boolean, mode?: GlobalLauncherMode) => void
-  openGlobalLauncher: (mode: GlobalLauncherMode) => void
-  openGlobalLauncherOverlay: (mode: GlobalLauncherMode) => void
+  setGlobalLauncherOpen: (open: boolean) => void
+  openGlobalLauncherOverlay: () => void
   pluginSurfaceToolTarget: PluginSurfaceOpenTarget | null
   openPluginSurfaceTool: (target: PluginSurfaceOpenTarget) => void
   clearPluginSurfaceTool: () => void
@@ -199,9 +196,6 @@ interface AppState {
 
   // Quick Editor
   quickEditorCommandOpen: boolean
-  openQuickEditor: () => void
-  closeQuickEditor: () => void
-  toggleQuickEditor: () => void
   openQuickEditorCommand: () => void
   closeQuickEditorCommand: () => void
 
@@ -406,35 +400,22 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   editorCommandBarOpen: false,
   setEditorCommandBarOpen: (open) => set({ editorCommandBarOpen: open }),
   globalLauncherOpen: false,
-  globalLauncherMode: 'full',
   globalLauncherOverlay: false,
   pluginSurfaceToolTarget: null,
   launcherHostSurfaceTarget: null,
-  setGlobalLauncherOpen: (open, mode) => set((state) => ({
+  setGlobalLauncherOpen: (open) => set((state) => ({
     globalLauncherOpen: open,
-    globalLauncherMode: mode ?? (open ? state.globalLauncherMode : 'full'),
     globalLauncherOverlay: open ? state.globalLauncherOverlay : false,
-    ...(open ? {} : { launcherHostSurfaceTarget: null }),
+    ...(open ? {} : { launcherHostSurfaceTarget: null, quickEditorCommandOpen: false }),
   })),
-  openGlobalLauncher: (mode) => set({ globalLauncherOpen: true, globalLauncherMode: mode }),
-  openGlobalLauncherOverlay: (mode) => set({ globalLauncherOpen: true, globalLauncherMode: mode, globalLauncherOverlay: true }),
+  openGlobalLauncherOverlay: () => set({ globalLauncherOpen: true, globalLauncherOverlay: true }),
   openPluginSurfaceTool: (target) => set({ pluginSurfaceToolTarget: target, launcherHostSurfaceTarget: null }),
   clearPluginSurfaceTool: () => set({ pluginSurfaceToolTarget: null }),
-  openLauncherHostSurface: (target) => set({ launcherHostSurfaceTarget: target, pluginSurfaceToolTarget: null, globalLauncherOpen: true, globalLauncherMode: 'full' }),
+  openLauncherHostSurface: (target) => set({ launcherHostSurfaceTarget: target, pluginSurfaceToolTarget: null, globalLauncherOpen: true }),
   clearLauncherHostSurface: () => set({ launcherHostSurfaceTarget: null }),
 
   // Quick Editor
   quickEditorCommandOpen: false,
-  openQuickEditor: () => set({ globalLauncherOpen: true, globalLauncherMode: 'quick-editor' }),
-  closeQuickEditor: () => set({ globalLauncherMode: 'full', quickEditorCommandOpen: false }),
-  toggleQuickEditor: () => {
-    const { globalLauncherOpen, globalLauncherMode } = get()
-    if (globalLauncherOpen && globalLauncherMode === 'quick-editor') {
-      get().setGlobalLauncherOpen(false)
-    } else {
-      get().openQuickEditor()
-    }
-  },
   openQuickEditorCommand: () => set({ quickEditorCommandOpen: true }),
   closeQuickEditorCommand: () => set({ quickEditorCommandOpen: false }),
 

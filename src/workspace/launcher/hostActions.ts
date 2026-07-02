@@ -3,6 +3,7 @@ import { requestOpenLauncherHostSurface } from '../launcherHostSurfaceBridge'
 import { useAppStore } from '../../store'
 import type { LauncherItem } from './types'
 import { getHostEditorActionItems } from './hostEditorActions'
+import { isQuickEditorWindowOpen, showQuickEditorWindow } from '../windowManager/quickEditorWindow'
 
 type SystemPowerAction = 'restart' | 'shutdown' | 'lock-screen'
 
@@ -194,7 +195,13 @@ export function getHostPaneControlItems(): LauncherItem[] {
       requiredCapabilities: ['pane-actions'],
       pinnable: false,
       execute: async () => {
-        useAppStore.getState().openQuickEditor()
+        // Single-instance rule: if the editor lives in the detached window,
+        // focus it instead of opening the surface.
+        if (await isQuickEditorWindowOpen()) {
+          await showQuickEditorWindow()
+          return { ok: true }
+        }
+        useAppStore.getState().openLauncherHostSurface('quick-editor')
         return { ok: true, keepOpen: true }
       },
     },

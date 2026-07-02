@@ -24,8 +24,8 @@ export function installGlobalPinnedLauncherHotkeys() {
   unsubscribeStore = useAppStore.subscribe((state, previousState) => {
     const next = state.settings.globalPinnedLauncherShortcut
     const previous = previousState.settings.globalPinnedLauncherShortcut
-    const quickEditorActive = state.globalLauncherOpen && state.globalLauncherMode === 'quick-editor'
-    const previousQuickEditorActive = previousState.globalLauncherOpen && previousState.globalLauncherMode === 'quick-editor'
+    const quickEditorActive = state.globalLauncherOpen && state.launcherHostSurfaceTarget === 'quick-editor'
+    const previousQuickEditorActive = previousState.globalLauncherOpen && previousState.launcherHostSurfaceTarget === 'quick-editor'
     if (shortcutIdentity(next) !== shortcutIdentity(previous) || quickEditorActive !== previousQuickEditorActive) {
       void syncShortcut(next)
     }
@@ -89,7 +89,7 @@ async function syncShortcutNow(shortcut: GlobalPinnedLauncherShortcut, generatio
 
   if (
     useAppStore.getState().globalLauncherOpen &&
-    useAppStore.getState().globalLauncherMode === 'quick-editor' &&
+    useAppStore.getState().launcherHostSurfaceTarget === 'quick-editor' &&
     shortcut.kind === 'accelerator' &&
     isQuickEditorCommandAccelerator(shortcut.accelerator)
   ) {
@@ -192,7 +192,7 @@ async function showLauncherWindow() {
 
 export async function routeGlobalPinnedLauncherShortcut() {
   const state = useAppStore.getState()
-  if (state.globalLauncherOpen && state.globalLauncherMode === 'quick-editor') {
+  if (state.globalLauncherOpen && state.launcherHostSurfaceTarget === 'quick-editor') {
     suppressStandaloneLauncherBlur()
     state.openQuickEditorCommand()
     return

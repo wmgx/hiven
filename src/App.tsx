@@ -164,7 +164,7 @@ function LauncherRuntimeApp() {
           if (pendingSurfaceTarget) {
             openLauncherHostedPluginSurface(pendingSurfaceTarget)
           } else {
-            useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
+            useAppStore.getState().openGlobalLauncherOverlay()
           }
         }
         if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return

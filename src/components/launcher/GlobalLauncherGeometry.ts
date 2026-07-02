@@ -13,10 +13,6 @@ export const STANDALONE_LAUNCHER_LIST_MAX_HEIGHT = 300
 export const GLOBAL_LAUNCHER_SETTINGS_WIDTH = 720
 export const GLOBAL_LAUNCHER_SETTINGS_HEIGHT = 560
 
-export const STANDALONE_QUICK_EDITOR_WIDTH = 720
-export const STANDALONE_QUICK_EDITOR_HEIGHT = 480
-export const STANDALONE_QUICK_EDITOR_MAX_HEIGHT = 720
-
 type LauncherSurfaceShell = PluginUiSurfaceContribution['shell']
 
 export type StandaloneLauncherGeometryInput = {
@@ -24,7 +20,6 @@ export type StandaloneLauncherGeometryInput = {
   hostSurfaceTarget: unknown
   launcherSettingsTarget: unknown
   surfaceShell?: LauncherSurfaceShell
-  mode?: string
   currentWindowWidth?: number
 }
 
@@ -39,16 +34,8 @@ export function computeStandaloneLauncherGeometry({
   hostSurfaceTarget,
   launcherSettingsTarget,
   surfaceShell,
-  mode,
   currentWindowWidth = window.innerWidth,
 }: StandaloneLauncherGeometryInput): StandaloneLauncherGeometry {
-  if (mode === 'quick-editor') {
-    return {
-      width: STANDALONE_QUICK_EDITOR_WIDTH + STANDALONE_LAUNCHER_HORIZONTAL_PADDING,
-      height: STANDALONE_QUICK_EDITOR_HEIGHT + STANDALONE_LAUNCHER_VERTICAL_PADDING,
-    }
-  }
-
   const isSurfaceLike = Boolean(surfaceShell || launcherSettingsTarget || hostSurfaceTarget)
   const measured = measureLauncherPanelParts(panel)
 

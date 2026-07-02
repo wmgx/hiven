@@ -54,7 +54,7 @@ export function clearPendingPluginSurfaceOpenTarget(): void {
 export function openLauncherHostedPluginSurface(target: PluginSurfaceOpenTarget): void {
   clearPendingPluginSurfaceOpenTarget()
   useAppStore.getState().openPluginSurfaceTool(target)
-  useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
+  useAppStore.getState().openGlobalLauncherOverlay()
 }
 
 export async function requestOpenPluginSurfaceTool(target: PluginSurfaceOpenTarget): Promise<void> {

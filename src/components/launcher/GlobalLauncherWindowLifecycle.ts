@@ -61,7 +61,6 @@ export function useStandaloneLauncherResize({
   launcherSettingsTarget,
   surfaceShell,
   visibleFilteredLength,
-  mode,
   controllerState,
 }: {
   open: boolean
@@ -71,7 +70,6 @@ export function useStandaloneLauncherResize({
   launcherSettingsTarget: LauncherSettingsTarget
   surfaceShell: SurfaceShellConfig
   visibleFilteredLength: number
-  mode: unknown
   controllerState: unknown
 }) {
   useLayoutEffect(() => {
@@ -90,7 +88,6 @@ export function useStandaloneLauncherResize({
           hostSurfaceTarget,
           launcherSettingsTarget,
           surfaceShell,
-          mode: mode as string | undefined,
         })
         applyStandaloneLauncherGeometry(panel, geometry)
 
@@ -111,7 +108,6 @@ export function useStandaloneLauncherResize({
     }
   }, [
     visibleFilteredLength,
-    mode,
     open,
     controllerState,
     standaloneLauncher,

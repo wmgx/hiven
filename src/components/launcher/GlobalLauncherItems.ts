@@ -7,7 +7,6 @@ import type { LauncherMixedItem } from './LauncherMixedList'
 export type GlobalLauncherItem = LauncherMixedItem
 
 export function buildGlobalLauncherItems({
-  mode,
   pinnedActions,
   rankedLauncherItems,
   query,
@@ -15,7 +14,6 @@ export function buildGlobalLauncherItems({
   recentActionNames,
   actionUsageCounts,
 }: {
-  mode: string
   pinnedActions: PinnedAction[]
   rankedLauncherItems: DomainLauncherItem[]
   query: string
@@ -23,7 +21,6 @@ export function buildGlobalLauncherItems({
   recentActionNames: string[]
   actionUsageCounts: Record<string, number>
 }): GlobalLauncherItem[] {
-  void mode
   void pinnedActions
   void query
   void recentActionNames

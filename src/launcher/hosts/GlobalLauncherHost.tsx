@@ -26,13 +26,11 @@ import { createEditorPane, replaceEditorSelection, insertIntoEditor, openEditorP
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import { prepareLauncherInputSource, restoreLauncherInputSource } from '../../workspace/windowManager/launcherWindow'
-import { QuickEditorPanel } from '../../components/quickEditor/QuickEditorPanel'
-import { STANDALONE_QUICK_EDITOR_WIDTH, STANDALONE_LAUNCHER_VERTICAL_PADDING } from '../../components/launcher/GlobalLauncherLayout'
+import { getHostSurfaceShell } from '../../components/launcher/hostSurfaceShell'
 
 export function GlobalLauncherHost() {
   const {
     open,
-    mode,
     overlay,
     pinnedActions,
     recentActionNames,
@@ -42,7 +40,6 @@ export function GlobalLauncherHost() {
     launcherHostSurfaceTarget,
   } = useAppStore(useShallow((s) => ({
     open: s.globalLauncherOpen,
-    mode: s.globalLauncherMode,
     overlay: s.globalLauncherOverlay,
     pinnedActions: s.pinnedActions,
     recentActionNames: s.actionUsageBySource['global-launcher'].recentActionNames,
@@ -99,7 +96,6 @@ export function GlobalLauncherHost() {
 
   useEffect(() => {
     if (!open) return
-    if (mode === 'quick-editor') return
     void prepareLauncherInputSource().catch((error) => {
       console.warn('[hiven] Failed to prepare launcher input source:', error)
     })
@@ -108,7 +104,7 @@ export function GlobalLauncherHost() {
         console.warn('[hiven] Failed to restore launcher input source:', error)
       })
     }
-  }, [mode, open])
+  }, [open])
 
   useEffect(() => {
     setSelectedObjectActionIndex((index) => Math.min(index, Math.max(0, objectActions.length - 1)))
@@ -148,7 +144,6 @@ export function GlobalLauncherHost() {
   const visibleFiltered = useMemo(() => {
     void pluginRegistryVersion
     return buildGlobalLauncherItems({
-      mode,
       pinnedActions,
       rankedLauncherItems,
       query,
@@ -156,7 +151,7 @@ export function GlobalLauncherHost() {
       recentActionNames,
       actionUsageCounts,
     })
-  }, [actionUsageCounts, locale, mode, pinnedActions, pluginRegistryVersion, query, rankedLauncherItems, recentActionNames])
+  }, [actionUsageCounts, locale, pinnedActions, pluginRegistryVersion, query, rankedLauncherItems, recentActionNames])
 
   const { restoreFocus, focusSearchInputAfterBack } = useGlobalLauncherFocusSession({
     open,
@@ -213,7 +208,8 @@ export function GlobalLauncherHost() {
   useCloseStandaloneLauncherOnBlur({
     open,
     standaloneLauncher,
-    closeOnBlur: mode === 'quick-editor' ? false : activeSurfaceFrame?.surface.shell?.closeOnBlur,
+    closeOnBlur: getHostSurfaceShell(launcherHostSurfaceTarget)?.closeOnBlur
+      ?? activeSurfaceFrame?.surface.shell?.closeOnBlur,
     closeLauncher,
   })
 
@@ -248,7 +244,6 @@ export function GlobalLauncherHost() {
     launcherSettingsTarget,
     surfaceShell: activeSurfaceFrame?.surface.shell,
     visibleFilteredLength: visibleFiltered.length,
-    mode,
     controllerState,
   })
 
@@ -274,7 +269,6 @@ export function GlobalLauncherHost() {
 
   useGlobalLauncherHostEscape({
     open,
-    mode,
     isImeComposingRef,
     launcherSettingsTarget,
     closeSettingsDialog,
@@ -350,37 +344,6 @@ export function GlobalLauncherHost() {
   })
 
   if (!open) return null
-
-  // Quick Editor mode: render dedicated editor panel instead of launcher search
-  if (mode === 'quick-editor') {
-    const quickEditorPanelStyle = {
-      background: 'var(--panel, #ffffff)',
-      border: '1px solid var(--border, #ececed)',
-      borderRadius: 'var(--radius, 10px)',
-      width: standaloneLauncher
-        ? `calc(100vw - 24px)`
-        : `${STANDALONE_QUICK_EDITOR_WIDTH}px`,
-      maxWidth: `${STANDALONE_QUICK_EDITOR_WIDTH}px`,
-      height: `calc(100vh - ${STANDALONE_LAUNCHER_VERTICAL_PADDING}px)`,
-      maxHeight: '720px',
-      position: 'fixed' as const,
-      left: '50%',
-      top: 12,
-      transform: 'translateX(-50%)',
-      overflow: 'hidden',
-    }
-    return (
-      <div
-        className="fixed inset-0 palette-overlay global-launcher-overlay open"
-        style={{ pointerEvents: 'auto', visibility: 'visible', zIndex: 1100 }}
-        onClick={(event) => { if (event.target === event.currentTarget) closeLauncher() }}
-      >
-        <div ref={panelRef} style={quickEditorPanelStyle} onPointerDown={beginDrag}>
-          <QuickEditorPanel onRequestExit={closeLauncher} />
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div

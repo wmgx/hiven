@@ -91,7 +91,6 @@ export function useGlobalLauncherCollectInputPreview({
 
 export function useGlobalLauncherHostEscape({
   open,
-  mode,
   isImeComposingRef,
   launcherSettingsTarget,
   closeSettingsDialog,
@@ -107,7 +106,6 @@ export function useGlobalLauncherHostEscape({
   focusSearchInputAfterBack,
 }: {
   open: boolean
-  mode?: string
   isImeComposingRef: RefObject<boolean>
   launcherSettingsTarget: { pluginId: string; source: PluginSettingsSource } | null
   closeSettingsDialog: () => void
@@ -177,7 +175,6 @@ export function useGlobalLauncherHostEscape({
     itemPermissionFrame,
     launcherSettingsTarget,
     leaveSurface,
-    mode,
     settingsDialogTarget,
     surfaceFrame,
   ])
