@@ -5,17 +5,19 @@
   min-height: 0;
   height: 100%;
   overflow: hidden;
+  background: var(--panel);
 }
 
 .system-settings-sidebar {
   display: flex;
   flex-direction: column;
-  width: 180px;
-  min-width: 180px;
-  padding: 12px 8px;
+  width: 176px;
+  min-width: 176px;
+  padding: 14px 10px;
   border-right: 1px solid var(--border);
   gap: 2px;
   overflow-y: auto;
+  background: var(--surface);
 }
 
 .system-settings-tab {
@@ -68,8 +70,9 @@
   flex: 1;
   min-width: 0;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
   overflow-x: hidden;
+  background: var(--panel);
 }
 
 .system-settings-content > .sscroll {
@@ -83,6 +86,7 @@
   flex: 1;
   min-height: 0;
   height: 100%;
+  padding: 14px 18px 18px;
 }
 
 .system-settings-content .scripts-search-results {
