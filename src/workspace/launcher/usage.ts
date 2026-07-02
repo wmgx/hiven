@@ -25,6 +25,7 @@ export function emptyUsageBySurface(): LauncherUsageBySurface {
     'command-palette': {},
     'editor-command-bar': {},
     'global-launcher': {},
+    'quick-editor-command': {},
   }
 }
 

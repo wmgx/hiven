@@ -9,6 +9,7 @@ import { QuickEditorCommandOverlay } from './QuickEditorCommandOverlay'
 import { getFluxMonacoTheme, registerFluxMonacoThemes } from '../../utils/monacoTheme'
 import { installMonacoHoverOverlay } from '../../utils/monacoHoverOverlay'
 import { createMonacoDisposableBucket } from '../../utils/monacoDisposables'
+import { suppressStandaloneLauncherBlur } from '../../workspace/launcherBlurGuard'
 
 export function QuickEditorPanel() {
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
@@ -37,6 +38,7 @@ export function QuickEditorPanel() {
     if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'k') return
     event.preventDefault()
     event.stopPropagation()
+    suppressStandaloneLauncherBlur()
     openQuickEditorCommand()
   }, [openQuickEditorCommand])
 
@@ -114,6 +116,7 @@ export function QuickEditorPanel() {
                 monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK,
               ],
               run: () => {
+                suppressStandaloneLauncherBlur()
                 useAppStore.getState().openQuickEditorCommand()
               },
             }))

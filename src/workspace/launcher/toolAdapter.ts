@@ -56,7 +56,8 @@ function manualTextInput(text: string, mode: TextInputMode): ResolvedTextInput {
 }
 
 function makeOutput(api: PluginLauncherApi, locale: Locale, surfaceId: string): PluginToolOutput {
-  const isGlobal = normalizeLauncherSurfaceId(surfaceId) === 'global-launcher'
+  const normalizedSurfaceId = normalizeLauncherSurfaceId(surfaceId)
+  const isGlobal = normalizedSurfaceId === 'global-launcher'
   return {
     text: (value: string) => isGlobal
       ? textResult(value, api, locale)
@@ -99,6 +100,8 @@ export function adaptToolToLauncherItem(
     ctx: Parameters<LauncherExecuteHandler>[0],
     params: Record<string, unknown>,
   ): Promise<LauncherExecuteResult> => {
+    const normalizedSurfaceId = normalizeLauncherSurfaceId(ctx.surfaceId)
+    const isEditorLike = normalizedSurfaceId === 'editor-command-bar' || normalizedSurfaceId === 'quick-editor-command'
     const hasManualInput = ctx.input?.text !== undefined
     const input = hasManualInput
       ? manualTextInput(ctx.input?.text ?? '', mode)
@@ -116,7 +119,7 @@ export function adaptToolToLauncherItem(
       }),
     )
     if (
-      normalizeLauncherSurfaceId(ctx.surfaceId) === 'editor-command-bar' &&
+      isEditorLike &&
       result.ok &&
       result.output?.choices.length === 1 &&
       result.output.choices[0]?.id === REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID

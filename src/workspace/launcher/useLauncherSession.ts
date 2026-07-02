@@ -18,6 +18,7 @@ import type {
   LauncherHostId,
   LauncherItem,
   LauncherSurfaceId,
+  PluginLauncherApi,
 } from './types'
 import { normalizeLauncherSurfaceId } from './types'
 
@@ -28,6 +29,7 @@ type UseLauncherSessionOptions = {
   staticItemFilter?: (items: LauncherItem[]) => LauncherItem[]
   collectDynamicWhenEmpty?: boolean
   clipboardText?: string
+  makeApi?: (api: PluginLauncherApi, item?: LauncherItem) => PluginLauncherApi
 }
 
 export type LauncherSession = {
@@ -50,6 +52,7 @@ export function useLauncherSession({
   staticItemFilter,
   collectDynamicWhenEmpty = false,
   clipboardText,
+  makeApi,
 }: UseLauncherSessionOptions): LauncherSession {
   const normalizedHostId = normalizeLauncherSurfaceId(hostId)
   const locale = useAppStore((s) => s.locale)
@@ -91,16 +94,17 @@ export function useLauncherSession({
       if (!controllerRef.current) {
         const nextController = new LauncherController({
           surfaceId: normalizedHostId,
-          api: createPluginLauncherApi(),
+          api: makeApi?.(createPluginLauncherApi()) ?? createPluginLauncherApi(),
           makeApi: (item) => {
             const requestedPermissions = item.pluginId && item.source
               ? pluginRegistry.getPluginPermissions(item.pluginId, item.source)
               : []
-            return createPluginLauncherApi({
+            const api = createPluginLauncherApi({
               pluginId: item.pluginId,
               source: item.source,
               requestedPermissions,
             })
+            return makeApi?.(api, item) ?? api
           },
           getStorage: (item) => {
             const requestedPermissions = item.pluginId && item.source
@@ -135,7 +139,7 @@ export function useLauncherSession({
       logLauncherPerfDuration('session:open:controller-reset', openedAt, { surfaceId: normalizedHostId })
     })
     return () => { cancelled = true }
-  }, [locale, normalizedHostId, open, recordLauncherSelection])
+  }, [locale, makeApi, normalizedHostId, open, recordLauncherSelection])
 
   const dynamicAbortRef = useRef<AbortController | null>(null)
 

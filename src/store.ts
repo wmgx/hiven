@@ -430,7 +430,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   toggleQuickEditor: () => {
     const { globalLauncherOpen, globalLauncherMode } = get()
     if (globalLauncherOpen && globalLauncherMode === 'quick-editor') {
-      get().closeQuickEditor()
+      get().setGlobalLauncherOpen(false)
     } else {
       get().openQuickEditor()
     }

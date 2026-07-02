@@ -523,7 +523,16 @@ async fn show_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
     show_launcher_window_for_hotkey(app)
 }
 
+#[tauri::command]
+async fn show_quick_editor_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
+    show_launcher_window_for_hotkey_with_event(app, "hiven://quick-editor-open")
+}
+
 pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(), String> {
+    show_launcher_window_for_hotkey_with_event(app, "hiven://launcher-open")
+}
+
+fn show_launcher_window_for_hotkey_with_event(app: tauri::AppHandle, open_event: &'static str) -> Result<(), String> {
     use tauri::Manager;
 
     let total_started_at = Instant::now();
@@ -619,7 +628,7 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
             center_launcher_window(&window);
             log_launcher_perf("native:center-window", started_at, "");
             let started_at = Instant::now();
-            let _ = window.emit("hiven://launcher-open", ());
+            let _ = window.emit(open_event, ());
             log_launcher_perf("native:emit-launcher-open", started_at, "");
         }
         log_launcher_perf("native:main-thread-open", main_thread_started_at, format!("wasVisible={}", was_visible));
@@ -4018,6 +4027,7 @@ pub fn run() {
             prepare_launcher_input_source,
             restore_launcher_input_source,
             show_launcher_window,
+            show_quick_editor_launcher_window,
             hide_launcher_window,
             show_editor_window,
             open_new_editor_window,

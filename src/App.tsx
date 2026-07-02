@@ -15,7 +15,7 @@ import { installPluginSurfaceShortcutHotkeys } from './hotkeys/pluginSurfaceShor
 import { consumePendingPluginSurfaceOpenTarget, isPluginSurfaceOpenTarget, openLauncherHostedPluginSurface } from './workspace/pluginSurfaceOpenRequest'
 import { LAUNCHER_HOST_SURFACE_OPEN_EVENT, consumePendingLauncherHostSurfaceOpen, isLauncherHostSurfaceOpenRequest, isLauncherHostSurfaceTarget, openLauncherHostSurfaceLocally, openLauncherHostSurfaceRequestLocally } from './workspace/launcherHostSurfaceBridge'
 import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from './workspace/launcherWindowEvents'
-import { onCurrentLauncherWindowMoved, setCurrentLauncherWindowPosition, type LauncherWindowMovedPosition } from './workspace/windowManager/launcherWindow'
+import { hideLauncherWindow, onCurrentLauncherWindowMoved, setCurrentLauncherWindowPosition, type LauncherWindowMovedPosition } from './workspace/windowManager/launcherWindow'
 
 // Register built-in panels
 import './panels/register'
@@ -194,6 +194,40 @@ function LauncherRuntimeApp() {
       })
       .catch((error) => {
         console.warn('[hiven] Failed to listen for launcher open event:', error)
+      })
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [])
+
+  useEffect(() => {
+    const openQuickEditor = () => {
+      void (async () => {
+        await rehydratePersistedAppState()
+        const state = useAppStore.getState()
+        if (state.globalLauncherOpen && state.globalLauncherMode === 'quick-editor') {
+          state.toggleQuickEditor()
+          await hideLauncherWindow().catch((error) => {
+            console.warn('[hiven] Failed to hide launcher window from quick editor toggle:', error)
+          })
+          return
+        }
+        state.toggleQuickEditor()
+      })()
+    }
+
+    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    import('@tauri-apps/api/event')
+      .then(({ listen }) => listen('hiven://quick-editor-open', openQuickEditor))
+      .then((cleanup) => {
+        if (disposed) cleanup()
+        else unlisten = cleanup
+      })
+      .catch((error) => {
+        console.warn('[hiven] Failed to listen for quick editor open event:', error)
       })
     return () => {
       disposed = true

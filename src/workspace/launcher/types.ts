@@ -23,7 +23,7 @@ import type { EffectRunnerResult } from '../effectRunner'
 
 // ─── System Surfaces ───────────────────────────────────────────────────────
 
-export type LauncherHostId = 'global-launcher' | 'editor-command-bar'
+export type LauncherHostId = 'global-launcher' | 'editor-command-bar' | 'quick-editor-command'
 
 /** `command-palette` is retained as a legacy alias for `editor-command-bar`. */
 export type LauncherSurfaceId = LauncherHostId | 'command-palette'
@@ -76,6 +76,16 @@ export const LAUNCHER_HOSTS: Record<LauncherHostId, LauncherHostConfig> = {
       'parameter-customization',
     ],
   },
+  'quick-editor-command': {
+    id: 'quick-editor-command',
+    presentation: 'editor-overlay',
+    placeholderKey: 'placeholder',
+    capabilities: [
+      'text-input-actions',
+      'pane-actions',
+      'parameter-customization',
+    ],
+  },
 }
 
 export function launcherHostHasCapability(
@@ -93,10 +103,11 @@ export const LAUNCHER_SURFACE_IDS: readonly LauncherSurfaceId[] = [
   'command-palette',
   'editor-command-bar',
   'global-launcher',
+  'quick-editor-command',
 ] as const
 
 export function isLauncherSurfaceId(value: unknown): value is LauncherSurfaceId {
-  return value === 'command-palette' || value === 'editor-command-bar' || value === 'global-launcher'
+  return value === 'command-palette' || value === 'editor-command-bar' || value === 'global-launcher' || value === 'quick-editor-command'
 }
 
 export function normalizeLauncherSurfaceId(surfaceId: LauncherSurfaceId): LauncherHostId {

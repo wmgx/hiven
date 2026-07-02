@@ -5,6 +5,7 @@ import { filterEditorCommandBarItems } from '../../workspace/launcher/types'
 import { resolveDisplayTitle, resolveDisplaySubtitle } from '../../workspace/launcher/display'
 import { resolveIcon } from '../../utils/resolveIcon'
 import type { LauncherItem as DomainLauncherItem } from '../../workspace/launcher/types'
+import { createQuickEditorLauncherApi } from '../../workspace/quickEditor/quickEditorActions'
 
 export function QuickEditorCommandOverlay() {
   const open = useAppStore((s) => s.quickEditorCommandOpen)
@@ -21,10 +22,11 @@ export function QuickEditorCommandOverlay() {
     controllerRef,
     rankedItems,
   } = useLauncherSession({
-    hostId: 'editor-command-bar',
+    hostId: 'quick-editor-command',
     open,
     requestClose: closeCommand,
     staticItemFilter: filterEditorCommandBarItems,
+    makeApi: createQuickEditorLauncherApi,
   })
 
   useEffect(() => {

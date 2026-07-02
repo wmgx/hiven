@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useRef, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from '../../workspace/launcherWindowEvents'
 import { onCurrentLauncherWindowFocusChanged, resizeCurrentLauncherWindow, startCurrentLauncherWindowDrag } from '../../workspace/windowManager/launcherWindow'
+import { shouldSuppressStandaloneLauncherBlur } from '../../workspace/launcherBlurGuard'
 import { applyStandaloneLauncherGeometry, computeStandaloneLauncherGeometry } from './GlobalLauncherLayout'
 
 type SurfaceShellConfig = {
@@ -35,6 +36,7 @@ export function useCloseStandaloneLauncherOnBlur({
     let disposed = false
     let unlisten: (() => void) | undefined
     onCurrentLauncherWindowFocusChanged((focused) => {
+      if (!focused && shouldSuppressStandaloneLauncherBlur()) return
       if (!focused && closeOnBlurRef.current !== false) closeLauncher()
     })
       .then((cleanup) => {
