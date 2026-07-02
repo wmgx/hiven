@@ -235,6 +235,10 @@ export class LauncherController {
       item.inputPolicy != null
   }
 
+  private hasObjectBlockText(text: string | undefined): text is string {
+    return text !== undefined
+  }
+
   private shouldPreviewInput(frame: CollectInputFrame): boolean {
     return this.shouldCollectTextInput(frame.item)
   }
@@ -277,6 +281,13 @@ export class LauncherController {
       if (this.shouldRecord(item, options)) {
         this.deps.recordSelection(this.deps.surfaceId, item)
       }
+      if (this.hasObjectBlockText(options.objectBlockText)) {
+        await this.runAndHandle(
+          () => Promise.resolve(item.execute(this.buildExecutionContext(item, options.objectBlockText))),
+          this.itemTitle(item),
+        )
+        return
+      }
       this.setState({
         frames: [...this.state.frames, this.collectInputFrameFor(item)],
       })
@@ -285,7 +296,7 @@ export class LauncherController {
 
     if (this.shouldCollectTextInput(item)) {
       // If Object Block text is available, skip collect-input and execute directly.
-      if (options.objectBlockText) {
+      if (this.hasObjectBlockText(options.objectBlockText)) {
         if (this.shouldRecord(item, options)) {
           this.deps.recordSelection(this.deps.surfaceId, item)
         }
@@ -439,7 +450,7 @@ export class LauncherController {
 
     if (this.shouldCollectTextInput(top.item)) {
       // If Object Block text is available, skip collect-input and execute directly with params.
-      if (top.objectBlockText) {
+      if (this.hasObjectBlockText(top.objectBlockText)) {
         await this.runAndHandle(
           () => Promise.resolve(top.item.executeWithParams?.(this.buildExecutionContext(top.item, top.objectBlockText), top.params) ?? top.item.execute(this.buildExecutionContext(top.item, top.objectBlockText))),
           this.itemTitle(top.item),

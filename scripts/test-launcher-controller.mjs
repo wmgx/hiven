@@ -112,6 +112,10 @@ function collectInputItem(systemKey, execute, input = {}) {
   return { systemKey, kind: 'plugin', display: { title: systemKey }, behavior: { type: 'collect-input', input }, pinnable: true, execute }
 }
 
+function flushAsyncChoiceAction() {
+  return new Promise((resolve) => setImmediate(resolve))
+}
+
 // --- 1. perform: records usage BEFORE execution, no-output closes ---
 {
   const order = []
@@ -124,17 +128,17 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.equal(getClosed(), 1, 'no-output success closes launcher')
 }
 
-// --- 2. perform with output: enters result mode, keeps open ---
+// --- 2. perform with single-choice output executes its primary action directly ---
 {
-  const { ctrl, getClosed, api } = makeController()
+  const cap = makeApi()
+  const { ctrl, getClosed } = makeController({ api: cap.api })
   const item = performItem('plugin:p:launcher:b', async (ctx) => output.textResult('HELLO', ctx.api))
   await ctrl.selectItem(item)
+  await flushAsyncChoiceAction()
   const st = ctrl.getState()
-  assert.equal(st.frames[st.frames.length - 1].kind, 'result', 'output enters result frame')
-  assert.equal(getClosed(), 0, 'output keeps launcher open')
-  // text output Enter copies
-  const choice = st.frames[st.frames.length - 1].output.choices[0]
-  assert.equal(choice.title, 'HELLO')
+  assert.equal(st.frames[st.frames.length - 1].kind, 'list', 'single output returns to list after primary action')
+  assert.deepEqual(cap.calls.copied, ['HELLO'], 'single text output primary action copies')
+  assert.equal(getClosed(), 1, 'single output closes after primary action')
 }
 
 // --- 3. perform with keepOpen success: stays open without entering a result frame ---
@@ -153,13 +157,12 @@ function collectInputItem(systemKey, execute, input = {}) {
 // --- 4. text output Enter-copy default ---
 {
   const cap = makeApi()
-  const { ctrl } = makeController({ api: cap.api })
+  const { ctrl, getClosed } = makeController({ api: cap.api })
   const item = performItem('plugin:p:launcher:c', async (ctx) => output.textResult('XYZ', ctx.api))
   await ctrl.selectItem(item)
-  const st = ctrl.getState()
-  const choice = st.frames[st.frames.length - 1].output.choices[0]
-  await ctrl.activateChoice(choice)
+  await flushAsyncChoiceAction()
   assert.deepEqual(cap.calls.copied, ['XYZ'], 'default text output Enter copies')
+  assert.equal(getClosed(), 1, 'default text output closes after copy')
 }
 
 // --- 5. collect-input: records usage on ENTER input (not submit), submits once ---
@@ -192,7 +195,42 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.equal(ctrl.getState().error, 'need input', 'shows empty-input message')
 }
 
-// --- 7. failure keeps launcher open and shows error ---
+// --- 7. global launcher Object Block text executes collect-input items directly ---
+{
+  const order = []
+  const { ctrl } = makeController({
+    surfaceId: 'global-launcher',
+    recordSelection: () => order.push('record'),
+  })
+  const item = collectInputItem('plugin:p:launcher:web-object-block', async (ctx) => {
+    order.push('execute:' + ctx.input.text)
+    return { ok: true }
+  })
+  await ctrl.selectItem(item, { objectBlockText: 'clipboard text' })
+  assert.deepEqual(order, ['record', 'execute:clipboard text'], 'Object Block text should fill the collect-input step')
+  assert.equal(ctrl.getState().frames[ctrl.getState().frames.length - 1].kind, 'list', 'Object Block collect-input execution should not enter manual input frame')
+}
+
+// --- 8. global launcher Object Block preserves empty text payloads ---
+{
+  const order = []
+  const { ctrl } = makeController({
+    surfaceId: 'global-launcher',
+    recordSelection: () => order.push('record'),
+  })
+  const item = {
+    ...performItem('plugin:p:tool:empty-object-block', async (ctx) => {
+      order.push('execute:' + JSON.stringify(ctx.input.text))
+      return { ok: true }
+    }),
+    inputPolicy: { mode: 'auto' },
+  }
+  await ctrl.selectItem(item, { objectBlockText: '' })
+  assert.deepEqual(order, ['record', 'execute:""'], 'empty Object Block text should be treated as supplied text')
+  assert.equal(ctrl.getState().frames[ctrl.getState().frames.length - 1].kind, 'list', 'empty Object Block text should still skip manual input')
+}
+
+// --- 9. failure keeps launcher open and shows error ---
 {
   const { ctrl, getClosed } = makeController()
   const item = performItem('plugin:p:launcher:fail', async () => ({ ok: false, message: 'boom' }))
@@ -201,10 +239,13 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.equal(getClosed(), 0, 'failure does not close launcher')
 }
 
-// --- 8. Escape pops frames; from base returns false ---
+// --- 10. Escape pops frames; from base returns false ---
 {
   const { ctrl } = makeController()
-  const item = performItem('plugin:p:launcher:o', async (ctx) => output.textResult('Z', ctx.api))
+  const item = performItem('plugin:p:launcher:o', async () => output.choicesResult([
+    { id: 'a', title: 'A', primaryAction: async () => {} },
+    { id: 'b', title: 'B', primaryAction: async () => {} },
+  ]))
   await ctrl.selectItem(item)
   assert.equal(ctrl.getState().frames.length, 2, 'in result frame')
   assert.equal(ctrl.back(), true, 'escape pops result frame')
@@ -212,7 +253,7 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.equal(ctrl.back(), false, 'escape from base returns false (host closes)')
 }
 
-// --- 9. pinned execution does not record usage (recordUsage:false) ---
+// --- 11. pinned execution does not record usage (recordUsage:false) ---
 {
   const recorded = []
   const { ctrl } = makeController({ recordSelection: (s, i) => recorded.push(i.systemKey) })
@@ -221,7 +262,7 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.equal(recorded.length, 0, 'pinned execution does not record usage')
 }
 
-// --- 10. dynamic item never records usage ---
+// --- 12. dynamic item never records usage ---
 {
   const recorded = []
   const { ctrl } = makeController({ recordSelection: (s, i) => recorded.push(i.systemKey) })
@@ -230,11 +271,19 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.equal(recorded.length, 0, 'dynamic item does not record long-term usage')
 }
 
-// --- 11. multi-level: choice action returning output pushes another result frame ---
+// --- 13. multi-level: choice action returning output pushes another result frame ---
 {
-  const { ctrl, api } = makeController()
+  const { ctrl } = makeController()
   const item = performItem('plugin:p:launcher:multi', async (ctx) => output.choicesResult([
-    { id: 'lvl1', title: 'Level1', primaryAction: async () => output.textResult('deep', ctx.api) },
+    {
+      id: 'lvl1',
+      title: 'Level1',
+      primaryAction: async () => output.choicesResult([
+        { id: 'deep1', title: 'Deep1', primaryAction: async () => {} },
+        { id: 'deep2', title: 'Deep2', primaryAction: async () => {} },
+      ]),
+    },
+    { id: 'lvl1b', title: 'Level1B', primaryAction: async () => {} },
   ]))
   await ctrl.selectItem(item)
   let st = ctrl.getState()
@@ -245,7 +294,7 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.equal(st.frames.length, 3, 'choice returning output pushes another result frame')
 }
 
-// --- 12. Cmd/Ctrl+Enter customization enters param frame and executes with supplied params ---
+// --- 14. Cmd/Ctrl+Enter customization enters param frame and executes with supplied params ---
 {
   const order = []
   const { ctrl } = makeController({ recordSelection: () => order.push('record') })
@@ -267,7 +316,7 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.deepEqual(order, ['record', 'execute:?'], 'param submit executes with edited params')
 }
 
-// --- 13. parameter frame advances one launcher step at a time and preserves default selection ---
+// --- 15. parameter frame advances one launcher step at a time and preserves default selection ---
 {
   const order = []
   const { ctrl } = makeController({ recordSelection: () => order.push('record') })
@@ -297,7 +346,7 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.deepEqual(order, ['record', 'execute:pretty:false'])
 }
 
-// --- 14. global launcher text tools collect manual input instead of reading the pane immediately ---
+// --- 16. global launcher text tools collect manual input instead of reading the pane immediately ---
 {
   const order = []
   const { ctrl } = makeController({
@@ -321,7 +370,7 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.deepEqual(order, ['record', 'execute:manual text'], 'manual input is passed into execution')
 }
 
-// --- 15. global launcher param tools collect manual input after params are confirmed ---
+// --- 17. global launcher param tools collect manual input after params are confirmed ---
 {
   const order = []
   const { ctrl } = makeController({
@@ -348,7 +397,7 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.deepEqual(order, ['record', 'execute:Abc:lower'], 'manual input and chosen params are submitted together')
 }
 
-// --- 16. global manual input tools can preview output while typing ---
+// --- 18. global manual input tools can preview output while typing ---
 {
   const cap = makeApi()
   const { ctrl } = makeController({
@@ -367,7 +416,7 @@ function collectInputItem(systemKey, execute, input = {}) {
   assert.equal(frame.previewOutput.choices[0].title, 'LIVE', 'live preview output updates in the input frame')
 }
 
-// --- 17. submitting a live preview copies the preview output and closes without re-running ---
+// --- 19. submitting a live preview copies the preview output and closes without re-running ---
 {
   const cap = makeApi()
   let executeCount = 0
