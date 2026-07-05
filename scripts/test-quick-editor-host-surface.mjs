@@ -111,4 +111,26 @@ assert.match(files.panel, /data-no-drag/, 'quick editor Monaco host must opt out
 assert.match(files.windowLifecycle, /\.monaco-editor/, 'launcher JS drag handling must preserve Monaco mouse events')
 assert.match(files.css, /html\[data-window=['"]launcher['"]\]\s+\.global-launcher-panel\s+:is\([\s\S]{0,220}\.monaco-editor[\s\S]{0,120}-webkit-app-region:\s*no-drag/, 'standalone launcher native drag fallback must exempt Monaco editor')
 
+// ── 11. detached window owns an opaque editor surface ─────────────────────
+assert.match(
+  files.detachedView,
+  /quick-editor-detached-window/,
+  'detached quick editor must render an explicit standalone window surface',
+)
+assert.match(
+  files.css,
+  /\.quick-editor-detached-window\s*\{[\s\S]{0,260}background:\s*var\(--color-background-primary\)/,
+  'detached quick editor surface must paint an opaque editor background inside the transparent native window',
+)
+assert.match(
+  files.css,
+  /\.quick-editor-detached-window\s*\{[\s\S]{0,320}-webkit-app-region:\s*drag/,
+  'detached quick editor surface must provide draggable window chrome',
+)
+assert.match(
+  files.css,
+  /\.quick-editor-detached-window\s+:is\([\s\S]{0,240}\[data-no-drag\][\s\S]{0,120}\.monaco-editor[\s\S]{0,160}-webkit-app-region:\s*no-drag/,
+  'detached quick editor controls and Monaco editor must opt out of native drag handling',
+)
+
 console.log('test-quick-editor-host-surface: all assertions passed')

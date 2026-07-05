@@ -31,7 +31,7 @@ export function QuickEditorDetachedView() {
 
   return (
     <div
-      className="h-screen w-screen overflow-hidden flex flex-col"
+      className="quick-editor-detached-window h-screen w-screen overflow-hidden flex flex-col"
       data-theme={theme}
       style={{ fontSize }}
     >
