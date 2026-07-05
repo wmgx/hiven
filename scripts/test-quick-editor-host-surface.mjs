@@ -142,11 +142,6 @@ assert.match(
 )
 assert.match(
   files.css,
-  /\.quick-editor-detached-window\s*\{[\s\S]{0,320}-webkit-app-region:\s*drag/,
-  'detached quick editor surface must provide draggable window chrome',
-)
-assert.match(
-  files.css,
   /\.quick-editor-detached-window\s+:is\([\s\S]{0,240}\[data-no-drag\][\s\S]{0,120}\.monaco-editor[\s\S]{0,160}-webkit-app-region:\s*no-drag/,
   'detached quick editor controls and Monaco editor must opt out of native drag handling',
 )
@@ -164,6 +159,36 @@ assert.match(
   files.detachedView,
   /startQuickEditorWindowResize/,
   'detached quick editor resize handles must call native resize dragging',
+)
+assert.match(
+  files.detachedView,
+  /registerHostLauncherProviders\(\)[\s\S]{0,160}registerBundledPluginPackages\(\)/,
+  'detached quick editor must bootstrap launcher providers and bundled plugin commands for Cmd+K',
+)
+assert.match(
+  files.detachedView,
+  /loadInstalledPluginsFromStore/,
+  'detached quick editor must load installed plugin commands for Cmd+K',
+)
+assert.doesNotMatch(
+  files.css,
+  /\.quick-editor-detached-window\s*\{[\s\S]{0,260}-webkit-app-region:\s*drag/,
+  'detached quick editor root must not use CSS app-region drag because it swallows JS drag events',
+)
+assert.match(
+  files.css,
+  /\.quick-editor-detached-window\s*\{[\s\S]{0,260}-webkit-app-region:\s*no-drag/,
+  'detached quick editor root should leave drag handling to the JS native fallback',
+)
+assert.match(
+  read('src-tauri/src/lib.rs'),
+  /const QUICK_EDITOR_WINDOW_WIDTH:\s*f64\s*=\s*LAUNCHER_COMPACT_WIDTH;/,
+  'detached quick editor default width should match the launcher compact width',
+)
+assert.match(
+  read('src-tauri/src/lib.rs'),
+  /const QUICK_EDITOR_WINDOW_HEIGHT:\s*f64\s*=\s*LAUNCHER_MAX_HEIGHT;/,
+  'detached quick editor default height should match the launcher max height',
 )
 
 console.log('test-quick-editor-host-surface: all assertions passed')

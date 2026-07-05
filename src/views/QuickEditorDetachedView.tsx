@@ -1,6 +1,9 @@
-import { useCallback, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, type PointerEvent as ReactPointerEvent } from 'react'
 import { Search, WrapText, X } from 'lucide-react'
 import { useAppStore } from '../store'
+import { loadInstalledPluginsFromStore } from '../workspace/pluginRuntime'
+import { registerBundledPluginPackages } from '../workspace/bundledPluginLoader'
+import { registerHostLauncherProviders } from '../workspace/launcher/hostProvider'
 import { useQuickEditorStore } from '../workspace/quickEditor/quickEditorStore'
 import { getLanguageOptionLabel } from '../workspace/languageOptions'
 import { QuickEditorPanel } from '../components/quickEditor/QuickEditorPanel'
@@ -12,6 +15,10 @@ import {
 import { quickEditorImperative } from '../components/quickEditor/quickEditorImperative'
 import { useT } from '../i18n'
 import type { ResizeDirection } from '@tauri-apps/api/window'
+import '../panels/register'
+
+registerHostLauncherProviders()
+registerBundledPluginPackages()
 
 const resizeHandles: Array<{ direction: ResizeDirection; className: string }> = [
   { direction: 'North', className: 'quick-editor-resize-handle quick-editor-resize-handle--n' },
@@ -38,6 +45,13 @@ export function QuickEditorDetachedView() {
   const tEditor = useT('editor')
   const tQuickEditor = useT('quickEditor')
   const languageLabel = getLanguageOptionLabel(language, locale)
+
+  useEffect(() => {
+    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+    void loadInstalledPluginsFromStore().catch((error) => {
+      console.error('[hiven] Failed to load plugins for quick editor:', error)
+    })
+  }, [])
 
   const handleRequestExit = useCallback(() => {
     void closeQuickEditorWindow().catch((error) => {

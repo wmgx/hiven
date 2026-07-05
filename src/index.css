@@ -1069,7 +1069,7 @@ html[data-window='quick-editor'] #root {
   border: 1px solid var(--color-border-tertiary);
   border-radius: 10px;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
-  -webkit-app-region: drag;
+  -webkit-app-region: no-drag;
 }
 
 .quick-editor-detached-window :is(button, input, textarea, select, a, [role='button'], [data-no-drag], .monaco-editor) {
