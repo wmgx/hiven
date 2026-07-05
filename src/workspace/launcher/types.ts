@@ -455,6 +455,8 @@ export function filterEditorCommandBarItems(items: LauncherItem[]): LauncherItem
 export function isEditorCommandBarItem(item: LauncherItem): boolean {
   if (item.systemKey.startsWith('plugin-settings:')) return false
   if (item.kind !== 'host') return true
+  const surfaces = item.surfaces?.map(normalizeLauncherSurfaceId)
+  if (surfaces?.length && !surfaces.includes('editor-command-bar')) return false
   return (
     item.systemKey.startsWith('host:pane:') ||
     item.systemKey.startsWith('host:editor:') ||

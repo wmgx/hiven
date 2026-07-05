@@ -19,6 +19,7 @@ assert.match(editorHost, /useLauncherSession\(\{[\s\S]*hostId:\s*['"]editor-comm
 assert.match(editorHost, /staticItemFilter:\s*filterEditorCommandBarItems/, 'Editor command bar must apply an editor-local item filter')
 assert.match(launcherTypes, /function filterEditorCommandBarItems[\s\S]*isEditorCommandBarItem/, 'Editor command bar filtering must live in the launcher domain layer')
 assert.match(launcherTypes, /function isEditorCommandBarItem[\s\S]*plugin-settings:[\s\S]*return false/, 'Editor command bar must hide plugin settings entries')
+assert.match(launcherTypes, /surfaces\?\.[\s\S]{0,120}!surfaces\.includes\(['"]editor-command-bar['"]\)[\s\S]{0,80}return false/, 'Editor command bar filtering must exclude host items that are not scoped to the editor command bar')
 assert.match(launcherTypes, /item\.kind !== ['"]host['"][\s\S]*return true/, 'Editor command bar must keep plugin text/action items')
 assert.match(launcherTypes, /host:pane:/, 'Editor command bar must keep pane-local host controls')
 assert.doesNotMatch(launcherTypes, /host:global:search-all-hiven/, 'Editor command bar must not include a Search all Hiven bridge')

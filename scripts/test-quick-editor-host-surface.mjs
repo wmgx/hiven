@@ -177,7 +177,12 @@ assert.match(
   'detached quick editor topbar must expose a Run button that opens the command overlay',
 )
 assert.match(
-  files.detachedView,
+  files.breadcrumbActions,
+  /editor-topbar-run[\s\S]{0,220}openQuickEditorCommand\(\)/,
+  'launcher-hosted quick editor breadcrumb must expose a Run button that opens the command overlay',
+)
+assert.match(
+  `${files.detachedView}\n${files.breadcrumbActions}`,
   /Cmd\+K[\s\S]{0,80}Ctrl\+K/,
   'detached quick editor Run button tooltip must mention Cmd/Ctrl+K',
 )
@@ -190,6 +195,11 @@ assert.match(
   files.hostEditorActions,
   /systemKey:\s*['"]host:pane:set-language['"][\s\S]*surfaces:\s*\[\s*['"]editor-command-bar['"],\s*['"]quick-editor-command['"]\s*\][\s\S]*setEditorLikeLanguage\(ctx\.surfaceId,\s*params\.language\)/,
   'Set Language must be available from both editor and quick editor command launchers',
+)
+assert.match(
+  files.overlay,
+  /executeGlobalLauncherDomainItem[\s\S]{0,220}controller:\s*controllerRef\.current/,
+  'quick editor command overlay must use shared launcher selection so param-required commands open choices',
 )
 assert.match(
   read('src/components/quickEditor/quickEditorImperative.ts'),

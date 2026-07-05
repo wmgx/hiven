@@ -1,17 +1,20 @@
 import { useCallback } from 'react'
-import { ExternalLink, Search, WrapText } from 'lucide-react'
+import { ExternalLink, Search, Sparkles, WrapText } from 'lucide-react'
 import { useAppStore } from '../../store'
 import { useT } from '../../i18n'
 import { quickEditorImperative } from './quickEditorImperative'
 import { showQuickEditorWindow } from '../../workspace/windowManager/quickEditorWindow'
 import { hideLauncherWindow } from '../../workspace/windowManager/launcherWindow'
 import { isStandaloneLauncherWindow } from '../launcher/GlobalLauncherHostLifecycle'
+import { suppressStandaloneLauncherBlur } from '../../workspace/launcherBlurGuard'
 
 export function QuickEditorBreadcrumbActions() {
   const wordWrap = useAppStore((s) => s.settings.wordWrap)
   const updateSetting = useAppStore((s) => s.updateSetting)
+  const openQuickEditorCommand = useAppStore((s) => s.openQuickEditorCommand)
   const tEditor = useT('editor')
   const tQuickEditor = useT('quickEditor')
+  const commandShortcut = navigator.platform.toLowerCase().includes('mac') ? 'Cmd+K' : 'Ctrl+K'
 
   const handleDetach = useCallback(async () => {
     try {
@@ -44,6 +47,18 @@ export function QuickEditorBreadcrumbActions() {
         <Search size={13} />
       </button>
       <span className="editor-topbar-divider" />
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm ft-btn ft-btn-ghost ft-btn-sm editor-topbar-run"
+        onClick={() => {
+          suppressStandaloneLauncherBlur()
+          openQuickEditorCommand()
+        }}
+        title={tQuickEditor('runCommandWithShortcut', { shortcut: commandShortcut })}
+      >
+        <Sparkles size={13} />
+        <span>{tQuickEditor('runCommand')}</span>
+      </button>
       <button
         type="button"
         className="editor-topbar-button"

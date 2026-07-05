@@ -8,6 +8,7 @@ import { useGlobalLauncherResultFrame } from '../launcher/GlobalLauncherResults'
 import { buildGlobalLauncherItems, type GlobalLauncherItem } from '../launcher/GlobalLauncherItems'
 import { handleGlobalLauncherKeyDown } from '../launcher/GlobalLauncherKeyboard'
 import { useGlobalLauncherImeComposition } from '../launcher/GlobalLauncherHostLifecycle'
+import { executeGlobalLauncherDomainItem } from '../launcher/GlobalLauncherSelection'
 import { isQuickEditorDetachedWindow } from '../../workspace/windowManager/quickEditorWindow'
 import { quickEditorImperative } from './quickEditorImperative'
 import { useT } from '../../i18n'
@@ -78,7 +79,12 @@ export function QuickEditorCommandOverlay() {
   const selectedItem = visibleFiltered[Math.min(selectedIndex, Math.max(0, visibleFiltered.length - 1))]
 
   const selectMixedItem = (item?: GlobalLauncherItem) => {
-    if (item?.kind === 'domain') controllerRef.current?.selectItem(item.domainItem)
+    if (item?.kind === 'domain') {
+      executeGlobalLauncherDomainItem({
+        item: item.domainItem,
+        controller: controllerRef.current,
+      })
+    }
   }
   const focusSearchInputAfterBack = () => requestAnimationFrame(() => inputRef.current?.focus())
 
