@@ -39,9 +39,16 @@ assertTracksAll(textEditorCore, 'TextEditorCore', [
   'editor.onDidFocusEditorText',
   'editor.onDidChangeCursorPosition',
   'editor.onDidChangeCursorSelection',
+  'editor.onDidScrollChange',
   'editor.addAction',
   'editor.addAction',
 ])
+
+const editorSurface = read('src/components/editor/EditorSurface.tsx')
+
+assert(/window\.removeEventListener\('paste', handlePasteCapture, true\)/.test(editorSurface), 'EditorSurface should release paste capture listener')
+assert(/window\.removeEventListener\('keydown', handlePasteKeydownCapture, true\)/.test(editorSurface), 'EditorSurface should release paste keydown listener')
+assert(/pasteSubscription\.dispose\(\)/.test(editorSurface), 'EditorSurface should dispose the onDidPaste subscription via onReady cleanup')
 
 assert(/editorDisposablesRef/.test(jsFilter), 'jsFilter panel should keep an editor disposable bucket')
 assertTracksAll(jsFilter, 'jsFilter panel', [
