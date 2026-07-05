@@ -365,6 +365,8 @@ export type LauncherItemContribution<TSettings = unknown> = {
   id: string
   display: LauncherItemDisplay
   behavior?: LauncherBehavior
+  /** Host-reserved key for explicit built-in host entries such as plugin settings. */
+  hostEntry?: 'plugin-settings'
   /** Restrict where the item appears. Missing = both main surfaces. */
   surfaces?: LauncherSurfaceId[]
   /** Whether this item can be pinned. Defaults to true for static items. */

@@ -174,6 +174,10 @@ function resolvePluginSettingsItem(
   }
 }
 
+function shouldExposePluginSettingsLauncherItem(definition: PluginDefinition<unknown>): boolean {
+  return definition.launcher?.items?.some((item) => item.hostEntry === 'plugin-settings') ?? false
+}
+
 /**
  * Collect all static plugin launcher items (from launcher.items + tools),
  * validating ids per plugin. Duplicate/invalid ids are skipped with a warning.
@@ -192,6 +196,7 @@ export function collectStaticPluginItems(): LauncherItem[] {
       console.warn(`[launcher] plugin "${pluginId}" launcher item id "${error.itemId}": ${error.reason}`)
     }
     for (const contribution of contributions) {
+      if (contribution.hostEntry === 'plugin-settings') continue
       if (badIds.has(contribution.id)) continue
       const item = resolveStaticItemFromContribution(contribution, pluginId, source)
       if (item) {
@@ -245,9 +250,11 @@ export function collectStaticPluginItems(): LauncherItem[] {
       items.push(item)
     }
 
-    const settingsItem = resolvePluginSettingsItem(def, pluginId, source)
-    if (settingsItem) {
-      items.push(settingsItem)
+    if (shouldExposePluginSettingsLauncherItem(def)) {
+      const settingsItem = resolvePluginSettingsItem(def, pluginId, source)
+      if (settingsItem) {
+        items.push(settingsItem)
+      }
     }
   }
   return items

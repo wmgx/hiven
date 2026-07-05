@@ -41,7 +41,8 @@ static PREVIOUS_FOREGROUND_PROCESS_ID: OnceLock<Mutex<Option<u32>>> = OnceLock::
 #[cfg(target_os = "macos")]
 static PREVIOUS_LAUNCHER_INPUT_SOURCE_ID: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 #[allow(dead_code)]
-static LAST_FOREGROUND_SELECTION_TEXT: OnceLock<Mutex<Option<ForegroundSelectionText>>> = OnceLock::new();
+static LAST_FOREGROUND_SELECTION_TEXT: OnceLock<Mutex<Option<ForegroundSelectionText>>> =
+    OnceLock::new();
 static INSTALLED_APP_TARGETS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 static PLUGIN_KV_DB: OnceLock<Result<Mutex<PluginKvDb>, String>> = OnceLock::new();
 static PLUGIN_SURFACE_WINDOW_TOKENS: OnceLock<Mutex<HashMap<String, u64>>> = OnceLock::new();
@@ -87,7 +88,6 @@ fn log_launcher_perf(label: &str, started_at: Instant, detail: impl AsRef<str>) 
     );
 }
 
-
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SurfaceInstanceRecord {
@@ -116,7 +116,9 @@ fn surface_registry_state() -> &'static SurfaceRegistryState {
 
 fn validate_surface_instance_kind(kind: &str) -> Result<(), String> {
     match kind {
-        "launcher" | "editor" | "plugin-surface" | "settings" | "plugins" | "plugin-editor" => Ok(()),
+        "launcher" | "editor" | "plugin-surface" | "settings" | "plugins" | "plugin-editor" => {
+            Ok(())
+        }
         _ => Err(format!("invalid surface kind: {}", kind)),
     }
 }
@@ -236,7 +238,11 @@ fn surface_registry_upsert(surface: SurfaceInstanceRecord) -> Result<(), String>
 }
 
 #[tauri::command(rename_all = "camelCase")]
-fn surface_registry_mark_state(id: String, state: String, last_active_at: u64) -> Result<(), String> {
+fn surface_registry_mark_state(
+    id: String,
+    state: String,
+    last_active_at: u64,
+) -> Result<(), String> {
     surface_registry_mark_record_state(&id, &state, last_active_at)
 }
 
@@ -274,7 +280,6 @@ unsafe extern "C" {
     fn dlclose(handle: *mut c_void) -> c_int;
 }
 
-
 #[cfg(target_os = "macos")]
 fn previous_launcher_input_source_id() -> &'static Mutex<Option<String>> {
     PREVIOUS_LAUNCHER_INPUT_SOURCE_ID.get_or_init(|| Mutex::new(None))
@@ -289,7 +294,10 @@ fn current_keyboard_input_source_id() -> Option<String> {
     extern "C" {
         static kTISPropertyInputSourceID: CFStringRef;
         fn TISCopyCurrentKeyboardInputSource() -> *const c_void;
-        fn TISGetInputSourceProperty(input_source: *const c_void, property_key: CFStringRef) -> *const c_void;
+        fn TISGetInputSourceProperty(
+            input_source: *const c_void,
+            property_key: CFStringRef,
+        ) -> *const c_void;
     }
 
     unsafe {
@@ -297,7 +305,8 @@ fn current_keyboard_input_source_id() -> Option<String> {
         if source.is_null() {
             return None;
         }
-        let _source_owner = CFType::wrap_under_create_rule(source as core_foundation::base::CFTypeRef);
+        let _source_owner =
+            CFType::wrap_under_create_rule(source as core_foundation::base::CFTypeRef);
         let property = TISGetInputSourceProperty(source, kTISPropertyInputSourceID);
         if property.is_null() {
             return None;
@@ -334,13 +343,19 @@ fn select_keyboard_input_source_by_id(source_id: &str) -> Result<(), String> {
 
     let list = unsafe { CFArray::<CFTypeRef>::wrap_under_create_rule(list_ref) };
     let Some(input_source) = list.get(0) else {
-        return Err(format!("macOS input source is not installed: {}", source_id));
+        return Err(format!(
+            "macOS input source is not installed: {}",
+            source_id
+        ));
     };
     let status = unsafe { TISSelectInputSource(*input_source as *const c_void) };
     if status == 0 {
         Ok(())
     } else {
-        Err(format!("TISSelectInputSource failed with status {}", status))
+        Err(format!(
+            "TISSelectInputSource failed with status {}",
+            status
+        ))
     }
 }
 
@@ -527,7 +542,10 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
     show_launcher_window_for_hotkey_with_event(app, "hiven://launcher-open")
 }
 
-fn show_launcher_window_for_hotkey_with_event(app: tauri::AppHandle, open_event: &'static str) -> Result<(), String> {
+fn show_launcher_window_for_hotkey_with_event(
+    app: tauri::AppHandle,
+    open_event: &'static str,
+) -> Result<(), String> {
     use tauri::Manager;
 
     let total_started_at = Instant::now();
@@ -574,7 +592,11 @@ fn show_launcher_window_for_hotkey_with_event(app: tauri::AppHandle, open_event:
                 }
             }
         };
-        log_launcher_perf("native:get-or-create-window", started_at, format!("wasVisible={}", was_visible));
+        log_launcher_perf(
+            "native:get-or-create-window",
+            started_at,
+            format!("wasVisible={}", was_visible),
+        );
 
         if !was_visible {
             let started_at = Instant::now();
@@ -587,25 +609,31 @@ fn show_launcher_window_for_hotkey_with_event(app: tauri::AppHandle, open_event:
                 .map(|mon| {
                     let scale = mon.scale_factor();
                     let logical_w = mon.size().width as f64 / scale;
-                    let w = (logical_w / 3.0).round().clamp(LAUNCHER_COMPACT_WIDTH, LAUNCHER_MAX_WIDTH);
+                    let w = (logical_w / 3.0)
+                        .round()
+                        .clamp(LAUNCHER_COMPACT_WIDTH, LAUNCHER_MAX_WIDTH);
                     (w, LAUNCHER_MAX_HEIGHT)
                 })
                 .unwrap_or((LAUNCHER_COMPACT_WIDTH, LAUNCHER_COMPACT_HEIGHT));
-            if let Err(error) = window.set_size(LogicalSize::new(
-                compact_width,
-                compact_height,
-            )) {
+            if let Err(error) = window.set_size(LogicalSize::new(compact_width, compact_height)) {
                 eprintln!(
                     "[hiven] Failed to compact launcher window before show: {}",
                     error
                 );
             }
-            log_launcher_perf("native:resize-before-show", started_at, format!("width={} height={}", compact_width, compact_height));
+            log_launcher_perf(
+                "native:resize-before-show",
+                started_at,
+                format!("width={} height={}", compact_width, compact_height),
+            );
         }
         if !was_visible {
             let started_at = Instant::now();
             if let Err(error) = switch_to_default_english_input_source() {
-                eprintln!("[hiven] Failed to switch launcher input source to default English: {}", error);
+                eprintln!(
+                    "[hiven] Failed to switch launcher input source to default English: {}",
+                    error
+                );
             }
             log_launcher_perf("native:switch-input-source", started_at, "");
         }
@@ -626,10 +654,18 @@ fn show_launcher_window_for_hotkey_with_event(app: tauri::AppHandle, open_event:
             let _ = window.emit(open_event, ());
             log_launcher_perf("native:emit-launcher-open", started_at, "");
         }
-        log_launcher_perf("native:main-thread-open", main_thread_started_at, format!("wasVisible={}", was_visible));
+        log_launcher_perf(
+            "native:main-thread-open",
+            main_thread_started_at,
+            format!("wasVisible={}", was_visible),
+        );
     })
     .map_err(|error| error.to_string())?;
-    log_launcher_perf("native:show-launcher-window-for-hotkey", total_started_at, "");
+    log_launcher_perf(
+        "native:show-launcher-window-for-hotkey",
+        total_started_at,
+        "",
+    );
     Ok(())
 }
 
@@ -642,7 +678,9 @@ fn show_launcher_window_for_hotkey_with_event(app: tauri::AppHandle, open_event:
 /// Compute the launcher logical width for a given monitor (1/3 of screen).
 fn launcher_logical_width_for_monitor(monitor: &tauri::Monitor) -> f64 {
     let logical_w = monitor.size().width as f64 / monitor.scale_factor();
-    (logical_w / 3.0).round().clamp(LAUNCHER_COMPACT_WIDTH, LAUNCHER_MAX_WIDTH)
+    (logical_w / 3.0)
+        .round()
+        .clamp(LAUNCHER_COMPACT_WIDTH, LAUNCHER_MAX_WIDTH)
 }
 
 fn center_launcher_window(window: &tauri::WebviewWindow) {
@@ -661,7 +699,10 @@ fn center_launcher_window(window: &tauri::WebviewWindow) {
         .map(|s| (s.width as i32, s.height as i32))
         .unwrap_or_else(|_| {
             let lw = launcher_logical_width_for_monitor(&monitor);
-            ((lw * scale).round() as i32, (LAUNCHER_MAX_HEIGHT * scale).round() as i32)
+            (
+                (lw * scale).round() as i32,
+                (LAUNCHER_MAX_HEIGHT * scale).round() as i32,
+            )
         });
 
     let x = mon_pos.x + ((mon_size.width as i32 - win_w) / 2).max(0);
@@ -678,7 +719,8 @@ fn center_launcher_window(window: &tauri::WebviewWindow) {
                     let ns_window = ns_window as *mut objc2::runtime::AnyObject;
                     // macOS screen coordinates: origin at bottom-left of primary screen.
                     // Tauri physical coords: origin at top-left. We need to convert.
-                    let primary_height = window.primary_monitor()
+                    let primary_height = window
+                        .primary_monitor()
                         .ok()
                         .flatten()
                         .map(|m| m.size().height as f64)
@@ -691,11 +733,8 @@ fn center_launcher_window(window: &tauri::WebviewWindow) {
                     // encoded as a single NSPoint via raw msg_send.
                     let sel = objc2::sel!(setFrameTopLeftPoint:);
                     let point: [f64; 2] = [ns_x, ns_y];
-                    let _: () = objc2::runtime::MessageReceiver::send_message(
-                        ns_window,
-                        sel,
-                        (point,),
-                    );
+                    let _: () =
+                        objc2::runtime::MessageReceiver::send_message(ns_window, sel, (point,));
                 }
                 return;
             }
@@ -858,7 +897,10 @@ async fn show_quick_editor_window(app: tauri::AppHandle) -> Result<(), String> {
     )
     .title("Quick Editor")
     .inner_size(QUICK_EDITOR_WINDOW_WIDTH, QUICK_EDITOR_WINDOW_HEIGHT)
-    .min_inner_size(QUICK_EDITOR_WINDOW_MIN_WIDTH, QUICK_EDITOR_WINDOW_MIN_HEIGHT)
+    .min_inner_size(
+        QUICK_EDITOR_WINDOW_MIN_WIDTH,
+        QUICK_EDITOR_WINDOW_MIN_HEIGHT,
+    )
     .decorations(false)
     .transparent(true)
     .shadow(false)
@@ -970,14 +1012,8 @@ async fn show_plugin_surface_window(
     };
 
     show_and_focus_plugin_surface_window(&app, &window)?;
-    let surface = plugin_surface_registry_record(
-        label,
-        source,
-        plugin_id,
-        surface_id,
-        title,
-        "visible",
-    );
+    let surface =
+        plugin_surface_registry_record(label, source, plugin_id, surface_id, title, "visible");
     surface_registry_upsert_record(surface.clone())?;
     emit_surface_registry_upsert(&app, &surface);
     Ok(())
@@ -1046,9 +1082,7 @@ fn plugin_surface_payload_set(label: String, payload: PluginSurfacePayload) -> R
 }
 
 #[tauri::command(rename_all = "camelCase")]
-fn plugin_surface_payload_consume(
-    label: String,
-) -> Result<Option<PluginSurfacePayload>, String> {
+fn plugin_surface_payload_consume(label: String) -> Result<Option<PluginSurfacePayload>, String> {
     let mut payloads = plugin_surface_payloads()
         .lock()
         .map_err(|_| "plugin surface payload lock poisoned".to_string())?;
@@ -1144,7 +1178,10 @@ fn schedule_plugin_surface_window_destroy(
     });
 }
 
-fn show_and_focus_plugin_surface_window(app: &tauri::AppHandle, window: &tauri::WebviewWindow) -> Result<(), String> {
+fn show_and_focus_plugin_surface_window(
+    app: &tauri::AppHandle,
+    window: &tauri::WebviewWindow,
+) -> Result<(), String> {
     let window_clone = window.clone();
     let (tx, rx) = std::sync::mpsc::channel();
     app.run_on_main_thread(move || {
@@ -1308,10 +1345,18 @@ fn capture_foreground_selection_text(app: &tauri::AppHandle) {
                     captured_at: Instant::now(),
                 });
             }
-            log_launcher_perf("native:capture-selection-worker", started_at, format!("hasText=true textLength={}", text_len));
+            log_launcher_perf(
+                "native:capture-selection-worker",
+                started_at,
+                format!("hasText=true textLength={}", text_len),
+            );
         } else {
             clear_foreground_selection_text();
-            log_launcher_perf("native:capture-selection-worker", started_at, "hasText=false");
+            log_launcher_perf(
+                "native:capture-selection-worker",
+                started_at,
+                "hasText=false",
+            );
         }
     });
 }
@@ -1678,6 +1723,12 @@ struct InstalledAppEntry {
     launch_target: String,
 }
 
+#[derive(Default)]
+struct InstalledAppDedupeGroups {
+    by_id: HashMap<String, InstalledAppEntry>,
+    by_normalized_name: HashMap<String, String>,
+}
+
 #[derive(Clone, serde::Serialize)]
 struct DiscoveredAppIcon {
     bytes: Vec<u8>,
@@ -1732,6 +1783,97 @@ fn stable_hash_bytes(bytes: &[u8]) -> String {
         hash = hash.wrapping_mul(0x100000001b3);
     }
     format!("{:016x}", hash)
+}
+
+fn normalized_app_name(name: &str) -> String {
+    name.to_lowercase()
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .collect()
+}
+
+fn app_dedupe_aliases(app: &InstalledAppEntry) -> Vec<String> {
+    let mut values = vec![app.name.clone()];
+    values.extend(
+        app.name_i18n
+            .as_ref()
+            .into_iter()
+            .flat_map(|names| names.values().cloned()),
+    );
+    values.extend(app.aliases.iter().cloned());
+    values
+}
+
+fn app_dedupe_name_keys(app: &InstalledAppEntry) -> Vec<String> {
+    let mut keys = Vec::new();
+    for value in app_dedupe_aliases(app) {
+        let key = normalized_app_name(&value);
+        if !key.is_empty() && !keys.contains(&key) {
+            keys.push(key);
+        }
+    }
+    keys
+}
+
+fn app_dedupe_rank(app: &InstalledAppEntry) -> u8 {
+    match app.source.as_str() {
+        "applications" => {
+            let path = app.display_path.as_deref().unwrap_or_default();
+            if path.starts_with("/Applications/") {
+                0
+            } else if path.starts_with("/System/Applications/") {
+                1
+            } else {
+                2
+            }
+        }
+        "start-menu" => 3,
+        "app-paths" => 4,
+        "desktop-entry" => 5,
+        _ => 6,
+    }
+}
+
+fn prefer_installed_app(candidate: &InstalledAppEntry, existing: &InstalledAppEntry) -> bool {
+    let candidate_rank = app_dedupe_rank(candidate);
+    let existing_rank = app_dedupe_rank(existing);
+    if candidate_rank != existing_rank {
+        return candidate_rank < existing_rank;
+    }
+    candidate.display_path.as_deref().unwrap_or_default()
+        < existing.display_path.as_deref().unwrap_or_default()
+}
+
+fn insert_installed_app(groups: &mut InstalledAppDedupeGroups, app: InstalledAppEntry) {
+    let mut keys = app_dedupe_name_keys(&app);
+    keys.push(app.app_id.clone());
+
+    let existing_ids: Vec<String> = keys
+        .iter()
+        .filter_map(|key| groups.by_normalized_name.get(key).cloned())
+        .collect();
+    let target_id = existing_ids
+        .first()
+        .cloned()
+        .unwrap_or_else(|| app.app_id.clone());
+
+    let should_replace = groups
+        .by_id
+        .get(&target_id)
+        .map(|existing| prefer_installed_app(&app, existing))
+        .unwrap_or(true);
+
+    if should_replace {
+        groups.by_id.insert(target_id.clone(), app);
+    }
+    for key in keys {
+        groups.by_normalized_name.insert(key, target_id.clone());
+    }
+    for old_id in existing_ids {
+        if old_id != target_id {
+            groups.by_id.remove(&old_id);
+        }
+    }
 }
 
 fn installed_app_from_entry(entry: &InstalledAppEntry) -> DiscoveredApp {
@@ -2396,11 +2538,11 @@ fn parse_linux_desktop_entry(path: &Path) -> Option<InstalledAppEntry> {
 }
 
 fn dedupe_installed_apps(apps: Vec<InstalledAppEntry>) -> Vec<InstalledAppEntry> {
-    let mut by_key = HashMap::<String, InstalledAppEntry>::new();
+    let mut groups = InstalledAppDedupeGroups::default();
     for app in apps {
-        by_key.entry(app.app_id.clone()).or_insert(app);
+        insert_installed_app(&mut groups, app);
     }
-    let mut result: Vec<InstalledAppEntry> = by_key.into_values().collect();
+    let mut result: Vec<InstalledAppEntry> = groups.by_id.into_values().collect();
     result.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     result
 }
@@ -2589,7 +2731,6 @@ fn read_file(path: String) -> Result<String, String> {
     fs::read_to_string(&file_path).map_err(|e| e.to_string())
 }
 
-
 #[derive(serde::Deserialize)]
 struct ProxyHttpRequest {
     url: String,
@@ -2647,7 +2788,11 @@ async fn plugin_http_request(request: ProxyHttpRequest) -> Result<ProxyHttpRespo
         .await
         .map_err(|e| format!("Failed to read response: {}", e))?;
 
-    Ok(ProxyHttpResponse { status, headers, body })
+    Ok(ProxyHttpResponse {
+        status,
+        headers,
+        body,
+    })
 }
 
 #[tauri::command]
@@ -2899,13 +3044,14 @@ fn plugin_kv_get(source: String, plugin_id: String, key: String) -> Result<Optio
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     validate_plugin_kv_key(&key)?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
-    db.connection.query_row(
-        "SELECT value_json FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 AND key = ?3",
-        params![source, plugin_id, key],
-        |row| row.get::<_, String>(0),
-    )
-    .optional()
-    .map_err(|e| e.to_string())
+    db.connection
+        .query_row(
+            "SELECT value_json FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 AND key = ?3",
+            params![source, plugin_id, key],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -2921,7 +3067,8 @@ fn plugin_kv_set(
         i64::try_from(value_json.len()).map_err(|_| "Plugin KV value is too large".to_string())?;
     let updated_at = current_millis_i64()?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
-    db.connection.execute(
+    db.connection
+        .execute(
             r#"
             INSERT INTO plugin_kv (source, plugin_id, key, value_json, byte_size, updated_at)
             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
@@ -2941,7 +3088,8 @@ fn plugin_kv_delete(source: String, plugin_id: String, key: String) -> Result<()
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     validate_plugin_kv_key(&key)?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
-    db.connection.execute(
+    db.connection
+        .execute(
             "DELETE FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 AND key = ?3",
             params![source, plugin_id, key],
         )
@@ -3016,7 +3164,10 @@ fn plugin_kv_prune(
     validate_plugin_kv_prune_policy(max_items, max_bytes, max_age_days)?;
 
     let mut connection = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
-    let transaction = connection.connection.transaction().map_err(|e| e.to_string())?;
+    let transaction = connection
+        .connection
+        .transaction()
+        .map_err(|e| e.to_string())?;
     let mut removed_bytes = 0;
     let mut removed_items = 0;
 
@@ -3105,7 +3256,8 @@ fn plugin_kv_prune(
 fn plugin_kv_clear(source: String, plugin_id: String) -> Result<(), String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
-    db.connection.execute(
+    db.connection
+        .execute(
             "DELETE FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2",
             params![source, plugin_id],
         )
@@ -3873,8 +4025,7 @@ fn disable_app_nap() {
         }
         // NSActivityUserInitiatedAllowingIdleSystemSleep = 0x00FFFFFFULL & ~(1ULL << 20)
         // This effectively disables App Nap while allowing idle system sleep.
-        let reason_cls =
-            objc2::runtime::AnyClass::get(c"NSString").expect("NSString must exist");
+        let reason_cls = objc2::runtime::AnyClass::get(c"NSString").expect("NSString must exist");
         let reason: *mut objc2::runtime::AnyObject = objc2::msg_send![
             reason_cls,
             stringWithUTF8String: c"Global hotkey must respond immediately".as_ptr()
@@ -4066,6 +4217,74 @@ mod plugin_dir_command_tests {
         ]);
         assert_eq!(apps.len(), 1);
         assert_eq!(apps[0].app_id, "macos:bundle:com.example.App");
+    }
+
+    #[test]
+    fn dedupe_app_discovery_collapses_same_display_name_across_bundle_ids() {
+        let apps = dedupe_installed_apps(vec![
+            InstalledAppEntry {
+                app_id: "macos:bundle:com.example.trae.primary".to_string(),
+                name: "TRAE".to_string(),
+                name_i18n: None,
+                aliases: Vec::new(),
+                platform: "macos".to_string(),
+                source: "applications".to_string(),
+                display_path: Some("/Applications/Trae.app".to_string()),
+                installed_at: Some(1_000),
+                launch_target: "/Applications/Trae.app".to_string(),
+            },
+            InstalledAppEntry {
+                app_id: "macos:bundle:com.example.trae.copy".to_string(),
+                name: "TRAE".to_string(),
+                name_i18n: None,
+                aliases: Vec::new(),
+                platform: "macos".to_string(),
+                source: "applications".to_string(),
+                display_path: Some("/Users/me/Applications/Trae.app".to_string()),
+                installed_at: Some(2_000),
+                launch_target: "/Users/me/Applications/Trae.app".to_string(),
+            },
+        ]);
+        assert_eq!(apps.len(), 1);
+        assert_eq!(
+            apps[0].display_path.as_deref(),
+            Some("/Applications/Trae.app")
+        );
+    }
+
+    #[test]
+    fn dedupe_app_discovery_collapses_localized_aliases() {
+        let mut first_i18n = HashMap::new();
+        first_i18n.insert("zh".to_string(), "飞书".to_string());
+        let apps = dedupe_installed_apps(vec![
+            InstalledAppEntry {
+                app_id: "macos:bundle:com.example.lark".to_string(),
+                name: "Lark".to_string(),
+                name_i18n: Some(first_i18n),
+                aliases: Vec::new(),
+                platform: "macos".to_string(),
+                source: "applications".to_string(),
+                display_path: Some("/Applications/Lark.app".to_string()),
+                installed_at: Some(1_000),
+                launch_target: "/Applications/Lark.app".to_string(),
+            },
+            InstalledAppEntry {
+                app_id: "macos:bundle:com.example.feishu".to_string(),
+                name: "飞书".to_string(),
+                name_i18n: None,
+                aliases: Vec::new(),
+                platform: "macos".to_string(),
+                source: "applications".to_string(),
+                display_path: Some("/Users/me/Applications/Feishu.app".to_string()),
+                installed_at: Some(2_000),
+                launch_target: "/Users/me/Applications/Feishu.app".to_string(),
+            },
+        ]);
+        assert_eq!(apps.len(), 1);
+        assert_eq!(
+            apps[0].display_path.as_deref(),
+            Some("/Applications/Lark.app")
+        );
     }
 
     #[test]
@@ -4391,7 +4610,9 @@ HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\App Paths\Example.e
             .expect("old plugin KV fixture should be written");
             {
                 let connection = get_plugin_kv_db().expect("plugin KV DB should open");
-                let connection = connection.lock().expect("plugin KV DB lock should not be poisoned");
+                let connection = connection
+                    .lock()
+                    .expect("plugin KV DB lock should not be poisoned");
                 connection
                     .connection
                     .execute(

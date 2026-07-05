@@ -23,6 +23,7 @@ const files = {
   hostActions: read('src/workspace/launcher/hostActions.ts'),
   hostEditorActions: read('src/workspace/launcher/hostEditorActions.ts'),
   hostAppLauncher: read('src/workspace/appLauncher/hostAppLauncher.ts'),
+  tauriLib: read('src-tauri/src/lib.rs'),
   app: read('src/App.tsx'),
   resolveIcon: read('src/utils/resolveIcon.tsx'),
 }
@@ -56,7 +57,8 @@ assert.match(files.registry, /\.\.\.hostDynamicItems[\s\S]*\.\.\.results\.flat/,
 
 assert.match(files.hostProvider, /getHostPaneControlItems/, 'host provider must include pane controls')
 assert.match(files.hostProvider, /getHostAppLauncherStaticItems/, 'host provider must include app launcher static items')
-assert.match(files.hostProvider, /setHostLauncherDynamicItemsProvider\(getHostAppLauncherDynamicItems\)/, 'host provider must wire app launcher dynamic items')
+assert.match(files.hostProvider, /setHostLauncherDynamicItemsProvider/, 'host provider must register host dynamic items')
+assert.match(files.hostProvider, /getHostAppLauncherDynamicItems\(ctx\)/, 'host provider must wire app launcher dynamic items')
 
 assert.match(files.hostActions, /host:pane:new/, 'pane controls must expose a host new-pane item')
 assert.match(files.hostActions, /host:pane:split-right/, 'pane controls must expose a split-right item')
@@ -89,6 +91,12 @@ assert.match(files.hostAppLauncher, /subtitle:\s*app\.displayPath\s*\|\|\s*sourc
 assert.doesNotMatch(files.hostAppLauncher, /:\s*['"]Application['"]/, 'host app dynamic item subtitles should not fall back to a generic Application label')
 assert.match(files.hostAppLauncher, /installedAt:\s*app\.installedAt/, 'host app dynamic items must pass install time into launcher ranking metadata')
 assert.doesNotMatch(files.hostAppLauncher, /kind:\s*['"]plugin['"]/, 'host app launcher items must not be plugin items')
+
+assert.match(files.tauriLib, /fn normalized_app_name/, 'native app discovery must normalize names for duplicate detection')
+assert.match(files.tauriLib, /fn app_dedupe_name_keys/, 'native app discovery must dedupe across display names and aliases')
+assert.match(files.tauriLib, /fn prefer_installed_app/, 'native app discovery must prefer canonical application locations')
+assert.match(files.tauriLib, /dedupe_app_discovery_collapses_same_display_name_across_bundle_ids/, 'native tests must cover duplicate display names with distinct bundle ids')
+assert.match(files.tauriLib, /dedupe_app_discovery_collapses_localized_aliases/, 'native tests must cover localized-name duplicate aliases')
 
 assert.match(files.resolveIcon, /read_installed_app_icon_url/, 'existing icon resolver must still load host app icon refs')
 assert.match(files.resolveIcon, /APP_ICON_MAX_CONCURRENT\s*=\s*2/, 'host app icon refs should remain lazy-loaded with bounded concurrency')
