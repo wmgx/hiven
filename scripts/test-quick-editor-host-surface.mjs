@@ -124,6 +124,16 @@ assert.match(
 )
 assert.match(
   files.css,
+  /\.quick-editor-detached-window\[data-theme=['"]dark['"]\][\s\S]{0,80}\{/,
+  'detached quick editor dark theme root must receive theme variables directly',
+)
+assert.match(
+  files.css,
+  /\.quick-editor-detached-window\[data-theme=['"]light['"]\][\s\S]{0,80}\{/,
+  'detached quick editor light theme root must receive theme variables directly',
+)
+assert.match(
+  files.css,
   /\.quick-editor-detached-window\s*\{[\s\S]{0,320}-webkit-app-region:\s*drag/,
   'detached quick editor surface must provide draggable window chrome',
 )
