@@ -600,21 +600,7 @@ fn show_launcher_window_for_hotkey_with_event(
 
         if !was_visible {
             let started_at = Instant::now();
-            // Use 1/3 of screen width for the launcher; height is fixed with a
-            // max cap so the launcher never becomes unreasonably tall on large
-            // monitors.
-            let (compact_width, compact_height) = monitor_under_cursor(&window)
-                .or_else(|| window.current_monitor().ok().flatten())
-                .or_else(|| window.primary_monitor().ok().flatten())
-                .map(|mon| {
-                    let scale = mon.scale_factor();
-                    let logical_w = mon.size().width as f64 / scale;
-                    let w = (logical_w / 3.0)
-                        .round()
-                        .clamp(LAUNCHER_COMPACT_WIDTH, LAUNCHER_MAX_WIDTH);
-                    (w, LAUNCHER_MAX_HEIGHT)
-                })
-                .unwrap_or((LAUNCHER_COMPACT_WIDTH, LAUNCHER_COMPACT_HEIGHT));
+            let (compact_width, compact_height) = launcher_default_window_size_for_window(&window);
             if let Err(error) = window.set_size(LogicalSize::new(compact_width, compact_height)) {
                 eprintln!(
                     "[hiven] Failed to compact launcher window before show: {}",
@@ -681,6 +667,19 @@ fn launcher_logical_width_for_monitor(monitor: &tauri::Monitor) -> f64 {
     (logical_w / 3.0)
         .round()
         .clamp(LAUNCHER_COMPACT_WIDTH, LAUNCHER_MAX_WIDTH)
+}
+
+fn launcher_default_window_size_for_window(window: &tauri::WebviewWindow) -> (f64, f64) {
+    monitor_under_cursor(window)
+        .or_else(|| window.current_monitor().ok().flatten())
+        .or_else(|| window.primary_monitor().ok().flatten())
+        .map(|monitor| {
+            (
+                launcher_logical_width_for_monitor(&monitor),
+                LAUNCHER_MAX_HEIGHT,
+            )
+        })
+        .unwrap_or((LAUNCHER_COMPACT_WIDTH, LAUNCHER_COMPACT_HEIGHT))
 }
 
 fn center_launcher_window(window: &tauri::WebviewWindow) {
@@ -911,6 +910,9 @@ async fn show_quick_editor_window(app: tauri::AppHandle) -> Result<(), String> {
     .build()
     .map_err(|e| e.to_string())?;
 
+    let (quick_width, quick_height) = launcher_default_window_size_for_window(&window);
+    window.set_size(LogicalSize::new(quick_width, quick_height))
+        .map_err(|e| e.to_string())?;
     window.show().map_err(|e| e.to_string())?;
     window.set_focus().map_err(|e| e.to_string())?;
     Ok(())

@@ -182,13 +182,8 @@ assert.match(
 )
 assert.match(
   read('src-tauri/src/lib.rs'),
-  /const QUICK_EDITOR_WINDOW_WIDTH:\s*f64\s*=\s*LAUNCHER_COMPACT_WIDTH;/,
-  'detached quick editor default width should match the launcher compact width',
-)
-assert.match(
-  read('src-tauri/src/lib.rs'),
-  /const QUICK_EDITOR_WINDOW_HEIGHT:\s*f64\s*=\s*LAUNCHER_MAX_HEIGHT;/,
-  'detached quick editor default height should match the launcher max height',
+  /launcher_default_window_size_for_window\(&window\)[\s\S]{0,160}window\.set_size\(LogicalSize::new\(quick_width,\s*quick_height\)\)/,
+  'detached quick editor default size should use the same computed size as the shortcut launcher',
 )
 
 console.log('test-quick-editor-host-surface: all assertions passed')
