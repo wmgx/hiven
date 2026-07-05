@@ -43,7 +43,7 @@ assert(/stickyScroll\?:\s*boolean/.test(pluginTypes), 'PaneInput should carry pe
 assert(/stickyScroll:\s*activePane\.stickyScroll\s*===\s*true/.test(inputResolver), 'Active pane inputs should include stickyScroll')
 assert(/stickyScroll:\s*pane\.stickyScroll\s*===\s*true/.test(rendererHost), 'RendererHost should resolve stickyScroll from current pane state')
 assert(/stickyScroll:\s*state\.panes\[paneId\]\?\.stickyScroll\s*===\s*true/.test(launcherPluginApi), 'Launcher pane snapshots should include stickyScroll')
-assert(/stickyScroll:\s*\{\s*enabled:\s*pane\.stickyScroll\s*===\s*true\s*\}/s.test(paneEditor), 'PaneEditor should pass pane stickyScroll to Monaco')
+assert(/stickyScroll=\{pane\.stickyScroll\s*===\s*true\}/.test(paneEditor), 'PaneEditor should pass pane stickyScroll to Monaco')
 assert(/leftStickyScrollEnabled\?:\s*boolean/.test(dualEditor), 'DualEditorView should accept left stickyScroll flag')
 assert(/rightStickyScrollEnabled\?:\s*boolean/.test(dualEditor), 'DualEditorView should accept right stickyScroll flag')
 assert(/stickyScroll=\{leftStickyScrollEnabled\}/.test(dualEditor), 'DualEditorView should pass left stickyScroll to Monaco')

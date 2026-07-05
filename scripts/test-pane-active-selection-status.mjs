@@ -19,7 +19,8 @@ function assert(condition, message) {
 }
 
 const workspaceShell = read('src/components/workspace/WorkspaceShell.tsx')
-const paneEditor = read('src/components/workspace/PaneEditor.tsx')
+const textEditorCore = read('src/kits/editor/TextEditorCore.tsx')
+const editorStatusBar = read('src/components/editor/EditorStatusBar.tsx')
 const pluginInputResolver = read('src/workspace/pluginInputResolver.ts')
 const i18n = readI18n()
 
@@ -29,19 +30,19 @@ assert(
 )
 
 assert(
-  /onDidChangeCursorSelection/.test(paneEditor),
-  'PaneEditor should subscribe to Monaco selection changes',
+  /onDidChangeCursorSelection/.test(textEditorCore),
+  'Editor primitive should subscribe to Monaco selection changes',
 )
 
 assert(
-  /getValueLengthInRange/.test(paneEditor),
-  'PaneEditor should compute selected character count from the current Monaco model selection',
+  /getValueLengthInRange/.test(textEditorCore),
+  'Editor primitive should compute selected character count from the current Monaco model selection',
 )
 
 assert(
-  /selectedCharCount\s*>\s*0/.test(paneEditor) &&
-  /t\(['"`]selectedChars['"`]\)/.test(paneEditor),
-  'PaneEditor status bar should render selected character count when a selection exists',
+  /selectedCharCount\s*>\s*0/.test(editorStatusBar) &&
+  /t\(['"`]selectedChars['"`]\)/.test(editorStatusBar),
+  'Editor status bar should render selected character count when a selection exists',
 )
 
 assert(
