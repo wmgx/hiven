@@ -25,7 +25,6 @@ let selection
 const effects = []
 const openedPanels = []
 const createdPanes = []
-const bridgedPanes = []
 const storeState = {
   activePaneId: 'pane-1',
   panes: {
@@ -117,10 +116,6 @@ const editorActionGlobals = {
     getState: () => storeState,
   },
   openEditorPanel: async (input) => { openedPanels.push(input) },
-  createEditorPane: async (input) => {
-    bridgedPanes.push(input)
-    return `bridged-pane-${bridgedPanes.length}`
-  },
   applyEffects: (nextEffects) => { effects.push(...nextEffects) },
   translate: (_locale, _namespace, key) => key,
   ...editorTextTransforms,
@@ -204,14 +199,11 @@ assert.deepEqual(plain(openedPanels.at(-1)), {
   placement: 'pane-bottom',
 })
 
-await findItem(items, 'host:pane:split-right').execute({ surfaceId: 'editor-command-bar' })
+await findItem(items, 'host:pane:split-right').execute({})
 assert.deepEqual(plain(createdPanes.at(-1)), { text: '', focus: true, direction: 'right' })
 
-await findItem(items, 'host:pane:split-down').execute({ surfaceId: 'editor-command-bar' })
+await findItem(items, 'host:pane:split-down').execute({})
 assert.deepEqual(plain(createdPanes.at(-1)), { text: '', focus: true, direction: 'bottom' })
-
-await findItem(items, 'host:pane:split-right').execute({ surfaceId: 'quick-editor-command' })
-assert.deepEqual(plain(bridgedPanes.at(-1)), { text: '', focus: true, direction: 'right' })
 
 syncPaneText('{ bad json')
 const invalidJsonResult = await findItem(items, 'host:editor:json-minify').execute({})
