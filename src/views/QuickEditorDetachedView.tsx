@@ -1,12 +1,28 @@
-import { useCallback } from 'react'
+import { useCallback, type PointerEvent as ReactPointerEvent } from 'react'
 import { Search, WrapText, X } from 'lucide-react'
 import { useAppStore } from '../store'
 import { useQuickEditorStore } from '../workspace/quickEditor/quickEditorStore'
 import { getLanguageOptionLabel } from '../workspace/languageOptions'
 import { QuickEditorPanel } from '../components/quickEditor/QuickEditorPanel'
-import { closeQuickEditorWindow } from '../workspace/windowManager/quickEditorWindow'
+import {
+  closeQuickEditorWindow,
+  startQuickEditorWindowDrag,
+  startQuickEditorWindowResize,
+} from '../workspace/windowManager/quickEditorWindow'
 import { quickEditorImperative } from '../components/quickEditor/quickEditorImperative'
 import { useT } from '../i18n'
+import type { ResizeDirection } from '@tauri-apps/api/window'
+
+const resizeHandles: Array<{ direction: ResizeDirection; className: string }> = [
+  { direction: 'North', className: 'quick-editor-resize-handle quick-editor-resize-handle--n' },
+  { direction: 'South', className: 'quick-editor-resize-handle quick-editor-resize-handle--s' },
+  { direction: 'West', className: 'quick-editor-resize-handle quick-editor-resize-handle--w' },
+  { direction: 'East', className: 'quick-editor-resize-handle quick-editor-resize-handle--e' },
+  { direction: 'NorthWest', className: 'quick-editor-resize-handle quick-editor-resize-handle--nw' },
+  { direction: 'NorthEast', className: 'quick-editor-resize-handle quick-editor-resize-handle--ne' },
+  { direction: 'SouthWest', className: 'quick-editor-resize-handle quick-editor-resize-handle--sw' },
+  { direction: 'SouthEast', className: 'quick-editor-resize-handle quick-editor-resize-handle--se' },
+]
 
 /**
  * Root view for the detached Quick Editor window.
@@ -29,13 +45,34 @@ export function QuickEditorDetachedView() {
     })
   }, [])
 
+  const handleWindowDrag = useCallback((event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return
+    if (event.target instanceof HTMLElement && event.target.closest('button, input, textarea, select, a, [role="button"], [data-no-drag], .monaco-editor')) return
+    event.preventDefault()
+    event.stopPropagation()
+    void startQuickEditorWindowDrag().catch((error) => {
+      console.warn('[hiven] Failed to drag quick editor window:', error)
+    })
+  }, [])
+
+  const handleResizeStart = useCallback((direction: ResizeDirection) => (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    void startQuickEditorWindowResize(direction).catch((error) => {
+      console.warn('[hiven] Failed to resize quick editor window:', error)
+    })
+  }, [])
+
   return (
     <div
-      className="quick-editor-detached-window h-screen w-screen overflow-hidden flex flex-col"
+      className="quick-editor-detached-window relative h-screen w-screen overflow-hidden flex flex-col"
       data-theme={theme}
       style={{ fontSize }}
     >
-      <div className="editor-topbar glass">
+      <div className="editor-topbar glass" onPointerDown={handleWindowDrag}>
         <div className="editor-topbar-system">
           <button
             type="button"
@@ -69,6 +106,14 @@ export function QuickEditorDetachedView() {
       <div className="flex-1 min-h-0">
         <QuickEditorPanel onRequestExit={handleRequestExit} />
       </div>
+      {resizeHandles.map((handle) => (
+        <div
+          key={handle.direction}
+          className={handle.className}
+          data-no-drag
+          onPointerDown={handleResizeStart(handle.direction)}
+        />
+      ))}
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import type { ResizeDirection } from '@tauri-apps/api/window'
 
 export const QUICK_EDITOR_WINDOW_LABEL = 'quick-editor'
 
@@ -14,6 +15,18 @@ export async function showQuickEditorWindow(): Promise<void> {
 export async function closeQuickEditorWindow(): Promise<void> {
   if (!isTauriRuntime()) return
   await invoke('close_quick_editor_window')
+}
+
+export async function startQuickEditorWindowDrag(): Promise<void> {
+  if (!isTauriRuntime()) return
+  const { getCurrentWindow } = await import('@tauri-apps/api/window')
+  await getCurrentWindow().startDragging()
+}
+
+export async function startQuickEditorWindowResize(direction: ResizeDirection): Promise<void> {
+  if (!isTauriRuntime()) return
+  const { getCurrentWindow } = await import('@tauri-apps/api/window')
+  await getCurrentWindow().startResizeDragging(direction)
 }
 
 export function isQuickEditorDetachedWindow(): boolean {

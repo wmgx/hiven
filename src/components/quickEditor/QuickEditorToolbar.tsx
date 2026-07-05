@@ -21,12 +21,12 @@ export function QuickEditorToolbar() {
 
   const handleDetach = useCallback(async () => {
     try {
-      await showQuickEditorWindow()
       // The editor now lives in the detached window; put the launcher away.
       useAppStore.getState().setGlobalLauncherOpen(false)
       if (isStandaloneLauncherWindow()) {
         await hideLauncherWindow()
       }
+      await showQuickEditorWindow()
     } catch (error) {
       console.warn('[hiven] Failed to detach quick editor:', error)
     }

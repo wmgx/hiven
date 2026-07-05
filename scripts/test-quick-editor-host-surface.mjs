@@ -25,6 +25,7 @@ const files = {
   hotkeys: read('src/hotkeys/globalPinnedLauncher.ts'),
   overlay: read('src/components/quickEditor/QuickEditorCommandOverlay.tsx'),
   panel: read('src/components/quickEditor/QuickEditorPanel.tsx'),
+  breadcrumbActions: read('src/components/quickEditor/QuickEditorBreadcrumbActions.tsx'),
   toolbar: read('src/components/quickEditor/QuickEditorToolbar.tsx'),
   detachedView: read('src/views/QuickEditorDetachedView.tsx'),
   quickEditorWindow: read('src/workspace/windowManager/quickEditorWindow.ts'),
@@ -58,6 +59,8 @@ assert.match(files.systemSurfaceFrame, /QuickEditorPanel/, 'system surface frame
 assert.match(files.hostActions, /openLauncherHostSurface\('quick-editor'\)/, 'entry must open the quick-editor host surface')
 assert.match(files.hostActions, /isQuickEditorWindowOpen/, 'entry must check for an existing detached window')
 assert.match(files.quickEditorWindow, /export async function isQuickEditorWindowOpen/, 'window manager must expose detached-window probe')
+assert.match(files.quickEditorWindow, /export async function startQuickEditorWindowDrag/, 'window manager must expose detached-window drag')
+assert.match(files.quickEditorWindow, /export async function startQuickEditorWindowResize/, 'window manager must expose detached-window resize')
 
 // ── 4. escape interceptor protocol ────────────────────────────────────────
 assert.ok(
@@ -110,6 +113,11 @@ assert.match(
 assert.match(files.panel, /data-no-drag/, 'quick editor Monaco host must opt out of launcher drag handling')
 assert.match(files.windowLifecycle, /\.monaco-editor/, 'launcher JS drag handling must preserve Monaco mouse events')
 assert.match(files.css, /html\[data-window=['"]launcher['"]\]\s+\.global-launcher-panel\s+:is\([\s\S]{0,220}\.monaco-editor[\s\S]{0,120}-webkit-app-region:\s*no-drag/, 'standalone launcher native drag fallback must exempt Monaco editor')
+assert.match(
+  files.breadcrumbActions + '\n' + files.toolbar,
+  /hideLauncherWindow\(\)[\s\S]{0,260}showQuickEditorWindow\(\)/,
+  'detaching from standalone launcher must hide launcher before focusing the quick editor window',
+)
 
 // ── 11. detached window owns an opaque editor surface ─────────────────────
 assert.match(
@@ -141,6 +149,21 @@ assert.match(
   files.css,
   /\.quick-editor-detached-window\s+:is\([\s\S]{0,240}\[data-no-drag\][\s\S]{0,120}\.monaco-editor[\s\S]{0,160}-webkit-app-region:\s*no-drag/,
   'detached quick editor controls and Monaco editor must opt out of native drag handling',
+)
+assert.match(
+  files.detachedView,
+  /startQuickEditorWindowDrag/,
+  'detached quick editor chrome must use the native drag fallback',
+)
+assert.match(
+  files.detachedView,
+  /quick-editor-resize-handle/,
+  'detached quick editor must render resize handles for its borderless window',
+)
+assert.match(
+  files.detachedView,
+  /startQuickEditorWindowResize/,
+  'detached quick editor resize handles must call native resize dragging',
 )
 
 console.log('test-quick-editor-host-surface: all assertions passed')

@@ -15,9 +15,11 @@ export function QuickEditorBreadcrumbActions() {
 
   const handleDetach = useCallback(async () => {
     try {
-      await showQuickEditorWindow()
       useAppStore.getState().setGlobalLauncherOpen(false)
-      if (isStandaloneLauncherWindow()) await hideLauncherWindow()
+      if (isStandaloneLauncherWindow()) {
+        await hideLauncherWindow()
+      }
+      await showQuickEditorWindow()
     } catch (error) {
       console.warn('[hiven] Failed to detach quick editor:', error)
     }
