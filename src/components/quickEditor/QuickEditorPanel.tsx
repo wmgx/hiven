@@ -1,54 +1,32 @@
-import { useRef, useCallback, useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import Editor from '@monaco-editor/react'
-import * as monaco from 'monaco-editor'
-import type { editor as MonacoEditor } from 'monaco-editor'
+import { useCallback, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useQuickEditorStore } from '../../workspace/quickEditor/quickEditorStore'
 import { useAppStore } from '../../store'
+import { EditorSurface } from '../editor/EditorSurface'
+import type { EditorTextBinding } from '../editor/editorSurfaceTypes'
 import { QuickEditorCommandOverlay } from './QuickEditorCommandOverlay'
-import { getFluxMonacoTheme, registerFluxMonacoThemes } from '../../utils/monacoTheme'
-import { installMonacoHoverOverlay } from '../../utils/monacoHoverOverlay'
-import { createMonacoDisposableBucket } from '../../utils/monacoDisposables'
 import { suppressStandaloneLauncherBlur } from '../../workspace/launcherBlurGuard'
 import { useQuickEditorEscape } from './useQuickEditorEscape'
 import { isQuickEditorDetachedWindow } from '../../workspace/windowManager/quickEditorWindow'
-import { getLanguageOptionLabel } from '../../workspace/languageOptions'
 import { quickEditorImperative } from './quickEditorImperative'
 import { useT } from '../../i18n'
 
 export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void }) {
-  const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
-  const monacoDisposablesRef = useRef<ReturnType<typeof createMonacoDisposableBucket> | null>(null)
-  const isLocalChangeRef = useRef(false)
-  const [cursorInfo, setCursorInfo] = useState({ line: 1, col: 1 })
-  const [selectedCharCount, setSelectedCharCount] = useState(0)
-
   const text = useQuickEditorStore((s) => s.text)
   const language = useQuickEditorStore((s) => s.language)
-  const cursorPosition = useQuickEditorStore((s) => s.cursorPosition)
-  const scrollPosition = useQuickEditorStore((s) => s.scrollPosition)
+  const languageSource = useQuickEditorStore((s) => s.languageSource)
   const setText = useQuickEditorStore((s) => s.setText)
+  const setDetectedLanguage = useQuickEditorStore((s) => s.setDetectedLanguage)
   const setCursorPosition = useQuickEditorStore((s) => s.setCursorPosition)
   const setScrollPosition = useQuickEditorStore((s) => s.setScrollPosition)
-
-  const settings = useAppStore((s) => s.settings)
-  const locale = useAppStore((s) => s.locale)
   const openQuickEditorCommand = useAppStore((s) => s.openQuickEditorCommand)
 
   const { exitHintVisible } = useQuickEditorEscape(onRequestExit)
   const tQuickEditor = useT('quickEditor')
-  const tEditor = useT('editor')
   const isDetached = isQuickEditorDetachedWindow()
-  const languageLabel = getLanguageOptionLabel(language, locale)
 
-  const lineCount = text.split('\n').length
-  const charCount = text.length
-
-  const handleChange = useCallback((value: string | undefined) => {
-    if (value !== undefined) {
-      isLocalChangeRef.current = true
-      setText(value)
-    }
-  }, [setText])
+  // 现场恢复只发生在挂载时：用 ref 冻结初始值，避免编辑期间反向写回
+  const initialCursorRef = useRef(useQuickEditorStore.getState().cursorPosition)
+  const initialScrollRef = useRef(useQuickEditorStore.getState().scrollPosition)
 
   const handleKeyDownCapture = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'k') return
@@ -58,184 +36,58 @@ export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void 
     openQuickEditorCommand()
   }, [openQuickEditorCommand])
 
-  // Sync external text changes (e.g. from command execution) without resetting cursor
-  useEffect(() => {
-    if (isLocalChangeRef.current) {
-      isLocalChangeRef.current = false
-      return
-    }
-    const editor = editorRef.current
-    const model = editor?.getModel()
-    if (editor && model && model.getValue() !== text) {
-      const fullRange = model.getFullModelRange()
-      editor.executeEdits('external', [{
-        range: fullRange,
-        text,
-        forceMoveMarkers: false,
-      }])
-    }
-  }, [text])
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      monacoDisposablesRef.current?.dispose()
-      monacoDisposablesRef.current = null
-      editorRef.current = null
-      quickEditorImperative.unregisterFind()
-    }
-  }, [])
+  const binding: EditorTextBinding = {
+    text,
+    language,
+    languageSource,
+    onTextChange: setText,
+    onDetectedLanguage: setDetectedLanguage,
+    initialCursor: initialCursorRef.current,
+    initialScroll: initialScrollRef.current,
+    onCursorChange: setCursorPosition,
+    onScrollChange: setScrollPosition,
+  }
 
   return (
-    <div className="relative flex flex-col h-full overflow-hidden" onKeyDownCapture={handleKeyDownCapture}>
-      <div className="flex-1 min-h-0" data-no-drag>
-        <Editor
-          height="100%"
-          defaultValue={text}
-          defaultLanguage={language}
-          beforeMount={registerFluxMonacoThemes}
-          onChange={handleChange}
-          onMount={(editor) => {
-            registerFluxMonacoThemes(monaco)
-            monacoDisposablesRef.current?.dispose()
-            const disposables = createMonacoDisposableBucket()
-            monacoDisposablesRef.current = disposables
-            installMonacoHoverOverlay(editor)
-            editorRef.current = editor
-
-            // Register find trigger for external callers (breadcrumb/topbar button)
-            quickEditorImperative.registerFind(() => {
-              editor.getAction('editor.action.startFindReplaceAction')?.run()
-            })
-
-            // Restore cursor & scroll
-            editor.setPosition(cursorPosition)
-            editor.setScrollPosition(scrollPosition)
-            editor.focus()
-
-            // Track cursor for status bar
-            disposables.add(editor.onDidChangeCursorPosition((e) => {
-              setCursorInfo({ line: e.position.lineNumber, col: e.position.column })
-              setCursorPosition({
-                lineNumber: e.position.lineNumber,
-                column: e.position.column,
-              })
-            }))
-
-            // Track selection for status bar
-            disposables.add(editor.onDidChangeCursorSelection((e) => {
-              const sel = e.selection
-              const model = editor.getModel()
-              if (!model) return
-              const selected = model.getValueInRange(sel)
-              setSelectedCharCount(selected.length)
-            }))
-
-            // Track scroll
-            disposables.add(editor.onDidScrollChange((e) => {
-              setScrollPosition({
-                scrollTop: e.scrollTop,
-                scrollLeft: e.scrollLeft,
-              })
-            }))
-
-            // ⌘K → open command overlay
-            disposables.add(editor.addAction({
-              id: 'quick-editor-command',
-              label: 'Quick Editor Command',
-              keybindings: [
-                monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK,
-              ],
-              run: () => {
-                suppressStandaloneLauncherBlur()
-                useAppStore.getState().openQuickEditorCommand()
-              },
-            }))
-
-            // ⌘F / ⌘H → find and replace
-            disposables.add(editor.addAction({
-              id: 'find-and-replace',
-              label: 'Find and Replace',
-              keybindings: [
-                monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF,
-                monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyF,
-                monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyH,
-              ],
-              run: (ed: MonacoEditor.IStandaloneCodeEditor) => {
-                ed.getAction('editor.action.startFindReplaceAction')?.run()
-              },
-            }))
-
-            disposables.add(editor.onDidDispose(() => {
-              if (editorRef.current === editor) editorRef.current = null
-              if (monacoDisposablesRef.current === disposables) monacoDisposablesRef.current = null
-              disposables.dispose()
-              quickEditorImperative.unregisterFind()
-            }))
-          }}
-          options={{
-            fontSize: settings.fontSize,
-            lineNumbers: settings.lineNumbers ? 'on' : 'off',
-            wordWrap: settings.wordWrap ? 'on' : 'off',
-            minimap: { enabled: false },
-            find: { addExtraSpaceOnTop: false },
-            scrollBeyondLastLine: false,
-            renderLineHighlight: 'line',
-            overviewRulerLanes: 0,
-            hideCursorInOverviewRuler: true,
-            folding: true,
-            stickyScroll: { enabled: false },
-            glyphMargin: false,
-            lineDecorationsWidth: 8,
-            lineNumbersMinChars: 3,
-            padding: { top: 12, bottom: 12 },
-            fontFamily: 'var(--font-mono)',
-            automaticLayout: true,
-            tabSize: 2,
-          }}
-          theme={getFluxMonacoTheme(settings.theme)}
-        />
-      </div>
-      {exitHintVisible && (
-        <div
-          className="pointer-events-none absolute bottom-8 left-1/2 -translate-x-1/2 z-40 px-2.5 py-1 rounded text-[11px]"
-          style={{
-            background: 'var(--color-background-tertiary)',
-            color: 'var(--color-text-secondary)',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12)',
-          }}
-        >
-          {isDetached ? tQuickEditor('escCloseHint') : tQuickEditor('escExitHint')}
-        </div>
-      )}
-      {/* Status bar */}
-      <div
-        className="h-[22px] flex items-center px-2 gap-2 shrink-0 overflow-hidden whitespace-nowrap text-[10px]"
-        style={{
-          borderTop: '0.5px solid var(--color-border-tertiary)',
-          background: 'var(--color-background-secondary)',
-          color: 'var(--color-text-tertiary)',
+    <div className="h-full" onKeyDownCapture={handleKeyDownCapture} data-no-drag>
+      <EditorSurface
+        binding={binding}
+        autoFocus
+        actions={[{
+          id: 'quick-editor-command',
+          label: 'Quick Editor Command',
+          keybindings: [2048 | 41],
+          run: () => {
+            suppressStandaloneLauncherBlur()
+            useAppStore.getState().openQuickEditorCommand()
+          },
+        }]}
+        onReady={(editor) => {
+          quickEditorImperative.registerFind(() => {
+            editor.getAction('editor.action.startFindReplaceAction')?.run()
+          })
+          return () => {
+            quickEditorImperative.unregisterFind()
+          }
         }}
-      >
-        <span className="shrink-0">
-          {tEditor('line')} {cursorInfo.line}, {tEditor('column')} {cursorInfo.col}
-        </span>
-        <span className="shrink-0">
-          {lineCount} {tEditor('lines')}
-        </span>
-        <span className="shrink-0">
-          {charCount} {tEditor('chars')}
-        </span>
-        {selectedCharCount > 0 && (
-          <span className="shrink-0">
-            {selectedCharCount} {tEditor('selectedChars')}
-          </span>
+        overlay={(
+          <>
+            {exitHintVisible && (
+              <div
+                className="pointer-events-none absolute bottom-8 left-1/2 -translate-x-1/2 z-40 px-2.5 py-1 rounded text-[11px]"
+                style={{
+                  background: 'var(--color-background-tertiary)',
+                  color: 'var(--color-text-secondary)',
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12)',
+                }}
+              >
+                {isDetached ? tQuickEditor('escCloseHint') : tQuickEditor('escExitHint')}
+              </div>
+            )}
+            <QuickEditorCommandOverlay />
+          </>
         )}
-        <span className="ml-auto shrink-0">
-          {languageLabel}
-        </span>
-      </div>
-      <QuickEditorCommandOverlay />
+      />
     </div>
   )
 }

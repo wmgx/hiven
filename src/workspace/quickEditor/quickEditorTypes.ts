@@ -3,6 +3,8 @@ export interface QuickEditorState {
   text: string
   /** Monaco 语言标识 */
   language: string
+  /** 语言来源：manual = 用户/命令显式设置，auto = 检测或默认 */
+  languageSource: 'manual' | 'auto'
   /** 光标位置 */
   cursorPosition: { lineNumber: number; column: number }
   /** 滚动位置 */
@@ -12,6 +14,7 @@ export interface QuickEditorState {
 export interface QuickEditorActions {
   setText: (text: string) => void
   setLanguage: (language: string) => void
+  setDetectedLanguage: (language: string) => void
   setCursorPosition: (position: { lineNumber: number; column: number }) => void
   setScrollPosition: (position: { scrollTop: number; scrollLeft: number }) => void
   reset: () => void
