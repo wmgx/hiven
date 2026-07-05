@@ -66,8 +66,12 @@ export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void 
           quickEditorImperative.registerFind(() => {
             editor.getAction('editor.action.startFindReplaceAction')?.run()
           })
+          quickEditorImperative.registerFocus(() => {
+            editor.focus()
+          })
           return () => {
             quickEditorImperative.unregisterFind()
+            quickEditorImperative.unregisterFocus()
           }
         }}
         overlay={(

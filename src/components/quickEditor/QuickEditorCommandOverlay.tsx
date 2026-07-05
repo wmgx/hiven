@@ -9,6 +9,7 @@ import { buildGlobalLauncherItems, type GlobalLauncherItem } from '../launcher/G
 import { handleGlobalLauncherKeyDown } from '../launcher/GlobalLauncherKeyboard'
 import { useGlobalLauncherImeComposition } from '../launcher/GlobalLauncherHostLifecycle'
 import { isQuickEditorDetachedWindow } from '../../workspace/windowManager/quickEditorWindow'
+import { quickEditorImperative } from './quickEditorImperative'
 import { useT } from '../../i18n'
 import type { ClipboardObjectBlockState } from '../../launcher/clipboard/useClipboardObjectBlock'
 
@@ -37,7 +38,7 @@ export function QuickEditorCommandOverlay() {
   } = useLauncherSession({
     hostId: 'quick-editor-command',
     open,
-    requestClose: closeCommand,
+    requestClose: closeCommandAndRestoreFocus,
     staticItemFilter: filterEditorCommandBarItems,
     makeApi: createQuickEditorLauncherApi,
   })
@@ -81,6 +82,11 @@ export function QuickEditorCommandOverlay() {
   }
   const focusSearchInputAfterBack = () => requestAnimationFrame(() => inputRef.current?.focus())
 
+  function closeCommandAndRestoreFocus() {
+    closeCommand()
+    requestAnimationFrame(() => quickEditorImperative.triggerFocus())
+  }
+
   useEffect(() => {
     if (open) {
       requestAnimationFrame(() => inputRef.current?.focus())
@@ -118,7 +124,7 @@ export function QuickEditorCommandOverlay() {
       const activeElement = document.activeElement
       if (internalPointerDownRef.current) return
       if (activeElement && panel.contains(activeElement)) return
-      closeCommand()
+      closeCommandAndRestoreFocus()
     })
   }
 
@@ -133,7 +139,7 @@ export function QuickEditorCommandOverlay() {
         if (event.key !== 'Escape' || isImeComposingRef.current) return
         event.preventDefault()
         event.stopPropagation()
-        closeCommand()
+        closeCommandAndRestoreFocus()
       }}
       onKeyDown={(event) => handleGlobalLauncherKeyDown({
         event,
@@ -152,7 +158,7 @@ export function QuickEditorCommandOverlay() {
         resultSelectedIndex,
         setResultSelectedIndex,
         toggleResultChoice,
-        closeLauncher: closeCommand,
+        closeLauncher: closeCommandAndRestoreFocus,
         isKeyboardNavRef,
         visibleFilteredLength: visibleFiltered.length,
         setSelectedIndex,
@@ -183,10 +189,10 @@ export function QuickEditorCommandOverlay() {
         showCustomizeHint={false}
         showWorkflowObjectHint={false}
         customizeShortcutLabel="⌘↵"
-        onSettingsClose={closeCommand}
-        onSurfaceBack={closeCommand}
-        onSurfaceClose={closeCommand}
-        onPermissionBack={closeCommand}
+        onSettingsClose={closeCommandAndRestoreFocus}
+        onSurfaceBack={closeCommandAndRestoreFocus}
+        onSurfaceClose={closeCommandAndRestoreFocus}
+        onPermissionBack={closeCommandAndRestoreFocus}
         onPermissionGrant={() => {}}
         onParamQueryChange={(value) => controllerRef.current?.setParamQuery(value)}
         onParamSelectedIndexChange={(index) => controllerRef.current?.setParamSelectedIndex(index)}
@@ -194,7 +200,7 @@ export function QuickEditorCommandOverlay() {
         onParamMultiToggle={(value) => controllerRef.current?.toggleCurrentMultiParamValue(value)}
         onFrameBack={() => {
           if (controllerRef.current?.back?.()) focusSearchInputAfterBack()
-          else closeCommand()
+          else closeCommandAndRestoreFocus()
         }}
         onCollectInputChange={(value) => controllerRef.current?.setInputText(value)}
         onActivateResultChoice={activateResultChoice}

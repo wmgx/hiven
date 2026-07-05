@@ -170,6 +170,21 @@ assert.match(
   /loadInstalledPluginsFromStore/,
   'detached quick editor must load installed plugin commands for Cmd+K',
 )
+assert.match(
+  read('src/components/quickEditor/quickEditorImperative.ts'),
+  /registerFocus[\s\S]*triggerFocus/,
+  'quick editor imperative bridge must expose editor focus restore hooks',
+)
+assert.match(
+  files.panel,
+  /quickEditorImperative\.registerFocus\(\(\)\s*=>\s*\{[\s\S]{0,160}editor\.focus\(\)/,
+  'quick editor panel must register Monaco focus restore on ready',
+)
+assert.match(
+  files.overlay,
+  /function closeCommandAndRestoreFocus\(\)[\s\S]{0,180}closeCommand\(\)[\s\S]{0,180}quickEditorImperative\.triggerFocus\(\)/,
+  'quick editor command overlay must restore editor focus whenever it closes',
+)
 assert.doesNotMatch(
   files.css,
   /\.quick-editor-detached-window\s*\{[\s\S]{0,260}-webkit-app-region:\s*drag/,
