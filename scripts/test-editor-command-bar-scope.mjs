@@ -42,6 +42,8 @@ assert.match(hostEditorActions, /systemKey:\s*['"]host:editor:quote-code-block['
 assert.match(launcherTypes, /item\.systemKey\.startsWith\(['"]host:editor:['"]\)/, 'Editor command bar filter must keep all editor-local host actions')
 assert.doesNotMatch(hostEditorActions, /host:editor:attach-(?:translate|clipboard)-panel/, 'Editor Cmd+K must not expose Translate or Clipboard History attachment commands')
 assert.match(hostEditorActions, /systemKey:\s*['"]host:editor:json-expression['"][\s\S]*openEditorPanel\(\{\s*panelId:\s*['"]js-filter\.panel['"],\s*placement:\s*['"]pane-bottom['"]/, 'JSON Expression must open the JSON Tools expression bottom panel')
+assert.match(hostEditorActions, /systemKey:\s*['"]host:pane:split-right['"][\s\S]*surfaces:\s*\[['"]editor-command-bar['"]\][\s\S]*createPane\(\{[\s\S]*direction:\s*['"]right['"]/, 'Editor command bar must expose split-right as an editor-local action')
+assert.match(hostEditorActions, /systemKey:\s*['"]host:pane:split-down['"][\s\S]*surfaces:\s*\[['"]editor-command-bar['"]\][\s\S]*createPane\(\{[\s\S]*direction:\s*['"]bottom['"]/, 'Editor command bar must expose split-down as an editor-local action')
 
 const paneHostItems = [...`${hostActions}\n${hostEditorActions}`.matchAll(/systemKey:\s*['"](host:pane:[^'"]+)['"][\s\S]*?surfaces:\s*\[([^\]]+)\]/g)]
 const editorLocalPaneItems = new Set([

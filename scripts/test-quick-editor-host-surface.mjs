@@ -29,6 +29,7 @@ const files = {
   toolbar: read('src/components/quickEditor/QuickEditorToolbar.tsx'),
   detachedView: read('src/views/QuickEditorDetachedView.tsx'),
   quickEditorWindow: read('src/workspace/windowManager/quickEditorWindow.ts'),
+  hostEditorActions: read('src/workspace/launcher/hostEditorActions.ts'),
   appTsx: read('src/App.tsx'),
 }
 
@@ -169,6 +170,26 @@ assert.match(
   files.detachedView,
   /loadInstalledPluginsFromStore/,
   'detached quick editor must load installed plugin commands for Cmd+K',
+)
+assert.match(
+  files.detachedView,
+  /editor-topbar-run[\s\S]{0,220}openQuickEditorCommand\(\)/,
+  'detached quick editor topbar must expose a Run button that opens the command overlay',
+)
+assert.match(
+  files.detachedView,
+  /Cmd\+K[\s\S]{0,80}Ctrl\+K/,
+  'detached quick editor Run button tooltip must mention Cmd/Ctrl+K',
+)
+assert.match(
+  read('src/i18n/locales/quickEditor.ts'),
+  /runCommand[\s\S]*runCommandWithShortcut/,
+  'quick editor Run button copy must go through the quickEditor locale namespace',
+)
+assert.match(
+  files.hostEditorActions,
+  /systemKey:\s*['"]host:pane:set-language['"][\s\S]*surfaces:\s*\[\s*['"]editor-command-bar['"],\s*['"]quick-editor-command['"]\s*\][\s\S]*setEditorLikeLanguage\(ctx\.surfaceId,\s*params\.language\)/,
+  'Set Language must be available from both editor and quick editor command launchers',
 )
 assert.match(
   read('src/components/quickEditor/quickEditorImperative.ts'),

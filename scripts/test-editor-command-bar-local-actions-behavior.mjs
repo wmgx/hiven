@@ -24,12 +24,17 @@ let selectedText
 let selection
 const effects = []
 const openedPanels = []
+const createdPanes = []
 const storeState = {
   activePaneId: 'pane-1',
   panes: {
     'pane-1': { id: 'pane-1', text: '' },
   },
   paneOrder: ['pane-1'],
+  createPane: (input) => {
+    createdPanes.push(input)
+    return `pane-${createdPanes.length + 1}`
+  },
 }
 
 function syncPaneText(text) {
@@ -62,7 +67,10 @@ function plain(value) {
 }
 
 function findItem(items, systemKey) {
-  const item = items.find((candidate) => candidate.systemKey === systemKey)
+  const item = items.find((candidate) => (
+    candidate.systemKey === systemKey &&
+    candidate.surfaces?.includes('editor-command-bar')
+  )) ?? items.find((candidate) => candidate.systemKey === systemKey)
   assert.ok(item, `${systemKey} should exist`)
   assert.deepEqual(plain(item.surfaces), ['editor-command-bar'], `${systemKey} must be scoped to editor-command-bar`)
   return item
@@ -189,6 +197,12 @@ assert.deepEqual(plain(openedPanels.at(-1)), {
   panelId: 'js-filter.panel',
   placement: 'pane-bottom',
 })
+
+await findItem(items, 'host:pane:split-right').execute({})
+assert.deepEqual(plain(createdPanes.at(-1)), { text: '', focus: true, direction: 'right' })
+
+await findItem(items, 'host:pane:split-down').execute({})
+assert.deepEqual(plain(createdPanes.at(-1)), { text: '', focus: true, direction: 'bottom' })
 
 syncPaneText('{ bad json')
 const invalidJsonResult = await findItem(items, 'host:editor:json-minify').execute({})

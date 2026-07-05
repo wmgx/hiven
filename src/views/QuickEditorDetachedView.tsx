@@ -1,5 +1,5 @@
 import { useCallback, useEffect, type PointerEvent as ReactPointerEvent } from 'react'
-import { Search, WrapText, X } from 'lucide-react'
+import { Search, Sparkles, WrapText, X } from 'lucide-react'
 import { useAppStore } from '../store'
 import { loadInstalledPluginsFromStore } from '../workspace/pluginRuntime'
 import { registerBundledPluginPackages } from '../workspace/bundledPluginLoader'
@@ -13,6 +13,7 @@ import {
   startQuickEditorWindowResize,
 } from '../workspace/windowManager/quickEditorWindow'
 import { quickEditorImperative } from '../components/quickEditor/quickEditorImperative'
+import { suppressStandaloneLauncherBlur } from '../workspace/launcherBlurGuard'
 import { useT } from '../i18n'
 import type { ResizeDirection } from '@tauri-apps/api/window'
 import '../panels/register'
@@ -40,11 +41,13 @@ export function QuickEditorDetachedView() {
   const fontSize = useAppStore((s) => s.settings.fontSize)
   const wordWrap = useAppStore((s) => s.settings.wordWrap)
   const updateSetting = useAppStore((s) => s.updateSetting)
+  const openQuickEditorCommand = useAppStore((s) => s.openQuickEditorCommand)
   const locale = useAppStore((s) => s.locale)
   const language = useQuickEditorStore((s) => s.language)
   const tEditor = useT('editor')
   const tQuickEditor = useT('quickEditor')
   const languageLabel = getLanguageOptionLabel(language, locale)
+  const commandShortcut = navigator.platform.toLowerCase().includes('mac') ? 'Cmd+K' : 'Ctrl+K'
 
   useEffect(() => {
     if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
@@ -106,6 +109,18 @@ export function QuickEditorDetachedView() {
           </button>
         </div>
         <div className="editor-topbar-plugin-slot">
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm ft-btn ft-btn-ghost ft-btn-sm editor-topbar-run"
+            onClick={() => {
+              suppressStandaloneLauncherBlur()
+              openQuickEditorCommand()
+            }}
+            title={tQuickEditor('runCommandWithShortcut', { shortcut: commandShortcut })}
+          >
+            <Sparkles size={13} />
+            <span>{tQuickEditor('runCommand')}</span>
+          </button>
           <span className="editor-topbar-status">{languageLabel}</span>
           <button
             type="button"

@@ -11,6 +11,8 @@ import { openEditorPanel } from '../editorBridge'
 import { applyEffects } from '../effectRunner'
 import { runtimeRegistry } from '../runtimeRegistry'
 import { useWorkspaceStore } from '../workspaceStore'
+import { useQuickEditorStore } from '../quickEditor/quickEditorStore'
+import { detectEditorLanguage } from '../languageDetector'
 import { translate } from '../../i18n'
 import type { LauncherItem, LauncherParamOption, TextRange } from './types'
 
@@ -74,6 +76,25 @@ function setActivePaneLanguage(requested: unknown): void {
   const normalized = EDITOR_LANGUAGE_VALUES.has(language) ? language : 'plaintext'
   state.updatePaneLanguage(paneId, normalized)
   useWorkspaceStore.getState().updatePaneLanguageSource(paneId, 'manual')
+}
+
+function setQuickEditorLanguage(requested: unknown): void {
+  const language = String(requested ?? 'auto')
+  const store = useQuickEditorStore.getState()
+  if (language === 'auto') {
+    store.setDetectedLanguage(detectEditorLanguage(store.text, { allowShortStrongSignals: true }))
+    return
+  }
+  const normalized = EDITOR_LANGUAGE_VALUES.has(language) ? language : 'plaintext'
+  store.setLanguage(normalized)
+}
+
+function setEditorLikeLanguage(surfaceId: string, requested: unknown): void {
+  if (surfaceId === 'quick-editor-command') {
+    setQuickEditorLanguage(requested)
+    return
+  }
+  setActivePaneLanguage(requested)
 }
 
 function getActiveEditorSurfaceText(): string | undefined {
@@ -190,6 +211,50 @@ function convertActiveEditorJsonToYaml(): boolean {
 export function getHostEditorActionItems(): LauncherItem[] {
   return [
     {
+      systemKey: 'host:pane:split-right',
+      kind: 'host',
+      display: {
+        title: 'Split Pane Right',
+        titleI18n: { zh: '向右分栏' },
+        subtitle: 'Open an empty pane to the right',
+        subtitleI18n: { zh: '在右侧打开一个空白面板' },
+        icon: 'PanelRight',
+        aliases: ['split', 'split right', 'pane right', '右侧分栏', '分栏'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['editor-command-bar'],
+      requiredCapabilities: ['pane-actions'],
+      pinnable: false,
+      execute: async () => {
+        const guard = guardEditorWindowRuntime()
+        if (guard) return guard
+        useWorkspaceStore.getState().createPane({ text: '', focus: true, direction: 'right' })
+        return { ok: true }
+      },
+    },
+    {
+      systemKey: 'host:pane:split-down',
+      kind: 'host',
+      display: {
+        title: 'Split Pane Down',
+        titleI18n: { zh: '向下分栏' },
+        subtitle: 'Open an empty pane below',
+        subtitleI18n: { zh: '在下方打开一个空白面板' },
+        icon: 'PanelBottom',
+        aliases: ['split', 'split down', 'pane down', '向下分栏', '分栏'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['editor-command-bar'],
+      requiredCapabilities: ['pane-actions'],
+      pinnable: false,
+      execute: async () => {
+        const guard = guardEditorWindowRuntime()
+        if (guard) return guard
+        useWorkspaceStore.getState().createPane({ text: '', focus: true, direction: 'bottom' })
+        return { ok: true }
+      },
+    },
+    {
       systemKey: 'host:pane:close',
       kind: 'host',
       display: {
@@ -294,7 +359,7 @@ export function getHostEditorActionItems(): LauncherItem[] {
         aliases: ['language', 'set-language', '语言'],
       },
       behavior: { type: 'perform' },
-      surfaces: ['editor-command-bar'],
+      surfaces: ['editor-command-bar', 'quick-editor-command'],
       requiredCapabilities: ['pane-actions', 'parameter-customization'],
       pinnable: false,
       legacyUsageKeys: ['core-pane.set-language'],
@@ -310,16 +375,20 @@ export function getHostEditorActionItems(): LauncherItem[] {
         },
       ],
       requireParamSelection: true,
-      execute: async () => {
-        const guard = guardEditorWindowRuntime()
-        if (guard) return guard
-        setActivePaneLanguage('auto')
+      execute: async (ctx) => {
+        if (ctx.surfaceId !== 'quick-editor-command') {
+          const guard = guardEditorWindowRuntime()
+          if (guard) return guard
+        }
+        setEditorLikeLanguage(ctx.surfaceId, 'auto')
         return { ok: true }
       },
-      executeWithParams: async (_ctx, params) => {
-        const guard = guardEditorWindowRuntime()
-        if (guard) return guard
-        setActivePaneLanguage(params.language)
+      executeWithParams: async (ctx, params) => {
+        if (ctx.surfaceId !== 'quick-editor-command') {
+          const guard = guardEditorWindowRuntime()
+          if (guard) return guard
+        }
+        setEditorLikeLanguage(ctx.surfaceId, params.language)
         return { ok: true }
       },
     },
