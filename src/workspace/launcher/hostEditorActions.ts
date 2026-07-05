@@ -7,7 +7,7 @@ import {
   quoteTextAsCodeBlock,
   rewriteTextPolitely,
 } from '../../workflow/editorTextTransforms'
-import { openEditorPanel } from '../editorBridge'
+import { createEditorPane, openEditorPanel } from '../editorBridge'
 import { applyEffects } from '../effectRunner'
 import { runtimeRegistry } from '../runtimeRegistry'
 import { useWorkspaceStore } from '../workspaceStore'
@@ -95,6 +95,20 @@ function setEditorLikeLanguage(surfaceId: string, requested: unknown): void {
     return
   }
   setActivePaneLanguage(requested)
+}
+
+async function createEditorLikePane(
+  surfaceId: string,
+  direction: 'right' | 'bottom',
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (surfaceId === 'quick-editor-command') {
+    await createEditorPane({ text: '', focus: true, direction })
+    return { ok: true }
+  }
+  const guard = guardEditorWindowRuntime()
+  if (guard) return guard
+  useWorkspaceStore.getState().createPane({ text: '', focus: true, direction })
+  return { ok: true }
 }
 
 function getActiveEditorSurfaceText(): string | undefined {
@@ -222,15 +236,10 @@ export function getHostEditorActionItems(): LauncherItem[] {
         aliases: ['split', 'split right', 'pane right', '右侧分栏', '分栏'],
       },
       behavior: { type: 'perform' },
-      surfaces: ['editor-command-bar'],
+      surfaces: ['editor-command-bar', 'quick-editor-command'],
       requiredCapabilities: ['pane-actions'],
       pinnable: false,
-      execute: async () => {
-        const guard = guardEditorWindowRuntime()
-        if (guard) return guard
-        useWorkspaceStore.getState().createPane({ text: '', focus: true, direction: 'right' })
-        return { ok: true }
-      },
+      execute: async (ctx) => createEditorLikePane(ctx.surfaceId, 'right'),
     },
     {
       systemKey: 'host:pane:split-down',
@@ -244,15 +253,10 @@ export function getHostEditorActionItems(): LauncherItem[] {
         aliases: ['split', 'split down', 'pane down', '向下分栏', '分栏'],
       },
       behavior: { type: 'perform' },
-      surfaces: ['editor-command-bar'],
+      surfaces: ['editor-command-bar', 'quick-editor-command'],
       requiredCapabilities: ['pane-actions'],
       pinnable: false,
-      execute: async () => {
-        const guard = guardEditorWindowRuntime()
-        if (guard) return guard
-        useWorkspaceStore.getState().createPane({ text: '', focus: true, direction: 'bottom' })
-        return { ok: true }
-      },
+      execute: async (ctx) => createEditorLikePane(ctx.surfaceId, 'bottom'),
     },
     {
       systemKey: 'host:pane:close',
