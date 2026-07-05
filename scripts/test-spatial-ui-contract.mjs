@@ -41,6 +41,7 @@ const files = {
   globalLauncher: read('src/launcher/hosts/GlobalLauncherHost.tsx') + '\n' + read('src/components/launcher/GlobalLauncherWindowLifecycle.ts') + '\n' + read('src/workspace/windowManager/launcherWindow.ts'),
   paneEditor: read('src/components/workspace/PaneEditor.tsx'),
   dualEditor: read('src/kits/ui/DualEditorView.tsx'),
+  textEditorCore: read('src/kits/editor/TextEditorCore.tsx'),
   monacoTheme: read('src/utils/monacoTheme.ts'),
   workspaceShell: read('src/components/workspace/WorkspaceShell.tsx'),
   renderStatusBar: read('src/components/workspace/RenderStatusBar.tsx'),
@@ -97,9 +98,9 @@ has(files.renderStatusBar, /statusbar/, 'Renderer status should use the demo sta
 has(files.paneEditor, /const\s+lineDecorationsWidth\s*=\s*foldingEnabled\s*\?\s*8\s*:\s*24/, 'Primary editor should normalize total gutter width for folding and plaintext panes')
 has(files.paneEditor, /lineDecorationsWidth,\s*\n\s*lineNumbersMinChars:\s*3/, 'Primary editor should keep a consistent VS Code-like gap after compact line numbers')
 has(files.paneEditor, /lineNumbersMinChars:\s*3/, 'Primary editor should use a fixed line-number width across panes')
-has(files.paneEditor, /padding:\s*\{\s*top:\s*12,\s*left:\s*8\s*\}/, 'Primary editor should add breathing room after the gutter')
+has(files.textEditorCore, /padding:\s*\{\s*top:\s*12,\s*bottom:\s*12,\s*left:\s*8\s*\}/, 'Editor primitive should own the unified editor padding')
 has(files.paneEditor, /renderLineHighlight:\s*['"]line['"]/, 'Primary editor should use VS Code-like current line highlighting')
-has(files.dualEditor, /padding:\s*\{\s*top:\s*12,\s*left:\s*8\s*\}/, 'Dual editor panes should match the primary editor padding')
+has(files.textEditorCore, /padding:\s*\{\s*top:\s*12,\s*bottom:\s*12,\s*left:\s*8\s*\}/, 'Dual editor panes should match the primary editor padding')
 assert.equal(
   cssColor(files.monacoTheme, 'editorGutter.background'),
   cssColor(files.monacoTheme, 'editor.background'),
