@@ -100,6 +100,40 @@ export const useQuickEditorStore = create<QuickEditorStore>()(
         })
         return id
       },
+      closePane: (paneId) => {
+        let didClose = false
+        set((state) => {
+          if (state.paneOrder.length <= 1 || !state.panes[paneId]) return {}
+          const nextPaneOrder = state.paneOrder.filter((id) => id !== paneId)
+          const nextPanes = { ...state.panes }
+          delete nextPanes[paneId]
+          const closedIndex = state.paneOrder.indexOf(paneId)
+          const nextActivePaneId = state.activePaneId === paneId
+            ? nextPaneOrder[Math.max(0, Math.min(closedIndex, nextPaneOrder.length - 1))]
+            : state.activePaneId
+          const active = nextPanes[nextActivePaneId] ?? activePaneSnapshot({
+            panes: nextPanes,
+            activePaneId: nextPaneOrder[0] ?? DEFAULT_PANE_ID,
+          })
+          didClose = true
+          return {
+            panes: nextPanes,
+            paneOrder: nextPaneOrder,
+            activePaneId: active.id,
+            splitDirection: nextPaneOrder.length > 1 ? state.splitDirection : 'horizontal',
+            text: active.text,
+            language: active.language,
+            languageSource: active.languageSource,
+            cursorPosition: active.cursorPosition,
+            scrollPosition: active.scrollPosition,
+          }
+        })
+        return didClose
+      },
+      closeActivePane: () => {
+        const state = useQuickEditorStore.getState()
+        return state.closePane(state.activePaneId)
+      },
       reset: () => set(INITIAL_STATE),
     }),
     {

@@ -218,9 +218,24 @@ assert.match(
   'quick editor store must maintain local pane state for split commands',
 )
 assert.match(
+  files.quickEditorStore,
+  /closePane:[\s\S]*paneOrder\.length <= 1[\s\S]*closeActivePane/,
+  'quick editor store must support closing the active local pane without closing the last pane',
+)
+assert.match(
   files.panel,
   /paneOrder\.map[\s\S]*QuickEditorPaneSurface/,
   'quick editor panel must render local split panes',
+)
+assert.match(
+  files.panel,
+  /key\.toLowerCase\(\) === ['"]w['"][\s\S]{0,220}closeActivePane\(\)/,
+  'quick editor panel must support Cmd/Ctrl+W for closing the active local pane',
+)
+assert.match(
+  files.panel,
+  /statusBarTrailing[\s\S]{0,260}pane-status-close[\s\S]{0,180}closePane\(pane\.id\)/,
+  'quick editor pane status bar must expose a close button',
 )
 assert.match(
   files.overlay,

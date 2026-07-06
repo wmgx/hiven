@@ -34,6 +34,8 @@ export interface QuickEditorActions {
   setScrollPosition: (position: { scrollTop: number; scrollLeft: number }) => void
   setActivePaneId: (paneId: QuickEditorPaneId) => void
   createPane: (options?: { direction?: 'right' | 'bottom'; text?: string; language?: string }) => QuickEditorPaneId
+  closePane: (paneId: QuickEditorPaneId) => boolean
+  closeActivePane: () => boolean
   reset: () => void
 }
 
