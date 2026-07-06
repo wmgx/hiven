@@ -30,6 +30,7 @@ const files = {
   detachedView: read('src/views/QuickEditorDetachedView.tsx'),
   quickEditorWindow: read('src/workspace/windowManager/quickEditorWindow.ts'),
   hostEditorActions: read('src/workspace/launcher/hostEditorActions.ts'),
+  quickEditorStore: read('src/workspace/quickEditor/quickEditorStore.ts'),
   appTsx: read('src/App.tsx'),
 }
 
@@ -195,6 +196,31 @@ assert.match(
   files.hostEditorActions,
   /systemKey:\s*['"]host:pane:set-language['"][\s\S]*surfaces:\s*\[\s*['"]editor-command-bar['"],\s*['"]quick-editor-command['"]\s*\][\s\S]*setEditorLikeLanguage\(ctx\.surfaceId,\s*params\.language\)/,
   'Set Language must be available from both editor and quick editor command launchers',
+)
+assert.match(
+  files.hostEditorActions,
+  /systemKey:\s*['"]host:pane:split-right['"][\s\S]*quick-editor-command[\s\S]*createEditorLikePane\(ctx\.surfaceId,\s*['"]right['"]\)/,
+  'Split Right must be available from the quick editor command launcher',
+)
+assert.match(
+  files.hostEditorActions,
+  /surfaceId === ['"]quick-editor-command['"][\s\S]{0,160}useQuickEditorStore\.getState\(\)\.createPane/,
+  'Quick editor split commands must create local quick editor panes',
+)
+assert.doesNotMatch(
+  files.hostEditorActions,
+  /createEditorPane/,
+  'Quick editor split commands must not open the main editor window',
+)
+assert.match(
+  files.quickEditorStore,
+  /paneOrder[\s\S]*activePaneId[\s\S]*createPane/,
+  'quick editor store must maintain local pane state for split commands',
+)
+assert.match(
+  files.panel,
+  /paneOrder\.map[\s\S]*QuickEditorPaneSurface/,
+  'quick editor panel must render local split panes',
 )
 assert.match(
   files.overlay,

@@ -1,4 +1,19 @@
+export type QuickEditorPaneId = string
+
+export interface QuickEditorPaneState {
+  id: QuickEditorPaneId
+  text: string
+  language: string
+  languageSource: 'manual' | 'auto'
+  cursorPosition: { lineNumber: number; column: number }
+  scrollPosition: { scrollTop: number; scrollLeft: number }
+}
+
 export interface QuickEditorState {
+  panes: Record<QuickEditorPaneId, QuickEditorPaneState>
+  paneOrder: QuickEditorPaneId[]
+  activePaneId: QuickEditorPaneId
+  splitDirection: 'horizontal' | 'vertical'
   /** 编辑器文本内容 */
   text: string
   /** Monaco 语言标识 */
@@ -17,6 +32,8 @@ export interface QuickEditorActions {
   setDetectedLanguage: (language: string) => void
   setCursorPosition: (position: { lineNumber: number; column: number }) => void
   setScrollPosition: (position: { scrollTop: number; scrollLeft: number }) => void
+  setActivePaneId: (paneId: QuickEditorPaneId) => void
+  createPane: (options?: { direction?: 'right' | 'bottom'; text?: string; language?: string }) => QuickEditorPaneId
   reset: () => void
 }
 
