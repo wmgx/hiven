@@ -36,12 +36,12 @@ assert.match(app, /installGlobalPinnedLauncherHotkeys\(\)/, 'background runtime 
 assert.match(app, /installPluginSurfaceShortcutHotkeys\(\)/, 'background runtime must keep plugin surface hotkeys registered')
 assert.doesNotMatch(app, /function MainApp|<Sidebar\b|function ViewContent|<EditorWindow|<CommandPalette\s*\/>/, 'background runtime must not mount visible main/editor shells')
 
-assert.match(tauriLib, /async fn close_editor_window[\s\S]*window\.close\(\)/, 'closing editor should close only the editor window')
-assert.match(editorWindowApi, /invoke\(['"]close_editor_window['"]\)/, 'frontend editor close must delegate to native editor close')
-assert.match(editorWindowManager, /function\s+closeEditorWindow\(\)[\s\S]*requestCloseEditorWindow\(\)/, 'editor window manager must expose a close facade')
-assert.match(editorWindow, /closeEditorWindow\(\)/, 'editor window close controls must use the editor window manager facade')
+assert.match(tauriLib, /async fn close_quick_editor_window[\s\S]*window\.close\(\)/, 'closing editor should close only the editor window')
+assert.match(editorWindowApi, /closeQuickEditorWindow\(\)/, 'frontend editor close must delegate to native editor close')
+assert.match(editorWindowManager, /function\s+closeEditorWindow\([\s\S]*requestCloseEditorWindow\(/, 'editor window manager must expose a close facade')
+assert.match(editorWindow, /closeEditorWindow\(/, 'editor window close controls must use the editor window manager facade')
 assert.doesNotMatch(editorWindow, /requestCloseEditorWindow/, 'editor window close controls must not call the lower-level lifecycle API directly')
-assert.doesNotMatch(tauriLib.match(/async fn close_editor_window[\s\S]*?\n}\n\nfn show_and_focus_editor_window/)?.[0] ?? '', /app\.exit|std::process::exit|ExitRequested/, 'closing editor must not exit the app process')
+assert.doesNotMatch(tauriLib.match(/async fn close_quick_editor_window[\s\S]*?\n}\n/)?.[0] ?? '', /app\.exit|std::process::exit|ExitRequested/, 'closing editor must not exit the app process')
 
 assert.match(tauriLib, /async fn hide_plugin_surface_window[\s\S]*window\.hide\(\)/, 'plugin surface close should hide the plugin window first')
 assert.match(tauriLib, /schedule_plugin_surface_window_destroy[\s\S]*window\.destroy\(\)/, 'hidden plugin surface windows may be destroyed later without exiting the app')

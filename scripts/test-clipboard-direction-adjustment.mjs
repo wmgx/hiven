@@ -101,7 +101,7 @@ const tokenSrc = readFileSync('src/components/launcher/ObjectBlockToken.tsx', 'u
 assert.match(tokenSrc, /data-testid="object-block-token"/, '#6: ObjectBlockToken component has test id')
 assert.match(tokenSrc, /data-source=/, '#6: token shows source')
 assert.match(tokenSrc, /data-kind=/, '#6: token shows kind')
-assert.match(tokenSrc, /ageLabel/, '#6: token shows age')
+assert.match(tokenSrc, /data-state=/, '#6: token shows age/state')
 
 // ─── #7: × delete + Backspace select-then-delete ──────────────────────────────
 assert.match(tokenSrc, /onRemove/, '#7: ObjectBlockToken has × remove')
@@ -111,7 +111,7 @@ assert.match(tokenSrc, /再按 Backspace 删除/, '#7: token shows delete hint w
 
 // ─── #8: Object Block shows recommended actions, not clipboard as search ───────
 assert.match(searchFrame, /recommendActionsForBlock/, '#8: recommended actions computed from block')
-assert.match(searchFrame, /block \? \(/, '#8: actions shown when block exists (object-action mode)')
+assert.match(searchFrame, /block && \(/, '#8: actions shown when block exists (object-action mode)')
 assert.match(searchFrame, /filteredActions/, '#8: actions filtered by query')
 assert.match(searchFrame, /RecommendedActionRow/, '#8: actions rendered as RecommendedActionRow')
 

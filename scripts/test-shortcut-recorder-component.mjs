@@ -15,8 +15,8 @@ assert.ok(existsSync(join(root, componentPath)), 'ShortcutRecorder component sho
 
 const files = {
   component: read(componentPath),
-  settingsSurfaceContent: read('src/surfaces/SettingsSurfaceContent.tsx'),
-  pluginsSurfaceContent: read('src/surfaces/PluginsManagerSurfaceContent.tsx'),
+  settingsSurfaceContent: read('src/surfaces/SettingsSurfaceContent.tsx') + '\n' + read('src/surfaces/SettingsContent.tsx'),
+  pluginsSurfaceContent: read('src/surfaces/PluginsManagerSurfaceContent.tsx') + '\n' + read('src/surfaces/PluginsContent.tsx'),
   css: read('src/index.css'),
 }
 

@@ -157,7 +157,7 @@ assert.equal(
   'node scripts/test-effect-runner-window-boundary.mjs',
   'package.json must expose effect runner window-boundary coverage',
 )
-assert.match(read('scripts/test-plugin-paste-behavior.mjs'), /hide_launcher_window[\s\S]*simulate_paste[\s\S]*Accessibility permission[\s\S]*pasteFiles/, 'plugin paste behavior must prove foreground paste and fallback paths')
+assert.match(read('scripts/test-plugin-paste-behavior.mjs'), /hide_launcher_and_paste[\s\S]*Accessibility permission[\s\S]*pasteFiles/, 'plugin paste behavior must prove foreground paste and fallback paths')
 assert.match(finalValidationDoc, /# Hiven Refactor Final Validation/, 'final validation doc must exist')
 assert.match(finalValidationDoc, /Launcher ↔ Editor Bridge[\s\S]*Automated evidence[\s\S]*scripts\/test-editor-bridge-behavior\.mjs/, 'final validation doc must map launcher-editor bridge to evidence')
 assert.match(finalValidationDoc, /SurfaceRegistry[\s\S]*Automated evidence[\s\S]*scripts\/test-surface-registry-behavior\.mjs/, 'final validation doc must map SurfaceRegistry to evidence')
@@ -262,9 +262,9 @@ assert.match(files.surfaceRegistry, /surface_registry_snapshot/, 'surface regist
 assert.match(files.surfaceRegistry, /surface_registry_upsert/, 'surface registry must persist upserts to Rust state')
 assert.match(files.tauriLib, /struct\s+SurfaceRegistryState/, 'native runtime must own Rust-side surface registry state')
 assert.match(files.surfaceActions, /focusSurfaceInstance/, 'surface registry must expose focus/switch operation')
-assert.match(files.surfaceActions, /requestOpenLauncherHostSurface\(['"]settings['"]\)/, 'surface focus must reopen Settings as a launcher-hosted surface')
-assert.match(files.surfaceActions, /requestOpenLauncherHostSurface\(['"]plugins['"]\)/, 'surface focus must reopen Plugins as a launcher-hosted surface')
-assert.match(files.surfaceActions, /surface\.kind === ['"]plugin-editor['"][\s\S]*requestOpenLauncherHostSurface\(['"]plugins['"]\)/, 'surface focus must route PluginEditor instances back to the Plugins host surface')
+assert.match(files.surfaceActions, /requestOpenLauncherHostSurface\(['"]system-settings['"]\)/, 'surface focus must reopen Settings as a launcher-hosted surface')
+assert.match(files.surfaceActions, /requestOpenLauncherHostSurface\(['"]system-plugins['"]\)/, 'surface focus must reopen Plugins as a launcher-hosted surface')
+assert.match(files.surfaceActions, /surface\.kind === ['"]plugin-editor['"][\s\S]*requestOpenLauncherHostSurface\(['"]system-plugins['"]\)/, 'surface focus must route PluginEditor instances back to the Plugins host surface')
 assert.match(files.surfaceActions, /requestOpenPluginEditorSurface\(\{[\s\S]*folderPath:\s*surface\.folderPath/, 'surface focus must restore PluginEditor instances through the plugin editor bridge')
 assert.match(files.surfaceActions, /requestOpenLauncherPluginSettingsSurface\([\s\S]*sourceFromSettingsSurfaceInstanceId\(surface\.id\)[\s\S]*surface\.pluginId/, 'surface focus must reopen plugin settings surfaces inside the global launcher')
 

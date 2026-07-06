@@ -109,8 +109,7 @@ assert.deepEqual(
 const [selectedTextItem] = defaultItems
 assert.equal(selectedTextItem.display.title, 'Selected Text')
 assert.equal(selectedTextItem.display.icon, 'icon:text')
-assert.match(selectedTextItem.display.subtitle, /Object: text/)
-assert.match(selectedTextItem.display.subtitle, /Press Tab for actions/)
+assert.equal(selectedTextItem.display.subtitle, 'hello world')
 assert.deepEqual(JSON.parse(JSON.stringify(selectedTextItem.metadata)), {
   kind: 'workflow-object',
   objectId: 'context:selected-text',

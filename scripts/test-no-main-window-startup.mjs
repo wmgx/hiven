@@ -24,6 +24,6 @@ assert.match(app, /installPluginSurfaceShortcutHotkeys\(\)/, 'launcher runtime m
 assert.match(app, /initializePluginBackgrounds\(\)/, 'launcher runtime must initialize plugin backgrounds')
 assert.match(main, /const windowType = new URLSearchParams/, 'entrypoint must route by window query param')
 assert.doesNotMatch(tauriLib, /get_webview_window\("main"\)|show_and_focus_main_window|show_and_focus_window/, 'native runtime must not retain main window focus commands')
-assert.match(hotkeys, /routeGlobalPinnedLauncherShortcut\(\)[\s\S]{0,160}showLauncherWindow\(\)/, 'global hotkey must open launcher directly')
+assert.match(hotkeys, /routeGlobalPinnedLauncherShortcut\(\)[\s\S]{0,300}showLauncherWindow\(\)/, 'global hotkey must open launcher directly')
 
 console.log('no main window startup checks passed')

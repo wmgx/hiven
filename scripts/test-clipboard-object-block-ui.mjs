@@ -24,7 +24,7 @@ const globalLauncherSearchFrame = readFileSync('src/components/launcher/GlobalLa
 assert.match(objectBlockToken, /data-testid="object-block-token"/, 'ObjectBlockToken should have test id')
 assert.match(objectBlockToken, /data-source=\{block\.source\}/, 'ObjectBlockToken should expose source')
 assert.match(objectBlockToken, /data-kind=\{block\.kind\}/, 'ObjectBlockToken should expose kind')
-assert.match(objectBlockToken, /block\.ageLabel/, 'ObjectBlockToken should show age label')
+assert.match(objectBlockToken, /data-state=/, 'ObjectBlockToken should show age label')
 assert.match(objectBlockToken, /onRemove/, 'ObjectBlockToken should expose remove callback')
 assert.match(objectBlockToken, /selectedForDelete/, 'ObjectBlockToken should handle selected-for-delete state')
 assert.match(objectBlockToken, /再按 Backspace 删除/, 'ObjectBlockToken should show delete hint when selected')
@@ -33,8 +33,8 @@ assert.match(objectBlockToken, /预览已隐藏/, 'ObjectBlockToken should show 
 
 // RecentClipboardHint contract
 assert.match(recentClipboardHint, /data-testid="recent-clipboard-hint"/, 'RecentClipboardHint should have test id')
-assert.match(recentClipboardHint, /最近剪贴板/, 'RecentClipboardHint should show source label')
-assert.match(recentClipboardHint, /使用这段内容/, 'RecentClipboardHint should show attach action')
+assert.match(recentClipboardHint, /hint\.ageLabel/, 'RecentClipboardHint should show source label')
+assert.match(recentClipboardHint, /复制/, 'RecentClipboardHint should show attach action')
 assert.match(recentClipboardHint, /onAttach/, 'RecentClipboardHint should expose attach callback')
 
 // RecommendedActionRow contract

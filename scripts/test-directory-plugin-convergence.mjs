@@ -17,7 +17,7 @@ function readIfExists(path) {
 
 const files = {
   packageJson: read('package.json'),
-  pluginsSurfaceContent: read('src/surfaces/PluginsManagerSurfaceContent.tsx'),
+  pluginsSurfaceContent: read('src/surfaces/PluginsManagerSurfaceContent.tsx') + read('src/surfaces/PluginsContent.tsx'),
   settingsSurfaceContent: read('src/surfaces/SettingsSurfaceContent.tsx'),
   pluginRuntime: read('src/workspace/pluginRuntime.ts'),
   pluginStore: read('src/workspace/pluginStore.ts'),
@@ -284,7 +284,7 @@ check('Text Diff builtin directory includes the adaptive diff UI source files', 
     /BUILTIN_PLUGIN_SOURCE_FILES/,
     'configInit should not keep a hardcoded BUILTIN_PLUGIN_SOURCE_FILES map',
   )
-  const renderer = read('src/plugins/textDiff/TextDiffRenderer.tsx')
+  const renderer = read('src/plugins/textDiff/DiffPageView.tsx')
   assert.match(renderer, /JSON semantic status|json-semantic|semanticAvailable/, 'text-diff renderer should own the adaptive JSON/text UI controls')
   assert.ok(readIfExists('src/plugins/textDiff/autoDiffMode.ts'), 'text-diff package should ship autoDiffMode.ts')
   assert.ok(readIfExists('src/plugins/textDiff/manifest.json'), 'text-diff package should ship manifest.json')
@@ -441,7 +441,7 @@ check('Builtin plugin update check compares remote package metadata', () => {
   assert.match(files.tauriLib, /fn\s+replace_plugin_dir[\s\S]*backup[\s\S]*fs::rename/, 'Tauri should provide a replace_plugin_dir command with backup/rename replacement')
   assert.match(files.tauriLib, /generate_handler!\[[\s\S]*replace_plugin_dir/, 'replace_plugin_dir should be registered as a Tauri command')
   assert.ok(files.builtinPluginIndex, 'remote builtin plugin index should exist at src/builtin-plugins/index.json')
-  assert.match(files.builtinPluginIndex, /"version"\s*:\s*26/, 'remote builtin plugin index should carry the current package index version')
+  assert.match(files.builtinPluginIndex, /"version"\s*:\s*27/, 'remote builtin plugin index should carry the current package index version')
   assert.doesNotMatch(files.builtinPluginIndex, /"files"\s*:/, 'remote builtin plugin index should not expose file lists as part of the plugin package contract')
   assert.doesNotMatch(files.configInit, /declare downloadable files/, 'builtin plugin updates should not reject package indexes that omit explicit file lists')
   assert.match(files.configInit, /fetchRemoteBuiltinPackageIndex|GitHub tree|recursive|tree API/i, 'builtin plugin updates should discover package files from the directory instead of requiring explicit file lists')

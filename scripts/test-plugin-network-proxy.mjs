@@ -12,6 +12,7 @@ const files = {
   pluginTypes: read('src/workspace/pluginTypes.ts'),
   pluginPermissions: read('src/workspace/pluginPermissions.ts'),
   globalLauncher: read('src/components/GlobalLauncher.tsx'),
+  pluginSurfaceRenderer: read('src/components/pluginSurface/PluginSurfaceRenderer.tsx'),
   tauriLib: read('src-tauri/src/lib.rs'),
   translateManifest: read('src/plugins/translate/manifest.json'),
   translateAdapters: read('src/plugins/translate/providers/adapters.ts'),
@@ -30,8 +31,8 @@ assert.match(files.pluginTypes, /'network\.request'/, 'PluginPermission must inc
 assert.match(files.pluginPermissions, /'network\.request'/, 'ALL_PLUGIN_PERMISSIONS must include network.request')
 assert.match(files.pluginPermissions, /Network request|访问网络|网络请求/, 'network.request must have localized permission labels')
 
-assert.match(files.globalLauncher, /network:\s*createPluginNetwork\(/, 'GlobalLauncher surface host must pass createPluginNetwork')
-assert.match(files.globalLauncher, /import\s*\{\s*createPluginNetwork\s*\}/, 'GlobalLauncher must import createPluginNetwork')
+assert.match(files.pluginSurfaceRenderer, /network:\s*createPluginNetwork\(/, 'GlobalLauncher surface host must pass createPluginNetwork')
+assert.match(files.pluginSurfaceRenderer, /import\s*\{[\s\S]*?createPluginNetwork[\s\S]*?\}/, 'GlobalLauncher must import createPluginNetwork')
 
 assert.match(files.tauriLib, /struct\s+ProxyHttpRequest/, 'Tauri must model ProxyHttpRequest')
 assert.match(files.tauriLib, /struct\s+ProxyHttpResponse/, 'Tauri must model ProxyHttpResponse')

@@ -57,7 +57,7 @@ assert.match(files.editorView, /createPane\(\{[\s\S]*direction:\s*['"]right['"]/
 assert.match(files.editorView, /createPane\(\{[\s\S]*direction:\s*['"]bottom['"]/, 'Topbar must expose host split-down action')
 assert.doesNotMatch(files.editorView, /title=\{t\(['"]closePane['"]\)\}[\s\S]{0,120}<X/, 'Topbar must not expose the close-pane action')
 assert.match(files.editorView, /key === ['"]w['"][\s\S]{0,240}closeActiveSurfaceOrPane\(\)/, 'Editor shell must expose the host close-pane/surface action through the standard close shortcut')
-assert.match(files.editorView, /setGlobalLauncherOpen\(true,\s*['"]full['"]\)/, 'Topbar must expose the host global launcher action')
+assert.match(files.editorView, /showLauncherWindow\(\)/, 'Topbar must expose the host global launcher action')
 assert.match(files.editorView, /setEditorCommandBarOpen\(true\)/, 'Editor run-action affordance must open the editor command bar')
 assert.match(files.editorView, /toolbarItems\.map/, 'EditorView must still render plugin toolbar contributions')
 assert.match(files.editorView, /runToolbarCommand\(item\.contribution\.commandId/, 'Plugin toolbar slot must execute plugin commands through the toolbar runner')

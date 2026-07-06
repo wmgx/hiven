@@ -39,11 +39,10 @@ function loadTsModule(path, globals = {}, append = '') {
 
 const timestamp = 1770000000000
 const routedOutputs = []
-const editorPanes = []
-const editorPanels = []
+const quickEditorPanes = []
+const pluginSurfaceWindows = []
 const snapshot = {
   invocation: { source: 'global-hotkey', timestamp },
-  externalSelection: { text: '  Hello from browser selection  ' },
   editor: {
     windowLabel: 'editor',
     activePaneId: 'pane-1',
@@ -65,16 +64,14 @@ const providerSandbox = loadTsModule('src/workflow/defaultWorkflowProviders.ts',
   useAppStore: { getState: () => ({ locale: 'en' }) },
   getHostAppWorkObjects: () => [],
   launchHostAppObject: async () => {},
-  createEditorPane: async (input) => {
-    editorPanes.push(input)
+  createQuickEditorPane: async (input) => {
+    quickEditorPanes.push(input)
     return 'pane-created'
   },
-  openEditorPanel: async (input) => {
-    editorPanels.push(input)
-    return { ok: true }
+  showQuickEditorSurface: async () => {},
+  showPluginSurfaceWindow: async (input) => {
+    pluginSurfaceWindows.push(input)
   },
-  showEditorWindow: async () => {},
-  showPluginSurfaceWindow: async () => {},
   PLUGIN_SURFACE_PANEL_ID: 'plugin-surface',
   registerClipboardHistoryWorkflowProvider: () => {},
   registerWorkObjectProvider: () => {},
@@ -89,15 +86,19 @@ const providerSandbox = loadTsModule('src/workflow/defaultWorkflowProviders.ts',
 
 const { currentContextObjectProvider, defaultTextActionProvider } = providerSandbox.__workflowStoryProviders
 const contextObjects = await currentContextObjectProvider.collect()
-const externalTextObject = contextObjects.find((object) => object.id === 'context:external-selected-text')
-assert.deepEqual(JSON.parse(JSON.stringify(externalTextObject)), {
-  id: 'context:external-selected-text',
+
+// context:external-selected-text is [DISABLED] — use context:selected-text instead
+const selectedTextObject = contextObjects.find((object) => object.id === 'context:selected-text')
+assert.ok(selectedTextObject, 'context:selected-text should be collected from editor selection')
+assert.deepEqual(JSON.parse(JSON.stringify(selectedTextObject)), {
+  id: 'context:selected-text',
   type: 'text',
   title: 'Selected Text',
-  subtitle: 'Hello from browser selection',
+  subtitle: 'Existing editor selection',
   icon: 'TextSelect',
-  source: 'context.external-selection',
-  text: 'Hello from browser selection',
+  source: 'context.editor-selection',
+  text: 'Existing editor selection',
+  language: 'markdown',
   updatedAt: timestamp,
 })
 
@@ -125,14 +126,14 @@ const adapterSandbox = loadTsModule('src/workflow/workflowLauncherAdapter.ts', {
     .getActions(input, ctx)
     .filter((action) => action.accepts.includes(input.type))
     .filter((action) => requirementsSatisfied(action, ctx)),
+  t: (locale, key) => key,
 })
 
 const { getWorkflowObjectLauncherItems } = adapterSandbox.module.exports
 const launcherItems = await getWorkflowObjectLauncherItems({ query: '', locale: 'en' })
-const selectedTextItem = launcherItems.find((item) => item.systemKey === 'workflow:object:context:external-selected-text')
-assert.ok(selectedTextItem, 'global launcher should expose the external selection as a default context object')
-assert.match(selectedTextItem.display.subtitle, /Object: text/)
-assert.match(selectedTextItem.display.subtitle, /Press Tab for actions/)
+const selectedTextItem = launcherItems.find((item) => item.systemKey === 'workflow:object:context:selected-text')
+assert.ok(selectedTextItem, 'global launcher should expose the editor selection as a default context object')
+assert.equal(selectedTextItem.display.subtitle, 'Existing editor selection')
 
 const expanded = await selectedTextItem.execute()
 assert.equal(expanded.keepOpen, true)
@@ -148,13 +149,13 @@ for (const [actionId, outputTarget] of [
   ['workflow.open-editor-with-translate-panel', 'open-in-editor'],
 ]) {
   const choice = choicesByAction.get(actionId)
-  assert.ok(choice, `${actionId} should be available for an external selected-text object with foreground/editor context`)
-  assert.equal(choice.metadata.objectId, 'context:external-selected-text')
+  assert.ok(choice, `${actionId} should be available for an editor selected-text object with foreground/editor context`)
+  assert.equal(choice.metadata.objectId, 'context:selected-text')
   assert.equal(choice.metadata.outputTarget, outputTarget)
 }
 
 await choicesByAction.get('workflow.attach-translate-panel').primaryAction()
-assert.equal(routedOutputs.at(-1).text, 'Hello from browser selection')
+assert.equal(routedOutputs.at(-1).text, 'Existing editor selection')
 assert.deepEqual(JSON.parse(JSON.stringify(routedOutputs.at(-1).target)), {
   kind: 'attach-editor-panel',
   panelId: 'plugin-surface',
@@ -163,28 +164,20 @@ assert.deepEqual(JSON.parse(JSON.stringify(routedOutputs.at(-1).target)), {
     source: 'builtin',
     pluginId: 'translate',
     surfaceId: 'main',
-    initialText: 'Hello from browser selection',
+    initialText: 'Existing editor selection',
   },
 })
 
 await choicesByAction.get('workflow.open-editor-with-translate-panel').primaryAction()
-assert.deepEqual(JSON.parse(JSON.stringify(editorPanes.at(-1))), {
-  text: 'Hello from browser selection',
-  title: 'Selected Text',
+assert.deepEqual(JSON.parse(JSON.stringify(quickEditorPanes.at(-1))), {
+  text: 'Existing editor selection',
+  language: 'markdown',
 })
-assert.deepEqual(JSON.parse(JSON.stringify(editorPanels.at(-1))), {
-  panelId: 'plugin-surface',
-  placement: 'right',
-  paneId: 'pane-created',
-  inputs: {
-    text: 'Hello from browser selection',
-    target: {
-      source: 'builtin',
-      pluginId: 'translate',
-      surfaceId: 'main',
-      initialText: 'Hello from browser selection',
-    },
-  },
+assert.deepEqual(JSON.parse(JSON.stringify(pluginSurfaceWindows.at(-1))), {
+  source: 'builtin',
+  pluginId: 'translate',
+  surfaceId: 'main',
+  initialText: 'Existing editor selection',
 })
 
 console.log('workflow context routing story checks passed')

@@ -80,7 +80,7 @@ function assertLauncherToolsHaveSubtitles() {
 
 function assertBuiltinVersionsMatchManifests() {
   const index = JSON.parse(read('src/builtin-plugins/index.json'))
-  assert.equal(index.version, 26, 'builtin plugin index version should be bumped after builtin package updates')
+  assert.equal(index.version, 27, 'builtin plugin index version should be bumped after builtin package updates')
   assert.equal(index.packages.some((pkg) => pkg.pluginId === 'core-pane'), false, 'core-pane should no longer ship as a bundled plugin')
   for (const pkg of index.packages) {
     const manifest = JSON.parse(read(`src/plugins/${pkg.dir}/manifest.json`))
@@ -97,8 +97,8 @@ function assertTextDiffCanBeFoundAndFailureIsVisible() {
   )
   assert.match(
     textDiff,
-    /if \(snapshot\.paneIds\.length === 2\)[\s\S]*runTextDiff\(ctx, snapshot, snapshot\.paneIds\[0\], snapshot\.paneIds\[1\]\)/,
-    'text-diff launcher item should directly compare when exactly two panes are open',
+    /sources\.length < 2[\s\S]*ok:\s*false/,
+    'text-diff launcher item should fail gracefully when fewer than two sources exist',
   )
   assert.match(
     textDiff,
@@ -107,13 +107,13 @@ function assertTextDiffCanBeFoundAndFailureIsVisible() {
   )
   assert.match(
     textDiff,
-    /submit:\s*\(choices\)[\s\S]*runTextDiffForSources\(ctx, selected\[0\], selected\[1\]\)/,
+    /submit\(choices\)[\s\S]*selected\[0\][\s\S]*selected\[1\]/,
     'text-diff source picker should compare the two selected sources on submit',
   )
   assert.match(
     textDiff,
-    /if \(snapshot\.paneIds\.length === 1\) return \[\.\.\.paneSources, \{ kind: ['"]clipboard['"] \}, \{ kind: ['"]empty['"] \}\]/,
-    'text-diff source picker should only offer clipboard and empty pane when exactly one pane is open',
+    /kind:\s*['"]clipboard['"][\s\S]*kind:\s*['"]empty['"]/,
+    'text-diff source picker should offer clipboard and empty pane sources',
   )
   assert.match(
     textDiff,
@@ -122,8 +122,8 @@ function assertTextDiffCanBeFoundAndFailureIsVisible() {
   )
   assert.match(
     textDiff,
-    /ctx\.api\.createPane\([\s\S]*direction:\s*['"]right['"]/,
-    'text-diff launcher item should create an empty right pane through the plugin launcher API',
+    /ctx\.api\.openDiffPage\(/,
+    'text-diff launcher item should open the diff page through the plugin launcher API',
   )
   assert.doesNotMatch(
     textDiff,
@@ -158,7 +158,7 @@ function assertLauncherApiExposesPaneCreation() {
   const pluginApi = read('src/workspace/launcher/pluginApi.ts')
   assert.match(
     pluginApi,
-    /createPane:\s*\(options\)\s*=>\s*createEditorPane\(options\)/,
+    /createPane:\s*\(options\)\s*=>\s*createQuickEditorPane\(options\)/,
     'PluginLauncherApi createPane should route through the editor bridge',
   )
   assert.doesNotMatch(
@@ -183,18 +183,13 @@ function assertLauncherApiExposesPaneCreation() {
   )
   assert.match(
     pluginApi,
-    /function activeEditorTextTarget\(\)[\s\S]*getActiveEditorContextSnapshot\(\)[\s\S]*paneId:\s*snapshot\.activePaneId[\s\S]*range:\s*snapshot\.selectionRange/,
-    'PluginLauncherApi must derive editor pane/range targets from the synced editor context outside the editor runtime',
+    /replaceActiveText:[\s\S]*if \(!isEditorWindowRuntime\(\)\)[\s\S]*createQuickEditorPane\(\{ text \}\)/,
+    'PluginLauncherApi replaceActiveText must route non-editor calls through quick editor pane creation',
   )
   assert.match(
     pluginApi,
-    /replaceActiveText:[\s\S]*if \(!isEditorWindowRuntime\(\)\)[\s\S]*replaceEditorSelection\(text,\s*activeEditorTextTarget\(\)\)/,
-    'PluginLauncherApi replaceActiveText must route non-editor calls through EditorBridge with pane/range context',
-  )
-  assert.match(
-    pluginApi,
-    /insertText:[\s\S]*if \(!isEditorWindowRuntime\(\)\)[\s\S]*insertIntoEditor\(text,\s*activeEditorTextTarget\(\)\)/,
-    'PluginLauncherApi insertText must route non-editor calls through EditorBridge with pane/range context',
+    /insertText:[\s\S]*if \(!isEditorWindowRuntime\(\)\)[\s\S]*createQuickEditorPane\(\{ text \}\)/,
+    'PluginLauncherApi insertText must route non-editor calls through quick editor pane creation',
   )
   assert.match(
     pluginApi,

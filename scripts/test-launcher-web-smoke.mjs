@@ -55,12 +55,12 @@ async function main() {
     const mainSource = readFileSync('src/main.tsx', 'utf8')
     assert.match(mainSource, /document\.documentElement\.dataset\.window\s*=\s*['"]launcher['"]/, 'main entry should mark launcher documents')
     assert.match(mainSource, /windowType === ['"]plugin-surface['"]/, 'main entry should keep plugin surface routing')
-    assert.match(mainSource, /windowType === ['"]editor['"]/, 'main entry should keep editor routing')
+    assert.match(mainSource, /windowType === ['"]quick-editor['"]/, 'main entry should keep editor routing')
 
     const pluginSurfaceHtml = await (await waitFor(`${baseUrl}/?window=plugin-surface&source=builtin&pluginId=clipboard-history&surfaceId=history`)).text()
     assert.match(pluginSurfaceHtml, /id="root"/, 'plugin surface web route should serve the app root')
 
-    const editorHtml = await (await waitFor(`${baseUrl}/?window=editor`)).text()
+    const editorHtml = await (await waitFor(`${baseUrl}/?window=quick-editor`)).text()
     assert.match(editorHtml, /id="root"/, 'editor web route should serve the app root')
 
     const appSource = readFileSync('src/App.tsx', 'utf8')

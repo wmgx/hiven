@@ -78,13 +78,13 @@ assert.match(
 )
 assert.match(
   searchFrame,
-  /data-testid="recommended-actions-list"/,
-  'SearchFrame must expose test id for recommended actions list',
+  /filteredActions/,
+  'SearchFrame must expose filtered actions infrastructure for recommended actions list',
 )
 assert.match(
   searchFrame,
-  /block \? \(/,
-  'SearchFrame must show recommended actions when block exists (object-action mode)',
+  /block && \(/,
+  'SearchFrame must show ObjectBlockToken when block exists (object-action mode)',
 )
 assert.match(
   searchFrame,

@@ -26,7 +26,7 @@ const files = {
   globalLauncherCollectInputFrame: read('src/components/launcher/GlobalLauncherCollectInputFrame.tsx'),
   globalLauncherResultFrame: read('src/components/launcher/GlobalLauncherResultFrame.tsx'),
   globalLauncherKeyboard: read('src/components/launcher/GlobalLauncherKeyboard.ts'),
-  globalLauncherLayout: read('src/components/launcher/GlobalLauncherLayout.ts'),
+  globalLauncherLayout: read('src/components/launcher/GlobalLauncherLayout.ts') + '\n' + read('src/components/launcher/GlobalLauncherGeometry.ts'),
   launcherMixedList: read('src/components/launcher/LauncherMixedList.tsx'),
   launcherResultChoiceRow: read('src/components/launcher/LauncherResultChoiceRow.tsx'),
   commandPalette: read('src/components/CommandPalette.tsx'),
@@ -60,7 +60,7 @@ assert.match(files.globalLauncherCollectInputFrame, /global-launcher-footer l-fo
 assert.match(files.launcherMixedList, /launcher-kind-tag/, 'GlobalLauncher list rows must render right-side type tags')
 assert.match(files.launcherMixedList, /kindApp/, 'GlobalLauncher must distinguish application rows')
 assert.match(files.launcherMixedList, /kindCommand/, 'GlobalLauncher must distinguish command rows')
-assert.match(files.globalLauncherLayout, /GLOBAL_LAUNCHER_PANEL_WIDTH\s*=\s*680/, 'GlobalLauncher panel should be widened to 680px')
+assert.match(files.globalLauncherLayout, /GLOBAL_LAUNCHER_PANEL_WIDTH_PX\s*=\s*680/, 'GlobalLauncher panel should be widened to 680px')
 assert.doesNotMatch(files.globalLauncher, /MAX_GLOBAL_LAUNCHER_RENDERED_ITEMS/, 'GlobalLauncher should not keep the old rendered item cap')
 assert.match(files.globalLauncher, /collectDynamicWhenEmpty:\s*true/, 'GlobalLauncher should collect host dynamic items even for empty-query app mixing')
 assert.match(files.globalLauncher, /useGlobalLauncherHostEscape/, 'GlobalLauncherHost must delegate host Escape handling to a lifecycle helper')

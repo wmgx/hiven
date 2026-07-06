@@ -134,8 +134,8 @@ assert.match(pluginTypes, /permissions\?\s*:\s*(?:string\[\]|PluginPermission\[\
 // ─── 6. Runtime must not grant permissions unconditionally ──────────────────
 
 const bgManager = read('src/workspace/pluginBackgroundManager.ts')
-const launcher = read('src/components/GlobalLauncher.tsx') + '\n' + read('src/launcher/hosts/GlobalLauncherHost.tsx') + '\n' + read('src/components/launcher/GlobalLauncherSelection.ts') + '\n' + read('src/components/launcher/GlobalLauncherFrames.tsx')
-const pluginsSurfaceContent = read('src/surfaces/PluginsManagerSurfaceContent.tsx')
+const launcher = read('src/components/GlobalLauncher.tsx') + '\n' + read('src/launcher/hosts/GlobalLauncherHost.tsx') + '\n' + read('src/components/launcher/GlobalLauncherSelection.ts') + '\n' + read('src/components/launcher/GlobalLauncherFrames.tsx') + '\n' + read('src/components/launcher/GlobalLauncherPermissionFrame.tsx')
+const pluginsSurfaceContent = read('src/surfaces/PluginsContent.tsx')
 const indexCss = read('src/index.css')
 const scriptsI18n = read('src/i18n/locales/scripts.ts')
 

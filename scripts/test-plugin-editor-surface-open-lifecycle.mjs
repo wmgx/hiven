@@ -90,7 +90,7 @@ assert.match(
 )
 assert.match(
   actions,
-  /kind === ['"]plugin-editor['"][\s\S]*requestOpenLauncherHostSurface\(['"]plugins['"]\)[\s\S]*requestOpenPluginEditorSurface\(/,
+  /kind === ['"]plugin-editor['"][\s\S]*requestOpenLauncherHostSurface\(['"]system-plugins['"]\)[\s\S]*requestOpenPluginEditorSurface\(/,
   'focusing a plugin-editor surface must bridge to the launcher-hosted plugins surface and request the editor sub-surface',
 )
 

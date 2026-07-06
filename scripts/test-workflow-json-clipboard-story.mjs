@@ -74,11 +74,11 @@ assert.match(
 for (const [systemKey, title] of [
   ['host:editor:json-minify', 'Compress JSON to Single Line'],
   ['host:editor:json-to-yaml', 'Convert JSON to YAML'],
-  ['host:editor:json-extract-fields', 'Extract JSON Fields'],
+  ['host:editor:json-expression', 'JSON Tools · Expression'],
 ]) {
   assert.match(
     files.hostEditorActions,
-    new RegExp(`systemKey:\\s*['\"]${systemKey}['\"][\\s\\S]*title:\\s*['\"]${title}['\"][\\s\\S]*surfaces:\\s*\\[['\"]editor-command-bar['\"]\\]`),
+    new RegExp(`systemKey:\\s*['\"]${systemKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['\"][\\s\\S]*title:\\s*['\"]${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['\"][\\s\\S]*surfaces:\\s*\\[['\"]editor-command-bar['\"]\\]`),
     `${title} must be available as an editor-local command bar action`,
   )
 }

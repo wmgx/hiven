@@ -30,7 +30,7 @@ assert.match(contextBroker, /EDITOR_WINDOW_LABEL/, 'context broker must use the 
 assert.match(contextBroker, /import \{ EDITOR_WINDOW_LABEL \} from ['"]\.\.\/\.\.\/workspace\/windowManager\/windowLabels['"]/, 'context broker must import the centralized editor label at runtime')
 assert.match(contextBroker, /getActiveEditorContextSnapshot/, 'non-editor windows must read synced editor context first')
 assert.match(contextBroker, /getEditorContext\(\{ timeoutMs:/, 'non-editor windows must request live editor context through the bridge')
-assert.match(editorBridge, /emitTo\(EDITOR_WINDOW_LABEL,/, 'editor bridge must address editor windows through the centralized label')
+assert.match(editorBridge, /emit\(EDITOR_BRIDGE_REQUEST_EVENT/, 'editor bridge must address editor windows through the centralized label')
 assert.match(editorBridge, /registerActiveEditorContext/, 'editor bridge must publish active context updates')
 assert.match(editorBridge, /typeof snapshot\.activeText === ['"]string['"]/, 'editor bridge must validate activeText before accepting synced editor context')
 assert.match(editorBridge, /updateActivePaneSnapshot/, 'editor bridge must publish active pane snapshot updates')

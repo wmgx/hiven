@@ -12,7 +12,7 @@ const pluginSdk = readFileSync('src/plugin-sdk.ts', 'utf8')
 const panelHost = readFileSync('src/components/workspace/PanelHostV2.tsx', 'utf8')
 const paneBottomPanels = readFileSync('src/components/workspace/PaneBottomPanels.tsx', 'utf8')
 const jsFilter = readFileSync('src/plugins/jsFilter/index.tsx', 'utf8')
-const regexTester = readFileSync('src/plugins/regex-tester/index.tsx', 'utf8')
+const regexTester = readFileSync('src/plugins/regex-tester/index.tsx', 'utf8') + '\n' + readFileSync('src/plugins/regex-tester/RegexTesterViews.tsx', 'utf8')
 const architectureCheck = readFileSync('scripts/check-architecture.mjs', 'utf8')
 
 assert.equal(

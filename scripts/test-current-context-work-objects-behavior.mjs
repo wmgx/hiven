@@ -30,14 +30,12 @@ source += '\n;globalThis.__currentContextObjectProvider = currentContextObjectPr
 const timestamp = 1770000000000
 let snapshot = {
   invocation: { source: 'global-hotkey', timestamp },
-  externalSelection: { text: '  external selected text  ' },
   editor: {
     windowLabel: 'editor',
     activePaneId: 'pane-1',
     selectedText: '  editor selected text  ',
     language: 'markdown',
   },
-  clipboard: { kind: 'text', text: '  clipboard text  ' },
 }
 
 const sandbox = {
@@ -55,9 +53,8 @@ const sandbox = {
   useAppStore: { getState: () => ({ locale: 'en' }) },
   getHostAppWorkObjects: () => [],
   launchHostAppObject: () => {},
-  createEditorPane: () => {},
-  openEditorPanel: () => {},
-  showEditorWindow: () => {},
+  createQuickEditorPane: () => {},
+  showQuickEditorSurface: () => {},
   showPluginSurfaceWindow: () => {},
   PLUGIN_SURFACE_PANEL_ID: 'plugin-surface',
   createDefaultOutputRouterContext: () => ({}),
@@ -78,16 +75,9 @@ function plain(value) {
   return JSON.parse(JSON.stringify(value))
 }
 
-assert.deepEqual(plain(byId.get('context:external-selected-text')), {
-  id: 'context:external-selected-text',
-  type: 'text',
-  title: 'Selected Text',
-  subtitle: 'external selected text',
-  icon: 'TextSelect',
-  source: 'context.external-selection',
-  text: 'external selected text',
-  updatedAt: timestamp,
-})
+// context:external-selected-text is [DISABLED] in the source — no longer collected.
+assert.equal(byId.get('context:external-selected-text'), undefined,
+  'external-selected-text should not be collected while the feature is disabled')
 
 assert.deepEqual(plain(byId.get('context:selected-text')), {
   id: 'context:selected-text',
@@ -98,29 +88,6 @@ assert.deepEqual(plain(byId.get('context:selected-text')), {
   source: 'context.editor-selection',
   text: 'editor selected text',
   language: 'markdown',
-  updatedAt: timestamp,
-})
-
-assert.deepEqual(plain(byId.get('context:clipboard-text')), {
-  id: 'context:clipboard-text',
-  type: 'clipboard',
-  title: 'Clipboard Text',
-  subtitle: 'clipboard text',
-  icon: 'Clipboard',
-  source: 'context.clipboard',
-  contentType: 'text',
-  preview: 'clipboard text',
-  updatedAt: timestamp,
-})
-
-assert.deepEqual(plain(byId.get('context:clipboard-text-as-text')), {
-  id: 'context:clipboard-text-as-text',
-  type: 'text',
-  title: 'Clipboard as Text',
-  subtitle: 'clipboard text',
-  icon: 'Text',
-  source: 'context.clipboard',
-  text: 'clipboard text',
   updatedAt: timestamp,
 })
 
@@ -139,14 +106,12 @@ assert.deepEqual(plain(byId.get('editor:pane-1')), {
 
 snapshot = {
   invocation: { source: 'global-hotkey', timestamp },
-  externalSelection: { text: '    ' },
   editor: {
     windowLabel: 'editor',
     activePaneId: 'pane-2',
     selectedText: ' \n\t ',
     language: undefined,
   },
-  clipboard: { kind: 'text', text: '   ' },
 }
 
 const whitespaceObjects = await provider.collect()

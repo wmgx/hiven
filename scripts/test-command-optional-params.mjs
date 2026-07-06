@@ -29,6 +29,7 @@ const globalLauncher = [
   read('src/components/GlobalLauncher.tsx'),
   read('src/launcher/hosts/GlobalLauncherHost.tsx'),
   read('src/components/launcher/GlobalLauncherFrames.tsx'),
+  read('src/components/launcher/GlobalLauncherPanel.tsx'),
 ].join('\n')
 const toolAdapter = read('src/workspace/launcher/toolAdapter.ts')
 const store = read('src/store.ts')
@@ -77,26 +78,11 @@ function pluginIndex(dir) {
   return existsSync(p) ? readFileSync(p, 'utf8') : null
 }
 
+// Plugins that declare params with explicit defaults for launcher parameter flow
 const parameterizedPlugins = [
-  'base64',
   'calculator',
-  'case',
-  'css',
-  'csv',
   'date-time-assistant',
-  'hash',
-  'html',
-  'json',
-  'lineAffix',
-  'lineTools',
-  'mdquote',
-  'queryString',
-  'slashes',
-  'sql',
-  'sqlin',
-  'url',
-  'xml',
-  'yaml',
+  'line-tools',
 ]
 
 for (const name of parameterizedPlugins) {
@@ -107,17 +93,9 @@ for (const name of parameterizedPlugins) {
   assert(/default:/.test(src), `${name} plugin params should provide explicit defaults for launcher parameter flow`)
 }
 
+// Plugins that require user to select params before running
 const promptBeforeRunPlugins = [
-  'base64',
   'calculator',
-  'case',
-  'csv',
-  'html',
-  'mdquote',
-  'queryString',
-  'slashes',
-  'url',
-  'yaml',
 ]
 
 for (const name of promptBeforeRunPlugins) {
@@ -126,22 +104,44 @@ for (const name of promptBeforeRunPlugins) {
   assert(/requireParamSelection:\s*true/.test(src), `${name} should prompt for mode/direction instead of default-running from launcher`)
 }
 
+// Plugins that support default-run (no requireParamSelection)
 const defaultRunPlugins = [
-  'css',
   'date-time-assistant',
-  'hash',
-  'json',
-  'lineAffix',
-  'lineTools',
-  'sql',
-  'sqlin',
-  'xml',
+  'line-tools',
+  'encode-decode',
+  'formatter',
+  'text-utils',
+  'crypto',
+  'json-tools',
+  'csv',
+  'yaml',
 ]
 
 for (const name of defaultRunPlugins) {
   const src = pluginIndex(name)
   assert(src, `${name} should exist as a first-party plugin package`)
   assert(!/requireParamSelection:\s*true/.test(src), `${name} should keep default-run launcher behavior`)
+}
+
+// All first-party plugins must use the definePlugin or PluginDefinition pattern
+const allPlugins = [
+  'calculator',
+  'csv',
+  'date-time-assistant',
+  'encode-decode',
+  'formatter',
+  'text-utils',
+  'crypto',
+  'line-tools',
+  'json-tools',
+  'yaml',
+]
+
+for (const name of allPlugins) {
+  const src = pluginIndex(name)
+  assert(src, `${name} should exist as a first-party plugin package`)
+  assert(!/optionalParams:\s*true/.test(src), `${name} plugin should not use deprecated optionalParams`)
+  assert(/definePlugin|PluginDefinition/.test(src), `${name} plugin should use definePlugin or PluginDefinition pattern`)
 }
 
 console.log('command optional params checks passed')

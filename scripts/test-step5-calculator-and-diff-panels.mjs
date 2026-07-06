@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Step 5 calculator result panel + Text Diff TextSource contract. */
+/** Step 5 calculator result panel + Text Diff plugin contract. */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
@@ -12,17 +12,15 @@ assert.match(calcSrc, /effects\.replaceActiveText\(resultText\)/, 'Calculation r
 assert.match(calcSrc, /pane\.create[\s\S]*resultText/, 'Calculation result panel should offer new pane output')
 
 const textDiffSrc = readFileSync('src/plugins/textDiff/index.tsx', 'utf8')
-const textDiffSurfaceSrc = readFileSync('src/plugins/textDiff/TextDiffSurface.tsx', 'utf8')
-assert.match(textDiffSrc, /type TextSource\s*=\s*{[\s\S]*kind:\s*['"]editor-pane['"] \| ['"]clipboard['"] \| ['"]empty['"] \| ['"]snapshot['"]/, 'Text Diff should own a plugin-local TextSource abstraction')
-assert.match(textDiffSrc, /contentProvider:\s*['"]live['"] \| ['"]snapshot['"]/, 'TextSource should distinguish live and snapshot providers')
-assert.match(textDiffSrc, /sourceMeta/, 'Text Diff renderer inputs should carry source metadata')
-assert.match(textDiffSrc, /snapshotAt/, 'Text Diff sources should record snapshot timestamp metadata')
-assert.match(textDiffSrc, /title:\s*['"]Text Diff['"][\s\S]*entry:\s*{\s*launcher:\s*true/, 'Text Diff should expose a global launcher surface')
-assert.match(textDiffSurfaceSrc, /Original[\s\S]*Modified[\s\S]*Preview/, 'Text Diff surface should provide original, modified, and preview columns')
+const diffPageViewSrc = readFileSync('src/plugins/textDiff/DiffPageView.tsx', 'utf8')
+assert.match(textDiffSrc, /type PaneSnapshot\s*=\s*\{/, 'Text Diff should own a plugin-local PaneSnapshot type')
+assert.match(textDiffSrc, /kind:\s*['"]editor-pane['"]/, 'Text Diff sources should support editor-pane kind')
+assert.match(textDiffSrc, /kind:\s*['"]clipboard['"]/, 'Text Diff sources should support clipboard kind')
+assert.match(textDiffSrc, /kind:\s*['"]empty['"]/, 'Text Diff sources should support empty kind')
+assert.match(textDiffSrc, /buildSourceList/, 'Text Diff should build a source list for diff input selection')
+assert.match(textDiffSrc, /surfaces:\s*\[['"]command-palette['"],\s*['"]global-launcher['"]\]/, 'Text Diff should expose both command-palette and global-launcher surfaces')
+assert.match(diffPageViewSrc, /Original[\s\S]*Modified|original[\s\S]*modified/, 'Text Diff page should provide original and modified columns')
+assert.match(diffPageViewSrc, /DualEditorView/, 'Text Diff page should render a dual editor view')
 assert.doesNotMatch(textDiffSrc, /framework|core\.diff/, 'Text Diff source semantics should not move into framework/core diff APIs')
-
-const rendererSrc = readFileSync('src/plugins/textDiff/TextDiffRenderer.tsx', 'utf8')
-assert.match(rendererSrc, /sourceMeta/, 'Text Diff renderer should read source metadata')
-assert.match(rendererSrc, /text-diff-snapshot-badge/, 'Text Diff renderer should expose snapshot badge UI')
 
 console.log('step5 calculator and diff panel checks passed')

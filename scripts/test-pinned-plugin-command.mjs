@@ -30,7 +30,7 @@ for (const pluginFile of fs.readdirSync('src/plugins')
   .filter((file) => fs.existsSync(file))) {
   const source = read(pluginFile)
   if (unsupportedPinnedEffectPattern.test(source)) {
-    assertHas(source, /live:\s*\{\s*pinnable:\s*false\s*\}/, `${pluginFile} emits workspace-only effects and should opt out of pinning`)
+    assertHas(source, /pinnable:\s*false/, `${pluginFile} emits workspace-only effects and should opt out of pinning`)
   }
 }
 

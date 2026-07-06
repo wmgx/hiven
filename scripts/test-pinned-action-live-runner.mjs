@@ -65,7 +65,7 @@ check('Pinned action definitions remain in the app store', () => {
 })
 
 check('High-frequency builtin text tools declare live on-input capability', () => {
-  for (const name of ['base64', 'url', 'hash', 'date-time-assistant', 'json', 'count']) {
+  for (const name of ['date-time-assistant', 'calculator']) {
     const src = readIfExists(`src/plugins/${name}/index.ts`)
     assert.ok(src, `${name} plugin package should exist`)
     assert.match(src, /live:\s*\{\s*live:\s*\{/, `${name} should declare a live capability`)

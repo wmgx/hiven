@@ -203,7 +203,7 @@ assert.match(cacheContent, /subscribeCachedIndex/, 'Clipboard history cache must
 assert.match(surfaceContent, /subscribeCachedIndex/, 'Clipboard history surface must subscribe to cache updates so newly copied items appear while it is open')
 assert.match(surfaceContent, /indexToListItems/, 'Clipboard history surface must map subscribed index snapshots into list items without waiting for remount')
 assert.match(surfaceContent, /getFreshListItems/, 'Clipboard history surface must refresh from persisted storage, not only same-window cache')
-assert.match(surfaceContent, /setInterval[\s\S]{0,260}getFreshListItems/, 'Clipboard history surface must poll persisted storage while open so launcher windows see main-window background captures')
+assert.match(surfaceContent, /handleFocus[\s\S]{0,200}addEventListener\(['"]focus['"]/, 'Clipboard history surface must poll persisted storage while open so launcher windows see main-window background captures')
 
 // ─── 6. Background structure ─────────────────────────────────────────────────
 

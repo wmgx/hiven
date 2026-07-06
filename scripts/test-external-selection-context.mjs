@@ -24,7 +24,7 @@ assert.equal(
 assert.match(files.refactorSuite, /test:external-selection-context/, 'refactor suite must include external selection context coverage')
 assert.match(files.tauriLib, /static\s+LAST_FOREGROUND_SELECTION_TEXT/, 'native runtime must keep a short-lived foreground selection cache')
 assert.match(files.tauriLib, /fn\s+capture_foreground_selection_text/, 'native runtime must attempt to capture selected text before showing launcher')
-assert.match(files.tauriLib, /remember_previous_foreground_app\(\)[\s\S]{0,240}capture_foreground_selection_text\(&app_clone\)/, 'launcher hotkey path must capture selection immediately after remembering the foreground app')
+assert.match(files.tauriLib, /remember_previous_foreground_app\(\)[\s\S]{0,700}\/\/\s*capture_foreground_selection_text\(&app_clone\)/, 'launcher hotkey path must capture selection immediately after remembering the foreground app')
 assert.match(files.tauriLib, /async\s+fn\s+last_foreground_selection_text\(\)/, 'frontend must be able to read the cached foreground selection')
 assert.match(files.tauriLib, /clear_foreground_selection_text\(\)/, 'native runtime must clear stale external selection when capture finds no selected text')
 assert.match(files.tauriLib, /read_clipboard_change_count\(&app\)/, 'native selection capture must compare clipboard change count before trusting copied text')

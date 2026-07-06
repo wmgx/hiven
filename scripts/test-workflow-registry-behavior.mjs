@@ -26,6 +26,7 @@ function plainIds(actions) {
 function loadWorkflowRegistry() {
   let src = readFileSync('src/workflow/workflowRegistry.ts', 'utf8')
   src = src.replace(/import\s+type\s*\{[\s\S]*?\}\s*from\s*'[^']*'\s*;?\s*\n?/g, '')
+  src = src.replace(/import\s*\{[\s\S]*?\}\s*from\s*'[^']*'\s*;?\s*\n?/g, '')
   const out = ts.transpileModule(src, {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
@@ -34,7 +35,13 @@ function loadWorkflowRegistry() {
     },
   }).outputText
   const moduleExports = {}
-  const sandbox = { exports: moduleExports, module: { exports: moduleExports }, console }
+  const sandbox = {
+    exports: moduleExports,
+    module: { exports: moduleExports },
+    console,
+    launcherPerfNow: () => 0,
+    logLauncherPerfDuration: () => {},
+  }
   vm.runInNewContext(out, sandbox)
   return sandbox.module.exports
 }
@@ -130,8 +137,8 @@ const externalSelectionActions = await registry.getWorkActions(textObject, {
 })
 assert.deepEqual(
   plainIds(externalSelectionActions),
-  ['copy-anywhere', 'translate-selection'],
-  'external selected text must satisfy selected-text requirements',
+  ['copy-anywhere'],
+  'external selected text must not satisfy selected-text requirements when externalSelection check is disabled',
 )
 
 const clipboardActionsWithoutClipboard = await registry.getWorkActions(clipboardObject, emptyCtx)

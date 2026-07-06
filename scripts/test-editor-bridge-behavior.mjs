@@ -21,7 +21,7 @@ assert.match(
 const editorBridgeSource = readFileSync('src/workspace/editorBridge.ts', 'utf8')
 assert.match(editorBridgeSource, /EDITOR_BRIDGE_READY_EVENT/, 'editor bridge must define an editor-ready event')
 assert.match(editorBridgeSource, /waitForEditorBridgeReady/, 'editor bridge requests must wait for editor readiness before delivery')
-assert.match(editorBridgeSource, /request = createEditorBridgeRequest[\s\S]*waitForEditorBridgeResponse[\s\S]*persistPendingEditorBridgeRequest\(request\)[\s\S]*showEditorWindow\(\)[\s\S]*waitForEditorBridgeReady/, 'startup-sensitive editor bridge requests must be queued before opening the editor window')
+assert.match(editorBridgeSource, /request = createEditorBridgeRequest[\s\S]*persistPendingEditorBridgeRequest\(request\)[\s\S]*showEditorWindow\(\)/, 'startup-sensitive editor bridge requests must be queued before opening the editor window')
 assert.match(editorBridgeSource, /emitEditorBridgeReady/, 'editor bridge handlers must publish readiness after registration')
 assert.match(editorBridgeSource, /clearPendingEditorBridgeRequest\(request\.requestId\)/, 'failed delivery must clear pending requests to avoid late execution')
 assert.match(editorBridgeSource, /expiresAt:\s*createdAt\s*\+\s*Math\.max\(timeoutMs,\s*0\)/, 'editor bridge requests must carry an execution expiry')

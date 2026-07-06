@@ -40,12 +40,20 @@ function loadPlugin(path) {
 }
 
 async function runTextCommand(plugin, id, text, params = {}) {
-  const command = plugin.commands?.find((item) => item.id === id)
+  const tools = plugin.tools ?? plugin.commands ?? []
+  const command = tools.find((item) => item.id === id)
   assert.ok(command, `${id} should exist`)
-  const result = await command.run({
+  const ctx = {
+    input: { kind: 'text', text, paneId: 'pane-test' },
     inputs: { input: { kind: 'text', text, paneId: 'pane-test' } },
     params,
-  })
+    output: {
+      text: (t) => ({ output: { kind: 'text', text: t } }),
+      replaceActiveText: (t) => ({ output: { kind: 'text', text: t } }),
+      error: (t) => ({ output: { kind: 'error', text: t } }),
+    },
+  }
+  const result = await command.run(ctx)
   if (result.output) return result.output.text
   const replace = result.effects?.find((effect) => effect.type === 'text.replace')
   assert.ok(replace, `${id} should return text output or legacy text.replace`)
@@ -53,7 +61,8 @@ async function runTextCommand(plugin, id, text, params = {}) {
 }
 
 const calculator = loadPlugin('src/plugins/calculator/index.ts')
-assert.ok(calculator.commands?.some((item) => item.id === 'calculator.base'), 'calculator should include number base conversion')
+const calcTools = calculator.tools ?? calculator.commands ?? []
+assert.ok(calcTools.some((item) => item.id === 'calculator.base'), 'calculator should include number base conversion')
 assert.equal(
   await runTextCommand(calculator, 'calculator.base', '9007199254740993', { mode: 'dec2hex' }),
   '20000000000001',
@@ -65,42 +74,36 @@ assert.equal(
   'calculator base conversion should convert large hex values back to decimal',
 )
 
-const lineAffix = loadPlugin('src/plugins/lineAffix/index.ts')
-assert.deepEqual(
-  Array.from(lineAffix.commands?.map((item) => item.id) ?? []),
-  ['line-affix.prepend', 'line-affix.append', 'line-affix.wrap'],
-  'line-affix should own prepend, append, and wrap commands',
-)
+const lineTools = loadPlugin('src/plugins/line-tools/index.ts')
+const lineToolItems = lineTools.tools ?? lineTools.commands ?? []
+const lineToolIds = lineToolItems.map((item) => item.id)
+assert.ok(lineToolIds.includes('line-affix.prepend'), 'line-tools should include line-affix.prepend')
+assert.ok(lineToolIds.includes('line-affix.append'), 'line-tools should include line-affix.append')
+assert.ok(lineToolIds.includes('line-affix.wrap'), 'line-tools should include line-affix.wrap')
+assert.ok(lineToolIds.includes('line-tools.sort'), 'line-tools should include sort')
+assert.ok(lineToolIds.includes('line-tools.dedup'), 'line-tools should include dedup')
+assert.ok(lineToolIds.includes('line-tools.reverse'), 'line-tools should include reverse')
+assert.ok(lineToolIds.includes('line-tools.reverse-text'), 'line-tools should include reverse-text')
+assert.ok(lineToolIds.includes('line-tools.remove-blank-lines'), 'line-tools should include remove-blank-lines')
+assert.ok(lineToolIds.includes('line-tools.trim-whitespace'), 'line-tools should include trim-whitespace')
+assert.ok(lineToolIds.includes('line-tools.join'), 'line-tools should include join')
+
 assert.equal(
-  await runTextCommand(lineAffix, 'line-affix.prepend', 'a\nb', { prefix: '- ' }),
+  await runTextCommand(lineTools, 'line-affix.prepend', 'a\nb', { prefix: '- ' }),
   '- a\n- b',
   'line-affix prepend should add a prefix to each line',
 )
 assert.equal(
-  await runTextCommand(lineAffix, 'line-affix.append', 'a\nb', { suffix: ',' }),
+  await runTextCommand(lineTools, 'line-affix.append', 'a\nb', { suffix: ',' }),
   'a,\nb,',
   'line-affix append should add a suffix to each line',
 )
 assert.equal(
-  await runTextCommand(lineAffix, 'line-affix.wrap', 'a\nb', { left: '"', right: '"' }),
+  await runTextCommand(lineTools, 'line-affix.wrap', 'a\nb', { left: '"', right: '"' }),
   '"a"\n"b"',
   'line-affix wrap should surround each line',
 )
 
-const lineTools = loadPlugin('src/plugins/lineTools/index.ts')
-assert.deepEqual(
-  Array.from(lineTools.commands?.map((item) => item.id) ?? []),
-  [
-    'line-tools.sort',
-    'line-tools.dedup',
-    'line-tools.reverse',
-    'line-tools.reverse-text',
-    'line-tools.remove-blank-lines',
-    'line-tools.trim-whitespace',
-    'line-tools.join',
-  ],
-  'line-tools should own the line transform commands',
-)
 assert.equal(
   await runTextCommand(lineTools, 'line-tools.sort', 'b\nA\na', { direction: 'asc', ignoreCase: true }),
   'A\na\nb',
@@ -139,7 +142,6 @@ assert.equal(
 
 const builtinIndex = JSON.parse(readFileSync('src/builtin-plugins/index.json', 'utf8'))
 const pluginIds = builtinIndex.packages.map((pkg) => pkg.pluginId)
-assert.ok(pluginIds.includes('line-affix'), 'builtins should include line-affix')
 assert.ok(pluginIds.includes('line-tools'), 'builtins should include line-tools')
 for (const removed of ['hex', 'prepend', 'append', 'wrap', 'sort', 'dedup', 'reverse', 'remove-blank-lines', 'trim-whitespace', 'join']) {
   assert.equal(pluginIds.includes(removed), false, `builtins should no longer include ${removed}`)

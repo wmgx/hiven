@@ -69,7 +69,7 @@ assert.match(
 )
 assert.match(
   files.outputRouter,
-  /attachEditorPanel:[\s\S]*openEditorPanel\(\{/,
+  /attachEditorPanel:[\s\S]*showPluginSurfaceWindow\(\{/,
   'OutputRouter attach path must continue using the editor bridge',
 )
 

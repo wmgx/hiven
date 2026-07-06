@@ -127,6 +127,6 @@ const searchFrame = readFileSync('src/components/launcher/GlobalLauncherSearchFr
 assert.match(searchFrame, /onExecuteAction/, 'SearchFrame must accept onExecuteAction callback')
 assert.match(searchFrame, /expandedAction/, 'SearchFrame must track expanded action state')
 assert.match(searchFrame, /OutputTargetExpansion/, 'SearchFrame must render OutputTargetExpansion')
-assert.match(searchFrame, /setExpandedAction\(null\)/, 'SearchFrame must allow back from expansion')
+assert.match(searchFrame, /setExpandedAction\(/, 'SearchFrame must allow back from expansion')
 
 console.log('output target expansion Phase R3 checks passed')

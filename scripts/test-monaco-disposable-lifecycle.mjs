@@ -55,7 +55,7 @@ assertTracksAll(jsFilter, 'jsFilter panel', [
   'editor.onKeyDown',
   'editor.onDidContentSizeChange',
 ])
-assert(/disposeAllMonacoDisposables\(editorDisposablesRef\.current\)/.test(jsFilter), 'jsFilter panel should dispose editor subscriptions on unmount')
+assert(/(?:disposeAllMonacoDisposables|kits\.monacoDisposables\.disposeAll)\(editorDisposablesRef\.current\)/.test(jsFilter), 'jsFilter panel should dispose editor subscriptions on unmount')
 assert(/editorRef\.current\s*=\s*null/.test(jsFilter), 'jsFilter panel should clear the Monaco editor ref during disposal')
 
 console.log('Monaco disposable lifecycle checks passed')

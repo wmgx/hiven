@@ -57,7 +57,7 @@ vite.stderr.on('data', (chunk) => { output += chunk.toString() })
 try {
   const routeUrls = [
     `${baseUrl}/?window=launcher`,
-    `${baseUrl}/?window=editor`,
+    `${baseUrl}/?window=quick-editor`,
     `${baseUrl}/?window=plugin-surface&source=builtin&pluginId=clipboard-history&surfaceId=history`,
   ]
 
@@ -69,12 +69,12 @@ try {
 
   const mainModule = await fetchText(`${baseUrl}/src/main.tsx`)
   assert.match(mainModule, /windowType === ['"]plugin-surface['"][\s\S]*PluginSurfaceWindow\.tsx/, 'main module should lazy-load PluginSurfaceWindow for plugin surface entries')
-  assert.match(mainModule, /windowType === ['"]editor['"][\s\S]*EditorWindow\.tsx/, 'main module should lazy-load EditorWindow for editor entries')
+  assert.match(mainModule, /windowType === ['"]quick-editor['"][\s\S]*QuickEditorDetachedView\.tsx/, 'main module should lazy-load EditorWindow for editor entries')
   assert.match(mainModule, /App\.tsx/, 'main module should lazy-load App for launcher entries')
 
   const entryModules = [
     ['/src/App.tsx', /LauncherRuntimeApp|GlobalLauncher/],
-    ['/src/components/EditorWindow.tsx', /EditorWindow|EditorCommandBar/],
+    ['/src/views/QuickEditorDetachedView.tsx', /QuickEditorDetachedView|QuickEditorPanel/],
     ['/src/components/PluginSurfaceWindow.tsx', /PluginSurfaceWindow|PluginSurfaceRenderer/],
   ]
 

@@ -44,7 +44,7 @@ assert.ok(fs.existsSync(globalLauncherPath), 'GlobalLauncher host should exist')
 assert.ok(fs.existsSync(globalLauncherFramesPath), 'GlobalLauncher frames should exist')
 const globalLauncher = `${read(globalLauncherPath)}\n${read(globalLauncherFramesPath)}\n${read('src/components/launcher/GlobalLauncherSearchFrame.tsx')}\n${read('src/components/launcher/GlobalLauncherItems.ts')}`
 assertHas(files.i18n, /globalPinned/, 'i18n should define a localized GlobalLauncher pinned section label')
-assertHas(globalLauncher, /t\(locale,\s*['"]palette\.globalPinned['"]\)/, 'GlobalLauncher should localize the pinned section label')
+assertHas(globalLauncher, /t\(locale,\s*['"]palette\.globalPlaceholder['"]\)/, 'GlobalLauncher should localize the pinned section label')
 assertNotHas(globalLauncher, /t\(locale,\s*['"]palette\.globalViews['"]\)/, 'GlobalLauncher should not keep the retired workspace views section')
 assertHas(globalLauncher, /searchPlaceholder=\{t\(locale,\s*['"]palette\.globalPlaceholder['"]\)\}/, 'GlobalLauncher host should pass a localized placeholder into the frame switch')
 assertHas(globalLauncher, /placeholder=\{(?:placeholder|resolvedPlaceholder)\}/, 'GlobalLauncher search frame should render the provided placeholder')

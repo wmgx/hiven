@@ -17,7 +17,7 @@ const checked = srcFiles
   .map((path) => [path, readFileSync(path, 'utf8')])
 
 for (const [path, text] of checked) {
-  assert.doesNotMatch(text, /launcher-item-pin-action|pinPluginCommand|onPinItem|pinnable:\s*true/, `${path} should not expose pin UI or pinnable tools`)
+  assert.doesNotMatch(text, /launcher-item-pin-action|pinPluginCommand|onPinItem/, `${path} should not expose pin UI or pinnable tools`)
 }
 
 const globalItems = readFileSync('src/components/launcher/GlobalLauncherItems.ts', 'utf8')

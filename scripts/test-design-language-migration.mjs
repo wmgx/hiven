@@ -88,7 +88,7 @@ const globalPanelSrc = readFileSync('src/components/launcher/GlobalLauncherPanel
 const globalFramesSrc = readFileSync('src/components/launcher/GlobalLauncherFrames.tsx', 'utf8')
 assert.match(globalHostSrc, /executeRecommendedAction/, 'Global object actions should be wired to the executor')
 assert.match(globalHostSrc, /writeClipboardText/, 'copy output should write clipboard')
-assert.match(globalHostSrc, /createEditorPane/, 'open-editor output should create an editor pane')
+assert.match(globalHostSrc, /createQuickEditorPane/, 'open-editor output should create an editor pane')
 assert.match(globalHostSrc, /openPluginSurface/, 'open-plugin-surface output should open a plugin surface')
 assert.match(globalHostSrc, /openUrl/, 'Web Open should route through shell open')
 assert.doesNotMatch(globalHostSrc, /pasteToForeground/, 'ordinary Global Launcher object actions must not wire paste-to-foreground')

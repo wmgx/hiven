@@ -40,12 +40,8 @@ const calls = []
 const outputRouter = loadOutputRouter({
   createPluginLauncherApi: () => ({ copyText: async (text) => calls.push(['default.copy', text]) }),
   createPluginPaste: () => ({ pasteText: async (text) => calls.push(['default.paste', text]) }),
-  replaceEditorSelection: async (text, options) => calls.push(['default.replace', text, options]),
-  insertIntoEditor: async (text, options) => calls.push(['default.insert', text, options]),
-  createEditorPane: async (input) => calls.push(['default.createPane', input]),
-  openEditorPanel: async (input) => calls.push(['default.openPanel', input]),
+  createQuickEditorPane: async (input) => calls.push(['default.createPane', input]),
   showPluginSurfaceWindow: async (target) => calls.push(['default.pluginSurface', target]),
-  WORKFLOW_OUTPUT_SHELF_PANEL_ID: 'workflow-output-shelf',
 })
 
 const routed = []
@@ -100,23 +96,13 @@ await defaultCtx.saveToShelf('shelf text')
 assert.deepEqual(JSON.parse(JSON.stringify(calls)), [
   ['default.copy', 'copied'],
   ['default.paste', 'pasted'],
-  ['default.replace', 'replacement', { paneId: 'pane-1', range: targets[2].range }],
-  ['default.insert', 'inserted', { paneId: 'pane-2' }],
-  ['default.createPane', { text: 'draft', title: 'Draft', language: 'markdown' }],
+  ['default.createPane', { text: 'replacement' }],
+  ['default.createPane', { text: 'inserted' }],
+  ['default.createPane', { text: 'draft', language: 'markdown' }],
   ['default.pluginSurface', { source: 'builtin', pluginId: 'json', surfaceId: 'main', initialText: 'surface text' }],
   ['default.pluginSurface', { source: 'dev', pluginId: 'translate', surfaceId: 'main', initialText: 'explicit initial' }],
-  ['default.openPanel', {
-    panelId: 'plugin-surface',
-    placement: 'right',
-    paneId: 'pane-1',
-    inputs: { text: 'panel text', target: { source: 'builtin', pluginId: 'json', surfaceId: 'main' } },
-  }],
-  ['default.openPanel', {
-    panelId: 'workflow-output-shelf',
-    placement: 'right',
-    inputs: { text: 'shelf text' },
-    title: 'Output Shelf',
-  }],
+  ['default.pluginSurface', { source: 'builtin', pluginId: 'json', surfaceId: 'main', initialText: 'panel text' }],
+  ['default.createPane', { text: 'shelf text' }],
 ], 'createDefaultOutputRouterContext must route through host clipboard, paste, editor bridge, plugin window manager, and output shelf panel')
 
 console.log('output router behavior checks passed')

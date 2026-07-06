@@ -60,7 +60,7 @@ assert.match(
 )
 assert.match(
   files.defaultWorkflowProviders,
-  /textAction\(['"]workflow\.open-editor-with-translate-panel['"],[\s\S]*createEditorPane\(\{[\s\S]*text,[\s\S]*openEditorPanel\(\{[\s\S]*panelId:\s*PLUGIN_SURFACE_PANEL_ID[\s\S]*pluginId:\s*['"]translate['"][\s\S]*initialText:\s*text/,
+  /textAction\(['"]workflow\.open-editor-with-translate-panel['"],[\s\S]*createQuickEditorPane\(\{[\s\S]*text,[\s\S]*showPluginSurfaceWindow\(\{[\s\S]*pluginId:\s*['"]translate['"][\s\S]*initialText:\s*text/,
   'selected/current text must support opening Editor and attaching Translate panel in one workflow action',
 )
 assert.match(

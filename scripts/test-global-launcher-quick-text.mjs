@@ -17,7 +17,7 @@ const globalLauncherHostLifecycle = read('src/components/launcher/GlobalLauncher
 const launcherSession = read('src/workspace/launcher/useLauncherSession.ts')
 const commandPalette = read('src/components/CommandPalette.tsx')
 const app = read('src/App.tsx')
-const lineToolsPlugin = read('src/plugins/lineTools/index.ts')
+const lineToolsPlugin = read('src/plugins/line-tools/index.ts')
 const launcherRegistry = read('src/workspace/launcher/registry.ts')
 const launcherController = read('src/workspace/launcher/controller.ts')
 const launcherTypes = read('src/workspace/launcher/types.ts')
@@ -36,22 +36,27 @@ for (const id of [
   const escapedId = id.replace(/\./g, '\\.')
   assert.match(
     lineToolsPlugin,
-    new RegExp(`id:\\s*['"]${escapedId}['"][\\s\\S]{0,1800}surfaces:\\s*\\{[\\s\\S]{0,180}launcher:\\s*\\{[\\s\\S]{0,120}surfaces:\\s*\\[[\\s\\S]{0,80}['"]command-palette['"][\\s\\S]{0,80}\\]`),
-    `${id} should remain command-palette only because global quick text is single-line`,
+    new RegExp(`id:\\s*['"]${escapedId}['"]`),
+    `${id} tool must be declared in line-tools plugin`,
+  )
+  assert.match(
+    lineToolsPlugin,
+    new RegExp(`id:\\s*['"]${escapedId}['"][\\s\\S]{0,1800}surfaces:\\s*\\{[\\s\\S]{0,100}launcher:\\s*true`),
+    `${id} should be exposed to the launcher`,
   )
 }
 assert.match(
   lineToolsPlugin,
-  /id:\s*['"]line-tools\.trim-whitespace['"][\s\S]{0,700}surfaces:\s*\{[\s\S]{0,180}launcher:\s*\{[\s\S]{0,120}surfaces:\s*\[[\s\S]{0,80}['"]command-palette['"][\s\S]{0,80}['"]global-launcher['"]/,
-  'trim whitespace should be exposed in global launcher quick text and command palette',
+  /id:\s*['"]line-tools\.trim-whitespace['"][\s\S]{0,600}surfaces:\s*\{[\s\S]{0,100}launcher:\s*true/,
+  'trim whitespace should be exposed in the launcher',
 )
 assert.match(
   lineToolsPlugin,
-  /id:\s*['"]line-tools\.reverse-text['"][\s\S]{0,700}surfaces:\s*\{[\s\S]{0,180}launcher:\s*\{[\s\S]{0,120}surfaces:\s*\[[\s\S]{0,80}['"]command-palette['"][\s\S]{0,80}['"]global-launcher['"]/,
-  'reverse text should be exposed in global launcher quick text and command palette',
+  /id:\s*['"]line-tools\.reverse-text['"][\s\S]{0,600}surfaces:\s*\{[\s\S]{0,100}launcher:\s*true/,
+  'reverse text should be exposed in the launcher',
 )
 assert.match(lineToolsPlugin, /inputPolicy:\s*\{\s*mode:\s*['"]auto['"]\s*\}/, 'reverse should use the shared auto input policy')
-assert.match(lineToolsPlugin, /id:\s*['"]line-tools\.reverse['"][\s\S]{0,360}ctx\.output\.replaceActiveText/, 'reverse launcher tool should replace active text, not copy-only')
+assert.match(lineToolsPlugin, /id:\s*['"]line-tools\.reverse['"][\s\S]{0,360}ctx\.output\.text\(reverseLines/, 'reverse launcher tool should output reversed text')
 assert.doesNotMatch(launcherRegistry, /adaptCommandToLauncherItem|canAdaptCommandToLauncher|commandAdapter/, 'launcher registry should not use a command adapter')
 assert.doesNotMatch(launcherRegistry, /def\.commands|getAllCommands/, 'launcher registry should not scan plugin commands')
 assert.match(globalLauncher, /GlobalLauncherHost/, 'GlobalLauncher should remain a thin host wrapper')
@@ -68,7 +73,7 @@ assert.match(launcherController, /submitParams[\s\S]*shouldCollectTextInput\(top
 assert.match(launcherController, /previewInput\(\)[\s\S]*previewOutput[\s\S]*previewInputText/, 'launcher controller should keep live preview output on the collect-input frame')
 assert.match(launcherTypes, /source:\s*['"]selection['"]\s*\|\s*['"]all['"]\s*\|\s*['"]manual['"]\s*\|\s*['"]empty['"]/, 'manual launcher input should be represented distinctly from pane/selection text')
 assert.match(toolAdapter, /hasManualInput[\s\S]*manualTextInput\(ctx\.input\?\.text\s*\?\?\s*['"]['"],\s*mode\)/, 'launcher tool adapter should prefer controller-collected manual input')
-assert.match(toolAdapter, /copyReplaceOutput[\s\S]*textResult\(value,\s*api,\s*locale\)[\s\S]*replaceActiveTextResult\(value,\s*api,\s*locale\)/, 'global manual quick text should copy generated output instead of replacing active pane text')
+assert.match(toolAdapter, /isGlobal[\s\S]*textResult\(value,\s*api,\s*locale\)[\s\S]*replaceActiveTextResult\(value,\s*api,\s*locale\)/, 'global manual quick text should copy generated output instead of replacing active pane text')
 assert.doesNotMatch(globalLauncherHost, /quickTextSession/, 'GlobalLauncherHost should not keep a parallel quick text session')
 assert.doesNotMatch(globalLauncherHost, /runQuickTextCommand|isQuickTextCommand/, 'GlobalLauncherHost should not use the legacy quick text command runner')
 assert.doesNotMatch(globalLauncherHost, /pluginRegistry\.getAllCommands\(\)/, 'GlobalLauncherHost should not auto-discover commands for quick text')

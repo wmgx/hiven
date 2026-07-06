@@ -64,7 +64,7 @@
     {
       "pluginId": "text-diff",
       "dir": "textDiff",
-      "version": "1.0.5"
+      "version": "2.0.0"
     },
     {
       "pluginId": "clipboard-history",
@@ -79,7 +79,7 @@
     {
       "pluginId": "web-open",
       "dir": "web-open",
-      "version": "1.0.1"
+      "version": "1.1.0"
     }
   ]
 }
