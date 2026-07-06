@@ -41,7 +41,7 @@ function loadPluginPaste({ invokeImpl, writeTextImpl, writeImageImpl, navigatorC
     exports: moduleExports,
     module: { exports: moduleExports },
     console,
-    setTimeout: (fn) => { fn(); return 0 },
+    setTimeout: (fn, ms) => { calls.push(['delay', ms]); fn(); return 0 },
     Blob: class Blob {
       constructor(parts, options) {
         this.parts = parts
@@ -95,17 +95,20 @@ function loadPluginPaste({ invokeImpl, writeTextImpl, writeImageImpl, navigatorC
   assert.deepEqual(plain(result), { ok: true })
   assert.deepEqual(plain(calls), [
     ['tauri.writeText', 'hello foreground'],
-    ['invoke', 'hide_launcher_window'],
-    ['invoke', 'simulate_paste'],
-  ], 'pasteText must write clipboard, hide launcher, then simulate paste')
-  assert.deepEqual(plain(invoked), ['hide_launcher_window', 'simulate_paste'])
+    ['invoke', 'hide_launcher_and_paste'],
+  ], 'pasteText must write clipboard then invoke the combined hide-and-paste command exactly once')
+  assert.deepEqual(plain(invoked), ['hide_launcher_and_paste'])
+  assert.ok(
+    !calls.some((call) => call[0] === 'delay'),
+    'pasteText must not rely on any JS-side delay; a hidden WKWebView throttles timers, so the hide+paste sequence must run entirely inside the Rust command',
+  )
 }
 
 {
   const { api, calls } = loadPluginPaste({
     invokeImpl: async (command) => {
       calls.push(['invoke', command])
-      if (command === 'simulate_paste') throw new Error('Accessibility permission required')
+      if (command === 'hide_launcher_and_paste') throw new Error('Accessibility permission required')
     },
   })
   const result = await api.createPluginPaste().pasteText('needs permission')
@@ -114,6 +117,10 @@ function loadPluginPaste({ invokeImpl, writeTextImpl, writeImageImpl, navigatorC
     fallback: 'copied',
     message: 'Copied to clipboard. Grant Accessibility access in System Settings → Privacy & Security → Accessibility to enable auto-paste.',
   }, 'Accessibility permission failures must return the explicit copied fallback message')
+  assert.deepEqual(plain(calls), [
+    ['tauri.writeText', 'needs permission'],
+    ['invoke', 'hide_launcher_and_paste'],
+  ], 'permission denial must surface from the single combined invoke, with no separate hide/simulate calls or JS delay')
 }
 
 {
@@ -126,9 +133,8 @@ function loadPluginPaste({ invokeImpl, writeTextImpl, writeImageImpl, navigatorC
   assert.deepEqual(plain(calls), [
     ['require', ['clipboard.write', 'clipboard.files', 'accessibility.paste']],
     ['navigator.writeText', '/tmp/a.txt\n/tmp/b.txt'],
-    ['invoke', 'hide_launcher_window'],
-    ['invoke', 'simulate_paste'],
-  ], 'pasteFiles must copy newline-separated file paths and use the foreground paste flow')
+    ['invoke', 'hide_launcher_and_paste'],
+  ], 'pasteFiles must copy newline-separated file paths and invoke the combined hide-and-paste command exactly once')
 }
 
 {
@@ -136,9 +142,10 @@ function loadPluginPaste({ invokeImpl, writeTextImpl, writeImageImpl, navigatorC
   const { api, calls } = loadPluginPaste()
   const result = await api.createPluginPaste(undefined, storage).pasteImage('image-1')
   assert.deepEqual(plain(result), { ok: true })
-  assert.deepEqual(plain(calls.map((call) => call[0])), ['tauri.writeImage', 'invoke', 'invoke'], 'pasteImage must write image bytes then hide launcher and simulate paste')
-  assert.deepEqual(plain(calls[1]), ['invoke', 'hide_launcher_window'])
-  assert.deepEqual(plain(calls[2]), ['invoke', 'simulate_paste'])
+  assert.deepEqual(plain(calls), [
+    ['tauri.writeImage', { kind: 'image', bytes: [1, 2, 3] }],
+    ['invoke', 'hide_launcher_and_paste'],
+  ], 'pasteImage must write image bytes then invoke the combined hide-and-paste command exactly once')
 }
 
 {

@@ -34,6 +34,13 @@ const QUICK_EDITOR_WINDOW_HEIGHT: f64 = LAUNCHER_MAX_HEIGHT;
 const QUICK_EDITOR_WINDOW_MIN_WIDTH: f64 = 480.0;
 const QUICK_EDITOR_WINDOW_MIN_HEIGHT: f64 = 320.0;
 static PREVIOUS_FOREGROUND_PROCESS_ID: OnceLock<Mutex<Option<u32>>> = OnceLock::new();
+// Label of whichever hiven webview window held macOS keyboard focus (key
+// window) at the moment a plugin surface window (e.g. clipboard history) was
+// opened. A non-activating panel — the launcher, or quick editor rendered
+// inside it — can be the key window while NSWorkspace's frontmost app is
+// still an external app; in that case the paste target is this hiven window,
+// not the "foreground app" tracked by PREVIOUS_FOREGROUND_PROCESS_ID.
+static PREVIOUS_KEY_WINDOW_LABEL: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 #[cfg(target_os = "macos")]
 static PREVIOUS_LAUNCHER_INPUT_SOURCE_ID: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 #[allow(dead_code)]
@@ -556,6 +563,12 @@ fn show_launcher_window_for_hotkey_with_event(
         if !was_visible {
             let started_at = Instant::now();
             remember_previous_foreground_app();
+            // The launcher is a global search/paste surface: its paste target
+            // is always whatever external app was previously in the
+            // foreground, never a hiven window — clear any key-window label
+            // a plugin surface window may have left behind so it can't leak
+            // into this launcher-driven paste.
+            remember_previous_key_window_label(None);
             log_launcher_perf("native:remember-foreground-app", started_at, "");
             // [DISABLED] External selection capture — logic preserved, entry point disabled.
             // let started_at = Instant::now();
@@ -821,6 +834,160 @@ async fn hide_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
     .map_err(|error| error.to_string())
 }
 
+// Combines hide_launcher_window + simulate_paste into a single native command.
+// Once the launcher WebView is hidden, macOS throttles its JS timers, so a JS-side
+// setTimeout between hiding the launcher and simulating the paste is unreliable
+// (a hidden WKWebView may throttle JS execution). Running the wait for foreground
+// focus handoff and the synthetic Cmd/Ctrl+V natively in Rust avoids that entirely.
+#[tauri::command]
+async fn hide_launcher_and_paste(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    // Phase 1 (main thread): restore input source and hide whichever window
+    // actually invoked this command. Both the launcher's non-activating panel
+    // and an activating plugin surface window (e.g. the clipboard history panel
+    // opened via Cmd+Shift+V) call this same command, so each must hide itself —
+    // the previous code hardcoded `get_webview_window("launcher")`, which
+    // silently no-op'd for any other caller and left it as the frontmost key
+    // window, breaking the focus handoff below.
+    let (tx, rx) = std::sync::mpsc::channel();
+    let app_for_main_thread = app.clone();
+    app.run_on_main_thread(move || {
+        let app = app_for_main_thread;
+        if window.label() == "launcher" {
+            // Input source restoration is launcher-specific; plugin surface
+            // windows never touch the keyboard input source.
+            if let Err(error) = restore_launcher_previous_input_source() {
+                eprintln!("[hiven] Failed to restore launcher input source: {}", error);
+            }
+        }
+        if let Err(error) = window.hide() {
+            eprintln!("[hiven] Failed to hide {} window: {}", window.label(), error);
+        }
+        let target_pid = previous_foreground_process_id()
+            .lock()
+            .ok()
+            .and_then(|mut stored| stored.take());
+        let key_label = previous_key_window_label()
+            .lock()
+            .ok()
+            .and_then(|mut stored| stored.take());
+        // If hiven itself held keyboard focus (a non-activating panel like
+        // the launcher/quick editor, or a detached window such as a
+        // standalone quick editor) when the surface window was opened, the
+        // real paste target is that hiven window — not the "remembered pid"
+        // above, which only tracks the OS-level frontmost app and can be a
+        // completely unrelated external app (e.g. an IDE) in that case.
+        // Activating that remembered app here would incorrectly steal focus
+        // back away from hiven's own window.
+        let target_is_self = key_label
+            .as_ref()
+            .and_then(|label| app.get_webview_window(label))
+            .map(|target_window| {
+                if current_foreground_process_id() == Some(std::process::id()) {
+                    // hiven is already the frontmost app (e.g. the main
+                    // window or a detached quick editor never lost app
+                    // activation) — a plain focus restore is enough; do not
+                    // swizzle an ordinary window into a non-activating panel.
+                    if let Err(error) = target_window.set_focus() {
+                        eprintln!(
+                            "[hiven] Failed to focus previous key window: {}",
+                            error
+                        );
+                    }
+                } else if let Err(error) =
+                    show_launcher_window_without_app_activation(&target_window)
+                {
+                    eprintln!(
+                        "[hiven] Failed to restore previous key window without activation: {}",
+                        error
+                    );
+                }
+            })
+            .is_some();
+        // Restore activation only if it is actually needed, and only when the
+        // target isn't one of hiven's own windows (handled above). The
+        // launcher is a non-activating panel, so the target app was never
+        // deactivated and `current_foreground_process_id() == Some(pid)`
+        // already holds here — we skip activate_process, matching Maccy's
+        // paste path (re-activating an already-active app makes macOS
+        // re-pick its key window/focus ring, which can drop the very text
+        // field the user had focused). A plugin surface window, by contrast,
+        // IS an activating window (`.focused(true)` in
+        // show_plugin_surface_window), so opening it deactivated the target
+        // app; here we must hand activation back explicitly, or the
+        // synthetic Cmd+V below lands on hiven itself.
+        if !target_is_self {
+            if let Some(pid) = target_pid {
+                if current_foreground_process_id() != Some(pid) {
+                    activate_process(pid);
+                }
+            }
+        }
+        let _ = tx.send((target_pid, target_is_self));
+    })
+    .map_err(|error| error.to_string())?;
+    let (target_pid, target_is_self) = rx.recv().map_err(|error| error.to_string())?;
+
+    // Phase 2 (blocking thread): the launcher WebView is throttled once hidden, so
+    // the focus-handoff wait and the synthetic Cmd/Ctrl+V must run natively.
+    tokio::task::spawn_blocking(move || {
+        wait_for_foreground_handoff_then_paste(target_pid, target_is_self)
+    })
+    .await
+    .map_err(|e| format!("spawn_blocking failed: {}", e))?
+}
+
+#[cfg(target_os = "macos")]
+fn wait_for_foreground_handoff_then_paste(
+    target_pid: Option<u32>,
+    target_is_self: bool,
+) -> Result<(), String> {
+    const POLL_INTERVAL_MS: u64 = 20;
+    const MAX_WAIT_MS: u64 = 1000;
+    // Browser address bars and other focused text fields may restore after the
+    // app activation notification, so give the first responder a short settle window.
+    const SETTLE_DELAY_MS: u64 = 120;
+
+    if target_is_self {
+        // The paste target is one of hiven's own windows, whose focus was
+        // already restored on the main thread above — the OS-level frontmost
+        // app will never equal a pid here (there is none to wait for), so
+        // polling for a handoff would just burn the full MAX_WAIT_MS. Settle
+        // briefly for the first responder to update, then paste directly.
+        std::thread::sleep(Duration::from_millis(SETTLE_DELAY_MS));
+        return simulate_paste_impl();
+    }
+
+    let own_pid = std::process::id();
+    let started_at = Instant::now();
+    let deadline = started_at + Duration::from_millis(MAX_WAIT_MS);
+    loop {
+        let handed_off = match target_pid {
+            Some(pid) => current_foreground_process_id() == Some(pid),
+            None => current_foreground_process_id() != Some(own_pid),
+        };
+        if handed_off || Instant::now() >= deadline {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(POLL_INTERVAL_MS));
+    }
+    std::thread::sleep(Duration::from_millis(SETTLE_DELAY_MS));
+    simulate_paste_impl()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn wait_for_foreground_handoff_then_paste(
+    _target_pid: Option<u32>,
+    _target_is_self: bool,
+) -> Result<(), String> {
+    // current_foreground_process_id() always returns None on this platform, so
+    // polling for a focus handoff would be meaningless; fall back to a fixed delay.
+    std::thread::sleep(Duration::from_millis(200));
+    simulate_paste_impl()
+}
+
 #[tauri::command]
 async fn show_quick_editor_window(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(QUICK_EDITOR_WINDOW_LABEL) {
@@ -894,7 +1061,36 @@ async fn show_plugin_surface_window(
         destroy_timeout_ms.unwrap_or(PLUGIN_SURFACE_WINDOW_DEFAULT_DESTROY_TIMEOUT_MS);
 
     touch_plugin_surface_window(&label);
-    let window = if let Some(window) = app.get_webview_window(&label) {
+    let existing_window = app.get_webview_window(&label);
+    let was_visible = existing_window
+        .as_ref()
+        .and_then(|window| window.is_visible().ok())
+        .unwrap_or(false);
+    if !was_visible {
+        // Unlike the launcher's non-activating panel, a plugin surface window is
+        // built with `.focused(true)` below, so showing/creating it here steals
+        // activation from whatever app the user was in. Remember it now (mirrors
+        // the launcher's show path) so hide_launcher_and_paste can hand
+        // activation back to it once the surface window is hidden again.
+        remember_previous_foreground_app();
+        // But that "foreground app" may not actually be the real paste
+        // target: a non-activating panel (the launcher, or quick editor
+        // rendered inside it) can hold macOS keyboard focus (isKeyWindow)
+        // while NSWorkspace's frontmost app is still an unrelated external
+        // app like an IDE — that's the whole point of a non-activating
+        // panel. Detect that here, before opening this surface window steals
+        // key-window status away, so hide_launcher_and_paste can hand focus
+        // back to hiven's own window instead of the external app.
+        let previous_key_window_label = app
+            .webview_windows()
+            .into_iter()
+            .find(|(window_label, window)| {
+                window_label != &label && window.is_focused().unwrap_or(false)
+            })
+            .map(|(window_label, _)| window_label);
+        remember_previous_key_window_label(previous_key_window_label);
+    }
+    let window = if let Some(window) = existing_window {
         let _ = window.set_size(LogicalSize::new(width, height));
         window
     } else {
@@ -1132,7 +1328,12 @@ fn simulate_paste_impl() -> Result<(), String> {
     }
 
     const KEY_V: u16 = 9;
-    let src = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
+    // Session-state source + session tap is the standard key-injection path
+    // used by clipboard tools (e.g. Maccy): session-layer events are queued
+    // by the window server, so they serialize after the panel's just-issued
+    // orderOut instead of racing it the way HID-layer injection can before
+    // the focus handoff has completed.
+    let src = CGEventSource::new(CGEventSourceStateID::CombinedSessionState)
         .map_err(|_| "Failed to create event source")?;
     let dn = CGEvent::new_keyboard_event(src.clone(), KEY_V, true)
         .map_err(|_| "Failed to create key-down event")?;
@@ -1140,8 +1341,8 @@ fn simulate_paste_impl() -> Result<(), String> {
         .map_err(|_| "Failed to create key-up event")?;
     dn.set_flags(CGEventFlags::CGEventFlagCommand);
     up.set_flags(CGEventFlags::CGEventFlagCommand);
-    dn.post(CGEventTapLocation::HID);
-    up.post(CGEventTapLocation::HID);
+    dn.post(CGEventTapLocation::Session);
+    up.post(CGEventTapLocation::Session);
     Ok(())
 }
 
@@ -1220,6 +1421,19 @@ fn remember_previous_foreground_app() {
     let previous = current_foreground_process_id().filter(|pid| *pid != std::process::id());
     if let Ok(mut stored) = previous_foreground_process_id().lock() {
         *stored = previous;
+    }
+}
+
+fn previous_key_window_label() -> &'static Mutex<Option<String>> {
+    PREVIOUS_KEY_WINDOW_LABEL.get_or_init(|| Mutex::new(None))
+}
+
+fn remember_previous_key_window_label(label: Option<String>) {
+    // Always overwrite (including with None) — a stale label from a previous
+    // open would otherwise leak into a later, unrelated paste and redirect it
+    // to the wrong window.
+    if let Ok(mut stored) = previous_key_window_label().lock() {
+        *stored = label;
     }
 }
 
@@ -4032,6 +4246,7 @@ pub fn run() {
             restore_launcher_input_source,
             show_launcher_window,
             hide_launcher_window,
+            hide_launcher_and_paste,
             show_quick_editor_window,
             close_quick_editor_window,
             show_plugin_surface_window,
