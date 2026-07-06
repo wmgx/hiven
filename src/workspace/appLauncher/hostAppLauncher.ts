@@ -3,6 +3,7 @@ import type { Locale } from '../../i18n'
 import type { DiscoveredApp, LauncherItem, LauncherSurfaceId } from '../launcher/types'
 import type { AppWorkObject } from '../../workflow/workObject'
 import { logLauncherPerfDuration, launcherPerfNow } from '../launcher/perf'
+import { normalizeHostAppEntries } from './hostAppIndex'
 
 const HOST_APP_INDEX_CACHE_KEY = 'hiven:host-app-launcher:index:v1'
 const APP_INDEX_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
@@ -39,7 +40,10 @@ function readCache(): HostAppLauncherCache {
   try {
     const parsed = JSON.parse(raw) as HostAppLauncherCache
     if (parsed.version !== 1 || !Array.isArray(parsed.apps)) return EMPTY_CACHE
-    return parsed
+    return {
+      ...parsed,
+      apps: normalizeHostAppEntries(parsed.apps),
+    }
   } catch {
     return EMPTY_CACHE
   }
@@ -49,7 +53,7 @@ function writeCache(apps: HostAppEntry[]): HostAppLauncherCache {
   const cache: HostAppLauncherCache = {
     version: 1,
     refreshedAt: Date.now(),
-    apps,
+    apps: normalizeHostAppEntries(apps),
   }
   storage()?.setItem(HOST_APP_INDEX_CACHE_KEY, JSON.stringify(cache))
   return cache
@@ -127,7 +131,7 @@ async function refreshApplicationIndex(options: { force?: boolean } = {}): Promi
 
 export function refreshHostApplicationIndexOnStartup(): void {
   if (!isTauriRuntime()) return
-  void refreshApplicationIndex({ force: false }).then((result) => {
+  void refreshApplicationIndex({ force: true }).then((result) => {
     if (!result.ok) console.warn('[app-launcher] Startup application index refresh failed:', result.message)
   })
 }

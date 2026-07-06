@@ -32,6 +32,7 @@
     "test:effect-runner-window-boundary": "node scripts/test-effect-runner-window-boundary.mjs",
     "test:web-open-dynamic-items": "node scripts/test-web-open-dynamic-items.mjs",
     "test:app-launcher-contract": "node scripts/test-app-launcher-contract.mjs",
+    "test:app-launcher-cache-normalization": "node scripts/test-app-launcher-cache-normalization.mjs",
     "test:quick-editor-host-surface": "node scripts/test-quick-editor-host-surface.mjs",
     "test:tauri-plugin-dir-commands": "cargo test --manifest-path src-tauri/Cargo.toml plugin_dir_command_tests -- --test-threads=1",
     "test:clipboard-history-storage": "node scripts/test-clipboard-history-storage.mjs",
