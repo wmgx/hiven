@@ -29,8 +29,14 @@ const files = {
   toolbar: read('src/components/quickEditor/QuickEditorToolbar.tsx'),
   detachedView: read('src/views/QuickEditorDetachedView.tsx'),
   quickEditorWindow: read('src/workspace/windowManager/quickEditorWindow.ts'),
+  quickEditorRequests: read('src/workspace/quickEditor/quickEditorRequests.ts'),
+  hostProvider: read('src/workspace/launcher/hostProvider.ts'),
   hostEditorActions: read('src/workspace/launcher/hostEditorActions.ts'),
   quickEditorStore: read('src/workspace/quickEditor/quickEditorStore.ts'),
+  pluginApi: read('src/workspace/launcher/pluginApi.ts'),
+  outputRouter: read('src/workflow/outputRouter.ts'),
+  main: read('src/main.tsx'),
+  tauriLib: read('src-tauri/src/lib.rs'),
   appTsx: read('src/App.tsx'),
 }
 
@@ -63,6 +69,41 @@ assert.match(files.hostActions, /isQuickEditorWindowOpen/, 'entry must check for
 assert.match(files.quickEditorWindow, /export async function isQuickEditorWindowOpen/, 'window manager must expose detached-window probe')
 assert.match(files.quickEditorWindow, /export async function startQuickEditorWindowDrag/, 'window manager must expose detached-window drag')
 assert.match(files.quickEditorWindow, /export async function startQuickEditorWindowResize/, 'window manager must expose detached-window resize')
+assert.equal(
+  existsSync(join(root, 'src/workspace/launcher/editorWindowItems.ts')),
+  false,
+  'global launcher must not expose the retired standalone editor window item',
+)
+assert.doesNotMatch(
+  files.hostProvider,
+  /getEditorWindowItems/,
+  'host provider must not register standalone editor window launcher items',
+)
+assert.doesNotMatch(
+  files.main,
+  /windowType === ['"]editor['"][\s\S]*EditorWindow/,
+  'entrypoint must not route ?window=editor to the retired standalone editor',
+)
+assert.doesNotMatch(
+  files.tauriLib,
+  /show_editor_window|open_new_editor_window|focus_editor_window|close_editor_window|list_editor_windows|index\.html\?window=editor/,
+  'native runtime must not expose or create retired standalone editor windows',
+)
+assert.match(
+  files.quickEditorRequests,
+  /showQuickEditorSurface[\s\S]*openLauncherHostSurface\(['"]quick-editor['"]\)/,
+  'legacy editor open paths must fall back to the quick editor surface',
+)
+assert.match(
+  files.pluginApi,
+  /showEditorWindow:\s*openEditorWindow[\s\S]*showQuickEditorSurface/,
+  'plugin showEditorWindow compatibility must route to quick editor instead of the retired editor window',
+)
+assert.match(
+  files.outputRouter,
+  /openInEditor:[\s\S]*createQuickEditorPane/,
+  'workflow open-in-editor output must route into quick editor',
+)
 
 // ── 4. escape interceptor protocol ────────────────────────────────────────
 assert.ok(

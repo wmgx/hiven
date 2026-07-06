@@ -23,10 +23,6 @@ const LAUNCHER_COMPACT_WIDTH: f64 = 660.0;
 const LAUNCHER_COMPACT_HEIGHT: f64 = 318.0;
 const LAUNCHER_MAX_WIDTH: f64 = 860.0;
 const LAUNCHER_MAX_HEIGHT: f64 = 560.0;
-const EDITOR_WINDOW_WIDTH: f64 = 1100.0;
-const EDITOR_WINDOW_HEIGHT: f64 = 720.0;
-const EDITOR_WINDOW_MIN_WIDTH: f64 = 800.0;
-const EDITOR_WINDOW_MIN_HEIGHT: f64 = 500.0;
 const PLUGIN_SURFACE_WINDOW_DEFAULT_WIDTH: f64 = 900.0;
 const PLUGIN_SURFACE_WINDOW_DEFAULT_HEIGHT: f64 = 640.0;
 const PLUGIN_SURFACE_WINDOW_DEFAULT_MIN_WIDTH: f64 = 320.0;
@@ -826,62 +822,6 @@ async fn hide_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn show_editor_window(app: tauri::AppHandle) -> Result<String, String> {
-    // Always open a new editor window and return its label so the frontend
-    // bridge can target it directly.
-    open_new_editor_window(app).await
-}
-
-#[tauri::command]
-async fn open_new_editor_window(app: tauri::AppHandle) -> Result<String, String> {
-    let label = new_editor_window_label();
-    let window = tauri::WebviewWindowBuilder::new(
-        &app,
-        &label,
-        tauri::WebviewUrl::App("index.html?window=editor".into()),
-    )
-    .title("Hiven Editor")
-    .inner_size(EDITOR_WINDOW_WIDTH, EDITOR_WINDOW_HEIGHT)
-    .min_inner_size(EDITOR_WINDOW_MIN_WIDTH, EDITOR_WINDOW_MIN_HEIGHT)
-    .decorations(false)
-    .transparent(false)
-    .resizable(true)
-    .focused(true)
-    .skip_taskbar(false)
-    .build()
-    .map_err(|error| error.to_string())?;
-
-    show_and_focus_editor_window(&app, &window)?;
-    Ok(label)
-}
-
-#[tauri::command]
-async fn focus_editor_window(app: tauri::AppHandle, label: String) -> Result<(), String> {
-    let Some(window) = app.get_webview_window(&label) else {
-        return Err(format!("Editor window not found: {}", label));
-    };
-    show_and_focus_editor_window(&app, &window)
-}
-
-#[tauri::command]
-async fn close_editor_window(app: tauri::AppHandle, label: Option<String>) -> Result<(), String> {
-    let label = label.unwrap_or_else(|| "editor".to_string());
-    let Some(window) = app.get_webview_window(&label) else {
-        return Ok(());
-    };
-    window.close().map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-fn list_editor_windows(app: tauri::AppHandle) -> Vec<String> {
-    app.webview_windows()
-        .keys()
-        .filter(|label| label.starts_with("editor"))
-        .cloned()
-        .collect()
-}
-
-#[tauri::command]
 async fn show_quick_editor_window(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(QUICK_EDITOR_WINDOW_LABEL) {
         window.show().map_err(|e| e.to_string())?;
@@ -924,32 +864,6 @@ async fn close_quick_editor_window(app: tauri::AppHandle) -> Result<(), String> 
         window.close().map_err(|e| e.to_string())?;
     }
     Ok(())
-}
-
-fn new_editor_window_label() -> String {
-    let ts = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
-    format!("editor:{ts}")
-}
-
-fn show_and_focus_editor_window(
-    app: &tauri::AppHandle,
-    window: &tauri::WebviewWindow,
-) -> Result<(), String> {
-    let window_clone = window.clone();
-    let (tx, rx) = std::sync::mpsc::channel();
-    app.run_on_main_thread(move || {
-        let result = (|| {
-            window_clone.show().map_err(|error| error.to_string())?;
-            let _ = window_clone.unminimize();
-            window_clone.set_focus().map_err(|error| error.to_string())
-        })();
-        let _ = tx.send(result);
-    })
-    .map_err(|error| error.to_string())?;
-    rx.recv().map_err(|error| error.to_string())?
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -4118,11 +4032,6 @@ pub fn run() {
             restore_launcher_input_source,
             show_launcher_window,
             hide_launcher_window,
-            show_editor_window,
-            open_new_editor_window,
-            focus_editor_window,
-            close_editor_window,
-            list_editor_windows,
             show_quick_editor_window,
             close_quick_editor_window,
             show_plugin_surface_window,

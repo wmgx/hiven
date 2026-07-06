@@ -3,8 +3,7 @@ import { focusSurfaceInstance } from '../surfaces/actions'
 import { getSurfaceInstances } from '../surfaces/registry'
 import { useAppStore } from '../store'
 import { getHostAppWorkObjects, launchHostAppObject } from '../workspace/appLauncher/hostAppLauncher'
-import { createEditorPane, openEditorPanel } from '../workspace/editorBridge'
-import { showEditorWindow } from '../workspace/windowManager/editorWindow'
+import { createQuickEditorPane, showQuickEditorSurface } from '../workspace/quickEditor/quickEditorRequests'
 import { EDITOR_WINDOW_LABEL } from '../workspace/windowManager/windowLabels'
 import { showPluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
 import { PLUGIN_SURFACE_PANEL_ID } from '../components/pluginSurface/PluginSurfacePanel'
@@ -282,24 +281,15 @@ const defaultTextActionProvider = {
         }, createDefaultOutputRouterContext())
       )),
       textAction('workflow.open-editor-with-translate-panel', 'Open Editor with Translate Panel', 'PanelRightOpen', 'open-in-editor', async () => {
-        const paneId = await createEditorPane({
+        await createQuickEditorPane({
           text,
-          title: input.title,
           language: languageForObject(input),
         })
-        await openEditorPanel({
-          panelId: PLUGIN_SURFACE_PANEL_ID,
-          placement: 'right',
-          paneId,
-          inputs: {
-            text,
-            target: {
-              source: 'builtin',
-              pluginId: 'translate',
-              surfaceId: 'main',
-              initialText: text,
-            },
-          },
+        await showPluginSurfaceWindow({
+          source: 'builtin',
+          pluginId: 'translate',
+          surfaceId: 'main',
+          initialText: text,
         })
         return { ok: true, text }
       }),
@@ -321,7 +311,7 @@ const defaultEditorDocumentActionProvider = {
         icon: 'PanelTopOpen',
         accepts: ['editor-document'],
         run: async () => {
-          await showEditorWindow()
+          await showQuickEditorSurface()
           return { ok: true }
         },
       },

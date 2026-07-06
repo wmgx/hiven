@@ -1,9 +1,8 @@
 import type { ActionResult, OutputTarget } from './outputTarget'
 import { createPluginPaste } from '../workspace/pluginPaste'
-import { createEditorPane, insertIntoEditor, openEditorPanel, replaceEditorSelection } from '../workspace/editorBridge'
 import { createPluginLauncherApi } from '../workspace/launcher/pluginApi'
 import { showPluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
-import { WORKFLOW_OUTPUT_SHELF_PANEL_ID } from '../components/workflow/WorkflowOutputShelfPanel'
+import { createQuickEditorPane } from '../workspace/quickEditor/quickEditorRequests'
 
 export type OutputRouterContext = {
   copy(text: string): Promise<void> | void
@@ -23,17 +22,11 @@ export function createDefaultOutputRouterContext(): OutputRouterContext {
     pasteToForegroundApp: async (text) => {
       await createPluginPaste().pasteText(text)
     },
-    replaceEditorSelection: (text, options) => replaceEditorSelection(text, {
-      paneId: options?.paneId,
-      range: options?.range,
-    }),
-    insertIntoEditor: (text, options) => insertIntoEditor(text, {
-      paneId: options?.paneId,
-    }),
+    replaceEditorSelection: (text) => createQuickEditorPane({ text }),
+    insertIntoEditor: (text) => createQuickEditorPane({ text }),
     openInEditor: async (text, options) => {
-      await createEditorPane({
+      await createQuickEditorPane({
         text,
-        title: options?.title,
         language: options?.language,
       })
     },
@@ -46,20 +39,20 @@ export function createDefaultOutputRouterContext(): OutputRouterContext {
       })
     },
     attachEditorPanel: async (text, options) => {
-      await openEditorPanel({
-        panelId: options.panelId,
-        placement: options.placement,
-        paneId: options.paneId,
-        inputs: { text, target: options.pluginSurfaceTarget },
-      })
+      const target = options.pluginSurfaceTarget
+      if (target) {
+        await showPluginSurfaceWindow({
+          source: target.source ?? 'builtin',
+          pluginId: target.pluginId,
+          surfaceId: target.surfaceId,
+          initialText: target.initialText ?? text,
+        })
+        return
+      }
+      await createQuickEditorPane({ text })
     },
     saveToShelf: async (text) => {
-      await openEditorPanel({
-        panelId: WORKFLOW_OUTPUT_SHELF_PANEL_ID,
-        placement: 'right',
-        inputs: { text },
-        title: 'Output Shelf',
-      })
+      await createQuickEditorPane({ text })
     },
   }
 }

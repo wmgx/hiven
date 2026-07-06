@@ -1,9 +1,9 @@
-import { createEditorPane } from '../editorBridge'
 import { requestOpenLauncherHostSurface } from '../launcherHostSurfaceBridge'
 import { useAppStore } from '../../store'
 import type { LauncherItem } from './types'
 import { getHostEditorActionItems } from './hostEditorActions'
 import { isQuickEditorWindowOpen, showQuickEditorWindow } from '../windowManager/quickEditorWindow'
+import { createQuickEditorPane } from '../quickEditor/quickEditorRequests'
 
 type SystemPowerAction = 'restart' | 'shutdown' | 'lock-screen'
 
@@ -134,7 +134,7 @@ export function getHostPaneControlItems(): LauncherItem[] {
       requiredCapabilities: ['pane-actions'],
       pinnable: false,
       execute: async () => {
-        await createEditorPane({ text: '', focus: true, direction: 'right' })
+        await createQuickEditorPane({ text: '', direction: 'right' })
         return { ok: true }
       },
     },
@@ -154,7 +154,7 @@ export function getHostPaneControlItems(): LauncherItem[] {
       requiredCapabilities: ['pane-actions'],
       pinnable: false,
       execute: async () => {
-        await createEditorPane({ text: '', focus: true, direction: 'right' })
+        await createQuickEditorPane({ text: '', direction: 'right' })
         return { ok: true }
       },
     },
@@ -174,7 +174,7 @@ export function getHostPaneControlItems(): LauncherItem[] {
       requiredCapabilities: ['pane-actions'],
       pinnable: false,
       execute: async () => {
-        await createEditorPane({ text: '', focus: true, direction: 'bottom' })
+        await createQuickEditorPane({ text: '', direction: 'bottom' })
         return { ok: true }
       },
     },

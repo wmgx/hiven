@@ -22,7 +22,7 @@ import { useClipboardObjectBlock } from '../clipboard/useClipboardObjectBlock'
 import { executeRecommendedAction } from '../clipboard/actionExecutor'
 import { recommendActionsForBlock, type RecommendedAction, type RecommendedOutputTarget } from '../clipboard/actionRecommendation'
 import { writeClipboardText } from '../../workspace/pluginClipboard'
-import { createEditorPane, replaceEditorSelection, insertIntoEditor, openEditorPanel } from '../../workspace/editorBridge'
+import { createQuickEditorPane } from '../../workspace/quickEditor/quickEditorRequests'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import { prepareLauncherInputSource, restoreLauncherInputSource } from '../../workspace/windowManager/launcherWindow'
@@ -293,7 +293,7 @@ export function GlobalLauncherHost() {
       copyText: writeClipboardText,
       copyAndKeepOpen: writeClipboardText,
       openInEditor: async (text, options) => {
-        await createEditorPane({ text, title: options?.title, language: options?.language })
+        await createQuickEditorPane({ text, language: options?.language })
       },
       openPluginSurface: async (pluginId) => {
         await openPluginSurface({ source: 'builtin' as PluginSettingsSource, pluginId, surfaceId: 'main' })
@@ -302,19 +302,19 @@ export function GlobalLauncherHost() {
         await openUrl(url)
       },
       replaceSelection: async (text) => {
-        await replaceEditorSelection(text)
+        await createQuickEditorPane({ text })
       },
       newPane: async (text, options) => {
-        await createEditorPane({ text, title: options?.title, language: options?.language })
+        await createQuickEditorPane({ text, language: options?.language })
       },
       insertBelow: async (text) => {
-        await insertIntoEditor(text)
+        await createQuickEditorPane({ text })
       },
       openBottomPanel: async (actionId, text) => {
-        await openEditorPanel({ panelId: actionId, inputs: { text } })
+        await createQuickEditorPane({ text: `${actionId}\n\n${text}` })
       },
       setRenderer: async (actionId, text) => {
-        await openEditorPanel({ panelId: actionId, inputs: { text } })
+        await createQuickEditorPane({ text: `${actionId}\n\n${text}` })
       },
     })
 

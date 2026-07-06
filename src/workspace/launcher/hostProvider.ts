@@ -9,7 +9,6 @@ import {
   setHostLauncherItemsProvider,
 } from './registry'
 import { measureLauncherPerf } from './perf'
-import { getEditorWindowItems } from './editorWindowItems'
 import { getHostPaneControlItems, getHostSystemPowerItems } from './hostActions'
 import { registerPluginSurfacePanelProvider } from '../pluginSurfacePanelProvider'
 import { registerWorkflowOutputShelfPanelProvider } from '../workflowOutputShelfPanelProvider'
@@ -19,7 +18,6 @@ export function registerHostLauncherProviders(): void {
   registerWorkflowOutputShelfPanelProvider()
   registerDefaultWorkflowProviders()
   setHostLauncherItemsProvider(() => [
-    ...getEditorWindowItems(),
     ...getHostPaneControlItems(),
     ...getHostSystemPowerItems(),
     ...getHostAppLauncherStaticItems(),

@@ -1,18 +1,18 @@
 import { getSurfaceInstance, markSurfaceInstanceState, type SurfaceInstance } from './registry'
 import type { PluginSettingsSource } from '../workspace/pluginSettingsStore'
-import { showEditorWindow } from '../workspace/windowManager/editorWindow'
 import { showLauncherWindow } from '../workspace/windowManager/launcherWindow'
 import { showPluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
 import { requestOpenLauncherHostSurface, requestOpenLauncherPluginSettingsSurface } from '../workspace/launcherHostSurfaceBridge'
 import { requestOpenPluginSurfaceTool } from '../workspace/pluginSurfaceOpenRequest'
 import { requestOpenPluginEditorSurface } from './pluginEditorSurfaceBridge'
+import { showQuickEditorSurface } from '../workspace/quickEditor/quickEditorRequests'
 
 export async function focusSurfaceInstance(surfaceOrId: SurfaceInstance | string): Promise<boolean> {
   const surface = typeof surfaceOrId === 'string' ? getSurfaceInstance(surfaceOrId) : surfaceOrId
   if (!surface) return false
 
   if (surface.kind === 'editor') {
-    await showEditorWindow()
+    await showQuickEditorSurface()
     markSurfaceInstanceState(surface.id, 'visible')
     return true
   }

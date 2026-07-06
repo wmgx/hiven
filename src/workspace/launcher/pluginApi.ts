@@ -17,15 +17,11 @@ import { useAppStore } from '../../store'
 import { requestOpenLauncherHostSurface } from '../launcherHostSurfaceBridge'
 import { createPluginPrivateStorage } from '../pluginStorage'
 import { getPluginPermissionSnapshot, requirePluginPermissions } from '../pluginPermissions'
-import { showEditorWindow } from '../windowManager/editorWindow'
 import {
-  createEditorPane,
   getActiveEditorContextSnapshot,
   getActiveEditorPaneSnapshot,
-  insertIntoEditor,
-  openEditorDiffPage,
-  replaceEditorSelection,
 } from '../editorBridge'
+import { createQuickEditorPane, showQuickEditorSurface } from '../quickEditor/quickEditorRequests'
 import type { FluxEffect, SerializedRange } from '../types'
 import type { PluginPermission } from '../pluginTypes'
 import type { PluginSettingsSource } from '../pluginSettingsStore'
@@ -67,15 +63,6 @@ function activeSelectionRange(): SerializedRange | undefined {
     startColumn: sel.startColumn,
     endLineNumber: sel.endLineNumber,
     endColumn: sel.endColumn,
-  }
-}
-
-function activeEditorTextTarget(): { paneId?: string; range?: SerializedRange } {
-  const snapshot = getActiveEditorContextSnapshot()
-  if (!snapshot) return {}
-  return {
-    paneId: snapshot.activePaneId,
-    range: snapshot.selectionRange,
   }
 }
 
@@ -125,9 +112,9 @@ async function writeClipboard(text: string): Promise<void> {
 
 async function openEditorWindow(): Promise<void> {
   try {
-    await showEditorWindow()
+    await showQuickEditorSurface()
   } catch (error) {
-    console.warn('[launcher] failed to show editor window:', error)
+    console.warn('[launcher] failed to show quick editor:', error)
   }
 }
 
@@ -222,7 +209,7 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
     getClipboardText: () => readClipboard(),
     replaceActiveText: async (text: string) => {
       if (!isEditorWindowRuntime()) {
-        await replaceEditorSelection(text, activeEditorTextTarget())
+        await createQuickEditorPane({ text })
         return
       }
       const range = activeSelectionRange()
@@ -235,7 +222,7 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
     },
     insertText: async (text: string) => {
       if (!isEditorWindowRuntime()) {
-        await insertIntoEditor(text, activeEditorTextTarget())
+        await createQuickEditorPane({ text })
         return
       }
       const range = activeSelectionRange()
@@ -263,7 +250,7 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
     showEditorWindow: openEditorWindow,
     showPluginsPage,
     showSettingsPage,
-    createPane: (options) => createEditorPane(options),
+    createPane: (options) => createQuickEditorPane(options),
     dispatchEffects: (effects: FluxEffect[]) => {
       if (!isEditorWindowRuntime()) {
         return { applied: [], errors: ['dispatchEffects is only available in the editor window'] }
@@ -282,7 +269,7 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
       if (isEditorWindowRuntime()) {
         useWorkspaceStore.getState().openDiffPage(payload)
       } else {
-        void openEditorDiffPage(payload)
+        void showQuickEditorSurface()
       }
     },
     apps: createPluginAppsApi(options),

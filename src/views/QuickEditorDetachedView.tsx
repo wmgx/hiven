@@ -5,6 +5,11 @@ import { loadInstalledPluginsFromStore } from '../workspace/pluginRuntime'
 import { registerBundledPluginPackages } from '../workspace/bundledPluginLoader'
 import { registerHostLauncherProviders } from '../workspace/launcher/hostProvider'
 import { useQuickEditorStore } from '../workspace/quickEditor/quickEditorStore'
+import {
+  applyQuickEditorPaneRequest,
+  isQuickEditorPaneRequest,
+  QUICK_EDITOR_CREATE_PANE_EVENT,
+} from '../workspace/quickEditor/quickEditorRequests'
 import { getLanguageOptionLabel } from '../workspace/languageOptions'
 import { QuickEditorPanel } from '../components/quickEditor/QuickEditorPanel'
 import {
@@ -54,6 +59,28 @@ export function QuickEditorDetachedView() {
     void loadInstalledPluginsFromStore().catch((error) => {
       console.error('[hiven] Failed to load plugins for quick editor:', error)
     })
+  }, [])
+
+  useEffect(() => {
+    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    import('@tauri-apps/api/event')
+      .then(({ listen }) => listen<unknown>(QUICK_EDITOR_CREATE_PANE_EVENT, (event) => {
+        if (!isQuickEditorPaneRequest(event.payload)) return
+        applyQuickEditorPaneRequest(event.payload)
+      }))
+      .then((cleanup) => {
+        if (disposed) cleanup()
+        else unlisten = cleanup
+      })
+      .catch((error) => {
+        console.warn('[hiven] Failed to listen for quick editor pane requests:', error)
+      })
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
   }, [])
 
   const handleRequestExit = useCallback(() => {
