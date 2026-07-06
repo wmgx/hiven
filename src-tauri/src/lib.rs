@@ -11,6 +11,7 @@ use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
+use tauri::tray::TrayIconBuilder;
 use tauri::Emitter;
 use tauri::LogicalSize;
 use tauri::Manager;
@@ -4172,6 +4173,57 @@ fn disable_app_nap() {
     }
 }
 
+fn configure_desktop_tray(app: &mut tauri::App) -> tauri::Result<()> {
+    #[cfg(target_os = "macos")]
+    app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+    let tray_menu = MenuBuilder::new(app)
+        .text("tray-open-launcher", desktop_tray_text("open"))
+        .separator()
+        .text("tray-quit", desktop_tray_text("quit"))
+        .build()?;
+
+    let mut tray = TrayIconBuilder::with_id("hiven-tray")
+        .tooltip("Hiven")
+        .menu(&tray_menu)
+        .show_menu_on_left_click(true)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "tray-open-launcher" => {
+                let _ = show_launcher_window_for_hotkey(app.clone());
+            }
+            "tray-quit" => app.exit(0),
+            _ => {}
+        });
+
+    if let Some(icon) = app.default_window_icon().cloned() {
+        tray = tray.icon(icon);
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        tray = tray.icon_as_template(true);
+    }
+
+    tray.build(app)?;
+    Ok(())
+}
+
+fn desktop_tray_text(key: &str) -> &'static str {
+    let is_zh = std::env::var("LC_ALL")
+        .or_else(|_| std::env::var("LC_MESSAGES"))
+        .or_else(|_| std::env::var("LANG"))
+        .map(|locale| locale.to_ascii_lowercase().starts_with("zh"))
+        .unwrap_or(false);
+
+    match (is_zh, key) {
+        (true, "open") => "打开 Hiven",
+        (true, "quit") => "退出 Hiven",
+        (_, "open") => "Open Hiven",
+        (_, "quit") => "Quit Hiven",
+        _ => "Hiven",
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -4189,6 +4241,8 @@ pub fn run() {
             // `run_on_main_thread` callbacks used to show the launcher window.
             #[cfg(target_os = "macos")]
             disable_app_nap();
+
+            configure_desktop_tray(app)?;
 
             // 构建 Edit 子菜单（macOS 需要原生 Edit 菜单才能让剪贴板快捷键生效）
             // 注意：不加 Undo/Redo，否则会拦截 Monaco 自己的撤销栈
