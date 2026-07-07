@@ -32,7 +32,6 @@ export function GlobalLauncherHost() {
   const {
     open,
     overlay,
-    pinnedActions,
     recentActionNames,
     actionUsageCounts,
     locale,
@@ -41,7 +40,6 @@ export function GlobalLauncherHost() {
   } = useAppStore(useShallow((s) => ({
     open: s.globalLauncherOpen,
     overlay: s.globalLauncherOverlay,
-    pinnedActions: s.pinnedActions,
     recentActionNames: s.actionUsageBySource['global-launcher'].recentActionNames,
     actionUsageCounts: s.actionUsageBySource['global-launcher'].actionUsageCounts,
     locale: s.locale,
@@ -49,7 +47,6 @@ export function GlobalLauncherHost() {
     launcherHostSurfaceTarget: s.launcherHostSurfaceTarget,
   })))
   const setOpen = useAppStore((s) => s.setGlobalLauncherOpen)
-  const openPinnedAction = useAppStore((s) => s.openPinnedAction)
   const clearPluginSurfaceTool = useAppStore((s) => s.clearPluginSurfaceTool)
   const clearLauncherHostSurface = useAppStore((s) => s.clearLauncherHostSurface)
   const pluginRegistryVersion = usePluginRegistryVersion()
@@ -144,14 +141,13 @@ export function GlobalLauncherHost() {
   const visibleFiltered = useMemo(() => {
     void pluginRegistryVersion
     return buildGlobalLauncherItems({
-      pinnedActions,
       rankedLauncherItems,
       query,
       locale,
       recentActionNames,
       actionUsageCounts,
     })
-  }, [actionUsageCounts, locale, pinnedActions, pluginRegistryVersion, query, rankedLauncherItems, recentActionNames])
+  }, [actionUsageCounts, locale, pluginRegistryVersion, query, rankedLauncherItems, recentActionNames])
 
   const { restoreFocus, focusSearchInputAfterBack } = useGlobalLauncherFocusSession({
     open,
@@ -257,7 +253,6 @@ export function GlobalLauncherHost() {
     controllerRef,
     standaloneLauncher,
     overlay,
-    openPinnedAction,
     restoreFocus,
     setOpen,
     clearPluginSurfaceTool,
@@ -270,15 +265,6 @@ export function GlobalLauncherHost() {
   useGlobalLauncherHostEscape({
     open,
     isImeComposingRef,
-    launcherSettingsTarget,
-    closeSettingsDialog,
-    settingsDialogTarget,
-    surfaceFrame,
-    leaveSurface,
-    hostSurfaceTarget,
-    clearLauncherHostSurface,
-    itemPermissionFrame,
-    cancelItemPermissionPrompt,
     controllerRef,
     closeLauncher,
     focusSearchInputAfterBack,

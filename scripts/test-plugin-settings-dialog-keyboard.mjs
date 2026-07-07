@@ -64,26 +64,13 @@ assert.ok(
 )
 
 assert.ok(
-  /(?:event|e)\.key\s*===\s*['"]Escape['"][\s\S]{0,260}(?:launcherSettingsTarget|settingsDialogTarget)[\s\S]{0,260}closeSettingsDialog\(\)[\s\S]{0,160}return/.test(globalLauncher),
-  'GlobalLauncher host Escape should close inline plugin settings directly',
+  /useLauncherEscapeInterceptor[\s\S]{0,40}escapeHandler/.test(globalLauncher),
+  'GlobalLauncher settings frame should register an escape interceptor to own its Escape handling',
 )
 
-const inlineEscapeIndex = globalLauncher.search(/(?:event|e)\.key\s*===\s*['"]Escape['"][\s\S]{0,260}(?:launcherSettingsTarget|settingsDialogTarget)[\s\S]{0,260}closeSettingsDialog\(\)/)
-const nextControllerBackIndex = inlineEscapeIndex >= 0 ? globalLauncher.indexOf('controllerRef.current?.back()', inlineEscapeIndex) : -1
-const nextLeaveSurfaceIndex = inlineEscapeIndex >= 0 ? globalLauncher.indexOf('leaveSurface()', inlineEscapeIndex) : -1
-
-assert.ok(inlineEscapeIndex >= 0, 'GlobalLauncher should have an Escape close branch for inline settings')
-if (nextControllerBackIndex >= 0) {
-  assert.ok(
-    nextControllerBackIndex - inlineEscapeIndex > 160,
-    'inline settings Escape branch should return before controller.back can run',
-  )
-}
-if (nextLeaveSurfaceIndex >= 0) {
-  assert.ok(
-    nextLeaveSurfaceIndex - inlineEscapeIndex > 160,
-    'inline settings Escape branch should return before leaveSurface can run',
-  )
-}
+assert.ok(
+  /(?:event|e)\.key\s*!==\s*['"]Escape['"][\s\S]{0,40}return\s+false[\s\S]{0,200}onClose\(\)[\s\S]{0,40}return\s+true/.test(globalLauncher),
+  'GlobalLauncher settings escape interceptor should close settings on Escape',
+)
 
 console.log('plugin settings global launcher checks passed')

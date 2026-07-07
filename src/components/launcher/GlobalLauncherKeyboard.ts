@@ -3,26 +3,19 @@ import type { CollectInputFrame, ResultFrame } from '../../workspace/launcher/co
 import type { LauncherMixedItem } from './LauncherMixedList'
 import { shouldCustomizeParams } from './launcherParamShortcuts'
 import { shouldIgnoreImeKeyDown } from '../../utils/imeKeyboard'
-import { hasLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
 
 export function handleGlobalLauncherKeyDown({
   event,
   isImeComposingRef,
   launcherSettingsTarget,
-  closeSettingsDialog,
-  focusSearchInputAfterBack,
   hostSurfaceTarget,
-  clearLauncherHostSurface,
   surfaceFrame,
-  leaveSurface,
   itemPermissionFrame,
-  cancelItemPermissionPrompt,
   controllerState,
   controllerRef,
   resultSelectedIndex,
   setResultSelectedIndex,
   toggleResultChoice,
-  closeLauncher,
   isKeyboardNavRef,
   visibleFilteredLength,
   setSelectedIndex,
@@ -41,14 +34,9 @@ export function handleGlobalLauncherKeyDown({
   event: ReactKeyboardEvent<HTMLElement>
   isImeComposingRef: MutableRefObject<boolean>
   launcherSettingsTarget: unknown
-  closeSettingsDialog: () => void
-  focusSearchInputAfterBack: () => void
   hostSurfaceTarget?: unknown
-  clearLauncherHostSurface?: () => void
   surfaceFrame: unknown
-  leaveSurface: () => void
   itemPermissionFrame: unknown
-  cancelItemPermissionPrompt: () => void
   controllerState: { frames: Array<{ kind: string }>; error?: string | null; busy: boolean } | null | undefined
   controllerRef: MutableRefObject<{
     submitInput?: () => void | Promise<void>
@@ -57,7 +45,6 @@ export function handleGlobalLauncherKeyDown({
   resultSelectedIndex: number
   setResultSelectedIndex: (updater: number | ((index: number) => number)) => void
   toggleResultChoice: (choice: unknown, frame: ResultFrame) => void
-  closeLauncher: () => void
   isKeyboardNavRef: MutableRefObject<boolean>
   visibleFilteredLength: number
   setSelectedIndex: (updater: number | ((index: number) => number)) => void
@@ -75,44 +62,11 @@ export function handleGlobalLauncherKeyDown({
 }) {
   if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
   if (event.defaultPrevented) return
-  if (event.key === 'Escape' && launcherSettingsTarget) {
-    event.preventDefault()
-    event.stopPropagation()
-    closeSettingsDialog()
-    focusSearchInputAfterBack()
-    return
-  }
+  if (event.key === 'Escape') return
   if (launcherSettingsTarget) return
-
-  if (hostSurfaceTarget) {
-    // Pages that registered an escape interceptor own Escape entirely
-    // (the window-capture host chain already consulted it).
-    if (event.key === 'Escape' && !hasLauncherEscapeInterceptor()) {
-      event.preventDefault()
-      event.stopPropagation()
-      clearLauncherHostSurface?.()
-      focusSearchInputAfterBack()
-    }
-    return
-  }
-
-  if (surfaceFrame) {
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      event.stopPropagation()
-      leaveSurface()
-    }
-    return
-  }
-
-  if (itemPermissionFrame) {
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      event.stopPropagation()
-      cancelItemPermissionPrompt()
-    }
-    return
-  }
+  if (hostSurfaceTarget) return
+  if (surfaceFrame) return
+  if (itemPermissionFrame) return
 
   if (controllerState && controllerState.frames.length > 1) {
     const topFrame = controllerState.frames[controllerState.frames.length - 1]
@@ -124,18 +78,10 @@ export function handleGlobalLauncherKeyDown({
         void controllerRef.current?.submitInput?.()
         return
       }
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        event.stopPropagation()
-        controllerRef.current?.back?.()
-        focusSearchInputAfterBack()
-        return
-      }
       if (event.key === 'Backspace' && !(topFrame as CollectInputFrame).inputText) {
         event.preventDefault()
         event.stopPropagation()
         controllerRef.current?.back?.()
-        focusSearchInputAfterBack()
         return
       }
       return
@@ -160,23 +106,10 @@ export function handleGlobalLauncherKeyDown({
         if (choice) toggleResultChoice(choice, resultFrame)
         return
       }
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        event.stopPropagation()
-        controllerRef.current?.back?.()
-        focusSearchInputAfterBack()
-        return
-      }
       return
     }
   }
 
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    event.stopPropagation()
-    closeLauncher()
-    return
-  }
   if (hasObjectActions && event.key === 'ArrowDown') {
     event.preventDefault()
     isKeyboardNavRef.current = true

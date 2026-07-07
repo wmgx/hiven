@@ -1,5 +1,7 @@
+import { useCallback } from 'react'
 import type { Locale } from '../../i18n'
 import type { PluginSurfaceOpenTarget } from '../../store'
+import { useLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
 import { PluginSurfaceRenderer } from '../pluginSurface/PluginSurfaceRenderer'
 import { SurfaceBreadcrumbHeader } from '../SurfaceBreadcrumbHeader'
 
@@ -21,6 +23,15 @@ export function GlobalLauncherPluginSurfaceFrame({
   onClose: () => void
 }) {
   const bodyHeight = breadcrumbTitle ? shellHeight - BREADCRUMB_HEIGHT : shellHeight
+
+  const escapeHandler = useCallback((event: KeyboardEvent): boolean => {
+    if (event.key !== 'Escape') return false
+    event.preventDefault()
+    event.stopPropagation()
+    onBack()
+    return true
+  }, [onBack])
+  useLauncherEscapeInterceptor(escapeHandler)
 
   return (
     <div

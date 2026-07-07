@@ -2,12 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../../store'
 import { useLauncherEscapeInterceptor } from '../launcher/launcherEscapeInterceptor'
 import { isQuickEditorDetachedWindow } from '../../workspace/windowManager/quickEditorWindow'
+import { quickEditorImperative } from './quickEditorImperative'
 
 const EXIT_HINT_DURATION_MS = 1500
 
 /**
  * Quick Editor two-stage escape:
- * - command overlay open → overlay handles Escape itself (bubble phase)
+ * - command overlay open → delegate to overlay's registered handler
  * - first Escape → show a hint only; Monaco still receives the key
  * - second Escape within the hint window → run the host-provided exit action
  *
@@ -33,8 +34,9 @@ export function useQuickEditorEscape(onExit: () => void) {
 
   const handleEscape = useCallback((event: KeyboardEvent): boolean => {
     if (event.key !== 'Escape') return false
-    // The command overlay handles its own Escape in the bubble phase.
-    if (useAppStore.getState().quickEditorCommandOpen) return true
+    if (useAppStore.getState().quickEditorCommandOpen) {
+      return quickEditorImperative.handleOverlayEscape(event)
+    }
     if (hintTimerRef.current != null) {
       event.preventDefault()
       event.stopPropagation()
@@ -42,8 +44,6 @@ export function useQuickEditorEscape(onExit: () => void) {
       onExitRef.current()
       return true
     }
-    // First Escape: hint only. No preventDefault so Monaco can close its own
-    // widgets (find, suggest) — but the host default chain must not run.
     setExitHintVisible(true)
     hintTimerRef.current = window.setTimeout(() => {
       hintTimerRef.current = null
@@ -54,10 +54,8 @@ export function useQuickEditorEscape(onExit: () => void) {
 
   const detached = isQuickEditorDetachedWindow()
 
-  // Surface host: register on the launcher escape interceptor slot.
   useLauncherEscapeInterceptor(detached ? null : handleEscape)
 
-  // Detached window host: capture-phase window listener.
   useEffect(() => {
     if (!detached) return
     const listener = (event: KeyboardEvent) => {

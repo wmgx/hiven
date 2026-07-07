@@ -1,5 +1,7 @@
+import { useCallback } from 'react'
 import type { Locale } from '../../i18n'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
+import { useLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
 import { PluginSettingsContent } from '../PluginSettingsDialog'
 
 export function GlobalLauncherSettingsFrame({
@@ -15,6 +17,15 @@ export function GlobalLauncherSettingsFrame({
   height: number
   onClose: () => void
 }) {
+  const escapeHandler = useCallback((event: KeyboardEvent): boolean => {
+    if (event.key !== 'Escape') return false
+    event.preventDefault()
+    event.stopPropagation()
+    onClose()
+    return true
+  }, [onClose])
+  useLauncherEscapeInterceptor(escapeHandler)
+
   return (
     <div
       className="global-launcher-settings-shell flex flex-col min-h-0 outline-none"

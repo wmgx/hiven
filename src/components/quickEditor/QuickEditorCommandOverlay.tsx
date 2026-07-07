@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type FocusEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, type FocusEvent } from 'react'
 import { useAppStore } from '../../store'
 import { useLauncherSession } from '../../workspace/launcher/useLauncherSession'
 import { filterEditorCommandBarItems } from '../../workspace/launcher/types'
@@ -69,7 +69,6 @@ export function QuickEditorCommandOverlay() {
   }), [])
 
   const visibleFiltered = useMemo(() => buildGlobalLauncherItems({
-    pinnedActions: [],
     rankedLauncherItems: rankedItems.slice(0, MAX_OVERLAY_ITEMS),
     query,
     locale,
@@ -92,6 +91,26 @@ export function QuickEditorCommandOverlay() {
     closeCommand()
     requestAnimationFrame(() => quickEditorImperative.triggerFocus())
   }
+
+  const overlayEscapeHandler = useCallback((event: KeyboardEvent): boolean => {
+    if (controllerRef.current?.back?.()) {
+      requestAnimationFrame(() => inputRef.current?.focus())
+      event.preventDefault()
+      event.stopPropagation()
+      return true
+    }
+    event.preventDefault()
+    event.stopPropagation()
+    closeCommand()
+    requestAnimationFrame(() => quickEditorImperative.triggerFocus())
+    return true
+  }, [closeCommand, controllerRef, inputRef])
+
+  useEffect(() => {
+    if (!open) return
+    quickEditorImperative.registerOverlayEscape(overlayEscapeHandler)
+    return () => quickEditorImperative.unregisterOverlayEscape()
+  }, [open, overlayEscapeHandler])
 
   useEffect(() => {
     if (open) {
@@ -141,30 +160,18 @@ export function QuickEditorCommandOverlay() {
       tabIndex={-1}
       onPointerDownCapture={markInternalPointerDown}
       onBlur={closeOnFocusLeave}
-      onKeyDownCapture={(event) => {
-        if (event.key !== 'Escape' || isImeComposingRef.current) return
-        event.preventDefault()
-        event.stopPropagation()
-        closeCommandAndRestoreFocus()
-      }}
       onKeyDown={(event) => handleGlobalLauncherKeyDown({
         event,
         isImeComposingRef,
         launcherSettingsTarget: null,
-        closeSettingsDialog: () => {},
-        focusSearchInputAfterBack,
         hostSurfaceTarget: null,
-        clearLauncherHostSurface: undefined,
         surfaceFrame: null,
-        leaveSurface: () => {},
         itemPermissionFrame: null,
-        cancelItemPermissionPrompt: () => {},
         controllerState,
         controllerRef,
         resultSelectedIndex,
         setResultSelectedIndex,
         toggleResultChoice,
-        closeLauncher: closeCommandAndRestoreFocus,
         isKeyboardNavRef,
         visibleFilteredLength: visibleFiltered.length,
         setSelectedIndex,

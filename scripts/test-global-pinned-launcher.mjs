@@ -42,10 +42,7 @@ const files = {
     read('src/components/launcher/GlobalLauncherSearchFrame.tsx'),
     read('src/components/launcher/GlobalLauncherHostLifecycle.ts'),
   ].join('\n'),
-  commandPalette: [
-    read('src/components/CommandPalette.tsx'),
-    read('src/launcher/hosts/EditorCommandBarHost.tsx'),
-  ].join('\n'),
+
   corePlugin: readOptional('src/workspace/corePlugin.ts'),
   hostActions: read('src/workspace/launcher/hostActions.ts'),
   builtinIndex: read('src/builtin-plugins/index.json'),
@@ -104,16 +101,6 @@ check('pinned-only mode builds launcher commands and pinned action items', () =>
     files.globalLauncher,
     /buildGlobalLauncherItems|rankedLauncherItems/,
     'items construction should branch on pinned-only mode',
-  )
-  assertHas(
-    files.globalLauncher,
-    /pinnedActions/,
-    'pinned-only branch should keep pinned shortcuts local while domain launcher items are merged separately',
-  )
-  assertHas(
-    files.globalLauncher,
-    /pinnedActions/,
-    'pinned-only branch should still derive pinned action items from pinnedActions',
   )
   assert.doesNotMatch(
     files.globalLauncher,
@@ -221,11 +208,6 @@ check('launcher surfaces do not auto-discover legacy plugin commands', () => {
     'GlobalLauncher should not auto-discover plugin commands; commands must be exposed as launcher items or tools',
   )
   assert.doesNotMatch(
-    files.commandPalette,
-    /pluginRegistry\.getAllCommands\(\)/,
-    'CommandPalette should not auto-discover plugin commands; commands must be exposed as launcher items or tools',
-  )
-  assert.doesNotMatch(
     files.globalLauncher,
     /hiven:\/\/run-plugin-command|runPluginCommandById/,
     'GlobalLauncher should not execute legacy plugin commands outside LauncherController',
@@ -270,19 +252,6 @@ check('global launcher reuses shared search ranking logic', () => {
   )
 })
 
-check('selecting a pinned item still opens the pinned action', () => {
-  assertHas(
-    files.globalLauncher,
-    /item\.kind\s*===\s*['"]pinned['"][\s\S]{0,260}finishPinnedLauncherSelection\([\s\S]{0,260}pinnedId:\s*item\.id[\s\S]{0,260}openPinnedAction,/,
-    'selecting a pinned launcher item should route pinned item ids through finishPinnedLauncherSelection',
-  )
-  assertHas(
-    files.globalLauncher,
-    /function\s+finishPinnedLauncherSelection[\s\S]*openPinnedAction\(pinnedId\)/,
-    'finishPinnedLauncherSelection should call openPinnedAction(pinnedId)',
-  )
-})
-
 check('standalone domain launcher items stay on the launcher controller path', () => {
   assert.doesNotMatch(
     files.globalLauncher,
@@ -311,11 +280,6 @@ check('launcher UI business logic does not parse systemKey for legacy command id
     files.globalLauncher,
     /(?:legacyUsageKeys|commandId|run-plugin-command)[\s\S]{0,180}systemKey\.split\(/,
     'GlobalLauncher should not parse systemKey for legacy command ids',
-  )
-  assert.doesNotMatch(
-    files.commandPalette,
-    /systemKey\.split\(/,
-    'CommandPalette should use explicit legacyUsageKeys instead of parsing systemKey',
   )
 })
 
@@ -694,7 +658,7 @@ check('standalone launcher closes on Escape without bubbling to the app', () => 
   )
   assertHas(
     files.globalLauncher,
-    /event\.key\s*===\s*['"]Escape['"][\s\S]{0,180}event\.preventDefault\(\)[\s\S]{0,180}event\.stopPropagation\(\)[\s\S]{0,180}closeLauncher\(\)/,
+    /event\.key\s*!==\s*['"]Escape['"]\)\s*return[\s\S]{0,300}event\.preventDefault\(\)[\s\S]{0,180}event\.stopPropagation\(\)[\s\S]{0,180}closeLauncher\(\)/,
     'Escape should only close the global launcher and stop app-level key handlers',
   )
   assertHas(
@@ -706,11 +670,6 @@ check('standalone launcher closes on Escape without bubbling to the app', () => 
     files.globalLauncher,
     /restoreCurrentLauncherOverlayWindow\(\{\s*hide:\s*hideOverlayWindow\s*\}\)/,
     'overlay launcher close should restore and optionally hide through the window manager',
-  )
-  assertHas(
-    files.globalLauncher,
-    /restoreCurrentLauncherOverlayWindow\(\)/,
-    'overlay pinned selection should restore decorations through the window manager',
   )
   assert.doesNotMatch(
     read('src/components/launcher/GlobalLauncherClose.ts'),

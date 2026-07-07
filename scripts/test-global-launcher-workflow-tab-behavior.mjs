@@ -68,25 +68,20 @@ function makeArgs(overrides = {}) {
   const calls = {
     selectedIndexes: [],
     selectedItems: [],
-    closed: 0,
   }
   return {
     calls,
     args: {
       isImeComposingRef: { current: false },
       launcherSettingsTarget: null,
-      closeSettingsDialog: () => undefined,
-      focusSearchInputAfterBack: () => undefined,
+      hostSurfaceTarget: null,
       surfaceFrame: null,
-      leaveSurface: () => undefined,
       itemPermissionFrame: null,
-      cancelItemPermissionPrompt: () => undefined,
       controllerState: null,
       controllerRef: { current: null },
       resultSelectedIndex: 0,
       setResultSelectedIndex: () => undefined,
       toggleResultChoice: () => undefined,
-      closeLauncher: () => { calls.closed += 1 },
       isKeyboardNavRef: { current: false },
       visibleFilteredLength: 3,
       setSelectedIndex: (updater) => { calls.selectedIndexes.push(updater) },

@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore, type PluginSurfaceOpenTarget } from '../store'
 import type { PluginSettingsSource } from '../workspace/pluginSettingsStore'
 import { markSurfaceInstanceState, upsertSurfaceInstance } from '../surfaces/registry'
 import { pluginSurfaceInstanceId, pluginSurfaceWindowLabel } from '../workspace/pluginSurfaceWindows'
 import { hideCurrentPluginSurfaceWindow, hidePluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
 import { PluginSettingsDialog } from './PluginSettingsDialog'
+import { ToastContainer } from './workspace/ToastContainer'
 import { PluginSurfaceRenderer, usePluginSurfaceRendersTitlebar, usePluginSurfaceTitle } from './pluginSurface/PluginSurfaceRenderer'
 import './PluginSurfaceWindow.css'
 
@@ -51,18 +52,30 @@ export function PluginSurfaceWindow() {
     }
   }, [target, title])
 
+  const isImeComposingRef = useRef(false)
+
+  useEffect(() => {
+    const onCompositionStart = () => { isImeComposingRef.current = true }
+    const onCompositionEnd = () => { isImeComposingRef.current = false }
+    document.addEventListener('compositionstart', onCompositionStart)
+    document.addEventListener('compositionend', onCompositionEnd)
+    return () => {
+      document.removeEventListener('compositionstart', onCompositionStart)
+      document.removeEventListener('compositionend', onCompositionEnd)
+    }
+  }, [])
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
+      if (isImeComposingRef.current || event.isComposing || (event as unknown as { keyCode: number }).keyCode === 229) return
       event.preventDefault()
       event.stopPropagation()
       void hideCurrentWindow(target)
     }
     window.addEventListener('keydown', onKeyDown, true)
-    document.addEventListener('keydown', onKeyDown, true)
     return () => {
       window.removeEventListener('keydown', onKeyDown, true)
-      document.removeEventListener('keydown', onKeyDown, true)
     }
   }, [target])
 
@@ -95,6 +108,7 @@ export function PluginSurfaceWindow() {
         </div>
       </div>
       <PluginSettingsDialog />
+      <ToastContainer />
     </div>
   )
 }

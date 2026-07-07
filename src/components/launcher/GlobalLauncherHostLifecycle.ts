@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, type RefObject } from 'react'
-import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import type { LauncherControllerState } from '../../workspace/launcher/controller'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../../utils/imeKeyboard'
 import { runLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
@@ -92,30 +91,12 @@ export function useGlobalLauncherCollectInputPreview({
 export function useGlobalLauncherHostEscape({
   open,
   isImeComposingRef,
-  launcherSettingsTarget,
-  closeSettingsDialog,
-  settingsDialogTarget,
-  surfaceFrame,
-  leaveSurface,
-  hostSurfaceTarget,
-  clearLauncherHostSurface,
-  itemPermissionFrame,
-  cancelItemPermissionPrompt,
   controllerRef,
   closeLauncher,
   focusSearchInputAfterBack,
 }: {
   open: boolean
   isImeComposingRef: RefObject<boolean>
-  launcherSettingsTarget: { pluginId: string; source: PluginSettingsSource } | null
-  closeSettingsDialog: () => void
-  settingsDialogTarget: unknown
-  surfaceFrame: unknown
-  leaveSurface: () => void
-  hostSurfaceTarget: unknown
-  clearLauncherHostSurface: () => void
-  itemPermissionFrame: unknown
-  cancelItemPermissionPrompt: () => void
   controllerRef: RefObject<{ back?: () => boolean | void } | null>
   closeLauncher: () => void
   focusSearchInputAfterBack: () => void
@@ -123,39 +104,10 @@ export function useGlobalLauncherHostEscape({
   const handleHostEscape = useCallback((event: KeyboardEvent) => {
     if (event.key !== 'Escape') return
     if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
-
-    // TODO(escape-migration): migrate the settings / plugin surface / host
-    // surface / permission branches below onto the launcherEscapeInterceptor
-    // protocol so each page owns its escape handling; the default chain should
-    // eventually shrink to: IME check → interceptor → controller.back → close.
     if (runLauncherEscapeInterceptor(event)) return
 
-    if (event.key === 'Escape' && launcherSettingsTarget) {
-      event.preventDefault()
-      event.stopPropagation()
-      closeSettingsDialog()
-      focusSearchInputAfterBack()
-      return
-    }
-    if (settingsDialogTarget) return
     event.preventDefault()
     event.stopPropagation()
-
-    if (surfaceFrame) {
-      leaveSurface()
-      return
-    }
-
-    if (hostSurfaceTarget) {
-      clearLauncherHostSurface()
-      focusSearchInputAfterBack()
-      return
-    }
-
-    if (itemPermissionFrame) {
-      cancelItemPermissionPrompt()
-      return
-    }
 
     if (controllerRef.current?.back?.()) {
       focusSearchInputAfterBack()
@@ -164,19 +116,10 @@ export function useGlobalLauncherHostEscape({
 
     closeLauncher()
   }, [
-    cancelItemPermissionPrompt,
-    clearLauncherHostSurface,
     closeLauncher,
-    closeSettingsDialog,
     controllerRef,
     focusSearchInputAfterBack,
-    hostSurfaceTarget,
     isImeComposingRef,
-    itemPermissionFrame,
-    launcherSettingsTarget,
-    leaveSurface,
-    settingsDialogTarget,
-    surfaceFrame,
   ])
 
   useEffect(() => {
