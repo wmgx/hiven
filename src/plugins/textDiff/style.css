@@ -1,9 +1,17 @@
 .td-surface { height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: visible; color: var(--hiven-color-text-primary); background: var(--bg-surface, var(--hiven-color-bg-primary)); font-family: var(--hiven-font-ui); }
 
 /* Header — matches .hdr in mockup */
-.td-hdr { display: flex; align-items: center; height: 42px; padding: 0 10px; gap: 6px; border-bottom: 1px solid var(--color-border-tertiary); background: var(--bg-surface, var(--hiven-color-bg-primary)); user-select: none; flex-shrink: 0; position: relative; z-index: 5; }
+.td-hdr { display: flex; align-items: center; height: 42px; padding: 0 10px 0 12px; gap: 6px; border-bottom: 1px solid var(--color-border-tertiary); background: var(--bg-surface, var(--hiven-color-bg-primary)); user-select: none; flex-shrink: 0; position: relative; z-index: 5; }
 .td-hdr-c { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .td-hdr-a { display: flex; align-items: center; gap: 1px; margin-left: 8px; }
+
+/* Breadcrumb — matches .bc-back/.bc-sep/.bc-cur in mockup */
+.td-bc-back { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 6px; border: 0; background: 0; color: var(--hiven-color-text-secondary); font: 500 13px/1 var(--hiven-font-ui); cursor: pointer; }
+.td-bc-back:hover { background: var(--hiven-color-bg-tertiary); color: var(--hiven-color-text-primary); }
+.td-bc-back svg { width: 14px; height: 14px; }
+.td-bc-root { font-weight: 600; }
+.td-bc-sep { color: var(--hiven-color-text-tertiary); font-size: 12px; margin: 0 1px; }
+.td-bc-cur { font-size: 13px; color: var(--hiven-color-text-secondary); }
 
 /* Mode toggle — matches .mt in mockup */
 .td-mt { display: inline-flex; align-items: center; padding: 2px; gap: 1px; border-radius: 7px; background: var(--hiven-color-bg-secondary); }
