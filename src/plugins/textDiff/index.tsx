@@ -1,9 +1,11 @@
 /**
  * First-party Text Diff plugin.
- * Opens a fullscreen diff page to compare two text sources.
+ * Provides a surface for side-by-side text comparison with line-level and
+ * character-level diff highlighting.
  */
 
 import { definePlugin, type LauncherExecutionContext, type DiffSource } from '@hiven/plugin'
+import { TextDiffSurface } from './TextDiffSurface'
 import './style.css'
 
 type PaneSnapshot = {
@@ -39,7 +41,41 @@ function buildSourceList(ctx: TextDiffLauncherContext, snapshot: PaneSnapshot): 
   ]
 }
 
+function materializeSourceText(source: DiffSource, snapshot: PaneSnapshot): string {
+  if (source.kind === 'clipboard') return source.text ?? ''
+  if (source.kind === 'empty') return ''
+  if (source.kind === 'editor-pane' && source.paneId) {
+    return source.text ?? ''
+  }
+  return ''
+}
+
 export const textDiffPlugin = definePlugin({
+  ui: {
+    surfaces: [
+      {
+        id: 'main',
+        kind: 'custom-view',
+        title: 'Text Compare',
+        titleI18n: { zh: '文本对比' },
+        icon: 'git-compare',
+        aliases: ['diff', 'compare', 'text diff', '文本对比', 'duibi'],
+        component: TextDiffSurface,
+        entry: { launcher: false, shortcutBindable: false },
+        shell: {
+          defaultWidth: 960,
+          defaultHeight: 640,
+          minWidth: 720,
+          minHeight: 480,
+          closeOnBlur: false,
+          resizable: true,
+          rendersTitlebar: false,
+          breadcrumbTitle: 'surface.breadcrumb',
+          breadcrumbTitleI18n: { zh: '文本对比' },
+        },
+      },
+    ],
+  },
   launcher: {
     items: [
       {
@@ -83,17 +119,18 @@ export const textDiffPlugin = definePlugin({
                     return { ok: false as const, message: ctx.t('choice.needTwoSources') }
                   }
 
-                  // Materialize clipboard text
                   for (const source of selected) {
                     if (source.kind === 'clipboard') {
                       source.text = await ctx.api.getClipboardText()
                     }
                   }
 
-                  // Ensure editor window is visible (needed when invoked from global launcher)
-                  await ctx.api.showEditorWindow()
+                  const payload = {
+                    original: { ...selected[0], text: materializeSourceText(selected[0], snapshot) },
+                    modified: { ...selected[1], text: materializeSourceText(selected[1], snapshot) },
+                  }
 
-                  ctx.api.openDiffPage({ original: selected[0], modified: selected[1] })
+                  ctx.api.openDiffPage(payload as any)
                   return { ok: true as const }
                 },
               },

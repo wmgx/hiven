@@ -177,6 +177,13 @@ export function PluginSurfaceRenderer({
                 context: { surfaceId: contextSurfaceId },
               })
             },
+            detachToWindow: (initialText?: string) => {
+              const windowTarget = { ...target, initialText: initialText ?? target.initialText }
+              import('../../workspace/windowManager/pluginSurfaceWindows').then(({ showPluginSurfaceWindow }) => {
+                void showPluginSurfaceWindow(windowTarget)
+              })
+              onClose()
+            },
             showMessage: (message, level) => {
               useAppStore.getState().setLastCommandStatus({
                 title: message,

@@ -10,11 +10,10 @@
  * boundary for *plugin* items.
  */
 
-import { useWorkspaceStore } from '../workspaceStore'
-import { runtimeRegistry } from '../runtimeRegistry'
-import { applyEffects, openExternalUrl } from '../effectRunner'
+import { openExternalUrl } from '../effectRunner'
 import { useAppStore } from '../../store'
 import { requestOpenLauncherHostSurface } from '../launcherHostSurfaceBridge'
+import { openLauncherHostedPluginSurface } from '../pluginSurfaceOpenRequest'
 import { createPluginPrivateStorage } from '../pluginStorage'
 import { getPluginPermissionSnapshot, requirePluginPermissions } from '../pluginPermissions'
 import {
@@ -22,7 +21,6 @@ import {
   getActiveEditorPaneSnapshot,
 } from '../editorBridge'
 import { createQuickEditorPane, showQuickEditorSurface } from '../quickEditor/quickEditorRequests'
-import type { FluxEffect, SerializedRange } from '../types'
 import type { PluginPermission } from '../pluginTypes'
 import type { PluginSettingsSource } from '../pluginSettingsStore'
 import type { DiscoveredApp, PluginAppsApi, PluginLauncherApi } from './types'
@@ -34,36 +32,11 @@ export type PluginLauncherApiOptions = {
 }
 
 function readActiveText(): string {
-  if (!isEditorWindowRuntime()) {
-    return getActiveEditorContextSnapshot()?.activeText ?? ''
-  }
-  return useWorkspaceStore.getState().getActivePaneText()
+  return getActiveEditorContextSnapshot()?.activeText ?? ''
 }
 
 function readSelectionText(): string {
-  if (!isEditorWindowRuntime()) {
-    return getActiveEditorContextSnapshot()?.selectedText ?? ''
-  }
-  const state = useWorkspaceStore.getState()
-  const editor = runtimeRegistry.getCodeEditor(state.activePaneId)
-  if (!editor) return ''
-  const sel = editor.getSelection?.()
-  if (!sel || sel.isEmpty?.()) return ''
-  return editor.getModel?.()?.getValueInRange(sel) ?? ''
-}
-
-function activeSelectionRange(): SerializedRange | undefined {
-  const state = useWorkspaceStore.getState()
-  const editor = runtimeRegistry.getCodeEditor(state.activePaneId)
-  if (!editor) return undefined
-  const sel = editor.getSelection?.()
-  if (!sel || sel.isEmpty?.()) return undefined
-  return {
-    startLineNumber: sel.startLineNumber,
-    startColumn: sel.startColumn,
-    endLineNumber: sel.endLineNumber,
-    endColumn: sel.endColumn,
-  }
+  return getActiveEditorContextSnapshot()?.selectedText ?? ''
 }
 
 function emptyPaneSnapshot() {
@@ -73,14 +46,6 @@ function emptyPaneSnapshot() {
     paneIds: [],
     panes: {},
     renderers: {},
-  }
-}
-
-function isEditorWindowRuntime(): boolean {
-  try {
-    return new URLSearchParams(window.location.search).get('window') === 'editor'
-  } catch {
-    return false
   }
 }
 
@@ -162,84 +127,25 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
     getActiveText: () => readActiveText(),
     getSelectionText: () => readSelectionText(),
     getPaneSnapshot: () => {
-      if (!isEditorWindowRuntime()) {
-        const snapshot = getActiveEditorPaneSnapshot()
-        if (!snapshot) return emptyPaneSnapshot()
-        return {
-          activePaneId: snapshot.activePaneId,
-          previousActivePaneId: snapshot.previousActivePaneId,
-          paneIds: snapshot.paneIds,
-          panes: snapshot.panes,
-          renderers: {},
-        }
-      }
-      const state = useWorkspaceStore.getState()
+      const snapshot = getActiveEditorPaneSnapshot()
+      if (!snapshot) return emptyPaneSnapshot()
       return {
-        activePaneId: state.activePaneId,
-        previousActivePaneId: state.previousActivePaneId,
-        paneIds: state.paneOrder,
-        panes: Object.fromEntries(
-          state.paneOrder.map((paneId) => [
-            paneId,
-            {
-              title: state.panes[paneId]?.title,
-              language: state.panes[paneId]?.language,
-              stickyScroll: state.panes[paneId]?.stickyScroll === true,
-            },
-          ]),
-        ),
-        renderers: Object.fromEntries(
-          Object.entries(state.paneRenderers).map(([paneId, renderer]) => [
-            paneId,
-            {
-              rendererId: renderer.rendererId,
-              ownerPluginId: renderer.ownerPluginId,
-              ownerContributionId: renderer.ownerContributionId,
-            },
-          ]),
-        ),
+        activePaneId: snapshot.activePaneId,
+        previousActivePaneId: snapshot.previousActivePaneId,
+        paneIds: snapshot.paneIds,
+        panes: snapshot.panes,
+        renderers: {},
       }
     },
-    isPanePanelOpen: (panelId: string) => {
-      if (!isEditorWindowRuntime()) return false
-      const state = useWorkspaceStore.getState()
-      const existing = state.panelInstancesV2[panelId]
-      return existing?.scope?.type === 'pane' && existing.scope.paneId === state.activePaneId
+    isPanePanelOpen: () => {
+      return false
     },
     getClipboardText: () => readClipboard(),
     replaceActiveText: async (text: string) => {
-      if (!isEditorWindowRuntime()) {
-        await createQuickEditorPane({ text })
-        return
-      }
-      const range = activeSelectionRange()
-      const paneId = useWorkspaceStore.getState().activePaneId
-      // If there is a selection, replace only that range; otherwise replace all.
-      const effects: FluxEffect[] = range
-        ? [{ type: 'text.replace', target: { paneId, range }, text }]
-        : [{ type: 'text.replace', target: 'active-input', text }]
-      applyEffects(effects)
+      await createQuickEditorPane({ text })
     },
     insertText: async (text: string) => {
-      if (!isEditorWindowRuntime()) {
-        await createQuickEditorPane({ text })
-        return
-      }
-      const range = activeSelectionRange()
-      const paneId = useWorkspaceStore.getState().activePaneId
-      // Insert at cursor: a zero-width replace at the selection start, or append.
-      if (range) {
-        const collapsed: SerializedRange = {
-          startLineNumber: range.startLineNumber,
-          startColumn: range.startColumn,
-          endLineNumber: range.startLineNumber,
-          endColumn: range.startColumn,
-        }
-        applyEffects([{ type: 'text.replace', target: { paneId, range: collapsed }, text }])
-      } else {
-        const current = readActiveText()
-        applyEffects([{ type: 'text.replace', target: 'active-input', text: current + text }])
-      }
+      await createQuickEditorPane({ text })
     },
     copyText: async (text: string) => {
       await writeClipboard(text)
@@ -251,11 +157,8 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
     showPluginsPage,
     showSettingsPage,
     createPane: (options) => createQuickEditorPane(options),
-    dispatchEffects: (effects: FluxEffect[]) => {
-      if (!isEditorWindowRuntime()) {
-        return { applied: [], errors: ['dispatchEffects is only available in the editor window'] }
-      }
-      return applyEffects(effects)
+    dispatchEffects: () => {
+      return { applied: [], errors: ['dispatchEffects is only available in the editor window'] }
     },
     showMessage: (message: string, level = 'info') => {
       useAppStore.getState().setLastCommandStatus({
@@ -266,11 +169,18 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
       })
     },
     openDiffPage: (payload) => {
-      if (isEditorWindowRuntime()) {
-        useWorkspaceStore.getState().openDiffPage(payload)
-      } else {
-        void showQuickEditorSurface()
-      }
+      const original = payload?.original
+      const modified = payload?.modified
+      const initialText = JSON.stringify({
+        original: { text: original?.text ?? '', title: original?.title ?? '' },
+        modified: { text: modified?.text ?? '', title: modified?.title ?? '' },
+      })
+      openLauncherHostedPluginSurface({
+        source: 'builtin',
+        pluginId: 'text-diff',
+        surfaceId: 'main',
+        initialText,
+      })
     },
     apps: createPluginAppsApi(options),
   }

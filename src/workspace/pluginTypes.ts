@@ -556,6 +556,7 @@ export type PluginSurfaceHostApi = {
   close(): void
   requestBack(): void
   openSettings(): void
+  detachToWindow(initialText?: string): void
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
   showToast(message: string, level?: 'info' | 'success' | 'warning' | 'error', options?: { action?: { label: string; onClick: () => void }; duration?: number }): string
   dismissToast(id: string): void
