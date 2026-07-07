@@ -1,9 +1,9 @@
 # hiven / FluxText UI & Design System (2026 Refresh)
 
 ## Source of truth
-- Status: Active (final scheme chosen 2026-06-16; sidebar finalized to pure-icon simple style per user 2026-06-16)
-- Last refreshed: 2026-06-16
-- Primary product surfaces: Main workbench (editor panes, sidebar/rail, topbar, status), Global Launcher, Command Palette, Plugins view, Pinned Runner, Settings, plugin surfaces (hosted shells).
+- Status: Active (final scheme chosen 2026-06-16; sidebar finalized to pure-icon simple style per user 2026-06-16). 2026-07-07: rewritten for launcher-only form factor; Pinned Runner removed from surfaces list.
+- Last refreshed: 2026-07-07
+- Primary product surfaces: System tray (only persistent entry) → Global hotkey/tray invokes Global Launcher (hidden window) → host surfaces expand in-place (quick-editor, system-settings, system-plugins) → Quick Editor can detach as independent window → plugin surface independent windows.
 - Evidence reviewed: PRODUCT.md (brand: Quiet, precise, capable. Reliable desktop workbench. Avoid decorative SaaS, muddy glassmorphism, low-contrast gray-on-tinted, hover states that hurt readability), AGENTS.md (framework owns shell/renderer/pane state/editor primitive; plugins own product semantics like diff, JSON, clipboard history UI; no leaking Monaco details into host concepts; validation after changes), current-state-board-v2.html (factual baseline: 44px icon sidebar, thin 0.5px borders, small JetBrains Mono, purple accent in light ref, compact 4-pane example, launcher/palette overlays, plugin cards with error visibility), src/ code (React 19 + Tailwind + CSS vars with some glass, Tauri), previous iteration feedback (too flat, 10-year-old style, ugly colors, limited by old layout), final user approval of VS Code Light+ inspired scheme.
 
 ## Final chosen visual scheme
@@ -12,9 +12,9 @@
   - Chrome/panels/rail/status/launcher bg: #F3F3F3 (classic VS Code light gray – clean, not dirty/muddy).
   - Borders: #E5E5E5 (subtle, present).
   - Primary text: #000000 (high contrast); secondary ~#6F6F6F.
-  - Accent: #007ACC (VS Code blue, professional and pops cleanly on white).
+  - Accent: #2563eb (calibrated from VS Code blue — #007ACC lacked presence in light tints and small controls; confirmed 2026-07-07).
   - Overall: crisp, high-contrast, premium desktop feel. No warm tints, no low-quality grays, no glassmorphism in light (solid clean surfaces + subtle shadows for depth).
-- **Dark mode**: Retained rich, high-legibility dark (deep slate/charcoal with modern indigo accent #8b93ff range, subtle glass for depth as appropriate).
+- **Dark mode**: Retained rich, high-legibility dark (deep slate/charcoal with modern indigo accent #3b82f6, subtle glass for depth as appropriate).
 - **Icons**: Pure line (lucide-react style: thin stroke, no fill, currentColor only – exactly matching the app's current lucide usage).
 - **Typography**: Inter (UI) + JetBrains Mono (content), small scale (10-14px base) for density + excellent readability.
 - **Depth/elevation**: Subtle soft shadows + refined borders. No heavy/muddy glassmorphism (per brand). Focus states clear (tint + ring).
@@ -49,15 +49,14 @@ This scheme was iteratively validated via mocks against user feedback and brand 
   - Pinned live tools that stay in flow.
 - Contexts: Desktop (macOS/Windows/Linux), mixed light/dark preference, high information density but needs breathing room so it doesn't feel cramped or flat.
 
-## Information architecture (with layout freedom)
-- **New proposed structure (adjusted from strict 4-pane + icon-only sidebar to feel more modern and less "10 years ago")**:
-  - **Left rail (collapsible, 48-56px icons + optional short labels on hover/expand)**: Primary navigation (Editor, Plugins, Settings) + Pinned actions (dynamic, with small badges if active). Feels like a professional tool dock, not just tiny buttons.
-  - **Top command bar**: Global status (Ready + theme), quick "Run action" (opens palette), window controls, plugin-contributed toolbar items. Minimal height, high affordance.
-  - **Main canvas**: Flexible. Default: Single prominent editor pane (Monaco full focus) that can split on demand (horizontal/vertical, up to reasonable number). Panes have rich tabs (title, close, dirty state, renderer indicator). Contextual side panels can slide in for tools (e.g., regex tester, diff controls) instead of always forcing 4-grid.
-  - **Floating / overlay surfaces** (Global Launcher, Command Palette, plugin tool shells): These are the "command center". Launcher gets more breathing and visual richness (sections with subtle cards, better preview for some items). Not stuck to old list style.
-  - **Bottom / status area**: Lightweight info (line/col, language, active renderer). Can show pinned status or quick actions.
-  - **Plugin surfaces**: Hosted in clean shells (launcher shell or dedicated tool window). Host provides consistent chrome (title, back/close, settings access). Plugin body is free within bounds (no breaking host tokens or leaking internal classes).
-- Navigation: Keyboard primary (hotkeys for everything). Sidebar can expand for discoverability on larger screens or for new users.
+## Information architecture (launcher-only form factor)
+- **Surface hierarchy (no persistent workbench window)**:
+  - **System tray**: Only always-present entry point. Provides global hotkey trigger and context menu access.
+  - **Global Launcher (hidden window)**: Invoked via global hotkey or tray click. A floating command surface for search, action execution, and parameter input. Dismisses on blur or explicit close without affecting other windows.
+  - **Host surfaces (expand in-place within launcher)**: Quick Editor (Monaco-based text editing), System Settings, System Plugins view. These appear as full-height panels expanding from the launcher interaction, not separate windows by default.
+  - **Quick Editor (detachable)**: Can be detached from the launcher context into an independent window for persistent text work. Single editor instance, no multi-pane split.
+  - **Plugin surface windows**: Plugins that need their own UI get independent hosted windows with consistent minimal chrome (title, back/close, settings access). Plugin body is free within bounds (no breaking host tokens or leaking internal classes).
+- Navigation: Keyboard primary (hotkeys for everything). Launcher is the universal entry for all actions.
 - Content hierarchy: Text/Monaco > actions > chrome. Always.
 
 ## Design principles (updated for modern feel)
@@ -82,7 +81,7 @@ This scheme was iteratively validated via mocks against user feedback and brand 
   - Scale and rhythm: Tight but readable. Use size + weight + color for hierarchy. Headers in launcher/settings can have a bit more presence.
 - **Spacing & rhythm**: 4px base. Compact in workbench, slightly more generous in launcher/cards for modern breathing without feeling sparse. Controlled negative space.
 - **Shape, radius, elevation**: Moderate, intentional rounding (not micro 2px or puffy 16px+). Subtle elevation via soft shadows + background shifts for cards, floating panels, focused panes. Borders are thin but visible and colored for structure. Focus states are strong and delightful (ring + tint + perhaps a left accent bar on lists).
-- **Motion**: Short, purposeful (150-250ms). State changes, hover lift on interactive items, smooth pane splits. No decorative animation.
+- **Motion**: Short, purposeful. Two tiers: instant feedback (hover/press/select) ≤150ms; structural state changes (panel expand, surface detach) 150-250ms. No decorative animation.
 - **Icons**: Consistent weight, crisp. Lucide or system-style. Used meaningfully in sidebar and launcher.
 - **Depth & presence**: To escape "too flat" and "10 year style" — use layered surfaces, soft but precise shadows, refined borders, and excellent focus/hover feedback. The UI should feel solid and "there" without being heavy or glass.
 
@@ -109,9 +108,9 @@ This scheme was iteratively validated via mocks against user feedback and brand 
 - Theme: Dark primary, light support. High DPI.
 
 ## Open questions
-- (Resolved) Exact accent: using VS Code #007ACC in light for authenticity and premium pop; dark uses complementary modern indigo range.
+- (Resolved) Exact accent: light uses #2563eb (calibrated 2026-07-07 — original #007ACC lacked presence in tint/control contexts); dark uses complementary modern indigo range.
 - (Resolved) Sidebar: 48px pure icon rail (simple style). No inline text labels — icons only + tooltip.
-- (Updated) Global launcher: referenced Raycast layout for item rows (left icon + title+sub inline, right type label "视图/固定/命令"), neutral gray selected rounded bar, clean top search input (no leading icon), section headers ("建议"/"结果"). Icons remain mixed (real app colorful images + pure lucide line for commands) per history "线条感" preference + discoverability. Keeps VS Code Light+ cold tokens + simple overall. Bottom hints and ranking stay.
+- (Updated) Global launcher: referenced Raycast layout for item rows (left icon + title+sub inline, right type label "视图/固定/命令"), neutral gray selected rounded bar, clean top search input (no leading icon), single sorted list (no section headers). Icons remain mixed (real app colorful images + pure lucide line for commands) per history "线条感" preference + discoverability. Keeps VS Code Light+ cold tokens + simple overall. Bottom hints and ranking stay.
 - Other points (layout freedom, launcher delight, plugin primitives exposure) remain for future incremental work; current scheme locked as baseline.
 
 This DESIGN.md is the contract. All future UI work, mocks, and code changes should reference it. Update when we learn more from user feedback or implementation.

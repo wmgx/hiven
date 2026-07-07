@@ -70,6 +70,8 @@
   "message.copied": "已复制到剪贴板",
   "message.cleared": "历史已清空",
   "message.deleted": "已删除",
+  "message.deleted.toast": "已删除",
+  "message.undo": "撤销",
   "error.loadFailed": "加载剪贴板历史失败",
   "error.pasteFailed": "粘贴失败"
 }

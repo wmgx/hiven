@@ -59,6 +59,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const searchRef = useRef<HTMLInputElement>(null)
   const imeKeyDown = useImeKeyboard()
   const isKeyboardNavRef = useRef(false)
+  const pendingDeleteRef = useRef<{ timerId: ReturnType<typeof setTimeout>; id: string; toastId: string } | null>(null)
 
   const applyListItems = useCallback((listItems: ClipboardHistoryItem[]) => {
     setItems(listItems)
@@ -115,6 +116,18 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     const frame = requestAnimationFrame(() => searchRef.current?.focus())
     return () => cancelAnimationFrame(frame)
   }, [loading, settings.enabled])
+
+  // Flush pending soft-delete on unmount
+  useEffect(() => {
+    return () => {
+      if (pendingDeleteRef.current) {
+        clearTimeout(pendingDeleteRef.current.timerId)
+        host.dismissToast(pendingDeleteRef.current.toastId)
+        void repository.deleteItem(pendingDeleteRef.current.id)
+        pendingDeleteRef.current = null
+      }
+    }
+  }, [repository])
 
   const filteredItems = useMemo(() => {
     let result = items
@@ -217,11 +230,67 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     }
   }, [host, t, repository])
 
-  const handleDelete = useCallback(async (id: string) => {
-    await repository.deleteItem(id)
-    await loadItems()
-    host.showMessage(t('message.deleted'), 'success')
-  }, [repository, loadItems, host, t])
+  const handleDelete = useCallback((id: string) => {
+    // Cancel any previous pending delete
+    if (pendingDeleteRef.current) {
+      clearTimeout(pendingDeleteRef.current.timerId)
+      host.dismissToast(pendingDeleteRef.current.toastId)
+      // Commit previous pending delete immediately
+      const prevId = pendingDeleteRef.current.id
+      void repository.deleteItem(prevId)
+      pendingDeleteRef.current = null
+    }
+
+    // Capture item and its position for undo
+    const itemIndex = items.findIndex((i) => i.id === id)
+    if (itemIndex === -1) return
+    const removedItem = items[itemIndex]
+
+    // Optimistically remove from displayed list
+    const newItems = items.filter((i) => i.id !== id)
+    setItems(newItems)
+
+    // Move selection to next item (or previous if last)
+    setSelectedId((current) => {
+      if (current !== id) return current
+      if (newItems.length === 0) return null
+      // Prefer the item that was below the deleted one
+      return newItems[Math.min(itemIndex, newItems.length - 1)]?.id ?? null
+    })
+
+    // Show undo toast
+    const toastMessage = `${t('message.deleted.toast')} \u00b7 `
+    const toastId = host.showToast(toastMessage, 'info', {
+      durationMs: 5000,
+      action: {
+        label: t('message.undo'),
+        onClick: () => {
+          // Restore item at original position
+          if (pendingDeleteRef.current?.id === id) {
+            clearTimeout(pendingDeleteRef.current.timerId)
+            pendingDeleteRef.current = null
+          }
+          setItems((current) => {
+            const restored = [...current]
+            const insertAt = Math.min(itemIndex, restored.length)
+            restored.splice(insertAt, 0, removedItem)
+            return restored
+          })
+          setSelectedId(id)
+        },
+      },
+    })
+
+    // Schedule actual deletion after 5 seconds
+    const timerId = setTimeout(() => {
+      if (pendingDeleteRef.current?.id === id) {
+        pendingDeleteRef.current = null
+      }
+      void repository.deleteItem(id)
+    }, 5000)
+
+    pendingDeleteRef.current = { timerId, id, toastId }
+  }, [items, repository, t])
 
   const handleItemHover = useCallback((id: string) => {
     if (!isKeyboardNavRef.current) {
@@ -238,7 +307,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'SELECT') return
       e.preventDefault()
-      void handleDelete(selectedItem.id)
+      handleDelete(selectedItem.id)
     } else if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
       e.preventDefault()
       if (selectedFullItem && selectedFullItem.kind === 'text') {
@@ -477,7 +546,7 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   onSelect: (id: string) => void
   onHover?: (id: string) => void
   onPaste: (item: ClipboardHistoryItem) => Promise<void>
-  onDelete: (id: string) => Promise<void>
+  onDelete: (id: string) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
 
@@ -510,7 +579,7 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
         type="button"
         label={t('action.delete')}
         className="clipboard-history-item-delete"
-        onClick={() => void onDelete(item.id)}
+        onClick={() => onDelete(item.id)}
       >
         <CloseIcon size={14} />
       </IconButton>

@@ -36,6 +36,8 @@ export interface QuickEditorActions {
   createPane: (options?: { direction?: 'right' | 'bottom'; text?: string; language?: string }) => QuickEditorPaneId
   closePane: (paneId: QuickEditorPaneId) => boolean
   closeActivePane: () => boolean
+  focusNextPane: () => void
+  focusPreviousPane: () => void
   reset: () => void
 }
 

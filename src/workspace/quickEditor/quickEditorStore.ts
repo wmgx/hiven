@@ -134,6 +134,22 @@ export const useQuickEditorStore = create<QuickEditorStore>()(
         const state = useQuickEditorStore.getState()
         return state.closePane(state.activePaneId)
       },
+      focusNextPane: () => {
+        const state = useQuickEditorStore.getState()
+        const { paneOrder, activePaneId } = state
+        if (paneOrder.length <= 1) return
+        const currentIndex = paneOrder.indexOf(activePaneId)
+        const nextIndex = (currentIndex + 1) % paneOrder.length
+        state.setActivePaneId(paneOrder[nextIndex])
+      },
+      focusPreviousPane: () => {
+        const state = useQuickEditorStore.getState()
+        const { paneOrder, activePaneId } = state
+        if (paneOrder.length <= 1) return
+        const currentIndex = paneOrder.indexOf(activePaneId)
+        const prevIndex = (currentIndex - 1 + paneOrder.length) % paneOrder.length
+        state.setActivePaneId(paneOrder[prevIndex])
+      },
       reset: () => set(INITIAL_STATE),
     }),
     {

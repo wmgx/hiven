@@ -129,14 +129,20 @@ export function GlobalLauncherSearchFrame({
             onAttach={() => clipboardBlock?.attachHintAsBlock()}
           />
         )}
-        <LauncherMixedList
-            items={items}
-            selected={selectedItem}
-            locale={locale}
-            truncate={!query}
-            onSelect={onSelectItem}
-            onHoverIndex={onHoverIndex}
-          />
+        {items.length === 0 && query ? (
+          <div className="flex-1 flex items-center justify-center py-8" style={{ color: 'var(--color-text-tertiary)' }}>
+            <span className="text-[13px]">{t(locale, 'palette.noResults')}</span>
+          </div>
+        ) : (
+          <LauncherMixedList
+              items={items}
+              selected={selectedItem}
+              locale={locale}
+              truncate={!query}
+              onSelect={onSelectItem}
+              onHoverIndex={onHoverIndex}
+            />
+        )}
       </div>
       <div className="global-launcher-footer l-foot">
         <LauncherHintKey keys="↑↓" label={t(locale, 'palette.select')} />

@@ -1,19 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { showToast } from './workspace/toast'
 import type { Locale } from './i18n'
-import {
-  DEFAULT_PINNED_RUNTIME_CONFIG,
-  activatePinnedRuntime,
-  discardPinnedTombstoneAfterPatch,
-  disposePinnedRuntime,
-  pruneIdlePinnedRuntimes,
-  restorePinnedFromTombstone,
-  tombstonePinnedRuntime,
-} from './workspace/pinnedActionRuntime'
-import type { PinnedRuntimeConfig as WorkspacePinnedRuntimeConfig } from './workspace/pinnedActionRuntime'
-import type { LiveActionCapability } from './workspace/pluginTypes'
-import { samePinnedPluginCommandIdentity } from './workspace/pinnedActionIdentity'
-import { createPinnedPluginCommandAction } from './workspace/pinnedActionFactory'
 import { migrateLocalStorageKey } from './utils/persistMigration'
 import type {
   LauncherSurfaceId,
@@ -32,62 +20,10 @@ export type ActionUsageSource =
   | 'command-palette'
   | 'editor-command-bar'
   | 'global-launcher'
-  | 'pinned-runner'
 
 export type ActionUsageBucket = {
   recentActionNames: string[]
   actionUsageCounts: Record<string, number>
-}
-
-export type PinnedOutputKind = 'text' | 'error' | 'presentation' | 'stale'
-export type PinnedActionKind = 'plugin-command'
-
-export type PinnedPluginCommandInput = {
-  kind: 'plugin-command'
-  actionId: string
-  pluginId: string
-  title: string
-  titleI18n?: Partial<Record<Locale, string>>
-  icon?: string
-  isDev?: boolean
-  params?: Record<string, unknown>
-  live?: LiveActionCapability
-}
-
-export interface PinnedAction {
-  id: string
-  kind?: PinnedActionKind
-  actionId: string
-  pluginId?: string
-  isDev?: boolean
-  title: string
-  titleI18n?: Partial<Record<Locale, string>>
-  icon?: string
-  inputText: string
-  outputText: string
-  outputKind: PinnedOutputKind
-  params: Record<string, unknown>
-  autoRun: boolean
-  debounceMs: number
-  controlsOpen: boolean
-  controlPanelInstanceId?: string
-  lastRunAt?: number
-  lastDurationMs?: number
-  lastError?: string
-}
-
-export type PinnedRuntime = import('./workspace/pinnedActionRuntime').PinnedRuntime
-export type PinnedTombstone = import('./workspace/pinnedActionRuntime').PinnedTombstone
-export type PinnedRuntimeConfig = {
-  idleTimeoutMs: WorkspacePinnedRuntimeConfig['idleTimeoutMs']
-  maxWarmRuntimes: WorkspacePinnedRuntimeConfig['maxWarmRuntimes']
-}
-export type PinnedTombstoneOutputSummary = {
-  outputSummary?: {
-    kind: 'empty' | 'text' | 'error' | 'stale'
-    preview?: string
-    generatedAt?: number
-  }
 }
 
 /** UI model for a launcher parameter field (used to normalize plugin CommandParam for rendering). */
@@ -160,26 +96,9 @@ export type PluginSurfaceOpenTarget = {
   initialText?: string
 }
 
-export type LauncherHostSurfaceTarget = 'settings' | 'plugins' | 'system-settings' | 'system-plugins' | 'quick-editor'
+export type LauncherHostSurfaceTarget = 'system-settings' | 'system-plugins' | 'quick-editor'
 
 interface AppState {
-  // Pinned Action / Live Runner
-  pinnedActions: PinnedAction[]
-  activePinnedActionId: string | null
-  pinnedRuntimes: Record<string, PinnedRuntime>
-  pinnedTombstones: Record<string, PinnedTombstone>
-  pinnedRuntimeConfig: PinnedRuntimeConfig
-  pinPluginCommand: (command: PinnedPluginCommandInput) => string
-  unpinAction: (pinnedId: string) => void
-  reorderPinnedActions: (orderedIds: string[]) => void
-  setActivePinnedAction: (pinnedId: string) => void
-  activatePinnedAction: (pinnedId: string) => void
-  openPinnedAction: (pinnedId: string) => void
-  updatePinnedAction: (pinnedId: string, patch: Partial<PinnedAction>) => void
-  updatePinnedRuntime: (pinnedId: string, patch: Partial<PinnedRuntime>) => void
-  releasePinnedRuntime: (pinnedId: string, reason?: PinnedTombstone['reason']) => void
-  prunePinnedRuntimes: (now?: number) => void
-
   // Editor command bar
   editorCommandBarOpen: boolean
   setEditorCommandBarOpen: (open: boolean) => void
@@ -196,7 +115,8 @@ interface AppState {
 
   // Quick Editor
   quickEditorCommandOpen: boolean
-  openQuickEditorCommand: () => void
+  quickEditorCommandInitialQuery: string
+  openQuickEditorCommand: (initialQuery?: string) => void
   closeQuickEditorCommand: () => void
 
   // Last command status
@@ -222,10 +142,6 @@ interface AppState {
     wordWrap: boolean
     lineNumbers: boolean
     persistParams: boolean
-    persistPinnedInput: boolean
-    persistPinnedTombstone: boolean
-    outputPreviewLimit: number
-    tombstoneTtlDays: number
     theme: 'dark' | 'light'
     locale: Locale
     disabledBuiltins: string[]
@@ -241,26 +157,6 @@ interface AppState {
   setLocale: (locale: Locale) => void
 }
 
-function serializePinnedTombstones(state: AppState): Record<string, PinnedTombstone> {
-  const ttlMs = Math.max(0, state.settings.tombstoneTtlDays) * 24 * 60 * 60 * 1000
-  const now = Date.now()
-  return Object.fromEntries(Object.entries(state.pinnedTombstones)
-    .filter(([, tombstone]) => ttlMs === 0 || now - tombstone.disposedAt <= ttlMs)
-    .map(([id, tombstone]) => [
-      id,
-      {
-        ...tombstone,
-        inputText: state.settings.persistPinnedInput ? tombstone.inputText : '',
-        outputSummary: tombstone.outputSummary
-          ? {
-            ...tombstone.outputSummary,
-            preview: tombstone.outputSummary.preview?.slice(0, state.settings.outputPreviewLimit),
-          }
-          : undefined,
-      },
-    ]))
-}
-
 function stripShortcutRuntimeStatus(shortcut: GlobalPinnedLauncherShortcut): GlobalPinnedLauncherShortcut {
   if (shortcut.kind === 'accelerator') return { kind: 'accelerator', accelerator: shortcut.accelerator }
   if (shortcut.kind === 'double-modifier') return { kind: 'double-modifier', modifier: shortcut.modifier }
@@ -268,134 +164,6 @@ function stripShortcutRuntimeStatus(shortcut: GlobalPinnedLauncherShortcut): Glo
 }
 
 export const useAppStore = create<AppState>()(persist((set) => ({
-  // Pinned Action / Live Runner
-  pinnedActions: [],
-  activePinnedActionId: null,
-  pinnedRuntimes: {},
-  pinnedTombstones: {},
-  pinnedRuntimeConfig: DEFAULT_PINNED_RUNTIME_CONFIG,
-  pinPluginCommand: (command) => {
-    const current = useAppStore.getState()
-    const existing = current.pinnedActions.find((pinned) => samePinnedPluginCommandIdentity(pinned, command))
-    if (existing) {
-      current.activatePinnedAction(existing.id)
-      return existing.id
-    }
-    const pinned = createPinnedPluginCommandAction(command)
-    set((state) => ({
-      pinnedActions: [...state.pinnedActions, pinned],
-      activePinnedActionId: pinned.id,
-      pinnedRuntimes: {
-        ...state.pinnedRuntimes,
-        [pinned.id]: activatePinnedRuntime(pinned, state.pinnedRuntimes[pinned.id], state.pinnedTombstones[pinned.id]),
-      },
-    }))
-    return pinned.id
-  },
-  unpinAction: (pinnedId) => set((state) => {
-    const { [pinnedId]: _runtime, ...pinnedRuntimes } = state.pinnedRuntimes
-    const { [pinnedId]: _tombstone, ...pinnedTombstones } = state.pinnedTombstones
-    const remaining = state.pinnedActions.filter((pinned) => pinned.id !== pinnedId)
-    return {
-      pinnedActions: remaining,
-      pinnedRuntimes,
-      pinnedTombstones,
-      activePinnedActionId: state.activePinnedActionId === pinnedId ? remaining[0]?.id ?? null : state.activePinnedActionId,
-    }
-  }),
-  reorderPinnedActions: (orderedIds) => set((state) => {
-    const byId = new Map(state.pinnedActions.map((pinned) => [pinned.id, pinned]))
-    const ordered = orderedIds.map((id) => byId.get(id)).filter((pinned): pinned is PinnedAction => !!pinned)
-    const leftovers = state.pinnedActions.filter((pinned) => !orderedIds.includes(pinned.id))
-    return { pinnedActions: [...ordered, ...leftovers] }
-  }),
-  setActivePinnedAction: (pinnedId) => set((state) => (
-    state.pinnedActions.some((pinned) => pinned.id === pinnedId)
-      ? { activePinnedActionId: pinnedId }
-      : {}
-  )),
-  activatePinnedAction: (pinnedId) => set((state) => {
-    const pinned = state.pinnedActions.find((item) => item.id === pinnedId)
-    if (!pinned) return {}
-    const restoredPinned = restorePinnedFromTombstone(pinned, state.pinnedTombstones[pinnedId])
-    const nextRuntimes: Record<string, PinnedRuntime> = {}
-    for (const [id, runtime] of Object.entries(state.pinnedRuntimes)) {
-      nextRuntimes[id] = id === pinnedId ? runtime : { ...runtime, status: runtime.status === 'active' ? 'idle' : runtime.status }
-    }
-    nextRuntimes[pinnedId] = activatePinnedRuntime(restoredPinned, nextRuntimes[pinnedId], state.pinnedTombstones[pinnedId])
-    const { [pinnedId]: _restoredTombstone, ...nextTombstones } = state.pinnedTombstones
-    return {
-      pinnedActions: state.pinnedActions.map((item) => item.id === pinnedId ? restoredPinned : item),
-      activePinnedActionId: pinnedId,
-      pinnedRuntimes: nextRuntimes,
-      pinnedTombstones: nextTombstones,
-      editorCommandBarOpen: false,
-    }
-  }),
-  openPinnedAction: (pinnedId) => {
-    useAppStore.getState().activatePinnedAction(pinnedId)
-  },
-  updatePinnedAction: (pinnedId, patch) => set((state) => {
-    const shouldDiscardTombstone = discardPinnedTombstoneAfterPatch(patch)
-    const nextTombstones = shouldDiscardTombstone && state.pinnedTombstones[pinnedId]
-      ? Object.fromEntries(Object.entries(state.pinnedTombstones).filter(([id]) => id !== pinnedId))
-      : state.pinnedTombstones
-    return {
-      pinnedActions: state.pinnedActions.map((pinned) => (
-        pinned.id === pinnedId ? { ...pinned, ...patch } : pinned
-      )),
-      pinnedTombstones: nextTombstones,
-    }
-  }),
-  updatePinnedRuntime: (pinnedId, patch) => set((state) => {
-    const current = state.pinnedRuntimes[pinnedId]
-    if (!current) return {}
-    return {
-      pinnedRuntimes: {
-        ...state.pinnedRuntimes,
-        [pinnedId]: { ...current, ...patch, lastInteractedAt: Date.now() },
-      },
-    }
-  }),
-  prunePinnedRuntimes: (now) => set((state) => {
-    const pruneIds = pruneIdlePinnedRuntimes(
-      state.pinnedRuntimes,
-      state.activePinnedActionId,
-      state.pinnedRuntimeConfig,
-      now,
-    )
-    if (pruneIds.length === 0) return {}
-    const nextRuntimes = { ...state.pinnedRuntimes }
-    const nextTombstones = { ...state.pinnedTombstones }
-    for (const pinnedId of pruneIds) {
-      const runtime = nextRuntimes[pinnedId]
-      const pinned = state.pinnedActions.find((item) => item.id === pinnedId)
-      if (!runtime || !pinned) continue
-      nextRuntimes[pinnedId] = disposePinnedRuntime(runtime)
-      nextTombstones[pinnedId] = tombstonePinnedRuntime(pinned, runtime, 'idle-timeout')
-    }
-    return {
-      pinnedRuntimes: nextRuntimes,
-      pinnedTombstones: nextTombstones,
-    }
-  }),
-  releasePinnedRuntime: (pinnedId, reason = 'manual') => set((state) => {
-    const runtime = state.pinnedRuntimes[pinnedId]
-    const pinned = state.pinnedActions.find((item) => item.id === pinnedId)
-    if (!runtime || !pinned) return {}
-    const tombstone = tombstonePinnedRuntime(pinned, runtime, reason)
-    return {
-      pinnedRuntimes: {
-        ...state.pinnedRuntimes,
-        [pinnedId]: disposePinnedRuntime(runtime),
-      },
-      pinnedTombstones: {
-        ...state.pinnedTombstones,
-        [pinnedId]: tombstone,
-      },
-    }
-  }),
-
   // Editor command bar
   editorCommandBarOpen: false,
   setEditorCommandBarOpen: (open) => set({ editorCommandBarOpen: open }),
@@ -406,7 +174,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   setGlobalLauncherOpen: (open) => set((state) => ({
     globalLauncherOpen: open,
     globalLauncherOverlay: open ? state.globalLauncherOverlay : false,
-    ...(open ? {} : { launcherHostSurfaceTarget: null, quickEditorCommandOpen: false }),
+    ...(open ? {} : { launcherHostSurfaceTarget: null, quickEditorCommandOpen: false, quickEditorCommandInitialQuery: '' }),
   })),
   openGlobalLauncherOverlay: () => set({ globalLauncherOpen: true, globalLauncherOverlay: true }),
   openPluginSurfaceTool: (target) => set({ pluginSurfaceToolTarget: target, launcherHostSurfaceTarget: null }),
@@ -416,19 +184,26 @@ export const useAppStore = create<AppState>()(persist((set) => ({
 
   // Quick Editor
   quickEditorCommandOpen: false,
-  openQuickEditorCommand: () => set({ quickEditorCommandOpen: true }),
-  closeQuickEditorCommand: () => set({ quickEditorCommandOpen: false }),
+  quickEditorCommandInitialQuery: '',
+  openQuickEditorCommand: (initialQuery?: string) => set({ quickEditorCommandOpen: true, quickEditorCommandInitialQuery: initialQuery ?? '' }),
+  closeQuickEditorCommand: () => set({ quickEditorCommandOpen: false, quickEditorCommandInitialQuery: '' }),
 
   // Last command status
   lastCommandStatus: null,
-  setLastCommandStatus: (status) => set({ lastCommandStatus: status }),
+  setLastCommandStatus: (status) => {
+    set({ lastCommandStatus: status })
+    if (status && status.status === 'success') {
+      showToast(status.message || status.title, 'success')
+    } else if (status && status.status === 'error') {
+      showToast(status.message || status.title, 'error')
+    }
+  },
 
   // Source-scoped usage
   actionUsageBySource: {
     'command-palette': { recentActionNames: [], actionUsageCounts: {} },
     'editor-command-bar': { recentActionNames: [], actionUsageCounts: {} },
     'global-launcher': { recentActionNames: [], actionUsageCounts: {} },
-    'pinned-runner': { recentActionNames: [], actionUsageCounts: {} },
   },
   pushRecentAction: (name, source = 'command-palette') => set((state) => {
     const bucket = state.actionUsageBySource[source]
@@ -461,10 +236,6 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     wordWrap: false,
     lineNumbers: true,
     persistParams: true,
-    persistPinnedInput: true,
-    persistPinnedTombstone: true,
-    outputPreviewLimit: 2048,
-    tombstoneTtlDays: 30,
     theme: 'dark',
     locale: 'en' as Locale,
     disabledBuiltins: [],
@@ -507,17 +278,6 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     savedActionParams: state.savedActionParams,
     actionUsageBySource: state.actionUsageBySource,
     launcherUsageBySurface: state.launcherUsageBySurface,
-    pinnedActions: state.pinnedActions.map(({ outputText: _outputText, lastError: _lastError, lastDurationMs: _lastDurationMs, controlPanelInstanceId: _controlPanelInstanceId, ...pinned }) => ({
-      ...pinned,
-      inputText: state.settings.persistPinnedInput ? pinned.inputText : '',
-      outputText: '',
-      outputKind: 'text' as PinnedOutputKind,
-    })),
-    activePinnedActionId: state.activePinnedActionId,
-    pinnedRuntimeConfig: state.pinnedRuntimeConfig,
-    pinnedTombstones: state.settings.persistPinnedTombstone
-      ? serializePinnedTombstones(state)
-      : {},
   }),
   merge: (persisted, current) => {
     const persistedState = persisted as Partial<AppState> & {
@@ -542,7 +302,6 @@ export const useAppStore = create<AppState>()(persist((set) => ({
           actionUsageCounts: persistedState.actionUsageCounts ?? {},
         },
         'global-launcher': { recentActionNames: [], actionUsageCounts: {} },
-        'pinned-runner': { recentActionNames: [], actionUsageCounts: {} },
       }
     } else if (persistedState.actionUsageBySource) {
       merged.actionUsageBySource = {
@@ -573,15 +332,6 @@ export const useAppStore = create<AppState>()(persist((set) => ({
       )
     } else {
       merged.launcherUsageBySurface = emptyUsageBySurface()
-    }
-    // Drop pinned actions persisted from the removed legacy action system;
-    // only plugin-command pins remain valid.
-    if (Array.isArray(merged.pinnedActions)) {
-      const validPins = merged.pinnedActions.filter((pinned) => pinned.kind === 'plugin-command')
-      merged.pinnedActions = validPins
-      if (merged.activePinnedActionId && !validPins.some((p) => p.id === merged.activePinnedActionId)) {
-        merged.activePinnedActionId = validPins.length > 0 ? validPins[0].id : null
-      }
     }
     return merged
   },

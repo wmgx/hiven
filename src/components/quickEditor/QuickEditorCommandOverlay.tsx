@@ -18,6 +18,7 @@ const MAX_OVERLAY_ITEMS = 12
 
 export function QuickEditorCommandOverlay() {
   const open = useAppStore((s) => s.quickEditorCommandOpen)
+  const initialQuery = useAppStore((s) => s.quickEditorCommandInitialQuery)
   const closeCommand = useAppStore((s) => s.closeQuickEditorCommand)
   const locale = useAppStore((s) => s.locale)
   const tQuickEditor = useT('quickEditor')
@@ -114,12 +115,16 @@ export function QuickEditorCommandOverlay() {
 
   useEffect(() => {
     if (open) {
+      if (initialQuery) {
+        setQuery(initialQuery)
+        setSelectedIndex(0)
+      }
       requestAnimationFrame(() => inputRef.current?.focus())
     } else {
       setQuery('')
       setSelectedIndex(0)
     }
-  }, [open, setQuery, setSelectedIndex])
+  }, [open, initialQuery, setQuery, setSelectedIndex])
 
   useEffect(() => () => {
     if (internalPointerResetRef.current !== null) window.clearTimeout(internalPointerResetRef.current)

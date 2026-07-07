@@ -289,16 +289,12 @@ body[data-theme='light'],
 .flux-spatial-shell[data-theme='dark'] .global-launcher-panel .cmd-item.selected,
 .flux-spatial-shell[data-theme='dark'] .palette-panel .cmd-item.selected {
   background: var(--bg-surface-hover);
-  border-radius: 0;
-  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .light .lnch-item.selected,
 .light .cmd-item.selected,
 .light .cmd-item.highlight {
   background: var(--accent-tint);
-  /* 极简左边指示条，精准专业感（不抢眼） */
-  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 /* Raycast 风格列表覆盖（中性灰选中条 + 圆角高亮，右侧标签对齐，适合 launcher）
@@ -310,9 +306,8 @@ body[data-theme='light'],
 }
 .global-launcher-panel .cmd-item.selected,
 .palette-panel .cmd-item.selected {
-  background: var(--accent-tint);
-  border-radius: 0;
-  box-shadow: inset 2px 0 0 var(--accent);
+  background: var(--accent-soft, var(--accent-tint));
+  border-radius: var(--radius-sm);
 }
 .global-launcher-panel .cmd-item .text-tertiary {
   color: #8a8a8a;
@@ -339,6 +334,24 @@ body[data-theme='light'],
 .cmd-item.selected .launcher-item-title,
 .cmd-item.highlight .launcher-item-title {
   color: var(--color-text-primary); /* selected: pure black in light, bright primary in dark */
+}
+/* Match highlight in launcher search results */
+.launcher-match-highlight {
+  font-weight: 600;
+  color: var(--accent, var(--color-accent));
+}
+/* Pinyin badge: small inline indicator next to the kind tag */
+.launcher-pinyin-badge {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  line-height: 16px;
+  font-weight: 500;
+  background: var(--surface-2, rgba(0, 0, 0, 0.06));
+  color: var(--color-text-tertiary, #888);
+  vertical-align: middle;
 }
 .global-launcher-result-row {
   border: 0;
@@ -4559,6 +4572,20 @@ body[data-theme='dark'] .l-row.selected .launcher-kind-tag {
   font-size: 11px;
 }
 
+.l-row .r-shortcut-badge {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  background: var(--surface, rgba(0, 0, 0, 0.03));
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.5px;
+}
+
 .l-result {
   width: calc(100% - 16px);
   display: flex;
@@ -5517,7 +5544,34 @@ body[data-theme='dark'] .sel-ctl.open {
 }
 
 .settings-select-item:hover,
-.settings-select-item.is-selected {
+.settings-select-item.is-selected,
+.settings-select-item.is-focused {
+  background: var(--accent-soft);
+}
+
+/* Reset button styles for sel-ctl and settings-select-item when rendered as <button> */
+button.sel-ctl {
+  appearance: none;
+  font-family: inherit;
+  text-align: left;
+}
+
+button.settings-select-item {
+  appearance: none;
+  font-family: inherit;
+  text-align: left;
+  border: none;
+  background: none;
+  width: 100%;
+}
+
+button.sel-ctl:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button.settings-select-item:focus-visible {
+  outline: none;
   background: var(--accent-soft);
 }
 
@@ -7193,4 +7247,19 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   width: 24px;
   height: 24px;
   padding: 0;
+}
+
+/* ─── Reduced Motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .anim-running-pulse,
+  .plugin-surface-window-message__indicator {
+    opacity: 1;
+  }
 }

@@ -30,6 +30,17 @@ export function ToastContainer() {
             style={{ background: style.bg, color: style.color, border: '1px solid currentColor', borderColor: `${style.color}33` }}
           >
             <span className="flex-1">{toast.message}</span>
+            {toast.action && (
+              <button
+                className="font-medium underline underline-offset-2 shrink-0 hover:opacity-80"
+                onClick={() => {
+                  toast.action!.onClick()
+                  removeToast(toast.id)
+                }}
+              >
+                {toast.action.label}
+              </button>
+            )}
             <button
               className="opacity-50 hover:opacity-100 shrink-0"
               onClick={() => removeToast(toast.id)}

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { getVersion } from '@tauri-apps/api/app'
-import { Check, Download, RefreshCw } from 'lucide-react'
+import { Check, Command, Download, Hash, Info, Languages, Moon, RefreshCw, Save, Type, WrapText } from 'lucide-react'
 import { useAppStore } from '../store'
 import { useT } from '../i18n'
 import { checkBuiltinPluginsUpdate } from '../configInit'
@@ -15,6 +15,7 @@ export function SettingsContent() {
   const t = useT('settings')
   const tUpdate = useT('update')
   const [appVersion, setAppVersion] = useState('')
+  const [switchingLocale, setSwitchingLocale] = useState<string | null>(null)
 
   useEffect(() => {
     getVersion().then((v) => setAppVersion(v)).catch(() => setAppVersion('dev'))
@@ -22,8 +23,23 @@ export function SettingsContent() {
 
   return (
     <div className="sscroll">
+      {switchingLocale && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'var(--color-bg-overlay, rgba(0,0,0,0.4))',
+          zIndex: 9999,
+          fontSize: 'var(--text-base)',
+          color: 'var(--color-text-primary)',
+        }}>
+          {t('switchingLanguage')}
+        </div>
+      )}
       <SettingGroup title={t('general')}>
-        <SettingsListRow icon="文" name={t('language')} desc={t('languageInfo')}>
+        <SettingsListRow icon={<Languages size={14} />} name={t('language')} desc={t('languageInfo')}>
           <LocaleSelect
             value={locale}
             options={[
@@ -32,17 +48,18 @@ export function SettingsContent() {
             ]}
             onChange={(value) => {
               updateSetting('locale', value)
-              setTimeout(() => window.location.reload(), 100)
+              setSwitchingLocale(value)
+              setTimeout(() => window.location.reload(), 300)
             }}
           />
         </SettingsListRow>
-        <SettingsListRow icon="◐" name={t('darkTheme')} desc={t('darkThemeInfo')}>
+        <SettingsListRow icon={<Moon size={14} />} name={t('darkTheme')} desc={t('darkThemeInfo')}>
           <Toggle value={settings.theme === 'dark'} onChange={(value) => updateSetting('theme', value ? 'dark' : 'light')} />
         </SettingsListRow>
       </SettingGroup>
 
       <SettingGroup title={t('hotkeys')}>
-        <SettingsListRow icon="⌘" name={t('globalPinnedLauncherShortcut')} desc={t('globalPinnedLauncherShortcutInfo')}>
+        <SettingsListRow icon={<Command size={14} />} name={t('globalPinnedLauncherShortcut')} desc={t('globalPinnedLauncherShortcutInfo')}>
           <ShortcutRecorder
             value={settings.globalPinnedLauncherShortcut ?? { kind: 'double-modifier', modifier: 'Command' }}
             allowDoubleModifier
@@ -57,35 +74,29 @@ export function SettingsContent() {
       </SettingGroup>
 
       <SettingGroup title={t('editor')}>
-        <SettingsListRow icon="A" name={t('fontSize')} desc={t('fontSizeInfo')}>
+        <SettingsListRow icon={<Type size={14} />} name={t('fontSize')} desc={t('fontSizeInfo')}>
           <span className="num">
             <button type="button" onClick={() => updateSetting('fontSize', Math.max(10, settings.fontSize - 1))}>−</button>
             <span className="v">{settings.fontSize}</span>
             <button type="button" onClick={() => updateSetting('fontSize', Math.min(24, settings.fontSize + 1))}>＋</button>
           </span>
         </SettingsListRow>
-        <SettingsListRow icon="↵" name={t('wordWrap')} desc={t('wordWrapInfo')}>
+        <SettingsListRow icon={<WrapText size={14} />} name={t('wordWrap')} desc={t('wordWrapInfo')}>
           <Toggle value={settings.wordWrap} onChange={(value) => updateSetting('wordWrap', value)} />
         </SettingsListRow>
-        <SettingsListRow icon="#" name={t('lineNumbers')} desc={t('lineNumbersInfo')}>
+        <SettingsListRow icon={<Hash size={14} />} name={t('lineNumbers')} desc={t('lineNumbersInfo')}>
           <Toggle value={settings.lineNumbers} onChange={(value) => updateSetting('lineNumbers', value)} />
         </SettingsListRow>
       </SettingGroup>
 
       <SettingGroup title={t('behavior')}>
-        <SettingsListRow icon="⊡" name={t('persistParams')} desc={t('persistParamsInfo')}>
+        <SettingsListRow icon={<Save size={14} />} name={t('persistParams')} desc={t('persistParamsInfo')}>
           <Toggle value={settings.persistParams} onChange={(value) => updateSetting('persistParams', value)} />
-        </SettingsListRow>
-        <SettingsListRow icon="📌" name={t('persistPinnedInput')} desc={t('persistPinnedInputInfo')}>
-          <Toggle value={settings.persistPinnedInput} onChange={(value) => updateSetting('persistPinnedInput', value)} />
-        </SettingsListRow>
-        <SettingsListRow icon="☾" name={t('persistPinnedTombstone')} desc={t('persistPinnedTombstoneInfo')}>
-          <Toggle value={settings.persistPinnedTombstone} onChange={(value) => updateSetting('persistPinnedTombstone', value)} />
         </SettingsListRow>
       </SettingGroup>
 
       <SettingGroup title={tUpdate('title')}>
-        <SettingsListRow icon="↻" name={t('currentVersion')} desc={t('currentVersionInfo')}>
+        <SettingsListRow icon={<Info size={14} />} name={t('currentVersion')} desc={t('currentVersionInfo')}>
           <div className="settings-version-control">
             <span className="kbd">v{appVersion}</span>
             <UpdateChecker compact />
@@ -131,7 +142,10 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (value: boolean
 
 function LocaleSelect({ options, value, onChange }: { options: { value: string; label: string }[]; value: string; onChange: (value: string) => void }) {
   const [open, setOpen] = useState(false)
+  const [focusedIndex, setFocusedIndex] = useState(-1)
   const ref = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const optionRefs = useRef<(HTMLButtonElement | null)[]>([])
 
   useEffect(() => {
     if (!open) return
@@ -142,23 +156,92 @@ function LocaleSelect({ options, value, onChange }: { options: { value: string; 
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
+  useEffect(() => {
+    if (open) {
+      const selectedIdx = options.findIndex((o) => o.value === value)
+      const idx = selectedIdx >= 0 ? selectedIdx : 0
+      setFocusedIndex(idx)
+      requestAnimationFrame(() => optionRefs.current[idx]?.focus())
+    } else {
+      setFocusedIndex(-1)
+    }
+  }, [open])
+
   const selected = options.find((option) => option.value === value)
+
+  const handleTriggerKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      setOpen(true)
+    }
+  }
+
+  const handleOptionKeyDown = (e: React.KeyboardEvent, index: number) => {
+    switch (e.key) {
+      case 'ArrowDown': {
+        e.preventDefault()
+        const next = index < options.length - 1 ? index + 1 : 0
+        setFocusedIndex(next)
+        optionRefs.current[next]?.focus()
+        break
+      }
+      case 'ArrowUp': {
+        e.preventDefault()
+        const prev = index > 0 ? index - 1 : options.length - 1
+        setFocusedIndex(prev)
+        optionRefs.current[prev]?.focus()
+        break
+      }
+      case 'Enter':
+      case ' ': {
+        e.preventDefault()
+        onChange(options[index].value)
+        setOpen(false)
+        triggerRef.current?.focus()
+        break
+      }
+      case 'Escape': {
+        e.preventDefault()
+        setOpen(false)
+        triggerRef.current?.focus()
+        break
+      }
+    }
+  }
 
   return (
     <div className={`settings-select-wrap ${open ? 'is-open' : ''}`} ref={ref}>
-      <div className={`sel-ctl ${open ? 'open' : ''}`} onClick={() => setOpen(!open)}>
+      <button
+        type="button"
+        ref={triggerRef}
+        className={`sel-ctl ${open ? 'open' : ''}`}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        onClick={() => setOpen(!open)}
+        onKeyDown={handleTriggerKeyDown}
+      >
         <span>{selected?.label ?? value}</span>
         <span className="chev">▾</span>
-      </div>
+      </button>
       {open && (
-        <div className="settings-select-menu">
-          {options.map((option) => (
-            <div key={option.value} className={`settings-select-item ${value === option.value ? 'is-selected' : ''}`} onClick={() => { onChange(option.value); setOpen(false) }}>
+        <div className="settings-select-menu" role="listbox" aria-activedescendant={focusedIndex >= 0 ? `locale-option-${options[focusedIndex].value}` : undefined}>
+          {options.map((option, index) => (
+            <button
+              type="button"
+              key={option.value}
+              id={`locale-option-${option.value}`}
+              ref={(el) => { optionRefs.current[index] = el }}
+              role="option"
+              aria-selected={value === option.value}
+              className={`settings-select-item ${value === option.value ? 'is-selected' : ''} ${focusedIndex === index ? 'is-focused' : ''}`}
+              onClick={() => { onChange(option.value); setOpen(false); triggerRef.current?.focus() }}
+              onKeyDown={(e) => handleOptionKeyDown(e, index)}
+            >
               <span className="w-3.5 shrink-0 flex items-center justify-center">
                 {value === option.value && <Check size={10} style={{ color: 'var(--color-accent)' }} />}
               </span>
               <span>{option.label}</span>
-            </div>
+            </button>
           ))}
         </div>
       )}

@@ -15,6 +15,7 @@ import { isStandaloneLauncherWindow } from '../launcher/GlobalLauncherHostLifecy
 export function QuickEditorToolbar() {
   const language = useQuickEditorStore((s) => s.language)
   const locale = useAppStore((s) => s.locale)
+  const openQuickEditorCommand = useAppStore((s) => s.openQuickEditorCommand)
   const t = useT('quickEditor')
   const languageLabel = getLanguageOptionLabel(language, locale)
   const isDetached = isQuickEditorDetachedWindow()
@@ -38,6 +39,11 @@ export function QuickEditorToolbar() {
     })
   }, [])
 
+  const handleLanguageLabelClick = useCallback(() => {
+    const queryWord = locale === 'zh' ? '语言' : 'language'
+    openQuickEditorCommand(queryWord)
+  }, [locale, openQuickEditorCommand])
+
   return (
     <div
       className="flex items-center justify-between px-3 h-8 shrink-0 select-none"
@@ -57,8 +63,20 @@ export function QuickEditorToolbar() {
       </div>
       <div className="flex items-center gap-1">
         <span
-          className="text-[10px] px-1.5 py-0.5 rounded"
+          className="text-[10px] px-1.5 py-0.5 rounded transition-colors cursor-pointer"
           style={{ color: 'var(--color-text-tertiary)' }}
+          title={t('languageLabelTooltip')}
+          onClick={handleLanguageLabelClick}
+          onMouseEnter={(e) => {
+            const el = e.currentTarget as HTMLElement
+            el.style.background = 'var(--color-background-tertiary)'
+            el.style.color = 'var(--color-text-secondary)'
+          }}
+          onMouseLeave={(e) => {
+            const el = e.currentTarget as HTMLElement
+            el.style.background = ''
+            el.style.color = 'var(--color-text-tertiary)'
+          }}
         >
           {languageLabel}
         </span>

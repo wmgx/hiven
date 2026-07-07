@@ -1,4 +1,5 @@
 import { Component, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from 'react'
+import { AlertTriangle } from 'lucide-react'
 import { localized, useAppStore, type PluginSurfaceOpenTarget } from '../../store'
 import { t, type Locale } from '../../i18n'
 import { makePluginT } from '../../i18n/pluginI18nRegistry'
@@ -8,6 +9,7 @@ import { getPluginPermissionSnapshot, missingPluginPermissions, describePluginPe
 import { restartPluginBackground } from '../../workspace/pluginBackgroundManager'
 import { createPluginPrivateStorage } from '../../workspace/pluginStorage'
 import { createPluginClipboard } from '../../workspace/pluginClipboard'
+import { showToast, dismissToast } from '../../workspace/toast'
 import { createPluginPaste } from '../../workspace/pluginPaste'
 import { createPluginNetwork } from '../../workspace/pluginNetwork'
 import { ensurePluginRuntimeReady } from '../../workspace/pluginRuntimeBootstrap'
@@ -128,10 +130,10 @@ export function PluginSurfaceRenderer({
     return <PluginSurfaceMessage title="Loading plugin surface..." />
   }
   if (surfaceState.status === 'error') {
-    return <PluginSurfaceMessage title={surfaceState.title} message={surfaceState.message} />
+    return <PluginSurfaceMessage title={surfaceState.title} message={surfaceState.message} variant="error" />
   }
   if (surfaceState.status === 'surface-not-found') {
-    return <PluginSurfaceMessage title="Plugin surface not found" message={surfaceState.message} />
+    return <PluginSurfaceMessage title="Plugin surface not found" message={surfaceState.message} variant="error" />
   }
   if (surfaceState.status === 'before-open') {
     return <PluginSurfaceMessage title="Opening plugin surface..." />
@@ -183,6 +185,8 @@ export function PluginSurfaceRenderer({
                 updatedAt: Date.now(),
               })
             },
+            showToast: (message, level, options) => showToast(message, level, options),
+            dismissToast,
             storage: hostStorage,
             clipboard: createPluginClipboard(target.pluginId, surfaceState.permissions, hostStorage),
             paste: createPluginPaste(surfaceState.permissions, hostStorage),
@@ -231,10 +235,14 @@ export function PluginSurfacePermissionGate({
   )
 }
 
-function PluginSurfaceMessage({ title, message }: { title: string; message?: string }) {
+function PluginSurfaceMessage({ title, message, variant }: { title: string; message?: string; variant?: 'loading' | 'error' }) {
   return (
     <div className="plugin-surface-window-message">
-      <div className="plugin-surface-window-message__indicator" />
+      {variant === 'error' ? (
+        <AlertTriangle size={18} style={{ color: 'var(--color-error)', flexShrink: 0 }} />
+      ) : (
+        <div className="plugin-surface-window-message__indicator" />
+      )}
       <div>{title}</div>
       {message && <small>{message}</small>}
     </div>

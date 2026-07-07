@@ -85,6 +85,62 @@ export function searchableFieldsMatch(fields: SearchableFields, q: string, local
   return false
 }
 
+// ─── Match Ranges (pure data for rendering) ─────────────────────────────────
+
+export type MatchRange = { start: number; end: number }
+
+export type MatchType = 'substring' | 'pinyin' | 'acronym' | 'none'
+
+export type MatchResult = {
+  ranges: MatchRange[]
+  type: MatchType
+}
+
+/**
+ * Compute match ranges for a title string against the query.
+ * Returns the first matching substring range, or pinyin/acronym indicator.
+ * Ranges are indices into the `title` string as displayed.
+ */
+export function computeTitleMatchRanges(title: string, q: string, locale: Locale): MatchResult {
+  if (!q) return { ranges: [], type: 'none' }
+
+  const lowerTitle = title.toLowerCase()
+  const lowerQ = q.toLowerCase()
+
+  // Direct substring match — find the first occurrence
+  const idx = lowerTitle.indexOf(lowerQ)
+  if (idx !== -1) {
+    return { ranges: [{ start: idx, end: idx + lowerQ.length }], type: 'substring' }
+  }
+
+  // Pinyin full match
+  if (/^[a-z]+$/.test(lowerQ)) {
+    let cached = pinyinCache.get(title)
+    if (!cached) {
+      const full = pinyin(title, { toneType: 'none', separator: '' }).toLowerCase()
+      const initials = pinyin(title, { pattern: 'initial', toneType: 'none', separator: '' }).toLowerCase()
+      cached = { full, initials }
+      pinyinCache.set(title, cached)
+    }
+    if (cached.full.includes(lowerQ) || cached.initials.startsWith(lowerQ)) {
+      return { ranges: [], type: 'pinyin' }
+    }
+  }
+
+  // Acronym match
+  if (/^[a-z]+$/.test(lowerQ)) {
+    const acronym = getAcronym(lowerTitle)
+    if (acronym.startsWith(lowerQ)) {
+      return { ranges: [], type: 'acronym' }
+    }
+    if (mixedAcronymMatch(title, lowerQ)) {
+      return { ranges: [], type: 'pinyin' }
+    }
+  }
+
+  return { ranges: [], type: 'none' }
+}
+
 export function scoreSearchableFields(
   fields: SearchableFields,
   q: string,

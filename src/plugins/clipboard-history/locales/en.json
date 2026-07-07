@@ -70,6 +70,8 @@
   "message.copied": "Copied to clipboard",
   "message.cleared": "History cleared",
   "message.deleted": "Item deleted",
+  "message.deleted.toast": "Deleted",
+  "message.undo": "Undo",
   "error.loadFailed": "Failed to load clipboard history",
   "error.pasteFailed": "Paste failed"
 }

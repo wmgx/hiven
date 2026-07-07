@@ -31,6 +31,24 @@ export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void 
       useQuickEditorStore.getState().closeActivePane()
       return
     }
+    if (event.key === '\\' && !event.altKey) {
+      event.preventDefault()
+      event.stopPropagation()
+      useQuickEditorStore.getState().createPane({ direction: event.shiftKey ? 'bottom' : 'right' })
+      return
+    }
+    if (event.altKey && event.key === 'ArrowRight') {
+      event.preventDefault()
+      event.stopPropagation()
+      useQuickEditorStore.getState().focusNextPane()
+      return
+    }
+    if (event.altKey && event.key === 'ArrowLeft') {
+      event.preventDefault()
+      event.stopPropagation()
+      useQuickEditorStore.getState().focusPreviousPane()
+      return
+    }
     if (event.key.toLowerCase() !== 'k') return
     event.preventDefault()
     event.stopPropagation()
@@ -126,6 +144,34 @@ function QuickEditorPaneSurface({
         keybindings: [2048 | 53],
         run: () => {
           useQuickEditorStore.getState().closeActivePane()
+        },
+      }, {
+        id: 'quick-editor-split-right',
+        label: 'Split Right',
+        keybindings: [2048 | 93],
+        run: () => {
+          useQuickEditorStore.getState().createPane({ direction: 'right' })
+        },
+      }, {
+        id: 'quick-editor-split-down',
+        label: 'Split Down',
+        keybindings: [2048 | 1024 | 93],
+        run: () => {
+          useQuickEditorStore.getState().createPane({ direction: 'bottom' })
+        },
+      }, {
+        id: 'quick-editor-focus-next-pane',
+        label: 'Focus Next Pane',
+        keybindings: [2048 | 512 | 17],
+        run: () => {
+          useQuickEditorStore.getState().focusNextPane()
+        },
+      }, {
+        id: 'quick-editor-focus-previous-pane',
+        label: 'Focus Previous Pane',
+        keybindings: [2048 | 512 | 15],
+        run: () => {
+          useQuickEditorStore.getState().focusPreviousPane()
         },
       }]}
       onFocus={() => setActivePaneId(pane.id)}
