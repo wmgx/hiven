@@ -131,7 +131,7 @@ export const textDiffPlugin = definePlugin({
                   }
 
                   ctx.api.openDiffPage(payload as any)
-                  return { ok: true as const }
+                  return { ok: true as const, keepOpen: true }
                 },
               },
             },
