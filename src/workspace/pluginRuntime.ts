@@ -15,7 +15,6 @@
 
 import { cleanupEditorPluginContributions } from './editorBridge'
 import { pluginRegistry } from './pluginRegistry'
-import { useWorkspaceStore } from './workspaceStore'
 import { usePluginStore } from './pluginStore'
 import { showToast } from './toast'
 import { createPluginScaffoldFiles } from './pluginScaffold.ts'
@@ -145,31 +144,10 @@ function clearPluginHostState(source: PluginSettingsSource, pluginId: string, op
 }
 
 function cleanupPluginEditorContributions(pluginId: string, panelIds: string[]): void {
-  if (isEditorWindowRuntime()) {
-    cleanupLocalEditorPluginContributions(pluginId, panelIds)
-    return
-  }
-
   cleanupEditorPluginContributions({ pluginId, panelIds })
     .catch((error) => {
       console.warn(`[hiven] Failed to clean editor contributions for plugin "${pluginId}" through EditorBridge:`, error)
     })
-}
-
-function cleanupLocalEditorPluginContributions(pluginId: string, panelIds: string[]): void {
-  const ws = useWorkspaceStore.getState()
-  ws.clearPaneRenderersForPlugin(pluginId)
-  for (const panelId of panelIds) {
-    ws.closePanelV2(panelId)
-  }
-}
-
-function isEditorWindowRuntime(): boolean {
-  try {
-    return new URLSearchParams(window.location.search).get('window') === 'editor'
-  } catch {
-    return false
-  }
 }
 
 function validatePackageRelativePath(value: string, label: string): void {

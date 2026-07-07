@@ -2,7 +2,6 @@ import { useCallback, useState, type RefObject } from 'react'
 import type { LauncherController } from '../../workspace/launcher/controller'
 import type { LauncherItem as DomainLauncherItem } from '../../workspace/launcher/types'
 import type { GlobalLauncherItem } from './GlobalLauncherItems'
-import { finishPinnedLauncherSelection } from './GlobalLauncherClose'
 import {
   buildItemPermissionFrame,
   executeGlobalLauncherDomainItem,
@@ -15,7 +14,6 @@ type UseGlobalLauncherSelectionControllerInput = {
   controllerRef: RefObject<LauncherController | null>
   standaloneLauncher: boolean
   overlay: boolean
-  openPinnedAction: (pinnedId: string) => void
   restoreFocus: () => void
   setOpen: (open: boolean) => void
   clearPluginSurfaceTool: () => void
@@ -29,7 +27,6 @@ export function useGlobalLauncherSelectionController({
   controllerRef,
   standaloneLauncher,
   overlay,
-  openPinnedAction,
   restoreFocus,
   setOpen,
   clearPluginSurfaceTool,
@@ -69,18 +66,7 @@ export function useGlobalLauncherSelectionController({
       executeDomainItem(item.domainItem, customizeParams)
       return
     }
-
-    if (item.kind === 'pinned') {
-      void finishPinnedLauncherSelection({
-        pinnedId: item.id,
-        standaloneLauncher,
-        overlay,
-        openPinnedAction,
-        restoreFocus,
-        setOpen,
-      })
-    }
-  }, [clearPluginSurfaceTool, executeDomainItem, openPinnedAction, openPluginSurface, overlay, restoreFocus, setOpen, standaloneLauncher])
+  }, [clearPluginSurfaceTool, executeDomainItem, openPluginSurface])
 
   const grantItemPermissionsAndRun = useCallback(() => {
     if (!itemPermissionFrame) return

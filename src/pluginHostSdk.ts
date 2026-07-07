@@ -147,13 +147,11 @@ function createPluginHostHooks(): PluginHostHooks {
     useSettings: () => useAppStore((s) => s.settings),
     useLocale: () => useAppStore((s) => s.locale),
     usePaneText: (paneId) => {
-      const localText = useWorkspaceStore((s) => isEditorWindowRuntime() ? s.panes[paneId]?.text : undefined)
-      const activeEditorText = React.useSyncExternalStore(
+      return React.useSyncExternalStore(
         subscribeActiveEditorState,
         () => getMirroredEditorPaneText(paneId),
         () => undefined,
       )
-      return isEditorWindowRuntime() ? localText : activeEditorText
     },
     useT: (pluginId) => {
       const locale = useAppStore((s) => s.locale)
@@ -173,12 +171,4 @@ function createPluginHostHooks(): PluginHostHooks {
 function getMirroredEditorPaneText(paneId: PaneId): string | undefined {
   const snapshot = getActiveEditorContextSnapshot()
   return snapshot?.activePaneId === paneId ? snapshot.activeText : undefined
-}
-
-function isEditorWindowRuntime(): boolean {
-  try {
-    return new URLSearchParams(window.location.search).get('window') === 'editor'
-  } catch {
-    return false
-  }
 }

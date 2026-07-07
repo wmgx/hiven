@@ -7,16 +7,8 @@
 import { runtimeRegistry, type Disposable } from './runtimeRegistry'
 import type { PaneId } from './types'
 
-function isEditorWindowRuntime(): boolean {
-  try {
-    return new URLSearchParams(window.location.search).get('window') === 'editor'
-  } catch {
-    return false
-  }
-}
-
-function getEditorRuntime(paneId: PaneId): any | null {
-  return isEditorWindowRuntime() ? runtimeRegistry.getCodeEditor(paneId) : null
+function getEditorRuntime(_paneId: PaneId): any | null {
+  return null
 }
 
 // ─── Core Bridge API ────────────────────────────────────────────────────────
@@ -28,7 +20,7 @@ export interface MonacoBridgeApi {
 
 export const monacoBridge: MonacoBridgeApi = {
   getMonaco() {
-    return isEditorWindowRuntime() ? ((window as any).monaco ?? null) : null
+    return null
   },
 
   getCodeEditor(paneId: PaneId) {

@@ -95,6 +95,7 @@ doc/diff-plugin-boundary-decision.md
 - Global Launcher、App 内命令入口、插件页面、Pinned Runner、设置页必须使用同一套多语言管线。
 - 新增或修改 first-party 插件时，必须同时补齐对应 locale key，并验证当前 locale 下展示正确。
 - 禁止在插件或 framework 中直接写死中文/英文作为最终 UI 文案；临时调试文案不得进入提交。
+- 原生托盘菜单文案（`src-tauri/src/lib.rs` 的 `desktop_tray_text()`）因 webview 未加载时读不到应用内 locale，允许按系统环境变量硬编码中英文双语，是唯一被认可的原生层文案例外；新增其它原生 UI 文案不得援引此例外。
 
 ## Launcher / Command 交互
 

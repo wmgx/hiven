@@ -67,7 +67,7 @@ export const csvPlugin = definePlugin({
         try {
           return ctx.output.text(csvToJson(ctx.input.text, ','))
         } catch (e: any) {
-          return ctx.output.error(`Error: ${e.message}`)
+          return ctx.output.error('Error: ' + e.message)
         }
       },
       surfaces: { launcher: true, panel: true, pinnable: true },
@@ -83,7 +83,7 @@ export const csvPlugin = definePlugin({
         try {
           return ctx.output.text(jsonToCsv(ctx.input.text, ','))
         } catch (e: any) {
-          return ctx.output.error(`Error: ${e.message}`)
+          return ctx.output.error('Error: ' + e.message)
         }
       },
       surfaces: { launcher: true, panel: true, pinnable: true },
@@ -99,7 +99,7 @@ export const csvPlugin = definePlugin({
         try {
           return ctx.output.text(csvToJson(ctx.input.text, '\t'))
         } catch (e: any) {
-          return ctx.output.error(`Error: ${e.message}`)
+          return ctx.output.error('Error: ' + e.message)
         }
       },
       surfaces: { launcher: true, panel: true, pinnable: true },
@@ -115,7 +115,7 @@ export const csvPlugin = definePlugin({
         try {
           return ctx.output.text(jsonToCsv(ctx.input.text, '\t'))
         } catch (e: any) {
-          return ctx.output.error(`Error: ${e.message}`)
+          return ctx.output.error('Error: ' + e.message)
         }
       },
       surfaces: { launcher: true, panel: true, pinnable: true },

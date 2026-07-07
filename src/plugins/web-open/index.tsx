@@ -115,7 +115,7 @@ async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<L
       : FALLBACK_ICON
 
     results.push({
-      id: `${entry.id}-quick`,
+      id: entry.id + '-quick',
       display: {
         title: entry.title || entry.urlTemplate,
         subtitle: url,
@@ -174,7 +174,7 @@ function migrateWebQuickOpenSettings(stored: unknown): WebQuickOpenSettings {
         ? entry as Partial<WebQuickOpenSettings['entries'][number]>
         : {}
       return {
-        id: String(source.id || `web-${index + 1}`),
+        id: String(source.id || 'web-' + (index + 1)),
         title: String(source.title || ''),
         aliases: Array.isArray(source.aliases) ? source.aliases.map(String) : [],
         placeholder: String(source.placeholder || ''),

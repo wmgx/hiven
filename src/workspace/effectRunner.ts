@@ -60,7 +60,7 @@ export function applyEffects(
 ): EffectRunnerResult {
   const result: EffectRunnerResult = { applied: [], errors: [] }
   const runnableEffects = effects.filter((effect) => {
-    if (!isEditorWindowRuntime() && isEditorWorkspaceEffect(effect)) {
+    if (isEditorWorkspaceEffect(effect)) {
       result.errors.push(`Editor workspace effects can only run in the editor window: ${effect.type}`)
       return false
     }
@@ -176,14 +176,6 @@ function isEditorWorkspaceEffect(effect: FluxEffect): boolean {
   }
 }
 
-function isEditorWindowRuntime(): boolean {
-  try {
-    return new URLSearchParams(window.location.search).get('window') === 'editor'
-  } catch {
-    return false
-  }
-}
-
 /**
  * Apply effects after user confirms conflict resolution.
  */
@@ -191,7 +183,7 @@ export function applyEffectsAfterConfirmation(
   effects: FluxEffect[],
   conflictsToReplace: ConflictInfo[]
 ): EffectRunnerResult {
-  if (!isEditorWindowRuntime() && effects.some(isEditorWorkspaceEffect)) {
+  if (effects.some(isEditorWorkspaceEffect)) {
     return {
       applied: [],
       errors: effects

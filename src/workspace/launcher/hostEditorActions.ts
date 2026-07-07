@@ -45,16 +45,8 @@ const EDITOR_LANGUAGE_VALUES = new Set(
 
 const EDITOR_WINDOW_REQUIRED_MESSAGE = 'Editor command actions can only run in the editor window'
 
-function isEditorWindowRuntime(): boolean {
-  try {
-    return new URLSearchParams(window.location.search).get('window') === 'editor'
-  } catch {
-    return false
-  }
-}
-
 function guardEditorWindowRuntime(): { ok: false; message: string } | undefined {
-  return isEditorWindowRuntime() ? undefined : { ok: false, message: EDITOR_WINDOW_REQUIRED_MESSAGE }
+  return { ok: false, message: EDITOR_WINDOW_REQUIRED_MESSAGE }
 }
 
 function focusRelativePane(delta: 1 | -1): void {

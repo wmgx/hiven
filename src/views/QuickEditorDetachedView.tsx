@@ -12,6 +12,7 @@ import {
 } from '../workspace/quickEditor/quickEditorRequests'
 import { getLanguageOptionLabel } from '../workspace/languageOptions'
 import { QuickEditorPanel } from '../components/quickEditor/QuickEditorPanel'
+import { ToastContainer } from '../components/workspace/ToastContainer'
 import {
   closeQuickEditorWindow,
   startQuickEditorWindowDrag,
@@ -170,6 +171,7 @@ export function QuickEditorDetachedView() {
           onPointerDown={handleResizeStart(handle.direction)}
         />
       ))}
+      <ToastContainer />
     </div>
   )
 }

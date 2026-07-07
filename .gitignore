@@ -37,6 +37,7 @@ temp/
 .agents/
 .claude/
 .trae/
+.codegraph/
 CLAUDE-FABLE-*-simplified.md
 
 # Local design drafts

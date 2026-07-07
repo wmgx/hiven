@@ -105,7 +105,7 @@ export const jsonToolsPlugin = definePlugin({
       textMatch: isJson,
       run(ctx) {
         try { return ctx.output.text(jsonPrettify(ctx.input.text)) }
-        catch (e: any) { return ctx.output.error(`Error: ${e.message}`) }
+        catch (e: any) { return ctx.output.error('Error: ' + e.message) }
       },
       surfaces: { launcher: true, panel: true, pinnable: true },
     },
@@ -119,7 +119,7 @@ export const jsonToolsPlugin = definePlugin({
       textMatch: isJson,
       run(ctx) {
         try { return ctx.output.text(jsonCompact(ctx.input.text)) }
-        catch (e: any) { return ctx.output.error(`Error: ${e.message}`) }
+        catch (e: any) { return ctx.output.error('Error: ' + e.message) }
       },
       surfaces: { launcher: true, panel: true, pinnable: true },
     },
@@ -133,7 +133,7 @@ export const jsonToolsPlugin = definePlugin({
       textMatch: isJson,
       run(ctx) {
         try { return ctx.output.text(sortJsonKeys(ctx.input.text)) }
-        catch (e: any) { return ctx.output.error(`Error: ${e.message}`) }
+        catch (e: any) { return ctx.output.error('Error: ' + e.message) }
       },
       surfaces: { launcher: true, panel: true, pinnable: true },
     },
@@ -147,7 +147,7 @@ export const jsonToolsPlugin = definePlugin({
       textMatch: isQueryString,
       run(ctx) {
         try { return ctx.output.text(queryStringToJson(ctx.input.text)) }
-        catch (e: any) { return ctx.output.error(`Error: ${e.message}`) }
+        catch (e: any) { return ctx.output.error('Error: ' + e.message) }
       },
       surfaces: { launcher: true, panel: true, pinnable: true },
     },
@@ -161,7 +161,7 @@ export const jsonToolsPlugin = definePlugin({
       textMatch: isJson,
       run(ctx) {
         try { return ctx.output.text(jsonToQueryString(ctx.input.text)) }
-        catch (e: any) { return ctx.output.error(`Error: ${e.message}`) }
+        catch (e: any) { return ctx.output.error('Error: ' + e.message) }
       },
       surfaces: { launcher: true, panel: true, pinnable: true },
     },

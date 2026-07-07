@@ -4,6 +4,7 @@ import type { GlobalLauncherPosition } from './store'
 import { initConfigDir } from './configInit'
 import { GlobalLauncher } from './components/GlobalLauncher'
 import { PluginSettingsDialog } from './components/PluginSettingsDialog'
+import { ToastContainer } from './components/workspace/ToastContainer'
 import { loadInstalledPluginsFromStore } from './workspace/pluginRuntime'
 import { registerBundledPluginPackages } from './workspace/bundledPluginLoader'
 import { initializePluginBackgrounds, setupBackgroundPermissionWatcher, setupBackgroundSettingsWatcher, stopAllPluginBackgrounds } from './workspace/pluginBackgroundManager'
@@ -23,8 +24,6 @@ import './panels/register'
 // Register first-party product plugin packages
 registerHostLauncherProviders()
 registerBundledPluginPackages()
-
-const PINNED_RUNTIME_PRUNE_INTERVAL_MS = 60_000
 
 export default function App() {
   return <LauncherRuntimeApp />
@@ -107,13 +106,6 @@ function LauncherRuntimeApp() {
 
   useEffect(() => installGlobalPinnedLauncherHotkeys(), [])
   useEffect(() => installPluginSurfaceShortcutHotkeys(), [])
-
-  useEffect(() => {
-    const prunePinnedRuntimes = () => useAppStore.getState().prunePinnedRuntimes()
-    prunePinnedRuntimes()
-    const timer = window.setInterval(prunePinnedRuntimes, PINNED_RUNTIME_PRUNE_INTERVAL_MS)
-    return () => window.clearInterval(timer)
-  }, [])
 
   useEffect(() => {
     if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
@@ -325,6 +317,7 @@ function LauncherRuntimeApp() {
     <div className="flux-spatial-shell launcher-window-shell" data-theme={theme} data-launcher-position={launcherWindowPosition ? 'stored' : 'default'} style={{ fontSize }}>
       <GlobalLauncher />
       <PluginSettingsDialog />
+      <ToastContainer />
     </div>
   )
 }

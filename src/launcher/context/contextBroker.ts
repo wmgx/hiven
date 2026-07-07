@@ -1,6 +1,5 @@
 import type { TextRange } from '../../workspace/launcher/types'
 import { getActiveEditorContextSnapshot, getEditorContext } from '../../workspace/editorBridge'
-import { readLocalEditorContextSnapshot } from '../../workspace/editorContextSnapshot'
 import { EDITOR_WINDOW_LABEL } from '../../workspace/windowManager/windowLabels'
 import { launcherPerfNow, logLauncherPerfDuration } from '../../workspace/launcher/perf'
 
@@ -81,11 +80,6 @@ export async function createWorkContextSnapshot(
 export const editorContextProvider: ContextSnapshotProvider = {
   id: EDITOR_WINDOW_LABEL,
   getSnapshot: async () => {
-    if (isEditorWindowRuntime()) {
-      const editor = readLocalEditorContextSnapshot()
-      return editor ? { editor } : {}
-    }
-
     const cached = getActiveEditorContextSnapshot()
     if (cached) return { editor: cached }
 
@@ -186,12 +180,4 @@ async function readForegroundAppContext(): Promise<WorkContextSnapshot['foregrou
 
 function isTauriRuntime(): boolean {
   return Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
-}
-
-function isEditorWindowRuntime(): boolean {
-  try {
-    return new URLSearchParams(window.location.search).get('window') === 'editor'
-  } catch {
-    return false
-  }
 }
