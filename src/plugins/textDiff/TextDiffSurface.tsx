@@ -20,6 +20,67 @@ function parsePayload(initialText?: string): DiffPayload {
   }
 }
 
+const IconText = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M4 7V4h16v3" /><path d="M9 20h6" /><path d="M12 4v16" />
+  </svg>
+)
+
+const IconJson = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1" />
+    <path d="M16 3h1a2 2 0 0 1 2 2v5a2 2 0 0 0 2 2 2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1" />
+  </svg>
+)
+
+const IconSwap = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="m16 3 4 4-4 4" /><path d="M20 7H4" /><path d="m8 21-4-4 4-4" /><path d="M4 17h16" />
+  </svg>
+)
+
+const IconDetach = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+  </svg>
+)
+
+const IconClose = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+  </svg>
+)
+
+const IconUp = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="m18 15-6-6-6 6" />
+  </svg>
+)
+
+const IconDown = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="m6 9 6 6 6-6" />
+  </svg>
+)
+
+const IconListOrdered = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h16" />
+  </svg>
+)
+
+const IconListUnordered = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M3 7h4l3 9 4-15 3 6h4" />
+  </svg>
+)
+
+const IconCheck = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="td-ck">
+    <path d="M20 6 9 17l-5-5" />
+  </svg>
+)
+
 export function TextDiffSurface({ t, settings, host, initialText }: PluginSurfaceProps) {
   const { kits } = getPluginHostSdk()
   const { DualEditorView, diff } = kits
@@ -81,10 +142,10 @@ export function TextDiffSurface({ t, settings, host, initialText }: PluginSurfac
 
   const hunkLines = useMemo(() => {
     const hunks: number[] = []
-    const lines = leftHighlights.length > 0 ? leftHighlights : rightHighlights
-    if (lines.length === 0) return hunks
+    const allLines = [...new Set([...leftHighlights, ...rightHighlights])].sort((a, b) => a - b)
+    if (allLines.length === 0) return hunks
     let lastLine = -999
-    for (const line of lines) {
+    for (const line of allLines) {
       if (line - lastLine > 1) hunks.push(line)
       lastLine = line
     }
@@ -105,8 +166,8 @@ export function TextDiffSurface({ t, settings, host, initialText }: PluginSurfac
   }, [originalText, modifiedText])
 
   const handleDetach = useCallback(() => {
-    const payload = JSON.stringify({ original: { text: originalText }, modified: { text: modifiedText } })
-    host.detachToWindow(payload)
+    const p = JSON.stringify({ original: { text: originalText }, modified: { text: modifiedText } })
+    host.detachToWindow(p)
   }, [originalText, modifiedText, host])
 
   const handlePrevHunk = useCallback(() => {
@@ -119,16 +180,16 @@ export function TextDiffSurface({ t, settings, host, initialText }: PluginSurfac
     setCurrentHunkIndex((i) => (i + 1) % totalHunks)
   }, [totalHunks])
 
-  const dropdownRef = useRef<HTMLDivElement>(null)
+  const jsonWrapRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!showJsonDropdown) return
     const onClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      if (jsonWrapRef.current && !jsonWrapRef.current.contains(e.target as Node)) {
         setShowJsonDropdown(false)
       }
     }
-    document.addEventListener('mousedown', onClickOutside)
-    return () => document.removeEventListener('mousedown', onClickOutside)
+    document.addEventListener('click', onClickOutside)
+    return () => document.removeEventListener('click', onClickOutside)
   }, [showJsonDropdown])
 
   const editorLanguage = renderMode === 'json-semantic' ? 'json' : 'plaintext'
@@ -136,65 +197,67 @@ export function TextDiffSurface({ t, settings, host, initialText }: PluginSurfac
 
   return (
     <div className="td-surface">
-      {/* Header */}
-      <div className="td-header">
-        <div className="td-header-left">
-          <div className="td-mode-toggle" role="radiogroup" aria-label={t('diff.mode')}>
+      {/* Header — matches .hdr from mockup */}
+      <div className="td-hdr">
+        <div className="td-hdr-c">
+          <div className="td-mt">
             <button
               type="button"
-              className={`td-mode-btn ${diffMode === 'text' ? 'is-active' : ''}`}
-              onClick={() => setDiffMode('text')}
-              aria-pressed={diffMode === 'text'}
+              className={`td-mt-i ${diffMode === 'text' ? 'on' : ''}`}
+              onClick={() => { setDiffMode('text'); setShowJsonDropdown(false) }}
             >
-              {t('diff.textMode')}
+              <IconText />{t('diff.textMode')}
             </button>
-            <div className="td-json-mode-wrap" ref={dropdownRef}>
+            <div className="td-json-wrap" ref={jsonWrapRef}>
               <button
                 type="button"
-                className={`td-mode-btn td-mode-btn--json ${diffMode === 'json-semantic' ? 'is-active' : ''}`}
+                className={`td-mt-i ${diffMode === 'json-semantic' ? 'on' : ''}`}
                 onClick={() => {
-                  setDiffMode('json-semantic')
-                  if (diffMode === 'json-semantic') setShowJsonDropdown(!showJsonDropdown)
+                  if (diffMode === 'json-semantic') {
+                    setShowJsonDropdown(!showJsonDropdown)
+                  } else {
+                    setDiffMode('json-semantic')
+                    setShowJsonDropdown(true)
+                  }
                 }}
-                aria-pressed={diffMode === 'json-semantic'}
               >
-                <span>{t('diff.jsonSemantic')}</span>
+                <IconJson />{t('diff.jsonSemantic')}
                 {diffMode === 'json-semantic' && (
-                  <span className="td-badge">
+                  <span className="td-mode-badge">
                     {jsonArrayMode === 'ordered' ? t('diff.jsonSemanticBadge.ordered') : t('diff.jsonSemanticBadge.unordered')}
                   </span>
                 )}
               </button>
               {showJsonDropdown && diffMode === 'json-semantic' && (
-                <div className="td-dropdown">
+                <div className="td-dd">
                   <button
                     type="button"
-                    className={`td-dropdown-item ${jsonArrayMode === 'ordered' ? 'is-active' : ''}`}
-                    onClick={() => { setJsonArrayMode('ordered'); setShowJsonDropdown(false) }}
+                    className={`td-dd-i ${jsonArrayMode === 'ordered' ? 'on' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); setJsonArrayMode('ordered'); setShowJsonDropdown(false) }}
                   >
-                    {t('diff.arrayOrdered')}
+                    <IconListOrdered />{t('diff.arrayOrdered')}<IconCheck />
                   </button>
                   <button
                     type="button"
-                    className={`td-dropdown-item ${jsonArrayMode === 'unordered' ? 'is-active' : ''}`}
-                    onClick={() => { setJsonArrayMode('unordered'); setShowJsonDropdown(false) }}
+                    className={`td-dd-i ${jsonArrayMode === 'unordered' ? 'on' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); setJsonArrayMode('unordered'); setShowJsonDropdown(false) }}
                   >
-                    {t('diff.arrayUnordered')}
+                    <IconListUnordered />{t('diff.arrayUnordered')}<IconCheck />
                   </button>
                 </div>
               )}
             </div>
           </div>
-          {diffMode === 'json-semantic' && !semanticAvailable && (
-            <span className="td-hint">{t('diff.semanticUnavailable')}</span>
-          )}
         </div>
-        <div className="td-header-right">
-          <button type="button" className="td-action-btn" onClick={handleSwap} title={t('diff.swap')} aria-label={t('diff.swap')}>
-            ⇄
+        <div className="td-hdr-a">
+          <button type="button" className="td-ib" onClick={handleSwap} title={t('diff.swap')} aria-label={t('diff.swap')}>
+            <IconSwap />
           </button>
-          <button type="button" className="td-action-btn" onClick={handleDetach} title={t('diff.detach')} aria-label={t('diff.detach')}>
-            ⧉
+          <button type="button" className="td-ib" onClick={handleDetach} title={t('diff.detach')} aria-label={t('diff.detach')}>
+            <IconDetach />
+          </button>
+          <button type="button" className="td-ib td-ib--close" onClick={() => host.close()} title={t('diff.close')} aria-label={t('diff.close')}>
+            <IconClose />
           </button>
         </div>
       </div>
@@ -217,33 +280,33 @@ export function TextDiffSurface({ t, settings, host, initialText }: PluginSurfac
         />
       </div>
 
-      {/* Status bar */}
-      <div className="td-statusbar">
-        <button
-          type="button"
-          className="td-nav-btn"
-          onClick={handlePrevHunk}
-          disabled={totalHunks === 0}
-          title={t('diff.navPrev')}
-          aria-label={t('diff.navPrev')}
-        >
-          ‹
-        </button>
-        <span className="td-nav-position">
-          {totalHunks > 0
-            ? t('diff.navPosition', { current: String(currentHunkIndex + 1), total: String(totalHunks) })
-            : t('diff.noChanges')}
-        </span>
-        <button
-          type="button"
-          className="td-nav-btn"
-          onClick={handleNextHunk}
-          disabled={totalHunks === 0}
-          title={t('diff.navNext')}
-          aria-label={t('diff.navNext')}
-        >
-          ›
-        </button>
+      {/* Status bar — matches .sbar from mockup */}
+      <div className="td-sbar">
+        <div className="td-nav">
+          <button
+            type="button"
+            className="td-nav-b"
+            onClick={handlePrevHunk}
+            disabled={totalHunks === 0}
+            aria-label={t('diff.navPrev')}
+          >
+            <IconUp />{t('diff.navPrev')}
+          </button>
+          <span className="td-nav-p">
+            {totalHunks > 0
+              ? t('diff.navPosition', { current: String(currentHunkIndex + 1), total: String(totalHunks) })
+              : t('diff.noChanges')}
+          </span>
+          <button
+            type="button"
+            className="td-nav-b"
+            onClick={handleNextHunk}
+            disabled={totalHunks === 0}
+            aria-label={t('diff.navNext')}
+          >
+            {t('diff.navNext')}<IconDown />
+          </button>
+        </div>
       </div>
     </div>
   )
