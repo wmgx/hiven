@@ -14,10 +14,10 @@
   width: 176px;
   min-width: 176px;
   padding: 14px 10px;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--border-subtle);
   gap: 2px;
   overflow-y: auto;
-  background: var(--surface);
+  background: var(--panel);
 }
 
 .system-settings-tab {
@@ -41,7 +41,7 @@
 }
 
 .system-settings-tab.active {
-  background: var(--color-bg-active);
+  background: var(--accent-soft, #eef2ff);
   color: var(--color-text-primary);
   font-weight: 500;
 }

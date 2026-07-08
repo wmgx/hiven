@@ -198,6 +198,16 @@ export function LauncherParamStep({
               else if (isMultiParam) submitMultiParam()
               else if (options[selectedIndex]) commitOption(options[selectedIndex].value)
             }
+            if (event.key === ' ' && isMultiParam) {
+              event.preventDefault()
+              event.stopPropagation()
+              const opt = options[selectedIndex]
+              if (opt) {
+                const optKey = String(opt.value)
+                const checked = currentMultiValue.includes(optKey)
+                if (!reachedMax || checked) commitOption(opt.value)
+              }
+            }
             if (event.key === 'ArrowDown' && !isTextParam) {
               event.preventDefault()
               event.stopPropagation()
@@ -252,6 +262,7 @@ export function LauncherParamStep({
       )}
       <div className={footerClassName} style={{ borderTop: '1px solid var(--border)' }}>
         {!isTextParam && <HintKey keys="↑↓" label={t(locale, 'palette.navigate')} />}
+        {isMultiParam && <HintKey keys="␣" label={t(locale, 'palette.select')} />}
         <HintKey keys="↵" label={isMultiParam ? t(locale, 'palette.submit') : t(locale, 'palette.select')} />
         <HintKey keys="esc" label={t(locale, 'palette.back')} />
       </div>

@@ -4,6 +4,7 @@ import type { PluginSettingsSource } from '../workspace/pluginSettingsStore'
 import { markSurfaceInstanceState, upsertSurfaceInstance } from '../surfaces/registry'
 import { pluginSurfaceInstanceId, pluginSurfaceWindowLabel } from '../workspace/pluginSurfaceWindows'
 import { hideCurrentPluginSurfaceWindow, hidePluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
+import { useT } from '../i18n'
 import { PluginSettingsDialog } from './PluginSettingsDialog'
 import { ToastContainer } from './workspace/ToastContainer'
 import { PluginSurfaceRenderer, usePluginSurfaceRendersTitlebar, usePluginSurfaceTitle } from './pluginSurface/PluginSurfaceRenderer'
@@ -12,6 +13,7 @@ import './PluginSurfaceWindow.css'
 export function PluginSurfaceWindow() {
   const locale = useAppStore((s) => s.locale)
   const theme = useAppStore((s) => s.settings.theme)
+  const t = useT('workspace')
   const baseTarget = useMemo(() => parseTargetFromUrl(), [])
   const [target, setTarget] = useState<PluginSurfaceOpenTarget | null>(null)
   const [targetReady, setTargetReady] = useState(false)
@@ -84,7 +86,7 @@ export function PluginSurfaceWindow() {
   }
 
   if (!target) {
-    return <WindowMessage title="Invalid plugin surface target" />
+    return <WindowMessage title={t('invalidTarget')} />
   }
 
   return (
@@ -92,7 +94,7 @@ export function PluginSurfaceWindow() {
       <div className="plugin-surface-window-frame">
         {!usesPluginTitlebar && (
           <div className="plugin-surface-window-titlebar" data-tauri-drag-region>
-            <div className="plugin-surface-window-title" data-tauri-drag-region>{title || 'Plugin Surface'}</div>
+            <div className="plugin-surface-window-title" data-tauri-drag-region>{title || t('pluginSurface')}</div>
             <button className="plugin-surface-window-close" type="button" onClick={() => { void hideCurrentWindow(target) }}>×</button>
           </div>
         )}

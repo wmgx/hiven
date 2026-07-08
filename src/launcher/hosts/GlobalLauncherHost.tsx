@@ -225,6 +225,12 @@ export function GlobalLauncherHost() {
     activeResultFrame: activeResultFrame?.kind === 'result' ? activeResultFrame : null,
   })
 
+  useEffect(() => {
+    if (activeResultFrame?.kind === 'result') {
+      requestAnimationFrame(() => panelRef.current?.focus())
+    }
+  }, [activeResultFrame?.kind])
+
   useGlobalLauncherCollectInputPreview({
     open,
     controllerState,

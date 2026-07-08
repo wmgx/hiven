@@ -66,7 +66,11 @@ export function GlobalLauncherResultFrame({
       )}
       <div className="global-launcher-footer l-foot">
         {countLabel && <LauncherHintText label={countLabel} />}
-        <LauncherHintKey keys="↵" label={selection?.type === 'multi' ? t(locale, 'palette.select') : t(locale, 'palette.confirm')} />
+        <LauncherHintKey keys="↑↓" label={t(locale, 'palette.navigate')} />
+        {selection?.type === 'multi'
+          ? <LauncherHintKey keys="␣" label={t(locale, 'palette.select')} />
+          : <LauncherHintKey keys="↵" label={t(locale, 'palette.confirm')} />
+        }
         <LauncherHintKey keys="esc" label={t(locale, 'palette.back')} />
       </div>
     </>

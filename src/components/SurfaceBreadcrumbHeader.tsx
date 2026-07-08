@@ -16,7 +16,7 @@ export function SurfaceBreadcrumbHeader({ title, onBack, onClose, actions }: Sur
         type="button"
         className="surface-breadcrumb-back"
         onClick={onBack}
-        aria-label="Back to hiven"
+        aria-label="Back"
       >
         <ChevronLeft size={14} />
         <span className="surface-breadcrumb-root">hiven</span>

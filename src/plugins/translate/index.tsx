@@ -16,8 +16,8 @@ const LANGUAGE_OPTIONS = [
 ]
 
 const PROFILE_FIELDS = [
-  { key: 'id', label: 'ID', kind: 'text', mono: true },
-  { key: 'name', label: 'Name', labelI18n: { zh: '名称' }, kind: 'text' },
+  { key: 'id', label: 'ID', kind: 'text', mono: true, group: 'Basic', groupI18n: { zh: '基本' } },
+  { key: 'name', label: 'Name', labelI18n: { zh: '名称' }, kind: 'text', group: 'Basic', groupI18n: { zh: '基本' } },
   {
     key: 'provider',
     label: 'Provider',
@@ -27,27 +27,31 @@ const PROFILE_FIELDS = [
       { label: 'Baidu Translate', labelI18n: { zh: '百度翻译' }, value: 'baidu' },
       { label: 'DeepL', value: 'deepl' },
     ],
+    group: 'Basic',
+    groupI18n: { zh: '基本' },
   },
-  { key: 'enabled', label: 'Enabled', labelI18n: { zh: '启用' }, kind: 'switch' },
-  { key: 'endpoint', label: 'Endpoint', kind: 'text', mono: true },
-  { key: 'appId', label: 'App ID', kind: 'text', mono: true },
-  { key: 'secret', label: 'Secret', kind: 'text', mono: true },
-  { key: 'authKey', label: 'Auth Key', kind: 'text', mono: true },
+  { key: 'enabled', label: 'Enabled', labelI18n: { zh: '启用' }, kind: 'switch', group: 'Basic', groupI18n: { zh: '基本' } },
+  { key: 'endpoint', label: 'Endpoint', kind: 'text', mono: true, group: 'Credentials', groupI18n: { zh: '凭据' }, sensitive: true },
+  { key: 'appId', label: 'App ID', kind: 'text', mono: true, group: 'Credentials', groupI18n: { zh: '凭据' }, sensitive: true },
+  { key: 'secret', label: 'Secret', kind: 'text', mono: true, group: 'Credentials', groupI18n: { zh: '凭据' }, sensitive: true },
+  { key: 'authKey', label: 'Auth Key', kind: 'text', mono: true, group: 'Credentials', groupI18n: { zh: '凭据' }, sensitive: true },
   {
     key: 'defaultTargetLang',
     label: 'Default target language',
     labelI18n: { zh: '默认目标语种' },
     kind: 'select',
     options: LANGUAGE_OPTIONS,
+    group: 'Behavior',
+    groupI18n: { zh: '行为' },
   },
-  { key: 'monthlyLimitChars', label: 'Monthly character limit', labelI18n: { zh: '月度字符上限' }, kind: 'text', mono: true },
+  { key: 'monthlyLimitChars', label: 'Monthly character limit', labelI18n: { zh: '月度字符上限' }, kind: 'text', mono: true, group: 'Behavior', groupI18n: { zh: '行为' } },
 ] as const
 
 export default definePlugin<TranslateSettings>({
   settings: {
     title: 'Translate',
     titleI18n: { zh: '翻译' },
-    version: 1,
+    version: 2,
     defaultValue: DEFAULT_TRANSLATE_SETTINGS,
     schema: {
       sections: [

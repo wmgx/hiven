@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { getVersion } from '@tauri-apps/api/app'
-import { Check, Command, Download, Hash, Info, Languages, Moon, RefreshCw, Save, Type, WrapText } from 'lucide-react'
+import { Check, Command, Download, Hash, Languages, Moon, RefreshCw, Save, Type, WrapText } from 'lucide-react'
 import { useAppStore } from '../store'
 import { useT } from '../i18n'
 import { checkBuiltinPluginsUpdate } from '../configInit'
@@ -13,7 +13,6 @@ export function SettingsContent() {
   const { settings, updateSetting } = useAppStore()
   const locale = useAppStore((s) => s.locale)
   const t = useT('settings')
-  const tUpdate = useT('update')
   const [appVersion, setAppVersion] = useState('')
   const [switchingLocale, setSwitchingLocale] = useState<string | null>(null)
 
@@ -56,6 +55,9 @@ export function SettingsContent() {
         <SettingsListRow icon={<Moon size={14} />} name={t('darkTheme')} desc={t('darkThemeInfo')}>
           <Toggle value={settings.theme === 'dark'} onChange={(value) => updateSetting('theme', value ? 'dark' : 'light')} />
         </SettingsListRow>
+        <SettingsListRow icon={<Save size={14} />} name={t('persistParams')} desc={t('persistParamsInfo')}>
+          <Toggle value={settings.persistParams} onChange={(value) => updateSetting('persistParams', value)} />
+        </SettingsListRow>
       </SettingGroup>
 
       <SettingGroup title={t('hotkeys')}>
@@ -89,20 +91,15 @@ export function SettingsContent() {
         </SettingsListRow>
       </SettingGroup>
 
-      <SettingGroup title={t('behavior')}>
-        <SettingsListRow icon={<Save size={14} />} name={t('persistParams')} desc={t('persistParamsInfo')}>
-          <Toggle value={settings.persistParams} onChange={(value) => updateSetting('persistParams', value)} />
-        </SettingsListRow>
-      </SettingGroup>
-
-      <SettingGroup title={tUpdate('title')}>
-        <SettingsListRow icon={<Info size={14} />} name={t('currentVersion')} desc={t('currentVersionInfo')}>
-          <div className="settings-version-control">
-            <span className="kbd">v{appVersion}</span>
-            <UpdateChecker compact />
-          </div>
-        </SettingsListRow>
-      </SettingGroup>
+      <div className="settings-about-card">
+        <div className="settings-about-left">
+          <span className="settings-about-name">hiven</span>
+          <span className="settings-about-version">v{appVersion}</span>
+        </div>
+        <div className="settings-about-right">
+          <UpdateChecker compact />
+        </div>
+      </div>
     </div>
   )
 }

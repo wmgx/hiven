@@ -191,7 +191,7 @@ export default definePlugin<WebQuickOpenSettings>({
   settings: {
     title: 'Web Quick Open',
     titleI18n: { zh: '网页快开' },
-    version: 3,
+    version: 4,
     defaultValue: DEFAULT_WEB_QUICK_OPEN_SETTINGS,
     migrate: migrateWebQuickOpenSettings,
     schema: {
@@ -249,6 +249,8 @@ export default definePlugin<WebQuickOpenSettings>({
                   labelI18n: { zh: '名称' },
                   placeholder: 'Google Search',
                   placeholderI18n: { zh: 'Google 搜索' },
+                  group: 'Basic',
+                  groupI18n: { zh: '基本' },
                 },
                 {
                   kind: 'string-list',
@@ -260,6 +262,8 @@ export default definePlugin<WebQuickOpenSettings>({
                   placeholder: 'Add trigger word...',
                   placeholderI18n: { zh: '添加触发词…' },
                   rows: 2,
+                  group: 'Basic',
+                  groupI18n: { zh: '基本' },
                 },
                 {
                   kind: 'text',
@@ -271,6 +275,8 @@ export default definePlugin<WebQuickOpenSettings>({
                   placeholder: 'https://www.google.com/search?q={query}',
                   placeholderI18n: { zh: 'https://www.google.com/search?q={query}' },
                   mono: true,
+                  group: 'Open behavior',
+                  groupI18n: { zh: '打开行为' },
                 },
                 {
                   kind: 'text',
@@ -282,12 +288,16 @@ export default definePlugin<WebQuickOpenSettings>({
                   placeholder: '^\\d{9}$',
                   placeholderI18n: { zh: '^\\d{9}$' },
                   mono: true,
+                  group: 'Open behavior',
+                  groupI18n: { zh: '打开行为' },
                 },
                 {
                   kind: 'switch',
                   key: 'encodeQuery',
                   label: 'Encode query',
                   labelI18n: { zh: '自动编码输入内容' },
+                  group: 'Open behavior',
+                  groupI18n: { zh: '打开行为' },
                 },
                 {
                   kind: 'select',
@@ -298,6 +308,8 @@ export default definePlugin<WebQuickOpenSettings>({
                     { value: 'block', label: 'Block', labelI18n: { zh: '阻止打开' } },
                     { value: 'open', label: 'Open anyway', labelI18n: { zh: '仍然打开' } },
                   ],
+                  group: 'Open behavior',
+                  groupI18n: { zh: '打开行为' },
                 },
               ],
             },

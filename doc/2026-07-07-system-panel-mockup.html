@@ -1,0 +1,569 @@
+<!doctype html>
+<!--
+  hiven / 系统设置面板 — 静态 mockup（仅供视觉评审，无真实功能）
+  三套配色方向：A 墨调 / B 暖纸 / C 冷雾，点击顶部按钮切换
+-->
+<html lang="zh-CN" data-theme="a">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>hiven · 系统设置面板 Mockup</title>
+<style>
+:root{
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --ease: cubic-bezier(.16,1,.3,1);
+  --r-panel:16px; --r-modal:14px; --r-card:10px; --r-ctrl:8px; --r-btn:7px;
+  --warn-fg:#b45309; --warn-bg:#fef3c7; --danger:#dc2626; --ok:#15803d;
+}
+html[data-theme="a"]{
+  --bg-page:#fafafa; --surface:#ffffff; --surface-2:#f4f4f5; --surface-3:#ececee;
+  --text-1:#111113; --text-2:#56565c; --text-3:#8f8f96;
+  --border:#e8e8ea; --divider:#f0f0f2;
+  --accent:#18181b; --accent-hover:#2d2d31; --accent-fg:#ffffff;
+  --pill-bg:#ececee; --pill-fg:var(--text-1);
+  --hover-ov:rgba(0,0,0,.045); --press-ov:rgba(0,0,0,.08);
+  --card-sh:none;
+  --menu-sh:0 8px 24px rgba(0,0,0,.08);
+  --panel-sh:0 16px 48px -16px rgba(0,0,0,.14), 0 0 0 1px rgba(0,0,0,.06);
+  --modal-sh:var(--panel-sh);
+}
+html[data-theme="b"]{
+  --bg-page:#f7f6f3; --surface:#fefdfb; --surface-2:#f3f1ec; --surface-3:#eae7e0;
+  --text-1:#1d1b16; --text-2:#5f5b52; --text-3:#928f86;
+  --border:#e7e4dc; --divider:#efece5;
+  --accent:#2563eb; --accent-hover:#1d4ed8; --accent-fg:#ffffff;
+  --pill-bg:#e9eefb; --pill-fg:var(--accent);
+  --hover-ov:rgba(60,50,30,.05); --press-ov:rgba(60,50,30,.09);
+  --card-sh:0 1px 3px rgba(60,50,30,.06);
+  --menu-sh:0 4px 14px rgba(60,50,30,.10), 0 0 0 1px rgba(60,50,30,.04);
+  --panel-sh:0 20px 50px -16px rgba(60,50,30,.16), 0 0 0 1px rgba(60,50,30,.05);
+  --modal-sh:var(--panel-sh);
+}
+html[data-theme="c"]{
+  --bg-page:#f7f7fa; --surface:#ffffff; --surface-2:#f1f1f6; --surface-3:#e9e9f0;
+  --text-1:#17171c; --text-2:#55555f; --text-3:#8d8d99;
+  --border:#e3e3ea; --divider:#ededf2;
+  --accent:#5e6ad2; --accent-hover:#5259bd; --accent-fg:#ffffff;
+  --pill-bg:#edeefb; --pill-fg:var(--accent);
+  --hover-ov:rgba(23,23,40,.05); --press-ov:rgba(23,23,40,.09);
+  --card-sh:0 1px 2px rgba(23,23,40,.05);
+  --menu-sh:0 4px 12px rgba(23,23,40,.10), 0 0 0 1px rgba(23,23,40,.04);
+  --panel-sh:0 16px 40px -12px rgba(23,23,40,.18), 0 0 0 1px rgba(23,23,40,.06);
+  --modal-sh:var(--panel-sh);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:#26262b;font-family:var(--font-sans);-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;min-height:100vh;padding:36px 16px}
+button,input{font-family:inherit}
+
+/* ---- 外部工具条 ---- */
+.ext-toolbar{display:flex;align-items:center;gap:10px}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09)}
+.seg-i{border:none;background:none;color:rgba(255,255,255,.6);font:500 12px/1 var(--font-sans);padding:7px 13px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:background .12s var(--ease),color .12s var(--ease)}
+.seg-i:hover:not(.active){color:rgba(255,255,255,.88);background:rgba(255,255,255,.06)}
+.seg-i.active{background:rgba(255,255,255,.18);color:#fff;font-weight:600}
+.seg-gap{width:8px}
+
+/* ---- 面板 ---- */
+.panel{width:920px;height:760px;background:var(--surface);border-radius:var(--r-panel);box-shadow:var(--panel-sh);overflow:hidden;display:flex;flex-direction:column;position:relative;color:var(--text-1)}
+.phdr{height:40px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 10px 0 6px;border-bottom:1px solid var(--divider)}
+.crumb{display:flex;align-items:center;gap:6px}
+.crumb-back{display:flex;align-items:center;gap:4px;height:28px;padding:0 9px;border-radius:6px;border:none;background:none;color:var(--text-2);cursor:pointer;font:500 12.5px/1 var(--font-sans)}
+.crumb-back:hover{background:var(--hover-ov);color:var(--text-1)}
+.crumb-sep{color:var(--text-3);font-size:12px}
+.crumb-current{color:var(--text-1);font-weight:600;font-size:12.5px}
+.close-btn{width:26px;height:26px;border-radius:6px;border:none;background:none;color:var(--text-2);font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.close-btn:hover{background:var(--hover-ov);color:var(--text-1)}
+
+.pbody{flex:1;display:flex;min-height:0}
+.sidebar{width:176px;flex-shrink:0;border-right:1px solid var(--divider);padding:12px 10px;display:flex;flex-direction:column;gap:4px}
+.navtab{display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;border-radius:999px;border:none;background:none;color:var(--text-2);font:500 13px/1 var(--font-sans);cursor:pointer;text-align:left;width:100%}
+.navtab .ico{font-size:14px;width:18px;text-align:center;flex-shrink:0}
+.navtab:hover:not(.active){background:var(--hover-ov)}
+.navtab.active{background:var(--pill-bg);color:var(--pill-fg);font-weight:600}
+
+.content{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden}
+.view{display:none;flex-direction:column;flex:1;min-height:0}
+.view.active{display:flex}
+
+/* ---- 插件页 ---- */
+.ptoolbar{height:56px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 20px;border-bottom:1px solid var(--divider)}
+.search{flex:1;max-width:260px;height:32px;border:1px solid var(--border);border-radius:var(--r-ctrl);background:var(--surface-2);display:flex;align-items:center;gap:6px;padding:0 10px;color:var(--text-3);font-size:13px}
+.search input{border:none;background:none;outline:none;font:400 12.5px/1 var(--font-sans);color:var(--text-1);width:100%}
+.search input::placeholder{color:var(--text-3)}
+.btn{height:32px;padding:0 13px;border-radius:var(--r-btn);border:1px solid var(--border);background:var(--surface);color:var(--text-1);font:500 12.5px/1 var(--font-sans);cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:background .12s var(--ease)}
+.btn:hover{background:var(--hover-ov)}
+.btn:active{background:var(--press-ov)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.btn-sm{height:26px;padding:0 10px;font-size:11.5px;border-radius:6px}
+
+.plist{flex:1;overflow-y:auto}
+.prow-item{position:relative}
+.prow-item.disabled .prow{opacity:.5}
+.prow-item:not(:last-child):not(.expanded) .prow{border-bottom:1px solid var(--divider)}
+.prow{display:flex;align-items:center;gap:12px;height:56px;padding:0 20px;cursor:pointer}
+.prow:hover{background:var(--hover-ov)}
+.picon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0}
+.icon-translate{background:#e0f2fe;color:#0369a1}
+.icon-clip{background:#f1e9fe}
+.icon-web{background:#ffedd5}
+.icon-json{background:#dcfce7;color:#15803d}
+.icon-test{background:#ececf1}
+.pmid{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.ptitle{display:flex;align-items:center;gap:6px}
+.pname{font:600 13px/1.2 var(--font-sans);color:var(--text-1)}
+.pdesc{font:12px/1.3 var(--font-sans);color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag{font:600 10.5px/1 var(--font-sans);padding:3px 6px;border-radius:5px;white-space:nowrap;flex-shrink:0}
+.tag-neutral{background:var(--surface-3);color:var(--text-2)}
+.tag-dev{border:1px dashed var(--text-3);color:var(--text-2)}
+.status-live{display:inline-flex;align-items:center;gap:4px;font:500 11px/1 var(--font-sans);color:var(--ok);flex-shrink:0}
+.status-live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.pright{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.badge-warn{display:flex;align-items:center;gap:4px;font:600 11px/1 var(--font-sans);color:var(--warn-fg);background:var(--warn-bg);padding:4px 8px;border-radius:999px;white-space:nowrap}
+.kbd{font:500 11px/1 var(--font-mono);color:var(--text-2);background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:4px 6px;white-space:nowrap}
+.toggle{position:relative;width:34px;height:20px;border-radius:999px;background:var(--surface-3);cursor:pointer;flex-shrink:0;display:inline-block;transition:background .15s var(--ease)}
+.toggle::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s var(--ease)}
+.toggle.on{background:var(--accent)}
+.toggle.on::after{transform:translateX(14px)}
+.icon-btn{width:28px;height:28px;border-radius:7px;border:none;background:transparent;color:var(--text-2);display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;flex-shrink:0}
+.icon-btn:hover{background:var(--hover-ov);color:var(--text-1)}
+.more-wrap{position:relative}
+
+/* 展开抽屉 */
+.drawer{display:none;flex-direction:column;gap:14px;margin:0 16px 14px;padding:14px 16px;border:1px solid var(--border);border-radius:var(--r-card);background:var(--surface);box-shadow:var(--card-sh)}
+.prow-item.expanded .drawer{display:flex}
+.prow-item.expanded{border-bottom:1px solid var(--divider)}
+.meta-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font:12px/1 var(--font-sans);color:var(--text-2)}
+.dot-ok{width:6px;height:6px;border-radius:50%;background:var(--ok);display:inline-block}
+.mono{font-family:var(--font-mono);font-size:11.5px;color:var(--text-3)}
+.sec{display:flex;flex-direction:column;gap:8px}
+.sec-title{font:700 10.5px/1 var(--font-sans);color:var(--text-3);text-transform:uppercase;letter-spacing:.05em}
+.perm-card{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r-card);background:var(--surface-2)}
+.perm-name{font:600 12.5px/1.3 var(--font-sans);color:var(--text-1);display:flex;align-items:center;gap:6px}
+.perm-desc{font:12px/1.4 var(--font-sans);color:var(--text-2);margin-top:3px}
+.tag-sensitive{background:var(--warn-bg);color:var(--warn-fg);font-weight:700;font-size:10px;padding:2px 6px;border-radius:999px}
+.granted-row{font:12px/1 var(--font-sans);color:var(--text-2);cursor:pointer;display:flex;align-items:center;gap:4px;width:fit-content}
+.caret{display:inline-block;font-size:10px;transition:transform .15s var(--ease)}
+.granted-list{display:none;flex-direction:column;gap:4px;padding-left:2px}
+.granted-item{font:12px/1.6 var(--font-sans);color:var(--text-2)}
+.sc-row{display:flex;align-items:center;gap:10px;height:32px}
+.sc-name{font:500 12.5px/1 var(--font-sans);color:var(--text-1);flex:1}
+.link-btn{background:none;border:none;color:var(--accent);font:500 12px/1 var(--font-sans);cursor:pointer;padding:0}
+.chip-row{display:flex;gap:6px;margin-top:2px}
+.chip{background:var(--surface-3);color:var(--text-2);font:500 11px/1 var(--font-sans);padding:5px 9px;border-radius:999px}
+
+/* ⋯ 菜单 */
+.menu{position:absolute;top:36px;right:0;min-width:176px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);box-shadow:var(--menu-sh);padding:6px;display:none;flex-direction:column;z-index:30}
+.menu.open{display:flex}
+.menu-item{display:flex;align-items:center;padding:8px 10px;border-radius:6px;font:500 12.5px/1 var(--font-sans);color:var(--text-1);cursor:pointer;background:none;border:none;text-align:left;width:100%}
+.menu-item:hover{background:var(--hover-ov)}
+.menu-sep{height:1px;background:var(--divider);margin:5px 2px}
+.menu-danger{color:var(--danger)}
+
+/* ---- 设置弹窗 ---- */
+.modal-overlay{position:fixed;inset:0;background:rgba(15,15,20,.45);display:none;align-items:center;justify-content:center;z-index:200}
+.modal-overlay.open{display:flex}
+.modal{width:640px;height:640px;background:var(--surface);border-radius:var(--r-modal);box-shadow:var(--modal-sh);display:flex;flex-direction:column;overflow:hidden;color:var(--text-1)}
+.modal-header{height:56px;flex-shrink:0;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid var(--divider)}
+.modal-icon{width:26px;height:26px;border-radius:7px;background:#e0f2fe;color:#0369a1;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+.modal-title{font:600 14px/1 var(--font-sans);color:var(--text-1)}
+.modal-sub{font:400 13px/1 var(--font-sans);color:var(--text-2)}
+.modal-header .close-btn{margin-left:auto}
+.modal-body{flex:1;overflow-y:auto;padding:22px 24px;display:flex;flex-direction:column;gap:26px}
+
+.group-title{font:600 12px/1 var(--font-sans);color:var(--text-2);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
+.field-row{display:flex;align-items:center;justify-content:space-between;height:44px;gap:12px;border-bottom:1px solid var(--divider)}
+.field-row:last-child{border-bottom:none}
+.field-label{font:500 12.5px/1 var(--font-sans);color:var(--text-1);display:flex;align-items:center;gap:8px}
+.field-label .ico{width:16px;text-align:center;font-size:14px;flex-shrink:0}
+.field-stack{display:flex;flex-direction:column;gap:6px;padding:10px 0}
+.field-stack .field-label{font:500 12px/1 var(--font-sans);color:var(--text-2)}
+.select{display:inline-flex;align-items:center;justify-content:space-between;gap:8px;min-width:112px;height:32px;padding:0 10px;border:1px solid var(--border);border-radius:var(--r-ctrl);background:var(--surface-2);color:var(--text-1);font:400 12.5px/1 var(--font-sans);cursor:default}
+.input{height:32px;padding:0 10px;border:1px solid var(--border);border-radius:var(--r-ctrl);background:var(--surface-2);color:var(--text-1);font:400 12.5px/1 var(--font-sans);outline:none;width:100%}
+.masked{display:flex;align-items:center;gap:8px}
+.masked .input{font-family:var(--font-mono);letter-spacing:2px}
+.eye-btn{background:none;border:none;cursor:pointer;font-size:14px;color:var(--text-2);flex-shrink:0}
+
+.accordion{border:1px solid var(--border);border-radius:var(--r-card);overflow:hidden;background:var(--surface)}
+.accordion+.accordion{margin-top:10px}
+.accordion-head{display:flex;align-items:center;gap:8px;height:46px;padding:0 12px;cursor:pointer}
+.accordion-head:hover{background:var(--hover-ov)}
+.acc-chevron{font-size:10px;color:var(--text-3);transition:transform .15s var(--ease)}
+.accordion.open .acc-chevron{transform:rotate(90deg)}
+.acc-name{font:600 13px/1 var(--font-sans);color:var(--text-1)}
+.acc-tag{background:#dcfce7;color:#15803d;font:700 10.5px/1 var(--font-sans);padding:3px 6px;border-radius:5px}
+.acc-spacer{flex:1}
+.acc-remove{background:none;border:none;color:var(--text-3);font-size:16px;cursor:pointer;padding:4px;line-height:1}
+.acc-remove:hover{color:var(--danger)}
+.accordion-body{display:none;flex-direction:column;gap:16px;padding:2px 14px 16px}
+.accordion.open .accordion-body{display:flex}
+.subsec{display:flex;flex-direction:column;gap:0}
+.subsec-title{font:700 10.5px/1 var(--font-sans);color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+
+/* ---- 设置页 ---- */
+.settings-scroll{flex:1;overflow-y:auto}
+.settings-wrap{max-width:560px;margin:0 auto;padding:28px 20px 40px;display:flex;flex-direction:column;gap:26px}
+.setting-group{display:flex;flex-direction:column;gap:8px}
+.group-label{font:600 12px/1 var(--font-sans);color:var(--text-2);padding-left:2px}
+.setting-card{border:1px solid var(--border);border-radius:var(--r-card);background:var(--surface);box-shadow:var(--card-sh);overflow:hidden}
+.setting-card .field-row{padding:0 16px}
+.status-line{padding:9px 16px 13px;font:500 12px/1 var(--font-sans);color:var(--ok);border-top:1px solid var(--divider)}
+.stepper{display:flex;align-items:center;gap:10px}
+.stepper button{width:24px;height:24px;border-radius:6px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-1);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.stepper button:hover{background:var(--hover-ov)}
+.stepper span{font:600 13px/1 var(--font-mono);color:var(--text-1);min-width:20px;text-align:center;display:inline-block}
+.about-card{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-radius:var(--r-card);background:var(--surface-2);border:1px solid var(--border)}
+.about-left{display:flex;flex-direction:column;gap:4px}
+.about-name{font:700 15px/1 var(--font-sans);color:var(--text-1)}
+.about-ver{font:500 12px/1 var(--font-sans);color:var(--text-2)}
+.about-status{font:500 11.5px/1 var(--font-sans);color:var(--ok)}
+</style>
+</head>
+<body>
+
+<div class="ext-toolbar">
+  <div class="seg">
+    <button class="seg-i theme-btn active" data-theme="a" onclick="setTheme('a')">A 墨调</button>
+    <button class="seg-i theme-btn" data-theme="b" onclick="setTheme('b')">B 暖纸</button>
+    <button class="seg-i theme-btn" data-theme="c" onclick="setTheme('c')">C 冷雾</button>
+  </div>
+  <div class="seg-gap"></div>
+  <div class="seg">
+    <button class="seg-i view-btn active" data-view="plugins" onclick="setView('plugins')">插件页</button>
+    <button class="seg-i view-btn" data-view="settings" onclick="setView('settings')">设置页</button>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="phdr">
+    <div class="crumb">
+      <button class="crumb-back">‹ hiven</button>
+      <span class="crumb-sep">/</span>
+      <span class="crumb-current">系统设置</span>
+    </div>
+    <button class="close-btn">×</button>
+  </div>
+
+  <div class="pbody">
+    <div class="sidebar">
+      <button class="navtab view-btn active" data-view="plugins" onclick="setView('plugins')"><span class="ico">🧩</span>插件</button>
+      <button class="navtab view-btn" data-view="settings" onclick="setView('settings')"><span class="ico">⚙</span>设置</button>
+    </div>
+
+    <div class="content">
+      <!-- 插件页 -->
+      <div class="view active" id="view-plugins">
+        <div class="ptoolbar">
+          <div class="search">🔍<input type="text" placeholder="搜索插件…" /></div>
+          <button class="btn">＋ 添加插件 <span style="font-size:10px">▾</span></button>
+        </div>
+        <div class="plist">
+
+          <div class="prow-item expanded" id="row-translate">
+            <div class="prow" onclick="toggleRow(this.parentElement)">
+              <div class="picon icon-translate">译</div>
+              <div class="pmid">
+                <div class="ptitle"><span class="pname">翻译</span><span class="tag tag-neutral">内置</span></div>
+                <div class="pdesc">选中文本即时翻译，支持多个翻译服务商</div>
+              </div>
+              <div class="pright">
+                <span class="badge-warn">⚠ 1 项待授权</span>
+                <span class="kbd">⌘T</span>
+                <span class="toggle on" onclick="event.stopPropagation();this.classList.toggle('on')"></span>
+                <button class="icon-btn" title="设置" onclick="event.stopPropagation();openModal()">⚙</button>
+                <div class="more-wrap">
+                  <button class="icon-btn more-btn" onclick="event.stopPropagation();toggleMenu(this)">⋯</button>
+                  <div class="menu">
+                    <button class="menu-item">打开面板</button>
+                    <button class="menu-item">打开编辑器</button>
+                    <button class="menu-item">重新加载</button>
+                    <button class="menu-item">在文件管理器中打开</button>
+                    <div class="menu-sep"></div>
+                    <button class="menu-item menu-danger">移除</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="drawer">
+              <div class="meta-line">v1 · 内置 · <span class="dot-ok"></span> 已加载 · <span class="mono">~/Library/Application Support/hiven/plugins/translate</span></div>
+              <div class="sec">
+                <div class="sec-title">权限</div>
+                <div class="perm-card">
+                  <div>
+                    <div class="perm-name">剪贴板读取 <span class="tag-sensitive">高敏感</span></div>
+                    <div class="perm-desc">用于读取你复制的文本以提供快速翻译建议</div>
+                  </div>
+                  <button class="btn btn-sm btn-primary">授权</button>
+                </div>
+                <div class="granted-row" onclick="toggleGranted(this)">已授权 2 项 <span class="caret">▸</span></div>
+                <div class="granted-list">
+                  <div class="granted-item">· 网络请求</div>
+                  <div class="granted-item">· 系统通知</div>
+                </div>
+              </div>
+              <div class="sec">
+                <div class="sec-title">快捷键</div>
+                <div class="sc-row">
+                  <span class="sc-name">翻译面板</span>
+                  <span class="kbd">⌘T</span>
+                  <button class="link-btn">重新录制</button>
+                  <button class="btn btn-sm">打开</button>
+                </div>
+              </div>
+              <div class="chip-row"><span class="chip">command</span><span class="chip">划词</span></div>
+            </div>
+          </div>
+
+          <div class="prow-item" id="row-clip">
+            <div class="prow" onclick="toggleRow(this.parentElement)">
+              <div class="picon icon-clip">📋</div>
+              <div class="pmid">
+                <div class="ptitle"><span class="pname">剪贴板历史</span><span class="tag tag-neutral">内置</span></div>
+                <div class="pdesc">记录并快速检索最近复制的文本、图片和文件</div>
+              </div>
+              <div class="pright">
+                <span class="kbd">⌘⇧V</span>
+                <span class="toggle on" onclick="event.stopPropagation();this.classList.toggle('on')"></span>
+                <button class="icon-btn" title="设置" onclick="event.stopPropagation();openModal()">⚙</button>
+                <div class="more-wrap"><button class="icon-btn more-btn" onclick="event.stopPropagation();toggleMenu(this)">⋯</button></div>
+              </div>
+            </div>
+            <div class="drawer"></div>
+          </div>
+
+          <div class="prow-item" id="row-web">
+            <div class="prow" onclick="toggleRow(this.parentElement)">
+              <div class="picon icon-web">🔗</div>
+              <div class="pmid">
+                <div class="ptitle"><span class="pname">网页快开</span><span class="tag tag-neutral">内置</span></div>
+                <div class="pdesc">一键在默认浏览器中打开常用网址</div>
+              </div>
+              <div class="pright">
+                <span class="toggle on" onclick="event.stopPropagation();this.classList.toggle('on')"></span>
+                <button class="icon-btn" title="设置" onclick="event.stopPropagation();openModal()">⚙</button>
+                <div class="more-wrap">
+                  <button class="icon-btn more-btn" onclick="event.stopPropagation();toggleMenu(this)">⋯</button>
+                  <div class="menu open">
+                    <button class="menu-item">打开面板</button>
+                    <button class="menu-item">打开编辑器</button>
+                    <button class="menu-item">重新加载</button>
+                    <button class="menu-item">在文件管理器中打开</button>
+                    <div class="menu-sep"></div>
+                    <button class="menu-item menu-danger">移除</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="drawer"></div>
+          </div>
+
+          <div class="prow-item disabled" id="row-json">
+            <div class="prow" onclick="toggleRow(this.parentElement)">
+              <div class="picon icon-json">{ }</div>
+              <div class="pmid">
+                <div class="ptitle"><span class="pname">JSON 工具</span><span class="tag tag-neutral">已安装</span></div>
+                <div class="pdesc">格式化、校验与压缩 JSON 文本</div>
+              </div>
+              <div class="pright">
+                <span class="toggle" onclick="event.stopPropagation();this.classList.toggle('on')"></span>
+                <button class="icon-btn" title="设置" onclick="event.stopPropagation();openModal()">⚙</button>
+                <div class="more-wrap"><button class="icon-btn more-btn" onclick="event.stopPropagation();toggleMenu(this)">⋯</button></div>
+              </div>
+            </div>
+            <div class="drawer"></div>
+          </div>
+
+          <div class="prow-item" id="row-test">
+            <div class="prow" onclick="toggleRow(this.parentElement)">
+              <div class="picon icon-test">🧪</div>
+              <div class="pmid">
+                <div class="ptitle"><span class="pname">我的测试插件</span><span class="tag tag-dev">DEV</span><span class="status-live">监听中</span></div>
+                <div class="pdesc">本地开发中的插件，来源于文件系统目录</div>
+              </div>
+              <div class="pright">
+                <span class="toggle on" onclick="event.stopPropagation();this.classList.toggle('on')"></span>
+                <button class="icon-btn" title="设置" onclick="event.stopPropagation();openModal()">⚙</button>
+                <div class="more-wrap"><button class="icon-btn more-btn" onclick="event.stopPropagation();toggleMenu(this)">⋯</button></div>
+              </div>
+            </div>
+            <div class="drawer"></div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 设置页 -->
+      <div class="view" id="view-settings">
+        <div class="settings-scroll">
+        <div class="settings-wrap">
+
+          <div class="setting-group">
+            <div class="group-label">通用</div>
+            <div class="setting-card">
+              <div class="field-row"><span class="field-label"><span class="ico">🌐</span>语言</span><div class="select">中文 <span class="caret" style="transform:none">▾</span></div></div>
+              <div class="field-row"><span class="field-label"><span class="ico">🌙</span>暗色主题</span><span class="toggle" onclick="this.classList.toggle('on')"></span></div>
+              <div class="field-row"><span class="field-label"><span class="ico">🐞</span>保留调试参数</span><span class="toggle" onclick="this.classList.toggle('on')"></span></div>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <div class="group-label">快捷键</div>
+            <div class="setting-card">
+              <div class="field-row"><span class="field-label"><span class="ico">⌨️</span>全局启动器</span>
+                <div style="display:flex;align-items:center;gap:10px"><span class="kbd">⌥ Space</span><button class="link-btn">重新录制</button></div>
+              </div>
+              <div class="status-line">✓ 已注册</div>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <div class="group-label">编辑器</div>
+            <div class="setting-card">
+              <div class="field-row"><span class="field-label"><span class="ico">🔤</span>字号</span>
+                <div class="stepper"><button onclick="stepFont(-1)">−</button><span id="font-size-val">14</span><button onclick="stepFont(1)">＋</button></div>
+              </div>
+              <div class="field-row"><span class="field-label"><span class="ico">↩</span>自动换行</span><span class="toggle on" onclick="this.classList.toggle('on')"></span></div>
+              <div class="field-row"><span class="field-label"><span class="ico">#</span>行号</span><span class="toggle on" onclick="this.classList.toggle('on')"></span></div>
+            </div>
+          </div>
+
+          <div class="about-card">
+            <div class="about-left">
+              <span class="about-name">hiven</span>
+              <span class="about-ver">v1.2.0</span>
+              <span class="about-status">已是最新版本</span>
+            </div>
+            <button class="btn">检查更新</button>
+          </div>
+
+        </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 设置弹窗：翻译 · 设置 -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-icon">译</div>
+      <span class="modal-title">翻译</span>
+      <span class="modal-sub">· 设置</span>
+      <button class="close-btn" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+
+      <div>
+        <div class="group-title">默认设置</div>
+        <div class="field-row"><span class="field-label">默认目标语言</span><div class="select">中文 <span class="caret" style="transform:none">▾</span></div></div>
+      </div>
+
+      <div>
+        <div class="group-title">API 配置 <button class="btn btn-sm">＋ 添加</button></div>
+
+        <div class="accordion">
+          <div class="accordion-head" onclick="toggleAccordion(this)">
+            <span class="acc-chevron">▸</span>
+            <span class="acc-name">百度翻译</span>
+            <span class="acc-tag">启用</span>
+            <span class="acc-spacer"></span>
+            <button class="acc-remove" onclick="event.stopPropagation()">×</button>
+          </div>
+          <div class="accordion-body"></div>
+        </div>
+
+        <div class="accordion open">
+          <div class="accordion-head" onclick="toggleAccordion(this)">
+            <span class="acc-chevron">▸</span>
+            <span class="acc-name">DeepL</span>
+            <span class="acc-tag">启用</span>
+            <span class="acc-spacer"></span>
+            <button class="acc-remove" onclick="event.stopPropagation()">×</button>
+          </div>
+          <div class="accordion-body">
+            <div class="subsec">
+              <div class="subsec-title">基本</div>
+              <div class="field-stack"><span class="field-label">名称</span><input class="input" value="DeepL" /></div>
+              <div class="field-row"><span class="field-label">服务商</span><div class="select">DeepL <span class="caret" style="transform:none">▾</span></div></div>
+              <div class="field-row"><span class="field-label">启用</span><span class="toggle on" onclick="this.classList.toggle('on')"></span></div>
+            </div>
+            <div class="subsec">
+              <div class="subsec-title">凭据</div>
+              <div class="field-stack"><span class="field-label">Endpoint</span><input class="input mono" value="https://api.deepl.com/v2/translate" /></div>
+              <div class="field-stack">
+                <span class="field-label">AuthKey</span>
+                <div class="masked"><input class="input" id="authkey-input" value="••••••••••••" readonly /><button class="eye-btn" data-show="0" onclick="toggleEye(this)">👁</button></div>
+              </div>
+            </div>
+            <div class="subsec">
+              <div class="subsec-title">行为</div>
+              <div class="field-row"><span class="field-label">目标语言</span><div class="select">中文 <span class="caret" style="transform:none">▾</span></div></div>
+              <div class="field-stack"><span class="field-label">月度字符上限</span><input class="input" value="500000" /></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+function setTheme(id){
+  document.documentElement.setAttribute('data-theme', id);
+  document.querySelectorAll('.theme-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.theme === id); });
+}
+function setView(view){
+  document.querySelectorAll('.view-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.view === view); });
+  document.getElementById('view-plugins').classList.toggle('active', view === 'plugins');
+  document.getElementById('view-settings').classList.toggle('active', view === 'settings');
+}
+function toggleRow(item){
+  var wasOpen = item.classList.contains('expanded');
+  document.querySelectorAll('.prow-item.expanded').forEach(function(i){ i.classList.remove('expanded'); });
+  if(!wasOpen) item.classList.add('expanded');
+}
+function toggleMenu(btn){
+  var menu = btn.nextElementSibling;
+  var wasOpen = menu.classList.contains('open');
+  document.querySelectorAll('.menu.open').forEach(function(m){ m.classList.remove('open'); });
+  if(!wasOpen) menu.classList.add('open');
+}
+document.addEventListener('click', function(e){
+  if(!e.target.closest('.more-wrap')){
+    document.querySelectorAll('.menu.open').forEach(function(m){ m.classList.remove('open'); });
+  }
+});
+function toggleGranted(el){
+  var list = el.nextElementSibling;
+  var open = list.style.display === 'flex';
+  list.style.display = open ? 'none' : 'flex';
+  el.querySelector('.caret').style.transform = open ? 'rotate(0deg)' : 'rotate(90deg)';
+}
+function openModal(){ document.getElementById('modal-overlay').classList.add('open'); }
+function closeModal(){ document.getElementById('modal-overlay').classList.remove('open'); }
+function toggleAccordion(el){ el.closest('.accordion').classList.toggle('open'); }
+function stepFont(delta){
+  var el = document.getElementById('font-size-val');
+  var v = Math.max(10, Math.min(24, parseInt(el.textContent, 10) + delta));
+  el.textContent = v;
+}
+function toggleEye(btn){
+  var inp = document.getElementById('authkey-input');
+  var showing = btn.dataset.show === '1';
+  if(showing){ inp.value = '••••••••••••'; btn.textContent = '👁'; btn.dataset.show = '0'; }
+  else { inp.value = 'sk-live-9f2a-7c31-de90'; btn.textContent = '🙈'; btn.dataset.show = '1'; }
+}
+/* 仅供设计自查用：?theme=a|b|c ?view=plugins|settings ?modal=1，不影响默认展示 */
+(function(){
+  var p = new URLSearchParams(location.search);
+  if(p.get('theme')) setTheme(p.get('theme'));
+  if(p.get('view')) setView(p.get('view'));
+  if(p.get('modal') === '1') openModal();
+})();
+</script>
+</body>
+</html>

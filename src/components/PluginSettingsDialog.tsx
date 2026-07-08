@@ -83,8 +83,8 @@ export function PluginSettingsDialog() {
       <div
         className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col overflow-hidden"
         style={{
-          width: 'min(560px, calc(100vw - 48px))',
-          maxHeight: 'min(600px, calc(100vh - 96px))',
+          width: 'min(640px, calc(100vw - 48px))',
+          maxHeight: 'min(640px, calc(100vh - 96px))',
           background: 'var(--panel, var(--bg-surface, #ffffff))',
           border: '0.5px solid var(--color-border-secondary)',
           borderRadius: 'var(--radius-xl)',

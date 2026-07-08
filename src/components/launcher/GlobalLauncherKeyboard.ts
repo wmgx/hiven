@@ -100,7 +100,7 @@ export function handleGlobalLauncherKeyDown({
         setResultSelectedIndex((index) => Math.max(index - 1, 0))
         return
       }
-      if (event.key === 'Enter') {
+      if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault()
         const choice = choices[Math.min(resultSelectedIndex, Math.max(0, choices.length - 1))]
         if (choice) toggleResultChoice(choice, resultFrame)

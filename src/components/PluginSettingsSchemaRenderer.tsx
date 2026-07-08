@@ -160,7 +160,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
   const [openObjectListCards, setOpenObjectListCards] = useState<Record<string, string>>({})
   const [openSelectId, setOpenSelectId] = useState<string | null>(null)
   const [numberDrafts, setNumberDrafts] = useState<Record<string, string>>({})
-
+  const [visibleSensitiveKeys, setVisibleSensitiveKeys] = useState<Set<string>>(new Set())
   function setFieldValue(key: string, next: unknown) {
     updateValue({ [key]: next } as Partial<TSettings>)
   }
@@ -330,6 +330,37 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
             placeholder={placeholder}
             onChange={(event) => onChange(event.currentTarget.value)}
           />
+        </label>
+      )
+    }
+
+    if (itemField.sensitive) {
+      const sensitiveKey = `${controlId}`
+      const isVisible = visibleSensitiveKeys.has(sensitiveKey)
+      return (
+        <label className="schema-object-list-field wr-field">
+          {itemLabel}
+          <span className="wr-sensitive-wrap">
+            <input
+              className={`wr-in ${itemField.mono || itemField.key.toLowerCase().includes('url') ? 'wr-mono' : ''}`}
+              type={isVisible ? 'text' : 'password'}
+              value={String(value ?? '')}
+              placeholder={placeholder}
+              onChange={(event) => onChange(event.currentTarget.value)}
+            />
+            <button
+              type="button"
+              className="wr-sensitive-toggle"
+              onClick={() => setVisibleSensitiveKeys((prev) => {
+                const next = new Set(prev)
+                if (next.has(sensitiveKey)) next.delete(sensitiveKey)
+                else next.add(sensitiveKey)
+                return next
+              })}
+            >
+              {isVisible ? '◉' : '○'}
+            </button>
+          </span>
         </label>
       )
     }
@@ -538,91 +569,115 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
       const items = getObjectList(record[field.key])
       const itemLabel = localize(field.itemLabel, field.itemLabelI18n, locale) || label
       const addLabel = localize(field.addLabel, field.addLabelI18n, locale) || '+'
+      const selectedCardId = openObjectListCards[field.key]
+      const selectedIndex = items.findIndex((item, i) => String(item.id ?? i) === selectedCardId)
+      const activeIndex = selectedIndex >= 0 ? selectedIndex : (items.length > 0 ? 0 : -1)
+      const activeItem = activeIndex >= 0 ? items[activeIndex] : null
+      const activeCardId = activeItem ? String(activeItem.id ?? activeIndex) : ''
+
       const addItem = () => {
         const nextItem = makeListItem(field.itemDefaults, items)
         const nextCardId = String(nextItem.id ?? items.length)
         setFieldValue(field.key, [...items, nextItem])
         setOpenObjectListCards((current) => ({ ...current, [field.key]: nextCardId }))
       }
+
+      const titleKey = field.itemTitleKey ?? 'title'
+
       return (
         <div className={`schema-object-list d-rules ${disabled ? 'is-disabled' : ''}`}>
           <div className="schema-object-list-head">
             {commonLabel}
           </div>
-          {items.length === 0 ? (
-            <div className="schema-object-list-empty">
-              {localize(field.emptyText, field.emptyTextI18n, locale)}
-            </div>
-          ) : (
-            <div className="schema-object-list-items">
+          <div className="schema-object-list-master-detail">
+            <div className="schema-object-list-master">
               {items.map((item, itemIndex) => {
                 const cardId = String(item.id ?? itemIndex)
-                const openCardId = openObjectListCards[field.key]
-                const isOpen = openCardId ? openCardId === cardId : itemIndex === 0
-                const titleKey = field.itemTitleKey ?? 'title'
                 const title = String(item[titleKey] ?? '') || `${itemLabel} ${itemIndex + 1}`
+                const isActive = itemIndex === activeIndex
+                const isEnabled = item.enabled !== false
                 return (
-                <details
-                  className={`schema-object-list-card wr-card ${isOpen ? 'open' : ''}`}
-                  key={`${cardId}-${itemIndex}`}
-                  open={isOpen}
-                  onToggle={(event) => {
-                    const nextOpen = event.currentTarget.open
-                    setOpenObjectListCards((current) => {
-                      if (nextOpen) return { ...current, [field.key]: cardId }
-                      if (current[field.key] !== cardId) return current
-                      const { [field.key]: _removed, ...rest } = current
-                      return rest
-                    })
-                  }}
-                >
-                  <summary className="schema-object-list-card-head wr-head">
-                    <span className="schema-object-list-caret wr-caret">›</span>
-                    <span className="wr-htext">
-                      <span className="schema-object-list-title wr-title">{title}</span>
-                      {Array.isArray(item.aliases) && item.aliases.length > 0 && (
-                        <span className="schema-object-list-tag wr-kwtag">
-                          {String(item.aliases[0])}{item.aliases.length > 1 ? ` +${item.aliases.length - 1}` : ''}
-                        </span>
-                      )}
+                  <button
+                    key={`${cardId}-${itemIndex}`}
+                    type="button"
+                    className={`schema-object-list-master-item ${isActive ? 'is-active' : ''}`}
+                    onClick={() => setOpenObjectListCards((current) => ({ ...current, [field.key]: cardId }))}
+                  >
+                    <span className={`schema-object-list-master-dot ${isEnabled ? 'is-on' : ''}`} />
+                    <span className="schema-object-list-master-title">{title}</span>
+                  </button>
+                )
+              })}
+              <button
+                type="button"
+                className="schema-object-list-add wr-add"
+                disabled={disabled}
+                onClick={addItem}
+              >
+                <span>＋</span>{addLabel}
+              </button>
+            </div>
+            <div className="schema-object-list-detail">
+              {activeItem ? (
+                <>
+                  <div className="schema-object-list-detail-head">
+                    <span className="schema-object-list-detail-title">
+                      {String(activeItem[titleKey] ?? '') || `${itemLabel} ${activeIndex + 1}`}
                     </span>
                     <button
                       type="button"
                       className="wr-del"
                       disabled={disabled}
-                      onClick={(event) => {
-                        event.preventDefault()
-                        event.stopPropagation()
-                        setFieldValue(field.key, items.filter((_, index) => index !== itemIndex))
+                      onClick={() => {
+                        const nextItems = items.filter((_, index) => index !== activeIndex)
+                        setFieldValue(field.key, nextItems)
+                        if (nextItems.length > 0) {
+                          const nextIdx = Math.min(activeIndex, nextItems.length - 1)
+                          setOpenObjectListCards((current) => ({ ...current, [field.key]: String(nextItems[nextIdx].id ?? nextIdx) }))
+                        }
                       }}
                     >
                       ×
                     </button>
-                  </summary>
-                  <div className="schema-object-list-grid wr-body">
-                    {field.fields.filter(isRenderableObjectListItemField).map((itemField) => (
-                      <div key={itemField.key}>
-                        {renderObjectListItemField(itemField, item, `${field.key}:${cardId}:${itemField.key}`, (next) => {
-                          setFieldValue(field.key, items.map((candidate, index) => (
-                            index === itemIndex ? { ...candidate, [itemField.key]: next } : candidate
-                          )))
-                        })}
-                      </div>
-                    ))}
                   </div>
-                </details>
-                )
-              })}
+                  <div className="schema-object-list-grid wr-body">
+                    {(() => {
+                      const renderableFields = field.fields.filter(isRenderableObjectListItemField)
+                      const groups: { group: string | undefined; fields: typeof renderableFields }[] = []
+                      for (const itemField of renderableFields) {
+                        const g = itemField.group
+                        const last = groups[groups.length - 1]
+                        if (last && last.group === g) last.fields.push(itemField)
+                        else groups.push({ group: g, fields: [itemField] })
+                      }
+                      return groups.map((grp, gi) => (
+                        <div key={gi} className="schema-object-list-group">
+                          {grp.group && (
+                            <div className="schema-object-list-group-title">
+                              {localize(grp.group, grp.fields[0]?.groupI18n, locale)}
+                            </div>
+                          )}
+                          {grp.fields.map((itemField) => (
+                            <div key={itemField.key}>
+                              {renderObjectListItemField(itemField, activeItem, `${field.key}:${activeCardId}:${itemField.key}`, (next) => {
+                                setFieldValue(field.key, items.map((candidate, index) => (
+                                  index === activeIndex ? { ...candidate, [itemField.key]: next } : candidate
+                                )))
+                              })}
+                            </div>
+                          ))}
+                        </div>
+                      ))
+                    })()}
+                  </div>
+                </>
+              ) : (
+                <div className="schema-object-list-empty">
+                  {localize(field.emptyText, field.emptyTextI18n, locale)}
+                </div>
+              )}
             </div>
-          )}
-          <button
-            type="button"
-            className="schema-object-list-add wr-add"
-            disabled={disabled}
-            onClick={addItem}
-          >
-            <span>＋</span>{addLabel}
-          </button>
+          </div>
         </div>
       )
     }

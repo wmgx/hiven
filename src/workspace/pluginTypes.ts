@@ -321,6 +321,9 @@ export type PluginSettingsObjectListItemField = {
   rows?: number
   options?: PluginSettingsOption[]
   mono?: boolean
+  group?: string
+  groupI18n?: Partial<Record<Locale, string>>
+  sensitive?: boolean
 }
 
 export type PluginSettingsObjectListField<TSettings = unknown> = PluginSettingsFieldBase<TSettings> & {

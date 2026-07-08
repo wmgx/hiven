@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>hiven Light 主题 · 现状 vs 新方案</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #d8d8dc;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; }
+
+  .page-header { padding: 28px 32px 20px; text-align: center; }
+  .page-header h1 { margin: 0 0 8px; font-size: 20px; font-weight: 700; color: #18181b; }
+  .page-header p { margin: 0; font-size: 13px; color: #55555e; }
+
+  .compare-grid { display: grid; grid-template-columns: 1fr 1fr; min-height: 100vh; align-items: start; }
+  .col { padding: 24px 28px 60px; min-height: 100%; }
+
+  .col-title { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; }
+  .col-title .badge { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 999px; letter-spacing: .5px; }
+  .col-old .badge { background: #e8e8e8; color: #6f6f6f; }
+  .col-new .badge { background: #eef2ff; color: #2563eb; }
+  .col-title h2 { margin: 0; font-size: 15px; font-weight: 600; }
+  .col-title .sub { font-size: 11px; color: #8a8a8a; margin-left: 4px; }
+
+  .block { margin-bottom: 24px; }
+  .block-label { font-size: 11px; font-weight: 600; margin-bottom: 10px; text-transform: uppercase; letter-spacing: .4px; opacity: .55; }
+
+  /* 1. 色板条 */
+  .swatch-row { display: flex; gap: 8px; }
+  .swatch { flex: 1; height: 64px; border-radius: 8px; display: flex; flex-direction: column; justify-content: flex-end;
+    padding: 6px 8px; font-size: 10px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .swatch .name { font-size: 9px; opacity: .7; margin-bottom: 2px; }
+
+  /* 2. 文字层级 */
+  .type-sample .t1 { font-size: 15px; font-weight: 600; margin: 0 0 6px; }
+  .type-sample .t2 { font-size: 13px; font-weight: 400; margin: 0 0 6px; }
+  .type-sample .t3 { font-size: 12px; font-weight: 400; margin: 0 0 6px; }
+  .type-sample .t4 { font-size: 11px; font-weight: 400; margin: 0; }
+
+  /* 卡片通用 */
+  .card { border-radius: 10px; padding: 4px 0; }
+  .group-title { font-size: 12px; font-weight: 600; margin: 0 0 8px 2px; }
+  .setting-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+  .setting-row + .setting-row { border-top: 1px solid; }
+  .row-icon { width: 28px; height: 28px; border-radius: 7px; flex-shrink: 0; }
+  .row-text { flex: 1; min-width: 0; }
+  .row-text .name { font-size: 13px; font-weight: 500; margin: 0 0 2px; }
+  .row-text .desc { font-size: 11px; margin: 0; }
+
+  .toggle { width: 36px; height: 20px; border-radius: 999px; position: relative; flex-shrink: 0; }
+  .toggle::after { content: ""; position: absolute; width: 16px; height: 16px; border-radius: 50%; background: #fff;
+    top: 2px; right: 2px; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+
+  .fake-select { font-size: 12px; padding: 5px 10px; border-radius: 6px; display: flex; align-items: center; gap: 6px; flex-shrink: 0; white-space: nowrap; }
+  .fake-select .chev { font-size: 9px; opacity: .6; }
+
+  .fake-stepper { display: flex; align-items: center; border-radius: 6px; overflow: hidden; flex-shrink: 0; }
+  .fake-stepper button { width: 22px; height: 24px; border: none; font-size: 13px; line-height: 1; cursor: default; background: transparent; }
+  .fake-stepper .val { font-size: 12px; padding: 0 8px; min-width: 20px; text-align: center; }
+
+  /* 4. 列表 */
+  .list-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; margin: 0 4px; cursor: default; }
+  .list-row .icon-dot { width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0; }
+  .list-row .label { font-size: 12.5px; flex: 1; }
+  .list-row .tag { font-size: 10px; padding: 2px 8px; border-radius: 999px; font-weight: 600; flex-shrink: 0; }
+
+  /* 5. 按钮组 */
+  .btn-row { display: flex; align-items: center; gap: 10px; }
+  .btn { font-size: 12.5px; font-weight: 500; padding: 7px 16px; border-radius: 7px; cursor: default; border: 1px solid transparent; }
+  .btn-danger { background: transparent; border: none; padding: 7px 4px; }
+
+  /* 6. 悬浮菜单 */
+  .menu { width: 200px; border-radius: 10px; padding: 6px; }
+  .menu-item { font-size: 12.5px; padding: 8px 10px; border-radius: 6px; cursor: default; }
+
+  /* 7. 浮层面板 */
+  .launcher-mini { width: 320px; border-radius: 12px; padding: 10px; }
+  .launcher-mini .input { font-size: 13px; padding: 9px 12px; border-radius: 8px; margin-bottom: 8px; }
+  .launcher-mini .result-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 7px; }
+  .launcher-mini .result-row .icon-dot { width: 20px; height: 20px; border-radius: 5px; flex-shrink: 0; }
+  .launcher-mini .result-row .label { font-size: 12.5px; }
+
+  /* ============ 现状（左列） ============ */
+  .col-old { background: #f3f3f3; color: #000000; }
+  .col-old .text-primary { color: #000000; }
+  .col-old .text-secondary { color: #6f6f6f; }
+  .col-old .text-tertiary { color: #8a8a8a; }
+  .col-old .border-c { border-color: #e5e5e5 !important; }
+  .col-old .accent-text { color: #2563eb; }
+
+  .col-old .swatch:nth-child(1) { background: #f3f3f3; color: #000; border: 1px solid #e5e5e5; }
+  .col-old .swatch:nth-child(2) { background: #ffffff; color: #000; border: 1px solid #e5e5e5; }
+  .col-old .swatch:nth-child(3) { background: #f3f3f3; color: #000; border: 1px solid #e5e5e5; }
+  .col-old .swatch:nth-child(4) { background: #e8e8e8; color: #000; }
+  .col-old .swatch:nth-child(5) { background: #e5e5e5; color: #000; }
+
+  .col-old .card { background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+  .col-old .setting-row + .setting-row { border-top-color: #ededed; }
+  .col-old .row-icon { background: #f3f3f3; }
+  .col-old .toggle-on { background: #2563eb; }
+  .col-old .fake-select { background: #f3f3f3; color: #000; }
+  .col-old .fake-stepper { border: 1px solid #e5e5e5; }
+  .col-old .fake-stepper button { color: #6f6f6f; }
+  .col-old .fake-stepper .val { color: #000; }
+
+  .col-old .list-card { background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+  .col-old .icon-dot { background: #f3f3f3; }
+  .col-old .list-row.selected { background: #eef2ff; }
+  .col-old .list-row.selected .icon-dot { background: #2563eb; }
+  .col-old .list-row.selected .label { color: #2563eb; font-weight: 500; }
+  .col-old .list-row .tag { background: #e8e8e8; color: #8a8a8a; }
+  /* 现状 bug：hover 无反馈，故 .col-old 不定义任何 :hover 规则 */
+
+  .col-old .btn-primary { background: #2563eb; color: #ffffff; }
+  .col-old .btn-secondary { background: #ffffff; color: #000000; border-color: #e5e5e5; }
+  .col-old .btn-danger { color: #dc2626; }
+
+  .col-old .menu { background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06); }
+  .col-old .menu-item { color: #000000; }
+
+  .col-old .launcher-mini { background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06); }
+  .col-old .launcher-mini .input { background: #f3f3f3; color: #000000; }
+  .col-old .launcher-mini .result-row.selected { background: #eef2ff; }
+  .col-old .launcher-mini .icon-dot { background: #f3f3f3; }
+
+  /* ============ 新方案（右列） ============ */
+  .col-new { background: #f6f6f7; color: #18181b; }
+  .col-new .text-primary { color: #18181b; }
+  .col-new .text-secondary { color: #55555e; }
+  .col-new .text-tertiary { color: #8e8e96; }
+  .col-new .border-c { border-color: #e2e2e6 !important; }
+  .col-new .accent-text { color: #2563eb; }
+
+  .col-new .swatch:nth-child(1) { background: #f6f6f7; color: #18181b; border: 1px solid #e2e2e6; }
+  .col-new .swatch:nth-child(2) { background: #ffffff; color: #18181b; border: 1px solid #e2e2e6; }
+  .col-new .swatch:nth-child(3) { background: #f2f2f4; color: #18181b; border: 1px solid #e2e2e6; }
+  .col-new .swatch:nth-child(4) { background: #eaeaee; color: #18181b; }
+  .col-new .swatch:nth-child(5) { background: #e2e2e6; color: #18181b; }
+
+  .col-new .card { background: #ffffff; box-shadow: 0 1px 2px rgba(16,17,20,.05); border: 1px solid #e2e2e6; }
+  .col-new .setting-row + .setting-row { border-top-color: #ececef; }
+  .col-new .row-icon { background: #f2f2f4; }
+  .col-new .toggle-on { background: #2563eb; }
+  .col-new .fake-select { background: #f2f2f4; color: #18181b; }
+  .col-new .fake-stepper { border: 1px solid #e2e2e6; }
+  .col-new .fake-stepper button { color: #55555e; }
+  .col-new .fake-stepper .val { color: #18181b; }
+
+  .col-new .list-card { background: #ffffff; box-shadow: 0 1px 2px rgba(16,17,20,.05); border: 1px solid #e2e2e6; }
+  .col-new .icon-dot { background: #f2f2f4; }
+  .col-new .list-row.selected { background: #eef2ff; }
+  .col-new .list-row.selected .icon-dot { background: #2563eb; }
+  .col-new .list-row.selected .label { color: #2563eb; font-weight: 500; }
+  .col-new .list-row .tag { background: #eaeaee; color: #8e8e96; }
+  .col-new .list-row.hoverable:hover { background: rgba(16,17,20,.05); }
+  .col-new .list-row.hoverable:active { background: rgba(16,17,20,.09); }
+
+  .col-new .btn-primary { background: #2563eb; color: #ffffff; }
+  .col-new .btn-secondary { background: #ffffff; color: #18181b; border-color: #e2e2e6; }
+  .col-new .btn-danger { color: #dc2626; }
+  .col-new .btn.btn-secondary:hover { background: rgba(16,17,20,.05); }
+  .col-new .btn.btn-primary:hover { filter: brightness(1.05); }
+
+  .col-new .menu { background: #ffffff; box-shadow: 0 4px 12px rgba(16,17,20,.10), 0 0 0 1px rgba(16,17,20,.04); }
+  .col-new .menu-item { color: #18181b; }
+  .col-new .menu-item:hover { background: rgba(16,17,20,.05); }
+
+  .col-new .launcher-mini { background: #ffffff; box-shadow: 0 16px 40px -12px rgba(16,17,20,.18), 0 0 0 1px rgba(16,17,20,.05); }
+  .col-new .launcher-mini .input { background: #f2f2f4; color: #18181b; box-shadow: inset 0 0 0 1px #e2e2e6; }
+  .col-new .launcher-mini .result-row.selected { background: #eef2ff; }
+  .col-new .launcher-mini .result-row.hoverable:hover { background: rgba(16,17,20,.05); }
+  .col-new .launcher-mini .icon-dot { background: #f2f2f4; }
+
+  @media (max-width: 860px) { .compare-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>hiven Light 主题 · 现状 vs 新方案</h1>
+  <p>左列为现状配色，右列为新方案配色；两列渲染完全相同的组件结构（由同一份模板生成），仅 CSS 变量取值不同。鼠标悬停右列列表行 / 按钮 / 菜单项可感受 hover 反馈差异。</p>
+</div>
+
+<div class="compare-grid">
+  <div class="col col-old">
+    <div class="col-title">
+      <span class="badge">现状</span>
+      <h2>Current Light Theme</h2>
+      <span class="sub">hover 无反馈（已知问题）</span>
+    </div>
+    <div id="body-old"></div>
+  </div>
+
+  <div class="col col-new">
+    <div class="col-title">
+      <span class="badge">新方案</span>
+      <h2>Proposed Light Theme</h2>
+      <span class="sub">hover / 边框 / 阴影层级增强</span>
+    </div>
+    <div id="body-new"></div>
+  </div>
+</div>
+
+<script>
+  // 两列使用同一套组件模板渲染，仅传入不同的色值标签和文案，
+  // 保证左右两列的 DOM 结构完全一致，差异只来自各自的 CSS 变量取值。
+  function renderBody(v) {
+    const swatchHtml = v.swatches.map(function (s) {
+      return '<div class="swatch"><span class="name">' + s.name + '</span>' + s.hex + '</div>';
+    }).join('');
+
+    return '' +
+      '<div class="block">' +
+      '  <div class="block-label text-tertiary">灰阶色板</div>' +
+      '  <div class="swatch-row">' + swatchHtml + '</div>' +
+      '</div>' +
+
+      '<div class="block type-sample">' +
+      '  <div class="block-label text-tertiary">文字层级</div>' +
+      '  <p class="t1 text-primary">主标题文字样式</p>' +
+      '  <p class="t2 text-primary">正文文字样式，用于常规内容展示。</p>' +
+      '  <p class="t3 text-secondary">次要说明文字，用于补充描述信息。</p>' +
+      '  <p class="t4 text-tertiary">三级提示文字，用于弱化的辅助信息</p>' +
+      '</div>' +
+
+      '<div class="block">' +
+      '  <div class="block-label text-tertiary">设置卡片</div>' +
+      '  <p class="group-title text-secondary">通用</p>' +
+      '  <div class="card">' +
+      '    <div class="setting-row">' +
+      '      <div class="row-icon"></div>' +
+      '      <div class="row-text"><p class="name text-primary">开机自启动</p><p class="desc text-secondary">系统启动时自动运行 hiven</p></div>' +
+      '      <div class="toggle toggle-on"></div>' +
+      '    </div>' +
+      '    <div class="setting-row">' +
+      '      <div class="row-icon"></div>' +
+      '      <div class="row-text"><p class="name text-primary">界面语言</p><p class="desc text-secondary">影响所有菜单与提示文案</p></div>' +
+      '      <div class="fake-select"><span>简体中文</span><span class="chev">▾</span></div>' +
+      '    </div>' +
+      '    <div class="setting-row">' +
+      '      <div class="row-icon"></div>' +
+      '      <div class="row-text"><p class="name text-primary">字体大小</p><p class="desc text-secondary">调整编辑区默认字号</p></div>' +
+      '      <div class="fake-stepper"><button>－</button><span class="val">14</span><button>＋</button></div>' +
+      '    </div>' +
+      '  </div>' +
+      '</div>' +
+
+      '<div class="block">' +
+      '  <div class="block-label text-tertiary">列表</div>' +
+      '  <div class="list-card card">' +
+      '    <div class="list-row hoverable"><div class="icon-dot"></div><span class="label text-primary">文本对比</span></div>' +
+      '    <div class="list-row selected"><div class="icon-dot"></div><span class="label">JSON 对比</span></div>' +
+      '    <div class="list-row hoverable"><div class="icon-dot"></div><span class="label text-primary">Markdown 对比</span><span class="tag">' + v.hoverTag + '</span></div>' +
+      '    <div class="list-row hoverable"><div class="icon-dot"></div><span class="label text-primary">正则测试</span></div>' +
+      '  </div>' +
+      '</div>' +
+
+      '<div class="block">' +
+      '  <div class="block-label text-tertiary">按钮组</div>' +
+      '  <div class="btn-row">' +
+      '    <button class="btn btn-primary">主要操作</button>' +
+      '    <button class="btn btn-secondary border-c">次要操作</button>' +
+      '    <button class="btn btn-danger">删除</button>' +
+      '  </div>' +
+      '</div>' +
+
+      '<div class="block">' +
+      '  <div class="block-label text-tertiary">悬浮菜单</div>' +
+      '  <div class="menu">' +
+      '    <div class="menu-item text-primary">重命名</div>' +
+      '    <div class="menu-item text-primary">复制路径</div>' +
+      '    <div class="menu-item text-primary" style="color:#dc2626;">删除</div>' +
+      '  </div>' +
+      '</div>' +
+
+      '<div class="block">' +
+      '  <div class="block-label text-tertiary">浮层面板（Launcher 迷你态）</div>' +
+      '  <div class="launcher-mini">' +
+      '    <div class="input text-secondary">搜索命令或插件…</div>' +
+      '    <div class="result-row selected"><div class="icon-dot"></div><span class="label accent-text">Base64 编码</span></div>' +
+      '    <div class="result-row hoverable"><div class="icon-dot"></div><span class="label text-primary">URL 编码</span></div>' +
+      '  </div>' +
+      '</div>';
+  }
+
+  document.getElementById('body-old').innerHTML = renderBody({
+    swatches: [
+      { name: 'bg-page', hex: '#f3f3f3' },
+      { name: 'surface', hex: '#ffffff' },
+      { name: 'surface-2', hex: '#f3f3f3' },
+      { name: 'surface-3', hex: '#e8e8e8' },
+      { name: 'border', hex: '#e5e5e5' }
+    ],
+    hoverTag: 'hover 态（无反馈）'
+  });
+
+  document.getElementById('body-new').innerHTML = renderBody({
+    swatches: [
+      { name: 'bg-page', hex: '#f6f6f7' },
+      { name: 'surface', hex: '#ffffff' },
+      { name: 'surface-2', hex: '#f2f2f4' },
+      { name: 'surface-3', hex: '#eaeaee' },
+      { name: 'border', hex: '#e2e2e6' }
+    ],
+    hoverTag: 'hover 态（试试悬停）'
+  });
+</script>
+
+</body>
+</html>

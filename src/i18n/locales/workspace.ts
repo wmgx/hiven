@@ -55,6 +55,10 @@ export default {
     'pane.noActive': 'No active pane',
     'pane.stickyScroll.enabled': 'Current pane sticky scroll enabled',
     'pane.stickyScroll.disabled': 'Current pane sticky scroll disabled',
+    'appName': 'hiven',
+    'backToApp': 'Back to hiven',
+    'invalidTarget': 'Invalid plugin surface target',
+    'pluginSurface': 'Plugin Surface',
   },
   zh: {
     'close': '关闭',
@@ -112,5 +116,9 @@ export default {
     'pane.noActive': '没有当前面板',
     'pane.stickyScroll.enabled': '已开启当前面板的层级吸顶',
     'pane.stickyScroll.disabled': '已关闭当前面板的层级吸顶',
+    'appName': 'hiven',
+    'backToApp': '返回 hiven',
+    'invalidTarget': '无效的插件面板目标',
+    'pluginSurface': '插件面板',
   },
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, type RefObject } from 'react'
 import type { LauncherControllerState } from '../../workspace/launcher/controller'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../../utils/imeKeyboard'
 import { runLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
+import { usePluginSettingsStore } from '../../workspace/pluginSettingsStore'
 
 export function isStandaloneLauncherWindow() {
   return new URLSearchParams(window.location.search).get('window') === 'launcher'
@@ -104,6 +105,7 @@ export function useGlobalLauncherHostEscape({
   const handleHostEscape = useCallback((event: KeyboardEvent) => {
     if (event.key !== 'Escape') return
     if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
+    if (usePluginSettingsStore.getState().settingsDialogTarget) return
     if (runLauncherEscapeInterceptor(event)) return
 
     event.preventDefault()
