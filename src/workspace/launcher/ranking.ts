@@ -74,7 +74,22 @@ function getCachedSearchableFields(item: LauncherItem, locale: Locale): Searchab
   return fields
 }
 
+function isHostAppLauncherItem(item: LauncherItem): boolean {
+  return item.systemKey.startsWith('host:app-launcher:app:')
+}
+
 function toSearchableFields(item: LauncherItem, locale: Locale): SearchableFields {
+  // Host app items: never match internal systemKey (path hashes) or filesystem
+  // subtitles (.app paths). Title / titleI18n / human aliases only.
+  if (isHostAppLauncherItem(item)) {
+    return {
+      id: '',
+      title: localizedDisplay(item.display.title, item.display.titleI18n, locale),
+      titleI18n: item.display.titleI18n,
+      aliases: item.display.aliases,
+      usageKey: item.systemKey,
+    }
+  }
   return {
     id: item.systemKey,
     title: localizedDisplay(item.display.title, item.display.titleI18n, locale),

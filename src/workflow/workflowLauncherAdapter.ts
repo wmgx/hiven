@@ -19,6 +19,9 @@ export async function getWorkflowObjectLauncherItems({
   const normalizedQuery = query.trim()
   const allObjects = await collectWorkObjects()
   const visibleObjects = allObjects
+    // Installed apps are owned by host app launcher; listing them again here
+    // produces duplicate rows (same app twice) in Global Launcher.
+    .filter((object) => object.type !== 'app')
     .filter((object) => normalizedQuery ? objectMatchesQuery(object, normalizedQuery, locale) : isDefaultContextObject(object))
     .slice(0, MAX_OBJECT_ITEMS)
 
@@ -90,19 +93,24 @@ function objectMatchesQuery(object: WorkObject, query: string, locale: Locale): 
 }
 
 function searchFieldsForObject(object: WorkObject): SearchableFields {
+  // Avoid matching internal ids (app:macos:path:<hex>, surface keys, etc.).
   return {
-    id: object.id,
+    id: '',
     title: object.title,
     aliases: aliasesForObject(object),
   }
 }
 
 function aliasesForObject(object: WorkObject): string[] {
-  const aliases = [object.subtitle, object.source, object.type]
+  const aliases: Array<string | undefined> = [object.source, object.type]
+  // Subtitle is often a filesystem path for apps/docs — keep for non-path values only.
+  if (object.subtitle && !object.subtitle.startsWith('/') && !object.subtitle.includes('\\')) {
+    aliases.push(object.subtitle)
+  }
   if (object.type === 'text') aliases.push(object.text)
   if (object.type === 'clipboard') aliases.push(object.preview, 'clipboard', 'paste', '剪贴板', '粘贴')
-  if (object.type === 'app') aliases.push(object.bundleId, object.executablePath, 'app', 'application', '应用')
-  if (object.type === 'editor-document') aliases.push(object.paneId, object.language, 'editor', '编辑器')
+  // App objects are filtered out of the launcher list; keep action routing fields out of search.
+  if (object.type === 'editor-document') aliases.push(object.language, 'editor', '编辑器')
   if (object.type === 'url') aliases.push(object.url)
   return aliases.filter((value): value is string => Boolean(value))
 }

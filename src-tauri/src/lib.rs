@@ -2152,6 +2152,39 @@ fn parse_plist_string(raw: &str, key: &str) -> Option<String> {
     Some(rest[start..start + end].trim().to_string())
 }
 
+/// Read Info.plist as XML text. macOS apps often ship binary plists; fall back to `plutil`.
+fn read_info_plist_xml(info_plist: &Path) -> String {
+    let Ok(bytes) = fs::read(info_plist) else {
+        return String::new();
+    };
+    if bytes.starts_with(b"bplist") {
+        #[cfg(target_os = "macos")]
+        {
+            if let Ok(output) = std::process::Command::new("plutil")
+                .args(["-convert", "xml1", "-o", "-", "--"])
+                .arg(info_plist)
+                .output()
+            {
+                if output.status.success() {
+                    if let Ok(xml) = String::from_utf8(output.stdout) {
+                        return xml;
+                    }
+                }
+            }
+        }
+        return String::new();
+    }
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
+fn text_contains_cjk(value: &str) -> bool {
+    value.chars().any(|ch| {
+        ('\u{4e00}'..='\u{9fff}').contains(&ch)
+            || ('\u{3400}'..='\u{4dbf}').contains(&ch)
+            || ('\u{f900}'..='\u{faff}').contains(&ch)
+    })
+}
+
 fn decode_text_file(bytes: &[u8]) -> String {
     if bytes.starts_with(&[0xfe, 0xff]) {
         let units: Vec<u16> = bytes[2..]
@@ -2305,7 +2338,8 @@ fn read_macos_bundle_metadata(
     Vec<String>,
 ) {
     let info = path.join("Contents").join("Info.plist");
-    let raw = fs::read_to_string(info).unwrap_or_default();
+    // Prefer XML text; convert binary Info.plist via plutil so Office apps keep stable bundle ids.
+    let raw = read_info_plist_xml(&info);
     let bundle_id = parse_plist_string(&raw, "CFBundleIdentifier");
     let plist_display_name = parse_plist_string(&raw, "CFBundleDisplayName");
     let plist_bundle_name = parse_plist_string(&raw, "CFBundleName");
@@ -2313,21 +2347,58 @@ fn read_macos_bundle_metadata(
         .clone()
         .or_else(|| plist_bundle_name.clone());
     let zh_name = read_macos_localized_bundle_name(path, Some("zh"));
-    let name = read_macos_system_display_name(path)
-        .or_else(|| plist_name.clone())
+    let en_name = read_macos_localized_bundle_name(path, Some("en"));
+    let system_name = read_macos_system_display_name(path);
+
+    // Canonical `name` must be locale-stable (plist/en), not NSFileManager's UI language.
+    // Otherwise Global Launcher mixes Chinese system names with English catalog names.
+    let name = plist_name
+        .clone()
+        .or_else(|| en_name.clone())
+        .or_else(|| {
+            system_name
+                .clone()
+                .filter(|value| !text_contains_cjk(value))
+        })
+        .or_else(|| system_name.clone())
         .or_else(|| zh_name.clone());
+
     let mut name_i18n = HashMap::new();
-    if let Some(ref name) = zh_name {
-        if plist_name.as_deref() != Some(name.as_str()) {
-            name_i18n.insert("zh".to_string(), name.clone());
+    if let Some(ref zh) = zh_name {
+        if name.as_deref() != Some(zh.as_str()) {
+            name_i18n.insert("zh".to_string(), zh.clone());
         }
     }
+    // If the only Chinese label comes from the system display name, keep it under zh.
+    if let Some(ref sys) = system_name {
+        if text_contains_cjk(sys) && name.as_deref() != Some(sys.as_str()) {
+            name_i18n
+                .entry("zh".to_string())
+                .or_insert_with(|| sys.clone());
+        }
+    }
+    if let Some(ref en) = en_name {
+        if name.as_deref() != Some(en.as_str()) {
+            name_i18n.insert("en".to_string(), en.clone());
+        }
+    }
+
     let mut aliases = Vec::new();
-    for alias in [plist_display_name, plist_bundle_name, bundle_id.clone()] {
+    // Human-readable name variants only — never bundle ids (avoid "com"/"microsoft" noise).
+    for alias in [
+        plist_display_name,
+        plist_bundle_name,
+        en_name,
+        zh_name.clone(),
+        system_name,
+    ] {
         let Some(alias) = alias else {
             continue;
         };
-        if name.as_deref() == Some(alias.as_str()) || zh_name.as_deref() == Some(alias.as_str()) {
+        if name.as_deref() == Some(alias.as_str()) {
+            continue;
+        }
+        if name_i18n.values().any(|value| value == &alias) {
             continue;
         }
         if !aliases.iter().any(|item| item == &alias) {
@@ -4468,7 +4539,7 @@ mod plugin_dir_command_tests {
     }
 
     #[test]
-    fn macos_bundle_metadata_keeps_search_names_and_uses_system_display_name() {
+    fn macos_bundle_metadata_prefers_plist_name_and_keeps_localized_zh() {
         let dir = unique_home("macos-localized-bundle");
         let app = dir.join("Lark.app");
         let contents = app.join("Contents");
@@ -4491,12 +4562,10 @@ CFBundleName = "飞书";"#,
         )
         .expect("localized InfoPlist.strings fixture should be written");
 
-        let (bundle_id, system_name, name_i18n, aliases) = read_macos_bundle_metadata(&app);
+        let (bundle_id, name, name_i18n, aliases) = read_macos_bundle_metadata(&app);
         assert_eq!(bundle_id.as_deref(), Some("com.electron.lark"));
-        assert_eq!(
-            system_name.as_deref(),
-            read_macos_system_display_name(&app).as_deref()
-        );
+        // Canonical name comes from plist (locale-stable), not the system UI language.
+        assert_eq!(name.as_deref(), Some("Lark"));
         assert_eq!(
             name_i18n
                 .as_ref()
@@ -4507,6 +4576,50 @@ CFBundleName = "飞书";"#,
         assert!(
             aliases.iter().any(|alias| alias == "Feishu"),
             "CFBundleName should be searchable as an app alias"
+        );
+        assert!(
+            !aliases.iter().any(|alias| alias == "com.electron.lark"),
+            "bundle ids must not be searchable aliases"
+        );
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_binary_info_plist_resolves_bundle_id_via_plutil() {
+        let dir = unique_home("macos-binary-plist");
+        let app = dir.join("BinaryMeta.app");
+        let contents = app.join("Contents");
+        fs::create_dir_all(&contents).expect("contents should be created");
+        let info = contents.join("Info.plist");
+        fs::write(
+            &info,
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>com.example.binarymeta</string>
+  <key>CFBundleDisplayName</key><string>Binary Meta</string>
+  <key>CFBundleName</key><string>BinaryMeta</string>
+</dict></plist>"#,
+        )
+        .expect("xml Info.plist fixture should be written");
+        // Convert fixture to binary form — same format Office apps ship.
+        let status = std::process::Command::new("plutil")
+            .args(["-convert", "binary1"])
+            .arg(&info)
+            .status()
+            .expect("plutil should be available on macOS test hosts");
+        assert!(status.success(), "plutil binary conversion should succeed");
+        let raw = fs::read(&info).expect("binary Info.plist should be readable");
+        assert!(raw.starts_with(b"bplist"), "fixture must be a binary plist");
+
+        let (bundle_id, name, _name_i18n, aliases) = read_macos_bundle_metadata(&app);
+        assert_eq!(bundle_id.as_deref(), Some("com.example.binarymeta"));
+        assert_eq!(name.as_deref(), Some("Binary Meta"));
+        assert!(
+            aliases.iter().any(|alias| alias == "BinaryMeta"),
+            "bundle name should remain a searchable alias"
         );
 
         let _ = fs::remove_dir_all(dir);

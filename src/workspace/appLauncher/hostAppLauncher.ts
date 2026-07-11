@@ -5,7 +5,9 @@ import type { AppWorkObject } from '../../workflow/workObject'
 import { logLauncherPerfDuration, launcherPerfNow } from '../launcher/perf'
 import { normalizeHostAppEntries } from './hostAppIndex'
 
-const HOST_APP_INDEX_CACHE_KEY = 'hiven:host-app-launcher:index:v1'
+// v2: drop stale caches that used path-hash appIds (binary Info.plist parse failures)
+// and avoid matching internal ids/paths in search.
+const HOST_APP_INDEX_CACHE_KEY = 'hiven:host-app-launcher:index:v2'
 const APP_INDEX_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
 
 type HostAppEntry = DiscoveredApp
@@ -92,13 +94,40 @@ function sourceLabel(app: HostAppEntry): string {
   }
 }
 
+/** Internal app ids / filesystem paths must never participate in query matching. */
+function isInternalAppSearchToken(value: string): boolean {
+  const v = value.trim().toLowerCase()
+  if (!v) return true
+  if (v.startsWith('macos:') || v.startsWith('windows:') || v.startsWith('linux:')) return true
+  if (v.startsWith('host:app-launcher:')) return true
+  if (v.startsWith('/') || v.includes('\\')) return true
+  if (v.endsWith('.app') || v.includes('.app/')) return true
+  return false
+}
+
+function humanAppAliases(app: HostAppEntry): string[] {
+  const values = [
+    app.name,
+    ...Object.values(app.nameI18n ?? {}),
+    ...(app.aliases ?? []),
+  ]
+  const aliases: string[] = []
+  for (const value of values) {
+    if (!value || isInternalAppSearchToken(value)) continue
+    if (aliases.some((existing) => existing.toLowerCase() === value.toLowerCase())) continue
+    aliases.push(value)
+  }
+  return aliases
+}
+
 function appSearchFields(app: HostAppEntry): SearchableFields {
-  // Use a synthetic internal ID that won't accidentally match user queries.
-  // App matching should only rely on title (with i18n support).
+  // Empty id: never match macos:path:<hex> / bundle path system keys.
+  // Aliases are human display names only (no path, no appId).
   return {
-    id: `host:app-launcher:app:${app.appId}`,
+    id: '',
     title: app.name,
     titleI18n: app.nameI18n,
+    aliases: humanAppAliases(app),
   }
 }
 
@@ -185,6 +214,8 @@ export async function getHostAppLauncherDynamicItems({
       titleI18n: app.nameI18n,
       subtitle: app.displayPath || sourceLabel(app),
       icon: appIconRef(app.appId),
+      // Human names only — ranking must not match path/appId via aliases.
+      aliases: humanAppAliases(app),
     },
     behavior: { type: 'perform' },
     surfaces: ['global-launcher'],

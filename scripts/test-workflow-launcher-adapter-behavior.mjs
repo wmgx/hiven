@@ -59,6 +59,15 @@ const objects = [
     pluginId: 'json',
     surfaceId: 'main',
   },
+  {
+    id: 'app:macos:path:3e9d62fe57f412e8',
+    type: 'app',
+    title: 'Microsoft Excel',
+    subtitle: '/Applications/Microsoft Excel.app',
+    source: 'host.app-index',
+    bundleId: 'macos:path:3e9d62fe57f412e8',
+    executablePath: '/Applications/Microsoft Excel.app',
+  },
 ]
 const registryActions = [
   {
@@ -121,6 +130,20 @@ assert.deepEqual(
   JSON.parse(JSON.stringify(searchedItems.map((item) => item.systemKey))),
   ['workflow:object:surface:json'],
   'non-empty launcher query must search all workflow objects by title/aliases',
+)
+
+const excelItems = await adapter.getWorkflowObjectLauncherItems({ query: 'excel', locale: 'en' })
+assert.deepEqual(
+  JSON.parse(JSON.stringify(excelItems.map((item) => item.systemKey))),
+  [],
+  'installed apps must not appear as workflow objects (host app launcher owns them)',
+)
+
+const hashLeakItems = await adapter.getWorkflowObjectLauncherItems({ query: '12', locale: 'en' })
+assert.deepEqual(
+  JSON.parse(JSON.stringify(hashLeakItems.map((item) => item.systemKey))),
+  [],
+  'workflow search must not match apps via path-hash ids',
 )
 
 const result = await selectedTextItem.execute()
