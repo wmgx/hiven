@@ -242,8 +242,13 @@ check('global launcher reuses shared search ranking logic', () => {
   )
   assertHas(
     files.searchRanking,
-    /aliases[\s\S]*pinyinMatch\(alias,\s*q\)[\s\S]*mixedAcronymMatch\(alias,\s*q\)/,
-    'shared search ranking should apply pinyin and acronym matching to aliases',
+    /for \(const alias of fields\.aliases[\s\S]*fieldTextMatches\(alias,\s*query\)/,
+    'shared search ranking should match aliases via the shared field matcher',
+  )
+  assertHas(
+    files.searchRanking,
+    /tokenPrefixMatch|SUBSTRING_MIN_QUERY_LENGTH/,
+    'shared search ranking should tighten short queries to token prefixes',
   )
   assertHas(
     files.globalLauncher,

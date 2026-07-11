@@ -65,6 +65,7 @@
     "test:launcher-host-capability-routing-behavior": "node scripts/test-launcher-host-capability-routing-behavior.mjs",
     "test:launcher-usage": "node scripts/test-launcher-usage.mjs",
     "test:launcher-ranking": "node scripts/test-launcher-ranking.mjs",
+    "test:search-ranking-match": "node scripts/test-search-ranking-match.mjs",
     "test:launcher-registry": "node scripts/test-launcher-registry.mjs",
     "test:launcher-controller": "node scripts/test-launcher-controller.mjs",
     "test:launcher-back-focus": "node scripts/test-launcher-back-focus.mjs",
