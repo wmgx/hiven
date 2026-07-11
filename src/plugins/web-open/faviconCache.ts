@@ -1,6 +1,7 @@
 /**
  * Favicon cache module for web-open plugin.
- * Fetches favicons via Google's favicon service, caches them in plugin blob storage.
+ * Fetches favicons via Google's favicon service, caches them in plugin blob + KV storage.
+ * Memory cache keeps launcher path off the network hot path.
  */
 
 import type { PluginPrivateStorageApi } from '@hiven/plugin'
@@ -15,8 +16,17 @@ type FaviconCacheEntry = {
   fetchedAt: number
 }
 
+export type FaviconCacheListEntry = {
+  domain: string
+  blobId: string
+  fetchedAt: number
+  iconRef?: string
+}
+
 // In-memory cache to avoid repeated kv lookups within a session
 const memoryCache = new Map<string, { iconRef: string; fetchedAt: number }>()
+/** Domains currently warming via network so we do not stampede. */
+const warmingDomains = new Set<string>()
 
 export function extractDomain(urlOrTemplate: string): string | undefined {
   try {
@@ -40,6 +50,44 @@ function isExpired(fetchedAt: number): boolean {
   return Date.now() - fetchedAt > FAVICON_MAX_AGE_MS
 }
 
+/**
+ * Resolve favicon for launcher list without blocking on network.
+ * 1. Memory hit → icon immediately
+ * 2. Otherwise return FALLBACK and warm plugin-internal cache in background
+ */
+export function resolveFaviconIconForLauncher(
+  domain: string,
+  storage: PluginPrivateStorageApi | undefined,
+  source: string,
+  pluginId: string,
+): string {
+  const memoryCached = memoryCache.get(domain)
+  if (memoryCached && !isExpired(memoryCached.fetchedAt)) {
+    return memoryCached.iconRef
+  }
+
+  if (storage) {
+    warmFaviconCache(domain, storage, source, pluginId)
+  }
+  return FALLBACK_ICON
+}
+
+/** Fire-and-forget warm of plugin-internal favicon cache (kv + blob + memory). */
+function warmFaviconCache(
+  domain: string,
+  storage: PluginPrivateStorageApi,
+  source: string,
+  pluginId: string,
+): void {
+  if (warmingDomains.has(domain)) return
+  warmingDomains.add(domain)
+  void getFaviconIcon(domain, storage, source, pluginId)
+    .catch(() => FALLBACK_ICON)
+    .finally(() => {
+      warmingDomains.delete(domain)
+    })
+}
+
 export async function getFaviconIcon(
   domain: string,
   storage: PluginPrivateStorageApi,
@@ -52,7 +100,7 @@ export async function getFaviconIcon(
     return memoryCached.iconRef
   }
 
-  // 2. Check kv cache
+  // 2. Check kv cache (plugin-internal)
   const kvKey = `${FAVICON_KV_PREFIX}${domain}`
   try {
     const cached = await storage.kv.get<FaviconCacheEntry>(kvKey)
@@ -107,7 +155,6 @@ async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Respons
 /**
  * Get favicon icon synchronously from memory cache only.
  * Returns FALLBACK_ICON if not cached yet.
- * Use this in contexts where async is not ideal for display.
  */
 export function getFaviconIconSync(domain: string): string {
   const cached = memoryCache.get(domain)
@@ -117,4 +164,78 @@ export function getFaviconIconSync(domain: string): string {
   return FALLBACK_ICON
 }
 
-export { FALLBACK_ICON }
+/** List plugin-internal favicon cache entries for the settings UI. */
+export async function listFaviconCacheEntries(
+  storage: PluginPrivateStorageApi,
+  source: string,
+  pluginId: string,
+): Promise<FaviconCacheListEntry[]> {
+  try {
+    const keys = await storage.kv.list(FAVICON_KV_PREFIX)
+    const results: FaviconCacheListEntry[] = []
+    for (const { key } of keys) {
+      if (!key.startsWith(FAVICON_KV_PREFIX)) continue
+      const domain = key.slice(FAVICON_KV_PREFIX.length)
+      if (!domain) continue
+      const entry = await storage.kv.get<FaviconCacheEntry>(key)
+      if (!entry?.blobId) continue
+      const iconRef = buildIconRef(source, pluginId, entry.blobId)
+      // Keep memory in sync for launcher path
+      if (!isExpired(entry.fetchedAt)) {
+        memoryCache.set(domain, { iconRef, fetchedAt: entry.fetchedAt })
+      }
+      results.push({
+        domain,
+        blobId: entry.blobId,
+        fetchedAt: entry.fetchedAt,
+        iconRef,
+      })
+    }
+    results.sort((a, b) => b.fetchedAt - a.fetchedAt)
+    return results
+  } catch {
+    return []
+  }
+}
+
+/** Remove one domain from plugin-internal favicon cache. */
+export async function removeFaviconCacheEntry(
+  storage: PluginPrivateStorageApi,
+  domain: string,
+): Promise<void> {
+  const kvKey = `${FAVICON_KV_PREFIX}${domain}`
+  try {
+    const cached = await storage.kv.get<FaviconCacheEntry>(kvKey)
+    if (cached?.blobId) {
+      await storage.blob.delete(cached.blobId).catch(() => {})
+    }
+    await storage.kv.delete(kvKey)
+  } catch {
+    // best effort
+  }
+  memoryCache.delete(domain)
+}
+
+/** Clear all plugin-internal favicon cache entries. */
+export async function clearFaviconCache(storage: PluginPrivateStorageApi): Promise<number> {
+  let removed = 0
+  try {
+    const keys = await storage.kv.list(FAVICON_KV_PREFIX)
+    for (const { key } of keys) {
+      if (!key.startsWith(FAVICON_KV_PREFIX)) continue
+      const domain = key.slice(FAVICON_KV_PREFIX.length)
+      const cached = await storage.kv.get<FaviconCacheEntry>(key)
+      if (cached?.blobId) {
+        await storage.blob.delete(cached.blobId).catch(() => {})
+      }
+      await storage.kv.delete(key)
+      memoryCache.delete(domain)
+      removed += 1
+    }
+  } catch {
+    // best effort
+  }
+  return removed
+}
+
+export { FALLBACK_ICON, FAVICON_KV_PREFIX }

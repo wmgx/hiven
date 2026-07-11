@@ -293,6 +293,28 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   })
 }
 
+/** Progressive update emitted as each dynamic source finishes. */
+export type DynamicItemsPartialUpdate = {
+  kind: 'host' | 'plugin'
+  /** Present when kind === 'plugin'. */
+  pluginId?: string
+  items: LauncherItem[]
+}
+
+export type CollectDynamicItemsOptions = {
+  /**
+   * Called as soon as one host/plugin source resolves so the session can paint
+   * fast compute results without waiting for slower providers (favicon, apps).
+   */
+  onPartial?: (update: DynamicItemsPartialUpdate) => void
+  /** Abort in-flight work when the query changes. */
+  signal?: AbortSignal
+  /** Collect host dynamic items (apps / workflow). Default true. */
+  includeHost?: boolean
+  /** Collect plugin dynamicItems providers. Default true. */
+  includePlugins?: boolean
+}
+
 /**
  * Run dynamic providers for a query. Returns resolved dynamic LauncherItems.
  * Guards:
@@ -300,6 +322,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
  *  - Query longer than DYNAMIC_QUERY_MAX_LENGTH → skip.
  *  - Each provider isolated by try/catch + timeout; one failure cannot break
  *    the launcher or other providers.
+ *  - onPartial streams per-provider results so fast plugins are not gated by
+ *    Promise.all of the slowest peer (progressive results).
  */
 export async function collectDynamicItems(
   query: string,
@@ -307,27 +331,47 @@ export async function collectDynamicItems(
   locale: Locale,
   getSettings: (pluginId: string, source: ContributionSource) => unknown,
   inputText?: string,
+  options: CollectDynamicItemsOptions = {},
 ): Promise<LauncherItem[]> {
+  const includeHost = options.includeHost !== false
+  const includePlugins = options.includePlugins !== false
+  const onPartial = options.onPartial
+  const signal = options.signal
+
   const q = query.trim()
   const resolvedInputText = (q || inputText?.trim() || '')
   if (resolvedInputText.length > DYNAMIC_QUERY_MAX_LENGTH) return []
 
-  const hostDynamicItems = hostDynamicItemsProvider
-    ? await measureLauncherPerf(
+  const hostPromise: Promise<LauncherItem[]> = includeHost && hostDynamicItemsProvider
+    ? measureLauncherPerf(
       'registry:host-dynamic-items',
-      () => Promise.resolve(hostDynamicItemsProvider({ query: q, surfaceId, locale })),
+      () => Promise.resolve(hostDynamicItemsProvider!({ query: q, surfaceId, locale })),
       (items) => ({
         surfaceId,
         queryLength: q.length,
         itemCount: items.length,
       }),
-    )
-    : []
-  if (!resolvedInputText) return hostDynamicItems
+    ).then((items) => {
+      if (signal?.aborted) return []
+      onPartial?.({ kind: 'host', items })
+      return items
+    }).catch((error) => {
+      console.warn('[launcher] host dynamic provider failed:', error)
+      if (!signal?.aborted) onPartial?.({ kind: 'host', items: [] })
+      return [] as LauncherItem[]
+    })
+    : Promise.resolve([])
+
+  if (!includePlugins || !resolvedInputText) {
+    return await hostPromise
+  }
+
+  if (signal?.aborted) return []
 
   const providers = collectDynamicProviders()
   const results = await Promise.all(
     providers.map(async ({ provider, pluginId, source }) => {
+      if (signal?.aborted) return [] as LauncherItem[]
       const startedAt = launcherPerfNow()
       try {
         const settings = getSettings(pluginId, source)
@@ -347,15 +391,22 @@ export async function collectDynamicItems(
           })),
           DYNAMIC_PROVIDER_TIMEOUT_MS,
         )
-        if (!Array.isArray(raw)) return []
-        const items = raw.map((contribution) => resolveDynamicItem(contribution, pluginId, source))
+        if (signal?.aborted) return []
+        if (!Array.isArray(raw)) {
+          onPartial?.({ kind: 'plugin', pluginId, items: [] })
+          return []
+        }
+        const items = raw
+          .map((contribution) => resolveDynamicItem(contribution, pluginId, source))
+          .filter((item): item is LauncherItem => item != null)
         logLauncherPerfDuration('registry:plugin-dynamic-provider', startedAt, {
           pluginId,
           source,
           queryLength: q.length,
           rawCount: raw.length,
-          itemCount: items.filter((item): item is LauncherItem => item != null).length,
+          itemCount: items.length,
         })
+        onPartial?.({ kind: 'plugin', pluginId, items })
         return items
       } catch (error) {
         logLauncherPerfDuration('registry:plugin-dynamic-provider', startedAt, {
@@ -366,13 +417,18 @@ export async function collectDynamicItems(
           message: error instanceof Error ? error.message : String(error),
         })
         console.warn(`[launcher] dynamic provider "${pluginId}" failed:`, error)
+        if (!signal?.aborted) onPartial?.({ kind: 'plugin', pluginId, items: [] })
         return []
       }
     }),
   )
+
+  if (signal?.aborted) return []
+
+  const hostDynamicItems = await hostPromise
   return [
     ...hostDynamicItems,
-    ...results.flat().filter((item): item is LauncherItem => item != null),
+    ...results.flat(),
   ]
 }
 

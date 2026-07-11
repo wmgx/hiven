@@ -22,6 +22,11 @@ import type {
 } from './types'
 import { normalizeLauncherSurfaceId } from './types'
 
+/** Local compute plugins (calc / timestamp / regex match) — keep near-instant. */
+const PLUGIN_DYNAMIC_DEBOUNCE_MS = 30
+/** Host app / workflow search — tolerate slightly longer debounce. */
+const HOST_DYNAMIC_DEBOUNCE_MS = 150
+
 type UseLauncherSessionOptions = {
   hostId: LauncherSurfaceId
   open: boolean
@@ -64,11 +69,19 @@ export function useLauncherSession({
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [controllerState, setControllerState] = useState<LauncherControllerState | null>(null)
   const [controller, setController] = useState<LauncherController | null>(null)
-  const [dynamicItems, setDynamicItems] = useState<LauncherItem[]>([])
+  /** Plugin dynamicItems (calc, timestamp, web-open, …) — progressive. */
+  const [pluginDynamicItems, setPluginDynamicItems] = useState<LauncherItem[]>([])
+  /** Host dynamic items (apps / workflow) — isolated from plugin path. */
+  const [hostDynamicItems, setHostDynamicItems] = useState<LauncherItem[]>([])
   const controllerRef = useRef<LauncherController | null>(null)
-  const dynamicQueryRef = useRef('')
+  const pluginQueryRef = useRef('')
+  const hostQueryRef = useRef('')
   const requestCloseRef = useRef(requestClose)
   const prevControllerStateRef = useRef<LauncherControllerState | null>(null)
+  const pluginAbortRef = useRef<AbortController | null>(null)
+  const hostAbortRef = useRef<AbortController | null>(null)
+  /** Per-plugin partial results for the in-flight generation. */
+  const pluginPartialsRef = useRef(new Map<string, LauncherItem[]>())
 
   useEffect(() => {
     requestCloseRef.current = requestClose
@@ -77,8 +90,13 @@ export function useLauncherSession({
   const reset = useCallback(() => {
     setQuery('')
     setSelectedIndex(0)
-    setDynamicItems([])
-    dynamicQueryRef.current = ''
+    setPluginDynamicItems([])
+    setHostDynamicItems([])
+    pluginQueryRef.current = ''
+    hostQueryRef.current = ''
+    pluginPartialsRef.current.clear()
+    pluginAbortRef.current?.abort()
+    hostAbortRef.current?.abort()
     controllerRef.current?.reset()
   }, [])
 
@@ -89,8 +107,11 @@ export function useLauncherSession({
     let cancelled = false
     queueMicrotask(() => {
       if (cancelled) return
-      setDynamicItems([])
-      dynamicQueryRef.current = ''
+      setPluginDynamicItems([])
+      setHostDynamicItems([])
+      pluginQueryRef.current = ''
+      hostQueryRef.current = ''
+      pluginPartialsRef.current.clear()
       if (!controllerRef.current) {
         const nextController = new LauncherController({
           surfaceId: normalizedHostId,
@@ -141,43 +162,106 @@ export function useLauncherSession({
     return () => { cancelled = true }
   }, [locale, makeApi, normalizedHostId, open, recordLauncherSelection])
 
-  const dynamicAbortRef = useRef<AbortController | null>(null)
-
+  // ── Plugin dynamic path (fast debounce, progressive partials) ──────────────
   useEffect(() => {
     if (!open) return
     const q = query.trim()
     const inputText = q || objectBlockText?.trim() || ''
     if (!inputText && !collectDynamicWhenEmpty) {
-      setDynamicItems([])
-      dynamicQueryRef.current = ''
+      setPluginDynamicItems([])
+      pluginQueryRef.current = ''
+      pluginPartialsRef.current.clear()
+      pluginAbortRef.current?.abort()
       return
     }
 
-    dynamicQueryRef.current = q
+    pluginQueryRef.current = q
     const timer = window.setTimeout(() => {
-      if (dynamicQueryRef.current !== q) return
-      // Abort the previous in-flight request
-      dynamicAbortRef.current?.abort()
+      if (pluginQueryRef.current !== q) return
+      pluginAbortRef.current?.abort()
       const abortController = new AbortController()
-      dynamicAbortRef.current = abortController
+      pluginAbortRef.current = abortController
+      pluginPartialsRef.current = new Map()
+      setPluginDynamicItems([])
       const startedAt = launcherPerfNow()
-      collectDynamicItems(q, normalizedHostId, locale, getPluginSettings, inputText)
-        .then((items) => {
+      void collectDynamicItems(q, normalizedHostId, locale, getPluginSettings, inputText, {
+        includeHost: false,
+        includePlugins: true,
+        signal: abortController.signal,
+        onPartial: (update) => {
           if (abortController.signal.aborted) return
-          logLauncherPerfDuration('session:dynamic-items', startedAt, {
-            surfaceId: normalizedHostId,
-            queryLength: q.length,
-            hasObjectBlockText: Boolean(objectBlockText),
-            itemCount: items.length,
-          })
-          if (dynamicQueryRef.current !== q) return
-          setDynamicItems(filterDynamicForSurface(items, normalizedHostId))
+          if (pluginQueryRef.current !== q) return
+          if (update.kind !== 'plugin' || !update.pluginId) return
+          pluginPartialsRef.current.set(update.pluginId, update.items)
+          const merged = filterDynamicForSurface(
+            [...pluginPartialsRef.current.values()].flat(),
+            normalizedHostId,
+          )
+          setPluginDynamicItems(merged)
+        },
+      }).then((items) => {
+        if (abortController.signal.aborted) return
+        logLauncherPerfDuration('session:plugin-dynamic-items', startedAt, {
+          surfaceId: normalizedHostId,
+          queryLength: q.length,
+          hasObjectBlockText: Boolean(objectBlockText),
+          itemCount: items.length,
         })
-        .catch(() => { /* aborted or failed — ignore */ })
-    }, q ? 150 : 0)
+        if (pluginQueryRef.current !== q) return
+        setPluginDynamicItems(filterDynamicForSurface(items, normalizedHostId))
+      }).catch(() => { /* aborted or failed — ignore */ })
+    }, q || inputText ? PLUGIN_DYNAMIC_DEBOUNCE_MS : 0)
+
     return () => {
       window.clearTimeout(timer)
-      dynamicAbortRef.current?.abort()
+      pluginAbortRef.current?.abort()
+    }
+  }, [collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query])
+
+  // ── Host dynamic path (apps / workflow) — isolated, longer debounce ────────
+  useEffect(() => {
+    if (!open) return
+    const q = query.trim()
+    const inputText = q || objectBlockText?.trim() || ''
+    if (!inputText && !collectDynamicWhenEmpty) {
+      setHostDynamicItems([])
+      hostQueryRef.current = ''
+      hostAbortRef.current?.abort()
+      return
+    }
+
+    hostQueryRef.current = q
+    const timer = window.setTimeout(() => {
+      if (hostQueryRef.current !== q) return
+      hostAbortRef.current?.abort()
+      const abortController = new AbortController()
+      hostAbortRef.current = abortController
+      const startedAt = launcherPerfNow()
+      void collectDynamicItems(q, normalizedHostId, locale, getPluginSettings, inputText, {
+        includeHost: true,
+        includePlugins: false,
+        signal: abortController.signal,
+        onPartial: (update) => {
+          if (abortController.signal.aborted) return
+          if (hostQueryRef.current !== q) return
+          if (update.kind !== 'host') return
+          setHostDynamicItems(filterDynamicForSurface(update.items, normalizedHostId))
+        },
+      }).then((items) => {
+        if (abortController.signal.aborted) return
+        logLauncherPerfDuration('session:host-dynamic-items', startedAt, {
+          surfaceId: normalizedHostId,
+          queryLength: q.length,
+          itemCount: items.length,
+        })
+        if (hostQueryRef.current !== q) return
+        setHostDynamicItems(filterDynamicForSurface(items, normalizedHostId))
+      }).catch(() => { /* aborted or failed — ignore */ })
+    }, q ? HOST_DYNAMIC_DEBOUNCE_MS : 0)
+
+    return () => {
+      window.clearTimeout(timer)
+      hostAbortRef.current?.abort()
     }
   }, [collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query])
 
@@ -204,20 +288,21 @@ export function useLauncherSession({
         now: Date.now(),
         contentText,
       },
-      [...staticCandidates, ...dynamicItems],
+      [...staticCandidates, ...pluginDynamicItems, ...hostDynamicItems],
     ), (items) => ({
       surfaceId: normalizedHostId,
       queryLength: query.trim().length,
       hasObjectBlockText: Boolean(objectBlockText),
-      inputCount: staticCandidates.length + dynamicItems.length,
+      inputCount: staticCandidates.length + pluginDynamicItems.length + hostDynamicItems.length,
       resultCount: items.length,
     }))
   }, [
-    dynamicItems,
+    hostDynamicItems,
     launcherUsageBySurface,
     locale,
     normalizedHostId,
     objectBlockText,
+    pluginDynamicItems,
     query,
     staticCandidates,
   ])

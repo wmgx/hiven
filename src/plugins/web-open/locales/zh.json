@@ -18,5 +18,15 @@
   "defaultBaiduPlaceholder": "输入搜索关键词",
   "matchPattern": "快捷匹配正则",
   "matchPatternDescription": "输入匹配该正则时，跳过二次输入直接打开。",
-  "directOpenTitle": "直接打开链接"
+  "directOpenTitle": "直接打开链接",
+  "faviconCache.description": "以下为插件内部缓存的网站图标，供启动器结果列表使用。可单独删除或全部清空。",
+  "faviconCache.loading": "加载中…",
+  "faviconCache.count": "共 {count} 条",
+  "faviconCache.empty": "暂无缓存的网站图标。使用网页快开后会自动写入。",
+  "faviconCache.clearAll": "清空全部",
+  "faviconCache.remove": "删除",
+  "faviconCache.removed": "已删除 {domain}",
+  "faviconCache.removeFailed": "删除缓存失败",
+  "faviconCache.cleared": "已清空 {count} 条缓存",
+  "faviconCache.clearFailed": "清空缓存失败"
 }

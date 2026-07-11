@@ -14,7 +14,9 @@ import {
   DEFAULT_WEB_QUICK_OPEN_SETTINGS,
   type WebQuickOpenSettings,
 } from './settings/model'
-import { extractDomain, getFaviconIcon, FALLBACK_ICON } from './faviconCache'
+import { FaviconCacheModal } from './settings/FaviconCacheModal'
+import { extractDomain, resolveFaviconIconForLauncher, FALLBACK_ICON } from './faviconCache'
+import { replaceMatchPatternCache, testMatchPattern } from './matchPatternCache'
 
 function buildEntryLauncherItem(entry: WebQuickOpenSettings['entries'][number]): LauncherItemContribution<WebQuickOpenSettings> {
   const aliases = Array.isArray(entry.aliases) ? entry.aliases : []
@@ -86,12 +88,13 @@ function isValidUrl(text: string): boolean {
   return /^https?:\/\//i.test(text.trim())
 }
 
-function testMatchPattern(pattern: string, input: string): boolean {
-  try {
-    return new RegExp(pattern).test(input)
-  } catch {
-    return false
-  }
+function resolveLauncherIcon(
+  url: string,
+  ctx: LauncherDynamicContext,
+): string {
+  const domain = extractDomain(url)
+  if (!domain) return FALLBACK_ICON
+  return resolveFaviconIconForLauncher(domain, ctx.storage, ctx.source, ctx.pluginId)
 }
 
 async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<LauncherItemContribution[]> {
@@ -101,18 +104,23 @@ async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<L
   const query = ctx.query.trim()
   if (!query) return []
 
+  // Replace compiled matchPattern cache with current settings (supports pattern replacement).
+  replaceMatchPatternCache(
+    entries
+      .map((entry) => entry.matchPattern)
+      .filter((pattern): pattern is string => typeof pattern === 'string' && pattern.trim().length > 0),
+  )
+
   const results: LauncherItemContribution[] = []
 
   // A. Pattern-matched entries → perform (one-step open)
+  // Favicon uses plugin-internal memory/kv cache; network warm is non-blocking.
   for (const entry of entries) {
     if (!entry.matchPattern) continue
     if (!testMatchPattern(entry.matchPattern, query)) continue
 
     const url = buildWebQuickOpenUrl(entry.urlTemplate, query, entry.encodeQuery)
-    const domain = extractDomain(url)
-    const icon = domain
-      ? await getFaviconIcon(domain, ctx.storage, ctx.source, ctx.pluginId)
-      : FALLBACK_ICON
+    const icon = resolveLauncherIcon(url, ctx)
 
     results.push({
       id: entry.id + '-quick',
@@ -131,10 +139,7 @@ async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<L
 
   // B. Direct URL open
   if (isValidUrl(query)) {
-    const domain = extractDomain(query)
-    const icon = domain
-      ? await getFaviconIcon(domain, ctx.storage, ctx.source, ctx.pluginId)
-      : FALLBACK_ICON
+    const icon = resolveLauncherIcon(query, ctx)
 
     results.push({
       id: 'direct-url-open',
@@ -167,7 +172,7 @@ function migrateWebQuickOpenSettings(stored: unknown): WebQuickOpenSettings {
     ? stored as Partial<WebQuickOpenSettings>
     : {}
   const entries = Array.isArray(value.entries) ? value.entries : DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries
-  return {
+  const migrated: WebQuickOpenSettings = {
     enabled: typeof value.enabled === 'boolean' ? value.enabled : DEFAULT_WEB_QUICK_OPEN_SETTINGS.enabled,
     entries: entries.map((entry, index) => {
       const source = entry && typeof entry === 'object' && !Array.isArray(entry)
@@ -185,6 +190,13 @@ function migrateWebQuickOpenSettings(stored: unknown): WebQuickOpenSettings {
       }
     }),
   }
+  // Keep regex cache in sync when settings are loaded/migrated (replace semantics).
+  replaceMatchPatternCache(
+    migrated.entries
+      .map((entry) => entry.matchPattern)
+      .filter((pattern): pattern is string => typeof pattern === 'string' && pattern.trim().length > 0),
+  )
+  return migrated
 }
 
 export default definePlugin<WebQuickOpenSettings>({
@@ -194,6 +206,14 @@ export default definePlugin<WebQuickOpenSettings>({
     version: 5,
     defaultValue: DEFAULT_WEB_QUICK_OPEN_SETTINGS,
     migrate: migrateWebQuickOpenSettings,
+    modals: [
+      {
+        id: 'favicon-cache',
+        title: 'Favicon Cache',
+        titleI18n: { zh: '网站图标缓存' },
+        component: FaviconCacheModal,
+      },
+    ],
     schema: {
       sections: [
         {
@@ -209,6 +229,28 @@ export default definePlugin<WebQuickOpenSettings>({
               labelI18n: { zh: '启用插件' },
               description: 'When disabled, quick-open trigger words stop opening pages.',
               descriptionI18n: { zh: '关闭后所有触发词不再打开网页。' },
+            },
+          ],
+        },
+        {
+          id: 'cache',
+          title: 'Cache',
+          titleI18n: { zh: '缓存' },
+          description: 'Plugin-internal favicon cache used by quick-open results.',
+          descriptionI18n: { zh: '网页快开结果使用的插件内网站图标缓存。' },
+          fields: [
+            {
+              kind: 'modal',
+              id: 'favicon-cache',
+              modalId: 'favicon-cache',
+              icon: 'Image',
+              label: 'Favicon cache',
+              labelI18n: { zh: '网站图标缓存' },
+              description: 'View, remove, or clear cached site icons stored by this plugin.',
+              descriptionI18n: { zh: '查看、删除或清空本插件缓存的网站图标。' },
+              buttonLabel: 'Manage',
+              buttonLabelI18n: { zh: '管理' },
+              requires: ['storage.private', 'storage.blob'],
             },
           ],
         },
