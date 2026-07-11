@@ -50,6 +50,7 @@ export type {
   PluginSettingsModalBodyProps,
   PluginSettingsModalContribution,
   PluginSettingsModalField,
+  PluginSettingsObjectListItemField,
   PluginSettingsSchema,
   PluginSettingsSection,
   RendererContribution,

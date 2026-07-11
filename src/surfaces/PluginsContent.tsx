@@ -1,12 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { LucideIcon } from 'lucide-react'
 import {
   AlertTriangle,
+  Binary,
+  Braces,
+  Calculator,
+  Calendar,
+  Clipboard,
+  Code2,
+  FileCode2,
+  FileDiff,
   Globe,
+  Languages,
+  List,
   Loader2,
+  Lock,
   MoreHorizontal,
   Package,
+  Regex,
   Search,
   Settings,
+  Table2,
+  Type,
+  AlignLeft,
 } from 'lucide-react'
 import { t } from '../i18n'
 import type { Locale } from '../i18n'
@@ -19,9 +35,16 @@ import { usePluginStore } from '../workspace/pluginStore'
 import { usePluginSettingsStore } from '../workspace/pluginSettingsStore'
 import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
 import type { PluginSettingsSource } from '../workspace/pluginSettingsStore'
-import { getPluginPermissionSnapshot, missingPluginPermissions, usePluginPermissionStore } from '../workspace/pluginPermissions'
+import {
+  describePluginPermission,
+  getPluginPermissionSnapshot,
+  missingPluginPermissions,
+  usePluginPermissionStore,
+} from '../workspace/pluginPermissions'
 import { requestOpenPluginSurfaceTool } from '../workspace/pluginSurfaceOpenRequest'
 import { pluginSurfaceShortcutKey, usePluginSurfaceShortcutStore } from '../workspace/pluginSurfaceShortcuts'
+import { ShortcutRecorder } from '../components/ShortcutRecorder'
+import type { PluginPermission } from '../workspace/pluginTypes'
 import {
   checkInstalledPluginUpdate,
   disablePlugin,
@@ -45,7 +68,7 @@ import {
   watchDevPlugin,
 } from '../workspace/pluginRuntime'
 import type { PluginPackageSummary } from '../workspace/pluginRuntime'
-import type { DevPlugin, InstalledPlugin, PluginPermission } from '../workspace/pluginTypes'
+import type { DevPlugin, InstalledPlugin } from '../workspace/pluginTypes'
 import { searchableFieldsMatch, type SearchableFields } from '../workspace/searchRanking'
 
 type PluginKind = 'builtin' | 'installed' | 'dev'
@@ -69,26 +92,58 @@ type PluginDetailRow = {
   plugin: InstalledPlugin | DevPlugin | PluginPackageSummary
 }
 
-const ICON_BG_PALETTE = ['#e8f4fd', '#e8faf0', '#fef3e2', '#fce8ec', '#f3e8fe', '#e8f0fe']
+const ICON_BG_PALETTE = [
+  { bg: '#e0f2fe', fg: '#0369a1' },
+  { bg: '#f3e8ff', fg: '#7e22ce' },
+  { bg: '#ffedd5', fg: '#c2410c' },
+  { bg: '#dcfce7', fg: '#15803d' },
+  { bg: '#fce7f3', fg: '#be185d' },
+  { bg: '#f1f5f9', fg: '#475569' },
+]
 
-function pluginIconBg(pluginId: string): string {
-  const hash = pluginId.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 6
+const PLUGIN_ICON_MAP: Record<string, LucideIcon> = {
+  translate: Languages,
+  'clipboard-history': Clipboard,
+  'web-open': Globe,
+  'json-tools': Braces,
+  'text-diff': FileDiff,
+  calculator: Calculator,
+  crypto: Lock,
+  csv: Table2,
+  'date-time-assistant': Calendar,
+  'encode-decode': Binary,
+  formatter: AlignLeft,
+  'js-filter': Code2,
+  'line-tools': List,
+  'regex-tester': Regex,
+  'text-utils': Type,
+  yaml: FileCode2,
+}
+
+function pluginIconTone(pluginId: string) {
+  const hash = pluginId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % ICON_BG_PALETTE.length
   return ICON_BG_PALETTE[hash]
 }
 
 function pluginIconText(title: string): string {
   const firstChar = title.charAt(0)
-  const isChinese = /[\u4e00-\u9fff]/.test(firstChar)
-  if (isChinese) return firstChar
-  const words = title.split(/[\s\-_·:]+/).filter(Boolean)
-  if (words.length === 1) {
-    return words[0].length > 4 ? words[0].charAt(0).toUpperCase() : words[0]
-  }
-  const latinWords = words.filter((w) => /^[a-zA-Z0-9]/.test(w))
-  if (latinWords.length >= 2) {
-    return latinWords.map((w) => w.charAt(0).toUpperCase()).join('').slice(0, 3)
-  }
+  if (!firstChar) return '?'
+  if (/[\u4e00-\u9fff]/.test(firstChar)) return firstChar
   return firstChar.toUpperCase()
+}
+
+function PluginRowIcon({ pluginId, title, loading }: { pluginId: string; title: string; loading?: boolean }) {
+  const tone = pluginIconTone(pluginId)
+  const Icon = PLUGIN_ICON_MAP[pluginId]
+  return (
+    <div className="plugins-row-icon" style={{ backgroundColor: tone.bg, color: tone.fg }}>
+      {loading
+        ? <Loader2 size={17} className="animate-spin" />
+        : Icon
+          ? <Icon size={17} strokeWidth={2} />
+          : <span className="plugins-row-icon-char">{pluginIconText(title)}</span>}
+    </div>
+  )
 }
 
 function isTauri() {
@@ -126,12 +181,6 @@ function statusLabel(status: string, locale: 'zh' | 'en') {
   if (status === 'active') return t(locale, 'scripts.status.active')
   if (status === 'blocked') return t(locale, 'scripts.status.blocked')
   return t(locale, 'scripts.status.available')
-}
-
-function capabilityLabel(capability: string, locale: 'zh' | 'en') {
-  if (capability === 'command') return t(locale, 'scripts.capability.command')
-  if (capability === 'instant-suggestion') return t(locale, 'scripts.capability.instantSuggestion')
-  return capability
 }
 
 function formatPluginShortcutLabel(accelerator: string) {
@@ -214,6 +263,11 @@ export function PluginsContent({ onOpenPluginEditor }: PluginsContentProps) {
   const [addMenuOpen, setAddMenuOpen] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'done' | 'error'>('idle')
   const [openMenuKey, setOpenMenuKey] = useState<string | null>(null)
+  const [expandedKey, setExpandedKey] = useState<string | null>(null)
+  const [recordingSurfaceKey, setRecordingSurfaceKey] = useState<string | null>(null)
+  const grantPermissions = usePluginPermissionStore((s) => s.grantPermissions)
+  const setSurfaceShortcut = usePluginSurfaceShortcutStore((s) => s.setShortcut)
+  const clearSurfaceShortcut = usePluginSurfaceShortcutStore((s) => s.clearShortcut)
   const isImeComposingRef = useRef(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -481,13 +535,27 @@ export function PluginsContent({ onOpenPluginEditor }: PluginsContentProps) {
     finishImeComposition(isImeComposingRef)
   }
 
+  function getRequestedPermissions(pluginId: string, source: PluginSettingsSource): PluginPermission[] {
+    return pluginRegistry.getPluginPermissions(pluginId, source)
+  }
+
+  function getMissingPermissions(pluginId: string, source: PluginSettingsSource): PluginPermission[] {
+    const requested = getRequestedPermissions(pluginId, source)
+    if (requested.length === 0) return []
+    const snapshot = getPluginPermissionSnapshot(source, pluginId, requested)
+    return missingPluginPermissions(snapshot, requested)
+  }
+
+  function getGrantedPermissionCount(pluginId: string, source: PluginSettingsSource) {
+    const requested = getRequestedPermissions(pluginId, source)
+    if (requested.length === 0) return 0
+    return requested.length - getMissingPermissions(pluginId, source).length
+  }
+
   function isPluginBlocked(pluginId: string, source: PluginSettingsSource) {
     const definition = pluginRegistry.getPluginDefinition(pluginId, source)
     if (!definition?.background) return false
-    const requested = pluginRegistry.getPluginPermissions(pluginId, source)
-    if (requested.length === 0) return false
-    const snapshot = getPluginPermissionSnapshot(source, pluginId, requested)
-    return missingPluginPermissions(snapshot, requested).length > 0
+    return getMissingPermissions(pluginId, source).length > 0
   }
 
   function isPluginEnabled(row: PluginDetailRow): boolean {
@@ -633,6 +701,143 @@ export function PluginsContent({ onOpenPluginEditor }: PluginsContentProps) {
     )
   }
 
+  function renderDrawer(row: PluginDetailRow) {
+    const missing = getMissingPermissions(row.pluginId, row.settingsSource)
+    const requested = getRequestedPermissions(row.pluginId, row.settingsSource)
+    const grantedCount = getGrantedPermissionCount(row.pluginId, row.settingsSource)
+    const surfaces = shortcutBindableSurfaces(row.pluginId, row.settingsSource)
+    const primarySurface = primarySurfaceForPlugin(row.pluginId, row.settingsSource)
+    const statusKey = pluginDetailStatusKey(row)
+
+    return (
+      <div className="plugins-drawer" onClick={(event) => event.stopPropagation()}>
+        <div className="plugins-drawer-line">
+          <div className="plugins-drawer-label">{t(locale, 'scripts.drawerPermissions')}</div>
+          <div className="plugins-drawer-value">
+            {requested.length === 0 ? (
+              <span>{t(locale, 'scripts.permissionsNone')}</span>
+            ) : (
+              <>
+                {missing.map((permission) => (
+                  <span key={permission} className="plugins-drawer-shortcut-group">
+                    <span className="plugins-drawer-perm-label">{describePluginPermission(permission, locale)}</span>
+                    <button
+                      type="button"
+                      className="plugins-drawer-link"
+                      onClick={() => grantPermissions(row.settingsSource, row.pluginId, [permission])}
+                    >
+                      {t(locale, 'scripts.permissionsGrant')}
+                    </button>
+                  </span>
+                ))}
+                {missing.length > 1 && (
+                  <button
+                    type="button"
+                    className="plugins-drawer-link"
+                    onClick={() => grantPermissions(row.settingsSource, row.pluginId, missing)}
+                  >
+                    {t(locale, 'scripts.permissionsGrantAll')}
+                  </button>
+                )}
+                {missing.length === 0 ? (
+                  <span>{t(locale, 'scripts.permissionsAllGranted')}</span>
+                ) : grantedCount > 0 ? (
+                  <span>
+                    {t(locale, 'scripts.permissionsGrantedCount').replace('{count}', String(grantedCount))}
+                  </span>
+                ) : null}
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="plugins-drawer-line">
+          <div className="plugins-drawer-label">{t(locale, 'scripts.surfaceShortcutTitle')}</div>
+          <div className="plugins-drawer-value">
+            {surfaces.length === 0 ? (
+              <span>—</span>
+            ) : (
+              surfaces.map((surface) => {
+                const target = { source: row.settingsSource, pluginId: row.pluginId, surfaceId: surface.id }
+                const surfaceKey = pluginSurfaceShortcutKey(target)
+                const shortcut = pluginSurfaceShortcuts[surfaceKey]
+                const title = localized(surface.title, surface.titleI18n, locale)
+                const isRecording = recordingSurfaceKey === surfaceKey
+                return (
+                  <div key={surface.id} className="plugins-drawer-shortcut-group">
+                    <span>{title}</span>
+                    {shortcut?.accelerator && (
+                      <kbd className="plugins-shortcut-badge">{formatPluginShortcutLabel(shortcut.accelerator)}</kbd>
+                    )}
+                    {isRecording ? (
+                      <div className="plugins-drawer-shortcut-record">
+                        <ShortcutRecorder
+                          value={shortcut?.accelerator
+                            ? { kind: 'accelerator', accelerator: shortcut.accelerator }
+                            : { kind: 'disabled' }}
+                          emptyLabel={t(locale, 'scripts.surfaceBindShortcut')}
+                          onRecord={(value) => {
+                            if (value.kind === 'accelerator') {
+                              setSurfaceShortcut(target, value.accelerator)
+                            }
+                            setRecordingSurfaceKey(null)
+                          }}
+                          onClear={() => {
+                            clearSurfaceShortcut(target)
+                            setRecordingSurfaceKey(null)
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="plugins-drawer-link"
+                        onClick={() => setRecordingSurfaceKey(surfaceKey)}
+                      >
+                        {shortcut?.accelerator
+                          ? t(locale, 'scripts.surfaceRerecordShortcut')
+                          : t(locale, 'scripts.surfaceBindShortcut')}
+                      </button>
+                    )}
+                    {primarySurface?.id === surface.id && (
+                      <button
+                        type="button"
+                        className="plugins-drawer-link"
+                        onClick={() => void requestOpenPluginSurfaceTool(target)}
+                      >
+                        {t(locale, 'scripts.surfaceOpen')}
+                      </button>
+                    )}
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </div>
+
+        <div className="plugins-drawer-line">
+          <div className="plugins-drawer-label">{t(locale, 'scripts.drawerAbout')}</div>
+          <div className="plugins-drawer-value">
+            {row.error ? (
+              <span className="plugins-drawer-error">{row.error}</span>
+            ) : (
+              <>
+                <span className={`plugins-drawer-status-dot ${statusKey}`} />
+                <span>{row.status}</span>
+                <span className="plugins-drawer-version">v{row.version}</span>
+                <span>·</span>
+                <span>{kindTag(row.kind, locale)}</span>
+                {row.folderPath && (
+                  <span className="plugins-drawer-path" title={row.folderPath}>{row.folderPath}</span>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // --- Render a single list row ---
   function renderRow(row: PluginDetailRow) {
     const shortcutHint = surfaceShortcutHintForPlugin(row.pluginId, row.settingsSource)
@@ -640,41 +845,48 @@ export function PluginsContent({ onOpenPluginEditor }: PluginsContentProps) {
     const showGear = hasSchemaSettings(row)
     const menuItems = getDropdownMenuItems(row)
     const showMenu = menuItems.length > 0
-    const iconText = pluginIconText(row.title)
-    const statusKey = pluginDetailStatusKey(row)
+    const description = getPluginDetailDescription(row.pluginId, row.settingsSource, locale)
+    const missingCount = getMissingPermissions(row.pluginId, row.settingsSource).length
+    const isExpanded = expandedKey === row.key
 
     return (
-      <div key={row.key} className="plugins-row-wrapper">
-        <div className={`plugins-row ${row.error ? 'plugins-row--error' : ''}`}>
-          {/* Icon */}
-          <div className="plugins-row-icon" style={{ backgroundColor: pluginIconBg(row.pluginId) }}>
-            {row.loading
-              ? <Loader2 size={16} className="animate-spin" />
-              : <span className="plugins-row-icon-char">{iconText}</span>
+      <div
+        key={row.key}
+        className={`plugins-row-wrapper ${isExpanded ? 'is-expanded' : ''} ${row.error ? 'plugins-row-wrapper--error' : ''}`}
+      >
+        <div
+          className="plugins-row"
+          role="button"
+          tabIndex={0}
+          aria-expanded={isExpanded}
+          onClick={() => setExpandedKey((prev) => (prev === row.key ? null : row.key))}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              setExpandedKey((prev) => (prev === row.key ? null : row.key))
             }
-          </div>
+          }}
+        >
+          <PluginRowIcon pluginId={row.pluginId} title={row.title} loading={row.loading} />
 
-          {/* Text */}
           <div className="plugins-row-text">
             <div className="plugins-row-title-line">
               <span className="plugins-row-name">{row.title}</span>
               <span className={`plugins-row-kind-tag plugins-row-kind-tag--${row.kind}`}>{kindTag(row.kind, locale)}</span>
-              {row.capabilities.map((cap) => (
-                <span key={cap} className="plugins-cap-chip">{capabilityLabel(cap, locale)}</span>
-              ))}
             </div>
-            <div className="plugins-row-meta">
-              <span className="plugins-row-meta-version">v{row.version}</span>
-              <span className={`plugins-row-meta-status ${statusKey}`}>{row.status}</span>
-              {row.folderPath && <span className="plugins-row-meta-path" title={row.folderPath}>{row.folderPath}</span>}
-            </div>
+            {description && <div className="plugins-row-desc">{description}</div>}
           </div>
 
-          {/* Right side controls */}
-          <div className="plugins-row-controls" onClick={(e) => e.stopPropagation()}>
+          <div className="plugins-row-controls" onClick={(event) => event.stopPropagation()}>
+            {missingCount > 0 && (
+              <span className="plugins-warn-pill">
+                {t(locale, 'scripts.permissionsPendingCount').replace('{count}', String(missingCount))}
+              </span>
+            )}
             {shortcutHint && <kbd className="plugins-shortcut-badge">{shortcutHint}</kbd>}
             {showToggle && (
               <button
+                type="button"
                 className={`plugins-toggle ${isPluginEnabled(row) ? 'is-on' : ''}`}
                 title={isPluginEnabled(row) ? t(locale, 'scripts.actionDisable') : t(locale, 'scripts.actionEnable')}
                 onClick={() => handleToggleEnabled(row)}
@@ -684,6 +896,7 @@ export function PluginsContent({ onOpenPluginEditor }: PluginsContentProps) {
             )}
             {showGear && (
               <button
+                type="button"
                 className="plugins-icon-btn"
                 title={t(locale, 'scripts.settings')}
                 onClick={() => openPluginsSurfaceSettings(row.pluginId, row.settingsSource)}
@@ -694,6 +907,7 @@ export function PluginsContent({ onOpenPluginEditor }: PluginsContentProps) {
             {showMenu && (
               <div className="plugins-menu-anchor">
                 <button
+                  type="button"
                   className="plugins-icon-btn"
                   title={t(locale, 'scripts.moreActions')}
                   onClick={() => setOpenMenuKey((prev) => (prev === row.key ? null : row.key))}
@@ -705,6 +919,7 @@ export function PluginsContent({ onOpenPluginEditor }: PluginsContentProps) {
             )}
           </div>
         </div>
+        {isExpanded && renderDrawer(row)}
       </div>
     )
   }
@@ -779,7 +994,12 @@ export function PluginsContent({ onOpenPluginEditor }: PluginsContentProps) {
         {pluginDetailRows.length === 0 ? (
           <div className="plugins-empty">
             <Package size={40} strokeWidth={1.5} />
-            <div className="plugins-empty-text">{t(locale, 'scripts.emptyPlugins')}</div>
+            <div className="plugins-empty-text">
+              {normalizedQuery ? t(locale, 'scripts.noResults') : t(locale, 'scripts.emptyPlugins')}
+            </div>
+            {normalizedQuery && (
+              <div className="plugins-empty-hint">{t(locale, 'scripts.emptySearchHint')}</div>
+            )}
           </div>
         ) : (
           pluginDetailRows.map(renderRow)

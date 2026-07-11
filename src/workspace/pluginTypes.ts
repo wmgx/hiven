@@ -285,9 +285,18 @@ export type PluginSettingsNumberField<TSettings = unknown> = PluginSettingsField
   storageScale?: number
 }
 
+export type PluginSettingsSelectOptionsFrom = {
+  /** Root settings key holding an array of objects, e.g. `profiles`. */
+  listKey: string
+  valueKey?: string
+  labelKey?: string
+}
+
 export type PluginSettingsSelectField<TSettings = unknown> = PluginSettingsFieldBase<TSettings> & {
   kind: 'select'
   options: PluginSettingsOption[]
+  /** Build options from another list field at render time (e.g. profile picker). */
+  optionsFrom?: PluginSettingsSelectOptionsFrom
 }
 
 export type PluginSettingsTextField<TSettings = unknown> = PluginSettingsFieldBase<TSettings> & {
@@ -315,7 +324,7 @@ export type PluginSettingsObjectListItemField = {
   labelI18n?: Partial<Record<Locale, string>>
   description?: string
   descriptionI18n?: Partial<Record<Locale, string>>
-  kind: 'text' | 'textarea' | 'switch' | 'select' | 'string-list'
+  kind: 'text' | 'textarea' | 'switch' | 'select' | 'string-list' | 'number'
   placeholder?: string
   placeholderI18n?: Partial<Record<Locale, string>>
   rows?: number
@@ -324,6 +333,13 @@ export type PluginSettingsObjectListItemField = {
   group?: string
   groupI18n?: Partial<Record<Locale, string>>
   sensitive?: boolean
+  /** When set, field is shown only if sibling field matches. */
+  visibleWhen?: { key: string; equals: string | number | boolean }
+  min?: number
+  max?: number
+  step?: number
+  unit?: string
+  unitI18n?: Partial<Record<Locale, string>>
 }
 
 export type PluginSettingsObjectListField<TSettings = unknown> = PluginSettingsFieldBase<TSettings> & {

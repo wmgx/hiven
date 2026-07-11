@@ -81,14 +81,15 @@ export function PluginSettingsDialog() {
       onClick={(e) => { if (e.target === e.currentTarget) closeSettingsDialog() }}
     >
       <div
-        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col overflow-hidden"
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col overflow-hidden plugin-settings-dialog-panel"
         style={{
-          width: 'min(640px, calc(100vw - 48px))',
-          maxHeight: 'min(640px, calc(100vh - 96px))',
+          width: 'min(780px, calc(100vw - 40px))',
+          height: 'min(680px, calc(100vh - 48px))',
+          maxHeight: 'min(680px, calc(100vh - 48px))',
           background: 'var(--panel, var(--bg-surface, #ffffff))',
-          border: '0.5px solid var(--color-border-secondary)',
-          borderRadius: 'var(--radius-xl)',
-          boxShadow: '0 24px 48px rgba(0, 0, 0, 0.2)',
+          border: '1px solid var(--border, var(--color-border-secondary))',
+          borderRadius: '14px',
+          boxShadow: '0 20px 50px -12px rgba(18, 22, 28, 0.22), 0 0 0 1px rgba(18, 22, 28, 0.06)',
         }}
         onClick={(e) => e.stopPropagation()}
       >

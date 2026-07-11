@@ -38,7 +38,7 @@ export function SettingsContent() {
         </div>
       )}
       <SettingGroup title={t('general')}>
-        <SettingsListRow icon={<Languages size={14} />} name={t('language')} desc={t('languageInfo')}>
+        <SettingsListRow icon={<Languages size={15} strokeWidth={2} />} name={t('language')} desc={t('languageInfo')}>
           <LocaleSelect
             value={locale}
             options={[
@@ -52,16 +52,16 @@ export function SettingsContent() {
             }}
           />
         </SettingsListRow>
-        <SettingsListRow icon={<Moon size={14} />} name={t('darkTheme')} desc={t('darkThemeInfo')}>
+        <SettingsListRow icon={<Moon size={15} strokeWidth={2} />} name={t('darkTheme')} desc={t('darkThemeInfo')}>
           <Toggle value={settings.theme === 'dark'} onChange={(value) => updateSetting('theme', value ? 'dark' : 'light')} />
         </SettingsListRow>
-        <SettingsListRow icon={<Save size={14} />} name={t('persistParams')} desc={t('persistParamsInfo')}>
+        <SettingsListRow icon={<Save size={15} strokeWidth={2} />} name={t('persistParams')} desc={t('persistParamsInfo')}>
           <Toggle value={settings.persistParams} onChange={(value) => updateSetting('persistParams', value)} />
         </SettingsListRow>
       </SettingGroup>
 
       <SettingGroup title={t('hotkeys')}>
-        <SettingsListRow icon={<Command size={14} />} name={t('globalPinnedLauncherShortcut')} desc={t('globalPinnedLauncherShortcutInfo')}>
+        <SettingsListRow icon={<Command size={15} strokeWidth={2} />} name={t('globalPinnedLauncherShortcut')} desc={t('globalPinnedLauncherShortcutInfo')}>
           <ShortcutRecorder
             value={settings.globalPinnedLauncherShortcut ?? { kind: 'double-modifier', modifier: 'Command' }}
             allowDoubleModifier
@@ -76,25 +76,30 @@ export function SettingsContent() {
       </SettingGroup>
 
       <SettingGroup title={t('editor')}>
-        <SettingsListRow icon={<Type size={14} />} name={t('fontSize')} desc={t('fontSizeInfo')}>
+        <SettingsListRow icon={<Type size={15} strokeWidth={2} />} name={t('fontSize')} desc={t('fontSizeInfo')}>
           <span className="num">
             <button type="button" onClick={() => updateSetting('fontSize', Math.max(10, settings.fontSize - 1))}>−</button>
             <span className="v">{settings.fontSize}</span>
             <button type="button" onClick={() => updateSetting('fontSize', Math.min(24, settings.fontSize + 1))}>＋</button>
           </span>
         </SettingsListRow>
-        <SettingsListRow icon={<WrapText size={14} />} name={t('wordWrap')} desc={t('wordWrapInfo')}>
+        <SettingsListRow icon={<WrapText size={15} strokeWidth={2} />} name={t('wordWrap')} desc={t('wordWrapInfo')}>
           <Toggle value={settings.wordWrap} onChange={(value) => updateSetting('wordWrap', value)} />
         </SettingsListRow>
-        <SettingsListRow icon={<Hash size={14} />} name={t('lineNumbers')} desc={t('lineNumbersInfo')}>
+        <SettingsListRow icon={<Hash size={15} strokeWidth={2} />} name={t('lineNumbers')} desc={t('lineNumbersInfo')}>
           <Toggle value={settings.lineNumbers} onChange={(value) => updateSetting('lineNumbers', value)} />
         </SettingsListRow>
       </SettingGroup>
 
       <div className="settings-about-card">
         <div className="settings-about-left">
-          <span className="settings-about-name">hiven</span>
-          <span className="settings-about-version">v{appVersion}</span>
+          <div className="settings-about-mark" aria-hidden="true">h</div>
+          <div className="settings-about-text">
+            <span className="settings-about-name">hiven</span>
+            <span className="settings-about-version">
+              {t('currentVersion')} <span>v{appVersion}</span>
+            </span>
+          </div>
         </div>
         <div className="settings-about-right">
           <UpdateChecker compact />

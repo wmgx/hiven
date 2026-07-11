@@ -1,0 +1,1720 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>hiven · 插件设置 Demo v2（对齐系统设置 A+）</title>
+<style>
+  :root {
+    --font: "Inter", system-ui, -apple-system, "PingFang SC", "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    --ease: cubic-bezier(.2, .8, .2, 1);
+
+    /* 与系统设置 A+ 完全一致 */
+    --shell: #eef0f2;
+    --work: #ffffff;
+    --work-edge: #e1e4e8;
+    --t1: #15171a;
+    --t2: #5c636a;
+    --t3: #8b9299;
+    --line: #e6e8eb;
+    --line-soft: #eef0f2;
+    --hover: rgba(21, 23, 26, .05);
+    --inset: #f4f5f6;
+    --accent: #2563eb;
+    --accent-hover: #1d56d8;
+    --accent-soft: #eef2ff;
+    --ok: #16a34a;
+    --danger: #b0402f;
+    --shadow-work: 0 1px 0 rgba(255,255,255,.85) inset, 0 10px 28px rgba(18, 22, 28, .07);
+    --shadow-card: 0 1px 2px rgba(18, 22, 28, .04), 0 4px 14px rgba(18, 22, 28, .05);
+    --shadow-float: 0 20px 50px -12px rgba(18, 22, 28, .22), 0 0 0 1px rgba(18, 22, 28, .06);
+    --shadow-ctl: 0 1px 1px rgba(18, 22, 28, .05), inset 0 1px 0 rgba(255,255,255,.9);
+    --r: 11px;
+    --r-ctl: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--font);
+    background: #1c1d21;
+    color: #e4e4e7;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 22px 16px 48px;
+    gap: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .head { width: min(1120px, 100%); display: flex; flex-direction: column; gap: 8px; }
+  .head h1 { font-size: 15px; font-weight: 600; color: #f4f4f5; letter-spacing: -0.01em; }
+  .head p { font-size: 12.5px; line-height: 1.55; color: #a1a1aa; max-width: 78ch; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .seg {
+    display: inline-flex; padding: 3px; gap: 2px; border-radius: 10px;
+    background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08);
+  }
+  .seg button {
+    border: 0; background: transparent; color: rgba(255,255,255,.55);
+    font: 500 12px/1 var(--font); padding: 8px 12px; border-radius: 7px; cursor: pointer;
+  }
+  .seg button:hover { color: #fff; background: rgba(255,255,255,.05); }
+  .seg button.active { background: rgba(255,255,255,.16); color: #fff; font-weight: 600; }
+  .chip {
+    font-size: 11.5px; color: #93c5fd; background: rgba(37,99,235,.12);
+    border: 1px solid rgba(37,99,235,.35); padding: 6px 10px; border-radius: 8px;
+  }
+
+  /* ========== 舞台：嵌入「系统设置」壳，灰底一致 ========== */
+  .stage {
+    width: min(1120px, 100%);
+    display: flex;
+    justify-content: center;
+  }
+
+  .app-frame {
+    width: 920px;
+    max-width: 100%;
+    height: 800px;
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--shell);
+    box-shadow: 0 28px 70px -24px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.06);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    color: var(--t1);
+  }
+
+  .app-crumb {
+    height: 40px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 12px 0 10px;
+    border-bottom: 1px solid var(--line);
+    background: var(--shell);
+    font-size: 12.5px; color: var(--t2);
+  }
+  .app-crumb strong { color: var(--t1); font-weight: 600; }
+
+  .app-body { flex: 1; display: flex; min-height: 0; }
+
+  .app-side {
+    width: 172px; flex-shrink: 0; padding: 12px 10px;
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .app-nav {
+    height: 36px; border: 0; border-radius: 8px; background: transparent;
+    display: flex; align-items: center; gap: 8px; padding: 0 11px;
+    font: 500 13px/1 var(--font); color: var(--t2); text-align: left; width: 100%;
+  }
+  .app-nav.active {
+    background: var(--work); color: var(--t1); font-weight: 600;
+    box-shadow: var(--shadow-card);
+  }
+  .app-nav.active svg { color: var(--accent); }
+
+  .app-work {
+    flex: 1; min-width: 0; margin: 10px 10px 10px 0;
+    border-radius: 12px; border: 1px solid var(--work-edge);
+    background: var(--work); box-shadow: var(--shadow-work);
+    position: relative; overflow: hidden;
+  }
+
+  /* dimmer when modal open */
+  .app-work::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: rgba(21, 23, 26, .28);
+    z-index: 1;
+  }
+
+  /* ========== Dialog：纯白浮层，不铺第二套灰 ========== */
+  .dialog {
+    position: absolute; z-index: 2;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(780px, calc(100% - 40px));
+    height: min(680px, calc(100% - 28px));
+    display: none; flex-direction: column;
+    background: var(--work);
+    border-radius: 14px;
+    border: 1px solid var(--work-edge);
+    box-shadow: var(--shadow-float);
+    overflow: hidden;
+    color: var(--t1);
+  }
+  .dialog.active { display: flex; }
+
+  .d-head {
+    height: 52px; flex-shrink: 0;
+    display: flex; align-items: center; gap: 12px;
+    padding: 0 14px 0 16px;
+    border-bottom: 1px solid var(--line);
+    background: var(--work);
+  }
+  .d-icon {
+    width: 32px; height: 32px; border-radius: 9px;
+    display: grid; place-items: center; flex-shrink: 0;
+  }
+  .d-icon svg { width: 16px; height: 16px; }
+  .d-icon.tr { background: #e0f2fe; color: #0369a1; }
+  .d-icon.cl { background: #f3e8ff; color: #7e22ce; }
+  .d-icon.wb { background: #ffedd5; color: #c2410c; }
+  .d-titles { flex: 1; min-width: 0; }
+  .d-title { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+  .d-sub { font-size: 12px; color: var(--t2); margin-top: 2px; }
+  .d-close {
+    width: 30px; height: 30px; border: 0; border-radius: 7px;
+    background: transparent; color: var(--t2); font-size: 18px;
+    cursor: pointer; display: grid; place-items: center;
+  }
+  .d-close:hover { background: var(--hover); color: var(--t1); }
+
+  /* 头不滚；主体可滚。主从块自己吃剩余高度，内部再滚 */
+  .d-body {
+    flex: 1; min-height: 0; overflow: auto;
+    padding: 16px 20px 20px;
+    display: flex; flex-direction: column; gap: 18px;
+    background: var(--work);
+  }
+  .d-body > .block { flex-shrink: 0; }
+  .d-body > .block-fill {
+    flex: 1 1 auto;
+    min-height: 420px;
+    display: flex;
+    flex-direction: column;
+  }
+  .d-body > .block-fill .sec-label,
+  .d-body > .block-fill .sec-desc { flex-shrink: 0; }
+  .d-body > .block-fill .md {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .sec-label {
+    font-size: 13px; font-weight: 600; color: var(--t1);
+    margin-bottom: 8px;
+  }
+  .sec-desc {
+    font-size: 12px; color: var(--t2); margin: -4px 0 10px; line-height: 1.45;
+  }
+
+  /* 卡片：白底 + 发丝边 + 轻阴影，对齐系统设置 scard */
+  .card {
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    background: var(--work);
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+  }
+
+  .row {
+    min-height: 52px;
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px;
+  }
+  .row + .row { border-top: 1px solid var(--line-soft); }
+
+  .row-ico {
+    width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+    display: grid; place-items: center;
+    background: linear-gradient(180deg, #fff, var(--inset));
+    border: 1px solid var(--line); color: var(--t2);
+    box-shadow: var(--shadow-ctl);
+  }
+  .row-ico svg { width: 14px; height: 14px; }
+  .row-main { flex: 1; min-width: 0; }
+  .row-name { font-size: 13px; font-weight: 600; color: var(--t1); }
+  .row-desc { font-size: 12px; color: var(--t2); margin-top: 2px; line-height: 1.35; }
+  .row-ctl {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .toggle {
+    width: 36px; height: 21px; border-radius: 999px; border: 0;
+    background: #c5cad0; position: relative; cursor: pointer;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,.14);
+    flex-shrink: 0;
+  }
+  .toggle::after {
+    content: ""; position: absolute; top: 2px; left: 2px;
+    width: 17px; height: 17px; border-radius: 50%; background: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,.2); transition: transform .14s var(--ease);
+  }
+  .toggle.on { background: var(--accent); box-shadow: none; }
+  .toggle.on::after { transform: translateX(15px); }
+
+  /* 下拉与数字输入同高同框：白底 + 边框 */
+  .sel {
+    height: 30px; min-width: 120px; max-width: 200px;
+    padding: 0 8px 0 10px;
+    border: 1px solid #d0d4d9; border-radius: 7px;
+    background: #fff;
+    color: var(--t1); font: 500 13px/1 var(--font);
+    display: inline-flex; align-items: center; justify-content: space-between; gap: 8px;
+    cursor: default;
+  }
+  .sel:hover { border-color: #b8bec6; }
+  .sel .label {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .sel .chev {
+    flex-shrink: 0;
+    color: var(--t3); font-size: 9px;
+  }
+
+  /*
+   * 数字输入：默认态也要像「可编辑」，不要灰井像 disabled。
+   * 默认 = 白底 + 清晰边框 + 主色字
+   * 聚焦 = accent 边 + 软环
+   * 真禁用 = .is-disabled
+   */
+  .num-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .num-field input {
+    width: 64px;
+    height: 30px;
+    padding: 0 8px;
+    border: 1px solid #d0d4d9;
+    border-radius: 7px;
+    background: #fff;
+    box-shadow: none;
+    font: 500 13px/1 var(--mono);
+    color: var(--t1);
+    text-align: left;
+    font-variant-numeric: tabular-nums;
+    outline: none;
+    -webkit-text-fill-color: var(--t1); /* 防部分环境灰字 */
+    opacity: 1;
+  }
+  .num-field input:hover {
+    border-color: #b8bec6;
+  }
+  .num-field input:focus {
+    border-color: var(--accent);
+    background: #fff;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+  }
+  .num-field input:disabled,
+  .num-field.is-disabled input {
+    background: var(--inset);
+    border-color: var(--line);
+    color: var(--t3);
+    -webkit-text-fill-color: var(--t3);
+    cursor: not-allowed;
+  }
+  .num-field.wide input { width: 88px; }
+  .unit {
+    font-size: 12px; color: var(--t2);
+    min-width: 1.5em;
+  }
+
+  /* 详情区文本输入同样：默认白底可编辑 */
+  .in {
+    height: 34px; padding: 0 11px; border: 1px solid #d0d4d9; border-radius: var(--r-ctl);
+    background: #fff;
+    box-shadow: none;
+    font: 400 12.5px/1 var(--font); color: var(--t1); width: 100%; outline: none;
+    -webkit-text-fill-color: var(--t1);
+  }
+  .in:hover { border-color: #b8bec6; }
+  .in:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+    background: #fff;
+  }
+  .in.mono { font-family: var(--mono); font-size: 12px; }
+  .in:disabled {
+    background: var(--inset);
+    color: var(--t3);
+    -webkit-text-fill-color: var(--t3);
+    cursor: not-allowed;
+  }
+
+  /* 记录类型：竖排开关行，无描边胶囊 */
+  .type-list {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--line-soft);
+  }
+  .type-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 48px;
+    padding: 8px 14px;
+    border: 0;
+    background: transparent;
+    width: 100%;
+    font: 500 13px/1.2 var(--font);
+    color: var(--t1); /* 关着也保持主色，不发灰 */
+    cursor: pointer;
+    text-align: left;
+  }
+  .type-row + .type-row { border-top: 1px solid var(--line-soft); }
+  .type-row:hover { background: var(--hover); }
+  .type-row-label { flex: 1; min-width: 0; color: var(--t1); }
+  .type-row-sub {
+    display: block;
+    margin-top: 3px;
+    font-size: 11.5px;
+    font-weight: 400;
+    color: var(--t2); /* 次要说明用 t2，不用更淡的 t3，避免整行像废掉 */
+  }
+  /* 关态时不要整行变灰；仅开关视觉区分开/关 */
+  .type-row:not(:has(.toggle.on)) .type-row-label {
+    color: var(--t1);
+  }
+
+  .notice {
+    margin: 0; padding: 10px 12px; border-radius: 9px;
+    background: var(--inset);
+    border: 1px solid var(--line);
+    font-size: 12px; color: var(--t2); line-height: 1.45;
+  }
+
+  .md-empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 32px 20px;
+    text-align: center;
+    color: var(--t2);
+  }
+  .md-empty-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--t1);
+  }
+  .md-empty-desc {
+    font-size: 12px;
+    color: var(--t3);
+    max-width: 16em;
+    line-height: 1.45;
+  }
+  .md-empty-btn {
+    margin-top: 4px;
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--t1);
+    font: 500 12.5px/1 var(--font);
+    cursor: pointer;
+  }
+  .md-empty-btn:hover { border-color: #b8bec6; }
+  .md-empty-btn.primary {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .danger-zone {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 14px 16px; border-radius: var(--r);
+    border: 1px solid color-mix(in srgb, var(--danger) 22%, var(--line));
+    background: var(--work);
+    box-shadow: var(--shadow-card);
+  }
+  .danger-zone .name { font-size: 13px; font-weight: 600; }
+  .danger-zone .desc { font-size: 12px; color: var(--t2); margin-top: 2px; }
+  .btn-danger {
+    height: 32px; padding: 0 12px; border-radius: var(--r-ctl);
+    border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--line));
+    background: #fff;
+    color: var(--danger); font: 500 12.5px/1 var(--font);
+    cursor: pointer;
+  }
+  .btn-danger:hover { background: #fff8f7; }
+  .btn-danger.is-confirm {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: #fff;
+  }
+
+  /* 主从：左栏加宽；内部滚动，外层尽量不双滚 */
+  .md {
+    display: grid; grid-template-columns: 232px 1fr;
+    border: 1px solid var(--line); border-radius: var(--r);
+    overflow: hidden;
+    min-height: 400px;
+    height: 100%;
+    background: var(--work); box-shadow: var(--shadow-card);
+  }
+  .md-master {
+    border-right: 1px solid var(--line);
+    background: var(--work); /* 纯白 */
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  .md-list {
+    flex: 1; overflow: auto; padding: 8px;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .md-item {
+    border: 1px solid transparent; background: transparent; text-align: left; cursor: pointer;
+    border-radius: 9px; padding: 10px 10px;
+    display: flex; flex-direction: column; gap: 3px;
+    font-family: inherit; width: 100%;
+    transition: background .12s var(--ease), box-shadow .12s var(--ease);
+  }
+  .md-item:hover:not(.active) { background: var(--hover); }
+  /* 与系统设置侧栏一致：白底抬起，不用浅蓝 tint */
+  .md-item.active {
+    background: var(--work);
+    box-shadow: var(--shadow-card);
+    border-color: var(--line);
+  }
+  .md-item.active .md-item-title { font-weight: 600; }
+  .md-item.active .dot.on { box-shadow: 0 0 0 2px color-mix(in srgb, var(--ok) 25%, transparent); }
+  .md-item-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--t3); flex-shrink: 0; }
+  .dot.on { background: var(--ok); }
+  .md-item-title {
+    font-size: 12.5px; font-weight: 600; color: var(--t1);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .md-item-sub {
+    font-size: 11px; color: var(--t3); padding-left: 15px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .md-add {
+    margin: 4px 8px 10px; height: 34px; border-radius: 8px;
+    border: 1px dashed var(--line); background: transparent;
+    color: var(--t2); font: 500 12.5px/1 var(--font); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+  }
+  .md-add:hover { background: var(--hover); color: var(--t1); border-style: solid; }
+
+  .md-detail { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--work); }
+  .md-detail-head {
+    height: 44px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 14px; border-bottom: 1px solid var(--line);
+  }
+  .md-detail-title { font-size: 13px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .md-del {
+    height: 28px; padding: 0 10px; border: 0; border-radius: 6px;
+    background: transparent; color: var(--danger);
+    font: 500 12px/1 var(--font); cursor: pointer; flex-shrink: 0;
+  }
+  .md-del:hover { background: rgba(176,64,47,.08); }
+  .md-detail-body {
+    flex: 1; min-height: 0; overflow: auto; padding: 14px 16px 18px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+
+  .g-title {
+    font-size: 11.5px; font-weight: 600; color: var(--t2);
+    margin-bottom: 8px;
+  }
+  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+  .field:last-child { margin-bottom: 0; }
+  .field-label { font-size: 12px; font-weight: 500; color: var(--t2); }
+  .field-hint { font-size: 11px; color: var(--t3); font-weight: 400; margin-left: 4px; }
+  .field-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+  .sensitive { display: flex; gap: 6px; }
+  .sensitive .in { flex: 1; }
+  .eye {
+    width: 34px; height: 34px; border-radius: var(--r-ctl);
+    border: 1px solid #d0d4d9; background: #fff; color: var(--t2);
+    cursor: pointer; display: grid; place-items: center; flex-shrink: 0;
+  }
+  .eye:hover { border-color: #b8bec6; color: var(--t1); }
+  .eye svg { width: 15px; height: 15px; }
+
+  .preview-bar {
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 11px 12px; border-radius: 9px;
+    border: 1px solid var(--line); background: var(--inset);
+  }
+  .preview-bar-row {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    font-size: 12px; color: var(--t2);
+  }
+  .preview-bar-row strong { color: var(--t1); font-weight: 500; }
+  .preview-sample {
+    width: 120px; height: 28px; padding: 0 8px;
+    border: 1px solid #d0d4d9; border-radius: 6px; background: #fff;
+    font: 400 12px/1 var(--font); color: var(--t1); outline: none;
+  }
+  .preview-sample:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+  .preview-url {
+    font-family: var(--mono); font-size: 12px; color: var(--accent);
+    word-break: break-all; line-height: 1.4;
+  }
+  .usage {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--t2); padding: 6px 10px;
+    border-radius: 8px; background: var(--inset); border: 1px solid var(--line);
+  }
+  .usage strong { font-family: var(--mono); font-weight: 500; color: var(--t1); }
+
+  .aliases {
+    display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px;
+    border-radius: var(--r-ctl); border: 1px solid var(--line);
+    background: var(--inset); box-shadow: inset 0 1px 2px rgba(0,0,0,.04);
+    min-height: 40px; align-items: center;
+  }
+  .alias {
+    display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px;
+    border-radius: 999px; background: #fff; border: 1px solid var(--line);
+    font-size: 11.5px; color: var(--t1); box-shadow: var(--shadow-ctl);
+  }
+  .alias x { color: var(--t3); font-size: 12px; }
+  .alias-in {
+    border: 0; outline: 0; background: transparent; font: 400 12px/1 var(--font);
+    color: var(--t1); min-width: 72px; flex: 1;
+  }
+
+  .adv {
+    border: 1px solid var(--line); border-radius: 9px; overflow: hidden;
+    background: var(--work);
+  }
+  .adv-head {
+    width: 100%; height: 36px; padding: 0 12px; border: 0; background: var(--work);
+    display: flex; align-items: center; justify-content: space-between;
+    font: 500 12px/1 var(--font); color: var(--t2); cursor: pointer;
+  }
+  .adv-head:hover { background: var(--hover); }
+  .adv-body { display: none; padding: 12px; border-top: 1px solid var(--line); }
+  .adv.open .adv-body { display: block; }
+  .adv-head .chev { font-size: 10px; color: var(--t3); transition: transform .12s; display: inline-block; }
+  .adv.open .adv-head .chev { transform: rotate(90deg); }
+
+  /* 服务商：与名称输入同宽（拉满详情栏） */
+  .provider-select {
+    position: relative;
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .provider-select .sel.provider-trigger {
+    display: flex !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box;
+    height: 34px;
+    padding: 0 11px;
+    border: 1px solid #d0d4d9;
+    border-radius: var(--r-ctl);
+    background: #fff;
+    font: 400 12.5px/1 var(--font);
+    cursor: pointer;
+  }
+  .provider-select .sel.provider-trigger:hover {
+    border-color: #b8bec6;
+  }
+  .provider-select.is-open .sel.provider-trigger {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+  .provider-select .sel .label {
+    font-weight: 400;
+  }
+  .provider-menu {
+    display: none;
+    position: absolute;
+    z-index: 30;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    width: 100%;
+    padding: 4px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--work);
+    box-shadow: var(--shadow-md, var(--shadow-card));
+  }
+  .provider-select.is-open .provider-menu { display: block; }
+  .provider-menu button {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    height: 34px;
+    padding: 0 11px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    font: 400 12.5px/1 var(--font);
+    color: var(--t1);
+    cursor: pointer;
+    text-align: left;
+  }
+  .provider-menu button:hover { background: var(--hover); }
+  .provider-menu button.is-selected {
+    background: var(--accent-soft);
+    font-weight: 500;
+  }
+
+  html[data-theme="dark"] .provider-select .sel.provider-trigger {
+    background: var(--work);
+    border-color: var(--line);
+  }
+
+  /* Dark：跟随系统 / 可强制 */
+  html[data-theme="dark"],
+  html[data-theme="dark"] .app-frame {
+    color-scheme: dark;
+  }
+  html[data-theme="dark"] {
+    --shell: #1c1e22;
+    --work: #25272c;
+    --work-edge: #33363c;
+    --t1: #f0f1f2;
+    --t2: #a0a6ae;
+    --t3: #757b84;
+    --line: #35383f;
+    --line-soft: #2e3137;
+    --hover: rgba(255,255,255,.06);
+    --inset: #1a1c20;
+    --accent: #3b82f6;
+    --accent-hover: #2563eb;
+    --accent-soft: rgba(59,130,246,.16);
+    --ok: #22c55e;
+    --danger: #f07167;
+    --shadow-work: 0 1px 0 rgba(255,255,255,.04) inset, 0 10px 28px rgba(0,0,0,.35);
+    --shadow-card: 0 1px 2px rgba(0,0,0,.25), 0 4px 14px rgba(0,0,0,.2);
+    --shadow-float: 0 24px 60px -12px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.06);
+  }
+  html[data-theme="dark"] .app-frame {
+    box-shadow: 0 28px 70px -24px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.06);
+  }
+  html[data-theme="dark"] .num-field input,
+  html[data-theme="dark"] .in,
+  html[data-theme="dark"] .sel,
+  html[data-theme="dark"] .eye,
+  html[data-theme="dark"] .preview-sample,
+  html[data-theme="dark"] .md-empty-btn {
+    background: var(--work);
+    border-color: var(--line);
+    color: var(--t1);
+    -webkit-text-fill-color: var(--t1);
+  }
+  html[data-theme="dark"] .num-field input:focus,
+  html[data-theme="dark"] .in:focus,
+  html[data-theme="dark"] .preview-sample:focus {
+    border-color: var(--accent);
+    background: var(--work);
+  }
+  html[data-theme="dark"] .alias {
+    background: var(--inset);
+    border-color: var(--line);
+    color: var(--t1);
+    box-shadow: none;
+  }
+  html[data-theme="dark"] .aliases {
+    background: var(--inset);
+    box-shadow: none;
+  }
+  html[data-theme="dark"] .toggle {
+    background: #4a4e56;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,.35);
+  }
+  html[data-theme="dark"] .toggle.on {
+    background: var(--accent);
+  }
+  html[data-theme="dark"] .d-icon.tr { background: rgba(3,105,161,.25); color: #7dd3fc; }
+  html[data-theme="dark"] .d-icon.cl { background: rgba(126,34,206,.25); color: #d8b4fe; }
+  html[data-theme="dark"] .d-icon.wb { background: rgba(194,65,12,.25); color: #fdba74; }
+  html[data-theme="dark"] .md-item.active {
+    background: #2c2f36;
+    border-color: var(--line);
+  }
+  html[data-theme="dark"] .btn-danger {
+    background: transparent;
+  }
+  html[data-theme="dark"] .btn-danger.is-confirm {
+    background: var(--danger);
+    color: #1a1c1e;
+  }
+  html[data-theme="dark"] .md-empty-btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  .notes {
+    width: min(1120px, 100%);
+    display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 10px;
+  }
+  @media (max-width: 900px) {
+    .notes { grid-template-columns: 1fr; }
+    .md { grid-template-columns: 1fr; }
+    .md-master { border-right: 0; border-bottom: 1px solid var(--line); max-height: 150px; }
+  }
+  .note {
+    background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07);
+    border-radius: 10px; padding: 12px 14px; font-size: 12px; line-height: 1.5; color: #a1a1aa;
+  }
+  .note h3 { font-size: 12.5px; font-weight: 600; color: #e4e4e7; margin-bottom: 6px; }
+  .note.rec { border-color: rgba(37,99,235,.4); background: rgba(37,99,235,.08); }
+  .note.rec h3 { color: #93c5fd; }
+  .note ul { margin: 4px 0 0 16px; }
+  .note li { margin: 2px 0; }
+  .hint { width: min(1120px, 100%); text-align: center; font-size: 11.5px; color: #71717a; }
+  kbd.key {
+    font: 500 10.5px/1 var(--mono); padding: 2px 5px; border-radius: 4px;
+    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); color: #d4d4d8;
+  }
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>插件设置 · Demo v2</h1>
+    <p>
+      弹窗嵌在<strong>与系统设置相同的壳灰</strong>（<code style="color:#d4d4d8">#eef0f2</code>）上；内容面纯白抬起。
+      去掉灰底侧栏 / 灰渐变标题 / 灰块分区，避免「十年前设置页」感。
+    </p>
+    <div class="controls">
+      <div class="seg" id="pluginSeg">
+        <button type="button" class="active" data-plugin="translate">翻译</button>
+        <button type="button" data-plugin="clipboard">剪贴板历史</button>
+        <button type="button" data-plugin="webopen">网页快开</button>
+      </div>
+      <div class="seg" id="themeSeg">
+        <button type="button" class="active" data-theme="light">Light</button>
+        <button type="button" data-theme="dark">Dark</button>
+      </div>
+      <span class="chip">780 宽 · 选中抬起 · 空态</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="app-frame">
+      <div class="app-crumb">
+        <span>‹ 返回 / <strong>设置</strong></span>
+        <span>×</span>
+      </div>
+      <div class="app-body">
+        <nav class="app-side">
+          <button type="button" class="app-nav">设置</button>
+          <button type="button" class="app-nav active">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4"/><path d="m6.8 6.8 2.8 2.8"/><path d="M2 12h4"/><path d="m6.8 17.2 2.8-2.8"/><path d="M12 18v4"/><path d="m17.2 17.2-2.8-2.8"/><path d="M18 12h4"/><path d="m17.2 6.8-2.8 2.8"/></svg>
+            插件
+          </button>
+        </nav>
+        <div class="app-work">
+          <!-- TRANSLATE -->
+          <div class="dialog active" id="dlg-translate" data-plugin="translate">
+            <header class="d-head">
+              <div class="d-icon tr">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg>
+              </div>
+              <div class="d-titles">
+                <div class="d-title">翻译设置</div>
+                <div class="d-sub">默认配置与 API 凭据</div>
+              </div>
+              <button type="button" class="d-close">×</button>
+            </header>
+            <div class="d-body">
+              <div class="block">
+                <div class="sec-label">默认设置</div>
+                <div class="sec-desc">打开翻译面板时使用的配置组与目标语种</div>
+                <div class="card">
+                  <div class="row">
+                    <div class="row-main">
+                      <div class="row-name">默认配置组</div>
+                      <div class="row-desc">从已有 profile 选择，不填 ID</div>
+                    </div>
+                    <div class="row-ctl"><div class="sel"><span class="label">百度翻译 · 工作</span><span class="chev">▾</span></div></div>
+                  </div>
+                  <div class="row">
+                    <div class="row-main">
+                      <div class="row-name">默认目标语种</div>
+                      <div class="row-desc">配置组内可覆盖此默认值</div>
+                    </div>
+                    <div class="row-ctl"><div class="sel"><span class="label">智能</span><span class="chev">▾</span></div></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="block-fill">
+                <div class="sec-label">API 配置组</div>
+                <div class="sec-desc">凭据按服务商显示；ID 不暴露；月用量只读</div>
+                <div class="md">
+                  <div class="md-master">
+                    <div class="md-list" id="tr-list">
+                      <button type="button" class="md-item active" data-tr="baidu">
+                        <div class="md-item-top"><span class="dot on"></span><span class="md-item-title">百度翻译 · 工作</span></div>
+                        <div class="md-item-sub">Baidu · 本月 12.4k / 100k</div>
+                      </button>
+                      <button type="button" class="md-item" data-tr="deepl">
+                        <div class="md-item-top"><span class="dot on"></span><span class="md-item-title">DeepL 个人</span></div>
+                        <div class="md-item-sub">DeepL · 本月 3.1k / 50k</div>
+                      </button>
+                      <button type="button" class="md-item" data-tr="off">
+                        <div class="md-item-top"><span class="dot"></span><span class="md-item-title">旧测试配置</span></div>
+                        <div class="md-item-sub">已停用</div>
+                      </button>
+                    </div>
+                    <button type="button" class="md-add">＋ 添加配置组</button>
+                  </div>
+                  <div class="md-detail">
+                    <div class="md-detail-head">
+                      <span class="md-detail-title" id="tr-detail-title">百度翻译 · 工作</span>
+                      <button type="button" class="md-del">删除</button>
+                    </div>
+                    <div class="md-detail-body" id="tr-detail"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- CLIPBOARD -->
+          <div class="dialog" id="dlg-clipboard" data-plugin="clipboard">
+            <header class="d-head">
+              <div class="d-icon cl">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+              </div>
+              <div class="d-titles">
+                <div class="d-title">剪贴板历史设置</div>
+                <div class="d-sub">记录类型、容量与隐私</div>
+              </div>
+              <button type="button" class="d-close">×</button>
+            </header>
+            <div class="d-body">
+              <div class="block">
+                <div class="sec-label">记录</div>
+                <div class="card">
+                  <div class="row">
+                    <div class="row-main">
+                      <div class="row-name">启用剪贴板历史</div>
+                      <div class="row-desc">权限齐全后启动后台记录</div>
+                    </div>
+                    <div class="row-ctl"><button type="button" class="toggle on"></button></div>
+                  </div>
+                  <div class="type-list">
+                    <button type="button" class="type-row" data-on="1">
+                      <span class="type-row-label">文本<span class="type-row-sub">复制的纯文本与代码</span></span>
+                      <span class="toggle on" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" class="type-row" data-on="1">
+                      <span class="type-row-label">图片<span class="type-row-sub">截图与剪贴板图片</span></span>
+                      <span class="toggle on" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" class="type-row" data-on="0">
+                      <span class="type-row-label">文件路径<span class="type-row-sub">从访达复制的文件</span></span>
+                      <span class="toggle" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="block">
+                <div class="sec-label">保留与容量</div>
+                <div class="sec-desc">条数管列表长度；大小管单项与总缓存 · 均为输入框</div>
+                <div class="card">
+                  <div class="row">
+                    <div class="row-main">
+                      <div class="row-name">最大记录条数</div>
+                      <div class="row-desc">超出后丢弃最旧条目</div>
+                    </div>
+                    <div class="row-ctl">
+                      <div class="num-field"><input type="text" inputmode="numeric" value="200" /></div>
+                      <span class="unit">条</span>
+                    </div>
+                  </div>
+                  <div class="row">
+                    <div class="row-main"><div class="row-name">保留天数</div></div>
+                    <div class="row-ctl">
+                      <div class="num-field"><input type="text" inputmode="numeric" value="30" /></div>
+                      <span class="unit">天</span>
+                    </div>
+                  </div>
+                  <div class="row">
+                    <div class="row-main">
+                      <div class="row-name">文本单项上限</div>
+                      <div class="row-desc">超过则跳过该条文本</div>
+                    </div>
+                    <div class="row-ctl">
+                      <div class="num-field"><input type="text" inputmode="decimal" value="1" /></div>
+                      <span class="unit">MB</span>
+                    </div>
+                  </div>
+                  <div class="row">
+                    <div class="row-main"><div class="row-name">图片单项上限</div></div>
+                    <div class="row-ctl">
+                      <div class="num-field"><input type="text" inputmode="decimal" value="8" /></div>
+                      <span class="unit">MB</span>
+                    </div>
+                  </div>
+                  <div class="row">
+                    <div class="row-main">
+                      <div class="row-name">总缓存容量</div>
+                      <div class="row-desc">含文本与图片 blob</div>
+                    </div>
+                    <div class="row-ctl">
+                      <div class="num-field"><input type="text" inputmode="decimal" value="256" /></div>
+                      <span class="unit">MB</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="block danger-zone">
+                <div>
+                  <div class="name">清空全部历史</div>
+                  <div class="desc">不可撤销 · 不影响其它设置</div>
+                </div>
+                <button type="button" class="btn-danger" id="clear-history">清空…</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- WEB OPEN -->
+          <div class="dialog" id="dlg-webopen" data-plugin="webopen">
+            <header class="d-head">
+              <div class="d-icon wb">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              </div>
+              <div class="d-titles">
+                <div class="d-title">网页快开设置</div>
+                <div class="d-sub">触发词与地址规则</div>
+              </div>
+              <button type="button" class="d-close">×</button>
+            </header>
+            <div class="d-body">
+              <div class="block">
+                <div class="card">
+                  <div class="row">
+                    <div class="row-main">
+                      <div class="row-name">启用插件</div>
+                      <div class="row-desc">关闭后所有触发词不再打开网页</div>
+                    </div>
+                    <div class="row-ctl"><button type="button" class="toggle on"></button></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="block-fill">
+                <div class="sec-label">网址规则</div>
+                <div class="sec-desc">副标题显示触发词；正则默认折叠；预览可改示例输入</div>
+                <div class="md">
+                  <div class="md-master">
+                    <div class="md-list" id="wo-list">
+                      <button type="button" class="md-item active" data-wo="g">
+                        <div class="md-item-top"><span class="dot on"></span><span class="md-item-title">Google 搜索</span></div>
+                        <div class="md-item-sub">g · google · 谷歌</div>
+                      </button>
+                      <button type="button" class="md-item" data-wo="gh">
+                        <div class="md-item-top"><span class="dot on"></span><span class="md-item-title">GitHub</span></div>
+                        <div class="md-item-sub">gh · github</div>
+                      </button>
+                      <button type="button" class="md-item" data-wo="mt">
+                        <div class="md-item-top"><span class="dot on"></span><span class="md-item-title">会议号直开</span></div>
+                        <div class="md-item-sub">正则 · 9 位数字</div>
+                      </button>
+                    </div>
+                    <button type="button" class="md-add" id="wo-add">＋ 添加规则</button>
+                  </div>
+                  <div class="md-detail">
+                    <div class="md-detail-head">
+                      <span class="md-detail-title" id="wo-detail-title">Google 搜索</span>
+                      <button type="button" class="md-del">删除</button>
+                    </div>
+                    <div class="md-detail-body" id="wo-detail"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note rec">
+      <h3>本轮</h3>
+      <ul>
+        <li>主从选中 = 白底抬起（对齐侧栏）</li>
+        <li>弹窗宽 780</li>
+        <li>Light / Dark 可切</li>
+        <li>空列表空态 + 引导添加</li>
+        <li>隐私 notice 文案已去掉</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h3>控件</h3>
+      <ul>
+        <li>数字输入居左</li>
+        <li>类型竖排 switch</li>
+        <li>下拉与输入同框</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h3>空态试法</h3>
+      <ul>
+        <li>翻译 / 网页：点「删除」可看空态</li>
+        <li>空态按钮会重新加一条</li>
+      </ul>
+    </div>
+  </div>
+  <p class="hint"><kbd class="key">1</kbd> 翻译 · <kbd class="key">2</kbd> 剪贴板 · <kbd class="key">3</kbd> 网页</p>
+
+  <script>
+    const EYE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`;
+    const EYE_OFF = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.9 4.2A10.5 10.5 0 0 1 12 4c6.5 0 10 8 10 8a18 18 0 0 1-2.2 3.2"/><path d="M6.6 6.6C3.8 8.5 2 12 2 12s3.5 8 10 8a10 10 0 0 0 4.4-1"/><path d="m2 2 20 20"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>`;
+
+    function sensitiveField(label, value) {
+      return `
+        <div class="field">
+          <div class="field-label">${label}</div>
+          <div class="sensitive">
+            <input class="in mono" type="password" value="${value}" />
+            <button type="button" class="eye" title="显示/隐藏" aria-label="显示/隐藏">${EYE}</button>
+          </div>
+        </div>`;
+    }
+
+    const trDetails = {
+      baidu: {
+        title: '百度翻译 · 工作',
+        html: `
+          <div>
+            <div class="g-title">基本</div>
+            <div class="field"><div class="field-label">名称</div><input class="in" value="百度翻译 · 工作" /></div>
+            <div class="field">
+              <div class="field-label">服务商</div>
+              <div class="provider-select" data-provider="baidu">
+                <button type="button" class="sel provider-trigger">
+                  <span class="label">百度</span><span class="chev">▾</span>
+                </button>
+                <div class="provider-menu">
+                  <button type="button" class="is-selected" data-p="baidu">百度</button>
+                  <button type="button" data-p="deepl">DeepL</button>
+                </div>
+              </div>
+            </div>
+            <div class="field-row" style="margin-top:8px">
+              <div class="field-label">启用</div>
+              <button type="button" class="toggle on"></button>
+            </div>
+          </div>
+          <div data-cred="baidu">
+            <div class="g-title">凭据 · 百度</div>
+            ${sensitiveField('App ID', '2024xxxxxx')}
+            ${sensitiveField('Secret', 'secretsecret')}
+          </div>
+          <div data-cred="deepl" hidden>
+            <div class="g-title">凭据 · DeepL</div>
+            ${sensitiveField('Auth Key', 'xxxx:fx')}
+            <div class="field"><div class="field-label">Endpoint <span class="field-hint">可选</span></div>
+              <input class="in mono" value="https://api-free.deepl.com" /></div>
+          </div>
+          <div>
+            <div class="g-title">行为</div>
+            <div class="field">
+              <div class="field-label">默认目标语种 <span class="field-hint">可覆盖全局</span></div>
+              <div class="sel"><span class="label">智能</span><span class="chev">▾</span></div>
+            </div>
+            <div class="field">
+              <div class="field-label">月度字符上限</div>
+              <div class="num-field wide"><input type="text" inputmode="numeric" value="100000" /></div>
+              <span class="unit" style="margin-top:4px">字符</span>
+            </div>
+            <div class="usage">本月已用 <strong>12,403</strong> 字符 · 只读</div>
+          </div>
+        `,
+      },
+      deepl: {
+        title: 'DeepL 个人',
+        html: `
+          <div>
+            <div class="g-title">基本</div>
+            <div class="field"><div class="field-label">名称</div><input class="in" value="DeepL 个人" /></div>
+            <div class="field">
+              <div class="field-label">服务商</div>
+              <div class="provider-select" data-provider="deepl">
+                <button type="button" class="sel provider-trigger">
+                  <span class="label">DeepL</span><span class="chev">▾</span>
+                </button>
+                <div class="provider-menu">
+                  <button type="button" data-p="baidu">百度</button>
+                  <button type="button" class="is-selected" data-p="deepl">DeepL</button>
+                </div>
+              </div>
+            </div>
+            <div class="field-row" style="margin-top:8px">
+              <div class="field-label">启用</div>
+              <button type="button" class="toggle on"></button>
+            </div>
+          </div>
+          <div data-cred="baidu" hidden>
+            <div class="g-title">凭据 · 百度</div>
+            ${sensitiveField('App ID', '')}
+            ${sensitiveField('Secret', '')}
+          </div>
+          <div data-cred="deepl">
+            <div class="g-title">凭据 · DeepL</div>
+            ${sensitiveField('Auth Key', 'xxxx:fx')}
+            <div class="field"><div class="field-label">Endpoint <span class="field-hint">可选</span></div>
+              <input class="in mono" value="https://api-free.deepl.com" /></div>
+          </div>
+          <div>
+            <div class="g-title">行为</div>
+            <div class="field">
+              <div class="field-label">默认目标语种</div>
+              <div class="sel"><span class="label">中文</span><span class="chev">▾</span></div>
+            </div>
+            <div class="usage">本月已用 <strong>3,102</strong> 字符 · 只读</div>
+          </div>
+        `,
+      },
+      off: {
+        title: '旧测试配置',
+        html: `
+          <div>
+            <div class="g-title">基本</div>
+            <div class="field"><div class="field-label">名称</div><input class="in" value="旧测试配置" /></div>
+            <div class="field-row">
+              <div class="field-label">启用</div>
+              <button type="button" class="toggle"></button>
+            </div>
+          </div>
+          <div class="notice" style="margin:0"><span class="notice-text">已停用，不会出现在翻译面板的服务商列表中。ID 不在此展示。</span></div>
+        `,
+      },
+    };
+
+    const woRules = {
+      g: {
+        title: 'Google 搜索',
+        template: 'https://www.google.com/search?q={query}',
+        sample: 'hiven',
+        encode: true,
+        html: (previewUrl) => `
+          <div>
+            <div class="g-title">基本</div>
+            <div class="field"><div class="field-label">名称</div><input class="in" value="Google 搜索" /></div>
+            <div class="field">
+              <div class="field-label">触发词 <span class="field-hint">回车添加</span></div>
+              <div class="aliases">
+                <span class="alias">g <x>×</x></span>
+                <span class="alias">google <x>×</x></span>
+                <span class="alias">谷歌 <x>×</x></span>
+                <input class="alias-in" placeholder="添加触发词…" />
+              </div>
+            </div>
+            <div class="field">
+              <div class="field-label">输入提示</div>
+              <input class="in" value="搜索内容" />
+            </div>
+          </div>
+          <div>
+            <div class="g-title">打开行为</div>
+            <div class="field">
+              <div class="field-label">地址模板</div>
+              <input class="in mono preview-template" value="https://www.google.com/search?q={query}" />
+            </div>
+            <div class="field-row">
+              <div class="field-label">自动编码输入</div>
+              <button type="button" class="toggle on preview-encode"></button>
+            </div>
+            <div class="field" style="margin-top:10px">
+              <div class="field-label">空输入时</div>
+              <div class="sel"><span class="label">阻止打开</span><span class="chev">▾</span></div>
+            </div>
+          </div>
+          <div class="adv" id="adv-g">
+            <button type="button" class="adv-head" data-adv="adv-g">
+              <span>高级 · 快捷匹配正则</span><span class="chev">›</span>
+            </button>
+            <div class="adv-body">
+              <div class="field">
+                <div class="field-label">匹配正则 <span class="field-hint">命中则跳过二次输入</span></div>
+                <input class="in mono" placeholder="例如 ^\\\\d{9}$" value="" />
+              </div>
+            </div>
+          </div>
+          <div class="preview-bar">
+            <div class="preview-bar-row">
+              预览 · 示例输入
+              <input class="preview-sample" type="text" value="hiven" />
+            </div>
+            <div class="preview-url">${previewUrl}</div>
+          </div>
+        `,
+      },
+      gh: {
+        title: 'GitHub',
+        template: 'https://github.com/search?q={query}',
+        sample: 'tauri',
+        encode: true,
+        html: (previewUrl) => `
+          <div>
+            <div class="g-title">基本</div>
+            <div class="field"><div class="field-label">名称</div><input class="in" value="GitHub" /></div>
+            <div class="field">
+              <div class="field-label">触发词</div>
+              <div class="aliases">
+                <span class="alias">gh <x>×</x></span>
+                <span class="alias">github <x>×</x></span>
+                <input class="alias-in" placeholder="添加触发词…" />
+              </div>
+            </div>
+            <div class="field">
+              <div class="field-label">输入提示</div>
+              <input class="in" value="仓库名或路径" />
+            </div>
+          </div>
+          <div>
+            <div class="g-title">打开行为</div>
+            <div class="field">
+              <div class="field-label">地址模板</div>
+              <input class="in mono preview-template" value="https://github.com/search?q={query}" />
+            </div>
+          </div>
+          <div class="adv" id="adv-gh">
+            <button type="button" class="adv-head" data-adv="adv-gh">
+              <span>高级 · 快捷匹配正则</span><span class="chev">›</span>
+            </button>
+            <div class="adv-body">
+              <div class="field">
+                <div class="field-label">匹配正则</div>
+                <input class="in mono" placeholder="可选" value="" />
+              </div>
+            </div>
+          </div>
+          <div class="preview-bar">
+            <div class="preview-bar-row">
+              预览 · 示例输入
+              <input class="preview-sample" type="text" value="tauri" />
+            </div>
+            <div class="preview-url">${previewUrl}</div>
+          </div>
+        `,
+      },
+      mt: {
+        title: '会议号直开',
+        template: 'https://meet.example.com/{query}',
+        sample: '123456789',
+        encode: false,
+        html: (previewUrl) => `
+          <div>
+            <div class="g-title">基本</div>
+            <div class="field"><div class="field-label">名称</div><input class="in" value="会议号直开" /></div>
+            <div class="field">
+              <div class="field-label">触发词</div>
+              <div class="aliases">
+                <span class="alias">mt <x>×</x></span>
+                <input class="alias-in" placeholder="添加触发词…" />
+              </div>
+            </div>
+            <div class="field">
+              <div class="field-label">输入提示</div>
+              <input class="in" value="9 位会议号" />
+            </div>
+          </div>
+          <div>
+            <div class="g-title">打开行为</div>
+            <div class="field">
+              <div class="field-label">地址模板</div>
+              <input class="in mono preview-template" value="https://meet.example.com/{query}" />
+            </div>
+          </div>
+          <div class="adv open" id="adv-mt">
+            <button type="button" class="adv-head" data-adv="adv-mt">
+              <span>高级 · 快捷匹配正则</span><span class="chev">›</span>
+            </button>
+            <div class="adv-body">
+              <div class="field">
+                <div class="field-label">匹配正则</div>
+                <input class="in mono" value="^\\\\d{9}$" />
+              </div>
+            </div>
+          </div>
+          <div class="preview-bar">
+            <div class="preview-bar-row">
+              预览 · 示例输入
+              <input class="preview-sample" type="text" value="123456789" />
+            </div>
+            <div class="preview-url">${previewUrl}</div>
+          </div>
+        `,
+      },
+    };
+
+    function buildPreview(template, sample, encode) {
+      const q = encode ? encodeURIComponent(sample) : sample;
+      return String(template || '').replaceAll('{query}', q);
+    }
+
+    function setPlugin(id) {
+      document.querySelectorAll('.dialog').forEach((el) => {
+        el.classList.toggle('active', el.dataset.plugin === id);
+      });
+      document.querySelectorAll('#pluginSeg button').forEach((b) => {
+        b.classList.toggle('active', b.dataset.plugin === id);
+      });
+    }
+
+    function showMasterEmpty(kind) {
+      const isTr = kind === 'tr';
+      const list = document.getElementById(isTr ? 'tr-list' : 'wo-list');
+      const titleEl = document.getElementById(isTr ? 'tr-detail-title' : 'wo-detail-title');
+      const bodyEl = document.getElementById(isTr ? 'tr-detail' : 'wo-detail');
+      if (titleEl) titleEl.textContent = isTr ? 'API 配置组' : '网址规则';
+      if (bodyEl) {
+        bodyEl.innerHTML = `
+          <div class="md-empty">
+            <div class="md-empty-title">${isTr ? '还没有配置组' : '还没有规则'}</div>
+            <div class="md-empty-desc">${isTr ? '添加一个翻译服务配置，即可在面板里选用。' : '添加一条网址规则，即可用触发词打开网页。'}</div>
+            <button type="button" class="md-empty-btn primary" data-empty-add="${kind}">
+              ${isTr ? '＋ 添加配置组' : '＋ 添加规则'}
+            </button>
+          </div>`;
+        bodyEl.querySelector('[data-empty-add]')?.addEventListener('click', () => {
+          if (isTr) addTrProfile();
+          else document.getElementById('wo-add')?.click();
+        });
+      }
+      list?.querySelectorAll('.md-item').forEach((b) => b.classList.remove('active'));
+    }
+
+    function setTr(id) {
+      const d = trDetails[id];
+      if (!d) {
+        showMasterEmpty('tr');
+        return;
+      }
+      document.getElementById('tr-detail-title').textContent = d.title;
+      document.getElementById('tr-detail').innerHTML = d.html;
+      document.querySelectorAll('#tr-list .md-item').forEach((b) => {
+        b.classList.toggle('active', b.dataset.tr === id);
+      });
+      bindInteractive();
+      bindDelete('tr');
+    }
+
+    function setWo(id) {
+      const d = woRules[id];
+      if (!d) {
+        showMasterEmpty('wo');
+        return;
+      }
+      const url = buildPreview(d.template, d.sample, d.encode);
+      document.getElementById('wo-detail-title').textContent = d.title;
+      document.getElementById('wo-detail').innerHTML = d.html(url);
+      document.querySelectorAll('#wo-list .md-item').forEach((b) => {
+        b.classList.toggle('active', b.dataset.wo === id);
+      });
+      bindInteractive();
+      bindPreview();
+      bindDelete('wo');
+    }
+
+    function bindDelete(kind) {
+      const head = kind === 'tr'
+        ? document.querySelector('#dlg-translate .md-detail-head .md-del')
+        : document.querySelector('#dlg-webopen .md-detail-head .md-del');
+      if (!head || head.dataset.bound) return;
+      head.dataset.bound = '1';
+      head.addEventListener('click', () => {
+        if (kind === 'tr') {
+          const active = document.querySelector('#tr-list .md-item.active');
+          const id = active?.dataset.tr;
+          active?.remove();
+          if (id) delete trDetails[id];
+          const next = document.querySelector('#tr-list .md-item');
+          if (next) setTr(next.dataset.tr);
+          else showMasterEmpty('tr');
+        } else {
+          const active = document.querySelector('#wo-list .md-item.active');
+          const id = active?.dataset.wo;
+          active?.remove();
+          if (id) delete woRules[id];
+          const next = document.querySelector('#wo-list .md-item');
+          if (next) setWo(next.dataset.wo);
+          else showMasterEmpty('wo');
+        }
+      });
+    }
+
+    function addTrProfile() {
+      const id = 'new-' + Date.now();
+      const list = document.getElementById('tr-list');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'md-item';
+      btn.dataset.tr = id;
+      btn.innerHTML = `
+        <div class="md-item-top"><span class="dot on"></span><span class="md-item-title">新配置组</span></div>
+        <div class="md-item-sub">未配置</div>`;
+      list.appendChild(btn);
+      trDetails[id] = {
+        title: '新配置组',
+        html: `
+          <div>
+            <div class="g-title">基本</div>
+            <div class="field"><div class="field-label">名称</div><input class="in" value="新配置组" /></div>
+            <div class="field">
+              <div class="field-label">服务商</div>
+              <div class="provider-select" data-provider="baidu">
+                <button type="button" class="sel provider-trigger">
+                  <span class="label">百度</span><span class="chev">▾</span>
+                </button>
+                <div class="provider-menu">
+                  <button type="button" class="is-selected" data-p="baidu">百度</button>
+                  <button type="button" data-p="deepl">DeepL</button>
+                </div>
+              </div>
+            </div>
+            <div class="field-row" style="margin-top:8px">
+              <div class="field-label">启用</div>
+              <button type="button" class="toggle on"></button>
+            </div>
+          </div>
+          <div data-cred="baidu">
+            <div class="g-title">凭据 · 百度</div>
+            ${sensitiveField('App ID', '')}
+            ${sensitiveField('Secret', '')}
+          </div>
+          <div data-cred="deepl" hidden>
+            <div class="g-title">凭据 · DeepL</div>
+            ${sensitiveField('Auth Key', '')}
+          </div>
+        `,
+      };
+      setTr(id);
+    }
+
+    function bindPreview() {
+      const root = document.getElementById('wo-detail');
+      if (!root) return;
+      const sample = root.querySelector('.preview-sample');
+      const template = root.querySelector('.preview-template');
+      const out = root.querySelector('.preview-url');
+      const enc = root.querySelector('.preview-encode');
+      if (!sample || !template || !out) return;
+      const refresh = () => {
+        const encode = enc ? enc.classList.contains('on') : true;
+        out.textContent = buildPreview(template.value, sample.value, encode);
+      };
+      sample.addEventListener('input', refresh);
+      template.addEventListener('input', refresh);
+      if (enc && !enc.dataset.previewBound) {
+        enc.dataset.previewBound = '1';
+        enc.addEventListener('click', () => setTimeout(refresh, 0));
+      }
+    }
+
+    function bindInteractive() {
+      document.querySelectorAll('.toggle').forEach((btn) => {
+        if (btn.dataset.bound) return;
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          btn.classList.toggle('on');
+        });
+      });
+      document.querySelectorAll('.type-row').forEach((row) => {
+        if (row.dataset.bound) return;
+        row.dataset.bound = '1';
+        row.addEventListener('click', (e) => {
+          e.preventDefault();
+          if (e.target.closest('.toggle')) return;
+          row.querySelector('.toggle')?.classList.toggle('on');
+        });
+      });
+      document.querySelectorAll('.eye').forEach((btn) => {
+        if (btn.dataset.bound) return;
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', () => {
+          const input = btn.parentElement.querySelector('input');
+          if (!input) return;
+          const show = input.type === 'password';
+          input.type = show ? 'text' : 'password';
+          btn.innerHTML = show ? EYE_OFF : EYE;
+        });
+      });
+      document.querySelectorAll('.adv-head').forEach((btn) => {
+        if (btn.dataset.bound) return;
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', () => {
+          document.getElementById(btn.dataset.adv)?.classList.toggle('open');
+        });
+      });
+      document.querySelectorAll('.provider-select').forEach((wrap) => {
+        if (wrap.dataset.bound) return;
+        wrap.dataset.bound = '1';
+        const trigger = wrap.querySelector('.provider-trigger');
+        const label = trigger?.querySelector('.label');
+        const menu = wrap.querySelector('.provider-menu');
+
+        trigger?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          // close other open selects
+          document.querySelectorAll('.provider-select.is-open').forEach((el) => {
+            if (el !== wrap) el.classList.remove('is-open');
+          });
+          wrap.classList.toggle('is-open');
+        });
+
+        menu?.addEventListener('click', (e) => {
+          const b = e.target.closest('button[data-p]');
+          if (!b) return;
+          e.stopPropagation();
+          const p = b.dataset.p;
+          const text = b.textContent.trim();
+          menu.querySelectorAll('button').forEach((x) => x.classList.toggle('is-selected', x === b));
+          if (label) label.textContent = text;
+          wrap.dataset.provider = p;
+          wrap.classList.remove('is-open');
+          const detail = wrap.closest('.md-detail-body') || document.getElementById('tr-detail');
+          detail?.querySelectorAll('[data-cred]').forEach((el) => {
+            el.hidden = el.getAttribute('data-cred') !== p;
+          });
+        });
+      });
+    }
+
+    // 点击外部关闭服务商下拉
+    document.addEventListener('click', () => {
+      document.querySelectorAll('.provider-select.is-open').forEach((el) => el.classList.remove('is-open'));
+    });
+
+    document.getElementById('pluginSeg').addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-plugin]');
+      if (b) setPlugin(b.dataset.plugin);
+    });
+    document.getElementById('tr-list').addEventListener('click', (e) => {
+      const b = e.target.closest('.md-item');
+      if (b) setTr(b.dataset.tr);
+    });
+    document.getElementById('wo-list').addEventListener('click', (e) => {
+      const b = e.target.closest('.md-item');
+      if (b) setWo(b.dataset.wo);
+    });
+
+    document.getElementById('themeSeg')?.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-theme]');
+      if (!b) return;
+      document.documentElement.dataset.theme = b.dataset.theme;
+      document.querySelectorAll('#themeSeg button').forEach((x) => {
+        x.classList.toggle('active', x === b);
+      });
+    });
+
+    document.querySelector('#dlg-translate .md-add')?.addEventListener('click', () => addTrProfile());
+
+    document.getElementById('clear-history')?.addEventListener('click', () => {
+      const btn = document.getElementById('clear-history');
+      if (!btn.classList.contains('is-confirm')) {
+        btn.classList.add('is-confirm');
+        btn.textContent = '确认清空';
+        setTimeout(() => {
+          if (btn.classList.contains('is-confirm')) {
+            btn.classList.remove('is-confirm');
+            btn.textContent = '清空…';
+          }
+        }, 3000);
+        return;
+      }
+      btn.classList.remove('is-confirm');
+      btn.textContent = '已清空';
+      setTimeout(() => { btn.textContent = '清空…'; }, 1500);
+    });
+
+    document.getElementById('wo-add')?.addEventListener('click', () => {
+      const list = document.getElementById('wo-list');
+      const id = 'new-' + Date.now();
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'md-item';
+      btn.dataset.wo = id;
+      btn.innerHTML = `
+        <div class="md-item-top"><span class="dot on"></span><span class="md-item-title">新规则</span></div>
+        <div class="md-item-sub">未设置触发词</div>`;
+      list.appendChild(btn);
+      woRules[id] = {
+        title: '新规则',
+        template: 'https://example.com/search?q={query}',
+        sample: 'test',
+        encode: true,
+        html: (previewUrl) => `
+          <div>
+            <div class="g-title">基本</div>
+            <div class="field"><div class="field-label">名称</div><input class="in" value="新规则" /></div>
+            <div class="field">
+              <div class="field-label">触发词</div>
+              <div class="aliases"><input class="alias-in" placeholder="添加触发词…" /></div>
+            </div>
+            <div class="field">
+              <div class="field-label">输入提示</div>
+              <input class="in" value="" placeholder="可选" />
+            </div>
+          </div>
+          <div>
+            <div class="g-title">打开行为</div>
+            <div class="field">
+              <div class="field-label">地址模板</div>
+              <input class="in mono preview-template" value="https://example.com/search?q={query}" />
+            </div>
+          </div>
+          <div class="adv" id="adv-${id}">
+            <button type="button" class="adv-head" data-adv="adv-${id}">
+              <span>高级 · 快捷匹配正则</span><span class="chev">›</span>
+            </button>
+            <div class="adv-body">
+              <div class="field">
+                <div class="field-label">匹配正则</div>
+                <input class="in mono" placeholder="可选" value="" />
+              </div>
+            </div>
+          </div>
+          <div class="preview-bar">
+            <div class="preview-bar-row">
+              预览 · 示例输入
+              <input class="preview-sample" type="text" value="test" />
+            </div>
+            <div class="preview-url">${previewUrl}</div>
+          </div>
+        `,
+      };
+      setWo(id);
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.target.matches('input,textarea')) return;
+      if (e.key === '1') setPlugin('translate');
+      if (e.key === '2') setPlugin('clipboard');
+      if (e.key === '3') setPlugin('webopen');
+    });
+
+    // 默认 light；系统偏好 dark 时自动
+    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.documentElement.dataset.theme = 'dark';
+      document.querySelectorAll('#themeSeg button').forEach((b) => {
+        b.classList.toggle('active', b.dataset.theme === 'dark');
+      });
+    } else {
+      document.documentElement.dataset.theme = 'light';
+    }
+
+    setTr('baidu');
+    setWo('g');
+    bindInteractive();
+  </script>
+</body>
+</html>

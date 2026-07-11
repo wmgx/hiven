@@ -1,0 +1,1227 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>hiven · 设置/插件 A+ 设计图</title>
+<style>
+  :root {
+    --font: "Inter", system-ui, -apple-system, "PingFang SC", "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --ease: cubic-bezier(.2, .8, .2, 1);
+    --accent: #2563eb;
+    --accent-hover: #1d56d8;
+    --accent-soft: #eef2ff;
+    --ok: #16a34a;
+    --warn: #b45309;
+    --warn-bg: #fef3c7;
+    --danger: #b0402f;
+
+    /* A+ tokens — 系统偏好疏朗 + 克制立体 */
+    --shell: #eef0f2;
+    --work: #ffffff;
+    --work-edge: #e1e4e8;
+    --t1: #15171a;
+    --t2: #5c636a;
+    --t3: #8b9299;
+    --line: #e6e8eb;
+    --line-soft: #eef0f2;
+    --hover: rgba(21, 23, 26, .045);
+    --press: rgba(21, 23, 26, .08);
+    --inset: #f4f5f6;
+    --raised: #ffffff;
+    --shadow-work: 0 1px 0 rgba(255,255,255,.85) inset, 0 10px 28px rgba(18, 22, 28, .07);
+    --shadow-card: 0 1px 2px rgba(18, 22, 28, .04), 0 4px 14px rgba(18, 22, 28, .05);
+    --shadow-float: 0 12px 36px rgba(18, 22, 28, .14), 0 0 0 1px rgba(18, 22, 28, .05);
+    --shadow-ctl: 0 1px 1px rgba(18, 22, 28, .05), inset 0 1px 0 rgba(255,255,255,.9);
+    --r: 11px;
+    --r-ctl: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--font);
+    background: #1a1b1f;
+    color: #e4e4e7;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 18px 56px;
+    gap: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .head {
+    width: min(1180px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .head h1 {
+    font-size: 15px;
+    font-weight: 600;
+    color: #f4f4f5;
+    letter-spacing: -0.01em;
+  }
+  .head p {
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: #a1a1aa;
+    max-width: 78ch;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
+  .seg {
+    display: inline-flex;
+    padding: 3px;
+    gap: 2px;
+    border-radius: 10px;
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.08);
+  }
+  .seg button {
+    border: 0;
+    background: transparent;
+    color: rgba(255,255,255,.55);
+    font: 500 12px/1 var(--font);
+    padding: 8px 12px;
+    border-radius: 7px;
+    cursor: pointer;
+  }
+  .seg button:hover { color: #fff; background: rgba(255,255,255,.05); }
+  .seg button.active {
+    background: rgba(255,255,255,.16);
+    color: #fff;
+    font-weight: 600;
+  }
+  .chip {
+    font-size: 11.5px;
+    color: #93c5fd;
+    background: rgba(37,99,235,.12);
+    border: 1px solid rgba(37,99,235,.35);
+    padding: 6px 10px;
+    border-radius: 8px;
+  }
+
+  .stage {
+    width: min(1180px, 100%);
+    display: flex;
+    justify-content: center;
+  }
+
+  /* ========== Panel ========== */
+  .panel {
+    width: 920px;
+    max-width: 100%;
+    height: 740px;
+    border-radius: 14px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    color: var(--t1);
+    background: var(--shell);
+    box-shadow:
+      0 28px 70px -24px rgba(0,0,0,.58),
+      0 0 0 1px rgba(255,255,255,.06);
+  }
+
+  .phdr {
+    height: 48px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px 0 10px;
+    border-bottom: 1px solid var(--line);
+    background: var(--shell);
+  }
+  .crumb {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+  }
+  .crumb-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 30px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--t2);
+    font: 500 13px/1 var(--font);
+    cursor: pointer;
+  }
+  .crumb-back:hover { background: var(--hover); color: var(--t1); }
+  .crumb-back:focus-visible,
+  .nav:focus-visible,
+  .toggle:focus-visible,
+  .iconbtn:focus-visible,
+  .btn-soft:focus-visible,
+  .btn-primary:focus-visible,
+  .search input:focus-visible {
+    outline: 2px solid rgba(37,99,235,.45);
+    outline-offset: 2px;
+  }
+  .crumb-sep { color: var(--t3); }
+  .crumb-now { font-weight: 600; color: var(--t1); }
+  .close {
+    width: 30px; height: 30px;
+    border: 0; border-radius: 7px;
+    background: transparent; color: var(--t2);
+    font-size: 17px; cursor: pointer;
+    display: grid; place-items: center;
+  }
+  .close:hover { background: var(--hover); color: var(--t1); }
+
+  .pbody { flex: 1; display: flex; min-height: 0; }
+
+  .sidebar {
+    width: 188px;
+    flex-shrink: 0;
+    padding: 14px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: var(--shell);
+  }
+  .nav {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 40px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--t2);
+    font: 500 13.5px/1 var(--font);
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+  }
+  .nav:hover:not(.active) { background: var(--hover); color: var(--t1); }
+  .nav.active {
+    background: #fff;
+    color: var(--t1);
+    font-weight: 600;
+    box-shadow: var(--shadow-card);
+  }
+  .nav svg { flex-shrink: 0; opacity: .65; }
+  .nav.active svg { opacity: 1; color: var(--accent); }
+
+  .work {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    margin: 12px 12px 12px 0;
+    border-radius: 12px;
+    border: 1px solid var(--work-edge);
+    background: var(--work);
+    box-shadow: var(--shadow-work);
+    overflow: hidden;
+  }
+
+  .view { display: none; flex: 1; min-height: 0; flex-direction: column; }
+  .view.active { display: flex; }
+
+  /* ---- Settings ---- */
+  .sscroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 22px 28px 32px;
+  }
+  .sgroup + .sgroup { margin-top: 28px; }
+  .sgroup-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--t1);
+    margin: 0 2px 10px;
+  }
+  .sgroup-hint {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--t3);
+    margin-left: 8px;
+  }
+
+  .scard {
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    background: var(--raised);
+    box-shadow: var(--shadow-card);
+    overflow: visible;
+  }
+
+  .srow {
+    min-height: 56px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 16px;
+  }
+  .srow + .srow { border-top: 1px solid var(--line-soft); }
+
+  .s-ico {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    background: linear-gradient(180deg, #fff, var(--inset));
+    color: var(--t2);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow-ctl);
+  }
+  .s-ico svg { width: 15px; height: 15px; }
+
+  .s-main { flex: 1; min-width: 0; }
+  .s-name {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--t1);
+  }
+  .s-desc {
+    margin-top: 3px;
+    font-size: 12px;
+    color: var(--t2);
+    line-height: 1.4;
+  }
+
+  .s-ctl {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .toggle {
+    width: 38px;
+    height: 22px;
+    border-radius: 999px;
+    border: 0;
+    background: #c5cad0;
+    position: relative;
+    cursor: pointer;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,.14);
+    transition: background .14s var(--ease);
+  }
+  .toggle::after {
+    content: "";
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,.22);
+    transition: transform .14s var(--ease);
+  }
+  .toggle.on {
+    background: var(--accent);
+    box-shadow: none;
+  }
+  .toggle.on::after { transform: translateX(16px); }
+
+  .ctl {
+    height: 34px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-ctl);
+    background: linear-gradient(180deg, #fff, #f5f6f7);
+    color: var(--t1);
+    font: 500 12.5px/1 var(--font);
+    box-shadow: var(--shadow-ctl);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 11px;
+    cursor: default;
+  }
+  .ctl:active { background: var(--inset); box-shadow: inset 0 1px 2px rgba(0,0,0,.06); }
+  .ctl .chev { color: var(--t3); font-size: 10px; }
+  .num {
+    font-family: var(--mono);
+    gap: 10px;
+  }
+  .num b { min-width: 20px; text-align: center; font-weight: 500; }
+  .num .step {
+    color: var(--t3);
+    width: 16px;
+    text-align: center;
+    cursor: pointer;
+    user-select: none;
+  }
+  .num .step:hover { color: var(--t1); }
+
+  .about {
+    margin-top: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px 18px;
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    background:
+      linear-gradient(180deg, #fafbfc 0%, #fff 40%);
+    box-shadow: var(--shadow-card);
+  }
+  .about-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .about-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(160deg, #3b76f0, #2563eb);
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+    box-shadow: 0 2px 6px rgba(37,99,235,.28), inset 0 1px 0 rgba(255,255,255,.25);
+  }
+  .about-name {
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--t1);
+  }
+  .about-meta {
+    margin-top: 3px;
+    font-size: 12px;
+    color: var(--t3);
+  }
+  .about-meta span {
+    font-family: var(--mono);
+    color: var(--t2);
+  }
+  .btn-soft {
+    height: 34px;
+    padding: 0 14px;
+    border-radius: var(--r-ctl);
+    border: 1px solid var(--line);
+    background: linear-gradient(180deg, #fff, #f5f6f7);
+    color: var(--t1);
+    font: 500 12.5px/1 var(--font);
+    box-shadow: var(--shadow-ctl);
+    cursor: pointer;
+  }
+  .btn-soft:hover { background: #fff; }
+  .btn-soft:active {
+    background: var(--inset);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,.06);
+  }
+
+  /* ---- Plugins ---- */
+  .ptoolbar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 24px 10px;
+  }
+  .search {
+    flex: 1;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--inset);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,.05);
+    color: var(--t3);
+  }
+  .search input {
+    border: 0;
+    outline: 0;
+    background: transparent;
+    width: 100%;
+    color: var(--t1);
+    font: 400 13px/1 var(--font);
+  }
+  .search input::placeholder { color: var(--t3); }
+
+  .btn-primary {
+    height: 36px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 9px;
+    background: linear-gradient(180deg, #3b76f0, var(--accent));
+    color: #fff;
+    font: 600 13px/1 var(--font);
+    box-shadow: 0 1px 2px rgba(37,99,235,.28), inset 0 1px 0 rgba(255,255,255,.22);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn-primary:hover { background: linear-gradient(180deg, #356de3, var(--accent-hover)); }
+  .btn-primary:active {
+    background: var(--accent-hover);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,.15);
+  }
+
+  .plist {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 18px 24px;
+  }
+
+  .prow-item {
+    border-radius: 11px;
+    transition: background .12s var(--ease), box-shadow .12s var(--ease);
+  }
+  .prow-item + .prow-item { margin-top: 2px; }
+
+  /* 默认：不抬卡；hover 只淡底 */
+  .prow {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 60px;
+    padding: 11px 12px;
+    border-radius: 11px;
+    cursor: pointer;
+  }
+  .prow-item:hover:not(.expanded) .prow {
+    background: var(--hover);
+  }
+
+  /* 仅展开时升为卡片 —— 立体留给当前关注项 */
+  .prow-item.expanded {
+    background: #fff;
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--line);
+    margin: 6px 0;
+  }
+  .prow-item.expanded .prow {
+    background: transparent;
+    cursor: default;
+  }
+
+  .picon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+  }
+  .picon svg { width: 17px; height: 17px; }
+  .picon.tr { background: #e0f2fe; color: #0369a1; }
+  .picon.cl { background: #f3e8ff; color: #7e22ce; }
+  .picon.wb { background: #ffedd5; color: #c2410c; }
+  .picon.js { background: #dcfce7; color: #15803d; }
+  .picon.dv { background: #f1f5f9; color: #475569; }
+
+  .pmid { flex: 1; min-width: 0; }
+  .ptitle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .pname {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--t1);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tag {
+    font: 600 10.5px/1 var(--font);
+    padding: 3px 7px;
+    border-radius: 5px;
+    background: var(--inset);
+    color: var(--t2);
+    flex-shrink: 0;
+    border: 1px solid transparent;
+  }
+  .tag.dev {
+    background: transparent;
+    border: 1px dashed #b0b6bd;
+    color: var(--t3);
+  }
+  .pdesc {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--t2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .pright {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .kbd {
+    font: 500 11px/1 var(--mono);
+    color: var(--t2);
+    background: #fff;
+    border: 1px solid var(--line);
+    border-bottom-width: 2px;
+    border-bottom-color: #d5d8dc;
+    border-radius: 6px;
+    padding: 4px 7px;
+  }
+  .warn-pill {
+    font: 600 11px/1 var(--font);
+    color: var(--warn);
+    background: var(--warn-bg);
+    padding: 5px 8px;
+    border-radius: 999px;
+  }
+  .iconbtn {
+    width: 30px;
+    height: 30px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--t2);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+  }
+  .iconbtn:hover { background: var(--hover); color: var(--t1); }
+  .iconbtn svg { width: 15px; height: 15px; }
+
+  /* 展开抽屉：三行摘要，不堆表单 */
+  .drawer {
+    display: none;
+    flex-direction: column;
+    gap: 0;
+    padding: 0 14px 14px 62px;
+  }
+  .prow-item.expanded .drawer { display: flex; }
+
+  .drow {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    min-height: 32px;
+    padding: 8px 0;
+    font-size: 12.5px;
+    color: var(--t2);
+  }
+  .drow + .drow { border-top: 1px solid var(--line-soft); }
+  .dlab {
+    width: 48px;
+    flex-shrink: 0;
+    font-weight: 600;
+    color: var(--t3);
+    font-size: 11.5px;
+    padding-top: 2px;
+  }
+  .dval {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    line-height: 1.45;
+  }
+  .link {
+    border: 0;
+    background: transparent;
+    color: var(--accent);
+    font: 500 12px/1 var(--font);
+    cursor: pointer;
+    padding: 0;
+  }
+  .link:hover { text-decoration: underline; }
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ok);
+    display: inline-block;
+  }
+  .mono { font-family: var(--mono); font-size: 11.5px; color: var(--t3); }
+
+  /* 空态演示（隐藏，可用按钮切） */
+  .empty {
+    display: none;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--t3);
+    padding: 40px 24px 60px;
+  }
+  .empty.show { display: flex; }
+  .plist.hide { display: none; }
+  .empty-ico {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    background: var(--inset);
+    border: 1px solid var(--line);
+    color: var(--t3);
+    margin-bottom: 4px;
+  }
+  .empty-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--t2);
+  }
+  .empty-desc {
+    font-size: 12.5px;
+    color: var(--t3);
+  }
+  .btn-soft.mt { margin-top: 6px; }
+
+  /* error banner */
+  .err {
+    display: none;
+    margin: 0 24px 8px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+    font-size: 12.5px;
+    align-items: center;
+    gap: 8px;
+  }
+  .err.show { display: flex; }
+
+  /* notes */
+  .notes {
+    width: min(1180px, 100%);
+    display: grid;
+    grid-template-columns: 1.2fr 1fr 1fr;
+    gap: 10px;
+  }
+  @media (max-width: 960px) {
+    .notes { grid-template-columns: 1fr; }
+  }
+  .note {
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.07);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #a1a1aa;
+  }
+  .note h3 {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #e4e4e7;
+    margin-bottom: 6px;
+  }
+  .note.rec {
+    border-color: rgba(37,99,235,.4);
+    background: rgba(37,99,235,.08);
+  }
+  .note.rec h3 { color: #93c5fd; }
+  .note ul { margin: 4px 0 0 16px; }
+  .note li { margin: 2px 0; }
+  .hint {
+    width: min(1180px, 100%);
+    text-align: center;
+    font-size: 11.5px;
+    color: #71717a;
+  }
+  kbd.key {
+    font: 500 10.5px/1 var(--mono);
+    padding: 2px 5px;
+    border-radius: 4px;
+    background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.12);
+    color: #d4d4d8;
+  }
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>设置 / 插件 · A+ 设计图</h1>
+    <p>
+      在 A（系统偏好疏朗）上收紧五件事：线标图标、hover 不抬卡、分组标题安静、控件同一厚度语言、插件只保留名称+描述。
+      立体只出现在<strong>壳层 / 工作面 / 展开项 / 浮层</strong>。点击插件行可看展开态。
+    </p>
+    <div class="controls">
+      <div class="seg" id="pageSeg">
+        <button type="button" class="active" data-page="settings">设置</button>
+        <button type="button" data-page="plugins">插件</button>
+      </div>
+      <div class="seg" id="demoSeg">
+        <button type="button" class="active" data-demo="normal">正常列表</button>
+        <button type="button" data-demo="empty">空态</button>
+        <button type="button" data-demo="error">错误条</button>
+      </div>
+      <span class="chip">A+ · 建议定稿方向</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="panel" id="panel">
+      <header class="phdr">
+        <div class="crumb">
+          <button type="button" class="crumb-back">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+            返回
+          </button>
+          <span class="crumb-sep">/</span>
+          <span class="crumb-now" id="crumbNow">设置</span>
+        </div>
+        <button type="button" class="close" aria-label="关闭">×</button>
+      </header>
+
+      <div class="pbody">
+        <nav class="sidebar">
+          <button type="button" class="nav active" data-goto="settings">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+            设置
+          </button>
+          <button type="button" class="nav" data-goto="plugins">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4"/><path d="m6.8 6.8 2.8 2.8"/><path d="M2 12h4"/><path d="m6.8 17.2 2.8-2.8"/><path d="M12 18v4"/><path d="m17.2 17.2-2.8-2.8"/><path d="M18 12h4"/><path d="m17.2 6.8-2.8 2.8"/></svg>
+            插件
+          </button>
+        </nav>
+
+        <main class="work">
+          <!-- SETTINGS -->
+          <section class="view active" data-view="settings">
+            <div class="sscroll">
+              <div class="sgroup">
+                <div class="sgroup-label">通用</div>
+                <div class="scard">
+                  <div class="srow">
+                    <div class="s-ico" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    </div>
+                    <div class="s-main">
+                      <div class="s-name">语言</div>
+                      <div class="s-desc">界面语言，切换后立即重载</div>
+                    </div>
+                    <div class="s-ctl"><div class="ctl">中文 <span class="chev">▾</span></div></div>
+                  </div>
+                  <div class="srow">
+                    <div class="s-ico">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                    </div>
+                    <div class="s-main">
+                      <div class="s-name">深色主题</div>
+                      <div class="s-desc">使用深色界面</div>
+                    </div>
+                    <div class="s-ctl"><button type="button" class="toggle" aria-pressed="false" aria-label="深色主题"></button></div>
+                  </div>
+                  <div class="srow">
+                    <div class="s-ico">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
+                    </div>
+                    <div class="s-main">
+                      <div class="s-name">记忆命令参数</div>
+                      <div class="s-desc">下次打开同一命令时保留上次输入</div>
+                    </div>
+                    <div class="s-ctl"><button type="button" class="toggle on" aria-pressed="true" aria-label="记忆命令参数"></button></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="sgroup">
+                <div class="sgroup-label">快捷键</div>
+                <div class="scard">
+                  <div class="srow">
+                    <div class="s-ico">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"/></svg>
+                    </div>
+                    <div class="s-main">
+                      <div class="s-name">全局启动器</div>
+                      <div class="s-desc">从任意应用唤起 Launcher</div>
+                    </div>
+                    <div class="s-ctl"><div class="ctl">双击 ⌘</div></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="sgroup">
+                <div class="sgroup-label">编辑器</div>
+                <div class="scard">
+                  <div class="srow">
+                    <div class="s-ico">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
+                    </div>
+                    <div class="s-main">
+                      <div class="s-name">字号</div>
+                      <div class="s-desc">Quick Editor 与文本面板字号</div>
+                    </div>
+                    <div class="s-ctl">
+                      <div class="ctl num"><span class="step">−</span><b>14</b><span class="step">＋</span></div>
+                    </div>
+                  </div>
+                  <div class="srow">
+                    <div class="s-ico">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M3 12h15"/><path d="M3 18h10"/></svg>
+                    </div>
+                    <div class="s-main">
+                      <div class="s-name">自动换行</div>
+                      <div class="s-desc">长行在视口内折行显示</div>
+                    </div>
+                    <div class="s-ctl"><button type="button" class="toggle on" aria-pressed="true"></button></div>
+                  </div>
+                  <div class="srow">
+                    <div class="s-ico">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h4"/><path d="M4 12h4"/><path d="M4 18h4"/><path d="M12 6h8"/><path d="M12 12h8"/><path d="M12 18h8"/></svg>
+                    </div>
+                    <div class="s-main">
+                      <div class="s-name">行号</div>
+                      <div class="s-desc">在编辑器左侧显示行号</div>
+                    </div>
+                    <div class="s-ctl"><button type="button" class="toggle on" aria-pressed="true"></button></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="about">
+                <div class="about-brand">
+                  <div class="about-mark">h</div>
+                  <div>
+                    <div class="about-name">hiven</div>
+                    <div class="about-meta">版本 <span>v0.4.2</span></div>
+                  </div>
+                </div>
+                <button type="button" class="btn-soft">检查更新</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- PLUGINS -->
+          <section class="view" data-view="plugins">
+            <div class="ptoolbar">
+              <div class="search">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>
+                <input type="text" placeholder="搜索插件…" />
+              </div>
+              <button type="button" class="btn-primary">＋ 添加插件 ▾</button>
+            </div>
+
+            <div class="err" id="errBanner">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+              无法读取插件目录：权限被拒绝
+            </div>
+
+            <div class="plist" id="plist">
+              <!-- 翻译：可展开 -->
+              <div class="prow-item expanded" data-expand>
+                <div class="prow">
+                  <div class="picon tr">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg>
+                  </div>
+                  <div class="pmid">
+                    <div class="ptitle">
+                      <span class="pname">翻译</span>
+                      <span class="tag">内置</span>
+                    </div>
+                    <div class="pdesc">多引擎划词翻译与结果面板</div>
+                  </div>
+                  <div class="pright" data-stop>
+                    <span class="kbd">⌘T</span>
+                    <button type="button" class="iconbtn" title="设置" aria-label="设置">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                    <button type="button" class="iconbtn" title="更多" aria-label="更多">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="drawer">
+                  <div class="drow">
+                    <div class="dlab">权限</div>
+                    <div class="dval">
+                      剪贴板读取 · 高敏感
+                      <button type="button" class="link">授权</button>
+                      <span style="color:var(--t3)">已授权 2 项</span>
+                    </div>
+                  </div>
+                  <div class="drow">
+                    <div class="dlab">快捷键</div>
+                    <div class="dval">
+                      翻译面板 <span class="kbd">⌘T</span>
+                      <button type="button" class="link">重录</button>
+                      <button type="button" class="link">打开</button>
+                    </div>
+                  </div>
+                  <div class="drow">
+                    <div class="dlab">关于</div>
+                    <div class="dval">
+                      <span class="dot"></span> 已加载 · v1.2.0 · 内置
+                      <span class="mono">~/plugins/builtin/translate</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="prow-item" data-expand>
+                <div class="prow">
+                  <div class="picon cl">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+                  </div>
+                  <div class="pmid">
+                    <div class="ptitle">
+                      <span class="pname">剪贴板历史</span>
+                      <span class="tag">内置</span>
+                    </div>
+                    <div class="pdesc">剪贴板记录、搜索与回填</div>
+                  </div>
+                  <div class="pright" data-stop>
+                    <span class="kbd">⌘⇧V</span>
+                    <button type="button" class="iconbtn" aria-label="设置">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                    <button type="button" class="iconbtn" aria-label="更多">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="drawer">
+                  <div class="drow">
+                    <div class="dlab">权限</div>
+                    <div class="dval">已授权 1 项 · 剪贴板</div>
+                  </div>
+                  <div class="drow">
+                    <div class="dlab">快捷键</div>
+                    <div class="dval">历史面板 <span class="kbd">⌘⇧V</span> <button type="button" class="link">重录</button></div>
+                  </div>
+                  <div class="drow">
+                    <div class="dlab">关于</div>
+                    <div class="dval"><span class="dot"></span> 已加载 · v1.0.4 · 内置</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="prow-item" data-expand>
+                <div class="prow">
+                  <div class="picon wb">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                  </div>
+                  <div class="pmid">
+                    <div class="ptitle">
+                      <span class="pname">网页快开</span>
+                      <span class="tag">内置</span>
+                    </div>
+                    <div class="pdesc">关键词直达网址</div>
+                  </div>
+                  <div class="pright" data-stop>
+                    <button type="button" class="iconbtn" aria-label="设置">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                    <button type="button" class="iconbtn" aria-label="更多">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="drawer">
+                  <div class="drow"><div class="dlab">权限</div><div class="dval">无额外权限</div></div>
+                  <div class="drow"><div class="dlab">快捷键</div><div class="dval">未绑定 <button type="button" class="link">绑定</button></div></div>
+                  <div class="drow"><div class="dlab">关于</div><div class="dval"><span class="dot"></span> 已加载 · v0.9.1 · 内置</div></div>
+                </div>
+              </div>
+
+              <div class="prow-item" data-expand>
+                <div class="prow">
+                  <div class="picon js">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/><path d="M16 3h1a2 2 0 0 1 2 2v5a2 2 0 0 0 2 2 2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1"/></svg>
+                  </div>
+                  <div class="pmid">
+                    <div class="ptitle">
+                      <span class="pname">JSON 工具</span>
+                      <span class="tag">已安装</span>
+                    </div>
+                    <div class="pdesc">格式化、压缩与路径查询</div>
+                  </div>
+                  <div class="pright" data-stop>
+                    <span class="warn-pill">待授权 1</span>
+                    <button type="button" class="toggle" aria-pressed="false" aria-label="启用"></button>
+                    <button type="button" class="iconbtn" aria-label="更多">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="drawer">
+                  <div class="drow">
+                    <div class="dlab">权限</div>
+                    <div class="dval">网络访问 · 中敏感 <button type="button" class="link">授权</button></div>
+                  </div>
+                  <div class="drow"><div class="dlab">快捷键</div><div class="dval">无</div></div>
+                  <div class="drow"><div class="dlab">关于</div><div class="dval">已停用 · v2.1.0 · 已安装</div></div>
+                </div>
+              </div>
+
+              <div class="prow-item" data-expand>
+                <div class="prow">
+                  <div class="picon dv">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></svg>
+                  </div>
+                  <div class="pmid">
+                    <div class="ptitle">
+                      <span class="pname">我的测试插件</span>
+                      <span class="tag dev">DEV</span>
+                    </div>
+                    <div class="pdesc">本地开发 · 文件监听中</div>
+                  </div>
+                  <div class="pright" data-stop>
+                    <button type="button" class="iconbtn" aria-label="更多">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="drawer">
+                  <div class="drow"><div class="dlab">权限</div><div class="dval">无</div></div>
+                  <div class="drow"><div class="dlab">快捷键</div><div class="dval">无</div></div>
+                  <div class="drow">
+                    <div class="dlab">关于</div>
+                    <div class="dval"><span class="dot"></span> 监听中 · v0.0.1 · <span class="mono">~/dev/hiven-test-plugin</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="empty" id="empty">
+              <div class="empty-ico">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v4"/><path d="m6.8 6.8 2.8 2.8"/><path d="M2 12h4"/><path d="m6.8 17.2 2.8-2.8"/><path d="M12 18v4"/><path d="m17.2 17.2-2.8-2.8"/><path d="M18 12h4"/><path d="m17.2 6.8-2.8 2.8"/></svg>
+              </div>
+              <div class="empty-title">没有匹配的插件</div>
+              <div class="empty-desc">试试其他关键词，或添加一个新插件</div>
+              <button type="button" class="btn-soft mt">添加插件</button>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note rec">
+      <h3>A+ 相对 A 的改动</h3>
+      <ul>
+        <li>设置/插件图标 → lucide 线标 + 淡底</li>
+        <li>插件 hover 仅淡底；只有展开才抬卡</li>
+        <li>行上只留 名称 / 描述 / 来源 tag / 必要控件</li>
+        <li>版本路径进「关于」行，不污染列表</li>
+        <li>关于区做成产品条，与表单组分离</li>
+        <li>统一控件厚度 + 可见 focus ring</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h3>交互说明</h3>
+      <ul>
+        <li>点插件行主体 → 展开/收起（同时仅一行）</li>
+        <li>⚙ / ⋯ / 开关 不触发展开</li>
+        <li>顶栏可切「空态 / 错误条」看状态</li>
+        <li>键盘 <kbd class="key">S</kbd> 设置 · <kbd class="key">P</kbd> 插件</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h3>刻意没做的</h3>
+      <ul>
+        <li>无全大写 eyebrow</li>
+        <li>无每行默认浮卡</li>
+        <li>无灰底大容器铺底</li>
+        <li>无粗左侧 accent 色条</li>
+        <li>无能力 chip / 路径堆在主行</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="hint">文件：doc/2026-07-11-settings-plugins-a-plus.html · 满意的话回「按 A+ 实现」即可开干</p>
+
+  <script>
+    const crumbNow = document.getElementById('crumbNow');
+    const pageSeg = document.getElementById('pageSeg');
+    const demoSeg = document.getElementById('demoSeg');
+    const plist = document.getElementById('plist');
+    const empty = document.getElementById('empty');
+    const errBanner = document.getElementById('errBanner');
+    const panel = document.getElementById('panel');
+
+    function setPage(page) {
+      crumbNow.textContent = page === 'settings' ? '设置' : '插件';
+      panel.querySelectorAll('.view').forEach((el) => {
+        el.classList.toggle('active', el.dataset.view === page);
+      });
+      panel.querySelectorAll('.nav').forEach((el) => {
+        el.classList.toggle('active', el.dataset.goto === page);
+      });
+      [...pageSeg.querySelectorAll('button')].forEach((b) => {
+        b.classList.toggle('active', b.dataset.page === page);
+      });
+    }
+
+    function setDemo(demo) {
+      [...demoSeg.querySelectorAll('button')].forEach((b) => {
+        b.classList.toggle('active', b.dataset.demo === demo);
+      });
+      const isEmpty = demo === 'empty';
+      const isError = demo === 'error';
+      plist.classList.toggle('hide', isEmpty);
+      empty.classList.toggle('show', isEmpty);
+      errBanner.classList.toggle('show', isError);
+      if (isEmpty || isError) setPage('plugins');
+    }
+
+    pageSeg.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-page]');
+      if (btn) setPage(btn.dataset.page);
+    });
+    demoSeg.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-demo]');
+      if (btn) setDemo(btn.dataset.demo);
+    });
+    panel.querySelectorAll('.nav').forEach((btn) => {
+      btn.addEventListener('click', () => setPage(btn.dataset.goto));
+    });
+
+    panel.querySelectorAll('.toggle').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const on = btn.classList.toggle('on');
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    });
+
+    // 插件行展开：同时仅一行
+    panel.querySelectorAll('[data-expand]').forEach((item) => {
+      item.querySelector('.prow').addEventListener('click', (e) => {
+        if (e.target.closest('[data-stop]')) return;
+        const open = item.classList.contains('expanded');
+        panel.querySelectorAll('[data-expand]').forEach((el) => el.classList.remove('expanded'));
+        if (!open) item.classList.add('expanded');
+      });
+    });
+    panel.querySelectorAll('[data-stop]').forEach((el) => {
+      el.addEventListener('click', (e) => e.stopPropagation());
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.target.matches('input,textarea')) return;
+      if (e.key === 's' || e.key === 'S') setPage('settings');
+      if (e.key === 'p' || e.key === 'P') setPage('plugins');
+    });
+  </script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-import { definePlugin } from '@hiven/plugin'
+import { definePlugin, type PluginSettingsObjectListItemField } from '@hiven/plugin'
 import type { TranslateSettings } from './settings/model'
 import { DEFAULT_TRANSLATE_SETTINGS } from './settings/model'
 import { TranslateSurface } from './surfaces/TranslateSurface'
@@ -15,8 +15,7 @@ const LANGUAGE_OPTIONS = [
   { label: 'Spanish', labelI18n: { zh: '西班牙文' }, value: 'es' },
 ]
 
-const PROFILE_FIELDS = [
-  { key: 'id', label: 'ID', kind: 'text', mono: true, group: 'Basic', groupI18n: { zh: '基本' } },
+const PROFILE_FIELDS: PluginSettingsObjectListItemField[] = [
   { key: 'name', label: 'Name', labelI18n: { zh: '名称' }, kind: 'text', group: 'Basic', groupI18n: { zh: '基本' } },
   {
     key: 'provider',
@@ -31,10 +30,45 @@ const PROFILE_FIELDS = [
     groupI18n: { zh: '基本' },
   },
   { key: 'enabled', label: 'Enabled', labelI18n: { zh: '启用' }, kind: 'switch', group: 'Basic', groupI18n: { zh: '基本' } },
-  { key: 'endpoint', label: 'Endpoint', kind: 'text', mono: true, group: 'Credentials', groupI18n: { zh: '凭据' }, sensitive: true },
-  { key: 'appId', label: 'App ID', kind: 'text', mono: true, group: 'Credentials', groupI18n: { zh: '凭据' }, sensitive: true },
-  { key: 'secret', label: 'Secret', kind: 'text', mono: true, group: 'Credentials', groupI18n: { zh: '凭据' }, sensitive: true },
-  { key: 'authKey', label: 'Auth Key', kind: 'text', mono: true, group: 'Credentials', groupI18n: { zh: '凭据' }, sensitive: true },
+  {
+    key: 'appId',
+    label: 'App ID',
+    kind: 'text',
+    mono: true,
+    group: 'Credentials',
+    groupI18n: { zh: '凭据' },
+    sensitive: true,
+    visibleWhen: { key: 'provider', equals: 'baidu' },
+  },
+  {
+    key: 'secret',
+    label: 'Secret',
+    kind: 'text',
+    mono: true,
+    group: 'Credentials',
+    groupI18n: { zh: '凭据' },
+    sensitive: true,
+    visibleWhen: { key: 'provider', equals: 'baidu' },
+  },
+  {
+    key: 'authKey',
+    label: 'Auth Key',
+    kind: 'text',
+    mono: true,
+    group: 'Credentials',
+    groupI18n: { zh: '凭据' },
+    sensitive: true,
+    visibleWhen: { key: 'provider', equals: 'deepl' },
+  },
+  {
+    key: 'endpoint',
+    label: 'Endpoint',
+    kind: 'text',
+    mono: true,
+    group: 'Credentials',
+    groupI18n: { zh: '凭据' },
+    visibleWhen: { key: 'provider', equals: 'deepl' },
+  },
   {
     key: 'defaultTargetLang',
     label: 'Default target language',
@@ -44,14 +78,25 @@ const PROFILE_FIELDS = [
     group: 'Behavior',
     groupI18n: { zh: '行为' },
   },
-  { key: 'monthlyLimitChars', label: 'Monthly character limit', labelI18n: { zh: '月度字符上限' }, kind: 'text', mono: true, group: 'Behavior', groupI18n: { zh: '行为' } },
-] as const
+  {
+    key: 'monthlyLimitChars',
+    label: 'Monthly character limit',
+    labelI18n: { zh: '月度字符上限' },
+    kind: 'number',
+    min: 0,
+    step: 1000,
+    unit: 'chars',
+    unitI18n: { zh: '字符' },
+    group: 'Behavior',
+    groupI18n: { zh: '行为' },
+  },
+]
 
 export default definePlugin<TranslateSettings>({
   settings: {
     title: 'Translate',
     titleI18n: { zh: '翻译' },
-    version: 2,
+    version: 3,
     defaultValue: DEFAULT_TRANSLATE_SETTINGS,
     schema: {
       sections: [
@@ -63,11 +108,21 @@ export default definePlugin<TranslateSettings>({
           descriptionI18n: { zh: '设置翻译浮层打开时使用的默认配置组和目标语种。' },
           fields: [
             {
-              kind: 'text',
+              kind: 'select',
               key: 'defaultProfileId',
-              label: 'Default profile ID',
-              labelI18n: { zh: '默认配置组 ID' },
-              mono: true,
+              label: 'Default profile',
+              labelI18n: { zh: '默认配置组' },
+              description: 'Pick from existing API profiles.',
+              descriptionI18n: { zh: '从已有配置组中选择，无需填写 ID。' },
+              options: DEFAULT_TRANSLATE_SETTINGS.profiles.map((profile) => ({
+                value: profile.id,
+                label: profile.name,
+              })),
+              optionsFrom: {
+                listKey: 'profiles',
+                valueKey: 'id',
+                labelKey: 'name',
+              },
             },
             {
               kind: 'select',
@@ -83,7 +138,7 @@ export default definePlugin<TranslateSettings>({
           title: 'API profiles',
           titleI18n: { zh: 'API 配置组' },
           description: 'Configure translation provider credentials and character limits.',
-          descriptionI18n: { zh: '配置翻译服务商凭据和字符额度。' },
+          descriptionI18n: { zh: '配置翻译服务商凭据和字符额度。凭据随服务商切换显示。' },
           fields: [
             {
               kind: 'object-list',
