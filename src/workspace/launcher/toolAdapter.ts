@@ -87,7 +87,6 @@ export function adaptToolToLauncherItem(
 ): LauncherItem {
   const launcherOpt = tool.surfaces?.launcher
   const launcherOptions = typeof launcherOpt === 'object' ? launcherOpt : undefined
-  const pinnable = false
   const mode: TextInputMode = tool.inputPolicy?.mode ?? 'auto'
   const defaultParams = { ...(tool.defaultParams ?? {}) }
   for (const param of tool.params ?? []) {
@@ -143,7 +142,6 @@ export function adaptToolToLauncherItem(
     display: toolDisplay(tool),
     behavior: { type: 'perform' },
     surfaces: launcherOptions?.surfaces,
-    pinnable,
     inputPolicy: tool.inputPolicy,
     params: tool.params,
     defaultParams,

@@ -33,7 +33,6 @@ export type LauncherHostCapability =
   | 'plugin-surfaces'
   | 'host-surfaces'
   | 'settings'
-  | 'pinned-actions'
   | 'text-input-actions'
   | 'pane-actions'
   | 'system-power'
@@ -59,7 +58,6 @@ export const LAUNCHER_HOSTS: Record<LauncherHostId, LauncherHostConfig> = {
       'plugin-surfaces',
       'host-surfaces',
       'settings',
-      'pinned-actions',
       'text-input-actions',
       'pane-actions',
       'system-power',
@@ -377,13 +375,17 @@ export type LauncherItemContribution<TSettings = unknown> = {
   hostEntry?: 'plugin-settings'
   /** Restrict where the item appears. Missing = both main surfaces. */
   surfaces?: LauncherSurfaceId[]
-  /** Whether this item can be pinned. Defaults to true for static items. */
-  pinnable?: boolean
   inputPolicy?: TextInputPolicy
   params?: LauncherParamSpec[]
   defaultParams?: Record<string, unknown>
   /** When true, selecting the item always opens the parameter flow before execution. */
   requireParamSelection?: boolean
+  /**
+   * Opt into long-term usage recording for dynamic items with stable ids.
+   * Static plugin/host items always record unless the host suppresses via select options.
+   * Dynamic items default to false (one-shot / content-derived results).
+   */
+  recordUsage?: boolean
   execute: LauncherExecuteHandler<TSettings>
   executeWithParams?: LauncherExecuteWithParamsHandler<TSettings>
 }
@@ -426,7 +428,6 @@ export type LauncherItem = {
   display: LauncherItemDisplay
   behavior: LauncherBehavior
   surfaces?: LauncherSurfaceId[]
-  pinnable: boolean
   inputPolicy?: TextInputPolicy
   /** Host-only ranking nudge for a small number of host-owned items. */
   staticPriority?: number
@@ -452,6 +453,11 @@ export type LauncherItem = {
   requireParamSelection?: boolean
   /** Content matcher: returns true if this tool can process the given text. Boosted in ranking. */
   textMatch?: (text: string) => boolean
+  /**
+   * When true, selection writes to launcher usage for ranking.
+   * Dynamic items must opt in with a stable systemKey; static items omit this (treated as true).
+   */
+  recordUsage?: boolean
   execute: LauncherExecuteHandler
   executeWithParams?: LauncherExecuteWithParamsHandler
 }
@@ -472,13 +478,6 @@ export function isEditorCommandBarItem(item: LauncherItem): boolean {
   )
 }
 
-// ─── Pinned Reference ─────────────────────────────────────────────────────────
-
-/** Pinned entries reference launcher items; they are not searchable items. */
-export type PinnedLauncherRef = {
-  itemKey: SystemLauncherItemKey
-}
-
 // ─── Usage ─────────────────────────────────────────────────────────────────
 
 export type LauncherUsageRecord = {
@@ -494,7 +493,6 @@ export type LauncherUsageBySurface = Record<LauncherSurfaceId, LauncherUsageBuck
 
 export type ToolLauncherOptions = {
   surfaces?: LauncherSurfaceId[]
-  pinnable?: boolean
 }
 
 export type ToolPanelOptions = {
@@ -504,7 +502,6 @@ export type ToolPanelOptions = {
 export type PluginToolSurfaces = {
   launcher?: boolean | ToolLauncherOptions
   panel?: boolean | ToolPanelOptions
-  pinnable?: boolean
 }
 
 export type PluginToolOutput = {

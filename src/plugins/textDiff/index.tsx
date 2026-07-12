@@ -112,7 +112,6 @@ export const textDiffPlugin = definePlugin({
           aliases: ['diff', 'compare', 'text diff', 'text-diff', 'duibi', 'wenben duibi'],
         },
         surfaces: ['command-palette', 'global-launcher', 'quick-editor-command'],
-        pinnable: false,
         execute(ctx) {
           const snapshot = ctx.api.getPaneSnapshot() as PaneSnapshot
           const sources = buildSourceList(ctx, snapshot)

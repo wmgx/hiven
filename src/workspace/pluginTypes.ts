@@ -112,7 +112,6 @@ export type TextCommandSurfaces = {
 }
 
 export type LiveActionCapability = {
-  pinnable?: boolean
   live?: {
     enabled: boolean
     debounceMs?: number

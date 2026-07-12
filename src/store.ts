@@ -12,19 +12,10 @@ import {
   emptyUsageBySurface,
   recordSelection as recordSelectionPure,
   migrateLegacyUsage,
+  type LegacyActionUsageBySource,
 } from './workspace/launcher/usage'
 
 migrateLocalStorageKey('fluxtext-settings', 'hiven-settings')
-
-export type ActionUsageSource =
-  | 'command-palette'
-  | 'editor-command-bar'
-  | 'global-launcher'
-
-export type ActionUsageBucket = {
-  recentActionNames: string[]
-  actionUsageCounts: Record<string, number>
-}
 
 /** UI model for a launcher parameter field (used to normalize plugin CommandParam for rendering). */
 export interface LauncherParamModel {
@@ -129,10 +120,6 @@ interface AppState {
   // Last command status
   lastCommandStatus: LastCommandStatus | null
   setLastCommandStatus: (status: LastCommandStatus | null) => void
-
-  // Source-scoped usage (per surface)
-  actionUsageBySource: Record<ActionUsageSource, ActionUsageBucket>
-  pushRecentAction: (name: string, source?: ActionUsageSource) => void
 
   // Launcher usage (per surface, scoped by system launcher item key)
   launcherUsageBySurface: LauncherUsageBySurface
@@ -242,24 +229,6 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     }
   },
 
-  // Source-scoped usage
-  actionUsageBySource: {
-    'command-palette': { recentActionNames: [], actionUsageCounts: {} },
-    'editor-command-bar': { recentActionNames: [], actionUsageCounts: {} },
-    'global-launcher': { recentActionNames: [], actionUsageCounts: {} },
-  },
-  pushRecentAction: (name, source = 'command-palette') => set((state) => {
-    const bucket = state.actionUsageBySource[source]
-    const filtered = bucket.recentActionNames.filter((n) => n !== name)
-    const newBucket: ActionUsageBucket = {
-      recentActionNames: [name, ...filtered].slice(0, 50),
-      actionUsageCounts: { ...bucket.actionUsageCounts, [name]: (bucket.actionUsageCounts[name] ?? 0) + 1 },
-    }
-    return {
-      actionUsageBySource: { ...state.actionUsageBySource, [source]: newBucket },
-    }
-  }),
-
   // Launcher usage (per surface, scoped by system launcher item key)
   launcherUsageBySurface: emptyUsageBySurface(),
   recordLauncherSelection: (surfaceId: LauncherSurfaceId, itemKey: SystemLauncherItemKey) => set((state) => ({
@@ -319,62 +288,74 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     },
     locale: state.locale,
     savedActionParams: state.savedActionParams,
-    actionUsageBySource: state.actionUsageBySource,
     launcherUsageBySurface: state.launcherUsageBySurface,
   }),
   merge: (persisted, current) => {
     const persistedState = persisted as Partial<AppState> & {
       recentActionNames?: string[]
       actionUsageCounts?: Record<string, number>
+      actionUsageBySource?: LegacyActionUsageBySource
       launcherUsageBySurface?: LauncherUsageBySurface
     }
-    const merged = { ...current, ...persistedState }
+    // Drop legacy usage fields from the merged live state.
+    const {
+      actionUsageBySource: _dropActionUsageBySource,
+      recentActionNames: _dropRecentActionNames,
+      actionUsageCounts: _dropActionUsageCounts,
+      ...persistedWithoutLegacyUsage
+    } = persistedState as typeof persistedState & {
+      actionUsageBySource?: LegacyActionUsageBySource
+      recentActionNames?: string[]
+      actionUsageCounts?: Record<string, number>
+    }
+    void _dropActionUsageBySource
+    void _dropRecentActionNames
+    void _dropActionUsageCounts
+
+    const merged = { ...current, ...persistedWithoutLegacyUsage }
     merged.settings = { ...current.settings, ...persistedState.settings }
     merged.settings.globalPinnedLauncherShortcut = stripShortcutRuntimeStatus(
       merged.settings.globalPinnedLauncherShortcut ?? current.settings.globalPinnedLauncherShortcut
     )
-    // Migrate legacy top-level recentActionNames/actionUsageCounts into command-palette bucket
-    if (!persistedState.actionUsageBySource && (persistedState.recentActionNames || persistedState.actionUsageCounts)) {
-      merged.actionUsageBySource = {
-        'command-palette': {
-          recentActionNames: persistedState.recentActionNames ?? [],
-          actionUsageCounts: persistedState.actionUsageCounts ?? {},
-        },
-        'editor-command-bar': {
-          recentActionNames: persistedState.recentActionNames ?? [],
-          actionUsageCounts: persistedState.actionUsageCounts ?? {},
-        },
-        'global-launcher': { recentActionNames: [], actionUsageCounts: {} },
-      }
-    } else if (persistedState.actionUsageBySource) {
-      merged.actionUsageBySource = {
-        ...current.actionUsageBySource,
-        ...persistedState.actionUsageBySource,
-      }
-    }
-    // Restore persisted launcher usage; ensure both surfaces exist.
+
+    // Restore persisted launcher usage; one-shot seed from legacy action usage if needed.
     const persistedLauncherUsage = persistedState.launcherUsageBySurface
     const hasPersistedLauncherUsage =
       persistedLauncherUsage != null &&
       (Object.keys(persistedLauncherUsage['command-palette'] ?? {}).length > 0 ||
         Object.keys(persistedLauncherUsage['editor-command-bar'] ?? {}).length > 0 ||
-        Object.keys(persistedLauncherUsage['global-launcher'] ?? {}).length > 0)
+        Object.keys(persistedLauncherUsage['global-launcher'] ?? {}).length > 0 ||
+        Object.keys(persistedLauncherUsage['quick-editor-command'] ?? {}).length > 0)
     if (hasPersistedLauncherUsage) {
       merged.launcherUsageBySurface = {
         ...emptyUsageBySurface(),
         ...persistedLauncherUsage,
       }
-    } else if (merged.actionUsageBySource) {
-      // First run after migration: seed launcher usage from legacy action usage.
-      // Identity map command ids to system keys; launcher items expose the same
-      // command id via legacyUsageKeys, so ranking still finds this history.
-      merged.launcherUsageBySurface = migrateLegacyUsage(
-        merged.actionUsageBySource,
-        (legacyKey) => legacyKey,
-        Date.now(),
-      )
     } else {
-      merged.launcherUsageBySurface = emptyUsageBySurface()
+      let legacySource: LegacyActionUsageBySource | undefined = persistedState.actionUsageBySource
+      if (!legacySource && (persistedState.recentActionNames || persistedState.actionUsageCounts)) {
+        legacySource = {
+          'command-palette': {
+            recentActionNames: persistedState.recentActionNames ?? [],
+            actionUsageCounts: persistedState.actionUsageCounts ?? {},
+          },
+          'editor-command-bar': {
+            recentActionNames: persistedState.recentActionNames ?? [],
+            actionUsageCounts: persistedState.actionUsageCounts ?? {},
+          },
+          'global-launcher': { recentActionNames: [], actionUsageCounts: {} },
+        }
+      }
+      if (legacySource) {
+        // Identity map command ids; launcher items expose the same id via legacyUsageKeys.
+        merged.launcherUsageBySurface = migrateLegacyUsage(
+          legacySource,
+          (legacyKey) => legacyKey,
+          Date.now(),
+        )
+      } else {
+        merged.launcherUsageBySurface = emptyUsageBySurface()
+      }
     }
     return merged
   },

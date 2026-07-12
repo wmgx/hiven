@@ -33,7 +33,7 @@ export const yamlPlugin = definePlugin({
           return ctx.output.error(`Error: ${e.message}`)
         }
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'yaml.fromJson',
@@ -49,7 +49,7 @@ export const yamlPlugin = definePlugin({
           return ctx.output.error(`Error: ${e.message}`)
         }
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
   ],
 })

@@ -13,8 +13,8 @@
  * Usage rules (design doc §4):
  *   - perform        → record usage BEFORE execution
  *   - collect-input  → record usage when ENTERING input mode (not on submit)
- *   - pinned / dynamic items → never record long-term usage (the caller passes
- *     recordUsage:false for pinned; dynamic items are kind 'dynamic' and skipped)
+ *   - dynamic items  → record only when item.recordUsage === true (stable ids)
+ *   - select options recordUsage:false → caller can suppress for ephemeral selections
  */
 
 import type {
@@ -118,7 +118,7 @@ const emptyStorage: PluginPrivateStorageApi = {
 }
 
 export type SelectOptions = {
-  /** When false (pinned execution), usage is not recorded. */
+  /** When false, usage is not recorded for this selection. */
   recordUsage?: boolean
   /** Enter a system-owned parameter form instead of running default params. */
   customizeParams?: boolean
@@ -178,8 +178,9 @@ export class LauncherController {
 
   private shouldRecord(item: LauncherItem, options: SelectOptions): boolean {
     if (options.recordUsage === false) return false
-    // Dynamic items never write long-term usage.
-    if (item.kind === 'dynamic') return false
+    if (item.recordUsage === false) return false
+    // Dynamic items default off; stable actions opt in via recordUsage: true.
+    if (item.kind === 'dynamic') return item.recordUsage === true
     return true
   }
 

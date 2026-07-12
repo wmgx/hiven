@@ -91,7 +91,7 @@ export const lineToolsPlugin = definePlugin({
         { key: 'ignoreCase', label: 'param.ignoreCase', type: 'boolean', default: false },
       ],
       run(ctx) { return ctx.output.text(sortLines(ctx.input.text, ctx.params.direction as string, ctx.params.ignoreCase as boolean)) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'line-tools.dedup',
@@ -102,7 +102,7 @@ export const lineToolsPlugin = definePlugin({
       inputPolicy: { mode: 'auto' },
       params: [{ key: 'ignoreCase', label: 'param.ignoreCase', type: 'boolean', default: false }],
       run(ctx) { return ctx.output.text(dedupLines(ctx.input.text, ctx.params.ignoreCase as boolean)) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'line-tools.reverse',
@@ -112,7 +112,7 @@ export const lineToolsPlugin = definePlugin({
       aliases: ['flip lines', 'reverse lines', '行反转'],
       inputPolicy: { mode: 'auto' },
       run(ctx) { return ctx.output.text(reverseLines(ctx.input.text)) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'line-tools.reverse-text',
@@ -122,7 +122,7 @@ export const lineToolsPlugin = definePlugin({
       aliases: ['reverse text', 'flip text', '文本反转'],
       inputPolicy: { mode: 'auto' },
       run(ctx) { return ctx.output.text(reverseText(ctx.input.text)) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'line-tools.remove-blank-lines',
@@ -132,7 +132,7 @@ export const lineToolsPlugin = definePlugin({
       aliases: ['remove empty lines', '删除空行'],
       inputPolicy: { mode: 'auto' },
       run(ctx) { return ctx.output.text(removeBlankLines(ctx.input.text)) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'line-tools.trim-whitespace',
@@ -142,7 +142,7 @@ export const lineToolsPlugin = definePlugin({
       aliases: ['strip', 'clean', '去空白'],
       inputPolicy: { mode: 'auto' },
       run(ctx) { return ctx.output.text(trimLineWhitespace(ctx.input.text)) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'line-tools.join',
@@ -153,7 +153,7 @@ export const lineToolsPlugin = definePlugin({
       inputPolicy: { mode: 'auto' },
       params: [{ key: 'separator', label: 'param.separator', type: 'text', default: ',' }],
       run(ctx) { return ctx.output.text(joinLines(ctx.input.text, (ctx.params.separator ?? ',') as string)) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'line-affix.prepend',
@@ -164,7 +164,7 @@ export const lineToolsPlugin = definePlugin({
       inputPolicy: { mode: 'auto' },
       params: [{ key: 'prefix', label: 'param.prefix', type: 'text', default: '- ' }],
       run(ctx) { return ctx.output.text(prependLines(ctx.input.text, (ctx.params.prefix ?? '- ') as string)) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'line-affix.append',
@@ -175,7 +175,7 @@ export const lineToolsPlugin = definePlugin({
       inputPolicy: { mode: 'auto' },
       params: [{ key: 'suffix', label: 'param.suffix', type: 'text', default: ',' }],
       run(ctx) { return ctx.output.text(appendLines(ctx.input.text, (ctx.params.suffix ?? ',') as string)) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'line-affix.wrap',
@@ -189,7 +189,7 @@ export const lineToolsPlugin = definePlugin({
         { key: 'right', label: 'param.right', type: 'text', default: '"' },
       ],
       run(ctx) { return ctx.output.text(wrapLines(ctx.input.text, (ctx.params.left ?? '"') as string, (ctx.params.right ?? '"') as string)) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'sqlin.string',
@@ -199,7 +199,7 @@ export const lineToolsPlugin = definePlugin({
       aliases: ['sql in string', 'sql-in', 'lines to sql', '生成IN字符串'],
       inputPolicy: { mode: 'auto' },
       run(ctx) { return ctx.output.text(sqlInString(ctx.input.text)) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'sqlin.number',
@@ -209,7 +209,7 @@ export const lineToolsPlugin = definePlugin({
       aliases: ['sql in number', 'sql-in-num', '生成IN数字'],
       inputPolicy: { mode: 'auto' },
       run(ctx) { return ctx.output.text(sqlInNumber(ctx.input.text)) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
   ],
 })

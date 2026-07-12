@@ -22,6 +22,8 @@ function buildEntryLauncherItem(entry: WebQuickOpenSettings['entries'][number]):
   const aliases = Array.isArray(entry.aliases) ? entry.aliases : []
   return {
     id: entry.id,
+    // Stable site/action id — safe to learn frequency when used as dynamic.
+    recordUsage: true,
     display: {
       title: entry.title || entry.urlTemplate,
       aliases: [
@@ -124,6 +126,8 @@ async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<L
 
     results.push({
       id: entry.id + '-quick',
+      // Pattern-matched site templates are stable intents (e.g. google-quick).
+      recordUsage: true,
       display: {
         title: entry.title || entry.urlTemplate,
         subtitle: url,
@@ -143,6 +147,8 @@ async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<L
 
     results.push({
       id: 'direct-url-open',
+      // Single stable action for "open this as URL", not the URL itself.
+      recordUsage: true,
       display: {
         title: ctx.t('directOpenTitle'),
         subtitle: query,

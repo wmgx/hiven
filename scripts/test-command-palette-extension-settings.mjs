@@ -65,6 +65,8 @@ const registry = loadLauncherRegistry({
       openSettingsDialog: (target) => openedSettingsTargets.push(target),
     }),
   },
+  resolvePluginProductMetadata: () => ({ provider: undefined }),
+  applyProductProviderToLauncherItem: (item) => item,
   pluginRegistry: {
     getAllPluginDefinitions: () => [
       {
@@ -72,7 +74,15 @@ const registry = loadLauncherRegistry({
         source: 'production',
         definition: {
           settings: demoSettingsContribution,
-          launcher: { items: [] },
+          // hostEntry opts the plugin into a discoverable settings launcher item.
+          launcher: {
+            items: [{
+              id: 'settings',
+              hostEntry: 'plugin-settings',
+              display: { title: 'Demo Extension Settings' },
+              execute: async () => ({ ok: true }),
+            }],
+          },
           tools: [],
           ui: { surfaces: [] },
         },
@@ -111,7 +121,7 @@ assert.ok(
   globalSettingsItem,
   'Global launcher should include a plugin/extension settings entry for plugins that declare settings',
 )
-assert.equal(globalSettingsItem.pinnable, false, 'Global launcher settings shortcut should not be pinnable')
+assert.equal('pinnable' in globalSettingsItem, false, 'Global launcher settings shortcut must not carry retired pinnable field')
 assert.ok(globalSettingsItem.surfaces?.includes('global-launcher'), 'Settings shortcut should be visible in the global launcher')
 
 const globalResult = await globalSettingsItem.execute({

@@ -69,7 +69,7 @@ export const formatterPlugin = definePlugin({
       aliases: ['css format', 'css格式化', 'css beautify'],
       inputPolicy: { mode: 'auto' },
       run(ctx) { return ctx.output.text(cssPrettify(ctx.input.text)) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'css.compact',
@@ -79,7 +79,7 @@ export const formatterPlugin = definePlugin({
       aliases: ['css minify', 'css压缩', 'css compress'],
       inputPolicy: { mode: 'auto' },
       run(ctx) { return ctx.output.text(cssCompact(ctx.input.text)) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'sql.prettify',
@@ -92,7 +92,7 @@ export const formatterPlugin = definePlugin({
         try { return ctx.output.text(sqlPrettify(ctx.input.text)) }
         catch (e: any) { return ctx.output.error(`Error: ${e.message}`) }
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'sql.compact',
@@ -102,7 +102,7 @@ export const formatterPlugin = definePlugin({
       aliases: ['sql minify', 'sql压缩', 'sql compress'],
       inputPolicy: { mode: 'auto' },
       run(ctx) { return ctx.output.text(sqlCompact(ctx.input.text)) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'xml.prettify',
@@ -112,7 +112,7 @@ export const formatterPlugin = definePlugin({
       aliases: ['xml format', 'xml格式化', 'xml beautify'],
       inputPolicy: { mode: 'auto' },
       run(ctx) { return ctx.output.text(xmlPrettify(ctx.input.text)) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'xml.compact',
@@ -122,7 +122,7 @@ export const formatterPlugin = definePlugin({
       aliases: ['xml minify', 'xml压缩', 'xml compress'],
       inputPolicy: { mode: 'auto' },
       run(ctx) { return ctx.output.text(xmlCompact(ctx.input.text)) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
   ],
 })

@@ -46,23 +46,19 @@ const us = mod.recordSelection(u2, 'global-launcher', 'plugin:p:launcher:a', 300
 assert.equal(us['editor-command-bar']['plugin:p:launcher:a'].count, 2)
 assert.equal(us['global-launcher']['plugin:p:launcher:a'].count, 1)
 
-// Legacy migration: command-palette history preserved, pinned-runner dropped
+// Legacy migration: command-palette history preserved into editor-command-bar
 const legacy = {
   'command-palette': {
     recentActionNames: ['line-tools.reverse', 'base64.run'],
     actionUsageCounts: { 'line-tools.reverse': 5, 'base64.run': 2 },
   },
   'global-launcher': { recentActionNames: [], actionUsageCounts: {} },
-  'pinned-runner': { recentActionNames: ['x'], actionUsageCounts: { x: 9 } },
 }
 const mapKey = (legacyKey) => `plugin:demo:launcher:${legacyKey}`
 const migrated = mod.migrateLegacyUsage(legacy, mapKey, 0)
 assert.equal(migrated['editor-command-bar']['plugin:demo:launcher:line-tools.reverse'].count, 5, 'editor command bar count preserved from legacy command-palette usage')
 assert.equal(migrated['editor-command-bar']['plugin:demo:launcher:base64.run'].count, 2)
 assert.equal(Object.keys(migrated['global-launcher']).length, 0)
-// pinned-runner must not leak into either launcher surface
-const allKeys = JSON.stringify(migrated)
-assert.ok(!allKeys.includes('plugin:demo:launcher:x'), 'pinned-runner usage dropped')
 
 // recency ordering: reverse (index 0, newer) should have larger timestamp than base64
 const rev = migrated['editor-command-bar']['plugin:demo:launcher:line-tools.reverse'].lastSelectedAt

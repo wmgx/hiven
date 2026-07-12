@@ -325,7 +325,7 @@ const definition: PluginDefinition = {
         if (opened.errors.length > 0) return ctx.output.text(resultText)
         return { ok: true }
       },
-      surfaces: { launcher: true, panel: true, pinnable: false },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'calculator.sum',
@@ -337,7 +337,7 @@ const definition: PluginDefinition = {
       run(ctx) {
         return ctx.output.replaceActiveText(sumNumericTokens(ctx.input.text))
       },
-      surfaces: { launcher: true, panel: true, pinnable: false },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'calculator.base',
@@ -371,7 +371,7 @@ const definition: PluginDefinition = {
           return ctx.output.error(`Error: ${error.message}`)
         }
       },
-      surfaces: { launcher: true, panel: true, pinnable: false },
+      surfaces: { launcher: true, panel: true },
     },
   ],
   commands: [

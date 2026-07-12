@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * test-launcher-ranking.mjs
- * Verifies mixed ranking: match dominates, usage is per-surface, pinned is mild.
+ * Verifies mixed ranking: match dominates, usage is per-surface.
  */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -67,7 +67,6 @@ function item(systemKey, title, opts = {}) {
     kind: opts.kind ?? 'plugin',
     display: { title, aliases: opts.aliases },
     behavior: { type: 'perform' },
-    pinnable: true,
     staticPriority: opts.staticPriority,
     ranking: opts.ranking,
     legacyUsageKeys: opts.legacyUsageKeys,
@@ -99,25 +98,14 @@ assert.equal(cpEmpty[0].systemKey, a.systemKey, 'global-launcher usage does not 
 const glEmpty = ranking.rankLauncherItems({ query: '', locale: 'en', surfaceId: 'global-launcher', usage: u2, now }, [a, b])
 assert.equal(glEmpty[0].systemKey, b.systemKey, 'global-launcher usage influences global-launcher order')
 
-// --- 3. Pinned boost is mild, not absolute top placement ---
-// Two items both matching weakly by query; pinned one should win on equal match,
-// but a strictly better match must still beat a pinned weaker match.
-const exactWin = item('plugin:p:launcher:format', 'Format')          // matches "format" exactly
-const pinnedWeak = item('plugin:p:launcher:fmtother', 'Formatter X') // prefix match, weaker tier
-const pinnedKeys = new Set([pinnedWeak.systemKey])
-const ctxPin = { query: 'format', locale: 'en', surfaceId: 'command-palette', usage: usage.emptyUsageBySurface(), now, pinnedKeys }
-const rankedPin = ranking.rankLauncherItems(ctxPin, [pinnedWeak, exactWin])
-assert.equal(rankedPin[0].systemKey, exactWin.systemKey, 'exact match beats pinned weaker match (pinned is mild)')
-
-// Equal match → pinned wins
+// --- 3. Equal match is stable by input order (no pin boost) ---
 const eqA = item('plugin:p:launcher:samea', 'Same')
 const eqB = item('plugin:p:launcher:sameb', 'Same')
-const pinB = new Set([eqB.systemKey])
 const rankedEq = ranking.rankLauncherItems(
-  { query: 'same', locale: 'en', surfaceId: 'command-palette', usage: usage.emptyUsageBySurface(), now, pinnedKeys: pinB },
+  { query: 'same', locale: 'en', surfaceId: 'command-palette', usage: usage.emptyUsageBySurface(), now },
   [eqA, eqB],
 )
-assert.equal(rankedEq[0].systemKey, eqB.systemKey, 'on equal match, pinned item gets the mild boost')
+assert.equal(rankedEq[0].systemKey, eqA.systemKey, 'on equal match, input order is preserved')
 
 // --- 4. Plugins cannot set static priority (only host items honored) ---
 const pluginWithPriority = item('plugin:p:launcher:x', 'XX', { kind: 'plugin', staticPriority: 999 })
@@ -167,5 +155,16 @@ assert.ok(
   ranking.installFreshnessScore({ query: '', locale: 'en', surfaceId: 'global-launcher', usage: usage.emptyUsageBySurface(), now }, newApp) < 1000,
   'install freshness boost stays below one match tier',
 )
+
+// --- 8. Dynamic items participate in usageScore via systemKey (once recorded) ---
+const dynA = item('plugin:web-open:dynamic:site-a-quick', 'Open A', { kind: 'dynamic' })
+const dynB = item('plugin:web-open:dynamic:site-b-quick', 'Open B', { kind: 'dynamic' })
+let uDyn = usage.emptyUsageBySurface()
+for (let i = 0; i < 5; i++) uDyn = usage.recordSelection(uDyn, 'global-launcher', dynB.systemKey, now)
+const rankedDyn = ranking.rankLauncherItems(
+  { query: '', locale: 'en', surfaceId: 'global-launcher', usage: uDyn, now },
+  [dynA, dynB],
+)
+assert.equal(rankedDyn[0].systemKey, dynB.systemKey, 'recorded dynamic usage ranks that dynamic item higher')
 
 console.log('✓ test-launcher-ranking passed')

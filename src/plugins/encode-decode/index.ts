@@ -123,7 +123,7 @@ export const encodeDecodePlugin = definePlugin({
         try { return ctx.output.text(base64Encode(ctx.input.text)) }
         catch (e: any) { return ctx.output.error(`Error: ${e.message}`) }
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'base64.decode',
@@ -137,7 +137,7 @@ export const encodeDecodePlugin = definePlugin({
         try { return ctx.output.text(base64Decode(ctx.input.text)) }
         catch (e: any) { return ctx.output.error(`Error: ${e.message}`) }
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'url.encode',
@@ -150,7 +150,7 @@ export const encodeDecodePlugin = definePlugin({
         try { return ctx.output.text(urlEncode(ctx.input.text)) }
         catch (e: any) { return ctx.output.error(`Error: ${e.message}`) }
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'url.decode',
@@ -164,7 +164,7 @@ export const encodeDecodePlugin = definePlugin({
         try { return ctx.output.text(urlDecode(ctx.input.text)) }
         catch (e: any) { return ctx.output.error(`Error: ${e.message}`) }
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'html.encode',
@@ -174,7 +174,7 @@ export const encodeDecodePlugin = definePlugin({
       aliases: ['html-entities encode', 'html-escape', 'html编码'],
       inputPolicy: { mode: 'auto' },
       run(ctx) { return ctx.output.text(htmlEncode(ctx.input.text)) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'html.decode',
@@ -185,7 +185,7 @@ export const encodeDecodePlugin = definePlugin({
       inputPolicy: { mode: 'auto' },
       textMatch: hasHtmlEntities,
       run(ctx) { return ctx.output.text(htmlDecode(ctx.input.text)) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'slashes.escape',
@@ -195,7 +195,7 @@ export const encodeDecodePlugin = definePlugin({
       aliases: ['escape', 'addslashes', '转义', 'add slashes'],
       inputPolicy: { mode: 'auto' },
       run(ctx) { return ctx.output.text(escapeSlashes(ctx.input.text)) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'slashes.unescape',
@@ -206,7 +206,7 @@ export const encodeDecodePlugin = definePlugin({
       inputPolicy: { mode: 'auto' },
       textMatch: hasEscapeSequences,
       run(ctx) { return ctx.output.text(unescapeSlashes(ctx.input.text)) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'jwt.decode',
@@ -220,7 +220,7 @@ export const encodeDecodePlugin = definePlugin({
         try { return ctx.output.text(decodeJwt(ctx.input.text)) }
         catch (e: any) { return ctx.output.error(`Error: ${e.message}`) }
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
   ],
 })

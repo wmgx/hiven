@@ -232,7 +232,6 @@ export const jsFilterPlugin = definePlugin({
           aliases: ['json-expression', 'jq', 'json-filter', 'expression'],
         },
         surfaces: ['command-palette'],
-        pinnable: false,
         execute(ctx) {
           const paneId = ctx.api.getPaneSnapshot().activePaneId
           const result = ctx.api.dispatchEffects(ctx.api.isPanePanelOpen(PANEL_ID)
@@ -256,7 +255,6 @@ export const jsFilterPlugin = definePlugin({
       description: 'command.open.description',
       icon: 'Code2',
       aliases: ['json-expression', 'jq', 'json-filter', 'expression'],
-      live: { pinnable: false },
       inputs: [{ key: 'input', label: 'Input', kind: 'pane' as const, required: true }],
       inputResolution: { strategy: 'use-active', fallback: 'fail' },
       run(ctx) {

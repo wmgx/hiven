@@ -29,7 +29,7 @@ export const textUtilsPlugin = definePlugin({
       aliases: ['uppercase', 'UPPER', '转大写'],
       inputPolicy: { mode: 'auto' },
       run(ctx) { return ctx.output.text(ctx.input.text.toUpperCase()) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'case.lower',
@@ -39,7 +39,7 @@ export const textUtilsPlugin = definePlugin({
       aliases: ['lowercase', '转小写'],
       inputPolicy: { mode: 'auto' },
       run(ctx) { return ctx.output.text(ctx.input.text.toLowerCase()) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'case.title',
@@ -49,7 +49,7 @@ export const textUtilsPlugin = definePlugin({
       aliases: ['titlecase', 'capitalize', '转标题'],
       inputPolicy: { mode: 'auto' },
       run(ctx) { return ctx.output.text(ctx.input.text.replace(/\b\w/g, c => c.toUpperCase())) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'case.camel',
@@ -59,7 +59,7 @@ export const textUtilsPlugin = definePlugin({
       aliases: ['camelCase', 'camelcase', '转驼峰'],
       inputPolicy: { mode: 'auto' },
       run(ctx) { return ctx.output.text(ctx.input.text.replace(/[-_\s]+(.)?/g, (_, c) => c ? c.toUpperCase() : '')) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'case.snake',
@@ -69,7 +69,7 @@ export const textUtilsPlugin = definePlugin({
       aliases: ['snake_case', 'snakecase', '转下划线'],
       inputPolicy: { mode: 'auto' },
       run(ctx) { return ctx.output.text(ctx.input.text.replace(/[\s-]+/g, '_').replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase()) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'count.run',
@@ -79,7 +79,7 @@ export const textUtilsPlugin = definePlugin({
       aliases: ['stats', 'wc', '文本统计', '字数统计'],
       inputPolicy: { mode: 'auto' },
       run(ctx) { return ctx.output.text(textStats(ctx.input.text)) },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
   ],
 })

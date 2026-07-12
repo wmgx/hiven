@@ -2,31 +2,28 @@ import { type Locale } from '../../i18n'
 import { resolveDisplaySubtitle, resolveDisplayTitle } from '../../workspace/launcher/display'
 import type { LauncherItem as DomainLauncherItem } from '../../workspace/launcher/types'
 import { usePluginSurfaceShortcutStore, type PluginSurfaceShortcut } from '../../workspace/pluginSurfaceShortcuts'
-import { computeTitleMatchRanges, scoreSearchableFields, searchableFieldsMatch, type SearchableFields } from '../../workspace/searchRanking'
+import { computeTitleMatchRanges } from '../../workspace/searchRanking'
 import type { LauncherMixedItem } from './LauncherMixedList'
 
 export type GlobalLauncherItem = LauncherMixedItem
 
+/**
+ * Map already-ranked domain launcher items to the UI list model.
+ * Ordering is owned by `rankLauncherItems`; this function does not re-score.
+ */
 export function buildGlobalLauncherItems({
   rankedLauncherItems,
   query,
   locale,
-  recentActionNames,
-  actionUsageCounts,
 }: {
   rankedLauncherItems: DomainLauncherItem[]
   query: string
   locale: Locale
-  recentActionNames: string[]
-  actionUsageCounts: Record<string, number>
 }): GlobalLauncherItem[] {
-  void recentActionNames
-  void actionUsageCounts
-
   const q = query.trim()
   const shortcuts = usePluginSurfaceShortcutStore.getState().shortcuts
 
-  const domainItems: GlobalLauncherItem[] = rankedLauncherItems.map((domainItem) => {
+  return rankedLauncherItems.map((domainItem) => {
     const title = resolveDisplayTitle(domainItem.display, locale)
     const match = q ? computeTitleMatchRanges(title, q, locale) : undefined
     return {
@@ -42,32 +39,6 @@ export function buildGlobalLauncherItems({
       matchType: match?.type,
     }
   })
-
-  return domainItems
-}
-
-function launcherItemMatchesQuery(item: GlobalLauncherItem, q: string, locale: Locale): boolean {
-  return searchableFieldsMatch(launcherItemSearchFields(item), q, locale)
-}
-
-function scoreLauncherItem(
-  item: GlobalLauncherItem,
-  q: string,
-  locale: Locale,
-  recentNames: string[],
-  usageCounts: Record<string, number>,
-): number {
-  return scoreSearchableFields(launcherItemSearchFields(item), q, locale, recentNames, usageCounts)
-}
-
-function launcherItemSearchFields(item: GlobalLauncherItem): SearchableFields {
-  return {
-    id: item.id,
-    title: item.title,
-    description: item.subtitle,
-    aliases: item.aliases,
-    usageKey: item.id,
-  }
 }
 
 // ─── Shortcut Resolution ────────────────────────────────────────────────────

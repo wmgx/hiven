@@ -181,7 +181,6 @@ export function getHostAppLauncherStaticItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['global-launcher'],
       requiredCapabilities: ['app-search'],
-      pinnable: false,
       execute: async () => {
         const result = await refreshApplicationIndex({ force: true })
         if (!result.ok) return { ok: false, message: result.message }
@@ -220,7 +219,6 @@ export async function getHostAppLauncherDynamicItems({
     behavior: { type: 'perform' },
     surfaces: ['global-launcher'],
     requiredCapabilities: ['app-search'],
-    pinnable: false,
     ranking: {
       installedAt: app.installedAt,
     },

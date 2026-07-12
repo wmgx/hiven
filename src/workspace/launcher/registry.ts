@@ -103,7 +103,6 @@ function resolveStaticItemFromContribution(
     display: contribution.display,
     behavior: contribution.behavior ?? { type: 'perform' },
     surfaces: sanitizeSurfaces(contribution.surfaces),
-    pinnable: false,
     inputPolicy: contribution.inputPolicy,
     params: contribution.params,
     defaultParams: contribution.defaultParams,
@@ -166,7 +165,6 @@ function resolvePluginSettingsItem(
     behavior: { type: 'perform' },
     surfaces: ['global-launcher'],
     requiredCapabilities: ['settings'],
-    pinnable: false,
     execute: async (ctx) => {
       await requestOpenLauncherPluginSettingsSurface(settingsSource, pluginId)
       return { ok: true, keepOpen: ctx.surfaceId === 'global-launcher' }
@@ -239,7 +237,6 @@ export function collectStaticPluginItems(): LauncherItem[] {
         behavior: { type: 'perform' },
         surfaces: ['global-launcher'],
         requiredCapabilities: ['plugin-surfaces'],
-        pinnable: false,
         execute: async () => {
           // Surface opening is handled by the host when this item is selected.
           // The launcher controller will detect the plugin-surface systemKey
@@ -445,9 +442,9 @@ function resolveDynamicItem(
     display: contribution.display,
     behavior: contribution.behavior ?? { type: 'perform' },
     surfaces: sanitizeSurfaces(contribution.surfaces),
-    // Dynamic items cannot be pinned in the first version.
-    pinnable: false,
     inputPolicy: contribution.inputPolicy,
+    // Only stable dynamic intents should opt in; one-shot results leave this unset.
+    recordUsage: contribution.recordUsage === true ? true : undefined,
     execute: contribution.execute,
   }
 }

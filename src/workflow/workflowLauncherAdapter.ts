@@ -41,7 +41,8 @@ function workObjectToLauncherItem(object: WorkObject, locale: Locale): LauncherI
     },
     behavior: { type: 'perform' },
     surfaces: ['global-launcher'],
-    pinnable: false,
+    // Object ids are stable across sessions (clipboard, windows, docs).
+    recordUsage: true,
     metadata: {
       kind: 'workflow-object',
       objectId: object.id,

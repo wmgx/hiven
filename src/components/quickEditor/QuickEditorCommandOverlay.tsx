@@ -77,8 +77,6 @@ export function QuickEditorCommandOverlay() {
     rankedLauncherItems: rankedItems.slice(0, MAX_OVERLAY_ITEMS),
     query,
     locale,
-    recentActionNames: [],
-    actionUsageCounts: {},
   }), [locale, query, rankedItems])
   const selectedItem = visibleFiltered[Math.min(selectedIndex, Math.max(0, visibleFiltered.length - 1))]
 

@@ -33,7 +33,6 @@ export function getHostSystemPowerItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['global-launcher'],
       requiredCapabilities: ['system-power'],
-      pinnable: false,
       execute: async () => performSystemPowerAction('restart'),
     },
     {
@@ -50,7 +49,6 @@ export function getHostSystemPowerItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['global-launcher'],
       requiredCapabilities: ['system-power'],
-      pinnable: false,
       execute: async () => performSystemPowerAction('shutdown'),
     },
     {
@@ -67,7 +65,6 @@ export function getHostSystemPowerItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['global-launcher'],
       requiredCapabilities: ['system-power'],
-      pinnable: false,
       execute: async () => performSystemPowerAction('lock-screen'),
     },
   ]
@@ -89,7 +86,6 @@ export function getHostPaneControlItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['global-launcher'],
       requiredCapabilities: ['settings'],
-      pinnable: false,
       legacyUsageKeys: ['show-plugins-page'],
       execute: async () => {
         await requestOpenLauncherHostSurface('system-plugins')
@@ -110,7 +106,6 @@ export function getHostPaneControlItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['global-launcher'],
       requiredCapabilities: ['settings'],
-      pinnable: false,
       legacyUsageKeys: ['show-settings-page'],
       execute: async () => {
         await requestOpenLauncherHostSurface('system-settings')
@@ -134,7 +129,6 @@ export function getHostPaneControlItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['global-launcher'],
       requiredCapabilities: ['pane-actions'],
-      pinnable: false,
       execute: async () => {
         // Single-instance rule: if the editor lives in the detached window,
         // focus it instead of opening the surface.

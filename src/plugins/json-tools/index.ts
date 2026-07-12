@@ -107,7 +107,7 @@ export const jsonToolsPlugin = definePlugin({
         try { return ctx.output.text(jsonPrettify(ctx.input.text)) }
         catch (e: any) { return ctx.output.error('Error: ' + e.message) }
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'json.compact',
@@ -121,7 +121,7 @@ export const jsonToolsPlugin = definePlugin({
         try { return ctx.output.text(jsonCompact(ctx.input.text)) }
         catch (e: any) { return ctx.output.error('Error: ' + e.message) }
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'sort-json.run',
@@ -135,7 +135,7 @@ export const jsonToolsPlugin = definePlugin({
         try { return ctx.output.text(sortJsonKeys(ctx.input.text)) }
         catch (e: any) { return ctx.output.error('Error: ' + e.message) }
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'query-string.toJson',
@@ -149,7 +149,7 @@ export const jsonToolsPlugin = definePlugin({
         try { return ctx.output.text(queryStringToJson(ctx.input.text)) }
         catch (e: any) { return ctx.output.error('Error: ' + e.message) }
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'query-string.fromJson',
@@ -163,7 +163,7 @@ export const jsonToolsPlugin = definePlugin({
         try { return ctx.output.text(jsonToQueryString(ctx.input.text)) }
         catch (e: any) { return ctx.output.error('Error: ' + e.message) }
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
   ],
 })

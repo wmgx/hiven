@@ -6,8 +6,7 @@
  *
  * Rules (see design doc §4–6):
  *  - Record on first-level launcher selection only.
- *  - Pinned execution does not write usage.
- *  - Dynamic items do not write long-term usage.
+ *  - Dynamic items write usage only when they opt in (`recordUsage: true`).
  *  - Execution success/failure does not change usage; usage measures intent.
  */
 
@@ -82,7 +81,7 @@ export type LegacyActionUsageBucket = {
 }
 
 export type LegacyActionUsageBySource = Partial<
-  Record<'command-palette' | 'editor-command-bar' | 'global-launcher' | 'pinned-runner', LegacyActionUsageBucket>
+  Record<'command-palette' | 'editor-command-bar' | 'global-launcher', LegacyActionUsageBucket>
 >
 
 /**
@@ -124,8 +123,7 @@ export function migrateLegacyBucket(
 
 /**
  * Migrate the full legacy `actionUsageBySource` into `launcherUsageBySurface`.
- * Only the two launcher surfaces are preserved; `pinned-runner` usage is dropped
- * (pinned execution must not feed launcher usage).
+ * Only launcher surfaces are preserved.
  */
 export function migrateLegacyUsage(
   legacy: LegacyActionUsageBySource | undefined,

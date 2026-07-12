@@ -230,7 +230,6 @@ export function getHostEditorActionItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['editor-command-bar', 'quick-editor-command'],
       requiredCapabilities: ['pane-actions'],
-      pinnable: false,
       execute: async (ctx) => createEditorLikePane(ctx.surfaceId, 'right'),
     },
     {
@@ -247,7 +246,6 @@ export function getHostEditorActionItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['editor-command-bar', 'quick-editor-command'],
       requiredCapabilities: ['pane-actions'],
-      pinnable: false,
       execute: async (ctx) => createEditorLikePane(ctx.surfaceId, 'bottom'),
     },
     {
@@ -264,7 +262,6 @@ export function getHostEditorActionItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['pane-actions'],
-      pinnable: false,
       execute: async () => {
         const guard = guardEditorWindowRuntime()
         if (guard) return guard
@@ -284,7 +281,6 @@ export function getHostEditorActionItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['pane-actions'],
-      pinnable: false,
       execute: async () => {
         const guard = guardEditorWindowRuntime()
         if (guard) return guard
@@ -304,7 +300,6 @@ export function getHostEditorActionItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['pane-actions'],
-      pinnable: false,
       execute: async () => {
         const guard = guardEditorWindowRuntime()
         if (guard) return guard
@@ -326,7 +321,6 @@ export function getHostEditorActionItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['pane-actions'],
-      pinnable: false,
       legacyUsageKeys: ['core-pane.toggle-sticky-scroll'],
       execute: async (ctx) => {
         const guard = guardEditorWindowRuntime()
@@ -357,7 +351,6 @@ export function getHostEditorActionItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['editor-command-bar', 'quick-editor-command'],
       requiredCapabilities: ['pane-actions', 'parameter-customization'],
-      pinnable: false,
       legacyUsageKeys: ['core-pane.set-language'],
       params: [
         {
@@ -402,7 +395,6 @@ export function getHostEditorActionItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['text-input-actions'],
-      pinnable: false,
       execute: async () => guardEditorWindowRuntime() ?? { ok: rewriteActiveEditorTextPolitely() },
     },
     {
@@ -419,7 +411,6 @@ export function getHostEditorActionItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['text-input-actions'],
-      pinnable: false,
       execute: async () => guardEditorWindowRuntime() ?? { ok: compressActiveEditorTextToThreeSentences() },
     },
     {
@@ -436,7 +427,6 @@ export function getHostEditorActionItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['text-input-actions'],
-      pinnable: false,
       execute: async () => guardEditorWindowRuntime() ?? { ok: formatActiveEditorTextAsBullets() },
     },
     {
@@ -453,7 +443,6 @@ export function getHostEditorActionItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['text-input-actions'],
-      pinnable: false,
       execute: async () => guardEditorWindowRuntime() ?? { ok: quoteActiveEditorTextAsCodeBlock() },
     },
     {
@@ -470,7 +459,6 @@ export function getHostEditorActionItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['text-input-actions'],
-      pinnable: false,
       execute: async () => guardEditorWindowRuntime() ?? { ok: minifyActiveEditorJson() },
     },
     {
@@ -487,7 +475,6 @@ export function getHostEditorActionItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['text-input-actions'],
-      pinnable: false,
       execute: async () => guardEditorWindowRuntime() ?? { ok: convertActiveEditorJsonToYaml() },
     },
     {
@@ -504,7 +491,6 @@ export function getHostEditorActionItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['pane-actions'],
-      pinnable: false,
       legacyUsageKeys: ['host:editor:json-extract-fields'],
       execute: async () => {
         const guard = guardEditorWindowRuntime()
@@ -527,7 +513,6 @@ export function getHostEditorActionItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['pane-actions'],
-      pinnable: false,
       execute: async () => {
         const guard = guardEditorWindowRuntime()
         if (guard) return guard

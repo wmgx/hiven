@@ -123,6 +123,13 @@ const registry = loadTsModule('src/workspace/launcher/registry.ts', {
           launcher: {
             items: [
               {
+                id: 'settings',
+                hostEntry: 'plugin-settings',
+                display: { title: 'Translate Settings' },
+                behavior: { type: 'perform' },
+                surfaces: ['global-launcher'],
+              },
+              {
                 id: 'editor-tool',
                 display: { title: 'Plugin Text Tool' },
                 behavior: { type: 'perform' },

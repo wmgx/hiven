@@ -42,7 +42,6 @@ export const regexTesterPlugin = definePlugin({
           aliases: ['regex', 'regexp', '正则'],
         },
         surfaces: ['command-palette'],
-        pinnable: false,
         execute(ctx) {
           const result = ctx.api.dispatchEffects([{
             type: 'panel.openV2' as const,
@@ -64,7 +63,6 @@ export const regexTesterPlugin = definePlugin({
       description: 'command.open.description',
       icon: 'regex',
       aliases: ['regex', 'regexp', '正则'],
-      live: { pinnable: false },
       inputs: [{ key: 'input', label: 'Input', kind: 'pane' as const, required: true }],
       inputResolution: { strategy: 'use-active', fallback: 'fail' },
       run(ctx) {

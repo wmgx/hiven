@@ -29,7 +29,7 @@ export const hashPlugin = definePlugin({
           return ctx.output.error(`Error: ${e.message}`)
         }
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'hash.sha1',
@@ -45,7 +45,7 @@ export const hashPlugin = definePlugin({
           return ctx.output.error(`Error: ${e.message}`)
         }
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'hash.sha512',
@@ -61,7 +61,7 @@ export const hashPlugin = definePlugin({
           return ctx.output.error(`Error: ${e.message}`)
         }
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
   ],
 })

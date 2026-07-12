@@ -32,16 +32,12 @@ export function GlobalLauncherHost() {
   const {
     open,
     overlay,
-    recentActionNames,
-    actionUsageCounts,
     locale,
     pluginSurfaceToolTarget,
     launcherHostSurfaceTarget,
   } = useAppStore(useShallow((s) => ({
     open: s.globalLauncherOpen,
     overlay: s.globalLauncherOverlay,
-    recentActionNames: s.actionUsageBySource['global-launcher'].recentActionNames,
-    actionUsageCounts: s.actionUsageBySource['global-launcher'].actionUsageCounts,
     locale: s.locale,
     pluginSurfaceToolTarget: s.pluginSurfaceToolTarget,
     launcherHostSurfaceTarget: s.launcherHostSurfaceTarget,
@@ -151,10 +147,8 @@ export function GlobalLauncherHost() {
       rankedLauncherItems,
       query,
       locale,
-      recentActionNames,
-      actionUsageCounts,
     })
-  }, [actionUsageCounts, locale, pluginRegistryVersion, query, rankedLauncherItems, recentActionNames])
+  }, [locale, pluginRegistryVersion, query, rankedLauncherItems])
 
   const resetLauncherSession = useCallback(() => {
     clearPluginSurfaceTool()

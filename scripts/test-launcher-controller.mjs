@@ -106,10 +106,10 @@ function makeController(overrides = {}) {
 }
 
 function performItem(systemKey, execute, kind = 'plugin') {
-  return { systemKey, kind, display: { title: systemKey }, behavior: { type: 'perform' }, pinnable: true, execute }
+  return { systemKey, kind, display: { title: systemKey }, behavior: { type: 'perform' }, execute }
 }
 function collectInputItem(systemKey, execute, input = {}) {
-  return { systemKey, kind: 'plugin', display: { title: systemKey }, behavior: { type: 'collect-input', input }, pinnable: true, execute }
+  return { systemKey, kind: 'plugin', display: { title: systemKey }, behavior: { type: 'collect-input', input }, execute }
 }
 
 function flushAsyncChoiceAction() {
@@ -253,22 +253,34 @@ function flushAsyncChoiceAction() {
   assert.equal(ctrl.back(), false, 'escape from base returns false (host closes)')
 }
 
-// --- 11. pinned execution does not record usage (recordUsage:false) ---
+// --- 11. select options can suppress usage (recordUsage:false) ---
 {
   const recorded = []
   const { ctrl } = makeController({ recordSelection: (s, i) => recorded.push(i.systemKey) })
   const item = performItem('plugin:p:launcher:pin', async () => ({ ok: true }))
   await ctrl.selectItem(item, { recordUsage: false })
-  assert.equal(recorded.length, 0, 'pinned execution does not record usage')
+  assert.equal(recorded.length, 0, 'recordUsage:false suppresses usage')
 }
 
-// --- 12. dynamic item never records usage ---
+// --- 12. dynamic item defaults to not recording usage ---
 {
   const recorded = []
   const { ctrl } = makeController({ recordSelection: (s, i) => recorded.push(i.systemKey) })
   const item = performItem('plugin:p:dynamic:d', async () => ({ ok: true }), 'dynamic')
   await ctrl.selectItem(item)
-  assert.equal(recorded.length, 0, 'dynamic item does not record long-term usage')
+  assert.equal(recorded.length, 0, 'dynamic item without recordUsage does not record')
+}
+
+// --- 12b. dynamic item with recordUsage:true does record ---
+{
+  const recorded = []
+  const { ctrl } = makeController({ recordSelection: (s, i) => recorded.push(i.systemKey) })
+  const item = {
+    ...performItem('plugin:web-open:dynamic:google-quick', async () => ({ ok: true }), 'dynamic'),
+    recordUsage: true,
+  }
+  await ctrl.selectItem(item)
+  assert.deepEqual(recorded, ['plugin:web-open:dynamic:google-quick'], 'stable dynamic opt-in records usage')
 }
 
 // --- 13. multi-level: choice action returning output pushes another result frame ---

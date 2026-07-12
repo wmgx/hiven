@@ -193,20 +193,17 @@ export function computeTitleMatchRanges(title: string, q: string, locale: Locale
   return { ranges: [], type: 'none' }
 }
 
+/**
+ * Pure text-match score for searchable fields.
+ * Usage / recency live only in launcher ranking (`usageScore`); this function
+ * does not take usage inputs.
+ */
 export function scoreSearchableFields(
   fields: SearchableFields,
   q: string,
   locale: Locale,
-  recentNames: string[],
-  usageCounts: Record<string, number>,
 ): number {
-  const usageKey = fields.usageKey ?? fields.id
-  const recentIdx = recentNames.indexOf(usageKey)
-  const recencyScore = recentIdx >= 0 ? 50 - recentIdx : 0
-  const freqScore = Math.log1p(usageCounts[usageKey] ?? 0) * 5
-  const baseScore = recencyScore + freqScore
-
-  if (!q) return baseScore
+  if (!q) return 0
 
   const query = q.trim().toLowerCase()
   const title = localizedText(fields.title || '', fields.titleI18n, locale).toLowerCase()
@@ -228,5 +225,5 @@ export function scoreSearchableFields(
     }
   }
 
-  return tier * 1000 + baseScore
+  return tier * 1000
 }

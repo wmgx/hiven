@@ -86,13 +86,13 @@ const identityWithStub = (() => {
   return me
 })()
 
-// --- Tool adapter: surfaces + pinnable + input policy ---
+// --- Tool adapter: surfaces + input policy ---
 const reverseTool = {
   id: 'reverse',
   title: 'Reverse',
   inputPolicy: { mode: 'auto' },
   run: async (ctx) => ctx.output.text(ctx.input.text.split('').reverse().join('')),
-  surfaces: { launcher: true, panel: true, pinnable: true },
+  surfaces: { launcher: true, panel: true },
 }
 const item = toolAdapter.adaptToolToLauncherItem(reverseTool, {
   pluginId: 'demo',
@@ -100,9 +100,9 @@ const item = toolAdapter.adaptToolToLauncherItem(reverseTool, {
   systemKey: 'plugin:demo:tool:reverse',
 })
 assert.equal(item.kind, 'plugin')
-assert.equal(item.pinnable, false, 'tool launcher items are not pinnable in the current host policy')
 assert.equal(item.behavior.type, 'perform')
 assert.equal(item.systemKey, 'plugin:demo:tool:reverse')
+assert.equal('pinnable' in item, false, 'tool launcher items no longer carry pinnable')
 
 // Execute via a fake api: auto mode with selection present uses selection
 let copied = null
