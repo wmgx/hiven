@@ -16,24 +16,53 @@ type PaneSnapshot = {
     title?: string
     language?: string
     stickyScroll?: boolean
+    text?: string
+    origin?: 'editor' | 'quick-editor'
   }>
 }
 
 type TextDiffLauncherContext = LauncherExecutionContext
 
-function paneLabel(snapshot: PaneSnapshot, paneId: string): string {
+function paneLabel(ctx: TextDiffLauncherContext, snapshot: PaneSnapshot, paneId: string): string {
   const index = snapshot.paneIds.indexOf(paneId)
-  return snapshot.panes[paneId]?.title || 'Pane ' + (index >= 0 ? index + 1 : paneId)
+  const pane = snapshot.panes[paneId]
+  const base = pane?.title || 'Pane ' + (index >= 0 ? index + 1 : paneId)
+  if (pane?.origin === 'quick-editor') {
+    return ctx.t('choice.quickEditorPane', { title: base })
+  }
+  if (pane?.origin === 'editor') {
+    return ctx.t('choice.editorPane', { title: base })
+  }
+  return base
+}
+
+/** Snapshot ids may be prefixed `quick:` on collision; store the real pane id for write-back. */
+function resolvePaneBinding(
+  snapshotPaneId: string,
+  origin?: 'editor' | 'quick-editor',
+): { paneId: string; origin?: 'editor' | 'quick-editor' } {
+  if (origin === 'quick-editor' && snapshotPaneId.startsWith('quick:')) {
+    return { paneId: snapshotPaneId.slice('quick:'.length), origin }
+  }
+  return { paneId: snapshotPaneId, origin }
 }
 
 function buildSourceList(ctx: TextDiffLauncherContext, snapshot: PaneSnapshot): DiffSource[] {
-  const paneSources: DiffSource[] = snapshot.paneIds.map((paneId) => ({
-    sourceId: 'pane:' + paneId,
-    kind: 'editor-pane' as const,
-    paneId,
-    title: paneLabel(snapshot, paneId),
-    language: snapshot.panes[paneId]?.language,
-  }))
+  const paneSources: DiffSource[] = snapshot.paneIds.map((snapshotPaneId) => {
+    const pane = snapshot.panes[snapshotPaneId]
+    const binding = resolvePaneBinding(snapshotPaneId, pane?.origin)
+    return {
+      sourceId: 'pane:' + snapshotPaneId,
+      kind: 'editor-pane' as const,
+      paneId: binding.paneId,
+      origin: binding.origin,
+      title: paneLabel(ctx, snapshot, snapshotPaneId),
+      language: pane?.language,
+      // Capture text at choice-build time so openDiffPage receives content
+      // even when the host snapshot is later gone (cross-window).
+      text: pane?.text ?? '',
+    }
+  })
   return [
     ...paneSources,
     { sourceId: 'clipboard', kind: 'clipboard' as const, title: ctx.t('choice.clipboard') },
@@ -41,13 +70,11 @@ function buildSourceList(ctx: TextDiffLauncherContext, snapshot: PaneSnapshot): 
   ]
 }
 
-function materializeSourceText(source: DiffSource, snapshot: PaneSnapshot): string {
+function materializeSourceText(source: DiffSource): string {
   if (source.kind === 'clipboard') return source.text ?? ''
   if (source.kind === 'empty') return ''
-  if (source.kind === 'editor-pane' && source.paneId) {
-    return source.text ?? ''
-  }
-  return ''
+  if (source.kind === 'editor-pane') return source.text ?? ''
+  return source.text ?? ''
 }
 
 export const textDiffPlugin = definePlugin({
@@ -84,10 +111,10 @@ export const textDiffPlugin = definePlugin({
           icon: 'git-compare',
           aliases: ['diff', 'compare', 'text diff', 'text-diff', 'duibi', 'wenben duibi'],
         },
-        surfaces: ['command-palette', 'global-launcher'],
+        surfaces: ['command-palette', 'global-launcher', 'quick-editor-command'],
         pinnable: false,
         execute(ctx) {
-          const snapshot = ctx.api.getPaneSnapshot()
+          const snapshot = ctx.api.getPaneSnapshot() as PaneSnapshot
           const sources = buildSourceList(ctx, snapshot)
 
           if (sources.length < 2) {
@@ -124,8 +151,8 @@ export const textDiffPlugin = definePlugin({
                   }
 
                   const payload = {
-                    original: { ...selected[0], text: materializeSourceText(selected[0], snapshot) },
-                    modified: { ...selected[1], text: materializeSourceText(selected[1], snapshot) },
+                    original: { ...selected[0], text: materializeSourceText(selected[0]) },
+                    modified: { ...selected[1], text: materializeSourceText(selected[1]) },
                   }
 
                   ctx.api.openDiffPage(payload as any)

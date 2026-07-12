@@ -3,6 +3,7 @@ import { openExternalUrl } from '../effectRunner'
 import type { FluxEffect, SerializedRange } from '../types'
 import type { PluginLauncherApi } from '../launcher/types'
 import { useQuickEditorStore } from './quickEditorStore'
+import { readQuickEditorPaneSnapshot } from './quickEditorPaneSnapshot'
 
 function splitLines(text: string): string[] {
   return text.split(/\r\n|\r|\n/)
@@ -106,6 +107,29 @@ export function createQuickEditorLauncherApi(baseApi: PluginLauncherApi): Plugin
     ...baseApi,
     getActiveText: () => useQuickEditorStore.getState().text,
     getSelectionText: () => '',
+    getPaneSnapshot: () => {
+      // Prefer the merged host snapshot (editor + quick editor) when available;
+      // fall back to live quick-editor panes so diff always sees local panels.
+      const merged = baseApi.getPaneSnapshot()
+      if (merged.paneIds.length > 0) return merged
+      const quick = readQuickEditorPaneSnapshot()
+      if (!quick) {
+        return {
+          activePaneId: '',
+          previousActivePaneId: undefined,
+          paneIds: [],
+          panes: {},
+          renderers: {},
+        }
+      }
+      return {
+        activePaneId: quick.activePaneId,
+        previousActivePaneId: undefined,
+        paneIds: quick.paneIds,
+        panes: quick.panes,
+        renderers: {},
+      }
+    },
     getClipboardText: () => readClipboard(),
     replaceActiveText: async (text: string) => {
       useQuickEditorStore.getState().setText(text)

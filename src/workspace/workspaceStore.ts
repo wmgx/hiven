@@ -25,6 +25,11 @@ export type DiffSource = {
   sourceId: string
   kind: 'editor-pane' | 'clipboard' | 'empty'
   paneId?: string
+  /**
+   * Where a pane-backed source lives. Used for bidirectional Diff binding:
+   * edits write back to the matching pane store.
+   */
+  origin?: 'editor' | 'quick-editor'
   title: string
   language?: string
   text?: string

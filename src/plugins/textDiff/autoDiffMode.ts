@@ -28,11 +28,24 @@ export function canUseSemanticJsonDiff(leftText: string, rightText: string): boo
   return isValidJson(leftText) && isValidJson(rightText)
 }
 
+/** Match kit parseJson: allow trailing commas so JSON mode doesn't fall back mid-edit. */
+function relaxJsonText(text: string): string {
+  return text
+    .replace(/^\uFEFF/, '')
+    .replace(/,(\s*[}\]])/g, '$1')
+}
+
 function isValidJson(text: string): boolean {
+  const raw = text.replace(/^\uFEFF/, '')
   try {
-    JSON.parse(text.replace(/^\uFEFF/, ''))
+    JSON.parse(raw)
     return true
   } catch {
-    return false
+    try {
+      JSON.parse(relaxJsonText(raw))
+      return true
+    } catch {
+      return false
+    }
   }
 }

@@ -28,6 +28,8 @@ export interface QuickEditorState {
 
 export interface QuickEditorActions {
   setText: (text: string) => void
+  /** Update a specific pane's text; keeps active mirror fields in sync when needed. */
+  setPaneText: (paneId: QuickEditorPaneId, text: string) => boolean
   setLanguage: (language: string) => void
   setDetectedLanguage: (language: string) => void
   setCursorPosition: (position: { lineNumber: number; column: number }) => void

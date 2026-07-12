@@ -110,8 +110,15 @@ interface AppState {
   openPluginSurfaceTool: (target: PluginSurfaceOpenTarget) => void
   clearPluginSurfaceTool: () => void
   launcherHostSurfaceTarget: LauncherHostSurfaceTarget | null
+  /**
+   * Host surface suspended while a plugin tool surface is open (e.g. Diff over
+   * Quick Editor). ESC/back restores this instead of closing the launcher.
+   */
+  previousLauncherHostSurfaceTarget: LauncherHostSurfaceTarget | null
   openLauncherHostSurface: (target: LauncherHostSurfaceTarget) => void
   clearLauncherHostSurface: () => void
+  /** Restore host surface suspended by openPluginSurfaceTool; returns true if restored. */
+  restorePreviousLauncherHostSurface: () => boolean
 
   // Quick Editor
   quickEditorCommandOpen: boolean
@@ -171,16 +178,52 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   globalLauncherOverlay: false,
   pluginSurfaceToolTarget: null,
   launcherHostSurfaceTarget: null,
+  previousLauncherHostSurfaceTarget: null,
   setGlobalLauncherOpen: (open) => set((state) => ({
     globalLauncherOpen: open,
     globalLauncherOverlay: open ? state.globalLauncherOverlay : false,
-    ...(open ? {} : { launcherHostSurfaceTarget: null, quickEditorCommandOpen: false, quickEditorCommandInitialQuery: '' }),
+    ...(open ? {} : {
+      launcherHostSurfaceTarget: null,
+      previousLauncherHostSurfaceTarget: null,
+      pluginSurfaceToolTarget: null,
+      quickEditorCommandOpen: false,
+      quickEditorCommandInitialQuery: '',
+    }),
   })),
   openGlobalLauncherOverlay: () => set({ globalLauncherOpen: true, globalLauncherOverlay: true }),
-  openPluginSurfaceTool: (target) => set({ pluginSurfaceToolTarget: target, launcherHostSurfaceTarget: null }),
+  openPluginSurfaceTool: (target) => set((state) => ({
+    pluginSurfaceToolTarget: target,
+    // Suspend the host surface (e.g. quick-editor) so ESC can restore it.
+    previousLauncherHostSurfaceTarget:
+      state.launcherHostSurfaceTarget ?? state.previousLauncherHostSurfaceTarget,
+    launcherHostSurfaceTarget: null,
+    // Diff / tool surfaces replace the quick-editor command overlay.
+    quickEditorCommandOpen: false,
+    quickEditorCommandInitialQuery: '',
+  })),
   clearPluginSurfaceTool: () => set({ pluginSurfaceToolTarget: null }),
-  openLauncherHostSurface: (target) => set({ launcherHostSurfaceTarget: target, pluginSurfaceToolTarget: null, globalLauncherOpen: true }),
+  openLauncherHostSurface: (target) => set({
+    launcherHostSurfaceTarget: target,
+    pluginSurfaceToolTarget: null,
+    previousLauncherHostSurfaceTarget: null,
+    globalLauncherOpen: true,
+  }),
   clearLauncherHostSurface: () => set({ launcherHostSurfaceTarget: null }),
+  restorePreviousLauncherHostSurface: () => {
+    let restored = false
+    set((state) => {
+      const previous = state.previousLauncherHostSurfaceTarget
+      if (!previous) return {}
+      restored = true
+      return {
+        launcherHostSurfaceTarget: previous,
+        previousLauncherHostSurfaceTarget: null,
+        pluginSurfaceToolTarget: null,
+        globalLauncherOpen: true,
+      }
+    })
+    return restored
+  },
 
   // Quick Editor
   quickEditorCommandOpen: false,

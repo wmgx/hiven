@@ -9,6 +9,10 @@ import {
   resolvePluginSurfaceTarget,
   type LauncherItemPermissionFrame,
 } from './GlobalLauncherSelection'
+import {
+  getPluginSurfaceShortcutPresentation,
+  showPluginSurfaceWindow,
+} from '../../workspace/windowManager/pluginSurfaceWindows'
 
 type UseGlobalLauncherSelectionControllerInput = {
   controllerRef: RefObject<LauncherController | null>
@@ -52,6 +56,13 @@ export function useGlobalLauncherSelectionController({
     if (item.kind === 'domain') {
       const pluginSurfaceTarget = resolvePluginSurfaceTarget(item.domainItem)
       if (pluginSurfaceTarget) {
+        // Surfaces that declare window presentation (e.g. clipboard history)
+        // must open as an independent window — never stack on top of the
+        // current launcher surface (text-diff, settings, …).
+        if (getPluginSurfaceShortcutPresentation(pluginSurfaceTarget) === 'window') {
+          void showPluginSurfaceWindow(pluginSurfaceTarget)
+          return
+        }
         clearPluginSurfaceTool()
         void openPluginSurface(pluginSurfaceTarget)
         return

@@ -12,6 +12,7 @@ const surfaceWindows = read('src/workspace/pluginSurfaceWindows.ts')
 const windowManager = read('src/workspace/windowManager/pluginSurfaceWindows.ts')
 const clipboardHistory = read('src/plugins/clipboard-history/index.tsx')
 const openRequest = read('src/workspace/pluginSurfaceOpenRequest.ts')
+const selectionController = read('src/components/launcher/useGlobalLauncherSelectionController.ts')
 const globalLauncher = read('src/launcher/hosts/GlobalLauncherHost.tsx') + '\n' + read('src/components/launcher/GlobalLauncherSurfaceFrame.ts')
 
 assert.match(surfaceWindows, /getPluginSurfaceShortcutPresentation[\s\S]*shortcutPresentation === ['"]window['"]/, 'surface metadata must choose window presentation for shortcuts')
@@ -20,7 +21,18 @@ assert.match(shortcutHotkeys, /getPluginSurfaceShortcutPresentation\(target\) ==
 assert.doesNotMatch(shortcutHotkeys, /requestOpenPluginSurfaceWindow/, 'shortcut handler must not call the lower-level plugin surface lifecycle API directly')
 assert.match(shortcutHotkeys, /requestOpenPluginSurfaceTool\(target\)/, 'shortcut handler must keep launcher presentation fallback')
 assert.match(clipboardHistory, /shortcutPresentation:\s*['"]window['"]/, 'clipboard history shortcut must open as an independent window')
-assert.match(openRequest, /function\s+openLauncherHostedPluginSurface\(target:[\s\S]*openPluginSurfaceTool\(target\)[\s\S]*openGlobalLauncherOverlay\(['"]pinned-only['"]\)/, 'launcher-presentation shortcuts must open through a dedicated launcher-hosted surface bridge')
+
+// Window-presentation surfaces must never stack inside the launcher tool shell.
+assert.match(
+  openRequest,
+  /requestOpenPluginSurfaceTool[\s\S]*getPluginSurfaceShortcutPresentation\(target\) === ['"]window['"][\s\S]*showPluginSurfaceWindow\(target\)/,
+  'requestOpenPluginSurfaceTool must redirect window-presentation surfaces to an independent window',
+)
+assert.match(
+  selectionController,
+  /getPluginSurfaceShortcutPresentation\(pluginSurfaceTarget\) === ['"]window['"][\s\S]*showPluginSurfaceWindow\(pluginSurfaceTarget\)/,
+  'launcher list selection must open window-presentation surfaces as independent windows, not in-launcher stack',
+)
 assert.match(openRequest, /if \(!isTauriRuntime\(\)\) \{[\s\S]*openLauncherHostedPluginSurface\(target\)/, 'non-Tauri launcher-presentation shortcuts must use the bridge instead of duplicating store writes')
 assert.match(globalLauncher, /pluginSurfaceToolTarget/, 'global launcher must keep a separate tool-shell target')
 assert.match(globalLauncher, /samePluginSurfaceTarget/, 'global launcher must distinguish current launcher surface from shortcut tool target')

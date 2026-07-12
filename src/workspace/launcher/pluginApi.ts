@@ -21,6 +21,7 @@ import {
   getActiveEditorPaneSnapshot,
 } from '../editorBridge'
 import { createQuickEditorPane, showQuickEditorSurface } from '../quickEditor/quickEditorRequests'
+import { readQuickEditorPaneSnapshot } from '../quickEditor/quickEditorPaneSnapshot'
 import type { PluginPermission } from '../pluginTypes'
 import type { PluginSettingsSource } from '../pluginSettingsStore'
 import type { DiscoveredApp, PluginAppsApi, PluginLauncherApi } from './types'
@@ -39,12 +40,65 @@ function readSelectionText(): string {
   return getActiveEditorContextSnapshot()?.selectedText ?? ''
 }
 
-function emptyPaneSnapshot() {
+type PaneSnapshot = ReturnType<PluginLauncherApi['getPaneSnapshot']>
+
+function emptyPaneSnapshot(): PaneSnapshot {
   return {
     activePaneId: '',
     previousActivePaneId: undefined,
     paneIds: [],
     panes: {},
+    renderers: {},
+  }
+}
+
+function buildMergedPaneSnapshot(): PaneSnapshot {
+  const editor = getActiveEditorPaneSnapshot()
+  const editorContext = getActiveEditorContextSnapshot()
+  const quick = readQuickEditorPaneSnapshot()
+
+  const panes: PaneSnapshot['panes'] = {}
+  const paneIds: string[] = []
+
+  if (editor) {
+    for (const paneId of editor.paneIds) {
+      const meta = editor.panes[paneId] ?? {}
+      const index = editor.paneIds.indexOf(paneId)
+      paneIds.push(paneId)
+      panes[paneId] = {
+        title: meta.title || `Pane ${index + 1}`,
+        language: meta.language,
+        stickyScroll: meta.stickyScroll,
+        text: paneId === editor.activePaneId ? (editorContext?.activeText ?? '') : '',
+        origin: 'editor',
+      }
+    }
+  }
+
+  if (quick) {
+    for (const paneId of quick.paneIds) {
+      // Avoid colliding with editor pane ids.
+      const snapshotId = paneIds.includes(paneId) ? `quick:${paneId}` : paneId
+      paneIds.push(snapshotId)
+      panes[snapshotId] = {
+        title: quick.panes[paneId]?.title,
+        language: quick.panes[paneId]?.language,
+        text: quick.panes[paneId]?.text ?? '',
+        origin: 'quick-editor',
+      }
+    }
+  }
+
+  const activePaneId = editor?.activePaneId
+    ?? quick?.activePaneId
+    ?? paneIds[0]
+    ?? ''
+
+  return {
+    activePaneId,
+    previousActivePaneId: editor?.previousActivePaneId,
+    paneIds,
+    panes,
     renderers: {},
   }
 }
@@ -127,15 +181,9 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
     getActiveText: () => readActiveText(),
     getSelectionText: () => readSelectionText(),
     getPaneSnapshot: () => {
-      const snapshot = getActiveEditorPaneSnapshot()
-      if (!snapshot) return emptyPaneSnapshot()
-      return {
-        activePaneId: snapshot.activePaneId,
-        previousActivePaneId: snapshot.previousActivePaneId,
-        paneIds: snapshot.paneIds,
-        panes: snapshot.panes,
-        renderers: {},
-      }
+      const snapshot = buildMergedPaneSnapshot()
+      if (snapshot.paneIds.length === 0) return emptyPaneSnapshot()
+      return snapshot
     },
     isPanePanelOpen: () => {
       return false
@@ -171,9 +219,19 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
     openDiffPage: (payload) => {
       const original = payload?.original
       const modified = payload?.modified
+      // Preserve pane binding metadata so TextDiffSurface can write edits back.
+      const serializeSide = (side: typeof original) => ({
+        sourceId: side?.sourceId,
+        kind: side?.kind,
+        paneId: side?.paneId,
+        origin: side?.origin,
+        title: side?.title ?? '',
+        language: side?.language,
+        text: side?.text ?? '',
+      })
       const initialText = JSON.stringify({
-        original: { text: original?.text ?? '', title: original?.title ?? '' },
-        modified: { text: modified?.text ?? '', title: modified?.title ?? '' },
+        original: serializeSide(original),
+        modified: serializeSide(modified),
       })
       openLauncherHostedPluginSurface({
         source: 'builtin',

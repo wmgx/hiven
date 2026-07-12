@@ -964,7 +964,7 @@ html[data-window='launcher'] #root {
 @keyframes palette-item-in {
   from {
     opacity: 0;
-    transform: translateX(-6px);
+    transform: translateX(-4px);
   }
   to {
     opacity: 1;
@@ -1004,7 +1004,7 @@ html[data-window='launcher'] #root {
   animation: running-pulse 1s ease-in-out infinite;
 }
 .anim-palette-item {
-  animation: palette-item-in 0.2s ease both;
+  animation: palette-item-in 0.12s ease both;
 }
 .anim-bump {
   animation: bump 0.2s ease;
@@ -1022,14 +1022,14 @@ html[data-window='launcher'] #root {
   backdrop-filter: none;
 }
 .palette-panel {
-  transform: scale(0.95) translateY(-10px);
+  transform: scale(0.98) translateY(-6px);
   opacity: 0;
   box-shadow:
     0 3px 8px rgba(15, 23, 42, 0.08),
     0 1px 2px rgba(15, 23, 42, 0.06);
   transition:
-    transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
-    opacity 0.2s ease;
+    transform 0.14s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.12s ease;
 }
 .palette-overlay.open .palette-panel {
   transform: scale(1) translateY(0);
@@ -1057,7 +1057,7 @@ html[data-window='launcher'] .global-launcher-overlay.open {
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
-  transition: height 120ms ease, max-height 120ms ease;
+  transition: height 70ms ease-out, max-height 70ms ease-out;
   -webkit-user-select: none;
   user-select: none;
 }
@@ -1186,7 +1186,7 @@ html[data-window='quick-editor'] #root {
   max-height: var(--launcher-body-max-height, var(--launcher-list-max-height));
   overflow-x: hidden;
   overflow-y: auto;
-  transition: max-height 120ms ease;
+  transition: max-height 70ms ease-out;
   overscroll-behavior: contain;
   touch-action: pan-y;
 }
@@ -4483,33 +4483,45 @@ body[data-theme='dark'] .global-launcher-panel.palette-panel {
 
 .quick-editor-command-layer {
   --quick-editor-command-width: clamp(320px, 58vw, 620px);
-  --quick-editor-command-max-height: min(60vh, 460px);
+  /* Grow toward the editor bottom, leaving ~20% free below the panel. */
+  --quick-editor-command-max-height: 80%;
   pointer-events: none;
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: clamp(18px, 8vh, 76px) 14px 14px;
+  padding: clamp(12px, 3vh, 28px) 14px 0;
+  box-sizing: border-box;
 }
 
 .quick-editor-command-layer--detached {
   --quick-editor-command-width: clamp(340px, 62vw, 660px);
-  --quick-editor-command-max-height: min(62vh, 480px);
-  padding-top: clamp(24px, 9vh, 84px);
+  --quick-editor-command-max-height: 80%;
+  padding-top: clamp(16px, 3.5vh, 32px);
 }
 
 .quick-editor-command-panel {
   width: min(var(--quick-editor-command-width), calc(100vw - 28px));
   max-height: var(--quick-editor-command-max-height);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   pointer-events: auto;
   background: color-mix(in srgb, var(--panel) 96%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--border-2) 78%, transparent);
   border-radius: 8px;
   color: var(--text);
   font-family: var(--font);
+  /* Keyboard focus is intentional for ↑↓/Space; never show a browser focus ring. */
+  outline: none;
   box-shadow:
     0 18px 44px -24px rgba(0, 0, 0, 0.5),
     0 8px 20px -16px rgba(0, 0, 0, 0.32),
     0 0 0 1px rgba(255, 255, 255, 0.38) inset;
+}
+
+.quick-editor-command-panel:focus,
+.quick-editor-command-panel:focus-visible {
+  outline: none;
 }
 
 .flux-spatial-shell[data-theme='dark'] .quick-editor-command-panel,
@@ -4534,9 +4546,20 @@ body[data-theme='dark'] .quick-editor-command-panel {
 
 .quick-editor-command-panel .l-list,
 .quick-editor-command-panel .global-launcher-body.l-list,
+.quick-editor-command-panel .global-launcher-body.l-results,
 .quick-editor-command-panel .launcher-results {
-  --launcher-body-max-height: calc(var(--quick-editor-command-max-height) - 86px);
+  /* Flex-fill under header/footer so the list can use the taller panel. */
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  --launcher-body-max-height: none;
   background: transparent;
+  overflow-y: auto;
+}
+
+.quick-editor-command-panel .global-launcher-header,
+.quick-editor-command-panel .global-launcher-footer {
+  flex: 0 0 auto;
 }
 
 .quick-editor-command-panel .l-row {

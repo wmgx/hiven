@@ -3,11 +3,10 @@
  * Opened via workspace store's openDiffPage(), closed via ESC.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   getPluginHostSdk,
   detectExternalEditorLanguage,
-  type DiffSource,
   type FullscreenView,
 } from '@hiven/plugin'
 import {
@@ -17,29 +16,13 @@ import {
 } from '@hiven/plugin-ui'
 import { CloseIcon } from '@hiven/plugin-ui/icons'
 import { canUseSemanticJsonDiff, isAutoDiffExitKey } from './autoDiffMode'
+import { useDiffSourceText } from './useDiffSourceText'
 import './style.css'
 
 const PLUGIN_ID = 'text-diff'
 
 type DiffPageProps = {
   source: FullscreenView & { type: 'diff' }
-}
-
-function useDiffSourceText(source: DiffSource): [string, (text: string) => void] {
-  const { hooks } = getPluginHostSdk()
-  const paneText = hooks.usePaneText(source.kind === 'editor-pane' ? source.paneId! : '')
-  const [localText, setLocalText] = useState(source.text ?? '')
-  const { setPaneText } = hooks.useWorkspaceActions()
-
-  if (source.kind === 'editor-pane') {
-    const text = paneText ?? ''
-    const setText = useCallback((newText: string) => {
-      if (source.paneId) setPaneText(source.paneId, newText)
-    }, [source.paneId, setPaneText])
-    return [text, setText]
-  }
-
-  return [localText, setLocalText]
 }
 
 export function DiffPageView({ source }: DiffPageProps) {
@@ -52,62 +35,57 @@ export function DiffPageView({ source }: DiffPageProps) {
   const [originalText, setOriginalText] = useDiffSourceText(source.original)
   const [modifiedText, setModifiedText] = useDiffSourceText(source.modified)
 
-  // JSON semantic mode
-  const semanticAvailable = useMemo(
+  const jsonAvailable = useMemo(
     () => canUseSemanticJsonDiff(originalText, modifiedText),
     [originalText, modifiedText],
   )
-  const [semanticEnabled, setSemanticEnabled] = useState(() => canUseSemanticJsonDiff(originalText, modifiedText))
-  const selectedMode = semanticEnabled ? 'json-semantic' : 'text-line'
-  const renderMode = semanticEnabled && semanticAvailable ? 'json-semantic' : 'text'
+  const [jsonEnabled, setJsonEnabled] = useState(() => canUseSemanticJsonDiff(originalText, modifiedText))
+  const selectedMode = jsonEnabled ? 'json' : 'text'
+  const renderMode = jsonEnabled && jsonAvailable ? 'json' : 'text'
 
-  // Compute diff
-  const viewModel = useMemo(
-    () => semanticAvailable ? diff.buildJsonDiffViewModel(originalText, modifiedText) : null,
-    [semanticAvailable, originalText, modifiedText, diff],
-  )
-  const changes = viewModel?.changes ?? []
-
-  const { leftText, rightText, leftHighlights, rightHighlights } = useMemo(() => {
-    if (renderMode === 'json-semantic') {
-      const origParsed = diff.parseJson(originalText)
-      const modParsed = diff.parseJson(modifiedText)
-      if (origParsed.ok && modParsed.ok && origParsed.value != null && modParsed.value != null) {
-        const tree = diff.buildDiffTree(origParsed.value, modParsed.value)
-        const leftLines = diff.buildSideLines(tree, 'left')
-        const rightLines = diff.buildSideLines(tree, 'right')
+  const { leftText, rightText, leftHighlights, rightHighlights, leftRanges, rightRanges, jsonChangeCount } = useMemo(() => {
+    // JSON mode: preserve user formatting; structural path → character-range blocks.
+    if (renderMode === 'json') {
+      const hl = diff.computeJsonLineHighlights(originalText, modifiedText)
+      if (hl) {
         return {
-          leftText: leftLines.map((line) => line.text).join('\n'),
-          rightText: rightLines.map((line) => line.text).join('\n'),
-          leftHighlights: leftLines.reduce<number[]>((acc, line, index) => {
-            if (line.highlight) acc.push(index + 1)
-            return acc
-          }, []),
-          rightHighlights: rightLines.reduce<number[]>((acc, line, index) => {
-            if (line.highlight) acc.push(index + 1)
-            return acc
-          }, []),
+          leftText: originalText,
+          rightText: modifiedText,
+          leftHighlights: hl.leftHighlights,
+          rightHighlights: hl.rightHighlights,
+          leftRanges: hl.leftRanges,
+          rightRanges: hl.rightRanges,
+          jsonChangeCount: hl.changes.length,
         }
       }
     }
 
     const { leftHighlights, rightHighlights } = diff.computeTextLineDiff(originalText, modifiedText)
-    return { leftText: originalText, rightText: modifiedText, leftHighlights, rightHighlights }
+    return {
+      leftText: originalText,
+      rightText: modifiedText,
+      leftHighlights,
+      rightHighlights,
+      leftRanges: undefined as undefined,
+      rightRanges: undefined as undefined,
+      jsonChangeCount: 0,
+    }
   }, [renderMode, originalText, modifiedText, diff])
 
-  const diffCount = renderMode === 'json-semantic'
-    ? changes.length
+  const diffCount = renderMode === 'json'
+    ? jsonChangeCount
     : Math.max(leftHighlights.length, rightHighlights.length)
 
-  // Language detection
+  // Language: JSON mode always uses Monaco `json` for folding/syntax; text mode
+  // keeps auto language detection from pane/content.
   const editorLanguage = useMemo(
-    () => renderMode === 'json-semantic'
+    () => jsonEnabled
       ? 'json'
       : detectExternalEditorLanguage(
         [originalText, modifiedText],
         [source.original.language, source.modified.language],
       ),
-    [renderMode, originalText, modifiedText, source.original.language, source.modified.language],
+    [jsonEnabled, originalText, modifiedText, source.original.language, source.modified.language],
   )
 
   // ESC to close
@@ -144,16 +122,28 @@ export function DiffPageView({ source }: DiffPageProps) {
           value={selectedMode}
           aria-label={t('diff.mode')}
           options={[
-            { value: 'text-line', label: t('diff.textMode') },
-            { value: 'json-semantic', label: t('diff.semantic') },
+            { value: 'text', label: t('diff.textMode') },
+            { value: 'json', label: t('diff.jsonMode') },
           ]}
-          onChange={(value) => setSemanticEnabled(value === 'json-semantic')}
+          onChange={(value) => setJsonEnabled(value === 'json')}
         />
 
-        {semanticEnabled && !semanticAvailable && (
-          <span className="text-diff-hint" title={t('diff.semanticUnavailable')}>
-            {t('diff.error')}
-          </span>
+        {jsonEnabled && (
+          <ToolbarButton
+            type="button"
+            className="text-diff-format-button"
+            onClick={() => {
+              const left = diff.formatJsonPreserveKeyOrder(originalText)
+              const right = diff.formatJsonPreserveKeyOrder(modifiedText)
+              if (left != null) setOriginalText(left)
+              if (right != null) setModifiedText(right)
+            }}
+            disabled={!diff.parseJson(originalText).ok && !diff.parseJson(modifiedText).ok}
+            title={t('diff.formatHint')}
+            aria-label={t('diff.format')}
+          >
+            {t('diff.format')}
+          </ToolbarButton>
         )}
 
         <ToolbarButton
@@ -173,6 +163,8 @@ export function DiffPageView({ source }: DiffPageProps) {
           rightText={rightText}
           leftHighlights={leftHighlights}
           rightHighlights={rightHighlights}
+          leftRanges={leftRanges}
+          rightRanges={rightRanges}
           layout="side-by-side"
           language={editorLanguage}
           onLeftChange={setOriginalText}
@@ -183,6 +175,13 @@ export function DiffPageView({ source }: DiffPageProps) {
           monacoTheme={settings.theme === 'dark' ? 'flux-vscode-dark' : 'flux-vscode-light'}
         />
       </div>
+
+      {jsonEnabled && renderMode === 'text' && (
+        <div className="text-diff-fallback" role="status">
+          <span className="text-diff-fallback-dot" aria-hidden />
+          {t('diff.fallbackToText')}
+        </div>
+      )}
     </div>
   )
 }

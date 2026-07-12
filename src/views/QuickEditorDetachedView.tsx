@@ -7,8 +7,11 @@ import { registerHostLauncherProviders } from '../workspace/launcher/hostProvide
 import { useQuickEditorStore } from '../workspace/quickEditor/quickEditorStore'
 import {
   applyQuickEditorPaneRequest,
+  applyQuickEditorSetPaneText,
   isQuickEditorPaneRequest,
+  isQuickEditorSetPaneTextRequest,
   QUICK_EDITOR_CREATE_PANE_EVENT,
+  QUICK_EDITOR_SET_PANE_TEXT_EVENT,
 } from '../workspace/quickEditor/quickEditorRequests'
 import { getLanguageOptionLabel } from '../workspace/languageOptions'
 import { QuickEditorPanel } from '../components/quickEditor/QuickEditorPanel'
@@ -65,22 +68,33 @@ export function QuickEditorDetachedView() {
   useEffect(() => {
     if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
     let disposed = false
-    let unlisten: (() => void) | undefined
+    let unlistenCreate: (() => void) | undefined
+    let unlistenSetText: (() => void) | undefined
     import('@tauri-apps/api/event')
-      .then(({ listen }) => listen<unknown>(QUICK_EDITOR_CREATE_PANE_EVENT, (event) => {
-        if (!isQuickEditorPaneRequest(event.payload)) return
-        applyQuickEditorPaneRequest(event.payload)
-      }))
-      .then((cleanup) => {
-        if (disposed) cleanup()
-        else unlisten = cleanup
+      .then(async ({ listen }) => {
+        const createCleanup = await listen<unknown>(QUICK_EDITOR_CREATE_PANE_EVENT, (event) => {
+          if (!isQuickEditorPaneRequest(event.payload)) return
+          applyQuickEditorPaneRequest(event.payload)
+        })
+        const setTextCleanup = await listen<unknown>(QUICK_EDITOR_SET_PANE_TEXT_EVENT, (event) => {
+          if (!isQuickEditorSetPaneTextRequest(event.payload)) return
+          applyQuickEditorSetPaneText(event.payload)
+        })
+        if (disposed) {
+          createCleanup()
+          setTextCleanup()
+          return
+        }
+        unlistenCreate = createCleanup
+        unlistenSetText = setTextCleanup
       })
       .catch((error) => {
         console.warn('[hiven] Failed to listen for quick editor pane requests:', error)
       })
     return () => {
       disposed = true
-      unlisten?.()
+      unlistenCreate?.()
+      unlistenSetText?.()
     }
   }, [])
 

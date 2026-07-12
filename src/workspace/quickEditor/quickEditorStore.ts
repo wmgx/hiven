@@ -51,10 +51,20 @@ const INITIAL_STATE: QuickEditorState = {
 
 export const useQuickEditorStore = create<QuickEditorStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       ...INITIAL_STATE,
 
       setText: (text) => set((state) => withActivePane(state, { text })),
+      setPaneText: (paneId, text) => {
+        const pane = get().panes[paneId]
+        if (!pane) return false
+        const isActive = get().activePaneId === paneId
+        set((state) => ({
+          panes: { ...state.panes, [paneId]: { ...pane, text } },
+          ...(isActive ? { text } : {}),
+        }))
+        return true
+      },
       setLanguage: (language) => set((state) => withActivePane(state, { language, languageSource: 'manual' })),
       setDetectedLanguage: (language) => set((state) => withActivePane(state, { language, languageSource: 'auto' })),
       setCursorPosition: (cursorPosition) => set((state) => withActivePane(state, { cursorPosition })),
@@ -131,24 +141,22 @@ export const useQuickEditorStore = create<QuickEditorStore>()(
         return didClose
       },
       closeActivePane: () => {
-        const state = useQuickEditorStore.getState()
-        return state.closePane(state.activePaneId)
+        const { activePaneId, closePane } = get()
+        return closePane(activePaneId)
       },
       focusNextPane: () => {
-        const state = useQuickEditorStore.getState()
-        const { paneOrder, activePaneId } = state
+        const { paneOrder, activePaneId, setActivePaneId } = get()
         if (paneOrder.length <= 1) return
         const currentIndex = paneOrder.indexOf(activePaneId)
         const nextIndex = (currentIndex + 1) % paneOrder.length
-        state.setActivePaneId(paneOrder[nextIndex])
+        setActivePaneId(paneOrder[nextIndex])
       },
       focusPreviousPane: () => {
-        const state = useQuickEditorStore.getState()
-        const { paneOrder, activePaneId } = state
+        const { paneOrder, activePaneId, setActivePaneId } = get()
         if (paneOrder.length <= 1) return
         const currentIndex = paneOrder.indexOf(activePaneId)
         const prevIndex = (currentIndex - 1 + paneOrder.length) % paneOrder.length
-        state.setActivePaneId(paneOrder[prevIndex])
+        setActivePaneId(paneOrder[prevIndex])
       },
       reset: () => set(INITIAL_STATE),
     }),

@@ -5,6 +5,9 @@ import {
   buildDiffTree,
   buildSideLines,
   computeJsonDiff,
+  computeJsonLineHighlights,
+  formatJsonPreserveKeyOrder,
+  parseJson,
 } from '../src/kits/diff/jsonSemanticDiff.ts'
 
 function changesOf(left, right) {
@@ -12,114 +15,44 @@ function changesOf(left, right) {
 }
 
 function paths(changes) {
-  return changes.map(change => change.path).sort()
+  return changes.map((change) => change.path).sort()
 }
 
 function kinds(changes) {
-  return changes.map(change => change.kind).sort()
+  return changes.map((change) => change.kind).sort()
 }
 
 {
   const changes = changesOf({ a: 1, b: 2 }, { b: 2, a: 1 })
-  assert.deepEqual(changes, [], 'object key order should not be semantic diff')
+  assert.deepEqual(changes, [], 'object key order should be ignored')
 }
 
 {
   const changes = changesOf(['read', 'write', 'admin'], ['admin', 'read', 'write'])
-  assert.deepEqual(changes, [], 'scalar array reorder should not be semantic diff')
+  assert.ok(changes.length > 0, 'array reorder must report index differences')
+  assert.deepEqual(paths(changes), ['$[0]', '$[1]', '$[2]'])
 }
 
 {
   const changes = changesOf(['a', 'a', 'b'], ['a', 'b', 'b'])
-  assert.equal(changes.length, 2, 'scalar duplicate count changes should be reported')
-  assert.deepEqual(kinds(changes), ['added', 'removed'])
+  assert.equal(changes.length, 1)
+  assert.deepEqual(paths(changes), ['$[1]'])
 }
 
 {
-  const left = {
-    plans: [
-      { code: 'basic', level: 1, title: 'Basic' },
-      { code: 'pro', level: 2, title: 'Pro' },
-      { code: 'max', level: 3, title: 'Max' },
-    ],
-  }
-  const right = {
-    plans: [
-      { code: 'new', level: 1, title: 'New' },
-      { code: 'max', level: 3, title: 'Max' },
-      { code: 'basic', level: 1, title: 'Basic' },
-      { code: 'pro', level: 2, title: 'Pro' },
-    ],
-  }
+  const left = { plans: [{ code: 'basic' }, { code: 'pro' }] }
+  const right = { plans: [{ code: 'pro' }, { code: 'basic' }] }
   const changes = changesOf(left, right)
-  assert.equal(changes.length, 1, 'object array insert/reorder should only report inserted object')
-  assert.equal(changes[0].kind, 'added')
-  assert.equal(changes[0].path, '$.plans{code="new"}')
+  assert.ok(changes.length >= 2)
+  assert.ok(paths(changes).every((p) => p.startsWith('$.plans[')))
 }
 
 {
-  const left = {
-    plans: [
-      { code: 'basic', level: 1, title: 'Basic' },
-      { code: 'pro', level: 2, title: 'Pro' },
-    ],
-  }
-  const right = {
-    plans: [
-      { code: 'pro', level: 2, title: 'Pro Plus' },
-      { code: 'basic', level: 1, title: 'Basic' },
-    ],
-  }
+  const left = [{ title: 'Basic', level: 1 }]
+  const right = [{ title: 'Basic Plan', level: 1 }]
   const changes = changesOf(left, right)
-  assert.deepEqual(paths(changes), ['$.plans{code="pro"}.title'])
-  assert.equal(changes[0].kind, 'changed')
-}
-
-{
-  const left = {
-    groups: [
-      {
-        code: 'vip',
-        features: [
-          { key: 'image', enabled: true },
-          { key: 'video', enabled: false },
-        ],
-      },
-    ],
-  }
-  const right = {
-    groups: [
-      {
-        code: 'vip',
-        features: [
-          { enabled: false, key: 'video' },
-          { enabled: true, key: 'image' },
-        ],
-      },
-    ],
-  }
-  assert.deepEqual(changesOf(left, right), [], 'nested object array reorder should not be semantic diff')
-}
-
-{
-  const left = [{ code: 'a', title: 'A1' }, { code: 'a', title: 'A2' }]
-  const right = [{ code: 'a', title: 'A2' }, { code: 'a', title: 'A1' }]
-  assert.deepEqual(changesOf(left, right), [], 'duplicate identity candidate must not cause false object-array diff')
-}
-
-{
-  const left = [{ title: 'Basic', level: 1, enabled: true }]
-  const right = [{ title: 'Basic Plan', level: 1, enabled: true }]
-  const changes = changesOf(left, right)
-  assert.equal(changes.length, 1, 'similar object without explicit id should be matched as changed')
-  assert.equal(changes[0].kind, 'changed')
-  assert.match(changes[0].path, /title$/)
-}
-
-{
-  const left = ['basic', { code: 'pro', flags: ['a', 'b'] }, 1, null]
-  const right = [null, 1, { flags: ['b', 'a'], code: 'pro' }, 'basic']
-  assert.deepEqual(changesOf(left, right), [], 'mixed array reorder and nested array reorder should be ignored')
+  assert.equal(changes.length, 1)
+  assert.equal(changes[0].path, '$[0].title')
 }
 
 {
@@ -130,24 +63,66 @@ function kinds(changes) {
 }
 
 {
-  assert.deepEqual(changesOf(1, 1.0), [], 'JSON numeric equivalents should be equal')
-  const changes = changesOf(1, '1')
-  assert.equal(changes.length, 1)
-  assert.equal(changes[0].kind, 'changed')
+  assert.deepEqual(changesOf(1, 1.0), [])
+  assert.equal(changesOf(1, '1').length, 1)
 }
 
 {
-  const left = { plans: [{ code: 'basic', title: 'Basic' }, { code: 'pro', title: 'Pro' }] }
-  const right = { plans: [{ code: 'new', title: 'New' }, { code: 'pro', title: 'Pro' }, { code: 'basic', title: 'Basic' }] }
-  const tree = buildDiffTree(left, right)
-  const leftText = buildSideLines(tree, 'left').map(line => line.text).join('\n')
-  const rightLines = buildSideLines(tree, 'right')
-  const highlighted = rightLines.filter(line => line.highlight).map(line => line.text).join('\n')
-  assert.match(leftText, /"code": "basic"/, 'unchanged left object should remain visible')
-  assert.match(leftText, /"code": "pro"/, 'unchanged left object should remain visible')
-  assert.match(highlighted, /"code": "new"/, 'only inserted object should be highlighted')
-  assert.doesNotMatch(highlighted, /"code": "basic"/, 'unchanged object should not be highlighted')
-  assert.doesNotMatch(highlighted, /"code": "pro"/, 'unchanged object should not be highlighted')
+  // Preserve user formatting: trailing commas + blank lines stay; only B highlights.
+  const leftText = '{\n"A": "B"\n\n\n}'
+  const rightText = '{\n"A": "B",\n"B": "B",\n}'
+  assert.equal(parseJson(leftText).ok, true)
+  assert.equal(parseJson(rightText).ok, true)
+
+  const hl = computeJsonLineHighlights(leftText, rightText)
+  assert.ok(hl, 'highlights must compute for edit-time JSON')
+  assert.deepEqual(hl.leftHighlights, [], 'left A unchanged → no left highlights (blank lines ignored)')
+  assert.deepEqual(hl.rightHighlights, [3], 'only added B line on right')
+  assert.equal(hl.rightRanges.length, 1, 'one character-range block for added B')
+  assert.equal(hl.rightRanges[0].startLineNumber, 3)
+  assert.equal(hl.changes.length, 1)
+  assert.equal(hl.changes[0].kind, 'added')
+  assert.equal(hl.changes[0].path, '$.B')
+}
+
+{
+  // Single-line object: only the added property is a block, not the whole line.
+  const leftText = '{ "A": "B", "B": "B" }'
+  const rightText = '{ "B": "B", "A": "B", "C": "" }'
+  const hl = computeJsonLineHighlights(leftText, rightText)
+  assert.ok(hl)
+  assert.deepEqual(hl.leftHighlights, [], 'A/B unchanged → no left highlight')
+  assert.equal(hl.rightRanges.length, 1, 'one block for C')
+  const block = hl.rightRanges[0]
+  assert.equal(block.startLineNumber, 1)
+  assert.equal(block.endLineNumber, 1)
+  // Block should cover C, not start at the first property on the line.
+  assert.ok(block.startColumn > 1, 'block should not cover the whole line from column 1')
+  const slice = rightText.slice(block.startColumn - 1, block.endColumn - 1)
+  assert.match(slice, /"C"/, 'block text should include key C')
+  assert.doesNotMatch(slice, /"A"/, 'block should not include unchanged A')
+}
+
+{
+  // buildSideLines still works for callers that want tree display.
+  const tree = buildDiffTree({ a: 1 }, { a: 1, b: 2 })
+  const right = buildSideLines(tree, 'right')
+  assert.ok(right.some((l) => l.highlight && l.text.includes('"b"')))
+}
+
+{
+  // Format pretty-prints but never sorts object keys.
+  const raw = '{"z":1,"a":2,"m":{"y":1,"x":2}}'
+  const formatted = formatJsonPreserveKeyOrder(raw)
+  assert.ok(formatted)
+  assert.match(formatted, /"z": 1,\s*"a": 2/, 'top-level key order preserved')
+  assert.match(formatted, /"y": 1,\s*"x": 2/, 'nested key order preserved')
+  assert.ok(formatted.includes('\n'), 'pretty-printed with newlines')
+  // trailing comma input still formats
+  assert.equal(
+    formatJsonPreserveKeyOrder('{"a":1,}'),
+    '{\n  "a": 1\n}',
+  )
 }
 
 console.log('json semantic diff checks passed')

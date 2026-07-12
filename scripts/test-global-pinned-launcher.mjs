@@ -115,25 +115,15 @@ check('main panel launcher command is contributed by host launcher actions', () 
     /core\.show-main-panel|show-main-panel[\s\S]{0,220}setActiveView/,
     'main panel command should not live in the internal core plugin',
   )
-  assertHas(
+  assert.doesNotMatch(
     files.hostActions,
-    /systemKey:\s*['"]host:pane:new['"][\s\S]{0,520}createQuickEditorPane\(\{/,
-    'host launcher actions should create editor panes through the editor bridge',
-  )
-  assertHas(
-    files.hostActions,
-    /systemKey:\s*['"]host:pane:new['"][\s\S]{0,520}surfaces:\s*\[\s*['"]global-launcher['"]\s*\]/,
-    'new pane launcher action should only appear in the global launcher',
+    /systemKey:\s*['"]host:pane:new['"]|systemKey:\s*['"]host:pane:split-right['"]|systemKey:\s*['"]host:pane:split-down['"]/,
+    'global host actions must not register pane new/split commands',
   )
   assert.doesNotMatch(
     files.hostActions,
     /core-pane\.show-main-panel|show-main-panel/,
     'retired main-panel usage keys should not be carried into editor-pane actions',
-  )
-  assertHas(
-    files.hostActions,
-    /createQuickEditorPane\(\{[\s\S]{0,160}direction/,
-    'standalone launcher pane actions should route through the editor bridge',
   )
   assert.doesNotMatch(
     files.globalLauncher,

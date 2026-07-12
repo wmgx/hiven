@@ -285,7 +285,7 @@ check('Text Diff builtin directory includes the adaptive diff UI source files', 
     'configInit should not keep a hardcoded BUILTIN_PLUGIN_SOURCE_FILES map',
   )
   const renderer = read('src/plugins/textDiff/DiffPageView.tsx')
-  assert.match(renderer, /JSON semantic status|json-semantic|semanticAvailable/, 'text-diff renderer should own the adaptive JSON/text UI controls')
+  assert.match(renderer, /jsonAvailable|jsonEnabled|renderMode === ['"]json['"]/, 'text-diff renderer should own the adaptive JSON/text UI controls')
   assert.ok(readIfExists('src/plugins/textDiff/autoDiffMode.ts'), 'text-diff package should ship autoDiffMode.ts')
   assert.ok(readIfExists('src/plugins/textDiff/manifest.json'), 'text-diff package should ship manifest.json')
   assert.doesNotMatch(

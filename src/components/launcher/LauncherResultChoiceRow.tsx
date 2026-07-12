@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import type { LauncherResultChoice } from '../../workspace/launcher/types'
 
 export function LauncherResultChoiceRow({
@@ -19,11 +20,19 @@ export function LauncherResultChoiceRow({
   onHover?: () => void
   onSelect: () => void
 }) {
+  const ref = useRef<HTMLButtonElement>(null)
   const bodyText = choice.preview ?? choice.title
   const longResult = isLongResultText(bodyText)
   const className = `global-launcher-result-row ${longResult ? 'l-result-block' : 'l-result'} ${selected ? 'sel is-selected' : ''} ${disabled ? 'disabled' : ''}`
+
+  useEffect(() => {
+    if (selected) ref.current?.scrollIntoView({ block: 'nearest' })
+  }, [selected])
+
   return (
     <button
+      ref={ref}
+      type="button"
       className={className}
       onMouseEnter={onHover}
       onClick={onSelect}

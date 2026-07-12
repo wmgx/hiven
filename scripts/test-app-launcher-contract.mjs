@@ -65,16 +65,16 @@ assert.match(
   'workflow launcher must not re-list installed apps (host app launcher owns app rows)',
 )
 
-assert.match(files.hostActions, /host:pane:new/, 'pane controls must expose a host new-pane item')
-assert.match(files.hostActions, /host:pane:split-right/, 'pane controls must expose a split-right item')
-assert.match(files.hostActions, /host:pane:split-down/, 'pane controls must expose a split-down item')
+// Pane controls belong to editor/quick-editor command surfaces, not global launcher.
+assert.doesNotMatch(files.hostActions, /host:pane:new|host:pane:split-right|host:pane:split-down/, 'global host actions must not expose pane split/new controls')
+assert.match(files.hostEditorActions, /host:pane:split-right/, 'editor-local pane controls must expose split-right')
+assert.match(files.hostEditorActions, /host:pane:split-down/, 'editor-local pane controls must expose split-down')
 assert.match(files.hostEditorActions, /host:pane:close/, 'editor-local pane controls must expose a close-pane item')
 assert.match(files.hostEditorActions, /host:pane:focus-next/, 'editor-local pane controls must expose focus-next')
 assert.match(files.hostEditorActions, /host:pane:focus-previous/, 'editor-local pane controls must expose focus-previous')
 assert.match(files.hostEditorActions, /host:pane:toggle-sticky-scroll/, 'editor-local pane controls must expose sticky-scroll toggle')
 assert.match(files.hostEditorActions, /host:pane:set-language/, 'editor-local pane controls must expose language selection')
-assert.match(files.hostActions, /createQuickEditorPane\(\{/, 'pane creation controls must route through the editor bridge')
-assert.doesNotMatch(files.hostActions, /useWorkspaceStore\.getState\(\)\.createPane/, 'pane creation controls must not mutate a local cross-window workspace store')
+assert.match(files.hostEditorActions, /createEditorLikePane/, 'editor-local pane creation must use createEditorLikePane')
 assert.doesNotMatch(files.hostActions, /definePlugin|PluginLauncherApi|pluginRegistry/, 'pane controls must not be implemented as a plugin')
 assert.equal(existsSync(join(root, 'src/plugins/core-pane')), false, 'core-pane plugin package should be retired')
 

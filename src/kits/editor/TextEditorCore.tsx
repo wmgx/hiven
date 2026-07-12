@@ -26,6 +26,7 @@ export const TextEditorCore = forwardRef<TextEditorCoreHandle, TextEditorCorePro
       stickyScroll = false,
       optionOverrides,
       lineDecorations,
+      rangeDecorations,
     } = props
 
     const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
@@ -51,8 +52,9 @@ export const TextEditorCore = forwardRef<TextEditorCoreHandle, TextEditorCorePro
     }), [])
 
     const applyDecorationsTo = (editor: MonacoEditor.IStandaloneCodeEditor) => {
-      const specs = propsRef.current.lineDecorations
-      const decorations = (specs ?? []).flatMap((spec) => spec.lines.map((line) => ({
+      const lineSpecs = propsRef.current.lineDecorations
+      const rangeSpecs = propsRef.current.rangeDecorations
+      const lineDecorations = (lineSpecs ?? []).flatMap((spec) => spec.lines.map((line) => ({
         range: { startLineNumber: line, startColumn: 1, endLineNumber: line, endColumn: 1 },
         options: {
           isWholeLine: true,
@@ -60,7 +62,23 @@ export const TextEditorCore = forwardRef<TextEditorCoreHandle, TextEditorCorePro
           overviewRuler: { color: spec.rulerColor, position: 7 },
         },
       })))
-      decorationIdsRef.current = editor.deltaDecorations(decorationIdsRef.current, decorations)
+      const rangeDecorations = (rangeSpecs ?? []).flatMap((spec) => spec.ranges.map((range) => ({
+        range: {
+          startLineNumber: range.startLineNumber,
+          startColumn: range.startColumn,
+          endLineNumber: range.endLineNumber,
+          endColumn: range.endColumn,
+        },
+        options: {
+          isWholeLine: false,
+          className: spec.className,
+          overviewRuler: { color: spec.rulerColor, position: 7 },
+        },
+      })))
+      decorationIdsRef.current = editor.deltaDecorations(
+        decorationIdsRef.current,
+        [...lineDecorations, ...rangeDecorations],
+      )
     }
 
     // Sync external value changes without resetting cursor. Local edits are
@@ -92,6 +110,8 @@ export const TextEditorCore = forwardRef<TextEditorCoreHandle, TextEditorCorePro
       }
       editor.updateOptions({
         folding: foldingEnabled,
+        foldingStrategy: foldingEnabled ? 'auto' : undefined,
+        showFoldingControls: foldingEnabled ? 'mouseover' : 'never',
         lineDecorationsWidth,
         stickyScroll: { enabled: stickyScroll },
       })
@@ -101,7 +121,7 @@ export const TextEditorCore = forwardRef<TextEditorCoreHandle, TextEditorCorePro
       const editor = editorRef.current
       if (!editor) return
       applyDecorationsTo(editor)
-    }, [lineDecorations])
+    }, [lineDecorations, rangeDecorations])
 
     useEffect(() => {
       return () => {
@@ -127,6 +147,7 @@ export const TextEditorCore = forwardRef<TextEditorCoreHandle, TextEditorCorePro
         height="100%"
         defaultValue={value}
         defaultLanguage={language}
+        language={language}
         beforeMount={registerFluxMonacoThemes}
         onChange={(v) => {
           isLocalChange.current = true
@@ -229,6 +250,8 @@ export const TextEditorCore = forwardRef<TextEditorCoreHandle, TextEditorCorePro
           overviewRulerLanes: 0,
           hideCursorInOverviewRuler: true,
           folding: foldingEnabled,
+          foldingStrategy: foldingEnabled ? 'auto' : undefined,
+          showFoldingControls: foldingEnabled ? 'mouseover' : 'never',
           stickyScroll: { enabled: stickyScroll },
           glyphMargin: false,
           lineDecorationsWidth,

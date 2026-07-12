@@ -92,16 +92,21 @@ export function handleGlobalLauncherKeyDown({
       const choices = resultFrame.output.choices
       if (event.key === 'ArrowDown') {
         event.preventDefault()
+        event.stopPropagation()
         setResultSelectedIndex((index) => Math.min(index + 1, Math.max(0, choices.length - 1)))
         return
       }
       if (event.key === 'ArrowUp') {
         event.preventDefault()
+        event.stopPropagation()
         setResultSelectedIndex((index) => Math.max(index - 1, 0))
         return
       }
-      if (event.key === 'Enter' || event.key === ' ') {
+      // Space: prefer event.code — some layouts / IME report event.key oddly.
+      const isSpace = event.key === ' ' || event.key === 'Spacebar' || event.code === 'Space'
+      if (event.key === 'Enter' || isSpace) {
         event.preventDefault()
+        event.stopPropagation()
         const choice = choices[Math.min(resultSelectedIndex, Math.max(0, choices.length - 1))]
         if (choice) toggleResultChoice(choice, resultFrame)
         return

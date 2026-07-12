@@ -657,7 +657,15 @@ export class LauncherController {
       return
     }
     if (result.keepOpen) {
-      this.setState({ busy: false, error: null })
+      // Stay open, but drop nested frames (e.g. multi-select result after Diff
+      // opens a tool surface) so system Esc back lands on the root list, not a
+      // stale intermediate step under the surface.
+      const root = this.state.frames[0]
+      this.setState({
+        busy: false,
+        error: null,
+        frames: root ? [root] : this.state.frames,
+      })
       return
     }
     // Success with no output: close.

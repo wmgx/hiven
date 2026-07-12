@@ -35,6 +35,13 @@ export interface LineDecorationSpec {
   rulerColor: string
 }
 
+/** Character-range decoration (inline / multi-line block, not whole-line wash). */
+export interface RangeDecorationSpec {
+  ranges: EditorSelectionRange[]
+  className: string
+  rulerColor: string
+}
+
 export interface TextEditorCoreHandle {
   getEditor(): MonacoEditor.IStandaloneCodeEditor | null
   focus(): void
@@ -54,6 +61,7 @@ export interface TextEditorCoreProps {
   optionOverrides?: MonacoEditor.IStandaloneEditorConstructionOptions
   actions?: EditorActionSpec[]
   lineDecorations?: LineDecorationSpec[]
+  rangeDecorations?: RangeDecorationSpec[]
   onChange?: (text: string) => void
   onFocus?: () => void
   onCursorChange?: (position: EditorPosition) => void

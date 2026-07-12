@@ -79,7 +79,8 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
     if (selected) ref.current?.scrollIntoView({ block: 'nearest' })
   }, [selected])
 
-  const staggerDelay = index < 8 ? `${index * 12}ms` : '0ms'
+  // Keep stagger short so tiny lists (e.g. 2 options) don't feel like a full entrance.
+  const staggerDelay = index < 6 ? `${index * 6}ms` : '0ms'
 
   return (
     <button

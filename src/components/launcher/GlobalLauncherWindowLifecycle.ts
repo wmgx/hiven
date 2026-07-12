@@ -78,33 +78,33 @@ export function useStandaloneLauncherResize({
 
     let disposed = false
     let lastSizeKey = ''
-    const timer = window.setTimeout(() => {
-      window.requestAnimationFrame(() => {
-        if (disposed) return
-        const panel = panelRef.current
-        if (!panel) return
-        const geometry = computeStandaloneLauncherGeometry({
-          panel,
-          hostSurfaceTarget,
-          launcherSettingsTarget,
-          surfaceShell,
-        })
-        applyStandaloneLauncherGeometry(panel, geometry)
-
-        const sizeKey = `${geometry.width}:${geometry.height}`
-        if (sizeKey === lastSizeKey) return
-        lastSizeKey = sizeKey
-        window.dispatchEvent(new CustomEvent(LAUNCHER_PROGRAMMATIC_MOVE_EVENT))
-        void resizeCurrentLauncherWindow({ width: geometry.width, height: geometry.height })
-          .catch((error) => {
-            console.warn('[hiven] Failed to resize launcher window:', error)
-          })
+    // One rAF is enough after layout: frame switches (e.g. diff → 2 choices)
+    // used to wait a fixed 80ms and felt like a full expand even for tiny lists.
+    const frameId = window.requestAnimationFrame(() => {
+      if (disposed) return
+      const panel = panelRef.current
+      if (!panel) return
+      const geometry = computeStandaloneLauncherGeometry({
+        panel,
+        hostSurfaceTarget,
+        launcherSettingsTarget,
+        surfaceShell,
       })
-    }, 80)
+      applyStandaloneLauncherGeometry(panel, geometry)
+
+      const sizeKey = `${geometry.width}:${geometry.height}`
+      if (sizeKey === lastSizeKey) return
+      lastSizeKey = sizeKey
+      window.dispatchEvent(new CustomEvent(LAUNCHER_PROGRAMMATIC_MOVE_EVENT))
+      void resizeCurrentLauncherWindow({ width: geometry.width, height: geometry.height })
+        .catch((error) => {
+          console.warn('[hiven] Failed to resize launcher window:', error)
+        })
+    })
 
     return () => {
       disposed = true
-      window.clearTimeout(timer)
+      window.cancelAnimationFrame(frameId)
     }
   }, [
     visibleFilteredLength,

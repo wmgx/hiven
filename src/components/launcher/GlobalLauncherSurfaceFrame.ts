@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
-import type { PluginSurfaceOpenTarget } from '../../store'
+import { useAppStore, type PluginSurfaceOpenTarget } from '../../store'
 import { samePluginSurfaceTarget } from './GlobalLauncherSurfaceRegistry'
 import { getPluginSurfaceDefinition } from './GlobalLauncherSelection'
 
@@ -18,11 +18,15 @@ export function useGlobalLauncherSurfaceFrame({
   pluginRegistryVersion,
   pluginSurfaceToolTarget,
   closeLauncher,
+  onReturnedToList,
 }: {
   open: boolean
   pluginRegistryVersion: number
   pluginSurfaceToolTarget: PluginSurfaceOpenTarget | null
+  /** Only for explicit close (×). ESC/back must never jump straight to this. */
   closeLauncher: () => void
+  /** After ESC/back pops the surface back to the launcher list. */
+  onReturnedToList?: () => void
 }) {
   const [surfaceFrame, setSurfaceFrame] = useState<GlobalLauncherSurfaceFrameTarget | null>(null)
   const [surfaceFocusVersion, setSurfaceFocusVersion] = useState(0)
@@ -47,19 +51,40 @@ export function useGlobalLauncherSurfaceFrame({
     return getPluginSurfaceDefinition(surfaceFrame)
   }, [surfaceFrame, pluginRegistryVersion])
 
+  /**
+   * System back (ESC / breadcrumb back): pop exactly one navigation layer.
+   * Never closes the launcher — only explicit close (×) does that.
+   *
+   * Order:
+   * 1. Leave current plugin surface
+   * 2. Restore suspended host (e.g. quick-editor under Diff), if any
+   * 3. Otherwise return to the launcher list
+   */
   const leaveSurface = useCallback(() => {
-    // If the surface has a breadcrumb header, "back" always returns to the launcher list
-    // (rather than closing the entire launcher), regardless of how it was opened.
-    const hasBreadcrumb = activeSurfaceFrame?.surface.shell?.breadcrumbTitle
-    if (!hasBreadcrumb && surfaceFrame && pluginSurfaceToolTarget && samePluginSurfaceTarget(surfaceFrame, pluginSurfaceToolTarget)) {
-      closeLauncher()
+    const wasToolSurface = Boolean(
+      surfaceFrame &&
+      pluginSurfaceToolTarget &&
+      samePluginSurfaceTarget(surfaceFrame, pluginSurfaceToolTarget),
+    )
+
+    setSurfaceFrame(null)
+
+    if (wasToolSurface) {
+      useAppStore.getState().clearPluginSurfaceTool()
+    }
+
+    if (useAppStore.getState().restorePreviousLauncherHostSurface()) {
       return
     }
-    setSurfaceFrame(null)
-  }, [activeSurfaceFrame, closeLauncher, pluginSurfaceToolTarget, surfaceFrame])
+
+    onReturnedToList?.()
+  }, [onReturnedToList, pluginSurfaceToolTarget, surfaceFrame])
 
   const closeSurface = useCallback(() => {
     setSurfaceFrame(null)
+    useAppStore.getState().clearPluginSurfaceTool()
+    // Explicit close discards any suspended host surface.
+    useAppStore.setState({ previousLauncherHostSurfaceTarget: null })
     closeLauncher()
   }, [closeLauncher])
 

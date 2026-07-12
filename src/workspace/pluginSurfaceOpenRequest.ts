@@ -3,6 +3,10 @@ import { pluginRegistry } from './pluginRegistry'
 import { resizeCurrentLauncherWindow, showLauncherWindow } from './windowManager/launcherWindow'
 import { LAUNCHER_WINDOW_LABEL } from './windowManager/windowLabels'
 import type { PluginDefinition } from './pluginTypes'
+import {
+  getPluginSurfaceShortcutPresentation,
+  showPluginSurfaceWindow,
+} from './windowManager/pluginSurfaceWindows'
 
 const PENDING_OPEN_KEY = 'hiven-plugin-surface-open-request'
 const MAX_PENDING_AGE_MS = 30_000
@@ -51,13 +55,29 @@ export function clearPendingPluginSurfaceOpenTarget(): void {
   }
 }
 
+/**
+ * Explicitly host a surface inside the launcher window (tool-shell / 压栈).
+ * Use for products that intentionally stay in-launcher (e.g. text-diff from command).
+ * Surfaces with entry.shortcutPresentation === 'window' should NOT use this.
+ */
 export function openLauncherHostedPluginSurface(target: PluginSurfaceOpenTarget): void {
   clearPendingPluginSurfaceOpenTarget()
   useAppStore.getState().openPluginSurfaceTool(target)
   useAppStore.getState().openGlobalLauncherOverlay()
 }
 
+/**
+ * Open a surface for tools/shortcuts. Honors shortcutPresentation:
+ * - 'window' → independent plugin-surface window (never stack on launcher)
+ * - 'launcher' (default) → launcher tool-shell
+ */
 export async function requestOpenPluginSurfaceTool(target: PluginSurfaceOpenTarget): Promise<void> {
+  if (getPluginSurfaceShortcutPresentation(target) === 'window') {
+    clearPendingPluginSurfaceOpenTarget()
+    await showPluginSurfaceWindow(target)
+    return
+  }
+
   writePendingPluginSurfaceOpenTarget(target)
   if (!isTauriRuntime()) {
     openLauncherHostedPluginSurface(target)

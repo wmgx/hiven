@@ -1,6 +1,9 @@
 /**
  * hiven - JSON Object Diff
- * Provides JSON normalization, stable stringify, and semantic diff algorithm.
+ *
+ * Rules:
+ * - Objects: ignore key order (compare by key set / values)
+ * - Arrays: ordered by index
  */
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -17,18 +20,9 @@ export type JsonDiffChange =
   | { kind: 'added'; path: string; newValue: JsonValue }
   | { kind: 'removed'; path: string; oldValue: JsonValue }
   | { kind: 'changed'; path: string; oldValue: JsonValue; newValue: JsonValue; oldType: string; newType: string }
-  | { kind: 'moved-or-reordered'; path: string; note: string }
 
-export type JsonArrayCompareMode =
-  | { type: 'semantic' }
-  | { type: 'by-index' }
-  | { type: 'unordered-scalar' }
-  | { type: 'by-object-key'; key: string }
-
-export interface JsonDiffOptions {
-  arrayCompareMode?: JsonArrayCompareMode
-  ignoreKeyOrder?: boolean // default true
-}
+/** Options reserved for future extensions; currently unused. */
+export type JsonDiffOptions = Record<string, never>
 
 export interface JsonDiffResult {
   changes: JsonDiffChange[]
@@ -60,20 +54,38 @@ export interface JsonDiffViewModel {
 
 // ─── Parse ──────────────────────────────────────────────────────────────────
 
+/**
+ * Tolerate common edit-time noise so JSON mode stays active while typing:
+ * - BOM
+ * - trailing commas before } / ]
+ *
+ * Display keeps the user's raw text; structure is parsed with this relaxation.
+ */
+export function relaxJsonText(text: string): string {
+  return text
+    .replace(/^\uFEFF/, '')
+    .replace(/,(\s*[}\]])/g, '$1')
+}
+
 export function parseJson(text: string): JsonParseResult {
   const jsonText = text.replace(/^\uFEFF/, '')
   try {
-    const value = JSON.parse(jsonText)
-    return { ok: true, value }
+    return { ok: true, value: JSON.parse(jsonText) }
+  } catch {
+    // Fall through to relaxed parse.
+  }
+
+  const relaxed = relaxJsonText(jsonText)
+  try {
+    return { ok: true, value: JSON.parse(relaxed) }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Invalid JSON'
-    // Try to extract line/column from error message
     const posMatch = msg.match(/position (\d+)/)
     let line = 1
     let column = 1
     if (posMatch) {
       const pos = parseInt(posMatch[1], 10)
-      const before = jsonText.slice(0, pos)
+      const before = relaxed.slice(0, pos)
       line = (before.match(/\n/g) || []).length + 1
       const lastNewline = before.lastIndexOf('\n')
       column = pos - lastNewline
@@ -82,345 +94,7 @@ export function parseJson(text: string): JsonParseResult {
   }
 }
 
-// ─── Normalize ──────────────────────────────────────────────────────────────
-
-function isScalar(value: JsonValue): boolean {
-  return value === null || typeof value !== 'object'
-}
-
-function compareJsonValues(a: JsonValue, b: JsonValue): number {
-  return JSON.stringify(a).localeCompare(JSON.stringify(b))
-}
-
-/**
- * Normalize a JSON value: sort object keys recursively (stable).
- * Arrays preserve order unless a display-oriented array mode asks for alignment.
- */
-export function normalizeJson(value: JsonValue, options: JsonDiffOptions = {}): JsonValue {
-  if (value === null || typeof value !== 'object') {
-    return value
-  }
-
-  if (Array.isArray(value)) {
-    const normalizedItems = value.map((item) => normalizeJson(item, options))
-    const arrayMode = options.arrayCompareMode
-    if (arrayMode?.type === 'unordered-scalar' && normalizedItems.every(isScalar)) {
-      return [...normalizedItems].sort(compareJsonValues)
-    }
-    if (arrayMode?.type === 'by-object-key') {
-      return sortArrayByObjectKey(normalizedItems, arrayMode.key)
-    }
-    return normalizedItems
-  }
-
-  // Object: sort keys alphabetically
-  const sortedKeys = Object.keys(value).sort()
-  const result: Record<string, JsonValue> = {}
-  for (const key of sortedKeys) {
-    result[key] = normalizeJson(value[key], options)
-  }
-  return result
-}
-
-function sortArrayByObjectKey(items: JsonValue[], key: string): JsonValue[] {
-  const withKey: JsonValue[] = []
-  const withoutKey: JsonValue[] = []
-
-  for (const item of items) {
-    if (item && typeof item === 'object' && !Array.isArray(item) && key in item) {
-      withKey.push(item)
-    } else {
-      withoutKey.push(item)
-    }
-  }
-
-  withKey.sort((a, b) => {
-    const aKey = (a as Record<string, JsonValue>)[key]
-    const bKey = (b as Record<string, JsonValue>)[key]
-    return compareJsonValues(aKey, bKey)
-  })
-
-  return [...withKey, ...withoutKey]
-}
-
-/**
- * Stable stringify: canonicalize then pretty-print with 2-space indent.
- */
-export function stableStringify(value: JsonValue, options: JsonDiffOptions = {}): string {
-  return JSON.stringify(normalizeJson(value, options), null, 2)
-}
-
-/**
- * Display stringify keeps object key order readable.
- *
- * Each side preserves its own key insertion order. This is intentionally
- * separate from the semantic diff algorithm, which ignores object key order.
- */
-export function displayStringify(
-  value: JsonValue,
-  options: JsonDiffOptions = {}
-): string {
-  return JSON.stringify(normalizeJsonForDisplay(value, options), null, 2)
-}
-
-function normalizeJsonForDisplay(
-  value: JsonValue,
-  options: JsonDiffOptions
-): JsonValue {
-  if (value === null || typeof value !== 'object') {
-    return value
-  }
-
-  if (Array.isArray(value)) {
-    const arrayMode = options.arrayCompareMode
-    if (arrayMode?.type === 'unordered-scalar' && value.every(isScalar)) {
-      return [...value].sort(compareJsonValues)
-    }
-    if (arrayMode?.type === 'by-object-key') {
-      return sortArrayByObjectKey(value, arrayMode.key).map((item) => normalizeJsonForDisplay(item, options))
-    }
-    return value.map((item) => normalizeJsonForDisplay(item, options))
-  }
-
-  const valueObj = value as Record<string, JsonValue>
-  const result: Record<string, JsonValue> = {}
-  for (const key of Object.keys(valueObj)) {
-    result[key] = normalizeJsonForDisplay(valueObj[key], options)
-  }
-  return result
-}
-
-// ─── Semantic Diff ──────────────────────────────────────────────────────────
-
-
-function isObjectRecord(value: JsonValue): value is Record<string, JsonValue> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
-function canonicalSignature(value: JsonValue): string {
-  if (value === null) return 'null:null'
-  if (Array.isArray(value)) {
-    return `array:[${value.map(canonicalSignature).sort().join(',')}]`
-  }
-  if (typeof value === 'object') {
-    const entries = Object.keys(value)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${canonicalSignature(value[key])}`)
-    return `object:{${entries.join(',')}}`
-  }
-  return `${typeof value}:${JSON.stringify(value)}`
-}
-
-const IDENTITY_KEY_HINTS = [
-  'id',
-  'uid',
-  'uuid',
-  'key',
-  'code',
-  'name',
-  'slug',
-  'value',
-  'type',
-  'identifier',
-]
-
-type ArrayMatchReason = 'exact' | 'identity-key' | 'similarity'
-
-type ArrayMatch = {
-  leftIndex: number
-  rightIndex: number
-  reason: ArrayMatchReason
-  pathLabel?: string
-}
-
-type ArrayMatchResult = {
-  matched: ArrayMatch[]
-  added: number[]
-  removed: number[]
-}
-
-function primitiveIdentityValue(value: JsonValue): value is null | boolean | number | string {
-  return value === null || typeof value !== 'object'
-}
-
-function identityPath(path: string, key: string, value: JsonValue): string {
-  return `${path}{${key}=${JSON.stringify(value)}}`
-}
-
-function fallbackElementPath(path: string, value: JsonValue, index: number): string {
-  if (isObjectRecord(value)) {
-    for (const key of IDENTITY_KEY_HINTS) {
-      if (key in value && primitiveIdentityValue(value[key])) {
-        return identityPath(path, key, value[key])
-      }
-    }
-  }
-  return `${path}[${index}]`
-}
-
-function inferArrayIdentityKey(
-  leftItems: JsonValue[],
-  rightItems: JsonValue[],
-  leftIndexes: Set<number>,
-  rightIndexes: Set<number>,
-): string | null {
-  const leftObjects = [...leftIndexes].map(index => leftItems[index]).filter(isObjectRecord)
-  const rightObjects = [...rightIndexes].map(index => rightItems[index]).filter(isObjectRecord)
-  if (leftObjects.length === 0 || rightObjects.length === 0) return null
-
-  const candidateKeys = new Set<string>()
-  for (const item of [...leftObjects, ...rightObjects]) {
-    for (const [key, value] of Object.entries(item)) {
-      if (primitiveIdentityValue(value)) candidateKeys.add(key)
-    }
-  }
-
-  let bestKey: string | null = null
-  let bestScore = 0
-  let secondBestScore = 0
-
-  for (const key of candidateKeys) {
-    const leftValues = leftObjects
-      .filter(item => key in item && primitiveIdentityValue(item[key]))
-      .map(item => JSON.stringify(item[key]))
-    const rightValues = rightObjects
-      .filter(item => key in item && primitiveIdentityValue(item[key]))
-      .map(item => JSON.stringify(item[key]))
-
-    if (leftValues.length === 0 || rightValues.length === 0) continue
-
-    const leftUnique = new Set(leftValues)
-    const rightUnique = new Set(rightValues)
-    const leftDuplicateFree = leftUnique.size === leftValues.length
-    const rightDuplicateFree = rightUnique.size === rightValues.length
-    if (!leftDuplicateFree || !rightDuplicateFree) continue
-
-    const coverage = (leftValues.length / leftObjects.length + rightValues.length / rightObjects.length) / 2
-    const overlapCount = [...leftUnique].filter(value => rightUnique.has(value)).length
-    const overlap = overlapCount / Math.max(1, Math.min(leftUnique.size, rightUnique.size))
-    const uniqueness = (leftUnique.size / leftValues.length + rightUnique.size / rightValues.length) / 2
-    const hint = IDENTITY_KEY_HINTS.includes(key) || /(^|_|-)(id|key|code|name|slug|type|value)($|_|-)/i.test(key) ? 1 : 0
-    const score = coverage * 2 + overlap * 3 + uniqueness * 2 + hint
-
-    if (score > bestScore) {
-      secondBestScore = bestScore
-      bestScore = score
-      bestKey = key
-    } else if (score > secondBestScore) {
-      secondBestScore = score
-    }
-  }
-
-  if (bestScore < 5) return null
-  if (bestScore - secondBestScore < 0.25) return null
-  return bestKey
-}
-
-function objectSimilarity(left: Record<string, JsonValue>, right: Record<string, JsonValue>): number {
-  const leftKeys = Object.keys(left)
-  const rightKeys = Object.keys(right)
-  const allKeys = new Set([...leftKeys, ...rightKeys])
-  if (allKeys.size === 0) return 1
-
-  const sharedKeys = leftKeys.filter(key => key in right)
-  const keyOverlap = sharedKeys.length / allKeys.size
-  let comparable = 0
-  let equal = 0
-
-  for (const key of sharedKeys) {
-    const leftValue = left[key]
-    const rightValue = right[key]
-    if (typeOf(leftValue) !== typeOf(rightValue)) continue
-    comparable++
-    if (canonicalSignature(leftValue) === canonicalSignature(rightValue)) equal++
-  }
-
-  const valueOverlap = comparable === 0 ? 0 : equal / comparable
-  return keyOverlap * 0.4 + valueOverlap * 0.6
-}
-
-function matchSemanticArray(leftItems: JsonValue[], rightItems: JsonValue[]): ArrayMatchResult {
-  const matched: ArrayMatch[] = []
-  const leftUnmatched = new Set(leftItems.map((_, index) => index))
-  const rightUnmatched = new Set(rightItems.map((_, index) => index))
-  const rightBySignature = new Map<string, number[]>()
-
-  for (const rightIndex of rightUnmatched) {
-    const signature = canonicalSignature(rightItems[rightIndex])
-    const bucket = rightBySignature.get(signature) ?? []
-    bucket.push(rightIndex)
-    rightBySignature.set(signature, bucket)
-  }
-
-  for (const leftIndex of [...leftUnmatched]) {
-    const signature = canonicalSignature(leftItems[leftIndex])
-    const bucket = rightBySignature.get(signature)
-    const rightIndex = bucket?.shift()
-    if (rightIndex === undefined) continue
-    matched.push({ leftIndex, rightIndex, reason: 'exact' })
-    leftUnmatched.delete(leftIndex)
-    rightUnmatched.delete(rightIndex)
-  }
-
-  const identityKey = inferArrayIdentityKey(leftItems, rightItems, leftUnmatched, rightUnmatched)
-  if (identityKey) {
-    const rightByIdentity = new Map<string, number>()
-    for (const rightIndex of rightUnmatched) {
-      const item = rightItems[rightIndex]
-      if (isObjectRecord(item) && identityKey in item && primitiveIdentityValue(item[identityKey])) {
-        rightByIdentity.set(JSON.stringify(item[identityKey]), rightIndex)
-      }
-    }
-
-    for (const leftIndex of [...leftUnmatched]) {
-      const leftItem = leftItems[leftIndex]
-      if (!isObjectRecord(leftItem) || !(identityKey in leftItem) || !primitiveIdentityValue(leftItem[identityKey])) continue
-      const identity = JSON.stringify(leftItem[identityKey])
-      const rightIndex = rightByIdentity.get(identity)
-      if (rightIndex === undefined || !rightUnmatched.has(rightIndex)) continue
-      matched.push({
-        leftIndex,
-        rightIndex,
-        reason: 'identity-key',
-        pathLabel: identityPath('', identityKey, leftItem[identityKey]),
-      })
-      leftUnmatched.delete(leftIndex)
-      rightUnmatched.delete(rightIndex)
-    }
-  }
-
-  const similarityCandidates: Array<{ leftIndex: number; rightIndex: number; score: number }> = []
-  for (const leftIndex of leftUnmatched) {
-    const leftItem = leftItems[leftIndex]
-    if (!isObjectRecord(leftItem)) continue
-    for (const rightIndex of rightUnmatched) {
-      const rightItem = rightItems[rightIndex]
-      if (!isObjectRecord(rightItem)) continue
-      const score = objectSimilarity(leftItem, rightItem)
-      if (score >= 0.75) similarityCandidates.push({ leftIndex, rightIndex, score })
-    }
-  }
-
-  similarityCandidates.sort((a, b) => b.score - a.score)
-  for (const candidate of similarityCandidates) {
-    if (!leftUnmatched.has(candidate.leftIndex) || !rightUnmatched.has(candidate.rightIndex)) continue
-    matched.push({
-      leftIndex: candidate.leftIndex,
-      rightIndex: candidate.rightIndex,
-      reason: 'similarity',
-    })
-    leftUnmatched.delete(candidate.leftIndex)
-    rightUnmatched.delete(candidate.rightIndex)
-  }
-
-  matched.sort((a, b) => a.leftIndex - b.leftIndex || a.rightIndex - b.rightIndex)
-
-  return {
-    matched,
-    added: [...rightUnmatched].sort((a, b) => a - b),
-    removed: [...leftUnmatched].sort((a, b) => a - b),
-  }
-}
+// ─── Normalize / stringify ──────────────────────────────────────────────────
 
 function typeOf(value: JsonValue): string {
   if (value === null) return 'null'
@@ -429,41 +103,114 @@ function typeOf(value: JsonValue): string {
 }
 
 /**
- * Compute semantic diff between two JSON values.
+ * Canonical form for equality-oriented display: sort object keys recursively.
+ * Arrays keep order (by index).
  */
+export function normalizeJson(value: JsonValue, _options: JsonDiffOptions = {}): JsonValue {
+  if (value === null || typeof value !== 'object') return value
+
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeJson(item, _options))
+  }
+
+  const sortedKeys = Object.keys(value).sort()
+  const result: Record<string, JsonValue> = {}
+  for (const key of sortedKeys) {
+    result[key] = normalizeJson(value[key], _options)
+  }
+  return result
+}
+
+export function stableStringify(value: JsonValue, options: JsonDiffOptions = {}): string {
+  return JSON.stringify(normalizeJson(value, options), null, 2)
+}
+
+/**
+ * Display stringify keeps each side's object key insertion order.
+ * Arrays keep index order. Comparison still ignores object key order.
+ */
+export function displayStringify(value: JsonValue, _options: JsonDiffOptions = {}): string {
+  return JSON.stringify(normalizeJsonForDisplay(value), null, 2)
+}
+
+/**
+ * Pretty-print JSON text without sorting object keys (preserves parse order).
+ * Tolerates trailing commas. Returns null if the side is not valid JSON.
+ */
+export function formatJsonPreserveKeyOrder(text: string): string | null {
+  const parsed = parseJson(text)
+  if (!parsed.ok || parsed.value === undefined) return null
+  // JSON.stringify preserves insertion order from JSON.parse — do not sort keys.
+  return JSON.stringify(parsed.value, null, 2)
+}
+
+function normalizeJsonForDisplay(value: JsonValue): JsonValue {
+  if (value === null || typeof value !== 'object') return value
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeJsonForDisplay(item))
+  }
+  const valueObj = value as Record<string, JsonValue>
+  const result: Record<string, JsonValue> = {}
+  for (const key of Object.keys(valueObj)) {
+    result[key] = normalizeJsonForDisplay(valueObj[key])
+  }
+  return result
+}
+
+// ─── Diff (object: by key; array: by index) ─────────────────────────────────
+
 export function computeJsonDiff(
   original: JsonValue,
   modified: JsonValue,
-  options: JsonDiffOptions = {}
+  _options: JsonDiffOptions = {},
 ): JsonDiffChange[] {
   const changes: JsonDiffChange[] = []
-  const arrayMode = options.arrayCompareMode || { type: 'semantic' }
 
   function diffRecursive(orig: JsonValue, mod: JsonValue, path: string) {
     const origType = typeOf(orig)
     const modType = typeOf(mod)
 
-    // Different types
     if (origType !== modType) {
-      changes.push({ kind: 'changed', path, oldValue: orig, newValue: mod, oldType: origType, newType: modType })
+      changes.push({
+        kind: 'changed',
+        path,
+        oldValue: orig,
+        newValue: mod,
+        oldType: origType,
+        newType: modType,
+      })
       return
     }
 
-    // Primitives
     if (origType !== 'object' && origType !== 'array') {
       if (orig !== mod) {
-        changes.push({ kind: 'changed', path, oldValue: orig, newValue: mod, oldType: origType, newType: modType })
+        changes.push({
+          kind: 'changed',
+          path,
+          oldValue: orig,
+          newValue: mod,
+          oldType: origType,
+          newType: modType,
+        })
       }
       return
     }
 
-    // Arrays
     if (Array.isArray(orig) && Array.isArray(mod)) {
-      diffArray(orig, mod, path, arrayMode)
+      const maxLen = Math.max(orig.length, mod.length)
+      for (let i = 0; i < maxLen; i++) {
+        const childPath = `${path}[${i}]`
+        if (i >= orig.length) {
+          changes.push({ kind: 'added', path: childPath, newValue: mod[i] })
+        } else if (i >= mod.length) {
+          changes.push({ kind: 'removed', path: childPath, oldValue: orig[i] })
+        } else {
+          diffRecursive(orig[i], mod[i], childPath)
+        }
+      }
       return
     }
 
-    // Objects
     const origObj = orig as Record<string, JsonValue>
     const modObj = mod as Record<string, JsonValue>
     const allKeys = new Set([...Object.keys(origObj), ...Object.keys(modObj)])
@@ -483,165 +230,26 @@ export function computeJsonDiff(
     }
   }
 
-  function diffArray(orig: JsonValue[], mod: JsonValue[], path: string, mode: JsonArrayCompareMode) {
-    switch (mode.type) {
-      case 'semantic':
-        diffArraySemantic(orig, mod, path)
-        break
-      case 'by-index':
-        diffArrayByIndex(orig, mod, path)
-        break
-      case 'unordered-scalar':
-        diffArrayUnorderedScalar(orig, mod, path)
-        break
-      case 'by-object-key':
-        diffArrayByObjectKey(orig, mod, path, mode.key)
-        break
-    }
-  }
-
-  function diffArraySemantic(orig: JsonValue[], mod: JsonValue[], path: string) {
-    const result = matchSemanticArray(orig, mod)
-
-    for (const match of result.matched) {
-      const childPath = match.pathLabel
-        ? `${path}${match.pathLabel}`
-        : fallbackElementPath(path, orig[match.leftIndex], match.leftIndex)
-      diffRecursive(orig[match.leftIndex], mod[match.rightIndex], childPath)
-    }
-
-    for (const index of result.removed) {
-      changes.push({ kind: 'removed', path: fallbackElementPath(path, orig[index], index), oldValue: orig[index] })
-    }
-
-    for (const index of result.added) {
-      changes.push({ kind: 'added', path: fallbackElementPath(path, mod[index], index), newValue: mod[index] })
-    }
-  }
-
-  function diffArrayByIndex(orig: JsonValue[], mod: JsonValue[], path: string) {
-    const maxLen = Math.max(orig.length, mod.length)
-    for (let i = 0; i < maxLen; i++) {
-      const childPath = `${path}[${i}]`
-      if (i >= orig.length) {
-        changes.push({ kind: 'added', path: childPath, newValue: mod[i] })
-      } else if (i >= mod.length) {
-        changes.push({ kind: 'removed', path: childPath, oldValue: orig[i] })
-      } else {
-        diffRecursive(orig[i], mod[i], childPath)
-      }
-    }
-  }
-
-  function diffArrayUnorderedScalar(orig: JsonValue[], mod: JsonValue[], path: string) {
-    // Only works for scalar arrays
-    const isScalar = (v: JsonValue) => v === null || typeof v !== 'object'
-    const allScalar = orig.every(isScalar) && mod.every(isScalar)
-
-    if (!allScalar) {
-      // Fallback to by-index
-      diffArrayByIndex(orig, mod, path)
-      return
-    }
-
-    const origCounts = new Map<string, number>()
-    const modCounts = new Map<string, number>()
-
-    for (const v of orig) {
-      const key = JSON.stringify(v)
-      origCounts.set(key, (origCounts.get(key) || 0) + 1)
-    }
-    for (const v of mod) {
-      const key = JSON.stringify(v)
-      modCounts.set(key, (modCounts.get(key) || 0) + 1)
-    }
-
-    const allKeys = new Set([...origCounts.keys(), ...modCounts.keys()])
-    for (const key of allKeys) {
-      const origCount = origCounts.get(key) || 0
-      const modCount = modCounts.get(key) || 0
-      const value = JSON.parse(key)
-
-      if (origCount > modCount) {
-        for (let i = 0; i < origCount - modCount; i++) {
-          changes.push({ kind: 'removed', path: `${path}[]`, oldValue: value })
-        }
-      } else if (modCount > origCount) {
-        for (let i = 0; i < modCount - origCount; i++) {
-          changes.push({ kind: 'added', path: `${path}[]`, newValue: value })
-        }
-      }
-    }
-  }
-
-  function diffArrayByObjectKey(orig: JsonValue[], mod: JsonValue[], path: string, key: string) {
-    const indexByKey = (arr: JsonValue[]): Map<string, { index: number; value: JsonValue }> => {
-      const map = new Map<string, { index: number; value: JsonValue }>()
-      for (let i = 0; i < arr.length; i++) {
-        const item = arr[i]
-        if (item && typeof item === 'object' && !Array.isArray(item) && key in item) {
-          const keyVal = JSON.stringify((item as Record<string, JsonValue>)[key])
-          map.set(keyVal, { index: i, value: item })
-        }
-      }
-      return map
-    }
-
-    const origMap = indexByKey(orig)
-    const modMap = indexByKey(mod)
-    const allKeys = new Set([...origMap.keys(), ...modMap.keys()])
-
-    for (const k of allKeys) {
-      const origEntry = origMap.get(k)
-      const modEntry = modMap.get(k)
-      const keyLabel = JSON.parse(k)
-
-      if (origEntry && !modEntry) {
-        changes.push({ kind: 'removed', path: `${path}[${key}=${keyLabel}]`, oldValue: origEntry.value })
-      } else if (!origEntry && modEntry) {
-        changes.push({ kind: 'added', path: `${path}[${key}=${keyLabel}]`, newValue: modEntry.value })
-      } else if (origEntry && modEntry) {
-        diffRecursive(origEntry.value, modEntry.value, `${path}[${key}=${keyLabel}]`)
-      }
-    }
-
-    // Handle items without the key (fallback)
-    const origWithout = orig.filter(item => {
-      if (!item || typeof item !== 'object' || Array.isArray(item)) return true
-      return !(key in (item as Record<string, JsonValue>))
-    })
-    const modWithout = mod.filter(item => {
-      if (!item || typeof item !== 'object' || Array.isArray(item)) return true
-      return !(key in (item as Record<string, JsonValue>))
-    })
-    if (origWithout.length > 0 || modWithout.length > 0) {
-      diffArrayByIndex(origWithout, modWithout, `${path}[no-key]`)
-    }
-  }
-
   diffRecursive(original, modified, '$')
   return changes
 }
 
-/**
- * Full JSON diff pipeline:
- * 1. Parse both inputs
- * 2. Normalize
- * 3. Compute semantic changes
- * 4. Generate stable stringified versions for Monaco Diff display
- */
 export function jsonDiff(
   originalText: string,
   modifiedText: string,
-  options: JsonDiffOptions = {}
+  options: JsonDiffOptions = {},
 ): { result?: JsonDiffResult; originalError?: string; modifiedError?: string } {
   const origParsed = parseJson(originalText)
   const modParsed = parseJson(modifiedText)
 
   if (!origParsed.ok || !modParsed.ok) {
     return {
-      originalError: origParsed.ok ? undefined : `Parse error at Ln ${origParsed.line}, Col ${origParsed.column}: ${origParsed.error}`,
-      modifiedError: modParsed.ok ? undefined : `Parse error at Ln ${modParsed.line}, Col ${modParsed.column}: ${modParsed.error}`,
+      originalError: origParsed.ok
+        ? undefined
+        : `Parse error at Ln ${origParsed.line}, Col ${origParsed.column}: ${origParsed.error}`,
+      modifiedError: modParsed.ok
+        ? undefined
+        : `Parse error at Ln ${modParsed.line}, Col ${modParsed.column}: ${modParsed.error}`,
     }
   }
 
@@ -669,29 +277,22 @@ export type DiffTreeNode =
   | { type: 'changed'; oldValue: JsonValue; newValue: JsonValue }
   | {
       type: 'object'
-      // entries: orig key 顺序（orig keys 在前，mod-only keys 在后）
+      /** original key order, then mod-only keys */
       entries: Array<{ key: string; node: DiffTreeNode }>
-      // modEntries: mod key 顺序（mod keys 在前，orig-only keys 在后）
+      /** modified key order, then orig-only keys */
       modEntries: Array<{ key: string; node: DiffTreeNode }>
       hasChanges: boolean
     }
   | { type: 'array'; items: DiffTreeNode[]; hasChanges: boolean }
 
-/**
- * Build a diff tree from two JSON values.
- * Nodes with no differences are marked as { type: 'same' } and can be skipped in rendering.
- */
 export function buildDiffTree(
   original: JsonValue,
   modified: JsonValue,
-  options: JsonDiffOptions = {}
+  _options: JsonDiffOptions = {},
 ): DiffTreeNode {
-  const arrayMode = options.arrayCompareMode ?? ({ type: 'semantic' } as const)
-
   function nodeHasChanges(node: DiffTreeNode): boolean {
     if (node.type === 'same') return false
-    if (node.type === 'object') return node.hasChanges
-    if (node.type === 'array') return node.hasChanges
+    if (node.type === 'object' || node.type === 'array') return node.hasChanges
     return true
   }
 
@@ -709,20 +310,19 @@ export function buildDiffTree(
     }
 
     if (Array.isArray(orig) && Array.isArray(mod)) {
-      return buildArrayNode(orig, mod)
+      return buildArrayByIndex(orig, mod)
     }
 
     return buildObjectNode(
       orig as Record<string, JsonValue>,
-      mod as Record<string, JsonValue>
+      mod as Record<string, JsonValue>,
     )
   }
 
   function buildObjectNode(
     orig: Record<string, JsonValue>,
-    mod: Record<string, JsonValue>
+    mod: Record<string, JsonValue>,
   ): DiffTreeNode {
-    // 先把所有 key 的 DiffTreeNode 计算出来
     const origKeys = Object.keys(orig)
     const modKeys = Object.keys(mod)
     const allKeys = [...new Set([...origKeys, ...modKeys])]
@@ -747,46 +347,13 @@ export function buildDiffTree(
       nodeMap.set(key, node)
     }
 
-    // entries: orig key 顺序（orig keys 在前，mod-only keys 在后）
-    const origOnlyInMod = modKeys.filter(k => !(k in orig))
-    const entries = [...origKeys, ...origOnlyInMod].map(k => ({ key: k, node: nodeMap.get(k)! }))
+    const origOnlyInMod = modKeys.filter((k) => !(k in orig))
+    const entries = [...origKeys, ...origOnlyInMod].map((k) => ({ key: k, node: nodeMap.get(k)! }))
 
-    // modEntries: mod key 顺序（mod keys 在前，orig-only keys 在后）
-    const modOnlyInOrig = origKeys.filter(k => !(k in mod))
-    const modEntries = [...modKeys, ...modOnlyInOrig].map(k => ({ key: k, node: nodeMap.get(k)! }))
+    const modOnlyInOrig = origKeys.filter((k) => !(k in mod))
+    const modEntries = [...modKeys, ...modOnlyInOrig].map((k) => ({ key: k, node: nodeMap.get(k)! }))
 
     return { type: 'object', entries, modEntries, hasChanges }
-  }
-
-  function buildArrayNode(orig: JsonValue[], mod: JsonValue[]): DiffTreeNode {
-    if (arrayMode.type === 'semantic') return buildArraySemantic(orig, mod)
-    if (arrayMode.type === 'unordered-scalar') return buildArrayUnorderedScalar(orig, mod)
-    if (arrayMode.type === 'by-object-key') return buildArrayByObjectKey(orig, mod, arrayMode.key)
-    return buildArrayByIndex(orig, mod)
-  }
-
-  function buildArraySemantic(orig: JsonValue[], mod: JsonValue[]): DiffTreeNode {
-    const result = matchSemanticArray(orig, mod)
-    const items: DiffTreeNode[] = []
-    let hasChanges = false
-
-    for (const match of result.matched) {
-      const node = build(orig[match.leftIndex], mod[match.rightIndex])
-      if (nodeHasChanges(node)) hasChanges = true
-      items.push(node)
-    }
-
-    for (const index of result.removed) {
-      items.push({ type: 'removed', value: orig[index] })
-      hasChanges = true
-    }
-
-    for (const index of result.added) {
-      items.push({ type: 'added', value: mod[index] })
-      hasChanges = true
-    }
-
-    return { type: 'array', items, hasChanges }
   }
 
   function buildArrayByIndex(orig: JsonValue[], mod: JsonValue[]): DiffTreeNode {
@@ -812,86 +379,16 @@ export function buildDiffTree(
     return { type: 'array', items, hasChanges }
   }
 
-  function buildArrayUnorderedScalar(orig: JsonValue[], mod: JsonValue[]): DiffTreeNode {
-    const isScalarVal = (v: JsonValue) => v === null || typeof v !== 'object'
-    if (!orig.every(isScalarVal) || !mod.every(isScalarVal)) return buildArrayByIndex(orig, mod)
-
-    const origCounts = new Map<string, number>()
-    const modCounts = new Map<string, number>()
-    for (const v of orig) { const k = JSON.stringify(v); origCounts.set(k, (origCounts.get(k) || 0) + 1) }
-    for (const v of mod)  { const k = JSON.stringify(v); modCounts.set(k, (modCounts.get(k) || 0) + 1) }
-
-    const allKeys = new Set([...origCounts.keys(), ...modCounts.keys()])
-    const items: DiffTreeNode[] = []
-    let hasChanges = false
-
-    for (const k of allKeys) {
-      const oc = origCounts.get(k) || 0
-      const mc = modCounts.get(k) || 0
-      const value = JSON.parse(k) as JsonValue
-      for (let i = 0; i < Math.max(oc, mc); i++) {
-        if (i < oc && i < mc) {
-          items.push({ type: 'same', value })
-        } else if (i < oc) {
-          items.push({ type: 'removed', value }); hasChanges = true
-        } else {
-          items.push({ type: 'added', value }); hasChanges = true
-        }
-      }
-    }
-
-    return { type: 'array', items, hasChanges }
-  }
-
-  function buildArrayByObjectKey(orig: JsonValue[], mod: JsonValue[], key: string): DiffTreeNode {
-    const toMap = (arr: JsonValue[]): Map<string, JsonValue> => {
-      const map = new Map<string, JsonValue>()
-      for (const item of arr) {
-        if (item && typeof item === 'object' && !Array.isArray(item) && key in (item as Record<string, JsonValue>)) {
-          map.set(JSON.stringify((item as Record<string, JsonValue>)[key]), item)
-        }
-      }
-      return map
-    }
-
-    const origMap = toMap(orig)
-    const modMap = toMap(mod)
-    const allKeys = [...new Set([...origMap.keys(), ...modMap.keys()])].sort()
-    const items: DiffTreeNode[] = []
-    let hasChanges = false
-
-    for (const k of allKeys) {
-      const origItem = origMap.get(k)
-      const modItem = modMap.get(k)
-      let node: DiffTreeNode
-
-      if (origItem !== undefined && modItem === undefined) {
-        node = { type: 'removed', value: origItem }; hasChanges = true
-      } else if (origItem === undefined && modItem !== undefined) {
-        node = { type: 'added', value: modItem }; hasChanges = true
-      } else if (origItem !== undefined && modItem !== undefined) {
-        node = build(origItem, modItem)
-        if (nodeHasChanges(node)) hasChanges = true
-      } else {
-        node = { type: 'same', value: null }
-      }
-      items.push(node)
-    }
-
-    return { type: 'array', items, hasChanges }
-  }
-
   return build(original, modified)
 }
 
-// ─── Side Lines (for dual Monaco editor) ────────────────────────────────────
+// ─── Side Lines (dual Monaco) ───────────────────────────────────────────────
 
 export type SideLine = {
   text: string
   highlight: boolean
 }
 
-/** Serialize a JSON value into indented lines with key prefix and trailing comma. */
 function fmtLines(value: JsonValue, depth: number, keyPrefix: string, comma: string): string[] {
   const indent = '  '.repeat(depth)
   const lines = JSON.stringify(value, null, 2).split('\n')
@@ -912,34 +409,30 @@ function buildSideLinesImpl(
   comma: string,
 ): SideLine[] {
   const indent = '  '.repeat(depth)
-  // left 侧跳过 added（原始 JSON 里没有）；right 侧跳过 removed（修改后 JSON 里没有）
   const skipType = side === 'left' ? 'added' : 'removed'
 
   if (node.type === skipType) return []
 
   if (node.type === 'same') {
-    return fmtLines(node.value, depth, keyPrefix, comma).map(text => ({ text, highlight: false }))
+    return fmtLines(node.value, depth, keyPrefix, comma).map((text) => ({ text, highlight: false }))
   }
 
   if (node.type === 'removed') {
-    // 只有 left 侧会到这里
-    return fmtLines(node.value, depth, keyPrefix, comma).map(text => ({ text, highlight: true }))
+    return fmtLines(node.value, depth, keyPrefix, comma).map((text) => ({ text, highlight: true }))
   }
 
   if (node.type === 'added') {
-    // 只有 right 侧会到这里
-    return fmtLines(node.value, depth, keyPrefix, comma).map(text => ({ text, highlight: true }))
+    return fmtLines(node.value, depth, keyPrefix, comma).map((text) => ({ text, highlight: true }))
   }
 
   if (node.type === 'changed') {
     const value = side === 'left' ? node.oldValue : node.newValue
-    return fmtLines(value, depth, keyPrefix, comma).map(text => ({ text, highlight: true }))
+    return fmtLines(value, depth, keyPrefix, comma).map((text) => ({ text, highlight: true }))
   }
 
   if (node.type === 'object') {
     const result: SideLine[] = []
     result.push({ text: `${indent}${keyPrefix}{`, highlight: false })
-    // left 侧按 orig key 顺序，right 侧按 mod key 顺序
     const entriesToUse = side === 'left' ? node.entries : node.modEntries
     const visible = entriesToUse.filter(({ node: child }) => child.type !== skipType)
     visible.forEach(({ key, node: child }, idx) => {
@@ -953,7 +446,7 @@ function buildSideLinesImpl(
   if (node.type === 'array') {
     const result: SideLine[] = []
     result.push({ text: `${indent}${keyPrefix}[`, highlight: false })
-    const visible = node.items.filter(item => item.type !== skipType)
+    const visible = node.items.filter((item) => item.type !== skipType)
     visible.forEach((item, idx) => {
       const isLast = idx === visible.length - 1
       result.push(...buildSideLinesImpl(item, side, depth + 1, '', isLast ? '' : ','))
@@ -965,26 +458,14 @@ function buildSideLinesImpl(
   return []
 }
 
-/**
- * Build the text and highlight information for one side of a semantic diff.
- * side='left' → original JSON (without added entries)
- * side='right' → modified JSON (without removed entries)
- */
 export function buildSideLines(node: DiffTreeNode, side: 'left' | 'right'): SideLine[] {
   return buildSideLinesImpl(node, side, 0, '', '')
 }
 
-/**
- * Build the text model consumed by the JSON diff renderer.
- *
- * Valid JSON is displayed as pretty text that preserves object key order while
- * aligning shared keys across sides. Invalid JSON deliberately falls back to raw
- * text diff for both sides.
- */
 export function buildJsonDiffViewModel(
   originalText: string,
   modifiedText: string,
-  options: JsonDiffOptions = {}
+  options: JsonDiffOptions = {},
 ): JsonDiffViewModel {
   const diff = jsonDiff(originalText, modifiedText, options)
   const invalidSides: Array<'original' | 'modified'> = []
@@ -995,6 +476,7 @@ export function buildJsonDiffViewModel(
     return {
       status: 'text',
       changes: [],
+      // Preserve user text even when invalid.
       originalDisplayText: originalText,
       modifiedDisplayText: modifiedText,
       originalLanguage: 'plaintext',
@@ -1008,10 +490,304 @@ export function buildJsonDiffViewModel(
   return {
     status: 'json',
     changes: diff.result.changes,
-    originalDisplayText: diff.result.originalNormalized,
-    modifiedDisplayText: diff.result.modifiedNormalized,
+    // Preserve user input formatting; do not pretty-rewrite.
+    originalDisplayText: originalText,
+    modifiedDisplayText: modifiedText,
     originalLanguage: 'json',
     modifiedLanguage: 'json',
     invalidSides,
+  }
+}
+
+// ─── Path → source ranges on user text (no reformat) ────────────────────────
+
+export type JsonPathRange = {
+  startOffset: number
+  endOffset: number
+  startLine: number
+  startColumn: number
+  endLine: number
+  endColumn: number
+}
+
+/** @deprecated alias — use JsonPathRange */
+export type JsonPathLineRange = Pick<JsonPathRange, 'startLine' | 'endLine'>
+
+export type JsonHighlightRange = {
+  startLineNumber: number
+  startColumn: number
+  endLineNumber: number
+  endColumn: number
+}
+
+function indexToLineCol(text: string, index: number): { line: number; column: number } {
+  let line = 1
+  let column = 1
+  const end = Math.max(0, Math.min(index, text.length))
+  for (let i = 0; i < end; i++) {
+    if (text[i] === '\n') {
+      line++
+      column = 1
+    } else {
+      column++
+    }
+  }
+  return { line, column }
+}
+
+/**
+ * Scan user JSON source and record character ranges for each structural path
+ * (`$.a`, `$.a.b`, `$[0]`, …). Tolerates trailing commas and whitespace/newlines.
+ */
+export function buildJsonPathLineMap(text: string): Map<string, JsonPathRange> | null {
+  const source = text.replace(/^\uFEFF/, '')
+  const ranges = new Map<string, JsonPathRange>()
+  let i = 0
+
+  const skipWs = () => {
+    while (i < source.length && /\s/.test(source[i]!)) i++
+  }
+
+  const peek = () => source[i]
+  const take = () => source[i++]
+
+  const parseString = (): string => {
+    if (take() !== '"') throw new Error('expected string')
+    let out = ''
+    while (i < source.length) {
+      const ch = take()
+      if (ch === '"') return out
+      if (ch === '\\') {
+        const esc = take()
+        switch (esc) {
+          case '"':
+          case '\\':
+          case '/':
+            out += esc
+            break
+          case 'b': out += '\b'; break
+          case 'f': out += '\f'; break
+          case 'n': out += '\n'; break
+          case 'r': out += '\r'; break
+          case 't': out += '\t'; break
+          case 'u': {
+            const hex = source.slice(i, i + 4)
+            i += 4
+            out += String.fromCharCode(parseInt(hex, 16) || 0)
+            break
+          }
+          default:
+            out += esc ?? ''
+        }
+      } else {
+        out += ch
+      }
+    }
+    throw new Error('unterminated string')
+  }
+
+  const parsePrimitive = () => {
+    if (source.startsWith('true', i)) { i += 4; return }
+    if (source.startsWith('false', i)) { i += 5; return }
+    if (source.startsWith('null', i)) { i += 4; return }
+    const start = i
+    if (source[i] === '-') i++
+    while (i < source.length && /[0-9.eE+-]/.test(source[i]!)) i++
+    if (i === start || (source[start] === '-' && i === start + 1)) throw new Error('bad number')
+  }
+
+  const record = (path: string, start: number, end: number) => {
+    const safeEnd = Math.max(start, end)
+    const startPos = indexToLineCol(source, start)
+    const endPos = indexToLineCol(source, Math.max(start, safeEnd - 1))
+    ranges.set(path, {
+      startOffset: start,
+      endOffset: safeEnd,
+      startLine: startPos.line,
+      startColumn: startPos.column,
+      endLine: endPos.line,
+      // end column is exclusive for Monaco (point after last char)
+      endColumn: endPos.column + 1,
+    })
+  }
+
+  const parseValue = (path: string): void => {
+    skipWs()
+    const start = i
+    const ch = peek()
+    if (ch === '{') parseObject(path)
+    else if (ch === '[') parseArray(path)
+    else if (ch === '"') { parseString() }
+    else parsePrimitive()
+    record(path, start, i)
+  }
+
+  const parseObject = (path: string) => {
+    if (take() !== '{') throw new Error('expected {')
+    skipWs()
+    if (peek() === '}') { take(); return }
+    while (i < source.length) {
+      skipWs()
+      const entryStart = i
+      const key = parseString()
+      skipWs()
+      if (take() !== ':') throw new Error('expected :')
+      const childPath = path === '$' ? `$.${key}` : `${path}.${key}`
+      parseValue(childPath)
+      // Include trailing comma in the property block when present (one visual block).
+      skipWs()
+      let entryEnd = i
+      if (peek() === ',') {
+        take()
+        entryEnd = i
+        skipWs()
+        record(childPath, entryStart, entryEnd)
+        if (peek() === '}') { take(); return }
+        continue
+      }
+      record(childPath, entryStart, entryEnd)
+      if (peek() === '}') { take(); return }
+      throw new Error('expected , or }')
+    }
+    throw new Error('unterminated object')
+  }
+
+  const parseArray = (path: string) => {
+    if (take() !== '[') throw new Error('expected [')
+    skipWs()
+    if (peek() === ']') { take(); return }
+    let index = 0
+    while (i < source.length) {
+      const childPath = `${path}[${index}]`
+      const elStart = i
+      parseValue(childPath)
+      skipWs()
+      let elEnd = i
+      if (peek() === ',') {
+        take()
+        elEnd = i
+        skipWs()
+        record(childPath, elStart, elEnd)
+        index++
+        if (peek() === ']') { take(); return }
+        continue
+      }
+      record(childPath, elStart, elEnd)
+      index++
+      if (peek() === ']') { take(); return }
+      throw new Error('expected , or ]')
+    }
+    throw new Error('unterminated array')
+  }
+
+  try {
+    parseValue('$')
+    skipWs()
+    return ranges
+  } catch {
+    return null
+  }
+}
+
+function rangeToHighlight(range: JsonPathRange): JsonHighlightRange {
+  return {
+    startLineNumber: range.startLine,
+    startColumn: range.startColumn,
+    endLineNumber: range.endLine,
+    endColumn: range.endColumn,
+  }
+}
+
+/** Merge overlapping / adjacent ranges into fewer visual blocks. */
+export function mergeHighlightRanges(ranges: JsonHighlightRange[]): JsonHighlightRange[] {
+  if (ranges.length === 0) return []
+  const sorted = [...ranges].sort((a, b) =>
+    a.startLineNumber - b.startLineNumber ||
+    a.startColumn - b.startColumn ||
+    a.endLineNumber - b.endLineNumber ||
+    a.endColumn - b.endColumn,
+  )
+  const out: JsonHighlightRange[] = [{ ...sorted[0]! }]
+  for (let i = 1; i < sorted.length; i++) {
+    const cur = sorted[i]!
+    const prev = out[out.length - 1]!
+    const sameLineTouch =
+      prev.endLineNumber === cur.startLineNumber &&
+      cur.startColumn <= prev.endColumn + 1
+    const multiLineOverlap =
+      cur.startLineNumber < prev.endLineNumber ||
+      (cur.startLineNumber === prev.endLineNumber && cur.startColumn <= prev.endColumn + 1)
+    if (sameLineTouch || multiLineOverlap) {
+      if (
+        cur.endLineNumber > prev.endLineNumber ||
+        (cur.endLineNumber === prev.endLineNumber && cur.endColumn > prev.endColumn)
+      ) {
+        prev.endLineNumber = cur.endLineNumber
+        prev.endColumn = cur.endColumn
+      }
+    } else {
+      out.push({ ...cur })
+    }
+  }
+  return out
+}
+
+function pushRange(
+  lines: Set<number>,
+  ranges: JsonHighlightRange[],
+  range: JsonPathRange | undefined,
+) {
+  if (!range) return
+  for (let line = range.startLine; line <= range.endLine; line++) lines.add(line)
+  ranges.push(rangeToHighlight(range))
+}
+
+/**
+ * JSON mode highlights on the user's original text (no auto-format).
+ * Returns character-range blocks for precise inline/multi-line decoration.
+ * Returns null when either side is not parseable as JSON.
+ */
+export function computeJsonLineHighlights(
+  leftText: string,
+  rightText: string,
+  options: JsonDiffOptions = {},
+): {
+  leftHighlights: number[]
+  rightHighlights: number[]
+  leftRanges: JsonHighlightRange[]
+  rightRanges: JsonHighlightRange[]
+  changes: JsonDiffChange[]
+} | null {
+  const leftParsed = parseJson(leftText)
+  const rightParsed = parseJson(rightText)
+  if (!leftParsed.ok || !rightParsed.ok || leftParsed.value == null || rightParsed.value == null) {
+    return null
+  }
+
+  const changes = computeJsonDiff(leftParsed.value, rightParsed.value, options)
+  const leftMap = buildJsonPathLineMap(leftText)
+  const rightMap = buildJsonPathLineMap(rightText)
+  if (!leftMap || !rightMap) return null
+
+  const leftLines = new Set<number>()
+  const rightLines = new Set<number>()
+  const leftRangesRaw: JsonHighlightRange[] = []
+  const rightRangesRaw: JsonHighlightRange[] = []
+
+  for (const change of changes) {
+    if (change.kind === 'removed' || change.kind === 'changed') {
+      pushRange(leftLines, leftRangesRaw, leftMap.get(change.path))
+    }
+    if (change.kind === 'added' || change.kind === 'changed') {
+      pushRange(rightLines, rightRangesRaw, rightMap.get(change.path))
+    }
+  }
+
+  return {
+    leftHighlights: [...leftLines].sort((a, b) => a - b),
+    rightHighlights: [...rightLines].sort((a, b) => a - b),
+    leftRanges: mergeHighlightRanges(leftRangesRaw),
+    rightRanges: mergeHighlightRanges(rightRangesRaw),
+    changes,
   }
 }

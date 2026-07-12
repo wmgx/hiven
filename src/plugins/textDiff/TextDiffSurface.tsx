@@ -1,22 +1,50 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { PluginSurfaceProps } from '@hiven/plugin'
+import type { DiffSource, PluginSurfaceProps } from '@hiven/plugin'
 import { getPluginHostSdk } from '@hiven/plugin'
 import { canUseSemanticJsonDiff } from './autoDiffMode'
+import { useDiffSourceText } from './useDiffSourceText'
 
-type DiffMode = 'text' | 'json-semantic'
-type JsonArrayMode = 'ordered' | 'unordered'
+type DiffMode = 'text' | 'json'
 
 type DiffPayload = {
-  original: { text?: string; title?: string }
-  modified: { text?: string; title?: string }
+  original: DiffSource
+  modified: DiffSource
+}
+
+function asDiffSource(side: Partial<DiffSource> | undefined, fallbackId: string): DiffSource {
+  return {
+    sourceId: typeof side?.sourceId === 'string' ? side.sourceId : fallbackId,
+    kind: side?.kind === 'editor-pane' || side?.kind === 'clipboard' || side?.kind === 'empty'
+      ? side.kind
+      : side?.paneId
+        ? 'editor-pane'
+        : 'empty',
+    paneId: typeof side?.paneId === 'string' ? side.paneId : undefined,
+    origin: side?.origin === 'editor' || side?.origin === 'quick-editor' ? side.origin : undefined,
+    title: typeof side?.title === 'string' ? side.title : '',
+    language: typeof side?.language === 'string' ? side.language : undefined,
+    text: typeof side?.text === 'string' ? side.text : '',
+  }
 }
 
 function parsePayload(initialText?: string): DiffPayload {
-  if (!initialText) return { original: { text: '' }, modified: { text: '' } }
+  if (!initialText) {
+    return {
+      original: asDiffSource({ text: '' }, 'original'),
+      modified: asDiffSource({ text: '' }, 'modified'),
+    }
+  }
   try {
-    return JSON.parse(initialText) as DiffPayload
+    const parsed = JSON.parse(initialText) as { original?: Partial<DiffSource>; modified?: Partial<DiffSource> }
+    return {
+      original: asDiffSource(parsed.original, 'original'),
+      modified: asDiffSource(parsed.modified, 'modified'),
+    }
   } catch {
-    return { original: { text: '' }, modified: { text: '' } }
+    return {
+      original: asDiffSource({ text: '' }, 'original'),
+      modified: asDiffSource({ text: '' }, 'modified'),
+    }
   }
 }
 
@@ -45,6 +73,12 @@ const IconSwap = () => (
   </svg>
 )
 
+const IconFormat = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M4 6h16" /><path d="M4 12h10" /><path d="M4 18h14" />
+  </svg>
+)
+
 const IconDetach = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
@@ -69,34 +103,14 @@ const IconDown = () => (
   </svg>
 )
 
-const IconListOrdered = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h16" />
-  </svg>
-)
-
-const IconListUnordered = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M3 7h4l3 9 4-15 3 6h4" />
-  </svg>
-)
-
-const IconCheck = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="td-ck">
-    <path d="M20 6 9 17l-5-5" />
-  </svg>
-)
-
 export function TextDiffSurface({ t, settings, host, initialText }: PluginSurfaceProps) {
   const { kits } = getPluginHostSdk()
   const { DualEditorView, diff } = kits
 
   const payload = useMemo(() => parsePayload(initialText), [initialText])
-  const [originalText, setOriginalText] = useState(payload.original.text ?? '')
-  const [modifiedText, setModifiedText] = useState(payload.modified.text ?? '')
+  const [originalText, setOriginalText] = useDiffSourceText(payload.original)
+  const [modifiedText, setModifiedText] = useDiffSourceText(payload.modified)
   const [diffMode, setDiffMode] = useState<DiffMode>('text')
-  const [jsonArrayMode, setJsonArrayMode] = useState<JsonArrayMode>('ordered')
-  const [showJsonDropdown, setShowJsonDropdown] = useState(false)
   const [currentHunkIndex, setCurrentHunkIndex] = useState(0)
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -112,38 +126,37 @@ export function TextDiffSurface({ t, settings, host, initialText }: PluginSurfac
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [originalText, modifiedText])
 
-  const semanticAvailable = useMemo(
+  const jsonAvailable = useMemo(
     () => canUseSemanticJsonDiff(debouncedOriginal, debouncedModified),
     [debouncedOriginal, debouncedModified],
   )
 
-  const renderMode: DiffMode = diffMode === 'json-semantic' && semanticAvailable ? 'json-semantic' : 'text'
+  const renderMode: DiffMode = diffMode === 'json' && jsonAvailable ? 'json' : 'text'
 
-  const { leftText, rightText, leftHighlights, rightHighlights } = useMemo(() => {
-    if (renderMode === 'json-semantic') {
-      const origParsed = diff.parseJson(debouncedOriginal)
-      const modParsed = diff.parseJson(debouncedModified)
-      if (origParsed.ok && modParsed.ok && origParsed.value != null && modParsed.value != null) {
-        const tree = diff.buildDiffTree(origParsed.value, modParsed.value)
-        const leftLines = diff.buildSideLines(tree, 'left')
-        const rightLines = diff.buildSideLines(tree, 'right')
+  const { leftText, rightText, leftHighlights, rightHighlights, leftRanges, rightRanges } = useMemo(() => {
+    // JSON mode: keep user text as-is; structural changes → character-range blocks.
+    if (renderMode === 'json') {
+      const hl = diff.computeJsonLineHighlights(debouncedOriginal, debouncedModified)
+      if (hl) {
         return {
-          leftText: leftLines.map((line) => line.text).join('\n'),
-          rightText: rightLines.map((line) => line.text).join('\n'),
-          leftHighlights: leftLines.reduce<number[]>((acc, line, index) => {
-            if (line.highlight) acc.push(index + 1)
-            return acc
-          }, []),
-          rightHighlights: rightLines.reduce<number[]>((acc, line, index) => {
-            if (line.highlight) acc.push(index + 1)
-            return acc
-          }, []),
+          leftText: debouncedOriginal,
+          rightText: debouncedModified,
+          leftHighlights: hl.leftHighlights,
+          rightHighlights: hl.rightHighlights,
+          leftRanges: hl.leftRanges,
+          rightRanges: hl.rightRanges,
         }
       }
     }
 
     const result = diff.computeTextLineDiff(debouncedOriginal, debouncedModified)
-    return { leftText: debouncedOriginal, rightText: debouncedModified, ...result }
+    return {
+      leftText: debouncedOriginal,
+      rightText: debouncedModified,
+      ...result,
+      leftRanges: undefined as undefined,
+      rightRanges: undefined as undefined,
+    }
   }, [renderMode, debouncedOriginal, debouncedModified, diff])
 
   const hunkLines = useMemo(() => {
@@ -171,6 +184,19 @@ export function TextDiffSurface({ t, settings, host, initialText }: PluginSurfac
     setModifiedText(originalText)
   }, [originalText, modifiedText])
 
+  /** Pretty-print both sides without sorting keys; only rewrites parseable sides. */
+  const handleFormat = useCallback(() => {
+    const left = diff.formatJsonPreserveKeyOrder(originalText)
+    const right = diff.formatJsonPreserveKeyOrder(modifiedText)
+    if (left != null) setOriginalText(left)
+    if (right != null) setModifiedText(right)
+  }, [diff, originalText, modifiedText])
+
+  const canFormat = useMemo(() => {
+    if (diffMode !== 'json') return false
+    return diff.parseJson(originalText).ok || diff.parseJson(modifiedText).ok
+  }, [diff, diffMode, originalText, modifiedText])
+
   const handleDetach = useCallback(() => {
     const p = JSON.stringify({ original: { text: originalText }, modified: { text: modifiedText } })
     host.detachToWindow(p)
@@ -186,24 +212,14 @@ export function TextDiffSurface({ t, settings, host, initialText }: PluginSurfac
     setCurrentHunkIndex((i) => (i + 1) % totalHunks)
   }, [totalHunks])
 
-  const jsonWrapRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!showJsonDropdown) return
-    const onClickOutside = (e: MouseEvent) => {
-      if (jsonWrapRef.current && !jsonWrapRef.current.contains(e.target as Node)) {
-        setShowJsonDropdown(false)
-      }
-    }
-    document.addEventListener('click', onClickOutside)
-    return () => document.removeEventListener('click', onClickOutside)
-  }, [showJsonDropdown])
-
-  const editorLanguage = renderMode === 'json-semantic' ? 'json' : 'plaintext'
+  // Follow the user-selected mode (not only successful JSON parse) so Monaco
+  // can offer JSON folding / syntax while editing toward valid JSON.
+  const editorLanguage = diffMode === 'json' ? 'json' : 'plaintext'
   const hostSettings = settings as { fontSize?: number; lineNumbers?: boolean; wordWrap?: boolean; theme?: string }
 
   return (
     <div className="td-surface">
-      {/* Header — matches .hdr from mockup: breadcrumb left, mode center-right, actions right */}
+      {/* Header — breadcrumb left, mode center-right, actions right */}
       <div className="td-hdr">
         <button type="button" className="td-bc-back" onClick={() => host.requestBack()}>
           <IconBack /><span className="td-bc-root">hiven</span>
@@ -211,56 +227,37 @@ export function TextDiffSurface({ t, settings, host, initialText }: PluginSurfac
         <span className="td-bc-sep">/</span>
         <span className="td-bc-cur">{t('surface.breadcrumb')}</span>
         <div className="td-hdr-c">
-          <div className="td-mt">
+          <div className="td-mt" role="group" aria-label={t('diff.mode')}>
             <button
               type="button"
               className={`td-mt-i ${diffMode === 'text' ? 'on' : ''}`}
-              onClick={() => { setDiffMode('text'); setShowJsonDropdown(false) }}
+              onClick={() => setDiffMode('text')}
             >
               <IconText />{t('diff.textMode')}
             </button>
-            <div className="td-json-wrap" ref={jsonWrapRef}>
-              <button
-                type="button"
-                className={`td-mt-i ${diffMode === 'json-semantic' ? 'on' : ''}`}
-                onClick={() => {
-                  if (diffMode === 'json-semantic') {
-                    setShowJsonDropdown(!showJsonDropdown)
-                  } else {
-                    setDiffMode('json-semantic')
-                    setShowJsonDropdown(true)
-                  }
-                }}
-              >
-                <IconJson />{t('diff.jsonSemantic')}
-                {diffMode === 'json-semantic' && (
-                  <span className="td-mode-badge">
-                    {jsonArrayMode === 'ordered' ? t('diff.jsonSemanticBadge.ordered') : t('diff.jsonSemanticBadge.unordered')}
-                  </span>
-                )}
-              </button>
-              {showJsonDropdown && diffMode === 'json-semantic' && (
-                <div className="td-dd">
-                  <button
-                    type="button"
-                    className={`td-dd-i ${jsonArrayMode === 'ordered' ? 'on' : ''}`}
-                    onClick={(e) => { e.stopPropagation(); setJsonArrayMode('ordered'); setShowJsonDropdown(false) }}
-                  >
-                    <IconListOrdered />{t('diff.arrayOrdered')}<IconCheck />
-                  </button>
-                  <button
-                    type="button"
-                    className={`td-dd-i ${jsonArrayMode === 'unordered' ? 'on' : ''}`}
-                    onClick={(e) => { e.stopPropagation(); setJsonArrayMode('unordered'); setShowJsonDropdown(false) }}
-                  >
-                    <IconListUnordered />{t('diff.arrayUnordered')}<IconCheck />
-                  </button>
-                </div>
-              )}
-            </div>
+            <button
+              type="button"
+              className={`td-mt-i ${diffMode === 'json' ? 'on' : ''}`}
+              onClick={() => setDiffMode('json')}
+              title={!jsonAvailable && diffMode === 'json' ? t('diff.semanticUnavailable') : undefined}
+            >
+              <IconJson />{t('diff.jsonMode')}
+            </button>
           </div>
         </div>
         <div className="td-hdr-a">
+          {diffMode === 'json' && (
+            <button
+              type="button"
+              className="td-ib"
+              onClick={handleFormat}
+              disabled={!canFormat}
+              title={t('diff.formatHint')}
+              aria-label={t('diff.format')}
+            >
+              <IconFormat />
+            </button>
+          )}
           <button type="button" className="td-ib" onClick={handleSwap} title={t('diff.swap')} aria-label={t('diff.swap')}>
             <IconSwap />
           </button>
@@ -280,6 +277,8 @@ export function TextDiffSurface({ t, settings, host, initialText }: PluginSurfac
           rightText={rightText}
           leftHighlights={leftHighlights}
           rightHighlights={rightHighlights}
+          leftRanges={leftRanges}
+          rightRanges={rightRanges}
           layout="side-by-side"
           language={editorLanguage}
           onLeftChange={setOriginalText}
@@ -290,6 +289,13 @@ export function TextDiffSurface({ t, settings, host, initialText }: PluginSurfac
           monacoTheme={hostSettings.theme === 'dark' ? 'flux-vscode-dark' : 'flux-vscode-light'}
         />
       </div>
+
+      {diffMode === 'json' && renderMode === 'text' && (
+        <div className="td-fallback" role="status">
+          <span className="td-fallback-dot" aria-hidden />
+          {t('diff.fallbackToText')}
+        </div>
+      )}
 
       {/* Status bar — matches .sbar from mockup */}
       <div className="td-sbar">

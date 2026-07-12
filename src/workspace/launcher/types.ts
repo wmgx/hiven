@@ -288,7 +288,15 @@ export type PluginLauncherApi = {
     activePaneId: string
     previousActivePaneId?: string
     paneIds: string[]
-    panes: Record<string, { title?: string; language?: string; stickyScroll?: boolean }>
+    panes: Record<string, {
+      title?: string
+      language?: string
+      stickyScroll?: boolean
+      /** Snapshot text content when available (e.g. quick-editor panes). */
+      text?: string
+      /** Where this pane lives; plugins use it for choice labels. */
+      origin?: 'editor' | 'quick-editor'
+    }>
     renderers: Record<string, {
       rendererId: string
       ownerPluginId?: string

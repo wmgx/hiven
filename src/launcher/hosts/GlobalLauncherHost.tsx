@@ -107,6 +107,13 @@ export function GlobalLauncherHost() {
     setSelectedObjectActionIndex((index) => Math.min(index, Math.max(0, objectActions.length - 1)))
   }, [objectActions.length])
 
+  const { restoreFocus, focusSearchInputAfterBack } = useGlobalLauncherFocusSession({
+    open,
+    inputRef,
+    setQuery,
+    setSelectedIndex,
+  })
+
   const {
     surfaceFrame,
     setSurfaceFrame,
@@ -121,6 +128,8 @@ export function GlobalLauncherHost() {
     pluginRegistryVersion,
     pluginSurfaceToolTarget,
     closeLauncher: () => closeLauncher(),
+    // ESC/back pops the tool surface; keep the launcher open and refocus search.
+    onReturnedToList: focusSearchInputAfterBack,
   })
 
   useGlobalLauncherSurfaceRegistry({
@@ -136,8 +145,6 @@ export function GlobalLauncherHost() {
     }, [controllerRef]),
   })
 
-
-
   const visibleFiltered = useMemo(() => {
     void pluginRegistryVersion
     return buildGlobalLauncherItems({
@@ -149,16 +156,11 @@ export function GlobalLauncherHost() {
     })
   }, [actionUsageCounts, locale, pluginRegistryVersion, query, rankedLauncherItems, recentActionNames])
 
-  const { restoreFocus, focusSearchInputAfterBack } = useGlobalLauncherFocusSession({
-    open,
-    inputRef,
-    setQuery,
-    setSelectedIndex,
-  })
-
   const resetLauncherSession = useCallback(() => {
     clearPluginSurfaceTool()
     clearLauncherHostSurface()
+    // Drop any suspended host (e.g. quick-editor under Diff) when fully closing.
+    useAppStore.setState({ previousLauncherHostSurfaceTarget: null })
     setSurfaceFrame(null)
     setItemPermissionFrame(null)
     if (usePluginSettingsStore.getState().settingsDialogTarget?.presentation === 'global-launcher') {

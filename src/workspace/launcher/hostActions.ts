@@ -3,7 +3,6 @@ import { useAppStore } from '../../store'
 import type { LauncherItem } from './types'
 import { getHostEditorActionItems } from './hostEditorActions'
 import { isQuickEditorWindowOpen, showQuickEditorWindow } from '../windowManager/quickEditorWindow'
-import { createQuickEditorPane } from '../quickEditor/quickEditorRequests'
 
 type SystemPowerAction = 'restart' | 'shutdown' | 'lock-screen'
 
@@ -118,66 +117,8 @@ export function getHostPaneControlItems(): LauncherItem[] {
         return { ok: true, keepOpen: true }
       },
     },
-    {
-      systemKey: 'host:pane:new',
-      kind: 'host',
-      display: {
-        title: 'New Pane',
-        titleI18n: { zh: '新建面板' },
-        subtitle: 'Create a new empty pane',
-        subtitleI18n: { zh: '创建一个空白面板' },
-        icon: 'PanelRightOpen',
-        aliases: ['pane', 'new pane', 'panel', '新建面板', '分栏'],
-      },
-      behavior: { type: 'perform' },
-      surfaces: ['global-launcher'],
-      requiredCapabilities: ['pane-actions'],
-      pinnable: false,
-      execute: async () => {
-        await createQuickEditorPane({ text: '', direction: 'right' })
-        return { ok: true }
-      },
-    },
-    {
-      systemKey: 'host:pane:split-right',
-      kind: 'host',
-      display: {
-        title: 'Split Pane Right',
-        titleI18n: { zh: '向右分栏' },
-        subtitle: 'Open an empty pane to the right',
-        subtitleI18n: { zh: '在右侧打开一个空白面板' },
-        icon: 'PanelRight',
-        aliases: ['split', 'split right', 'pane right', '右侧分栏', '分栏'],
-      },
-      behavior: { type: 'perform' },
-      surfaces: ['global-launcher'],
-      requiredCapabilities: ['pane-actions'],
-      pinnable: false,
-      execute: async () => {
-        await createQuickEditorPane({ text: '', direction: 'right' })
-        return { ok: true }
-      },
-    },
-    {
-      systemKey: 'host:pane:split-down',
-      kind: 'host',
-      display: {
-        title: 'Split Pane Down',
-        titleI18n: { zh: '向下分栏' },
-        subtitle: 'Open an empty pane below',
-        subtitleI18n: { zh: '在下方打开一个空白面板' },
-        icon: 'PanelBottom',
-        aliases: ['split', 'split down', 'pane down', '向下分栏', '分栏'],
-      },
-      behavior: { type: 'perform' },
-      surfaces: ['global-launcher'],
-      requiredCapabilities: ['pane-actions'],
-      pinnable: false,
-      execute: async () => {
-        await createQuickEditorPane({ text: '', direction: 'bottom' })
-        return { ok: true }
-      },
-    },
+    // Pane split / new-pane live only on editor-command-bar & quick-editor-command
+    // (see hostEditorActions). Global launcher should not expose panel controls.
     ...getHostEditorActionItems(),
     {
       systemKey: 'host:view:quick-editor',

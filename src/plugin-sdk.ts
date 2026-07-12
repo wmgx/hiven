@@ -26,7 +26,6 @@ export type {
 export type { Locale } from './i18n'
 export type { TranslateFunction } from './i18n'
 export type { PluginT } from './i18n/pluginI18nRegistry'
-export type { JsonArrayCompareMode } from './kits/diff/jsonSemanticDiff'
 export type {
   CommandContribution,
   CommandParam,
@@ -129,3 +128,4 @@ export type {
   TextReplaceEffect,
 } from './workspace/types'
 export type { DiffSource, FullscreenView } from './workspace/workspaceStore'
+export type { DiffSourceBinding } from './pluginHostSdk'

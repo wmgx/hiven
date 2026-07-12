@@ -89,6 +89,15 @@ export function useGlobalLauncherCollectInputPreview({
   }, [controllerRef, controllerState, open])
 }
 
+/**
+ * System-owned Escape = global back, not "close whatever is focused".
+ *
+ * Stack (top → bottom), one level per Escape:
+ * 1. Active layer interceptor (plugin surface / host surface / permission /
+ *    quick-editor double-Esc hint) — must only pop that layer, never close
+ * 2. Launcher controller frames (result / param / collect-input)
+ * 3. Root list → close launcher
+ */
 export function useGlobalLauncherHostEscape({
   open,
   isImeComposingRef,
@@ -105,17 +114,22 @@ export function useGlobalLauncherHostEscape({
   const handleHostEscape = useCallback((event: KeyboardEvent) => {
     if (event.key !== 'Escape') return
     if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
+    // Settings modal owns its own Esc until dismissed.
     if (usePluginSettingsStore.getState().settingsDialogTarget) return
+
+    // Layer interceptors: surface/host/permission pop themselves via leave*/onBack.
     if (runLauncherEscapeInterceptor(event)) return
 
     event.preventDefault()
     event.stopPropagation()
 
+    // Controller frame stack (result choices, params, …).
     if (controllerRef.current?.back?.()) {
       focusSearchInputAfterBack()
       return
     }
 
+    // Root: only now may Escape dismiss the launcher.
     closeLauncher()
   }, [
     closeLauncher,

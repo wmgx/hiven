@@ -18,7 +18,13 @@ assert.match(textDiffSrc, /kind:\s*['"]editor-pane['"]/, 'Text Diff sources shou
 assert.match(textDiffSrc, /kind:\s*['"]clipboard['"]/, 'Text Diff sources should support clipboard kind')
 assert.match(textDiffSrc, /kind:\s*['"]empty['"]/, 'Text Diff sources should support empty kind')
 assert.match(textDiffSrc, /buildSourceList/, 'Text Diff should build a source list for diff input selection')
-assert.match(textDiffSrc, /surfaces:\s*\[['"]command-palette['"],\s*['"]global-launcher['"]\]/, 'Text Diff should expose both command-palette and global-launcher surfaces')
+assert.match(
+  textDiffSrc,
+  /surfaces:\s*\[['"]command-palette['"],\s*['"]global-launcher['"],\s*['"]quick-editor-command['"]\]/,
+  'Text Diff should expose command-palette, global-launcher, and quick-editor-command surfaces',
+)
+assert.match(textDiffSrc, /origin:\s*['"]quick-editor['"]|quick-editorPane|choice\.quickEditorPane/, 'Text Diff should label quick-editor panes as selectable sources')
+assert.match(textDiffSrc, /text:\s*snapshot\.panes\[paneId\]\?\.text/, 'Text Diff should capture pane text into source choices')
 assert.match(diffPageViewSrc, /Original[\s\S]*Modified|original[\s\S]*modified/, 'Text Diff page should provide original and modified columns')
 assert.match(diffPageViewSrc, /DualEditorView/, 'Text Diff page should render a dual editor view')
 assert.doesNotMatch(textDiffSrc, /framework|core\.diff/, 'Text Diff source semantics should not move into framework/core diff APIs')
