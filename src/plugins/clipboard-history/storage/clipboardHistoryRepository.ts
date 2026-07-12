@@ -4,7 +4,8 @@
  * Pure business logic for clipboard history management:
  * - Add items with deduplication
  * - CRUD operations
- * - Prune by maxItems, retentionDays, maxTotalCacheBytes
+ * - Paste usage + favorites
+ * - Prune by maxItems, retentionDays, maxTotalCacheBytes (favorites exempt)
  * - Blob cleanup on image deletion
  */
 
@@ -34,6 +35,9 @@ export type ClipboardHistoryRepository = {
   clearAll(): Promise<void>
   pruneItems(policy: ClipboardHistoryPrunePolicy): Promise<PruneResult>
   findByHash(hash: string): Promise<ClipboardHistoryItem | undefined>
+  recordPaste(id: string): Promise<ClipboardHistoryItem | undefined>
+  setFavorite(id: string, favorite: boolean, title?: string): Promise<ClipboardHistoryItem | undefined>
+  updateFavoriteTitle(id: string, title: string): Promise<ClipboardHistoryItem | undefined>
 }
 
 function generateId(): string {
@@ -44,6 +48,26 @@ function makeTextPreview(text: string, maxLength = 200): string {
   const singleLine = text.replace(/\n/g, ' ').trim()
   if (singleLine.length <= maxLength) return singleLine
   return singleLine.slice(0, maxLength) + '…'
+}
+
+function usageFieldsFromItem(item: ClipboardHistoryItem): Pick<
+  ClipboardHistoryIndexEntry,
+  'pasteCount' | 'lastPastedAt' | 'isFavorite' | 'favoriteTitle' | 'favoritedAt' | 'copyCount' | 'sourceApp' | 'lastCopiedAt'
+> {
+  return {
+    lastCopiedAt: item.lastCopiedAt,
+    copyCount: item.copyCount,
+    sourceApp: item.sourceApp,
+    pasteCount: item.pasteCount ?? 0,
+    lastPastedAt: item.lastPastedAt,
+    isFavorite: item.isFavorite ?? false,
+    favoriteTitle: item.favoriteTitle,
+    favoritedAt: item.favoritedAt,
+  }
+}
+
+function isFavoriteEntry(entry: ClipboardHistoryIndexEntry): boolean {
+  return entry.isFavorite === true
 }
 
 export function indexToListItems(index: ClipboardHistoryIndex): ClipboardHistoryItem[] {
@@ -57,6 +81,11 @@ export function indexToListItems(index: ClipboardHistoryIndex): ClipboardHistory
       copyCount: entry.copyCount ?? 1,
       byteSize: entry.byteSize,
       sourceApp: entry.sourceApp,
+      pasteCount: entry.pasteCount ?? 0,
+      lastPastedAt: entry.lastPastedAt,
+      isFavorite: entry.isFavorite ?? false,
+      favoriteTitle: entry.favoriteTitle,
+      favoritedAt: entry.favoritedAt,
     }
     switch (entry.kind) {
       case 'text':
@@ -78,6 +107,22 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
   async function saveIndexAndCache(index: ClipboardHistoryIndex): Promise<void> {
     await store.saveIndex(index)
     setCachedIndex(index)
+  }
+
+  async function updateItemAndIndex(
+    id: string,
+    mutate: (item: ClipboardHistoryItem) => ClipboardHistoryItem,
+  ): Promise<ClipboardHistoryItem | undefined> {
+    const existing = await store.getItem(id)
+    if (!existing) return undefined
+    const updated = mutate(existing)
+    await store.saveItem(updated)
+    const index = await store.getIndex()
+    const entries = index.entries.map((entry) =>
+      entry.id === id ? { ...entry, ...usageFieldsFromItem(updated) } : entry,
+    )
+    await saveIndexAndCache({ entries, updatedAt: Date.now() })
+    return updated
   }
 
   async function findByHash(hash: string): Promise<ClipboardHistoryItem | undefined> {
@@ -108,9 +153,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
         const filtered = index.entries.filter((e) => e.id !== existingEntry.id)
         const updatedEntry: ClipboardHistoryIndexEntry = {
           ...existingEntry,
-          lastCopiedAt: now,
-          copyCount: updated.copyCount,
-          sourceApp: updated.sourceApp,
+          ...usageFieldsFromItem(updated),
         }
         filtered.unshift(updatedEntry)
         await saveIndexAndCache({ entries: filtered, updatedAt: now })
@@ -132,6 +175,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
           firstCopiedAt: now,
           lastCopiedAt: now,
           copyCount: 1,
+          pasteCount: 0,
           byteSize: input.byteSize,
           sourceApp: input.sourceApp,
           text: input.text,
@@ -146,6 +190,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
           firstCopiedAt: now,
           lastCopiedAt: now,
           copyCount: 1,
+          pasteCount: 0,
           byteSize: input.byteSize,
           sourceApp: input.sourceApp,
           blobId: input.blobId,
@@ -163,6 +208,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
           firstCopiedAt: now,
           lastCopiedAt: now,
           copyCount: 1,
+          pasteCount: 0,
           byteSize: input.byteSize,
           sourceApp: input.sourceApp,
           paths: input.paths,
@@ -183,6 +229,8 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
       sourceApp: input.sourceApp,
       firstCopiedAt: now,
       copyCount: 1,
+      pasteCount: 0,
+      isFavorite: false,
       ...(input.kind === 'text' ? { preview: makeTextPreview(input.text) } : {}),
       ...(input.kind === 'image' ? { contentType: input.contentType, width: input.width, height: input.height, previewBlobId: input.previewBlobId } : {}),
       ...(input.kind === 'files' ? { fileNames: input.fileNames } : {}),
@@ -223,6 +271,50 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     const cached = getCachedIndex()
     if (!cached) return null
     return indexToListItems(cached)
+  }
+
+  async function recordPaste(id: string): Promise<ClipboardHistoryItem | undefined> {
+    const now = Date.now()
+    return updateItemAndIndex(id, (item) => ({
+      ...item,
+      pasteCount: (item.pasteCount ?? 0) + 1,
+      lastPastedAt: now,
+    }))
+  }
+
+  async function setFavorite(
+    id: string,
+    favorite: boolean,
+    title?: string,
+  ): Promise<ClipboardHistoryItem | undefined> {
+    const now = Date.now()
+    return updateItemAndIndex(id, (item) => {
+      if (!favorite) {
+        const { favoriteTitle: _t, favoritedAt: _a, ...rest } = item
+        return { ...rest, isFavorite: false, favoriteTitle: undefined, favoritedAt: undefined }
+      }
+      const trimmed = title?.trim()
+      return {
+        ...item,
+        isFavorite: true,
+        favoritedAt: item.favoritedAt ?? now,
+        favoriteTitle: trimmed ? trimmed : item.favoriteTitle,
+      }
+    })
+  }
+
+  async function updateFavoriteTitle(
+    id: string,
+    title: string,
+  ): Promise<ClipboardHistoryItem | undefined> {
+    return updateItemAndIndex(id, (item) => {
+      if (!item.isFavorite) return item
+      const trimmed = title.trim()
+      return {
+        ...item,
+        favoriteTitle: trimmed || undefined,
+      }
+    })
   }
 
   async function deleteItem(id: string): Promise<void> {
@@ -271,38 +363,46 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     // Sort entries by lastCopiedAt descending (newest first) - index is already in this order
     const entries = [...index.entries]
 
+    const markRemovable = (entry: ClipboardHistoryIndexEntry) => {
+      if (isFavoriteEntry(entry)) return
+      if (toRemove.has(entry.id)) return
+      toRemove.add(entry.id)
+      removedBytes += entry.byteSize
+    }
+
     // Prune by retentionDays
     if (policy.retentionDays != null && policy.retentionDays > 0) {
       const cutoff = now - policy.retentionDays * 24 * 60 * 60 * 1000
       for (const entry of entries) {
         if (entry.lastCopiedAt < cutoff) {
-          toRemove.add(entry.id)
-          removedBytes += entry.byteSize
+          markRemovable(entry)
         }
       }
     }
 
-    // Prune by maxItems (keep newest)
+    // Prune by maxItems (keep newest; favorites always kept)
     if (policy.maxItems != null && policy.maxItems > 0) {
       const remaining = entries.filter((e) => !toRemove.has(e.id))
       if (remaining.length > policy.maxItems) {
         const excess = remaining.slice(policy.maxItems)
         for (const entry of excess) {
-          toRemove.add(entry.id)
-          removedBytes += entry.byteSize
+          markRemovable(entry)
         }
       }
     }
 
-    // Prune by maxTotalCacheBytes (keep newest)
+    // Prune by maxTotalCacheBytes (keep newest; favorites always kept)
     if (policy.maxTotalCacheBytes != null && policy.maxTotalCacheBytes > 0) {
       const remaining = entries.filter((e) => !toRemove.has(e.id))
       let totalBytes = remaining.reduce((sum, e) => sum + e.byteSize, 0)
       // Remove oldest until under limit
       for (let i = remaining.length - 1; i >= 0 && totalBytes > policy.maxTotalCacheBytes; i--) {
-        toRemove.add(remaining[i].id)
-        totalBytes -= remaining[i].byteSize
-        removedBytes += remaining[i].byteSize
+        const entry = remaining[i]
+        if (isFavoriteEntry(entry)) continue
+        if (toRemove.has(entry.id)) continue
+        toRemove.add(entry.id)
+        totalBytes -= entry.byteSize
+        removedBytes += entry.byteSize
       }
     }
 
@@ -339,5 +439,8 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     clearAll,
     pruneItems,
     findByHash,
+    recordPaste,
+    setFavorite,
+    updateFavoriteTitle,
   }
 }

@@ -1,7 +1,6 @@
 import { StrictMode, type ComponentType } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import { loader } from '@monaco-editor/react'
 
 const windowType = new URLSearchParams(window.location.search).get('window')
 if (windowType === 'launcher') {
@@ -46,11 +45,35 @@ async function loadRootComponent(): Promise<ComponentType> {
   return mod.default
 }
 
-async function init() {
+function renderRoot(RootComponent: ComponentType) {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <RootComponent />
+    </StrictMode>,
+  )
+}
+
+/**
+ * Plugin surface windows (clipboard history, csv, …) open via a dedicated
+ * webview. They must not pay Monaco bootstrap cost on first paint — none of
+ * the current window-presented surfaces mount an editor, and Monaco's
+ * editor.api chunk alone is multi-MB.
+ *
+ * Surfaces that later need Monaco can still load it lazily via
+ * @monaco-editor/react (which falls back to its own loader).
+ */
+async function initPluginSurfaceWindow() {
+  const RootComponent = await loadRootComponent()
+  renderRoot(RootComponent)
+}
+
+async function initEditorCapableWindow() {
   await loadMonacoNls()
 
   // Monaco 必须在 NLS 注入后加载，否则内置 tooltip 文案会固定为默认英文。
-  const [RootComponent, monaco, { default: editorWorker }] = await Promise.all([
+  // Dynamic import keeps Monaco out of the plugin-surface entry graph.
+  const [{ loader }, RootComponent, monaco, { default: editorWorker }] = await Promise.all([
+    import('@monaco-editor/react'),
     loadRootComponent(),
     import('monaco-editor'),
     import('monaco-editor/esm/vs/editor/editor.worker?worker'),
@@ -63,12 +86,15 @@ async function init() {
   }
 
   loader.config({ monaco })
+  renderRoot(RootComponent)
+}
 
-  createRoot(document.getElementById('root')!).render(
-    <StrictMode>
-      <RootComponent />
-    </StrictMode>,
-  )
+async function init() {
+  if (windowType === 'plugin-surface') {
+    await initPluginSurfaceWindow()
+    return
+  }
+  await initEditorCapableWindow()
 }
 
 init()

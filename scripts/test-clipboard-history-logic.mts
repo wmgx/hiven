@@ -92,30 +92,89 @@ async function deleteItem(id: string) {
 
 async function clearAll() { await store.clear() }
 
+async function updateItemAndIndex(id: string, mutate: (item: any) => any) {
+  const existing = await store.getItem(id)
+  if (!existing) return undefined
+  const updated = mutate(existing)
+  await store.saveItem(updated)
+  const index = await store.getIndex()
+  const entries = index.entries.map((entry: any) =>
+    entry.id === id
+      ? {
+          ...entry,
+          lastCopiedAt: updated.lastCopiedAt,
+          copyCount: updated.copyCount,
+          pasteCount: updated.pasteCount ?? 0,
+          lastPastedAt: updated.lastPastedAt,
+          isFavorite: updated.isFavorite ?? false,
+          favoriteTitle: updated.favoriteTitle,
+          favoritedAt: updated.favoritedAt,
+        }
+      : entry,
+  )
+  await store.saveIndex({ entries, updatedAt: Date.now() })
+  return updated
+}
+
+async function recordPaste(id: string) {
+  const now = Date.now()
+  return updateItemAndIndex(id, (item) => ({
+    ...item,
+    pasteCount: (item.pasteCount ?? 0) + 1,
+    lastPastedAt: now,
+  }))
+}
+
+async function setFavorite(id: string, favorite: boolean, title?: string) {
+  const now = Date.now()
+  return updateItemAndIndex(id, (item) => {
+    if (!favorite) {
+      return { ...item, isFavorite: false, favoriteTitle: undefined, favoritedAt: undefined }
+    }
+    const trimmed = title?.trim()
+    return {
+      ...item,
+      isFavorite: true,
+      favoritedAt: item.favoritedAt ?? now,
+      favoriteTitle: trimmed ? trimmed : item.favoriteTitle,
+    }
+  })
+}
+
 async function pruneItems(policy: { maxItems?: number; retentionDays?: number; maxTotalCacheBytes?: number }) {
   const index = await store.getIndex()
   const now = Date.now()
   const toRemove = new Set<string>()
   let removedBytes = 0
   const entries = [...index.entries]
+  const markRemovable = (entry: any) => {
+    if (entry.isFavorite === true) return
+    if (toRemove.has(entry.id)) return
+    toRemove.add(entry.id)
+    removedBytes += entry.byteSize
+  }
 
   if (policy.retentionDays != null && policy.retentionDays > 0) {
     const cutoff = now - policy.retentionDays * 24 * 60 * 60 * 1000
     for (const entry of entries) {
-      if (entry.lastCopiedAt < cutoff) { toRemove.add(entry.id); removedBytes += entry.byteSize }
+      if (entry.lastCopiedAt < cutoff) markRemovable(entry)
     }
   }
   if (policy.maxItems != null && policy.maxItems > 0) {
     const remaining = entries.filter((e: any) => !toRemove.has(e.id))
     if (remaining.length > policy.maxItems) {
-      for (const entry of remaining.slice(policy.maxItems)) { toRemove.add(entry.id); removedBytes += entry.byteSize }
+      for (const entry of remaining.slice(policy.maxItems)) markRemovable(entry)
     }
   }
   if (policy.maxTotalCacheBytes != null && policy.maxTotalCacheBytes > 0) {
     const remaining = entries.filter((e: any) => !toRemove.has(e.id))
     let total = remaining.reduce((s: number, e: any) => s + e.byteSize, 0)
     for (let i = remaining.length - 1; i >= 0 && total > policy.maxTotalCacheBytes; i--) {
-      toRemove.add(remaining[i].id); total -= remaining[i].byteSize; removedBytes += remaining[i].byteSize
+      if (remaining[i].isFavorite === true) continue
+      if (toRemove.has(remaining[i].id)) continue
+      toRemove.add(remaining[i].id)
+      total -= remaining[i].byteSize
+      removedBytes += remaining[i].byteSize
     }
   }
 
@@ -184,5 +243,48 @@ assert.equal(imgItems.length, 1)
 await deleteItem(imgItems[0].id)
 assert.equal(blobStore.has('img-blob-1'), false, 'Original blob should be deleted')
 assert.equal(blobStore.has('img-preview-1'), false, 'Preview blob should be deleted')
+
+// Test: recordPaste increments pasteCount
+await clearAll()
+const pasteBase = await addItem({ kind: 'text', text: 'paste-me', byteSize: 8, hash: 'paste-hash' })
+const afterPaste1 = await recordPaste(pasteBase.id)
+const afterPaste2 = await recordPaste(pasteBase.id)
+assert.equal(afterPaste1?.pasteCount, 1)
+assert.equal(afterPaste2?.pasteCount, 2)
+assert.ok((afterPaste2?.lastPastedAt ?? 0) >= (afterPaste1?.lastPastedAt ?? 0))
+
+// Test: setFavorite + title, prune skips favorites
+await clearAll()
+const fav = await addItem({ kind: 'text', text: 'keep-me', byteSize: 7, hash: 'fav-hash' })
+await setFavorite(fav.id, true, 'My snippet')
+const favItem = await store.getItem(fav.id)
+assert.equal(favItem.isFavorite, true)
+assert.equal(favItem.favoriteTitle, 'My snippet')
+for (let i = 0; i < 4; i++) {
+  await addItem({ kind: 'text', text: 'noise-' + i, byteSize: 7, hash: 'noise-' + i })
+}
+const favPrune = await pruneItems({ maxItems: 2 })
+const afterFavPrune = await getAllItems()
+assert.ok(favPrune.removedCount > 0)
+assert.ok(afterFavPrune.some((item: any) => item.id === fav.id && item.isFavorite), 'favorite must survive prune')
+assert.ok(afterFavPrune.length >= 1)
+
+// Test: Frequent filter threshold sorting (pure list helper)
+const threshold = 3
+const mockList = [
+  { id: 'a', pasteCount: 5, lastPastedAt: 10 },
+  { id: 'b', pasteCount: 2, lastPastedAt: 99 },
+  { id: 'c', pasteCount: 5, lastPastedAt: 20 },
+  { id: 'd', pasteCount: 3, lastPastedAt: 1 },
+]
+const frequent = mockList
+  .filter((item) => (item.pasteCount ?? 0) >= threshold)
+  .slice()
+  .sort((a, b) => {
+    const pasteDiff = (b.pasteCount ?? 0) - (a.pasteCount ?? 0)
+    if (pasteDiff !== 0) return pasteDiff
+    return (b.lastPastedAt ?? 0) - (a.lastPastedAt ?? 0)
+  })
+assert.deepEqual(frequent.map((item) => item.id), ['c', 'a', 'd'])
 
 console.log('clipboard-history functional logic tests passed')

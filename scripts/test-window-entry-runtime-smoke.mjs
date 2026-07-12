@@ -71,6 +71,18 @@ try {
   assert.match(mainModule, /windowType === ['"]plugin-surface['"][\s\S]*PluginSurfaceWindow\.tsx/, 'main module should lazy-load PluginSurfaceWindow for plugin surface entries')
   assert.match(mainModule, /windowType === ['"]quick-editor['"][\s\S]*QuickEditorDetachedView\.tsx/, 'main module should lazy-load EditorWindow for editor entries')
   assert.match(mainModule, /App\.tsx/, 'main module should lazy-load App for launcher entries')
+  // Clipboard/csv cold open must not pay Monaco multi-MB bootstrap on first paint.
+  assert.match(
+    mainModule,
+    /if\s*\(\s*windowType\s*===\s*['"]plugin-surface['"]\s*\)\s*\{[\s\S]{0,200}initPluginSurfaceWindow/,
+    'plugin-surface windows must take a Monaco-free init path',
+  )
+  assert.doesNotMatch(
+    mainModule,
+    /import\s*\{\s*loader\s*\}\s*from\s*['"]@monaco-editor\/react['"]/,
+    'main entry must not statically import Monaco loader (keeps plugin-surface graph lean)',
+  )
+  assert.match(mainModule, /import\(['"]@monaco-editor\/react['"]\)/, 'editor-capable windows still dynamic-import Monaco loader')
 
   const entryModules = [
     ['/src/App.tsx', /LauncherRuntimeApp|GlobalLauncher/],

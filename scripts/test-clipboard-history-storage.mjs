@@ -43,6 +43,11 @@ assert.match(typesFile, /firstCopiedAt:\s*number/, 'Base must have firstCopiedAt
 assert.match(typesFile, /lastCopiedAt:\s*number/, 'Base must have lastCopiedAt field')
 assert.match(typesFile, /copyCount:\s*number/, 'Base must have copyCount field')
 assert.match(typesFile, /byteSize:\s*number/, 'Base must have byteSize field')
+assert.match(typesFile, /pasteCount\?:\s*number/, 'Base must support pasteCount for Frequent tab')
+assert.match(typesFile, /isFavorite\?:\s*boolean/, 'Base must support isFavorite for Favorites tab')
+assert.match(typesFile, /favoriteTitle\?:\s*string/, 'Base must support favoriteTitle')
+assert.match(typesFile, /favoritedAt\?:\s*number/, 'Base must support favoritedAt')
+assert.match(typesFile, /lastPastedAt\?:\s*number/, 'Base must support lastPastedAt')
 
 // Text item fields
 assert.match(typesFile, /text:\s*string/, 'TextItem must have text field')
@@ -74,6 +79,7 @@ assert.match(settingsModel, /retentionDays:\s*30/, 'Default retentionDays should
 assert.match(settingsModel, /maxTextBytes:\s*256\s*\*\s*1024/, 'Default maxTextBytes should be 256KB')
 assert.match(settingsModel, /maxImageBytes:\s*10\s*\*\s*1024\s*\*\s*1024/, 'Default maxImageBytes should be 10MB')
 assert.match(settingsModel, /maxTotalCacheBytes:\s*500\s*\*\s*1024\s*\*\s*1024/, 'Default maxTotalCacheBytes should be 500MB')
+assert.match(settingsModel, /frequentPasteThreshold:\s*3/, 'Default frequentPasteThreshold should be 3')
 
 // ─── 3. Repository file structure ───────────────────────────────────────────
 
@@ -87,6 +93,10 @@ assert.match(repoFile, /clearAll/, 'Must export clearAll')
 assert.match(repoFile, /pruneItems/, 'Must export pruneItems')
 assert.match(repoFile, /findByHash/, 'Must handle deduplication via findByHash')
 assert.match(repoFile, /addItem/, 'Must export addItem')
+assert.match(repoFile, /recordPaste/, 'Must export recordPaste for Frequent ranking')
+assert.match(repoFile, /setFavorite/, 'Must export setFavorite for Favorites')
+assert.match(repoFile, /updateFavoriteTitle/, 'Must export updateFavoriteTitle')
+assert.match(repoFile, /isFavoriteEntry|isFavorite === true|entry\.isFavorite/, 'prune must consider favorite exemption')
 
 // ─── 4. Store file structure ─────────────────────────────────────────────────
 

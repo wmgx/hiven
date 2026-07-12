@@ -70,6 +70,7 @@ assert.match(pluginIndex, /key:\s*['"]recordImages['"]/, 'Settings schema must e
 assert.match(pluginIndex, /key:\s*['"]recordFiles['"]/, 'Settings schema must expose file recording toggle')
 assert.match(pluginIndex, /key:\s*['"]maxItems['"]/, 'Settings schema must expose max item limit')
 assert.match(pluginIndex, /key:\s*['"]retentionDays['"]/, 'Settings schema must expose retention limit')
+assert.match(pluginIndex, /key:\s*['"]frequentPasteThreshold['"]/, 'Settings schema must expose frequent paste threshold')
 assert.match(pluginIndex, /key:\s*['"]maxTextBytes['"][\s\S]{0,420}storageScale:\s*MB/, 'Text byte limit must render as MB via schema')
 assert.match(pluginIndex, /key:\s*['"]maxImageBytes['"][\s\S]{0,420}storageScale:\s*MB/, 'Image byte limit must render as MB via schema')
 assert.match(pluginIndex, /key:\s*['"]maxTotalCacheBytes['"][\s\S]{0,420}storageScale:\s*MB/, 'Total cache limit must render as MB via schema')

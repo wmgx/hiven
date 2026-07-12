@@ -41,6 +41,12 @@ assert.match(indexContent, /id:\s*['"]main['"]/, 'Must declare surface with id "
 assert.match(indexContent, /kind:\s*['"]custom-view['"]/, 'Surface kind must be custom-view')
 assert.match(indexContent, /component:\s*ClipboardHistorySurface/, 'Surface component must reference ClipboardHistorySurface')
 assert.match(indexContent, /beforeOpen[\s\S]{0,220}getFreshListItems/, 'Clipboard history surface must prewarm fresh storage before activation')
+assert.match(indexContent, /destroyTimeout:\s*30\s*\*\s*60\s*\*\s*1000/, 'Clipboard history window must keep webview warm longer than the default 2 minutes')
+assert.match(
+  indexContent,
+  /if\s*\(\s*getCachedIndex\(\)\s*\)\s*return[\s\S]{0,120}void\s+createClipboardHistoryRepository[\s\S]{0,80}getFreshListItems/,
+  'Clipboard history beforeOpen must not block paint on cold open when the in-memory cache is empty',
+)
 
 // entry.launcher is true (default or explicit)
 assert.match(indexContent, /launcher:\s*true/, 'Surface entry.launcher must be true')

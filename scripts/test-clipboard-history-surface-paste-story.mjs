@@ -52,6 +52,16 @@ assert.match(
 )
 assert.match(
   handlePasteBlock,
+  /recordPaste\(fullItem\.id\)/,
+  'successful paste must record pasteCount for the Frequent tab',
+)
+assert.match(
+  handlePasteBlock,
+  /setQuery\(['"]['"]\)[\s\S]*host\.close\(\)/,
+  'successful paste must clear the search query before closing so warm reopen has a clean list',
+)
+assert.match(
+  handlePasteBlock,
   /host\.close\(\)/,
   'successful paste flow must close the clipboard history surface',
 )
