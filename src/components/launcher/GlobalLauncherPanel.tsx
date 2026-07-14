@@ -39,6 +39,7 @@ type GlobalLauncherPanelProps = {
   setResultSelectedIndex: (index: number) => void
   selectedResultChoiceIds: Set<string>
   activateResultChoice: (choice: LauncherResultChoice) => void
+  activateSecondaryAction?: (choice: LauncherResultChoice, actionId: string) => void
   toggleResultChoice: (choice: LauncherResultChoice, frame: ResultFrame) => void
   closeLauncher: () => void
   visibleFiltered: GlobalLauncherItem[]
@@ -90,6 +91,7 @@ export function GlobalLauncherPanel({
   setResultSelectedIndex,
   selectedResultChoiceIds,
   activateResultChoice,
+  activateSecondaryAction,
   toggleResultChoice,
   closeLauncher,
   visibleFiltered,
@@ -199,6 +201,7 @@ export function GlobalLauncherPanel({
         }}
         onCollectInputChange={(value) => controllerRef.current?.setInputText(value)}
         onActivateResultChoice={activateResultChoice}
+        onSecondaryAction={activateSecondaryAction}
         onHoverResultChoice={setResultSelectedIndex}
         onToggleResultChoice={toggleResultChoice}
         onSearchQueryChange={(value) => { setQuery(value); setSelectedIndex(0) }}

@@ -396,6 +396,15 @@ export type PluginSettingsSchema<TSettings = unknown> = {
   sections: PluginSettingsSection<TSettings>[]
 }
 
+/** Fired after settings are written (set / update / reset). Plugin side-effects only. */
+export type PluginSettingsChangeContext<TSettings = unknown> = {
+  value: TSettings
+  pluginId: string
+  source: 'builtin' | 'installed' | 'dev'
+  storage: PluginPrivateStorageApi
+  network: PluginNetworkApi
+}
+
 export type PluginSettingsContribution<TSettings = unknown> = {
   title?: string
   titleI18n?: Partial<Record<Locale, string>>
@@ -405,6 +414,11 @@ export type PluginSettingsContribution<TSettings = unknown> = {
   schema?: PluginSettingsSchema<TSettings>
   modals?: PluginSettingsModalContribution<TSettings>[]
   component?: ComponentType<PluginSettingsBodyProps<TSettings>>
+  /**
+   * Optional side-effect after settings persist (write-through).
+   * Host only invokes; product work stays in the plugin (e.g. warm caches).
+   */
+  onChange?: (ctx: PluginSettingsChangeContext<TSettings>) => void | Promise<void>
 }
 
 // ─── Launcher Quick Entry ────────────────────────────────────────────────────
@@ -537,12 +551,19 @@ export type PluginNetworkRequest = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   headers?: Record<string, string>
   body?: string
+  /**
+   * `binary` returns bodyBytes (for images etc.). Default `text` keeps body as UTF-8 string.
+   * Use binary for favicons — text mode corrupts PNG/JPEG bytes.
+   */
+  responseType?: 'text' | 'binary'
 }
 
 export type PluginNetworkResponse = {
   status: number
   headers: Record<string, string>
   body: string
+  /** Present when request.responseType is `binary`. */
+  bodyBytes?: number[]
 }
 
 export type PluginNetworkApi = {

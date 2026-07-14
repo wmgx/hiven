@@ -28,5 +28,13 @@
   "faviconCache.removed": "已删除 {domain}",
   "faviconCache.removeFailed": "删除缓存失败",
   "faviconCache.cleared": "已清空 {count} 条缓存",
-  "faviconCache.clearFailed": "清空缓存失败"
+  "faviconCache.clearFailed": "清空缓存失败",
+  "queryHistory.description": "以下为各规则已记录的参数历史。可按规则清空。",
+  "queryHistory.loading": "加载中…",
+  "queryHistory.empty": "暂无参数历史。在规则中开启「记录参数历史」并成功打开后会出现。",
+  "queryHistory.count": "共 {count} 条",
+  "queryHistory.clear": "清空",
+  "queryHistory.cleared": "已清空「{title}」的参数历史",
+  "queryHistory.clearFailed": "清空参数历史失败",
+  "queryHistory.delete": "删除"
 }

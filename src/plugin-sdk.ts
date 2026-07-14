@@ -77,6 +77,12 @@ export type {
   PluginPrivateStorageApi,
   PluginBlobRef,
   PluginStoragePrunePolicy,
+  // Plugin Network types
+  PluginNetworkApi,
+  PluginNetworkRequest,
+  PluginNetworkResponse,
+  // Plugin Settings change hook
+  PluginSettingsChangeContext,
   // Plugin Clipboard types
   PluginClipboardApi,
   ClipboardChange,
@@ -96,6 +102,8 @@ export type {
   LauncherExecutionContext,
   LauncherExecuteHandler,
   LauncherExecuteResult,
+  LauncherSuggestContext,
+  LauncherSuggestHandler,
   LauncherOutput,
   LauncherResultChoice,
   LauncherResultAction,

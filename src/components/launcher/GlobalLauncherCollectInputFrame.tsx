@@ -6,7 +6,6 @@ import { resolveDisplayTitle } from '../../workspace/launcher/display'
 import type { LauncherResultChoice } from '../../workspace/launcher/types'
 import { resolveIcon } from '../../utils/resolveIcon'
 import { LauncherHintKey, LauncherHintText } from './LauncherFooterHints'
-import { LauncherResultChoiceRow } from './LauncherResultChoiceRow'
 
 export function GlobalLauncherCollectInputFrame({
   inputRef,
@@ -18,6 +17,7 @@ export function GlobalLauncherCollectInputFrame({
   onInputChange,
   onBack,
   onActivateChoice,
+  onSecondaryAction,
 }: {
   inputRef: RefObject<HTMLInputElement | null>
   frame: CollectInputFrame
@@ -28,9 +28,13 @@ export function GlobalLauncherCollectInputFrame({
   onInputChange: (value: string) => void
   onBack: () => void
   onActivateChoice: (choice: LauncherResultChoice) => void
+  /** Host wiring: run a secondary action by id (plugin defines the action ids). */
+  onSecondaryAction?: (choice: LauncherResultChoice, actionId: string) => void
 }) {
   const placeholder = frame.input.placeholder ?? ''
   const previewChoices = frame.previewOutput?.choices ?? []
+  const selectedIndex = frame.selectedSuggestionIndex ?? -1
+  const hasSuggestions = previewChoices.length > 0
 
   return (
     <>
@@ -66,22 +70,60 @@ export function GlobalLauncherCollectInputFrame({
           {error}
         </div>
       )}
-      {previewChoices.length > 0 && (
-        <div className="global-launcher-body l-results">
-          {previewChoices.map((choice, index) => (
-            <LauncherResultChoiceRow
-              key={choice.id}
-              choice={choice}
-              index={index}
-              selected={index === 0}
-              onSelect={() => onActivateChoice(choice)}
-            />
-          ))}
+      {hasSuggestions && (
+        <div className="global-launcher-body l-results l-suggest-list">
+          {previewChoices.map((choice, index) => {
+            const selected = index === selectedIndex
+            const secondary = choice.secondaryActions ?? []
+            return (
+              <div
+                key={choice.id}
+                className={`l-suggest-row ${selected ? 'sel' : ''}`}
+              >
+                <button
+                  type="button"
+                  className="l-suggest-row-main"
+                  onClick={() => onActivateChoice(choice)}
+                >
+                  <span className="r-ico r-favicon" aria-hidden>
+                    {resolveIcon(
+                      choice.icon ?? frame.item.display.icon,
+                      18,
+                      choice.title,
+                    )}
+                  </span>
+                  <div className="r-main">
+                    <span className="r-title">{choice.title}</span>
+                    {choice.subtitle ? (
+                      <span className="r-desc" title={choice.subtitle}>{choice.subtitle}</span>
+                    ) : null}
+                  </div>
+                  {selected ? <span className="r-kbd">↵</span> : null}
+                </button>
+                {onSecondaryAction && secondary.map((action) => (
+                  <button
+                    key={action.id}
+                    type="button"
+                    className="l-suggest-row-secondary"
+                    title={action.title}
+                    aria-label={action.title}
+                    onClick={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      onSecondaryAction(choice, action.id)
+                    }}
+                  >
+                    ×
+                  </button>
+                ))}
+              </div>
+            )
+          })}
         </div>
       )}
       <div className="global-launcher-footer l-foot">
-        {previewChoices.length > 0
-          ? <LauncherHintText label={t(locale, 'palette.enterToCopy')} />
+        {hasSuggestions
+          ? <LauncherHintText label={t(locale, 'palette.collectInputSuggestHint')} />
           : <LauncherHintKey keys="↵" label={t(locale, 'palette.quickEntryRun')} />}
         <LauncherHintKey keys="esc" label={t(locale, 'palette.back')} />
       </div>

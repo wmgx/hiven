@@ -41,6 +41,7 @@ export function handleGlobalLauncherKeyDown({
   controllerRef: MutableRefObject<{
     submitInput?: () => void | Promise<void>
     back?: () => boolean | void
+    moveSuggestionHighlight?: (delta: number) => void
   } | null>
   resultSelectedIndex: number
   setResultSelectedIndex: (updater: number | ((index: number) => number)) => void
@@ -73,6 +74,18 @@ export function handleGlobalLauncherKeyDown({
     if (topFrame.kind === 'param-input') return
 
     if (topFrame.kind === 'collect-input') {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        event.stopPropagation()
+        controllerRef.current?.moveSuggestionHighlight?.(1)
+        return
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        event.stopPropagation()
+        controllerRef.current?.moveSuggestionHighlight?.(-1)
+        return
+      }
       if (event.key === 'Enter') {
         event.preventDefault()
         void controllerRef.current?.submitInput?.()

@@ -6,6 +6,8 @@ import { resolvePluginSettings } from '../pluginSettingsStore'
 import type { ContributionSource } from '../pluginTypes'
 import { LauncherController, type LauncherControllerState } from './controller'
 import { createPluginLauncherApi, createPluginLauncherStorage } from './pluginApi'
+import { createPluginNetwork } from '../pluginNetwork'
+import { getPluginPermissionSnapshot } from '../pluginPermissions'
 import { resolvePluginSettingsSource } from './pluginSource'
 import { rankLauncherItems } from './ranking'
 import {
@@ -136,6 +138,14 @@ export function useLauncherSession({
               source: item.source,
               requestedPermissions,
             })
+          },
+          getNetwork: (item) => {
+            const requestedPermissions = item.pluginId && item.source
+              ? pluginRegistry.getPluginPermissions(item.pluginId, item.source)
+              : []
+            const source = item.source ?? 'builtin'
+            const pluginId = item.pluginId ?? ''
+            return createPluginNetwork(getPluginPermissionSnapshot(source, pluginId, requestedPermissions))
           },
           locale,
           makeT: (item) => makePluginT(item.pluginId ?? '', locale),

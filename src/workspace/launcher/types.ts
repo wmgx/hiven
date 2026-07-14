@@ -16,7 +16,7 @@
 
 import type { ComponentType } from 'react'
 import type { Locale } from '../../i18n'
-import type { PluginPrivateStorageApi } from '../pluginTypes'
+import type { PluginNetworkApi, PluginPrivateStorageApi } from '../pluginTypes'
 import type { FluxEffect } from '../types'
 import type { DiffSource } from '../workspaceStore'
 import type { EffectRunnerResult } from '../effectRunner'
@@ -245,6 +245,8 @@ export type LauncherResultChoice = {
   titleI18n?: Partial<Record<Locale, string>>
   subtitle?: string
   subtitleI18n?: Partial<Record<Locale, string>>
+  /** Optional leading icon (e.g. site favicon for history suggestions). */
+  icon?: IconRef
   preview?: string
   metadata?: LauncherResultChoiceMetadata
   primaryAction: LauncherResultActionHandler
@@ -357,6 +359,29 @@ export type LauncherExecuteWithParamsHandler<TSettings = unknown> = (
   params: Record<string, unknown>,
 ) => Promise<LauncherExecuteResult> | LauncherExecuteResult
 
+/**
+ * Optional collect-input suggestions (e.g. per-entry query history).
+ * Host calls this when the collect-input frame is entered or inputText changes.
+ * Return empty choices / null to hide the list.
+ */
+export type LauncherSuggestContext<TSettings = unknown> = {
+  surfaceId: LauncherSurfaceId
+  inputText: string
+  settings: TSettings
+  locale: Locale
+  api: PluginLauncherApi
+  storage: PluginPrivateStorageApi
+  network: PluginNetworkApi
+  t: (key: string, vars?: Record<string, string | number>) => string
+  /** Plugin identity for storage-scoped assets (e.g. favicon blob refs). */
+  pluginId?: string
+  source?: 'builtin' | 'installed' | 'dev'
+}
+
+export type LauncherSuggestHandler<TSettings = unknown> = (
+  ctx: LauncherSuggestContext<TSettings>,
+) => Promise<LauncherOutput | null | undefined> | LauncherOutput | null | undefined
+
 // ─── Plugin Contribution (authoring API) ─────────────────────────────────────
 
 /**
@@ -386,6 +411,11 @@ export type LauncherItemContribution<TSettings = unknown> = {
    * Dynamic items default to false (one-shot / content-derived results).
    */
   recordUsage?: boolean
+  /**
+   * Optional suggestions for collect-input frames (filtered by current inputText).
+   * Host infrastructure only — product semantics (history, etc.) stay in the plugin.
+   */
+  suggest?: LauncherSuggestHandler<TSettings>
   execute: LauncherExecuteHandler<TSettings>
   executeWithParams?: LauncherExecuteWithParamsHandler<TSettings>
 }
@@ -400,6 +430,7 @@ export type LauncherDynamicContext = {
   settings: unknown
   api: PluginLauncherApi
   storage: PluginPrivateStorageApi
+  network: PluginNetworkApi
   t: (key: string, vars?: Record<string, string | number>) => string
   source: 'builtin' | 'installed' | 'dev'
   pluginId: string
@@ -458,6 +489,8 @@ export type LauncherItem = {
    * Dynamic items must opt in with a stable systemKey; static items omit this (treated as true).
    */
   recordUsage?: boolean
+  /** Optional collect-input suggestions loader (host-resolved from contribution). */
+  suggest?: LauncherSuggestHandler
   execute: LauncherExecuteHandler
   executeWithParams?: LauncherExecuteWithParamsHandler
 }

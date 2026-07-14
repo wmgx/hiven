@@ -57,6 +57,7 @@ export function QuickEditorCommandOverlay() {
     setResultSelectedIndex,
     selectedResultChoiceIds,
     activateResultChoice,
+    activateSecondaryAction,
     toggleResultChoice,
   } = useGlobalLauncherResultFrame({
     controller: controllerRef.current,
@@ -303,6 +304,7 @@ export function QuickEditorCommandOverlay() {
         }}
         onCollectInputChange={(value) => controllerRef.current?.setInputText(value)}
         onActivateResultChoice={activateResultChoice}
+        onSecondaryAction={activateSecondaryAction}
         onHoverResultChoice={setResultSelectedIndex}
         onToggleResultChoice={toggleResultChoice}
         onSearchQueryChange={(value) => { setQuery(value); setSelectedIndex(0) }}

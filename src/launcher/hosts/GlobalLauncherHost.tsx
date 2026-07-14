@@ -215,6 +215,7 @@ export function GlobalLauncherHost() {
     setResultSelectedIndex,
     selectedResultChoiceIds,
     activateResultChoice,
+    activateSecondaryAction,
     toggleResultChoice,
   } = useGlobalLauncherResultFrame({
     controller,
@@ -371,6 +372,7 @@ export function GlobalLauncherHost() {
         setResultSelectedIndex={setResultSelectedIndex}
         selectedResultChoiceIds={selectedResultChoiceIds}
         activateResultChoice={activateResultChoice}
+        activateSecondaryAction={activateSecondaryAction}
         toggleResultChoice={toggleResultChoice}
         closeLauncher={closeLauncher}
         visibleFiltered={visibleFiltered}

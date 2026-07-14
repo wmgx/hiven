@@ -123,11 +123,38 @@ type QueryHistoryRecord = {
 - controller 在进入 frame、以及 inputText 变化（可 debounce）时调用；web-open 读 kv 并按输入过滤后返回 choices。
 - **不**把「历史」做成 framework 通用产品 API；host 只提供 collect-input suggestions + 高亮选择基础设施。
 
+### Host `suggest` 契约（通用，非 history 产品 API）
+
+| 角色 | 职责 |
+|------|------|
+| **Host** | 提供 `item.suggest` 钩子、`selectedSuggestionIndex`、↑↓ 高亮、Enter 分支（高亮 → `activateChoice`，无高亮 → `execute` 原文）、collect-input 建议列表壳（`l-suggest-*`）、`activateSecondary(choice, actionId)` 回调接线 |
+| **Plugin** | 实现 `suggest`（读产品数据、过滤、返回 `LauncherOutput.choices`）；`primaryAction` / `secondaryActions` 的 id 与语义；成功打开后写历史；favicon 只吐 `plugin-blob:*` 或 lucide 名（如 `Globe`） |
+
+**Secondary action 约定：**
+
+- 插件在 choice 上声明 `secondaryActions: [{ id, title, run }]`。
+- Host UI 渲染 compact 按钮，点击时调用 **host 回调** `onSecondaryAction(choice, actionId)` → controller `activateSecondary(choice, actionId)`。
+- Host **不** hardcode 任何 action id（如 `delete`）；产品语义全在插件 `run` 里。
+- `run` 返回 `{ ok: true, keepOpen: true }` 时：若当前为 collect-input 且 item 有 `suggest`，host **留在同一 frame** 并 `refreshSuggestions()`（通用刷新，非 history 专用）。
+
+**Icon 约定：**
+
+- Host `resolveIcon` 只认：lucide 名、`plugin-blob:…`、`app-icon:…`。
+- 站点图标拉取/候选 URL/`/logo.png` 等策略 **只在插件** `faviconCache`；成功后存 blob，对外只给 `plugin-blob` 或 `Globe`。
+- **预热时机（web-open）**：
+  1. `hooks.startup` — 应用启动时对当前规则域名 warm
+  2. `settings.onChange` — 设置 write-through 后 debounce warm（改 URL 模板即拉）
+  3. launcher 路径上 cache miss 时后台 warm（兜底）
+- **拉取通道**：必须用 `network.request({ responseType: 'binary' })`（Tauri reqwest，无 CORS）。禁止 webview `fetch` 读跨域图片（CORS 会失败；text 模式会损坏 PNG）。
+- 权限：`storage.private` + `storage.blob` + `network.request`
+- 静态 `launcher.items` 用 getter，每次 collect 时从 memory 读 `plugin-blob`，warm 完成后重新打开启动器即可看到站点图。
+
 ### 边界
 
 - 一级列表排序 / usage 不动。
 - 历史不做跨入口共享、云同步。
 - 过滤规则第一版：子串包含、大小写不敏感；不做拼音/模糊（若以后要做，仍留在插件 suggest 内）。
+- Host CSS/i18n 使用中性名（`l-suggest-*`、`collectInputSuggestHint`），不出现 history 产品词。
 
 ## §3 存储健壮性、i18n、测试与验收
 

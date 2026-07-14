@@ -34,20 +34,31 @@ const launcherSessionSource = readFileSync('src/workspace/launcher/useLauncherSe
 const faviconCacheSource = readFileSync('src/plugins/web-open/faviconCache.ts', 'utf8')
 const webOpenIndexSource = readFileSync('src/plugins/web-open/index.tsx', 'utf8')
 
+const queryHistory = loadModule('src/plugins/web-open/queryHistory.ts', {
+  stripImports: [
+    ...stripTypeImports,
+    /import\s*\{[\s\S]*?\}\s*from\s*'@hiven\/plugin'\s*;?\s*\n?/g,
+  ],
+})
+
 const webOpen = loadModule('src/plugins/web-open/index.tsx', {
   stripImports: [
     ...stripTypeImports,
     /import\s*\{[\s\S]*?\}\s*from\s*'@hiven\/plugin'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/settings\/model'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/settings\/FaviconCacheModal'\s*;?\s*\n?/g,
+    /import\s*\{[\s\S]*?\}\s*from\s*'\.\/settings\/QueryHistoryModal'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/faviconCache'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/matchPatternCache'\s*;?\s*\n?/g,
+    /import\s*\{[\s\S]*?\}\s*from\s*'\.\/queryHistory'\s*;?\s*\n?/g,
   ],
   globals: {
     definePlugin: (definition) => definition,
     buildWebQuickOpenUrl: model.buildWebQuickOpenUrl,
+    DEFAULT_MAX_QUERY_HISTORY: model.DEFAULT_MAX_QUERY_HISTORY,
     DEFAULT_WEB_QUICK_OPEN_SETTINGS: model.DEFAULT_WEB_QUICK_OPEN_SETTINGS,
     FaviconCacheModal: () => null,
+    QueryHistoryModal: () => null,
     extractDomain: (url) => {
       try {
         return new URL(url).hostname
@@ -59,6 +70,11 @@ const webOpen = loadModule('src/plugins/web-open/index.tsx', {
     FALLBACK_ICON: 'Globe',
     replaceMatchPatternCache: matchPatternCache.replaceMatchPatternCache,
     testMatchPattern: matchPatternCache.testMatchPattern,
+    clampMaxQueryHistory: queryHistory.clampMaxQueryHistory,
+    filterQueryHistory: queryHistory.filterQueryHistory,
+    loadQueryHistory: queryHistory.loadQueryHistory,
+    recordQueryHistory: queryHistory.recordQueryHistory,
+    removeQueryHistoryEntry: queryHistory.removeQueryHistoryEntry,
   },
 })
 

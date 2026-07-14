@@ -3083,6 +3083,9 @@ struct ProxyHttpRequest {
     method: Option<String>,
     headers: Option<std::collections::HashMap<String, String>>,
     body: Option<String>,
+    /// "text" (default) or "binary" — binary returns bodyBytes (no UTF-8 corruption for images).
+    #[serde(rename = "responseType")]
+    response_type: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -3090,6 +3093,9 @@ struct ProxyHttpResponse {
     status: u16,
     headers: std::collections::HashMap<String, String>,
     body: String,
+    /// Present when responseType is "binary".
+    #[serde(rename = "bodyBytes", skip_serializing_if = "Option::is_none")]
+    body_bytes: Option<Vec<u8>>,
 }
 
 #[tauri::command]
@@ -3129,16 +3135,36 @@ async fn plugin_http_request(request: ProxyHttpRequest) -> Result<ProxyHttpRespo
             headers.insert(name.to_string(), text.to_string());
         }
     }
-    let body = resp
-        .text()
-        .await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
 
-    Ok(ProxyHttpResponse {
-        status,
-        headers,
-        body,
-    })
+    let want_binary = request
+        .response_type
+        .as_deref()
+        .map(|v| v.eq_ignore_ascii_case("binary"))
+        .unwrap_or(false);
+
+    if want_binary {
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| format!("Failed to read response bytes: {}", e))?;
+        Ok(ProxyHttpResponse {
+            status,
+            headers,
+            body: String::new(),
+            body_bytes: Some(bytes.to_vec()),
+        })
+    } else {
+        let body = resp
+            .text()
+            .await
+            .map_err(|e| format!("Failed to read response: {}", e))?;
+        Ok(ProxyHttpResponse {
+            status,
+            headers,
+            body,
+            body_bytes: None,
+        })
+    }
 }
 
 #[tauri::command]

@@ -53,6 +53,7 @@ export function GlobalLauncherFrameSwitch({
   onFrameBack,
   onCollectInputChange,
   onActivateResultChoice,
+  onSecondaryAction,
   onHoverResultChoice,
   onToggleResultChoice,
   onSearchQueryChange,
@@ -96,6 +97,8 @@ export function GlobalLauncherFrameSwitch({
   onFrameBack: () => void
   onCollectInputChange: (value: string) => void
   onActivateResultChoice: (choice: LauncherResultChoice) => void
+  /** Collect-input / result secondary actions (id is plugin-defined). */
+  onSecondaryAction?: (choice: LauncherResultChoice, actionId: string) => void
   onHoverResultChoice: (index: number) => void
   onToggleResultChoice: (choice: LauncherResultChoice, frame: ResultFrame) => void
   onSearchQueryChange: (value: string) => void
@@ -208,6 +211,7 @@ export function GlobalLauncherFrameSwitch({
         onInputChange={onCollectInputChange}
         onBack={onFrameBack}
         onActivateChoice={onActivateResultChoice}
+        onSecondaryAction={onSecondaryAction}
       />
     )
   }

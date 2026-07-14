@@ -7,12 +7,18 @@ export type WebQuickOpenEntry = {
   encodeQuery: boolean
   emptyQueryBehavior: 'block' | 'open'
   matchPattern?: string
+  /** When true, successful queries are stored per entry for reuse. Default false. */
+  recordQueryHistory?: boolean
+  /** Max history items for this entry. Default 20. */
+  maxQueryHistory?: number
 }
 
 export type WebQuickOpenSettings = {
   enabled: boolean
   entries: WebQuickOpenEntry[]
 }
+
+export const DEFAULT_MAX_QUERY_HISTORY = 20
 
 export const DEFAULT_WEB_QUICK_OPEN_SETTINGS: WebQuickOpenSettings = {
   enabled: true,
@@ -25,6 +31,8 @@ export const DEFAULT_WEB_QUICK_OPEN_SETTINGS: WebQuickOpenSettings = {
       urlTemplate: 'https://www.google.com/search?q={query}',
       encodeQuery: true,
       emptyQueryBehavior: 'block',
+      recordQueryHistory: false,
+      maxQueryHistory: DEFAULT_MAX_QUERY_HISTORY,
     },
     {
       id: 'github',
@@ -34,6 +42,8 @@ export const DEFAULT_WEB_QUICK_OPEN_SETTINGS: WebQuickOpenSettings = {
       urlTemplate: 'https://github.com/search?q={query}',
       encodeQuery: true,
       emptyQueryBehavior: 'block',
+      recordQueryHistory: false,
+      maxQueryHistory: DEFAULT_MAX_QUERY_HISTORY,
     },
     {
       id: 'mdn',
@@ -43,6 +53,8 @@ export const DEFAULT_WEB_QUICK_OPEN_SETTINGS: WebQuickOpenSettings = {
       urlTemplate: 'https://developer.mozilla.org/search?q={query}',
       encodeQuery: true,
       emptyQueryBehavior: 'block',
+      recordQueryHistory: false,
+      maxQueryHistory: DEFAULT_MAX_QUERY_HISTORY,
     },
   ],
 }

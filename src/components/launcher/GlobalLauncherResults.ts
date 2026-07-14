@@ -22,6 +22,11 @@ export function useGlobalLauncherResultFrame({
     void controller?.activateChoice(choice)
   }, [controller])
 
+  /** Host API: run a result/suggestion secondary action by id (plugin-defined). */
+  const activateSecondaryAction = useCallback((choice: LauncherResultChoice, actionId: string) => {
+    void controller?.activateSecondary(choice, actionId)
+  }, [controller])
+
   const toggleResultChoice = useCallback((choice: LauncherResultChoice, frame: ResultFrame) => {
     const selection = frame.output.selection
     if (selection?.type !== 'multi') {
@@ -48,6 +53,7 @@ export function useGlobalLauncherResultFrame({
     setResultSelectedIndex,
     selectedResultChoiceIds,
     activateResultChoice,
+    activateSecondaryAction,
     toggleResultChoice,
   }
 }

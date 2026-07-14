@@ -35,6 +35,8 @@ import {
   findUnknownSurfaces,
 } from './identity'
 import { createPluginLauncherApi, createPluginLauncherStorage } from './pluginApi'
+import { createPluginNetwork } from '../pluginNetwork'
+import { getPluginPermissionSnapshot } from '../pluginPermissions'
 import { launcherPerfNow, logLauncherPerfDuration, measureLauncherPerf } from './perf'
 import { resolvePluginSettingsSource } from './pluginSource'
 import { adaptToolToLauncherItem } from './toolAdapter'
@@ -108,6 +110,7 @@ function resolveStaticItemFromContribution(
     defaultParams: contribution.defaultParams,
     requireParamSelection: contribution.requireParamSelection,
     executeWithParams: contribution.executeWithParams,
+    suggest: contribution.suggest,
     // Legacy usage keys: item id may match a command id from old usage data.
     // Prefer matching launcher item ids to old command ids during migration.
     legacyUsageKeys: [contribution.id],
@@ -386,6 +389,7 @@ export async function collectDynamicItems(
             pluginId,
             api: createPluginLauncherApi({ pluginId, source: settingsSource, requestedPermissions }),
             storage: createPluginLauncherStorage({ pluginId, source: settingsSource, requestedPermissions }),
+            network: createPluginNetwork(getPluginPermissionSnapshot(settingsSource, pluginId, requestedPermissions)),
             t: makePluginT(pluginId, locale),
           })),
           DYNAMIC_PROVIDER_TIMEOUT_MS,
@@ -447,6 +451,7 @@ function resolveDynamicItem(
     inputPolicy: contribution.inputPolicy,
     // Only stable dynamic intents should opt in; one-shot results leave this unset.
     recordUsage: contribution.recordUsage === true ? true : undefined,
+    suggest: contribution.suggest,
     execute: contribution.execute,
   }
 }

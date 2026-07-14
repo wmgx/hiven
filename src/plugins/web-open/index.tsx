@@ -7,18 +7,177 @@
 import {
   definePlugin,
   type LauncherDynamicContext,
+  type LauncherExecutionContext,
   type LauncherItemContribution,
+  type LauncherOutput,
+  type LauncherSuggestContext,
 } from '@hiven/plugin'
 import {
   buildWebQuickOpenUrl,
+  DEFAULT_MAX_QUERY_HISTORY,
   DEFAULT_WEB_QUICK_OPEN_SETTINGS,
+  type WebQuickOpenEntry,
   type WebQuickOpenSettings,
 } from './settings/model'
 import { FaviconCacheModal } from './settings/FaviconCacheModal'
-import { extractDomain, resolveFaviconIconForLauncher, FALLBACK_ICON } from './faviconCache'
+import { QueryHistoryModal } from './settings/QueryHistoryModal'
+import {
+  extractDomain,
+  getCachedFaviconIcon,
+  getFaviconIcon,
+  getFaviconIconSync,
+  resolveFaviconIconForLauncher,
+  warmFaviconDomains,
+  FALLBACK_ICON,
+} from './faviconCache'
 import { replaceMatchPatternCache, testMatchPattern } from './matchPatternCache'
+import {
+  clampMaxQueryHistory,
+  filterQueryHistory,
+  loadQueryHistory,
+  recordQueryHistory,
+  removeQueryHistoryEntry,
+} from './queryHistory'
 
-function buildEntryLauncherItem(entry: WebQuickOpenSettings['entries'][number]): LauncherItemContribution<WebQuickOpenSettings> {
+function resolveEntryHistoryLimit(entry: WebQuickOpenEntry): number {
+  return clampMaxQueryHistory(entry.maxQueryHistory ?? DEFAULT_MAX_QUERY_HISTORY)
+}
+
+function shouldRecordHistory(entry: WebQuickOpenEntry): boolean {
+  return entry.recordQueryHistory === true
+}
+
+async function openAndMaybeRecord(
+  ctx: Pick<LauncherExecutionContext<WebQuickOpenSettings>, 'api' | 'storage'>,
+  entry: WebQuickOpenEntry,
+  query: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const url = buildWebQuickOpenUrl(entry.urlTemplate, query, entry.encodeQuery)
+  try {
+    await ctx.api.openUrl(url)
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : String(error) }
+  }
+  if (shouldRecordHistory(entry)) {
+    void recordQueryHistory(ctx.storage, entry.id, query, resolveEntryHistoryLimit(entry))
+  }
+  return { ok: true }
+}
+
+/**
+ * Resolve entry favicon as plugin-blob only (or Globe fallback).
+ * Host never receives raw site URLs — multi-source fetch stays inside the plugin cache.
+ */
+async function resolveEntryFavicon(
+  entry: WebQuickOpenEntry,
+  ctx: Pick<LauncherSuggestContext<WebQuickOpenSettings>, 'storage' | 'network' | 'pluginId' | 'source'>,
+): Promise<string> {
+  const domain = extractDomain(entry.urlTemplate)
+  if (!domain) return FALLBACK_ICON
+
+  const source = ctx.source ?? 'builtin'
+  const pluginId = ctx.pluginId ?? 'web-open'
+
+  try {
+    const cached = await getCachedFaviconIcon(domain, ctx.storage, source, pluginId)
+    if (cached) return cached
+    return await getFaviconIcon(domain, ctx.storage, source, pluginId, ctx.network)
+  } catch {
+    return resolveFaviconIconForLauncher(domain, ctx.storage, source, pluginId, ctx.network)
+  }
+}
+
+async function buildHistoryOutput(
+  entry: WebQuickOpenEntry,
+  items: Awaited<ReturnType<typeof loadQueryHistory>>,
+  ctx: Pick<LauncherSuggestContext<WebQuickOpenSettings>, 'api' | 'storage' | 'network' | 't' | 'pluginId' | 'source'>,
+): Promise<LauncherOutput> {
+  const icon = await resolveEntryFavicon(entry, ctx)
+  return {
+    choices: items.map((item) => {
+      const url = buildWebQuickOpenUrl(entry.urlTemplate, item.text, entry.encodeQuery)
+      return {
+        id: `history:${entry.id}:${encodeURIComponent(item.text)}`,
+        title: item.text,
+        subtitle: url,
+        icon,
+        primaryAction: async () => {
+          try {
+            await ctx.api.openUrl(url)
+          } catch (error) {
+            return { ok: false as const, message: error instanceof Error ? error.message : String(error) }
+          }
+          void recordQueryHistory(ctx.storage, entry.id, item.text, resolveEntryHistoryLimit(entry))
+          return { ok: true as const }
+        },
+        secondaryActions: [
+          {
+            id: 'delete',
+            title: ctx.t('queryHistory.delete'),
+            run: async () => {
+              await removeQueryHistoryEntry(ctx.storage, entry.id, item.text)
+              return { ok: true as const, keepOpen: true as const }
+            },
+          },
+        ],
+      }
+    }),
+  }
+}
+
+async function suggestHistoryForEntry(
+  ctx: LauncherSuggestContext<WebQuickOpenSettings>,
+  entry: WebQuickOpenEntry,
+): Promise<LauncherOutput | null> {
+  const runtimeEntry =
+    ctx.settings?.entries?.find((candidate) => candidate.id === entry.id) ?? entry
+  if (!shouldRecordHistory(runtimeEntry)) return null
+  const all = await loadQueryHistory(ctx.storage, runtimeEntry.id)
+  const filtered = filterQueryHistory(all, ctx.inputText)
+  if (filtered.length === 0) return null
+  return await buildHistoryOutput(runtimeEntry, filtered, ctx)
+}
+
+/**
+ * Prefer in-memory plugin-blob after warm (settings save / startup).
+ * Otherwise Globe until cache is ready.
+ */
+function entrySiteIcon(entry: WebQuickOpenEntry): string {
+  const domain = extractDomain(entry.urlTemplate)
+  if (!domain) return FALLBACK_ICON
+  const cached = getFaviconIconSync(domain)
+  return cached !== FALLBACK_ICON ? cached : FALLBACK_ICON
+}
+
+function domainsFromSettings(settings: WebQuickOpenSettings): string[] {
+  const domains: string[] = []
+  for (const entry of settings.entries ?? []) {
+    const domain = extractDomain(entry.urlTemplate)
+    if (domain) domains.push(domain)
+  }
+  return domains
+}
+
+/** Debounce: object-list fields fire onChange per keystroke while editing URL. */
+let faviconWarmTimer: ReturnType<typeof setTimeout> | undefined
+
+function scheduleWarmFavicons(
+  settings: WebQuickOpenSettings,
+  storage: Parameters<typeof warmFaviconDomains>[1],
+  source: string,
+  pluginId: string,
+  network: Parameters<typeof warmFaviconDomains>[4],
+): void {
+  if (typeof faviconWarmTimer !== 'undefined') clearTimeout(faviconWarmTimer)
+  faviconWarmTimer = setTimeout(() => {
+    warmFaviconDomains(domainsFromSettings(settings), storage, source, pluginId, network)
+  }, 350)
+}
+
+function buildEntryLauncherItem(
+  entry: WebQuickOpenSettings['entries'][number],
+  icon?: string,
+): LauncherItemContribution<WebQuickOpenSettings> {
   const aliases = Array.isArray(entry.aliases) ? entry.aliases : []
   return {
     id: entry.id,
@@ -26,6 +185,7 @@ function buildEntryLauncherItem(entry: WebQuickOpenSettings['entries'][number]):
     recordUsage: true,
     display: {
       title: entry.title || entry.urlTemplate,
+      icon: icon ?? entrySiteIcon(entry),
       aliases: [
         ...aliases,
         entry.placeholder,
@@ -43,6 +203,7 @@ function buildEntryLauncherItem(entry: WebQuickOpenSettings['entries'][number]):
           : undefined,
       },
     },
+    suggest: (ctx) => suggestHistoryForEntry(ctx, entry),
     async execute(ctx) {
       if (ctx.settings?.enabled === false) {
         const message = ctx.t('disabledMessage')
@@ -50,15 +211,14 @@ function buildEntryLauncherItem(entry: WebQuickOpenSettings['entries'][number]):
         return { ok: false, message }
       }
       const runtimeEntry = ctx.settings?.entries?.find((candidate) => candidate.id === entry.id) ?? entry
-      const url = buildWebQuickOpenUrl(runtimeEntry.urlTemplate, ctx.input?.text ?? '', runtimeEntry.encodeQuery)
-      await ctx.api.openUrl(url)
-      return { ok: true }
+      return openAndMaybeRecord(ctx, runtimeEntry, ctx.input?.text ?? '')
     },
   }
 }
 
+/** Rebuilt each static collect so icons pick up memory blob after warm. */
 function buildLauncherItems(): LauncherItemContribution<WebQuickOpenSettings>[] {
-  return DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries.map(buildEntryLauncherItem)
+  return DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries.map((entry) => buildEntryLauncherItem(entry))
 }
 
 function entryMatchesQuery(entry: WebQuickOpenSettings['entries'][number], query: string): boolean {
@@ -96,7 +256,7 @@ function resolveLauncherIcon(
 ): string {
   const domain = extractDomain(url)
   if (!domain) return FALLBACK_ICON
-  return resolveFaviconIconForLauncher(domain, ctx.storage, ctx.source, ctx.pluginId)
+  return resolveFaviconIconForLauncher(domain, ctx.storage, ctx.source, ctx.pluginId, ctx.network)
 }
 
 async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<LauncherItemContribution[]> {
@@ -135,8 +295,10 @@ async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<L
       },
       behavior: { type: 'perform' as const },
       async execute(execCtx) {
-        await execCtx.api.openUrl(url)
-        return { ok: true }
+        const runtimeEntry =
+          (execCtx.settings as WebQuickOpenSettings | undefined)?.entries?.find((candidate) => candidate.id === entry.id)
+          ?? entry
+        return openAndMaybeRecord(execCtx as LauncherExecutionContext<WebQuickOpenSettings>, runtimeEntry, query)
       },
     })
   }
@@ -163,10 +325,14 @@ async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<L
   }
 
   // C. Existing behavior: user-customized entries matching by keyword
+  // Prefer memory/blob favicon when available; otherwise multi-try origin icon.
   const keywordMatches = entries
     .filter((entry) => !isUnchangedDefaultEntry(entry))
     .filter((entry) => entryMatchesQuery(entry, ctx.query))
-    .map((entry) => buildEntryLauncherItem(entry) as LauncherItemContribution)
+    .map((entry) => {
+      const icon = resolveLauncherIcon(entry.urlTemplate, ctx)
+      return buildEntryLauncherItem(entry, icon) as LauncherItemContribution
+    })
 
   results.push(...keywordMatches)
 
@@ -193,6 +359,10 @@ function migrateWebQuickOpenSettings(stored: unknown): WebQuickOpenSettings {
         encodeQuery: typeof source.encodeQuery === 'boolean' ? source.encodeQuery : true,
         emptyQueryBehavior: source.emptyQueryBehavior === 'open' ? 'open' : 'block',
         matchPattern: typeof source.matchPattern === 'string' ? source.matchPattern : undefined,
+        recordQueryHistory: source.recordQueryHistory === true,
+        maxQueryHistory: clampMaxQueryHistory(
+          typeof source.maxQueryHistory === 'number' ? source.maxQueryHistory : DEFAULT_MAX_QUERY_HISTORY,
+        ),
       }
     }),
   }
@@ -206,18 +376,37 @@ function migrateWebQuickOpenSettings(stored: unknown): WebQuickOpenSettings {
 }
 
 export default definePlugin<WebQuickOpenSettings>({
+  hooks: {
+    // App start: warm favicons for current rules so launcher shows site icons after first session.
+    startup(ctx) {
+      const settings = (ctx.settings as WebQuickOpenSettings | undefined) ?? DEFAULT_WEB_QUICK_OPEN_SETTINGS
+      scheduleWarmFavicons(settings, ctx.storage, ctx.source, ctx.pluginId, ctx.network)
+    },
+  },
+
   settings: {
     title: 'Web Quick Open',
     titleI18n: { zh: '网页快开' },
-    version: 5,
+    version: 6,
     defaultValue: DEFAULT_WEB_QUICK_OPEN_SETTINGS,
     migrate: migrateWebQuickOpenSettings,
+    // Settings write-through: re-warm domains when rules / URL templates change.
+    onChange(ctx) {
+      const settings = ctx.value ?? DEFAULT_WEB_QUICK_OPEN_SETTINGS
+      scheduleWarmFavicons(settings, ctx.storage, ctx.source, ctx.pluginId, ctx.network)
+    },
     modals: [
       {
         id: 'favicon-cache',
         title: 'Favicon Cache',
         titleI18n: { zh: '网站图标缓存' },
         component: FaviconCacheModal,
+      },
+      {
+        id: 'query-history',
+        title: 'Query History',
+        titleI18n: { zh: '参数历史' },
+        component: QueryHistoryModal,
       },
     ],
     schema: {
@@ -242,8 +431,8 @@ export default definePlugin<WebQuickOpenSettings>({
           id: 'cache',
           title: 'Cache',
           titleI18n: { zh: '缓存' },
-          description: 'Plugin-internal favicon cache used by quick-open results.',
-          descriptionI18n: { zh: '网页快开结果使用的插件内网站图标缓存。' },
+          description: 'Plugin-internal caches used by quick-open results.',
+          descriptionI18n: { zh: '网页快开使用的插件内缓存。' },
           fields: [
             {
               kind: 'modal',
@@ -257,6 +446,19 @@ export default definePlugin<WebQuickOpenSettings>({
               buttonLabel: 'Manage',
               buttonLabelI18n: { zh: '管理' },
               requires: ['storage.private', 'storage.blob'],
+            },
+            {
+              kind: 'modal',
+              id: 'query-history',
+              modalId: 'query-history',
+              icon: 'History',
+              label: 'Query history',
+              labelI18n: { zh: '参数历史' },
+              description: 'Clear recorded parameters for rules that keep history.',
+              descriptionI18n: { zh: '清空已开启记录的规则参数历史。' },
+              buttonLabel: 'Manage',
+              buttonLabelI18n: { zh: '管理' },
+              requires: ['storage.private'],
             },
           ],
         },
@@ -288,6 +490,8 @@ export default definePlugin<WebQuickOpenSettings>({
                 encodeQuery: true,
                 emptyQueryBehavior: 'block',
                 matchPattern: '',
+                recordQueryHistory: false,
+                maxQueryHistory: DEFAULT_MAX_QUERY_HISTORY,
               },
               fields: [
                 {
@@ -359,6 +563,29 @@ export default definePlugin<WebQuickOpenSettings>({
                   groupI18n: { zh: '打开行为' },
                 },
                 {
+                  kind: 'switch',
+                  key: 'recordQueryHistory',
+                  label: 'Remember query history',
+                  labelI18n: { zh: '记录参数历史' },
+                  description: 'Store successful queries for this rule and suggest them next time.',
+                  descriptionI18n: { zh: '成功打开后记住参数，下次可从历史中选择。' },
+                  group: 'History',
+                  groupI18n: { zh: '历史' },
+                },
+                {
+                  kind: 'number',
+                  key: 'maxQueryHistory',
+                  label: 'History limit',
+                  labelI18n: { zh: '历史条数上限' },
+                  description: 'Maximum number of remembered parameters for this rule.',
+                  descriptionI18n: { zh: '该规则最多保留的历史参数条数。' },
+                  min: 1,
+                  step: 1,
+                  visibleWhen: { key: 'recordQueryHistory', equals: true },
+                  group: 'History',
+                  groupI18n: { zh: '历史' },
+                },
+                {
                   kind: 'text',
                   key: 'matchPattern',
                   label: 'Quick match pattern',
@@ -380,7 +607,10 @@ export default definePlugin<WebQuickOpenSettings>({
   },
 
   launcher: {
-    items: buildLauncherItems(),
+    // Getter: re-resolve icons from memory cache after settings/startup warm.
+    get items() {
+      return buildLauncherItems()
+    },
     dynamicItems: buildDynamicLauncherItems,
   },
 })

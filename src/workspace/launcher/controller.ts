@@ -27,7 +27,7 @@ import type {
   LauncherSurfaceId,
   PluginLauncherApi,
 } from './types'
-import type { PluginPrivateStorageApi } from '../pluginTypes'
+import type { PluginNetworkApi, PluginPrivateStorageApi } from '../pluginTypes'
 import { isOutputResult } from './output'
 import { translate, type Locale } from '../../i18n'
 
@@ -45,6 +45,11 @@ export type CollectInputFrame = {
   params?: Record<string, unknown>
   previewOutput?: LauncherOutput
   previewInputText?: string
+  /**
+   * Index into previewOutput.choices for keyboard highlight.
+   * -1 = no highlight (Enter uses typed inputText).
+   */
+  selectedSuggestionIndex: number
 }
 
 export type ParamInputFrame = {
@@ -83,6 +88,7 @@ export type LauncherControllerDeps = {
   api: PluginLauncherApi
   makeApi?: (item: LauncherItem) => PluginLauncherApi
   getStorage?: (item: LauncherItem) => PluginPrivateStorageApi
+  getNetwork?: (item: LauncherItem) => PluginNetworkApi
   locale: string
   /** Translate function scoped to the item's plugin. */
   makeT: (item: LauncherItem) => (key: string, vars?: Record<string, string | number>) => string
@@ -117,6 +123,12 @@ const emptyStorage: PluginPrivateStorageApi = {
   },
 }
 
+const emptyNetwork: PluginNetworkApi = {
+  request: async () => {
+    throw new Error('Plugin network is not available for this launcher item')
+  },
+}
+
 export type SelectOptions = {
   /** When false, usage is not recorded for this selection. */
   recordUsage?: boolean
@@ -132,6 +144,7 @@ export class LauncherController {
   private state: LauncherControllerState
   private deps: LauncherControllerDeps
   private previewRunId = 0
+  private suggestRunId = 0
 
   constructor(deps: LauncherControllerDeps) {
     this.deps = deps
@@ -257,6 +270,7 @@ export class LauncherController {
       inputText: '',
       input,
       params,
+      selectedSuggestionIndex: -1,
     }
   }
 
@@ -292,6 +306,7 @@ export class LauncherController {
       this.setState({
         frames: [...this.state.frames, this.collectInputFrameFor(item)],
       })
+      if (item.suggest) void this.refreshSuggestions()
       return
     }
 
@@ -313,6 +328,7 @@ export class LauncherController {
       this.setState({
         frames: [...this.state.frames, this.collectInputFrameFor(item)],
       })
+      if (item.suggest) void this.refreshSuggestions()
       return
     }
 
@@ -475,13 +491,113 @@ export class LauncherController {
     const top = this.topFrame()
     if (top.kind !== 'collect-input') return
     const frames = this.state.frames.slice(0, -1)
-    frames.push({ ...top, inputText: text, previewOutput: undefined, previewInputText: undefined })
+    if (top.item.suggest) {
+      frames.push({ ...top, inputText: text })
+    } else {
+      frames.push({
+        ...top,
+        inputText: text,
+        previewOutput: undefined,
+        previewInputText: undefined,
+        selectedSuggestionIndex: -1,
+      })
+    }
+    this.setState({ frames, error: null })
+    if (top.item.suggest) void this.refreshSuggestions()
+  }
+
+  /**
+   * Move suggestion highlight for collect-input.
+   * -1 = no highlight. Arrow up from first item clears highlight (does not wrap).
+   * Arrow down from last item stays on last.
+   */
+  moveSuggestionHighlight(delta: number): void {
+    const top = this.topFrame()
+    if (top.kind !== 'collect-input') return
+    const choices = top.previewOutput?.choices ?? []
+    if (choices.length === 0) return
+
+    let next = top.selectedSuggestionIndex
+    if (next < 0) {
+      next = delta > 0 ? 0 : -1
+    } else {
+      next = next + delta
+      if (next < -1) next = -1
+      if (next >= choices.length) next = choices.length - 1
+    }
+
+    if (next === top.selectedSuggestionIndex) return
+    const frames = this.state.frames.slice(0, -1)
+    frames.push({ ...top, selectedSuggestionIndex: next })
+    this.setState({ frames })
+  }
+
+  /** Load / refresh collect-input suggestions from item.suggest. */
+  async refreshSuggestions(): Promise<void> {
+    const top = this.topFrame()
+    if (top.kind !== 'collect-input' || !top.item.suggest) return
+
+    const { item, inputText } = top
+    const previousId =
+      top.selectedSuggestionIndex >= 0
+        ? top.previewOutput?.choices[top.selectedSuggestionIndex]?.id
+        : undefined
+
+    const runId = ++this.suggestRunId
+    let output: LauncherOutput | null | undefined
+    try {
+      output = await Promise.resolve(
+        item.suggest!({
+          surfaceId: this.deps.surfaceId,
+          inputText,
+          settings: this.deps.getSettings(item),
+          locale: this.deps.locale as never,
+          api: this.deps.makeApi?.(item) ?? this.deps.api,
+          storage: this.deps.getStorage?.(item) ?? emptyStorage,
+          network: this.deps.getNetwork?.(item) ?? emptyNetwork,
+          t: this.deps.makeT(item),
+          pluginId: item.pluginId,
+          source: item.source,
+        }),
+      )
+    } catch {
+      if (runId !== this.suggestRunId) return
+      this.clearCollectInputPreview(top)
+      return
+    }
+
+    if (runId !== this.suggestRunId) return
+    const latestTop = this.topFrame()
+    if (
+      latestTop.kind !== 'collect-input' ||
+      latestTop.item.systemKey !== item.systemKey ||
+      latestTop.inputText !== inputText
+    ) {
+      return
+    }
+
+    const choices = output?.choices ?? []
+    let selectedSuggestionIndex = -1
+    if (previousId) {
+      const idx = choices.findIndex((choice) => choice.id === previousId)
+      if (idx >= 0) selectedSuggestionIndex = idx
+    }
+
+    const frames = this.state.frames.slice(0, -1)
+    frames.push({
+      ...latestTop,
+      previewOutput: choices.length > 0 ? { choices } : undefined,
+      previewInputText: inputText,
+      selectedSuggestionIndex,
+    })
     this.setState({ frames, error: null })
   }
 
   async previewInput(): Promise<void> {
     const top = this.topFrame()
     if (top.kind !== 'collect-input' || !this.shouldPreviewInput(top)) return
+    // Suggest path owns empty/partial lists for collect-input items with suggest.
+    if (top.item.suggest) return
 
     const { item, inputText } = top
     if (!inputText.trim() && !top.input.allowEmptyInput) {
@@ -526,6 +642,7 @@ export class LauncherController {
       ...latestTop,
       previewOutput: result.output,
       previewInputText: inputText,
+      selectedSuggestionIndex: -1,
     })
     this.setState({ frames, busy: false, error: null })
   }
@@ -537,7 +654,12 @@ export class LauncherController {
       return
     }
     const frames = this.state.frames.slice(0, -1)
-    frames.push({ ...top, previewOutput: undefined, previewInputText: undefined })
+    frames.push({
+      ...top,
+      previewOutput: undefined,
+      previewInputText: undefined,
+      selectedSuggestionIndex: -1,
+    })
     this.setState({ frames, busy: false, error })
   }
 
@@ -550,6 +672,15 @@ export class LauncherController {
     if (top.kind !== 'collect-input') return
     const { item, inputText } = top
 
+    // Highlighted suggestion wins (including empty input + history highlight).
+    if (top.selectedSuggestionIndex >= 0) {
+      const highlighted = top.previewOutput?.choices[top.selectedSuggestionIndex]
+      if (highlighted) {
+        await this.runChoiceAction(() => highlighted.primaryAction(), highlighted.title)
+        return
+      }
+    }
+
     const spec = item.behavior.type === 'collect-input' ? item.behavior.input : undefined
     const inputSpec = top.input ?? spec
     if (!inputText.trim() && !inputSpec?.allowEmptyInput) {
@@ -557,10 +688,11 @@ export class LauncherController {
       return
     }
 
+    // Legacy perform+inputPolicy preview: first choice when preview matches input.
     const firstPreviewChoice = top.previewInputText === inputText
       ? top.previewOutput?.choices[0]
       : undefined
-    if (firstPreviewChoice && this.shouldPreviewInput(top)) {
+    if (firstPreviewChoice && this.shouldPreviewInput(top) && !item.suggest) {
       await this.runChoiceAction(() => firstPreviewChoice.primaryAction(), firstPreviewChoice.title)
       return
     }
@@ -658,6 +790,14 @@ export class LauncherController {
       return
     }
     if (result.keepOpen) {
+      // Collect-input with suggest: keep the same frame and refresh suggestions
+      // (e.g. secondary action mutates suggestion source). Generic, not product-specific.
+      const top = this.topFrame()
+      if (top.kind === 'collect-input' && top.item.suggest) {
+        this.setState({ busy: false, error: null })
+        void this.refreshSuggestions()
+        return
+      }
       // Stay open, but drop nested frames (e.g. multi-select result after Diff
       // opens a tool surface) so system Esc back lands on the root list, not a
       // stale intermediate step under the surface.
