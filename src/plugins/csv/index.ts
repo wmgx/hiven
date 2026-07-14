@@ -1,35 +1,48 @@
 /**
- * First-party CSV / TSV Convert plugin.
- *
- * Exposes independent tools for each conversion direction — no sub-selection needed.
- * Surface UI preserved for later enhancement.
+ * First-party CSV Tools plugin — surface-only table converter.
+ * Opens in launcher tool-shell (in-place), not a detached window.
  */
 
 import { definePlugin } from '@hiven/plugin'
 import { CsvSurface } from './CsvSurface'
 
-function csvToJson(text: string, sep: string): string {
-  const lines = text.trim().split('\n')
-  if (lines.length < 2) return '[]'
-  const headers = lines[0].split(sep).map((h: string) => h.trim())
-  const result = lines.slice(1).map(line => {
-    const vals = line.split(sep)
-    const obj: Record<string, string> = {}
-    headers.forEach((h: string, i: number) => { obj[h] = (vals[i] || '').trim() })
-    return obj
-  })
-  return JSON.stringify(result, null, 2)
-}
-
-function jsonToCsv(text: string, sep: string): string {
-  const arr = JSON.parse(text)
-  if (!Array.isArray(arr) || arr.length === 0) return ''
-  const headers = Object.keys(arr[0])
-  const lines = [headers.join(sep)]
-  for (const row of arr) {
-    lines.push(headers.map((h: string) => String(row[h] ?? '')).join(sep))
+/** Boost CSV Tools when clipboard is table content or a .csv/.tsv path. */
+function csvSurfaceTextMatch(text: string): boolean {
+  const trimmed = text.trim()
+  if (!trimmed) return false
+  // Single-line path / bare filename with table extension
+  if (!/[\r\n]/.test(trimmed)) {
+    if (/\.(csv|tsv)$/i.test(trimmed)) return true
+    if (/^file:\/\/.+\.(csv|tsv)$/i.test(trimmed)) return true
   }
-  return lines.join('\n')
+  // Delimited multi-line table
+  const lines = trimmed.split(/\r?\n/).filter((line) => line.length > 0)
+  if (lines.length < 2) return false
+  const sample = lines.slice(0, 6)
+  for (const delimiter of [',', '\t', ';', '|'] as const) {
+    const counts = sample.map((line) => {
+      let n = 0
+      let inQuotes = false
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i]
+        if (ch === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            i++
+            continue
+          }
+          inQuotes = !inQuotes
+          continue
+        }
+        if (!inQuotes && ch === delimiter) n++
+      }
+      return n
+    })
+    const min = Math.min(...counts)
+    if (min < 1) continue
+    const first = counts[0]
+    if (counts.every((c) => Math.abs(c - first) <= 1)) return true
+  }
+  return false
 }
 
 export const csvPlugin = definePlugin({
@@ -41,86 +54,21 @@ export const csvPlugin = definePlugin({
         title: 'CSV Tools',
         titleI18n: { zh: 'CSV Tools' },
         icon: 'Table',
-        aliases: ['csv', 'tsv', 'table convert', '表格转换'],
+        aliases: ['csv', 'tsv', 'table convert', '表格转换', 'csv to json', 'sql insert'],
+        textMatch: csvSurfaceTextMatch,
         component: CsvSurface,
-        entry: { launcher: true, shortcutBindable: true, shortcutPresentation: 'window' },
+        entry: { launcher: true, shortcutBindable: true },
         shell: {
-          defaultWidth: 960,
-          defaultHeight: 680,
-          minWidth: 720,
-          minHeight: 520,
+          defaultWidth: 920,
+          defaultHeight: 620,
+          minWidth: 680,
+          minHeight: 480,
           closeOnBlur: false,
           resizable: true,
         },
       },
     ],
   },
-  tools: [
-    {
-      id: 'csv.toJson',
-      title: 'command.csvToJson.title',
-      subtitle: 'command.csvToJson.description',
-      icon: 'Table',
-      aliases: ['csv to json', 'csv2json', 'csv转json'],
-      inputPolicy: { mode: 'auto' },
-      run(ctx) {
-        try {
-          return ctx.output.text(csvToJson(ctx.input.text, ','))
-        } catch (e: any) {
-          return ctx.output.error('Error: ' + e.message)
-        }
-      },
-      surfaces: { launcher: true, panel: true },
-    },
-    {
-      id: 'csv.fromJson',
-      title: 'command.jsonToCsv.title',
-      subtitle: 'command.jsonToCsv.description',
-      icon: 'Table',
-      aliases: ['json to csv', 'json2csv', 'json转csv'],
-      inputPolicy: { mode: 'auto' },
-      run(ctx) {
-        try {
-          return ctx.output.text(jsonToCsv(ctx.input.text, ','))
-        } catch (e: any) {
-          return ctx.output.error('Error: ' + e.message)
-        }
-      },
-      surfaces: { launcher: true, panel: true },
-    },
-    {
-      id: 'csv.tsvToJson',
-      title: 'command.tsvToJson.title',
-      subtitle: 'command.tsvToJson.description',
-      icon: 'Table',
-      aliases: ['tsv to json', 'tsv2json', 'tsv转json'],
-      inputPolicy: { mode: 'auto' },
-      run(ctx) {
-        try {
-          return ctx.output.text(csvToJson(ctx.input.text, '\t'))
-        } catch (e: any) {
-          return ctx.output.error('Error: ' + e.message)
-        }
-      },
-      surfaces: { launcher: true, panel: true },
-    },
-    {
-      id: 'csv.jsonToTsv',
-      title: 'command.jsonToTsv.title',
-      subtitle: 'command.jsonToTsv.description',
-      icon: 'Table',
-      aliases: ['json to tsv', 'json2tsv', 'json转tsv'],
-      inputPolicy: { mode: 'auto' },
-      run(ctx) {
-        try {
-          return ctx.output.text(jsonToCsv(ctx.input.text, '\t'))
-        } catch (e: any) {
-          return ctx.output.error('Error: ' + e.message)
-        }
-      },
-      surfaces: { launcher: true, panel: true },
-    },
-  ],
 })
 
 export default csvPlugin

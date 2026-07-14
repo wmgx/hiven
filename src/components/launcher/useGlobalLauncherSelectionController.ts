@@ -8,11 +8,13 @@ import {
   grantGlobalLauncherItemPermissions,
   resolvePluginSurfaceTarget,
   type LauncherItemPermissionFrame,
+  type PluginSurfaceTarget,
 } from './GlobalLauncherSelection'
 import {
   getPluginSurfaceShortcutPresentation,
   showPluginSurfaceWindow,
 } from '../../workspace/windowManager/pluginSurfaceWindows'
+import { detectClipboardFilePath } from '../../launcher/clipboard/clipboardSnapshot'
 
 type UseGlobalLauncherSelectionControllerInput = {
   controllerRef: RefObject<LauncherController | null>
@@ -21,10 +23,26 @@ type UseGlobalLauncherSelectionControllerInput = {
   restoreFocus: () => void
   setOpen: (open: boolean) => void
   clearPluginSurfaceTool: () => void
-  openPluginSurface: (target: ReturnType<typeof resolvePluginSurfaceTarget>) => void | Promise<void>
+  openPluginSurface: (target: PluginSurfaceTarget) => void | Promise<void>
   grantPluginPermissions: (pluginId: string, permissions: string[]) => void
   focusSearchInputAfterBack: () => void
   objectBlockText?: string
+}
+
+/** Resolve Object Block / clipboard text into surface initialText (load file when payload is a path). */
+async function resolveSurfaceInitialText(raw: string | undefined): Promise<string | undefined> {
+  if (!raw?.trim()) return undefined
+  const text = raw
+  const filePath = detectClipboardFilePath(text)
+  if (!filePath) return text
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    return await invoke<string>('read_file', { path: filePath.path })
+  } catch (error) {
+    console.warn('[hiven] Failed to read clipboard file path for plugin surface:', filePath.path, error)
+    // Fall back to path string so surface can still show / allow manual open
+    return text
+  }
 }
 
 export function useGlobalLauncherSelectionController({
@@ -56,15 +74,26 @@ export function useGlobalLauncherSelectionController({
     if (item.kind === 'domain') {
       const pluginSurfaceTarget = resolvePluginSurfaceTarget(item.domainItem)
       if (pluginSurfaceTarget) {
-        // Surfaces that declare window presentation (e.g. clipboard history)
-        // must open as an independent window — never stack on top of the
-        // current launcher surface (text-diff, settings, …).
-        if (getPluginSurfaceShortcutPresentation(pluginSurfaceTarget) === 'window') {
-          void showPluginSurfaceWindow(pluginSurfaceTarget)
-          return
-        }
-        clearPluginSurfaceTool()
-        void openPluginSurface(pluginSurfaceTarget)
+        void (async () => {
+          const initialText = await resolveSurfaceInitialText(objectBlockText)
+          const target: PluginSurfaceTarget = {
+            ...pluginSurfaceTarget,
+            initialText,
+          }
+          // Surfaces that declare window presentation (e.g. clipboard history)
+          // must open as an independent window — never stack on top of the
+          // current launcher surface (text-diff, settings, …).
+          if (getPluginSurfaceShortcutPresentation(target) === 'window') {
+            // In Tauri open an independent window; in browser fall through to launcher shell.
+            const isTauri = Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
+            if (isTauri) {
+              void showPluginSurfaceWindow(target)
+              return
+            }
+          }
+          clearPluginSurfaceTool()
+          await openPluginSurface(target)
+        })()
         return
       }
 
@@ -77,7 +106,7 @@ export function useGlobalLauncherSelectionController({
       executeDomainItem(item.domainItem, customizeParams)
       return
     }
-  }, [clearPluginSurfaceTool, executeDomainItem, openPluginSurface])
+  }, [clearPluginSurfaceTool, executeDomainItem, objectBlockText, openPluginSurface])
 
   const grantItemPermissionsAndRun = useCallback(() => {
     if (!itemPermissionFrame) return

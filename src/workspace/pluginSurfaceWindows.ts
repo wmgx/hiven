@@ -48,8 +48,12 @@ export async function requestOpenPluginSurfaceWindow(target: PluginSurfaceOpenTa
     pluginId: target.pluginId,
     surfaceId: target.surfaceId,
     source: target.source,
+    title: surface?.title,
     width,
     height,
+    minWidth: shell?.minWidth,
+    minHeight: shell?.minHeight,
+    resizable: shell?.resizable,
     closeOnBlur,
     destroyTimeoutMs,
   })

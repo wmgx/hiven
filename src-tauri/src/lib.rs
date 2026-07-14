@@ -1537,6 +1537,150 @@ fn read_clipboard_change_count(_app: &tauri::AppHandle) -> Option<i64> {
     None
 }
 
+/// Read local file paths from the system clipboard (Finder / file manager copy).
+/// Prefer this over plain text: macOS often puts only the bare filename in the text flavor.
+#[tauri::command]
+fn read_clipboard_file_paths() -> Result<Vec<String>, String> {
+    #[cfg(target_os = "macos")]
+    {
+        read_macos_clipboard_file_paths()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(Vec::new())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn nsstring_utf8(s: &str) -> Option<*mut objc2::runtime::AnyObject> {
+    unsafe {
+        let cls = objc2::runtime::AnyClass::get(c"NSString")?;
+        let cstr = std::ffi::CString::new(s).ok()?;
+        let obj: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![cls, stringWithUTF8String: cstr.as_ptr()];
+        if obj.is_null() {
+            None
+        } else {
+            Some(obj)
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn nsstring_to_rust(obj: *mut objc2::runtime::AnyObject) -> Option<String> {
+    if obj.is_null() {
+        return None;
+    }
+    unsafe {
+        let utf8: *const std::ffi::c_char = objc2::msg_send![obj, UTF8String];
+        if utf8.is_null() {
+            return None;
+        }
+        Some(std::ffi::CStr::from_ptr(utf8).to_string_lossy().into_owned())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn read_macos_clipboard_file_paths() -> Result<Vec<String>, String> {
+    unsafe {
+        let pasteboard_cls = objc2::runtime::AnyClass::get(c"NSPasteboard")
+            .ok_or_else(|| "NSPasteboard unavailable".to_string())?;
+        let pasteboard: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![pasteboard_cls, generalPasteboard];
+        if pasteboard.is_null() {
+            return Ok(Vec::new());
+        }
+
+        // 1) NSFilenamesPboardType → NSArray of POSIX paths (Finder classic)
+        if let Some(type_str) = nsstring_utf8("NSFilenamesPboardType") {
+            let plist: *mut objc2::runtime::AnyObject =
+                objc2::msg_send![pasteboard, propertyListForType: type_str];
+            if !plist.is_null() {
+                let count: usize = objc2::msg_send![plist, count];
+                let mut paths = Vec::with_capacity(count);
+                for i in 0..count {
+                    let item: *mut objc2::runtime::AnyObject =
+                        objc2::msg_send![plist, objectAtIndex: i];
+                    if let Some(path) = nsstring_to_rust(item) {
+                        if !path.is_empty() {
+                            paths.push(path);
+                        }
+                    }
+                }
+                if !paths.is_empty() {
+                    return Ok(paths);
+                }
+            }
+        }
+
+        // 2) public.file-url → single/multiple file URLs
+        if let Some(type_str) = nsstring_utf8("public.file-url") {
+            let data: *mut objc2::runtime::AnyObject =
+                objc2::msg_send![pasteboard, dataForType: type_str];
+            if !data.is_null() {
+                let nsdata_len: usize = objc2::msg_send![data, length];
+                let bytes: *const u8 = objc2::msg_send![data, bytes];
+                if !bytes.is_null() && nsdata_len > 0 {
+                    let slice = std::slice::from_raw_parts(bytes, nsdata_len);
+                    if let Ok(url_str) = std::str::from_utf8(slice) {
+                        if let Some(path) = file_url_to_path(url_str.trim()) {
+                            return Ok(vec![path]);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3) NSURL reading via readObjectsForClasses is heavier; try string type "public.file-url"
+        Ok(Vec::new())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn file_url_to_path(url: &str) -> Option<String> {
+    let trimmed = url.trim();
+    if !trimmed.to_ascii_lowercase().starts_with("file:") {
+        return None;
+    }
+    // file:///Users/me/a.csv → /Users/me/a.csv
+    let without_scheme = trimmed
+        .trim_start_matches("file://")
+        .trim_start_matches("FILE://");
+    let decoded = urlencoding_decode(without_scheme);
+    if decoded.is_empty() {
+        return None;
+    }
+    // Windows-style file:///C:/... sometimes appears; keep as-is for unix.
+    Some(decoded)
+}
+
+/// Minimal percent-decoding for file URLs (spaces, CJK, etc.).
+fn urlencoding_decode(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let h = |c: u8| -> Option<u8> {
+                match c {
+                    b'0'..=b'9' => Some(c - b'0'),
+                    b'a'..=b'f' => Some(c - b'a' + 10),
+                    b'A'..=b'F' => Some(c - b'A' + 10),
+                    _ => None,
+                }
+            };
+            if let (Some(a), Some(b)) = (h(bytes[i + 1]), h(bytes[i + 2])) {
+                out.push((a << 4) | b);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 #[cfg(target_os = "macos")]
 #[allow(dead_code)]
 fn simulate_copy_selection_impl() -> Result<(), String> {
@@ -4340,6 +4484,7 @@ pub fn run() {
             init_config_dir,
             read_scripts_dir,
             read_file,
+            read_clipboard_file_paths,
             fetch_url,
             plugin_http_request,
             list_plugin_dirs,

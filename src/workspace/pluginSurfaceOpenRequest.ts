@@ -74,7 +74,13 @@ export function openLauncherHostedPluginSurface(target: PluginSurfaceOpenTarget)
 export async function requestOpenPluginSurfaceTool(target: PluginSurfaceOpenTarget): Promise<void> {
   if (getPluginSurfaceShortcutPresentation(target) === 'window') {
     clearPendingPluginSurfaceOpenTarget()
-    await showPluginSurfaceWindow(target)
+    // Desktop: independent plugin-surface window.
+    // Browser / non-Tauri: window open is a no-op — fall back to launcher tool-shell.
+    if (isTauriRuntime()) {
+      await showPluginSurfaceWindow(target)
+      return
+    }
+    openLauncherHostedPluginSurface(target)
     return
   }
 

@@ -617,6 +617,11 @@ export type PluginUiSurfaceContribution<TSettings = unknown> = {
   titleI18n?: Partial<Record<Locale, string>>
   icon?: string
   aliases?: string[]
+  /**
+   * When true for clipboard / Object Block content, launcher ranking boosts this surface
+   * (same contract as tool textMatch). Scoring only — does not hide other items.
+   */
+  textMatch?: (text: string) => boolean
   component: ComponentType<PluginSurfaceProps<TSettings>>
   beforeOpen?(ctx: PluginSurfaceOpenContext<TSettings>): Promise<void> | void
   instancePolicy?: PluginSurfaceInstancePolicy

@@ -283,8 +283,17 @@ export function GlobalLauncherHost() {
       openInEditor: async (text, options) => {
         await createQuickEditorPane({ text, language: options?.language })
       },
-      openPluginSurface: async (pluginId) => {
-        await openPluginSurface({ source: 'builtin' as PluginSettingsSource, pluginId, surfaceId: 'main' })
+      openPluginSurface: async (pluginId, options) => {
+        await openPluginSurface({
+          source: 'builtin' as PluginSettingsSource,
+          pluginId,
+          surfaceId: 'main',
+          initialText: options?.initialText,
+        })
+      },
+      readLocalFileText: async (path) => {
+        const { invoke } = await import('@tauri-apps/api/core')
+        return invoke<string>('read_file', { path })
       },
       openUrl: async (url) => {
         await openUrl(url)

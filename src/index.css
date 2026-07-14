@@ -1066,7 +1066,32 @@ html[data-window='launcher'] .global-launcher-panel {
   -webkit-app-region: drag;
 }
 
-html[data-window='launcher'] .global-launcher-panel :is(input, textarea, select, button, a, [role='button'], [data-no-drag], .monaco-editor) {
+/* Interactive / scrollable content must not start window drag (table, editors, lists). */
+html[data-window='launcher'] .global-launcher-panel :is(
+  input,
+  textarea,
+  select,
+  button,
+  a,
+  pre,
+  [role='button'],
+  [role='grid'],
+  [role='row'],
+  [role='columnheader'],
+  [role='gridcell'],
+  [data-no-drag],
+  [data-launcher-scrollable],
+  .monaco-editor,
+  .rdg,
+  .csv-tools-surface,
+  .global-launcher-surface-shell .global-launcher-body
+) {
+  -webkit-app-region: no-drag;
+}
+
+/* Plugin surface body is fully interactive — never a drag handle. */
+html[data-window='launcher'] .global-launcher-surface-shell .global-launcher-body,
+html[data-window='launcher'] .global-launcher-surface-shell .global-launcher-body * {
   -webkit-app-region: no-drag;
 }
 
@@ -1189,6 +1214,14 @@ html[data-window='quick-editor'] #root {
   transition: max-height 70ms ease-out;
   overscroll-behavior: contain;
   touch-action: pan-y;
+}
+
+/* Plugin surfaces host their own 2D scroll (tables, panes) — allow pan-x too. */
+.global-launcher-body--surface {
+  overflow: hidden;
+  touch-action: auto;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .launcher-results {
@@ -4070,13 +4103,12 @@ body[data-theme='dark'] .monaco-editor .find-widget {
 
 .hiven-ui-button,
 .hiven-ui-icon-button,
-.hiven-ui-segmented-item,
 .hiven-ui-surface-list-item {
-  border: 0.5px solid var(--hiven-color-border);
+  border: 0.5px solid var(--hiven-color-border, var(--color-border-tertiary));
   border-radius: var(--hiven-radius-md);
   cursor: pointer;
-  color: var(--hiven-color-text-primary);
-  background: var(--hiven-color-bg-secondary);
+  color: var(--hiven-color-text-primary, var(--color-text-primary));
+  background: var(--hiven-color-bg-secondary, var(--color-background-secondary));
 }
 
 .hiven-ui-button {
@@ -4122,45 +4154,153 @@ body[data-theme='dark'] .monaco-editor .find-widget {
   background: var(--hiven-color-bg-secondary);
 }
 
+/* Custom Select — mirrors schema-select (product menu, not OS picker) */
 .hiven-ui-select {
+  --hiven-select-panel: var(--panel, var(--hiven-color-bg-primary, #fff));
+  --hiven-select-surface: var(--surface, var(--hiven-color-bg-secondary, #f3f3f3));
+  --hiven-select-border: var(--border, var(--hiven-color-border, #e7e8e9));
+  --hiven-select-border-2: var(--border-2, var(--hiven-color-border, #d8d9db));
+  --hiven-select-text: var(--text, var(--hiven-color-text-primary, #1c1c1e));
+  --hiven-select-text-3: var(--text-3, var(--hiven-color-text-tertiary, #8e8e93));
+  --hiven-select-accent: var(--accent, var(--hiven-color-accent, #2563eb));
+  --hiven-select-accent-soft: var(--accent-soft, rgba(37, 99, 235, 0.14));
   position: relative;
   display: inline-flex;
-  align-items: center;
+  align-items: stretch;
   min-width: 0;
-  min-height: 28px;
-  border: 0.5px solid var(--hiven-color-border);
-  border-radius: var(--hiven-radius-md);
-  color: var(--hiven-color-text-primary);
-  background: var(--hiven-color-bg-secondary);
+  color: var(--hiven-select-text);
+  font-family: var(--font, var(--hiven-font-ui, inherit));
 }
 
-.hiven-ui-select-control {
+.hiven-ui-select.is-disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.hiven-ui-select-trigger {
   width: 100%;
   min-width: 0;
-  min-height: 28px;
-  appearance: none;
-  padding: 5px 28px 5px 9px;
-  border: 0;
-  outline: none;
-  color: inherit;
-  background: transparent;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 9px 6px 11px;
+  border: 1px solid var(--hiven-select-border);
+  border-radius: 8px;
+  background: var(--hiven-select-panel);
+  color: var(--hiven-select-text);
   font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.2;
+  text-align: left;
   cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
-.hiven-ui-select-control:disabled {
-  cursor: default;
-  opacity: 0.55;
+.hiven-ui-select-trigger:hover:not(:disabled) {
+  border-color: var(--hiven-select-border-2);
+  background: var(--hiven-select-surface);
+}
+
+.hiven-ui-select-trigger:focus-visible {
+  outline: none;
+  border-color: var(--hiven-select-accent);
+  box-shadow: 0 0 0 3px var(--hiven-select-accent-soft);
+}
+
+.hiven-ui-select.is-open .hiven-ui-select-trigger,
+.hiven-ui-select.is-open .hiven-ui-select-trigger:hover:not(:disabled) {
+  border-color: var(--hiven-select-accent);
+  background: var(--hiven-select-panel);
+  box-shadow: 0 0 0 3px var(--hiven-select-accent-soft);
+}
+
+.hiven-ui-select-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hiven-ui-select-chevron {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  color: var(--hiven-select-text-3);
+  transition: transform 0.12s ease;
+}
+
+.hiven-ui-select-chevron svg {
+  width: 14px;
+  height: 14px;
+}
+
+.hiven-ui-select.is-open .hiven-ui-select-chevron {
+  transform: rotate(180deg);
+}
+
+.hiven-ui-select-menu {
   position: absolute;
-  right: 8px;
-  top: 50%;
-  pointer-events: none;
-  transform: translateY(-54%);
-  color: var(--hiven-color-text-secondary);
-  font-size: var(--text-sm);
+  z-index: 80;
+  top: calc(100% + 6px);
+  left: 0;
+  right: auto;
+  min-width: 100%;
+  width: max-content;
+  max-width: min(320px, 80vw);
+  max-height: min(280px, 50vh);
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--hiven-select-border-2);
+  border-radius: 8px;
+  background: var(--hiven-select-panel);
+  box-shadow: 0 18px 42px -18px rgba(0, 0, 0, 0.32), 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.hiven-ui-select-option {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 11px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--hiven-select-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+
+/* Hover must win over generic .hiven-ui-* button chrome */
+button.hiven-ui-select-option:hover {
+  background: var(--hiven-select-accent-soft) !important;
+  color: var(--hiven-select-accent) !important;
+}
+
+button.hiven-ui-select-option.is-selected {
+  background: var(--hiven-select-accent-soft) !important;
+  color: var(--hiven-select-accent) !important;
+  font-weight: 650;
+}
+
+button.hiven-ui-select-option.is-selected:hover {
+  background: color-mix(in srgb, var(--hiven-select-accent) 22%, transparent) !important;
+}
+
+.hiven-ui-select-check {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
 }
 
 .hiven-ui-textarea {
@@ -4183,24 +4323,74 @@ body[data-theme='dark'] .monaco-editor .find-widget {
   background: var(--hiven-color-bg-tertiary);
 }
 
+/* Segmented control — iOS-style track + elevated active pill (readable on light/dark) */
 .hiven-ui-segmented {
   display: inline-flex;
+  align-items: stretch;
   gap: 2px;
   padding: 2px;
-  border-radius: var(--hiven-radius-md);
-  background: var(--hiven-color-bg-secondary);
+  border-radius: 9px;
+  background: color-mix(
+    in srgb,
+    var(--hiven-color-text-primary, var(--color-text-primary, #1c1c1e)) 8%,
+    var(--hiven-color-bg-secondary, var(--color-background-secondary, #f3f3f3))
+  );
+  border: 0.5px solid color-mix(in srgb, var(--hiven-color-border, var(--color-border-tertiary, #e7e8e9)) 80%, transparent);
+  box-sizing: border-box;
 }
 
 .hiven-ui-segmented-item {
-  min-height: 24px;
-  padding: 3px 8px;
-  font-size: var(--text-xs);
+  appearance: none;
+  min-height: 26px;
+  padding: 3px 12px;
+  margin: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--hiven-color-text-secondary, var(--color-text-secondary, #6c6c70));
+  font: inherit;
+  font-size: var(--text-xs, 12px);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease,
+    transform 80ms ease;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
-.hiven-ui-segmented-item.is-active,
+.hiven-ui-segmented-item:hover:not(:disabled):not(.is-active) {
+  color: var(--hiven-color-text-primary, var(--color-text-primary, #1c1c1e));
+  background: color-mix(in srgb, var(--hiven-color-text-primary, var(--color-text-primary)) 6%, transparent);
+}
+
+.hiven-ui-segmented-item:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.hiven-ui-segmented-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.hiven-ui-segmented-item.is-active {
+  border: 0;
+  background: var(--hiven-color-bg-primary, var(--color-background-primary, #fff));
+  color: var(--hiven-color-text-primary, var(--color-text-primary, #1c1c1e));
+  font-weight: 650;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    0 0 0 0.5px color-mix(in srgb, var(--hiven-color-border, var(--color-border-tertiary, #d0d0d0)) 70%, transparent);
+}
+
 .hiven-ui-surface-list-item.is-selected {
   border-color: transparent;
-  background: var(--hiven-color-accent);
+  background: var(--hiven-color-accent, var(--color-accent, #2563eb));
   color: #fff;
 }
 
@@ -7528,95 +7718,612 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   flex-direction: column;
   background: var(--color-background-primary);
   color: var(--color-text-primary);
+  font-family: var(--hiven-font-ui, inherit);
+  /* Inside launcher drag region: keep pointer events for scroll / select */
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  touch-action: manipulation;
 }
 
+/* Header — aligned with Text Diff .td-hdr / .td-ib */
 .csv-tools-surface__header {
-  min-height: 48px;
   display: flex;
   align-items: center;
+  height: 42px;
+  flex-shrink: 0;
+  gap: 6px;
+  padding: 0 10px 0 10px;
+  border-bottom: 1px solid var(--color-border-tertiary);
+  background: var(--color-background-primary);
+  user-select: none;
+}
+
+.csv-tools-surface__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: 500 13px/1 var(--hiven-font-ui, inherit);
+  cursor: pointer;
+}
+
+.csv-tools-surface__back:hover {
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+}
+
+.csv-tools-surface__back svg {
+  width: 14px;
+  height: 14px;
+}
+
+.csv-tools-surface__back-root {
+  font-weight: 600;
+}
+
+.csv-tools-surface__sep {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  margin: 0 1px;
+}
+
+.csv-tools-surface__crumb {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.csv-tools-surface__meta {
+  margin-left: 2px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--color-background-secondary);
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.csv-tools-surface__meta.mono {
+  font-family: var(--font-mono);
+}
+
+.csv-tools-surface__header-spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
+.csv-tools-surface__file-btn {
+  height: 28px;
+  padding: 0 11px;
+  border: 0.5px solid var(--color-border-secondary, var(--border));
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--color-background-primary) 70%, transparent) 0%, transparent 100%),
+    var(--color-background-secondary);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow:
+    0 1px 0 color-mix(in srgb, #fff 55%, transparent) inset,
+    0 1px 2px rgba(0, 0, 0, 0.04);
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease,
+    transform 80ms ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.csv-tools-surface__file-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.csv-tools-surface__file-btn:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-border-primary, var(--border-2, var(--border)));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--color-background-primary) 85%, transparent) 0%, transparent 100%),
+    color-mix(in srgb, var(--color-background-secondary) 88%, var(--color-text-primary) 4%);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, #fff 65%, transparent) inset,
+    0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.csv-tools-surface__file-btn:active {
+  transform: translateY(1px) scale(0.98);
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.04) inset,
+    0 0 0 transparent;
+}
+
+.csv-tools-surface__file-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--hiven-color-accent, #2563eb) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.csv-tools-surface__file-btn--primary {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(180deg, color-mix(in srgb, #fff 18%, var(--hiven-color-accent, #2563eb)) 0%, var(--hiven-color-accent, #2563eb) 100%);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, #fff 28%, transparent) inset,
+    0 1px 3px color-mix(in srgb, var(--hiven-color-accent, #2563eb) 35%, transparent);
+}
+
+.csv-tools-surface__file-btn--primary:hover {
+  color: #fff;
+  border-color: transparent;
+  filter: brightness(1.04);
+}
+
+.csv-tools-surface__banner {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--color-border-tertiary);
+  background: var(--color-background-secondary);
+  color: var(--color-text-secondary);
+}
+
+.csv-tools-surface__banner.is-error {
+  color: var(--hiven-color-error, #be1100);
+  background: var(--hiven-color-error-bg, rgba(190, 17, 0, 0.06));
+}
+
+.csv-tools-surface__banner.is-warn {
+  color: var(--color-text-secondary);
+  background: color-mix(in srgb, #f59e0b 10%, var(--color-background-secondary));
+  border-bottom-color: color-mix(in srgb, #f59e0b 22%, var(--color-border-tertiary));
+}
+
+.csv-tools-surface__banner.is-ok {
+  color: var(--color-text-secondary);
+  background: color-mix(in srgb, #22c55e 10%, var(--color-background-secondary));
+  border-bottom-color: color-mix(in srgb, #22c55e 22%, var(--color-border-tertiary));
+}
+
+.csv-tools-surface__banner-row {
+  display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 0 14px;
+}
+
+.csv-tools-surface__banner-text {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.45;
+}
+
+.csv-tools-surface__banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.csv-tools-surface__progress {
+  margin-top: 6px;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+  overflow: hidden;
+}
+
+.csv-tools-surface__progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    var(--hiven-color-accent, #2563eb),
+    color-mix(in srgb, var(--hiven-color-accent, #2563eb) 60%, #22c55e)
+  );
+  transition: width 120ms linear;
+}
+
+.csv-tools-surface__output-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.csv-tools-surface__output-hint {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  font-size: 11.5px;
+  color: var(--color-text-tertiary);
   border-bottom: 1px solid var(--color-border-tertiary);
   background: var(--color-background-secondary);
 }
 
-.csv-tools-surface__header strong {
-  display: block;
-  font-size: 13px;
+.csv-tools-surface__output-wrap pre {
+  flex: 1;
 }
 
-.csv-tools-surface__header span {
-  display: block;
-  margin-top: 2px;
-  color: var(--color-text-tertiary);
-  font-size: 11px;
+.csv-tools-surface__meta--busy {
+  animation: csv-tools-pulse 1.1s ease-in-out infinite;
 }
 
-.csv-tools-surface__actions,
-.csv-tools-surface__params {
+@keyframes csv-tools-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.csv-tools-surface__actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 1px;
 }
 
-.csv-tools-surface button,
-.csv-tools-surface select {
-  border: 1px solid var(--color-border-secondary);
+.csv-tools-surface__ib {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
   border-radius: 6px;
-  background: var(--color-background-primary);
-  color: var(--color-text-primary);
-  font-size: 12px;
-}
-
-.csv-tools-surface button {
-  padding: 5px 9px;
+  background: transparent;
+  color: var(--color-text-tertiary);
   cursor: pointer;
+  transition: all 0.12s;
 }
 
-.csv-tools-surface__params {
-  padding: 10px 14px;
+.csv-tools-surface__ib:hover:not(:disabled) {
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+}
+
+.csv-tools-surface__ib:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
+.csv-tools-surface__ib:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.csv-tools-surface__ib svg {
+  width: 14px;
+  height: 14px;
+}
+
+.csv-tools-surface__ib--close:hover:not(:disabled) {
+  background: var(--hiven-color-error-bg, rgba(190, 17, 0, 0.08));
+  color: var(--hiven-color-error, #be1100);
+}
+
+/* Toolbar */
+.csv-tools-surface__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 12px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--color-border-tertiary);
   background: var(--color-background-primary);
+  flex-shrink: 0;
 }
 
-.csv-tools-surface__params label {
+.csv-tools-surface__toolbar-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  min-width: 0;
+}
+
+.csv-tools-surface__field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-tertiary);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.csv-tools-surface__field > span {
+  white-space: nowrap;
+}
+
+.csv-tools-surface__field select,
+.csv-tools-surface__text {
+  height: 28px;
+  border: 1px solid var(--color-border-tertiary);
+  border-radius: 6px;
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  padding: 0 8px;
+}
+
+.csv-tools-surface__field select:hover:not(:disabled),
+.csv-tools-surface__text:hover {
+  border-color: var(--color-border-secondary);
+}
+
+.csv-tools-surface__field select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.csv-tools-surface__text {
+  width: 100px;
+  font-family: var(--font-mono);
+}
+
+.csv-tools-surface__check {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   color: var(--color-text-secondary);
   font-size: 11.5px;
+  cursor: pointer;
+  user-select: none;
 }
 
+/* Segmented transforms — same idea as Diff mode toggle */
+.csv-tools-surface__seg {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  gap: 1px;
+  border-radius: 7px;
+  background: var(--color-background-secondary);
+  flex-shrink: 0;
+}
+
+.csv-tools-surface__seg-item {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font: 500 11px/1 var(--hiven-font-ui, inherit);
+  padding: 5px 9px;
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.12s;
+}
+
+.csv-tools-surface__seg-item:hover:not(.is-on) {
+  color: var(--color-text-secondary);
+}
+
+.csv-tools-surface__seg-item.is-on {
+  background: var(--color-background-primary);
+  color: var(--color-text-primary);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+/* Body: dual pane Source | Table/Output */
 .csv-tools-surface__body {
   flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-columns: 1fr 1.15fr 1fr;
-  gap: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-background-primary);
 }
 
-.csv-tools-surface__pane {
-  min-width: 0;
+.csv-tools-surface__body--single {
+  min-height: 0;
+}
+
+.csv-tools-surface__viewbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--color-border-tertiary);
+  background: var(--color-background-secondary);
+  flex-shrink: 0;
+}
+
+.csv-tools-surface__viewbar .hiven-ui-segmented {
+  height: 30px;
+  flex-shrink: 0;
+}
+
+.csv-tools-surface__viewbar .hiven-ui-segmented-item {
+  min-height: 26px;
+  height: 100%;
+  font-size: 12px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.csv-tools-surface__viewbar .hiven-ui-segmented-item.is-active {
+  /* Reinforce active pill in surface chrome (track is secondary bg) */
+  background: var(--color-background-primary, #fff);
+  color: var(--color-text-primary);
+  font-weight: 650;
+}
+
+.csv-tools-surface__source-guard {
+  flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--color-border-tertiary);
+  align-items: flex-start;
+  justify-content: center;
+  gap: 10px;
+  padding: 28px 24px;
+  max-width: 480px;
+  margin: 0 auto;
 }
 
-.csv-tools-surface__pane:last-child {
-  border-right: 0;
+.csv-tools-surface__source-guard-title {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--color-text-primary);
 }
 
-.csv-tools-surface__pane-title {
-  height: 30px;
+.csv-tools-surface__source-guard-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--color-text-secondary);
+}
+
+.csv-tools-surface__source-guard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.csv-tools-surface__right-tabs {
   display: flex;
   align-items: center;
-  padding: 0 10px;
-  color: var(--color-text-secondary);
+  gap: 2px;
+  height: 34px;
+  padding: 0 8px;
   border-bottom: 1px solid var(--color-border-tertiary);
+  background: var(--color-background-secondary);
+  flex-shrink: 0;
+}
+
+.csv-tools-surface__tab {
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font: 500 11.5px/1 var(--hiven-font-ui, inherit);
+  cursor: pointer;
+}
+
+.csv-tools-surface__tab:hover:not(.is-on) {
+  color: var(--color-text-secondary);
+}
+
+.csv-tools-surface__tab.is-on {
+  background: var(--color-background-primary);
+  color: var(--color-text-primary);
+  font-weight: 650;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.csv-tools-surface__tab-hint {
+  margin-left: auto;
+  color: var(--color-text-tertiary);
   font-size: 11px;
-  font-weight: 600;
+}
+
+.csv-tools-surface__native-select {
+  min-width: 108px;
+}
+
+.csv-tools-surface__native-select .hiven-ui-select-trigger {
+  min-width: 108px;
+  font-size: 12px;
+}
+
+.csv-tools-surface__transform-checks {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+}
+
+.csv-tools-surface__transform-checks .hiven-ui-check {
+  font-size: 11.5px;
+  color: var(--color-text-secondary);
+  gap: 6px;
+}
+
+.csv-tools-surface__right-tabs .hiven-ui-segmented {
+  height: 28px;
+}
+
+.csv-tools-surface__right-tabs .hiven-ui-segmented-item {
+  font-size: 11.5px;
+  padding: 0 10px;
+}
+
+.csv-tools-surface__back {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 4px;
+  width: auto !important;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--color-text-secondary);
+  font: 500 13px/1 var(--hiven-font-ui, inherit);
+}
+
+.csv-tools-surface__back:hover {
+  background: var(--color-background-secondary) !important;
+  color: var(--color-text-primary);
+}
+
+.csv-tools-surface__ib {
+  width: 28px !important;
+  height: 28px !important;
+  border: 0.5px solid transparent !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: var(--color-text-tertiary);
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease,
+    transform 80ms ease,
+    box-shadow 120ms ease;
+}
+
+.csv-tools-surface__ib:hover:not(:disabled) {
+  background: var(--color-background-secondary) !important;
+  border-color: var(--color-border-tertiary) !important;
+  color: var(--color-text-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.csv-tools-surface__ib:active:not(:disabled) {
+  transform: scale(0.94);
+  box-shadow: none;
+}
+
+.csv-tools-surface__ib svg {
+  width: 14px;
+  height: 14px;
+}
+
+.csv-tools-surface__ib--close:hover:not(:disabled) {
+  background: var(--hiven-color-error-bg, rgba(190, 17, 0, 0.08)) !important;
+  border-color: color-mix(in srgb, var(--hiven-color-error, #be1100) 18%, transparent) !important;
+  color: var(--hiven-color-error, #be1100) !important;
 }
 
 .csv-tools-surface textarea,
@@ -7624,45 +8331,353 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   flex: 1;
   min-height: 0;
   margin: 0;
-  padding: 10px;
+  padding: 12px;
   border: 0;
   outline: 0;
   resize: none;
   overflow: auto;
-  background: var(--color-background-primary);
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  background: transparent;
   color: var(--color-text-primary);
   font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.csv-tools-surface textarea::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.csv-tools-surface pre.is-error,
+.csv-tools-surface__empty.is-error {
+  color: var(--color-danger, var(--hiven-color-error, #be1100));
+}
+
+.csv-tools-surface__grid-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  touch-action: pan-x pan-y;
+  overscroll-behavior: contain;
+}
+
+.csv-tools-surface__table-tools {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--color-border-tertiary);
+  background: var(--color-background-secondary);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.csv-tools-surface__grid-host {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  touch-action: pan-x pan-y;
+}
+
+.csv-tools-surface__filter {
+  flex: 1;
+  min-width: 140px;
+  max-width: 480px;
+  min-height: 28px;
+  font-size: 12px;
+}
+
+.csv-tools-surface__filter--sql {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  width: 100%;
+  max-width: none;
+}
+
+.csv-tools-surface__sql-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 180px;
+  max-width: min(560px, 55vw);
+  z-index: 5;
+}
+
+.csv-tools-surface__sql-wrap .csv-tools-surface__filter {
+  max-width: none;
+  width: 100%;
+}
+
+.csv-tools-surface__sql-suggest {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 220px;
+  overflow: auto;
+  border-radius: 8px;
+  border: 0.5px solid var(--color-border-secondary, var(--color-border-tertiary));
+  background: var(--color-background-primary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  z-index: 20;
+}
+
+.csv-tools-surface__sql-suggest-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.csv-tools-surface__sql-suggest-item:hover,
+.csv-tools-surface__sql-suggest-item.is-active {
+  background: color-mix(in srgb, var(--hiven-color-accent, #2563eb) 12%, transparent);
+}
+
+.csv-tools-surface__sql-suggest-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.csv-tools-surface__sql-suggest-detail {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.csv-tools-surface__filter-error {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  font-size: 11.5px;
+  color: var(--hiven-color-error, #be1100);
+  background: var(--hiven-color-error-bg, rgba(190, 17, 0, 0.06));
+  border-bottom: 1px solid var(--color-border-tertiary);
+}
+
+.csv-tools-surface__table-hint {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+
+.csv-tools-surface__col-header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding-inline: 2px;
+}
+
+.csv-tools-surface__col-name {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.csv-tools-surface__col-name:hover {
+  background: color-mix(in srgb, var(--hiven-color-accent, #2563eb) 10%, transparent);
+}
+
+.csv-tools-surface__col-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.csv-tools-surface__col-sort {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.csv-tools-surface__col-sort:hover {
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+}
+
+.csv-tools-surface__col-sort.is-on {
+  color: var(--hiven-color-accent, #2563eb);
+  background: color-mix(in srgb, var(--hiven-color-accent, #2563eb) 12%, transparent);
+}
+
+.csv-tools-surface__cell {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: none;
+  cursor: cell;
+}
+
+.csv-tools-surface__grid {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  block-size: 100%;
+  overflow: auto !important;
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y;
+  -webkit-app-region: no-drag !important;
+  app-region: no-drag !important;
+  /* Theme bridge — never inherit rdg default white selected rows */
+  --rdg-color-scheme: light;
+  --rdg-background-color: var(--color-background-primary);
+  --rdg-header-background-color: var(--color-background-secondary);
+  --rdg-header-draggable-background-color: color-mix(
+    in srgb,
+    var(--color-background-secondary) 70%,
+    var(--hiven-color-accent, #2563eb) 12%
+  );
+  --rdg-row-hover-background-color: color-mix(
+    in srgb,
+    var(--hiven-color-accent, #2563eb) 8%,
+    var(--color-background-primary)
+  );
+  --rdg-row-selected-background-color: color-mix(
+    in srgb,
+    var(--hiven-color-accent, #2563eb) 18%,
+    var(--color-background-primary)
+  );
+  --rdg-row-selected-hover-background-color: color-mix(
+    in srgb,
+    var(--hiven-color-accent, #2563eb) 26%,
+    var(--color-background-primary)
+  );
+  --rdg-selection-color: var(--hiven-color-accent, #2563eb);
+  --rdg-checkbox-focus-color: var(--hiven-color-accent, #2563eb);
+  --rdg-border-color: var(--color-border-tertiary);
+  --rdg-summary-border-color: var(--color-border-secondary, var(--color-border-tertiary));
+  --rdg-color: var(--color-text-primary);
+  --rdg-font-size: 12px;
+  font-size: 12px;
+  color: var(--color-text-primary);
+  background: var(--color-background-primary);
+}
+
+/* Selected / focused cells must keep readable text (not pure white wash) */
+.csv-tools-surface__grid .rdg-row[aria-selected='true'],
+.csv-tools-surface__grid .csv-row--selected {
+  color: var(--color-text-primary);
+}
+
+.csv-tools-surface__grid [role='gridcell'][aria-selected='true'] {
+  outline: 2px solid var(--hiven-color-accent, #2563eb) !important;
+  outline-offset: -2px;
+  background-color: color-mix(
+    in srgb,
+    var(--hiven-color-accent, #2563eb) 14%,
+    var(--color-background-primary)
+  ) !important;
+  color: var(--color-text-primary) !important;
+  z-index: 1;
+}
+
+.csv-tools-surface__grid .csv-cell--range {
+  background-color: color-mix(
+    in srgb,
+    var(--hiven-color-accent, #2563eb) 22%,
+    var(--color-background-primary)
+  ) !important;
+  color: var(--color-text-primary) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hiven-color-accent, #2563eb) 35%, transparent);
+}
+
+.csv-tools-surface__grid .csv-cell--col-selected {
+  background-color: color-mix(
+    in srgb,
+    var(--hiven-color-accent, #2563eb) 12%,
+    var(--color-background-primary)
+  ) !important;
+  color: var(--color-text-primary) !important;
+}
+
+.csv-tools-surface__grid .csv-cell--focus:not(.csv-cell--range) {
+  background-color: color-mix(
+    in srgb,
+    var(--hiven-color-accent, #2563eb) 16%,
+    var(--color-background-primary)
+  ) !important;
+}
+
+.csv-tools-surface__header-cell.is-col-selected {
+  background: color-mix(in srgb, var(--hiven-color-accent, #2563eb) 18%, var(--color-background-secondary)) !important;
+  color: var(--color-text-primary);
+}
+
+.csv-tools-surface__empty {
+  padding: 16px 12px;
+  color: var(--color-text-tertiary);
   font-size: 12px;
   line-height: 1.5;
 }
 
-.csv-tools-surface__table-wrap {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-}
 
-.csv-tools-surface table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-}
-
-.csv-tools-surface th,
-.csv-tools-surface td {
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--color-border-tertiary);
-  border-right: 1px solid var(--color-border-tertiary);
-  text-align: left;
-  white-space: nowrap;
-}
-
-.csv-tools-surface th {
-  position: sticky;
-  top: 0;
-  background: var(--color-background-secondary);
-  font-weight: 600;
-}
 
 /* Step 5: Calculator Editor result panel */
 .calculator-result-panel {

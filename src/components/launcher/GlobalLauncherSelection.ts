@@ -11,6 +11,7 @@ export type PluginSurfaceTarget = {
   source: PluginSettingsSource
   pluginId: string
   surfaceId: string
+  initialText?: string
 }
 
 export type LauncherItemPermissionFrame = {

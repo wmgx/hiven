@@ -73,7 +73,10 @@ for (const token of [
 
 assert.match(files.css, /\.hiven-ui-button/, 'CSS must style plugin-ui buttons')
 assert.match(files.css, /\.hiven-ui-select/, 'CSS must style plugin-ui select wrappers')
-assert.match(files.css, /appearance:\s*none/, 'plugin-ui select must hide native browser appearance')
+assert.match(files.css, /\.hiven-ui-select-trigger/, 'plugin-ui select must use custom trigger (not native OS menu)')
+assert.match(files.css, /\.hiven-ui-select-menu/, 'plugin-ui select must style in-app dropdown menu')
+assert.match(files.pluginUi, /hiven-ui-select-menu|role=['"]listbox['"]/, 'plugin-ui Select must render custom listbox menu')
+assert.doesNotMatch(files.pluginUi, /return\s*\([\s\S]{0,80}<select[\s>]/, 'plugin-ui Select must not render native select element')
 assert.match(files.css, /\.hiven-ui-surface-toolbar/, 'CSS must style plugin-ui surface toolbar')
 assert.match(files.css, /\.hiven-ui-surface-empty/, 'CSS must style plugin-ui empty state')
 

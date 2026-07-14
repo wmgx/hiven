@@ -46,7 +46,12 @@ export function GlobalLauncherPluginSurfaceFrame({
           onClose={onClose}
         />
       )}
-      <div className="global-launcher-body" style={{ maxHeight: bodyHeight, height: bodyHeight, overflow: 'hidden' }}>
+      <div
+        className="global-launcher-body global-launcher-body--surface"
+        data-no-drag
+        data-launcher-scrollable
+        style={{ maxHeight: bodyHeight, height: bodyHeight, overflow: 'hidden', touchAction: 'auto' }}
+      >
         <PluginSurfaceRenderer
           target={target}
           locale={locale}

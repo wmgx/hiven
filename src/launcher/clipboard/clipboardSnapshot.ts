@@ -24,6 +24,7 @@ export type ClipboardDetectedType =
   | 'secret-like'
   | 'yaml'
   | 'query-string'
+  | 'markdown'
 
 export type ClipboardSnapshot = {
   text: string
@@ -59,9 +60,87 @@ export function hashClipboardText(text: string): string {
 
 // ─── Detection ─────────────────────────────────────────────────────────────────
 
+/** Map a filesystem path extension to a clipboard kind (when clipboard is a path). */
+const PATH_EXT_TO_KIND: Record<string, ClipboardDetectedType> = {
+  csv: 'csv',
+  tsv: 'csv',
+  json: 'json',
+  sql: 'sql',
+  xml: 'xml',
+  css: 'css',
+  md: 'markdown',
+  markdown: 'markdown',
+  yml: 'yaml',
+  yaml: 'yaml',
+  txt: 'text',
+}
+
+/**
+ * Detect a single-line local file path / filename (absolute/relative/file:// / bare name)
+ * with a known extension. Used when the user copies a path or a Finder file
+ * (plain-text flavor is often only the bare filename).
+ */
+export function detectClipboardFilePath(text: string): { path: string; ext: string; kind: ClipboardDetectedType } | null {
+  const trimmed = text.trim()
+  if (!trimmed || /[\r\n]/.test(trimmed)) return null
+
+  let path = trimmed
+  // Strip surrounding quotes from shell/path copy
+  if (
+    (path.startsWith('"') && path.endsWith('"')) ||
+    (path.startsWith("'") && path.endsWith("'"))
+  ) {
+    path = path.slice(1, -1).trim()
+  }
+  if (/^file:\/\//i.test(path)) {
+    try {
+      path = decodeURIComponent(path.replace(/^file:\/\//i, ''))
+      // file:///Users/... → /Users/...
+      if (/^\/[A-Za-z]:\//.test(path)) path = path.slice(1)
+    } catch {
+      return null
+    }
+  }
+
+  const extMatch = path.match(/\.([A-Za-z0-9]+)$/)
+  if (!extMatch) return null
+  const ext = extMatch[1].toLowerCase()
+  const kind = PATH_EXT_TO_KIND[ext]
+  if (!kind) return null
+
+  const looksLikeAbsoluteOrRelativePath =
+    path.startsWith('/') ||
+    path.startsWith('~/') ||
+    /^[A-Za-z]:[\\/]/.test(path) ||
+    path.startsWith('\\\\') ||
+    path.includes('/') ||
+    path.includes('\\')
+
+  // Bare filename with known extension (Finder text flavor often has no directory)
+  const looksLikeBareFilename =
+    !looksLikeAbsoluteOrRelativePath &&
+    path.length <= 255 &&
+    !/[/\\:*?"<>|]/.test(path) &&
+    // single path segment, not a sentence
+    !/\s{2,}/.test(path)
+
+  if (!looksLikeAbsoluteOrRelativePath && !looksLikeBareFilename) return null
+  return { path, ext, kind }
+}
+
+export function fileNameFromPath(path: string): string {
+  const normalized = path.replace(/\\/g, '/')
+  const parts = normalized.split('/').filter(Boolean)
+  return parts[parts.length - 1] ?? path
+}
+
 export function detectClipboardType(text: string): ClipboardDetectedType {
   const trimmed = text.trim()
   if (!trimmed) return 'unknown'
+
+  // File path with known extension (e.g. user copied /tmp/export.csv)
+  const filePath = detectClipboardFilePath(trimmed)
+  if (filePath) return filePath.kind
 
   // Secret detection (high priority — before JSON/URL)
   if (/(?:sk-|token|password|Authorization|Bearer)/i.test(trimmed)) return 'secret-like'
@@ -83,7 +162,6 @@ export function detectClipboardType(text: string): ClipboardDetectedType {
   if (/^[.#]?[A-Za-z0-9_-]+\s*\{[\s\S]*\}$/.test(trimmed)) return 'css'
   if (/\bselect\b[\s\S]+\bfrom\b|\binsert\s+into\b|\bupdate\b[\s\S]+\bset\b/i.test(trimmed)) return 'sql'
   if (looksLikeDelimitedTable(trimmed)) return 'csv'
-
   // YAML (must come after JSON check — JSON is also valid YAML)
   if (looksLikeYaml(trimmed)) return 'yaml'
 

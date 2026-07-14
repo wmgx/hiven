@@ -1,4 +1,16 @@
-import { forwardRef, useRef, type ButtonHTMLAttributes, type ComponentPropsWithoutRef, type InputHTMLAttributes, type LabelHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ButtonHTMLAttributes,
+  type ComponentPropsWithoutRef,
+  type InputHTMLAttributes,
+  type LabelHTMLAttributes,
+  type TextareaHTMLAttributes,
+} from 'react'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from './utils/imeKeyboard'
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -14,10 +26,32 @@ type SelectOption = {
   value: string
 }
 
-type SelectProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'children'> & {
-  options: SelectOption[]
+/** Compatible change payload for former native select onChange handlers. */
+type SelectChangeEvent = {
+  target: { value: string; name?: string }
+  currentTarget: { value: string; name?: string }
 }
 
+type SelectProps = {
+  options: SelectOption[]
+  value?: string
+  defaultValue?: string
+  disabled?: boolean
+  className?: string
+  name?: string
+  id?: string
+  'aria-label'?: string
+  onChange?: (event: SelectChangeEvent) => void
+}
+
+/** Only one shared Select menu open at a time. */
+const openSelectClosers = new Set<() => void>()
+
+function closeOtherSelects(except?: () => void) {
+  for (const close of openSelectClosers) {
+    if (close !== except) close()
+  }
+}
 type ToggleOption = {
   label: string
   value: string
@@ -104,17 +138,127 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
   return <textarea ref={ref} className={cx('hiven-ui-input hiven-ui-textarea', className)} {...props} />
 })
 
-export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { className, options, ...props },
+export const Select = forwardRef<HTMLDivElement, SelectProps>(function Select(
+  {
+    className,
+    options,
+    value,
+    defaultValue,
+    disabled,
+    name,
+    id,
+    'aria-label': ariaLabel,
+    onChange,
+  },
   ref,
 ) {
+  const [uncontrolled, setUncontrolled] = useState(defaultValue ?? options[0]?.value ?? '')
+  const current = value ?? uncontrolled
+  const selected = options.find((option) => option.value === current) ?? options[0]
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const listId = useId()
+
+  const close = useCallback(() => setOpen(false), [])
+
+  const setRootRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      rootRef.current = node
+      if (typeof ref === 'function') ref(node)
+      else if (ref) ref.current = node
+    },
+    [ref],
+  )
+
+  useEffect(() => {
+    if (!open) return
+    openSelectClosers.add(close)
+    closeOtherSelects(close)
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null
+      if (target && rootRef.current?.contains(target)) return
+      setOpen(false)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+
+    document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      openSelectClosers.delete(close)
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('keydown', onKeyDown, true)
+    }
+  }, [close, open])
+
+  const commit = (next: string) => {
+    if (value === undefined) setUncontrolled(next)
+    const payload: SelectChangeEvent = {
+      target: { value: next, name },
+      currentTarget: { value: next, name },
+    }
+    onChange?.(payload)
+    setOpen(false)
+  }
+
   return (
-    <span className={cx('hiven-ui-select', className)}>
-      <select ref={ref} className="hiven-ui-select-control" {...props}>
-        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-      </select>
-      <span className="hiven-ui-select-chevron" aria-hidden="true">⌄</span>
-    </span>
+    <div
+      ref={setRootRef}
+      className={cx('hiven-ui-select', open && 'is-open', disabled && 'is-disabled', className)}
+      id={id}
+    >
+      <button
+        type="button"
+        className="hiven-ui-select-trigger"
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={listId}
+        disabled={disabled}
+        onClick={() => {
+          if (disabled) return
+          setOpen((currentOpen) => {
+            const next = !currentOpen
+            if (next) closeOtherSelects(close)
+            return next
+          })
+        }}
+      >
+        <span className="hiven-ui-select-label">{selected?.label ?? ''}</span>
+        <span className="hiven-ui-select-chevron" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </span>
+      </button>
+      {open && !disabled && (
+        <div className="hiven-ui-select-menu" role="listbox" id={listId}>
+          {options.map((option) => {
+            const isSelected = option.value === current
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                className={cx('hiven-ui-select-option', isSelected && 'is-selected')}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => commit(option.value)}
+              >
+                <span>{option.label}</span>
+                {isSelected ? (
+                  <svg className="hiven-ui-select-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                ) : null}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 })
 

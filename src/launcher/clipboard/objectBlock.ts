@@ -7,6 +7,7 @@
  */
 
 import type { ClipboardDetectedType, ClipboardSnapshot } from './clipboardSnapshot'
+import { detectClipboardFilePath, fileNameFromPath } from './clipboardSnapshot'
 import { shouldAutoAttachClipboard, shouldShowRecentClipboardHint } from './clipboardSnapshot'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -171,11 +172,15 @@ export function createClipboardObjectBlock(
   if (!options?.forceAttach && !shouldAutoAttachClipboard(snapshot, now)) return null
   const ageMs = snapshot.changedAt !== undefined ? now - snapshot.changedAt : 0
   const kind = normalizeSecretKind(snapshot.detectedType)
+  const filePath = detectClipboardFilePath(snapshot.text)
+  const subtitle = filePath
+    ? `${getKindLabel(kind)} · ${fileNameFromPath(filePath.path)}`
+    : getKindLabel(kind)
   return createGenericObjectBlock({
     source: 'clipboard',
     kind,
     title: getSourceLabel('clipboard'),
-    subtitle: getKindLabel(kind),
+    subtitle,
     text: snapshot.text,
     ageLabel: formatAgeLabel(ageMs),
     masked: isSecretKind(kind),

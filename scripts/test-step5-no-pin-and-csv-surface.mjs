@@ -35,11 +35,55 @@ assert.doesNotMatch(ranking, /PINNED_BOOST|pinnedKeys|pinnedBoost/, 'ranking mus
 
 const csvIndex = readFileSync('src/plugins/csv/index.ts', 'utf8')
 const csvSurface = readFileSync('src/plugins/csv/CsvSurface.tsx', 'utf8')
+const csvCore = readFileSync('src/plugins/csv/csvCore.ts', 'utf8')
 assert.match(csvIndex, /ui:\s*{[\s\S]*surfaces:/, 'CSV Tools should expose a dedicated surface')
-assert.match(csvIndex, /shortcutPresentation:\s*['"]window['"]/, 'CSV Tools surface should open as plugin window')
-assert.match(csvSurface, /Table preview/, 'CSV surface should show table preview')
-assert.match(csvSurface, /Output preview/, 'CSV surface should show output preview')
+assert.match(csvIndex, /textMatch/, 'CSV surface should declare textMatch for clipboard / path recommendations')
+assert.doesNotMatch(csvIndex, /contentKinds/, 'CSV surface should not declare contentKinds after kind-filter rollback')
+assert.doesNotMatch(csvIndex, /shortcutPresentation:\s*['"]window['"]/, 'CSV Tools should open in launcher, not detached window')
+assert.doesNotMatch(csvIndex, /csv\.toJson|tools:\s*\[/, 'CSV plugin should be surface-only without tools')
+assert.doesNotMatch(csvSurface, /Alice,30,Shanghai|const SAMPLE\s*=/, 'CSV surface must not ship a default sample table')
+assert.match(csvSurface, /pane\.table|Table/, 'CSV surface should show table view')
+assert.match(csvSurface, /pane\.output|Output/, 'CSV surface should show output view')
+assert.match(csvSurface, /pane\.source|Source/, 'CSV surface should show source view')
 assert.match(csvSurface, /Delimiter[\s\S]*Header[\s\S]*Output/, 'CSV surface should expose params')
+assert.match(csvSurface, /requestBack|action\.back/, 'CSV surface should expose back action')
+assert.match(csvSurface, /detachToWindow|action\.detach/, 'CSV surface should expose detach-to-window action')
+assert.match(csvSurface, /react-data-grid|DataGrid/, 'CSV surface should use react-data-grid for table')
+assert.match(csvSurface, /@hiven\/plugin-ui/, 'CSV surface should use shared plugin-ui components')
+assert.match(csvSurface, /\bSelect\b/, 'CSV surface should use plugin-ui Select')
+assert.match(csvSurface, /body--single|MainView|mainView/, 'CSV surface should use single-pane layout with view switch')
+assert.match(csvSurface, /useDeferredValue|PARSE_MAX_ROWS|maxRows/, 'CSV surface should guard large-file parse cost')
+assert.match(csvSurface, /processFullSource|runFullProcess|job\.runFull/, 'CSV surface should offer full-file process job')
+assert.match(csvSurface, /downloadTextFile|job\.download/, 'CSV surface should support downloading full result')
+assert.match(csvSurface, /cycleSort|col-sort|IconSort/, 'CSV table should expose sort icons on headers')
+assert.match(csvSurface, /SearchField|globalFilter|table\.filterPlaceholder/, 'CSV table should support text filter')
+assert.match(csvSurface, /filterMode.*sql|sqlFilter|filterRowsBySql/, 'CSV table should support SQL query filter')
+assert.match(csvSurface, /getSqlCompletions|sql-suggest|applySqlCompletion/, 'CSV SQL mode should offer completions')
+assert.match(csvSurface, /defaultSqlTemplate|SELECT \*/, 'CSV SQL mode should start from SELECT template')
+assert.match(csvSurface, /dragSelectRef|onCellMouseDown|selectedColumns/, 'CSV table should support mouse drag block and column selection')
+assert.doesNotMatch(csvCore, /from ['"]papaparse['"]/, 'CSV core must not depend on papaparse (disk-release safe)')
+assert.match(csvCore, /parseDelimited|Quoted field/, 'CSV core should implement delimited parsing')
+assert.match(csvCore, /sql|INSERT/, 'CSV core should support SQL INSERT output')
+assert.match(csvCore, /maxRows/, 'CSV core should support maxRows parse limit')
+assert.match(csvCore, /processFullSource|parseDelimitedAsync/, 'CSV core should support async full-file pipeline')
+
+const launcherRegistry = readFileSync('src/workspace/launcher/registry.ts', 'utf8')
+assert.match(
+  launcherRegistry,
+  /textMatch:\s*typeof surface\.textMatch/,
+  'launcher registry should wire surface textMatch into launcher items',
+)
+const selectionController = readFileSync('src/components/launcher/useGlobalLauncherSelectionController.ts', 'utf8')
+assert.match(
+  selectionController,
+  /resolveSurfaceInitialText|detectClipboardFilePath|read_file/,
+  'selecting a plugin surface should resolve clipboard file paths into initialText',
+)
+assert.match(
+  selectionController,
+  /initialText/,
+  'plugin surface open target should carry initialText from Object Block',
+)
 
 const encodeIndex = readFileSync('src/plugins/encode-decode/index.ts', 'utf8')
 assert.match(encodeIndex, /encodeDecodePlugin|Encode|Decode/, 'Encode / Decode Tools plugin should exist')

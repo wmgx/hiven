@@ -237,6 +237,8 @@ export function collectStaticPluginItems(): LauncherItem[] {
         behavior: { type: 'perform' },
         surfaces: ['global-launcher'],
         requiredCapabilities: ['plugin-surfaces'],
+        // Clipboard / Object Block content boost (e.g. CSV path → CSV Tools)
+        textMatch: typeof surface.textMatch === 'function' ? surface.textMatch : undefined,
         execute: async () => {
           // Surface opening is handled by the host when this item is selected.
           // The launcher controller will detect the plugin-surface systemKey

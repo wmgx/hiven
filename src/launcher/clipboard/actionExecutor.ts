@@ -8,6 +8,7 @@
 
 import type { RecommendedAction, RecommendedOutputTarget } from './actionRecommendation'
 import type { LauncherObjectBlock } from './objectBlock'
+import { detectClipboardFilePath } from './clipboardSnapshot'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -25,7 +26,7 @@ export type ActionExecutionHandlers = {
   copyText: (text: string) => Promise<void>
   copyAndKeepOpen?: (text: string) => Promise<void>
   openInEditor: (text: string, options?: { language?: string; title?: string }) => Promise<void>
-  openPluginSurface: (pluginId: string) => Promise<void>
+  openPluginSurface: (pluginId: string, options?: { initialText?: string }) => Promise<void>
   openUrl?: (url: string) => Promise<void>
   replaceSelection?: (text: string) => Promise<void>
   replacePane?: (text: string) => Promise<void>
@@ -33,6 +34,8 @@ export type ActionExecutionHandlers = {
   insertBelow?: (text: string) => Promise<void>
   openBottomPanel?: (actionId: string, text: string) => Promise<void>
   setRenderer?: (actionId: string, text: string) => Promise<void>
+  /** Resolve a local file path to its text content when the clipboard holds a path. */
+  readLocalFileText?: (path: string) => Promise<string>
 }
 
 // ─── Executor ──────────────────────────────────────────────────────────────────
@@ -63,7 +66,17 @@ export async function executeRecommendedAction(
       }
       case 'open-plugin-surface': {
         if (action.pluginId) {
-          await handlers.openPluginSurface(action.pluginId)
+          let initialText = text
+          const filePath = detectClipboardFilePath(text)
+          if (filePath && handlers.readLocalFileText) {
+            try {
+              initialText = await handlers.readLocalFileText(filePath.path)
+            } catch {
+              // Keep path text; surface can still show / retry load.
+              initialText = text
+            }
+          }
+          await handlers.openPluginSurface(action.pluginId, { initialText })
           return { ok: true }
         }
         return { ok: false, error: 'No plugin surface available' }

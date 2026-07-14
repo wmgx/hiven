@@ -495,8 +495,13 @@ check('standalone launcher exposes the whole non-interactive panel as a drag sur
   )
   assertHas(
     files.globalLauncher,
-    /closest\(['"]input,\s*textarea,\s*select,\s*button,\s*a,\s*\[role="button"\],\s*\[data-no-drag\],\s*\[data-launcher-scrollable\],\s*\.monaco-editor['"]\)/,
+    /closest\([\s\S]{0,200}\[data-launcher-scrollable\][\s\S]{0,80}\[data-no-drag\][\s\S]{0,200}input,\s*textarea,\s*select,\s*button[\s\S]{0,300}\.monaco-editor/,
     'GlobalLauncher drag handling should preserve interactive controls and scrollable regions',
+  )
+  assertHas(
+    files.globalLauncher,
+    /\[role="grid"\]|\.rdg|csv-tools-surface/,
+    'GlobalLauncher drag handling should preserve data grids and plugin surfaces from window drag',
   )
   assertHas(
     files.globalLauncher,
@@ -510,8 +515,13 @@ check('standalone launcher exposes the whole non-interactive panel as a drag sur
   )
   assertHas(
     files.indexCss,
-    /html\[data-window=['"]launcher['"]\]\s+\.global-launcher-panel\s+:is\(input,\s*textarea,\s*select,\s*button,\s*a,\s*\[role=['"]button['"]\],\s*\[data-no-drag\],\s*\.monaco-editor\)[\s\S]{0,120}-webkit-app-region:\s*no-drag/,
+    /html\[data-window=['"]launcher['"]\]\s+\.global-launcher-panel\s+:is\([\s\S]{0,400}\.monaco-editor[\s\S]{0,200}-webkit-app-region:\s*no-drag/,
     'standalone launcher should keep interactive controls out of the native drag region',
+  )
+  assertHas(
+    files.indexCss,
+    /global-launcher-body--surface[\s\S]{0,160}-webkit-app-region:\s*no-drag/,
+    'plugin surface body inside launcher must opt out of window drag for table scrolling',
   )
 })
 
@@ -556,8 +566,13 @@ check('standalone launcher locks webview document panning while preserving list 
   )
   assertHas(
     files.app,
-    /function\s+shouldAllowLauncherListWheel[\s\S]{0,900}data-launcher-scrollable[\s\S]{0,900}scrollTop/,
-    'LauncherWindowApp should also allow wheel scrolling inside launcher-owned modal scroll bodies',
+    /function\s+shouldAllowLauncherListWheel[\s\S]{0,900}data-launcher-scrollable[\s\S]{0,400}role="grid"|function\s+shouldAllowLauncherListWheel[\s\S]{0,1200}data-launcher-scrollable/,
+    'LauncherWindowApp should also allow wheel scrolling inside launcher-owned modal scroll bodies and data grids',
+  )
+  assertHas(
+    files.app,
+    /canScrollLauncherElement[\s\S]{0,400}scrollWidth|scrollLeft/,
+    'Launcher wheel helper should support horizontal scroll for tables',
   )
   assertHas(
     files.app,
@@ -566,7 +581,7 @@ check('standalone launcher locks webview document panning while preserving list 
   )
   assertHas(
     files.globalLauncher,
-    /closest\(['"][\s\S]{0,180}data-launcher-scrollable[\s\S]{0,180}\)/,
+    /closest\([\s\S]{0,240}data-launcher-scrollable[\s\S]{0,400}\)/,
     'Global launcher dragging should not start from scrollable surface bodies or their scrollbars',
   )
 })

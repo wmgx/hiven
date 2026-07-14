@@ -147,7 +147,15 @@ export function useFocusGlobalLauncherSurfaceShell({
 export function useGlobalLauncherNativeDrag(standaloneLauncher: boolean) {
   return useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return
-    if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, button, a, [role="button"], [data-no-drag], [data-launcher-scrollable], .monaco-editor')) return
+    if (
+      event.target instanceof HTMLElement &&
+      event.target.closest(
+        // data-launcher-scrollable / data-no-drag first: keep contract + early match for surfaces/tables
+        '[data-launcher-scrollable], [data-no-drag], input, textarea, select, button, a, pre, [role="button"], [role="grid"], [role="row"], [role="gridcell"], [role="columnheader"], .monaco-editor, .rdg, .csv-tools-surface, .global-launcher-surface-shell .global-launcher-body',
+      )
+    ) {
+      return
+    }
     // Only the standalone launcher window is draggable, via the native Tauri
     // window drag. Its position (with TTL) is persisted in App.tsx `onMoved`.
     if (standaloneLauncher && isTauriRuntime()) {

@@ -323,26 +323,55 @@ function LauncherRuntimeApp() {
 }
 
 function shouldAllowLauncherListWheel(event: WheelEvent) {
-  if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return false
   const target = event.target instanceof Element ? event.target : null
-  return findLauncherWheelScroller(target, event.deltaY) !== null
+  if (!target) return false
+
+  // Plugin surfaces / data grids own their own 2D scrolling (incl. trackpad pan-x).
+  // Do not block deltaX here — that was preventing horizontal table scroll.
+  if (
+    target.closest(
+      '.global-launcher-body--surface, [data-launcher-scrollable], [role="grid"], .rdg, .csv-tools-surface',
+    )
+  ) {
+    return true
+  }
+
+  // Result list: only vertical list scroll; ignore primarily-horizontal gestures.
+  if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return false
+  return findLauncherWheelScroller(target, event.deltaY, event.deltaX) !== null
 }
 
-function findLauncherWheelScroller(target: Element | null, deltaY: number): HTMLElement | null {
+function findLauncherWheelScroller(
+  target: Element | null,
+  deltaY: number,
+  deltaX = 0,
+): HTMLElement | null {
   const launcherBody = target?.closest('.global-launcher-body') as HTMLElement | null
   let candidate = target instanceof HTMLElement ? target : target?.parentElement ?? null
   while (candidate) {
     const isExplicitLauncherScroller = candidate.matches('[data-launcher-scrollable], .global-launcher-body')
     const isNestedLauncherScroller = launcherBody?.contains(candidate) ?? false
-    if ((isExplicitLauncherScroller || isNestedLauncherScroller) && canScrollLauncherElement(candidate, deltaY)) return candidate
+    if (
+      (isExplicitLauncherScroller || isNestedLauncherScroller) &&
+      canScrollLauncherElement(candidate, deltaY, deltaX)
+    ) {
+      return candidate
+    }
     if (candidate === launcherBody) return null
     candidate = candidate.parentElement
   }
   return null
 }
 
-function canScrollLauncherElement(element: HTMLElement, deltaY: number) {
-  if (element.scrollHeight <= element.clientHeight) return false
+function canScrollLauncherElement(element: HTMLElement, deltaY: number, deltaX = 0) {
+  const preferX = Math.abs(deltaX) > Math.abs(deltaY)
+  if (preferX) {
+    if (element.scrollWidth <= element.clientWidth + 1) return false
+    if (deltaX < 0) return element.scrollLeft > 0
+    if (deltaX > 0) return element.scrollLeft + element.clientWidth < element.scrollWidth - 1
+    return true
+  }
+  if (element.scrollHeight <= element.clientHeight + 1) return false
   if (deltaY < 0) return element.scrollTop > 0
   if (deltaY > 0) return element.scrollTop + element.clientHeight < element.scrollHeight - 1
   return true

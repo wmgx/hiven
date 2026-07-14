@@ -11,6 +11,8 @@ export type GlobalLauncherSurfaceFrameTarget = {
   source: PluginSettingsSource
   pluginId: string
   surfaceId: string
+  /** Clipboard / Object Block payload (or host-resolved file contents). */
+  initialText?: string
 }
 
 export function useGlobalLauncherSurfaceFrame({

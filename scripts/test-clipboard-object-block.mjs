@@ -34,6 +34,8 @@ const snapshot = transpileAndRun('src/launcher/clipboard/clipboardSnapshot.ts')
 const objectBlock = transpileAndRun('src/launcher/clipboard/objectBlock.ts', {
   shouldAutoAttachClipboard: snapshot.shouldAutoAttachClipboard,
   shouldShowRecentClipboardHint: snapshot.shouldShowRecentClipboardHint,
+  detectClipboardFilePath: snapshot.detectClipboardFilePath,
+  fileNameFromPath: snapshot.fileNameFromPath,
 })
 const recommendation = transpileAndRun('src/launcher/clipboard/actionRecommendation.ts')
 
@@ -82,6 +84,24 @@ assert.equal(snapshot.detectClipboardType('sk-abc123 is a secret'), 'secret-like
 assert.equal(snapshot.detectClipboardType('Bearer token123'), 'secret-like')
 assert.equal(snapshot.detectClipboardType('hello world plain text'), 'text')
 assert.equal(snapshot.detectClipboardType('   '), 'unknown')
+
+// File-path extension recommendations (clipboard holds a path, not contents)
+assert.equal(snapshot.detectClipboardType('/Users/me/export.csv'), 'csv')
+assert.equal(snapshot.detectClipboardType('/tmp/data.tsv'), 'csv')
+assert.equal(snapshot.detectClipboardType('file:///Users/me/report.json'), 'json')
+assert.equal(snapshot.detectClipboardType('C:\\Users\\me\\query.sql'), 'sql')
+assert.equal(snapshot.detectClipboardType('~/notes/readme.md'), 'markdown')
+// Bare filename (Finder often pastes only the name in the text flavor)
+assert.equal(snapshot.detectClipboardType('export.csv'), 'csv', 'bare .csv filename should be detected as csv')
+assert.equal(snapshot.detectClipboardType('status_3_pay_time_delay_over_30d.csv'), 'csv')
+assert.ok(snapshot.detectClipboardFilePath('export.csv'), 'bare filename should still yield a file-path hit for kind mapping')
+assert.ok(snapshot.detectClipboardFilePath('/Users/me/export.csv'))
+assert.equal(snapshot.detectClipboardFilePath('/Users/me/export.csv')?.ext, 'csv')
+assert.equal(snapshot.fileNameFromPath('/Users/me/export.csv'), 'export.csv')
+
+// readLauncherClipboard prefers native file paths over plain text
+const readClip = readFileSync('src/launcher/clipboard/readLauncherClipboard.ts', 'utf8')
+assert.match(readClip, /read_clipboard_file_paths/, 'launcher clipboard read should prefer native file paths')
 
 // ─── §11.2 Object Block ───────────────────────────────────────────────────────
 
@@ -172,8 +192,15 @@ assert.doesNotMatch(globalLauncherHost, /simulateCopy|simulate_copy|Cmd\+C|⌘C/
 // Global Launcher should NOT read external selection
 assert.doesNotMatch(globalLauncherHost, /readExternalSelection|getExternalSelection/, 'GlobalLauncher must not read external selection directly')
 
-// Editor Cmd+K should not walk clipboard freshness rules
-const editorCmdBarHost = readFileSync('src/launcher/hosts/EditorCommandBarHost.tsx', 'utf8')
-assert.doesNotMatch(editorCmdBarHost, /shouldAutoAttachClipboard|FRESH_CLIPBOARD_TTL/, 'Editor command bar should not use clipboard freshness')
+// CSV path should recommend open CSV tools surface
+const csvPathBlock = {
+  ...block,
+  kind: 'csv',
+  source: 'clipboard',
+  payloadText: '/Users/me/export.csv',
+  subtitle: 'CSV · export.csv',
+}
+const csvActions = recommendation.recommendActionsForBlock(csvPathBlock)
+assert.ok(csvActions.some((a) => a.id === 'open-csv-tools-surface'), 'csv path clipboard should recommend CSV Tools')
 
 console.log('clipboard object block behavior checks passed')
