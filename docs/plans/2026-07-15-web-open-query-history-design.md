@@ -9,8 +9,8 @@
 为网页快开入口提供**可配置的参数历史**：
 
 1. 用户首次输入参数并成功打开链接后，记录该参数。
-2. 下次进入同一入口的二级输入时，可在空输入态选择历史参数直接打开。
-3. 也可继续输入新参数打开；新参数写入历史。
+2. 下次进入同一入口的二级输入时，可浏览 / 过滤历史参数并用方向键或点击打开。
+3. 无匹配历史或未高亮历史时，用当前输入打开新链接并写入历史。
 
 ## 非目标
 
@@ -24,11 +24,12 @@
 | 决策点 | 选择 |
 |--------|------|
 | 开关粒度 | **每个入口单独开关** |
-| 二级交互 | **空输入时下列表，点选历史直接打开**；有输入时隐藏列表，可敲新参数 |
+| 二级交互 | **空输入展示全部历史；有输入时优先过滤历史**；↑↓ 高亮；Enter 优先高亮项，无高亮则用输入原文打开并记录 |
 | 容量 | **每个入口各自配置上限**，默认 20 |
 | 去重 | 相同参数去重，再次使用置顶并更新 `lastUsedAt` |
 | 管理 | 列表可删单条 + 设置页可清空该入口历史 |
 | 默认入口 | Google / GitHub / MDN 等默认**不**开历史 |
+| Enter 规则 | **有高亮 → 开历史项；无高亮 → 用输入框原文**；默认**不**自动高亮第一条，避免误开近似历史 |
 
 ## §1 数据与配置
 
@@ -76,16 +77,21 @@ type QueryHistoryRecord = {
 
 ### 二级输入行为
 
-1. 选中入口 → 进入 collect-input，输入为空。
+1. 选中入口 → 进入 collect-input，输入为空，**无高亮**。
 2. 若开启历史且 kv 有数据 → 下方展示最近参数（新→旧）；标题为参数原文，副标题可为拼好的 URL（可选）。
-3. **点选历史项** → 拼 URL 并 `openUrl`；成功后关闭 launcher，并刷新该条 `lastUsedAt`。
-4. **输入非空** → 隐藏历史列表；Enter 用当前输入打开，成功后写入历史。
-5. **清空输入** → 历史列表重新出现。
-6. 空输入 + `emptyQueryBehavior: 'block'` 时 Enter 仍拦截（与现网一致）。
+3. **输入变化** → 对历史做**包含过滤**（case-insensitive，匹配 `text`）；无匹配则列表为空，仍可 Enter 用原文打开。
+4. **↑ / ↓** → 在当前过滤结果中移动高亮；从「无高亮」按 ↓ 进入第一条；在第一条按 ↑ 可回到「无高亮」（恢复「用输入原文」语义）。
+5. **Enter**：
+   - 有高亮历史项 → 用该历史参数打开（并 upsert 置顶）。
+   - **无高亮** → 用输入框当前文本打开；成功则写入历史。
+   - 空输入 + 无高亮 + `emptyQueryBehavior: 'block'` → 仍拦截（与现网一致）。
+   - 空输入 + 有高亮 → 允许打开该历史项（即使 empty 为 block）。
+6. **点击**历史项 → 等同于高亮该项并执行打开。
+7. 打字过程中若过滤结果变化，高亮策略：若当前高亮项仍在过滤结果中则保留；否则清除高亮（回到「无高亮 / 用原文」）。
 
 ### 删除
 
-- 列表项 secondary action / 行内删除：从该入口 kv 移除，不打开链接。
+- 列表项 secondary action / 行内删除：从该入口 kv 移除，不打开链接；删除后刷新列表并校正高亮。
 - 设置页「清空该入口历史」：`kv.delete('query-history/' + entryId)`。
 
 ### Host 最小扩展
@@ -93,29 +99,31 @@ type QueryHistoryRecord = {
 现状要点：
 
 - `previewInput` 仅对 `perform + inputPolicy` 生效，**collect-input（网页快开）当前不会走 preview**。
-- `GlobalLauncherCollectInputFrame` 已能渲染 `previewOutput.choices`。
-- `submitInput` 在存在 preview 时会优先执行 **第一条** choice —— 空输入有历史时必须避免误开第一条。
+- `GlobalLauncherCollectInputFrame` 已能渲染 `previewOutput.choices`，但**无选中索引 / ↑↓**。
+- 现有 `submitInput` 在存在 preview 时会优先执行 **第一条** choice —— 与本设计冲突，必须改为「仅高亮项优先，无高亮则 execute 原文」。
 
 改动：
 
 | 点 | 改动 |
 |----|------|
-| 进入 collect-input | 可选加载 suggestions 填入 `previewOutput` |
-| 空输入 suggest | 对声明了 suggest 钩子的 collect-input：**空输入也加载**；有输入则清空 suggestions |
-| Enter | 空输入 + 仅有历史 suggestions 时，**不**自动执行 first preview choice；仍走空输入校验或要求点选 |
-| 点击 | `activateChoice` 打开对应历史项 |
-| 键盘 ↑↓ | 第一版可选；非必须（点选即可） |
+| 进入 collect-input | 加载 suggestions（query 为空 = 全量历史）填入 `previewOutput`；`selectedSuggestionIndex = -1`（无高亮） |
+| 输入变化 | 调用 suggest（带当前 inputText）刷新过滤列表；校正高亮索引 |
+| Enter | **有高亮** → `activateChoice(高亮项)`；**无高亮** → `execute` 当前输入（成功后插件记历史） |
+| 点击 | 打开对应历史项 |
+| 键盘 ↑↓ | **必须**：在 collect-input + 有 suggestions 时移动高亮（含「无高亮」态） |
+| 渲染 | 列表项反映 `selectedSuggestionIndex` 高亮样式 |
 
 插件提供 suggestions 的方式（推荐）：
 
-- collect-input item 增加可选 `suggest?: (ctx) => LauncherOutput | Promise<...>`（或等价 host 回调）。
-- 仅在输入为空时由 controller 调用；web-open 读 kv 并返回 choices。
-- **不**把「历史」做成 framework 通用产品 API；host 只提供空态 suggestions 基础设施。
+- collect-input item 增加可选 `suggest?: (ctx) => LauncherOutput | Promise<...>`（ctx 含当前 `inputText`）。
+- controller 在进入 frame、以及 inputText 变化（可 debounce）时调用；web-open 读 kv 并按输入过滤后返回 choices。
+- **不**把「历史」做成 framework 通用产品 API；host 只提供 collect-input suggestions + 高亮选择基础设施。
 
 ### 边界
 
 - 一级列表排序 / usage 不动。
 - 历史不做跨入口共享、云同步。
+- 过滤规则第一版：子串包含、大小写不敏感；不做拼音/模糊（若以后要做，仍留在插件 suggest 内）。
 
 ## §3 存储健壮性、i18n、测试与验收
 
@@ -131,28 +139,30 @@ type QueryHistoryRecord = {
 所有用户可见文案走 locale（中英）：
 
 - 设置：记录历史开关、上限、清空按钮与确认/成功文案。
-- 二级：footer 提示「选择历史或输入新参数」（可选）。
+- 二级：footer 可提示「↑↓ 选择历史 · Enter 打开」（有历史时）。
 - 删除 action 文案。
 
 ### 测试
 
 | 层 | 内容 |
 |----|------|
-| 纯函数 | upsert 去重置顶、截断、空串不写、max 变更截断 |
-| 插件 | 开关关时不写不展示；开时 execute 后 kv 有值 |
-| controller（若动 host） | 空输入加载 suggest；有输入清空；空 Enter 不误开第一条；点击 choice 打开 |
-| 手工 | 开历史 → 输入打开 → 再进见历史 → 点选 → 删一条 → 设置清空 |
+| 纯函数 | upsert 去重置顶、截断、空串不写、max 变更截断；过滤匹配 |
+| 插件 | 开关关时不写不展示；开时 execute 后 kv 有值；suggest 按输入过滤 |
+| controller（若动 host） | 进入加载 suggest；输入变化刷新；默认无高亮；↑↓ 高亮；Enter 有高亮开历史 / 无高亮开原文；空 Enter + block 拦截 |
+| 手工 | 开历史 → 输入打开 → 再进见历史 → 过滤 → ↑↓ 选中打开 → 无高亮 Enter 开新词 → 删一条 → 设置清空 |
 
 ### 验收标准
 
 1. 未开历史的入口：行为与现网完全一致。
 2. 开启后首次成功打开 → 再进该入口空输入可见该参数。
-3. 可点历史直接打开；可输入新参数打开并置顶历史。
-4. 重复参数只保留一条并置顶。
-5. 超上限淘汰最旧。
-6. 单条删除与设置清空生效。
-7. 中英文无 hardcode UI 文案。
-8. `npm run check:architecture` / build 通过；历史逻辑不进入 framework 的 diff/compare 语义。
+3. 输入时可过滤历史；↑↓ 高亮；有高亮 Enter 开历史项。
+4. 无高亮时 Enter 用当前输入打开新链接并记录（无匹配历史时亦然）。
+5. 默认不自动高亮第一条；从无高亮 ↓ 才进入第一条。
+6. 重复参数只保留一条并置顶。
+7. 超上限淘汰最旧。
+8. 单条删除与设置清空生效。
+9. 中英文无 hardcode UI 文案。
+10. `npm run check:architecture` / build 通过；历史逻辑不进入 framework 的 diff/compare 语义。
 
 ## 实现任务拆分（供后续 plan）
 
@@ -160,13 +170,14 @@ type QueryHistoryRecord = {
    - `recordQueryHistory` / `maxQueryHistory`  
    - settings version bump + migrate 默认值  
 2. **`queryHistory.ts`**  
-   - load / upsert / remove / clear；纯函数可单测  
-3. **host：collect-input empty suggest**  
-   - item `suggest` 钩子  
-   - 进入 / 输入变空时加载；有输入清空  
-   - 空 Enter 不误触第一条历史  
+   - load / upsert / remove / clear / filter；纯函数可单测  
+3. **host：collect-input suggestions + 高亮**  
+   - item `suggest(ctx)` 钩子（带 inputText）  
+   - 进入 / 输入变化时加载过滤列表  
+   - `selectedSuggestionIndex`（-1 = 无高亮）  
+   - ↑↓ 导航；Enter 按高亮 / 原文分支  
 4. **web-open 接线**  
-   - suggest 读历史 → choices（打开 + 删除）  
+   - suggest 读历史并过滤 → choices（打开 + 删除）  
    - execute / 一步打开成功后 upsert  
 5. **设置清空**  
    - 入口级清空按钮（settings body / schema action）  
@@ -176,7 +187,7 @@ type QueryHistoryRecord = {
 ## 架构原则对齐
 
 - 历史是 **web-open 插件产品策略**，存在 plugin private storage。  
-- host 只补 collect-input **空态 suggestions** 最小能力。  
+- host 只补 collect-input **suggestions + 高亮选择** 最小能力。  
 - 符合 Agents.md：插件通过 host API / storage 使用能力，不把产品语义塞进 framework 核心。
 
 ## 相关文档
