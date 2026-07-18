@@ -411,6 +411,14 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       e.preventDefault()
       handleDelete(selectedItem.id)
     } else if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
+      // Prefer DOM selection (preview / search) over whole history item.
+      const selectedText = readDomSelectedText()
+      if (selectedText) {
+        e.preventDefault()
+        void host.clipboard.writeText(selectedText)
+        host.showMessage(t('message.copied'), 'success')
+        return
+      }
       e.preventDefault()
       if (selectedFullItem && selectedFullItem.kind === 'text') {
         void host.clipboard.writeText(selectedFullItem.text)
@@ -992,4 +1000,18 @@ function formatBytes(bytes: number) {
 
 function countWords(text: string) {
   return text.trim().split(/\s+/).filter(Boolean).length
+}
+
+/** Read non-empty text selection from inputs or the document (preview pane). */
+function readDomSelectedText(): string {
+  const active = document.activeElement
+  if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+    const start = active.selectionStart
+    const end = active.selectionEnd
+    if (start != null && end != null && end > start) {
+      return active.value.slice(start, end)
+    }
+    return ''
+  }
+  return window.getSelection()?.toString() ?? ''
 }
