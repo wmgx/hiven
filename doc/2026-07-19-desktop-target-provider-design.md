@@ -1,7 +1,7 @@
 # 桌面目标可扩展协议（Desktop Target Provider）设计
 
 **日期:** 2026-07-19  
-**状态:** 草案（待评审）  
+**状态:** 评审修订稿（v1.1）— 已吸收外部评审实质意见，§15 开放问题已关闭  
 **产品:** hiven（原 FluxText）  
 **读者:** 实现 AI / 评审 / 后续维护者  
 **关联:**
@@ -9,7 +9,9 @@
 - `doc/2026-07-19-launcher-intelligence-roadmap-design.md`（控制中枢总路线；包③–⑤ 已有窗口/进程骨架）
 - `docs/superpowers/specs/2026-07-19-control-hub-intent-design.md`（已被路线图吸收）
 - `doc/diff-plugin-boundary-decision.md`、`Agents.md`（host / plugin / kit 边界）
-- 现状实现参考：`src/workspace/appLauncher/`、`src/workspace/desktopControl/`、`src/workspace/launcher/hostProvider.ts`
+- 现状实现参考：`src/workspace/appLauncher/`、`src/workspace/desktopControl/`、`src/workspace/launcher/hostProvider.ts`、`src/workspace/launcher/registry.ts`（`onPartial`）、`src/workspace/launcher/types.ts`（`LauncherHostCapability`）
+
+**修订摘要（v1.1）：** 聚合契约补 partial；usage/systemKey 规范；关窗口产出路径；权限 key 与现有连字符对齐；关闭 §15；写明 D2 修复「任意 query 混出 terminate」的现网缺陷。
 
 ---
 
@@ -109,7 +111,10 @@ plugins (web-open, encode-decode, …)
 
 ### 4.1 DesktopTarget
 
-统一「可聚焦 / 可打开」的桌面目标（字段名实现时可微调，语义不变）：
+统一「可聚焦 / 可打开」的**一级导航**桌面目标（字段名实现时可微调，语义不变）。
+
+> **类型共享、注册表分离：**  
+> `meta.cpuPercent` / `memoryBytes` 与 `actionClass: 'terminate' | 'close'` 可出现在类型定义中供二级进程模式、次级动作映射复用，但 **`terminate` 目标不得进入一级 `DesktopTargetRegistry.list` 输出**。进程走 §7 独立会话；关窗口走 §5.5 次级动作路径，不是一级混排的默认 list 结果。
 
 ```ts
 /** 展示与排序用的目标类型 */
@@ -129,7 +134,11 @@ type DesktopTargetSourceId = string
 //   …
 
 type DesktopTarget = {
-  /** 全局稳定 id，跨刷新尽量稳定；格式建议 `${sourceId}:${nativeId}` */
+  /**
+   * 运行时列表 id（可含易变原生 id）。
+   * 格式建议 `${sourceId}:${kind}:${nativeId}`。
+   * **不要求**跨会话稳定；usage 键见 §5.6。
+   */
   id: string
   sourceId: DesktopTargetSourceId
   kind: DesktopTargetKind
@@ -140,6 +149,11 @@ type DesktopTarget = {
   subtitle?: string
   /** 所属应用展示名，如 Chrome / Edge / Code */
   appName?: string
+  /**
+   * 跨会话尽量稳定的应用身份（macOS bundle id / 可执行稳定名）。
+   * usage 聚合优先用此字段，而非原生 window/tab id。
+   */
+  appStableKey?: string
 
   /** 搜索关键词（不要求全展示） */
   keywords?: string[]
@@ -152,7 +166,7 @@ type DesktopTarget = {
     windowId?: string
     profileId?: string
     faviconKey?: string
-    // 进程二级列表专用，见 §7
+    /** 仅进程二级列表使用；一级 Provider list 不得依赖这些字段做导航 */
     cpuPercent?: number
     memoryBytes?: number
   }
@@ -161,10 +175,17 @@ type DesktopTarget = {
   icon?: string
 
   /**
-   * 安全级别提示（执行策略由 host 统一解释）
-   * focus/open → L1；close window / terminate → L2
+   * 主动作安全级别提示（执行策略由 host 统一解释）
+   * 一级 list 默认只产出 focus | open。
+   * close / terminate 见 §5.5 / §7，不得作为一级 list 的默认项。
    */
   actionClass?: 'focus' | 'open' | 'close' | 'terminate'
+
+  /**
+   * 该目标支持的次级动作（host 可据此生成额外 LauncherItem 或 result choices）。
+   * 例：窗口 focus 目标可声明 secondaryActions: ['close']。
+   */
+  secondaryActions?: Array<'close'>
 }
 ```
 
@@ -172,12 +193,20 @@ type DesktopTarget = {
 
 ```ts
 type DesktopTargetQueryContext = {
+  /** 用户当前输入；已 trim；空字符串表示空搜场景 */
   query: string
   locale: Locale
-  /** 已规范化；空表示空搜场景 */
   surfaceId: LauncherSurfaceId
   /** 可选：content detections，用于「强文本 intent 时导航目标让位」 */
   detections?: Array<{ kind: string; confidence: number }>
+  /** 查询取消（query 变更 / 关闭 Launcher）；provider 应尊重 abort */
+  signal?: AbortSignal
+}
+
+/** 选中后的激活上下文；不要复用 QueryContext（query/detections 对激活无意义） */
+type DesktopTargetActivateContext = {
+  locale: Locale
+  surfaceId: LauncherSurfaceId
   signal?: AbortSignal
 }
 
@@ -193,42 +222,67 @@ type DesktopTargetProvider = {
   /**
    * 同步或异步列出候选。Host 负责超时与失败隔离。
    * 应在 provider 内做粗过滤；host 再统一 rank。
+   * 一级 registry 的 list **只应**返回 actionClass 为 focus/open（或默认 focus）的导航目标。
    */
   list(ctx: DesktopTargetQueryContext): Promise<DesktopTarget[]> | DesktopTarget[]
 
   /**
-   * 执行主动作（聚焦/打开）。危险动作可走独立 API + L2 壳。
-   * 若省略，host 可按 kind/source 分发到原生命令。
+   * 执行主动作（聚焦/打开）。
+   * 危险动作（close/terminate）不走此默认路径，见 §5.5 / §7。
    */
-  activate?(target: DesktopTarget, ctx: DesktopTargetQueryContext): Promise<void>
+  activate?(target: DesktopTarget, ctx: DesktopTargetActivateContext): Promise<void>
 
   /** 健康检查：扩展是否连接、权限是否足够；失败则本轮 list 跳过 */
   health?(): Promise<{ ok: boolean; reason?: string }>
 }
 ```
 
-### 4.3 Host 注册表职责
+### 4.3 Host 注册表职责（含渐进渲染）
+
+**不得**退化现有 `collectDynamicItems` 的 progressive 体验。现状证据：`src/workspace/launcher/registry.ts` 的 `onPartial`（约 L298–318）支持快源先画、慢源后到，并传递 `AbortSignal`。
 
 ```text
 registerDesktopTargetProvider(provider)
 unregisterDesktopTargetProvider(id)
 
-collectDesktopTargets(ctx):
-  for each provider (enabled + health ok):
-    run list with soft timeout + catch
-    tag results with sourceId
-  dedupe by policy (§5.3)
-  map to LauncherItem
-  return to ranking pipeline
+// 契约：支持 partial；批式 API 仅作测试便利封装
+collectDesktopTargets(ctx, options?: {
+  signal?: AbortSignal
+  onPartial?: (update: {
+    sourceId: DesktopTargetSourceId
+    targets: DesktopTarget[]
+    /** 该源是否已终态（完成/失败/超时） */
+    done: boolean
+  }) => void
+}): Promise<DesktopTarget[]>
+
+实现要点：
+  for each provider (enabled + health ok) in parallel:
+    run list(ctx with signal) with soft timeout + catch
+    on resolve/reject/timeout:
+      onPartial({ sourceId, targets or [], done: true })
+  任意时刻 session 可将「已到达源的并集」经 dedupe → map → rank 后渲染
+  全部 done 后 resolve 最终并集（供测试与非 UI 调用方）
 ```
+
+**Partial 下去重与重排规则：**
+
+| 规则 | 说明 |
+|------|------|
+| 并集 | 后到源的新 `target.id` **追加**进候选池，不清空已渲染源的结果 |
+| 同 id | 后到结果若与已有 `target.id` 冲突，**后写覆盖**元数据（标题可能刷新），不双份 |
+| 重排 | 每来一个 partial（或 debounce 一帧）对**当前并集**重新 `rankLauncherItems`；允许名次变化（快源暂居前列、慢源 tab 到达后插入是预期） |
+| 取消 | `signal` abort 后停止调度未开始的 provider；已 in-flight 的结果可丢弃 |
+| 限条 | 每源上限 + 全局上限在 **每次 partial 合并后**裁剪（先 per-source，再 global），避免慢源把列表撑爆 |
 
 **硬规则：**
 
-1. 单 provider 超时/抛错 → 忽略该源，其它继续。  
+1. 单 provider 超时/抛错 → 该源 `targets: []` + `done: true`，其它继续。  
 2. 全局限条 + 每源限条，防止刷屏。  
 3. 生产日志不打 tab URL/标题全文（或 debug 开关才打）。  
-4. 禁止新来源绕过注册表直接改 `rankLauncherItems` 私有常量。
-
+4. 禁止新来源绕过注册表直接改 `rankLauncherItems` 私有常量。  
+5. **D0 必须实现 partial 契约**；禁止先批式落地、D3 再返工。  
+6. 注册表 API **不**导出到插件 SDK（一期仅 first-party 注册）。
 ---
 
 ## 5. 混排与列表融合
@@ -267,16 +321,28 @@ score =
 | 明确输入 App/命令名 | 名称匹配赢 |
 | 搜「chrome」 | App + 相关窗口 + 相关标签可共存混排 |
 | 强文本 content（JWT/JSON… conf 高） | **导航类 target 让位**（App/窗口/标签同类降权），文本动作优先 |
-| 空 query | 少量最近 App + 少量最近窗口 + **更少**最近标签；不刷满顶 |
+| 空 query | 少量最近 App + 窗口上限维持 **8**（见下「最近」数据源）；**标签空搜默认 0 条**（D3 后再放开 2–3） |
 | 普通中文空搜 | 不乱推编解码；也不应被上百 tab 淹没 |
 
 `desktopAffinity`（若做）建议 ≤ 200 量级，避免「永远打开着的 Chrome」压过精确命令匹配。
+
+#### 「最近」数据来源（D1 前必须落地其一）
+
+现状窗口列表多为原生返回顺序，**没有 MRU**。空搜「最近窗口」不得假装有历史。
+
+| 策略 | 说明 | 采用 |
+|------|------|------|
+| A. z-order 近似 | 原生 list 顺序常近似前后台叠放，取前 N | **D1 默认**：文档与实现均称为「可见窗口（靠前）」而非「最近使用」 |
+| B. host 聚焦历史 | 每次成功 focus/open 写入本地 ring（appStableKey + 粗粒度 target 类型），空搜按历史排 | **D1+ 增强**（推荐很快补上，usage 也可复用） |
+| C. 系统正式 MRU API | 若平台后续提供 | 可选替换 |
+
+文案：空搜窗口副标题/注释避免写死「最近」除非已实现 B。
 
 ### 5.3 去重
 
 | 冲突 | 策略 |
 |------|------|
-| 同一 `target.id` | 保留一条 |
+| 同一 `target.id` | 保留一条（partial 场景后写覆盖，见 §4.3） |
 | 同一浏览器窗口 vs 其下 tab | **都可保留**：窗口 = 整窗聚焦；tab = 精确页。展示上 kind 不同 |
 | 同一 URL 多个 tab | 都保留或按「活跃 tab 优先」保留 N 条（实现可选，需可测） |
 | App 项 vs 仅窗口 | 都可保留 |
@@ -286,11 +352,45 @@ score =
 | 现状 | 迁移方向 |
 |------|----------|
 | `hostAppLauncher` 动态项 | 适配为 `sourceId: 'host.app'` 的 Provider（或内部先 map 到 DesktopTarget 再转 LauncherItem） |
-| `desktopControl/windows.ts` | 适配为 `sourceId: 'host.window'` |
-| `desktopControl/processes.ts` | **不**进入一级 DesktopTarget 混排；见 §7 二级进程模式 |
-| `hostProvider` 并行 Promise.all 拼数组 | 逐步收到 `collectDesktopTargets` 单一聚合点 |
+| `desktopControl/windows.ts` | 适配为 `sourceId: 'host.window'`；close 路径见 §5.5 |
+| `desktopControl/processes.ts` | **不**进入一级 DesktopTarget 混排；见 §7。**D2 必修**现网缺陷：任意非空 query 都会混出 terminate 项（不要求 kill 前缀） |
+| `hostProvider` 并行 Promise.all 拼数组 | 收到 `collectDesktopTargets`（**保留 onPartial**，对齐 `registry.collectDynamicItems`） |
 
-一期允许「逻辑等价、结构渐进」：先引入类型与注册表，再把 app/window 迁入，避免大爆炸重构。
+一期允许「逻辑等价、结构渐进」：先引入类型与注册表，再把 app/window 迁入，避免大爆炸重构。**禁止**为迁入而丢掉 progressive 渲染。
+
+### 5.5 关窗口（close）产出路径（评审已定）
+
+现状 `CLOSE_PREFIXES`（`windows.ts`）会产出 L2 关窗口项；新协议一级 `list()` 默认只返回 **focus** 目标。close 不得丢失，路径定为：
+
+| 触发 | 行为 |
+|------|------|
+| **主路径（保留前缀）** | query 匹配 `关闭` / `关掉` / `close`（及后续 i18n 同义词）时，window provider 的 **list 变体**或 host 包装层将匹配窗口映射为 `actionClass: 'close'` 的 **独立 LauncherItem**（`systemKey` 见 §5.6），execute → L2 确认 choices → 再 close |
+| **次级动作（可选增强）** | focus 目标可带 `secondaryActions: ['close']`；UI 在选中后提供次要操作（若 Global Launcher 尚无稳定 secondary UX，则 **D1 可不做**，仅前缀路径） |
+| **禁止** | 把 close 项与 focus 项共用同一 `systemKey`；禁止 close 因高 conf 跳过 L2 |
+
+D1 完成定义必须包含：前缀触发的关窗口仍可用，且必经 L2。
+
+### 5.6 Usage 记录与 `systemKey` 规范（D0/D2 必修现存坑）
+
+**问题：** 窗口 id、tab id、pid **跨会话不稳定**。现状 `host:window:focus:${win.id}`、`host:process:terminate:${pid}` 且 `recordUsage: true`，会污染 `launcherUsageBySurface`。
+
+**映射规范（`toLauncherItem` 必须遵守）：**
+
+| kind / 动作 | `recordUsage` | `systemKey`（usage 维度） | 说明 |
+|-------------|---------------|---------------------------|------|
+| `app` + open | **true** | 现有 `host:app-launcher:app:${appId}` | appId 已相对稳定 |
+| `window` + focus | **true** | `host:window:focus:app:${appStableKey}` | **按应用聚合**，不按瞬时 window id |
+| `window` + close | **false** | `host:window:close:ephemeral:${windowId}` | 危险/低频；不记 usage，或仅 journal 不参与 score |
+| `tab` + focus | **true** | `host:tab:focus:app:${appStableKey}` 或 `…:origin:${origin}`（若有 URL） | 优先 app；有稳定 origin 时可更细，仍避免 tabId |
+| `terminate` 进程 | **false** | 任意仅作列表身份 | **禁止** `recordUsage: true`；pid 不可作 usage key |
+| 文本 pipeline 等 | 按现有 host 策略 | 稳定 pipeline id | 不变 |
+
+**列表渲染 id** 仍可用含原生 id 的 `DesktopTarget.id` / LauncherItem 运行时 key，与 **usage systemKey** 分离：
+
+- `LauncherItem.systemKey` = 上表 usage 维度（可重复出现多个「Chrome 窗口」行，但 usage 记到同一 app 桶——可接受；若需区分窗口实例，**仍不写 usage**）。  
+- 可选：`legacyUsageKeys` 不用于桌面瞬时 id。
+
+D0 引入 `toLauncherItem` 时一并修正 window focus；D2 修正 process `recordUsage: false` 并移出一级列表。
 
 ---
 
@@ -320,8 +420,9 @@ Chrome / Edge / 其它 Chromium：
 
 - **激活 tab：** L1，直接执行（聚焦浏览器窗口 + 选中 tab）  
 - **扩展未连接：** health 失败 → 本源无结果；UI 可在设置页说明，Launcher 不报错刷屏  
-- **无痕/敏感：** 默认策略建议「不索引无痕」或可设置（评审可裁）  
-- **性能：** 缓存 + TTL（建议 1–3s 级）；list 侧按 query 预过滤；限制返回条数  
+- **无痕：** Chromium 扩展 **默认拿不到** 无痕窗口 tab（需用户在扩展详情页显式开启「在无痕模式下启用」）。平台默认即「不索引无痕」，**无需评审另裁**；设置页可一句话说明此平台行为  
+- **空搜：** D3 上线时标签空搜默认 **0 条**；验证稳定后再放开 2–3（需聚焦历史或等价 MRU，见 §5.2）  
+- **性能：** 缓存 + TTL（建议 1–3s 级）；list 侧按 query 预过滤；限制返回条数；慢源依赖 §4.3 partial，不得阻塞快源 App/窗口  
 
 ### 6.4 与 web-open 插件的分工
 
@@ -337,29 +438,38 @@ Chrome / Edge / 其它 Chromium：
 
 进程结束是 L2 危险操作，**不应**与 App/窗口/标签一级混排。
 
+### 7.0 现网缺陷（D2 优先级论据）
+
+现状 `getHostProcessLauncherDynamicItems`（`processes.ts`）：**任意非空 query**（在 strip 前缀后非空）都会去 list 进程并生成 terminate 项，**不要求**用户先输入 `kill` / `杀`。
+
+后果：普通搜 App/文件名时可能混出「结束进程」危险项——这是 **已上线产品缺陷**，不是锦上添花的形态修正。  
+**D2 必须修复：** 仅进程模式（显式 kill 意图）才调用 process list；一级 `collectDesktopTargets` 永不包含 terminate。
+
 ### 7.1 交互
 
 ```text
-1. 用户输入 kill / 杀 / 结束（可配置同义词）
-2. 进入「进程模式」子列表（同 Launcher 框内模式条，或等价 UX）
-3. 展示进程行：名称、pid、CPU、内存等（采样刷新）
-4. 可继续键入过滤名称
-5. 回车 → 确认框（名 + pid + 可选资源）→ SIGTERM（默认）
-6. Esc → 退出进程模式，回到普通搜索
+1. 用户输入 kill / 杀 / 结束（可配置同义词）→ 进入进程模式
+2. 展示进程行：名称、pid、CPU、内存等（采样刷新）；默认按 CPU 降序
+3. 可继续键入过滤名称
+4. 回车 → 确认框（名 + pid + 可选资源）→ SIGTERM（默认）
+5. Esc → 退出进程模式，回到普通搜索
 ```
 
 ### 7.2 规则
 
-- 普通空搜、普通 query：**不**列进程  
-- 仅输入 `kill` 而无过滤词：可列有限集合（建议按 CPU 降序，上限 N）  
+- 普通空搜、普通 query：**不**列进程（修复 §7.0）  
+- 仅输入 `kill` 而无过滤词：可列有限集合，**默认 CPU 降序** + 上限 N；可继续键入过滤  
 - deny 表（kernel_task、launchd、WindowServer…）不可选或不可确认通过  
 - 强杀非默认；审计只记动作类型与目标摘要  
+- **`recordUsage: false`**（§5.6）  
 
 ### 7.3 实现位置
 
-可保留在 host `desktopControl/processes`，但语义上是 **Process Session Mode**，不是 `DesktopTargetProvider` 的默认 list 源。  
-若要用 Provider 抽象，应使用单独 registry 或 `mode: 'process-manager'`，避免污染一级导航。
+可保留在 host `desktopControl/processes`，语义是 **Process Session Mode**。  
 
+- **类型**可与 `DesktopTarget` 共享字段（如 meta.cpuPercent），但  
+- **注册表必须分离**：不进一级 `DesktopTargetRegistry.list`；可用 `processMode.ts` 或 `mode: 'process-manager'` 专用收集路径。  
+- 防止实现者把 terminate 目标塞进一级 registry（与 §4.1 警告一致）。
 ---
 
 ## 8. 新软件接入成本模型
@@ -408,17 +518,19 @@ Chrome / Edge / 其它 Chromium：
 
 高 confidence **不**跳过 L2。
 
-### 9.2 Capability / Permission（建议）
+### 9.2 Capability / Permission（与现码对齐）
 
-| Key | 用途 |
-|-----|------|
-| `desktop.windows` | 窗口枚举与聚焦 |
-| `desktop.processes` | 进程模式 |
-| `desktop.browser-tabs` | 浏览器标签枚举与聚焦（扩展桥） |
-| 未来 `desktop.editor-tabs` | 编辑器页（可合并为更粗的 `desktop.tabs` + source 细分，评审二选一） |
+**裁决：沿用现有连字符风格**，与 `LauncherHostCapability`（`types.ts`）一致，**禁止**再引入点分隔的平行命名。
 
-第三方若未来允许实现 Provider：默认 **不**授予 `desktop.browser-tabs`；需显式授权。
+| Key | 用途 | 现状 |
+|-----|------|------|
+| `desktop-windows` | 窗口枚举与聚焦 | **已有** `LauncherHostCapability` |
+| `desktop-processes` | 进程模式 | **已有** |
+| `desktop-browser-tabs` | 浏览器标签枚举与聚焦（扩展桥） | **D3 新增**（同风格） |
 
+- **YAGNI：** 不发明统一的 `desktop-tabs` / `desktop.tabs`，直到出现第二个 tab 源（如 VS Code）再评估合并。  
+- PluginPermission 文案层若需字符串，与 capability **同形**（连字符），避免 `desktop.windows` vs `desktop-windows` 双轨。  
+- 一期仅 first-party：注册表不进插件 SDK ⇒ 第三方自然无法注册 Provider。
 ### 9.3 隐私
 
 - Tab 标题/URL 仅本机使用，默认不上传  
@@ -431,20 +543,23 @@ Chrome / Edge / 其它 Chromium：
 
 ```text
 src/workspace/desktopTargets/
-  types.ts           # DesktopTarget, Provider, QueryContext
-  registry.ts        # register / collect / timeout / limits
-  toLauncherItem.ts  # Target → LauncherItem 映射
+  types.ts           # DesktopTarget, Provider, QueryContext, ActivateContext
+  registry.ts        # register / collectDesktopTargets(onPartial, signal) / timeout / limits
+  toLauncherItem.ts  # Target → LauncherItem（含 §5.6 usage/systemKey 规范）
   providers/
     app.ts           # 包装现有 app launcher
-    window.ts        # 包装现有 windows
-    chromiumTabs.ts  # 扩展桥（后续）
-  processMode.ts     # kill 二级模式（不进一级 collect）
+    window.ts        # focus list + close 前缀路径（§5.5）
+    chromiumTabs.ts  # 扩展桥（D3）
+  processMode.ts     # kill 二级模式（独立收集，不进一级 registry）
+  focusHistory.ts    # 可选：聚焦历史 ring（空搜「最近」增强）
 
 src-tauri/…          # list/focus tabs 桥；窗口/进程已有则复用
 
 src/workspace/launcher/
-  hostProvider.ts    # 改为 collectDesktopTargets + processMode 分支
+  hostProvider.ts    # collectDesktopTargets(partial) + processMode 分支
+  registry.ts        # 保持与 dynamicItems onPartial 模式一致
   ranking.ts         # 导航让位、可选 desktopAffinity
+  types.ts           # capability 仅连字符：desktop-windows | desktop-processes | desktop-browser-tabs
 ```
 
 插件目录 **不** 出现「只为混排服务的 chrome-tabs 业务插件」作为唯一实现；扩展与桥在 host/native。
@@ -453,27 +568,28 @@ src/workspace/launcher/
 
 ## 11. 分期
 
+顺序固定：**D0 → D1 → D2 → D3 → D4**（不得为赶标签跳过 D0 partial / D2 缺陷修复）。
+
 | 期 | 交付 | 完成定义 |
 |----|------|----------|
-| **D0 协议** | types + registry + 超时/限条/失败隔离；app/window 迁入或适配 | 假 provider 可出现在列表；坏 provider 不影响其它 |
-| **D1 窗口混排产品化** | 窗口与 App 同框体验对齐（搜索自然、type 标签、空搜克制、强文本让位） | 搜应用名可同时见 App+窗口；无需记「切到」前缀也能用（前缀可保留作 boost） |
-| **D2 进程二级模式** | `kill` 进入进程列表；CPU/内存采样；L2 确认 | 空搜无进程；仅 kill 模式可见；确认前不杀 |
-| **D3 Chromium 标签** | 扩展 + 本机桥 + `browser.chromium` provider | 安装扩展后 tab 进混排；未安装无报错刷屏 |
-| **D4 更多来源** | VS Code 等按接入清单添加 | 仅新增 adapter，不改 registry 核心 |
+| **D0 协议** | types + registry（**含 onPartial + signal**）+ 超时/限条/失败隔离；`toLauncherItem` usage 规范；app/window 适配迁入 | 假 provider partial 可先于慢源渲染；坏 provider 不影响其它；window focus usage 不再按瞬时 window id |
+| **D1 窗口混排产品化** | 与 App 同框；type 标签；空搜窗口上限 8（z-order 近似，文案诚实）；强文本让位；**close 前缀路径 + L2**（§5.5） | 搜应用名可见 App+窗口；关窗口仍可用且必确认；「切到」前缀可保留作 boost |
+| **D2 进程二级模式** | 显式 kill 模式；CPU 降序 + 过滤；L2 确认；**移出一级列表**；`recordUsage: false` | **任意普通 query 不再出现 terminate**（修 §7.0）；仅 kill 模式可见进程 |
+| **D3 Chromium 标签** | 扩展 + 本机桥 + `browser.chromium`；capability `desktop-browser-tabs`；空搜 tab=0 | 有扩展则 tab 进混排且 partial 不堵 App；无扩展静默 |
+| **D4 更多来源** | VS Code 等按接入清单 | 仅 adapter；registry 核心不动 |
 
-与路线图包③–⑤ 的关系：现有实现是 **骨架**；本设计是 **可扩展收口与产品形态修正**（尤其窗口一级化、进程二级化、标签协议化）。
-
+与路线图包③–⑤：现有是 **骨架**；本设计是 **可扩展收口 + 产品形态修正 + 缺陷修复**（D2 含现网危险混排）。
 ---
 
 ## 12. 测试策略
 
 | 层 | 覆盖 |
 |----|------|
-| 单测 | registry 超时隔离；限条；去重；Target→LauncherItem 映射 |
-| 契约 | 未启用/health 失败源无输出；进程不出现在一级 collect |
+| 单测 | registry 超时隔离；**partial 顺序**（快源先 onPartial）；限条；去重后写覆盖；Target→LauncherItem **usage key** |
+| 契约 | 未启用/health 失败源无输出；**普通 query 一级 collect 无 terminate**；close 前缀产出 L2 |
 | 排序 | 强 jwt detection 下导航 target 分低于文本工具；精确 App 名仍可赢 |
-| 集成/手工 | macOS：混排搜 Chrome；kill 模式资源列；扩展断连降级 |
-| 架构 | `check:architecture`；插件不 import desktopTargets 私有实现（若仅 public API 导出则走 public） |
+| 集成/手工 | macOS：混排搜 Chrome；kill 模式 CPU 序；扩展断连降级；关窗口确认 |
+| 架构 | `check:architecture`；注册表不进插件 SDK |
 
 ---
 
@@ -482,55 +598,77 @@ src/workspace/launcher/
 | 风险 | 缓解 |
 |------|------|
 | 扩展安装率低 | 未安装时窗口仍可用；设置引导 |
-| Tab 数量大拖慢输入 | TTL、限条、query 预过滤、异步 partial |
+| Tab 数量大拖慢输入 | TTL、限条、query 预过滤；**partial 契约强制**，禁止批式退化 |
+| D0 批式返工 | §4.3 完成定义绑定 partial |
 | Provider 各自为政再分裂 | 准入清单 + 代码评审门禁 |
-| 隐私顾虑 | 权限说明、无痕策略、日志脱敏 |
+| usage 污染 | §5.6；D0/D2 必修 |
+| 隐私顾虑 | 权限说明、平台默认无痕不可见、日志脱敏 |
 | 与 web-open 概念混淆 | 文档与 UI 文案区分「已打开标签」vs「打开链接」 |
+| 普通 query 混出杀进程 | D2 必修 §7.0 |
 
 ---
 
-## 14. 决策记录（供评审确认）
+## 14. 决策记录
 
 | # | 决策 | 状态 |
 |---|------|------|
-| 1 | 窗口与 App **一级混排**，心智对齐「开应用」 | 已讨论同意 |
-| 2 | 浏览器/同类标签进入 **同一混排**，不单独「标签模式」 | 已讨论同意 |
-| 3 | 新来源通过 **DesktopTargetProvider** 扩展，禁止平行管道 | 本设计提出 |
-| 4 | Chromium 族 **共享** provider，配置化多浏览器 | 本设计提出 |
-| 5 | Tab 主路径 = **扩展 + host 桥**，非读 Session 文件 | 本设计提出 |
-| 6 | 导航目标属 **host**；文本/站点模板属 **plugin** | 已讨论同意 |
-| 7 | 杀进程 = **二级模式** + 资源信息 + L2 确认 | 已讨论同意 |
-| 8 | 关窗口等 L2 不因高 conf 跳过确认 | 沿用路线图 |
+| 1 | 窗口与 App **一级混排**，心智对齐「开应用」 | 已确认 |
+| 2 | 浏览器/同类标签进入 **同一混排**，不单独「标签模式」 | 已确认 |
+| 3 | 新来源通过 **DesktopTargetProvider** 扩展，禁止平行管道 | 已确认 |
+| 4 | Chromium 族 **共享** provider，配置化多浏览器 | 已确认 |
+| 5 | Tab 主路径 = **扩展 + host 桥**，非读 Session 文件 | 已确认 |
+| 6 | 导航目标属 **host**；文本/站点模板属 **plugin** | 已确认 |
+| 7 | 杀进程 = **二级模式** + 资源信息 + L2 确认 | 已确认 |
+| 8 | 关窗口等 L2 不因高 conf 跳过确认 | 已确认 |
+| 9 | 聚合契约 **必须 partial**（对齐现有 dynamicItems），禁止 D0 批式退化 | v1.1 评审补入 |
+| 10 | usage：窗口/tab **按 appStableKey 聚合**；进程/关窗默认不记 usage | v1.1 评审补入 |
+| 11 | 关窗口：一级 list 默认 focus；**前缀触发 close 项 + L2**（§5.5） | v1.1 评审补入 |
+| 12 | Capability **连字符**：`desktop-windows` / `desktop-processes` / `desktop-browser-tabs` | v1.1 评审补入 |
+| 13 | 一期仅 first-party（注册表不进插件 SDK） | v1.1 关闭 §15 |
+| 14 | 空搜标签 0；窗口上限 8；D0→D1→D2 先于 D3 | v1.1 关闭 §15 |
 
 ---
 
-## 15. 开放问题（请评审拍板）
+## 15. 原开放问题 — 已关闭
 
-1. **空搜最近标签条数：** 建议 0–3，与最近 App/窗口如何配比？  
-2. **权限粒度：** `desktop.browser-tabs` 独立，还是统一 `desktop.tabs` + sourceId？  
-3. **第三方 Provider：** 一期是否 **完全禁止**，仅 first-party？  
-4. **进程模式排序默认：** CPU 降序 vs 名称 vs 「仅用户进程」？建议 CPU 降序 + 可键入过滤。  
-5. **关闭标签：** 是否一期只做 focus，关闭 tab 留作 L2 二期？建议一期只 focus。  
-6. **D0/D1 是否先于 D3：** 建议先 D0+D1+D2 修正现有骨架体验，再上扩展（D3）。
+| # | 问题 | 裁决 |
+|---|------|------|
+| 1 | 空搜最近标签条数 | **0 条起步**；D3 验证后再考虑 2–3。窗口空搜上限 **维持 8**（z-order 近似，不称 MRU 除非有聚焦历史） |
+| 2 | 权限粒度 | 独立 **`desktop-browser-tabs`（连字符）**；不做 `desktop-tabs` 合并（YAGNI） |
+| 3 | 第三方 Provider | **一期仅 first-party**；注册表 API 不导出插件 SDK |
+| 4 | 进程排序 | **CPU 降序 + 键入过滤** |
+| 5 | 关闭标签 | **一期只 focus**；关 tab 不做 |
+| 6 | 分期顺序 | **D0→D1→D2→D3**；D2 含修现网「任意 query 混出 terminate」缺陷，优先级硬 |
 
 ---
 
-## 16. 评审关注清单（给 Claude / 人类）
+## 16. 评审关注清单（v1.1 自检）
 
-- [ ] 与 `Agents.md` host/plugin 边界是否一致？  
-- [ ] 是否会诱导 framework 膨胀进「Chrome 产品语义」？  
-- [ ] Provider 超时/限条是否足以保护输入流畅？  
-- [ ] 进程二级与 Target 一级分离是否足够硬（避免以后又混回去）？  
-- [ ] Chromium 共享实现是否写清，避免 Edge 再 fork 一套？  
-- [ ] 与现有 `desktopControl/*`、`hostAppLauncher` 迁移路径是否可渐进？  
-- [ ] 安全 L1/L2/L3 与审计是否闭环？  
-- [ ] 开放问题 §15 是否需在开工前全部关闭？  
+- [x] 与 `Agents.md` host/plugin 边界一致  
+- [x] 不把 Chrome 产品语义塞进 framework 核心（chromium 为 host 子系统 / provider）  
+- [x] partial + 超时/限条写入 §4.3 契约  
+- [x] 进程二级与 Target 一级分离（§4.1 / §7 / D2 缺陷）  
+- [x] Chromium 共享实现写清  
+- [x] 渐进迁移 + 不丢 onPartial  
+- [x] L1/L2/L3、close 路径、usage 规范闭环  
+- [x] §15 已关闭  
+
+若二次评审仅需抽查：**§4.3 partial、§5.5 close、§5.6 usage、§7.0 缺陷、§9.2 连字符 capability**。
 
 ---
 
 ## 17. 下一步
 
-1. 评审本草案，关闭 §15 开放问题。  
-2. 通过后拆实施计划（建议按 D0→D1→D2→D3）。  
-3. 扩展通信协议（消息 schema、鉴权、端口）可另文：`doc/…-browser-extension-bridge-design.md`。  
+1. ~~关闭 §15~~（v1.1 已关闭）。  
+2. 拆实施计划（D0→D1→D2→D3），任务含：partial 契约测试、usage key 修正、process 一级混出回归测试、close 前缀 L2。  
+3. 扩展通信协议另文：`doc/…-browser-extension-bridge-design.md`（D3 前）。  
 4. 实现落在独立分支/worktree，避免直接在 main 大改。
+
+---
+
+## 18. 修订历史
+
+| 版本 | 说明 |
+|------|------|
+| v1.0 | 初稿草案 |
+| v1.1 | 吸收评审：partial 聚合、usage/systemKey、close 路径、capability 连字符、注释/ActivateContext/类型共享说明、无痕默认、最近数据源、关闭 §15、D2 现网缺陷论据 |
