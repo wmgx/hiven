@@ -57,7 +57,9 @@ assert.match(settings, /openChromiumExtensionInstallFolder/)
 
 // Host must NOT register chromium provider directly (plugin owns it).
 assert.doesNotMatch(host, /chromiumTabsProvider/)
-assert.match(host, /vscodeDocumentsProvider|hostWindowTargetProvider/)
+assert.doesNotMatch(host, /vscodeDocumentsProvider|editor\.vscode/, 'D4 vscode provider must be removed')
+assert.match(host, /hostWindowTargetProvider/)
+assert.match(host, /getDesktopBridgeLauncherDynamicItems/)
 
 assert.match(rust, /prepare_chromium_extension_package/)
 assert.match(rust, /reveal_path_in_file_manager/)

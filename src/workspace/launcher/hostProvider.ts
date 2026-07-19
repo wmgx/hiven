@@ -8,7 +8,6 @@ import { getDesktopBridgeLauncherDynamicItems } from '../desktopTargets/collectB
 import {
   registerDesktopTargetProvider,
 } from '../desktopTargets/registry'
-import { vscodeDocumentsProvider } from '../desktopTargets/vscodeDocuments'
 import { hostWindowTargetProvider } from '../desktopTargets/windowProvider'
 import { registerDefaultWorkflowProviders } from '../../workflow/defaultWorkflowProviders'
 import { getTextPipelineLauncherItems } from '../../workflow/pipelineLauncher'
@@ -29,10 +28,8 @@ export function registerHostLauncherProviders(): void {
   registerDefaultWorkflowProviders()
   registerBuiltinTextPipelines()
   // Host-owned desktop targets (window). Browser tabs are registered by the
-  // first-party browser-tabs plugin via desktopTargets.registerProvider (same
-  // protocol Feishu adapters will use). VS Code stays host-owned until split.
+  // first-party browser-tabs plugin via desktopTargets.registerProvider.
   registerDesktopTargetProvider(hostWindowTargetProvider)
-  registerDesktopTargetProvider(vscodeDocumentsProvider)
   setHostLauncherItemsProvider(() => [
     ...getHostPaneControlItems(),
     ...getHostSystemPowerItems(),
@@ -56,7 +53,7 @@ export function registerHostLauncherProviders(): void {
     }))
 
     if (!q) {
-      // Empty open path: skip workflow + bridge tabs/docs (empty-search tabs = 0).
+      // Empty open path: skip workflow + bridge tabs (empty-search tabs = 0).
       return [...appItems, ...windowItems]
     }
 
@@ -68,7 +65,7 @@ export function registerHostLauncherProviders(): void {
       return [] as Awaited<ReturnType<typeof getWorkflowObjectLauncherItems>>
     })
 
-    // D3/D4: Chromium tabs + editor documents via desktop bridge (silent if offline).
+    // D3: Chromium tabs via desktop bridge (plugin-registered; silent if offline).
     const bridgeItems = await measureLauncherPerf(
       'host-provider:bridge-items',
       () => getDesktopBridgeLauncherDynamicItems(ctx),

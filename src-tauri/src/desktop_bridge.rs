@@ -1,6 +1,6 @@
-//! Localhost bridge for D3 browser tabs + D4 editor documents.
+//! Localhost bridge for D3 browser tabs.
 //!
-//! Chromium / VS Code extensions push snapshots and poll focus commands.
+//! Chromium extensions push tab snapshots and poll focus commands.
 //! Launcher reads via Tauri commands — no extension process required for list
 //! when the bridge has a fresh snapshot.
 

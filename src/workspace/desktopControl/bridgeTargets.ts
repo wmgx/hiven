@@ -1,5 +1,5 @@
 /**
- * Client for the native desktop bridge (D3 Chromium tabs + D4 editor docs).
+ * Client for the native desktop bridge (D3 Chromium tabs).
  * Extensions push snapshots to 127.0.0.1:19246; launcher lists via Tauri.
  */
 
