@@ -70,6 +70,7 @@ export const LAUNCHER_HOSTS: Record<LauncherHostId, LauncherHostConfig> = {
       'parameter-customization',
       'desktop-windows',
       'desktop-processes',
+      'desktop-browser-tabs',
     ],
   },
   'editor-command-bar': {
@@ -257,6 +258,11 @@ export type LauncherResultChoice = {
   subtitleI18n?: Partial<Record<Locale, string>>
   /** Optional leading icon (e.g. site favicon for history suggestions). */
   icon?: IconRef
+  /**
+   * Visual tone for L2 choice rows (confirm dialogs).
+   * `danger` = destructive primary; `muted` = cancel / secondary.
+   */
+  tone?: 'default' | 'danger' | 'muted'
   preview?: string
   metadata?: LauncherResultChoiceMetadata
   primaryAction: LauncherResultActionHandler

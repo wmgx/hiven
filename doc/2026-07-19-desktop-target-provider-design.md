@@ -653,8 +653,8 @@ src/workspace/launcher/
 | **D0 协议** | types + registry（**含 onPartial + signal**）+ 超时/限条；`toLauncherItem`（**systemKey≡target.id**、usage 键分离、**surfaces 仅 global-launcher**）；app/window 适配迁入；priority cap 实现 | 假 provider partial 先于慢源；坏 provider 隔离；契约：editor-command-bar **无** host:window；usage 不按瞬时 window id 污染 |
 | **D1 窗口混排产品化** | 见下方 **D1 可检验 delta**（**不可**用「已能搜到窗口」冒充完成） | 下列验收项 **全部** 通过 |
 | **D2 进程二级模式** | 显式 kill 模式；CPU 降序 + 过滤；L2 确认；**移出一级列表**；`recordUsage: false` | **任意普通 query 不再出现 terminate**（修 §7.0）；仅 kill 模式可见进程 |
-| **D3 Chromium 标签** | 扩展 + 本机桥 + `browser.chromium`；capability `desktop-browser-tabs`；空搜 tab=0 | 有扩展则 tab 进混排且 partial 不堵 App；无扩展静默 |
-| **D4 更多来源** | VS Code 等按接入清单 | 仅 adapter；registry 核心不动 |
+| **D3 Chromium 标签** | 扩展 + 本机桥 + `browser.chromium`；capability `desktop-browser-tabs`；空搜 tab=0 | ✅ 已交付：本机桥 + **first-party 插件 `browser-tabs`**（设置内安装引导）经 `desktopTargets.registerProvider` 注册；无扩展静默 |
+| **D4 更多来源** | VS Code 等按接入清单 | ✅ 已交付：`editor.vscode` + `extensions/hiven-vscode-bridge`；registry 核心不动 |
 
 #### D1 可检验 delta（相对 **今日骨架**，二刷指出的验收失效问题）
 

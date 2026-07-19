@@ -29,8 +29,19 @@ assert.ok(
 assert.match(globalLauncher, /GlobalLauncherHost/, 'GlobalLauncher should delegate to GlobalLauncherHost')
 assert.match(
   globalLauncherHostLifecycle,
-  /focusSearchInputAfterBack\s*=\s*useCallback\(\(\) => \{[\s\S]{0,180}requestAnimationFrame\(\(\) => inputRef\.current\?\.focus\(\)\)/,
+  /focusSearchInputAfterBack\s*=\s*useCallback\(\(\) => \{[\s\S]{0,220}requestAnimationFrame\(\(\) => \{\s*focusLauncherInput\(\)/,
   'GlobalLauncher lifecycle helper should centralize focus restoration after launcher back navigation',
+)
+// Aggressive rekey/focus loops previously broke click-to-focus; keep the path minimal.
+assert.doesNotMatch(
+  globalLauncherHostLifecycle,
+  /focusLauncherWebview|rekeyNativeWebview|makeFirstResponder/,
+  'GlobalLauncher focus session must not rekey native first-responder from JS',
+)
+assert.doesNotMatch(
+  globalLauncherHostLifecycle,
+  /setInterval|ghostRekeysLeft/,
+  'GlobalLauncher focus session must not run a continuous focus watchdog',
 )
 const globalLauncherBackHandlers = (globalLauncherHost + '\n' + globalLauncherHostLifecycle + '\n' + globalLauncherKeyboard).match(/controllerRef\.current\?\.back(?:\?\.)?\(\)/g) ?? []
 const globalLauncherFocusHandlers = (globalLauncherHost + '\n' + globalLauncherHostLifecycle + '\n' + globalLauncherKeyboard).match(/focusSearchInputAfterBack\(\)/g) ?? []

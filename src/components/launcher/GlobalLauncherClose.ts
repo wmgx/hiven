@@ -1,4 +1,8 @@
-import { hideLauncherWindow, restoreCurrentLauncherOverlayWindow } from '../../workspace/windowManager/launcherWindow'
+import {
+  hideLauncherWindow,
+  restoreCurrentLauncherOverlayWindow,
+  type RestoreForegroundMode,
+} from '../../workspace/windowManager/launcherWindow'
 
 export async function closeGlobalLauncherWindow({
   standaloneLauncher,
@@ -6,16 +10,23 @@ export async function closeGlobalLauncherWindow({
   hideOverlayWindow,
   restoreFocus,
   setOpen,
+  restoreForeground = 'auto',
 }: {
   standaloneLauncher: boolean
   overlay: boolean
   hideOverlayWindow: boolean
   restoreFocus: () => void
   setOpen: (open: boolean) => void
+  /**
+   * Host hide policy for the remembered previous app.
+   * Blur-dismiss should pass `never`; Esc / idle close use `auto`.
+   * Clipboard paste does not use this path — it calls hide_launcher_and_paste.
+   */
+  restoreForeground?: RestoreForegroundMode
 }) {
   if (standaloneLauncher) {
     try {
-      await hideLauncherWindow()
+      await hideLauncherWindow({ restoreForeground })
     } catch (error) {
       console.warn('[hiven] Failed to hide launcher window:', error)
     }

@@ -3,10 +3,35 @@ const LAUNCHER_PERF_PREFIX = '[hiven:launcher-perf]'
 
 export function isLauncherPerfEnabled(): boolean {
   try {
-    return window.localStorage.getItem(LAUNCHER_PERF_STORAGE_KEY) === '1'
+    const stored = window.localStorage.getItem(LAUNCHER_PERF_STORAGE_KEY)
+    if (stored === '0') return false
+    if (stored === '1') return true
+    // Dev builds default on so perf lines reach native stderr without devtools.
+    return import.meta.env.DEV
   } catch {
     return false
   }
+}
+
+type InvokeFn = (cmd: string, args?: Record<string, unknown>) => Promise<unknown>
+let nativeInvoke: InvokeFn | null = null
+let nativeInvokeLoading = false
+
+/** Fire-and-forget mirror of perf lines into native stderr (dev diagnosis). */
+function forwardLauncherPerfLine(line: string): void {
+  if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+  if (nativeInvoke) {
+    void nativeInvoke('log_launcher_perf_frontend', { line }).catch(() => {})
+    return
+  }
+  if (nativeInvokeLoading) return
+  nativeInvokeLoading = true
+  void import('@tauri-apps/api/core')
+    .then(({ invoke }) => {
+      nativeInvoke = invoke as InvokeFn
+      void invoke('log_launcher_perf_frontend', { line }).catch(() => {})
+    })
+    .catch(() => {})
 }
 
 export function launcherPerfNow(): number {
@@ -17,9 +42,11 @@ export function logLauncherPerf(label: string, details?: Record<string, unknown>
   if (!isLauncherPerfEnabled()) return
   if (details) {
     console.info(LAUNCHER_PERF_PREFIX, label, details)
+    forwardLauncherPerfLine(`${label} ${JSON.stringify(details)}`)
     return
   }
   console.info(LAUNCHER_PERF_PREFIX, label)
+  forwardLauncherPerfLine(label)
 }
 
 export function logLauncherPerfDuration(

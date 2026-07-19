@@ -8,6 +8,30 @@ import type { WorkAction, WorkContext } from './workAction'
 import type { WorkObject } from './workObject'
 
 const MAX_OBJECT_ITEMS = 12
+/** Reuse object list across rapid keystrokes; collection is now cheap but still avoid thrash. */
+const WORKFLOW_OBJECTS_TTL_MS = 1500
+
+type WorkflowObjectsCache = {
+  fetchedAt: number
+  objects: WorkObject[]
+}
+
+let workflowObjectsCache: WorkflowObjectsCache | null = null
+
+async function listWorkflowObjectsCached(): Promise<WorkObject[]> {
+  const now = Date.now()
+  if (
+    workflowObjectsCache &&
+    now - workflowObjectsCache.fetchedAt < WORKFLOW_OBJECTS_TTL_MS
+  ) {
+    return workflowObjectsCache.objects
+  }
+  const objects = await collectWorkObjects()
+  // Installed apps are owned by host app launcher; never surface as workflow rows.
+  const filtered = objects.filter((object) => object.type !== 'app')
+  workflowObjectsCache = { fetchedAt: Date.now(), objects: filtered }
+  return filtered
+}
 
 export async function getWorkflowObjectLauncherItems({
   query,
@@ -17,11 +41,8 @@ export async function getWorkflowObjectLauncherItems({
   locale: Locale
 }): Promise<LauncherItem[]> {
   const normalizedQuery = query.trim()
-  const allObjects = await collectWorkObjects()
+  const allObjects = await listWorkflowObjectsCached()
   const visibleObjects = allObjects
-    // Installed apps are owned by host app launcher; listing them again here
-    // produces duplicate rows (same app twice) in Global Launcher.
-    .filter((object) => object.type !== 'app')
     .filter((object) => normalizedQuery ? objectMatchesQuery(object, normalizedQuery, locale) : isDefaultContextObject(object))
     .slice(0, MAX_OBJECT_ITEMS)
 

@@ -9,6 +9,7 @@ import { LauncherHintKey, LauncherHintText } from './LauncherFooterHints'
 
 export function GlobalLauncherCollectInputFrame({
   inputRef,
+  bindSearchInputRef,
   frame,
   busy,
   error,
@@ -20,6 +21,7 @@ export function GlobalLauncherCollectInputFrame({
   onSecondaryAction,
 }: {
   inputRef: RefObject<HTMLInputElement | null>
+  bindSearchInputRef?: (node: HTMLInputElement | null) => void
   frame: CollectInputFrame
   busy: boolean
   error?: string | null
@@ -35,6 +37,9 @@ export function GlobalLauncherCollectInputFrame({
   const previewChoices = frame.previewOutput?.choices ?? []
   const selectedIndex = frame.selectedSuggestionIndex ?? -1
   const hasSuggestions = previewChoices.length > 0
+  const filterText = frame.inputText.trim()
+  // Suggest-backed collect-input: empty choices after load = true empty state (not a fake row).
+  const showEmptyState = Boolean(frame.item.suggest) && !busy && !hasSuggestions && frame.previewInputText !== undefined
 
   return (
     <>
@@ -55,11 +60,13 @@ export function GlobalLauncherCollectInputFrame({
         ))}
         <span className="vbar" />
         <input
-          ref={inputRef}
+          ref={bindSearchInputRef ?? inputRef}
           value={frame.inputText}
+          autoFocus
           onChange={(event) => onInputChange(event.target.value)}
           placeholder={placeholder}
           className="mono"
+          style={{ caretColor: 'var(--text, currentColor)' }}
         />
         {busy && (
           <span className="meta">...</span>
@@ -82,7 +89,9 @@ export function GlobalLauncherCollectInputFrame({
               >
                 <button
                   type="button"
+                  tabIndex={-1}
                   className="l-suggest-row-main"
+                  onMouseDown={(event) => event.preventDefault()}
                   onClick={() => onActivateChoice(choice)}
                 >
                   <span className="r-ico r-favicon" aria-hidden>
@@ -104,9 +113,11 @@ export function GlobalLauncherCollectInputFrame({
                   <button
                     key={action.id}
                     type="button"
+                    tabIndex={-1}
                     className="l-suggest-row-secondary"
                     title={action.title}
                     aria-label={action.title}
+                    onMouseDown={(event) => event.preventDefault()}
                     onClick={(event) => {
                       event.preventDefault()
                       event.stopPropagation()
@@ -121,10 +132,37 @@ export function GlobalLauncherCollectInputFrame({
           })}
         </div>
       )}
+      {showEmptyState && (
+        <div
+          className="global-launcher-body l-results"
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            padding: '28px 20px',
+            textAlign: 'center',
+            minHeight: 96,
+          }}
+          role="status"
+        >
+          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-secondary, var(--muted-foreground, #888))' }}>
+            {t(locale, 'palette.collectInputEmptyTitle')}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-tertiary, var(--muted-foreground, #999))', maxWidth: 320 }}>
+            {filterText
+              ? t(locale, 'palette.collectInputEmptyFilterHint').replace('{query}', filterText)
+              : t(locale, 'palette.collectInputEmptyHint')}
+          </div>
+        </div>
+      )}
       <div className="global-launcher-footer l-foot">
         {hasSuggestions
           ? <LauncherHintText label={t(locale, 'palette.collectInputSuggestHint')} />
-          : <LauncherHintKey keys="↵" label={t(locale, 'palette.quickEntryRun')} />}
+          : showEmptyState
+            ? <LauncherHintText label={t(locale, 'palette.collectInputEmptyFooter')} />
+            : <LauncherHintKey keys="↵" label={t(locale, 'palette.quickEntryRun')} />}
         <LauncherHintKey keys="esc" label={t(locale, 'palette.back')} />
       </div>
     </>

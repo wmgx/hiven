@@ -31,6 +31,7 @@ const files = {
 // ── Rust commands ────────────────────────────────────────────────────────────
 for (const name of [
   'list_desktop_windows',
+  'list_desktop_windows_enriched',
   'focus_desktop_window',
   'close_desktop_window',
   'list_desktop_processes',
@@ -75,17 +76,51 @@ assert.match(files.tauriLib, /deny_list_blocks_critical_system_process_names/, '
 // ── TS windows ───────────────────────────────────────────────────────────────
 assert.match(files.windows, /WINDOW_LIST_TTL_MS\s*=\s*8000/, 'window list TTL must be 8s (perf)')
 assert.match(files.windows, /listDesktopWindowsCached|windowListCache/, 'window TTL cache helper required')
+assert.match(files.windows, /prefetchDesktopWindowsOnStartup/, 'startup must be able to warm window list lazily')
+assert.match(files.windows, /ensureWindowListLoading|listInflight/, 'window list must single-flight and not block open')
+assert.match(files.windows, /COLD_LOAD_DEFER_MS|scheduleDeferredWindowListLoad/, 'cold window load must be deferred past first open paint')
+assert.match(
+  read('src/workspace/launcher/useLauncherSession.ts'),
+  /HOST_EMPTY_OPEN_DELAY_MS/,
+  'empty open must delay host dynamic past first paint',
+)
+assert.match(
+  read('src/workspace/appLauncher/hostAppLauncher.ts'),
+  /getEmptyQueryTopApps|emptyQueryTopApps/,
+  'empty open must not re-sort the full app catalog',
+)
 assert.match(files.windows, /getHostWindowLauncherDynamicItems/, 'window dynamic items provider required')
+assert.match(read('src/App.tsx'), /prefetchDesktopWindowsOnStartup/, 'App must prefetch windows on startup idle')
 assert.match(files.windows, /host\.window:focus:native:\$\{/, 'focus systemKey required')
 assert.match(files.windows, /host\.window:close:native:\$\{/, 'close systemKey required')
 assert.match(files.windows, /kindLabelI18n/, 'window kindLabel i18n required')
 assert.match(files.processes, /isProcessModeQuery/, 'process mode gate required')
 assert.match(files.processes, /recordUsage:\s*false/, 'process items must not record usage')
 assert.match(files.windows, /invoke\(['"]list_desktop_windows['"]/, 'windows must invoke list_desktop_windows')
+assert.match(files.windows, /list_desktop_windows_enriched/, 'windows must offline-enrich titles (not on keystroke path)')
+assert.match(files.windows, /subscribeDesktopWindowsUpdated/, 'windows must notify when titles enrich')
+assert.match(files.windows, /app-icon:\$\{win\.appId\}|app-icon:\$\{/, 'window rows must use app icons when appId present')
 assert.match(files.windows, /invoke\(['"]focus_desktop_window['"]/, 'windows must invoke focus')
 assert.match(files.windows, /invoke\(['"]close_desktop_window['"]/, 'windows must invoke close')
+assert.match(files.tauriLib, /app_id:\s*Option<String>/, 'DesktopWindow/Process must carry optional app_id for icons')
 assert.match(files.windows, /stripWindowQueryPrefix/, 'window prefix strip helper required')
+assert.match(files.windows, /isSwitchableDesktopWindow/, 'window switch list must filter non-window shells')
 assert.match(files.windows, /切到|focus|窗口/, 'window aliases / prefixes required')
+assert.match(
+  files.tauriLib,
+  /clear_previous_foreground_app/,
+  'focus/launch must clear previous-app restore so hide does not bounce focus back',
+)
+assert.match(
+  files.tauriLib,
+  /focus_desktop_window[\s\S]{0,900}clear_previous_foreground_app/,
+  'focus_desktop_window must clear previous foreground after activate',
+)
+assert.match(
+  files.tauriLib,
+  /kCGWindowBounds|window_bounds_size/,
+  'window list must require positive CG bounds (real windows only)',
+)
 assert.match(files.windows, /confirm-close-window|Confirm close|确认关闭/, 'close L2 confirm choice required')
 assert.match(files.windows, /cancel-close-window|Cancel|取消/, 'close L2 cancel choice required')
 assert.match(files.windows, /titleI18n/, 'window items must use titleI18n')
@@ -104,9 +139,31 @@ assert.doesNotMatch(
 )
 
 // ── TS processes primitives ──────────────────────────────────────────────────
-assert.match(files.processes, /PROCESS_LIST_TTL_MS\s*=\s*3000/, 'process list TTL must be 3s')
-assert.match(files.processes, /listDesktopProcessesCached|processListCache/, 'process TTL cache helper required')
+assert.match(files.processes, /PROCESS_SNAPSHOT_TTL_MS\s*=\s*8000/, 'process snapshot TTL must be 8s')
+assert.match(files.processes, /listDesktopProcessesCached|processListCache|ensureProcessSnapshot/, 'process snapshot cache required')
 assert.match(files.processes, /invoke\(['"]list_desktop_processes['"]/, 'processes must invoke list')
+assert.match(files.processes, /PROCESS_SNAPSHOT_KEY\s*=\s*['"]\*['"]/, 'native fetch always uses full snapshot token')
+assert.match(files.processes, /processMatchesFilter/, 'process name filter must run client-side')
+assert.match(
+  files.tauriLib,
+  /PROCESS_LIST_ICON_RESOLVE_MAX/,
+  'process list must cap app_id icon resolve (not O(all processes))',
+)
+assert.match(
+  files.tauriLib,
+  /app_id:\s*None/,
+  'process rows start without app_id before selective icon resolve',
+)
+assert.match(
+  files.processes,
+  /list_desktop_processes failed/,
+  'process list failures must be logged, not silently TTL-cached as empty',
+)
+assert.match(
+  read('src/workspace/launcher/controller.ts'),
+  /scheduleRefreshSuggestions|suggestDebounceTimer/,
+  'collect-input suggest must debounce typing',
+)
 // First-level dynamic process rows removed (collect-input command owns UX)
 assert.match(
   files.processes,
@@ -119,12 +176,17 @@ const killCmd = readFileSync('src/workspace/desktopControl/killProcessCommand.ts
 assert.match(killCmd, /host:process:kill-command/, 'stable kill command systemKey')
 assert.match(killCmd, /type:\s*'collect-input'/, 'kill must use collect-input second level')
 assert.match(killCmd, /suggest:\s*async/, 'kill must suggest process list on second level')
+assert.doesNotMatch(killCmd, /process-empty|未找到进程/, 'kill must not fake an empty-state choice row')
+assert.match(killCmd, /app-icon:\$\{proc\.appId\}|app-icon:\$\{/, 'kill process rows must prefer real app icons')
 assert.match(killCmd, /confirm-terminate-process|确认结束/, 'L2 confirm required')
 assert.match(killCmd, /cancel-terminate-process|取消/, 'L2 cancel required')
 assert.match(killCmd, /terminate_desktop_process/, 'must invoke terminate')
 assert.match(killCmd, /force.*false|false\s*\/\* soft/, 'default soft terminate')
 // Soft terminate
 assert.match(killCmd, /terminateDesktopProcess\(proc\.pid,\s*false\)/, 'default terminate soft')
+
+const collectFrame = readFileSync('src/components/launcher/GlobalLauncherCollectInputFrame.tsx', 'utf8')
+assert.match(collectFrame, /collectInputEmptyTitle|showEmptyState/, 'collect-input must render true empty state')
 
 // ── Audit ────────────────────────────────────────────────────────────────────
 assert.match(files.audit, /export function auditL2Action/, 'auditL2Action export required')

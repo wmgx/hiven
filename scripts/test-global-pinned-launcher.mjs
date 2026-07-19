@@ -168,8 +168,8 @@ check('global launcher keeps keyboard selection visible while navigating', () =>
   )
   assertHas(
     files.launcherList,
-    /function\s+LauncherMixedListItem[\s\S]*useRef<HTMLButtonElement>[\s\S]*scrollIntoView\(\{\s*block:\s*['"]nearest['"]\s*\}\)/,
-    'GlobalLauncher selected rows should scroll into view as keyboard navigation changes selection',
+    /isKeyboardNavRef[\s\S]*scrollIntoView\(\{\s*block:\s*['"]nearest['"]\s*\}\)/,
+    'GlobalLauncher selected rows should scrollIntoView only during keyboard navigation (not hover)',
   )
 })
 
@@ -813,16 +813,21 @@ check('native launcher close restores the previously foreground app instead of a
   )
   assertHas(
     hideFn,
-    /restore_previous_foreground_app\(\)/,
-    'hiding a standalone launcher should restore focus to the app that was foreground before launcher opened',
+    /apply_restore_foreground_mode|restore_previous_foreground_app|RestoreForegroundMode/,
+    'hiding a standalone launcher should apply an explicit restore-foreground policy',
   )
-  const restoreIndex = hideFn.indexOf('restore_previous_foreground_app()')
+  assertHas(
+    files.tauriLib,
+    /parse_restore_foreground_mode|restore_foreground/,
+    'hide_launcher_window should accept restore_foreground mode (auto|never|force)',
+  )
+  assertHas(
+    files.tauriLib,
+    /RestoreForegroundMode::Never|\"never\"/,
+    'hide path must support never-restore for blur-dismiss',
+  )
   const hideIndex = hideFn.indexOf('window.hide()')
-  assert.ok(restoreIndex >= 0 && hideIndex >= 0, 'hide_launcher_window should restore and hide')
-  assert.ok(
-    hideIndex < restoreIndex,
-    'hide_launcher_window should restore the previous foreground app after hiding the launcher to avoid briefly activating main',
-  )
+  assert.ok(hideIndex >= 0, 'hide_launcher_window should hide the launcher window')
   assertHas(
     files.tauriLib,
     /runningApplicationWithProcessIdentifier[\s\S]{0,260}activateWithOptions/,

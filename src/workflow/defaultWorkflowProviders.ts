@@ -1,8 +1,7 @@
-import { createDefaultWorkContextSnapshot } from '../launcher/context/contextBroker'
 import { focusSurfaceInstance } from '../surfaces/actions'
 import { getSurfaceInstances } from '../surfaces/registry'
-import { useAppStore } from '../store'
-import { getHostAppWorkObjects, launchHostAppObject } from '../workspace/appLauncher/hostAppLauncher'
+import { getActiveEditorContextSnapshot } from '../workspace/editorBridge'
+import { launchHostAppObject } from '../workspace/appLauncher/hostAppLauncher'
 import { createQuickEditorPane, showQuickEditorSurface } from '../workspace/quickEditor/quickEditorRequests'
 import { EDITOR_WINDOW_LABEL } from '../workspace/windowManager/windowLabels'
 import { showPluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
@@ -28,28 +27,22 @@ export function registerDefaultWorkflowProviders(): void {
   registerWorkActionProvider(defaultSurfaceActionProvider)
 }
 
+/**
+ * List-path object provider for current editor context.
+ *
+ * Must stay free of clipboard / foreground / bridge RPC — it runs on every
+ * launcher keystroke via host dynamic collect. Uses the in-memory editor
+ * snapshot only; execute-time builds a full WorkContext in the adapter.
+ */
 export const currentContextObjectProvider: WorkObjectProvider = {
   id: 'workflow.context-objects',
   collect: async () => {
-    const snapshot = await createDefaultWorkContextSnapshot('global-hotkey')
+    const editor = getActiveEditorContextSnapshot()
+    if (!editor) return []
+
     const objects: WorkObject[] = []
-
-    // [DISABLED] External selection object — logic preserved, entry point disabled.
-    // const externalSelectionText = snapshot.externalSelection?.text?.trim()
-    // if (externalSelectionText) {
-    //   objects.push({
-    //     id: 'context:external-selected-text',
-    //     type: 'text',
-    //     title: 'Selected Text',
-    //     subtitle: preview(externalSelectionText),
-    //     icon: 'TextSelect',
-    //     source: 'context.external-selection',
-    //     text: externalSelectionText,
-    //     updatedAt: snapshot.invocation.timestamp,
-    //   })
-    // }
-
-    const selectedText = snapshot.editor?.selectedText?.trim()
+    const updatedAt = Date.now()
+    const selectedText = editor.selectedText?.trim()
     if (selectedText) {
       objects.push({
         id: 'context:selected-text',
@@ -59,33 +52,36 @@ export const currentContextObjectProvider: WorkObjectProvider = {
         icon: 'TextSelect',
         source: 'context.editor-selection',
         text: selectedText,
-        language: snapshot.editor?.language,
-        updatedAt: snapshot.invocation.timestamp,
+        language: editor.language,
+        updatedAt,
       })
     }
 
-    if (snapshot.editor) {
-      objects.push({
-        id: `editor:${snapshot.editor.activePaneId}`,
-        type: 'editor-document',
-        title: 'Current Editor Document',
-        subtitle: snapshot.editor.language ?? snapshot.editor.activePaneId,
-        icon: 'PanelTop',
-        source: 'context.editor',
-        windowLabel: EDITOR_WINDOW_LABEL,
-        paneId: snapshot.editor.activePaneId,
-        language: snapshot.editor.language,
-        updatedAt: snapshot.invocation.timestamp,
-      })
-    }
+    objects.push({
+      id: `editor:${editor.activePaneId}`,
+      type: 'editor-document',
+      title: 'Current Editor Document',
+      subtitle: editor.language ?? editor.activePaneId,
+      icon: 'PanelTop',
+      source: 'context.editor',
+      windowLabel: EDITOR_WINDOW_LABEL,
+      paneId: editor.activePaneId,
+      language: editor.language,
+      updatedAt,
+    })
 
     return objects
   },
 }
 
+/**
+ * Apps are listed by host app launcher (not workflow rows).
+ * Keep the provider registered for action typing, but never rebuild hundreds of
+ * app WorkObjects on each keystroke.
+ */
 export const hostAppObjectProvider: WorkObjectProvider = {
   id: 'workflow.host-app-objects',
-  collect: () => getHostAppWorkObjects('', useAppStore.getState().locale),
+  collect: () => [],
 }
 
 export const surfaceObjectProvider: WorkObjectProvider = {

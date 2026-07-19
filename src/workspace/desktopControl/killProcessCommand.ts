@@ -15,10 +15,9 @@ import { auditL2Action } from './audit'
 import {
   clearDesktopProcessListCache,
   listDesktopProcessesCached,
+  QUERY_PROCESS_LIMIT,
   type DesktopProcess,
 } from './processes'
-
-const QUERY_PROCESS_LIMIT = 40
 
 function processBaseName(name: string): string {
   const parts = name.split(/[/\\]/)
@@ -39,10 +38,10 @@ function formatCpu(cpu: number | undefined): string {
   return `${cpu.toFixed(1)}%`
 }
 
-/** Heuristic app icon for known apps; falls back to Cpu. */
-function processIcon(name: string): string {
-  const base = processBaseName(name).toLowerCase()
-  // Common macOS app process names → prefer generic brand icons when no app-icon id.
+/** Prefer real app icon via native appId; fall back to lucide heuristics. */
+function processIcon(proc: DesktopProcess): string {
+  if (proc.appId) return `app-icon:${proc.appId}`
+  const base = processBaseName(proc.name).toLowerCase()
   if (base.includes('chrome') || base.includes('helper')) return 'Globe'
   if (base.includes('edge')) return 'Globe'
   if (base.includes('safari')) return 'Globe'
@@ -71,21 +70,23 @@ async function terminateDesktopProcess(pid: number, force = false): Promise<void
 
 function buildTerminateConfirmResult(proc: DesktopProcess): LauncherExecuteResult {
   const base = processBaseName(proc.name)
-  const summary = `${base} · ${processSubtitle(proc)}`
+  const summary = processSubtitle(proc)
+  const targetLine = `${base} · ${summary}`
   return {
     ok: true,
     output: {
       choices: [
         {
           id: 'confirm-terminate-process',
-          title: 'Confirm terminate',
-          titleI18n: { en: 'Confirm terminate', zh: '确认结束' },
-          subtitle: summary,
-          subtitleI18n: { en: summary, zh: summary },
-          icon: processIcon(proc.name),
+          title: 'End process',
+          titleI18n: { en: 'End process', zh: '确认结束进程' },
+          subtitle: targetLine,
+          subtitleI18n: { en: targetLine, zh: targetLine },
+          icon: processIcon(proc),
+          tone: 'danger',
           primaryAction: async () => {
             try {
-              auditL2Action({ action: 'process.terminate', targetSummary: summary })
+              auditL2Action({ action: 'process.terminate', targetSummary: targetLine })
               await terminateDesktopProcess(proc.pid, false)
               clearDesktopProcessListCache()
               return { ok: true as const }
@@ -101,6 +102,10 @@ function buildTerminateConfirmResult(proc: DesktopProcess): LauncherExecuteResul
           id: 'cancel-terminate-process',
           title: 'Cancel',
           titleI18n: { en: 'Cancel', zh: '取消' },
+          subtitle: 'Keep the process running',
+          subtitleI18n: { en: 'Keep the process running', zh: '不结束，返回列表' },
+          icon: 'X',
+          tone: 'muted',
           primaryAction: async () => ({ ok: true as const, keepOpen: true as const }),
         },
       ],
@@ -117,15 +122,14 @@ function processToChoice(proc: DesktopProcess): LauncherResultChoice {
     titleI18n: { en: base, zh: base },
     subtitle,
     subtitleI18n: { en: subtitle, zh: subtitle },
-    icon: processIcon(proc.name),
+    icon: processIcon(proc),
     primaryAction: async () => buildTerminateConfirmResult(proc),
   }
 }
 
 async function loadProcessChoices(filter: string): Promise<LauncherResultChoice[]> {
-  // Bare second-level input → list all; otherwise filter by name.
-  const listQuery = filter.trim() || '*'
-  const list = await listDesktopProcessesCached(listQuery)
+  // One native snapshot + client filter (no re-ps per keystroke).
+  const list = await listDesktopProcessesCached(filter.trim() || '*')
   return list.slice(0, QUERY_PROCESS_LIMIT).map(processToChoice)
 }
 
@@ -182,20 +186,9 @@ export function getKillProcessHostItem(): LauncherItem {
     recordUsage: true,
     // Stable id for usage learning of the command itself.
     suggest: async (ctx: LauncherSuggestContext) => {
+      // Empty list → true empty state in CollectInputFrame (no fake selectable row).
       const choices = await loadProcessChoices(ctx.inputText)
-      if (choices.length === 0) {
-        return {
-          choices: [
-            {
-              id: 'process-empty',
-              title: ctx.locale === 'zh' ? '未找到进程' : 'No processes found',
-              subtitle: ctx.inputText.trim() || undefined,
-              primaryAction: async () => ({ ok: true as const, keepOpen: true as const }),
-            },
-          ],
-        } satisfies LauncherOutput
-      }
-      return { choices }
+      return { choices } satisfies LauncherOutput
     },
     execute: async (ctx) => {
       // Free-text submit without picking a row: try exact/unique name match → L2 confirm.

@@ -43,6 +43,8 @@ assert.match(tauriLib, /current_foreground_application_name\(\)/, 'foreground co
 assert.match(tauriLib, /current_foreground_process_id\(\)/, 'foreground context must include process id when available')
 assert.match(tauriLib, /current_foreground_app_context,/, 'foreground context command must be registered with Tauri')
 assert.match(workflowAdapter, /createDefaultWorkContextSnapshot\(['"]global-hotkey['"]\)/, 'workflow launcher adapter must build a context snapshot before expanding actions')
-assert.match(defaultWorkflowProviders, /currentContextObjectProvider[\s\S]*createDefaultWorkContextSnapshot\(['"]global-hotkey['"]\)/, 'current context object provider must use the default context snapshot')
+// List path stays free of clipboard/foreground: in-memory editor snapshot only.
+assert.match(defaultWorkflowProviders, /currentContextObjectProvider[\s\S]*getActiveEditorContextSnapshot\(\)/, 'current context object provider list path must use the in-memory editor snapshot only')
+assert.doesNotMatch(defaultWorkflowProviders, /currentContextObjectProvider[\s\S]*createDefaultWorkContextSnapshot/, 'list path must not call createDefaultWorkContextSnapshot (clipboard/foreground jank)')
 
 console.log('context snapshot editor checks passed')

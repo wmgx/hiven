@@ -24,6 +24,7 @@ import {
   searchableFieldsMatch,
   type SearchableFields,
 } from '../searchRanking'
+import { navNearDuplicateDemotion } from '../desktopTargets/browserWindowPolicy'
 import type {
   LauncherItem,
   LauncherSurfaceId,
@@ -276,7 +277,12 @@ export function contextBoost(item: LauncherItem, ctx: RankContext): number {
  *
  * Usage is solely from `launcherUsageBySurface` via {@link usageScore}.
  */
-export function scoreLauncherItem(ctx: RankContext, item: LauncherItem): number {
+export function scoreLauncherItem(
+  ctx: RankContext,
+  item: LauncherItem,
+  /** Full candidate list for soft near-dup demotion (optional). */
+  peers?: LauncherItem[],
+): number {
   const q = ctx.query.trim().toLowerCase()
   const matchScore = scoreSearchableFields(getCachedSearchableFields(item, ctx.locale), q, ctx.locale)
   const textMatchBoost = ctx.contentText && item.textMatch
@@ -299,6 +305,11 @@ export function scoreLauncherItem(ctx: RankContext, item: LauncherItem): number 
     providerPriorityBoost
   if (isDesktopNavigationItem(item) && hasStrongTextContentIntent(ctx.detections)) {
     score -= STRONG_TEXT_INTENT_NAV_PENALTY
+  }
+  // Soft: page-level nav (tabs) outranks coarser nav (windows) when titles collide.
+  // Host only uses capability tier + title similarity — no browser product rules.
+  if (peers && peers.length > 1 && isDesktopNavigationItem(item)) {
+    score -= navNearDuplicateDemotion(item, peers)
   }
   return score
 }
@@ -335,14 +346,22 @@ export function rankLauncherItems(ctx: RankContext, items: LauncherItem[]): Laun
   searchableFieldsCacheLocale = ctx.locale
 
   const q = ctx.query.trim().toLowerCase()
-  // When query is present, filter strictly by name/keyword match only.
-  // contentText (textMatch) only contributes to scoring, not filtering —
-  // otherwise tools like Base64 that accept any text would appear for every query.
+  // When query is present, filter by name/keyword match for static/host rows.
+  // Plugin *dynamic* items already self-selected for this query (e.g. web-open
+  // matchPattern → open URL). Re-filtering them via title/alias drops pattern
+  // hits whose title is a site name and whose matched text only appears in the
+  // URL subtitle (searchableFieldsMatch intentionally ignores subtitle).
+  // contentText (textMatch) still only scores, not filters — Base64-style tools
+  // remain dynamic providers rather than always-visible static rows.
   const candidates = q
-    ? items.filter((item) => itemMatchesQuery(item, q, ctx.locale))
+    ? items.filter((item) => item.kind === 'dynamic' || itemMatchesQuery(item, q, ctx.locale))
     : items.slice()
 
-  const scored: ScoredItem[] = candidates.map((item, index) => ({ item, index, score: scoreLauncherItem(ctx, item) }))
+  const scored: ScoredItem[] = candidates.map((item, index) => ({
+    item,
+    index,
+    score: scoreLauncherItem(ctx, item, candidates),
+  }))
 
   const limit = Math.min(scored.length, MAX_RANKED_RESULTS)
 

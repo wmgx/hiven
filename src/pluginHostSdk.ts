@@ -34,8 +34,13 @@ import {
   textError,
   defineTextCommand,
 } from './pluginHostCore.ts'
+import {
+  createDesktopTargetsHostApi,
+  type DesktopTargetsHostApi,
+} from './workspace/desktopTargets/pluginApi'
 
 export type { PluginHostUi, PluginHostEffects, TextCommandDefinition } from './pluginHostCore.ts'
+export type { DesktopTargetsHostApi, DesktopTargetProvider } from './workspace/desktopTargets/pluginApi'
 
 type HostSettings = ReturnType<typeof useAppStore.getState>['settings']
 
@@ -109,6 +114,11 @@ export type PluginHostSdk = {
   textOutput: typeof textOutput
   textError: typeof textError
   defineTextCommand: typeof defineTextCommand
+  /**
+   * Desktop Target protocol: plugins register providers (browser tabs, Feishu, …)
+   * that feed Global Launcher mix — not parallel dynamicItems lists.
+   */
+  desktopTargets: DesktopTargetsHostApi
 }
 
 declare global {
@@ -131,6 +141,7 @@ export function createPluginHostSdk(): PluginHostSdk {
     textOutput: core.textOutput,
     textError: core.textError,
     defineTextCommand: core.defineTextCommand,
+    desktopTargets: createDesktopTargetsHostApi(),
   }
 }
 

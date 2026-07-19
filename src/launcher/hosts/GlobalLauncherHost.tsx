@@ -25,8 +25,9 @@ import { writeClipboardText } from '../../workspace/pluginClipboard'
 import { createQuickEditorPane } from '../../workspace/quickEditor/quickEditorRequests'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
-import { prepareLauncherInputSource, restoreLauncherInputSource } from '../../workspace/windowManager/launcherWindow'
+import { restoreLauncherInputSource } from '../../workspace/windowManager/launcherWindow'
 import { getHostSurfaceShell } from '../../components/launcher/hostSurfaceShell'
+import { logLauncherPerf } from '../../workspace/launcher/perf'
 
 export function GlobalLauncherHost() {
   const {
@@ -50,6 +51,7 @@ export function GlobalLauncherHost() {
   const settingsDialogTarget = usePluginSettingsStore((s) => s.settingsDialogTarget)
   const closeSettingsDialog = usePluginSettingsStore((s) => s.closeSettingsDialog)
   const closeAfterActionRef = useRef<() => void>(() => {})
+  const focusSearchInputAfterBackRef = useRef<() => void>(() => {})
   const isKeyboardNavRef = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -71,6 +73,7 @@ export function GlobalLauncherHost() {
 
   const {
     query,
+    rankingQuery,
     setQuery,
     selectedIndex,
     setSelectedIndex,
@@ -93,36 +96,56 @@ export function GlobalLauncherHost() {
   }, [clipboardBlock.block])
 
   useEffect(() => {
+    if (!open) return
+    // Total open-event → first painted frame (double rAF ≈ paint).
+    const raf = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const t0 = (window as unknown as { __hivenLauncherOpenT0?: number }).__hivenLauncherOpenT0
+        if (typeof t0 !== 'number') return
+        ;(window as unknown as { __hivenLauncherOpenT0?: number }).__hivenLauncherOpenT0 = undefined
+        logLauncherPerf('open:event-to-first-paint', {
+          durationMs: Math.round((performance.now() - t0) * 10) / 10,
+        })
+      })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [open])
+
+  useEffect(() => {
     if (!open) {
       setForegroundApp(undefined)
       return
     }
+    // Defer after first paint — AppKit foreground lookup must not delay show.
     let cancelled = false
-    void (async () => {
-      try {
-        if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
+            if (!cancelled) setForegroundApp(undefined)
+            return
+          }
+          const { invoke } = await import('@tauri-apps/api/core')
+          const foreground = await invoke<{ appName?: string | null } | null>('current_foreground_app_context')
+          if (cancelled) return
+          const name = foreground?.appName?.trim()
+          setForegroundApp(name || undefined)
+        } catch {
           if (!cancelled) setForegroundApp(undefined)
-          return
         }
-        const { invoke } = await import('@tauri-apps/api/core')
-        const foreground = await invoke<{ appName?: string | null } | null>('current_foreground_app_context')
-        if (cancelled) return
-        const name = foreground?.appName?.trim()
-        setForegroundApp(name || undefined)
-      } catch {
-        if (!cancelled) setForegroundApp(undefined)
-      }
-    })()
+      })()
+    }, 200)
     return () => {
       cancelled = true
+      window.clearTimeout(timer)
     }
   }, [open])
 
   useEffect(() => {
+    // Native show_launcher already switches to English IME before show.
+    // Frontend must NOT call prepare again (duplicate TIS on main thread).
+    // Restore previous input source only when leaving the open state.
     if (!open) return
-    void prepareLauncherInputSource().catch((error) => {
-      console.warn('[hiven] Failed to prepare launcher input source:', error)
-    })
     return () => {
       void restoreLauncherInputSource().catch((error) => {
         console.warn('[hiven] Failed to restore launcher input source:', error)
@@ -133,13 +156,6 @@ export function GlobalLauncherHost() {
   useEffect(() => {
     setSelectedObjectActionIndex((index) => Math.min(index, Math.max(0, objectActions.length - 1)))
   }, [objectActions.length])
-
-  const { restoreFocus, focusSearchInputAfterBack } = useGlobalLauncherFocusSession({
-    open,
-    inputRef,
-    setQuery,
-    setSelectedIndex,
-  })
 
   const {
     surfaceFrame,
@@ -154,10 +170,31 @@ export function GlobalLauncherHost() {
     open,
     pluginRegistryVersion,
     pluginSurfaceToolTarget,
-    closeLauncher: () => closeLauncher(),
+    closeLauncher: () => closeAfterActionRef.current(),
     // ESC/back pops the tool surface; keep the launcher open and refocus search.
-    onReturnedToList: focusSearchInputAfterBack,
+    onReturnedToList: () => focusSearchInputAfterBackRef.current(),
   })
+
+  // Root list + collect-input keep the caret; result/param/surface own their own focus.
+  const retainSearchFocus = useMemo(() => {
+    if (surfaceFrame || launcherSettingsTarget || hostSurfaceTarget) return false
+    const top = controllerState?.frames[controllerState.frames.length - 1]
+    if (!top || top.kind === 'list') return true
+    if (top.kind === 'collect-input') return true
+    return false
+  }, [controllerState, hostSurfaceTarget, launcherSettingsTarget, surfaceFrame])
+
+  const { restoreFocus, focusSearchInputAfterBack, bindSearchInputRef } = useGlobalLauncherFocusSession({
+    open,
+    inputRef,
+    setQuery,
+    setSelectedIndex,
+    retainSearchFocus,
+  })
+
+  useEffect(() => {
+    focusSearchInputAfterBackRef.current = focusSearchInputAfterBack
+  }, [focusSearchInputAfterBack])
 
   useGlobalLauncherSurfaceRegistry({
     open,
@@ -172,14 +209,24 @@ export function GlobalLauncherHost() {
     }, [controllerRef]),
   })
 
+  // Use rankingQuery (deferred), not live query — otherwise every keystroke rebuilds
+  // all list item objects and busts row memo before deferred rank catches up.
   const visibleFiltered = useMemo(() => {
     void pluginRegistryVersion
     return buildGlobalLauncherItems({
       rankedLauncherItems,
-      query,
+      query: rankingQuery,
       locale,
     })
-  }, [locale, pluginRegistryVersion, query, rankedLauncherItems])
+  }, [locale, pluginRegistryVersion, rankingQuery, rankedLauncherItems])
+
+  /** Primitive resize trigger — controllerState object identity changes every setState. */
+  const controllerResizeKey = useMemo(() => {
+    if (!controllerState) return 'idle'
+    const top = controllerState.frames[controllerState.frames.length - 1]
+    const topKind = top?.kind ?? 'none'
+    return `${controllerState.busy ? 1 : 0}:${controllerState.frames.length}:${topKind}:${controllerState.error ?? ''}`
+  }, [controllerState])
 
   const resetLauncherSession = useCallback(() => {
     clearPluginSurfaceTool()
@@ -194,8 +241,9 @@ export function GlobalLauncherHost() {
     setQuery('')
     setSelectedIndex(0)
     controllerRef.current?.reset()
-  }, [clearLauncherHostSurface, clearPluginSurfaceTool, closeSettingsDialog])
+  }, [clearLauncherHostSurface, clearPluginSurfaceTool, closeSettingsDialog, setQuery, setSelectedIndex, controllerRef])
 
+  // Esc / overlay click / surface close: smart restore (skip if user already left).
   const closeLauncher = useCallback(() => {
     resetLauncherSession()
     void closeGlobalLauncherWindow({
@@ -204,6 +252,20 @@ export function GlobalLauncherHost() {
       hideOverlayWindow: true,
       restoreFocus,
       setOpen,
+      restoreForeground: 'auto',
+    })
+  }, [overlay, resetLauncherSession, setOpen, standaloneLauncher, restoreFocus])
+
+  // Blur-dismiss (clicked another app/window): never steal focus back.
+  const closeLauncherOnBlur = useCallback(() => {
+    resetLauncherSession()
+    void closeGlobalLauncherWindow({
+      standaloneLauncher,
+      overlay,
+      hideOverlayWindow: true,
+      restoreFocus,
+      setOpen,
+      restoreForeground: 'never',
     })
   }, [overlay, resetLauncherSession, setOpen, standaloneLauncher, restoreFocus])
 
@@ -221,6 +283,9 @@ export function GlobalLauncherHost() {
       hideOverlayWindow: false,
       restoreFocus,
       setOpen,
+      // Intentionally switched targets already clear_previous_foreground_app;
+      // auto still restores when the action only wrote clipboard / stayed put.
+      restoreForeground: 'auto',
     })
   }, [overlay, resetLauncherSession, setOpen, standaloneLauncher, restoreFocus])
 
@@ -233,7 +298,7 @@ export function GlobalLauncherHost() {
     standaloneLauncher,
     closeOnBlur: getHostSurfaceShell(launcherHostSurfaceTarget)?.closeOnBlur
       ?? activeSurfaceFrame?.surface.shell?.closeOnBlur,
-    closeLauncher,
+    closeLauncher: closeLauncherOnBlur,
   })
 
   const clampedSelectedIndex = Math.min(selectedIndex, Math.max(0, visibleFiltered.length - 1))
@@ -274,7 +339,7 @@ export function GlobalLauncherHost() {
     launcherSettingsTarget,
     surfaceShell: activeSurfaceFrame?.surface.shell,
     visibleFilteredLength: visibleFiltered.length,
-    controllerState,
+    controllerResizeKey,
   })
 
   const {
@@ -383,6 +448,7 @@ export function GlobalLauncherHost() {
       <GlobalLauncherPanel
         panelRef={panelRef}
         inputRef={inputRef}
+        bindSearchInputRef={bindSearchInputRef}
         controllerRef={controllerRef}
         isImeComposingRef={isImeComposingRef}
         isKeyboardNavRef={isKeyboardNavRef}

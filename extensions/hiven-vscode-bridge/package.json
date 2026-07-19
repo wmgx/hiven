@@ -1,0 +1,21 @@
+{
+  "name": "hiven-vscode-bridge",
+  "displayName": "Hiven Editor Bridge",
+  "description": "Pushes open editor documents to Hiven Global Launcher (D4).",
+  "version": "0.1.0",
+  "publisher": "hiven",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "hivenBridge.pushNow",
+        "title": "Hiven: Push open editors to launcher"
+      }
+    ]
+  }
+}

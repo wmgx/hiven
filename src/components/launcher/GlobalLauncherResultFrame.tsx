@@ -32,15 +32,17 @@ export function GlobalLauncherResultFrame({
     ? t(locale, 'palette.selectedCountMax', { count: selectedCount, max: selection.max })
     : null
 
+  const isConfirmDialog = choices.length <= 3 && choices.some((c) => c.tone === 'danger' || c.tone === 'muted')
+
   return (
     <>
       <div className="global-launcher-header l-search" style={{ borderBottom: '1px solid var(--border)' }}>
-        <button className="back" type="button" onClick={onBack}>‹</button>
+        <button className="back" type="button" onClick={onBack} aria-label={t(locale, 'palette.back')}>‹</button>
         <span className="title">
           {frame.sourceTitle}
         </span>
       </div>
-      <div className="global-launcher-body l-results">
+      <div className={`global-launcher-body l-results ${isConfirmDialog ? 'l-results-confirm' : ''}`}>
         {choices.map((choice, index) => {
           const checked = selectedChoiceIds.has(choice.id)
           const disabled = selection?.type === 'multi' && selectedCount >= selection.max && !checked
@@ -53,6 +55,7 @@ export function GlobalLauncherResultFrame({
               checked={checked}
               disabled={disabled}
               multi={selection?.type === 'multi'}
+              locale={locale}
               onHover={() => onHoverChoice(index)}
               onSelect={() => onToggleChoice(choice, frame)}
             />

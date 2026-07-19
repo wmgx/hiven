@@ -10,6 +10,7 @@ import { registerBundledPluginPackages } from './workspace/bundledPluginLoader'
 import { initializePluginBackgrounds, setupBackgroundPermissionWatcher, setupBackgroundSettingsWatcher, stopAllPluginBackgrounds } from './workspace/pluginBackgroundManager'
 import { runPluginStartupHooks } from './workspace/pluginHookManager'
 import { refreshHostApplicationIndexOnStartup } from './workspace/appLauncher/hostAppLauncher'
+import { prefetchDesktopWindowsOnStartup } from './workspace/desktopControl/windows'
 import { registerHostLauncherProviders } from './workspace/launcher/hostProvider'
 import { installGlobalPinnedLauncherHotkeys, routeGlobalPinnedLauncherShortcut } from './hotkeys/globalPinnedLauncher'
 import { installPluginSurfaceShortcutHotkeys } from './hotkeys/pluginSurfaceShortcuts'
@@ -17,6 +18,7 @@ import { consumePendingPluginSurfaceOpenTarget, isPluginSurfaceOpenTarget, openL
 import { LAUNCHER_HOST_SURFACE_OPEN_EVENT, consumePendingLauncherHostSurfaceOpen, isLauncherHostSurfaceOpenRequest, isLauncherHostSurfaceTarget, openLauncherHostSurfaceLocally, openLauncherHostSurfaceRequestLocally } from './workspace/launcherHostSurfaceBridge'
 import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from './workspace/launcherWindowEvents'
 import { onCurrentLauncherWindowMoved, setCurrentLauncherWindowPosition, type LauncherWindowMovedPosition } from './workspace/windowManager/launcherWindow'
+import { launcherPerfNow, logLauncherPerfDuration } from './workspace/launcher/perf'
 
 // Register built-in panels
 import './panels/register'
@@ -74,6 +76,8 @@ function LauncherRuntimeApp() {
 
       if (disposed) return
       refreshHostApplicationIndexOnStartup()
+      // Warm on-screen window list in idle time so first Global Launcher open is snappy.
+      prefetchDesktopWindowsOnStartup()
       runPluginStartupHooks()
       try {
         initializePluginBackgrounds()
@@ -146,19 +150,28 @@ function LauncherRuntimeApp() {
 
   useEffect(() => {
     const openLauncher = () => {
-      void (async () => {
-        await rehydratePersistedAppState()
-        const pendingHostSurfaceTarget = consumePendingLauncherHostSurfaceOpen()
-        if (pendingHostSurfaceTarget) {
-          openLauncherHostSurfaceRequestLocally(pendingHostSurfaceTarget)
+      const eventReceivedAt = launcherPerfNow()
+      ;(window as unknown as { __hivenLauncherOpenT0?: number }).__hivenLauncherOpenT0 = eventReceivedAt
+      // Open the store *synchronously*. Awaiting rehydrate first left the panel
+      // visible with no mounted search input, so native first-responder could not
+      // land on a real caret until the user clicked.
+      const pendingHostSurfaceTarget = consumePendingLauncherHostSurfaceOpen()
+      if (pendingHostSurfaceTarget) {
+        openLauncherHostSurfaceRequestLocally(pendingHostSurfaceTarget)
+      } else {
+        const pendingSurfaceTarget = consumePendingPluginSurfaceOpenTarget()
+        if (pendingSurfaceTarget) {
+          openLauncherHostedPluginSurface(pendingSurfaceTarget)
         } else {
-          const pendingSurfaceTarget = consumePendingPluginSurfaceOpenTarget()
-          if (pendingSurfaceTarget) {
-            openLauncherHostedPluginSurface(pendingSurfaceTarget)
-          } else {
-            useAppStore.getState().openGlobalLauncherOverlay()
-          }
+          useAppStore.getState().openGlobalLauncherOverlay()
         }
+      }
+      logLauncherPerfDuration('open:event-to-store-open', eventReceivedAt)
+
+      void (async () => {
+        const rehydrateStartedAt = launcherPerfNow()
+        await rehydratePersistedAppState()
+        logLauncherPerfDuration('open:rehydrate', rehydrateStartedAt)
         if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
         const settings = useAppStore.getState().settings
         const saved = settings.globalLauncherWindowPositionSource === 'user'

@@ -354,7 +354,7 @@ usage                        ≤ ~100
 ## 16. 相关文档
 
 - 被本文吸收：`docs/superpowers/specs/2026-07-19-control-hub-intent-design.md`（其 §4 排序、§6 桌面控制、§7 安全、§9 测试被整体采纳；其 §3 纯命令式协议被 §5 两级混合取代）
-- **桌面目标可扩展（App/窗口/标签混排 + Provider 协议）：** `doc/2026-07-19-desktop-target-provider-design.md`（草案，待评审；修正包③–⑤ 产品形态并定义后续标签/多来源接入）
+- **桌面目标可扩展（App/窗口/标签混排 + Provider 协议）：** `doc/2026-07-19-desktop-target-provider-design.md`（D0–D4 已落地：registry + 窗口/进程 + Chromium 标签桥 + VS Code 文档桥；扩展见 `extensions/`）
 - 边界哲学：`doc/diff-plugin-boundary-decision.md`；插件目录协议：`doc/plugin-directory-convention.md`；SQLite 基础设施：`doc/plugin-storage-sqlite-migration.md`
 - 交互先例：`docs/superpowers/specs/2026-07-01-launcher-interaction-optimization-design.md`（L0 剪贴板智能与一步到位）
 - 二期参考：`doc/future/shell-effect-runtime-design.md`

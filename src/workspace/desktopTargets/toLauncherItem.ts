@@ -13,7 +13,7 @@ import type { DesktopTarget, DesktopTargetActivateContext, DesktopTargetProvider
 const KIND_LABELS: Record<string, { en: string; zh: string }> = {
   app: { en: 'App', zh: '应用' },
   window: { en: 'Window', zh: '窗口' },
-  tab: { en: 'Tab', zh: '标签' },
+  tab: { en: 'Browser', zh: '浏览器' },
   document: { en: 'Document', zh: '文档' },
 }
 
@@ -41,13 +41,18 @@ export function stableUsageKeyForTarget(target: DesktopTarget): string | null {
     if (!key) return null
     return `host:tab:focus:app:${key}`
   }
+  if (target.kind === 'document' && action === 'focus') {
+    const key = target.appStableKey || target.appName
+    if (!key) return null
+    return `host:document:focus:app:${key}`
+  }
   return null
 }
 
 export function shouldRecordUsage(target: DesktopTarget): boolean {
   const action = target.actionClass ?? 'focus'
   if (action === 'close' || action === 'terminate') return false
-  return target.kind === 'app' || target.kind === 'window' || target.kind === 'tab'
+  return target.kind === 'app' || target.kind === 'window' || target.kind === 'tab' || target.kind === 'document'
 }
 
 export type ToLauncherItemOptions = {

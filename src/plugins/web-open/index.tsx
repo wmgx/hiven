@@ -292,6 +292,9 @@ async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<L
         title: entry.title || entry.urlTemplate,
         subtitle: url,
         icon,
+        // Keep the matched query as an alias so ranking matchScore stays high
+        // even if host filters by searchable fields (title-only policy).
+        aliases: [query, entry.title, ...(Array.isArray(entry.aliases) ? entry.aliases : [])].filter(Boolean),
       },
       behavior: { type: 'perform' as const },
       async execute(execCtx) {

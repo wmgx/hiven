@@ -27,31 +27,27 @@ source = source
   .replace(/: string/g, '')
 source += '\n;globalThis.__currentContextObjectProvider = currentContextObjectProvider;'
 
+// List path must use in-memory editor snapshot only (no clipboard/foreground/bridge).
 const timestamp = 1770000000000
-let snapshot = {
-  invocation: { source: 'global-hotkey', timestamp },
-  editor: {
-    windowLabel: 'editor',
-    activePaneId: 'pane-1',
-    selectedText: '  editor selected text  ',
-    language: 'markdown',
-  },
+let editorSnapshot = {
+  windowLabel: 'editor',
+  activePaneId: 'pane-1',
+  selectedText: '  editor selected text  ',
+  language: 'markdown',
 }
 
 const sandbox = {
   console,
-  createDefaultWorkContextSnapshot: async (source) => {
-    assert.equal(source, 'global-hotkey')
-    return snapshot
+  Date: {
+    now: () => timestamp,
   },
+  getActiveEditorContextSnapshot: () => editorSnapshot,
   EDITOR_WINDOW_LABEL: 'editor',
   registerClipboardHistoryWorkflowProvider: () => {},
   registerWorkObjectProvider: () => {},
   registerWorkActionProvider: () => {},
   focusSurfaceInstance: () => {},
   getSurfaceInstances: () => [],
-  useAppStore: { getState: () => ({ locale: 'en' }) },
-  getHostAppWorkObjects: () => [],
   launchHostAppObject: () => {},
   createQuickEditorPane: () => {},
   showQuickEditorSurface: () => {},
@@ -69,7 +65,6 @@ assert.equal(provider.id, 'workflow.context-objects')
 
 const objects = await provider.collect()
 const byId = new Map(objects.map((object) => [object.id, object]))
-
 
 function plain(value) {
   return JSON.parse(JSON.stringify(value))
@@ -104,17 +99,20 @@ assert.deepEqual(plain(byId.get('editor:pane-1')), {
   updatedAt: timestamp,
 })
 
-snapshot = {
-  invocation: { source: 'global-hotkey', timestamp },
-  editor: {
-    windowLabel: 'editor',
-    activePaneId: 'pane-2',
-    selectedText: ' \n\t ',
-    language: undefined,
-  },
+editorSnapshot = {
+  windowLabel: 'editor',
+  activePaneId: 'pane-2',
+  selectedText: ' \n\t ',
+  language: undefined,
 }
 
 const whitespaceObjects = await provider.collect()
 assert.deepEqual(plain(whitespaceObjects.map((object) => object.id)), ['editor:pane-2'])
+
+// Empty snapshot → no list rows (never block search on missing editor).
+editorSnapshot = undefined
+const emptyObjects = await provider.collect()
+assert.equal(Array.isArray(emptyObjects), true)
+assert.equal(emptyObjects.length, 0, 'missing editor snapshot must yield no context rows')
 
 console.log('current context work object behavior checks passed')

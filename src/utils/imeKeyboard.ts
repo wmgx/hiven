@@ -3,9 +3,13 @@ type CompositionRef = {
 }
 
 type ImeKeyEvent = {
+  key?: string
   keyCode?: number
+  /** React 17+ synthetic keyboard event */
+  isComposing?: boolean
   nativeEvent?: {
     isComposing?: boolean
+    keyCode?: number
   }
 }
 
@@ -15,6 +19,15 @@ const defaultSchedule: Scheduler = (callback) => {
   window.setTimeout(callback, 0)
 }
 
+/**
+ * After compositionend, some IMEs still deliver a plain Enter keydown for 上屏.
+ * Ignore Enter/Process for a short window so it is never treated as confirm/select.
+ */
+const IME_COMMIT_ENTER_GUARD_MS = 120
+
+/** Shared clock for post-compositionend Enter suppression (all surfaces). */
+let lastCompositionEndedAt = 0
+
 export function startImeComposition(composingRef: CompositionRef) {
   composingRef.current = true
 }
@@ -23,9 +36,41 @@ export function finishImeComposition(
   composingRef: CompositionRef,
   schedule: Scheduler = defaultSchedule,
 ) {
-  schedule(() => { composingRef.current = false })
+  lastCompositionEndedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+  // Clear composing flag asynchronously so a same-turn Enter keydown still sees true.
+  schedule(() => {
+    composingRef.current = false
+  })
 }
 
-export function shouldIgnoreImeKeyDown(event: ImeKeyEvent, composingRef: CompositionRef) {
-  return composingRef.current || event.nativeEvent?.isComposing === true || event.keyCode === 229
+/**
+ * Global IME keydown guard.
+ * Must be used for every launcher / palette Enter (and Esc) handler.
+ *
+ * Covers:
+ * - tracked composition flag
+ * - native / React isComposing
+ * - keyCode 229 (IME processing key)
+ * - Enter shortly after compositionend (上屏 Enter that looks like a plain confirm)
+ */
+export function shouldIgnoreImeKeyDown(event: ImeKeyEvent, composingRef: CompositionRef): boolean {
+  if (composingRef.current) return true
+  if (event.isComposing === true) return true
+  if (event.nativeEvent?.isComposing === true) return true
+  const keyCode = event.keyCode ?? event.nativeEvent?.keyCode
+  if (keyCode === 229) return true
+
+  const key = event.key
+  if (key === 'Enter' || key === 'Process') {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    if (now - lastCompositionEndedAt < IME_COMMIT_ENTER_GUARD_MS) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Test helper: reset post-composition guard clock. */
+export function resetImeCompositionGuardForTests(): void {
+  lastCompositionEndedAt = 0
 }

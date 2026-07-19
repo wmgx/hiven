@@ -18,6 +18,7 @@ use tauri::Manager;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use zip::ZipArchive;
 
+pub mod desktop_bridge;
 pub mod hotkeys;
 
 const LAUNCHER_COMPACT_WIDTH: f64 = 660.0;
@@ -90,6 +91,15 @@ fn log_launcher_perf(label: &str, started_at: Instant, detail: impl AsRef<str>) 
         started_at.elapsed().as_millis(),
         detail.as_ref()
     );
+}
+
+/// Frontend perf lines land in the same stderr stream as native ones.
+#[tauri::command]
+fn log_launcher_perf_frontend(line: String) {
+    if !launcher_perf_enabled() {
+        return;
+    }
+    eprintln!("[hiven:launcher-perf] frontend:{}", line);
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -816,10 +826,33 @@ fn global_cursor_position() -> Option<tauri::PhysicalPosition<f64>> {
     None
 }
 
+/// How hide_launcher_window should handle the remembered previous app.
+/// - `auto` (default): restore only if focus has not already moved to a third app
+/// - `never`: blur-dismiss / user already chose a new frontmost — do not steal focus
+/// - `force`: always restore (rare; paste uses hide_launcher_and_paste instead)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RestoreForegroundMode {
+    Auto,
+    Never,
+    Force,
+}
+
+fn parse_restore_foreground_mode(value: Option<&str>) -> RestoreForegroundMode {
+    match value.map(str::trim).map(str::to_ascii_lowercase).as_deref() {
+        Some("never") => RestoreForegroundMode::Never,
+        Some("force") => RestoreForegroundMode::Force,
+        _ => RestoreForegroundMode::Auto,
+    }
+}
+
 #[tauri::command]
-async fn hide_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
+async fn hide_launcher_window(
+    app: tauri::AppHandle,
+    restore_foreground: Option<String>,
+) -> Result<(), String> {
     use tauri::Manager;
 
+    let mode = parse_restore_foreground_mode(restore_foreground.as_deref());
     let app_clone = app.clone();
     app.run_on_main_thread(move || {
         if let Some(window) = app_clone.get_webview_window("launcher") {
@@ -830,7 +863,7 @@ async fn hide_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
                 eprintln!("[hiven] Failed to hide launcher window: {}", error);
             }
         }
-        restore_previous_foreground_app();
+        apply_restore_foreground_mode(mode);
     })
     .map_err(|error| error.to_string())
 }
@@ -1750,13 +1783,47 @@ fn simulate_copy_selection_impl() -> Result<(), String> {
     Err("Selection copy simulation is not supported on this platform".to_string())
 }
 
-fn restore_previous_foreground_app() {
-    let previous = previous_foreground_process_id()
+fn take_previous_foreground_process_id() -> Option<u32> {
+    previous_foreground_process_id()
         .lock()
         .ok()
-        .and_then(|mut stored| stored.take());
-    if let Some(pid) = previous {
-        activate_process(pid);
+        .and_then(|mut stored| stored.take())
+}
+
+fn apply_restore_foreground_mode(mode: RestoreForegroundMode) {
+    match mode {
+        RestoreForegroundMode::Never => {
+            // Drop memory so a later hide does not surprise-restore.
+            let _ = take_previous_foreground_process_id();
+        }
+        RestoreForegroundMode::Force => {
+            if let Some(pid) = take_previous_foreground_process_id() {
+                activate_process(pid);
+            }
+        }
+        RestoreForegroundMode::Auto => {
+            let Some(pid) = take_previous_foreground_process_id() else {
+                return;
+            };
+            // Blur-dismiss: user already activated another app (e.g. clicked a
+            // third window). Do not steal focus back. Escape dismiss usually
+            // leaves frontmost as the remembered app (non-activating panel).
+            let our_pid = std::process::id();
+            if let Some(current) = current_foreground_process_id() {
+                if current != pid && current != our_pid {
+                    return;
+                }
+            }
+            activate_process(pid);
+        }
+    }
+}
+
+/// Drop remembered "previous app" so hide_launcher does not undo an intentional switch
+/// (focus window / launch app). Call after successfully activating a new frontmost target.
+fn clear_previous_foreground_app() {
+    if let Ok(mut stored) = previous_foreground_process_id().lock() {
+        *stored = None;
     }
 }
 
@@ -1790,10 +1857,104 @@ fn show_launcher_window_without_app_activation_macos(
     promote_window_to_nonactivating_panel(ns_window);
     unsafe {
         let ns_window = ns_window as *mut objc2::runtime::AnyObject;
-        let ns_view = ns_view as *mut objc2::runtime::AnyObject;
         let _: () = objc2::msg_send![ns_window, orderFrontRegardless];
+    }
+    // First-responder is set here for early key routing, and again from the
+    // frontend after the search <input> mounts (see focus_launcher_webview).
+    rekey_launcher_window(window)
+}
+
+/// Re-establish key window + webview first responder without activating the app.
+///
+/// Non-activating HivenKeyablePanel can show with a "ghost" HTML focus: the
+/// <input> is document.activeElement but WKWebView does not accept keyboard /
+/// show a caret until first responder is re-applied *after* the DOM focus.
+/// Called on show and again from the frontend after focusing the search field.
+#[tauri::command]
+async fn focus_launcher_webview(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+
+    let app_clone = app.clone();
+    app.run_on_main_thread(move || {
+        if let Some(window) = app_clone.get_webview_window("launcher") {
+            if let Err(error) = rekey_launcher_window(&window) {
+                eprintln!("[hiven] Failed to rekey launcher webview: {}", error);
+            }
+        }
+    })
+    .map_err(|error| error.to_string())
+}
+
+/// Find the view keyboard focus belongs on: the WKWebView instance inside
+/// wry's container. On macOS WebKit only paints the caret / routes key events
+/// to the page while the WKWebView itself is the window's first responder —
+/// a responder stuck on the WryWebViewParent container leaves the page
+/// keyboard-inactive. Matched via isKindOfClass, not class-name strings: the
+/// container's own class name ("…WryWebViewParent0.55.1") contains "WryWebView".
+#[cfg(target_os = "macos")]
+unsafe fn launcher_first_responder_target(
+    ns_view: *mut objc2::runtime::AnyObject,
+) -> *mut objc2::runtime::AnyObject {
+    let Some(wk_webview_class) = objc2::runtime::AnyClass::get(c"WKWebView") else {
+        return ns_view;
+    };
+    let mut queue: Vec<*mut objc2::runtime::AnyObject> = vec![ns_view];
+    while let Some(view) = queue.pop() {
+        if view.is_null() {
+            continue;
+        }
+        let is_webview: bool = objc2::msg_send![view, isKindOfClass: wk_webview_class];
+        if is_webview {
+            return view;
+        }
+        let subviews: *mut objc2::runtime::AnyObject = objc2::msg_send![view, subviews];
+        if subviews.is_null() {
+            continue;
+        }
+        let count: usize = objc2::msg_send![subviews, count];
+        for index in 0..count {
+            let subview: *mut objc2::runtime::AnyObject =
+                objc2::msg_send![subviews, objectAtIndex: index];
+            queue.push(subview);
+        }
+    }
+    ns_view
+}
+
+fn rekey_launcher_window(window: &tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        rekey_launcher_window_macos(window)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        // Best-effort on other platforms; non-activating panel is macOS-only.
+        let _ = window.unminimize();
+        window.set_focus().map_err(|error| error.to_string())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn rekey_launcher_window_macos(window: &tauri::WebviewWindow) -> Result<(), String> {
+    let ns_window = window.ns_window().map_err(|error| error.to_string())?;
+    let ns_view = window.ns_view().map_err(|error| error.to_string())?;
+    if ns_window.is_null() {
+        return Err("launcher NSWindow is null".to_string());
+    }
+    if ns_view.is_null() {
+        return Err("launcher NSView is null".to_string());
+    }
+    unsafe {
+        let ns_window = ns_window as *mut objc2::runtime::AnyObject;
+        let ns_view = ns_view as *mut objc2::runtime::AnyObject;
+        // makeKeyWindow (not makeKeyAndOrderFront) keeps non-activating behavior
+        // while allowing the panel to receive keyboard events.
         let _: () = objc2::msg_send![ns_window, makeKeyWindow];
-        let _: bool = objc2::msg_send![ns_window, makeFirstResponder: ns_view];
+        // First responder must land on WebKit's content view (WKContentView),
+        // not wry's container: a responder stuck on WryWebViewParent leaves the
+        // page inactive — caret-less focus, keyboard never reaches the DOM.
+        let responder_target = launcher_first_responder_target(ns_view);
+        let _: bool = objc2::msg_send![ns_window, makeFirstResponder: responder_target];
     }
     Ok(())
 }
@@ -2927,7 +3088,10 @@ fn launch_installed_app(app_id: String) -> Result<(), String> {
         }
         target
     };
-    system_open_app_target(&target)
+    system_open_app_target(&target)?;
+    // Same as focus_desktop_window: hide_launcher must not restore the prior app.
+    clear_previous_foreground_app();
+    Ok(())
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -2963,6 +3127,9 @@ struct DesktopWindow {
     app_name: String,
     title: String,
     pid: u32,
+    /// Installed-app id for `app-icon:` when resolvable (bundle / path hash).
+    #[serde(rename = "appId", skip_serializing_if = "Option::is_none")]
+    app_id: Option<String>,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -2975,6 +3142,9 @@ struct DesktopProcess {
     /// Resident memory in bytes (from `ps -o rss` KB × 1024).
     #[serde(rename = "memoryBytes")]
     memory_bytes: u64,
+    /// Installed-app id for `app-icon:` when the process belongs to a .app bundle.
+    #[serde(rename = "appId", skip_serializing_if = "Option::is_none")]
+    app_id: Option<String>,
 }
 
 /// Critical system processes that must never be terminated from the launcher.
@@ -3050,19 +3220,96 @@ fn run_osascript(source: &str) -> Result<(), String> {
     }
 }
 
-/// Cap how many PIDs we will AX-enrich per list call (each osascript is ~100–300ms).
-const AX_TITLE_ENRICH_MAX_PIDS: usize = 4;
+/// Cap AX enrich batch size. One osascript for many PIDs; keep offline path bounded.
+const AX_TITLE_ENRICH_MAX_PIDS: usize = 28;
+
+/// PID → app_id cache so window/process lists do not re-stat the same process.
+#[cfg(target_os = "macos")]
+static PID_APP_ID_CACHE: OnceLock<Mutex<HashMap<u32, Option<String>>>> = OnceLock::new();
+
+#[cfg(target_os = "macos")]
+fn pid_app_id_cache() -> &'static Mutex<HashMap<u32, Option<String>>> {
+    PID_APP_ID_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Thread-safe process path via libproc.
+/// **Never call AppKit (NSRunningApplication / NSFileManager) from Tauri command threads** —
+/// that was crashing the process on first Global Launcher open.
+#[cfg(target_os = "macos")]
+fn process_executable_path(pid: u32) -> Option<PathBuf> {
+    const BUF_SIZE: usize = 4096;
+    unsafe {
+        extern "C" {
+            fn proc_pidpath(pid: c_int, buffer: *mut c_char, buffersize: u32) -> c_int;
+        }
+        let mut buf = [0i8; BUF_SIZE];
+        let ret = proc_pidpath(pid as c_int, buf.as_mut_ptr(), BUF_SIZE as u32);
+        if ret <= 0 {
+            return None;
+        }
+        let path = CStr::from_ptr(buf.as_ptr()).to_string_lossy();
+        if path.is_empty() {
+            None
+        } else {
+            Some(PathBuf::from(path.as_ref()))
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn find_app_bundle_path(path: &Path) -> Option<PathBuf> {
+    if path.extension().and_then(|e| e.to_str()) == Some("app") {
+        return Some(path.to_path_buf());
+    }
+    path.ancestors()
+        .find(|p| p.extension().and_then(|e| e.to_str()) == Some("app"))
+        .map(|p| p.to_path_buf())
+}
+
+/// Register path in icon target map and return a stable app id.
+/// **Plist-only** (no AppKit) so it is safe off the main thread.
+#[cfg(target_os = "macos")]
+fn app_id_for_bundle_path(path: &Path) -> String {
+    let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let canonical_str = canonical.to_string_lossy().to_string();
+    let info = canonical.join("Contents").join("Info.plist");
+    let raw = read_info_plist_xml(&info);
+    let bundle_id = parse_plist_string(&raw, "CFBundleIdentifier");
+    let app_id = bundle_id
+        .map(|id| format!("macos:bundle:{id}"))
+        .unwrap_or_else(|| format!("macos:path:{}", stable_hash(&canonical_str)));
+    if let Ok(mut targets) = installed_app_targets().lock() {
+        targets.insert(app_id.clone(), canonical_str);
+    }
+    app_id
+}
+
+#[cfg(target_os = "macos")]
+fn app_id_for_pid(pid: u32) -> Option<String> {
+    if let Ok(cache) = pid_app_id_cache().lock() {
+        if let Some(hit) = cache.get(&pid) {
+            return hit.clone();
+        }
+    }
+    let resolved = (|| {
+        let exe = process_executable_path(pid)?;
+        let bundle = find_app_bundle_path(&exe)?;
+        Some(app_id_for_bundle_path(&bundle))
+    })();
+    if let Ok(mut cache) = pid_app_id_cache().lock() {
+        cache.insert(pid, resolved.clone());
+    }
+    resolved
+}
 
 /// One osascript for many PIDs (avoids N process spawns that freeze the launcher).
 /// Format per line: `pid\tname1\x1fname2\x1f...`
 #[cfg(target_os = "macos")]
-fn ax_window_titles_for_pids_batched(pids: &[u32]) -> std::collections::HashMap<u32, Vec<String>> {
-    use std::collections::HashMap;
+fn ax_window_titles_for_pids_batched(pids: &[u32]) -> HashMap<u32, Vec<String>> {
     let mut out: HashMap<u32, Vec<String>> = HashMap::new();
     if pids.is_empty() {
         return out;
     }
-    // Build a single script: for each pid, print pid + tab + window names joined by unit separator.
     let mut lines = String::from(
         r#"set output to ""
 tell application "System Events"
@@ -3112,7 +3359,29 @@ return output
     out
 }
 
-/// Fast dedupe without AX. Empty titles become "App · 窗口 N".
+/// Apply AX titles onto windows that still have empty CG titles (by pid order).
+#[cfg(target_os = "macos")]
+fn apply_ax_titles_to_windows(windows: &mut [DesktopWindow], titles_by_pid: &HashMap<u32, Vec<String>>) {
+    let mut ax_index: HashMap<u32, usize> = HashMap::new();
+    for w in windows.iter_mut() {
+        if !w.title.trim().is_empty() {
+            continue;
+        }
+        if let Some(names) = titles_by_pid.get(&w.pid) {
+            let idx = ax_index.entry(w.pid).or_insert(0);
+            if *idx < names.len() {
+                w.title = names[*idx].clone();
+                *idx += 1;
+            }
+        }
+    }
+}
+
+/// Fast dedupe for switch UX.
+///
+/// macOS often leaves `kCGWindowName` empty without Screen Recording. Keep the
+/// row with a **stable** app-name label (not "窗口 N" placeholders that later
+/// flash to a real title). Real titles from CG/AX win when present.
 #[cfg(target_os = "macos")]
 fn dedupe_desktop_windows_fast(windows: Vec<DesktopWindow>) -> Vec<DesktopWindow> {
     use std::collections::{HashMap, HashSet};
@@ -3128,19 +3397,19 @@ fn dedupe_desktop_windows_fast(windows: Vec<DesktopWindow>) -> Vec<DesktopWindow
     for mut w in windows {
         let title_trim = w.title.trim().to_string();
         if title_trim.is_empty() {
+            // Same pid already has a real title → skip empty shell.
             if titled_pids.contains(&w.pid) {
                 continue;
             }
+            // Stable label: app name (+ ordinal only when multiple untitled of same app).
+            // Avoid "窗口 N" which later morphs into document titles (jarring UX).
             let n = empty_index_by_app.entry(w.app_name.clone()).or_insert(0);
             *n += 1;
-            w.title = format!("{} · 窗口 {}", w.app_name, *n);
-        } else if title_trim.eq_ignore_ascii_case(w.app_name.trim()) {
-            let key = format!("{}||{}", w.app_name.to_lowercase(), title_trim.to_lowercase());
-            if !seen_key.insert(key) {
-                let n = empty_index_by_app.entry(w.app_name.clone()).or_insert(1);
-                *n += 1;
-                w.title = format!("{} · 窗口 {}", w.app_name, *n);
-            }
+            w.title = if *n == 1 {
+                w.app_name.clone()
+            } else {
+                format!("{} ({})", w.app_name, *n)
+            };
         } else {
             let key = format!(
                 "{}||{}",
@@ -3156,75 +3425,52 @@ fn dedupe_desktop_windows_fast(windows: Vec<DesktopWindow>) -> Vec<DesktopWindow
     out
 }
 
-/// Optionally enrich a small set of PIDs (query-matched apps) with real window titles.
-/// Never blocks on more than AX_TITLE_ENRICH_MAX_PIDS processes.
+/// CG list + app icons. AX titles stay on the enrich path.
 #[cfg(target_os = "macos")]
-fn enrich_and_dedupe_desktop_windows(
-    mut windows: Vec<DesktopWindow>,
-    title_query: Option<&str>,
-) -> Vec<DesktopWindow> {
-    use std::collections::{HashMap, HashSet};
+fn list_macos_desktop_windows(_query: Option<&str>) -> Result<Vec<DesktopWindow>, String> {
+    let mut raw = list_macos_desktop_windows_raw()?;
+    // Resolve app_id once per pid (pid cache) so every window row can use app-icon:.
+    let mut pid_to_app: HashMap<u32, Option<String>> = HashMap::new();
+    for w in &mut raw {
+        let app_id = pid_to_app
+            .entry(w.pid)
+            .or_insert_with(|| app_id_for_pid(w.pid));
+        w.app_id = app_id.clone();
+    }
+    Ok(dedupe_desktop_windows_fast(raw))
+}
 
-    let q = title_query
-        .map(|s| s.trim().to_lowercase())
-        .filter(|s| !s.is_empty());
-
-    // Only spend AX budget when user is filtering (typing an app/window name).
-    // Empty-query launcher open must stay CG-only (fast).
-    if let Some(ref needle) = q {
-        let mut pids_needing: Vec<u32> = Vec::new();
-        let mut seen_pid: HashSet<u32> = HashSet::new();
-        for w in &windows {
-            if !w.title.trim().is_empty() {
-                continue;
-            }
-            // Prefer PIDs whose app name matches the query (Edge / 飞书 / Chrome…).
-            if !w.app_name.to_lowercase().contains(needle.as_str()) {
-                continue;
-            }
-            if seen_pid.insert(w.pid) {
-                pids_needing.push(w.pid);
-            }
+/// Offline path: CG + one batched AX enrich for empty titles (Mission Control-like names).
+/// Must NOT be called on the typing hot path.
+#[cfg(target_os = "macos")]
+fn list_macos_desktop_windows_enriched() -> Result<Vec<DesktopWindow>, String> {
+    use std::collections::HashSet;
+    let mut raw = list_macos_desktop_windows_raw()?;
+    for w in &mut raw {
+        if w.app_id.is_none() {
+            w.app_id = app_id_for_pid(w.pid);
+        }
+    }
+    let mut pids_needing: Vec<u32> = Vec::new();
+    let mut seen: HashSet<u32> = HashSet::new();
+    for w in &raw {
+        if w.title.trim().is_empty() && seen.insert(w.pid) {
+            pids_needing.push(w.pid);
             if pids_needing.len() >= AX_TITLE_ENRICH_MAX_PIDS {
                 break;
             }
         }
-        // If nothing matched app name, still try top few empty-title pids (cap 2).
-        if pids_needing.is_empty() {
-            for w in &windows {
-                if w.title.trim().is_empty() && seen_pid.insert(w.pid) {
-                    pids_needing.push(w.pid);
-                }
-                if pids_needing.len() >= 2 {
-                    break;
-                }
-            }
-        }
-
-        let titles_by_pid = ax_window_titles_for_pids_batched(&pids_needing);
-        let mut ax_index: HashMap<u32, usize> = HashMap::new();
-        for w in &mut windows {
-            if !w.title.trim().is_empty() {
-                continue;
-            }
-            if let Some(names) = titles_by_pid.get(&w.pid) {
-                let idx = ax_index.entry(w.pid).or_insert(0);
-                if *idx < names.len() {
-                    w.title = names[*idx].clone();
-                    *idx += 1;
-                }
-            }
-        }
     }
-
-    dedupe_desktop_windows_fast(windows)
+    if !pids_needing.is_empty() {
+        let titles = ax_window_titles_for_pids_batched(&pids_needing);
+        apply_ax_titles_to_windows(&mut raw, &titles);
+    }
+    Ok(dedupe_desktop_windows_fast(raw))
 }
 
-/// CG list + optional AX title enrich. `query` non-empty enables limited AX for matching apps.
-#[cfg(target_os = "macos")]
-fn list_macos_desktop_windows(query: Option<&str>) -> Result<Vec<DesktopWindow>, String> {
-    let raw = list_macos_desktop_windows_raw()?;
-    Ok(enrich_and_dedupe_desktop_windows(raw, query))
+#[cfg(not(target_os = "macos"))]
+fn list_macos_desktop_windows_enriched() -> Result<Vec<DesktopWindow>, String> {
+    Ok(Vec::new())
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -3265,6 +3511,32 @@ fn list_macos_desktop_windows_raw() -> Result<Vec<DesktopWindow>, String> {
         cftype.downcast::<CFNumber>().and_then(|n| n.to_i64())
     }
 
+    fn dict_f64(dict: &CFDictionary, key: &str) -> Option<f64> {
+        let cf_key = CFString::new(key);
+        let value_ptr = *dict.find(cf_key.to_void())?;
+        if value_ptr.is_null() {
+            return None;
+        }
+        let cftype = unsafe { CFType::wrap_under_get_rule(value_ptr as *const c_void) };
+        let num = cftype.downcast::<CFNumber>()?;
+        num.to_f64()
+            .or_else(|| num.to_i64().map(|v| v as f64))
+    }
+
+    /// Real user windows have a positive CG bounds; helpers often report 0×0.
+    fn window_bounds_size(dict: &CFDictionary) -> Option<(f64, f64)> {
+        let cf_key = CFString::new("kCGWindowBounds");
+        let value_ptr = *dict.find(cf_key.to_void())?;
+        if value_ptr.is_null() {
+            return None;
+        }
+        let cftype = unsafe { CFType::wrap_under_get_rule(value_ptr as *const c_void) };
+        let bounds: CFDictionary = cftype.downcast::<CFDictionary>()?;
+        let w = dict_f64(&bounds, "Width")?;
+        let h = dict_f64(&bounds, "Height")?;
+        Some((w, h))
+    }
+
     let options = kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements;
     let array_ref = unsafe { CGWindowListCopyWindowInfo(options, kCGNullWindowID) };
     if array_ref.is_null() {
@@ -3272,6 +3544,7 @@ fn list_macos_desktop_windows_raw() -> Result<Vec<DesktopWindow>, String> {
     }
     let array: core_foundation::array::CFArray =
         unsafe { TCFType::wrap_under_create_rule(array_ref) };
+    let self_pid = std::process::id();
     let mut windows = Vec::new();
     for raw in array.get_all_values() {
         if raw.is_null() {
@@ -3281,6 +3554,7 @@ fn list_macos_desktop_windows_raw() -> Result<Vec<DesktopWindow>, String> {
             CFDictionary::wrap_under_get_rule(raw as core_foundation::dictionary::CFDictionaryRef)
         };
         let layer = dict_i64(&dict, "kCGWindowLayer").unwrap_or(-1);
+        // Normal app windows are layer 0; skip overlays / menubar / dock helpers.
         if layer != 0 {
             continue;
         }
@@ -3296,6 +3570,25 @@ fn list_macos_desktop_windows_raw() -> Result<Vec<DesktopWindow>, String> {
             Some(value) if value > 0 => value as u32,
             _ => continue,
         };
+        // Never list our own process (launcher / app chrome is not a switch target).
+        if pid == self_pid {
+            continue;
+        }
+        // Drop zero-size / invisible shells that look like "process without a window".
+        if let Some((w, h)) = window_bounds_size(&dict) {
+            if w < 2.0 || h < 2.0 {
+                continue;
+            }
+        } else {
+            // No bounds → not a real user window for switch UX.
+            continue;
+        }
+        // Alpha 0 = fully transparent non-window (rare but noisy).
+        if let Some(alpha) = dict_i64(&dict, "kCGWindowAlpha") {
+            if alpha == 0 {
+                continue;
+            }
+        }
         let number = match dict_i64(&dict, "kCGWindowNumber") {
             Some(value) if value > 0 => value as u32,
             _ => continue,
@@ -3310,6 +3603,7 @@ fn list_macos_desktop_windows_raw() -> Result<Vec<DesktopWindow>, String> {
             app_name,
             title,
             pid,
+            app_id: None,
         });
     }
     Ok(windows)
@@ -3326,7 +3620,21 @@ fn list_desktop_windows(query: Option<String>) -> Result<Vec<DesktopWindow>, Str
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty());
-    list_macos_desktop_windows(q)
+    // Hot path always CG-only (query is filtered client-side).
+    // catch_unwind: never let a list panic take down the whole app on first open.
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| list_macos_desktop_windows(q))) {
+        Ok(result) => result,
+        Err(_) => Err("list_desktop_windows panicked".to_string()),
+    }
+}
+
+/// Offline / open-path enrich: CG + batched Accessibility titles. Do not call per keystroke.
+#[tauri::command]
+fn list_desktop_windows_enriched() -> Result<Vec<DesktopWindow>, String> {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(list_macos_desktop_windows_enriched)) {
+        Ok(result) => result,
+        Err(_) => Err("list_desktop_windows_enriched panicked".to_string()),
+    }
 }
 
 fn find_desktop_window(id: &str) -> Result<DesktopWindow, String> {
@@ -3369,6 +3677,9 @@ end tell"#
         };
         // Activation already happened; AppleScript raise is best-effort.
         let _ = run_osascript(&script);
+        // Launcher hide path calls restore_previous_foreground_app — clear so we do not
+        // immediately bounce focus back to the app that was frontmost when launcher opened.
+        clear_previous_foreground_app();
         Ok(())
     }
 }
@@ -3424,6 +3735,11 @@ end tell"#
         run_osascript(&script)
     }
 }
+
+/// Snapshot size for kill-mode client-side filter (CPU-sorted). Frontend shows ~40.
+const PROCESS_LIST_RETURN_MAX: usize = 500;
+/// Resolve app icons only for the top rows after CPU sort.
+const PROCESS_LIST_ICON_RESOLVE_MAX: usize = 48;
 
 #[cfg(target_os = "macos")]
 fn list_macos_desktop_processes(query: Option<&str>) -> Result<Vec<DesktopProcess>, String> {
@@ -3484,11 +3800,13 @@ fn list_macos_desktop_processes(query: Option<&str>) -> Result<Vec<DesktopProces
                 continue;
             }
         }
+        // Defer app_id until after sort+cap — never resolve for 900+ system processes.
         processes.push(DesktopProcess {
             pid,
             name,
             cpu_percent,
             memory_bytes,
+            app_id: None,
         });
     }
     // Highest CPU first (kill UX: noisy processes on top)
@@ -3497,6 +3815,13 @@ fn list_macos_desktop_processes(query: Option<&str>) -> Result<Vec<DesktopProces
             .partial_cmp(&a.cpu_percent)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
+    if processes.len() > PROCESS_LIST_RETURN_MAX {
+        processes.truncate(PROCESS_LIST_RETURN_MAX);
+    }
+    let icon_n = processes.len().min(PROCESS_LIST_ICON_RESOLVE_MAX);
+    for proc in processes.iter_mut().take(icon_n) {
+        proc.app_id = app_id_for_pid(proc.pid);
+    }
     Ok(processes)
 }
 
@@ -3513,10 +3838,13 @@ fn list_desktop_processes(query: Option<String>) -> Result<Vec<DesktopProcess>, 
     if raw.is_none() {
         return Ok(Vec::new());
     }
-    if raw == Some("*") {
-        return list_macos_desktop_processes(None);
+    let q = if raw == Some("*") { None } else { raw.map(|s| s.to_string()) };
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        list_macos_desktop_processes(q.as_deref())
+    })) {
+        Ok(result) => result,
+        Err(_) => Err("list_desktop_processes panicked".to_string()),
     }
-    list_macos_desktop_processes(raw)
 }
 
 #[tauri::command]
@@ -4589,18 +4917,141 @@ fn open_plugin_dir(path: String) -> Result<(), String> {
     }
 
     // Fall back to the system file manager.
+    reveal_path_in_file_manager_impl(&dir_str)
+}
+
+/// Open a path in the OS file manager (Finder / Explorer). Used by desktop-bridge
+/// extension install guides — do not prefer VS Code here.
+#[tauri::command]
+fn reveal_path_in_file_manager(path: String) -> Result<(), String> {
+    let expanded = expand_path(&path);
+    if !expanded.exists() {
+        return Err(format!("Path does not exist: {}", expanded.display()));
+    }
+    reveal_path_in_file_manager_impl(&expanded.to_string_lossy())
+}
+
+fn reveal_path_in_file_manager_impl(path: &str) -> Result<(), String> {
     let (program, args): (&str, Vec<&str>) = if cfg!(target_os = "macos") {
-        ("open", vec![dir_str.as_str()])
+        ("open", vec![path])
     } else if cfg!(target_os = "windows") {
-        ("explorer", vec![dir_str.as_str()])
+        ("explorer", vec![path])
     } else {
-        ("xdg-open", vec![dir_str.as_str()])
+        ("xdg-open", vec![path])
     };
     std::process::Command::new(program)
         .args(&args)
         .spawn()
         .map(|_| ())
         .map_err(|e| e.to_string())
+}
+
+/// Chromium extension is part of the first-party `browser-tabs` plugin package.
+/// Embedded at compile time so prepare works even when the app cwd is not the repo
+/// and even when an older builtin release missed the `extension/` folder.
+const BROWSER_TABS_EXTENSION_MANIFEST: &str =
+    include_str!("../../src/plugins/browser-tabs/extension/manifest.json");
+const BROWSER_TABS_EXTENSION_BACKGROUND: &str =
+    include_str!("../../src/plugins/browser-tabs/extension/background.js");
+
+/// Ensure `plugins/builtin/browser-tabs/extension` exists (plugin dir, not bridges/)
+/// and return that path for Chrome “Load unpacked”.
+#[tauri::command]
+fn prepare_chromium_extension_package() -> Result<String, String> {
+    let config = init_config_dir()?;
+    let plugin_root = PathBuf::from(&config)
+        .join("plugins")
+        .join("builtin")
+        .join("browser-tabs");
+    let dest = plugin_root.join("extension");
+    fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
+
+    // Always (re)write core files so Load unpacked never opens an empty folder
+    // after version bumps or incomplete prior releases.
+    fs::write(dest.join("manifest.json"), BROWSER_TABS_EXTENSION_MANIFEST)
+        .map_err(|e| e.to_string())?;
+    fs::write(dest.join("background.js"), BROWSER_TABS_EXTENSION_BACKGROUND)
+        .map_err(|e| e.to_string())?;
+
+    // Best-effort: also copy any extra files from an on-disk plugin package.
+    if let Ok(source) = resolve_chromium_extension_source_dir() {
+        if source != dest {
+            let _ = copy_dir_recursive(&source, &dest);
+        }
+    }
+
+    // Ensure parent plugin package has a manifest so the path is clearly under plugins/.
+    let plugin_manifest = plugin_root.join("manifest.json");
+    if !plugin_manifest.is_file() {
+        let _ = fs::write(
+            &plugin_manifest,
+            r#"{
+  "pluginId": "browser-tabs",
+  "displayName": "Browser Tabs",
+  "displayNameI18n": { "zh": "浏览器标签" },
+  "version": "0.1.1",
+  "capabilities": ["settings"]
+}
+"#,
+        );
+    }
+
+    Ok(dest.to_string_lossy().to_string())
+}
+
+fn resolve_chromium_extension_source_dir() -> Result<PathBuf, String> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(cwd) = std::env::current_dir() {
+        candidates.push(
+            cwd.join("src")
+                .join("plugins")
+                .join("browser-tabs")
+                .join("extension"),
+        );
+        candidates.push(
+            cwd.join("plugins")
+                .join("builtin")
+                .join("browser-tabs")
+                .join("extension"),
+        );
+        candidates.push(cwd.join("extensions").join("hiven-chromium-tabs"));
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            candidates.push(
+                dir.join("..")
+                    .join("..")
+                    .join("..")
+                    .join("src")
+                    .join("plugins")
+                    .join("browser-tabs")
+                    .join("extension"),
+            );
+        }
+    }
+    for path in candidates {
+        let canonical = path.canonicalize().unwrap_or(path);
+        if canonical.is_dir() && canonical.join("manifest.json").is_file() {
+            return Ok(canonical);
+        }
+    }
+    Err("on-disk extension source not found (embedded files still written)".to_string())
+}
+
+fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<(), String> {
+    fs::create_dir_all(dest).map_err(|e| e.to_string())?;
+    for entry in fs::read_dir(src).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let ty = entry.file_type().map_err(|e| e.to_string())?;
+        let from = entry.path();
+        let to = dest.join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir_recursive(&from, &to)?;
+        } else if ty.is_file() {
+            fs::copy(&from, &to).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -5206,6 +5657,10 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            // D3/D4: localhost bridge for Chromium tabs + editor documents.
+            desktop_bridge::start_desktop_bridge_server();
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -5221,6 +5676,8 @@ pub fn run() {
             replace_plugin_dir,
             list_plugin_files,
             open_plugin_dir,
+            reveal_path_in_file_manager,
+            prepare_chromium_extension_package,
             read_plugin_file,
             save_plugin_file,
             plugin_kv_get,
@@ -5246,6 +5703,8 @@ pub fn run() {
             prepare_launcher_input_source,
             restore_launcher_input_source,
             show_launcher_window,
+            focus_launcher_webview,
+            log_launcher_perf_frontend,
             hide_launcher_window,
             hide_launcher_and_paste,
             show_quick_editor_window,
@@ -5264,10 +5723,14 @@ pub fn run() {
             cache_installed_app_icons,
             launch_installed_app,
             list_desktop_windows,
+            list_desktop_windows_enriched,
             focus_desktop_window,
             close_desktop_window,
             list_desktop_processes,
             terminate_desktop_process,
+            desktop_bridge::desktop_bridge_status,
+            desktop_bridge::list_desktop_bridge_targets,
+            desktop_bridge::focus_desktop_bridge_target,
             perform_system_power_action,
             surface_registry_snapshot,
             surface_registry_upsert,

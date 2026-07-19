@@ -336,7 +336,11 @@ function SettingsDialogBody({
       {/* Body */}
       <div className="flex-1 overflow-y-auto px-5 py-4" data-launcher-scrollable>
         <SettingsErrorBoundary fallback={errorFallback}>
-          {contribution.schema ? (
+          {/* Prefer custom body when present (install guides, connection UI).
+              Schema-only plugins keep the generated form renderer. */}
+          {SettingsComponent ? (
+            <SettingsComponent {...settingsBodyProps} />
+          ) : contribution.schema ? (
             <PluginSettingsSchemaRenderer
               schema={contribution.schema}
               locale={locale}
@@ -345,8 +349,6 @@ function SettingsDialogBody({
               onOpenModal={(field) => setSettingsModalTarget(resolvePluginSettingsModal(contribution, field))}
               permissions={permissions}
             />
-          ) : SettingsComponent ? (
-            <SettingsComponent {...settingsBodyProps} />
           ) : (
             <div className="text-[13px]" style={{ color: 'var(--color-text-secondary)' }}>
               {t(locale, 'scripts.settingsRenderError')}

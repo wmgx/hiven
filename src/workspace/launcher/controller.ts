@@ -146,6 +146,8 @@ export class LauncherController {
   private deps: LauncherControllerDeps
   private previewRunId = 0
   private suggestRunId = 0
+  /** Debounce timer for suggest refresh (kill process filter, history, …). */
+  private suggestDebounceTimer: ReturnType<typeof setTimeout> | null = null
   /** Last journaled command id (for prev_command_id chain). */
   private lastJournalCommandId: string | null = null
 
@@ -174,6 +176,10 @@ export class LauncherController {
 
   /** Reset to the base list frame (e.g. when the launcher opens). */
   reset(): void {
+    if (this.suggestDebounceTimer != null) {
+      clearTimeout(this.suggestDebounceTimer)
+      this.suggestDebounceTimer = null
+    }
     this.setState({ frames: [{ kind: 'list' }], error: null, busy: false })
   }
 
@@ -509,7 +515,18 @@ export class LauncherController {
       })
     }
     this.setState({ frames, error: null })
-    if (top.item.suggest) void this.refreshSuggestions()
+    if (top.item.suggest) this.scheduleRefreshSuggestions()
+  }
+
+  /** Debounce suggest reloads so typing does not thrash state/busy every keystroke. */
+  private scheduleRefreshSuggestions(): void {
+    if (this.suggestDebounceTimer != null) {
+      clearTimeout(this.suggestDebounceTimer)
+    }
+    this.suggestDebounceTimer = setTimeout(() => {
+      this.suggestDebounceTimer = null
+      void this.refreshSuggestions()
+    }, 60)
   }
 
   /**
@@ -550,6 +567,11 @@ export class LauncherController {
         : undefined
 
     const runId = ++this.suggestRunId
+    // Busy only on first load (no choices yet). Subsequent filter updates use the
+    // cached snapshot and must not flicker busy / reflow the whole collect frame.
+    const hasExistingChoices = (top.previewOutput?.choices?.length ?? 0) > 0
+    const shouldToggleBusy = !this.state.busy && !hasExistingChoices
+    if (shouldToggleBusy) this.setState({ busy: true, error: null })
     let output: LauncherOutput | null | undefined
     try {
       output = await Promise.resolve(
@@ -569,6 +591,7 @@ export class LauncherController {
     } catch {
       if (runId !== this.suggestRunId) return
       this.clearCollectInputPreview(top)
+      if (shouldToggleBusy) this.setState({ busy: false })
       return
     }
 
@@ -579,6 +602,7 @@ export class LauncherController {
       latestTop.item.systemKey !== item.systemKey ||
       latestTop.inputText !== inputText
     ) {
+      if (shouldToggleBusy) this.setState({ busy: false })
       return
     }
 
@@ -596,7 +620,7 @@ export class LauncherController {
       previewInputText: inputText,
       selectedSuggestionIndex,
     })
-    this.setState({ frames, error: null })
+    this.setState({ frames, error: null, busy: shouldToggleBusy ? false : this.state.busy })
   }
 
   async previewInput(): Promise<void> {
@@ -802,6 +826,16 @@ export class LauncherController {
       if (top.kind === 'collect-input' && top.item.suggest) {
         this.setState({ busy: false, error: null })
         void this.refreshSuggestions()
+        return
+      }
+      // L2 confirm Cancel (kill / close-window): pop only the result frame so the
+      // user returns to the previous step (process list / window list), not root.
+      if (top.kind === 'result' && this.state.frames.length > 1) {
+        this.setState({
+          busy: false,
+          error: null,
+          frames: this.state.frames.slice(0, -1),
+        })
         return
       }
       // Stay open, but drop nested frames (e.g. multi-select result after Diff

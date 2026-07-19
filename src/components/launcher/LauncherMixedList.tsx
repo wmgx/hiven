@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef } from 'react'
+import { memo, useCallback, useEffect, useRef, type MutableRefObject } from 'react'
 import { t, type Locale } from '../../i18n'
 import { resolveIcon } from '../../utils/resolveIcon'
 import type { LauncherItem as DomainLauncherItem } from '../../workspace/launcher/types'
@@ -17,6 +17,7 @@ export function LauncherMixedList({
   truncate = false,
   onSelect,
   onHoverIndex,
+  isKeyboardNavRef,
 }: {
   items: LauncherMixedItem[]
   selected?: LauncherMixedItem
@@ -25,11 +26,21 @@ export function LauncherMixedList({
   truncate?: boolean
   onSelect: (item: LauncherMixedItem) => void
   onHoverIndex?: (index: number) => void
+  /**
+   * When true, selected row scrolls into view. Hover must leave this false so
+   * mouse move does not force reflow via scrollIntoView on every row.
+   */
+  isKeyboardNavRef?: MutableRefObject<boolean>
 }) {
   if (items.length === 0) return null
 
   const shouldTruncate = truncate && items.length > MAX_VISIBLE_IDLE
   const visible = shouldTruncate ? items.slice(0, MAX_VISIBLE_IDLE) : items
+
+  // Stable identity for memo children — do not allocate per-row lambdas in map.
+  const handleHover = useCallback((index: number) => {
+    onHoverIndex?.(index)
+  }, [onHoverIndex])
 
   return (
     <>
@@ -43,7 +54,8 @@ export function LauncherMixedList({
             selected={isSelected}
             locale={locale}
             onSelect={onSelect}
-            onMouseEnter={() => onHoverIndex && onHoverIndex(index)}
+            onHoverIndex={onHoverIndex ? handleHover : undefined}
+            isKeyboardNavRef={isKeyboardNavRef}
           />
         )
       })}
@@ -62,22 +74,35 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
   selected,
   locale,
   onSelect,
-  onMouseEnter,
+  onHoverIndex,
+  isKeyboardNavRef,
 }: {
   item: LauncherMixedItem
   index: number
   selected: boolean
   locale: Locale
   onSelect: (item: LauncherMixedItem) => void
-  onMouseEnter?: () => void
+  onHoverIndex?: (index: number) => void
+  isKeyboardNavRef?: MutableRefObject<boolean>
 }) {
   const ref = useRef<HTMLButtonElement>(null)
   const appIcon = isAppIconRef(item.icon)
   const tag = getLauncherItemKindLabel(item, locale)
 
   useEffect(() => {
-    if (selected) ref.current?.scrollIntoView({ block: 'nearest' })
-  }, [selected])
+    // Keyboard nav only — hover selection already keeps the row under the cursor.
+    if (selected && isKeyboardNavRef?.current) {
+      ref.current?.scrollIntoView({ block: 'nearest' })
+    }
+  }, [selected, isKeyboardNavRef])
+
+  const handleMouseEnter = useCallback(() => {
+    onHoverIndex?.(index)
+  }, [index, onHoverIndex])
+
+  const handleClick = useCallback(() => {
+    onSelect(item)
+  }, [item, onSelect])
 
   // Keep stagger short so tiny lists (e.g. 2 options) don't feel like a full entrance.
   const staggerDelay = index < 6 ? `${index * 6}ms` : '0ms'
@@ -85,10 +110,14 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
   return (
     <button
       ref={ref}
+      type="button"
+      tabIndex={-1}
       className={`l-row cmd-item anim-palette-item w-full border-none text-left ${selected ? 'sel selected' : ''}`}
       style={{ animationDelay: staggerDelay }}
-      onClick={() => onSelect(item)}
-      onMouseEnter={onMouseEnter}
+      onClick={handleClick}
+      onMouseEnter={onHoverIndex ? handleMouseEnter : undefined}
+      // Keep the search caret — do not let list rows take focus on mousedown.
+      onMouseDown={(event) => event.preventDefault()}
     >
       <span className={appIcon ? 'r-app' : 'r-ico'}>
         {appIcon ? (

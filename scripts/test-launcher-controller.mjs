@@ -154,6 +154,50 @@ function flushAsyncChoiceAction() {
   assert.equal(getClosed(), 0, 'keepOpen success should not request launcher close')
 }
 
+// --- 3b. L2 confirm Cancel (keepOpen on result frame) pops only one level ---
+{
+  const { ctrl, getClosed } = makeController()
+  // list → collect-input → result(confirm/cancel); cancel keepOpen must return to collect-input
+  const collect = {
+    systemKey: 'host:process:kill-command',
+    kind: 'host',
+    display: { title: 'Kill' },
+    behavior: { type: 'collect-input', input: { allowEmptyInput: true } },
+    execute: async () => ({
+      ok: true,
+      output: {
+        choices: [
+          {
+            id: 'confirm',
+            title: 'Confirm',
+            primaryAction: async () => ({ ok: true }),
+          },
+          {
+            id: 'cancel',
+            title: 'Cancel',
+            primaryAction: async () => ({ ok: true, keepOpen: true }),
+          },
+        ],
+      },
+    }),
+  }
+  await ctrl.selectItem(collect)
+  assert.equal(ctrl.getState().frames.length, 2, 'entered collect-input')
+  assert.equal(ctrl.getState().frames[1].kind, 'collect-input')
+  await ctrl.submitInput()
+  await flushAsyncChoiceAction()
+  let st = ctrl.getState()
+  assert.equal(st.frames.at(-1)?.kind, 'result', 'confirm dialog is a result frame')
+  assert.equal(st.frames.length, 3, 'list + collect-input + result')
+  const cancelChoice = st.frames.at(-1).output.choices[1]
+  await ctrl.activateChoice(cancelChoice)
+  await flushAsyncChoiceAction()
+  st = ctrl.getState()
+  assert.equal(getClosed(), 0, 'cancel must not close launcher')
+  assert.equal(st.frames.length, 2, 'cancel pops only the result frame')
+  assert.equal(st.frames.at(-1)?.kind, 'collect-input', 'cancel returns to process list step')
+}
+
 // --- 4. text output Enter-copy default ---
 {
   const cap = makeApi()

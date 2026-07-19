@@ -1,4 +1,4 @@
-import type { RefObject } from 'react'
+import { useCallback, type RefObject } from 'react'
 import type { Locale } from '../../i18n'
 import type { LauncherHostSurfaceTarget, PluginSurfaceOpenTarget } from '../../store'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
@@ -19,6 +19,8 @@ import { MAX_VISIBLE_IDLE } from './LauncherMixedList'
 type GlobalLauncherPanelProps = {
   panelRef: RefObject<HTMLDivElement | null>
   inputRef: RefObject<HTMLInputElement | null>
+  /** Prefer over inputRef for focus-on-mount (cold open). */
+  bindSearchInputRef?: (node: HTMLInputElement | null) => void
   controllerRef: RefObject<LauncherController | null>
   isImeComposingRef: RefObject<boolean>
   isKeyboardNavRef: RefObject<boolean>
@@ -71,6 +73,7 @@ type GlobalLauncherPanelProps = {
 export function GlobalLauncherPanel({
   panelRef,
   inputRef,
+  bindSearchInputRef,
   controllerRef,
   isImeComposingRef,
   isKeyboardNavRef,
@@ -118,6 +121,16 @@ export function GlobalLauncherPanel({
   expandSelectedObjectAction,
   executeSelectedObjectAction,
 }: GlobalLauncherPanelProps) {
+  // Stable handlers so LauncherMixedListItem memo is not busted every parent render.
+  const handleSearchSelectItem = useCallback((item: GlobalLauncherItem) => {
+    selectItem(item)
+  }, [selectItem])
+  const handleSearchHoverIndex = useCallback((index: number) => {
+    if (!isKeyboardNavRef.current) setSelectedIndex(index)
+  }, [isKeyboardNavRef, setSelectedIndex])
+  const handleSearchMouseMove = useCallback(() => {
+    isKeyboardNavRef.current = false
+  }, [isKeyboardNavRef])
   return (
     <LauncherView
       hostId="global-launcher"
@@ -154,7 +167,10 @@ export function GlobalLauncherPanel({
         handleClipboardBackspace: clipboardBlock?.handleBackspace,
         hasClipboardHint: Boolean(clipboardBlock?.hint && !clipboardBlock?.block),
         attachHintAsBlock: clipboardBlock?.attachHintAsBlock,
-        hasObjectActions: Boolean(clipboardBlock?.block && objectActionCount > 0),
+        // Clipboard recommendations are rendered as normal launcher list rows
+        // (plugin dynamicItems). Dedicated RecommendedActionRow UI is disabled,
+        // so arrow keys must drive selectedIndex — not selectedObjectActionIndex.
+        hasObjectActions: false,
         objectActionCount,
         setSelectedObjectActionIndex: setSelectedActionIndex,
         expandSelectedObjectAction,
@@ -173,6 +189,7 @@ export function GlobalLauncherPanel({
         itemPermissionFrame={itemPermissionFrame}
         controllerState={controllerState}
         inputRef={inputRef}
+        bindSearchInputRef={bindSearchInputRef}
         query={query}
         searchPlaceholder={searchPlaceholder}
         visibleFiltered={visibleFiltered}
@@ -205,9 +222,10 @@ export function GlobalLauncherPanel({
         onHoverResultChoice={setResultSelectedIndex}
         onToggleResultChoice={toggleResultChoice}
         onSearchQueryChange={(value) => { setQuery(value); setSelectedIndex(0) }}
-        onSearchSelectItem={(item) => selectItem(item)}
-        onSearchHoverIndex={(index) => { if (!isKeyboardNavRef.current) setSelectedIndex(index) }}
-        onSearchMouseMove={() => { isKeyboardNavRef.current = false }}
+        onSearchSelectItem={handleSearchSelectItem}
+        onSearchHoverIndex={handleSearchHoverIndex}
+        onSearchMouseMove={handleSearchMouseMove}
+        isKeyboardNavRef={isKeyboardNavRef}
         clipboardBlock={clipboardBlock}
         onExecuteAction={onExecuteObjectAction}
         selectedActionIndex={selectedActionIndex}

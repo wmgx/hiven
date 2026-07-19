@@ -45,6 +45,7 @@ rankingSrc = rankingSrc
   .replace(/import\s+type\s*\{[^}]*\}\s*from\s*'\.\/types'\s*;?\s*\n?/, '')
   .replace(/import\s*\{[^}]*\}\s*from\s*'\.\/usage'\s*;?\s*\n?/, '')
   .replace(/import\s*\{[^}]*\}\s*from\s*'\.\/display'\s*;?\s*\n?/, '')
+  .replace(/import\s*\{[^}]*\}\s*from\s*'\.\.\/desktopTargets\/browserWindowPolicy'\s*;?\s*\n?/, '')
 const rankingOut = ts.transpileModule(rankingSrc, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, esModuleInterop: true },
 }).outputText
@@ -57,6 +58,8 @@ const sandbox = {
   searchableFieldsMatch: searchRanking.searchableFieldsMatch,
   getUsageRecord: usage.getUsageRecord,
   localizedDisplay: display.localizedDisplay,
+  // Soft nav demotion optional in ranking; stub for harness.
+  navNearDuplicateDemotion: () => 0,
 }
 vm.runInNewContext(rankingOut, sandbox)
 const ranking = sandbox.module.exports
@@ -166,5 +169,27 @@ const rankedDyn = ranking.rankLauncherItems(
   [dynA, dynB],
 )
 assert.equal(rankedDyn[0].systemKey, dynB.systemKey, 'recorded dynamic usage ranks that dynamic item higher')
+
+// --- 9. Plugin dynamic pattern hits survive query filter without title match ---
+// web-open matchPattern items use site title; query only appears in URL subtitle.
+// searchableFieldsMatch ignores subtitle — dynamic kind must not be dropped.
+const patternHit = item('plugin:web-open:dynamic:meego-quick', 'Meego 工单', {
+  kind: 'dynamic',
+  aliases: [],
+})
+const rankedPattern = ranking.rankLauncherItems(
+  {
+    query: '202607181649026C0B034AEF46D9FBA2C7',
+    locale: 'zh',
+    surfaceId: 'global-launcher',
+    usage: usage.emptyUsageBySurface(),
+    now,
+  },
+  [patternHit, reverse],
+)
+assert.ok(
+  rankedPattern.some((row) => row.systemKey === patternHit.systemKey),
+  'dynamic matchPattern item must remain after ranking filter even when title lacks the query',
+)
 
 console.log('✓ test-launcher-ranking passed')

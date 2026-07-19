@@ -159,12 +159,47 @@ function AppIcon({ iconName, size, fallbackName }: { iconName: string; size: num
   )
 }
 
+function isRemoteImageIcon(iconName: string): boolean {
+  return (
+    iconName.startsWith('https://') ||
+    iconName.startsWith('http://') ||
+    iconName.startsWith('data:image/')
+  )
+}
+
+function RemoteImageIcon({
+  src,
+  size,
+  fallbackName,
+}: {
+  src: string
+  size: number
+  fallbackName?: string
+}) {
+  const [failed, setFailed] = useState(false)
+  if (failed) return resolveIcon('Globe', size, fallbackName)
+  return (
+    <img
+      src={src}
+      alt=""
+      width={size}
+      height={size}
+      style={{ width: size, height: size, objectFit: 'contain', borderRadius: 3 }}
+      draggable={false}
+      onError={() => setFailed(true)}
+    />
+  )
+}
+
 /**
  * 根据 icon 名称解析 lucide 图标组件
  * fallback 为 name 前两个字母大写
  */
 export function resolveIcon(iconName?: string, size = 16, fallbackName?: string) {
   if (iconName) {
+    if (isRemoteImageIcon(iconName)) {
+      return <RemoteImageIcon src={iconName} size={size} fallbackName={fallbackName} />
+    }
     if (parsePluginBlobIcon(iconName)) {
       return <PluginBlobIcon iconName={iconName} size={size} fallbackName={fallbackName} />
     }

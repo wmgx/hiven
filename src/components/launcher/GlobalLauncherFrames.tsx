@@ -1,4 +1,4 @@
-import { type RefObject } from 'react'
+import { type MutableRefObject, type RefObject } from 'react'
 import type { Locale } from '../../i18n'
 import { localized, type LauncherHostSurfaceTarget, type PluginSurfaceOpenTarget } from '../../store'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
@@ -31,6 +31,7 @@ export function GlobalLauncherFrameSwitch({
   itemPermissionFrame,
   controllerState,
   inputRef,
+  bindSearchInputRef,
   query,
   searchPlaceholder,
   visibleFiltered,
@@ -60,6 +61,7 @@ export function GlobalLauncherFrameSwitch({
   onSearchSelectItem,
   onSearchHoverIndex,
   onSearchMouseMove,
+  isKeyboardNavRef,
   clipboardBlock,
   onExecuteAction,
   selectedActionIndex,
@@ -75,6 +77,7 @@ export function GlobalLauncherFrameSwitch({
   itemPermissionFrame: GlobalLauncherPermissionFrameState | null
   controllerState: { frames: Array<CollectInputFrame | ParamInputFrame | ResultFrame | { kind: string }>; error?: string | null; busy: boolean } | null | undefined
   inputRef: RefObject<HTMLInputElement | null>
+  bindSearchInputRef?: (node: HTMLInputElement | null) => void
   query: string
   searchPlaceholder: string
   visibleFiltered: LauncherMixedItem[]
@@ -105,6 +108,7 @@ export function GlobalLauncherFrameSwitch({
   onSearchSelectItem: (item: LauncherMixedItem) => void
   onSearchHoverIndex: (index: number) => void
   onSearchMouseMove: () => void
+  isKeyboardNavRef?: MutableRefObject<boolean>
   clipboardBlock: ClipboardObjectBlockState
   onExecuteAction?: (action: RecommendedAction, target: RecommendedOutputTarget) => void
   selectedActionIndex?: number
@@ -203,6 +207,7 @@ export function GlobalLauncherFrameSwitch({
     return (
       <GlobalLauncherCollectInputFrame
         inputRef={inputRef}
+        bindSearchInputRef={bindSearchInputRef}
         frame={frame}
         busy={controllerState?.busy ?? false}
         error={controllerState?.error}
@@ -235,6 +240,7 @@ export function GlobalLauncherFrameSwitch({
   return (
     <GlobalLauncherSearchFrame
       inputRef={inputRef}
+      bindSearchInputRef={bindSearchInputRef}
       query={query}
       placeholder={searchPlaceholder}
       clipboardBlock={clipboardBlock}
@@ -249,6 +255,7 @@ export function GlobalLauncherFrameSwitch({
       onSelectItem={onSearchSelectItem}
       onHoverIndex={onSearchHoverIndex}
       onMouseMove={onSearchMouseMove}
+      isKeyboardNavRef={isKeyboardNavRef}
       onExecuteAction={onExecuteAction}
       selectedActionIndex={selectedActionIndex}
       onSelectedActionIndexChange={onSelectedActionIndexChange}

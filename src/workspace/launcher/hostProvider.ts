@@ -4,9 +4,11 @@ import {
 } from '../appLauncher/hostAppLauncher'
 import { getKillProcessHostItem } from '../desktopControl/killProcessCommand'
 import { getHostWindowLauncherDynamicItems } from '../desktopControl/windows'
+import { getDesktopBridgeLauncherDynamicItems } from '../desktopTargets/collectBridgeLauncherItems'
 import {
   registerDesktopTargetProvider,
 } from '../desktopTargets/registry'
+import { vscodeDocumentsProvider } from '../desktopTargets/vscodeDocuments'
 import { hostWindowTargetProvider } from '../desktopTargets/windowProvider'
 import { registerDefaultWorkflowProviders } from '../../workflow/defaultWorkflowProviders'
 import { getTextPipelineLauncherItems } from '../../workflow/pipelineLauncher'
@@ -26,8 +28,11 @@ export function registerHostLauncherProviders(): void {
   registerWorkflowOutputShelfPanelProvider()
   registerDefaultWorkflowProviders()
   registerBuiltinTextPipelines()
-  // First-party desktop target providers (protocol registry; progressive collect ready for D3 tabs).
+  // Host-owned desktop targets (window). Browser tabs are registered by the
+  // first-party browser-tabs plugin via desktopTargets.registerProvider (same
+  // protocol Feishu adapters will use). VS Code stays host-owned until split.
   registerDesktopTargetProvider(hostWindowTargetProvider)
+  registerDesktopTargetProvider(vscodeDocumentsProvider)
   setHostLauncherItemsProvider(() => [
     ...getHostPaneControlItems(),
     ...getHostSystemPowerItems(),
@@ -38,24 +43,48 @@ export function registerHostLauncherProviders(): void {
   ])
   setHostLauncherDynamicItemsProvider(async (ctx) => {
     // Process terminate is NOT first-level dynamic. Use getKillProcessHostItem (static).
-    const [workflowItems, appItems, windowItems] = await Promise.all([
-      measureLauncherPerf('host-provider:workflow-items', () => getWorkflowObjectLauncherItems(ctx), (items) => ({
-        queryLength: ctx.query.trim().length,
-        itemCount: items.length,
-      })),
-      measureLauncherPerf('host-provider:app-items', () => getHostAppLauncherDynamicItems(ctx), (items) => ({
-        queryLength: ctx.query.trim().length,
-        itemCount: items.length,
-      })),
-      measureLauncherPerf('host-provider:window-items', () => getHostWindowLauncherDynamicItems(ctx), (items) => ({
-        queryLength: ctx.query.trim().length,
-        itemCount: items.length,
-      })),
-    ])
+    // Empty open: apps only (memo top-N) + cached windows if any. No workflow, no waiting.
+    // Query present: apps + windows (+ light workflow). Windows never block (lazy cache).
+    const q = ctx.query.trim()
+    const appItems = await measureLauncherPerf('host-provider:app-items', () => getHostAppLauncherDynamicItems(ctx), (items) => ({
+      queryLength: q.length,
+      itemCount: items.length,
+    }))
+    const windowItems = await measureLauncherPerf('host-provider:window-items', () => getHostWindowLauncherDynamicItems(ctx), (items) => ({
+      queryLength: q.length,
+      itemCount: items.length,
+    }))
+
+    if (!q) {
+      // Empty open path: skip workflow + bridge tabs/docs (empty-search tabs = 0).
+      return [...appItems, ...windowItems]
+    }
+
+    const workflowItems = await measureLauncherPerf('host-provider:workflow-items', () => getWorkflowObjectLauncherItems(ctx), (items) => ({
+      queryLength: q.length,
+      itemCount: items.length,
+    })).catch((error) => {
+      console.warn('[launcher] workflow dynamic items failed:', error)
+      return [] as Awaited<ReturnType<typeof getWorkflowObjectLauncherItems>>
+    })
+
+    // D3/D4: Chromium tabs + editor documents via desktop bridge (silent if offline).
+    const bridgeItems = await measureLauncherPerf(
+      'host-provider:bridge-items',
+      () => getDesktopBridgeLauncherDynamicItems(ctx),
+      (items) => ({ queryLength: q.length, itemCount: items.length }),
+    ).catch((error) => {
+      console.warn('[launcher] desktop bridge dynamic items failed:', error)
+      return [] as Awaited<ReturnType<typeof getDesktopBridgeLauncherDynamicItems>>
+    })
+
+    // Window vs tab de-dupe is soft ranking (title near-dup + capability tier),
+    // not a host product filter that knows about browser plugins.
     return [
       ...workflowItems,
       ...appItems,
       ...windowItems,
+      ...bridgeItems,
     ]
   })
 }

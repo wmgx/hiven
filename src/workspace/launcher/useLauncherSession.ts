@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import { makePluginT } from '../../i18n/pluginI18nRegistry'
 import { detectContent } from '../../kits/content'
 import { useAppStore } from '../../store'
@@ -10,6 +10,7 @@ import { createPluginLauncherApi, createPluginLauncherStorage } from './pluginAp
 import { createPluginNetwork } from '../pluginNetwork'
 import { getPluginPermissionSnapshot } from '../pluginPermissions'
 import { resolvePluginSettingsSource } from './pluginSource'
+import { subscribeDesktopWindowsUpdated } from '../desktopControl/windows'
 import { rankLauncherItems } from './ranking'
 import {
   collectDynamicItems,
@@ -26,9 +27,17 @@ import type {
 import { normalizeLauncherSurfaceId } from './types'
 
 /** Local compute plugins (calc / timestamp / regex match) — keep near-instant. */
-const PLUGIN_DYNAMIC_DEBOUNCE_MS = 30
-/** Host app / workflow search — tolerate slightly longer debounce. */
-const HOST_DYNAMIC_DEBOUNCE_MS = 150
+const PLUGIN_DYNAMIC_DEBOUNCE_MS = 60
+/**
+ * Host app / window list debounce while typing.
+ * Apps filter in-memory; windows use 8s CG cache.
+ */
+const HOST_DYNAMIC_DEBOUNCE_MS = 200
+/**
+ * Empty-open: wait a frame so static list paints before any host dynamic work.
+ * Previously debounce was 0 on empty open and felt like a freeze on first show.
+ */
+const HOST_EMPTY_OPEN_DELAY_MS = 120
 
 type UseLauncherSessionOptions = {
   hostId: LauncherSurfaceId
@@ -45,6 +54,11 @@ type UseLauncherSessionOptions = {
 export type LauncherSession = {
   hostId: LauncherHostId
   query: string
+  /**
+   * Deferred query used for ranking + list mapping (match highlights).
+   * Live `query` drives the input; use this so typing does not rebuild the full list every keystroke.
+   */
+  rankingQuery: string
   setQuery: (value: string) => void
   selectedIndex: number
   setSelectedIndex: (value: number | ((current: number) => number)) => void
@@ -72,6 +86,8 @@ export function useLauncherSession({
   const pluginRegistryVersion = usePluginRegistryVersion()
 
   const [query, setQuery] = useState('')
+  /** Keep the input box on the live query; defer ranking so keystrokes stay responsive. */
+  const deferredQuery = useDeferredValue(query)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [controllerState, setControllerState] = useState<LauncherControllerState | null>(null)
   const [controller, setController] = useState<LauncherController | null>(null)
@@ -251,6 +267,8 @@ export function useLauncherSession({
     }
 
     hostQueryRef.current = q
+    // Empty open: delay past first paint. Typing: normal debounce.
+    const delayMs = q ? HOST_DYNAMIC_DEBOUNCE_MS : HOST_EMPTY_OPEN_DELAY_MS
     const timer = window.setTimeout(() => {
       if (hostQueryRef.current !== q) return
       hostAbortRef.current?.abort()
@@ -277,13 +295,35 @@ export function useLauncherSession({
         if (hostQueryRef.current !== q) return
         setHostDynamicItems(filterDynamicForSurface(items, normalizedHostId))
       }).catch(() => { /* aborted or failed — ignore */ })
-    }, q ? HOST_DYNAMIC_DEBOUNCE_MS : 0)
+    }, delayMs)
 
     return () => {
       window.clearTimeout(timer)
       hostAbortRef.current?.abort()
     }
   }, [collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query])
+
+  // When offline window-title enrich finishes, re-collect host items so titles/icons update.
+  useEffect(() => {
+    if (!open) return
+    return subscribeDesktopWindowsUpdated(() => {
+      const q = hostQueryRef.current
+      const inputText = q || objectBlockText?.trim() || ''
+      if (!inputText && !collectDynamicWhenEmpty) return
+      hostAbortRef.current?.abort()
+      const abortController = new AbortController()
+      hostAbortRef.current = abortController
+      void collectDynamicItems(q, normalizedHostId, locale, getPluginSettings, inputText, {
+        includeHost: true,
+        includePlugins: false,
+        signal: abortController.signal,
+      }).then((items) => {
+        if (abortController.signal.aborted) return
+        if (hostQueryRef.current !== q) return
+        setHostDynamicItems(filterDynamicForSurface(items, normalizedHostId))
+      }).catch(() => { /* ignore */ })
+    })
+  }, [collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open])
 
   // Collect static candidates separately — they only change with pluginRegistryVersion,
   // not on every keystroke.
@@ -298,11 +338,13 @@ export function useLauncherSession({
   const rankedItems = useMemo<LauncherItem[]>(() => {
     // contentText for textMatch: Object Block takes precedence (it IS the text to process);
     // only fall back to query when no Object Block is present.
-    const contentText = objectBlockText ?? (query.trim() || undefined)
+    // Rank against deferredQuery so typing is not blocked by detectContent + full re-rank.
+    const rankQuery = deferredQuery.trim()
+    const contentText = objectBlockText ?? (rankQuery || undefined)
     const detections = contentText ? detectContent(contentText) : []
     return measureLauncherPerfSync('session:rank-items', () => rankLauncherItems(
       {
-        query: query.trim(),
+        query: rankQuery,
         locale,
         surfaceId: normalizedHostId,
         usage: launcherUsageBySurface,
@@ -314,12 +356,13 @@ export function useLauncherSession({
       [...staticCandidates, ...pluginDynamicItems, ...hostDynamicItems],
     ), (items) => ({
       surfaceId: normalizedHostId,
-      queryLength: query.trim().length,
+      queryLength: rankQuery.length,
       hasObjectBlockText: Boolean(objectBlockText),
       inputCount: staticCandidates.length + pluginDynamicItems.length + hostDynamicItems.length,
       resultCount: items.length,
     }))
   }, [
+    deferredQuery,
     foregroundApp,
     hostDynamicItems,
     launcherUsageBySurface,
@@ -327,13 +370,13 @@ export function useLauncherSession({
     normalizedHostId,
     objectBlockText,
     pluginDynamicItems,
-    query,
     staticCandidates,
   ])
 
   return {
     hostId: normalizedHostId,
     query,
+    rankingQuery: deferredQuery,
     setQuery,
     selectedIndex,
     setSelectedIndex,

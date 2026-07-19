@@ -565,9 +565,11 @@ export function PluginsContent({ onOpenPluginEditor }: PluginsContentProps) {
     return false
   }
 
-  function hasSchemaSettings(row: PluginDetailRow): boolean {
+  /** Gear opens settings for schema-driven or custom-component settings bodies. */
+  function hasPluginSettings(row: PluginDetailRow): boolean {
     const settingsContribution = pluginRegistry.getPluginDefinition(row.pluginId, row.settingsSource)?.settings
-    return !!settingsContribution?.schema
+    if (!settingsContribution) return false
+    return Boolean(settingsContribution.schema || settingsContribution.component)
   }
 
   function primarySurfaceForPlugin(pluginId: string, source: PluginSettingsSource) {
@@ -594,6 +596,10 @@ export function PluginsContent({ onOpenPluginEditor }: PluginsContentProps) {
     const definition = pluginRegistry.getPluginDefinition(pluginId, source)
     const schemaSection = definition?.settings?.schema?.sections.find((section) => section.description || section.descriptionI18n)
     if (schemaSection) return localized(schemaSection.description ?? '', schemaSection.descriptionI18n, currentLocale)
+    // Custom settings body (e.g. browser-tabs install guide) — use settings title as blurb.
+    if (definition?.settings?.component && (definition.settings.title || definition.settings.titleI18n)) {
+      return localized(definition.settings.title ?? '', definition.settings.titleI18n, currentLocale)
+    }
     const surface = definition?.ui?.surfaces?.[0]
     if (surface) return localized(surface.title, surface.titleI18n, currentLocale)
     const command = definition?.commands?.find((item) => item.description || item.descriptionI18n)
@@ -842,7 +848,7 @@ export function PluginsContent({ onOpenPluginEditor }: PluginsContentProps) {
   function renderRow(row: PluginDetailRow) {
     const shortcutHint = surfaceShortcutHintForPlugin(row.pluginId, row.settingsSource)
     const showToggle = row.kind !== 'builtin'
-    const showGear = hasSchemaSettings(row)
+    const showGear = hasPluginSettings(row)
     const menuItems = getDropdownMenuItems(row)
     const showMenu = menuItems.length > 0
     const description = getPluginDetailDescription(row.pluginId, row.settingsSource, locale)

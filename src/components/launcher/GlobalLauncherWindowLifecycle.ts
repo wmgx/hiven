@@ -4,6 +4,7 @@ import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from '../../workspace/launcherWindow
 import { onCurrentLauncherWindowFocusChanged, resizeCurrentLauncherWindow, startCurrentLauncherWindowDrag } from '../../workspace/windowManager/launcherWindow'
 import { shouldSuppressStandaloneLauncherBlur } from '../../workspace/launcherBlurGuard'
 import { applyStandaloneLauncherGeometry, computeStandaloneLauncherGeometry } from './GlobalLauncherLayout'
+import { logLauncherPerf } from '../../workspace/launcher/perf'
 
 type SurfaceShellConfig = {
   closeOnBlur?: boolean
@@ -61,7 +62,8 @@ export function useStandaloneLauncherResize({
   launcherSettingsTarget,
   surfaceShell,
   visibleFilteredLength,
-  controllerState,
+  /** Stable primitive signature for frame changes — NOT a new object every render. */
+  controllerResizeKey,
 }: {
   open: boolean
   standaloneLauncher: boolean
@@ -70,14 +72,17 @@ export function useStandaloneLauncherResize({
   launcherSettingsTarget: LauncherSettingsTarget
   surfaceShell: SurfaceShellConfig
   visibleFilteredLength: number
-  controllerState: unknown
+  controllerResizeKey: string
 }) {
+  // Must live outside the effect — previously reset to '' on every dep change,
+  // so sizeKey === lastSizeKey was always false → native resize every keystroke.
+  const lastSizeKeyRef = useRef('')
+
   useLayoutEffect(() => {
     if (!open || !standaloneLauncher) return
     if (!isTauriRuntime()) return
 
     let disposed = false
-    let lastSizeKey = ''
     // One rAF is enough after layout: frame switches (e.g. diff → 2 choices)
     // used to wait a fixed 80ms and felt like a full expand even for tiny lists.
     const frameId = window.requestAnimationFrame(() => {
@@ -93,8 +98,9 @@ export function useStandaloneLauncherResize({
       applyStandaloneLauncherGeometry(panel, geometry)
 
       const sizeKey = `${geometry.width}:${geometry.height}`
-      if (sizeKey === lastSizeKey) return
-      lastSizeKey = sizeKey
+      if (sizeKey === lastSizeKeyRef.current) return
+      lastSizeKeyRef.current = sizeKey
+      logLauncherPerf('resize:native-window', { width: geometry.width, height: geometry.height })
       window.dispatchEvent(new CustomEvent(LAUNCHER_PROGRAMMATIC_MOVE_EVENT))
       void resizeCurrentLauncherWindow({ width: geometry.width, height: geometry.height })
         .catch((error) => {
@@ -109,13 +115,18 @@ export function useStandaloneLauncherResize({
   }, [
     visibleFilteredLength,
     open,
-    controllerState,
+    controllerResizeKey,
     standaloneLauncher,
     surfaceShell,
     hostSurfaceTarget,
     launcherSettingsTarget,
     panelRef,
   ])
+
+  // Reset dedupe when launcher closes so next open can compact→expand once.
+  useLayoutEffect(() => {
+    if (!open) lastSizeKeyRef.current = ''
+  }, [open])
 }
 
 export function useFocusGlobalLauncherSurfaceShell({
@@ -150,8 +161,10 @@ export function useGlobalLauncherNativeDrag(standaloneLauncher: boolean) {
     if (
       event.target instanceof HTMLElement &&
       event.target.closest(
-        // data-launcher-scrollable / data-no-drag first: keep contract + early match for surfaces/tables
-        '[data-launcher-scrollable], [data-no-drag], input, textarea, select, button, a, pre, [role="button"], [role="grid"], [role="row"], [role="gridcell"], [role="columnheader"], .monaco-editor, .rdg, .csv-tools-surface, .global-launcher-surface-shell .global-launcher-body',
+        // data-launcher-scrollable / data-no-drag first: keep contract + early match for surfaces/tables.
+        // .l-search / header: never start native startDragging from the search row —
+        // that steals the click and prevents the input from focusing.
+        '[data-launcher-scrollable], [data-no-drag], input, textarea, select, button, a, pre, [role="button"], [role="grid"], [role="row"], [role="gridcell"], [role="columnheader"], .monaco-editor, .rdg, .csv-tools-surface, .global-launcher-surface-shell .global-launcher-body, .global-launcher-header, .l-search',
       )
     ) {
       return

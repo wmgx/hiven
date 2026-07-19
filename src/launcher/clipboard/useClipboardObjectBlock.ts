@@ -47,7 +47,7 @@ export function useClipboardObjectBlock(params: {
   const [hint, setHint] = useState<RecentClipboardHint | null>(null)
   const didReadRef = useRef(false)
 
-  // On open: read clipboard and determine mode.
+  // On open: read clipboard after first paint — never compete with window show / list paint.
   useEffect(() => {
     if (!open) {
       didReadRef.current = false
@@ -56,43 +56,51 @@ export function useClipboardObjectBlock(params: {
     if (didReadRef.current) return
     didReadRef.current = true
 
-    void (async () => {
-      const startedAt = launcherPerfNow()
-      try {
-        const text = await readClipboard()
-        logLauncherPerfDuration('clipboard-object-block:read', startedAt, {
-          hasText: Boolean(text),
-          textLength: text.length,
-        })
-        if (!text) {
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const startedAt = launcherPerfNow()
+        try {
+          const text = await readClipboard()
+          if (cancelled) return
+          logLauncherPerfDuration('clipboard-object-block:read', startedAt, {
+            hasText: Boolean(text),
+            textLength: text.length,
+          })
+          if (!text) {
+            setBlock(null)
+            setHint(null)
+            return
+          }
+
+          const lastSnapshot = getLastClipboardSnapshot()
+          let snapshot: ClipboardSnapshot
+
+          if (lastSnapshot && lastSnapshot.text === text) {
+            snapshot = updateClipboardSnapshot(text)
+          } else if (lastSnapshot) {
+            snapshot = updateClipboardSnapshot(text)
+          } else {
+            snapshot = createClipboardSnapshotFromUnknownAge(text)
+          }
+
+          if (cancelled) return
+          const newBlock = isClipboardDismissed(snapshot) ? null : createClipboardObjectBlock(snapshot)
+          setBlock(newBlock)
+          setHint(newBlock ? null : buildRecentClipboardHint(snapshot))
+        } catch {
+          if (cancelled) return
+          logLauncherPerfDuration('clipboard-object-block:read', startedAt, { failed: true })
           setBlock(null)
           setHint(null)
-          return
         }
+      })()
+    }, 180)
 
-        const lastSnapshot = getLastClipboardSnapshot()
-        let snapshot: ClipboardSnapshot
-
-        if (lastSnapshot && lastSnapshot.text === text) {
-          // Same text — update lastSeenAt
-          snapshot = updateClipboardSnapshot(text)
-        } else if (lastSnapshot) {
-          // Different text — new clipboard content
-          snapshot = updateClipboardSnapshot(text)
-        } else {
-          // First time — unknown age
-          snapshot = createClipboardSnapshotFromUnknownAge(text)
-        }
-
-        const newBlock = isClipboardDismissed(snapshot) ? null : createClipboardObjectBlock(snapshot)
-        setBlock(newBlock)
-        setHint(newBlock ? null : buildRecentClipboardHint(snapshot))
-      } catch {
-        logLauncherPerfDuration('clipboard-object-block:read', startedAt, { failed: true })
-        setBlock(null)
-        setHint(null)
-      }
-    })()
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
   }, [open, readClipboard])
 
   // When launcher closes, clear block state

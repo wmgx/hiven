@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type RefObject } from 'react'
+import { useEffect, useMemo, useState, type MutableRefObject, type RefObject } from 'react'
 import { Search } from 'lucide-react'
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
@@ -13,6 +13,7 @@ import { recommendActionsForBlock, type RecommendedAction, type RecommendedOutpu
 
 export function GlobalLauncherSearchFrame({
   inputRef,
+  bindSearchInputRef,
   query,
   placeholder,
   error,
@@ -27,12 +28,14 @@ export function GlobalLauncherSearchFrame({
   onSelectItem,
   onHoverIndex,
   onMouseMove,
+  isKeyboardNavRef,
   onExecuteAction,
   selectedActionIndex = 0,
   onSelectedActionIndexChange,
   onObjectActionController,
 }: {
   inputRef: RefObject<HTMLInputElement | null>
+  bindSearchInputRef?: (node: HTMLInputElement | null) => void
   query: string
   placeholder: string
   error?: string | null
@@ -47,6 +50,7 @@ export function GlobalLauncherSearchFrame({
   onSelectItem: (item: LauncherMixedItem) => void
   onHoverIndex: (index: number) => void
   onMouseMove: () => void
+  isKeyboardNavRef?: MutableRefObject<boolean>
   onExecuteAction?: (action: RecommendedAction, target: RecommendedOutputTarget) => void
   selectedActionIndex?: number
   onSelectedActionIndexChange?: (index: number) => void
@@ -106,13 +110,14 @@ export function GlobalLauncherSearchFrame({
           />
         )}
         <input
-          ref={inputRef}
+          ref={bindSearchInputRef ?? inputRef}
           value={query}
           inputMode="latin"
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
           lang="en"
+          autoFocus
           onChange={(event) => onQueryChange(event.target.value)}
           placeholder={resolvedPlaceholder}
         />
@@ -141,6 +146,7 @@ export function GlobalLauncherSearchFrame({
               truncate={!query}
               onSelect={onSelectItem}
               onHoverIndex={onHoverIndex}
+              isKeyboardNavRef={isKeyboardNavRef}
             />
         )}
       </div>

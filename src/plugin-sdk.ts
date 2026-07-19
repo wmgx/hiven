@@ -22,6 +22,8 @@ export type {
   PluginHostI18n,
   MonacoDisposable,
   TextCommandDefinition,
+  DesktopTargetsHostApi,
+  DesktopTargetProvider,
 } from './pluginHostSdk'
 export type { Locale } from './i18n'
 export type { TranslateFunction } from './i18n'
