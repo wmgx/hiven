@@ -67,6 +67,7 @@ export function GlobalLauncherHost() {
   })
   // Only use clipboard for recommendations when the Object Block is showing (fresh enough)
   const objectBlockText = clipboardBlock.block?.payloadText ?? undefined
+  const [foregroundApp, setForegroundApp] = useState<string | undefined>()
 
   const {
     query,
@@ -83,12 +84,39 @@ export function GlobalLauncherHost() {
     requestClose: () => closeAfterActionRef.current(),
     collectDynamicWhenEmpty: true,
     objectBlockText,
+    foregroundApp,
   })
 
   const objectActions = useMemo(() => {
     if (!clipboardBlock.block) return []
     return recommendActionsForBlock(clipboardBlock.block)
   }, [clipboardBlock.block])
+
+  useEffect(() => {
+    if (!open) {
+      setForegroundApp(undefined)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
+          if (!cancelled) setForegroundApp(undefined)
+          return
+        }
+        const { invoke } = await import('@tauri-apps/api/core')
+        const foreground = await invoke<{ appName?: string | null } | null>('current_foreground_app_context')
+        if (cancelled) return
+        const name = foreground?.appName?.trim()
+        setForegroundApp(name || undefined)
+      } catch {
+        if (!cancelled) setForegroundApp(undefined)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open])
 
   useEffect(() => {
     if (!open) return

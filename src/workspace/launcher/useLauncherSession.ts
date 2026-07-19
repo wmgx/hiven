@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import { makePluginT } from '../../i18n/pluginI18nRegistry'
+import { detectContent } from '../../kits/content'
 import { useAppStore } from '../../store'
 import { pluginRegistry, usePluginRegistryVersion } from '../pluginRegistry'
 import { resolvePluginSettings } from '../pluginSettingsStore'
@@ -36,6 +37,8 @@ type UseLauncherSessionOptions = {
   staticItemFilter?: (items: LauncherItem[]) => LauncherItem[]
   collectDynamicWhenEmpty?: boolean
   objectBlockText?: string
+  /** Foreground application name when host can resolve it (contextBoost). */
+  foregroundApp?: string
   makeApi?: (api: PluginLauncherApi, item?: LauncherItem) => PluginLauncherApi
 }
 
@@ -59,6 +62,7 @@ export function useLauncherSession({
   staticItemFilter,
   collectDynamicWhenEmpty = false,
   objectBlockText,
+  foregroundApp,
   makeApi,
 }: UseLauncherSessionOptions): LauncherSession {
   const normalizedHostId = normalizeLauncherSurfaceId(hostId)
@@ -289,6 +293,7 @@ export function useLauncherSession({
     // contentText for textMatch: Object Block takes precedence (it IS the text to process);
     // only fall back to query when no Object Block is present.
     const contentText = objectBlockText ?? (query.trim() || undefined)
+    const detections = contentText ? detectContent(contentText) : []
     return measureLauncherPerfSync('session:rank-items', () => rankLauncherItems(
       {
         query: query.trim(),
@@ -297,6 +302,8 @@ export function useLauncherSession({
         usage: launcherUsageBySurface,
         now: Date.now(),
         contentText,
+        detections,
+        foregroundApp,
       },
       [...staticCandidates, ...pluginDynamicItems, ...hostDynamicItems],
     ), (items) => ({
@@ -307,6 +314,7 @@ export function useLauncherSession({
       resultCount: items.length,
     }))
   }, [
+    foregroundApp,
     hostDynamicItems,
     launcherUsageBySurface,
     locale,
