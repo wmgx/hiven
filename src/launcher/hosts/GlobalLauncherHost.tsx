@@ -21,13 +21,19 @@ import { useGlobalLauncherSelectionController } from '../../components/launcher/
 import { useClipboardObjectBlock } from '../clipboard/useClipboardObjectBlock'
 import { executeRecommendedAction } from '../clipboard/actionExecutor'
 import { recommendActionsForBlock, type RecommendedAction, type RecommendedOutputTarget } from '../clipboard/actionRecommendation'
-import { writeClipboardText } from '../../workspace/pluginClipboard'
+import { createPluginClipboard, writeClipboardText } from '../../workspace/pluginClipboard'
+import { createGlobalLauncherPluginApi } from '../clipboard/globalLauncherApi'
+import { createPluginPaste } from '../../workspace/pluginPaste'
+import { createPluginPrivateStorage } from '../../workspace/pluginStorage'
 import { createQuickEditorPane } from '../../workspace/quickEditor/quickEditorRequests'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import { restoreLauncherInputSource } from '../../workspace/windowManager/launcherWindow'
 import { getHostSurfaceShell } from '../../components/launcher/hostSurfaceShell'
 import { logLauncherPerf } from '../../workspace/launcher/perf'
+import type { LauncherItem } from '../../workspace/launcher/types'
+import { getPluginPermissionSnapshot } from '../../workspace/pluginPermissions'
+import { showToast } from '../../workspace/toast'
 
 export function GlobalLauncherHost() {
   const {
@@ -88,6 +94,7 @@ export function GlobalLauncherHost() {
     collectDynamicWhenEmpty: true,
     objectBlockText,
     foregroundApp,
+    makeApi: createGlobalLauncherPluginApi,
   })
 
   const objectActions = useMemo(() => {
@@ -211,7 +218,7 @@ export function GlobalLauncherHost() {
 
   // Use rankingQuery (deferred), not live query — otherwise every keystroke rebuilds
   // all list item objects and busts row memo before deferred rank catches up.
-  const visibleFiltered = useMemo(() => {
+  const rankedVisible = useMemo(() => {
     void pluginRegistryVersion
     return buildGlobalLauncherItems({
       rankedLauncherItems,
@@ -220,12 +227,62 @@ export function GlobalLauncherHost() {
     })
   }, [locale, pluginRegistryVersion, rankingQuery, rankedLauncherItems])
 
-  /** Primitive resize trigger — controllerState object identity changes every setState. */
+  /** Image/files history Object Blocks cannot use textMatch; inject host actions at list top. */
+  const historyObjectActionItems = useMemo((): GlobalLauncherItem[] => {
+    const block = clipboardBlock.block
+    if (!block || (block.kind !== 'image' && block.kind !== 'files')) return []
+    const q = rankingQuery.trim().toLowerCase()
+    return objectActions
+      .filter((action) => {
+        if (!q) return true
+        return (
+          action.title.toLowerCase().includes(q) ||
+          action.titleZh.toLowerCase().includes(q) ||
+          action.id.toLowerCase().includes(q)
+        )
+      })
+      .map((action) => {
+        const title = locale === 'zh' ? action.titleZh : action.title
+        const domainItem: LauncherItem = {
+          systemKey: `history-object-action:${action.id}`,
+          kind: 'host',
+          display: {
+            title,
+            titleI18n: { en: action.title, zh: action.titleZh },
+            subtitle: action.provider,
+            kindLabel: block.kind === 'image' ? 'Image' : 'Files',
+            kindLabelI18n: { en: block.kind === 'image' ? 'Image' : 'Files', zh: block.kind === 'image' ? '图片' : '文件' },
+          },
+          behavior: { type: 'perform' },
+          execute: async () => ({ ok: true }),
+        }
+        return {
+          kind: 'domain' as const,
+          id: domainItem.systemKey,
+          title,
+          subtitle: action.provider ?? '',
+          domainItem,
+        }
+      })
+  }, [clipboardBlock.block, locale, objectActions, rankingQuery])
+
+  const visibleFiltered = useMemo(
+    () => [...historyObjectActionItems, ...rankedVisible],
+    [historyObjectActionItems, rankedVisible],
+  )
+
+  /**
+   * Primitive resize trigger — controllerState object identity changes every setState.
+   * Also folds in collect-input preview content, since that can change while
+   * busy/frames.length/kind/error all stay the same (e.g. previewInput() resolving).
+   */
   const controllerResizeKey = useMemo(() => {
     if (!controllerState) return 'idle'
     const top = controllerState.frames[controllerState.frames.length - 1]
     const topKind = top?.kind ?? 'none'
-    return `${controllerState.busy ? 1 : 0}:${controllerState.frames.length}:${topKind}:${controllerState.error ?? ''}`
+    const previewSignal =
+      top?.kind === 'collect-input' ? `:${top.previewOutput?.choices.length ?? 0}:${top.previewInputText ?? ''}` : ''
+    return `${controllerState.busy ? 1 : 0}:${controllerState.frames.length}:${topKind}:${controllerState.error ?? ''}${previewSignal}`
   }, [controllerState])
 
   const resetLauncherSession = useCallback(() => {
@@ -374,6 +431,19 @@ export function GlobalLauncherHost() {
     const block = clipboardBlock.block
     if (!block) return
 
+    // History image/files blobs live in clipboard-history private storage
+    const historyPermissions = getPluginPermissionSnapshot('builtin', 'clipboard-history', [
+      'clipboard.write',
+      'clipboard.image',
+      'clipboard.files',
+      'storage.private',
+      'storage.blob',
+      'accessibility.paste',
+    ])
+    const historyStorage = createPluginPrivateStorage('builtin', 'clipboard-history', historyPermissions)
+    const historyClipboard = createPluginClipboard('clipboard-history', historyPermissions, historyStorage)
+    const historyPaste = createPluginPaste(historyPermissions, historyStorage)
+
     const result = await executeRecommendedAction({ block, action, target }, {
       copyText: writeClipboardText,
       copyAndKeepOpen: writeClipboardText,
@@ -410,12 +480,38 @@ export function GlobalLauncherHost() {
       setRenderer: async (actionId, text) => {
         await createQuickEditorPane({ text: `${actionId}\n\n${text}` })
       },
+      pasteImage: async (blobId) => {
+        const pasteResult = await historyPaste.pasteImage(blobId)
+        if (!pasteResult.ok) throw new Error(pasteResult.message || 'Paste image failed')
+      },
+      writeImage: async (blobId) => {
+        await historyClipboard.writeImage(blobId)
+      },
+      pasteFiles: async (paths) => {
+        const pasteResult = await historyPaste.pasteFiles(paths)
+        if (!pasteResult.ok) throw new Error(pasteResult.message || 'Paste files failed')
+      },
     })
+
+    if (!result.ok) {
+      showToast(result.error, 'error')
+      return
+    }
 
     if (result.ok && target !== 'copy-and-keep-open') {
       closeLauncherAfterAction()
     }
   }, [clipboardBlock.block, closeLauncherAfterAction, openPluginSurface])
+
+  const selectItemWithHistoryActions = useCallback((item: GlobalLauncherItem) => {
+    if (item.id.startsWith('history-object-action:')) {
+      const actionId = item.id.slice('history-object-action:'.length)
+      const action = objectActions.find((entry) => entry.id === actionId)
+      if (action) void executeObjectAction(action, action.defaultOutput)
+      return
+    }
+    selectItem(item)
+  }, [executeObjectAction, objectActions, selectItem])
 
   const beginDrag = useGlobalLauncherNativeDrag(standaloneLauncher)
 
@@ -476,7 +572,7 @@ export function GlobalLauncherHost() {
         selectedItem={selectedItem}
         setSelectedIndex={setSelectedIndex}
         isWorkflowObjectLauncherItem={isWorkflowObjectLauncherItem}
-        selectItem={selectItem}
+        selectItem={selectItemWithHistoryActions}
         hostSurfaceTarget={hostSurfaceTarget}
         clearLauncherHostSurface={clearLauncherHostSurface}
         query={query}
@@ -495,6 +591,15 @@ export function GlobalLauncherHost() {
         onObjectActionController={(controller) => { objectActionControllerRef.current = controller }}
         expandSelectedObjectAction={() => objectActionControllerRef.current?.expand()}
         executeSelectedObjectAction={(keepOpen) => objectActionControllerRef.current?.execute(keepOpen)}
+        onSearchWeb={(searchQuery) => {
+          const q = searchQuery.trim()
+          if (!q) return
+          void openUrl(`https://www.google.com/search?q=${encodeURIComponent(q)}`)
+            .then(() => closeLauncherAfterAction())
+            .catch((error) => {
+              showToast(error instanceof Error ? error.message : String(error), 'error')
+            })
+        }}
       />
     </div>
   )
