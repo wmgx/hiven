@@ -442,6 +442,8 @@ export type PluginPermission =
   | 'context.foreground-app'
   | 'desktop.windows'
   | 'desktop.processes'
+  /** L3: run arbitrary local shell commands (default denied until user grants). */
+  | 'shell.run'
 
 export type PluginPermissionGrant = {
   granted: boolean

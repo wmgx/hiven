@@ -20,6 +20,7 @@ export const ALL_PLUGIN_PERMISSIONS: readonly PluginPermission[] = [
   'context.foreground-app',
   'desktop.windows',
   'desktop.processes',
+  'shell.run',
 ]
 
 export type PluginPermissionStore = Record<PluginSettingsSource, Record<string, Partial<Record<PluginPermission, PluginPermissionGrant>>>>
@@ -150,6 +151,7 @@ const permissionLabels: Record<PluginPermission, Record<Locale, string>> = {
   'context.foreground-app': { en: 'Read foreground application', zh: '读取前台应用' },
   'desktop.windows': { en: 'List and control desktop windows', zh: '列出并控制桌面窗口' },
   'desktop.processes': { en: 'List and terminate desktop processes', zh: '列出并结束桌面进程' },
+  'shell.run': { en: 'Run shell commands', zh: '运行 Shell 命令' },
 }
 
 export function describePluginPermission(permission: PluginPermission, locale: Locale): string {
