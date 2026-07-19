@@ -2954,6 +2954,402 @@ fn activate_process(pid: u32) {
 #[cfg(not(target_os = "macos"))]
 fn activate_process(_pid: u32) {}
 
+// ─── Desktop windows / processes (macOS-first; other platforms return empty) ───
+
+#[derive(Clone, serde::Serialize)]
+struct DesktopWindow {
+    id: String,
+    #[serde(rename = "appName")]
+    app_name: String,
+    title: String,
+    pid: u32,
+}
+
+#[derive(Clone, serde::Serialize)]
+struct DesktopProcess {
+    pid: u32,
+    name: String,
+}
+
+/// Critical system processes that must never be terminated from the launcher.
+const DESKTOP_PROCESS_DENY_NAMES: &[&str] = &[
+    "kernel_task",
+    "launchd",
+    "windowserver",
+    "loginwindow",
+    "systemuiserver",
+    "cfprefsd",
+    "opendirectoryd",
+    "securityd",
+    "coreaudiod",
+    "distnoted",
+    "notifyd",
+    "syslogd",
+    "useractivityd",
+    "dock",
+    "finder",
+    "coreservicesd",
+    "configd",
+    "mds",
+    "mds_stores",
+    "mdworker",
+    "mdworker_shared",
+    "spotlight",
+    "bluetoothd",
+    "airportd",
+    "powerd",
+    "fseventsd",
+    "hidd",
+    "trustd",
+    "tccd",
+    "amfid",
+    "syspolicyd",
+];
+
+fn process_basename_lower(name: &str) -> String {
+    Path::new(name)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or(name)
+        .to_lowercase()
+}
+
+fn is_denied_desktop_process_name(name: &str) -> bool {
+    let base = process_basename_lower(name);
+    DESKTOP_PROCESS_DENY_NAMES
+        .iter()
+        .any(|denied| *denied == base.as_str())
+}
+
+fn applescript_escape(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+fn run_osascript(source: &str) -> Result<(), String> {
+    let output = Command::new("osascript")
+        .args(["-e", source])
+        .output()
+        .map_err(|e| format!("Failed to run osascript: {e}"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if !stderr.is_empty() {
+        Err(stderr)
+    } else if !stdout.is_empty() {
+        Err(stdout)
+    } else {
+        Err("osascript failed".to_string())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn list_macos_desktop_windows() -> Result<Vec<DesktopWindow>, String> {
+    use core_foundation::base::{CFType, TCFType, ToVoid};
+    use core_foundation::dictionary::CFDictionary;
+    use core_foundation::number::CFNumber;
+    use core_foundation::string::CFString;
+    use core_graphics::display::{
+        kCGNullWindowID, kCGWindowListExcludeDesktopElements, kCGWindowListOptionOnScreenOnly,
+        CGWindowListCopyWindowInfo,
+    };
+    use std::os::raw::c_void;
+
+    fn dict_string(dict: &CFDictionary, key: &str) -> Option<String> {
+        let cf_key = CFString::new(key);
+        let value_ptr = *dict.find(cf_key.to_void())?;
+        if value_ptr.is_null() {
+            return None;
+        }
+        let cftype = unsafe { CFType::wrap_under_get_rule(value_ptr as *const c_void) };
+        cftype.downcast::<CFString>().map(|s| s.to_string())
+    }
+
+    fn dict_i64(dict: &CFDictionary, key: &str) -> Option<i64> {
+        let cf_key = CFString::new(key);
+        let value_ptr = *dict.find(cf_key.to_void())?;
+        if value_ptr.is_null() {
+            return None;
+        }
+        let cftype = unsafe { CFType::wrap_under_get_rule(value_ptr as *const c_void) };
+        cftype.downcast::<CFNumber>().and_then(|n| n.to_i64())
+    }
+
+    let options = kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements;
+    let array_ref = unsafe { CGWindowListCopyWindowInfo(options, kCGNullWindowID) };
+    if array_ref.is_null() {
+        return Ok(Vec::new());
+    }
+    let array: core_foundation::array::CFArray =
+        unsafe { TCFType::wrap_under_create_rule(array_ref) };
+    let mut windows = Vec::new();
+    for raw in array.get_all_values() {
+        if raw.is_null() {
+            continue;
+        }
+        let dict: CFDictionary = unsafe {
+            CFDictionary::wrap_under_get_rule(raw as core_foundation::dictionary::CFDictionaryRef)
+        };
+        let layer = dict_i64(&dict, "kCGWindowLayer").unwrap_or(-1);
+        if layer != 0 {
+            continue;
+        }
+        let owner = dict_string(&dict, "kCGWindowOwnerName").unwrap_or_default();
+        let title = dict_string(&dict, "kCGWindowName").unwrap_or_default();
+        if owner.trim().is_empty() && title.trim().is_empty() {
+            continue;
+        }
+        // Skip menu-bar / status extras that still report layer 0 without a title.
+        if title.trim().is_empty() && owner.eq_ignore_ascii_case("Window Server") {
+            continue;
+        }
+        let pid = match dict_i64(&dict, "kCGWindowOwnerPID") {
+            Some(value) if value > 0 => value as u32,
+            _ => continue,
+        };
+        let number = match dict_i64(&dict, "kCGWindowNumber") {
+            Some(value) if value > 0 => value as u32,
+            _ => continue,
+        };
+        let app_name = if owner.trim().is_empty() {
+            "Unknown".to_string()
+        } else {
+            owner
+        };
+        windows.push(DesktopWindow {
+            id: number.to_string(),
+            app_name,
+            title,
+            pid,
+        });
+    }
+    Ok(windows)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn list_macos_desktop_windows() -> Result<Vec<DesktopWindow>, String> {
+    Ok(Vec::new())
+}
+
+#[tauri::command]
+fn list_desktop_windows() -> Result<Vec<DesktopWindow>, String> {
+    list_macos_desktop_windows()
+}
+
+fn find_desktop_window(id: &str) -> Result<DesktopWindow, String> {
+    let windows = list_macos_desktop_windows()?;
+    windows
+        .into_iter()
+        .find(|window| window.id == id)
+        .ok_or_else(|| "Window is no longer available".to_string())
+}
+
+#[tauri::command]
+fn focus_desktop_window(id: String) -> Result<(), String> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = id;
+        return Err("Window focus is only available on macOS".to_string());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let window = find_desktop_window(&id)?;
+        activate_process(window.pid);
+        let pid = window.pid;
+        let title = applescript_escape(&window.title);
+        let script = if window.title.trim().is_empty() {
+            format!(
+                r#"tell application "System Events" to set frontmost of first process whose unix id is {pid} to true"#
+            )
+        } else {
+            format!(
+                r#"tell application "System Events"
+  tell (first process whose unix id is {pid})
+    set frontmost to true
+    try
+      perform action "AXRaise" of (first window whose name is "{title}")
+    end try
+  end tell
+end tell"#
+            )
+        };
+        // Activation already happened; AppleScript raise is best-effort.
+        let _ = run_osascript(&script);
+        Ok(())
+    }
+}
+
+#[tauri::command]
+fn close_desktop_window(id: String) -> Result<(), String> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = id;
+        return Err("Window close is only available on macOS".to_string());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let window = find_desktop_window(&id)?;
+        let pid = window.pid;
+        let title = applescript_escape(&window.title);
+        let app_name = applescript_escape(&window.app_name);
+        let script = if !window.title.trim().is_empty() {
+            format!(
+                r#"tell application "System Events"
+  tell (first process whose unix id is {pid})
+    set frontmost to true
+    try
+      perform action "AXPress" of (first button whose subrole is "AXCloseButton") of (first window whose name is "{title}")
+    on error
+      try
+        click (first button whose subrole is "AXCloseButton") of (first window whose name is "{title}")
+      on error errMsg
+        error "Failed to close window: " & errMsg
+      end try
+    end try
+  end tell
+end tell"#
+            )
+        } else {
+            format!(
+                r#"tell application "System Events"
+  tell (first process whose unix id is {pid})
+    set frontmost to true
+    try
+      perform action "AXPress" of (first button whose subrole is "AXCloseButton") of window 1
+    on error
+      try
+        click (first button whose subrole is "AXCloseButton") of window 1
+      on error errMsg
+        error "Failed to close window of {app_name}: " & errMsg
+      end try
+    end try
+  end tell
+end tell"#
+            )
+        };
+        run_osascript(&script)
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn list_macos_desktop_processes(query: Option<&str>) -> Result<Vec<DesktopProcess>, String> {
+    let output = Command::new("ps")
+        .args(["-axo", "pid=,comm="])
+        .output()
+        .map_err(|e| format!("Failed to list processes: {e}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            "Failed to list processes".to_string()
+        } else {
+            stderr
+        });
+    }
+    let needle = query
+        .map(|q| q.trim().to_lowercase())
+        .filter(|q| !q.is_empty());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut processes = Vec::new();
+    for line in stdout.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let mut parts = line.split_whitespace();
+        let pid_str = match parts.next() {
+            Some(value) => value,
+            None => continue,
+        };
+        let pid: u32 = match pid_str.parse() {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        let name = parts.collect::<Vec<_>>().join(" ");
+        if name.is_empty() {
+            continue;
+        }
+        if is_denied_desktop_process_name(&name) {
+            continue;
+        }
+        if let Some(ref q) = needle {
+            let name_l = name.to_lowercase();
+            let base_l = process_basename_lower(&name);
+            if !name_l.contains(q.as_str()) && !base_l.contains(q.as_str()) {
+                continue;
+            }
+        }
+        processes.push(DesktopProcess { pid, name });
+    }
+    Ok(processes)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn list_macos_desktop_processes(_query: Option<&str>) -> Result<Vec<DesktopProcess>, String> {
+    Ok(Vec::new())
+}
+
+#[tauri::command]
+fn list_desktop_processes(query: Option<String>) -> Result<Vec<DesktopProcess>, String> {
+    let q = query.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    // Empty query: return nothing (frontend should also skip invoke).
+    if q.is_none() {
+        return Ok(Vec::new());
+    }
+    list_macos_desktop_processes(q)
+}
+
+#[tauri::command]
+fn terminate_desktop_process(pid: u32, force: bool) -> Result<(), String> {
+    if pid == 0 {
+        return Err("Invalid process id".to_string());
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = force;
+        return Err("Process terminate is only available on macOS".to_string());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // Resolve live name via ps so deny applies even when list filters hide the row.
+        if let Ok(output) = Command::new("ps")
+            .args(["-p", &pid.to_string(), "-o", "comm="])
+            .output()
+        {
+            if output.status.success() {
+                let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !name.is_empty() && is_denied_desktop_process_name(&name) {
+                    return Err(format!(
+                        "Refusing to terminate protected system process: {name}"
+                    ));
+                }
+            }
+        }
+        let pid_s = pid.to_string();
+        let mut cmd = Command::new("kill");
+        if force {
+            cmd.arg("-9");
+        } else {
+            cmd.arg("-TERM");
+        }
+        let output = cmd
+            .arg(&pid_s)
+            .output()
+            .map_err(|e| format!("Failed to terminate process {pid}: {e}"))?;
+        if output.status.success() {
+            return Ok(());
+        }
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        Err(if stderr.is_empty() {
+            format!("Failed to terminate process {pid}")
+        } else {
+            stderr
+        })
+    }
+}
+
 /// 配置根目录: ~/.local/hiven
 fn config_dir() -> Result<PathBuf, String> {
     dirs_next_home()
@@ -4647,6 +5043,11 @@ pub fn run() {
             read_installed_app_icon_url,
             cache_installed_app_icons,
             launch_installed_app,
+            list_desktop_windows,
+            focus_desktop_window,
+            close_desktop_window,
+            list_desktop_processes,
+            terminate_desktop_process,
             perform_system_power_action,
             surface_registry_snapshot,
             surface_registry_upsert,
@@ -5409,5 +5810,39 @@ HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\App Paths\Example.e
             .expect_err("plugin write paths with parent components should be rejected");
             assert!(parent_error.contains("parent directory"));
         });
+    }
+}
+
+#[cfg(test)]
+mod desktop_process_deny_tests {
+    use super::*;
+
+    #[test]
+    fn deny_list_blocks_critical_system_process_names() {
+        assert!(is_denied_desktop_process_name("kernel_task"));
+        assert!(is_denied_desktop_process_name("launchd"));
+        assert!(is_denied_desktop_process_name("WindowServer"));
+        assert!(is_denied_desktop_process_name("loginwindow"));
+        assert!(is_denied_desktop_process_name("SystemUIServer"));
+        assert!(is_denied_desktop_process_name("cfprefsd"));
+        assert!(is_denied_desktop_process_name("opendirectoryd"));
+        assert!(is_denied_desktop_process_name("securityd"));
+        assert!(is_denied_desktop_process_name("/usr/sbin/WindowServer"));
+        assert!(is_denied_desktop_process_name("/sbin/launchd"));
+    }
+
+    #[test]
+    fn deny_list_allows_ordinary_user_processes() {
+        assert!(!is_denied_desktop_process_name("node"));
+        assert!(!is_denied_desktop_process_name("Chrome"));
+        assert!(!is_denied_desktop_process_name("/Applications/Example.app/Contents/MacOS/Example"));
+    }
+
+    #[test]
+    fn list_desktop_processes_empty_query_returns_empty() {
+        let result = list_desktop_processes(None).expect("empty query should succeed");
+        assert!(result.is_empty());
+        let result = list_desktop_processes(Some("   ".to_string())).expect("blank query should succeed");
+        assert!(result.is_empty());
     }
 }

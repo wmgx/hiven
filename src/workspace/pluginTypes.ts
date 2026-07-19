@@ -440,6 +440,8 @@ export type PluginPermission =
   | 'accessibility.paste'
   | 'network.request'
   | 'context.foreground-app'
+  | 'desktop.windows'
+  | 'desktop.processes'
 
 export type PluginPermissionGrant = {
   granted: boolean

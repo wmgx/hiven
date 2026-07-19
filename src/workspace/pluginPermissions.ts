@@ -18,6 +18,8 @@ export const ALL_PLUGIN_PERMISSIONS: readonly PluginPermission[] = [
   'accessibility.paste',
   'network.request',
   'context.foreground-app',
+  'desktop.windows',
+  'desktop.processes',
 ]
 
 export type PluginPermissionStore = Record<PluginSettingsSource, Record<string, Partial<Record<PluginPermission, PluginPermissionGrant>>>>
@@ -146,6 +148,8 @@ const permissionLabels: Record<PluginPermission, Record<Locale, string>> = {
   'accessibility.paste': { en: 'Paste into the foreground app', zh: '粘贴到前台应用' },
   'network.request': { en: 'Network request', zh: '访问网络请求' },
   'context.foreground-app': { en: 'Read foreground application', zh: '读取前台应用' },
+  'desktop.windows': { en: 'List and control desktop windows', zh: '列出并控制桌面窗口' },
+  'desktop.processes': { en: 'List and terminate desktop processes', zh: '列出并结束桌面进程' },
 }
 
 export function describePluginPermission(permission: PluginPermission, locale: Locale): string {

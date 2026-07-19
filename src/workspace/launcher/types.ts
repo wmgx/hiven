@@ -40,6 +40,8 @@ export type LauncherHostCapability =
   | 'pane-actions'
   | 'system-power'
   | 'parameter-customization'
+  | 'desktop-windows'
+  | 'desktop-processes'
 
 export type LauncherHostDescriptor = {
   id: LauncherHostId
@@ -65,6 +67,8 @@ export const LAUNCHER_HOSTS: Record<LauncherHostId, LauncherHostConfig> = {
       'pane-actions',
       'system-power',
       'parameter-customization',
+      'desktop-windows',
+      'desktop-processes',
     ],
   },
   'editor-command-bar': {

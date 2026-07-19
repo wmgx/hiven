@@ -2,6 +2,8 @@ import {
   getHostAppLauncherDynamicItems,
   getHostAppLauncherStaticItems,
 } from '../appLauncher/hostAppLauncher'
+import { getHostProcessLauncherDynamicItems } from '../desktopControl/processes'
+import { getHostWindowLauncherDynamicItems } from '../desktopControl/windows'
 import { registerDefaultWorkflowProviders } from '../../workflow/defaultWorkflowProviders'
 import { getWorkflowObjectLauncherItems } from '../../workflow/workflowLauncherAdapter'
 import {
@@ -23,7 +25,7 @@ export function registerHostLauncherProviders(): void {
     ...getHostAppLauncherStaticItems(),
   ])
   setHostLauncherDynamicItemsProvider(async (ctx) => {
-    const [workflowItems, appItems] = await Promise.all([
+    const [workflowItems, appItems, windowItems, processItems] = await Promise.all([
       measureLauncherPerf('host-provider:workflow-items', () => getWorkflowObjectLauncherItems(ctx), (items) => ({
         queryLength: ctx.query.trim().length,
         itemCount: items.length,
@@ -32,10 +34,20 @@ export function registerHostLauncherProviders(): void {
         queryLength: ctx.query.trim().length,
         itemCount: items.length,
       })),
+      measureLauncherPerf('host-provider:window-items', () => getHostWindowLauncherDynamicItems(ctx), (items) => ({
+        queryLength: ctx.query.trim().length,
+        itemCount: items.length,
+      })),
+      measureLauncherPerf('host-provider:process-items', () => getHostProcessLauncherDynamicItems(ctx), (items) => ({
+        queryLength: ctx.query.trim().length,
+        itemCount: items.length,
+      })),
     ])
     return [
       ...workflowItems,
       ...appItems,
+      ...windowItems,
+      ...processItems,
     ]
   })
 }
