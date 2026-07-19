@@ -6,11 +6,13 @@
  *
  *   score = matchScore + usageScore(surface) + hostStaticPriority
  *     + installFreshnessScore + textMatchBoost + dynamicBoost
+ *     + intentScore + contextBoost
  *
  * Rules:
  *  - Match relevance dominates (match tier contributes thousands; the rest are
  *    bounded well below one tier so a strong match always beats a weak match
  *    with high usage).
+ *  - Intent slots are large (1.6k–2.4k) but still below exact title match (6k).
  *  - Usage is per surface.
  *  - Plugins cannot set static priority; only host-owned items may.
  *  - Query-empty and query-present modes use the same pipeline, different weights.
@@ -41,6 +43,15 @@ const MAX_STATIC_PRIORITY = 300 // host-only ceiling, still < 1000
 const TEXT_MATCH_BOOST = 800 // strong boost when tool can process the content; below match tier (1000) so an exact name match still wins
 const DYNAMIC_ITEM_BOOST = 900 // dynamic items are plugin-asserted matches; rank above static items without text match
 
+/** Content conf ≥ 0.85 or exact accepts.alias match. */
+const INTENT_SCORE_STRONG = 2400
+/** Weaker content intent (detected kind, conf > 0, or regex hit). */
+const INTENT_SCORE_MEDIUM = 1600
+/** Cap when combining alias/content intent pathways (they take max, not sum). */
+const INTENT_SCORE_CAP = 2800
+/** accepts.apps matches foregroundApp. */
+const CONTEXT_BOOST_MAX = 400
+
 export type RankContext = {
   query: string
   locale: Locale
@@ -49,6 +60,15 @@ export type RankContext = {
   now: number
   /** Text to test against textMatch (clipboard content or raw user input). */
   contentText?: string
+  /** Content detections from host (kind/confidence); drives intentScore. */
+  detections?: Array<{ kind: string; confidence: number; normalized: string }>
+  /** Foreground application name when available; drives contextBoost. */
+  foregroundApp?: string
+}
+
+/** Inline normalize (trim + lower + collapse whitespace). Avoids intentEngine import for test harnesses that stub ranking imports. */
+function normalizeIntentQueryLocal(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
 /**
@@ -101,7 +121,14 @@ function toSearchableFields(item: LauncherItem, locale: Locale): SearchableField
 export function itemMatchesQuery(item: LauncherItem, query: string, locale: Locale): boolean {
   const q = query.trim().toLowerCase()
   if (!q) return true
-  return searchableFieldsMatch(getCachedSearchableFields(item, locale), q, locale)
+  if (searchableFieldsMatch(getCachedSearchableFields(item, locale), q, locale)) return true
+  // accepts.aliases alone can admit the item (exact normalized match).
+  const aliases = item.accepts?.aliases
+  if (aliases?.length) {
+    const nq = normalizeIntentQueryLocal(query)
+    if (nq && aliases.some((alias) => normalizeIntentQueryLocal(alias) === nq)) return true
+  }
+  return false
 }
 
 /** Bounded usage contribution for a surface. Always < 1000. */
@@ -136,8 +163,67 @@ export function installFreshnessScore(ctx: RankContext, item: LauncherItem): num
 }
 
 /**
+ * Intent score from accepts.aliases / accepts.kinds(+detections) / accepts.regex.
+ * Takes max of alias and content pathways (not summed); capped at INTENT_SCORE_CAP.
+ */
+export function intentScore(item: LauncherItem, ctx: RankContext): number {
+  const accepts = item.accepts
+  if (!accepts) return 0
+
+  let aliasScore = 0
+  if (accepts.aliases?.length) {
+    const nq = normalizeIntentQueryLocal(ctx.query ?? '')
+    if (nq && accepts.aliases.some((alias) => normalizeIntentQueryLocal(alias) === nq)) {
+      aliasScore = INTENT_SCORE_STRONG
+    }
+  }
+
+  let contentScore = 0
+  if (accepts.kinds?.length) {
+    const detections = ctx.detections ?? []
+    let maxConf = 0
+    const kinds = accepts.kinds as readonly string[]
+    for (const d of detections) {
+      if (kinds.includes(d.kind)) {
+        maxConf = Math.max(maxConf, d.confidence ?? 0)
+      }
+    }
+    if (maxConf >= 0.85) contentScore = INTENT_SCORE_STRONG
+    else if (maxConf > 0) contentScore = INTENT_SCORE_MEDIUM
+  }
+
+  if (accepts.regex) {
+    const text = ctx.contentText ?? ''
+    if (text) {
+      try {
+        if (new RegExp(accepts.regex).test(text)) {
+          contentScore = Math.max(contentScore, INTENT_SCORE_MEDIUM)
+        }
+      } catch {
+        // invalid regex — ignore
+      }
+    }
+  }
+
+  return Math.min(INTENT_SCORE_CAP, Math.max(aliasScore, contentScore))
+}
+
+/**
+ * Context boost when accepts.apps matches foregroundApp (case-insensitive).
+ */
+export function contextBoost(item: LauncherItem, ctx: RankContext): number {
+  const apps = item.accepts?.apps
+  if (!apps?.length || !ctx.foregroundApp) return 0
+  const fg = ctx.foregroundApp.toLowerCase()
+  if (!fg) return 0
+  if (apps.some((name) => name.toLowerCase() === fg)) return CONTEXT_BOOST_MAX
+  return 0
+}
+
+/**
  * Score one item for one surface. Combines match score with launcher usage,
- * host static priority, install freshness, content textMatch, and dynamic boost.
+ * host static priority, install freshness, content textMatch, dynamic boost,
+ * intent score, and context boost.
  *
  * Usage is solely from `launcherUsageBySurface` via {@link usageScore}.
  */
@@ -148,7 +234,16 @@ export function scoreLauncherItem(ctx: RankContext, item: LauncherItem): number 
     ? (safeTextMatch(item.textMatch, ctx.contentText) ? TEXT_MATCH_BOOST : 0)
     : 0
   const dynamicBoost = item.kind === 'dynamic' ? DYNAMIC_ITEM_BOOST : 0
-  return matchScore + usageScore(ctx, item) + staticPriority(item) + installFreshnessScore(ctx, item) + textMatchBoost + dynamicBoost
+  return (
+    matchScore +
+    usageScore(ctx, item) +
+    staticPriority(item) +
+    installFreshnessScore(ctx, item) +
+    textMatchBoost +
+    dynamicBoost +
+    intentScore(item, ctx) +
+    contextBoost(item, ctx)
+  )
 }
 
 /** Maximum text length passed to plugin textMatch to prevent runaway matching. */
