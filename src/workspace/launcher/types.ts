@@ -230,6 +230,8 @@ export type LauncherResultAction = {
   id: string
   title: string
   titleI18n?: Partial<Record<Locale, string>>
+  /** Icon shown in place of the generic "×" glyph; omit for destructive actions (close/delete). */
+  icon?: IconRef
   run: LauncherResultActionHandler
 }
 
@@ -323,6 +325,12 @@ export type PluginLauncherApi = {
   getClipboardText(): Promise<string>
   replaceActiveText(text: string): Promise<void>
   insertText(text: string): Promise<void>
+  /**
+   * Hand text back to the surface that can turn it into a first-class object
+   * (e.g. Global Launcher's Object Block). Surfaces with no such concept (Quick
+   * Editor command bar) fall back to the same behavior as insertText.
+   */
+  returnToLauncher(text: string): Promise<void>
   copyText(text: string): Promise<void>
   openUrl(url: string): Promise<void>
   showEditorWindow(): Promise<string | undefined>

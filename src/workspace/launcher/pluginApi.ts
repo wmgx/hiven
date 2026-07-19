@@ -195,6 +195,13 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
     insertText: async (text: string) => {
       await createQuickEditorPane({ text })
     },
+    // Real implementation lives in src/launcher/clipboard/globalLauncherApi.ts,
+    // injected via useLauncherSession's makeApi for the global-launcher surface
+    // (the only surface that ever calls this — see output.ts textResult()).
+    // This fallback only exists so the interface is total; unreachable in practice.
+    returnToLauncher: async (text: string) => {
+      await createQuickEditorPane({ text })
+    },
     copyText: async (text: string) => {
       await writeClipboard(text)
     },
