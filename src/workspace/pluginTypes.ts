@@ -439,6 +439,7 @@ export type PluginPermission =
   | 'globalShortcut.register'
   | 'accessibility.paste'
   | 'network.request'
+  | 'context.foreground-app'
 
 export type PluginPermissionGrant = {
   granted: boolean
