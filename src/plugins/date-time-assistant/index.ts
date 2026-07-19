@@ -339,6 +339,7 @@ export const dateTimeAssistantPlugin = definePlugin({
       icon: 'Clock',
       aliases: ['unix-time', 'epoch', 'date-convert'],
       inputPolicy: { mode: 'auto' },
+      accepts: { kinds: ['timestamp'] },
       params: TIMESTAMP_PARAMS,
       run(ctx) {
         return ctx.output.replaceActiveText(convertTimestampText(ctx.input.text, ctx.params, ctx.input.source === 'all'))
