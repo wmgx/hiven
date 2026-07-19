@@ -147,6 +147,9 @@ export function adaptToolToLauncherItem(
     defaultParams,
     requireParamSelection: tool.requireParamSelection,
     textMatch: tool.textMatch,
+    // Intent: declarative accepts + optional runtime match (same as textMatch — runtime-only)
+    accepts: tool.accepts,
+    match: tool.match,
     // Legacy usage keys: the tool id may match a command id used in old usage data
     legacyUsageKeys: [tool.id],
     execute,

@@ -20,6 +20,9 @@ import type { PluginNetworkApi, PluginPrivateStorageApi } from '../pluginTypes'
 import type { FluxEffect } from '../types'
 import type { DiffSource } from '../workspaceStore'
 import type { EffectRunnerResult } from '../effectRunner'
+import type { ContentAccepts, IntentHit, IntentMatchContext } from './intentTypes'
+
+export type { ContentAccepts, IntentHit, IntentMatchContext } from './intentTypes'
 
 // ─── System Surfaces ───────────────────────────────────────────────────────
 
@@ -485,6 +488,16 @@ export type LauncherItem = {
   /** Content matcher: returns true if this tool can process the given text. Boosted in ranking. */
   textMatch?: (text: string) => boolean
   /**
+   * Declarative intent coarse filter (host pure-data evaluation).
+   * Runtime field only — not serialized across process boundaries.
+   */
+  accepts?: ContentAccepts
+  /**
+   * Optional intent fine matcher; only invoked after accepts hits.
+   * Runtime function field (same lifetime as textMatch).
+   */
+  match?: (ctx: IntentMatchContext) => IntentHit[] | null
+  /**
    * When true, selection writes to launcher usage for ranking.
    * Dynamic items must opt in with a stable systemKey; static items omit this (treated as true).
    */
@@ -580,6 +593,16 @@ export type PluginToolContribution<TSettings = unknown> = {
    * Matched tools are boosted to the top of the command list.
    */
   textMatch?: (text: string) => boolean
+  /**
+   * Declarative intent coarse filter. Host evaluates without running plugin code.
+   * Missing accepts → tool does not participate in intent recommendation.
+   */
+  accepts?: ContentAccepts
+  /**
+   * Optional fine-grained intent matcher. Only called after accepts hits.
+   * Synchronous, local, budgeted by the host intent engine.
+   */
+  match?: (ctx: IntentMatchContext) => IntentHit[] | null
   run(ctx: PluginToolContext<TSettings>): Promise<PluginToolResult> | PluginToolResult
   surfaces?: PluginToolSurfaces
 }
