@@ -5,7 +5,7 @@
  * - Top bar: plugin-owned back, search, type filter, settings, close
  * - Left panel: grouped clipboard history list
  * - Right panel: preview and metadata for the selected item
- * - Keyboard shortcuts: Enter=paste, Cmd/Ctrl+C=copy, Delete=remove
+ * - Keyboard shortcuts: Enter=paste, Cmd/Ctrl+C=copy selection in preview, Delete=remove
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef, memo, type KeyboardEvent } from 'react'
@@ -411,19 +411,12 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       e.preventDefault()
       handleDelete(selectedItem.id)
     } else if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
-      // Prefer DOM selection (preview / search) over whole history item.
+      // Whole-item reuse is Enter / double-click paste. ⌘C only copies DOM selection.
       const selectedText = readDomSelectedText()
-      if (selectedText) {
-        e.preventDefault()
-        void host.clipboard.writeText(selectedText)
-        host.showMessage(t('message.copied'), 'success')
-        return
-      }
+      if (!selectedText) return
       e.preventDefault()
-      if (selectedFullItem && selectedFullItem.kind === 'text') {
-        void host.clipboard.writeText(selectedFullItem.text)
-        host.showMessage(t('message.copied'), 'success')
-      }
+      void host.clipboard.writeText(selectedText)
+      host.showMessage(t('message.copied'), 'success')
     } else if (e.key === 'ArrowDown') {
       e.preventDefault()
       isKeyboardNavRef.current = true
@@ -445,7 +438,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         if (flatIndex >= 0) virtualizer.scrollToIndex(flatIndex, { align: 'auto' })
       }
     }
-  }, [selectedItem, selectedFullItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleDelete, host, t, imeKeyDown])
+  }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleDelete, host, t, imeKeyDown])
 
   const renderContent = () => {
     if (loading) {
@@ -604,7 +597,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
         <SurfaceFooterHints className="clipboard-history-footer">
           <span>↵ {t('hint.paste')}</span>
-          <span>⌘C {t('hint.copy')}</span>
           <span>⌫ {t('hint.delete')}</span>
         </SurfaceFooterHints>
       </>
