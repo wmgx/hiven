@@ -4,6 +4,13 @@
  *   evaluateAccepts(accepts, ctx) → boolean  (pure data filter; never calls match)
  *   runIntentMatchers(matchers, ctx, options?) → IntentHit[]
  *
+ * evaluateAccepts pathway OR (content | alias | apps):
+ *   - content path active when kinds and/or regex declared; active dimensions AND
+ *   - alias path active when aliases declared; needs normalized query hit
+ *   - apps path active when apps declared; needs foregroundApp hit
+ *   - final true when at least one active path succeeds
+ *   - no path declared: undefined/null → false; {} → vacuous true
+ *
  * Expects:
  *   src/workspace/launcher/intentTypes.ts
  *   src/workspace/launcher/intentEngine.ts  exporting evaluateAccepts, runIntentMatchers
@@ -232,6 +239,92 @@ assert.equal(typeof runIntentMatchers, 'function', 'intentEngine must export run
     baseCtx({ foregroundApp: 'Terminal', detections: [] }),
   )
   assert.equal(ok, false, 'apps must reject non-matching foregroundApp')
+}
+
+// ─── 6b. multi-path accepts: pathway OR (content | alias | apps) ─────────────
+// Final true when at least one *active* path succeeds. Paths do not AND together.
+// content = kinds/regex (AND within path when both present)
+// alias   = aliases
+// apps    = apps
+{
+  // 1) kinds+aliases, query hits alias, no detections → alias path alone
+  const ok = evaluateAccepts(
+    { kinds: ['jwt'], aliases: ['jwt'] },
+    baseCtx({ query: 'JWT', detections: [] }),
+  )
+  assert.equal(
+    ok,
+    true,
+    'pathway OR: kinds+aliases with query JWT and empty detections must accept via alias only',
+  )
+}
+
+{
+  // 2) kinds+aliases, empty query, jwt detection → content path alone
+  const ok = evaluateAccepts(
+    { kinds: ['jwt'], aliases: ['jwt'] },
+    baseCtx({ query: '', detections: [detection('jwt')] }),
+  )
+  assert.equal(
+    ok,
+    true,
+    'pathway OR: kinds+aliases with empty query and jwt detection must accept via content only',
+  )
+}
+
+{
+  // 3) kinds+aliases, empty query, no jwt detection → no path succeeds
+  const ok = evaluateAccepts(
+    { kinds: ['jwt'], aliases: ['jwt'] },
+    baseCtx({ query: '', detections: [detection('csv')] }),
+  )
+  assert.equal(
+    ok,
+    false,
+    'pathway OR: kinds+aliases with empty query and non-jwt detections must reject',
+  )
+}
+
+{
+  // 4) kinds wants json, alias hits fmt, detections are jwt only → alias path
+  const ok = evaluateAccepts(
+    { kinds: ['json'], aliases: ['fmt'] },
+    baseCtx({ query: 'fmt', detections: [detection('jwt')] }),
+  )
+  assert.equal(
+    ok,
+    true,
+    'pathway OR: kinds:json + aliases:fmt with query fmt and jwt-only detections must accept via alias',
+  )
+}
+
+{
+  // 5) apps+kinds, Safari foreground, no detections → apps path alone
+  const ok = evaluateAccepts(
+    { apps: ['Safari'], kinds: ['url'] },
+    baseCtx({ foregroundApp: 'Safari', detections: [] }),
+  )
+  assert.equal(
+    ok,
+    true,
+    'pathway OR: apps+kinds with Safari foreground and empty detections must accept via apps only',
+  )
+}
+
+{
+  // 6) apps miss, url content hit → content path alone still succeeds
+  const ok = evaluateAccepts(
+    { apps: ['Safari'], kinds: ['url'] },
+    baseCtx({
+      foregroundApp: 'Terminal',
+      detections: [detection('url')],
+    }),
+  )
+  assert.equal(
+    ok,
+    true,
+    'pathway OR: apps miss + url detection must still accept via content path',
+  )
 }
 
 // ─── 7. accepts miss → match() MUST NOT be called ────────────────────────────
