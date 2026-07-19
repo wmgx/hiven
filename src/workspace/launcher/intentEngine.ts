@@ -32,7 +32,13 @@ function defaultNow(): number {
 /**
  * Pure-data accepts evaluation. Does not call plugin match functions.
  * Missing / undefined accepts → false (item does not participate in intent).
- * Multiple provided dimensions are AND-ed.
+ *
+ * Pathway OR (content | alias | apps):
+ *   - content path active when kinds and/or regex declared; declared dimensions AND
+ *   - alias path active when aliases declared
+ *   - apps path active when apps declared
+ *   - final true when at least one active path succeeds
+ *   - no path active (e.g. {}) → vacuous true
  */
 export function evaluateAccepts(
   accepts: ContentAccepts | undefined | null,
@@ -45,42 +51,49 @@ export function evaluateAccepts(
   const hasAliases = accepts.aliases !== undefined
   const hasApps = accepts.apps !== undefined
 
-  if (hasKinds) {
-    const kinds = accepts.kinds!
-    const detections = ctx.detections ?? []
-    const ok = detections.some((d) => kinds.includes(d.kind))
-    if (!ok) return false
-  }
+  const contentActive = hasKinds || hasRegex
+  const aliasActive = hasAliases
+  const appsActive = hasApps
 
-  if (hasRegex) {
-    const text = ctx.contentText ?? ''
-    let re: RegExp
-    try {
-      re = new RegExp(accepts.regex!)
-    } catch {
-      return false
+  // No pathway declared → vacuous true (e.g. accepts is {}).
+  if (!contentActive && !aliasActive && !appsActive) return true
+
+  if (contentActive) {
+    let contentOk = true
+    if (hasKinds) {
+      const kinds = accepts.kinds!
+      const detections = ctx.detections ?? []
+      contentOk = detections.some((d) => kinds.includes(d.kind))
     }
-    if (!re.test(text)) return false
+    if (contentOk && hasRegex) {
+      const text = ctx.contentText ?? ''
+      try {
+        contentOk = new RegExp(accepts.regex!).test(text)
+      } catch {
+        contentOk = false
+      }
+    }
+    if (contentOk) return true
   }
 
-  if (hasAliases) {
+  if (aliasActive) {
     const normalizedQuery = normalizeIntentQuery(ctx.query ?? '')
     const aliases = accepts.aliases!
     const ok = aliases.some((alias) => normalizeIntentQuery(alias) === normalizedQuery)
-    if (!ok) return false
+    if (ok) return true
   }
 
-  if (hasApps) {
+  if (appsActive) {
     const app = (ctx.foregroundApp ?? '').toLowerCase()
-    if (!app) return false
-    const apps = accepts.apps!
-    const ok = apps.some((name) => name.toLowerCase() === app)
-    if (!ok) return false
+    if (app) {
+      const apps = accepts.apps!
+      const ok = apps.some((name) => name.toLowerCase() === app)
+      if (ok) return true
+    }
   }
 
-  // Vacuous true when accepts is {} (declared but no dimensions).
-  // Any dimension that was provided must have passed above.
-  return true
+  // At least one path was active, but none succeeded.
+  return false
 }
 
 /**
