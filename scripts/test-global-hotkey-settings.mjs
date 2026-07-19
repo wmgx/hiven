@@ -24,7 +24,7 @@ const files = {
   tauriLib: read('src-tauri/src/lib.rs'),
   defaultCapability: read('src-tauri/capabilities/default.json'),
   store: read('src/store.ts'),
-  settingsView: read('src/views/SettingsView.tsx'),
+  settingsSurfaceContent: read('src/surfaces/SettingsSurfaceContent.tsx') + '\n' + read('src/surfaces/SettingsContent.tsx'),
   app: read('src/App.tsx'),
   globalPinnedLauncherHotkeys: read('src/hotkeys/globalPinnedLauncher.ts'),
   shortcutRecorder: read('src/components/ShortcutRecorder.tsx'),
@@ -147,49 +147,49 @@ for (const modifier of ['Command', 'Shift', 'Option']) {
   })
 }
 
-check('SettingsView renders a Hotkeys UI for the global pinned launcher shortcut', () => {
+check('SettingsSurfaceContent renders a Hotkeys UI for the global pinned launcher shortcut', () => {
   assertHas(
-    files.settingsView,
+    files.settingsSurfaceContent,
     /t\(['"]hotkeys['"]\)|settings\.hotkeys|Hotkeys|快捷键/,
-    'SettingsView should render a Hotkeys card',
+    'SettingsSurfaceContent should render a Hotkeys card',
   )
   assertHas(
-    files.settingsView,
+    files.settingsSurfaceContent,
     /globalPinnedLauncherShortcut/,
-    'SettingsView should read and update globalPinnedLauncherShortcut',
+    'SettingsSurfaceContent should read and update globalPinnedLauncherShortcut',
   )
   assertHas(
-    files.settingsView,
+    files.settingsSurfaceContent,
     /settings\.globalPinnedLauncherShortcut|settings\.openPinnedLauncherShortcut|pinned-only|Pinned Launcher|固定命令启动器/,
-    'SettingsView should label the global pinned launcher shortcut control',
+    'SettingsSurfaceContent should label the global pinned launcher shortcut control',
   )
 })
 
-check('SettingsView supports recording, disabled, and status display', () => {
+check('SettingsSurfaceContent supports recording, disabled, and status display', () => {
   assertHas(
     files.shortcutRecorder,
     /recordingShortcut|recordShortcut|isRecording|onKeyDown[\s\S]{0,240}accelerator/,
     'ShortcutRecorder should support recording an accelerator',
   )
   assertHas(
-    `${files.settingsView}\n${files.shortcutRecorder}`,
+    `${files.settingsSurfaceContent}\n${files.shortcutRecorder}`,
     /disabled|settings\.hotkeyDisabled|禁用/,
-    'SettingsView should expose a disabled option',
+    'SettingsSurfaceContent should expose a disabled option',
   )
   assertHas(
-    files.settingsView,
+    files.settingsSurfaceContent,
     /registrationStatus|registerStatus|statusText|settings\.hotkeyStatus/,
-    'SettingsView should show registration status or error text',
+    'SettingsSurfaceContent should show registration status or error text',
   )
   assertDoesNotHave(
-    files.settingsView,
+    files.settingsSurfaceContent,
     /shortcut\.registrationStatus\s*\?\?\s*t\(['"]hotkeyStatusPending['"]\)/,
-    'SettingsView should not render native registration status strings without i18n formatting',
+    'SettingsSurfaceContent should not render native registration status strings without i18n formatting',
   )
   assertHas(
-    files.settingsView,
+    files.settingsSurfaceContent,
     /formatHotkeyRegistrationStatus/,
-    'SettingsView should localize native registration status strings before rendering',
+    'SettingsSurfaceContent should localize native registration status strings before rendering',
   )
 })
 
@@ -215,8 +215,8 @@ check('Settings recording path can identify modifier-only double-modifier shortc
     'recording should convert modifier-only key events into double-modifier shortcut configs',
   )
   assertHas(
-    `${files.settingsView}\n${files.shortcutRecorder}`,
-    /onRecord=\{onChange\}|onChange\(\s*(?:recordedShortcut(?:\.shortcut)?|shortcut|nextShortcut)\s*\)/,
+    `${files.settingsSurfaceContent}\n${files.shortcutRecorder}`,
+    /onRecord=\{onChange\}|onChange\(\s*(?:recordedShortcut(?:\.shortcut)?|shortcut|nextShortcut)\s*\)|onRecord=\{\(recordedShortcut\)\s*=>\s*updateSetting/,
     'recording handler should pass the recorded accelerator or double-modifier shortcut through onChange',
   )
 })
@@ -272,34 +272,37 @@ check('native double-modifier hotkey layer supports Command, Shift, and Option',
   )
 })
 
-check('native double-modifier registration requests macOS Accessibility trust', () => {
+check('native double-modifier registration avoids Accessibility-only event taps', () => {
   assertHas(
     files.tauriHotkeys,
-    /AXIsProcessTrustedWithOptions/,
-    'native double-modifier registration should ask macOS for Accessibility trust before creating the event tap',
+    /NSEvent global and local monitors installed|addGlobalMonitorForEventsMatchingMask/,
+    'native double-modifier registration should use NSEvent monitor based routing',
   )
-  assertHas(
+  assertDoesNotHave(
     files.tauriHotkeys,
-    /AXTrustedCheckOptionPrompt/,
-    'native Accessibility trust check should request the system prompt for GitHub/release installs',
-  )
-  assertHas(
-    files.tauriHotkeys,
-    /Accessibility permission is required for double-modifier global shortcuts/,
-    'native hotkey status should expose a recognizable Accessibility failure',
+    /AXIsProcessTrustedWithOptions|AXTrustedCheckOptionPrompt|Accessibility permission is required for double-modifier global shortcuts/,
+    'native double-modifier registration should not expose stale Accessibility event-tap requirements',
   )
 })
 
-check('App global keydown handler ignores shortcut recorder events', () => {
+check('shortcut recorder marks active hotkey recording sessions', () => {
   assertHas(
-    files.app,
-    /is(?:Global)?ShortcutRecordingEvent|isHotkeyRecordingEvent|data-(?:shortcut|hotkey)-recorder|__FLUXTEXT_HOTKEY_RECORDING__/,
-    'App should be able to identify active Settings shortcut recording events',
+    files.shortcutRecorder,
+    /__FLUXTEXT_HOTKEY_RECORDING__/,
+    'ShortcutRecorder should mark active recording sessions for any host-level key routing',
   )
+  assertDoesNotHave(
+    files.app,
+    /setEditorCommandBarOpen\(true\)|openGlobalLauncher\(['"]full['"]\)/,
+    'launcher runtime should not retain retired app-level keydown launcher routes that can steal recorder input',
+  )
+})
+
+check('launcher runtime installs the global pinned launcher hotkey coordinator', () => {
   assertHas(
     files.app,
-    /if\s*\([^)]*(?:is(?:Global)?ShortcutRecordingEvent|isHotkeyRecordingEvent|data-(?:shortcut|hotkey)-recorder|__FLUXTEXT_HOTKEY_RECORDING__)[\s\S]{0,160}return/,
-    'App keydown capture handler should return before opening launchers/palette while Settings is recording',
+    /function LauncherRuntimeApp[\s\S]*installGlobalPinnedLauncherHotkeys\(\)/,
+    'LauncherRuntimeApp should install global pinned launcher hotkeys because launcher is the default runtime window',
   )
 })
 

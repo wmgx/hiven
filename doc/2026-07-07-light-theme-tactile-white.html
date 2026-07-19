@@ -1,0 +1,600 @@
+<title>立体白 Tactile White — light 主题方向预览</title>
+<style>
+  :root{
+    --bg:#ffffff;
+    --well:#f7f8f8;
+    --hover:#f2f3f4;
+    --press:#ecedee;
+    --text-1:#1a1c1e;
+    --text-2:#686d71;
+    --text-3:#999fa4;
+    --border:#e7e8e9;
+    --border-strong:#d8dadc;
+    --divider:#f0f1f2;
+    --danger:#b0402f;
+    --danger-tint:rgba(176,64,47,.08);
+
+    --shadow-card:0 1px 1px rgba(0,0,0,.03),0 2px 8px rgba(0,0,0,.04);
+    --shadow-float:0 12px 40px rgba(0,0,0,.14),0 0 0 1px rgba(0,0,0,.05);
+    --shadow-thumb:0 1px 3px rgba(0,0,0,.18);
+    --inset-well:inset 0 1px 2px rgba(0,0,0,.06);
+    --inset-hi:inset 0 1px 0 rgba(255,255,255,.7);
+
+    /* accent: 雾蓝 石板 (default) — 降饱和雾感，非饱和纯蓝 */
+    --accent-top:#69808e;
+    --accent-bot:#5a7184;
+    --accent-hover-top:#4f6475;
+    --accent-hover-bot:#445868;
+    --accent-solid:#5a7184;
+    --accent-focus:rgba(90,113,132,.28);
+  }
+  :root[data-accent="teal"]{
+    --accent-top:#547279;--accent-bot:#45636b;
+    --accent-hover-top:#3b565d;--accent-hover-bot:#324a50;
+    --accent-solid:#45636b;--accent-focus:rgba(69,99,107,.28);
+  }
+  :root[data-accent="pine"]{
+    --accent-top:#427d69;--accent-bot:#33705c;
+    --accent-hover-top:#356653;--accent-hover-bot:#295a4a;
+    --accent-solid:#33705c;--accent-focus:rgba(51,112,92,.28);
+  }
+  :root[data-accent="sage"]{
+    --accent-top:#72856d;--accent-bot:#64775f;
+    --accent-hover-top:#576a53;--accent-hover-bot:#4b5c48;
+    --accent-solid:#64775f;--accent-focus:rgba(100,119,95,.28);
+  }
+  :root[data-accent="copper"]{
+    --accent-top:#b16f42;--accent-bot:#a05a2c;
+    --accent-hover-top:#8f4f26;--accent-hover-bot:#7c451f;
+    --accent-solid:#a05a2c;--accent-focus:rgba(160,90,44,.28);
+  }
+  :root[data-accent="rose"]{
+    --accent-top:#a37179;--accent-bot:#96626a;
+    --accent-hover-top:#85555d;--accent-hover-bot:#744a51;
+    --accent-solid:#96626a;--accent-focus:rgba(150,98,106,.28);
+  }
+  :root[data-accent="mocha"]{
+    --accent-top:#8c7261;--accent-bot:#7d6353;
+    --accent-hover-top:#6e5647;--accent-hover-bot:#5f4a3d;
+    --accent-solid:#7d6353;--accent-focus:rgba(125,99,83,.28);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text-1);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Helvetica Neue",Arial,sans-serif;
+    font-size:14px;
+    line-height:1.5;
+    padding-bottom:80px;
+  }
+
+  /* ---------- topbar ---------- */
+  .topbar{
+    position:sticky;top:0;z-index:50;
+    display:flex;align-items:center;gap:12px;
+    padding:12px 24px;
+    background:var(--bg);
+    border-bottom:1px solid var(--divider);
+  }
+  .topbar__label{font-size:12px;color:var(--text-3);}
+  .accent-switch{display:flex;gap:6px;}
+  .accent-btn{
+    appearance:none;border:1px solid var(--border);border-bottom-color:var(--border-strong);
+    background:linear-gradient(#ffffff,#f6f7f7);
+    box-shadow:var(--inset-hi);
+    border-radius:7px;padding:6px 10px;font-size:12.5px;color:var(--text-2);
+    cursor:pointer;white-space:nowrap;
+  }
+  .accent-btn:hover{background:linear-gradient(#fbfcfc,var(--hover));}
+  .accent-btn:active{box-shadow:none;transform:translateY(1px);}
+  .accent-btn.is-active{
+    color:#fff;border-color:var(--accent-bot);border-bottom-color:var(--accent-hover-bot);
+    background:linear-gradient(var(--accent-top),var(--accent-bot));
+  }
+  .topbar__hint{margin-left:auto;font-size:11px;color:var(--text-3);}
+
+  /* ---------- canvas ---------- */
+  .canvas{width:720px;margin:0 auto;padding:32px 0 0;}
+  .section{margin-bottom:40px;}
+  .section__title{
+    font-size:13px;font-weight:600;color:var(--text-2);
+    margin:0 0 14px;display:flex;align-items:center;gap:8px;
+  }
+  .section__title .num{
+    width:18px;height:18px;border-radius:5px;flex:none;
+    background:linear-gradient(#ffffff,#f6f7f7);border:1px solid var(--border);border-bottom-color:var(--border-strong);
+    font-size:10.5px;color:var(--text-3);display:flex;align-items:center;justify-content:center;
+  }
+
+  /* ---------- icon placeholder ---------- */
+  .ico{
+    width:28px;height:28px;border-radius:7px;flex:none;
+    background:#ffffff;border:1px solid var(--border);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .ico::after{content:"";width:9px;height:9px;border-radius:3px;background:var(--text-3);opacity:.5;}
+  .ico.dot::after{border-radius:50%;} .ico.bar::after{width:12px;height:2.5px;border-radius:2px;}
+  /* 极淡彩底示意真实插件图标，饱和度压到最低 */
+  .ico.tint-a{background:#eef4f4;border-color:#e0ebeb;} .ico.tint-a::after{background:#6a9494;opacity:1;}
+  .ico.tint-b{background:#f8f1e9;border-color:#eee2d3;} .ico.tint-b::after{background:#b58a55;opacity:1;}
+  .ico.tint-c{background:#eef3ec;border-color:#e0eadd;} .ico.tint-c::after{background:#7a9873;opacity:1;}
+  .ico.tint-d{background:#f7f0f1;border-color:#ecdfe1;} .ico.tint-d::after{background:#a87e85;opacity:1;}
+
+  /* ---------- typography sample ---------- */
+  .type-row{display:flex;align-items:baseline;gap:14px;padding:7px 0;border-bottom:1px solid var(--divider);}
+  .type-row:last-child{border-bottom:none;}
+  .type-row .sample{color:var(--text-1);}
+  .type-row .meta{margin-left:auto;font:11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--text-3);}
+  .t-h1{font-size:26px;font-weight:600;} .t-h2{font-size:17px;font-weight:600;}
+  .t-body{font-size:14px;font-weight:400;}
+  .t-sec{font-size:13px;color:var(--text-2);}
+  .t-ter{font-size:12px;color:var(--text-3);}
+
+  .swatches{display:flex;gap:16px;flex-wrap:wrap;margin-top:16px;}
+  .swatch{width:78px;text-align:center;}
+  .swatch__chip{
+    width:56px;height:56px;border-radius:10px;margin:0 auto 6px;
+    border:1px solid var(--border);
+  }
+  .swatch__label{font-size:10px;color:var(--text-2);}
+  .swatch__hex{font:10px ui-monospace,Menlo,monospace;color:var(--text-3);}
+  .accent-chip{background:linear-gradient(var(--accent-top),var(--accent-bot));box-shadow:var(--inset-hi);}
+
+  /* ---------- card ---------- */
+  .card{
+    background:var(--bg);border:1px solid var(--border);border-radius:12px;
+    box-shadow:var(--shadow-card);overflow:hidden;
+  }
+  .row{
+    display:flex;align-items:center;gap:12px;padding:12px 16px;
+    border-bottom:1px solid var(--divider);position:relative;
+  }
+  .row:last-child{border-bottom:none;}
+  .row__text{display:flex;flex-direction:column;gap:2px;min-width:0;}
+  .row__title{font-size:13.5px;color:var(--text-1);}
+  .row__desc{font-size:11.5px;color:var(--text-3);}
+  .row__control{margin-left:auto;display:flex;align-items:center;gap:10px;flex:none;}
+
+  /* ---------- toggle ---------- */
+  .toggle{
+    appearance:none;border:none;padding:0;cursor:pointer;
+    width:38px;height:22px;border-radius:11px;position:relative;flex:none;
+    background:var(--well);box-shadow:var(--inset-well);
+    transition:background .15s;
+  }
+  .toggle__thumb{
+    position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;
+    background:#ffffff;box-shadow:var(--shadow-thumb);
+    transition:left .15s;
+  }
+  .toggle[data-on="true"]{
+    background:linear-gradient(var(--accent-top),var(--accent-bot));
+    box-shadow:var(--inset-hi);
+  }
+  .toggle[data-on="true"] .toggle__thumb{left:18px;}
+
+  /* ---------- select / dropdown ---------- */
+  .select{position:relative;flex:none;}
+  .select__btn{
+    appearance:none;cursor:pointer;
+    display:flex;align-items:center;gap:8px;
+    padding:6px 10px 6px 12px;border-radius:8px;font-size:12.5px;color:var(--text-1);
+    border:1px solid var(--border);border-bottom-color:var(--border-strong);
+    background:linear-gradient(#ffffff,#f6f7f7);box-shadow:var(--inset-hi);
+    min-width:104px;justify-content:space-between;
+  }
+  .select__btn:hover{background:linear-gradient(#fbfcfc,var(--hover));}
+  .select__btn:active{box-shadow:none;transform:translateY(1px);}
+  .select__chev{color:var(--text-3);font-size:10px;}
+  .select__menu{
+    display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:20;
+    min-width:130px;background:#fff;border-radius:10px;box-shadow:var(--shadow-float);
+    padding:6px;
+  }
+  .select.is-open .select__menu{display:block;}
+  .select__opt{
+    padding:7px 10px;border-radius:6px;font-size:12.5px;color:var(--text-1);cursor:pointer;
+  }
+  .select__opt:hover{background:var(--hover);}
+  .select__opt.is-picked{color:var(--accent-solid);font-weight:600;}
+
+  /* ---------- stepper ---------- */
+  .stepper{
+    display:flex;align-items:stretch;border-radius:8px;overflow:hidden;
+    border:1px solid var(--border);border-bottom-color:var(--border-strong);
+    background:linear-gradient(#ffffff,#f6f7f7);box-shadow:var(--inset-hi);
+    flex:none;
+  }
+  .stepper__btn{
+    appearance:none;border:none;cursor:pointer;background:transparent;
+    width:26px;font-size:14px;color:var(--text-2);
+  }
+  .stepper__btn:hover{background:rgba(0,0,0,.04);}
+  .stepper__btn:active{background:rgba(0,0,0,.08);}
+  .stepper__val{
+    width:34px;text-align:center;font-size:12.5px;color:var(--text-1);
+    background:var(--well);box-shadow:var(--inset-well);
+    display:flex;align-items:center;justify-content:center;
+  }
+
+  /* ---------- search input (内凹) ---------- */
+  .search{
+    display:flex;align-items:center;gap:8px;
+    padding:8px 12px;margin-bottom:10px;border-radius:9px;
+    background:var(--well);box-shadow:var(--inset-well);
+  }
+  .search__icon{width:13px;height:13px;border-radius:50%;border:1.6px solid var(--text-3);flex:none;position:relative;}
+  .search__icon::after{content:"";position:absolute;width:5px;height:1.6px;background:var(--text-3);right:-4px;bottom:-1px;transform:rotate(45deg);}
+  .search input{
+    border:none;outline:none;background:transparent;font-size:12.5px;color:var(--text-1);width:100%;
+    font-family:inherit;
+  }
+  .search input::placeholder{color:var(--text-3);}
+
+  /* ---------- keycap ---------- */
+  .keycap{
+    font:11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--text-2);
+    padding:3px 6px;border-radius:5px;background:#ffffff;
+    border:1px solid var(--border);border-bottom:2px solid var(--border-strong);
+    flex:none;
+  }
+
+  /* ---------- list row states ---------- */
+  .list-row{cursor:default;}
+  .list-row:hover{background:var(--hover);}
+  .list-row.is-selected{background:var(--hover);}
+  .list-row.is-selected::before{
+    content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:2px;
+    background:var(--accent-solid);
+  }
+  .list-row.is-selected .row__title{color:var(--accent-solid);font-weight:600;}
+  .list-row.demo-hover{background:var(--hover);}
+  .list-row .flag{margin-left:8px;font-size:10.5px;color:var(--text-3);}
+
+  /* ---------- accent overview ---------- */
+  .acc-grid{display:flex;gap:8px;}
+  .acc-card{
+    flex:1;min-width:0;border:1px solid var(--border);border-radius:9px;
+    padding:10px 6px 9px;display:flex;flex-direction:column;align-items:center;gap:7px;
+    background:var(--bg);box-shadow:var(--shadow-card);
+  }
+  .acc-card__name{font-size:11px;color:var(--text-1);font-weight:600;}
+  .acc-card__hex{font:9.5px ui-monospace,Menlo,monospace;color:var(--text-3);margin-top:-5px;}
+  .acc-card__btn{
+    font-size:10.5px;color:#fff;padding:4px 10px;border-radius:6px;
+    background:linear-gradient(var(--c-top),var(--c-bot));
+    border:1px solid var(--c-bot);box-shadow:var(--inset-hi);
+  }
+  .acc-card__toggle{
+    width:30px;height:18px;border-radius:9px;position:relative;
+    background:linear-gradient(var(--c-top),var(--c-bot));box-shadow:var(--inset-hi);
+  }
+  .acc-card__toggle::after{
+    content:"";position:absolute;top:2px;right:2px;width:14px;height:14px;border-radius:50%;
+    background:#fff;box-shadow:var(--shadow-thumb);
+  }
+  .acc-card__pill{
+    font-size:10px;color:var(--c-bot);font-weight:600;
+    background:var(--hover);border-radius:5px;padding:3px 8px 3px 11px;position:relative;
+  }
+  .acc-card__pill::before{
+    content:"";position:absolute;left:3px;top:4px;bottom:4px;width:2.5px;border-radius:2px;
+    background:var(--c-bot);
+  }
+
+  /* ---------- buttons row ---------- */
+  .btn-row{display:flex;align-items:center;gap:14px;}
+  .btn{
+    appearance:none;cursor:pointer;font-size:13px;border-radius:8px;padding:8px 18px;
+    font-family:inherit;
+  }
+  .btn-primary{
+    color:#fff;border:1px solid var(--accent-bot);border-bottom-color:var(--accent-hover-bot);
+    background:linear-gradient(var(--accent-top),var(--accent-bot));
+    box-shadow:var(--inset-hi);
+  }
+  .btn-primary:hover{background:linear-gradient(var(--accent-hover-top),var(--accent-hover-bot));}
+  .btn-primary:active{box-shadow:none;transform:translateY(1px);}
+  .btn-secondary{
+    color:var(--text-1);border:1px solid var(--border);border-bottom-color:var(--border-strong);
+    background:linear-gradient(#ffffff,#f6f7f7);box-shadow:var(--inset-hi);
+  }
+  .btn-secondary:hover{background:linear-gradient(#fbfcfc,var(--hover));}
+  .btn-secondary:active{box-shadow:none;transform:translateY(1px);}
+  .btn-danger{
+    color:var(--danger);background:transparent;border:1px solid transparent;padding:8px 12px;
+  }
+  .btn-danger:hover{background:var(--danger-tint);}
+
+  /* ---------- floating menu ---------- */
+  .floater{
+    width:200px;background:#fff;border-radius:11px;box-shadow:var(--shadow-float);padding:6px;
+  }
+  .floater__item{
+    display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:7px;font-size:13px;color:var(--text-1);cursor:default;
+  }
+  .floater__item:hover{background:var(--hover);}
+  .floater__item .keycap{margin-left:auto;}
+  .floater__item.is-danger{color:var(--danger);}
+  .floater__div{height:1px;background:var(--divider);margin:5px 4px;}
+
+  /* ---------- mini panel ---------- */
+  .mini-panel{
+    width:480px;background:#fff;border:1px solid var(--border);border-radius:13px;
+    box-shadow:var(--shadow-card);overflow:hidden;
+  }
+  .mini-panel__head{
+    height:40px;display:flex;align-items:center;gap:6px;padding:0 14px;
+    background:#ffffff;border-bottom:1px solid var(--divider);
+    box-shadow:0 1px 3px rgba(0,0,0,.02);position:relative;z-index:2;
+    font-size:12px;color:var(--text-2);
+  }
+  .mini-panel__head .crumb-cur{color:var(--text-1);font-weight:600;}
+  .mini-panel__body{display:flex;min-height:220px;}
+  .mini-panel__side{
+    width:128px;flex:none;background:#ffffff;border-right:1px solid var(--divider);
+    box-shadow:1px 0 3px rgba(0,0,0,.015);position:relative;z-index:1;
+    padding:12px 8px;display:flex;flex-direction:column;gap:4px;
+  }
+  .tab{
+    padding:7px 10px;border-radius:7px;font-size:12.5px;color:var(--text-2);cursor:default;position:relative;
+    border:1px solid transparent;
+  }
+  .tab:hover{background:var(--hover);}
+  .tab.is-active{
+    background:#fff;color:var(--text-1);font-weight:600;
+    border-color:var(--divider);box-shadow:var(--shadow-card);
+  }
+  .tab.is-active::before{
+    content:"";position:absolute;left:-8px;top:50%;transform:translateY(-50%);
+    width:3px;height:14px;border-radius:2px;background:var(--accent-solid);
+  }
+  .mini-panel__main{flex:1;padding:14px;display:flex;flex-direction:column;gap:12px;}
+  .mini-card{border:1px solid var(--border);border-radius:9px;overflow:hidden;}
+  .mini-card .row{padding:10px 12px;}
+  .mini-card .row__title{font-size:12.5px;}
+  .mini-card .row__desc{font-size:11px;}
+
+  .foot-note{font-size:11px;color:var(--text-3);margin-top:8px;}
+</style>
+
+<div class="topbar">
+  <span class="topbar__label">accent</span>
+  <div class="accent-switch">
+    <button class="accent-btn is-active" onclick="setAccent('mist',this)">雾蓝</button>
+    <button class="accent-btn" onclick="setAccent('teal',this)">墨青</button>
+    <button class="accent-btn" onclick="setAccent('pine',this)">松绿</button>
+    <button class="accent-btn" onclick="setAccent('sage',this)">鼠尾草</button>
+    <button class="accent-btn" onclick="setAccent('copper',this)">暖铜</button>
+    <button class="accent-btn" onclick="setAccent('rose',this)">灰玫瑰</button>
+    <button class="accent-btn" onclick="setAccent('mocha',this)">摩卡</button>
+  </div>
+  <span class="topbar__hint">立体白 · 光影材质，禁饱和蓝/紫</span>
+</div>
+
+<div class="canvas">
+
+  <!-- 1. 文字层级 + 色板 -->
+  <div class="section">
+    <p class="section__title"><span class="num">1</span>文字层级 &amp; 灰阶 / 材质色板</p>
+    <div class="type-row"><span class="sample t-h1">标题 Heading</span><span class="meta">26px · 600 · #1a1c1e</span></div>
+    <div class="type-row"><span class="sample t-h2">子标题 Subheading</span><span class="meta">17px · 600 · #1a1c1e</span></div>
+    <div class="type-row"><span class="sample t-body">正文 Body 文本示例</span><span class="meta">14px · 400 · #1a1c1e</span></div>
+    <div class="type-row"><span class="sample t-sec">次要说明文字 Secondary</span><span class="meta">13px · 400 · #686d71</span></div>
+    <div class="type-row"><span class="sample t-ter">三级弱化文字 Tertiary</span><span class="meta">12px · 400 · #999fa4</span></div>
+
+    <div class="swatches">
+      <div class="swatch"><div class="swatch__chip" style="background:#ffffff"></div><div class="swatch__label">主背景</div><div class="swatch__hex">#ffffff</div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:#f7f8f8"></div><div class="swatch__label">输入井/关轨</div><div class="swatch__hex">#f7f8f8</div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:#f2f3f4"></div><div class="swatch__label">hover</div><div class="swatch__hex">#f2f3f4</div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:#ecedee"></div><div class="swatch__label">按压</div><div class="swatch__hex">#ecedee</div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:#e7e8e9"></div><div class="swatch__label">边框</div><div class="swatch__hex">#e7e8e9</div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:#f0f1f2"></div><div class="swatch__label">发丝线</div><div class="swatch__hex">#f0f1f2</div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:#1a1c1e"></div><div class="swatch__label">文字一级</div><div class="swatch__hex">#1a1c1e</div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:#686d71"></div><div class="swatch__label">文字二级</div><div class="swatch__hex">#686d71</div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:#999fa4"></div><div class="swatch__label">文字三级</div><div class="swatch__hex">#999fa4</div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:#b0402f"></div><div class="swatch__label">危险</div><div class="swatch__hex">#b0402f</div></div>
+      <div class="swatch"><div class="swatch__chip accent-chip" id="accent-chip"></div><div class="swatch__label">当前 accent</div><div class="swatch__hex" id="accent-hex">#5a7184</div></div>
+    </div>
+  </div>
+
+  <!-- 2. 设置卡片 -->
+  <div class="section">
+    <p class="section__title"><span class="num">2</span>设置卡片 — 开关 / 下拉 / 步进器</p>
+    <div class="card">
+      <div class="row">
+        <div class="ico dot tint-a"></div>
+        <div class="row__text"><span class="row__title">自动保存</span><span class="row__desc">编辑内容将实时写入磁盘</span></div>
+        <div class="row__control">
+          <button class="toggle" data-on="true" onclick="toggleSwitch(this)"><span class="toggle__thumb"></span></button>
+        </div>
+      </div>
+      <div class="row">
+        <div class="ico tint-b"></div>
+        <div class="row__text"><span class="row__title">界面语言</span><span class="row__desc">影响菜单与提示文案</span></div>
+        <div class="row__control">
+          <div class="select" id="lang-select">
+            <button class="select__btn" onclick="toggleSelect(this)">
+              <span id="lang-val">简体中文</span><span class="select__chev">▾</span>
+            </button>
+            <div class="select__menu">
+              <div class="select__opt is-picked" onclick="pickOption(this,'简体中文')">简体中文</div>
+              <div class="select__opt" onclick="pickOption(this,'English')">English</div>
+              <div class="select__opt" onclick="pickOption(this,'日本語')">日本語</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="ico bar tint-c"></div>
+        <div class="row__text"><span class="row__title">编辑器字号</span><span class="row__desc">影响正文与代码字体大小</span></div>
+        <div class="row__control">
+          <div class="stepper">
+            <button class="stepper__btn" onclick="stepValue(-1)">－</button>
+            <span class="stepper__val" id="step-val">14</span>
+            <button class="stepper__btn" onclick="stepValue(1)">＋</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. 列表卡片 -->
+  <div class="section">
+    <p class="section__title"><span class="num">3</span>列表卡片 — 选中 / hover / 键帽</p>
+    <div class="search"><span class="search__icon"></span><input placeholder="搜索命令或文件…"></div>
+    <div class="card">
+      <div class="row list-row">
+        <div class="ico dot tint-b"></div>
+        <div class="row__text"><span class="row__title">最近打开的文档</span></div>
+        <div class="row__control"><span class="keycap">⌘1</span></div>
+      </div>
+      <div class="row list-row is-selected">
+        <div class="ico dot tint-a"></div>
+        <div class="row__text"><span class="row__title">当前项目 · flux_text</span></div>
+        <div class="row__control"><span class="keycap">⌘K</span></div>
+      </div>
+      <div class="row list-row demo-hover">
+        <div class="ico tint-d"></div>
+        <div class="row__text"><span class="row__title">插件市场</span></div>
+        <div class="row__control"><span class="flag">← hover 态演示</span></div>
+      </div>
+      <div class="row list-row">
+        <div class="ico bar tint-c"></div>
+        <div class="row__text"><span class="row__title">偏好设置</span></div>
+        <div class="row__control"><span class="keycap">⌘,</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. accent 候选一览 -->
+  <div class="section">
+    <p class="section__title"><span class="num">4</span>accent 候选一览 — 七色横向对比</p>
+    <div class="acc-grid">
+      <div class="acc-card" style="--c-top:#69808e;--c-bot:#5a7184">
+        <span class="acc-card__name">雾蓝</span><span class="acc-card__hex">#5a7184</span>
+        <span class="acc-card__btn">按钮</span><span class="acc-card__toggle"></span><span class="acc-card__pill">选中</span>
+      </div>
+      <div class="acc-card" style="--c-top:#547279;--c-bot:#45636b">
+        <span class="acc-card__name">墨青</span><span class="acc-card__hex">#45636b</span>
+        <span class="acc-card__btn">按钮</span><span class="acc-card__toggle"></span><span class="acc-card__pill">选中</span>
+      </div>
+      <div class="acc-card" style="--c-top:#427d69;--c-bot:#33705c">
+        <span class="acc-card__name">松绿</span><span class="acc-card__hex">#33705c</span>
+        <span class="acc-card__btn">按钮</span><span class="acc-card__toggle"></span><span class="acc-card__pill">选中</span>
+      </div>
+      <div class="acc-card" style="--c-top:#72856d;--c-bot:#64775f">
+        <span class="acc-card__name">鼠尾草</span><span class="acc-card__hex">#64775f</span>
+        <span class="acc-card__btn">按钮</span><span class="acc-card__toggle"></span><span class="acc-card__pill">选中</span>
+      </div>
+      <div class="acc-card" style="--c-top:#b16f42;--c-bot:#a05a2c">
+        <span class="acc-card__name">暖铜</span><span class="acc-card__hex">#a05a2c</span>
+        <span class="acc-card__btn">按钮</span><span class="acc-card__toggle"></span><span class="acc-card__pill">选中</span>
+      </div>
+      <div class="acc-card" style="--c-top:#a37179;--c-bot:#96626a">
+        <span class="acc-card__name">灰玫瑰</span><span class="acc-card__hex">#96626a</span>
+        <span class="acc-card__btn">按钮</span><span class="acc-card__toggle"></span><span class="acc-card__pill">选中</span>
+      </div>
+      <div class="acc-card" style="--c-top:#8c7261;--c-bot:#7d6353">
+        <span class="acc-card__name">摩卡</span><span class="acc-card__hex">#7d6353</span>
+        <span class="acc-card__btn">按钮</span><span class="acc-card__toggle"></span><span class="acc-card__pill">选中</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. 按钮排 -->
+  <div class="section">
+    <p class="section__title"><span class="num">5</span>按钮排 — 主 / 次 / 危险</p>
+    <div class="btn-row">
+      <button class="btn btn-primary">保存更改</button>
+      <button class="btn btn-secondary">取消</button>
+      <button class="btn btn-danger">删除此项</button>
+    </div>
+  </div>
+
+  <!-- 5. 悬浮菜单 -->
+  <div class="section">
+    <p class="section__title"><span class="num">6</span>悬浮菜单</p>
+    <div class="floater">
+      <div class="floater__item">打开 <span class="keycap">⌘O</span></div>
+      <div class="floater__item">重命名 <span class="keycap">⌘R</span></div>
+      <div class="floater__item">复制 <span class="keycap">⌘D</span></div>
+      <div class="floater__div"></div>
+      <div class="floater__item is-danger">移到废纸篓 <span class="keycap">⌘⌫</span></div>
+    </div>
+  </div>
+
+  <!-- 6. 迷你系统面板 -->
+  <div class="section">
+    <p class="section__title"><span class="num">7</span>迷你系统面板 — 白上叠白的分层演示</p>
+    <div class="mini-panel">
+      <div class="mini-panel__head">设置 <span>›</span> <span class="crumb-cur">插件</span></div>
+      <div class="mini-panel__body">
+        <div class="mini-panel__side">
+          <div class="tab is-active">通用</div>
+          <div class="tab">插件</div>
+        </div>
+        <div class="mini-panel__main">
+          <div class="mini-card">
+            <div class="row">
+              <div class="ico dot tint-a"></div>
+              <div class="row__text"><span class="row__title">启用云同步</span><span class="row__desc">跨设备保持配置一致</span></div>
+              <div class="row__control">
+                <button class="toggle" data-on="false" onclick="toggleSwitch(this)"><span class="toggle__thumb"></span></button>
+              </div>
+            </div>
+          </div>
+          <div class="mini-card">
+            <div class="row">
+              <div class="ico tint-b"></div>
+              <div class="row__text"><span class="row__title">Text Diff 插件</span><span class="row__desc">v1.2.0 · 已启用</span></div>
+              <div class="row__control">
+                <span class="keycap">⌘⇧P</span>
+                <button class="toggle" data-on="true" onclick="toggleSwitch(this)"><span class="toggle__thumb"></span></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="foot-note">头部、侧栏、内容区全部纯白，仅靠发丝线 #f0f1f2 与细微阴影分区；选中 Tab 以边框 + 阴影浮起，面板再以卡片阴影悬于页面之上——全白分层，光影承担全部层次。</p>
+  </div>
+
+</div>
+
+<script>
+  function setAccent(name, el){
+    document.documentElement.setAttribute('data-accent', name);
+    document.querySelectorAll('.accent-btn').forEach(b=>b.classList.remove('is-active'));
+    el.classList.add('is-active');
+    var hexMap = {mist:'#5a7184', teal:'#45636b', pine:'#33705c', sage:'#64775f', copper:'#a05a2c', rose:'#96626a', mocha:'#7d6353'};
+    document.getElementById('accent-hex').textContent = hexMap[name];
+  }
+  function toggleSwitch(el){
+    var on = el.getAttribute('data-on') === 'true';
+    el.setAttribute('data-on', on ? 'false' : 'true');
+  }
+  function toggleSelect(btn){
+    var wrap = btn.closest('.select');
+    document.querySelectorAll('.select.is-open').forEach(function(s){ if(s!==wrap) s.classList.remove('is-open'); });
+    wrap.classList.toggle('is-open');
+  }
+  function pickOption(el, label){
+    document.getElementById('lang-val').textContent = label;
+    el.parentElement.querySelectorAll('.select__opt').forEach(o=>o.classList.remove('is-picked'));
+    el.classList.add('is-picked');
+    el.closest('.select').classList.remove('is-open');
+  }
+  document.addEventListener('click', function(e){
+    if(!e.target.closest('.select')){
+      document.querySelectorAll('.select.is-open').forEach(s=>s.classList.remove('is-open'));
+    }
+  });
+  var stepN = 14;
+  function stepValue(d){
+    stepN = Math.max(10, Math.min(24, stepN + d));
+    document.getElementById('step-val').textContent = stepN;
+  }
+</script>

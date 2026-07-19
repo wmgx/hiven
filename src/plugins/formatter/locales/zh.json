@@ -1,0 +1,14 @@
+{
+  "css.prettify.title": "CSS 格式化",
+  "css.prettify.description": "美化 CSS（缩进换行）",
+  "css.compact.title": "CSS 压缩",
+  "css.compact.description": "压缩 CSS（去空格注释）",
+  "sql.prettify.title": "SQL 格式化",
+  "sql.prettify.description": "美化 SQL（缩进换行）",
+  "sql.compact.title": "SQL 压缩",
+  "sql.compact.description": "压缩 SQL（去注释、单行）",
+  "xml.prettify.title": "XML 格式化",
+  "xml.prettify.description": "美化 XML（缩进换行）",
+  "xml.compact.title": "XML 压缩",
+  "xml.compact.description": "压缩 XML（去空白）"
+}

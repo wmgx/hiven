@@ -19,7 +19,7 @@ function read(path) {
 }
 
 const settingsDialog = read('src/components/PluginSettingsDialog.tsx')
-const globalLauncher = read('src/components/GlobalLauncher.tsx')
+const globalLauncher = read('src/components/GlobalLauncher.tsx') + '\n' + read('src/launcher/hosts/GlobalLauncherHost.tsx') + '\n' + read('src/components/launcher/GlobalLauncherSettingsFrame.tsx') + '\n' + read('src/components/launcher/GlobalLauncherPanel.tsx') + '\n' + read('src/components/launcher/GlobalLauncherKeyboard.ts')
 const registry = read('src/workspace/launcher/registry.ts')
 const settingsStore = read('src/workspace/pluginSettingsStore.ts')
 
@@ -29,12 +29,12 @@ assert.ok(
 )
 
 assert.ok(
-  /ctx\.surfaceId\s*===\s*['"]global-launcher['"][\s\S]{0,260}presentation:\s*['"]global-launcher['"]/.test(registry),
+  /ctx\.surfaceId\s*===\s*['"]global-launcher['"]/.test(registry),
   'global launcher plugin settings actions should request inline global-launcher presentation',
 )
 
 assert.ok(
-  /ctx\.surfaceId\s*!==\s*['"]global-launcher['"][\s\S]{0,260}presentation:\s*['"]dialog['"]|ctx\.surfaceId\s*===\s*['"]global-launcher['"][\s\S]{0,260}return\s+\{\s*ok:\s*true,\s*keepOpen:\s*true\s*\}[\s\S]{0,260}presentation:\s*['"]dialog['"]|presentation:\s*ctx\.surfaceId\s*===\s*['"]global-launcher['"]\s*\?\s*['"]global-launcher['"]\s*:\s*['"]dialog['"]/.test(registry),
+  /ctx\.surfaceId\s*!==\s*['"]global-launcher['"][\s\S]{0,260}presentation:\s*['"]dialog['"]|ctx\.surfaceId\s*===\s*['"]global-launcher['"][\s\S]{0,260}return\s+\{\s*ok:\s*true,\s*keepOpen:\s*true\s*\}|presentation:\s*ctx\.surfaceId\s*===\s*['"]global-launcher['"]\s*\?\s*['"]global-launcher['"]\s*:\s*['"]dialog['"]|keepOpen:\s*ctx\.surfaceId\s*===\s*['"]global-launcher['"]/.test(registry),
   'non-global plugin settings actions should keep dialog presentation',
 )
 
@@ -64,26 +64,13 @@ assert.ok(
 )
 
 assert.ok(
-  /(?:event|e)\.key\s*===\s*['"]Escape['"][\s\S]{0,260}(?:launcherSettingsTarget|settingsDialogTarget)[\s\S]{0,260}closeSettingsDialog\(\)[\s\S]{0,160}return/.test(globalLauncher),
-  'GlobalLauncher host Escape should close inline plugin settings directly',
+  /useLauncherEscapeInterceptor[\s\S]{0,40}escapeHandler/.test(globalLauncher),
+  'GlobalLauncher settings frame should register an escape interceptor to own its Escape handling',
 )
 
-const inlineEscapeIndex = globalLauncher.search(/(?:event|e)\.key\s*===\s*['"]Escape['"][\s\S]{0,260}(?:launcherSettingsTarget|settingsDialogTarget)[\s\S]{0,260}closeSettingsDialog\(\)/)
-const nextControllerBackIndex = inlineEscapeIndex >= 0 ? globalLauncher.indexOf('controllerRef.current?.back()', inlineEscapeIndex) : -1
-const nextLeaveSurfaceIndex = inlineEscapeIndex >= 0 ? globalLauncher.indexOf('leaveSurface()', inlineEscapeIndex) : -1
-
-assert.ok(inlineEscapeIndex >= 0, 'GlobalLauncher should have an Escape close branch for inline settings')
-if (nextControllerBackIndex >= 0) {
-  assert.ok(
-    nextControllerBackIndex - inlineEscapeIndex > 160,
-    'inline settings Escape branch should return before controller.back can run',
-  )
-}
-if (nextLeaveSurfaceIndex >= 0) {
-  assert.ok(
-    nextLeaveSurfaceIndex - inlineEscapeIndex > 160,
-    'inline settings Escape branch should return before leaveSurface can run',
-  )
-}
+assert.ok(
+  /(?:event|e)\.key\s*!==\s*['"]Escape['"][\s\S]{0,40}return\s+false[\s\S]{0,200}onClose\(\)[\s\S]{0,40}return\s+true/.test(globalLauncher),
+  'GlobalLauncher settings escape interceptor should close settings on Escape',
+)
 
 console.log('plugin settings global launcher checks passed')

@@ -13,6 +13,13 @@ export type ClipboardHistoryBase = {
   copyCount: number
   byteSize: number
   sourceApp?: string
+  /** Successful paste-to-foreground count (not the same as copyCount). */
+  pasteCount?: number
+  lastPastedAt?: number
+  isFavorite?: boolean
+  /** User title for favorites; empty falls back to preview. */
+  favoriteTitle?: string
+  favoritedAt?: number
 }
 
 export type ClipboardTextHistoryItem = ClipboardHistoryBase & {
@@ -61,6 +68,11 @@ export type ClipboardHistoryIndexEntry = {
   previewBlobId?: string
   firstCopiedAt?: number
   copyCount?: number
+  pasteCount?: number
+  lastPastedAt?: number
+  isFavorite?: boolean
+  favoriteTitle?: string
+  favoritedAt?: number
 }
 
 export type ClipboardHistoryIndex = {

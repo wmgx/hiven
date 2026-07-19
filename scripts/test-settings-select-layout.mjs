@@ -15,7 +15,7 @@ const root = process.cwd()
 const read = (path) => readFileSync(join(root, path), 'utf8')
 
 const packageJson = JSON.parse(read('package.json'))
-const settingsView = read('src/views/SettingsView.tsx')
+const settingsView = read('src/surfaces/SettingsSurfaceContent.tsx') + '\n' + read('src/surfaces/SettingsContent.tsx')
 const css = read('src/index.css')
 
 assert.equal(

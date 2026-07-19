@@ -19,8 +19,19 @@ function read(path) {
 
 const files = {
   packageJson: read('package.json'),
-  globalLauncher: read('src/components/GlobalLauncher.tsx'),
+  globalLauncher: read('src/launcher/hosts/GlobalLauncherHost.tsx'),
+  globalLauncherFrames: read('src/components/launcher/GlobalLauncherFrames.tsx'),
+  globalLauncherHostLifecycle: read('src/components/launcher/GlobalLauncherHostLifecycle.ts'),
+  globalLauncherPermissionFrame: read('src/components/launcher/GlobalLauncherPermissionFrame.tsx'),
+  globalLauncherCollectInputFrame: read('src/components/launcher/GlobalLauncherCollectInputFrame.tsx'),
+  globalLauncherResultFrame: read('src/components/launcher/GlobalLauncherResultFrame.tsx'),
+  globalLauncherKeyboard: read('src/components/launcher/GlobalLauncherKeyboard.ts'),
+  globalLauncherLayout: read('src/components/launcher/GlobalLauncherLayout.ts') + '\n' + read('src/components/launcher/GlobalLauncherGeometry.ts'),
+  launcherMixedList: read('src/components/launcher/LauncherMixedList.tsx'),
+  launcherResultChoiceRow: read('src/components/launcher/LauncherResultChoiceRow.tsx'),
   commandPalette: read('src/components/CommandPalette.tsx'),
+  editorCommandBarHost: read('src/launcher/hosts/EditorCommandBarHost.tsx'),
+  launcherDomainSearchStep: read('src/components/launcher/LauncherDomainSearchStep.tsx'),
   launcherParamStep: read('src/components/launcher/LauncherParamStep.tsx'),
   launcherController: read('src/workspace/launcher/controller.ts'),
   launcherTypes: read('src/workspace/launcher/types.ts'),
@@ -36,27 +47,39 @@ assert.equal(
 )
 
 assert.match(files.globalLauncher, /resultSelectedIndex/, 'GlobalLauncher result frame must track a selected result row')
-assert.match(files.globalLauncher, /event\.key === 'ArrowDown'[\s\S]{0,320}setResultSelectedIndex/, 'GlobalLauncher result frame must support ArrowDown selection')
-assert.match(files.globalLauncher, /event\.key === 'ArrowUp'[\s\S]{0,320}setResultSelectedIndex/, 'GlobalLauncher result frame must support ArrowUp selection')
-assert.match(files.globalLauncher, /choices\[Math\.min\(resultSelectedIndex/, 'Enter should activate the selected result choice instead of always using the first row')
-assert.match(files.globalLauncher, /global-launcher-result-row/, 'GlobalLauncher result rows must have a stable v3 row styling hook')
-assert.match(files.globalLauncher, /ResultChoiceRow/, 'GlobalLauncher must render result choices through the shared v3 result row')
-assert.match(files.globalLauncher, /l-result-block/, 'GlobalLauncher must support the long text result fallback block')
+assert.match(files.globalLauncherKeyboard, /event\.key === 'ArrowDown'[\s\S]{0,320}setResultSelectedIndex/, 'GlobalLauncher result frame must support ArrowDown selection')
+assert.match(files.globalLauncherKeyboard, /event\.key === 'ArrowUp'[\s\S]{0,320}setResultSelectedIndex/, 'GlobalLauncher result frame must support ArrowUp selection')
+assert.match(files.globalLauncherKeyboard, /choices\[Math\.min\(resultSelectedIndex/, 'Enter should activate the selected result choice instead of always using the first row')
+assert.match(files.launcherResultChoiceRow, /global-launcher-result-row/, 'GlobalLauncher result rows must have a stable v3 row styling hook')
+assert.match(files.globalLauncherResultFrame, /LauncherResultChoiceRow/, 'GlobalLauncher result frame must render result choices through the shared v3 result row')
+assert.match(files.launcherResultChoiceRow, /l-result-block/, 'GlobalLauncher must support the long text result fallback block')
 assert.match(files.globalLauncher, /toggleResultChoice/, 'GlobalLauncher must support selectable multi-result rows')
-assert.match(files.globalLauncher, /global-launcher-header l-search/, 'GlobalLauncher must use the v3 search header structure')
-assert.match(files.globalLauncher, /className=\{`l-row/, 'GlobalLauncher list rows must use the v3 l-row structure')
-assert.match(files.globalLauncher, /global-launcher-footer l-foot/, 'GlobalLauncher must use the v3 footer structure')
-assert.match(files.globalLauncher, /launcher-kind-tag/, 'GlobalLauncher list rows must render right-side type tags')
-assert.match(files.globalLauncher, /kindApp/, 'GlobalLauncher must distinguish application rows')
-assert.match(files.globalLauncher, /kindCommand/, 'GlobalLauncher must distinguish command rows')
-assert.match(files.globalLauncher, /GLOBAL_LAUNCHER_PANEL_WIDTH\s*=\s*680/, 'GlobalLauncher panel should be widened to 680px')
+assert.match(files.globalLauncherCollectInputFrame, /global-launcher-header l-search/, 'GlobalLauncher collect-input frame must use the v3 search header structure')
+assert.match(files.launcherMixedList, /className=\{`l-row/, 'GlobalLauncher list rows must use the v3 l-row structure')
+assert.match(files.globalLauncherCollectInputFrame, /global-launcher-footer l-foot/, 'GlobalLauncher collect-input frame must use the v3 footer structure')
+assert.match(files.launcherMixedList, /launcher-kind-tag/, 'GlobalLauncher list rows must render right-side type tags')
+assert.match(files.launcherMixedList, /kindApp/, 'GlobalLauncher must distinguish application rows')
+assert.match(files.launcherMixedList, /kindCommand/, 'GlobalLauncher must distinguish command rows')
+assert.match(files.globalLauncherLayout, /GLOBAL_LAUNCHER_PANEL_WIDTH_PX\s*=\s*680/, 'GlobalLauncher panel should be widened to 680px')
 assert.doesNotMatch(files.globalLauncher, /MAX_GLOBAL_LAUNCHER_RENDERED_ITEMS/, 'GlobalLauncher should not keep the old rendered item cap')
-assert.match(files.globalLauncher, /collectDynamicItems\(q,\s*['"]global-launcher['"],\s*locale/, 'GlobalLauncher should collect host dynamic items even for empty-query app mixing')
+assert.match(files.globalLauncher, /collectDynamicWhenEmpty:\s*true/, 'GlobalLauncher should collect host dynamic items even for empty-query app mixing')
+assert.match(files.globalLauncher, /useGlobalLauncherHostEscape/, 'GlobalLauncherHost must delegate host Escape handling to a lifecycle helper')
+assert.match(files.globalLauncher, /useGlobalLauncherCollectInputPreview/, 'GlobalLauncherHost must delegate collect-input preview lifecycle to a helper')
+assert.match(files.globalLauncher, /useGlobalLauncherFocusSession/, 'GlobalLauncherHost must delegate focus capture and restoration to a helper')
+assert.match(files.globalLauncherHostLifecycle, /useGlobalLauncherHostEscape[\s\S]*window\.addEventListener\('keydown', handleHostEscape, true\)/, 'GlobalLauncher lifecycle helper must own host-level Escape subscription')
+assert.match(files.globalLauncherHostLifecycle, /useGlobalLauncherCollectInputPreview[\s\S]*previewInput/, 'GlobalLauncher lifecycle helper must own collect-input preview scheduling')
+assert.match(files.globalLauncherFrames, /<GlobalLauncherPermissionFrame/, 'GlobalLauncher frame switch must delegate permission rendering to a dedicated frame component')
+assert.doesNotMatch(files.globalLauncherFrames, /PluginSurfacePermissionGate/, 'GlobalLauncher frame switch must not render plugin permission gate inline')
+assert.match(files.globalLauncherPermissionFrame, /PluginSurfacePermissionGate/, 'GlobalLauncher permission frame must own plugin permission gate rendering')
+assert.match(files.globalLauncherFrames, /<GlobalLauncherCollectInputFrame/, 'GlobalLauncher frame switch must delegate collect-input rendering to a dedicated frame component')
+assert.doesNotMatch(files.globalLauncherFrames, /LauncherResultChoiceRow|LauncherHintText|resolveIcon/, 'GlobalLauncher frame switch must not render collect-input UI internals inline')
+assert.match(files.globalLauncherCollectInputFrame, /LauncherResultChoiceRow[\s\S]*previewChoices/, 'GlobalLauncher collect-input frame must own preview result rows')
 
-assert.match(files.commandPalette, /command-launcher-panel global-launcher-panel/, 'CommandPalette must use the same v3 launcher panel shell')
-assert.match(files.commandPalette, /global-launcher-header l-search/, 'CommandPalette must use the v3 search header')
-assert.match(files.commandPalette, /className=\{`l-row command-launcher-row/, 'CommandPalette list rows must use the v3 row structure')
-assert.match(files.commandPalette, /global-launcher-footer l-foot/, 'CommandPalette must use the v3 footer structure')
+assert.match(files.commandPalette, /EditorCommandBar/, 'CommandPalette compatibility wrapper must delegate to EditorCommandBar')
+assert.match(files.editorCommandBarHost, /<LauncherDomainSearchStep/, 'EditorCommandBarHost must use the shared v3 search step')
+assert.match(files.launcherDomainSearchStep, /global-launcher-header l-search/, 'Shared launcher search step must use the v3 search header')
+assert.match(files.editorCommandBarHost, /<LauncherDomainSearchStep/, 'EditorCommandBarHost must delegate v3 row rendering to shared launcher search step')
+assert.match(files.launcherDomainSearchStep, /global-launcher-footer l-foot/, 'Shared launcher search step must use the v3 footer structure')
 
 assert.match(files.launcherParamStep, /l-option-row/, 'Launcher param option rows must use the v3 option-list row')
 assert.match(files.launcherParamStep, /onMultiToggle/, 'Launcher multi-select params must toggle in place instead of confirming immediately')

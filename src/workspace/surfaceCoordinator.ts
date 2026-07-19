@@ -8,11 +8,12 @@ import type {
   SurfaceClaim,
   SurfaceOccupancy,
   ConflictPolicy,
-  ExitPolicy,
   PaneId,
 } from './types'
-import { useWorkspaceStore } from './workspaceStore'
-import { runtimeRegistry } from './runtimeRegistry'
+
+function readEditorOccupancies(): Record<string, SurfaceOccupancy> {
+  return {}
+}
 
 // ─── Conflict Detection ─────────────────────────────────────────────────────
 
@@ -30,8 +31,7 @@ export function detectConflicts(
   newClaims: SurfaceClaim[],
   newOwnerId: string
 ): ConflictInfo[] {
-  const state = useWorkspaceStore.getState()
-  const occupancies = state.occupancies
+  const occupancies = readEditorOccupancies()
   const conflicts: ConflictInfo[] = []
 
   for (const claim of newClaims) {
@@ -89,61 +89,21 @@ export function resolveConflict(
  * Register a new surface occupancy.
  */
 export function registerOccupancy(occupancy: SurfaceOccupancy) {
-  const state = useWorkspaceStore.getState()
-  const occupancies = { ...state.occupancies, [occupancy.id]: occupancy }
-  useWorkspaceStore.setState({ occupancies })
+  return
 }
 
 /**
  * Release an occupancy and clean up associated resources.
  */
 export function releaseOccupancy(occupancyId: string) {
-  const state = useWorkspaceStore.getState()
-  const occupancy = state.occupancies[occupancyId]
-  if (!occupancy) return
-
-  // Clean up runtime resources for this owner
-  runtimeRegistry.disposeOwner(occupancy.ownerId)
-
-  // Remove from store
-  const occupancies = { ...state.occupancies }
-  delete occupancies[occupancyId]
-  useWorkspaceStore.setState({ occupancies })
+  return
 }
 
 /**
  * Execute exit policy for an occupancy.
  */
 export function executeExitPolicy(occupancyId: string): boolean {
-  const state = useWorkspaceStore.getState()
-  const occupancy = state.occupancies[occupancyId]
-  if (!occupancy) return true
-
-  const { exitPolicy } = occupancy
-
-  switch (exitPolicy.closeBehavior) {
-    case 'dispose-only':
-      releaseOccupancy(occupancyId)
-      return true
-
-    case 'restore-view':
-      // Restore previous renderer from render stack (handled by caller)
-      releaseOccupancy(occupancyId)
-      return true
-
-    case 'confirm-if-dirty':
-      // For now, always allow (UI confirmation will be in component layer)
-      releaseOccupancy(occupancyId)
-      return true
-
-    case 'custom':
-      releaseOccupancy(occupancyId)
-      return true
-
-    default:
-      releaseOccupancy(occupancyId)
-      return true
-  }
+  return true
 }
 
 // ─── Surface ID Helpers ─────────────────────────────────────────────────────
@@ -164,8 +124,7 @@ export const WORKSPACE_MAIN_SURFACE: SurfaceId = 'workspace:main'
  * Get all occupancies for a given surface.
  */
 export function getOccupanciesForSurface(surfaceId: SurfaceId): SurfaceOccupancy[] {
-  const state = useWorkspaceStore.getState()
-  return Object.values(state.occupancies).filter((occ) =>
+  return Object.values(readEditorOccupancies()).filter((occ) =>
     occ.surfaces.some((s) => s.surfaceId === surfaceId)
   )
 }
@@ -174,16 +133,14 @@ export function getOccupanciesForSurface(surfaceId: SurfaceId): SurfaceOccupancy
  * Get all occupancies owned by a specific owner.
  */
 export function getOccupanciesByOwner(ownerId: string): SurfaceOccupancy[] {
-  const state = useWorkspaceStore.getState()
-  return Object.values(state.occupancies).filter((occ) => occ.ownerId === ownerId)
+  return Object.values(readEditorOccupancies()).filter((occ) => occ.ownerId === ownerId)
 }
 
 /**
  * Check if a surface is currently occupied exclusively.
  */
 export function isSurfaceExclusivelyOccupied(surfaceId: SurfaceId): boolean {
-  const state = useWorkspaceStore.getState()
-  return Object.values(state.occupancies).some((occ) =>
+  return Object.values(readEditorOccupancies()).some((occ) =>
     occ.surfaces.some((s) => s.surfaceId === surfaceId && s.mode === 'exclusive')
   )
 }

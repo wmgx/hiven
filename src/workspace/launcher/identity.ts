@@ -26,7 +26,10 @@ export function getPluginToolItemKey(pluginId: string, toolId: string): SystemLa
   return `plugin:${pluginId}:tool:${toolId}`
 }
 
-/** `plugin:${pluginId}:dynamic:${itemId}` — dynamic item key (not used for usage/pin). */
+/**
+ * `plugin:${pluginId}:dynamic:${itemId}` — dynamic item key.
+ * Stable ids may opt into usage via `recordUsage: true` on the contribution.
+ */
 export function getPluginDynamicItemKey(pluginId: string, itemId: string): SystemLauncherItemKey {
   return `plugin:${pluginId}:dynamic:${itemId}`
 }

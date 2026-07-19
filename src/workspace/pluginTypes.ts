@@ -112,7 +112,6 @@ export type TextCommandSurfaces = {
 }
 
 export type LiveActionCapability = {
-  pinnable?: boolean
   live?: {
     enabled: boolean
     debounceMs?: number
@@ -191,6 +190,8 @@ export type PanelHostApi = {
 export type PanelPropsV2<TInputs = unknown> = {
   inputs: TInputs
   panelId: string
+  /** Pane id when this panel is rendered inside a pane-scoped panel surface. */
+  paneId?: PaneId
   host: PanelHostApi
 }
 
@@ -283,9 +284,18 @@ export type PluginSettingsNumberField<TSettings = unknown> = PluginSettingsField
   storageScale?: number
 }
 
+export type PluginSettingsSelectOptionsFrom = {
+  /** Root settings key holding an array of objects, e.g. `profiles`. */
+  listKey: string
+  valueKey?: string
+  labelKey?: string
+}
+
 export type PluginSettingsSelectField<TSettings = unknown> = PluginSettingsFieldBase<TSettings> & {
   kind: 'select'
   options: PluginSettingsOption[]
+  /** Build options from another list field at render time (e.g. profile picker). */
+  optionsFrom?: PluginSettingsSelectOptionsFrom
 }
 
 export type PluginSettingsTextField<TSettings = unknown> = PluginSettingsFieldBase<TSettings> & {
@@ -313,12 +323,22 @@ export type PluginSettingsObjectListItemField = {
   labelI18n?: Partial<Record<Locale, string>>
   description?: string
   descriptionI18n?: Partial<Record<Locale, string>>
-  kind: 'text' | 'textarea' | 'switch' | 'select' | 'string-list'
+  kind: 'text' | 'textarea' | 'switch' | 'select' | 'string-list' | 'number'
   placeholder?: string
   placeholderI18n?: Partial<Record<Locale, string>>
   rows?: number
   options?: PluginSettingsOption[]
   mono?: boolean
+  group?: string
+  groupI18n?: Partial<Record<Locale, string>>
+  sensitive?: boolean
+  /** When set, field is shown only if sibling field matches. */
+  visibleWhen?: { key: string; equals: string | number | boolean }
+  min?: number
+  max?: number
+  step?: number
+  unit?: string
+  unitI18n?: Partial<Record<Locale, string>>
 }
 
 export type PluginSettingsObjectListField<TSettings = unknown> = PluginSettingsFieldBase<TSettings> & {
@@ -376,6 +396,15 @@ export type PluginSettingsSchema<TSettings = unknown> = {
   sections: PluginSettingsSection<TSettings>[]
 }
 
+/** Fired after settings are written (set / update / reset). Plugin side-effects only. */
+export type PluginSettingsChangeContext<TSettings = unknown> = {
+  value: TSettings
+  pluginId: string
+  source: 'builtin' | 'installed' | 'dev'
+  storage: PluginPrivateStorageApi
+  network: PluginNetworkApi
+}
+
 export type PluginSettingsContribution<TSettings = unknown> = {
   title?: string
   titleI18n?: Partial<Record<Locale, string>>
@@ -385,6 +414,11 @@ export type PluginSettingsContribution<TSettings = unknown> = {
   schema?: PluginSettingsSchema<TSettings>
   modals?: PluginSettingsModalContribution<TSettings>[]
   component?: ComponentType<PluginSettingsBodyProps<TSettings>>
+  /**
+   * Optional side-effect after settings persist (write-through).
+   * Host only invokes; product work stays in the plugin (e.g. warm caches).
+   */
+  onChange?: (ctx: PluginSettingsChangeContext<TSettings>) => void | Promise<void>
 }
 
 // ─── Launcher Quick Entry ────────────────────────────────────────────────────
@@ -517,12 +551,19 @@ export type PluginNetworkRequest = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   headers?: Record<string, string>
   body?: string
+  /**
+   * `binary` returns bodyBytes (for images etc.). Default `text` keeps body as UTF-8 string.
+   * Use binary for favicons — text mode corrupts PNG/JPEG bytes.
+   */
+  responseType?: 'text' | 'binary'
 }
 
 export type PluginNetworkResponse = {
   status: number
   headers: Record<string, string>
   body: string
+  /** Present when request.responseType is `binary`. */
+  bodyBytes?: number[]
 }
 
 export type PluginNetworkApi = {
@@ -533,11 +574,31 @@ export type PluginNetworkApi = {
 
 export type PluginUiSurfaceKind = 'custom-view'
 
+export type PluginSurfaceInstancePolicy = 'singleton' | 'multi'
+
+export type PluginSurfaceShortcutPresentation = 'launcher' | 'window'
+
+export type PluginSurfaceShell = {
+  defaultWidth?: number
+  defaultHeight?: number
+  minWidth?: number
+  minHeight?: number
+  closeOnBlur?: boolean
+  destroyTimeout?: number
+  resizable?: boolean
+  rendersTitlebar?: boolean
+  breadcrumbTitle?: string
+  breadcrumbTitleI18n?: Partial<Record<Locale, string>>
+}
+
 export type PluginSurfaceHostApi = {
   close(): void
   requestBack(): void
   openSettings(): void
+  detachToWindow(initialText?: string): void
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
+  showToast(message: string, level?: 'info' | 'success' | 'warning' | 'error', options?: { action?: { label: string; onClick: () => void }; duration?: number }): string
+  dismissToast(id: string): void
   storage: PluginPrivateStorageApi
   clipboard: PluginClipboardApi
   paste: PluginPasteApi
@@ -551,6 +612,7 @@ export type PluginSurfaceProps<TSettings = unknown> = {
   t: (key: string, vars?: Record<string, string | number>) => string
   settings: TSettings
   permissions: PluginPermissionSnapshot
+  initialText?: string
   host: PluginSurfaceHostApi
 }
 
@@ -562,6 +624,7 @@ export type PluginSurfaceOpenContext<TSettings = unknown> = {
   t: (key: string, vars?: Record<string, string | number>) => string
   settings: TSettings
   permissions: PluginPermissionSnapshot
+  initialText?: string
   storage: PluginPrivateStorageApi
   clipboard: PluginClipboardApi
   paste: PluginPasteApi
@@ -575,21 +638,21 @@ export type PluginUiSurfaceContribution<TSettings = unknown> = {
   titleI18n?: Partial<Record<Locale, string>>
   icon?: string
   aliases?: string[]
+  /**
+   * When true for clipboard / Object Block content, launcher ranking boosts this surface
+   * (same contract as tool textMatch). Scoring only — does not hide other items.
+   */
+  textMatch?: (text: string) => boolean
   component: ComponentType<PluginSurfaceProps<TSettings>>
   beforeOpen?(ctx: PluginSurfaceOpenContext<TSettings>): Promise<void> | void
+  instancePolicy?: PluginSurfaceInstancePolicy
   entry?: {
     launcher?: boolean
     shortcutBindable?: boolean
     recommendedShortcut?: string
+    shortcutPresentation?: PluginSurfaceShortcutPresentation
   }
-  shell?: {
-    defaultWidth?: number
-    defaultHeight?: number
-    minWidth?: number
-    minHeight?: number
-    closeOnBlur?: boolean
-    resizable?: boolean
-  }
+  shell?: PluginSurfaceShell
 }
 
 export type PluginUiContribution<TSettings = unknown> = {

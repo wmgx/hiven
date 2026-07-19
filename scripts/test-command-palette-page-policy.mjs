@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const root = process.cwd()
@@ -13,6 +13,7 @@ function read(path) {
 const files = {
   app: read('src/App.tsx'),
   store: read('src/store.ts'),
+  editorWindow: read('src/components/EditorWindow.tsx'),
   editorView: read('src/views/EditorView.tsx'),
   paneEditor: read('src/components/workspace/PaneEditor.tsx'),
   editorLocale: read('src/i18n/locales/editor.ts'),
@@ -33,22 +34,49 @@ function assertHas(source, pattern, message) {
   assert.match(source, pattern, message)
 }
 
-const editorOnlyCommandPaletteRender =
-  /activeView\s*={2,3}\s*['"]editor['"][\s\S]{0,220}<CommandPalette\s*\/>|<CommandPalette\s*\/>[\s\S]{0,220}activeView\s*={2,3}\s*['"]editor['"]/
 
-check('ViewId includes the plugin editor and pinned runner pages under test', () => {
-  assertHas(
+check('Retired settings/plugins view wrappers are removed', () => {
+  for (const viewPath of ['src/views/SettingsView.tsx', 'src/views/ScriptsView.tsx', 'src/views/PluginEditorView.tsx']) {
+    assert.equal(existsSync(join(root, viewPath)), false, `${viewPath} should be removed after first-class surfaces replace main-window views`)
+  }
+})
+
+check('Store no longer exposes the retired main-window ViewId model', () => {
+  assert.doesNotMatch(
     files.store,
-    /export\s+type\s+ViewId\s*=[^\n]*['"]plugin-editor['"][^\n]*['"]pinned-runner['"]/,
-    'ViewId should include plugin-editor and pinned-runner so this policy test covers both non-editor pages',
+    /export\s+type\s+ViewId\b|\bactiveView\b|\bsetActiveView\b/,
+    'ViewId/activeView/setActiveView should be retired after removing the main-window navigation shell',
+  )
+})
+
+check('Store no longer keeps editor document or runtime instance state', () => {
+  assert.doesNotMatch(
+    files.store,
+    /\beditorText\b|\bsetEditorText\b|\beditorInstance\b|\bsetEditorInstance\b/,
+    'Editor text and Monaco instances must stay inside the editor window workspace/runtime registries, not AppState',
+  )
+  assert.doesNotMatch(
+    read('src/workspace/workspaceStore.ts'),
+    /\bmigrateLegacyEditorText\b|legacy editorText/,
+    'Workspace store should not keep the retired app-store editorText migration path',
+  )
+  assert.match(
+    read('src/workspace/workspaceStore.ts'),
+    /createWorkspaceSessionStorage[\s\S]*isEditorWindowWorkspaceSession\(\)[\s\S]*window\.sessionStorage[\s\S]*workspaceRuntimeStorage/,
+    'Workspace persistence must be editor-window session scoped and use runtime memory outside editor windows',
+  )
+  assert.doesNotMatch(
+    read('src/workspace/workspaceStore.ts'),
+    /isEditorWindowWorkspaceSession\(\)\s*\?\s*window\.sessionStorage\s*:\s*window\.localStorage/,
+    'Launcher/background runtimes must not persist a shadow editor workspace in localStorage',
   )
 })
 
 check('App does not register Cmd/Ctrl+K for the in-app command palette', () => {
   assert.doesNotMatch(
     files.app,
-    /\(e\.metaKey\s*\|\|\s*e\.ctrlKey\)[\s\S]{0,120}key\s*={2,3}\s*['"]k['"][\s\S]{0,260}setCommandPaletteOpen\(true\)/,
-    'App should not open CommandPalette from a hard-coded Cmd/Ctrl+K listener',
+    /\(e\.metaKey\s*\|\|\s*e\.ctrlKey\)[\s\S]{0,120}key\s*={2,3}\s*['"]k['"][\s\S]{0,260}setEditorCommandBarOpen\(true\)/,
+    'App should not open EditorCommandBar from a hard-coded Cmd/Ctrl+K listener',
   )
 })
 
@@ -60,10 +88,16 @@ check('Monaco editor does not register CtrlCmd+K for the command palette', () =>
   )
 })
 
-check('CommandPalette is only rendered while the editor page is active', () => {
-  assert.ok(
-    editorOnlyCommandPaletteRender.test(files.app),
-    'CommandPalette is rendered outside an activeView === "editor" condition, so a non-editor page can still display it when commandPaletteOpen becomes true',
+check('Editor command bar is only hosted by the editor window surface', () => {
+  assert.doesNotMatch(
+    files.app,
+    /<EditorCommandBar\s*\/>/,
+    'Launcher runtime App must not render the editor command bar',
+  )
+  assertHas(
+    files.editorWindow,
+    /<EditorCommandBar\s*\/>/,
+    'EditorWindow should own the editor command bar',
   )
 })
 

@@ -324,29 +324,34 @@ async function releaseBuiltinPluginManifests(_configDir: string, pluginBuiltinDi
   if (needsRelease) {
     // 整目录覆盖：先删除每个内置包的现有目录，清掉历史残留文件
     // （如旧版释放的 index.js / entry.js），再以当前源码包内容重写。
-    for (const pkg of BUILTIN_PLUGIN_PACKAGES) {
+    // 不同 pluginId 目录互不依赖，可并行处理。
+    await Promise.all(BUILTIN_PLUGIN_PACKAGES.map(async (pkg) => {
       await invoke<void>('remove_plugin_dir', {
         rootPath: pluginBuiltinDir,
         pluginId: pkg.pluginId,
       }).catch(() => undefined)
       const pluginDir = `${pluginBuiltinDir}/${pkg.pluginId}`
-      for (const [fileName, content] of Object.entries(pkg.files)) {
-        await ensureTextFile(`${pluginDir}/${fileName}`, content)
-      }
-    }
+      await Promise.all(
+        Object.entries(pkg.files).map(([fileName, content]) =>
+          ensureTextFile(`${pluginDir}/${fileName}`, content)
+        )
+      )
+    }))
   }
 
   // 移除不再属于内置集合的历史包目录。
   const expectedPackages = new Set(embeddedIndex.packages.map((pkg) => pkg.pluginId))
   const existingPackages = await invoke<{ pluginId: string }[]>('list_plugin_dirs', { path: pluginBuiltinDir }).catch(() => [])
-  for (const plugin of existingPackages) {
-    if (!expectedPackages.has(plugin.pluginId)) {
-      await invoke<void>('remove_plugin_dir', {
-        rootPath: pluginBuiltinDir,
-        pluginId: plugin.pluginId,
-      }).catch(() => undefined)
-    }
-  }
+  await Promise.all(
+    existingPackages
+      .filter((plugin) => !expectedPackages.has(plugin.pluginId))
+      .map((plugin) =>
+        invoke<void>('remove_plugin_dir', {
+          rootPath: pluginBuiltinDir,
+          pluginId: plugin.pluginId,
+        }).catch(() => undefined)
+      )
+  )
 
   const indexPath = `${pluginBuiltinDir}/index.json`
   if (needsRelease) {
@@ -364,9 +369,11 @@ async function initPluginPackageDirs(): Promise<string | null> {
   const pluginInstalledDir = `${configDir}/plugins/installed`
   const pluginDevDir = `${configDir}/plugins/dev`
 
-  await ensureTextFile(`${pluginBuiltinDir}/.keep`, '')
-  await ensureTextFile(`${pluginInstalledDir}/.keep`, '')
-  await ensureTextFile(`${pluginDevDir}/.keep`, '')
+  await Promise.all([
+    ensureTextFile(`${pluginBuiltinDir}/.keep`, ''),
+    ensureTextFile(`${pluginInstalledDir}/.keep`, ''),
+    ensureTextFile(`${pluginDevDir}/.keep`, ''),
+  ])
 
   return configDir
 }

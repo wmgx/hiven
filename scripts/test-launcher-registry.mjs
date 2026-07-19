@@ -61,8 +61,10 @@ const toolAdapter = loadModule('src/workspace/launcher/toolAdapter.ts', {
   stripImports: [
     ...stripTypeImports,
     /import\s*\{[^}]*\}\s*from\s*'\.\/output'\s*;?\s*\n?/,
+    /import\s*\{[^}]*normalizeLauncherSurfaceId[^}]*\}\s*from\s*'\.\/types'\s*;?\s*\n?/,
   ],
   globals: {
+    normalizeLauncherSurfaceId: (surfaceId) => surfaceId === 'command-palette' ? 'editor-command-bar' : surfaceId,
     textResult: output.textResult,
     replaceActiveTextResult: output.replaceActiveTextResult,
     errorResult: output.errorResult,
@@ -74,7 +76,7 @@ const toolAdapter = loadModule('src/workspace/launcher/toolAdapter.ts', {
 const identityWithStub = (() => {
   let src = readFileSync('src/workspace/launcher/identity.ts', 'utf8').replace(
     /import\s*\{[^}]*\}\s*from\s*'\.\/types'\s*;?\s*\n?/,
-    "const isLauncherSurfaceId=(v)=>v==='command-palette'||v==='global-launcher';\n",
+    "const isLauncherSurfaceId=(v)=>v==='command-palette'||v==='editor-command-bar'||v==='global-launcher';\n",
   )
   const out = ts.transpileModule(src, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, esModuleInterop: true },
@@ -84,13 +86,13 @@ const identityWithStub = (() => {
   return me
 })()
 
-// --- Tool adapter: surfaces + pinnable + input policy ---
+// --- Tool adapter: surfaces + input policy ---
 const reverseTool = {
   id: 'reverse',
   title: 'Reverse',
   inputPolicy: { mode: 'auto' },
   run: async (ctx) => ctx.output.text(ctx.input.text.split('').reverse().join('')),
-  surfaces: { launcher: true, panel: true, pinnable: true },
+  surfaces: { launcher: true, panel: true },
 }
 const item = toolAdapter.adaptToolToLauncherItem(reverseTool, {
   pluginId: 'demo',
@@ -98,9 +100,9 @@ const item = toolAdapter.adaptToolToLauncherItem(reverseTool, {
   systemKey: 'plugin:demo:tool:reverse',
 })
 assert.equal(item.kind, 'plugin')
-assert.equal(item.pinnable, true, 'tool pinnable honored')
 assert.equal(item.behavior.type, 'perform')
 assert.equal(item.systemKey, 'plugin:demo:tool:reverse')
+assert.equal('pinnable' in item, false, 'tool launcher items no longer carry pinnable')
 
 // Execute via a fake api: auto mode with selection present uses selection
 let copied = null
@@ -114,11 +116,11 @@ const api = {
   insertText: async () => {},
   copyText: async (t) => { copied = t },
   openUrl: async () => {},
-  showMainPanel: async () => {},
+  showEditorWindow: async () => {},
   dispatchEffects: () => ({ applied: [], errors: [] }),
   showMessage: () => {},
 }
-const res = await item.execute({ settings: {}, locale: 'en', api, t: (k) => k })
+const res = await item.execute({ surfaceId: 'global-launcher', settings: {}, locale: 'en', api, t: (k) => k })
 assert.equal(res.ok, true)
 assert.ok(res.output && res.output.choices.length === 1, 'text output is one choice')
 assert.equal(res.output.choices[0].title, 'cba', 'auto mode reversed the selection "abc"')
@@ -129,14 +131,14 @@ assert.equal(copied, 'cba', 'default text output Enter copies')
 // inputPolicy 'all' ignores selection
 const allTool = { ...reverseTool, id: 'rev-all', inputPolicy: { mode: 'all' } }
 const allItem = toolAdapter.adaptToolToLauncherItem(allTool, { pluginId: 'demo', source: 'builtin', systemKey: 'k' })
-const allRes = await allItem.execute({ settings: {}, locale: 'en', api, t: (k) => k })
+const allRes = await allItem.execute({ surfaceId: 'global-launcher', settings: {}, locale: 'en', api, t: (k) => k })
 assert.equal(allRes.output.choices[0].title, 'txet elohw', "'all' mode uses whole text")
 
 // inputPolicy 'selection' with no selection → empty
 const selTool = { ...reverseTool, id: 'rev-sel', inputPolicy: { mode: 'selection' } }
 const selItem = toolAdapter.adaptToolToLauncherItem(selTool, { pluginId: 'demo', source: 'builtin', systemKey: 'k2' })
 const noSelApi = { ...api, getSelectionText: () => '' }
-const selRes = await selItem.execute({ settings: {}, locale: 'en', api: noSelApi, t: (k) => k })
+const selRes = await selItem.execute({ surfaceId: 'global-launcher', settings: {}, locale: 'en', api: noSelApi, t: (k) => k })
 assert.equal(selRes.output.choices[0].title, '', "'selection' with no selection → empty text")
 
 // --- Tool adapter: parameter customization stays on explicit tools ---
@@ -155,9 +157,9 @@ const paramItem = toolAdapter.adaptToolToLauncherItem(paramTool, {
 assert.equal(paramItem.params?.[0].key, 'suffix', 'tool adapter exposes explicit param schema')
 assert.equal(paramItem.defaultParams?.suffix, '!', 'tool adapter derives default params')
 assert.equal(paramItem.requireParamSelection, true, 'tool adapter preserves explicit parameter-selection policy')
-const paramDefaultRes = await paramItem.execute({ settings: {}, locale: 'en', api, t: (k) => k })
+const paramDefaultRes = await paramItem.execute({ surfaceId: 'global-launcher', settings: {}, locale: 'en', api, t: (k) => k })
 assert.equal(paramDefaultRes.output.choices[0].title, 'ABC!', 'tool adapter runs with default params')
-const paramCustomRes = await paramItem.executeWithParams({ settings: {}, locale: 'en', api, t: (k) => k }, { suffix: '?' })
+const paramCustomRes = await paramItem.executeWithParams({ surfaceId: 'global-launcher', settings: {}, locale: 'en', api, t: (k) => k }, { suffix: '?' })
 assert.equal(paramCustomRes.output.choices[0].title, 'ABC?', 'tool adapter runs with customized params')
 
 // --- output helpers contract ---
@@ -185,6 +187,23 @@ assert.equal(
   identityWithStub.getPluginSurfaceItemKey('installed', 'demo', 'main'),
   'plugin-surface:installed:demo:main',
   'installed surface key must not collapse to builtin',
+)
+
+const registrySource = readFileSync('src/workspace/launcher/registry.ts', 'utf8')
+assert.match(
+  registrySource,
+  /function shouldExposePluginSettingsLauncherItem[\s\S]*hostEntry === 'plugin-settings'/,
+  'plugin settings launcher items must be explicit opt-in',
+)
+assert.match(
+  registrySource,
+  /if \(contribution\.hostEntry === 'plugin-settings'\) continue/,
+  'plugin settings host-entry declarations must not also become normal plugin launcher rows',
+)
+assert.doesNotMatch(
+  registrySource,
+  /}\n\s*const settingsItem = resolvePluginSettingsItem\(def, pluginId, source\)/,
+  'plugins with settings must not automatically add global launcher settings rows',
 )
 
 console.log('✓ test-launcher-registry passed')

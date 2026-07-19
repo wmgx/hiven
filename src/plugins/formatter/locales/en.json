@@ -1,0 +1,14 @@
+{
+  "css.prettify.title": "CSS Prettify",
+  "css.prettify.description": "Format CSS with indentation",
+  "css.compact.title": "CSS Compact",
+  "css.compact.description": "Minify CSS (remove whitespace and comments)",
+  "sql.prettify.title": "SQL Prettify",
+  "sql.prettify.description": "Format SQL with indentation",
+  "sql.compact.title": "SQL Compact",
+  "sql.compact.description": "Minify SQL (remove comments, single line)",
+  "xml.prettify.title": "XML Prettify",
+  "xml.prettify.description": "Format XML with indentation",
+  "xml.compact.title": "XML Compact",
+  "xml.compact.description": "Minify XML (remove whitespace)"
+}

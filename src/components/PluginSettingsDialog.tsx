@@ -18,6 +18,7 @@ import {
 import { openExternalUrl } from '../workspace/effectRunner'
 import type { PluginSettingsContribution } from '../workspace/pluginTypes'
 import { createPluginPrivateStorage } from '../workspace/pluginStorage'
+import { createPluginNetwork } from '../workspace/pluginNetwork'
 import { getPluginPermissionSnapshot, usePluginPermissionStore } from '../workspace/pluginPermissions'
 import { PluginSettingsSchemaRenderer } from './PluginSettingsSchemaRenderer'
 import { resolvePluginSettingsModal, type ResolvedPluginSettingsModal } from './pluginSettingsModalResolution'
@@ -81,14 +82,15 @@ export function PluginSettingsDialog() {
       onClick={(e) => { if (e.target === e.currentTarget) closeSettingsDialog() }}
     >
       <div
-        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col overflow-hidden"
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col overflow-hidden plugin-settings-dialog-panel"
         style={{
-          width: 'min(560px, calc(100vw - 48px))',
-          maxHeight: 'min(600px, calc(100vh - 96px))',
+          width: 'min(780px, calc(100vw - 40px))',
+          height: 'min(680px, calc(100vh - 48px))',
+          maxHeight: 'min(680px, calc(100vh - 48px))',
           background: 'var(--panel, var(--bg-surface, #ffffff))',
-          border: '0.5px solid var(--color-border-secondary)',
-          borderRadius: 'var(--radius-xl)',
-          boxShadow: '0 24px 48px rgba(0, 0, 0, 0.2)',
+          border: '1px solid var(--border, var(--color-border-secondary))',
+          borderRadius: '14px',
+          boxShadow: '0 20px 50px -12px rgba(18, 22, 28, 0.22), 0 0 0 1px rgba(18, 22, 28, 0.06)',
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -208,31 +210,6 @@ function SettingsDialogBody({
     return { value: storedRecord.value }
   }, [storedRecord, currentVersion, contribution])
 
-  const setValue = useCallback(
-    (next: unknown) => {
-      setPluginSettings(source, pluginId, next, currentVersion)
-    },
-    [setPluginSettings, source, pluginId, currentVersion]
-  )
-
-  const updateValue = useCallback(
-    (patch: Partial<unknown>) => {
-      const current = usePluginSettingsStore.getState().getPluginSettings(source, pluginId)
-      const currentValue = current?.value ?? contribution.defaultValue
-      const next = { ...(currentValue as Record<string, unknown>), ...(patch as Record<string, unknown>) }
-      setPluginSettings(source, pluginId, next, currentVersion)
-    },
-    [setPluginSettings, source, pluginId, currentVersion, contribution.defaultValue]
-  )
-
-  const resetValue = useCallback(() => {
-    setPluginSettings(source, pluginId, contribution.defaultValue, currentVersion)
-  }, [setPluginSettings, source, pluginId, contribution.defaultValue, currentVersion])
-
-  const openExternal = useCallback(async (url: string) => {
-    await openExternalUrl(url)
-  }, [])
-
   const title = contribution.titleI18n?.[locale] ?? contribution.title ?? t(locale, 'scripts.settingsDialogTitle')
   const pluginT = useMemo(() => makePluginT(pluginId, locale), [pluginId, locale])
   const requestedPermissions = useMemo(() => pluginRegistry.getPluginPermissions(pluginId, source), [pluginId, source])
@@ -249,6 +226,54 @@ function SettingsDialogBody({
       })
     },
   }), [source, pluginId, permissions])
+
+  const settingsNetwork = useMemo(
+    () => createPluginNetwork(permissions),
+    [permissions],
+  )
+
+  const notifySettingsChange = useCallback((next: unknown) => {
+    if (!contribution.onChange) return
+    void Promise.resolve(
+      contribution.onChange({
+        value: next,
+        pluginId,
+        source,
+        storage: settingsHost.storage,
+        network: settingsNetwork,
+      }),
+    ).catch((error) => {
+      console.warn(`[hiven] Plugin settings onChange failed for "${pluginId}":`, error)
+    })
+  }, [contribution, pluginId, source, settingsHost.storage, settingsNetwork])
+
+  const setValue = useCallback(
+    (next: unknown) => {
+      setPluginSettings(source, pluginId, next, currentVersion)
+      notifySettingsChange(next)
+    },
+    [setPluginSettings, source, pluginId, currentVersion, notifySettingsChange]
+  )
+
+  const updateValue = useCallback(
+    (patch: Partial<unknown>) => {
+      const current = usePluginSettingsStore.getState().getPluginSettings(source, pluginId)
+      const currentValue = current?.value ?? contribution.defaultValue
+      const next = { ...(currentValue as Record<string, unknown>), ...(patch as Record<string, unknown>) }
+      setPluginSettings(source, pluginId, next, currentVersion)
+      notifySettingsChange(next)
+    },
+    [setPluginSettings, source, pluginId, currentVersion, contribution.defaultValue, notifySettingsChange]
+  )
+
+  const resetValue = useCallback(() => {
+    setPluginSettings(source, pluginId, contribution.defaultValue, currentVersion)
+    notifySettingsChange(contribution.defaultValue)
+  }, [setPluginSettings, source, pluginId, contribution.defaultValue, currentVersion, notifySettingsChange])
+
+  const openExternal = useCallback(async (url: string) => {
+    await openExternalUrl(url)
+  }, [])
 
   const SettingsComponent = contribution.component
   const SettingsModalComponent = settingsModalTarget?.modal.component

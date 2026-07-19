@@ -14,11 +14,11 @@ function assert(condition, message) {
   }
 }
 
-const commandPalette = read('src/components/CommandPalette.tsx')
-const globalLauncher = read('src/components/GlobalLauncher.tsx')
+const commandPalette = read('src/components/CommandPalette.tsx') + '\n' + read('src/launcher/hosts/EditorCommandBarHost.tsx')
+const globalLauncher = read('src/components/GlobalLauncher.tsx') + '\n' + read('src/launcher/hosts/GlobalLauncherHost.tsx') + '\n' + read('src/components/launcher/GlobalLauncherKeyboard.ts') + '\n' + read('src/components/launcher/GlobalLauncherPanel.tsx')
 const launcherParamStep = read('src/components/launcher/LauncherParamStep.tsx')
-const scriptsView = read('src/views/ScriptsView.tsx')
-const settingsView = read('src/views/SettingsView.tsx')
+const scriptsView = read('src/surfaces/PluginsManagerSurfaceContent.tsx') + '\n' + read('src/surfaces/PluginsContent.tsx')
+const settingsView = read('src/surfaces/SettingsSurfaceContent.tsx') + '\n' + read('src/surfaces/SettingsContent.tsx')
 const jsFilterPlugin = read('src/plugins/jsFilter/index.tsx')
 const pluginUi = read('src/plugin-ui.tsx')
 const clipboardHistorySurface = read('src/plugins/clipboard-history/surfaces/ClipboardHistorySurface.tsx')

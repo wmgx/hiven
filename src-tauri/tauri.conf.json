@@ -13,24 +13,11 @@
     "macOSPrivateApi": true,
     "windows": [
       {
-        "label": "main",
-        "title": "Hiven",
-        "width": 1100,
-        "height": 720,
-        "minWidth": 800,
-        "minHeight": 500,
-        "resizable": true,
-        "fullscreen": false,
-        "decorations": true,
-        "theme": "Dark",
-        "transparent": false
-      },
-      {
         "label": "launcher",
         "title": "Hiven Launcher",
         "url": "index.html?window=launcher",
-        "width": 660,
-        "height": 390,
+        "width": 504,
+        "height": 360,
         "minWidth": 320,
         "minHeight": 160,
         "resizable": false,
@@ -39,7 +26,6 @@
         "transparent": true,
         "shadow": false,
         "visible": false,
-        "alwaysOnTop": true,
         "skipTaskbar": true,
         "focus": false
       }

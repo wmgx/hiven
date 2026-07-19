@@ -1,7 +1,7 @@
 /**
  * Launcher Controller
  *
- * Framework-agnostic state machine driving both CommandPalette and GlobalLauncher.
+ * Framework-agnostic state machine driving launcher hosts such as EditorCommandBar and GlobalLauncher.
  * The UI renders `controller.state` and calls intents (selectItem, submitInput,
  * activateChoice, back). The controller owns:
  *   - first-level selection
@@ -13,8 +13,8 @@
  * Usage rules (design doc §4):
  *   - perform        → record usage BEFORE execution
  *   - collect-input  → record usage when ENTERING input mode (not on submit)
- *   - pinned / dynamic items → never record long-term usage (the caller passes
- *     recordUsage:false for pinned; dynamic items are kind 'dynamic' and skipped)
+ *   - dynamic items  → record only when item.recordUsage === true (stable ids)
+ *   - select options recordUsage:false → caller can suppress for ephemeral selections
  */
 
 import type {
@@ -27,7 +27,7 @@ import type {
   LauncherSurfaceId,
   PluginLauncherApi,
 } from './types'
-import type { PluginPrivateStorageApi } from '../pluginTypes'
+import type { PluginNetworkApi, PluginPrivateStorageApi } from '../pluginTypes'
 import { isOutputResult } from './output'
 import { translate, type Locale } from '../../i18n'
 
@@ -45,6 +45,11 @@ export type CollectInputFrame = {
   params?: Record<string, unknown>
   previewOutput?: LauncherOutput
   previewInputText?: string
+  /**
+   * Index into previewOutput.choices for keyboard highlight.
+   * -1 = no highlight (Enter uses typed inputText).
+   */
+  selectedSuggestionIndex: number
 }
 
 export type ParamInputFrame = {
@@ -54,6 +59,8 @@ export type ParamInputFrame = {
   paramIndex: number
   query: string
   selectedIndex: number
+  /** Carried from selectItem options; used to skip collect-input after params. */
+  objectBlockText?: string
 }
 
 export type ResultFrame = {
@@ -81,6 +88,7 @@ export type LauncherControllerDeps = {
   api: PluginLauncherApi
   makeApi?: (item: LauncherItem) => PluginLauncherApi
   getStorage?: (item: LauncherItem) => PluginPrivateStorageApi
+  getNetwork?: (item: LauncherItem) => PluginNetworkApi
   locale: string
   /** Translate function scoped to the item's plugin. */
   makeT: (item: LauncherItem) => (key: string, vars?: Record<string, string | number>) => string
@@ -115,11 +123,19 @@ const emptyStorage: PluginPrivateStorageApi = {
   },
 }
 
+const emptyNetwork: PluginNetworkApi = {
+  request: async () => {
+    throw new Error('Plugin network is not available for this launcher item')
+  },
+}
+
 export type SelectOptions = {
-  /** When false (pinned execution), usage is not recorded. */
+  /** When false, usage is not recorded for this selection. */
   recordUsage?: boolean
   /** Enter a system-owned parameter form instead of running default params. */
   customizeParams?: boolean
+  /** Pre-existing text from Object Block; when provided, skip collect-input and use directly. */
+  objectBlockText?: string
 }
 
 // ─── Controller ───────────────────────────────────────────────────────────
@@ -128,6 +144,7 @@ export class LauncherController {
   private state: LauncherControllerState
   private deps: LauncherControllerDeps
   private previewRunId = 0
+  private suggestRunId = 0
 
   constructor(deps: LauncherControllerDeps) {
     this.deps = deps
@@ -174,8 +191,9 @@ export class LauncherController {
 
   private shouldRecord(item: LauncherItem, options: SelectOptions): boolean {
     if (options.recordUsage === false) return false
-    // Dynamic items never write long-term usage.
-    if (item.kind === 'dynamic') return false
+    if (item.recordUsage === false) return false
+    // Dynamic items default off; stable actions opt in via recordUsage: true.
+    if (item.kind === 'dynamic') return item.recordUsage === true
     return true
   }
 
@@ -208,7 +226,7 @@ export class LauncherController {
     return value === undefined || value === null ? '' : String(value)
   }
 
-  private paramFrameFor(item: LauncherItem, params = this.defaultParamsFor(item), paramIndex = 0): ParamInputFrame {
+  private paramFrameFor(item: LauncherItem, params = this.defaultParamsFor(item), paramIndex = 0, objectBlockText?: string): ParamInputFrame {
     const param = item.params?.[paramIndex]
     return {
       kind: 'param-input',
@@ -217,6 +235,7 @@ export class LauncherController {
       paramIndex,
       query: this.queryFor(param, params),
       selectedIndex: this.selectedIndexFor(param, params),
+      objectBlockText,
     }
   }
 
@@ -228,6 +247,10 @@ export class LauncherController {
     return this.deps.surfaceId === 'global-launcher' &&
       item.behavior.type === 'perform' &&
       item.inputPolicy != null
+  }
+
+  private hasObjectBlockText(text: string | undefined): text is string {
+    return text !== undefined
   }
 
   private shouldPreviewInput(frame: CollectInputFrame): boolean {
@@ -247,6 +270,7 @@ export class LauncherController {
       inputText: '',
       input,
       params,
+      selectedSuggestionIndex: -1,
     }
   }
 
@@ -263,7 +287,7 @@ export class LauncherController {
         this.deps.recordSelection(this.deps.surfaceId, item)
       }
       this.setState({
-        frames: [...this.state.frames, this.paramFrameFor(item)],
+        frames: [...this.state.frames, this.paramFrameFor(item, undefined, 0, options.objectBlockText)],
       })
       return
     }
@@ -272,19 +296,39 @@ export class LauncherController {
       if (this.shouldRecord(item, options)) {
         this.deps.recordSelection(this.deps.surfaceId, item)
       }
+      if (this.hasObjectBlockText(options.objectBlockText)) {
+        await this.runAndHandle(
+          () => Promise.resolve(item.execute(this.buildExecutionContext(item, options.objectBlockText))),
+          this.itemTitle(item),
+        )
+        return
+      }
       this.setState({
         frames: [...this.state.frames, this.collectInputFrameFor(item)],
       })
+      if (item.suggest) void this.refreshSuggestions()
       return
     }
 
     if (this.shouldCollectTextInput(item)) {
+      // If Object Block text is available, skip collect-input and execute directly.
+      if (this.hasObjectBlockText(options.objectBlockText)) {
+        if (this.shouldRecord(item, options)) {
+          this.deps.recordSelection(this.deps.surfaceId, item)
+        }
+        await this.runAndHandle(
+          () => Promise.resolve(item.execute(this.buildExecutionContext(item, options.objectBlockText))),
+          this.itemTitle(item),
+        )
+        return
+      }
       if (this.shouldRecord(item, options)) {
         this.deps.recordSelection(this.deps.surfaceId, item)
       }
       this.setState({
         frames: [...this.state.frames, this.collectInputFrameFor(item)],
       })
+      if (item.suggest) void this.refreshSuggestions()
       return
     }
 
@@ -399,7 +443,7 @@ export class LauncherController {
     const nextIndex = top.paramIndex + 1
     if (nextIndex < (top.item.params?.length ?? 0)) {
       const frames = this.state.frames.slice(0, -1)
-      frames.push(this.paramFrameFor(top.item, params, nextIndex))
+      frames.push(this.paramFrameFor(top.item, params, nextIndex, top.objectBlockText))
       this.setState({ frames, error: null })
       return
     }
@@ -422,6 +466,14 @@ export class LauncherController {
     }
 
     if (this.shouldCollectTextInput(top.item)) {
+      // If Object Block text is available, skip collect-input and execute directly with params.
+      if (this.hasObjectBlockText(top.objectBlockText)) {
+        await this.runAndHandle(
+          () => Promise.resolve(top.item.executeWithParams?.(this.buildExecutionContext(top.item, top.objectBlockText), top.params) ?? top.item.execute(this.buildExecutionContext(top.item, top.objectBlockText))),
+          this.itemTitle(top.item),
+        )
+        return
+      }
       const frames = this.state.frames.slice(0, -1)
       frames.push(this.collectInputFrameFor(top.item, top.params))
       this.setState({ frames, error: null })
@@ -439,13 +491,113 @@ export class LauncherController {
     const top = this.topFrame()
     if (top.kind !== 'collect-input') return
     const frames = this.state.frames.slice(0, -1)
-    frames.push({ ...top, inputText: text, previewOutput: undefined, previewInputText: undefined })
+    if (top.item.suggest) {
+      frames.push({ ...top, inputText: text })
+    } else {
+      frames.push({
+        ...top,
+        inputText: text,
+        previewOutput: undefined,
+        previewInputText: undefined,
+        selectedSuggestionIndex: -1,
+      })
+    }
+    this.setState({ frames, error: null })
+    if (top.item.suggest) void this.refreshSuggestions()
+  }
+
+  /**
+   * Move suggestion highlight for collect-input.
+   * -1 = no highlight. Arrow up from first item clears highlight (does not wrap).
+   * Arrow down from last item stays on last.
+   */
+  moveSuggestionHighlight(delta: number): void {
+    const top = this.topFrame()
+    if (top.kind !== 'collect-input') return
+    const choices = top.previewOutput?.choices ?? []
+    if (choices.length === 0) return
+
+    let next = top.selectedSuggestionIndex
+    if (next < 0) {
+      next = delta > 0 ? 0 : -1
+    } else {
+      next = next + delta
+      if (next < -1) next = -1
+      if (next >= choices.length) next = choices.length - 1
+    }
+
+    if (next === top.selectedSuggestionIndex) return
+    const frames = this.state.frames.slice(0, -1)
+    frames.push({ ...top, selectedSuggestionIndex: next })
+    this.setState({ frames })
+  }
+
+  /** Load / refresh collect-input suggestions from item.suggest. */
+  async refreshSuggestions(): Promise<void> {
+    const top = this.topFrame()
+    if (top.kind !== 'collect-input' || !top.item.suggest) return
+
+    const { item, inputText } = top
+    const previousId =
+      top.selectedSuggestionIndex >= 0
+        ? top.previewOutput?.choices[top.selectedSuggestionIndex]?.id
+        : undefined
+
+    const runId = ++this.suggestRunId
+    let output: LauncherOutput | null | undefined
+    try {
+      output = await Promise.resolve(
+        item.suggest!({
+          surfaceId: this.deps.surfaceId,
+          inputText,
+          settings: this.deps.getSettings(item),
+          locale: this.deps.locale as never,
+          api: this.deps.makeApi?.(item) ?? this.deps.api,
+          storage: this.deps.getStorage?.(item) ?? emptyStorage,
+          network: this.deps.getNetwork?.(item) ?? emptyNetwork,
+          t: this.deps.makeT(item),
+          pluginId: item.pluginId,
+          source: item.source,
+        }),
+      )
+    } catch {
+      if (runId !== this.suggestRunId) return
+      this.clearCollectInputPreview(top)
+      return
+    }
+
+    if (runId !== this.suggestRunId) return
+    const latestTop = this.topFrame()
+    if (
+      latestTop.kind !== 'collect-input' ||
+      latestTop.item.systemKey !== item.systemKey ||
+      latestTop.inputText !== inputText
+    ) {
+      return
+    }
+
+    const choices = output?.choices ?? []
+    let selectedSuggestionIndex = -1
+    if (previousId) {
+      const idx = choices.findIndex((choice) => choice.id === previousId)
+      if (idx >= 0) selectedSuggestionIndex = idx
+    }
+
+    const frames = this.state.frames.slice(0, -1)
+    frames.push({
+      ...latestTop,
+      previewOutput: choices.length > 0 ? { choices } : undefined,
+      previewInputText: inputText,
+      selectedSuggestionIndex,
+    })
     this.setState({ frames, error: null })
   }
 
   async previewInput(): Promise<void> {
     const top = this.topFrame()
     if (top.kind !== 'collect-input' || !this.shouldPreviewInput(top)) return
+    // Suggest path owns empty/partial lists for collect-input items with suggest.
+    if (top.item.suggest) return
 
     const { item, inputText } = top
     if (!inputText.trim() && !top.input.allowEmptyInput) {
@@ -490,6 +642,7 @@ export class LauncherController {
       ...latestTop,
       previewOutput: result.output,
       previewInputText: inputText,
+      selectedSuggestionIndex: -1,
     })
     this.setState({ frames, busy: false, error: null })
   }
@@ -501,7 +654,12 @@ export class LauncherController {
       return
     }
     const frames = this.state.frames.slice(0, -1)
-    frames.push({ ...top, previewOutput: undefined, previewInputText: undefined })
+    frames.push({
+      ...top,
+      previewOutput: undefined,
+      previewInputText: undefined,
+      selectedSuggestionIndex: -1,
+    })
     this.setState({ frames, busy: false, error })
   }
 
@@ -514,6 +672,15 @@ export class LauncherController {
     if (top.kind !== 'collect-input') return
     const { item, inputText } = top
 
+    // Highlighted suggestion wins (including empty input + history highlight).
+    if (top.selectedSuggestionIndex >= 0) {
+      const highlighted = top.previewOutput?.choices[top.selectedSuggestionIndex]
+      if (highlighted) {
+        await this.runChoiceAction(() => highlighted.primaryAction(), highlighted.title)
+        return
+      }
+    }
+
     const spec = item.behavior.type === 'collect-input' ? item.behavior.input : undefined
     const inputSpec = top.input ?? spec
     if (!inputText.trim() && !inputSpec?.allowEmptyInput) {
@@ -521,10 +688,11 @@ export class LauncherController {
       return
     }
 
+    // Legacy perform+inputPolicy preview: first choice when preview matches input.
     const firstPreviewChoice = top.previewInputText === inputText
       ? top.previewOutput?.choices[0]
       : undefined
-    if (firstPreviewChoice && this.shouldPreviewInput(top)) {
+    if (firstPreviewChoice && this.shouldPreviewInput(top) && !item.suggest) {
       await this.runChoiceAction(() => firstPreviewChoice.primaryAction(), firstPreviewChoice.title)
       return
     }
@@ -608,6 +776,11 @@ export class LauncherController {
       return
     }
     if (isOutputResult(result)) {
+      // Single choice: execute directly without entering result frame
+      if (result.output.choices.length === 1) {
+        void this.runChoiceAction(() => result.output.choices[0].primaryAction(), result.output.choices[0].title)
+        return
+      }
       // Success with output: enter result-choice mode (keep open).
       this.setState({
         busy: false,
@@ -617,7 +790,23 @@ export class LauncherController {
       return
     }
     if (result.keepOpen) {
-      this.setState({ busy: false, error: null })
+      // Collect-input with suggest: keep the same frame and refresh suggestions
+      // (e.g. secondary action mutates suggestion source). Generic, not product-specific.
+      const top = this.topFrame()
+      if (top.kind === 'collect-input' && top.item.suggest) {
+        this.setState({ busy: false, error: null })
+        void this.refreshSuggestions()
+        return
+      }
+      // Stay open, but drop nested frames (e.g. multi-select result after Diff
+      // opens a tool surface) so system Esc back lands on the root list, not a
+      // stale intermediate step under the surface.
+      const root = this.state.frames[0]
+      this.setState({
+        busy: false,
+        error: null,
+        frames: root ? [root] : this.state.frames,
+      })
       return
     }
     // Success with no output: close.

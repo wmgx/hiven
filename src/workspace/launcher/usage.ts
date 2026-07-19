@@ -6,8 +6,7 @@
  *
  * Rules (see design doc §4–6):
  *  - Record on first-level launcher selection only.
- *  - Pinned execution does not write usage.
- *  - Dynamic items do not write long-term usage.
+ *  - Dynamic items write usage only when they opt in (`recordUsage: true`).
  *  - Execution success/failure does not change usage; usage measures intent.
  */
 
@@ -18,12 +17,14 @@ import type {
   LauncherUsageRecord,
   SystemLauncherItemKey,
 } from './types'
-import { LAUNCHER_SURFACE_IDS } from './types'
+import { LAUNCHER_SURFACE_IDS, normalizeLauncherSurfaceId } from './types'
 
 export function emptyUsageBySurface(): LauncherUsageBySurface {
   return {
     'command-palette': {},
+    'editor-command-bar': {},
     'global-launcher': {},
+    'quick-editor-command': {},
   }
 }
 
@@ -37,7 +38,8 @@ export function recordSelection(
   itemKey: SystemLauncherItemKey,
   now: number,
 ): LauncherUsageBySurface {
-  const bucket = usage[surfaceId] ?? {}
+  const normalizedSurfaceId = normalizeLauncherSurfaceId(surfaceId)
+  const bucket = usage[normalizedSurfaceId] ?? usage[surfaceId] ?? {}
   const prev = bucket[itemKey]
   const nextRecord: LauncherUsageRecord = {
     count: (prev?.count ?? 0) + 1,
@@ -45,7 +47,7 @@ export function recordSelection(
   }
   return {
     ...usage,
-    [surfaceId]: { ...bucket, [itemKey]: nextRecord },
+    [normalizedSurfaceId]: { ...bucket, [itemKey]: nextRecord },
   }
 }
 
@@ -54,14 +56,16 @@ export function getUsageRecord(
   surfaceId: LauncherSurfaceId,
   itemKey: SystemLauncherItemKey,
 ): LauncherUsageRecord | undefined {
-  return usage[surfaceId]?.[itemKey]
+  const normalizedSurfaceId = normalizeLauncherSurfaceId(surfaceId)
+  return usage[normalizedSurfaceId]?.[itemKey] ?? usage[surfaceId]?.[itemKey]
 }
 
 export function getUsageBucket(
   usage: LauncherUsageBySurface,
   surfaceId: LauncherSurfaceId,
 ): LauncherUsageBucket {
-  return usage[surfaceId] ?? {}
+  const normalizedSurfaceId = normalizeLauncherSurfaceId(surfaceId)
+  return usage[normalizedSurfaceId] ?? usage[surfaceId] ?? {}
 }
 
 // ─── Legacy Migration ────────────────────────────────────────────────────────
@@ -77,7 +81,7 @@ export type LegacyActionUsageBucket = {
 }
 
 export type LegacyActionUsageBySource = Partial<
-  Record<'command-palette' | 'global-launcher' | 'pinned-runner', LegacyActionUsageBucket>
+  Record<'command-palette' | 'editor-command-bar' | 'global-launcher', LegacyActionUsageBucket>
 >
 
 /**
@@ -119,8 +123,7 @@ export function migrateLegacyBucket(
 
 /**
  * Migrate the full legacy `actionUsageBySource` into `launcherUsageBySurface`.
- * Only the two launcher surfaces are preserved; `pinned-runner` usage is dropped
- * (pinned execution must not feed launcher usage).
+ * Only launcher surfaces are preserved.
  */
 export function migrateLegacyUsage(
   legacy: LegacyActionUsageBySource | undefined,
@@ -131,6 +134,10 @@ export function migrateLegacyUsage(
   if (!legacy) return result
   for (const surfaceId of LAUNCHER_SURFACE_IDS) {
     result[surfaceId] = migrateLegacyBucket(legacy[surfaceId], mapKey, baseTime)
+  }
+  result['editor-command-bar'] = {
+    ...result['command-palette'],
+    ...result['editor-command-bar'],
   }
   return result
 }

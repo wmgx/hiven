@@ -1,8 +1,13 @@
 import { searchableFieldsMatch, type SearchableFields } from '../searchRanking'
 import type { Locale } from '../../i18n'
 import type { DiscoveredApp, LauncherItem, LauncherSurfaceId } from '../launcher/types'
+import type { AppWorkObject } from '../../workflow/workObject'
+import { logLauncherPerfDuration, launcherPerfNow } from '../launcher/perf'
+import { normalizeHostAppEntries } from './hostAppIndex'
 
-const HOST_APP_INDEX_CACHE_KEY = 'hiven:host-app-launcher:index:v1'
+// v2: drop stale caches that used path-hash appIds (binary Info.plist parse failures)
+// and avoid matching internal ids/paths in search.
+const HOST_APP_INDEX_CACHE_KEY = 'hiven:host-app-launcher:index:v2'
 const APP_INDEX_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
 
 type HostAppEntry = DiscoveredApp
@@ -37,7 +42,10 @@ function readCache(): HostAppLauncherCache {
   try {
     const parsed = JSON.parse(raw) as HostAppLauncherCache
     if (parsed.version !== 1 || !Array.isArray(parsed.apps)) return EMPTY_CACHE
-    return parsed
+    return {
+      ...parsed,
+      apps: normalizeHostAppEntries(parsed.apps),
+    }
   } catch {
     return EMPTY_CACHE
   }
@@ -47,7 +55,7 @@ function writeCache(apps: HostAppEntry[]): HostAppLauncherCache {
   const cache: HostAppLauncherCache = {
     version: 1,
     refreshedAt: Date.now(),
-    apps,
+    apps: normalizeHostAppEntries(apps),
   }
   storage()?.setItem(HOST_APP_INDEX_CACHE_KEY, JSON.stringify(cache))
   return cache
@@ -69,16 +77,8 @@ async function launchInstalledApp(appId: string): Promise<void> {
   await invoke('launch_installed_app', { appId })
 }
 
-function normalizeAppName(name: string): string {
-  return name.trim().toLowerCase()
-}
-
-function basenameForSearch(displayPath?: string): string | undefined {
-  if (!displayPath) return undefined
-  const normalized = displayPath.replace(/\\/g, '/')
-  const base = normalized.split('/').filter(Boolean).pop()
-  if (!base) return undefined
-  return base.replace(/\.(app|lnk|desktop)$/i, '')
+export async function launchHostAppObject(appId: string): Promise<void> {
+  await launchInstalledApp(appId)
 }
 
 function sourceLabel(app: HostAppEntry): string {
@@ -94,24 +94,40 @@ function sourceLabel(app: HostAppEntry): string {
   }
 }
 
-function searchAliases(app: HostAppEntry): string[] {
-  const base = basenameForSearch(app.displayPath)
-  const aliases = [...(app.aliases ?? [])]
-  if (base && normalizeAppName(base) !== normalizeAppName(app.name)) {
-    aliases.push(base)
+/** Internal app ids / filesystem paths must never participate in query matching. */
+function isInternalAppSearchToken(value: string): boolean {
+  const v = value.trim().toLowerCase()
+  if (!v) return true
+  if (v.startsWith('macos:') || v.startsWith('windows:') || v.startsWith('linux:')) return true
+  if (v.startsWith('host:app-launcher:')) return true
+  if (v.startsWith('/') || v.includes('\\')) return true
+  if (v.endsWith('.app') || v.includes('.app/')) return true
+  return false
+}
+
+function humanAppAliases(app: HostAppEntry): string[] {
+  const values = [
+    app.name,
+    ...Object.values(app.nameI18n ?? {}),
+    ...(app.aliases ?? []),
+  ]
+  const aliases: string[] = []
+  for (const value of values) {
+    if (!value || isInternalAppSearchToken(value)) continue
+    if (aliases.some((existing) => existing.toLowerCase() === value.toLowerCase())) continue
+    aliases.push(value)
   }
-  return Array.from(new Set(aliases.filter(Boolean)))
+  return aliases
 }
 
 function appSearchFields(app: HostAppEntry): SearchableFields {
+  // Empty id: never match macos:path:<hex> / bundle path system keys.
+  // Aliases are human display names only (no path, no appId).
   return {
-    id: app.appId,
+    id: '',
     title: app.name,
     titleI18n: app.nameI18n,
-    aliases: [
-      basenameForSearch(app.displayPath),
-      ...searchAliases(app),
-    ].filter((value): value is string => Boolean(value)),
+    aliases: humanAppAliases(app),
   }
 }
 
@@ -144,7 +160,7 @@ async function refreshApplicationIndex(options: { force?: boolean } = {}): Promi
 
 export function refreshHostApplicationIndexOnStartup(): void {
   if (!isTauriRuntime()) return
-  void refreshApplicationIndex({ force: false }).then((result) => {
+  void refreshApplicationIndex({ force: true }).then((result) => {
     if (!result.ok) console.warn('[app-launcher] Startup application index refresh failed:', result.message)
   })
 }
@@ -164,7 +180,7 @@ export function getHostAppLauncherStaticItems(): LauncherItem[] {
       },
       behavior: { type: 'perform' },
       surfaces: ['global-launcher'],
-      pinnable: false,
+      requiredCapabilities: ['app-search'],
       execute: async () => {
         const result = await refreshApplicationIndex({ force: true })
         if (!result.ok) return { ok: false, message: result.message }
@@ -184,11 +200,12 @@ export async function getHostAppLauncherDynamicItems({
   locale: Locale
 }): Promise<LauncherItem[]> {
   if (surfaceId !== 'global-launcher') return []
+  const startedAt = launcherPerfNow()
   const cache = readCache()
   const apps = cache.apps
     .filter((app) => appMatchesQuery(app, query, locale))
 
-  return apps.map((app) => ({
+  const items = apps.map((app) => ({
     systemKey: `host:app-launcher:app:${app.appId}`,
     kind: 'host',
     display: {
@@ -196,11 +213,12 @@ export async function getHostAppLauncherDynamicItems({
       titleI18n: app.nameI18n,
       subtitle: app.displayPath || sourceLabel(app),
       icon: appIconRef(app.appId),
-      aliases: searchAliases(app),
+      // Human names only — ranking must not match path/appId via aliases.
+      aliases: humanAppAliases(app),
     },
     behavior: { type: 'perform' },
     surfaces: ['global-launcher'],
-    pinnable: false,
+    requiredCapabilities: ['app-search'],
     ranking: {
       installedAt: app.installedAt,
     },
@@ -213,4 +231,27 @@ export async function getHostAppLauncherDynamicItems({
       }
     },
   }))
+  logLauncherPerfDuration('app-launcher:dynamic-items', startedAt, {
+    queryLength: query.trim().length,
+    cacheCount: cache.apps.length,
+    matchedCount: apps.length,
+    itemCount: items.length,
+  })
+  return items
+}
+
+export function getHostAppWorkObjects(query: string, locale: Locale): AppWorkObject[] {
+  return readCache().apps
+    .filter((app) => appMatchesQuery(app, query, locale))
+    .map((app) => ({
+      id: `app:${app.appId}`,
+      type: 'app',
+      title: app.name,
+      subtitle: app.displayPath || sourceLabel(app),
+      icon: appIconRef(app.appId),
+      source: 'host.app-index',
+      bundleId: app.appId,
+      executablePath: app.displayPath,
+      createdAt: app.installedAt,
+    }))
 }

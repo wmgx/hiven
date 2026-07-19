@@ -17,16 +17,16 @@ function readOptional(path) {
 }
 
 const corePlugin = readOptional('src/workspace/corePlugin.ts')
-const hostActions = read('src/workspace/launcher/hostActions.ts')
+const hostEditorActions = read('src/workspace/launcher/hostEditorActions.ts')
 const builtinIndex = JSON.parse(read('src/builtin-plugins/index.json'))
 
 assert.doesNotMatch(corePlugin, /core\.toggle-sticky-scroll/, 'sticky scroll command should not live in internal corePlugin')
 assert.doesNotMatch(corePlugin, /core\.set-language/, 'set language command should not live in internal corePlugin')
 
-assert.match(hostActions, /host:pane:toggle-sticky-scroll/, 'host launcher actions should own sticky scroll command')
-assert.match(hostActions, /updatePaneStickyScroll\(state\.activePaneId,\s*next\)/, 'sticky scroll should update the active pane')
-assert.match(hostActions, /host:pane:set-language/, 'host launcher actions should own set language command')
-assert.match(hostActions, /updatePaneLanguageSource\(paneId,\s*['"]auto['"]\)|updatePaneLanguageSource\(paneId,\s*['"]manual['"]\)/, 'set language should preserve languageSource behavior')
+assert.match(hostEditorActions, /host:pane:toggle-sticky-scroll/, 'editor-local host actions should own sticky scroll command')
+assert.match(hostEditorActions, /updatePaneStickyScroll\(state\.activePaneId,\s*next\)/, 'sticky scroll should update the active pane')
+assert.match(hostEditorActions, /host:pane:set-language/, 'editor-local host actions should own set language command')
+assert.match(hostEditorActions, /updatePaneLanguageSource\(paneId,\s*['"]auto['"]\)|updatePaneLanguageSource\(paneId,\s*['"]manual['"]\)/, 'set language should preserve languageSource behavior')
 
 assert.equal(builtinIndex.packages.some((entry) => entry.pluginId === 'core-pane'), false, 'core-pane should no longer ship as a builtin plugin')
 

@@ -5,26 +5,32 @@
  * corePlugin to a standalone first-party plugin package.
  */
 
-import { definePlugin, useT, type PanelPropsV2 } from '@hiven/plugin'
-import { useWorkspaceStore } from '../../workspace/workspaceStore'
-import { RegexTesterPanel } from '../../panels/RegexTesterPanel'
-
-function RegexTesterPluginPanel({ panelId, host }: PanelPropsV2<unknown>) {
-  const activePaneId = useWorkspaceStore((state) => state.activePaneId)
-  const t = useT('regex-tester')
-  return (
-    <RegexTesterPanel
-      instanceId={panelId}
-      title={t('panel.main.title')}
-      placement="bottom"
-      props={{}}
-      activePaneId={activePaneId}
-      onClose={host.close}
-    />
-  )
-}
+import { definePlugin, type PaneInput } from '@hiven/plugin'
+import { RegexTesterPluginPanel, RegexTesterSurface } from './RegexTesterViews'
 
 export const regexTesterPlugin = definePlugin({
+  ui: {
+    surfaces: [
+      {
+        id: 'main',
+        kind: 'custom-view',
+        title: 'Regex Tester',
+        titleI18n: { zh: 'Regex Tester' },
+        icon: 'Regex',
+        aliases: ['regex', 'regexp', 'regular expression', '正则', '正则表达式'],
+        component: RegexTesterSurface,
+        entry: { launcher: true, shortcutBindable: true },
+        shell: {
+          defaultWidth: 900,
+          defaultHeight: 620,
+          minWidth: 680,
+          minHeight: 440,
+          closeOnBlur: false,
+          resizable: true,
+        },
+      },
+    ],
+  },
   launcher: {
     items: [
       {
@@ -36,12 +42,12 @@ export const regexTesterPlugin = definePlugin({
           aliases: ['regex', 'regexp', '正则'],
         },
         surfaces: ['command-palette'],
-        pinnable: false,
         execute(ctx) {
           const result = ctx.api.dispatchEffects([{
             type: 'panel.openV2' as const,
             panelId: 'regex-tester.panel',
-            placement: 'bottom' as const,
+            placement: 'pane-bottom' as const,
+            scope: { type: 'pane' as const, paneId: ctx.api.getPaneSnapshot().activePaneId },
             ownerPluginId: 'regex-tester',
           }])
           if (result.errors.length > 0) return { ok: false, message: result.errors[0] }
@@ -57,13 +63,16 @@ export const regexTesterPlugin = definePlugin({
       description: 'command.open.description',
       icon: 'regex',
       aliases: ['regex', 'regexp', '正则'],
-      live: { pinnable: false },
-      run() {
+      inputs: [{ key: 'input', label: 'Input', kind: 'pane' as const, required: true }],
+      inputResolution: { strategy: 'use-active', fallback: 'fail' },
+      run(ctx) {
+        const paneId = (ctx.inputs.input as PaneInput).paneId
         return {
           effects: [{
             type: 'panel.openV2' as const,
             panelId: 'regex-tester.panel',
-            placement: 'bottom' as const,
+            placement: 'pane-bottom' as const,
+            scope: { type: 'pane' as const, paneId },
             ownerPluginId: 'regex-tester',
           }],
         }

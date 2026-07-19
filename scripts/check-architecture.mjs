@@ -82,8 +82,7 @@ function checkImports(dir, forbidden, label) {
 function checkPluginCrossImports() {
   const pluginsDir = join(root, 'src/plugins')
   if (!existsSync(pluginsDir)) return
-  // Legacy plugins with known host deep-path imports (to be migrated later)
-  const legacyAllowList = new Set(['jsFilter', 'regex-tester'])
+  const legacyAllowList = new Set()
   for (const pluginName of readdirSync(pluginsDir)) {
     const pluginDir = join(pluginsDir, pluginName)
     if (!statSync(pluginDir).isDirectory()) continue
@@ -102,11 +101,12 @@ function checkPluginCrossImports() {
           addFailure(`plugins must not import other plugins: ${rel(file)} imports "${spec}"`)
           continue
         }
-        // For relative imports starting with ../, resolve and check if it escapes the plugin dir
+        // For relative imports starting with ../, resolve and only block plugin→plugin escapes here.
+        // Host deep imports are checked separately by checkPluginHostDeepImports.
         if (/^\.\.\//.test(spec)) {
           const fileDir = file.substring(0, file.lastIndexOf('/'))
           const resolved = normalize(join(fileDir, spec))
-          if (!resolved.startsWith(pluginDir)) {
+          if (!resolved.startsWith(pluginDir) && isWithin(resolved, pluginsDir)) {
             addFailure(`plugins must not import other plugins: ${rel(file)} imports "${spec}"`)
           }
         }
@@ -118,8 +118,7 @@ function checkPluginCrossImports() {
 function checkPluginHostDeepImports() {
   const pluginsDir = join(root, 'src/plugins')
   if (!existsSync(pluginsDir)) return
-  // Legacy plugins with known host deep-path imports (to be migrated later)
-  const legacyAllowList = new Set(['jsFilter', 'regex-tester'])
+  const legacyAllowList = new Set()
   const forbiddenHostDirs = [
     join(root, 'src/components'),
     join(root, 'src/store'),
@@ -159,7 +158,7 @@ function checkPluginHostDeepImports() {
 function checkPluginIndexBoundaries() {
   const pluginsDir = join(root, 'src/plugins')
   if (!existsSync(pluginsDir)) return
-  const legacyAllowList = new Set(['jsFilter', 'regex-tester'])
+  const legacyAllowList = new Set()
   for (const pluginName of readdirSync(pluginsDir)) {
     const pluginDir = join(pluginsDir, pluginName)
     if (!statSync(pluginDir).isDirectory()) continue

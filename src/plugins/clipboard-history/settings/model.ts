@@ -12,6 +12,8 @@ export type ClipboardHistorySettings = {
   maxTextBytes: number
   maxImageBytes: number
   maxTotalCacheBytes: number
+  /** Min successful pastes before an item appears in the Frequent tab. */
+  frequentPasteThreshold: number
 }
 
 export const DEFAULT_CLIPBOARD_HISTORY_SETTINGS: ClipboardHistorySettings = {
@@ -24,4 +26,5 @@ export const DEFAULT_CLIPBOARD_HISTORY_SETTINGS: ClipboardHistorySettings = {
   maxTextBytes: 256 * 1024,
   maxImageBytes: 10 * 1024 * 1024,
   maxTotalCacheBytes: 500 * 1024 * 1024,
+  frequentPasteThreshold: 3,
 }

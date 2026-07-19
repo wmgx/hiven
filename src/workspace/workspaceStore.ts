@@ -4,8 +4,8 @@
  */
 
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-import { migrateLocalStorageKey } from '../utils/persistMigration'
+import { createJSONStorage, persist } from 'zustand/middleware'
+import { migrateStorageKey } from '../utils/persistMigration'
 import type {
   PaneId,
   EditorPane,
@@ -19,11 +19,60 @@ import type {
   PanelInstanceV2,
 } from './types'
 
+// ─── Fullscreen View Types ──────────────────────────────────────────────────
+
+export type DiffSource = {
+  sourceId: string
+  kind: 'editor-pane' | 'clipboard' | 'empty'
+  paneId?: string
+  /**
+   * Where a pane-backed source lives. Used for bidirectional Diff binding:
+   * edits write back to the matching pane store.
+   */
+  origin?: 'editor' | 'quick-editor'
+  title: string
+  language?: string
+  text?: string
+}
+
+export type FullscreenView = {
+  type: 'diff'
+  original: DiffSource
+  modified: DiffSource
+}
+
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const DEFAULT_PANE_ID = 'pane-main'
+const workspaceRuntimeStorage = new Map<string, string>()
 
-migrateLocalStorageKey('fluxtext-workspace', 'hiven-workspace')
+function isEditorWindowWorkspaceSession(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get('window') === 'editor'
+  } catch {
+    return false
+  }
+}
+
+function createWorkspaceSessionStorage(): Storage {
+  if (isEditorWindowWorkspaceSession()) {
+    const storage = window.sessionStorage
+    try {
+      migrateStorageKey(storage, 'fluxtext-workspace', 'hiven-workspace')
+    } catch {
+      // Workspace migration is best-effort; editor sessions can always start fresh.
+    }
+    return storage
+  }
+  return {
+    getItem: (key) => workspaceRuntimeStorage.get(key) ?? null,
+    setItem: (key, value) => { workspaceRuntimeStorage.set(key, value) },
+    removeItem: (key) => { workspaceRuntimeStorage.delete(key) },
+    clear: () => { workspaceRuntimeStorage.clear() },
+    key: (index) => Array.from(workspaceRuntimeStorage.keys())[index] ?? null,
+    get length() { return workspaceRuntimeStorage.size },
+  } as Storage
+}
 
 function generatePaneId(): PaneId {
   return `pane-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
@@ -152,6 +201,9 @@ interface WorkspaceSlice {
   // Plugin system: panel instances V2 (single-instance by panelId)
   panelInstancesV2: Record<string, PanelInstanceV2>
 
+  // Fullscreen view (diff page, etc.)
+  activeFullscreenView: FullscreenView | null
+
   // Actions
   setActivePaneText: (text: string) => void
   setPaneText: (paneId: PaneId, text: string) => void
@@ -188,8 +240,12 @@ interface WorkspaceSlice {
   clearPaneRenderer: (paneId: PaneId) => void
   clearPaneRenderersForPlugin: (pluginId: string) => void
 
-  // Compat: legacy editorText getter
+  // Active pane text helper
   getActivePaneText: () => string
+
+  // Fullscreen view actions
+  openDiffPage: (payload: { original: DiffSource; modified: DiffSource }) => void
+  clearActiveFullscreenView: () => void
 }
 
 // ─── Store ──────────────────────────────────────────────────────────────────
@@ -221,6 +277,7 @@ export const useWorkspaceStore = create<WorkspaceSlice>()(persist(
     renderStacks: {},
     paneRenderers: {},
     panelInstancesV2: {},
+    activeFullscreenView: null,
 
     setActivePaneText: (text) => {
       const { activePaneId, panes } = get()
@@ -408,6 +465,14 @@ export const useWorkspaceStore = create<WorkspaceSlice>()(persist(
       return panes[activePaneId]?.text || ''
     },
 
+    openDiffPage: (payload) => {
+      set({ activeFullscreenView: { type: 'diff', ...payload } })
+    },
+
+    clearActiveFullscreenView: () => {
+      set({ activeFullscreenView: null })
+    },
+
     openPresentation: (session) => {
       const { presentations } = get()
       set({ presentations: { ...presentations, [session.id]: session } })
@@ -512,6 +577,7 @@ export const useWorkspaceStore = create<WorkspaceSlice>()(persist(
   }),
   {
     name: 'hiven-workspace',
+    storage: createJSONStorage(createWorkspaceSessionStorage),
     partialize: (state) => ({
       panes: Object.fromEntries(
         Object.entries(state.panes).map(([id, pane]) => [
@@ -551,27 +617,6 @@ export const useWorkspaceStore = create<WorkspaceSlice>()(persist(
         layout: normalizeLayout(persisted.layout, nextPaneOrder),
       } as WorkspaceSlice
     },
-    // Migration from legacy editorText
-    migrate: (persisted: unknown, version: number) => {
-      if (version === 0 || !persisted) {
-        return persisted
-      }
-      return persisted
-    },
     version: 1,
   }
 ))
-
-/**
- * Migrate legacy editorText from the old store into workspace pane.
- * Call this once at app startup.
- */
-export function migrateLegacyEditorText(legacyText: string) {
-  const state = useWorkspaceStore.getState()
-  const activePaneId = state.activePaneId
-  const pane = state.panes[activePaneId]
-  // Only migrate if current pane is empty (fresh init)
-  if (pane && !pane.text && legacyText) {
-    state.setActivePaneText(legacyText)
-  }
-}

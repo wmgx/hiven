@@ -7,6 +7,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { migrateLocalStorageKey } from '../utils/persistMigration'
+import type { LauncherHostId } from './launcher/types'
 
 migrateLocalStorageKey('fluxtext-plugin-settings', 'hiven-plugin-settings')
 
@@ -30,7 +31,7 @@ export type PluginSettingsDialogTarget = {
   source: PluginSettingsSource
   presentation?: 'dialog' | 'global-launcher'
   context?: {
-    surfaceId?: 'command-palette' | 'global-launcher'
+    surfaceId?: LauncherHostId
   }
 } | null
 

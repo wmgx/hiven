@@ -1,5 +1,5 @@
 import BigNumber from 'bignumber.js'
-import { textOutput, textError, type PluginDefinition, type TextInput, type LauncherDynamicContext, type LauncherItemContribution } from '@hiven/plugin'
+import { getPluginHostSdk, textOutput, textError, type PanelPropsV2, type PluginDefinition, type TextInput, type LauncherDynamicContext, type LauncherItemContribution } from '@hiven/plugin'
 
 // ─── Safe Math Parser ────────────────────────────────────────────────────────
 // A simple recursive descent parser for arithmetic expressions.
@@ -258,6 +258,50 @@ function convertBaseLines(text: string, mode: BaseConversionMode): string {
   return text.trim().split('\n').map((line) => convertBaseValue(line, mode)).join('\n')
 }
 
+
+const RESULT_PANEL_ID = 'calculator.result-panel'
+
+type CalculationResultPanelInputs = {
+  sourceText?: string
+  resultText?: string
+}
+
+function CalculationResultPanel({ inputs, host }: PanelPropsV2<CalculationResultPanelInputs>) {
+  const { hooks, effects, react: React } = getPluginHostSdk()
+  const t = hooks.useT('calculator')
+  const sourceText = inputs?.sourceText ?? ''
+  const resultText = inputs?.resultText ?? calculateFormulaLines(sourceText)
+  const e = React.createElement
+
+  return e('div', { className: 'calculator-result-panel' },
+    e('div', { className: 'calculator-result-panel__header' },
+      e('div', null,
+        e('div', { className: 'calculator-result-panel__title' }, t('panel.result.title')),
+        e('div', { className: 'calculator-result-panel__subtitle' }, t('panel.result.subtitle')),
+      ),
+      e('button', { type: 'button', className: 'calculator-result-panel__ghost', onClick: () => host.close() }, '×'),
+    ),
+    e('div', { className: 'calculator-result-panel__grid' },
+      e('section', null,
+        e('span', null, t('panel.result.source')),
+        e('pre', null, sourceText || '—'),
+      ),
+      e('section', null,
+        e('span', null, t('panel.result.output')),
+        e('pre', null, resultText || '—'),
+      ),
+    ),
+    e('div', { className: 'calculator-result-panel__footer' },
+      e('button', { type: 'button', onClick: () => navigator.clipboard?.writeText(resultText) }, t('panel.result.copy')),
+      e('button', { type: 'button', onClick: () => host.dispatch([effects.replaceActiveText(resultText)]) }, t('panel.result.replace')),
+      e('button', {
+        type: 'button',
+        onClick: () => host.dispatch([{ type: 'pane.create', pane: { text: resultText, title: t('panel.result.newPaneTitle'), language: 'plaintext' }, focus: true, direction: 'right' }]),
+      }, t('panel.result.newPane')),
+    ),
+  )
+}
+
 // ─── Plugin Definition ───────────────────────────────────────────────────────
 
 const definition: PluginDefinition = {
@@ -270,9 +314,18 @@ const definition: PluginDefinition = {
       aliases: ['calc', 'formula'],
       inputPolicy: { mode: 'auto' },
       run(ctx) {
-        return ctx.output.replaceActiveText(calculateFormulaLines(ctx.input.text))
+        const sourceText = ctx.input.text
+        const resultText = calculateFormulaLines(sourceText)
+        const opened = ctx.api.dispatchEffects([{
+          type: 'panel.openV2' as const,
+          panelId: RESULT_PANEL_ID,
+          placement: 'pane-bottom' as const,
+          inputs: { sourceText, resultText },
+        }])
+        if (opened.errors.length > 0) return ctx.output.text(resultText)
+        return { ok: true }
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'calculator.sum',
@@ -284,7 +337,7 @@ const definition: PluginDefinition = {
       run(ctx) {
         return ctx.output.replaceActiveText(sumNumericTokens(ctx.input.text))
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
     {
       id: 'calculator.base',
@@ -318,7 +371,7 @@ const definition: PluginDefinition = {
           return ctx.output.error(`Error: ${error.message}`)
         }
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
   ],
   commands: [
@@ -390,13 +443,24 @@ const definition: PluginDefinition = {
       },
     },
   ],
+  panels: [
+    {
+      id: RESULT_PANEL_ID,
+      title: 'Calculation Result',
+      titleI18n: { zh: '计算结果', en: 'Calculation Result' },
+      defaultPlacement: 'pane-bottom',
+      height: '220px',
+      component: CalculationResultPanel,
+    },
+  ],
   launcher: {
     dynamicItems(ctx: LauncherDynamicContext): LauncherItemContribution[] {
-      const result = safeCalculate(ctx.query)
+      const input = ctx.query
+      const result = safeCalculate(input)
       if (result === null) return []
       return [{
         id: 'calc-result',
-        display: { title: `${ctx.query.trim()} = ${result}`, subtitle: ctx.query, icon: 'Calculator' },
+        display: { title: `${input.trim()} = ${result}`, subtitle: input, icon: 'Calculator' },
         behavior: { type: 'perform' },
         async execute(ctx2) {
           await ctx2.api.copyText(result)

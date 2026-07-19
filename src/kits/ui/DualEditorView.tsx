@@ -4,12 +4,10 @@
  * semantics, pane binding, and highlight computation.
  */
 
-import { useRef, useEffect, useCallback } from 'react'
-import { Editor } from '@monaco-editor/react'
-import * as monaco from 'monaco-editor'
+import { useEffect, useMemo, useRef } from 'react'
 import type { editor as MonacoEditor } from 'monaco-editor'
-import { createMonacoDisposableBucket, disposeAllMonacoDisposables, type MonacoDisposable } from '../../utils/monacoDisposables'
-import { registerFluxMonacoThemes } from '../../utils/monacoTheme'
+import { TextEditorCore } from '../editor/TextEditorCore'
+import type { EditorSelectionRange, LineDecorationSpec, RangeDecorationSpec, TextEditorCoreHandle } from '../editor/types'
 
 let cssInjected = false
 function ensureCss() {
@@ -19,17 +17,30 @@ function ensureCss() {
   style.textContent = `
     .ft-left-change-line  { background: rgba(252, 165, 165, 0.22) !important; }
     .ft-right-change-line { background: rgba(134, 239, 172, 0.22) !important; }
+    .ft-left-change-block  {
+      background: rgba(252, 165, 165, 0.28) !important;
+      border-radius: 3px;
+    }
+    .ft-right-change-block {
+      background: rgba(134, 239, 172, 0.28) !important;
+      border-radius: 3px;
+    }
   `
   document.head.appendChild(style)
 }
 
-type DecId = string[]
+const dualOptionOverrides: MonacoEditor.IStandaloneEditorConstructionOptions = {
+  renderLineHighlight: 'none',
+  overviewRulerLanes: 3,
+}
 
 export function DualEditorView({
   leftText,
   rightText,
   leftHighlights,
   rightHighlights,
+  leftRanges,
+  rightRanges,
   layout,
   language = 'plaintext',
   onLeftFocus,
@@ -40,13 +51,16 @@ export function DualEditorView({
   lineNumbers,
   wordWrap,
   monacoTheme = 'flux-vscode-light',
-  leftStickyScrollEnabled,
-  rightStickyScrollEnabled,
+  leftStickyScrollEnabled = false,
+  rightStickyScrollEnabled = false,
 }: {
   leftText: string
   rightText: string
   leftHighlights: number[]
   rightHighlights: number[]
+  /** Prefer precise character ranges (JSON mode). Falls back to whole-line highlights. */
+  leftRanges?: EditorSelectionRange[]
+  rightRanges?: EditorSelectionRange[]
   layout: 'side-by-side' | 'inline'
   language?: string
   onLeftFocus?: () => void
@@ -57,214 +71,119 @@ export function DualEditorView({
   lineNumbers: boolean
   wordWrap: boolean
   monacoTheme?: string
-  leftStickyScrollEnabled: boolean
-  rightStickyScrollEnabled: boolean
+  leftStickyScrollEnabled?: boolean
+  rightStickyScrollEnabled?: boolean
 }) {
-  const leftRef  = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
-  const rightRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
-  const leftDisposablesRef = useRef<MonacoDisposable[]>([])
-  const rightDisposablesRef = useRef<MonacoDisposable[]>([])
-  const leftDecIds  = useRef<DecId>([])
-  const rightDecIds = useRef<DecId>([])
-  const isApplying  = useRef(false)
-  const isSyncing   = useRef(false)
-  const skipNextLeftSync = useRef(false)
-  const skipNextRightSync = useRef(false)
-  const foldingEnabled = language !== 'plaintext'
-
-  const applyLanguage = useCallback((editor: MonacoEditor.IStandaloneCodeEditor | null) => {
-    const model = editor?.getModel()
-    if (!editor || !model) return
-    if (model.getLanguageId() !== language) {
-      monaco.editor.setModelLanguage(model, language)
-    }
-    editor.updateOptions({ folding: foldingEnabled })
-  }, [language, foldingEnabled])
+  const leftRef = useRef<TextEditorCoreHandle | null>(null)
+  const rightRef = useRef<TextEditorCoreHandle | null>(null)
+  const isSyncing = useRef(false)
 
   useEffect(() => {
-    applyLanguage(leftRef.current)
-    applyLanguage(rightRef.current)
-  }, [applyLanguage])
-
-  const applyDecs = useCallback((
-    editor: MonacoEditor.IStandaloneCodeEditor | null,
-    idsRef: React.MutableRefObject<DecId>,
-    lines: number[],
-    cls: string,
-  ) => {
-    if (!editor) return
-    const rulerColor = cls === 'ft-left-change-line'
-      ? 'rgba(252, 165, 165, 0.22)'
-      : 'rgba(134, 239, 172, 0.22)'
-    idsRef.current = editor.deltaDecorations(
-      idsRef.current,
-      lines.map(line => ({
-        range: { startLineNumber: line, startColumn: 1, endLineNumber: line, endColumn: 1 },
-        options: {
-          isWholeLine: true,
-          className: cls,
-          overviewRuler: { color: rulerColor, position: 7 },
-        },
-      })),
-    )
-  }, [])
-
-  const syncText = useCallback((
-    editor: MonacoEditor.IStandaloneCodeEditor | null,
-    text: string,
-    skipNextSyncRef: React.MutableRefObject<boolean>,
-  ) => {
-    if (!editor) return
-    const model = editor.getModel()
-    if (!model) return
-    if (model.getValue() === text) {
-      skipNextSyncRef.current = false
-      return
-    }
-    if (skipNextSyncRef.current) {
-      skipNextSyncRef.current = false
-      return
-    }
-    isApplying.current = true
-    try {
-      editor.executeEdits('external', [{ range: model.getFullModelRange(), text, forceMoveMarkers: false }])
-    } finally {
-      isApplying.current = false
-    }
-  }, [])
-
-  useEffect(() => { syncText(leftRef.current,  leftText,  skipNextLeftSync)  }, [leftText,  syncText])
-  useEffect(() => { syncText(rightRef.current, rightText, skipNextRightSync) }, [rightText, syncText])
-
-  useEffect(() => {
-    applyDecs(leftRef.current,  leftDecIds,  leftHighlights,  'ft-left-change-line')
-    applyDecs(rightRef.current, rightDecIds, rightHighlights, 'ft-right-change-line')
-  }, [leftHighlights, rightHighlights, applyDecs])
-
-  const editorOptions: MonacoEditor.IStandaloneEditorConstructionOptions = {
-    readOnly: false,
-    fontSize,
-    lineNumbers: lineNumbers ? 'on' : 'off',
-    wordWrap: wordWrap ? 'on' : 'off',
-    minimap: { enabled: false },
-    find: { addExtraSpaceOnTop: false },
-    scrollBeyondLastLine: false,
-    renderLineHighlight: 'none',
-    folding: foldingEnabled,
-    glyphMargin: false,
-    lineDecorationsWidth: 8,
-    lineNumbersMinChars: 3,
-    padding: { top: 12, left: 8 },
-    fontFamily: 'var(--font-mono)',
-    overviewRulerLanes: 3,
-  }
-
-  const handleLeftMount = useCallback((editor: MonacoEditor.IStandaloneCodeEditor) => {
     ensureCss()
-    registerFluxMonacoThemes(monaco)
-    disposeAllMonacoDisposables(leftDisposablesRef.current)
-    leftDecIds.current = []
-    const disposables = createMonacoDisposableBucket()
-    leftDisposablesRef.current = [disposables]
-    leftRef.current = editor
-    disposables.add(editor.onDidFocusEditorText(() => {
-      onLeftFocus?.()
-    }))
-    disposables.add(editor.onDidChangeModelContent(() => {
-      if (isApplying.current) return
-      skipNextLeftSync.current = true
-      onLeftChange?.(editor.getModel()?.getValue() ?? '')
-    }))
-    disposables.add(editor.onDidScrollChange((e) => {
-      if (isSyncing.current) return
-      const right = rightRef.current; if (!right) return
-      isSyncing.current = true
-      right.setScrollPosition({ scrollTop: e.scrollTop, scrollLeft: e.scrollLeft })
-      isSyncing.current = false
-    }))
-    disposables.add(editor.onDidDispose(() => {
-      if (leftRef.current === editor) leftRef.current = null
-      leftDecIds.current = []
-      disposables.dispose()
-    }))
-    applyLanguage(editor)
-    applyDecs(editor, leftDecIds, leftHighlights, 'ft-left-change-line')
-  }, [onLeftFocus, onLeftChange, applyDecs, applyLanguage, leftHighlights])
-
-  const handleRightMount = useCallback((editor: MonacoEditor.IStandaloneCodeEditor) => {
-    ensureCss()
-    registerFluxMonacoThemes(monaco)
-    disposeAllMonacoDisposables(rightDisposablesRef.current)
-    rightDecIds.current = []
-    const disposables = createMonacoDisposableBucket()
-    rightDisposablesRef.current = [disposables]
-    rightRef.current = editor
-    disposables.add(editor.onDidFocusEditorText(() => {
-      onRightFocus?.()
-    }))
-    disposables.add(editor.onDidChangeModelContent(() => {
-      if (isApplying.current) return
-      skipNextRightSync.current = true
-      onRightChange?.(editor.getModel()?.getValue() ?? '')
-    }))
-    disposables.add(editor.onDidScrollChange((e) => {
-      if (isSyncing.current) return
-      const left = leftRef.current; if (!left) return
-      isSyncing.current = true
-      left.setScrollPosition({ scrollTop: e.scrollTop, scrollLeft: e.scrollLeft })
-      isSyncing.current = false
-    }))
-    disposables.add(editor.onDidDispose(() => {
-      if (rightRef.current === editor) rightRef.current = null
-      rightDecIds.current = []
-      disposables.dispose()
-    }))
-    applyLanguage(editor)
-    applyDecs(editor, rightDecIds, rightHighlights, 'ft-right-change-line')
-  }, [onRightFocus, onRightChange, applyDecs, applyLanguage, rightHighlights])
-
-  useEffect(() => () => {
-    try {
-      leftRef.current?.deltaDecorations(leftDecIds.current, [])
-    } catch {}
-    try {
-      rightRef.current?.deltaDecorations(rightDecIds.current, [])
-    } catch {}
-    disposeAllMonacoDisposables(leftDisposablesRef.current)
-    disposeAllMonacoDisposables(rightDisposablesRef.current)
-    leftRef.current = null
-    rightRef.current = null
-    leftDecIds.current = []
-    rightDecIds.current = []
   }, [])
+
+  const useLeftRanges = Boolean(leftRanges && leftRanges.length > 0)
+  const useRightRanges = Boolean(rightRanges && rightRanges.length > 0)
+
+  const leftDecorations = useMemo<LineDecorationSpec[]>(() => {
+    if (useLeftRanges) return []
+    return [{
+      lines: leftHighlights,
+      className: 'ft-left-change-line',
+      rulerColor: 'rgba(252, 165, 165, 0.22)',
+    }]
+  }, [leftHighlights, useLeftRanges])
+
+  const rightDecorations = useMemo<LineDecorationSpec[]>(() => {
+    if (useRightRanges) return []
+    return [{
+      lines: rightHighlights,
+      className: 'ft-right-change-line',
+      rulerColor: 'rgba(134, 239, 172, 0.22)',
+    }]
+  }, [rightHighlights, useRightRanges])
+
+  const leftRangeDecorations = useMemo<RangeDecorationSpec[]>(() => {
+    if (!useLeftRanges || !leftRanges) return []
+    return [{
+      ranges: leftRanges,
+      className: 'ft-left-change-block',
+      rulerColor: 'rgba(252, 165, 165, 0.28)',
+    }]
+  }, [leftRanges, useLeftRanges])
+
+  const rightRangeDecorations = useMemo<RangeDecorationSpec[]>(() => {
+    if (!useRightRanges || !rightRanges) return []
+    return [{
+      ranges: rightRanges,
+      className: 'ft-right-change-block',
+      rulerColor: 'rgba(134, 239, 172, 0.28)',
+    }]
+  }, [rightRanges, useRightRanges])
+
+  const syncFrom = (source: 'left' | 'right') =>
+    (position: { scrollTop: number; scrollLeft: number }) => {
+      if (isSyncing.current) return
+      const other = source === 'left' ? rightRef.current : leftRef.current
+      if (!other) return
+      isSyncing.current = true
+      other.setScrollPosition(position)
+      isSyncing.current = false
+    }
+
+  const leftPane = (
+    <TextEditorCore
+      ref={leftRef}
+      value={leftText}
+      language={language}
+      theme={monacoTheme}
+      fontSize={fontSize}
+      lineNumbers={lineNumbers}
+      wordWrap={wordWrap}
+      stickyScroll={leftStickyScrollEnabled}
+      optionOverrides={dualOptionOverrides}
+      lineDecorations={leftDecorations}
+      rangeDecorations={leftRangeDecorations}
+      onChange={onLeftChange}
+      onFocus={onLeftFocus}
+      onScrollChange={syncFrom('left')}
+    />
+  )
+
+  const rightPane = (
+    <TextEditorCore
+      ref={rightRef}
+      value={rightText}
+      language={language}
+      theme={monacoTheme}
+      fontSize={fontSize}
+      lineNumbers={lineNumbers}
+      wordWrap={wordWrap}
+      stickyScroll={rightStickyScrollEnabled}
+      optionOverrides={dualOptionOverrides}
+      lineDecorations={rightDecorations}
+      rangeDecorations={rightRangeDecorations}
+      onChange={onRightChange}
+      onFocus={onRightFocus}
+      onScrollChange={syncFrom('right')}
+    />
+  )
 
   const border = '1px solid var(--color-border-tertiary)'
 
   if (layout === 'side-by-side') {
     return (
       <div style={{ display: 'flex', height: '100%' }}>
-        <div style={{ flex: 1, overflow: 'hidden', borderRight: border }}>
-          <Editor height="100%" defaultValue={leftText} defaultLanguage={language}
-            beforeMount={registerFluxMonacoThemes} onMount={handleLeftMount} options={{ ...editorOptions, stickyScroll: { enabled: leftStickyScrollEnabled } }} theme={monacoTheme} />
-        </div>
-        <div style={{ flex: 1, overflow: 'hidden' }}>
-          <Editor height="100%" defaultValue={rightText} defaultLanguage={language}
-            beforeMount={registerFluxMonacoThemes} onMount={handleRightMount} options={{ ...editorOptions, stickyScroll: { enabled: rightStickyScrollEnabled } }} theme={monacoTheme} />
-        </div>
+        <div style={{ flex: 1, overflow: 'hidden', borderRight: border }}>{leftPane}</div>
+        <div style={{ flex: 1, overflow: 'hidden' }}>{rightPane}</div>
       </div>
     )
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ flex: 1, overflow: 'hidden', borderBottom: border }}>
-        <Editor height="100%" defaultValue={leftText} defaultLanguage={language}
-          beforeMount={registerFluxMonacoThemes} onMount={handleLeftMount} options={{ ...editorOptions, stickyScroll: { enabled: leftStickyScrollEnabled } }} theme={monacoTheme} />
-      </div>
-      <div style={{ flex: 1, overflow: 'hidden' }}>
-        <Editor height="100%" defaultValue={rightText} defaultLanguage={language}
-          beforeMount={registerFluxMonacoThemes} onMount={handleRightMount} options={{ ...editorOptions, stickyScroll: { enabled: rightStickyScrollEnabled } }} theme={monacoTheme} />
-      </div>
+      <div style={{ flex: 1, overflow: 'hidden', borderBottom: border }}>{leftPane}</div>
+      <div style={{ flex: 1, overflow: 'hidden' }}>{rightPane}</div>
     </div>
   )
 }

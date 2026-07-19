@@ -1,5 +1,12 @@
 {
   "command.open.title": "Regex Tester",
   "command.open.description": "Open regex tester panel",
-  "panel.main.title": "Regex Tester"
+  "panel.main.title": "Regex Tester",
+  "panel.regex.pattern": "pattern",
+  "panel.regex.flags": "flags",
+  "panel.regex.match": "{count} match",
+  "panel.regex.matches": "{count} matches",
+  "panel.regex.more": "{count} more",
+  "panel.regex.noMatches": "No matches",
+  "panel.close": "Close"
 }

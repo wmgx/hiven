@@ -1,0 +1,16 @@
+{
+  "sort.title": "行排序", "sort.description": "按字母顺序排列行",
+  "dedup.title": "行去重", "dedup.description": "移除重复行",
+  "reverse.title": "行反转", "reverse.description": "反转行的顺序",
+  "reverseText.title": "文本反转", "reverseText.description": "反转整段文本的字符顺序",
+  "removeBlankLines.title": "删除空行", "removeBlankLines.description": "移除所有空白行",
+  "trimWhitespace.title": "去首尾空白", "trimWhitespace.description": "去除每行首尾空白字符",
+  "join.title": "合并为一行", "join.description": "用分隔符将多行合并为一行",
+  "prepend.title": "添加行前缀", "prepend.description": "为每行添加前缀文本",
+  "append.title": "添加行后缀", "append.description": "为每行添加后缀文本",
+  "wrap.title": "行包裹", "wrap.description": "用左右文本包裹每行",
+  "sqlin.string.title": "生成 IN (字符串)", "sqlin.string.description": "将多行文本转为 SQL IN 子句（字符串模式）",
+  "sqlin.number.title": "生成 IN (数字)", "sqlin.number.description": "将多行文本转为 SQL IN 子句（数字模式）",
+  "param.direction.label": "方向", "param.direction.asc": "升序", "param.direction.desc": "降序",
+  "param.ignoreCase": "忽略大小写", "param.separator": "分隔符", "param.prefix": "前缀", "param.suffix": "后缀", "param.left": "左", "param.right": "右"
+}

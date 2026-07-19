@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>hiven Light · 四个方向（无蓝紫）</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #e7e5df;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+    overflow-x: auto; }
+  button { outline: none; font-family: inherit; }
+
+  .page-header { padding: 30px 32px 22px; text-align: center; }
+  .page-header h1 { margin: 0 0 8px; font-size: 20px; font-weight: 700; color: #201f1c; }
+  .page-header p { margin: 0 0 6px; font-size: 13px; color: #55534c; }
+  .page-header p.note { font-size: 12px; color: #8c897f; }
+
+  .compare-grid { display: flex; min-width: max-content; min-height: 100vh; align-items: stretch; }
+  .col { width: 380px; flex: 0 0 380px; padding: 24px 24px 60px; }
+  .col + .col { border-left: 1px solid rgba(0,0,0,.08); }
+
+  .col-title { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+  .col-title .badge { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 999px; letter-spacing: .5px;
+    background: var(--surface-3); color: var(--accent); }
+  .col-title h2 { margin: 0; font-size: 15px; font-weight: 600; }
+  .col-title .sub { font-size: 11.5px; color: var(--text-tertiary); flex-basis: 100%; margin-top: 3px; line-height: 1.5; }
+
+  .block { margin-bottom: 24px; }
+  .block-label { font-size: 11px; font-weight: 600; margin-bottom: 10px; text-transform: uppercase; letter-spacing: .4px; opacity: .55; }
+
+  /* 1. 色板条 */
+  .swatch-row { display: flex; gap: 8px; }
+  .swatch { flex: 1; height: 64px; border-radius: var(--radius-sm); display: flex; flex-direction: column; justify-content: flex-end;
+    padding: 6px 8px; font-size: 9.5px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .swatch .name { font-size: 9px; opacity: .7; margin-bottom: 2px; }
+
+  /* 2. 文字层级 */
+  .type-sample .t1 { font-size: 15px; font-weight: 600; margin: 0 0 6px; }
+  .type-sample .t2 { font-size: 13px; font-weight: 400; margin: 0 0 6px; }
+  .type-sample .t3 { font-size: 12px; font-weight: 400; margin: 0 0 6px; }
+  .type-sample .t4 { font-size: 11px; font-weight: 400; margin: 0; }
+
+  /* 卡片通用 */
+  .card { border-radius: var(--radius-md); padding: 4px 0; }
+  .group-title { font-size: 12px; font-weight: 600; margin: 0 0 8px 2px; }
+  .setting-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+  .setting-row + .setting-row { border-top: 1px solid; }
+  .row-icon { width: 28px; height: 28px; border-radius: 7px; flex-shrink: 0; }
+  .row-text { flex: 1; min-width: 0; }
+  .row-text .name { font-size: 13px; font-weight: 500; margin: 0 0 2px; }
+  .row-text .desc { font-size: 11px; margin: 0; }
+
+  .toggle { width: 36px; height: 20px; border-radius: 999px; position: relative; flex-shrink: 0; }
+  .toggle::after { content: ""; position: absolute; width: 16px; height: 16px; border-radius: 50%; background: #fff;
+    top: 2px; right: 2px; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+
+  .fake-select { font-size: 12px; padding: 5px 10px; border-radius: var(--radius-sm); display: flex; align-items: center; gap: 6px; flex-shrink: 0; white-space: nowrap; }
+  .fake-select .chev { font-size: 9px; opacity: .6; }
+
+  .fake-stepper { display: flex; align-items: center; border-radius: var(--radius-sm); overflow: hidden; flex-shrink: 0; }
+  .fake-stepper button { width: 22px; height: 24px; border: none; font-size: 13px; line-height: 1; cursor: default; background: transparent; }
+  .fake-stepper .val { font-size: 12px; padding: 0 8px; min-width: 20px; text-align: center; }
+
+  /* 4. 列表 */
+  .list-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius-md); margin: 0 4px; cursor: default; transition: background-color .12s ease; }
+  .list-row .icon-dot { width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0; }
+  .list-row .label { font-size: 12.5px; flex: 1; }
+  .list-row .tag { font-size: 10px; padding: 2px 8px; border-radius: 999px; font-weight: 600; flex-shrink: 0; }
+
+  /* 5. 按钮组 */
+  .btn-row { display: flex; align-items: center; gap: 10px; }
+  .btn { font-size: 12.5px; font-weight: 500; padding: 7px 16px; border-radius: var(--radius-sm); cursor: default; border: 1px solid transparent; transition: background-color .12s ease, box-shadow .12s ease; }
+  .btn-danger { background: transparent; border: none; padding: 7px 4px; }
+
+  /* 6. 悬浮菜单 */
+  .menu { width: 200px; border-radius: var(--radius-md); padding: 6px; }
+  .menu-item { font-size: 12.5px; padding: 8px 10px; border-radius: calc(var(--radius-sm) + 1px); cursor: default; transition: background-color .12s ease; }
+
+  /* 7. 迷你面板 */
+  .launcher-mini { width: 320px; border-radius: var(--radius-lg); padding: 10px; position: relative; }
+  .launcher-mini .mini-header { display: flex; align-items: center; gap: 7px; padding: 2px 4px 10px; }
+  .launcher-mini .mini-header-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+  .launcher-mini .mini-header-title { font-size: 11px; font-weight: 600; flex: 1; }
+  .launcher-mini .mini-header-hint { font-size: 10px; opacity: .5; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .launcher-mini .input { font-size: 13px; padding: 9px 12px; border-radius: var(--radius-sm); margin-bottom: 8px; }
+  .launcher-mini .result-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: calc(var(--radius-sm) + 1px); transition: background-color .12s ease; }
+  .launcher-mini .result-row .icon-dot { width: 20px; height: 20px; border-radius: 5px; flex-shrink: 0; }
+  .launcher-mini .result-row .label { font-size: 12.5px; }
+
+  /* B 专属：色框对撞迷你面板 */
+  .launcher-mini.sidebar-variant { display: flex; padding: 0; overflow: hidden; }
+  .mini-sidebar { width: 34%; flex-shrink: 0; padding: 12px 8px; display: flex; flex-direction: column; gap: 4px; }
+  .mini-sidebar-item { font-size: 11.5px; padding: 7px 8px; border-radius: 6px; }
+  .mini-content { flex: 1; padding: 10px; min-width: 0; }
+
+  /* C 专属：朱砂印章 */
+  .seal { position: absolute; top: 8px; right: 8px; width: 15px; height: 15px; border-radius: 2px;
+    display: flex; align-items: center; justify-content: center; color: #fdece8;
+    font-size: 6.5px; font-weight: 700; letter-spacing: .2px; line-height: 1; }
+
+  /* ============================================================
+     四列共用同一套组件规则，全部通过 CSS 变量取值；
+     每列真正不同的只有各自 .col-x 里声明的变量、以及少量结构差异
+     （B 的双色分栏迷你面板 / C 的衬线标题与印章 / A 的暖光晕 / D 的釉面高光）。
+     ============================================================ */
+
+  .col { background: var(--bg-page); color: var(--text-primary); }
+  .text-primary { color: var(--text-primary); }
+  .text-secondary { color: var(--text-secondary); }
+  .text-tertiary { color: var(--text-tertiary); }
+  .border-c { border-color: var(--border) !important; }
+  .accent-text { color: var(--accent); }
+
+  .swatch { border: 1px solid var(--border); color: var(--text-primary); }
+  .swatch:nth-child(1) { background: var(--bg-page); }
+  .swatch:nth-child(2) { background: var(--surface); }
+  .swatch:nth-child(3) { background: var(--surface-2); }
+  .swatch:nth-child(4) { background: var(--surface-3); }
+  .swatch:nth-child(5) { background: var(--border); }
+
+  .card, .list-card { background: var(--surface); border: 1px solid var(--border); box-shadow: var(--card-shadow); }
+  .setting-row + .setting-row { border-top-color: var(--divider); }
+  .row-icon { background: var(--surface-2); }
+  .toggle-on { background: var(--accent); }
+  .fake-select { background: var(--surface-2); color: var(--text-primary); }
+  .fake-stepper { border: 1px solid var(--border); }
+  .fake-stepper button { color: var(--text-secondary); }
+  .fake-stepper .val { color: var(--text-primary); }
+
+  .list-row .icon-dot { background: var(--surface-2); }
+  .list-row.selected { background: var(--selected-bg); }
+  .list-row.selected .icon-dot { background: var(--selected-icon-bg); }
+  .list-row.selected .label { color: var(--selected-fg); font-weight: 600; }
+  .list-row .tag { background: var(--surface-3); color: var(--text-tertiary); }
+  .list-row.hoverable:hover { background: var(--hover-bg); }
+  .list-row.hoverable:active { background: var(--active-bg); }
+
+  .btn-primary { background: var(--accent); color: var(--accent-fg); }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-secondary { background: var(--surface); color: var(--text-primary); border-color: var(--border); }
+  .btn-secondary:hover { background: var(--hover-bg); }
+  .btn-danger { color: #b3392f; }
+
+  .menu { background: var(--surface); box-shadow: var(--menu-shadow); }
+  .menu-item { color: var(--text-primary); }
+  .menu-item:hover { background: var(--hover-bg); }
+
+  .launcher-mini { background: var(--bg-page); box-shadow: var(--float-shadow); }
+  .launcher-mini .mini-header-title { color: var(--text-primary); }
+  .launcher-mini .mini-header-hint { color: var(--text-tertiary); }
+  .launcher-mini .input { background: var(--surface-2); color: var(--text-secondary); box-shadow: inset 0 0 0 1px var(--border); }
+  .launcher-mini .result-row.selected { background: var(--selected-bg); }
+  .launcher-mini .result-row.selected .label { color: var(--selected-fg); font-weight: 600; }
+  .launcher-mini .result-row.hoverable:hover { background: var(--hover-bg); }
+  .launcher-mini .icon-dot { background: var(--surface-2); }
+
+  /* ============ A · 晨光 · 光感渐变 ============ */
+  .col-a {
+    --bg-page: linear-gradient(135deg, #fdf7ec 0%, #fbf5f0 45%, #f8f1ea 100%);
+    --surface: #fffdf9;
+    --surface-2: #f7f1e8;
+    --surface-3: #f2e8d6;
+    --text-primary: #201c15;
+    --text-secondary: #6d6353;
+    --text-tertiary: #a09484;
+    --border: #ece2d2;
+    --divider: #f2ead9;
+    --accent: #c77b1e;
+    --accent-hover: #a86612;
+    --accent-fg: #ffffff;
+    --selected-bg: #f9edd8;
+    --selected-icon-bg: #c77b1e;
+    --selected-fg: #9c5c14;
+    --hover-bg: rgba(160,110,40,.07);
+    --active-bg: rgba(160,110,40,.13);
+    --card-shadow: 0 1px 3px rgba(120,80,20,.08);
+    --menu-shadow: 0 8px 22px rgba(120,80,20,.14);
+    --float-shadow: 0 20px 50px -16px rgba(120,80,20,.22);
+    --radius-sm: 7px; --radius-md: 10px; --radius-lg: 16px;
+    --glow: 0 0 0 1px rgba(199,123,30,.25), 0 2px 12px rgba(199,123,30,.18);
+  }
+  .col-a .btn-primary,
+  .col-a .list-row.selected,
+  .col-a .launcher-mini .result-row.selected { box-shadow: var(--glow); }
+
+  /* ============ B · 墨绿框 · 色框对撞 ============ */
+  .col-b {
+    --bg-page: #f5f6f1;
+    --surface: #ffffff;
+    --surface-2: #f2f3ef;
+    --surface-3: #e9ece4;
+    --text-primary: #1b211d;
+    --text-secondary: #5b645e;
+    --text-tertiary: #8f978f;
+    --border: #e3e6e0;
+    --divider: #ebede8;
+    --accent: #2f6b4f;
+    --accent-hover: #275a42;
+    --accent-fg: #ffffff;
+    --selected-bg: #e4efe8;
+    --selected-icon-bg: #2f6b4f;
+    --selected-fg: #23573e;
+    --hover-bg: rgba(30,50,40,.05);
+    --active-bg: rgba(30,50,40,.10);
+    --card-shadow: 0 1px 2px rgba(20,40,30,.06);
+    --menu-shadow: 0 6px 20px rgba(20,40,30,.12);
+    --float-shadow: 0 18px 44px -14px rgba(20,40,30,.20);
+    --radius-sm: 6px; --radius-md: 8px; --radius-lg: 10px;
+    --sidebar-bg: #1c2b24;
+    --sidebar-text: #c8d4cc;
+    --sidebar-selected-bg: #2e4438;
+    --sidebar-selected-fg: #ffffff;
+  }
+  .col-b .mini-sidebar { background: var(--sidebar-bg); color: var(--sidebar-text); }
+  .col-b .mini-sidebar-item.active { background: var(--sidebar-selected-bg); color: var(--sidebar-selected-fg); font-weight: 600; }
+  .col-b .mini-content { background: #fafaf7; }
+
+  /* ============ C · 纸墨印 · 文人调 ============ */
+  .col-c {
+    --bg-page: #f6f2e9;
+    --surface: #fbf8f1;
+    --surface-2: #f0eadc;
+    --surface-3: #e8e0cc;
+    --text-primary: #26231e;
+    --text-secondary: #6b665c;
+    --text-tertiary: #9a9384;
+    --border: #e5ddc9;
+    --divider: #ede6d6;
+    --accent: #bf4338;
+    --accent-hover: #a63a30;
+    --accent-fg: #ffffff;
+    --selected-bg: #f7e6e2;
+    --selected-icon-bg: #bf4338;
+    --selected-fg: #93332a;
+    --hover-bg: rgba(120,90,50,.07);
+    --active-bg: rgba(120,90,50,.13);
+    --card-shadow: 0 1px 3px rgba(80,60,30,.08);
+    --menu-shadow: 0 8px 20px rgba(80,60,30,.12);
+    --float-shadow: 0 18px 46px -16px rgba(80,60,30,.20);
+    --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+    background-color: #f6f2e9;
+    background-image: radial-gradient(rgba(90,70,40,.05) 0.5px, transparent 0.5px);
+    background-size: 4px 4px;
+  }
+  .col-c .col-title h2,
+  .col-c .type-sample .t1,
+  .col-c .group-title { font-family: "Songti SC", "Noto Serif SC", serif; font-weight: 600; }
+  .col-c .seal { background: #bf4338; }
+
+  /* ============ D · 青瓷 · 雾色单色调 ============ */
+  .col-d {
+    --bg-page: #eaefed;
+    --surface: #ffffff;
+    --surface-2: #eff4f1;
+    --surface-3: #dfe8e3;
+    --text-primary: #1f2823;
+    --text-secondary: #57655d;
+    --text-tertiary: #8a968f;
+    --border: #d9e2dc;
+    --divider: #e4ebe6;
+    --accent: #33705d;
+    --accent-hover: #2a5e4e;
+    --accent-fg: #ffffff;
+    --selected-bg: #ddeae3;
+    --selected-icon-bg: #33705d;
+    --selected-fg: #235240;
+    --hover-bg: rgba(40,80,60,.06);
+    --active-bg: rgba(40,80,60,.11);
+    --card-shadow: 0 1px 2px rgba(30,50,40,.06);
+    --menu-shadow: 0 8px 22px rgba(30,50,40,.12);
+    --float-shadow: 0 16px 44px -14px rgba(30,50,40,.20);
+    --radius-sm: 6px; --radius-md: 8px; --radius-lg: 14px;
+  }
+  .col-d .card, .col-d .list-card {
+    box-shadow: var(--card-shadow), inset 0 1px 0 rgba(255,255,255,.6);
+  }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>hiven Light · 四个方向（无蓝紫）</h1>
+  <p>四列使用同一份组件模板渲染（色板条 / 文字层级 / 设置卡片 / 列表选中 &amp; hover / 按钮组 / 悬浮菜单 / 迷你面板），全页面不含蓝色、紫色或蓝紫渐变。每列在配色之外，也各自调整了光影、质感、造型或字体，不是单纯换色。</p>
+  <p class="note">鼠标悬停列表行、按钮、菜单项、结果行可感受各方向真实的 hover 反馈；按压态更深一档。</p>
+</div>
+
+<div class="compare-grid">
+  <div class="col col-a">
+    <div class="col-title">
+      <span class="badge">A</span>
+      <h2>晨光 · 光感渐变</h2>
+      <span class="sub">暖金→蜜桃的极淡光感渐变底，选中态与主按钮带柔和暖光晕。气质：有光、暖、活。</span>
+    </div>
+    <div id="body-a"></div>
+  </div>
+
+  <div class="col col-b">
+    <div class="col-title">
+      <span class="badge">B</span>
+      <h2>墨绿框 · 色框对撞</h2>
+      <span class="sub">深墨绿与暖白两色分栏结构对撞，accent 为深松绿。气质：结构对撞、克制、有身份。</span>
+    </div>
+    <div id="body-b"></div>
+  </div>
+
+  <div class="col col-c">
+    <div class="col-title">
+      <span class="badge">C</span>
+      <h2>纸墨印 · 文人调</h2>
+      <span class="sub">宣纸底 + 细颗粒纸感 + 衬线标题 + 朱砂印章，accent 为朱砂红。气质：文具、纸感、东方。</span>
+    </div>
+    <div id="body-c"></div>
+  </div>
+
+  <div class="col col-d">
+    <div class="col-title">
+      <span class="badge">D</span>
+      <h2>青瓷 · 雾色单色调</h2>
+      <span class="sub">从底色到 accent 贯穿同一青绿色相，卡片带釉面高光。气质：一个颜色的立场，冷静但绝不是灰。</span>
+    </div>
+    <div id="body-d"></div>
+  </div>
+</div>
+
+<script>
+  // 四列共用同一套核心区块（色板 / 文字层级 / 设置卡片 / 列表 / 按钮 / 菜单），
+  // 仅迷你面板（区块 7）按方向分叉出结构差异：B 为双色分栏，C 带印章，A/D 为标准版式。
+  function renderCommon(v) {
+    var swatchHtml = v.swatches.map(function (s) {
+      return '<div class="swatch"><span class="name">' + s.name + '</span>' + s.hex + '</div>';
+    }).join('');
+
+    return '' +
+      '<div class="block">' +
+      '  <div class="block-label text-tertiary">色板</div>' +
+      '  <div class="swatch-row">' + swatchHtml + '</div>' +
+      '</div>' +
+
+      '<div class="block type-sample">' +
+      '  <div class="block-label text-tertiary">文字层级</div>' +
+      '  <p class="t1 text-primary">主标题文字样式</p>' +
+      '  <p class="t2 text-primary">正文文字样式，用于常规内容展示。</p>' +
+      '  <p class="t3 text-secondary">次要说明文字，用于补充描述信息。</p>' +
+      '  <p class="t4 text-tertiary">三级提示文字，用于弱化的辅助信息</p>' +
+      '</div>' +
+
+      '<div class="block">' +
+      '  <div class="block-label text-tertiary">设置卡片</div>' +
+      '  <p class="group-title text-secondary">通用</p>' +
+      '  <div class="card">' +
+      '    <div class="setting-row">' +
+      '      <div class="row-icon"></div>' +
+      '      <div class="row-text"><p class="name text-primary">开机自启动</p><p class="desc text-secondary">系统启动时自动运行 hiven</p></div>' +
+      '      <div class="toggle toggle-on"></div>' +
+      '    </div>' +
+      '    <div class="setting-row">' +
+      '      <div class="row-icon"></div>' +
+      '      <div class="row-text"><p class="name text-primary">界面语言</p><p class="desc text-secondary">影响所有菜单与提示文案</p></div>' +
+      '      <div class="fake-select"><span>简体中文</span><span class="chev">▾</span></div>' +
+      '    </div>' +
+      '    <div class="setting-row">' +
+      '      <div class="row-icon"></div>' +
+      '      <div class="row-text"><p class="name text-primary">字体大小</p><p class="desc text-secondary">调整编辑区默认字号</p></div>' +
+      '      <div class="fake-stepper"><button>－</button><span class="val">14</span><button>＋</button></div>' +
+      '    </div>' +
+      '  </div>' +
+      '</div>' +
+
+      '<div class="block">' +
+      '  <div class="block-label text-tertiary">列表</div>' +
+      '  <div class="list-card card">' +
+      '    <div class="list-row hoverable"><div class="icon-dot"></div><span class="label text-primary">文本对比</span></div>' +
+      '    <div class="list-row selected"><div class="icon-dot"></div><span class="label">JSON 对比</span></div>' +
+      '    <div class="list-row hoverable"><div class="icon-dot"></div><span class="label text-primary">Markdown 对比</span><span class="tag">hover 态</span></div>' +
+      '    <div class="list-row hoverable"><div class="icon-dot"></div><span class="label text-primary">正则测试</span></div>' +
+      '  </div>' +
+      '</div>' +
+
+      '<div class="block">' +
+      '  <div class="block-label text-tertiary">按钮组</div>' +
+      '  <div class="btn-row">' +
+      '    <button class="btn btn-primary">主要操作</button>' +
+      '    <button class="btn btn-secondary border-c">次要操作</button>' +
+      '    <button class="btn btn-danger">删除</button>' +
+      '  </div>' +
+      '</div>' +
+
+      '<div class="block">' +
+      '  <div class="block-label text-tertiary">悬浮菜单</div>' +
+      '  <div class="menu">' +
+      '    <div class="menu-item text-primary">重命名</div>' +
+      '    <div class="menu-item text-primary">复制路径</div>' +
+      '    <div class="menu-item" style="color:#b3392f;">删除</div>' +
+      '  </div>' +
+      '</div>';
+  }
+
+  // 标准迷你面板：头部 + 输入框 + 2 行结果（A / D 共用；C 在此基础上叠加印章）
+  function renderStandardMini(withSeal) {
+    return '' +
+      '<div class="launcher-mini standard">' +
+      (withSeal ? '<div class="seal">hi</div>' : '') +
+      '  <div class="mini-header"><span class="mini-header-dot"></span><span class="mini-header-title">hiven</span><span class="mini-header-hint">⌘K</span></div>' +
+      '  <div class="input text-secondary">搜索命令或插件…</div>' +
+      '  <div class="result-row selected"><div class="icon-dot"></div><span class="label">Base64 编码</span></div>' +
+      '  <div class="result-row hoverable"><div class="icon-dot"></div><span class="label text-primary">URL 编码</span></div>' +
+      '</div>';
+  }
+
+  // B 专属：左侧深墨绿导航 + 右侧暖白内容，两色分栏对撞
+  function renderSidebarMini() {
+    return '' +
+      '<div class="launcher-mini sidebar-variant">' +
+      '  <div class="mini-sidebar">' +
+      '    <div class="mini-sidebar-item">对比</div>' +
+      '    <div class="mini-sidebar-item active">插件</div>' +
+      '    <div class="mini-sidebar-item">设置</div>' +
+      '  </div>' +
+      '  <div class="mini-content">' +
+      '    <div class="input text-secondary">搜索命令或插件…</div>' +
+      '    <div class="result-row selected"><div class="icon-dot"></div><span class="label">Base64 编码</span></div>' +
+      '    <div class="result-row hoverable"><div class="icon-dot"></div><span class="label text-primary">URL 编码</span></div>' +
+      '  </div>' +
+      '</div>';
+  }
+
+  var miniBlockLabel = '<div class="block-label text-tertiary">迷你面板</div>';
+
+  document.getElementById('body-a').innerHTML = renderCommon({
+    swatches: [
+      { name: 'bg-page', hex: '135° 渐变' },
+      { name: 'surface', hex: '#fffdf9' },
+      { name: 'surface-2', hex: '#f7f1e8' },
+      { name: 'surface-3', hex: '#f2e8d6' },
+      { name: 'border', hex: '#ece2d2' }
+    ]
+  }) + '<div class="block">' + miniBlockLabel + renderStandardMini(false) + '</div>';
+
+  document.getElementById('body-b').innerHTML = renderCommon({
+    swatches: [
+      { name: 'bg-page', hex: '#f5f6f1' },
+      { name: 'surface', hex: '#ffffff' },
+      { name: 'surface-2', hex: '#f2f3ef' },
+      { name: 'surface-3', hex: '#e9ece4' },
+      { name: 'border', hex: '#e3e6e0' }
+    ]
+  }) + '<div class="block">' + miniBlockLabel + renderSidebarMini() + '</div>';
+
+  document.getElementById('body-c').innerHTML = renderCommon({
+    swatches: [
+      { name: 'bg-page', hex: '#f6f2e9' },
+      { name: 'surface', hex: '#fbf8f1' },
+      { name: 'surface-2', hex: '#f0eadc' },
+      { name: 'surface-3', hex: '#e8e0cc' },
+      { name: 'border', hex: '#e5ddc9' }
+    ]
+  }) + '<div class="block">' + miniBlockLabel + renderStandardMini(true) + '</div>';
+
+  document.getElementById('body-d').innerHTML = renderCommon({
+    swatches: [
+      { name: 'bg-page', hex: '#eaefed' },
+      { name: 'surface', hex: '#ffffff' },
+      { name: 'surface-2', hex: '#eff4f1' },
+      { name: 'surface-3', hex: '#dfe8e3' },
+      { name: 'border', hex: '#d9e2dc' }
+    ]
+  }) + '<div class="block">' + miniBlockLabel + renderStandardMini(false) + '</div>';
+</script>
+
+</body>
+</html>

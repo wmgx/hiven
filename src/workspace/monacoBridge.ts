@@ -7,6 +7,10 @@
 import { runtimeRegistry, type Disposable } from './runtimeRegistry'
 import type { PaneId } from './types'
 
+function getEditorRuntime(_paneId: PaneId): any | null {
+  return null
+}
+
 // ─── Core Bridge API ────────────────────────────────────────────────────────
 
 export interface MonacoBridgeApi {
@@ -16,11 +20,11 @@ export interface MonacoBridgeApi {
 
 export const monacoBridge: MonacoBridgeApi = {
   getMonaco() {
-    return (window as any).monaco ?? null
+    return null
   },
 
   getCodeEditor(paneId: PaneId) {
-    return runtimeRegistry.getCodeEditor(paneId)
+    return getEditorRuntime(paneId)
   },
 }
 
@@ -49,7 +53,7 @@ export interface PresentationApi {
 
 export const presentationApi: PresentationApi = {
   decorate(paneId, decorations, owner) {
-    const editor = runtimeRegistry.getCodeEditor(paneId)
+    const editor = getEditorRuntime(paneId)
     if (!editor) return { dispose() {} }
 
     const ids = editor.deltaDecorations([], decorations)
@@ -60,7 +64,7 @@ export const presentationApi: PresentationApi = {
 
     const disposable: Disposable = {
       dispose() {
-        const currentEditor = runtimeRegistry.getCodeEditor(paneId)
+        const currentEditor = getEditorRuntime(paneId)
         if (currentEditor) {
           currentEditor.deltaDecorations(ids, [])
         }
@@ -82,7 +86,7 @@ export const presentationApi: PresentationApi = {
   },
 
   addViewZone(paneId, zone, owner) {
-    const editor = runtimeRegistry.getCodeEditor(paneId)
+    const editor = getEditorRuntime(paneId)
     if (!editor) return { dispose() {} }
 
     let zoneId: string | null = null
@@ -92,7 +96,7 @@ export const presentationApi: PresentationApi = {
 
     const disposable: Disposable = {
       dispose() {
-        const currentEditor = runtimeRegistry.getCodeEditor(paneId)
+        const currentEditor = getEditorRuntime(paneId)
         if (currentEditor && zoneId !== null) {
           currentEditor.changeViewZones((accessor: any) => {
             accessor.removeZone(zoneId)
@@ -106,14 +110,14 @@ export const presentationApi: PresentationApi = {
   },
 
   addContentWidget(paneId, widget, owner) {
-    const editor = runtimeRegistry.getCodeEditor(paneId)
+    const editor = getEditorRuntime(paneId)
     if (!editor) return { dispose() {} }
 
     editor.addContentWidget(widget)
 
     const disposable: Disposable = {
       dispose() {
-        const currentEditor = runtimeRegistry.getCodeEditor(paneId)
+        const currentEditor = getEditorRuntime(paneId)
         if (currentEditor) {
           currentEditor.removeContentWidget(widget)
         }
@@ -125,14 +129,14 @@ export const presentationApi: PresentationApi = {
   },
 
   addOverlayWidget(paneId, widget, owner) {
-    const editor = runtimeRegistry.getCodeEditor(paneId)
+    const editor = getEditorRuntime(paneId)
     if (!editor) return { dispose() {} }
 
     editor.addOverlayWidget(widget)
 
     const disposable: Disposable = {
       dispose() {
-        const currentEditor = runtimeRegistry.getCodeEditor(paneId)
+        const currentEditor = getEditorRuntime(paneId)
         if (currentEditor) {
           currentEditor.removeOverlayWidget(widget)
         }
@@ -144,7 +148,7 @@ export const presentationApi: PresentationApi = {
   },
 
   addGlyphMarginWidget(paneId, widget, owner) {
-    const editor = runtimeRegistry.getCodeEditor(paneId)
+    const editor = getEditorRuntime(paneId)
     if (!editor) return { dispose() {} }
 
     // Monaco uses editor.addGlyphMarginWidget if available (Monaco 0.40+)
@@ -154,7 +158,7 @@ export const presentationApi: PresentationApi = {
 
       const disposable: Disposable = {
         dispose() {
-          const currentEditor = runtimeRegistry.getCodeEditor(paneId)
+          const currentEditor = getEditorRuntime(paneId)
           if (currentEditor && typeof currentEditor.removeGlyphMarginWidget === 'function') {
             currentEditor.removeGlyphMarginWidget(widget)
           }
@@ -170,7 +174,7 @@ export const presentationApi: PresentationApi = {
   },
 
   updateEditorOptions(paneId, options, owner) {
-    const editor = runtimeRegistry.getCodeEditor(paneId)
+    const editor = getEditorRuntime(paneId)
     if (!editor) return { dispose() {} }
 
     // Save previous options for restoration
@@ -187,7 +191,7 @@ export const presentationApi: PresentationApi = {
     const disposable: Disposable = {
       dispose() {
         // Best-effort restoration: set options back
-        const currentEditor = runtimeRegistry.getCodeEditor(paneId)
+        const currentEditor = getEditorRuntime(paneId)
         if (currentEditor && Object.keys(prevOptions).length > 0) {
           // Only attempt restoration for keys we explicitly changed
           // In practice, the caller should manage this
@@ -208,7 +212,7 @@ export function applyMonacoDecorate(paneId: PaneId, decorations: any[], owner?: 
 }
 
 export function applyMonacoUpdateOptions(paneId: PaneId, options: Record<string, any>) {
-  const editor = runtimeRegistry.getCodeEditor(paneId)
+  const editor = getEditorRuntime(paneId)
   if (editor) {
     editor.updateOptions(options)
   }

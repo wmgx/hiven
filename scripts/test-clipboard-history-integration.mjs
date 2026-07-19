@@ -41,6 +41,12 @@ assert.match(indexContent, /id:\s*['"]main['"]/, 'Must declare surface with id "
 assert.match(indexContent, /kind:\s*['"]custom-view['"]/, 'Surface kind must be custom-view')
 assert.match(indexContent, /component:\s*ClipboardHistorySurface/, 'Surface component must reference ClipboardHistorySurface')
 assert.match(indexContent, /beforeOpen[\s\S]{0,220}getFreshListItems/, 'Clipboard history surface must prewarm fresh storage before activation')
+assert.match(indexContent, /destroyTimeout:\s*30\s*\*\s*60\s*\*\s*1000/, 'Clipboard history window must keep webview warm longer than the default 2 minutes')
+assert.match(
+  indexContent,
+  /if\s*\(\s*getCachedIndex\(\)\s*\)\s*return[\s\S]{0,120}void\s+createClipboardHistoryRepository[\s\S]{0,80}getFreshListItems/,
+  'Clipboard history beforeOpen must not block paint on cold open when the in-memory cache is empty',
+)
 
 // entry.launcher is true (default or explicit)
 assert.match(indexContent, /launcher:\s*true/, 'Surface entry.launcher must be true')
@@ -203,7 +209,7 @@ assert.match(cacheContent, /subscribeCachedIndex/, 'Clipboard history cache must
 assert.match(surfaceContent, /subscribeCachedIndex/, 'Clipboard history surface must subscribe to cache updates so newly copied items appear while it is open')
 assert.match(surfaceContent, /indexToListItems/, 'Clipboard history surface must map subscribed index snapshots into list items without waiting for remount')
 assert.match(surfaceContent, /getFreshListItems/, 'Clipboard history surface must refresh from persisted storage, not only same-window cache')
-assert.match(surfaceContent, /setInterval[\s\S]{0,260}getFreshListItems/, 'Clipboard history surface must poll persisted storage while open so launcher windows see main-window background captures')
+assert.match(surfaceContent, /handleFocus[\s\S]{0,200}addEventListener\(['"]focus['"]/, 'Clipboard history surface must poll persisted storage while open so launcher windows see main-window background captures')
 
 // ─── 6. Background structure ─────────────────────────────────────────────────
 

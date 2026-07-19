@@ -1,9 +1,9 @@
 import { useAppStore, type GlobalPinnedLauncherShortcut } from '../store'
+import { suppressStandaloneLauncherBlur } from '../workspace/launcherBlurGuard'
 
 type GlobalShortcutApi = typeof import('@tauri-apps/plugin-global-shortcut')
 type TauriCoreApi = typeof import('@tauri-apps/api/core')
 type TauriEventApi = typeof import('@tauri-apps/api/event')
-type TauriWindowApi = typeof import('@tauri-apps/api/window')
 
 let installed = false
 let unsubscribeStore: (() => void) | null = null
@@ -18,14 +18,15 @@ export function installGlobalPinnedLauncherHotkeys() {
   installed = true
 
   const shortcut = useAppStore.getState().settings.globalPinnedLauncherShortcut
-  console.warn('[hiven-diag] installGlobalPinnedLauncherHotkeys called, shortcut:', JSON.stringify(shortcut))
   void syncShortcut(shortcut)
   void listenForDoubleModifierErrors()
   void listenForDoubleModifierReady()
   unsubscribeStore = useAppStore.subscribe((state, previousState) => {
     const next = state.settings.globalPinnedLauncherShortcut
     const previous = previousState.settings.globalPinnedLauncherShortcut
-    if (shortcutIdentity(next) !== shortcutIdentity(previous)) {
+    const quickEditorActive = state.globalLauncherOpen && state.launcherHostSurfaceTarget === 'quick-editor'
+    const previousQuickEditorActive = previousState.globalLauncherOpen && previousState.launcherHostSurfaceTarget === 'quick-editor'
+    if (shortcutIdentity(next) !== shortcutIdentity(previous) || quickEditorActive !== previousQuickEditorActive) {
       void syncShortcut(next)
     }
   })
@@ -80,12 +81,21 @@ function syncShortcut(shortcut: GlobalPinnedLauncherShortcut) {
 }
 
 async function syncShortcutNow(shortcut: GlobalPinnedLauncherShortcut, generation: number) {
-  console.warn('[hiven-diag] syncShortcutNow called, kind:', shortcut.kind, 'isTauri:', isTauriRuntime())
   if (!isTauriRuntime()) return
 
   await unregisterCurrentAccelerator()
   await unregisterDoubleModifier()
   if (generation !== syncGeneration) return
+
+  if (
+    useAppStore.getState().globalLauncherOpen &&
+    useAppStore.getState().launcherHostSurfaceTarget === 'quick-editor' &&
+    shortcut.kind === 'accelerator' &&
+    isQuickEditorCommandAccelerator(shortcut.accelerator)
+  ) {
+    updateShortcutStatus(shortcut, 'Handled by Quick Editor')
+    return
+  }
 
   if (shortcut.kind === 'disabled') {
     updateShortcutStatus(shortcut, 'Disabled')
@@ -132,9 +142,7 @@ async function registerDoubleModifier(shortcut: GlobalPinnedLauncherShortcut, ge
   try {
     const { invoke } = await loadTauriCoreApi()
     const modifier = shortcut.kind === 'double-modifier' ? shortcut.modifier : 'Command'
-    console.warn('[hiven-diag] invoking register_double_modifier_hotkey, modifier:', modifier)
     const result = await invoke<{ status: string }>('register_double_modifier_hotkey', { modifier })
-    console.warn('[hiven-diag] register_double_modifier_hotkey result:', result)
     if (generation !== syncGeneration) {
       if (shortcutIdentity(useAppStore.getState().settings.globalPinnedLauncherShortcut) !== shortcutIdentity(shortcut)) {
         await unregisterDoubleModifier()
@@ -143,7 +151,6 @@ async function registerDoubleModifier(shortcut: GlobalPinnedLauncherShortcut, ge
     }
     if (generation === syncGeneration) updateShortcutStatus(shortcut, result.status)
   } catch (error) {
-    console.warn('[hiven-diag] register_double_modifier_hotkey ERROR:', error)
     if (generation === syncGeneration) updateShortcutStatus(shortcut, 'Registration failed', formatError(error))
   }
 }
@@ -184,24 +191,13 @@ async function showLauncherWindow() {
 }
 
 export async function routeGlobalPinnedLauncherShortcut() {
-  if (await shouldOpenCommandPaletteInMainWindow()) {
-    useAppStore.getState().setCommandPaletteOpen(true)
+  const state = useAppStore.getState()
+  if (state.globalLauncherOpen && state.launcherHostSurfaceTarget === 'quick-editor') {
+    suppressStandaloneLauncherBlur()
+    state.openQuickEditorCommand()
     return
   }
   await showLauncherWindow()
-}
-
-async function shouldOpenCommandPaletteInMainWindow() {
-  const state = useAppStore.getState()
-  if (state.activeView !== 'editor') return false
-  if (!isTauriRuntime()) return true
-  try {
-    const { getCurrentWindow } = await loadTauriWindowApi()
-    return await getCurrentWindow().isFocused()
-  } catch (error) {
-    console.warn('[hiven] Failed to inspect main window focus for global shortcut:', error)
-    return false
-  }
 }
 
 function updateShortcutStatus(
@@ -220,6 +216,21 @@ function updateShortcutStatus(
 
 function normalizeAccelerator(accelerator: string) {
   return accelerator.replace(/\bCmd\b/g, 'Command')
+}
+
+function isQuickEditorCommandAccelerator(accelerator: string) {
+  const parts = normalizeAccelerator(accelerator)
+    .split('+')
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean)
+  return parts.includes('k') && parts.some((part) => (
+    part === 'command' ||
+    part === 'cmd' ||
+    part === 'control' ||
+    part === 'ctrl' ||
+    part === 'cmdorctrl' ||
+    part === 'commandorcontrol'
+  ))
 }
 
 function shortcutIdentity(shortcut: GlobalPinnedLauncherShortcut) {
@@ -246,8 +257,4 @@ function loadTauriCoreApi(): Promise<TauriCoreApi> {
 
 function loadTauriEventApi(): Promise<TauriEventApi> {
   return import('@tauri-apps/api/event')
-}
-
-function loadTauriWindowApi(): Promise<TauriWindowApi> {
-  return import('@tauri-apps/api/window')
 }

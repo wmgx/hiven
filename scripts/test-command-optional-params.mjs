@@ -18,10 +18,19 @@ function assert(condition, message) {
   }
 }
 
-const commandPalette = read('src/components/CommandPalette.tsx')
+const commandPalette = [
+  read('src/components/CommandPalette.tsx'),
+  read('src/launcher/hosts/EditorCommandBarHost.tsx'),
+  read('src/components/launcher/LauncherDomainSearchStep.tsx'),
+].join('\n')
 const launcherParamStep = read('src/components/launcher/LauncherParamStep.tsx')
 const launcherParamShortcuts = read('src/components/launcher/launcherParamShortcuts.ts')
-const globalLauncher = read('src/components/GlobalLauncher.tsx')
+const globalLauncher = [
+  read('src/components/GlobalLauncher.tsx'),
+  read('src/launcher/hosts/GlobalLauncherHost.tsx'),
+  read('src/components/launcher/GlobalLauncherFrames.tsx'),
+  read('src/components/launcher/GlobalLauncherPanel.tsx'),
+].join('\n')
 const toolAdapter = read('src/workspace/launcher/toolAdapter.ts')
 const store = read('src/store.ts')
 const pluginTypes = read('src/workspace/pluginTypes.ts')
@@ -40,7 +49,7 @@ assert(/getPlatformShortcutMeta/.test(launcherParamShortcuts), 'shared launcher 
 assert(/isMacPlatform/.test(launcherParamShortcuts), 'shared launcher shortcut helper should detect macOS for Command shortcuts')
 assert(/event\.metaKey/.test(commandPalette) && /event\.ctrlKey/.test(commandPalette), 'CommandPalette should pass click modifier state for macOS and other platforms')
 assert(/shouldCustomizeParams/.test(launcherParamShortcuts), 'launcher should centralize customize modifier handling')
-assert(/selectItem\(item,\s*shouldCustomizeParams\(e\.metaKey,\s*e\.ctrlKey\)\)/.test(commandPalette), 'CommandPalette should support platform-aware Enter selection intent')
+assert(/selectItem\([^,]+,\s*shouldCustomizeParams\([^)]*\.metaKey,\s*[^)]*\.ctrlKey\)\)/.test(commandPalette), 'CommandPalette should support platform-aware selection intent')
 assert(/return\s+shortcutMeta\.modifier === 'meta' \? metaKey : ctrlKey/.test(launcherParamShortcuts), 'launcher should customize based on the platform modifier at selection time')
 assert(/supportsDefaultParamRun/.test(launcherParamShortcuts), 'launcher should gate default runs behind explicit default support')
 assert(/item\.requireParamSelection/.test(launcherParamShortcuts), 'launcher should block default runs for explicit parameter-selection tools')
@@ -69,27 +78,11 @@ function pluginIndex(dir) {
   return existsSync(p) ? readFileSync(p, 'utf8') : null
 }
 
+// Plugins that declare params with explicit defaults for launcher parameter flow
 const parameterizedPlugins = [
-  'base64',
   'calculator',
-  'case',
-  'css',
-  'csv',
   'date-time-assistant',
-  'extract',
-  'hash',
-  'html',
-  'json',
-  'lineAffix',
-  'lineTools',
-  'mdquote',
-  'queryString',
-  'slashes',
-  'sql',
-  'sqlin',
-  'url',
-  'xml',
-  'yaml',
+  'line-tools',
 ]
 
 for (const name of parameterizedPlugins) {
@@ -100,17 +93,9 @@ for (const name of parameterizedPlugins) {
   assert(/default:/.test(src), `${name} plugin params should provide explicit defaults for launcher parameter flow`)
 }
 
+// Plugins that require user to select params before running
 const promptBeforeRunPlugins = [
-  'base64',
   'calculator',
-  'case',
-  'csv',
-  'html',
-  'mdquote',
-  'queryString',
-  'slashes',
-  'url',
-  'yaml',
 ]
 
 for (const name of promptBeforeRunPlugins) {
@@ -119,23 +104,44 @@ for (const name of promptBeforeRunPlugins) {
   assert(/requireParamSelection:\s*true/.test(src), `${name} should prompt for mode/direction instead of default-running from launcher`)
 }
 
+// Plugins that support default-run (no requireParamSelection)
 const defaultRunPlugins = [
-  'css',
   'date-time-assistant',
-  'extract',
-  'hash',
-  'json',
-  'lineAffix',
-  'lineTools',
-  'sql',
-  'sqlin',
-  'xml',
+  'line-tools',
+  'encode-decode',
+  'formatter',
+  'text-utils',
+  'crypto',
+  'json-tools',
+  'csv',
+  'yaml',
 ]
 
 for (const name of defaultRunPlugins) {
   const src = pluginIndex(name)
   assert(src, `${name} should exist as a first-party plugin package`)
   assert(!/requireParamSelection:\s*true/.test(src), `${name} should keep default-run launcher behavior`)
+}
+
+// All first-party plugins must use the definePlugin or PluginDefinition pattern
+const allPlugins = [
+  'calculator',
+  'csv',
+  'date-time-assistant',
+  'encode-decode',
+  'formatter',
+  'text-utils',
+  'crypto',
+  'line-tools',
+  'json-tools',
+  'yaml',
+]
+
+for (const name of allPlugins) {
+  const src = pluginIndex(name)
+  assert(src, `${name} should exist as a first-party plugin package`)
+  assert(!/optionalParams:\s*true/.test(src), `${name} plugin should not use deprecated optionalParams`)
+  assert(/definePlugin|PluginDefinition/.test(src), `${name} plugin should use definePlugin or PluginDefinition pattern`)
 }
 
 console.log('command optional params checks passed')

@@ -24,6 +24,7 @@ import type {
   ResolvedTextInput,
   TextInputMode,
 } from './types'
+import { normalizeLauncherSurfaceId } from './types'
 import { emptyResult, textResult, replaceActiveTextResult, errorResult, choicesResult, REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID } from './output'
 import type { Locale } from '../../i18n'
 
@@ -54,10 +55,14 @@ function manualTextInput(text: string, mode: TextInputMode): ResolvedTextInput {
   return { kind: 'text', text, mode, source: text ? 'manual' : 'empty' }
 }
 
-function makeOutput(api: PluginLauncherApi, locale: Locale, copyReplaceOutput = false): PluginToolOutput {
+function makeOutput(api: PluginLauncherApi, locale: Locale, surfaceId: string): PluginToolOutput {
+  const normalizedSurfaceId = normalizeLauncherSurfaceId(surfaceId)
+  const isGlobal = normalizedSurfaceId === 'global-launcher'
   return {
-    text: (value: string) => textResult(value, api, locale),
-    replaceActiveText: (value: string) => copyReplaceOutput
+    text: (value: string) => isGlobal
+      ? textResult(value, api, locale)
+      : replaceActiveTextResult(value, api, locale),
+    replaceActiveText: (value: string) => isGlobal
       ? textResult(value, api, locale)
       : replaceActiveTextResult(value, api, locale),
     error: (message: string) => errorResult(message),
@@ -82,7 +87,6 @@ export function adaptToolToLauncherItem(
 ): LauncherItem {
   const launcherOpt = tool.surfaces?.launcher
   const launcherOptions = typeof launcherOpt === 'object' ? launcherOpt : undefined
-  const pinnable = launcherOptions?.pinnable ?? tool.surfaces?.pinnable ?? true
   const mode: TextInputMode = tool.inputPolicy?.mode ?? 'auto'
   const defaultParams = { ...(tool.defaultParams ?? {}) }
   for (const param of tool.params ?? []) {
@@ -95,6 +99,8 @@ export function adaptToolToLauncherItem(
     ctx: Parameters<LauncherExecuteHandler>[0],
     params: Record<string, unknown>,
   ): Promise<LauncherExecuteResult> => {
+    const normalizedSurfaceId = normalizeLauncherSurfaceId(ctx.surfaceId)
+    const isEditorLike = normalizedSurfaceId === 'editor-command-bar' || normalizedSurfaceId === 'quick-editor-command'
     const hasManualInput = ctx.input?.text !== undefined
     const input = hasManualInput
       ? manualTextInput(ctx.input?.text ?? '', mode)
@@ -108,11 +114,11 @@ export function adaptToolToLauncherItem(
         api: ctx.api,
         storage: ctx.storage,
         t: ctx.t,
-        output: makeOutput(ctx.api, ctx.locale, hasManualInput && ctx.surfaceId === 'global-launcher'),
+        output: makeOutput(ctx.api, ctx.locale, ctx.surfaceId ?? ''),
       }),
     )
     if (
-      ctx.surfaceId === 'command-palette' &&
+      isEditorLike &&
       result.ok &&
       result.output?.choices.length === 1 &&
       result.output.choices[0]?.id === REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID
@@ -136,11 +142,11 @@ export function adaptToolToLauncherItem(
     display: toolDisplay(tool),
     behavior: { type: 'perform' },
     surfaces: launcherOptions?.surfaces,
-    pinnable,
     inputPolicy: tool.inputPolicy,
     params: tool.params,
     defaultParams,
     requireParamSelection: tool.requireParamSelection,
+    textMatch: tool.textMatch,
     // Legacy usage keys: the tool id may match a command id used in old usage data
     legacyUsageKeys: [tool.id],
     execute,

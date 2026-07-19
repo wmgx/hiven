@@ -28,7 +28,6 @@ export type PluginHostUi = {
 export type PluginHostEffects = {
   replaceActiveText: (text: string) => { type: 'text.replace'; target: 'active-input'; text: string }
   createPane: (text: string, title?: string) => { type: 'pane.create'; pane: { text: string; title?: string }; focus: boolean }
-  showMainPanel: () => { type: 'app.showMainPanel' }
   status: (message: string, level?: 'info' | 'success' | 'warning' | 'error') => { type: 'status.message'; level: 'info' | 'success' | 'warning' | 'error'; message: string }
 }
 
@@ -48,7 +47,6 @@ export function createPluginHostCoreSdk(): PluginHostCoreSdk {
     effects: {
       replaceActiveText: (text) => ({ type: 'text.replace' as const, target: 'active-input' as const, text }),
       createPane: (text, title) => ({ type: 'pane.create' as const, pane: { text, title }, focus: true }),
-      showMainPanel: () => ({ type: 'app.showMainPanel' as const }),
       status: (message, level = 'info') => ({ type: 'status.message' as const, level, message }),
     },
     ui: createPluginHostUi(),

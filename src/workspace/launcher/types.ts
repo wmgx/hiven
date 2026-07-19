@@ -2,7 +2,7 @@
  * Launcher Domain Types
  *
  * The launcher is a host/workspace domain centered on `LauncherItem`, shared by
- * CommandPalette and GlobalLauncher. Plugins contribute launcher items (or tools
+ * EditorCommandBar and GlobalLauncher. Plugins contribute launcher items (or tools
  * that the host adapts into launcher items); the host owns identity, ranking,
  * usage, and the execution lifecycle.
  *
@@ -16,22 +16,100 @@
 
 import type { ComponentType } from 'react'
 import type { Locale } from '../../i18n'
-import type { PluginPrivateStorageApi } from '../pluginTypes'
+import type { PluginNetworkApi, PluginPrivateStorageApi } from '../pluginTypes'
 import type { FluxEffect } from '../types'
+import type { DiffSource } from '../workspaceStore'
 import type { EffectRunnerResult } from '../effectRunner'
 
 // ─── System Surfaces ───────────────────────────────────────────────────────
 
-/** The two system launcher surfaces in the first version. */
-export type LauncherSurfaceId = 'command-palette' | 'global-launcher'
+export type LauncherHostId = 'global-launcher' | 'editor-command-bar' | 'quick-editor-command'
+
+/** `command-palette` is retained as a legacy alias for `editor-command-bar`. */
+export type LauncherSurfaceId = LauncherHostId | 'command-palette'
+
+export type LauncherHostCapability =
+  | 'app-search'
+  | 'plugin-surfaces'
+  | 'host-surfaces'
+  | 'settings'
+  | 'text-input-actions'
+  | 'pane-actions'
+  | 'system-power'
+  | 'parameter-customization'
+
+export type LauncherHostDescriptor = {
+  id: LauncherHostId
+  capabilities: readonly LauncherHostCapability[]
+}
+
+export type LauncherHostConfig = LauncherHostDescriptor & {
+  presentation: 'spotlight-window' | 'editor-overlay'
+  placeholderKey: 'globalPlaceholder' | 'placeholder'
+}
+
+export const LAUNCHER_HOSTS: Record<LauncherHostId, LauncherHostConfig> = {
+  'global-launcher': {
+    id: 'global-launcher',
+    presentation: 'spotlight-window',
+    placeholderKey: 'globalPlaceholder',
+    capabilities: [
+      'app-search',
+      'plugin-surfaces',
+      'host-surfaces',
+      'settings',
+      'text-input-actions',
+      'pane-actions',
+      'system-power',
+      'parameter-customization',
+    ],
+  },
+  'editor-command-bar': {
+    id: 'editor-command-bar',
+    presentation: 'editor-overlay',
+    placeholderKey: 'placeholder',
+    capabilities: [
+      'text-input-actions',
+      'pane-actions',
+      'parameter-customization',
+    ],
+  },
+  'quick-editor-command': {
+    id: 'quick-editor-command',
+    presentation: 'editor-overlay',
+    placeholderKey: 'placeholder',
+    capabilities: [
+      'text-input-actions',
+      'pane-actions',
+      'parameter-customization',
+    ],
+  },
+}
+
+export function launcherHostHasCapability(
+  hostId: LauncherHostId,
+  capability: LauncherHostCapability,
+): boolean {
+  return LAUNCHER_HOSTS[hostId].capabilities.includes(capability)
+}
+
+export function getLauncherHostConfig(hostId: LauncherHostId): LauncherHostConfig {
+  return LAUNCHER_HOSTS[hostId]
+}
 
 export const LAUNCHER_SURFACE_IDS: readonly LauncherSurfaceId[] = [
   'command-palette',
+  'editor-command-bar',
   'global-launcher',
+  'quick-editor-command',
 ] as const
 
 export function isLauncherSurfaceId(value: unknown): value is LauncherSurfaceId {
-  return value === 'command-palette' || value === 'global-launcher'
+  return value === 'command-palette' || value === 'editor-command-bar' || value === 'global-launcher' || value === 'quick-editor-command'
+}
+
+export function normalizeLauncherSurfaceId(surfaceId: LauncherSurfaceId): LauncherHostId {
+  return surfaceId === 'command-palette' ? 'editor-command-bar' : surfaceId
 }
 
 // ─── System Identity ───────────────────────────────────────────────────────
@@ -82,6 +160,8 @@ export type LauncherItemDisplay = {
   icon?: IconRef
   /** Extra search terms (aliases) used by ranking but not shown as primary. */
   aliases?: string[]
+  /** Custom kind label shown as the tag pill. Overrides the default derived label. */
+  kindLabel?: string
 }
 
 // ─── Behavior (lifecycle types) ──────────────────────────────────────────────
@@ -142,13 +222,33 @@ export type LauncherResultAction = {
   run: LauncherResultActionHandler
 }
 
+export type WorkflowObjectItemMetadata = {
+  kind: 'workflow-object'
+  objectId: string
+  objectType: string
+}
+
+export type WorkflowActionChoiceMetadata = {
+  kind: 'workflow-action'
+  objectId: string
+  actionId: string
+  outputTarget?: string
+}
+
+export type LauncherItemMetadata = WorkflowObjectItemMetadata
+
+export type LauncherResultChoiceMetadata = WorkflowActionChoiceMetadata
+
 export type LauncherResultChoice = {
   id: string
   title: string
   titleI18n?: Partial<Record<Locale, string>>
   subtitle?: string
   subtitleI18n?: Partial<Record<Locale, string>>
+  /** Optional leading icon (e.g. site favicon for history suggestions). */
+  icon?: IconRef
   preview?: string
+  metadata?: LauncherResultChoiceMetadata
   primaryAction: LauncherResultActionHandler
   secondaryActions?: LauncherResultAction[]
 }
@@ -188,7 +288,15 @@ export type PluginLauncherApi = {
     activePaneId: string
     previousActivePaneId?: string
     paneIds: string[]
-    panes: Record<string, { title?: string; language?: string; stickyScroll?: boolean }>
+    panes: Record<string, {
+      title?: string
+      language?: string
+      stickyScroll?: boolean
+      /** Snapshot text content when available (e.g. quick-editor panes). */
+      text?: string
+      /** Where this pane lives; plugins use it for choice labels. */
+      origin?: 'editor' | 'quick-editor'
+    }>
     renderers: Record<string, {
       rendererId: string
       ownerPluginId?: string
@@ -201,12 +309,13 @@ export type PluginLauncherApi = {
   insertText(text: string): Promise<void>
   copyText(text: string): Promise<void>
   openUrl(url: string): Promise<void>
-  showMainPanel(): Promise<void>
+  showEditorWindow(): Promise<string | undefined>
   showPluginsPage(): Promise<void>
   showSettingsPage(): Promise<void>
-  createPane(options?: { text?: string; title?: string; language?: string; focus?: boolean; direction?: 'left' | 'right' | 'top' | 'bottom' }): string
+  createPane(options?: { text?: string; title?: string; language?: string; focus?: boolean; direction?: 'left' | 'right' | 'top' | 'bottom' }): Promise<string | undefined>
   dispatchEffects(effects: FluxEffect[]): EffectRunnerResult
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
+  openDiffPage(payload: { original: DiffSource; modified: DiffSource }): void
   apps: PluginAppsApi
 }
 
@@ -250,6 +359,29 @@ export type LauncherExecuteWithParamsHandler<TSettings = unknown> = (
   params: Record<string, unknown>,
 ) => Promise<LauncherExecuteResult> | LauncherExecuteResult
 
+/**
+ * Optional collect-input suggestions (e.g. per-entry query history).
+ * Host calls this when the collect-input frame is entered or inputText changes.
+ * Return empty choices / null to hide the list.
+ */
+export type LauncherSuggestContext<TSettings = unknown> = {
+  surfaceId: LauncherSurfaceId
+  inputText: string
+  settings: TSettings
+  locale: Locale
+  api: PluginLauncherApi
+  storage: PluginPrivateStorageApi
+  network: PluginNetworkApi
+  t: (key: string, vars?: Record<string, string | number>) => string
+  /** Plugin identity for storage-scoped assets (e.g. favicon blob refs). */
+  pluginId?: string
+  source?: 'builtin' | 'installed' | 'dev'
+}
+
+export type LauncherSuggestHandler<TSettings = unknown> = (
+  ctx: LauncherSuggestContext<TSettings>,
+) => Promise<LauncherOutput | null | undefined> | LauncherOutput | null | undefined
+
 // ─── Plugin Contribution (authoring API) ─────────────────────────────────────
 
 /**
@@ -264,15 +396,26 @@ export type LauncherItemContribution<TSettings = unknown> = {
   id: string
   display: LauncherItemDisplay
   behavior?: LauncherBehavior
+  /** Host-reserved key for explicit built-in host entries such as plugin settings. */
+  hostEntry?: 'plugin-settings'
   /** Restrict where the item appears. Missing = both main surfaces. */
   surfaces?: LauncherSurfaceId[]
-  /** Whether this item can be pinned. Defaults to true for static items. */
-  pinnable?: boolean
   inputPolicy?: TextInputPolicy
   params?: LauncherParamSpec[]
   defaultParams?: Record<string, unknown>
   /** When true, selecting the item always opens the parameter flow before execution. */
   requireParamSelection?: boolean
+  /**
+   * Opt into long-term usage recording for dynamic items with stable ids.
+   * Static plugin/host items always record unless the host suppresses via select options.
+   * Dynamic items default to false (one-shot / content-derived results).
+   */
+  recordUsage?: boolean
+  /**
+   * Optional suggestions for collect-input frames (filtered by current inputText).
+   * Host infrastructure only — product semantics (history, etc.) stay in the plugin.
+   */
+  suggest?: LauncherSuggestHandler<TSettings>
   execute: LauncherExecuteHandler<TSettings>
   executeWithParams?: LauncherExecuteWithParamsHandler<TSettings>
 }
@@ -280,12 +423,14 @@ export type LauncherItemContribution<TSettings = unknown> = {
 // ─── Dynamic Items ───────────────────────────────────────────────────────────
 
 export type LauncherDynamicContext = {
+  /** Host-resolved input text. Plugins do not need to know whether it came from typed query or Object Block. */
   query: string
   surfaceId: LauncherSurfaceId
   locale: Locale
   settings: unknown
   api: PluginLauncherApi
   storage: PluginPrivateStorageApi
+  network: PluginNetworkApi
   t: (key: string, vars?: Record<string, string | number>) => string
   source: 'builtin' | 'installed' | 'dev'
   pluginId: string
@@ -308,11 +453,12 @@ export type LauncherItem = {
   systemKey: SystemLauncherItemKey
   kind: LauncherItemContributionKind
   pluginId?: string
+  /** Product-level provider name, e.g. JSON Tools, not the raw plugin id. */
+  productProvider?: string
   source?: 'builtin' | 'installed' | 'dev'
   display: LauncherItemDisplay
   behavior: LauncherBehavior
   surfaces?: LauncherSurfaceId[]
-  pinnable: boolean
   inputPolicy?: TextInputPolicy
   /** Host-only ranking nudge for a small number of host-owned items. */
   staticPriority?: number
@@ -329,19 +475,40 @@ export type LauncherItem = {
   legacyUsageKeys?: string[]
   /** Host-owned parameter schema for system adapters that support Cmd/Ctrl+Enter customization. */
   params?: LauncherParamSpec[]
+  requiredCapabilities?: LauncherHostCapability[]
+  preferredCapabilities?: LauncherHostCapability[]
+  metadata?: LauncherItemMetadata
   /** Explicit default values used when entering the parameter form. */
   defaultParams?: Record<string, unknown>
   /** Host-owned execution policy: defaults can prefill UI but must not skip parameter selection. */
   requireParamSelection?: boolean
+  /** Content matcher: returns true if this tool can process the given text. Boosted in ranking. */
+  textMatch?: (text: string) => boolean
+  /**
+   * When true, selection writes to launcher usage for ranking.
+   * Dynamic items must opt in with a stable systemKey; static items omit this (treated as true).
+   */
+  recordUsage?: boolean
+  /** Optional collect-input suggestions loader (host-resolved from contribution). */
+  suggest?: LauncherSuggestHandler
   execute: LauncherExecuteHandler
   executeWithParams?: LauncherExecuteWithParamsHandler
 }
 
-// ─── Pinned Reference ─────────────────────────────────────────────────────────
+export function filterEditorCommandBarItems(items: LauncherItem[]): LauncherItem[] {
+  return items.filter(isEditorCommandBarItem)
+}
 
-/** Pinned entries reference launcher items; they are not searchable items. */
-export type PinnedLauncherRef = {
-  itemKey: SystemLauncherItemKey
+export function isEditorCommandBarItem(item: LauncherItem): boolean {
+  if (item.systemKey.startsWith('plugin-settings:')) return false
+  if (item.kind !== 'host') return true
+  const surfaces = item.surfaces?.map(normalizeLauncherSurfaceId)
+  if (surfaces?.length && !surfaces.includes('editor-command-bar')) return false
+  return (
+    item.systemKey.startsWith('host:pane:') ||
+    item.systemKey.startsWith('host:editor:') ||
+    item.systemKey.startsWith('host:text:')
+  )
 }
 
 // ─── Usage ─────────────────────────────────────────────────────────────────
@@ -359,7 +526,6 @@ export type LauncherUsageBySurface = Record<LauncherSurfaceId, LauncherUsageBuck
 
 export type ToolLauncherOptions = {
   surfaces?: LauncherSurfaceId[]
-  pinnable?: boolean
 }
 
 export type ToolPanelOptions = {
@@ -369,7 +535,6 @@ export type ToolPanelOptions = {
 export type PluginToolSurfaces = {
   launcher?: boolean | ToolLauncherOptions
   panel?: boolean | ToolPanelOptions
-  pinnable?: boolean
 }
 
 export type PluginToolOutput = {
@@ -409,6 +574,12 @@ export type PluginToolContribution<TSettings = unknown> = {
   defaultParams?: Record<string, unknown>
   /** When true, launcher selection prompts for params even when defaults exist. */
   requireParamSelection?: boolean
+  /**
+   * Content matcher: returns true if this tool can process the given text.
+   * Used for both clipboard content and direct user input in the launcher.
+   * Matched tools are boosted to the top of the command list.
+   */
+  textMatch?: (text: string) => boolean
   run(ctx: PluginToolContext<TSettings>): Promise<PluginToolResult> | PluginToolResult
   surfaces?: PluginToolSurfaces
 }

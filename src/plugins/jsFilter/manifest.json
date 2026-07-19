@@ -1,9 +1,9 @@
 {
   "pluginId": "js-filter",
-  "displayName": "JS Filter",
+  "displayName": "JSON Tools · Expression",
   "displayNameI18n": {
-    "zh": "JS 过滤器",
-    "en": "JS Filter"
+    "zh": "JSON Tools · 表达式",
+    "en": "JSON Tools · Expression"
   },
   "version": "1.0.1",
   "capabilities": ["panel"]

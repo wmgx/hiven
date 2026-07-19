@@ -15,7 +15,7 @@ function assertNotHas(source, pattern, message) {
 
 const files = {
   packageJson: read('package.json'),
-  scriptsView: read('src/views/ScriptsView.tsx'),
+  pluginsSurfaceContent: read('src/surfaces/PluginsManagerSurfaceContent.tsx') + '\n' + read('src/surfaces/PluginsContent.tsx'),
   pluginRuntime: read('src/workspace/pluginRuntime.ts'),
   pluginTypes: read('src/workspace/pluginTypes.ts'),
   configInit: read('src/configInit.ts'),
@@ -33,9 +33,9 @@ assertHas(files.pluginRuntime, /clearPluginPrivateStorage/, 'installed uninstall
 assertHas(files.pluginRuntime, /clearPluginShortcuts/, 'installed uninstall and dev remove should clear surface shortcuts')
 assertHas(files.pluginRuntime, /clearPluginPermissions/, 'installed uninstall and dev remove should clear permission grants')
 assertHas(files.pluginRuntime, /removePluginSettings/, 'installed uninstall and dev remove should clear plugin settings')
-assertHas(files.scriptsView, /await\s+uninstallPlugin\(plugin\.pluginId\)/, 'ScriptsView uninstall button should await physical uninstall')
-assertHas(files.scriptsView, /setUpdateStatus\(['"`]checking['"`]\)|setUpdateStatus\(['"`]done['"`]\)/, 'ScriptsView should refresh directory summaries after uninstall')
-assertHas(files.scriptsView, /const\s+result\s*=\s*await\s+checkBuiltinPluginsUpdate\(\)[\s\S]*result\.error[\s\S]*setUpdateStatus\(['"`]error['"`]\)/, 'ScriptsView package update checks should surface checkBuiltinPluginsUpdate returned errors')
+assertHas(files.pluginsSurfaceContent, /await\s+uninstallPlugin\(plugin\.pluginId\)/, 'PluginsManagerSurfaceContent uninstall button should await physical uninstall')
+assertHas(files.pluginsSurfaceContent, /setUpdateStatus\(['"`]checking['"`]\)|setUpdateStatus\(['"`]done['"`]\)/, 'PluginsManagerSurfaceContent should refresh directory summaries after uninstall')
+assertHas(files.pluginsSurfaceContent, /const\s+result\s*=\s*await\s+checkBuiltinPluginsUpdate\(\)[\s\S]*result\.error[\s\S]*setUpdateStatus\(['"`]error['"`]\)/, 'PluginsManagerSurfaceContent package update checks should surface checkBuiltinPluginsUpdate returned errors')
 
 assertNotHas(files.configInit, /createScriptPluginEntrySource|parseScriptToAction/, 'configInit should no longer use the legacy defineAction parser/wrapper')
 assertNotHas(files.configInit, /releaseUserScriptPluginPackages|releaseBuiltinScriptPluginPackages/, 'configInit should no longer release defineAction scripts as packages')
@@ -43,11 +43,11 @@ assertNotHas(files.configInit, /DEMO_PLUGIN_SOURCE|demo-text-plugin/, 'configIni
 
 assertHas(files.tauriLib, /display_name_i18n|displayNameI18n/, 'Tauri PluginDirSummary should include displayNameI18n')
 assertHas(files.tauriLib, /get\("displayNameI18n"\)/, 'Tauri manifest summary should read displayNameI18n from manifest.json')
-assertHas(files.scriptsView, /displayNameI18n:\s*pkg\.displayNameI18n/, 'ScriptsView should preserve displayNameI18n when syncing scanned packages into store')
-assertHas(files.scriptsView, /updatePluginMetadata\(pkg\.pluginId[\s\S]*displayNameI18n:\s*pkg\.displayNameI18n/, 'ScriptsView should refresh displayNameI18n for already persisted packages')
-assertHas(files.scriptsView, /function\s+pluginDisplayName[\s\S]*localized\([\s\S]*displayNameI18n[\s\S]*locale[\s\S]*\)/, 'ScriptsView should localize plugin package display names from displayNameI18n')
-assertHas(files.scriptsView, /title=\{pluginDisplayName\(plugin,\s*locale\)\}/, 'ScriptsView cards should render localized plugin display names')
-assertHas(files.scriptsView, /searchableFieldsMatch\(pluginSearchFields\(plugin\),\s*query,\s*locale\)/, 'ScriptsView search should use the shared matcher for localized plugin display names')
-assertHas(files.scriptsView, /titleI18n:\s*plugin\.displayNameI18n/, 'ScriptsView search fields should preserve localized plugin display names')
+assertHas(files.pluginsSurfaceContent, /displayNameI18n:\s*pkg\.displayNameI18n/, 'PluginsManagerSurfaceContent should preserve displayNameI18n when syncing scanned packages into store')
+assertHas(files.pluginsSurfaceContent, /updatePluginMetadata\(pkg\.pluginId[\s\S]*displayNameI18n:\s*pkg\.displayNameI18n/, 'PluginsManagerSurfaceContent should refresh displayNameI18n for already persisted packages')
+assertHas(files.pluginsSurfaceContent, /function\s+pluginDisplayName[\s\S]*localized\([\s\S]*displayNameI18n[\s\S]*locale[\s\S]*\)/, 'PluginsManagerSurfaceContent should localize plugin package display names from displayNameI18n')
+assertHas(files.pluginsSurfaceContent, /title=\{pluginDisplayName\(plugin,\s*locale\)\}/, 'PluginsManagerSurfaceContent cards should render localized plugin display names')
+assertHas(files.pluginsSurfaceContent, /searchableFieldsMatch\(pluginSearchFields\(plugin\),\s*query,\s*locale\)/, 'PluginsManagerSurfaceContent search should use the shared matcher for localized plugin display names')
+assertHas(files.pluginsSurfaceContent, /titleI18n:\s*plugin\.displayNameI18n/, 'PluginsManagerSurfaceContent search fields should preserve localized plugin display names')
 
 console.log('plugin package lifecycle checks passed')

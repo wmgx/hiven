@@ -21,7 +21,6 @@ import type {
 } from './types'
 import { useWorkspaceStore } from './workspaceStore'
 import { runtimeRegistry } from './runtimeRegistry'
-import { useAppStore } from '../store'
 import {
   detectConflicts,
   resolveConflict,
@@ -60,9 +59,16 @@ export function applyEffects(
   conflictPolicy: ConflictPolicy = 'ask'
 ): EffectRunnerResult {
   const result: EffectRunnerResult = { applied: [], errors: [] }
+  const runnableEffects = effects.filter((effect) => {
+    if (isEditorWorkspaceEffect(effect)) {
+      result.errors.push(`Editor workspace effects can only run in the editor window: ${effect.type}`)
+      return false
+    }
+    return true
+  })
 
   // Step 1-3: Check for surface conflicts (for presentation/panel effects)
-  const surfaceEffects = effects.filter(
+  const surfaceEffects = runnableEffects.filter(
     (e) => e.type === 'presentation.open' || e.type === 'panel.open'
   )
 
@@ -89,7 +95,7 @@ export function applyEffects(
   }
 
   // Step 4-6: Apply effects
-  for (const effect of effects) {
+  for (const effect of runnableEffects) {
     try {
       switch (effect.type) {
         case 'text.replace':
@@ -118,7 +124,6 @@ export function applyEffects(
           applyWorkspaceEffect(effect)
           result.applied.push(effect)
           break
-        case 'app.showMainPanel':
         case 'app.openExternal':
           applyAppEffect(effect)
           result.applied.push(effect)
@@ -161,6 +166,16 @@ export function applyEffects(
   return result
 }
 
+function isEditorWorkspaceEffect(effect: FluxEffect): boolean {
+  switch (effect.type) {
+    case 'app.openExternal':
+    case 'status.message':
+      return false
+    default:
+      return true
+  }
+}
+
 /**
  * Apply effects after user confirms conflict resolution.
  */
@@ -168,6 +183,15 @@ export function applyEffectsAfterConfirmation(
   effects: FluxEffect[],
   conflictsToReplace: ConflictInfo[]
 ): EffectRunnerResult {
+  if (effects.some(isEditorWorkspaceEffect)) {
+    return {
+      applied: [],
+      errors: effects
+        .filter(isEditorWorkspaceEffect)
+        .map((effect) => `Editor workspace effects can only run in the editor window: ${effect.type}`),
+    }
+  }
+
   // Release all conflicting occupancies
   for (const conflict of conflictsToReplace) {
     releaseOccupancy(conflict.existingOccupancy.id)
@@ -268,13 +292,7 @@ function applyTextReplace(effect: TextReplaceEffect) {
 }
 
 function applyAppEffect(effect: AppEffect) {
-  const app = useAppStore.getState()
   switch (effect.type) {
-    case 'app.showMainPanel':
-      app.setActiveView('editor')
-      app.setCommandPaletteOpen(false)
-      app.setGlobalLauncherOpen(false)
-      break
     case 'app.openExternal':
       void openExternalUrl(effect.url)
       break
@@ -310,11 +328,6 @@ function applyPaneEffect(effect: PaneEffect) {
         ws.closePane(effect.paneId)
       } else {
         ws.closeActiveSurfaceOrPane()
-        const newActivePaneId = useWorkspaceStore.getState().activePaneId
-        const editor = runtimeRegistry.getCodeEditor(newActivePaneId)
-        if (editor) {
-          useAppStore.getState().setEditorInstance(editor)
-        }
       }
       break
     case 'pane.focus':

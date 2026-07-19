@@ -80,7 +80,7 @@ function assertLauncherToolsHaveSubtitles() {
 
 function assertBuiltinVersionsMatchManifests() {
   const index = JSON.parse(read('src/builtin-plugins/index.json'))
-  assert.equal(index.version, 26, 'builtin plugin index version should be bumped after builtin package updates')
+  assert.equal(index.version, 27, 'builtin plugin index version should be bumped after builtin package updates')
   assert.equal(index.packages.some((pkg) => pkg.pluginId === 'core-pane'), false, 'core-pane should no longer ship as a bundled plugin')
   for (const pkg of index.packages) {
     const manifest = JSON.parse(read(`src/plugins/${pkg.dir}/manifest.json`))
@@ -89,7 +89,7 @@ function assertBuiltinVersionsMatchManifests() {
 }
 
 function assertTextDiffCanBeFoundAndFailureIsVisible() {
-  const textDiff = read('src/plugins/textDiff/index.ts')
+  const textDiff = read('src/plugins/textDiff/index.tsx')
   assert.match(
     textDiff,
     /id:\s*['"]text-diff\.compare['"][\s\S]*aliases:\s*\[[\s\S]*['"]diff['"]/,
@@ -97,8 +97,8 @@ function assertTextDiffCanBeFoundAndFailureIsVisible() {
   )
   assert.match(
     textDiff,
-    /if \(snapshot\.paneIds\.length === 2\)[\s\S]*runTextDiff\(ctx, snapshot, snapshot\.paneIds\[0\], snapshot\.paneIds\[1\]\)/,
-    'text-diff launcher item should directly compare when exactly two panes are open',
+    /sources\.length < 2[\s\S]*ok:\s*false/,
+    'text-diff launcher item should fail gracefully when fewer than two sources exist',
   )
   assert.match(
     textDiff,
@@ -107,13 +107,13 @@ function assertTextDiffCanBeFoundAndFailureIsVisible() {
   )
   assert.match(
     textDiff,
-    /submit:\s*\(choices\)[\s\S]*runTextDiffForSources\(ctx, selected\[0\], selected\[1\]\)/,
+    /submit\(choices\)[\s\S]*selected\[0\][\s\S]*selected\[1\]/,
     'text-diff source picker should compare the two selected sources on submit',
   )
   assert.match(
     textDiff,
-    /if \(snapshot\.paneIds\.length === 1\) return \[\.\.\.paneSources, \{ kind: ['"]clipboard['"] \}, \{ kind: ['"]empty['"] \}\]/,
-    'text-diff source picker should only offer clipboard and empty pane when exactly one pane is open',
+    /kind:\s*['"]clipboard['"][\s\S]*kind:\s*['"]empty['"]/,
+    'text-diff source picker should offer clipboard and empty pane sources',
   )
   assert.match(
     textDiff,
@@ -122,8 +122,8 @@ function assertTextDiffCanBeFoundAndFailureIsVisible() {
   )
   assert.match(
     textDiff,
-    /ctx\.api\.createPane\([\s\S]*direction:\s*['"]right['"]/,
-    'text-diff launcher item should create an empty right pane through the plugin launcher API',
+    /ctx\.api\.openDiffPage\(/,
+    'text-diff launcher item should open the diff page through the plugin launcher API',
   )
   assert.doesNotMatch(
     textDiff,
@@ -152,13 +152,65 @@ function assertTextDiffCanBeFoundAndFailureIsVisible() {
 function assertLauncherApiExposesPaneCreation() {
   assert.match(
     read('src/workspace/launcher/types.ts'),
-    /createPane\(options\?:\s*\{[\s\S]*direction\?:\s*['"]left['"]\s*\|\s*['"]right['"]\s*\|\s*['"]top['"]\s*\|\s*['"]bottom['"][\s\S]*\}\):\s*string/,
-    'PluginLauncherApi should expose generic pane creation for plugin-owned launcher flows',
+    /createPane\(options\?:\s*\{[\s\S]*direction\?:\s*['"]left['"]\s*\|\s*['"]right['"]\s*\|\s*['"]top['"]\s*\|\s*['"]bottom['"][\s\S]*\}\):\s*Promise<string \| undefined>/,
+    'PluginLauncherApi should expose async editor-pane creation for plugin-owned launcher flows',
+  )
+  const pluginApi = read('src/workspace/launcher/pluginApi.ts')
+  assert.match(
+    pluginApi,
+    /createPane:\s*\(options\)\s*=>\s*createQuickEditorPane\(options\)/,
+    'PluginLauncherApi createPane should route through the editor bridge',
+  )
+  assert.doesNotMatch(
+    pluginApi,
+    /createPane:\s*\(options\)[\s\S]{0,160}useWorkspaceStore\.getState\(\)\.createPane\(options\)/,
+    'Launcher PluginLauncherApi must not directly mutate editor workspace panes',
   )
   assert.match(
-    read('src/workspace/launcher/pluginApi.ts'),
-    /createPane:\s*\(options\)\s*=>\s*useWorkspaceStore\.getState\(\)\.createPane\(options\)/,
-    'PluginLauncherApi createPane should delegate to the workspace API',
+    pluginApi,
+    /function readActiveText[\s\S]*if \(!isEditorWindowRuntime\(\)\)[\s\S]*getActiveEditorContextSnapshot\(\)/,
+    'PluginLauncherApi must read active text from synced editor context outside the editor runtime',
+  )
+  assert.match(
+    pluginApi,
+    /function readActiveText[\s\S]*getActiveEditorContextSnapshot\(\)\?\.activeText/,
+    'PluginLauncherApi getActiveText must use activeText from synced editor context outside the editor runtime',
+  )
+  assert.match(
+    pluginApi,
+    /function readSelectionText[\s\S]*if \(!isEditorWindowRuntime\(\)\)[\s\S]*getActiveEditorContextSnapshot\(\)/,
+    'PluginLauncherApi must read selection text from synced editor context outside the editor runtime',
+  )
+  assert.match(
+    pluginApi,
+    /replaceActiveText:[\s\S]*if \(!isEditorWindowRuntime\(\)\)[\s\S]*createQuickEditorPane\(\{ text \}\)/,
+    'PluginLauncherApi replaceActiveText must route non-editor calls through quick editor pane creation',
+  )
+  assert.match(
+    pluginApi,
+    /insertText:[\s\S]*if \(!isEditorWindowRuntime\(\)\)[\s\S]*createQuickEditorPane\(\{ text \}\)/,
+    'PluginLauncherApi insertText must route non-editor calls through quick editor pane creation',
+  )
+  assert.match(
+    pluginApi,
+    /function emptyPaneSnapshot\(\)[\s\S]*activePaneId:\s*['"][\s\S]*paneIds:\s*\[\][\s\S]*renderers:\s*\{\}/,
+    'PluginLauncherApi must expose an empty pane snapshot fallback instead of reading launcher-local workspace state',
+  )
+  assert.match(
+    pluginApi,
+    /getPaneSnapshot:[\s\S]*if \(!snapshot\) return emptyPaneSnapshot\(\)[\s\S]*const state = useWorkspaceStore\.getState\(\)/,
+    'PluginLauncherApi getPaneSnapshot must only read workspaceStore inside the editor runtime branch',
+  )
+
+  assert.match(
+    pluginApi,
+    /isPanePanelOpen:\s*\([^)]*\)\s*=>\s*\{[\s\S]*if \(!isEditorWindowRuntime\(\)\) return false/,
+    'PluginLauncherApi must not inspect editor panel state from non-editor windows',
+  )
+  assert.match(
+    pluginApi,
+    /dispatchEffects:\s*\(effects:[^)]*\)\s*=>\s*\{[\s\S]*if \(!isEditorWindowRuntime\(\)\)[\s\S]*return \{ applied:\s*\[\], errors:/,
+    'PluginLauncherApi must reject direct effect dispatch outside the editor runtime',
   )
 }
 
@@ -175,11 +227,11 @@ function assertLauncherParamsAreLocalized() {
     'launcher item params should be localized, including labels and select options',
   )
 
-  const hostActions = read('src/workspace/launcher/hostActions.ts')
-  assert.match(hostActions, /host:pane:set-language/, 'host launcher actions should own pane language selection')
-  assert.match(hostActions, /labelI18n:\s*\{\s*zh:\s*['"]语言['"]\s*\}/, 'host language param should provide Chinese label text')
-  assert.match(hostActions, /labelI18n:\s*\{\s*zh:\s*['"]自动检测['"]\s*\}/, 'host language auto option should provide Chinese label text')
-  assert.match(hostActions, /labelI18n:\s*\{\s*zh:\s*['"]纯文本['"]\s*\}/, 'host language plaintext option should provide Chinese label text')
+  const hostEditorActions = read('src/workspace/launcher/hostEditorActions.ts')
+  assert.match(hostEditorActions, /host:pane:set-language/, 'editor-local host actions should own pane language selection')
+  assert.match(hostEditorActions, /labelI18n:\s*\{\s*zh:\s*['"]语言['"]\s*\}/, 'host language param should provide Chinese label text')
+  assert.match(hostEditorActions, /labelI18n:\s*\{\s*zh:\s*['"]自动检测['"]\s*\}/, 'host language auto option should provide Chinese label text')
+  assert.match(hostEditorActions, /labelI18n:\s*\{\s*zh:\s*['"]纯文本['"]\s*\}/, 'host language plaintext option should provide Chinese label text')
 }
 
 function assertLauncherSystemMessagesAreLocalized() {

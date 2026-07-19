@@ -1,0 +1,1129 @@
+<!doctype html>
+<!-- prettier-ignore -->
+<!--
+  hiven / text-diff 双栏比较视图 — 静态 mockup（仅供视觉评审，无真实功能）
+  accent 使用 #2563eb（light）/ #3b82f6（dark）
+-->
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>hiven · text-diff 双栏比较视图 Mockup</title>
+    <style>
+      :root {
+        --font-sans:
+          'Inter', 'PingFang SC', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+          sans-serif;
+        --font-mono:
+          'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+        --ease: cubic-bezier(0.16, 1, 0.3, 1);
+        --r-panel: 12px;
+        --r-ctrl: 7px;
+        --r-btn: 6px;
+      }
+      html[data-theme='light'] {
+        --bg-outer: #f3f3f3;
+        --bg-content: #fff;
+        --bg-tertiary: #e8e8e8;
+        --bg-hover: rgba(0, 0, 0, 0.04);
+        --text-1: #1a1a1a;
+        --text-2: #6f6f6f;
+        --text-3: #8a8a8a;
+        --border-2: #e0e0e0;
+        --border-3: #ebebeb;
+        --accent: #2563eb;
+        --accent-tint: #eef2ff;
+        --error: #be1100;
+        --error-bg: rgba(190, 17, 0, 0.08);
+        --panel-sh:
+          0 24px 56px -16px rgba(15, 23, 42, 0.18),
+          0 4px 12px rgba(15, 23, 42, 0.06);
+        --del-bg: #fff0ee;
+        --del-hover: #ffe8e5;
+        --del-chip: #ffc9c3;
+        --add-bg: #eafbee;
+        --add-hover: #dbf7e2;
+        --add-chip: #abf2bc;
+        --sep: #e0e0e0;
+        --stripe: rgba(0, 0, 0, 0.035);
+        --stage-bg: #e9e9ec;
+        --stage-bar: rgba(233, 233, 236, 0.88);
+        --stage-t: #6f6f6f;
+        --stage-ts: #28282b;
+        --tog-bg: #e4e4e8;
+        --tog-act: #fff;
+        --tog-sh: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+        --dd-sh:
+          0 6px 20px -4px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.06);
+      }
+      html[data-theme='dark'] {
+        --bg-outer: #2a2a2e;
+        --bg-content: #1e1e21;
+        --bg-tertiary: #3a3a3f;
+        --bg-hover: rgba(255, 255, 255, 0.05);
+        --text-1: #f2f2f4;
+        --text-2: #a0a0a8;
+        --text-3: #6d6d75;
+        --border-2: #3e3e44;
+        --border-3: #333338;
+        --accent: #3b82f6;
+        --accent-tint: rgba(59, 130, 246, 0.14);
+        --error: #ef4444;
+        --error-bg: rgba(239, 68, 68, 0.12);
+        --panel-sh:
+          0 28px 64px -16px rgba(0, 0, 0, 0.65),
+          0 0 0 1px rgba(255, 255, 255, 0.04);
+        --del-bg: rgba(248, 81, 73, 0.1);
+        --del-hover: rgba(248, 81, 73, 0.16);
+        --del-chip: rgba(248, 81, 73, 0.34);
+        --add-bg: rgba(63, 185, 80, 0.1);
+        --add-hover: rgba(63, 185, 80, 0.16);
+        --add-chip: rgba(63, 185, 80, 0.36);
+        --sep: #3e3e44;
+        --stripe: rgba(255, 255, 255, 0.035);
+        --stage-bg: #0e0e10;
+        --stage-bar: rgba(14, 14, 16, 0.88);
+        --stage-t: #8b8b93;
+        --stage-ts: #e4e4e7;
+        --tog-bg: #333338;
+        --tog-act: #484850;
+        --tog-sh: 0 1px 3px rgba(0, 0, 0, 0.3);
+        --dd-sh:
+          0 8px 24px -4px rgba(0, 0, 0, 0.5),
+          0 0 0 1px rgba(255, 255, 255, 0.05);
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: var(--font-sans);
+        background: var(--stage-bg);
+        min-height: 100vh;
+        -webkit-font-smoothing: antialiased;
+      }
+      .stage-bar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 14px;
+        padding: 10px 20px;
+        background: var(--stage-bar);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--border-3);
+      }
+      .stage-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font: 600 13px/1 var(--font-sans);
+        color: var(--stage-ts);
+        white-space: nowrap;
+      }
+      .stage-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      .stage-controls {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .stage-label {
+        font-size: 11px;
+        color: var(--stage-t);
+        margin-right: 2px;
+      }
+      .seg {
+        display: inline-flex;
+        padding: 2px;
+        gap: 2px;
+        border-radius: 8px;
+        background: var(--tog-bg);
+      }
+      .seg-i {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        border: 0;
+        background: 0;
+        color: var(--text-2);
+        font: 500 12px/1 var(--font-sans);
+        padding: 5px 11px;
+        border-radius: 6px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: all 0.15s;
+      }
+      .seg-i:hover:not(.on) {
+        color: var(--text-1);
+        background: var(--bg-hover);
+      }
+      .seg-i.on {
+        background: var(--tog-act);
+        color: var(--text-1);
+        font-weight: 600;
+        box-shadow: var(--tog-sh);
+      }
+      .seg-i svg {
+        width: 13px;
+        height: 13px;
+      }
+      .canvas {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 48px 20px 100px;
+        gap: 56px;
+      }
+      .scene {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+      }
+      .scene[hidden] {
+        display: none;
+      }
+      .caption {
+        font-size: 12px;
+        color: var(--stage-t);
+      }
+      .caption b {
+        color: var(--stage-ts);
+        font-weight: 600;
+      }
+      .panel {
+        display: flex;
+        flex-direction: column;
+        background: var(--bg-outer);
+        border: 1px solid var(--border-2);
+        border-radius: var(--r-panel);
+        box-shadow: var(--panel-sh);
+        color: var(--text-1);
+        overflow: visible;
+      }
+      .hdr {
+        display: flex;
+        align-items: center;
+        height: 42px;
+        padding: 0 10px 0 12px;
+        gap: 6px;
+        border-bottom: 1px solid var(--border-3);
+        background: var(--bg-outer);
+        user-select: none;
+        flex-shrink: 0;
+        position: relative;
+        z-index: 5;
+      }
+      .hdr--s {
+        padding: 0 10px;
+      }
+      .hdr--s .hdr-c {
+        margin-left: 0;
+      }
+      .hdr--s .hdr-a {
+        margin-left: auto;
+      }
+      .bc-back {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 8px;
+        border-radius: var(--r-btn);
+        border: 0;
+        background: 0;
+        color: var(--text-2);
+        font: 500 13px/1 var(--font-sans);
+        cursor: pointer;
+      }
+      .bc-back:hover {
+        background: var(--bg-tertiary);
+        color: var(--text-1);
+      }
+      .bc-back svg {
+        width: 14px;
+        height: 14px;
+      }
+      .bc-root {
+        font-weight: 600;
+      }
+      .bc-sep {
+        color: var(--text-3);
+        font-size: 12px;
+        margin: 0 1px;
+      }
+      .bc-cur {
+        font-size: 13px;
+        color: var(--text-2);
+      }
+      .hdr-c {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .hdr-a {
+        display: flex;
+        align-items: center;
+        gap: 1px;
+        margin-left: 8px;
+      }
+      .mt {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px;
+        gap: 1px;
+        border-radius: var(--r-ctrl);
+        background: var(--tog-bg);
+      }
+      .mt-i {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border: 0;
+        background: 0;
+        color: var(--text-3);
+        font: 500 11px/1 var(--font-sans);
+        padding: 4px 9px;
+        border-radius: 5px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: all 0.15s;
+      }
+      .mt-i:hover:not(.on) {
+        color: var(--text-2);
+      }
+      .mt-i.on {
+        background: var(--tog-act);
+        color: var(--text-1);
+        font-weight: 600;
+        box-shadow: var(--tog-sh);
+      }
+      .mt-i svg {
+        width: 11px;
+        height: 11px;
+      }
+      /* JSON wrapper: contains button + dropdown as siblings */
+      .json-wrap {
+        position: relative;
+        display: inline-flex;
+      }
+      .json-wrap .mt-i {
+        border-radius: 5px;
+      }
+      .mode-badge {
+        font-size: 9px;
+        font-weight: 600;
+        color: var(--accent);
+        margin-left: 1px;
+      }
+      .dd {
+        position: absolute;
+        top: calc(100% + 8px);
+        left: 50%;
+        transform: translateX(-50%);
+        display: none;
+        flex-direction: column;
+        min-width: 110px;
+        padding: 4px;
+        border-radius: var(--r-ctrl);
+        background: var(--bg-content);
+        border: 1px solid var(--border-2);
+        box-shadow: var(--dd-sh);
+        z-index: 30;
+      }
+      .dd.open {
+        display: flex;
+      }
+      .dd-i {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        border: 0;
+        background: 0;
+        color: var(--text-2);
+        font: 500 12px/1 var(--font-sans);
+        padding: 7px 10px;
+        border-radius: 5px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: all 0.1s;
+      }
+      .dd-i:hover {
+        background: var(--bg-hover);
+        color: var(--text-1);
+      }
+      .dd-i.on {
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .dd-i svg {
+        width: 13px;
+        height: 13px;
+      }
+      .dd-i .ck {
+        opacity: 0;
+        margin-left: auto;
+      }
+      .dd-i.on .ck {
+        opacity: 1;
+      }
+      .ib {
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 0;
+        border-radius: var(--r-btn);
+        background: 0;
+        color: var(--text-3);
+        cursor: pointer;
+        transition: all 0.12s;
+      }
+      .ib:hover {
+        background: var(--bg-tertiary);
+        color: var(--text-1);
+      }
+      .ib:active {
+        transform: scale(0.92);
+      }
+      .ib--d:hover {
+        background: var(--error-bg);
+        color: var(--error);
+      }
+      .ib svg {
+        width: 14px;
+        height: 14px;
+      }
+      .ib.spin svg {
+        animation: sp 0.35s var(--ease);
+      }
+      @keyframes sp {
+        from {
+          transform: rotate(0);
+        }
+        to {
+          transform: rotate(180deg);
+        }
+      }
+      .sbar {
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        background: var(--bg-outer);
+        border-top: 1px solid var(--border-3);
+        user-select: none;
+        flex-shrink: 0;
+      }
+      .nav {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+      }
+      .nav-b {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        border: 0;
+        background: 0;
+        color: var(--text-3);
+        font: 500 11px/1 var(--font-sans);
+        padding: 3px 8px;
+        border-radius: var(--r-btn);
+        cursor: pointer;
+        transition: all 0.12s;
+      }
+      .nav-b:hover {
+        background: var(--bg-tertiary);
+        color: var(--text-1);
+      }
+      .nav-b:active {
+        transform: scale(0.95);
+      }
+      .nav-b svg {
+        width: 11px;
+        height: 11px;
+      }
+      .nav-p {
+        font: 600 11px/1 var(--font-sans);
+        color: var(--text-2);
+        font-variant-numeric: tabular-nums;
+        padding: 0 4px;
+        min-width: 32px;
+        text-align: center;
+      }
+      .dbody {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        overflow: auto;
+        background: var(--bg-content);
+      }
+      .dp {
+        flex: 1 1 50%;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        cursor: text;
+        padding: 4px 0;
+      }
+      .dp--l {
+        border-right: 1px solid var(--sep);
+      }
+      .dp.foc {
+        box-shadow: inset 0 2px 0 var(--accent);
+      }
+      .pl {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        height: 24px;
+        padding: 0 14px;
+        font: 600 10px/1 var(--font-sans);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-3);
+        background: var(--bg-content);
+        border-bottom: 1px solid var(--border-3);
+        user-select: none;
+      }
+      .dr {
+        display: flex;
+        height: 22px;
+        flex-shrink: 0;
+        transition: background 0.08s;
+      }
+      .dr:hover {
+        background: var(--bg-hover);
+      }
+      .dr--del:hover .dc,
+      .dr--md:hover .dc {
+        background: var(--del-hover);
+      }
+      .dr--add:hover .dc,
+      .dr--ma:hover .dc {
+        background: var(--add-hover);
+      }
+      .dg {
+        flex: 0 0 38px;
+        text-align: right;
+        padding-right: 10px;
+        font: 11px/22px var(--font-mono);
+        color: var(--text-3);
+        font-variant-numeric: tabular-nums;
+        user-select: none;
+        opacity: 0.7;
+      }
+      .dc {
+        flex: 1;
+        min-width: 0;
+        padding: 0 14px;
+        font: 12.5px/22px var(--font-mono);
+        white-space: pre;
+        overflow: hidden;
+        color: var(--text-1);
+        border-radius: 2px;
+      }
+      .dr--del .dc,
+      .dr--md .dc {
+        background: var(--del-bg);
+      }
+      .dr--add .dc,
+      .dr--ma .dc {
+        background: var(--add-bg);
+      }
+      .dc--ph {
+        background-image: repeating-linear-gradient(
+          135deg,
+          var(--stripe) 0,
+          var(--stripe) 1px,
+          transparent 1px,
+          transparent 8px
+        );
+        opacity: 0.7;
+      }
+      .chip {
+        border-radius: 2px;
+        padding: 0 1px;
+      }
+      .chip--d {
+        background: var(--del-chip);
+      }
+      .chip--a {
+        background: var(--add-chip);
+      }
+      .cur {
+        display: inline-block;
+        width: 1.5px;
+        height: 14px;
+        margin-left: 1px;
+        vertical-align: -3px;
+        background: var(--accent);
+        border-radius: 1px;
+        animation: blink 1s step-end infinite;
+      }
+      @keyframes blink {
+        0%,
+        49% {
+          opacity: 1;
+        }
+        50%,
+        100% {
+          opacity: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="stage-bar">
+      <div class="stage-title">
+        <span class="stage-dot"></span>hiven · text-diff 双栏比较视图 Mockup
+      </div>
+      <div class="stage-controls">
+        <span class="stage-label">宿主形态</span>
+        <div class="seg">
+          <button class="seg-i on" data-host="launcher">Launcher 内嵌</button>
+          <button class="seg-i" data-host="window">独立窗口</button>
+        </div>
+        <span class="stage-label">主题</span>
+        <div class="seg">
+          <button class="seg-i on" data-theme="light">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <circle cx="12" cy="12" r="4" />
+              <path
+                d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"
+              /></svg
+            >浅色
+          </button>
+          <button class="seg-i" data-theme="dark">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" /></svg
+            >深色
+          </button>
+        </div>
+      </div>
+    </header>
+    <main class="canvas">
+      <!-- ① Launcher 内嵌 -->
+      <section class="scene" data-scene="launcher">
+        <p class="caption">
+          <b>Launcher 内嵌形态</b> · 920×720 · 面包屑+工具合一 · 默认可编辑
+        </p>
+        <div class="panel" style="width: 920px; height: 720px">
+          <div class="hdr">
+            <button class="bc-back">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="m15 18-6-6 6-6" /></svg
+              ><span class="bc-root">hiven</span>
+            </button>
+            <span class="bc-sep">/</span>
+            <span class="bc-cur">文本比较</span>
+            <div class="hdr-c">
+              <div class="mt">
+                <button class="mt-i on" data-mode="text">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M4 7V4h16v3" />
+                    <path d="M9 20h6" />
+                    <path d="M12 4v16" /></svg
+                  >文本
+                </button>
+                <div class="json-wrap">
+                  <button class="mt-i" data-mode="json">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1"
+                      />
+                      <path
+                        d="M16 3h1a2 2 0 0 1 2 2v5a2 2 0 0 0 2 2 2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1"
+                      /></svg
+                    >JSON 语义<span class="mode-badge">有序</span>
+                  </button>
+                  <div class="dd">
+                    <button class="dd-i on" data-arr="ordered">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                      >
+                        <path d="M4 6h16" />
+                        <path d="M4 12h16" />
+                        <path d="M4 18h16" /></svg
+                      >数组有序<svg
+                        class="ck"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                      >
+                        <path d="M20 6 9 17l-5-5" />
+                      </svg>
+                    </button>
+                    <button class="dd-i" data-arr="unordered">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                      >
+                        <path d="M3 7h4l3 9 4-15 3 6h4" /></svg
+                      >数组无序<svg
+                        class="ck"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                      >
+                        <path d="M20 6 9 17l-5-5" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="hdr-a">
+              <button class="ib" data-action="swap" title="交换左右">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="m16 3 4 4-4 4" />
+                  <path d="M20 7H4" />
+                  <path d="m8 21-4-4 4-4" />
+                  <path d="M4 17h16" />
+                </svg>
+              </button>
+              <button class="ib" title="脱离为独立窗口">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M15 3h6v6" />
+                  <path d="M10 14 21 3" />
+                  <path
+                    d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"
+                  />
+                </svg>
+              </button>
+              <button class="ib" title="关闭">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M18 6 6 18" />
+                  <path d="m6 6 12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="dbody">
+            <div class="dp dp--l foc" data-side="l">
+              <div class="pl">原始 Original</div>
+            </div>
+            <div class="dp" data-side="r">
+              <div class="pl">修改 Modified</div>
+            </div>
+          </div>
+          <div class="sbar">
+            <div class="nav">
+              <button class="nav-b">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="m18 15-6-6-6 6" /></svg
+                >上一处
+              </button>
+              <span class="nav-p">1 / 3</span>
+              <button class="nav-b">
+                下一处<svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ② 独立窗口 -->
+      <section class="scene" data-scene="window" hidden>
+        <p class="caption">
+          <b>独立窗口形态</b> · 1200×720 · 无面包屑 · 默认可编辑
+        </p>
+        <div class="panel" style="width: 1200px; height: 720px">
+          <div class="hdr hdr--s">
+            <div class="hdr-c">
+              <div class="mt">
+                <button class="mt-i on" data-mode="text">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M4 7V4h16v3" />
+                    <path d="M9 20h6" />
+                    <path d="M12 4v16" /></svg
+                  >文本
+                </button>
+                <div class="json-wrap">
+                  <button class="mt-i" data-mode="json">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1"
+                      />
+                      <path
+                        d="M16 3h1a2 2 0 0 1 2 2v5a2 2 0 0 0 2 2 2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1"
+                      /></svg
+                    >JSON 语义<span class="mode-badge">有序</span>
+                  </button>
+                  <div class="dd">
+                    <button class="dd-i on" data-arr="ordered">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                      >
+                        <path d="M4 6h16" />
+                        <path d="M4 12h16" />
+                        <path d="M4 18h16" /></svg
+                      >数组有序<svg
+                        class="ck"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                      >
+                        <path d="M20 6 9 17l-5-5" />
+                      </svg>
+                    </button>
+                    <button class="dd-i" data-arr="unordered">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                      >
+                        <path d="M3 7h4l3 9 4-15 3 6h4" /></svg
+                      >数组无序<svg
+                        class="ck"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                      >
+                        <path d="M20 6 9 17l-5-5" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="hdr-a">
+              <button class="ib" data-action="swap" title="交换左右">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="m16 3 4 4-4 4" />
+                  <path d="M20 7H4" />
+                  <path d="m8 21-4-4 4-4" />
+                  <path d="M4 17h16" />
+                </svg>
+              </button>
+              <button class="ib ib--d" title="关闭窗口">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M18 6 6 18" />
+                  <path d="m6 6 12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="dbody">
+            <div class="dp dp--l foc" data-side="l">
+              <div class="pl">原始 Original</div>
+            </div>
+            <div class="dp" data-side="r">
+              <div class="pl">修改 Modified</div>
+            </div>
+          </div>
+          <div class="sbar">
+            <div class="nav">
+              <button class="nav-b">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="m18 15-6-6-6 6" /></svg
+                >上一处
+              </button>
+              <span class="nav-p">1 / 3</span>
+              <button class="nav-b">
+                下一处<svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script>
+      !(function () {
+        var R = [
+          {
+            l: { n: 1, t: '# hiven 桌面工作台配置 (workbench.config)' },
+            r: { n: 1, t: '# hiven 桌面工作台配置 (workbench.config)' },
+          },
+          {
+            l: { n: 2, t: '# 编辑此文件后需要重启应用生效' },
+            r: { n: 2, t: '# 编辑此文件后需要重启应用生效' },
+          },
+          { l: { n: 3, t: '' }, r: { n: 3, t: '' } },
+          {
+            l: { n: 4, t: 'app.name = "hiven"' },
+            r: { n: 4, t: 'app.name = "hiven"' },
+          },
+          {
+            type: 'mod',
+            l: { n: 5, pre: 'app.version = "2.', chip: '4', post: '.0"' },
+            r: { n: 5, pre: 'app.version = "2.', chip: '5', post: '.0"' },
+          },
+          {
+            l: { n: 6, t: 'window.width = 1440' },
+            r: { n: 6, t: 'window.width = 1440' },
+          },
+          {
+            l: { n: 7, t: 'window.height = 900' },
+            r: { n: 7, t: 'window.height = 900' },
+          },
+          {
+            l: { n: 8, t: 'window.resizable = true' },
+            r: { n: 8, t: 'window.resizable = true' },
+          },
+          { l: { n: 9, t: '' }, r: { n: 9, t: '' } },
+          {
+            l: { n: 10, t: '# 编辑器设置 editor settings' },
+            r: { n: 10, t: '# 编辑器设置 editor settings' },
+          },
+          {
+            l: { n: 11, t: 'editor.fontFamily = "JetBrains Mono"' },
+            r: { n: 11, t: 'editor.fontFamily = "JetBrains Mono"' },
+          },
+          { type: 'del', l: { n: 12, t: 'editor.tabSize = 2' }, r: null },
+          {
+            l: { n: 13, t: 'editor.wordWrap = "on"' },
+            r: { n: 12, t: 'editor.wordWrap = "on"' },
+          },
+          {
+            type: 'add',
+            l: null,
+            r: { n: 13, t: 'editor.rulers = [80, 120]' },
+          },
+          {
+            l: { n: 14, t: '# 启动行为 startup behavior' },
+            r: { n: 14, t: '# 启动行为 startup behavior' },
+          },
+        ];
+        function e(s) {
+          return String(s).replace(/[&<>]/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c];
+          });
+        }
+        function row(r, s) {
+          var c = r[s];
+          if (!c)
+            return '<div class="dr"><span class="dg"></span><span class="dc dc--ph"></span></div>';
+          var k = 'dr';
+          if (r.type === 'del' && s === 'l') k += ' dr--del';
+          if (r.type === 'add' && s === 'r') k += ' dr--add';
+          if (r.type === 'mod') k += s === 'l' ? ' dr--md' : ' dr--ma';
+          var h;
+          if (r.type === 'mod') {
+            var cc = 'chip ' + (s === 'l' ? 'chip--d' : 'chip--a');
+            h =
+              e(c.pre) +
+              '<span class="' +
+              cc +
+              '">' +
+              e(c.chip) +
+              '</span>' +
+              e(c.post);
+            if (s === 'l') h += '<span class="cur"></span>';
+          } else h = e(c.t);
+          return (
+            '<div class="' +
+            k +
+            '"><span class="dg">' +
+            c.n +
+            '</span><span class="dc">' +
+            h +
+            '</span></div>'
+          );
+        }
+        document.querySelectorAll('.dp[data-side]').forEach(function (p) {
+          var s = p.dataset.side;
+          p.insertAdjacentHTML(
+            'beforeend',
+            R.map(function (r) {
+              return row(r, s);
+            }).join('')
+          );
+        });
+        // Host
+        document.querySelectorAll('[data-host]').forEach(function (b) {
+          b.onclick = function () {
+            document.querySelectorAll('[data-host]').forEach(function (x) {
+              x.classList.remove('on');
+            });
+            b.classList.add('on');
+            document.querySelectorAll('.scene').forEach(function (s) {
+              s.hidden = s.dataset.scene !== b.dataset.host;
+            });
+          };
+        });
+        // Theme
+        document.querySelectorAll('[data-theme]').forEach(function (b) {
+          b.onclick = function () {
+            document.querySelectorAll('[data-theme]').forEach(function (x) {
+              x.classList.remove('on');
+            });
+            b.classList.add('on');
+            document.documentElement.dataset.theme = b.dataset.theme;
+          };
+        });
+        // Mode toggle
+        document.querySelectorAll('.mt').forEach(function (g) {
+          var btns = g.querySelectorAll('.mt-i');
+          btns.forEach(function (b) {
+            b.onclick = function (ev) {
+              if (ev.target.closest('.dd')) return;
+              var isJ = b.dataset.mode === 'json',
+                wrap = b.closest('.json-wrap'),
+                dd = wrap ? wrap.querySelector('.dd') : null;
+              if (b.classList.contains('on') && isJ && dd) {
+                dd.classList.toggle('open');
+                ev.stopPropagation();
+                return;
+              }
+              btns.forEach(function (x) {
+                x.classList.remove('on');
+              });
+              document.querySelectorAll('.dd.open').forEach(function (d) {
+                d.classList.remove('open');
+              });
+              b.classList.add('on');
+              if (isJ && dd) dd.classList.add('open');
+            };
+          });
+        });
+        // Dropdown items
+        document.querySelectorAll('.dd').forEach(function (dd) {
+          var items = dd.querySelectorAll('.dd-i');
+          var badge = dd.closest('.json-wrap').querySelector('.mode-badge');
+          items.forEach(function (b) {
+            b.onclick = function (ev) {
+              ev.stopPropagation();
+              items.forEach(function (x) {
+                x.classList.remove('on');
+              });
+              b.classList.add('on');
+              if (badge)
+                badge.textContent =
+                  b.dataset.arr === 'ordered' ? '有序' : '无序';
+              dd.classList.remove('open');
+            };
+          });
+        });
+        // Outside click closes dropdown
+        document.addEventListener('click', function (ev) {
+          if (!ev.target.closest('.json-wrap'))
+            document.querySelectorAll('.dd.open').forEach(function (d) {
+              d.classList.remove('open');
+            });
+        });
+        // Swap spin
+        document.querySelectorAll('[data-action="swap"]').forEach(function (b) {
+          b.onclick = function () {
+            b.classList.remove('spin');
+            void b.offsetWidth;
+            b.classList.add('spin');
+          };
+        });
+      })();
+    </script>
+  </body>
+</html>

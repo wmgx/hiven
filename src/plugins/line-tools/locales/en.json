@@ -1,0 +1,16 @@
+{
+  "sort.title": "Sort Lines", "sort.description": "Sort lines alphabetically",
+  "dedup.title": "Deduplicate Lines", "dedup.description": "Remove duplicate lines",
+  "reverse.title": "Reverse Lines", "reverse.description": "Reverse line order",
+  "reverseText.title": "Reverse Text", "reverseText.description": "Reverse all characters",
+  "removeBlankLines.title": "Remove Blank Lines", "removeBlankLines.description": "Remove all empty lines",
+  "trimWhitespace.title": "Trim Whitespace", "trimWhitespace.description": "Trim leading/trailing whitespace per line",
+  "join.title": "Join Lines", "join.description": "Join lines with a separator",
+  "prepend.title": "Prepend Lines", "prepend.description": "Add prefix text to each line",
+  "append.title": "Append Lines", "append.description": "Add suffix text to each line",
+  "wrap.title": "Wrap Lines", "wrap.description": "Wrap each line with left/right text",
+  "sqlin.string.title": "SQL IN (String)", "sqlin.string.description": "Convert lines to SQL IN clause (string mode)",
+  "sqlin.number.title": "SQL IN (Number)", "sqlin.number.description": "Convert lines to SQL IN clause (number mode)",
+  "param.direction.label": "Direction", "param.direction.asc": "Ascending", "param.direction.desc": "Descending",
+  "param.ignoreCase": "Ignore Case", "param.separator": "Separator", "param.prefix": "Prefix", "param.suffix": "Suffix", "param.left": "Left", "param.right": "Right"
+}

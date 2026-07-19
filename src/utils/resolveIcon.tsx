@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { icons } from 'lucide-react'
 import { createPluginPrivateStorage } from '../workspace/pluginStorage'
 import type { PluginSettingsSource } from '../workspace/pluginSettingsStore'
+import { launcherPerfNow, logLauncherPerfDuration } from '../workspace/launcher/perf'
 
 type NativeAppIconUrlResult = string | null
 
@@ -20,6 +21,7 @@ function scheduleAppIconLoads(): void {
     const job = appIconQueue.shift()
     if (!job) return
     activeAppIconLoads++
+    const startedAt = launcherPerfNow()
 
     void import('@tauri-apps/api/core')
       .then(({ convertFileSrc, invoke }) =>
@@ -27,6 +29,11 @@ function scheduleAppIconLoads(): void {
           .then((path) => path ? convertFileSrc(path) : ''),
       )
       .then((url) => {
+        logLauncherPerfDuration('app-icon:load', startedAt, {
+          appId: job.appId,
+          hasUrl: Boolean(url),
+          queueLength: appIconQueue.length,
+        })
         if (!url) {
           appIconUrlCache.set(job.appId, null)
           job.resolve('')
@@ -36,6 +43,11 @@ function scheduleAppIconLoads(): void {
         job.resolve(url)
       })
       .catch((error) => {
+        logLauncherPerfDuration('app-icon:load', startedAt, {
+          appId: job.appId,
+          failed: true,
+          message: error instanceof Error ? error.message : String(error),
+        })
         if (import.meta.env.DEV) console.warn('[hiven] Failed to read app icon:', job.appId, error)
         appIconUrlCache.set(job.appId, null)
         job.resolve('')
@@ -54,6 +66,11 @@ function loadAppIconUrl(appId: string): Promise<string> {
   if (inflight) return inflight
   const promise = new Promise<string>((resolve) => {
     appIconQueue.push({ appId, resolve })
+    logLauncherPerfDuration('app-icon:queued', launcherPerfNow(), {
+      appId,
+      queueLength: appIconQueue.length,
+      activeLoads: activeAppIconLoads,
+    })
     scheduleAppIconLoads()
   })
   appIconInflight.set(appId, promise)

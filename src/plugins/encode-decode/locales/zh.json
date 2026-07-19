@@ -1,0 +1,20 @@
+{
+  "base64.encode.title": "Base64 编码",
+  "base64.encode.description": "将文本进行 Base64 编码",
+  "base64.decode.title": "Base64 解码",
+  "base64.decode.description": "将 Base64 文本解码为原始文本",
+  "url.encode.title": "URL 编码",
+  "url.encode.description": "对文本进行 URL 编码（encodeURIComponent）",
+  "url.decode.title": "URL 解码",
+  "url.decode.description": "对 URL 编码文本进行解码（decodeURIComponent）",
+  "html.encode.title": "HTML 实体编码",
+  "html.encode.description": "将 HTML 特殊字符转为实体（如 < → &lt;）",
+  "html.decode.title": "HTML 实体解码",
+  "html.decode.description": "将 HTML 实体还原为字符（如 &lt; → <）",
+  "slashes.escape.title": "转义",
+  "slashes.escape.description": "转义特殊字符（引号、换行、制表符等）",
+  "slashes.unescape.title": "反转义",
+  "slashes.unescape.description": "反转义特殊字符（还原 \\n \\t \\\" 等）",
+  "jwt.decode.title": "JWT 解码",
+  "jwt.decode.description": "解码 JWT 令牌，展示 Header 和 Payload"
+}

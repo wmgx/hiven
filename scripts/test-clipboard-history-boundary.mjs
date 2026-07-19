@@ -134,8 +134,8 @@ assert.match(pluginTypes, /permissions\?\s*:\s*(?:string\[\]|PluginPermission\[\
 // ─── 6. Runtime must not grant permissions unconditionally ──────────────────
 
 const bgManager = read('src/workspace/pluginBackgroundManager.ts')
-const launcher = read('src/components/GlobalLauncher.tsx')
-const scriptsView = read('src/views/ScriptsView.tsx')
+const launcher = read('src/components/GlobalLauncher.tsx') + '\n' + read('src/launcher/hosts/GlobalLauncherHost.tsx') + '\n' + read('src/components/launcher/GlobalLauncherSelection.ts') + '\n' + read('src/components/launcher/GlobalLauncherFrames.tsx') + '\n' + read('src/components/launcher/GlobalLauncherPermissionFrame.tsx')
+const pluginsSurfaceContent = read('src/surfaces/PluginsContent.tsx')
 const indexCss = read('src/index.css')
 const scriptsI18n = read('src/i18n/locales/scripts.ts')
 
@@ -146,13 +146,13 @@ assert.match(bgManager, /usePluginPermissionStore\.subscribe/, 'background manag
 assert.match(bgManager, /stopBackground\(instance\.source,\s*instance\.pluginId\)/, 'background manager must stop active backgrounds when permissions are revoked')
 assert.match(launcher, /getPluginPermissionSnapshot|usePluginPermissionStore/, 'GlobalLauncher must use the permission store')
 assert.match(launcher, /PluginSurfacePermissionGate/, 'GlobalLauncher must show a host permission gate before rendering protected surfaces')
-assert.match(scriptsView, /plugin-permissions[\s\S]{0,160}is-missing/, 'ScriptsView must render a prominent missing-permission console state')
-assert.match(scriptsView, /scripts\.permissionsBlockedTitle/, 'ScriptsView missing-permission state must have a localized title')
-assert.match(scriptsView, /scripts\.permissionsBlockedDetail/, 'ScriptsView missing-permission state must explain that background features are paused')
-assert.match(indexCss, /\.plugin-permissions\.is-missing/, 'Missing permission state must have dedicated ScriptsView styling')
+assert.match(pluginsSurfaceContent, /plugin-permissions[\s\S]{0,160}is-missing/, 'PluginsManagerSurfaceContent must render a prominent missing-permission console state')
+assert.match(pluginsSurfaceContent, /scripts\.permissionsBlockedTitle/, 'PluginsManagerSurfaceContent missing-permission state must have a localized title')
+assert.match(pluginsSurfaceContent, /scripts\.permissionsBlockedDetail/, 'PluginsManagerSurfaceContent missing-permission state must explain that background features are paused')
+assert.match(indexCss, /\.plugin-permissions\.is-missing/, 'Missing permission state must have dedicated PluginsManagerSurfaceContent styling')
 assert.match(indexCss, /\.plugin-permissions-grant/, 'Missing permission grant action must keep a dedicated style hook')
-assert.match(scriptsI18n, /permissionsBlockedTitle/, 'ScriptsView i18n must include missing permission title')
-assert.match(scriptsI18n, /permissionsBlockedDetail/, 'ScriptsView i18n must include missing permission detail')
+assert.match(scriptsI18n, /permissionsBlockedTitle/, 'PluginsManagerSurfaceContent i18n must include missing permission title')
+assert.match(scriptsI18n, /permissionsBlockedDetail/, 'PluginsManagerSurfaceContent i18n must include missing permission detail')
 
 // ─── 7. plugin-sdk.ts must re-export new types ──────────────────────────────
 

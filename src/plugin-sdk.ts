@@ -20,12 +20,12 @@ export type {
   PluginHostKits,
   PluginHostHooks,
   PluginHostI18n,
+  MonacoDisposable,
   TextCommandDefinition,
 } from './pluginHostSdk'
 export type { Locale } from './i18n'
 export type { TranslateFunction } from './i18n'
 export type { PluginT } from './i18n/pluginI18nRegistry'
-export type { JsonArrayCompareMode } from './kits/diff/jsonSemanticDiff'
 export type {
   CommandContribution,
   CommandParam,
@@ -49,6 +49,7 @@ export type {
   PluginSettingsModalBodyProps,
   PluginSettingsModalContribution,
   PluginSettingsModalField,
+  PluginSettingsObjectListItemField,
   PluginSettingsSchema,
   PluginSettingsSection,
   RendererContribution,
@@ -76,6 +77,12 @@ export type {
   PluginPrivateStorageApi,
   PluginBlobRef,
   PluginStoragePrunePolicy,
+  // Plugin Network types
+  PluginNetworkApi,
+  PluginNetworkRequest,
+  PluginNetworkResponse,
+  // Plugin Settings change hook
+  PluginSettingsChangeContext,
   // Plugin Clipboard types
   PluginClipboardApi,
   ClipboardChange,
@@ -95,6 +102,8 @@ export type {
   LauncherExecutionContext,
   LauncherExecuteHandler,
   LauncherExecuteResult,
+  LauncherSuggestContext,
+  LauncherSuggestHandler,
   LauncherOutput,
   LauncherResultChoice,
   LauncherResultAction,
@@ -126,3 +135,5 @@ export type {
   StatusEffect,
   TextReplaceEffect,
 } from './workspace/types'
+export type { DiffSource, FullscreenView } from './workspace/workspaceStore'
+export type { DiffSourceBinding } from './pluginHostSdk'

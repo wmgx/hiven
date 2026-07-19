@@ -11,6 +11,7 @@ import { DEFAULT_CLIPBOARD_HISTORY_SETTINGS } from './settings/model'
 import { ClipboardHistorySurface } from './surfaces/ClipboardHistorySurface'
 import { clipboardHistoryBackground } from './background/clipboardHistoryBackground'
 import { createClipboardHistoryRepository } from './storage/clipboardHistoryRepository'
+import { getCachedIndex } from './storage/clipboardHistoryCache'
 
 const MB = 1024 * 1024
 
@@ -85,6 +86,16 @@ export default definePlugin<ClipboardHistorySettings>({
               unit: 'days',
               unitI18n: { zh: '天' },
             },
+            {
+              kind: 'number',
+              key: 'frequentPasteThreshold',
+              label: 'Frequent paste threshold',
+              labelI18n: { zh: '常用粘贴次数门槛' },
+              icon: 'ListOrdered',
+              min: 2,
+              max: 20,
+              step: 1,
+            },
           ],
         },
         {
@@ -144,12 +155,17 @@ export default definePlugin<ClipboardHistorySettings>({
         aliases: ['clipboard', 'paste', 'history', '剪贴板', '粘贴板', '剪切板'],
         component: ClipboardHistorySurface,
         async beforeOpen(ctx) {
-          await createClipboardHistoryRepository(ctx.storage).getFreshListItems()
+          // 同进程内 background 已预热时跳过 IPC。独立 webview 冷启动时缓存必空：
+          // 不 await，让 Surface 先挂载（骨架屏），后台写缓存后通过 subscribe 刷新。
+          // 仍调用 getFreshListItems，满足预热契约并与 Surface 自身加载路径共享结果。
+          if (getCachedIndex()) return
+          void createClipboardHistoryRepository(ctx.storage).getFreshListItems()
         },
         entry: {
           launcher: true,
           shortcutBindable: true,
           recommendedShortcut: 'CmdOrCtrl+Shift+V',
+          shortcutPresentation: 'window',
         },
         shell: {
           defaultWidth: 900,
@@ -158,6 +174,10 @@ export default definePlugin<ClipboardHistorySettings>({
           minHeight: 360,
           closeOnBlur: true,
           resizable: false,
+          rendersTitlebar: true,
+          // 默认 2 分钟销毁对高频剪贴板场景太短，冷启动会反复加载 webview。
+          // 30 分钟内热开：原生 show() 复用已存活 webview，接近瞬时。
+          destroyTimeout: 30 * 60 * 1000,
         },
       },
     ],

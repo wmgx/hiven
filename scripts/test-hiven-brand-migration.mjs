@@ -19,8 +19,10 @@ const tauriConfig = JSON.parse(read('src-tauri/tauri.conf.json'))
 const cargoToml = read('src-tauri/Cargo.toml')
 const tauriLib = read('src-tauri/src/lib.rs')
 const hotkeys = read('src-tauri/src/hotkeys.rs')
+const globalPinnedLauncher = read('src/hotkeys/globalPinnedLauncher.ts')
 const app = read('src/App.tsx')
 const globalLauncher = read('src/components/GlobalLauncher.tsx')
+const globalLauncherHost = read('src/launcher/hosts/GlobalLauncherHost.tsx')
 const main = read('src/main.tsx')
 const store = read('src/store.ts')
 const pluginStore = read('src/workspace/pluginStore.ts')
@@ -38,12 +40,12 @@ const configInit = read('src/configInit.ts')
 assert.equal(packageJson.name, 'hiven-app', 'package.json should use the hiven app package name')
 assert.equal(packageLock.name, 'hiven-app', 'package-lock root name should use hiven-app')
 assert.equal(packageLock.packages[''].name, 'hiven-app', 'package-lock package metadata should use hiven-app')
-assertIncludes(indexHtml, '<title>hiven</title>', 'HTML title should use hiven')
+assertIncludes(indexHtml, '<title>Hiven</title>', 'HTML title should use Hiven')
 
-assert.equal(tauriConfig.productName, 'hiven', 'Tauri productName should be hiven')
+assert.equal(tauriConfig.productName, 'Hiven', 'Tauri productName should be Hiven')
 assert.equal(tauriConfig.identifier, 'com.hiven.app', 'Tauri bundle identifier should be com.hiven.app')
-assert.equal(tauriConfig.app.windows.find((window) => window.label === 'main')?.title, 'hiven', 'main window title should be hiven')
-assert.equal(tauriConfig.app.windows.find((window) => window.label === 'launcher')?.title, 'hiven Launcher', 'launcher window title should be hiven Launcher')
+assert.ok(!tauriConfig.app.windows.some((window) => window.label === 'main'), 'retired main window should not be declared after window architecture refactor')
+assert.equal(tauriConfig.app.windows.find((window) => window.label === 'launcher')?.title, 'Hiven Launcher', 'launcher window title should be Hiven Launcher')
 assert.deepEqual(tauriConfig.plugins.updater.endpoints, [
   'https://proxy.github.wmgx.top/github/wmgx/hiven/releases/latest/download/latest.json',
   'https://github.com/wmgx/hiven/releases/latest/download/latest.json',
@@ -59,7 +61,9 @@ assertIncludes(tauriLib, 'migrate_legacy_config_dir', 'native config init should
 assertIncludes(tauriLib, '[hiven]', 'native logs should use the hiven prefix')
 assertIncludes(tauriLib, 'hiven://launcher-open', 'native launcher event should use hiven scheme')
 assertNotIncludes(tauriLib, 'fluxtext://launcher-open', 'native launcher event should not use fluxtext scheme')
-assertIncludes(hotkeys, 'hiven://double-modifier-hotkey-error', 'hotkey event should use hiven scheme')
+assertIncludes(globalPinnedLauncher, 'hiven://double-modifier-hotkey-error', 'double-modifier error event should use hiven scheme')
+assertIncludes(globalPinnedLauncher, 'hiven://double-modifier-hotkey-ready', 'double-modifier ready event should use hiven scheme')
+assertIncludes(hotkeys, '[hiven]', 'native hotkey logs should use the hiven prefix')
 
 assertIncludes(store, "watchDirectory: '~/.local/hiven/plugins/installed'", 'default watch directory should point at hiven plugins')
 assertIncludes(store, "name: 'hiven-settings'", 'settings store should persist under hiven-settings')
@@ -67,7 +71,8 @@ assertIncludes(store, 'fluxtext-settings', 'settings store should read legacy Fl
 assertIncludes(pluginStore, "name: 'hiven-plugins'", 'plugin store should persist under hiven-plugins')
 assertIncludes(pluginStore, 'fluxtext-plugins', 'plugin store should read legacy FluxText plugin data during migration')
 assertIncludes(workspaceStore, "name: 'hiven-workspace'", 'workspace store should persist under hiven-workspace')
-assertIncludes(workspaceStore, 'fluxtext-workspace', 'workspace store should read legacy FluxText workspace data during migration')
+assertIncludes(workspaceStore, 'fluxtext-workspace', 'workspace store should read legacy FluxText workspace data during session-scoped migration')
+assertNotIncludes(workspaceStore, 'migrateLocalStorageKey', 'workspace store should not revive a persisted localStorage editor workspace during session migration')
 assertIncludes(cdnLoader, "const DB_NAME = 'hiven-cdn-cache'", 'CDN cache DB should use hiven')
 assertIncludes(cdnLoader, 'fluxtext-cdn-cache', 'CDN cache should include a legacy migration path')
 assertIncludes(main, "localStorage.getItem('hiven-settings')", 'theme bootstrap should read hiven settings')
@@ -85,10 +90,10 @@ assertIncludes(tsconfig, '"@fluxtext/plugin"', 'TypeScript paths should keep @fl
 assertIncludes(viteConfig, "'@hiven/plugin'", 'Vite alias should expose @hiven/plugin')
 assertIncludes(viteConfig, "'@fluxtext/plugin'", 'Vite alias should keep @fluxtext/plugin compatibility')
 
-for (const source of [app, globalLauncher]) {
-  assertIncludes(source, 'hiven://', 'frontend events should use hiven scheme')
-  assertNotIncludes(source, 'fluxtext://', 'frontend runtime events should not use fluxtext scheme')
-}
+assertIncludes(app, 'hiven://', 'runtime App events should use hiven scheme')
+assertNotIncludes(app, 'fluxtext://', 'runtime App events should not use fluxtext scheme')
+assertIncludes(globalLauncher, 'GlobalLauncherHost', 'GlobalLauncher should remain a thin host wrapper')
+assertNotIncludes(globalLauncherHost, 'fluxtext://', 'GlobalLauncherHost runtime events should not use fluxtext scheme')
 
 assertIncludes(configInit, 'proxy.github.wmgx.top', 'builtin plugin downloads should use the new proxy host')
 assertIncludes(configInit, 'wmgx/hiven', 'builtin plugin downloads should target the renamed hiven repository')

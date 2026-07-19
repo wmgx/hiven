@@ -1,6 +1,12 @@
 import { useAppStore, type PluginSurfaceOpenTarget } from '../store'
 import { pluginRegistry } from './pluginRegistry'
+import { resizeCurrentLauncherWindow, showLauncherWindow } from './windowManager/launcherWindow'
+import { LAUNCHER_WINDOW_LABEL } from './windowManager/windowLabels'
 import type { PluginDefinition } from './pluginTypes'
+import {
+  getPluginSurfaceShortcutPresentation,
+  showPluginSurfaceWindow,
+} from './windowManager/pluginSurfaceWindows'
 
 const PENDING_OPEN_KEY = 'hiven-plugin-surface-open-request'
 const MAX_PENDING_AGE_MS = 30_000
@@ -41,33 +47,57 @@ export function consumePendingPluginSurfaceOpenTarget(): PluginSurfaceOpenTarget
   }
 }
 
+export function clearPendingPluginSurfaceOpenTarget(): void {
+  try {
+    localStorage.removeItem(PENDING_OPEN_KEY)
+  } catch {
+    // Ignore storage failures; launcher-local delivery already has the request.
+  }
+}
+
+/**
+ * Explicitly host a surface inside the launcher window (tool-shell / 压栈).
+ * Use for products that intentionally stay in-launcher (e.g. text-diff from command).
+ * Surfaces with entry.shortcutPresentation === 'window' should NOT use this.
+ */
+export function openLauncherHostedPluginSurface(target: PluginSurfaceOpenTarget): void {
+  clearPendingPluginSurfaceOpenTarget()
+  useAppStore.getState().openPluginSurfaceTool(target)
+  useAppStore.getState().openGlobalLauncherOverlay()
+}
+
+/**
+ * Open a surface for tools/shortcuts. Honors shortcutPresentation:
+ * - 'window' → independent plugin-surface window (never stack on launcher)
+ * - 'launcher' (default) → launcher tool-shell
+ */
 export async function requestOpenPluginSurfaceTool(target: PluginSurfaceOpenTarget): Promise<void> {
-  writePendingPluginSurfaceOpenTarget(target)
-  if (!isTauriRuntime()) {
-    useAppStore.getState().openPluginSurfaceTool(target)
-    useAppStore.getState().openGlobalLauncherOverlay('pinned-only')
+  if (getPluginSurfaceShortcutPresentation(target) === 'window') {
+    clearPendingPluginSurfaceOpenTarget()
+    // Desktop: independent plugin-surface window.
+    // Browser / non-Tauri: window open is a no-op — fall back to launcher tool-shell.
+    if (isTauriRuntime()) {
+      await showPluginSurfaceWindow(target)
+      return
+    }
+    openLauncherHostedPluginSurface(target)
     return
   }
 
-  // Pre-size the launcher window to the target surface dimensions before showing,
-  // so there's no compact→surface resize jump visible to the user.
-  const shell = resolveSurfaceShell(target)
-  if (shell) {
-    try {
-      const { getCurrentWindow, LogicalSize } = await import('@tauri-apps/api/window')
-      const width = Math.ceil((shell.defaultWidth ?? 660) + STANDALONE_LAUNCHER_HORIZONTAL_PADDING)
-      const height = Math.ceil((shell.defaultHeight ?? 480) + STANDALONE_LAUNCHER_VERTICAL_PADDING)
-      await getCurrentWindow().setSize(new LogicalSize(width, height))
-    } catch {
-      // Non-critical: window will resize later via useLayoutEffect fallback
-    }
+  writePendingPluginSurfaceOpenTarget(target)
+  if (!isTauriRuntime()) {
+    openLauncherHostedPluginSurface(target)
+    return
   }
 
-  const { invoke } = await import('@tauri-apps/api/core')
-  await invoke('show_launcher_window')
+  if (isLauncherWindowRuntime()) {
+    await preSizeCurrentLauncherWindowForPluginSurface(target)
+  }
+
+  await showLauncherWindow()
   try {
     const { emitTo } = await import('@tauri-apps/api/event')
-    await emitTo('launcher', 'hiven://open-plugin-surface', target)
+    await emitTo(LAUNCHER_WINDOW_LABEL, 'hiven://open-plugin-surface', target)
   } catch (error) {
     console.warn('[hiven] Failed to emit plugin surface open request:', error)
   }
@@ -85,8 +115,33 @@ export function isPluginSurfaceOpenTarget(value: unknown): value is PluginSurfac
   )
 }
 
+
+async function preSizeCurrentLauncherWindowForPluginSurface(target: PluginSurfaceOpenTarget): Promise<void> {
+  // Pre-size only when this code is already running in the launcher window.
+  // Other webviews must not call current-window resizing, because that
+  // would resize the caller window instead of the launcher.
+  const shell = resolveSurfaceShell(target)
+  if (!shell) return
+  try {
+    await resizeCurrentLauncherWindow({
+      width: Math.ceil((shell.defaultWidth ?? 660) + STANDALONE_LAUNCHER_HORIZONTAL_PADDING),
+      height: Math.ceil((shell.defaultHeight ?? 480) + STANDALONE_LAUNCHER_VERTICAL_PADDING),
+    })
+  } catch {
+    // Non-critical: window will resize later via useLayoutEffect fallback.
+  }
+}
+
 function isTauriRuntime(): boolean {
   return Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
+}
+
+function isLauncherWindowRuntime(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get('window') === 'launcher'
+  } catch {
+    return false
+  }
 }
 
 function resolveSurfaceShell(target: PluginSurfaceOpenTarget): { defaultWidth?: number; defaultHeight?: number } | null {

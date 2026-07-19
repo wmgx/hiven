@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 
-const paneEditor = readFileSync('src/components/workspace/PaneEditor.tsx', 'utf8')
+const textEditorCore = readFileSync('src/kits/editor/TextEditorCore.tsx', 'utf8')
 const packageJson = readFileSync('package.json', 'utf8')
 
 assert.match(
@@ -11,15 +11,15 @@ assert.match(
 )
 
 assert.match(
-  paneEditor,
+  textEditorCore,
   /const\s+lineDecorationsWidth\s*=\s*foldingEnabled\s*\?\s*8\s*:\s*24/,
-  'Primary editor should normalize total gutter width for folding and plaintext panes',
+  'Editor primitive should normalize total gutter width for folding and plaintext editors',
 )
 
 assert.match(
-  paneEditor,
+  textEditorCore,
   /lineDecorationsWidth,\s*\n\s*lineNumbersMinChars:\s*3/,
-  'Primary editor should pass the normalized gutter width with fixed line-number digits',
+  'Editor primitive should pass the normalized gutter width with fixed line-number digits',
 )
 
 console.log('Monaco gutter width checks passed')

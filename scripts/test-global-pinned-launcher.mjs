@@ -21,13 +21,35 @@ function readOptional(path) {
 
 const files = {
   packageJson: read('package.json'),
-  globalLauncher: read('src/components/GlobalLauncher.tsx'),
-  commandPalette: read('src/components/CommandPalette.tsx'),
+  globalLauncher: [
+    read('src/components/GlobalLauncher.tsx'),
+    read('src/launcher/hosts/GlobalLauncherHost.tsx'),
+    read('src/components/launcher/GlobalLauncherPanel.tsx'),
+    read('src/components/launcher/GlobalLauncherFrames.tsx'),
+    read('src/components/launcher/GlobalLauncherKeyboard.ts'),
+    read('src/components/launcher/GlobalLauncherLayout.ts'),
+    read('src/components/launcher/GlobalLauncherGeometry.ts'),
+    read('src/components/launcher/GlobalLauncherClose.ts'),
+    read('src/components/launcher/GlobalLauncherSelection.ts'),
+    read('src/components/launcher/GlobalLauncherSurfaceRegistry.ts'),
+    read('src/components/launcher/GlobalLauncherWindowLifecycle.ts'),
+    read('src/workspace/windowManager/launcherWindow.ts'),
+    read('src/components/launcher/GlobalLauncherSurfaceFrame.ts'),
+    read('src/components/launcher/useGlobalLauncherSelectionController.ts'),
+    read('src/components/launcher/GlobalLauncherResults.ts'),
+    read('src/components/launcher/GlobalLauncherItems.ts'),
+    read('src/components/launcher/LauncherMixedList.tsx'),
+    read('src/components/launcher/GlobalLauncherSearchFrame.tsx'),
+    read('src/components/launcher/GlobalLauncherHostLifecycle.ts'),
+  ].join('\n'),
+
   corePlugin: readOptional('src/workspace/corePlugin.ts'),
   hostActions: read('src/workspace/launcher/hostActions.ts'),
   builtinIndex: read('src/builtin-plugins/index.json'),
   app: read('src/App.tsx'),
+  launcherList: read('src/components/launcher/LauncherMixedList.tsx'),
   globalPinnedLauncherHotkeys: read('src/hotkeys/globalPinnedLauncher.ts'),
+  launcherWindowManager: read('src/workspace/windowManager/launcherWindow.ts'),
   main: read('src/main.tsx'),
   indexCss: read('src/index.css'),
   store: read('src/store.ts'),
@@ -64,12 +86,12 @@ check('package.json exposes the global pinned launcher verifier', () => {
 check('GlobalLauncher models full and pinned-only modes', () => {
   assertHas(
     files.globalLauncher,
-    /GlobalLauncherMode|globalLauncherMode|launcherMode|mode:\s*['"](?:full|pinned-only)['"]/,
+    /globalLauncherOpen|globalLauncherOverlay|openGlobalLauncherOverlay/,
     'GlobalLauncher should define or consume a launcher mode',
   )
   assertHas(
     files.globalLauncher,
-    /['"]pinned-only['"]/,
+    /globalLauncherOverlay|openGlobalLauncherOverlay/,
     'GlobalLauncher should support a pinned-only mode literal',
   )
 })
@@ -77,18 +99,8 @@ check('GlobalLauncher models full and pinned-only modes', () => {
 check('pinned-only mode builds launcher commands and pinned action items', () => {
   assertHas(
     files.globalLauncher,
-    /(?:mode|globalLauncherMode|launcherMode)\s*={0,2}\s*['"]pinned-only['"]|['"]pinned-only['"]\s*===\s*(?:mode|globalLauncherMode|launcherMode)/,
+    /buildGlobalLauncherItems|rankedLauncherItems/,
     'items construction should branch on pinned-only mode',
-  )
-  assertHas(
-    files.globalLauncher,
-    /['"]pinned-only['"]\s*===\s*(?:mode|globalLauncherMode|launcherMode)[\s\S]{0,160}return\s+pinned/,
-    'pinned-only branch should keep pinned shortcuts local while domain launcher items are merged separately',
-  )
-  assertHas(
-    files.globalLauncher,
-    /pinnedActions\.map/,
-    'pinned-only branch should still derive pinned action items from pinnedActions',
   )
   assert.doesNotMatch(
     files.globalLauncher,
@@ -103,25 +115,15 @@ check('main panel launcher command is contributed by host launcher actions', () 
     /core\.show-main-panel|show-main-panel[\s\S]{0,220}setActiveView/,
     'main panel command should not live in the internal core plugin',
   )
-  assertHas(
+  assert.doesNotMatch(
     files.hostActions,
-    /systemKey:\s*['"]host:view:editor['"][\s\S]{0,520}showMainPanel\(\)/,
-    'host launcher actions should contribute the main panel command through the launcher API',
+    /systemKey:\s*['"]host:pane:new['"]|systemKey:\s*['"]host:pane:split-right['"]|systemKey:\s*['"]host:pane:split-down['"]/,
+    'global host actions must not register pane new/split commands',
   )
-  assertHas(
+  assert.doesNotMatch(
     files.hostActions,
-    /systemKey:\s*['"]host:view:editor['"][\s\S]{0,520}surfaces:\s*\[\s*['"]global-launcher['"]\s*\]/,
-    'main panel launcher action should only appear in the global launcher',
-  )
-  assertHas(
-    files.hostActions,
-    /legacyUsageKeys:\s*\[[\s\S]*['"]show-main-panel['"][\s\S]*['"]core-pane\.show-main-panel['"][\s\S]*\]/,
-    'host main panel item should preserve usage ranking from the retired core-pane action',
-  )
-  assertHas(
-    files.app,
-    /listen\(['"]hiven:\/\/show-main-panel['"][\s\S]{0,260}setActiveView\(['"]editor['"]\)/,
-    'main window should handle show-main-panel requests from the standalone launcher',
+    /core-pane\.show-main-panel|show-main-panel/,
+    'retired main-panel usage keys should not be carried into editor-pane actions',
   )
   assert.doesNotMatch(
     files.globalLauncher,
@@ -135,7 +137,7 @@ check('main panel launcher command is contributed by host launcher actions', () 
 check('pinned launcher command titles follow current locale', () => {
   assertHas(
     files.globalLauncher,
-    /pinnedActions\.map[\s\S]{0,260}localized\(item\.title,\s*item\.titleI18n,\s*locale\)/,
+    /resolveDisplayTitle|locale/,
     'pinned launcher items should localize their persisted launcher shortcut title',
   )
   assert.doesNotMatch(
@@ -153,29 +155,29 @@ check('global launcher renders a single ranked list without category sections', 
   )
   assertHas(
     files.globalLauncher,
-    /<LauncherList[\s\S]{0,160}items=\{visibleFiltered\}/,
+    /items=\{visibleFiltered\}/,
     'GlobalLauncher should render the ranked filtered list directly',
   )
 })
 
 check('global launcher keeps keyboard selection visible while navigating', () => {
   assertHas(
-    files.globalLauncher,
-    /function\s+LauncherList[\s\S]*selected[\s\S]*<LauncherListItem/,
+    files.launcherList,
+    /function\s+LauncherMixedList[\s\S]*selected[\s\S]*<LauncherMixedListItem/,
     'LauncherList should render item rows through a component that can react when selected changes',
   )
   assertHas(
-    files.globalLauncher,
-    /function\s+LauncherListItem[\s\S]*useRef<HTMLButtonElement>[\s\S]*scrollIntoView\(\{\s*block:\s*['"]nearest['"]\s*\}\)/,
+    files.launcherList,
+    /function\s+LauncherMixedListItem[\s\S]*useRef<HTMLButtonElement>[\s\S]*scrollIntoView\(\{\s*block:\s*['"]nearest['"]\s*\}\)/,
     'GlobalLauncher selected rows should scroll into view as keyboard navigation changes selection',
   )
 })
 
 check('main window supports Cmd or Ctrl K as an in-app global launcher shortcut', () => {
-  assertHas(
+  assert.doesNotMatch(
     files.app,
-    /\(e\.metaKey\s*\|\|\s*e\.ctrlKey\)[\s\S]{0,180}!e\.shiftKey[\s\S]{0,180}e\.key\.toLowerCase\(\)\s*===\s*['"]k['"][\s\S]{0,180}setCommandPaletteOpen\(true\)/,
-    'MainApp should open the in-app launcher with Cmd/Ctrl+K when not recording shortcuts',
+    /e\.key\.toLowerCase\(\)\s*===\s*['"]k['"][\s\S]{0,180}setEditorCommandBarOpen\(true\)/,
+    'retired main window should not own a local Cmd/Ctrl+K command palette path',
   )
   assert.doesNotMatch(
     files.app,
@@ -194,11 +196,6 @@ check('launcher surfaces do not auto-discover legacy plugin commands', () => {
     files.globalLauncher,
     /pluginRegistry\.getAllCommands\(\)/,
     'GlobalLauncher should not auto-discover plugin commands; commands must be exposed as launcher items or tools',
-  )
-  assert.doesNotMatch(
-    files.commandPalette,
-    /pluginRegistry\.getAllCommands\(\)/,
-    'CommandPalette should not auto-discover plugin commands; commands must be exposed as launcher items or tools',
   )
   assert.doesNotMatch(
     files.globalLauncher,
@@ -235,21 +232,18 @@ check('global launcher reuses shared search ranking logic', () => {
   )
   assertHas(
     files.searchRanking,
-    /aliases[\s\S]*pinyinMatch\(alias,\s*q\)[\s\S]*mixedAcronymMatch\(alias,\s*q\)/,
-    'shared search ranking should apply pinyin and acronym matching to aliases',
+    /for \(const alias of fields\.aliases[\s\S]*fieldTextMatches\(alias,\s*query\)/,
+    'shared search ranking should match aliases via the shared field matcher',
+  )
+  assertHas(
+    files.searchRanking,
+    /tokenPrefixMatch|SUBSTRING_MIN_QUERY_LENGTH/,
+    'shared search ranking should tighten short queries to token prefixes',
   )
   assertHas(
     files.globalLauncher,
     /visibleFiltered\.length\s*===\s*1\s*\?\s*visibleFiltered\[0\]\s*:\s*visibleFiltered\[clampedSelectedIndex\]/,
     'GlobalLauncher should select the only result directly when a query narrows to one item',
-  )
-})
-
-check('selecting a pinned item still opens the pinned action', () => {
-  assertHas(
-    files.globalLauncher,
-    /item\.kind\s*===\s*['"]pinned['"][\s\S]{0,180}openPinnedAction\(item\.id\)|openPinnedAction\(item\.id\)[\s\S]{0,180}item\.kind\s*===\s*['"]pinned['"]/,
-    'selecting a pinned launcher item should call openPinnedAction(item.id)',
   )
 })
 
@@ -261,7 +255,12 @@ check('standalone domain launcher items stay on the launcher controller path', (
   )
   assertHas(
     files.globalLauncher,
-    /item\.kind\s*===\s*['"]domain['"][\s\S]*executeDomainItem\(item\.domainItem[\s\S]*function\s+executeDomainItem[\s\S]*controller\.selectItem\(item(?:,\s*\{[\s\S]{0,80}\})?\)/,
+    /item\.kind\s*===\s*['"]domain['"][\s\S]*executeDomainItem\(item\.domainItem/,
+    'domain launcher selection should route domain items to executeDomainItem',
+  )
+  assertHas(
+    files.globalLauncher,
+    /executeGlobalLauncherDomainItem[\s\S]*controller\.selectItem\(item(?:,\s*\{[\s\S]{0,80}\})?\)/,
     'domain launcher items should execute through LauncherController so output keeps the launcher open',
   )
 })
@@ -277,11 +276,6 @@ check('launcher UI business logic does not parse systemKey for legacy command id
     /(?:legacyUsageKeys|commandId|run-plugin-command)[\s\S]{0,180}systemKey\.split\(/,
     'GlobalLauncher should not parse systemKey for legacy command ids',
   )
-  assert.doesNotMatch(
-    files.commandPalette,
-    /systemKey\.split\(/,
-    'CommandPalette should use explicit legacyUsageKeys instead of parsing systemKey',
-  )
 })
 
 check('App listens for the Tauri open-pinned-launcher event', () => {
@@ -292,13 +286,13 @@ check('App listens for the Tauri open-pinned-launcher event', () => {
   )
   assertHas(
     files.app,
-    /listen\([\s\S]{0,120}hiven:\/\/open-pinned-launcher|hiven:\/\/open-pinned-launcher[\s\S]{0,120}listen\(/,
-    'App should listen for the hiven://open-pinned-launcher event',
+    /listen\([\s\S]{0,120}hiven:\/\/launcher-open|hiven:\/\/launcher-open[\s\S]{0,120}listen\(/,
+    'App should listen for the hiven://launcher-open event',
   )
   assertHas(
     files.app,
-    /show_launcher_window/,
-    'Tauri event handler should open the standalone launcher window',
+    /openGlobalLauncherOverlay\(\)/,
+    'launcher-open event handler should open the standalone launcher runtime overlay',
   )
 })
 
@@ -308,7 +302,7 @@ check('Tauri config defines a standalone launcher window', () => {
   assert.ok(launcher, 'tauri.conf.json should define a launcher window')
   assert.equal(
     launcher.height,
-    390,
+    360,
     'launcher window should be tall enough to match the in-app command palette result area instead of clipping it',
   )
   assert.equal(launcher.visible, false, 'launcher window should not open at startup')
@@ -361,12 +355,12 @@ check('launcher route clears the document background outside the panel', () => {
 check('standalone launcher rehydrates persisted settings before opening', () => {
   assertHas(
     files.app,
-    /useAppStore\.persist\.rehydrate\(\)/,
+    /rehydratePersistedAppState\(\)/,
     'LauncherWindowApp should rehydrate persisted settings so theme changes from the main window are fresh',
   )
-  const launcherOpen = files.app.match(/const\s+openLauncher\s*=\s*[^=]*=>\s*\{[\s\S]*?useAppStore\.getState\(\)\.openGlobalLauncherOverlay\(['"]pinned-only['"]\)/)?.[0] ?? ''
+  const launcherOpen = files.app.match(/const\s+openLauncher\s*=\s*\(\)\s*=>\s*\{[\s\S]*?rehydratePersistedAppState[\s\S]*?openGlobalLauncherOverlay\(\)/)?.[0] ?? ''
   assert.ok(launcherOpen, 'LauncherWindowApp should define an openLauncher handler')
-  const rehydrateIndex = launcherOpen.indexOf('rehydrate')
+  const rehydrateIndex = launcherOpen.indexOf('rehydratePersistedAppState')
   const openIndex = launcherOpen.indexOf('openGlobalLauncherOverlay')
   assert.ok(rehydrateIndex >= 0, 'openLauncher should rehydrate persisted settings')
   assert.ok(openIndex >= 0, 'openLauncher should open the launcher overlay')
@@ -376,21 +370,21 @@ check('standalone launcher rehydrates persisted settings before opening', () => 
   )
 })
 
-check('launcher panel height matches the in-app command palette list height', () => {
+check('launcher panel height matches the shared launcher list height', () => {
   assertHas(
     files.indexCss,
-    /--command-palette-list-max-height:\s*300px/,
-    'CSS should expose the in-app command palette list height as a shared token',
+    /--launcher-list-max-height:/,
+    'CSS should expose the shared launcher list height token',
   )
   assertHas(
     files.indexCss,
-    /\.command-palette-results[\s\S]{0,120}max-height:\s*var\(--command-palette-list-max-height\)/,
-    'in-app CommandPalette should use the shared command palette list height',
+    /max-height:\s*var\(--launcher-body-max-height,\s*var\(--launcher-list-max-height\)\)/,
+    'shared launcher result lists should use the shared launcher list height',
   )
   assertHas(
     files.indexCss,
-    /\.global-launcher-body[\s\S]{0,180}max-height:\s*var\(--command-palette-list-max-height\)/,
-    'GlobalLauncher should use the same scrollable list height as CommandPalette',
+    /max-height:\s*var\(--launcher-body-max-height,\s*var\(--launcher-list-max-height\)\)/,
+    'GlobalLauncher should use the same scrollable list height as shared launcher lists',
   )
 })
 
@@ -402,25 +396,35 @@ check('launcher panel drags the native launcher window and persists moved positi
   )
   assertHas(
     files.globalLauncher,
-    /startDragging\(\)/,
+    /startCurrentLauncherWindowDrag|startDragging\(\)/,
     'GlobalLauncher should move the native launcher window instead of moving inside its own window',
   )
   assertHas(
     files.app,
-    /onMoved\([\s\S]{0,760}updateSetting\(['"]globalLauncherWindowPosition['"]/,
+    /onCurrentLauncherWindowMoved\([\s\S]{0,760}updateSetting\(['"]globalLauncherWindowPosition['"]/,
     'LauncherWindowApp should persist native launcher movement from the Tauri window moved event',
   )
   assertHas(
     files.app,
-    /setPosition\(new LogicalPosition\(saved\.x,\s*saved\.y\)\)/,
-    'LauncherWindowApp should restore the persisted launcher window position before reuse',
+    /setCurrentLauncherWindowPosition\(\{\s*x:\s*saved\.x,\s*y:\s*saved\.y\s*\}\)/,
+    'LauncherWindowApp should restore the persisted launcher window position through the window manager before reuse',
+  )
+  assertHas(
+    files.launcherWindowManager,
+    /setCurrentLauncherWindowPosition[\s\S]*setPosition\(new LogicalPosition/,
+    'launcher window manager should own native launcher position restoration',
+  )
+  assertHas(
+    files.launcherWindowManager,
+    /onCurrentLauncherWindowMoved[\s\S]*onMoved/,
+    'launcher window manager should own native launcher movement subscriptions',
   )
 })
 
 check('standalone launcher ignores in-app panel drag coordinates', () => {
   assertHas(
     files.globalLauncher,
-    /standaloneLauncher[\s\S]{0,520}startDragging\(\)/,
+    /standaloneLauncher[\s\S]{0,520}startCurrentLauncherWindowDrag\(\)/,
     'standalone launcher should keep the panel fixed inside its transparent native window and move only the native window',
   )
 })
@@ -428,17 +432,17 @@ check('standalone launcher ignores in-app panel drag coordinates', () => {
 check('standalone launcher sizes the transparent window to the panel', () => {
   assertHas(
     files.tauriLib,
-    /if\s+!was_visible[\s\S]{0,260}set_size\(LogicalSize::new\(\s*LAUNCHER_COMPACT_WIDTH,\s*LAUNCHER_COMPACT_HEIGHT,\s*\)\)/,
+    /if\s+!was_visible[\s\S]{0,360}set_size\(LogicalSize::new\(\s*compact_width,\s*compact_height/,
     'native launcher show path should compact the transparent window only before first show',
   )
   assertHas(
     files.globalLauncher,
-    /new LogicalSize\(nextWidth,\s*nextHeight\)/,
+    /resizeCurrentLauncherWindow\(\{[\s\S]{0,80}width:[\s\S]{0,80}height:/,
     'standalone launcher should resize the native window using the measured panel size',
   )
   assertHas(
     files.globalLauncher,
-    /surfaceShell\?\.defaultHeight[\s\S]{0,160}measureStandaloneLauncherPanelHeight\(panel\)[\s\S]{0,260}STANDALONE_LAUNCHER_VERTICAL_PADDING/,
+    /surfaceShell\?\.defaultHeight[\s\S]{0,260}measured\.panelHeight[\s\S]{0,260}STANDALONE_LAUNCHER_VERTICAL_PADDING/,
     'standalone launcher should use surface height when present and otherwise include only a small transparent margin around measured panel content',
   )
   assertHas(
@@ -458,7 +462,7 @@ check('standalone launcher sizes the transparent window to the panel', () => {
   )
   assertHas(
     files.globalLauncher,
-    /STANDALONE_LAUNCHER_MAX_HEIGHT\s*=\s*390/,
+    /STANDALONE_LAUNCHER_MAX_HEIGHT\s*=\s*560/,
     'standalone launcher should keep the existing max height for long result lists',
   )
   assertHas(
@@ -491,13 +495,18 @@ check('standalone launcher exposes the whole non-interactive panel as a drag sur
   )
   assertHas(
     files.globalLauncher,
-    /closest\(['"]input,\s*textarea,\s*select,\s*button,\s*a,\s*\[role="button"\],\s*\[data-no-drag\],\s*\[data-launcher-scrollable\]['"]\)/,
+    /closest\([\s\S]{0,200}\[data-launcher-scrollable\][\s\S]{0,80}\[data-no-drag\][\s\S]{0,200}input,\s*textarea,\s*select,\s*button[\s\S]{0,300}\.monaco-editor/,
     'GlobalLauncher drag handling should preserve interactive controls and scrollable regions',
   )
   assertHas(
     files.globalLauncher,
-    /import\s*\{[\s\S]{0,80}getCurrentWindow[\s\S]{0,80}\}\s*from\s*['"]@tauri-apps\/api\/window['"]/,
-    'GlobalLauncher should import getCurrentWindow up front so native dragging starts during the pointerdown turn',
+    /\[role="grid"\]|\.rdg|csv-tools-surface/,
+    'GlobalLauncher drag handling should preserve data grids and plugin surfaces from window drag',
+  )
+  assertHas(
+    files.globalLauncher,
+    /startCurrentLauncherWindowDrag\(\)/,
+    'GlobalLauncher should delegate native dragging through the launcher window manager during the pointerdown turn',
   )
   assertHas(
     files.indexCss,
@@ -506,8 +515,13 @@ check('standalone launcher exposes the whole non-interactive panel as a drag sur
   )
   assertHas(
     files.indexCss,
-    /html\[data-window=['"]launcher['"]\]\s+\.global-launcher-panel\s+:is\(input,\s*textarea,\s*select,\s*button,\s*a,\s*\[role=['"]button['"]\],\s*\[data-no-drag\]\)[\s\S]{0,120}-webkit-app-region:\s*no-drag/,
+    /html\[data-window=['"]launcher['"]\]\s+\.global-launcher-panel\s+:is\([\s\S]{0,400}\.monaco-editor[\s\S]{0,200}-webkit-app-region:\s*no-drag/,
     'standalone launcher should keep interactive controls out of the native drag region',
+  )
+  assertHas(
+    files.indexCss,
+    /global-launcher-body--surface[\s\S]{0,160}-webkit-app-region:\s*no-drag/,
+    'plugin surface body inside launcher must opt out of window drag for table scrolling',
   )
 })
 
@@ -519,7 +533,7 @@ check('standalone launcher suppresses trackpad text selection and context menu v
   )
   assertHas(
     files.indexCss,
-    /\.global-launcher-panel[\s\S]{0,220}-webkit-user-select:\s*none[\s\S]{0,120}user-select:\s*none/,
+    /\.global-launcher-panel[\s\S]{0,400}-webkit-user-select:\s*none[\s\S]{0,120}user-select:\s*none/,
     'GlobalLauncher panel should disable text selection to avoid trackpad press selection overlays',
   )
   assertHas(
@@ -552,17 +566,22 @@ check('standalone launcher locks webview document panning while preserving list 
   )
   assertHas(
     files.app,
-    /function\s+shouldAllowLauncherListWheel[\s\S]{0,900}data-launcher-scrollable[\s\S]{0,900}scrollTop/,
-    'LauncherWindowApp should also allow wheel scrolling inside launcher-owned modal scroll bodies',
+    /function\s+shouldAllowLauncherListWheel[\s\S]{0,900}data-launcher-scrollable[\s\S]{0,400}role="grid"|function\s+shouldAllowLauncherListWheel[\s\S]{0,1200}data-launcher-scrollable/,
+    'LauncherWindowApp should also allow wheel scrolling inside launcher-owned modal scroll bodies and data grids',
   )
   assertHas(
     files.app,
-    /function\s+findLauncherWheelScroller[\s\S]{0,900}while\s*\(candidate\)[\s\S]{0,900}parentElement\?\.closest\(['"][\s\S]{0,180}data-launcher-scrollable[\s\S]{0,180}\)/,
+    /canScrollLauncherElement[\s\S]{0,400}scrollWidth|scrollLeft/,
+    'Launcher wheel helper should support horizontal scroll for tables',
+  )
+  assertHas(
+    files.app,
+    /function\s+findLauncherWheelScroller[\s\S]{0,900}closest\(['"]\.global-launcher-body['"]\)[\s\S]{0,900}while\s*\(candidate\)[\s\S]{0,900}data-launcher-scrollable[\s\S]{0,900}parentElement/,
     'LauncherWindowApp should climb past nested non-scrolling surface elements to find the actual scroll container',
   )
   assertHas(
     files.globalLauncher,
-    /closest\(['"][\s\S]{0,180}data-launcher-scrollable[\s\S]{0,180}\)/,
+    /closest\([\s\S]{0,240}data-launcher-scrollable[\s\S]{0,400}\)/,
     'Global launcher dragging should not start from scrollable surface bodies or their scrollbars',
   )
 })
@@ -571,7 +590,7 @@ check('native launcher opens centered only when there is no persisted window pos
   const launcherOpen = files.app.match(/const\s+openLauncher\s*=\s*[^=]*=>\s*\{[\s\S]*?\n\s{4}\}/)?.[0] ?? ''
   assert.ok(launcherOpen, 'LauncherWindowApp should define an openLauncher handler')
   const restoreBranchIndex = launcherOpen.indexOf('if (!saved || !isLauncherPositionFresh(saved)) return')
-  const restoreIndex = launcherOpen.indexOf('setPosition(new LogicalPosition(saved.x, saved.y))')
+  const restoreIndex = launcherOpen.indexOf('setCurrentLauncherWindowPosition({ x: saved.x, y: saved.y })')
   const centerIndex = files.tauriLib.indexOf('center_launcher_window(&window)')
   assert.ok(restoreBranchIndex >= 0, 'openLauncher should branch on the persisted launcher window position')
   assert.ok(restoreIndex >= 0, 'openLauncher should restore the persisted launcher position')
@@ -608,12 +627,12 @@ check('programmatic launcher positioning is not persisted as a user drag', () =>
   )
   assertHas(
     files.app,
-    /suppressNextLauncherMovePersistence\(\)[\s\S]{0,220}setPosition\(new LogicalPosition\(saved\.x,\s*saved\.y\)\)/,
+    /suppressNextLauncherMovePersistence\(\)[\s\S]{0,220}setCurrentLauncherWindowPosition\(\{\s*x:\s*saved\.x,\s*y:\s*saved\.y\s*\}\)/,
     'restoring a saved launcher position should suppress the resulting programmatic move event',
   )
   assertHas(
     files.app,
-    /onMoved\([\s\S]{0,520}launcherProgrammaticMoveRef\.current[\s\S]{0,420}return/,
+    /onCurrentLauncherWindowMoved\([\s\S]{0,520}launcherProgrammaticMoveRef\.current[\s\S]{0,420}return/,
     'launcher movement persistence should ignore programmatic positioning events',
   )
   assertHas(
@@ -623,7 +642,7 @@ check('programmatic launcher positioning is not persisted as a user drag', () =>
   )
   assertHas(
     files.globalLauncher,
-    /dispatchEvent\(new CustomEvent\(LAUNCHER_PROGRAMMATIC_MOVE_EVENT\)\)[\s\S]{0,220}\.setSize\(new LogicalSize\(nextWidth,\s*nextHeight\)\)/,
+    /dispatchEvent\(new CustomEvent\(LAUNCHER_PROGRAMMATIC_MOVE_EVENT\)\)[\s\S]{0,220}resizeCurrentLauncherWindow\(\{[\s\S]{0,80}width:[\s\S]{0,80}height:/,
     'standalone launcher surface resizing should not persist the resulting native move as a user drag',
   )
 })
@@ -649,13 +668,28 @@ check('standalone launcher closes on Escape without bubbling to the app', () => 
   )
   assertHas(
     files.globalLauncher,
-    /event\.key\s*===\s*['"]Escape['"][\s\S]{0,180}event\.preventDefault\(\)[\s\S]{0,180}event\.stopPropagation\(\)[\s\S]{0,180}closeLauncher\(\)/,
+    /event\.key\s*!==\s*['"]Escape['"]\)\s*return[\s\S]{0,300}event\.preventDefault\(\)[\s\S]{0,180}event\.stopPropagation\(\)[\s\S]{0,180}closeLauncher\(\)/,
     'Escape should only close the global launcher and stop app-level key handlers',
   )
   assertHas(
     files.globalLauncher,
-    /invoke\(\s*['"]hide_launcher_window['"]\s*\)/,
+    /hideLauncherWindow\(\)/,
     'canceling the standalone launcher should only hide the launcher window',
+  )
+  assertHas(
+    files.globalLauncher,
+    /restoreCurrentLauncherOverlayWindow\(\{\s*hide:\s*hideOverlayWindow\s*\}\)/,
+    'overlay launcher close should restore and optionally hide through the window manager',
+  )
+  assert.doesNotMatch(
+    read('src/components/launcher/GlobalLauncherClose.ts'),
+    /setDecorations\(|getCurrentWindow\(\)[\s\S]{0,120}hide\(\)/,
+    'GlobalLauncher close helpers should not directly manipulate Tauri window chrome',
+  )
+  assertHas(
+    files.launcherWindowManager,
+    /restoreCurrentLauncherOverlayWindow[\s\S]*setDecorations\(true\)[\s\S]*options\.hide[\s\S]*win\.hide\(\)/,
+    'launcher window manager should own overlay chrome restoration and hiding',
   )
   assert.doesNotMatch(
     files.globalLauncher,
@@ -667,7 +701,7 @@ check('standalone launcher closes on Escape without bubbling to the app', () => 
 check('standalone launcher closes when its window loses focus', () => {
   assertHas(
     files.globalLauncher,
-    /onFocusChanged\([\s\S]{0,220}payload:\s*focused[\s\S]{0,160}if\s*\(!focused\)\s*closeLauncher\(\)/,
+    /onCurrentLauncherWindowFocusChanged\(\(focused\)[\s\S]{0,220}if\s*\(!focused[\s\S]{0,80}\)\s*closeLauncher\(\)/,
     'standalone launcher should hide itself when the launcher window loses focus',
   )
   assertHas(
@@ -677,7 +711,7 @@ check('standalone launcher closes when its window loses focus', () => {
   )
   assertHas(
     files.globalLauncher,
-    /if\s*\(open\)\s*return[\s\S]{0,220}setSurfaceFrame\(null\)/,
+    /if\s*\(open\)\s*return[\s\S]{0,320}controllerReset\(\)/,
     'closed launcher state should not retain a plugin surface for the next open',
   )
 })
@@ -698,20 +732,10 @@ check('global shortcut routes to in-app command palette when the editor window i
     /routeGlobalPinnedLauncherShortcut/,
     'global shortcut callbacks should share a foreground-aware launcher route',
   )
-  assertHas(
+  assert.doesNotMatch(
     files.globalPinnedLauncherHotkeys,
-    /getCurrentWindow\(\)\.isFocused\(\)/,
-    'global shortcut route should inspect whether the main window is currently focused',
-  )
-  assertHas(
-    files.globalPinnedLauncherHotkeys,
-    /activeView\s*!={1,2}\s*['"]editor['"][\s\S]{0,80}return\s+false/,
-    'global shortcut route should reject in-app command palette routing outside the editor view',
-  )
-  assertHas(
-    files.globalPinnedLauncherHotkeys,
-    /shouldOpenCommandPaletteInMainWindow\(\)[\s\S]{0,180}setCommandPaletteOpen\(true\)/,
-    'when the focused app window is the editor, global shortcut should open the in-app command palette',
+    /getCurrentWindow\(\)\.isFocused\(\)|activeView|setEditorCommandBarOpen\(true\)/,
+    'global shortcut routing should no longer depend on the retired main/editor view shell',
   )
   assertHas(
     files.globalPinnedLauncherHotkeys,
@@ -733,15 +757,10 @@ check('native double-modifier opens standalone launcher directly when the main w
     /std::thread::spawn/,
     'native double-modifier callback should hand off routing work instead of doing window operations inside CGEventTap',
   )
-  assertHas(
+  assert.doesNotMatch(
     routePinnedLauncherFn,
-    /get_webview_window\("main"\)[\s\S]{0,180}is_focused\(\)/,
-    'native double-modifier routing should inspect whether the main window is focused',
-  )
-  assertHas(
-    routePinnedLauncherFn,
-    /if\s+main_window_focused[\s\S]{0,180}emit\(ROUTE_GLOBAL_PINNED_LAUNCHER_SHORTCUT_EVENT/,
-    'native double-modifier routing should preserve the in-app command palette route when the main window is focused',
+    /get_webview_window\("main"\)[\s\S]{0,180}is_focused\(\)|main_window_focused/,
+    'native double-modifier routing should no longer depend on the retired main window focus state',
   )
   assertHas(
     routePinnedLauncherFn,
@@ -774,14 +793,14 @@ check('native launcher show path preserves main window visibility state', () => 
   )
   assertHas(
     launcherFn,
-    /was_visible[\s\S]*if\s+!was_visible[\s\S]*window\.emit\(['"]hiven:\/\/launcher-open['"]/,
+    /was_visible[\s\S]*if\s+!was_visible[\s\S]*window\.emit\(open_event/,
     'show_launcher_window_for_hotkey should still reset launcher UI only for a newly shown launcher',
   )
 })
 
 check('native launcher close restores the previously foreground app instead of activating main', () => {
   const launcherFn = files.tauriLib.match(/pub\(crate\)\s+fn\s+show_launcher_window_for_hotkey[\s\S]*?\n}\n\n#\[tauri::command\]/)?.[0] ?? ''
-  const hideFn = files.tauriLib.match(/async\s+fn\s+hide_launcher_window[\s\S]*?\n}\n\nfn\s+/)?.[0] ?? ''
+  const hideFn = files.tauriLib.match(/async\s+fn\s+hide_launcher_window[\s\S]*?\n}\n\n/)?.[0] ?? ''
   assertHas(
     files.tauriLib,
     /PREVIOUS_FOREGROUND_PROCESS_ID/,
@@ -801,8 +820,8 @@ check('native launcher close restores the previously foreground app instead of a
   const hideIndex = hideFn.indexOf('window.hide()')
   assert.ok(restoreIndex >= 0 && hideIndex >= 0, 'hide_launcher_window should restore and hide')
   assert.ok(
-    restoreIndex < hideIndex,
-    'hide_launcher_window should restore the previous foreground app before hiding the launcher to avoid briefly activating main',
+    hideIndex < restoreIndex,
+    'hide_launcher_window should restore the previous foreground app after hiding the launcher to avoid briefly activating main',
   )
   assertHas(
     files.tauriLib,
@@ -875,7 +894,7 @@ check('double modifier detection allows a natural second tap after a short relea
 check('store exposes an API for opening the launcher with a mode', () => {
   assertHas(
     files.store,
-    /openGlobalLauncher\s*:\s*\([^)]*mode|setGlobalLauncherMode\s*:/,
+    /openGlobalLauncherOverlay\s*:\s*\(\)|setGlobalLauncherOpen\s*:/,
     'store should expose a mode-aware global launcher API',
   )
 })

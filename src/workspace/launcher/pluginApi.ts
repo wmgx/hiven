@@ -10,13 +10,18 @@
  * boundary for *plugin* items.
  */
 
-import { useWorkspaceStore } from '../workspaceStore'
-import { runtimeRegistry } from '../runtimeRegistry'
-import { applyEffects, openExternalUrl } from '../effectRunner'
+import { openExternalUrl } from '../effectRunner'
 import { useAppStore } from '../../store'
+import { requestOpenLauncherHostSurface } from '../launcherHostSurfaceBridge'
+import { openLauncherHostedPluginSurface } from '../pluginSurfaceOpenRequest'
 import { createPluginPrivateStorage } from '../pluginStorage'
 import { getPluginPermissionSnapshot, requirePluginPermissions } from '../pluginPermissions'
-import type { FluxEffect, SerializedRange } from '../types'
+import {
+  getActiveEditorContextSnapshot,
+  getActiveEditorPaneSnapshot,
+} from '../editorBridge'
+import { createQuickEditorPane, showQuickEditorSurface } from '../quickEditor/quickEditorRequests'
+import { readQuickEditorPaneSnapshot } from '../quickEditor/quickEditorPaneSnapshot'
 import type { PluginPermission } from '../pluginTypes'
 import type { PluginSettingsSource } from '../pluginSettingsStore'
 import type { DiscoveredApp, PluginAppsApi, PluginLauncherApi } from './types'
@@ -28,29 +33,73 @@ export type PluginLauncherApiOptions = {
 }
 
 function readActiveText(): string {
-  return useWorkspaceStore.getState().getActivePaneText()
+  return getActiveEditorContextSnapshot()?.activeText ?? ''
 }
 
 function readSelectionText(): string {
-  const state = useWorkspaceStore.getState()
-  const editor = runtimeRegistry.getCodeEditor(state.activePaneId)
-  if (!editor) return ''
-  const sel = editor.getSelection?.()
-  if (!sel || sel.isEmpty?.()) return ''
-  return editor.getModel?.()?.getValueInRange(sel) ?? ''
+  return getActiveEditorContextSnapshot()?.selectedText ?? ''
 }
 
-function activeSelectionRange(): SerializedRange | undefined {
-  const state = useWorkspaceStore.getState()
-  const editor = runtimeRegistry.getCodeEditor(state.activePaneId)
-  if (!editor) return undefined
-  const sel = editor.getSelection?.()
-  if (!sel || sel.isEmpty?.()) return undefined
+type PaneSnapshot = ReturnType<PluginLauncherApi['getPaneSnapshot']>
+
+function emptyPaneSnapshot(): PaneSnapshot {
   return {
-    startLineNumber: sel.startLineNumber,
-    startColumn: sel.startColumn,
-    endLineNumber: sel.endLineNumber,
-    endColumn: sel.endColumn,
+    activePaneId: '',
+    previousActivePaneId: undefined,
+    paneIds: [],
+    panes: {},
+    renderers: {},
+  }
+}
+
+function buildMergedPaneSnapshot(): PaneSnapshot {
+  const editor = getActiveEditorPaneSnapshot()
+  const editorContext = getActiveEditorContextSnapshot()
+  const quick = readQuickEditorPaneSnapshot()
+
+  const panes: PaneSnapshot['panes'] = {}
+  const paneIds: string[] = []
+
+  if (editor) {
+    for (const paneId of editor.paneIds) {
+      const meta = editor.panes[paneId] ?? {}
+      const index = editor.paneIds.indexOf(paneId)
+      paneIds.push(paneId)
+      panes[paneId] = {
+        title: meta.title || `Pane ${index + 1}`,
+        language: meta.language,
+        stickyScroll: meta.stickyScroll,
+        text: paneId === editor.activePaneId ? (editorContext?.activeText ?? '') : '',
+        origin: 'editor',
+      }
+    }
+  }
+
+  if (quick) {
+    for (const paneId of quick.paneIds) {
+      // Avoid colliding with editor pane ids.
+      const snapshotId = paneIds.includes(paneId) ? `quick:${paneId}` : paneId
+      paneIds.push(snapshotId)
+      panes[snapshotId] = {
+        title: quick.panes[paneId]?.title,
+        language: quick.panes[paneId]?.language,
+        text: quick.panes[paneId]?.text ?? '',
+        origin: 'quick-editor',
+      }
+    }
+  }
+
+  const activePaneId = editor?.activePaneId
+    ?? quick?.activePaneId
+    ?? paneIds[0]
+    ?? ''
+
+  return {
+    activePaneId,
+    previousActivePaneId: editor?.previousActivePaneId,
+    paneIds,
+    panes,
+    renderers: {},
   }
 }
 
@@ -80,56 +129,20 @@ async function writeClipboard(text: string): Promise<void> {
   }
 }
 
-async function showMainPanel(): Promise<void> {
-  const effects: FluxEffect[] = [{ type: 'app.showMainPanel' }]
-  if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
-    try {
-      const [{ emitTo }, { invoke }] = await Promise.all([
-        import('@tauri-apps/api/event'),
-        import('@tauri-apps/api/core'),
-      ])
-      await emitTo('main', 'hiven://show-main-panel')
-      await invoke('show_and_focus_window')
-      return
-    } catch (error) {
-      console.warn('[launcher] failed to show main panel via Tauri:', error)
-    }
+async function openEditorWindow(): Promise<void> {
+  try {
+    await showQuickEditorSurface()
+  } catch (error) {
+    console.warn('[launcher] failed to show quick editor:', error)
   }
-  applyEffects(effects)
 }
 
 async function showPluginsPage(): Promise<void> {
-  if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
-    try {
-      const [{ emitTo }, { invoke }] = await Promise.all([
-        import('@tauri-apps/api/event'),
-        import('@tauri-apps/api/core'),
-      ])
-      await emitTo('main', 'hiven://show-plugins-page')
-      await invoke('show_and_focus_window')
-      return
-    } catch (error) {
-      console.warn('[launcher] failed to show plugins page via Tauri:', error)
-    }
-  }
-  useAppStore.getState().setActiveView('scripts')
+  await requestOpenLauncherHostSurface('system-plugins')
 }
 
 async function showSettingsPage(): Promise<void> {
-  if ((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
-    try {
-      const [{ emitTo }, { invoke }] = await Promise.all([
-        import('@tauri-apps/api/event'),
-        import('@tauri-apps/api/core'),
-      ])
-      await emitTo('main', 'hiven://show-settings-page')
-      await invoke('show_and_focus_window')
-      return
-    } catch (error) {
-      console.warn('[launcher] failed to show settings page via Tauri:', error)
-    }
-  }
-  useAppStore.getState().setActiveView('settings')
+  await requestOpenLauncherHostSurface('system-settings')
 }
 
 /**
@@ -168,64 +181,19 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
     getActiveText: () => readActiveText(),
     getSelectionText: () => readSelectionText(),
     getPaneSnapshot: () => {
-      const state = useWorkspaceStore.getState()
-      return {
-        activePaneId: state.activePaneId,
-        previousActivePaneId: state.previousActivePaneId,
-        paneIds: state.paneOrder,
-        panes: Object.fromEntries(
-          state.paneOrder.map((paneId) => [
-            paneId,
-            {
-              title: state.panes[paneId]?.title,
-              language: state.panes[paneId]?.language,
-              stickyScroll: state.panes[paneId]?.stickyScroll === true,
-            },
-          ]),
-        ),
-        renderers: Object.fromEntries(
-          Object.entries(state.paneRenderers).map(([paneId, renderer]) => [
-            paneId,
-            {
-              rendererId: renderer.rendererId,
-              ownerPluginId: renderer.ownerPluginId,
-              ownerContributionId: renderer.ownerContributionId,
-            },
-          ]),
-        ),
-      }
+      const snapshot = buildMergedPaneSnapshot()
+      if (snapshot.paneIds.length === 0) return emptyPaneSnapshot()
+      return snapshot
     },
-    isPanePanelOpen: (panelId: string) => {
-      const state = useWorkspaceStore.getState()
-      const existing = state.panelInstancesV2[panelId]
-      return existing?.scope?.type === 'pane' && existing.scope.paneId === state.activePaneId
+    isPanePanelOpen: () => {
+      return false
     },
     getClipboardText: () => readClipboard(),
     replaceActiveText: async (text: string) => {
-      const range = activeSelectionRange()
-      const paneId = useWorkspaceStore.getState().activePaneId
-      // If there is a selection, replace only that range; otherwise replace all.
-      const effects: FluxEffect[] = range
-        ? [{ type: 'text.replace', target: { paneId, range }, text }]
-        : [{ type: 'text.replace', target: 'active-input', text }]
-      applyEffects(effects)
+      await createQuickEditorPane({ text })
     },
     insertText: async (text: string) => {
-      const range = activeSelectionRange()
-      const paneId = useWorkspaceStore.getState().activePaneId
-      // Insert at cursor: a zero-width replace at the selection start, or append.
-      if (range) {
-        const collapsed: SerializedRange = {
-          startLineNumber: range.startLineNumber,
-          startColumn: range.startColumn,
-          endLineNumber: range.startLineNumber,
-          endColumn: range.startColumn,
-        }
-        applyEffects([{ type: 'text.replace', target: { paneId, range: collapsed }, text }])
-      } else {
-        const current = readActiveText()
-        applyEffects([{ type: 'text.replace', target: 'active-input', text: current + text }])
-      }
+      await createQuickEditorPane({ text })
     },
     copyText: async (text: string) => {
       await writeClipboard(text)
@@ -233,17 +201,43 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
     openUrl: async (url: string) => {
       await openExternalUrl(url)
     },
-    showMainPanel,
+    showEditorWindow: openEditorWindow,
     showPluginsPage,
     showSettingsPage,
-    createPane: (options) => useWorkspaceStore.getState().createPane(options),
-    dispatchEffects: (effects: FluxEffect[]) => applyEffects(effects),
+    createPane: (options) => createQuickEditorPane(options),
+    dispatchEffects: () => {
+      return { applied: [], errors: ['dispatchEffects is only available in the editor window'] }
+    },
     showMessage: (message: string, level = 'info') => {
       useAppStore.getState().setLastCommandStatus({
         title: message,
         status: level === 'error' ? 'error' : 'success',
         message,
         updatedAt: Date.now(),
+      })
+    },
+    openDiffPage: (payload) => {
+      const original = payload?.original
+      const modified = payload?.modified
+      // Preserve pane binding metadata so TextDiffSurface can write edits back.
+      const serializeSide = (side: typeof original) => ({
+        sourceId: side?.sourceId,
+        kind: side?.kind,
+        paneId: side?.paneId,
+        origin: side?.origin,
+        title: side?.title ?? '',
+        language: side?.language,
+        text: side?.text ?? '',
+      })
+      const initialText = JSON.stringify({
+        original: serializeSide(original),
+        modified: serializeSide(modified),
+      })
+      openLauncherHostedPluginSurface({
+        source: 'builtin',
+        pluginId: 'text-diff',
+        surfaceId: 'main',
+        initialText,
       })
     },
     apps: createPluginAppsApi(options),

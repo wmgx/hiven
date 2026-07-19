@@ -13,5 +13,13 @@
   "param.base.mode.option.bin2dec.label": "Bin -> Dec",
   "provider.title": "计算器",
   "provider.subtitle": "计算器",
-  "provider.actionLabel": "复制答案"
+  "provider.actionLabel": "复制答案",
+  "panel.result.title": "计算结果",
+  "panel.result.subtitle": "多行公式先预览，不直接覆盖当前编辑器。",
+  "panel.result.source": "Source",
+  "panel.result.output": "Result",
+  "panel.result.copy": "复制",
+  "panel.result.replace": "覆盖当前选区",
+  "panel.result.newPane": "新建 pane",
+  "panel.result.newPaneTitle": "计算结果"
 }

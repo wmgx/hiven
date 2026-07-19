@@ -40,42 +40,23 @@ async function writeImageToClipboard(bytes: Uint8Array): Promise<void> {
   await navigator.clipboard.write([new ClipboardItemCtor({ [blob.type]: blob })])
 }
 
-async function trySimulatePaste(): Promise<{ ok: boolean; permissionDenied?: boolean }> {
+// The hide-then-paste sequence must run as a single native command rather than
+// hide + JS delay + simulate: once the launcher WebView is hidden, macOS throttles
+// its JS timers, so a JS-side setTimeout between hide and simulate is unreliable
+// (see history: a hidden WKWebView may throttle JS execution). Doing the wait for
+// foreground focus handoff and the Cmd/Ctrl+V simulation natively in Rust avoids that.
+async function pasteAfterClipboardWrite(fallbackMessage: string): Promise<PluginPasteResult> {
   try {
     const { invoke } = await import('@tauri-apps/api/core')
-    await invoke('simulate_paste')
+    await invoke('hide_launcher_and_paste')
     return { ok: true }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    return { ok: false, permissionDenied: msg.includes('Accessibility permission') }
+    const message = msg.includes('Accessibility permission')
+      ? 'Copied to clipboard. Grant Accessibility access in System Settings → Privacy & Security → Accessibility to enable auto-paste.'
+      : fallbackMessage
+    return { ok: false, fallback: 'copied', message }
   }
-}
-
-async function tryHideLauncherWindow(): Promise<void> {
-  try {
-    const { invoke } = await import('@tauri-apps/api/core')
-    await invoke('hide_launcher_window')
-  } catch {
-    // Not in standalone launcher mode, or command doesn't exist
-  }
-}
-
-async function pasteAfterClipboardWrite(fallbackMessage: string): Promise<PluginPasteResult> {
-  // Hide launcher first, then paste into the previously-focused app.
-  // Even though the launcher is a non-activating panel, CGEventPost sends
-  // the keystroke to the key window — which may be the panel itself if it
-  // accepted key status. Hiding first ensures the target app regains key focus.
-  await tryHideLauncherWindow()
-  // Small delay to let the target app regain focus
-  await new Promise((r) => setTimeout(r, 80))
-  const result = await trySimulatePaste()
-  if (result.ok) {
-    return { ok: true }
-  }
-  const message = result.permissionDenied
-    ? 'Copied to clipboard. Grant Accessibility access in System Settings → Privacy & Security → Accessibility to enable auto-paste.'
-    : fallbackMessage
-  return { ok: false, fallback: 'copied', message }
 }
 
 export function createPluginPaste(

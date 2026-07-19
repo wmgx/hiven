@@ -13,5 +13,13 @@
   "param.base.mode.option.bin2dec.label": "Bin -> Dec",
   "provider.title": "Calculator",
   "provider.subtitle": "Calculator",
-  "provider.actionLabel": "Copy Answer"
+  "provider.actionLabel": "Copy Answer",
+  "panel.result.title": "Calculation Result",
+  "panel.result.subtitle": "Preview multi-line formulas before replacing editor text.",
+  "panel.result.source": "Source",
+  "panel.result.output": "Result",
+  "panel.result.copy": "Copy",
+  "panel.result.replace": "Replace selection",
+  "panel.result.newPane": "New pane",
+  "panel.result.newPaneTitle": "Calculation Result"
 }

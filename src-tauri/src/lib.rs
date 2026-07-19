@@ -9,22 +9,257 @@ use std::os::raw::{c_char, c_int, c_void};
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::sync::{Mutex, OnceLock};
-#[cfg(target_os = "macos")]
-use std::time::Duration;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
+use tauri::tray::TrayIconBuilder;
 use tauri::Emitter;
 use tauri::LogicalSize;
+use tauri::Manager;
+use tauri_plugin_clipboard_manager::ClipboardExt;
 use zip::ZipArchive;
 
 pub mod hotkeys;
 
 const LAUNCHER_COMPACT_WIDTH: f64 = 660.0;
-const LAUNCHER_COMPACT_HEIGHT: f64 = 294.0;
+const LAUNCHER_COMPACT_HEIGHT: f64 = 318.0;
+const LAUNCHER_MAX_WIDTH: f64 = 860.0;
+const LAUNCHER_MAX_HEIGHT: f64 = 560.0;
+const PLUGIN_SURFACE_WINDOW_DEFAULT_WIDTH: f64 = 900.0;
+const PLUGIN_SURFACE_WINDOW_DEFAULT_HEIGHT: f64 = 640.0;
+const PLUGIN_SURFACE_WINDOW_DEFAULT_MIN_WIDTH: f64 = 320.0;
+const PLUGIN_SURFACE_WINDOW_DEFAULT_MIN_HEIGHT: f64 = 240.0;
+const PLUGIN_SURFACE_WINDOW_DEFAULT_DESTROY_TIMEOUT_MS: u64 = 120_000;
+const QUICK_EDITOR_WINDOW_LABEL: &str = "quick-editor";
+const QUICK_EDITOR_WINDOW_WIDTH: f64 = LAUNCHER_COMPACT_WIDTH;
+const QUICK_EDITOR_WINDOW_HEIGHT: f64 = LAUNCHER_MAX_HEIGHT;
+const QUICK_EDITOR_WINDOW_MIN_WIDTH: f64 = 480.0;
+const QUICK_EDITOR_WINDOW_MIN_HEIGHT: f64 = 320.0;
 static PREVIOUS_FOREGROUND_PROCESS_ID: OnceLock<Mutex<Option<u32>>> = OnceLock::new();
+// Label of whichever hiven webview window held macOS keyboard focus (key
+// window) at the moment a plugin surface window (e.g. clipboard history) was
+// opened. A non-activating panel — the launcher, or quick editor rendered
+// inside it — can be the key window while NSWorkspace's frontmost app is
+// still an external app; in that case the paste target is this hiven window,
+// not the "foreground app" tracked by PREVIOUS_FOREGROUND_PROCESS_ID.
+static PREVIOUS_KEY_WINDOW_LABEL: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+#[cfg(target_os = "macos")]
+static PREVIOUS_LAUNCHER_INPUT_SOURCE_ID: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+#[allow(dead_code)]
+static LAST_FOREGROUND_SELECTION_TEXT: OnceLock<Mutex<Option<ForegroundSelectionText>>> =
+    OnceLock::new();
 static INSTALLED_APP_TARGETS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
-static PLUGIN_KV_DB: OnceLock<Result<Mutex<Connection>, String>> = OnceLock::new();
+static PLUGIN_KV_DB: OnceLock<Result<Mutex<PluginKvDb>, String>> = OnceLock::new();
+static PLUGIN_SURFACE_WINDOW_TOKENS: OnceLock<Mutex<HashMap<String, u64>>> = OnceLock::new();
+static PLUGIN_SURFACE_PAYLOADS: OnceLock<Mutex<HashMap<String, PluginSurfacePayload>>> =
+    OnceLock::new();
+static SURFACE_REGISTRY: OnceLock<SurfaceRegistryState> = OnceLock::new();
+const SURFACE_REGISTRY_EVENT: &str = "hiven://surface-registry-sync";
 const MAX_APP_ICON_CACHE_WARM_COUNT: usize = 20;
+#[allow(dead_code)]
+const FOREGROUND_SELECTION_CACHE_TTL: Duration = Duration::from_secs(30);
+const LAUNCHER_PERF_ENV: &str = "HIVEN_LAUNCHER_PERF";
+
+#[derive(Clone)]
+#[allow(dead_code)]
+struct ForegroundSelectionText {
+    text: String,
+    captured_at: Instant,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PluginSurfacePayload {
+    initial_text: Option<String>,
+}
+
+fn plugin_surface_payloads() -> &'static Mutex<HashMap<String, PluginSurfacePayload>> {
+    PLUGIN_SURFACE_PAYLOADS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn launcher_perf_enabled() -> bool {
+    std::env::var(LAUNCHER_PERF_ENV).ok().as_deref() == Some("1")
+}
+
+fn log_launcher_perf(label: &str, started_at: Instant, detail: impl AsRef<str>) {
+    if !launcher_perf_enabled() {
+        return;
+    }
+    eprintln!(
+        "[hiven:launcher-perf] {} durationMs={} {}",
+        label,
+        started_at.elapsed().as_millis(),
+        detail.as_ref()
+    );
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SurfaceInstanceRecord {
+    id: String,
+    kind: String,
+    window_label: String,
+    title: String,
+    plugin_id: Option<String>,
+    surface_id: Option<String>,
+    folder_path: Option<String>,
+    state: String,
+    can_receive_text: Option<bool>,
+    can_provide_text: Option<bool>,
+    can_attach_to_editor: Option<bool>,
+    last_active_at: u64,
+}
+
+#[derive(Default)]
+struct SurfaceRegistryState {
+    surfaces: Mutex<HashMap<String, SurfaceInstanceRecord>>,
+}
+
+fn surface_registry_state() -> &'static SurfaceRegistryState {
+    SURFACE_REGISTRY.get_or_init(SurfaceRegistryState::default)
+}
+
+fn validate_surface_instance_kind(kind: &str) -> Result<(), String> {
+    match kind {
+        "launcher" | "editor" | "plugin-surface" | "settings" | "plugins" | "plugin-editor" => {
+            Ok(())
+        }
+        _ => Err(format!("invalid surface kind: {}", kind)),
+    }
+}
+
+fn validate_surface_instance_state(state: &str) -> Result<(), String> {
+    match state {
+        "visible" | "hidden" | "destroyed" => Ok(()),
+        _ => Err(format!("invalid surface state: {}", state)),
+    }
+}
+
+fn now_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn surface_registry_upsert_record(surface: SurfaceInstanceRecord) -> Result<(), String> {
+    validate_surface_instance_kind(&surface.kind)?;
+    validate_surface_instance_state(&surface.state)?;
+    let registry = surface_registry_state();
+    registry
+        .surfaces
+        .lock()
+        .map_err(|_| "surface registry lock poisoned".to_string())?
+        .insert(surface.id.clone(), surface);
+    Ok(())
+}
+
+fn surface_registry_mark_record_state(
+    id: &str,
+    state: &str,
+    last_active_at: u64,
+) -> Result<(), String> {
+    validate_surface_instance_state(state)?;
+    let registry = surface_registry_state();
+    let mut surfaces = registry
+        .surfaces
+        .lock()
+        .map_err(|_| "surface registry lock poisoned".to_string())?;
+    if let Some(surface) = surfaces.get_mut(id) {
+        surface.state = state.to_string();
+        surface.last_active_at = last_active_at;
+    }
+    Ok(())
+}
+
+fn emit_surface_registry_mark_state(
+    app: &tauri::AppHandle,
+    id: &str,
+    state: &str,
+    last_active_at: u64,
+) {
+    let _ = app.emit(
+        SURFACE_REGISTRY_EVENT,
+        serde_json::json!({
+            "sourceId": "rust-surface-registry",
+            "type": "mark-state",
+            "id": id,
+            "state": state,
+            "lastActiveAt": last_active_at,
+        }),
+    );
+}
+
+fn emit_surface_registry_upsert(app: &tauri::AppHandle, surface: &SurfaceInstanceRecord) {
+    let _ = app.emit(
+        SURFACE_REGISTRY_EVENT,
+        serde_json::json!({
+            "sourceId": "rust-surface-registry",
+            "type": "upsert",
+            "surface": surface,
+        }),
+    );
+}
+
+fn plugin_surface_registry_record(
+    label: String,
+    _source: String,
+    plugin_id: String,
+    surface_id: String,
+    title: String,
+    state: &str,
+) -> SurfaceInstanceRecord {
+    SurfaceInstanceRecord {
+        id: label.clone(),
+        kind: "plugin-surface".to_string(),
+        window_label: label,
+        title,
+        plugin_id: Some(plugin_id),
+        surface_id: Some(surface_id),
+        folder_path: None,
+        state: state.to_string(),
+        can_receive_text: Some(true),
+        can_provide_text: Some(true),
+        can_attach_to_editor: Some(true),
+        last_active_at: now_millis(),
+    }
+}
+
+#[tauri::command]
+fn surface_registry_snapshot() -> Result<Vec<SurfaceInstanceRecord>, String> {
+    let registry = surface_registry_state();
+    let surfaces = registry
+        .surfaces
+        .lock()
+        .map_err(|_| "surface registry lock poisoned".to_string())?;
+    let mut snapshot: Vec<SurfaceInstanceRecord> = surfaces.values().cloned().collect();
+    snapshot.sort_by(|a, b| b.last_active_at.cmp(&a.last_active_at));
+    Ok(snapshot)
+}
+
+#[tauri::command]
+fn surface_registry_upsert(surface: SurfaceInstanceRecord) -> Result<(), String> {
+    surface_registry_upsert_record(surface)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+fn surface_registry_mark_state(
+    id: String,
+    state: String,
+    last_active_at: u64,
+) -> Result<(), String> {
+    surface_registry_mark_record_state(&id, &state, last_active_at)
+}
+
+#[tauri::command]
+fn surface_registry_remove(id: String) -> Result<(), String> {
+    let registry = surface_registry_state();
+    registry
+        .surfaces
+        .lock()
+        .map_err(|_| "surface registry lock poisoned".to_string())?
+        .remove(&id);
+    Ok(())
+}
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -47,6 +282,152 @@ unsafe extern "C" {
     fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void;
     fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
     fn dlclose(handle: *mut c_void) -> c_int;
+}
+
+#[cfg(target_os = "macos")]
+fn previous_launcher_input_source_id() -> &'static Mutex<Option<String>> {
+    PREVIOUS_LAUNCHER_INPUT_SOURCE_ID.get_or_init(|| Mutex::new(None))
+}
+
+#[cfg(target_os = "macos")]
+fn current_keyboard_input_source_id() -> Option<String> {
+    use core_foundation::base::{CFType, TCFType};
+    use core_foundation::string::{CFString, CFStringRef};
+
+    #[link(name = "Carbon", kind = "framework")]
+    extern "C" {
+        static kTISPropertyInputSourceID: CFStringRef;
+        fn TISCopyCurrentKeyboardInputSource() -> *const c_void;
+        fn TISGetInputSourceProperty(
+            input_source: *const c_void,
+            property_key: CFStringRef,
+        ) -> *const c_void;
+    }
+
+    unsafe {
+        let source = TISCopyCurrentKeyboardInputSource();
+        if source.is_null() {
+            return None;
+        }
+        let _source_owner =
+            CFType::wrap_under_create_rule(source as core_foundation::base::CFTypeRef);
+        let property = TISGetInputSourceProperty(source, kTISPropertyInputSourceID);
+        if property.is_null() {
+            return None;
+        }
+        let source_id = CFString::wrap_under_get_rule(property as CFStringRef).to_string();
+        Some(source_id)
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn select_keyboard_input_source_by_id(source_id: &str) -> Result<(), String> {
+    use core_foundation::array::{CFArray, CFArrayRef};
+    use core_foundation::base::{CFTypeRef, TCFType};
+    use core_foundation::dictionary::{CFDictionary, CFDictionaryRef};
+    use core_foundation::string::{CFString, CFStringRef};
+
+    #[link(name = "Carbon", kind = "framework")]
+    extern "C" {
+        static kTISPropertyInputSourceID: CFStringRef;
+        fn TISCreateInputSourceList(
+            properties: CFDictionaryRef,
+            include_all_installed: bool,
+        ) -> CFArrayRef;
+        fn TISSelectInputSource(input_source: *const c_void) -> c_int;
+    }
+
+    let source_id = CFString::new(source_id);
+    let key = unsafe { CFString::wrap_under_get_rule(kTISPropertyInputSourceID) };
+    let properties = CFDictionary::from_CFType_pairs(&[(key.as_CFType(), source_id.as_CFType())]);
+    let list_ref = unsafe { TISCreateInputSourceList(properties.as_concrete_TypeRef(), true) };
+    if list_ref.is_null() {
+        return Err("Unable to query macOS input sources".to_string());
+    }
+
+    let list = unsafe { CFArray::<CFTypeRef>::wrap_under_create_rule(list_ref) };
+    let Some(input_source) = list.get(0) else {
+        return Err(format!(
+            "macOS input source is not installed: {}",
+            source_id
+        ));
+    };
+    let status = unsafe { TISSelectInputSource(*input_source as *const c_void) };
+    if status == 0 {
+        Ok(())
+    } else {
+        Err(format!(
+            "TISSelectInputSource failed with status {}",
+            status
+        ))
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn switch_to_default_english_input_source() -> Result<(), String> {
+    const ABC_INPUT_SOURCE_ID: &str = "com.apple.keylayout.ABC";
+    let previous = current_keyboard_input_source_id();
+    if let Ok(mut stored) = previous_launcher_input_source_id().lock() {
+        if stored.is_none() {
+            *stored = previous.filter(|source_id| source_id != ABC_INPUT_SOURCE_ID);
+        }
+    }
+    select_keyboard_input_source_by_id(ABC_INPUT_SOURCE_ID)
+}
+
+#[cfg(target_os = "macos")]
+fn restore_launcher_previous_input_source() -> Result<(), String> {
+    let previous = previous_launcher_input_source_id()
+        .lock()
+        .map_err(|_| "launcher input source lock poisoned".to_string())?
+        .take();
+    if let Some(source_id) = previous {
+        select_keyboard_input_source_by_id(&source_id)
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn switch_to_default_english_input_source() -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn restore_launcher_previous_input_source() -> Result<(), String> {
+    Ok(())
+}
+
+#[tauri::command]
+async fn prepare_launcher_input_source(app: tauri::AppHandle) -> Result<(), String> {
+    run_launcher_input_source_on_main_thread(app, switch_to_default_english_input_source)
+}
+
+#[tauri::command]
+async fn restore_launcher_input_source(app: tauri::AppHandle) -> Result<(), String> {
+    run_launcher_input_source_on_main_thread(app, restore_launcher_previous_input_source)
+}
+
+#[cfg(target_os = "macos")]
+fn run_launcher_input_source_on_main_thread(
+    app: tauri::AppHandle,
+    operation: fn() -> Result<(), String>,
+) -> Result<(), String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let _ = tx.send(operation());
+    })
+    .map_err(|error| error.to_string())?;
+    rx.recv()
+        .unwrap_or_else(|_| Err("launcher input source operation did not complete".to_string()))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn run_launcher_input_source_on_main_thread(
+    _app: tauri::AppHandle,
+    operation: fn() -> Result<(), String>,
+) -> Result<(), String> {
+    operation()
 }
 
 #[cfg(target_os = "macos")]
@@ -157,61 +538,46 @@ fn perform_system_power_action(action: SystemPowerAction) -> Result<(), String> 
 }
 
 #[tauri::command]
-fn show_and_focus_window(app: tauri::AppHandle) {
-    #[cfg(target_os = "macos")]
-    {
-        let app_clone = app.clone();
-        let _ = app.run_on_main_thread(move || {
-            show_and_focus_main_window(&app_clone);
-        });
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        show_and_focus_main_window(&app);
-    }
-}
-
-fn show_and_focus_main_window(app: &tauri::AppHandle) {
-    use tauri::Manager;
-
-    // Clear saved foreground app so that a subsequent hide_launcher_window
-    // won't restore focus away from the main window we're about to show.
-    if let Ok(mut stored) = previous_foreground_process_id().lock() {
-        *stored = None;
-    }
-
-    if let Some(window) = app.get_webview_window("launcher") {
-        let _ = window.hide();
-    }
-
-    activate_app();
-
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
-    }
-}
-
-#[tauri::command]
 async fn show_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
     show_launcher_window_for_hotkey(app)
 }
 
 pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(), String> {
+    show_launcher_window_for_hotkey_with_event(app, "hiven://launcher-open")
+}
+
+fn show_launcher_window_for_hotkey_with_event(
+    app: tauri::AppHandle,
+    open_event: &'static str,
+) -> Result<(), String> {
     use tauri::Manager;
 
+    let total_started_at = Instant::now();
     let app_clone = app.clone();
     app.run_on_main_thread(move || {
+        let main_thread_started_at = Instant::now();
         let existing_launcher = app_clone.get_webview_window("launcher");
         let was_visible = existing_launcher
             .as_ref()
             .and_then(|window| window.is_visible().ok())
             .unwrap_or(false);
         if !was_visible {
+            let started_at = Instant::now();
             remember_previous_foreground_app();
+            // The launcher is a global search/paste surface: its paste target
+            // is always whatever external app was previously in the
+            // foreground, never a hiven window — clear any key-window label
+            // a plugin surface window may have left behind so it can't leak
+            // into this launcher-driven paste.
+            remember_previous_key_window_label(None);
+            log_launcher_perf("native:remember-foreground-app", started_at, "");
+            // [DISABLED] External selection capture — logic preserved, entry point disabled.
+            // let started_at = Instant::now();
+            // capture_foreground_selection_text(&app_clone);
+            // log_launcher_perf("native:capture-selection-dispatch", started_at, "");
         }
 
+        let started_at = Instant::now();
         let window = if let Some(window) = existing_launcher {
             window
         } else {
@@ -236,31 +602,67 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
                 }
             }
         };
+        log_launcher_perf(
+            "native:get-or-create-window",
+            started_at,
+            format!("wasVisible={}", was_visible),
+        );
 
         if !was_visible {
-            if let Err(error) = window.set_size(LogicalSize::new(
-                LAUNCHER_COMPACT_WIDTH,
-                LAUNCHER_COMPACT_HEIGHT,
-            )) {
+            let started_at = Instant::now();
+            let (compact_width, compact_height) = launcher_default_window_size_for_window(&window);
+            if let Err(error) = window.set_size(LogicalSize::new(compact_width, compact_height)) {
                 eprintln!(
                     "[hiven] Failed to compact launcher window before show: {}",
                     error
                 );
             }
+            log_launcher_perf(
+                "native:resize-before-show",
+                started_at,
+                format!("width={} height={}", compact_width, compact_height),
+            );
         }
+        if !was_visible {
+            let started_at = Instant::now();
+            if let Err(error) = switch_to_default_english_input_source() {
+                eprintln!(
+                    "[hiven] Failed to switch launcher input source to default English: {}",
+                    error
+                );
+            }
+            log_launcher_perf("native:switch-input-source", started_at, "");
+        }
+        let started_at = Instant::now();
         if let Err(error) = show_launcher_window_without_app_activation(&window) {
             eprintln!("[hiven] Failed to show launcher window: {}", error);
             return;
         }
+        log_launcher_perf("native:show-window", started_at, "");
         if !was_visible {
             // Position AFTER showing: on macOS a `set_position` on a hidden
             // window gets clobbered by the window's initial frame when it is
             // ordered front, leaving it at the OS default (bottom-right) spot.
+            let started_at = Instant::now();
             center_launcher_window(&window);
-            let _ = window.emit("hiven://launcher-open", ());
+            log_launcher_perf("native:center-window", started_at, "");
+            let started_at = Instant::now();
+            let _ = window.emit(open_event, ());
+            log_launcher_perf("native:emit-launcher-open", started_at, "");
         }
+        log_launcher_perf(
+            "native:main-thread-open",
+            main_thread_started_at,
+            format!("wasVisible={}", was_visible),
+        );
     })
-    .map_err(|error| error.to_string())
+    .map_err(|error| error.to_string())?;
+    log_launcher_perf(
+        "native:show-launcher-window-for-hotkey",
+        total_started_at,
+        "",
+    );
+    Ok(())
 }
 
 /// Position the launcher window horizontally centered and in the upper portion
@@ -269,6 +671,27 @@ pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(
 /// since the launcher config carries no position. The cursor's monitor is used
 /// rather than `current_monitor()` so the launcher follows the active screen
 /// instead of wherever the hidden window happened to live.
+/// Compute the launcher logical width for a given monitor (1/3 of screen).
+fn launcher_logical_width_for_monitor(monitor: &tauri::Monitor) -> f64 {
+    let logical_w = monitor.size().width as f64 / monitor.scale_factor();
+    (logical_w / 3.0)
+        .round()
+        .clamp(LAUNCHER_COMPACT_WIDTH, LAUNCHER_MAX_WIDTH)
+}
+
+fn launcher_default_window_size_for_window(window: &tauri::WebviewWindow) -> (f64, f64) {
+    monitor_under_cursor(window)
+        .or_else(|| window.current_monitor().ok().flatten())
+        .or_else(|| window.primary_monitor().ok().flatten())
+        .map(|monitor| {
+            (
+                launcher_logical_width_for_monitor(&monitor),
+                LAUNCHER_MAX_HEIGHT,
+            )
+        })
+        .unwrap_or((LAUNCHER_COMPACT_WIDTH, LAUNCHER_COMPACT_HEIGHT))
+}
+
 fn center_launcher_window(window: &tauri::WebviewWindow) {
     let monitor = monitor_under_cursor(window)
         .or_else(|| window.current_monitor().ok().flatten())
@@ -278,22 +701,89 @@ fn center_launcher_window(window: &tauri::WebviewWindow) {
     let scale = monitor.scale_factor();
     let mon_pos = monitor.position();
     let mon_size = monitor.size();
-    let win_w = (LAUNCHER_COMPACT_WIDTH * scale).round() as i32;
-    let win_h = (LAUNCHER_COMPACT_HEIGHT * scale).round() as i32;
+    // Read the current window size (already set by the compact-resize step
+    // before show) so we don't resize again and cause flicker.
+    let (win_w, _win_h) = window
+        .outer_size()
+        .map(|s| (s.width as i32, s.height as i32))
+        .unwrap_or_else(|_| {
+            let lw = launcher_logical_width_for_monitor(&monitor);
+            (
+                (lw * scale).round() as i32,
+                (LAUNCHER_MAX_HEIGHT * scale).round() as i32,
+            )
+        });
 
     let x = mon_pos.x + ((mon_size.width as i32 - win_w) / 2).max(0);
-    // Keep the panel in the upper third so it stays anchored as the window
-    // grows downward to fit results.
-    let upper = ((mon_size.height as i32 - win_h) as f64 * 0.30).round() as i32;
-    let y = mon_pos.y + upper.max(0);
+    // Position in the upper portion of the screen (1/5 from top, Spotlight-style)
+    let y = mon_pos.y + (mon_size.height as i32 / 5).max(0);
+
+    // Use NSWindow setFrameTopLeftPoint: directly for reliable cross-screen
+    // positioning across monitors on macOS.
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(ns_window) = window.ns_window() {
+            if !ns_window.is_null() {
+                unsafe {
+                    let ns_window = ns_window as *mut objc2::runtime::AnyObject;
+                    // macOS screen coordinates: origin at bottom-left of primary screen.
+                    // Tauri physical coords: origin at top-left. We need to convert.
+                    let primary_height = window
+                        .primary_monitor()
+                        .ok()
+                        .flatten()
+                        .map(|m| m.size().height as f64)
+                        .unwrap_or(mon_size.height as f64);
+                    let ns_x = x as f64 / scale;
+                    let ns_y = (primary_height - y as f64) / scale;
+
+                    // setFrameTopLeftPoint: takes a CGPoint/NSPoint {x, y}
+                    // which is repr(C) two f64s. Pass as two separate args
+                    // encoded as a single NSPoint via raw msg_send.
+                    let sel = objc2::sel!(setFrameTopLeftPoint:);
+                    let point: [f64; 2] = [ns_x, ns_y];
+                    let _: () =
+                        objc2::runtime::MessageReceiver::send_message(ns_window, sel, (point,));
+                }
+                return;
+            }
+        }
+    }
 
     if let Err(error) = window.set_position(tauri::PhysicalPosition::new(x, y)) {
         eprintln!("[hiven] Failed to center launcher window: {}", error);
     }
 }
 
-/// Find the monitor that currently contains the mouse cursor (physical coords).
+/// Find the monitor that currently contains the mouse cursor.
+/// Uses CGEvent on macOS for reliable global cursor position even when
+/// the launcher window is hidden.
 fn monitor_under_cursor(window: &tauri::WebviewWindow) -> Option<tauri::Monitor> {
+    // First try CGEvent-based approach (works even when window is hidden)
+    if let Some(cursor_points) = global_cursor_position() {
+        if let Ok(monitors) = window.available_monitors() {
+            // On macOS, CGEvent.location() returns points (logical coords).
+            // Tauri's monitor.position() is PhysicalPosition (pixels).
+            // Compare in logical space by dividing monitor physical coords by scale.
+            let found = monitors.into_iter().find(|monitor| {
+                let scale = monitor.scale_factor();
+                let pos = monitor.position();
+                let size = monitor.size();
+                let lx = pos.x as f64 / scale;
+                let ly = pos.y as f64 / scale;
+                let lw = size.width as f64 / scale;
+                let lh = size.height as f64 / scale;
+                cursor_points.x >= lx
+                    && cursor_points.x < lx + lw
+                    && cursor_points.y >= ly
+                    && cursor_points.y < ly + lh
+            });
+            if found.is_some() {
+                return found;
+            }
+        }
+    }
+    // Fallback: Tauri's cursor_position (requires visible window)
     let cursor = window.cursor_position().ok()?;
     let monitors = window.available_monitors().ok()?;
     monitors.into_iter().find(|monitor| {
@@ -306,6 +796,26 @@ fn monitor_under_cursor(window: &tauri::WebviewWindow) -> Option<tauri::Monitor>
     })
 }
 
+#[cfg(target_os = "macos")]
+fn global_cursor_position() -> Option<tauri::PhysicalPosition<f64>> {
+    // Use CoreGraphics to get the mouse location in global display coordinates.
+    // CGEventGetLocation returns physical pixel coordinates relative to the
+    // top-left corner of the main display — the same coordinate space that
+    // Tauri's monitor.position() uses.
+    use core_graphics::event::CGEvent;
+    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+
+    let source = CGEventSource::new(CGEventSourceStateID::CombinedSessionState).ok()?;
+    let event = CGEvent::new(source).ok()?;
+    let point = event.location();
+    Some(tauri::PhysicalPosition::new(point.x, point.y))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn global_cursor_position() -> Option<tauri::PhysicalPosition<f64>> {
+    None
+}
+
 #[tauri::command]
 async fn hide_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
     use tauri::Manager;
@@ -313,13 +823,490 @@ async fn hide_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
     let app_clone = app.clone();
     app.run_on_main_thread(move || {
         if let Some(window) = app_clone.get_webview_window("launcher") {
-            restore_previous_foreground_app();
+            if let Err(error) = restore_launcher_previous_input_source() {
+                eprintln!("[hiven] Failed to restore launcher input source: {}", error);
+            }
             if let Err(error) = window.hide() {
                 eprintln!("[hiven] Failed to hide launcher window: {}", error);
             }
         }
+        restore_previous_foreground_app();
     })
     .map_err(|error| error.to_string())
+}
+
+// Combines hide_launcher_window + simulate_paste into a single native command.
+// Once the launcher WebView is hidden, macOS throttles its JS timers, so a JS-side
+// setTimeout between hiding the launcher and simulating the paste is unreliable
+// (a hidden WKWebView may throttle JS execution). Running the wait for foreground
+// focus handoff and the synthetic Cmd/Ctrl+V natively in Rust avoids that entirely.
+#[tauri::command]
+async fn hide_launcher_and_paste(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    // Phase 1 (main thread): restore input source and hide whichever window
+    // actually invoked this command. Both the launcher's non-activating panel
+    // and an activating plugin surface window (e.g. the clipboard history panel
+    // opened via Cmd+Shift+V) call this same command, so each must hide itself —
+    // the previous code hardcoded `get_webview_window("launcher")`, which
+    // silently no-op'd for any other caller and left it as the frontmost key
+    // window, breaking the focus handoff below.
+    let (tx, rx) = std::sync::mpsc::channel();
+    let app_for_main_thread = app.clone();
+    app.run_on_main_thread(move || {
+        let app = app_for_main_thread;
+        if window.label() == "launcher" {
+            // Input source restoration is launcher-specific; plugin surface
+            // windows never touch the keyboard input source.
+            if let Err(error) = restore_launcher_previous_input_source() {
+                eprintln!("[hiven] Failed to restore launcher input source: {}", error);
+            }
+        }
+        if let Err(error) = window.hide() {
+            eprintln!("[hiven] Failed to hide {} window: {}", window.label(), error);
+        }
+        let target_pid = previous_foreground_process_id()
+            .lock()
+            .ok()
+            .and_then(|mut stored| stored.take());
+        let key_label = previous_key_window_label()
+            .lock()
+            .ok()
+            .and_then(|mut stored| stored.take());
+        // If hiven itself held keyboard focus (a non-activating panel like
+        // the launcher/quick editor, or a detached window such as a
+        // standalone quick editor) when the surface window was opened, the
+        // real paste target is that hiven window — not the "remembered pid"
+        // above, which only tracks the OS-level frontmost app and can be a
+        // completely unrelated external app (e.g. an IDE) in that case.
+        // Activating that remembered app here would incorrectly steal focus
+        // back away from hiven's own window.
+        let target_is_self = key_label
+            .as_ref()
+            .and_then(|label| app.get_webview_window(label))
+            .map(|target_window| {
+                if current_foreground_process_id() == Some(std::process::id()) {
+                    // hiven is already the frontmost app (e.g. the main
+                    // window or a detached quick editor never lost app
+                    // activation) — a plain focus restore is enough; do not
+                    // swizzle an ordinary window into a non-activating panel.
+                    if let Err(error) = target_window.set_focus() {
+                        eprintln!(
+                            "[hiven] Failed to focus previous key window: {}",
+                            error
+                        );
+                    }
+                } else if let Err(error) =
+                    show_launcher_window_without_app_activation(&target_window)
+                {
+                    eprintln!(
+                        "[hiven] Failed to restore previous key window without activation: {}",
+                        error
+                    );
+                }
+            })
+            .is_some();
+        // Restore activation only if it is actually needed, and only when the
+        // target isn't one of hiven's own windows (handled above). The
+        // launcher is a non-activating panel, so the target app was never
+        // deactivated and `current_foreground_process_id() == Some(pid)`
+        // already holds here — we skip activate_process, matching Maccy's
+        // paste path (re-activating an already-active app makes macOS
+        // re-pick its key window/focus ring, which can drop the very text
+        // field the user had focused). A plugin surface window, by contrast,
+        // IS an activating window (`.focused(true)` in
+        // show_plugin_surface_window), so opening it deactivated the target
+        // app; here we must hand activation back explicitly, or the
+        // synthetic Cmd+V below lands on hiven itself.
+        if !target_is_self {
+            if let Some(pid) = target_pid {
+                if current_foreground_process_id() != Some(pid) {
+                    activate_process(pid);
+                }
+            }
+        }
+        let _ = tx.send((target_pid, target_is_self));
+    })
+    .map_err(|error| error.to_string())?;
+    let (target_pid, target_is_self) = rx.recv().map_err(|error| error.to_string())?;
+
+    // Phase 2 (blocking thread): the launcher WebView is throttled once hidden, so
+    // the focus-handoff wait and the synthetic Cmd/Ctrl+V must run natively.
+    tokio::task::spawn_blocking(move || {
+        wait_for_foreground_handoff_then_paste(target_pid, target_is_self)
+    })
+    .await
+    .map_err(|e| format!("spawn_blocking failed: {}", e))?
+}
+
+#[cfg(target_os = "macos")]
+fn wait_for_foreground_handoff_then_paste(
+    target_pid: Option<u32>,
+    target_is_self: bool,
+) -> Result<(), String> {
+    const POLL_INTERVAL_MS: u64 = 20;
+    const MAX_WAIT_MS: u64 = 1000;
+    // Browser address bars and other focused text fields may restore after the
+    // app activation notification, so give the first responder a short settle window.
+    const SETTLE_DELAY_MS: u64 = 120;
+
+    if target_is_self {
+        // The paste target is one of hiven's own windows, whose focus was
+        // already restored on the main thread above — the OS-level frontmost
+        // app will never equal a pid here (there is none to wait for), so
+        // polling for a handoff would just burn the full MAX_WAIT_MS. Settle
+        // briefly for the first responder to update, then paste directly.
+        std::thread::sleep(Duration::from_millis(SETTLE_DELAY_MS));
+        return simulate_paste_impl();
+    }
+
+    let own_pid = std::process::id();
+    let started_at = Instant::now();
+    let deadline = started_at + Duration::from_millis(MAX_WAIT_MS);
+    loop {
+        let handed_off = match target_pid {
+            Some(pid) => current_foreground_process_id() == Some(pid),
+            None => current_foreground_process_id() != Some(own_pid),
+        };
+        if handed_off || Instant::now() >= deadline {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(POLL_INTERVAL_MS));
+    }
+    std::thread::sleep(Duration::from_millis(SETTLE_DELAY_MS));
+    simulate_paste_impl()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn wait_for_foreground_handoff_then_paste(
+    _target_pid: Option<u32>,
+    _target_is_self: bool,
+) -> Result<(), String> {
+    // current_foreground_process_id() always returns None on this platform, so
+    // polling for a focus handoff would be meaningless; fall back to a fixed delay.
+    std::thread::sleep(Duration::from_millis(200));
+    simulate_paste_impl()
+}
+
+#[tauri::command]
+async fn show_quick_editor_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(QUICK_EDITOR_WINDOW_LABEL) {
+        window.show().map_err(|e| e.to_string())?;
+        window.set_focus().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+
+    let window = tauri::WebviewWindowBuilder::new(
+        &app,
+        QUICK_EDITOR_WINDOW_LABEL,
+        tauri::WebviewUrl::App("index.html?window=quick-editor".into()),
+    )
+    .title("Quick Editor")
+    .inner_size(QUICK_EDITOR_WINDOW_WIDTH, QUICK_EDITOR_WINDOW_HEIGHT)
+    .min_inner_size(
+        QUICK_EDITOR_WINDOW_MIN_WIDTH,
+        QUICK_EDITOR_WINDOW_MIN_HEIGHT,
+    )
+    .decorations(false)
+    .transparent(true)
+    .shadow(false)
+    .resizable(true)
+    .focused(true)
+    .skip_taskbar(false)
+    .center()
+    .build()
+    .map_err(|e| e.to_string())?;
+
+    let (quick_width, quick_height) = launcher_default_window_size_for_window(&window);
+    window.set_size(LogicalSize::new(quick_width, quick_height))
+        .map_err(|e| e.to_string())?;
+    window.show().map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn close_quick_editor_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(QUICK_EDITOR_WINDOW_LABEL) {
+        window.close().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn show_plugin_surface_window(
+    app: tauri::AppHandle,
+    source: String,
+    plugin_id: String,
+    surface_id: String,
+    title: Option<String>,
+    width: Option<f64>,
+    height: Option<f64>,
+    min_width: Option<f64>,
+    min_height: Option<f64>,
+    resizable: Option<bool>,
+    close_on_blur: Option<bool>,
+    destroy_timeout_ms: Option<u64>,
+) -> Result<(), String> {
+    let label = plugin_surface_window_label(&source, &plugin_id, &surface_id);
+    let url = plugin_surface_window_url(&source, &plugin_id, &surface_id);
+    let title = title.unwrap_or_else(|| surface_id.clone());
+    let width = width.unwrap_or(PLUGIN_SURFACE_WINDOW_DEFAULT_WIDTH);
+    let height = height.unwrap_or(PLUGIN_SURFACE_WINDOW_DEFAULT_HEIGHT);
+    let min_width = min_width.unwrap_or(PLUGIN_SURFACE_WINDOW_DEFAULT_MIN_WIDTH);
+    let min_height = min_height.unwrap_or(PLUGIN_SURFACE_WINDOW_DEFAULT_MIN_HEIGHT);
+    let resizable = resizable.unwrap_or(true);
+    let close_on_blur = close_on_blur.unwrap_or(true);
+    let destroy_timeout_ms =
+        destroy_timeout_ms.unwrap_or(PLUGIN_SURFACE_WINDOW_DEFAULT_DESTROY_TIMEOUT_MS);
+
+    touch_plugin_surface_window(&label);
+    let existing_window = app.get_webview_window(&label);
+    let was_visible = existing_window
+        .as_ref()
+        .and_then(|window| window.is_visible().ok())
+        .unwrap_or(false);
+    if !was_visible {
+        // Unlike the launcher's non-activating panel, a plugin surface window is
+        // built with `.focused(true)` below, so showing/creating it here steals
+        // activation from whatever app the user was in. Remember it now (mirrors
+        // the launcher's show path) so hide_launcher_and_paste can hand
+        // activation back to it once the surface window is hidden again.
+        remember_previous_foreground_app();
+        // But that "foreground app" may not actually be the real paste
+        // target: a non-activating panel (the launcher, or quick editor
+        // rendered inside it) can hold macOS keyboard focus (isKeyWindow)
+        // while NSWorkspace's frontmost app is still an unrelated external
+        // app like an IDE — that's the whole point of a non-activating
+        // panel. Detect that here, before opening this surface window steals
+        // key-window status away, so hide_launcher_and_paste can hand focus
+        // back to hiven's own window instead of the external app.
+        let previous_key_window_label = app
+            .webview_windows()
+            .into_iter()
+            .find(|(window_label, window)| {
+                window_label != &label && window.is_focused().unwrap_or(false)
+            })
+            .map(|(window_label, _)| window_label);
+        remember_previous_key_window_label(previous_key_window_label);
+    }
+    let window = if let Some(window) = existing_window {
+        let _ = window.set_size(LogicalSize::new(width, height));
+        window
+    } else {
+        let window =
+            tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App(url.into()))
+                .title(title.clone())
+                .inner_size(width, height)
+                .min_inner_size(min_width, min_height)
+                .decorations(false)
+                .transparent(true)
+                .shadow(false)
+                .resizable(resizable)
+                .focused(true)
+                .skip_taskbar(false)
+                .center()
+                .build()
+                .map_err(|error| error.to_string())?;
+
+        attach_plugin_surface_window_events(
+            &window,
+            app.clone(),
+            label.clone(),
+            source.clone(),
+            plugin_id.clone(),
+            surface_id.clone(),
+            title.clone(),
+            close_on_blur,
+            destroy_timeout_ms,
+        );
+        window
+    };
+
+    show_and_focus_plugin_surface_window(&app, &window)?;
+    let surface =
+        plugin_surface_registry_record(label, source, plugin_id, surface_id, title, "visible");
+    surface_registry_upsert_record(surface.clone())?;
+    emit_surface_registry_upsert(&app, &surface);
+    Ok(())
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn hide_plugin_surface_window(
+    app: tauri::AppHandle,
+    source: String,
+    plugin_id: String,
+    surface_id: String,
+    destroy_timeout_ms: Option<u64>,
+) -> Result<(), String> {
+    let label = plugin_surface_window_label(&source, &plugin_id, &surface_id);
+    let destroy_timeout_ms =
+        destroy_timeout_ms.unwrap_or(PLUGIN_SURFACE_WINDOW_DEFAULT_DESTROY_TIMEOUT_MS);
+    let token = touch_plugin_surface_window(&label);
+    let Some(window) = app.get_webview_window(&label) else {
+        return Ok(());
+    };
+    window.hide().map_err(|error| error.to_string())?;
+    let last_active_at = now_millis();
+    surface_registry_mark_record_state(&label, "hidden", last_active_at)?;
+    emit_surface_registry_mark_state(&app, &label, "hidden", last_active_at);
+    schedule_plugin_surface_window_destroy(app, label, token, destroy_timeout_ms);
+    Ok(())
+}
+
+fn plugin_surface_window_label(source: &str, plugin_id: &str, surface_id: &str) -> String {
+    format!("plugin-surface:{source}:{plugin_id}:{surface_id}")
+}
+
+fn plugin_surface_window_url(source: &str, plugin_id: &str, surface_id: &str) -> String {
+    format!(
+        "index.html?window=plugin-surface&source={}&pluginId={}&surfaceId={}",
+        url_query_encode(source),
+        url_query_encode(plugin_id),
+        url_query_encode(surface_id)
+    )
+}
+
+fn url_query_encode(value: &str) -> String {
+    let mut encoded = String::new();
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                encoded.push(byte as char)
+            }
+            _ => encoded.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    encoded
+}
+
+fn plugin_surface_window_tokens() -> &'static Mutex<HashMap<String, u64>> {
+    PLUGIN_SURFACE_WINDOW_TOKENS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[tauri::command(rename_all = "camelCase")]
+fn plugin_surface_payload_set(label: String, payload: PluginSurfacePayload) -> Result<(), String> {
+    plugin_surface_payloads()
+        .lock()
+        .map_err(|_| "plugin surface payload lock poisoned".to_string())?
+        .insert(label, payload);
+    Ok(())
+}
+
+#[tauri::command(rename_all = "camelCase")]
+fn plugin_surface_payload_consume(label: String) -> Result<Option<PluginSurfacePayload>, String> {
+    let mut payloads = plugin_surface_payloads()
+        .lock()
+        .map_err(|_| "plugin surface payload lock poisoned".to_string())?;
+    Ok(payloads.remove(&label))
+}
+
+fn touch_plugin_surface_window(label: &str) -> u64 {
+    let Ok(mut tokens) = plugin_surface_window_tokens().lock() else {
+        return 0;
+    };
+    let token = tokens.get(label).copied().unwrap_or(0).wrapping_add(1);
+    tokens.insert(label.to_string(), token);
+    token
+}
+
+fn current_plugin_surface_window_token(label: &str) -> Option<u64> {
+    plugin_surface_window_tokens()
+        .lock()
+        .ok()
+        .and_then(|tokens| tokens.get(label).copied())
+}
+
+fn clear_plugin_surface_window_token(label: &str) {
+    if let Ok(mut tokens) = plugin_surface_window_tokens().lock() {
+        tokens.remove(label);
+    }
+}
+
+fn attach_plugin_surface_window_events(
+    window: &tauri::WebviewWindow,
+    app: tauri::AppHandle,
+    label: String,
+    source: String,
+    plugin_id: String,
+    surface_id: String,
+    title: String,
+    close_on_blur: bool,
+    destroy_timeout_ms: u64,
+) {
+    window.on_window_event(move |event| match event {
+        tauri::WindowEvent::Focused(false) if close_on_blur => {
+            let token = touch_plugin_surface_window(&label);
+            if let Some(window) = app.get_webview_window(&label) {
+                let _ = window.hide();
+            }
+            let last_active_at = now_millis();
+            let _ = surface_registry_mark_record_state(&label, "hidden", last_active_at);
+            emit_surface_registry_mark_state(&app, &label, "hidden", last_active_at);
+            schedule_plugin_surface_window_destroy(
+                app.clone(),
+                label.clone(),
+                token,
+                destroy_timeout_ms,
+            );
+        }
+        tauri::WindowEvent::Destroyed => {
+            clear_plugin_surface_window_token(&label);
+            let last_active_at = now_millis();
+            let destroyed_surface = plugin_surface_registry_record(
+                label.clone(),
+                source.clone(),
+                plugin_id.clone(),
+                surface_id.clone(),
+                title.clone(),
+                "destroyed",
+            );
+            let destroyed_surface = SurfaceInstanceRecord {
+                last_active_at,
+                ..destroyed_surface
+            };
+            let _ = surface_registry_upsert_record(destroyed_surface.clone());
+            emit_surface_registry_upsert(&app, &destroyed_surface);
+        }
+        _ => {}
+    });
+}
+
+fn schedule_plugin_surface_window_destroy(
+    app: tauri::AppHandle,
+    label: String,
+    token: u64,
+    destroy_timeout_ms: u64,
+) {
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(destroy_timeout_ms));
+        if current_plugin_surface_window_token(&label) != Some(token) {
+            return;
+        }
+        if let Some(window) = app.get_webview_window(&label) {
+            let _ = window.destroy();
+        }
+        clear_plugin_surface_window_token(&label);
+    });
+}
+
+fn show_and_focus_plugin_surface_window(
+    app: &tauri::AppHandle,
+    window: &tauri::WebviewWindow,
+) -> Result<(), String> {
+    let window_clone = window.clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let result = (|| {
+            window_clone.show().map_err(|error| error.to_string())?;
+            let _ = window_clone.unminimize();
+            window_clone.set_focus().map_err(|error| error.to_string())
+        })();
+        let _ = tx.send(result);
+    })
+    .map_err(|error| error.to_string())?;
+    rx.recv().map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -342,7 +1329,12 @@ fn simulate_paste_impl() -> Result<(), String> {
     }
 
     const KEY_V: u16 = 9;
-    let src = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
+    // Session-state source + session tap is the standard key-injection path
+    // used by clipboard tools (e.g. Maccy): session-layer events are queued
+    // by the window server, so they serialize after the panel's just-issued
+    // orderOut instead of racing it the way HID-layer injection can before
+    // the focus handoff has completed.
+    let src = CGEventSource::new(CGEventSourceStateID::CombinedSessionState)
         .map_err(|_| "Failed to create event source")?;
     let dn = CGEvent::new_keyboard_event(src.clone(), KEY_V, true)
         .map_err(|_| "Failed to create key-down event")?;
@@ -350,8 +1342,8 @@ fn simulate_paste_impl() -> Result<(), String> {
         .map_err(|_| "Failed to create key-up event")?;
     dn.set_flags(CGEventFlags::CGEventFlagCommand);
     up.set_flags(CGEventFlags::CGEventFlagCommand);
-    dn.post(CGEventTapLocation::HID);
-    up.post(CGEventTapLocation::HID);
+    dn.post(CGEventTapLocation::Session);
+    up.post(CGEventTapLocation::Session);
     Ok(())
 }
 
@@ -431,6 +1423,331 @@ fn remember_previous_foreground_app() {
     if let Ok(mut stored) = previous_foreground_process_id().lock() {
         *stored = previous;
     }
+}
+
+fn previous_key_window_label() -> &'static Mutex<Option<String>> {
+    PREVIOUS_KEY_WINDOW_LABEL.get_or_init(|| Mutex::new(None))
+}
+
+fn remember_previous_key_window_label(label: Option<String>) {
+    // Always overwrite (including with None) — a stale label from a previous
+    // open would otherwise leak into a later, unrelated paste and redirect it
+    // to the wrong window.
+    if let Ok(mut stored) = previous_key_window_label().lock() {
+        *stored = label;
+    }
+}
+
+#[allow(dead_code)]
+fn last_foreground_selection_state() -> &'static Mutex<Option<ForegroundSelectionText>> {
+    LAST_FOREGROUND_SELECTION_TEXT.get_or_init(|| Mutex::new(None))
+}
+
+#[tauri::command]
+#[allow(dead_code)]
+async fn last_foreground_selection_text() -> Option<String> {
+    let mut stored = last_foreground_selection_state().lock().ok()?;
+    let selection = stored.as_ref()?;
+    if selection.captured_at.elapsed() > FOREGROUND_SELECTION_CACHE_TTL {
+        *stored = None;
+        return None;
+    }
+    Some(selection.text.clone())
+}
+
+#[allow(dead_code)]
+fn clear_foreground_selection_text() {
+    if let Ok(mut stored) = last_foreground_selection_state().lock() {
+        *stored = None;
+    }
+}
+
+// [DISABLED] External selection capture — all functions below are preserved but currently unused.
+#[allow(dead_code)]
+fn capture_foreground_selection_text(app: &tauri::AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let started_at = Instant::now();
+        if let Some(text) = capture_foreground_selection_text_impl(&app) {
+            let text_len = text.len();
+            if let Ok(mut stored) = last_foreground_selection_state().lock() {
+                *stored = Some(ForegroundSelectionText {
+                    text,
+                    captured_at: Instant::now(),
+                });
+            }
+            log_launcher_perf(
+                "native:capture-selection-worker",
+                started_at,
+                format!("hasText=true textLength={}", text_len),
+            );
+        } else {
+            clear_foreground_selection_text();
+            log_launcher_perf(
+                "native:capture-selection-worker",
+                started_at,
+                "hasText=false",
+            );
+        }
+    });
+}
+
+#[allow(dead_code)]
+fn capture_foreground_selection_text_impl(app: &tauri::AppHandle) -> Option<String> {
+    let before = app.clipboard().read_text().ok();
+    let before_change_count = read_clipboard_change_count(&app);
+    simulate_copy_selection_impl().ok()?;
+    std::thread::sleep(Duration::from_millis(80));
+    let after_change_count = read_clipboard_change_count(&app);
+    if before_change_count.is_some()
+        && after_change_count.is_some()
+        && before_change_count == after_change_count
+    {
+        return None;
+    }
+    let selected = app.clipboard().read_text().ok()?.trim().to_string();
+    if let Some(previous) = before {
+        let _ = app.clipboard().write_text(previous);
+    }
+    if selected.is_empty() {
+        None
+    } else {
+        Some(selected)
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[allow(dead_code)]
+fn read_clipboard_change_count(_app: &tauri::AppHandle) -> Option<i64> {
+    unsafe {
+        let pasteboard_cls = objc2::runtime::AnyClass::get(c"NSPasteboard")?;
+        let pasteboard: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![pasteboard_cls, generalPasteboard];
+        if pasteboard.is_null() {
+            return None;
+        }
+        let change_count: i64 = objc2::msg_send![pasteboard, changeCount];
+        Some(change_count)
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+#[allow(dead_code)]
+fn read_clipboard_change_count(_app: &tauri::AppHandle) -> Option<i64> {
+    None
+}
+
+/// Read local file paths from the system clipboard (Finder / file manager copy).
+/// Prefer this over plain text: macOS often puts only the bare filename in the text flavor.
+#[tauri::command]
+fn read_clipboard_file_paths() -> Result<Vec<String>, String> {
+    #[cfg(target_os = "macos")]
+    {
+        read_macos_clipboard_file_paths()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(Vec::new())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn nsstring_utf8(s: &str) -> Option<*mut objc2::runtime::AnyObject> {
+    unsafe {
+        let cls = objc2::runtime::AnyClass::get(c"NSString")?;
+        let cstr = std::ffi::CString::new(s).ok()?;
+        let obj: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![cls, stringWithUTF8String: cstr.as_ptr()];
+        if obj.is_null() {
+            None
+        } else {
+            Some(obj)
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn nsstring_to_rust(obj: *mut objc2::runtime::AnyObject) -> Option<String> {
+    if obj.is_null() {
+        return None;
+    }
+    unsafe {
+        let utf8: *const std::ffi::c_char = objc2::msg_send![obj, UTF8String];
+        if utf8.is_null() {
+            return None;
+        }
+        Some(std::ffi::CStr::from_ptr(utf8).to_string_lossy().into_owned())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn read_macos_clipboard_file_paths() -> Result<Vec<String>, String> {
+    unsafe {
+        let pasteboard_cls = objc2::runtime::AnyClass::get(c"NSPasteboard")
+            .ok_or_else(|| "NSPasteboard unavailable".to_string())?;
+        let pasteboard: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![pasteboard_cls, generalPasteboard];
+        if pasteboard.is_null() {
+            return Ok(Vec::new());
+        }
+
+        // 1) NSFilenamesPboardType → NSArray of POSIX paths (Finder classic)
+        if let Some(type_str) = nsstring_utf8("NSFilenamesPboardType") {
+            let plist: *mut objc2::runtime::AnyObject =
+                objc2::msg_send![pasteboard, propertyListForType: type_str];
+            if !plist.is_null() {
+                let count: usize = objc2::msg_send![plist, count];
+                let mut paths = Vec::with_capacity(count);
+                for i in 0..count {
+                    let item: *mut objc2::runtime::AnyObject =
+                        objc2::msg_send![plist, objectAtIndex: i];
+                    if let Some(path) = nsstring_to_rust(item) {
+                        if !path.is_empty() {
+                            paths.push(path);
+                        }
+                    }
+                }
+                if !paths.is_empty() {
+                    return Ok(paths);
+                }
+            }
+        }
+
+        // 2) public.file-url → single/multiple file URLs
+        if let Some(type_str) = nsstring_utf8("public.file-url") {
+            let data: *mut objc2::runtime::AnyObject =
+                objc2::msg_send![pasteboard, dataForType: type_str];
+            if !data.is_null() {
+                let nsdata_len: usize = objc2::msg_send![data, length];
+                let bytes: *const u8 = objc2::msg_send![data, bytes];
+                if !bytes.is_null() && nsdata_len > 0 {
+                    let slice = std::slice::from_raw_parts(bytes, nsdata_len);
+                    if let Ok(url_str) = std::str::from_utf8(slice) {
+                        if let Some(path) = file_url_to_path(url_str.trim()) {
+                            return Ok(vec![path]);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3) NSURL reading via readObjectsForClasses is heavier; try string type "public.file-url"
+        Ok(Vec::new())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn file_url_to_path(url: &str) -> Option<String> {
+    let trimmed = url.trim();
+    if !trimmed.to_ascii_lowercase().starts_with("file:") {
+        return None;
+    }
+    // file:///Users/me/a.csv → /Users/me/a.csv
+    let without_scheme = trimmed
+        .trim_start_matches("file://")
+        .trim_start_matches("FILE://");
+    let decoded = urlencoding_decode(without_scheme);
+    if decoded.is_empty() {
+        return None;
+    }
+    // Windows-style file:///C:/... sometimes appears; keep as-is for unix.
+    Some(decoded)
+}
+
+/// Minimal percent-decoding for file URLs (spaces, CJK, etc.).
+fn urlencoding_decode(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let h = |c: u8| -> Option<u8> {
+                match c {
+                    b'0'..=b'9' => Some(c - b'0'),
+                    b'a'..=b'f' => Some(c - b'a' + 10),
+                    b'A'..=b'F' => Some(c - b'A' + 10),
+                    _ => None,
+                }
+            };
+            if let (Some(a), Some(b)) = (h(bytes[i + 1]), h(bytes[i + 2])) {
+                out.push((a << 4) | b);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+#[cfg(target_os = "macos")]
+#[allow(dead_code)]
+fn simulate_copy_selection_impl() -> Result<(), String> {
+    use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
+    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+
+    if !ax_is_trusted(false) {
+        return Err("Accessibility permission not granted".into());
+    }
+
+    const KEY_C: u16 = 8;
+    let src = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
+        .map_err(|_| "Failed to create event source")?;
+    let dn = CGEvent::new_keyboard_event(src.clone(), KEY_C, true)
+        .map_err(|_| "Failed to create key-down event")?;
+    let up = CGEvent::new_keyboard_event(src, KEY_C, false)
+        .map_err(|_| "Failed to create key-up event")?;
+    dn.set_flags(CGEventFlags::CGEventFlagCommand);
+    up.set_flags(CGEventFlags::CGEventFlagCommand);
+    dn.post(CGEventTapLocation::HID);
+    up.post(CGEventTapLocation::HID);
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+#[allow(dead_code)]
+fn simulate_copy_selection_impl() -> Result<(), String> {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
+        VIRTUAL_KEY,
+    };
+
+    const VK_CONTROL: VIRTUAL_KEY = VIRTUAL_KEY(0x11);
+    const VK_C: VIRTUAL_KEY = VIRTUAL_KEY(0x43);
+
+    let make = |vk: VIRTUAL_KEY, flags: KEYBD_EVENT_FLAGS| INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: vk,
+                wScan: 0,
+                dwFlags: flags,
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    };
+
+    let inputs = [
+        make(VK_CONTROL, KEYBD_EVENT_FLAGS(0)),
+        make(VK_C, KEYBD_EVENT_FLAGS(0)),
+        make(VK_C, KEYEVENTF_KEYUP),
+        make(VK_CONTROL, KEYEVENTF_KEYUP),
+    ];
+
+    let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
+    if sent == 4 {
+        Ok(())
+    } else {
+        Err(format!("SendInput sent {} of 4 expected events", sent))
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[allow(dead_code)]
+fn simulate_copy_selection_impl() -> Result<(), String> {
+    Err("Selection copy simulation is not supported on this platform".to_string())
 }
 
 fn restore_previous_foreground_app() {
@@ -520,16 +1837,9 @@ fn promote_window_to_nonactivating_panel(ns_window: *mut std::ffi::c_void) {
         ];
 
         // NSPanel-specific configuration for non-activating behavior
-        let _: () = objc2::msg_send![ns_window, setFloatingPanel: true];
+        let _: () = objc2::msg_send![ns_window, setFloatingPanel: false];
         let _: () = objc2::msg_send![ns_window, setHidesOnDeactivate: false];
         let _: () = objc2::msg_send![ns_window, setBecomesKeyOnlyIfNeeded: false];
-
-        // Explicitly set the window level above normal and floating windows so
-        // the launcher appears on top even when the app is fully in the background.
-        // kCGStatusWindowLevel (25) is sufficient — it sits above main-menu level
-        // (24) and all regular app windows, matching Spotlight/Raycast behavior.
-        const STATUS_WINDOW_LEVEL: i64 = 25;
-        let _: () = objc2::msg_send![ns_window, setLevel: STATUS_WINDOW_LEVEL];
 
         // Allow the panel to appear on all Spaces (follows user across desktops)
         let behavior: usize = objc2::msg_send![ns_window, collectionBehavior];
@@ -656,6 +1966,25 @@ async fn current_foreground_app_name() -> Option<String> {
     current_foreground_application_name()
 }
 
+#[derive(serde::Serialize)]
+struct ForegroundAppContext {
+    #[serde(rename = "appName", skip_serializing_if = "Option::is_none")]
+    app_name: Option<String>,
+    #[serde(rename = "processId", skip_serializing_if = "Option::is_none")]
+    process_id: Option<u32>,
+    #[serde(rename = "windowTitle", skip_serializing_if = "Option::is_none")]
+    window_title: Option<String>,
+}
+
+#[tauri::command]
+async fn current_foreground_app_context() -> ForegroundAppContext {
+    ForegroundAppContext {
+        app_name: current_foreground_application_name(),
+        process_id: current_foreground_process_id(),
+        window_title: None,
+    }
+}
+
 #[derive(Clone)]
 struct InstalledAppEntry {
     app_id: String,
@@ -667,6 +1996,12 @@ struct InstalledAppEntry {
     display_path: Option<String>,
     installed_at: Option<u64>,
     launch_target: String,
+}
+
+#[derive(Default)]
+struct InstalledAppDedupeGroups {
+    by_id: HashMap<String, InstalledAppEntry>,
+    by_normalized_name: HashMap<String, String>,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -723,6 +2058,97 @@ fn stable_hash_bytes(bytes: &[u8]) -> String {
         hash = hash.wrapping_mul(0x100000001b3);
     }
     format!("{:016x}", hash)
+}
+
+fn normalized_app_name(name: &str) -> String {
+    name.to_lowercase()
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .collect()
+}
+
+fn app_dedupe_aliases(app: &InstalledAppEntry) -> Vec<String> {
+    let mut values = vec![app.name.clone()];
+    values.extend(
+        app.name_i18n
+            .as_ref()
+            .into_iter()
+            .flat_map(|names| names.values().cloned()),
+    );
+    values.extend(app.aliases.iter().cloned());
+    values
+}
+
+fn app_dedupe_name_keys(app: &InstalledAppEntry) -> Vec<String> {
+    let mut keys = Vec::new();
+    for value in app_dedupe_aliases(app) {
+        let key = normalized_app_name(&value);
+        if !key.is_empty() && !keys.contains(&key) {
+            keys.push(key);
+        }
+    }
+    keys
+}
+
+fn app_dedupe_rank(app: &InstalledAppEntry) -> u8 {
+    match app.source.as_str() {
+        "applications" => {
+            let path = app.display_path.as_deref().unwrap_or_default();
+            if path.starts_with("/Applications/") {
+                0
+            } else if path.starts_with("/System/Applications/") {
+                1
+            } else {
+                2
+            }
+        }
+        "start-menu" => 3,
+        "app-paths" => 4,
+        "desktop-entry" => 5,
+        _ => 6,
+    }
+}
+
+fn prefer_installed_app(candidate: &InstalledAppEntry, existing: &InstalledAppEntry) -> bool {
+    let candidate_rank = app_dedupe_rank(candidate);
+    let existing_rank = app_dedupe_rank(existing);
+    if candidate_rank != existing_rank {
+        return candidate_rank < existing_rank;
+    }
+    candidate.display_path.as_deref().unwrap_or_default()
+        < existing.display_path.as_deref().unwrap_or_default()
+}
+
+fn insert_installed_app(groups: &mut InstalledAppDedupeGroups, app: InstalledAppEntry) {
+    let mut keys = app_dedupe_name_keys(&app);
+    keys.push(app.app_id.clone());
+
+    let existing_ids: Vec<String> = keys
+        .iter()
+        .filter_map(|key| groups.by_normalized_name.get(key).cloned())
+        .collect();
+    let target_id = existing_ids
+        .first()
+        .cloned()
+        .unwrap_or_else(|| app.app_id.clone());
+
+    let should_replace = groups
+        .by_id
+        .get(&target_id)
+        .map(|existing| prefer_installed_app(&app, existing))
+        .unwrap_or(true);
+
+    if should_replace {
+        groups.by_id.insert(target_id.clone(), app);
+    }
+    for key in keys {
+        groups.by_normalized_name.insert(key, target_id.clone());
+    }
+    for old_id in existing_ids {
+        if old_id != target_id {
+            groups.by_id.remove(&old_id);
+        }
+    }
 }
 
 fn installed_app_from_entry(entry: &InstalledAppEntry) -> DiscoveredApp {
@@ -868,6 +2294,39 @@ fn parse_plist_string(raw: &str, key: &str) -> Option<String> {
     let start = rest.find(start_marker)? + start_marker.len();
     let end = rest[start..].find("</string>")?;
     Some(rest[start..start + end].trim().to_string())
+}
+
+/// Read Info.plist as XML text. macOS apps often ship binary plists; fall back to `plutil`.
+fn read_info_plist_xml(info_plist: &Path) -> String {
+    let Ok(bytes) = fs::read(info_plist) else {
+        return String::new();
+    };
+    if bytes.starts_with(b"bplist") {
+        #[cfg(target_os = "macos")]
+        {
+            if let Ok(output) = std::process::Command::new("plutil")
+                .args(["-convert", "xml1", "-o", "-", "--"])
+                .arg(info_plist)
+                .output()
+            {
+                if output.status.success() {
+                    if let Ok(xml) = String::from_utf8(output.stdout) {
+                        return xml;
+                    }
+                }
+            }
+        }
+        return String::new();
+    }
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
+fn text_contains_cjk(value: &str) -> bool {
+    value.chars().any(|ch| {
+        ('\u{4e00}'..='\u{9fff}').contains(&ch)
+            || ('\u{3400}'..='\u{4dbf}').contains(&ch)
+            || ('\u{f900}'..='\u{faff}').contains(&ch)
+    })
 }
 
 fn decode_text_file(bytes: &[u8]) -> String {
@@ -1023,7 +2482,8 @@ fn read_macos_bundle_metadata(
     Vec<String>,
 ) {
     let info = path.join("Contents").join("Info.plist");
-    let raw = fs::read_to_string(info).unwrap_or_default();
+    // Prefer XML text; convert binary Info.plist via plutil so Office apps keep stable bundle ids.
+    let raw = read_info_plist_xml(&info);
     let bundle_id = parse_plist_string(&raw, "CFBundleIdentifier");
     let plist_display_name = parse_plist_string(&raw, "CFBundleDisplayName");
     let plist_bundle_name = parse_plist_string(&raw, "CFBundleName");
@@ -1031,21 +2491,58 @@ fn read_macos_bundle_metadata(
         .clone()
         .or_else(|| plist_bundle_name.clone());
     let zh_name = read_macos_localized_bundle_name(path, Some("zh"));
-    let name = read_macos_system_display_name(path)
-        .or_else(|| plist_name.clone())
+    let en_name = read_macos_localized_bundle_name(path, Some("en"));
+    let system_name = read_macos_system_display_name(path);
+
+    // Canonical `name` must be locale-stable (plist/en), not NSFileManager's UI language.
+    // Otherwise Global Launcher mixes Chinese system names with English catalog names.
+    let name = plist_name
+        .clone()
+        .or_else(|| en_name.clone())
+        .or_else(|| {
+            system_name
+                .clone()
+                .filter(|value| !text_contains_cjk(value))
+        })
+        .or_else(|| system_name.clone())
         .or_else(|| zh_name.clone());
+
     let mut name_i18n = HashMap::new();
-    if let Some(ref name) = zh_name {
-        if plist_name.as_deref() != Some(name.as_str()) {
-            name_i18n.insert("zh".to_string(), name.clone());
+    if let Some(ref zh) = zh_name {
+        if name.as_deref() != Some(zh.as_str()) {
+            name_i18n.insert("zh".to_string(), zh.clone());
         }
     }
+    // If the only Chinese label comes from the system display name, keep it under zh.
+    if let Some(ref sys) = system_name {
+        if text_contains_cjk(sys) && name.as_deref() != Some(sys.as_str()) {
+            name_i18n
+                .entry("zh".to_string())
+                .or_insert_with(|| sys.clone());
+        }
+    }
+    if let Some(ref en) = en_name {
+        if name.as_deref() != Some(en.as_str()) {
+            name_i18n.insert("en".to_string(), en.clone());
+        }
+    }
+
     let mut aliases = Vec::new();
-    for alias in [plist_display_name, plist_bundle_name, bundle_id.clone()] {
+    // Human-readable name variants only — never bundle ids (avoid "com"/"microsoft" noise).
+    for alias in [
+        plist_display_name,
+        plist_bundle_name,
+        en_name,
+        zh_name.clone(),
+        system_name,
+    ] {
         let Some(alias) = alias else {
             continue;
         };
-        if name.as_deref() == Some(alias.as_str()) || zh_name.as_deref() == Some(alias.as_str()) {
+        if name.as_deref() == Some(alias.as_str()) {
+            continue;
+        }
+        if name_i18n.values().any(|value| value == &alias) {
             continue;
         }
         if !aliases.iter().any(|item| item == &alias) {
@@ -1387,11 +2884,11 @@ fn parse_linux_desktop_entry(path: &Path) -> Option<InstalledAppEntry> {
 }
 
 fn dedupe_installed_apps(apps: Vec<InstalledAppEntry>) -> Vec<InstalledAppEntry> {
-    let mut by_key = HashMap::<String, InstalledAppEntry>::new();
+    let mut groups = InstalledAppDedupeGroups::default();
     for app in apps {
-        by_key.entry(app.app_id.clone()).or_insert(app);
+        insert_installed_app(&mut groups, app);
     }
-    let mut result: Vec<InstalledAppEntry> = by_key.into_values().collect();
+    let mut result: Vec<InstalledAppEntry> = groups.by_id.into_values().collect();
     result.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     result
 }
@@ -1456,15 +2953,6 @@ fn activate_process(pid: u32) {
 
 #[cfg(not(target_os = "macos"))]
 fn activate_process(_pid: u32) {}
-
-fn activate_app() {
-    #[cfg(target_os = "macos")]
-    unsafe {
-        let cls = objc2::runtime::AnyClass::get(c"NSApplication").unwrap();
-        let ns_app: *mut objc2::runtime::AnyObject = objc2::msg_send![cls, sharedApplication];
-        let _: () = objc2::msg_send![ns_app, activateIgnoringOtherApps: true];
-    }
-}
 
 /// 配置根目录: ~/.local/hiven
 fn config_dir() -> Result<PathBuf, String> {
@@ -1589,13 +3077,15 @@ fn read_file(path: String) -> Result<String, String> {
     fs::read_to_string(&file_path).map_err(|e| e.to_string())
 }
 
-
 #[derive(serde::Deserialize)]
 struct ProxyHttpRequest {
     url: String,
     method: Option<String>,
     headers: Option<std::collections::HashMap<String, String>>,
     body: Option<String>,
+    /// "text" (default) or "binary" — binary returns bodyBytes (no UTF-8 corruption for images).
+    #[serde(rename = "responseType")]
+    response_type: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -1603,6 +3093,9 @@ struct ProxyHttpResponse {
     status: u16,
     headers: std::collections::HashMap<String, String>,
     body: String,
+    /// Present when responseType is "binary".
+    #[serde(rename = "bodyBytes", skip_serializing_if = "Option::is_none")]
+    body_bytes: Option<Vec<u8>>,
 }
 
 #[tauri::command]
@@ -1642,12 +3135,36 @@ async fn plugin_http_request(request: ProxyHttpRequest) -> Result<ProxyHttpRespo
             headers.insert(name.to_string(), text.to_string());
         }
     }
-    let body = resp
-        .text()
-        .await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
 
-    Ok(ProxyHttpResponse { status, headers, body })
+    let want_binary = request
+        .response_type
+        .as_deref()
+        .map(|v| v.eq_ignore_ascii_case("binary"))
+        .unwrap_or(false);
+
+    if want_binary {
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| format!("Failed to read response bytes: {}", e))?;
+        Ok(ProxyHttpResponse {
+            status,
+            headers,
+            body: String::new(),
+            body_bytes: Some(bytes.to_vec()),
+        })
+    } else {
+        let body = resp
+            .text()
+            .await
+            .map_err(|e| format!("Failed to read response: {}", e))?;
+        Ok(ProxyHttpResponse {
+            status,
+            headers,
+            body,
+            body_bytes: None,
+        })
+    }
 }
 
 #[tauri::command]
@@ -1740,6 +3257,12 @@ struct PluginKvPruneResult {
     removed_items: i64,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
+struct PluginKvDb {
+    path: PathBuf,
+    connection: Connection,
+}
+
 fn validate_plugin_storage_source(source: &str) -> Result<(), String> {
     match source {
         "builtin" | "installed" | "dev" => Ok(()),
@@ -1775,8 +3298,8 @@ fn plugin_kv_db_path() -> Result<PathBuf, String> {
     Ok(dir.join("plugin-storage.sqlite"))
 }
 
-fn init_plugin_kv_db() -> Result<Mutex<Connection>, String> {
-    let connection = Connection::open(plugin_kv_db_path()?).map_err(|e| e.to_string())?;
+fn open_plugin_kv_db(path: PathBuf) -> Result<PluginKvDb, String> {
+    let connection = Connection::open(&path).map_err(|e| e.to_string())?;
     connection
         .execute_batch(
             r#"
@@ -1794,14 +3317,27 @@ fn init_plugin_kv_db() -> Result<Mutex<Connection>, String> {
                 "#,
         )
         .map_err(|e| e.to_string())?;
-    Ok(Mutex::new(connection))
+    Ok(PluginKvDb { path, connection })
 }
 
-fn get_plugin_kv_db() -> Result<&'static Mutex<Connection>, String> {
-    PLUGIN_KV_DB
+fn init_plugin_kv_db() -> Result<Mutex<PluginKvDb>, String> {
+    open_plugin_kv_db(plugin_kv_db_path()?).map(Mutex::new)
+}
+
+fn get_plugin_kv_db() -> Result<&'static Mutex<PluginKvDb>, String> {
+    let db = PLUGIN_KV_DB
         .get_or_init(init_plugin_kv_db)
         .as_ref()
-        .map_err(|e| e.clone())
+        .map_err(|e| e.clone())?;
+    #[cfg(test)]
+    {
+        let current_path = plugin_kv_db_path()?;
+        let mut guard = db.lock().map_err(|e| e.to_string())?;
+        if guard.path != current_path {
+            *guard = open_plugin_kv_db(current_path)?;
+        }
+    }
+    Ok(db)
 }
 
 fn validate_plugin_kv_namespace(source: &str, plugin_id: &str) -> Result<(), String> {
@@ -1880,13 +3416,14 @@ fn plugin_kv_get(source: String, plugin_id: String, key: String) -> Result<Optio
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     validate_plugin_kv_key(&key)?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
-    db.query_row(
-        "SELECT value_json FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 AND key = ?3",
-        params![source, plugin_id, key],
-        |row| row.get::<_, String>(0),
-    )
-    .optional()
-    .map_err(|e| e.to_string())
+    db.connection
+        .query_row(
+            "SELECT value_json FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 AND key = ?3",
+            params![source, plugin_id, key],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1902,7 +3439,8 @@ fn plugin_kv_set(
         i64::try_from(value_json.len()).map_err(|_| "Plugin KV value is too large".to_string())?;
     let updated_at = current_millis_i64()?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
-    db.execute(
+    db.connection
+        .execute(
             r#"
             INSERT INTO plugin_kv (source, plugin_id, key, value_json, byte_size, updated_at)
             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
@@ -1922,7 +3460,8 @@ fn plugin_kv_delete(source: String, plugin_id: String, key: String) -> Result<()
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     validate_plugin_kv_key(&key)?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
-    db.execute(
+    db.connection
+        .execute(
             "DELETE FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 AND key = ?3",
             params![source, plugin_id, key],
         )
@@ -1943,7 +3482,7 @@ fn plugin_kv_list(
         }
     }
     let connection = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
-    let mut statement = connection
+    let mut statement = connection.connection
         .prepare(
             "SELECT key, updated_at FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 ORDER BY updated_at DESC, key ASC",
         )
@@ -1975,7 +3514,7 @@ fn plugin_kv_list(
 fn plugin_kv_usage(source: String, plugin_id: String) -> Result<PluginKvUsage, String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
-    let (bytes, item_count): (i64, i64) = db
+    let (bytes, item_count): (i64, i64) = db.connection
         .query_row(
             "SELECT COALESCE(SUM(byte_size), 0), COUNT(*) FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2",
             params![source, plugin_id],
@@ -1997,7 +3536,10 @@ fn plugin_kv_prune(
     validate_plugin_kv_prune_policy(max_items, max_bytes, max_age_days)?;
 
     let mut connection = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
-    let transaction = connection.transaction().map_err(|e| e.to_string())?;
+    let transaction = connection
+        .connection
+        .transaction()
+        .map_err(|e| e.to_string())?;
     let mut removed_bytes = 0;
     let mut removed_items = 0;
 
@@ -2086,7 +3628,8 @@ fn plugin_kv_prune(
 fn plugin_kv_clear(source: String, plugin_id: String) -> Result<(), String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
-    db.execute(
+    db.connection
+        .execute(
             "DELETE FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2",
             params![source, plugin_id],
         )
@@ -2854,8 +4397,7 @@ fn disable_app_nap() {
         }
         // NSActivityUserInitiatedAllowingIdleSystemSleep = 0x00FFFFFFULL & ~(1ULL << 20)
         // This effectively disables App Nap while allowing idle system sleep.
-        let reason_cls =
-            objc2::runtime::AnyClass::get(c"NSString").expect("NSString must exist");
+        let reason_cls = objc2::runtime::AnyClass::get(c"NSString").expect("NSString must exist");
         let reason: *mut objc2::runtime::AnyObject = objc2::msg_send![
             reason_cls,
             stringWithUTF8String: c"Global hotkey must respond immediately".as_ptr()
@@ -2869,6 +4411,57 @@ fn disable_app_nap() {
         ];
         // We intentionally never end this activity — it must persist for the
         // process lifetime so the hotkey listener is never throttled.
+    }
+}
+
+fn configure_desktop_tray(app: &mut tauri::App) -> tauri::Result<()> {
+    #[cfg(target_os = "macos")]
+    app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+    let tray_menu = MenuBuilder::new(app)
+        .text("tray-open-launcher", desktop_tray_text("open"))
+        .separator()
+        .text("tray-quit", desktop_tray_text("quit"))
+        .build()?;
+
+    let mut tray = TrayIconBuilder::with_id("hiven-tray")
+        .tooltip("Hiven")
+        .menu(&tray_menu)
+        .show_menu_on_left_click(true)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "tray-open-launcher" => {
+                let _ = show_launcher_window_for_hotkey(app.clone());
+            }
+            "tray-quit" => app.exit(0),
+            _ => {}
+        });
+
+    if let Some(icon) = app.default_window_icon().cloned() {
+        tray = tray.icon(icon);
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        tray = tray.icon_as_template(true);
+    }
+
+    tray.build(app)?;
+    Ok(())
+}
+
+fn desktop_tray_text(key: &str) -> &'static str {
+    let is_zh = std::env::var("LC_ALL")
+        .or_else(|_| std::env::var("LC_MESSAGES"))
+        .or_else(|_| std::env::var("LANG"))
+        .map(|locale| locale.to_ascii_lowercase().starts_with("zh"))
+        .unwrap_or(false);
+
+    match (is_zh, key) {
+        (true, "open") => "打开 Hiven",
+        (true, "quit") => "退出 Hiven",
+        (_, "open") => "Open Hiven",
+        (_, "quit") => "Quit Hiven",
+        _ => "Hiven",
     }
 }
 
@@ -2889,6 +4482,8 @@ pub fn run() {
             // `run_on_main_thread` callbacks used to show the launcher window.
             #[cfg(target_os = "macos")]
             disable_app_nap();
+
+            configure_desktop_tray(app)?;
 
             // 构建 Edit 子菜单（macOS 需要原生 Edit 菜单才能让剪贴板快捷键生效）
             // 注意：不加 Undo/Redo，否则会拦截 Monaco 自己的撤销栈
@@ -2915,6 +4510,7 @@ pub fn run() {
             init_config_dir,
             read_scripts_dir,
             read_file,
+            read_clipboard_file_paths,
             fetch_url,
             plugin_http_request,
             list_plugin_dirs,
@@ -2942,16 +4538,31 @@ pub fn run() {
             fetch_github_directory,
             hotkeys::register_double_modifier_hotkey,
             hotkeys::unregister_double_modifier_hotkey,
-            show_and_focus_window,
+            prepare_launcher_input_source,
+            restore_launcher_input_source,
             show_launcher_window,
             hide_launcher_window,
+            hide_launcher_and_paste,
+            show_quick_editor_window,
+            close_quick_editor_window,
+            show_plugin_surface_window,
+            hide_plugin_surface_window,
+            plugin_surface_payload_set,
+            plugin_surface_payload_consume,
             simulate_paste,
             current_foreground_app_name,
+            current_foreground_app_context,
+            // [DISABLED] External selection capture — command preserved, entry point disabled.
+            // last_foreground_selection_text,
             discover_installed_apps,
             read_installed_app_icon_url,
             cache_installed_app_icons,
             launch_installed_app,
             perform_system_power_action,
+            surface_registry_snapshot,
+            surface_registry_upsert,
+            surface_registry_mark_state,
+            surface_registry_remove,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -2959,7 +4570,7 @@ pub fn run() {
             let _ = (&app, &event); // suppress unused warnings on non-macOS
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = event {
-                show_and_focus_main_window(app);
+                let _ = show_launcher_window_for_hotkey(app.clone());
             }
         });
 }
@@ -3031,7 +4642,75 @@ mod plugin_dir_command_tests {
     }
 
     #[test]
-    fn macos_bundle_metadata_keeps_search_names_and_uses_system_display_name() {
+    fn dedupe_app_discovery_collapses_same_display_name_across_bundle_ids() {
+        let apps = dedupe_installed_apps(vec![
+            InstalledAppEntry {
+                app_id: "macos:bundle:com.example.trae.primary".to_string(),
+                name: "TRAE".to_string(),
+                name_i18n: None,
+                aliases: Vec::new(),
+                platform: "macos".to_string(),
+                source: "applications".to_string(),
+                display_path: Some("/Applications/Trae.app".to_string()),
+                installed_at: Some(1_000),
+                launch_target: "/Applications/Trae.app".to_string(),
+            },
+            InstalledAppEntry {
+                app_id: "macos:bundle:com.example.trae.copy".to_string(),
+                name: "TRAE".to_string(),
+                name_i18n: None,
+                aliases: Vec::new(),
+                platform: "macos".to_string(),
+                source: "applications".to_string(),
+                display_path: Some("/Users/me/Applications/Trae.app".to_string()),
+                installed_at: Some(2_000),
+                launch_target: "/Users/me/Applications/Trae.app".to_string(),
+            },
+        ]);
+        assert_eq!(apps.len(), 1);
+        assert_eq!(
+            apps[0].display_path.as_deref(),
+            Some("/Applications/Trae.app")
+        );
+    }
+
+    #[test]
+    fn dedupe_app_discovery_collapses_localized_aliases() {
+        let mut first_i18n = HashMap::new();
+        first_i18n.insert("zh".to_string(), "飞书".to_string());
+        let apps = dedupe_installed_apps(vec![
+            InstalledAppEntry {
+                app_id: "macos:bundle:com.example.lark".to_string(),
+                name: "Lark".to_string(),
+                name_i18n: Some(first_i18n),
+                aliases: Vec::new(),
+                platform: "macos".to_string(),
+                source: "applications".to_string(),
+                display_path: Some("/Applications/Lark.app".to_string()),
+                installed_at: Some(1_000),
+                launch_target: "/Applications/Lark.app".to_string(),
+            },
+            InstalledAppEntry {
+                app_id: "macos:bundle:com.example.feishu".to_string(),
+                name: "飞书".to_string(),
+                name_i18n: None,
+                aliases: Vec::new(),
+                platform: "macos".to_string(),
+                source: "applications".to_string(),
+                display_path: Some("/Users/me/Applications/Feishu.app".to_string()),
+                installed_at: Some(2_000),
+                launch_target: "/Users/me/Applications/Feishu.app".to_string(),
+            },
+        ]);
+        assert_eq!(apps.len(), 1);
+        assert_eq!(
+            apps[0].display_path.as_deref(),
+            Some("/Applications/Lark.app")
+        );
+    }
+
+    #[test]
+    fn macos_bundle_metadata_prefers_plist_name_and_keeps_localized_zh() {
         let dir = unique_home("macos-localized-bundle");
         let app = dir.join("Lark.app");
         let contents = app.join("Contents");
@@ -3054,12 +4733,10 @@ CFBundleName = "飞书";"#,
         )
         .expect("localized InfoPlist.strings fixture should be written");
 
-        let (bundle_id, system_name, name_i18n, aliases) = read_macos_bundle_metadata(&app);
+        let (bundle_id, name, name_i18n, aliases) = read_macos_bundle_metadata(&app);
         assert_eq!(bundle_id.as_deref(), Some("com.electron.lark"));
-        assert_eq!(
-            system_name.as_deref(),
-            read_macos_system_display_name(&app).as_deref()
-        );
+        // Canonical name comes from plist (locale-stable), not the system UI language.
+        assert_eq!(name.as_deref(), Some("Lark"));
         assert_eq!(
             name_i18n
                 .as_ref()
@@ -3070,6 +4747,50 @@ CFBundleName = "飞书";"#,
         assert!(
             aliases.iter().any(|alias| alias == "Feishu"),
             "CFBundleName should be searchable as an app alias"
+        );
+        assert!(
+            !aliases.iter().any(|alias| alias == "com.electron.lark"),
+            "bundle ids must not be searchable aliases"
+        );
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_binary_info_plist_resolves_bundle_id_via_plutil() {
+        let dir = unique_home("macos-binary-plist");
+        let app = dir.join("BinaryMeta.app");
+        let contents = app.join("Contents");
+        fs::create_dir_all(&contents).expect("contents should be created");
+        let info = contents.join("Info.plist");
+        fs::write(
+            &info,
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>com.example.binarymeta</string>
+  <key>CFBundleDisplayName</key><string>Binary Meta</string>
+  <key>CFBundleName</key><string>BinaryMeta</string>
+</dict></plist>"#,
+        )
+        .expect("xml Info.plist fixture should be written");
+        // Convert fixture to binary form — same format Office apps ship.
+        let status = std::process::Command::new("plutil")
+            .args(["-convert", "binary1"])
+            .arg(&info)
+            .status()
+            .expect("plutil should be available on macOS test hosts");
+        assert!(status.success(), "plutil binary conversion should succeed");
+        let raw = fs::read(&info).expect("binary Info.plist should be readable");
+        assert!(raw.starts_with(b"bplist"), "fixture must be a binary plist");
+
+        let (bundle_id, name, _name_i18n, aliases) = read_macos_bundle_metadata(&app);
+        assert_eq!(bundle_id.as_deref(), Some("com.example.binarymeta"));
+        assert_eq!(name.as_deref(), Some("Binary Meta"));
+        assert!(
+            aliases.iter().any(|alias| alias == "BinaryMeta"),
+            "bundle name should remain a searchable alias"
         );
 
         let _ = fs::remove_dir_all(dir);
@@ -3351,14 +5072,19 @@ HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\App Paths\Example.e
                 r#""old""#.to_string(),
             )
             .expect("old plugin KV fixture should be written");
-            let connection = get_plugin_kv_db().expect("plugin KV DB should open");
-            let connection = connection.lock().expect("plugin KV DB lock should not be poisoned");
-            connection
-                .execute(
-                    "UPDATE plugin_kv SET updated_at = 1 WHERE source = ?1 AND plugin_id = ?2 AND key = ?3",
-                    params!["builtin", "clipboard-history", "old"],
-                )
-                .expect("old plugin KV fixture should be backdated");
+            {
+                let connection = get_plugin_kv_db().expect("plugin KV DB should open");
+                let connection = connection
+                    .lock()
+                    .expect("plugin KV DB lock should not be poisoned");
+                connection
+                    .connection
+                    .execute(
+                        "UPDATE plugin_kv SET updated_at = 1 WHERE source = ?1 AND plugin_id = ?2 AND key = ?3",
+                        params!["builtin", "clipboard-history", "old"],
+                    )
+                    .expect("old plugin KV fixture should be backdated");
+            }
 
             let result = plugin_kv_prune(
                 "builtin".to_string(),

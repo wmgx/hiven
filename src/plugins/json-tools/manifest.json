@@ -1,0 +1,7 @@
+{
+  "pluginId": "json-tools",
+  "displayName": "JSON Tools",
+  "displayNameI18n": { "zh": "JSON 工具" },
+  "version": "2.0.0",
+  "capabilities": ["command", "surface"]
+}

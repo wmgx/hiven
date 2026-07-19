@@ -103,10 +103,11 @@ type ParsedResult = {
   actionLabelKey: string
 }
 
-function resultKindLabel(kind: ParsedResult['kind'], t: LauncherDynamicContext['t']): string {
-  if (kind === 'timestamp') return t('result.timestamp')
-  if (kind === 'date') return t('result.date')
-  return t('result.datetime')
+function resultKindLabel(kind: ParsedResult['kind'], locale: LauncherDynamicContext['locale']): string {
+  const isZh = locale.toLowerCase().startsWith('zh')
+  if (kind === 'timestamp') return isZh ? '时间戳' : 'Timestamp'
+  if (kind === 'date') return isZh ? '日期' : 'Date'
+  return isZh ? '日期时间' : 'DateTime'
 }
 
 function nowResult(date: Date, offsetMinutes?: number): ParsedResult {
@@ -342,7 +343,7 @@ export const dateTimeAssistantPlugin = definePlugin({
       run(ctx) {
         return ctx.output.replaceActiveText(convertTimestampText(ctx.input.text, ctx.params, ctx.input.source === 'all'))
       },
-      surfaces: { launcher: true, panel: true, pinnable: true },
+      surfaces: { launcher: true, panel: true },
     },
   ],
   commands: [
@@ -368,23 +369,25 @@ export const dateTimeAssistantPlugin = definePlugin({
   ],
   launcher: {
     dynamicItems(ctx: LauncherDynamicContext): LauncherItemContribution[] {
+      const input = ctx.query
+      if (!input) return []
       const now = new Date()
-      const parsed = parseDateTimeQuery(ctx.query, now)
-      const dateTimestampResults = parseDateForTimestampSuggestions(ctx.query)
+      const parsed = parseDateTimeQuery(input, now)
+      const dateTimestampResults = parseDateForTimestampSuggestions(input)
       if (!parsed && dateTimestampResults.length === 0) return []
 
       // "now" expressions produce multiple items (timestamp + datetime)
-      const nowParsed = parseNowExpression(ctx.query, now)
+      const nowParsed = parseNowExpression(input, now)
       if (nowParsed) {
         const separatorIndex = parsed.value.indexOf(' | ')
         if (separatorIndex >= 0) {
           const timestampValue = parsed.value.slice(0, separatorIndex)
           const dateTimeValue = parsed.value.slice(separatorIndex + 3)
-          const trimmed = ctx.query.trim()
+          const trimmed = input.trim()
           return [
             {
               id: 'dt-now-timestamp',
-              display: { title: `${trimmed} -> ${timestampValue}`, subtitle: resultKindLabel('timestamp', ctx.t), icon: 'Clock' },
+              display: { title: `${trimmed} -> ${timestampValue}`, subtitle: resultKindLabel('timestamp', ctx.locale), icon: 'Clock' },
               behavior: { type: 'perform' },
               async execute(ctx2) {
                 await ctx2.api.copyText(timestampValue)
@@ -393,7 +396,7 @@ export const dateTimeAssistantPlugin = definePlugin({
             },
             {
               id: 'dt-now-datetime',
-              display: { title: `${trimmed} -> ${dateTimeValue}`, subtitle: resultKindLabel('datetime', ctx.t), icon: 'Clock' },
+              display: { title: `${trimmed} -> ${dateTimeValue}`, subtitle: resultKindLabel('datetime', ctx.locale), icon: 'Clock' },
               behavior: { type: 'perform' },
               async execute(ctx2) {
                 await ctx2.api.copyText(dateTimeValue)
@@ -405,10 +408,10 @@ export const dateTimeAssistantPlugin = definePlugin({
       }
 
       if (dateTimestampResults.length > 0) {
-        const trimmed = ctx.query.trim()
+        const trimmed = input.trim()
         return dateTimestampResults.map((result, index) => ({
           id: `dt-date-timestamp-${index}`,
-          display: { title: `${trimmed} -> ${result.display}`, subtitle: resultKindLabel(result.kind, ctx.t), icon: 'Clock' },
+          display: { title: `${trimmed} -> ${result.display}`, subtitle: resultKindLabel(result.kind, ctx.locale), icon: 'Clock' },
           behavior: { type: 'perform' },
           async execute(ctx2) {
             await ctx2.api.copyText(result.value)
@@ -418,10 +421,10 @@ export const dateTimeAssistantPlugin = definePlugin({
       }
 
       // Single result (timestamp conversion, date offset, tomorrow, etc.)
-      const trimmed = ctx.query.trim()
+      const trimmed = input.trim()
       return [{
         id: 'dt-result',
-        display: { title: `${trimmed} -> ${parsed.display}`, subtitle: resultKindLabel(parsed.kind, ctx.t), icon: 'Clock' },
+        display: { title: `${trimmed} -> ${parsed.display}`, subtitle: resultKindLabel(parsed.kind, ctx.locale), icon: 'Clock' },
         behavior: { type: 'perform' },
         async execute(ctx2) {
           await ctx2.api.copyText(parsed.value)
