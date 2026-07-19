@@ -6,6 +6,7 @@ import { makePluginT, type PluginT } from './i18n/pluginI18nRegistry'
 import type { Locale } from './i18n'
 import { DualEditorView } from './kits/ui/DualEditorView'
 import { computeTextLineDiff } from './kits/diff/lineDiff'
+import { detectContent } from './kits/content'
 import { createMonacoDisposableBucket, disposeAllMonacoDisposables } from './utils/monacoDisposables'
 import {
   buildDiffTree,
@@ -53,6 +54,9 @@ export type PluginHostKits = {
     computeJsonLineHighlights: typeof computeJsonLineHighlights
     formatJsonPreserveKeyOrder: typeof formatJsonPreserveKeyOrder
     parseJson: typeof parseJson
+  }
+  content: {
+    detectContent: typeof detectContent
   }
 }
 
@@ -165,6 +169,9 @@ function createPluginHostKits(): PluginHostKits {
       computeJsonLineHighlights,
       formatJsonPreserveKeyOrder,
       parseJson,
+    },
+    content: {
+      detectContent,
     },
   }
 }
