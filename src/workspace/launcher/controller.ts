@@ -28,6 +28,7 @@ import type {
   PluginLauncherApi,
 } from './types'
 import type { PluginNetworkApi, PluginPrivateStorageApi } from '../pluginTypes'
+import { appendUsageJournal } from '../usageJournal'
 import { isOutputResult } from './output'
 import { translate, type Locale } from '../../i18n'
 
@@ -145,6 +146,8 @@ export class LauncherController {
   private deps: LauncherControllerDeps
   private previewRunId = 0
   private suggestRunId = 0
+  /** Last journaled command id (for prev_command_id chain). */
+  private lastJournalCommandId: string | null = null
 
   constructor(deps: LauncherControllerDeps) {
     this.deps = deps
@@ -195,6 +198,19 @@ export class LauncherController {
     // Dynamic items default off; stable actions opt in via recordUsage: true.
     if (item.kind === 'dynamic') return item.recordUsage === true
     return true
+  }
+
+  /** Record selection usage + fire-and-forget append-only journal row. */
+  private recordSelectionIfNeeded(item: LauncherItem, options: SelectOptions): void {
+    if (!this.shouldRecord(item, options)) return
+    this.deps.recordSelection(this.deps.surfaceId, item)
+    void appendUsageJournal({
+      commandId: item.systemKey,
+      surfaceId: this.deps.surfaceId,
+      executedAt: Date.now(),
+      prevCommandId: this.lastJournalCommandId ?? null,
+    }).catch(() => {})
+    this.lastJournalCommandId = item.systemKey
   }
 
   private defaultParamsFor(item: LauncherItem): Record<string, unknown> {
@@ -283,9 +299,7 @@ export class LauncherController {
     this.setState({ error: null })
 
     if (options.customizeParams && this.hasCustomizableParams(item)) {
-      if (this.shouldRecord(item, options)) {
-        this.deps.recordSelection(this.deps.surfaceId, item)
-      }
+      this.recordSelectionIfNeeded(item, options)
       this.setState({
         frames: [...this.state.frames, this.paramFrameFor(item, undefined, 0, options.objectBlockText)],
       })
@@ -293,9 +307,7 @@ export class LauncherController {
     }
 
     if (item.behavior.type === 'collect-input') {
-      if (this.shouldRecord(item, options)) {
-        this.deps.recordSelection(this.deps.surfaceId, item)
-      }
+      this.recordSelectionIfNeeded(item, options)
       if (this.hasObjectBlockText(options.objectBlockText)) {
         await this.runAndHandle(
           () => Promise.resolve(item.execute(this.buildExecutionContext(item, options.objectBlockText))),
@@ -313,18 +325,14 @@ export class LauncherController {
     if (this.shouldCollectTextInput(item)) {
       // If Object Block text is available, skip collect-input and execute directly.
       if (this.hasObjectBlockText(options.objectBlockText)) {
-        if (this.shouldRecord(item, options)) {
-          this.deps.recordSelection(this.deps.surfaceId, item)
-        }
+        this.recordSelectionIfNeeded(item, options)
         await this.runAndHandle(
           () => Promise.resolve(item.execute(this.buildExecutionContext(item, options.objectBlockText))),
           this.itemTitle(item),
         )
         return
       }
-      if (this.shouldRecord(item, options)) {
-        this.deps.recordSelection(this.deps.surfaceId, item)
-      }
+      this.recordSelectionIfNeeded(item, options)
       this.setState({
         frames: [...this.state.frames, this.collectInputFrameFor(item)],
       })
@@ -333,9 +341,7 @@ export class LauncherController {
     }
 
     // perform: record before execution
-    if (this.shouldRecord(item, options)) {
-      this.deps.recordSelection(this.deps.surfaceId, item)
-    }
+    this.recordSelectionIfNeeded(item, options)
     await this.runAndHandle(
       () => Promise.resolve(item.execute(this.buildExecutionContext(item))),
       this.itemTitle(item),

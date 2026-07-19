@@ -3314,6 +3314,16 @@ fn open_plugin_kv_db(path: PathBuf) -> Result<PluginKvDb, String> {
                 );
                 CREATE INDEX IF NOT EXISTS idx_plugin_kv_namespace_updated
                   ON plugin_kv (source, plugin_id, updated_at);
+                CREATE TABLE IF NOT EXISTS usage_journal (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  command_id TEXT NOT NULL,
+                  surface_id TEXT NOT NULL,
+                  executed_at INTEGER NOT NULL,
+                  prev_command_id TEXT,
+                  object_kind TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_usage_journal_executed_at
+                  ON usage_journal (executed_at);
                 "#,
         )
         .map_err(|e| e.to_string())?;
@@ -3634,6 +3644,83 @@ fn plugin_kv_clear(source: String, plugin_id: String) -> Result<(), String> {
             params![source, plugin_id],
         )
         .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Append a single launcher usage journal row (metadata only; no content body).
+#[tauri::command]
+fn usage_journal_append(
+    command_id: String,
+    surface_id: String,
+    executed_at: i64,
+    prev_command_id: Option<String>,
+    object_kind: Option<String>,
+) -> Result<(), String> {
+    if command_id.trim().is_empty() {
+        return Err("command_id must be non-empty".to_string());
+    }
+    if surface_id.trim().is_empty() {
+        return Err("surface_id must be non-empty".to_string());
+    }
+    let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
+    db.connection
+        .execute(
+            r#"
+                INSERT INTO usage_journal (
+                  command_id, surface_id, executed_at, prev_command_id, object_kind
+                ) VALUES (?1, ?2, ?3, ?4, ?5)
+            "#,
+            params![
+                command_id,
+                surface_id,
+                executed_at,
+                prev_command_id,
+                object_kind
+            ],
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Prune usage journal rows older than `max_age_days` and/or beyond `max_rows` (keep newest).
+#[tauri::command]
+fn usage_journal_prune(
+    max_age_days: Option<i64>,
+    max_rows: Option<i64>,
+) -> Result<(), String> {
+    if max_age_days.is_some_and(|value| value < 0) || max_rows.is_some_and(|value| value < 0) {
+        return Err("usage_journal prune limits must be non-negative".to_string());
+    }
+
+    let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
+
+    if let Some(days) = max_age_days {
+        let cutoff = current_millis_i64()?.saturating_sub(days.saturating_mul(86_400_000));
+        db.connection
+            .execute(
+                "DELETE FROM usage_journal WHERE executed_at < ?1",
+                params![cutoff],
+            )
+            .map_err(|e| e.to_string())?;
+    }
+
+    if let Some(max_rows) = max_rows {
+        // Delete oldest rows beyond max_rows, keeping the newest by executed_at then id.
+        db.connection
+            .execute(
+                r#"
+                    DELETE FROM usage_journal
+                    WHERE id IN (
+                      SELECT id FROM usage_journal
+                      ORDER BY executed_at DESC, id DESC
+                      LIMIT -1 OFFSET ?1
+                    )
+                "#,
+                params![max_rows],
+            )
+            .map_err(|e| e.to_string())?;
+    }
+
     Ok(())
 }
 
@@ -4527,6 +4614,8 @@ pub fn run() {
             plugin_kv_usage,
             plugin_kv_prune,
             plugin_kv_clear,
+            usage_journal_append,
+            usage_journal_prune,
             plugin_blob_save,
             plugin_blob_read,
             plugin_blob_delete,
@@ -4877,6 +4966,55 @@ HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\App Paths\Example.e
         assert_eq!(app.name, "Missing Icon");
         assert_eq!(app.installed_at, Some(42));
         assert!(extract_app_icon(&entry).is_none());
+    }
+
+    #[test]
+    fn usage_journal_append_and_prune_keep_newest_rows() {
+        with_isolated_home("usage-journal-append-prune", |_home| {
+            usage_journal_append(
+                "cmd-a".to_string(),
+                "global-launcher".to_string(),
+                1_000,
+                None,
+                None,
+            )
+            .expect("append a");
+            usage_journal_append(
+                "cmd-b".to_string(),
+                "global-launcher".to_string(),
+                2_000,
+                Some("cmd-a".to_string()),
+                Some("clipboard".to_string()),
+            )
+            .expect("append b");
+            usage_journal_append(
+                "cmd-c".to_string(),
+                "editor-command-bar".to_string(),
+                3_000,
+                Some("cmd-b".to_string()),
+                None,
+            )
+            .expect("append c");
+
+            usage_journal_prune(None, Some(2)).expect("prune to 2 rows");
+
+            let db = get_plugin_kv_db().expect("db").lock().expect("lock");
+            let count: i64 = db
+                .connection
+                .query_row("SELECT COUNT(*) FROM usage_journal", [], |row| row.get(0))
+                .expect("count");
+            assert_eq!(count, 2);
+
+            let oldest_cmd: String = db
+                .connection
+                .query_row(
+                    "SELECT command_id FROM usage_journal ORDER BY executed_at ASC LIMIT 1",
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("oldest");
+            assert_eq!(oldest_cmd, "cmd-b");
+        });
     }
 
     #[test]
