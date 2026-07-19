@@ -451,6 +451,8 @@ function resolveDynamicItem(
     inputPolicy: contribution.inputPolicy,
     // Only stable dynamic intents should opt in; one-shot results leave this unset.
     recordUsage: contribution.recordUsage === true ? true : undefined,
+    // Dynamic contributions may declare accepts (e.g. web-open direct-url → kinds:url).
+    accepts: contribution.accepts,
     suggest: contribution.suggest,
     execute: contribution.execute,
   }

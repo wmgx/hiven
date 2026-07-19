@@ -311,6 +311,8 @@ async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<L
       id: 'direct-url-open',
       // Single stable action for "open this as URL", not the URL itself.
       recordUsage: true,
+      // Participate in content intent ranking when detections include url.
+      accepts: { kinds: ['url'] },
       display: {
         title: ctx.t('directOpenTitle'),
         subtitle: query,
@@ -534,8 +536,8 @@ export default definePlugin<WebQuickOpenSettings>({
                   key: 'urlTemplate',
                   label: 'Address template',
                   labelI18n: { zh: '地址模板' },
-                  description: 'Use {query} as the input placeholder.',
-                  descriptionI18n: { zh: '{query} 会被命令面板中输入的查询内容替换。' },
+                  description: 'Use {query} and/or {clipboard} as placeholders.',
+                  descriptionI18n: { zh: '{query} / {clipboard} 会被输入或剪贴板内容替换。' },
                   placeholder: 'https://www.google.com/search?q={query}',
                   placeholderI18n: { zh: 'https://www.google.com/search?q={query}' },
                   mono: true,

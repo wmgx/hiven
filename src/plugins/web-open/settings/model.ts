@@ -59,10 +59,23 @@ export const DEFAULT_WEB_QUICK_OPEN_SETTINGS: WebQuickOpenSettings = {
   ],
 }
 
-export function buildWebQuickOpenUrl(template: string, query: string, encode: boolean): string {
-  const value = encode ? encodeURIComponent(query) : query
-  if (template.includes('{query}')) {
-    return template.replace('{query}', value)
-  }
+/**
+ * Expand a quick-open URL template.
+ * - `{query}` → query (optionally URI-encoded)
+ * - `{clipboard}` → extras.clipboard when provided, otherwise same as query
+ *   (object-block / resolved input often lands in `query`; callers may still
+ *   pass a distinct clipboard snapshot via extras).
+ */
+export function buildWebQuickOpenUrl(
+  template: string,
+  query: string,
+  encode: boolean,
+  extras?: { clipboard?: string },
+): string {
+  const queryValue = encode ? encodeURIComponent(query) : query
+  const clipboardRaw = extras?.clipboard ?? query
+  const clipboardValue = encode ? encodeURIComponent(clipboardRaw) : clipboardRaw
   return template
+    .split('{query}').join(queryValue)
+    .split('{clipboard}').join(clipboardValue)
 }

@@ -9,6 +9,10 @@ import { normalizeHostAppEntries } from './hostAppIndex'
 // and avoid matching internal ids/paths in search.
 const HOST_APP_INDEX_CACHE_KEY = 'hiven:host-app-launcher:index:v2'
 const APP_INDEX_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
+/** Empty query: only surface a few recent apps so they do not flood the mixed list. */
+const EMPTY_QUERY_APP_LIMIT = 5
+/** Query-present: hard cap after filter to keep dynamic provider cheap. */
+const QUERY_APP_LIMIT = 50
 
 type HostAppEntry = DiscoveredApp
 
@@ -137,6 +141,23 @@ function appMatchesQuery(app: HostAppEntry, query: string, locale: Locale): bool
   return searchableFieldsMatch(appSearchFields(app), q, locale)
 }
 
+/** Empty-query order: newest installedAt first; missing timestamps last; then name. */
+function compareAppsForEmptyQuery(a: HostAppEntry, b: HostAppEntry): number {
+  const aTime = typeof a.installedAt === 'number' ? a.installedAt : 0
+  const bTime = typeof b.installedAt === 'number' ? b.installedAt : 0
+  if (aTime !== bTime) return bTime - aTime
+  return a.name.localeCompare(b.name)
+}
+
+function limitMatchedApps(apps: HostAppEntry[], query: string): HostAppEntry[] {
+  const q = query.trim()
+  if (!q) {
+    return apps.slice().sort(compareAppsForEmptyQuery).slice(0, EMPTY_QUERY_APP_LIMIT)
+  }
+  if (apps.length > QUERY_APP_LIMIT) return apps.slice(0, QUERY_APP_LIMIT)
+  return apps
+}
+
 function appIconRef(appId: string): string {
   return `app-icon:${appId}`
 }
@@ -202,8 +223,10 @@ export async function getHostAppLauncherDynamicItems({
   if (surfaceId !== 'global-launcher') return []
   const startedAt = launcherPerfNow()
   const cache = readCache()
-  const apps = cache.apps
-    .filter((app) => appMatchesQuery(app, query, locale))
+  const apps = limitMatchedApps(
+    cache.apps.filter((app) => appMatchesQuery(app, query, locale)),
+    query,
+  )
 
   const items = apps.map((app) => ({
     systemKey: `host:app-launcher:app:${app.appId}`,

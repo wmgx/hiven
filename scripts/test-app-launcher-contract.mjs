@@ -92,9 +92,10 @@ assert.doesNotMatch(
   /launch_installed_app\s*,\s*\{\s*(path|displayPath)\b/,
   'host app launcher must not launch by path',
 )
-assert.doesNotMatch(files.hostAppLauncher, /MAX_DYNAMIC_APP_ITEMS/, 'host app launcher results should no longer use the old dynamic result cap')
-assert.match(files.hostAppLauncher, /if\s*\(!q\)\s*return true/, 'host app launcher should include apps in the empty-query mixed list')
-assert.doesNotMatch(files.hostAppLauncher, /\.filter\(\(app\) => appMatchesQuery\(app,\s*query,\s*locale\)\)\s*\n\s*\.slice\(/, 'host app launcher dynamic results should not be sliced after matching')
+assert.match(files.hostAppLauncher, /EMPTY_QUERY_APP_LIMIT\s*=\s*5/, 'empty query must cap host apps at 5')
+assert.match(files.hostAppLauncher, /QUERY_APP_LIMIT\s*=\s*50/, 'query-present path should keep a reasonable app cap')
+assert.match(files.hostAppLauncher, /limitMatchedApps|compareAppsForEmptyQuery/, 'empty-query apps must be ordered (installedAt then name) before cap')
+assert.match(files.hostAppLauncher, /if\s*\(!q\)\s*return true/, 'host app launcher should still match all apps when query is empty (then limit)')
 assert.match(files.hostAppLauncher, /searchableFieldsMatch/, 'host app launcher must reuse shared launcher search ranking')
 assert.doesNotMatch(files.hostAppLauncher, /pinyin-pro|pinyin\(value/, 'host app launcher must not reimplement pinyin search locally')
 assert.match(files.hostAppLauncher, /app-icon:\$\{appId\}/, 'host app launcher must use host app-icon refs')

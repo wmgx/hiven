@@ -415,6 +415,11 @@ export type LauncherItemContribution<TSettings = unknown> = {
    */
   recordUsage?: boolean
   /**
+   * Declarative intent coarse filter. Host copies this onto the resolved item
+   * for ranking / accepts evaluation (static tools already carry accepts).
+   */
+  accepts?: ContentAccepts
+  /**
    * Optional suggestions for collect-input frames (filtered by current inputText).
    * Host infrastructure only — product semantics (history, etc.) stay in the plugin.
    */

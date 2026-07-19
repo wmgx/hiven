@@ -51,6 +51,28 @@ const INTENT_SCORE_MEDIUM = 1600
 const INTENT_SCORE_CAP = 2800
 /** accepts.apps matches foregroundApp. */
 const CONTEXT_BOOST_MAX = 400
+/**
+ * When clipboard/content is a strong text structure (jwt/json/…), demote host
+ * app rows so content tools can rank above heavily-used apps. Pure `url` is
+ * excluded so web-open / direct-open can still compete with apps.
+ */
+const STRONG_TEXT_INTENT_APP_PENALTY = 2500
+const STRONG_TEXT_CONTENT_KINDS = new Set([
+  'jwt',
+  'json',
+  'base64',
+  'csv',
+  'timestamp',
+  'url-encoded',
+  'yaml',
+  'xml',
+  'sql',
+  'tsv',
+  'query-string',
+  'markdown',
+  'secret',
+  'secret-like',
+])
 
 export type RankContext = {
   query: string
@@ -92,6 +114,17 @@ function getCachedSearchableFields(item: LauncherItem, locale: Locale): Searchab
 
 function isHostAppLauncherItem(item: LauncherItem): boolean {
   return item.systemKey.startsWith('host:app-launcher:app:')
+}
+
+/** True when detections include a high-confidence structured-text kind (not plain url). */
+function hasStrongTextContentIntent(
+  detections: RankContext['detections'] | undefined,
+): boolean {
+  if (!detections?.length) return false
+  for (const d of detections) {
+    if ((d.confidence ?? 0) >= 0.85 && STRONG_TEXT_CONTENT_KINDS.has(d.kind)) return true
+  }
+  return false
 }
 
 function toSearchableFields(item: LauncherItem, locale: Locale): SearchableFields {
@@ -234,7 +267,7 @@ export function scoreLauncherItem(ctx: RankContext, item: LauncherItem): number 
     ? (safeTextMatch(item.textMatch, ctx.contentText) ? TEXT_MATCH_BOOST : 0)
     : 0
   const dynamicBoost = item.kind === 'dynamic' ? DYNAMIC_ITEM_BOOST : 0
-  return (
+  let score =
     matchScore +
     usageScore(ctx, item) +
     staticPriority(item) +
@@ -243,7 +276,10 @@ export function scoreLauncherItem(ctx: RankContext, item: LauncherItem): number 
     dynamicBoost +
     intentScore(item, ctx) +
     contextBoost(item, ctx)
-  )
+  if (isHostAppLauncherItem(item) && hasStrongTextContentIntent(ctx.detections)) {
+    score -= STRONG_TEXT_INTENT_APP_PENALTY
+  }
+  return score
 }
 
 /** Maximum text length passed to plugin textMatch to prevent runaway matching. */
