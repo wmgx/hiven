@@ -14,6 +14,7 @@ import type {
   LauncherExecuteResult,
   LauncherOutput,
   LauncherResultChoice,
+  LauncherSurfaceId,
   PluginLauncherApi,
 } from './types'
 import { normalizeLauncherSurfaceId } from './types'
@@ -103,7 +104,7 @@ export function surfaceTextResult(
   text: string,
   api: PluginLauncherApi,
   locale: Locale,
-  surfaceId: string,
+  surfaceId: LauncherSurfaceId,
 ): LauncherExecuteResult {
   return normalizeLauncherSurfaceId(surfaceId) === 'global-launcher'
     ? textResult(text, api, locale)
