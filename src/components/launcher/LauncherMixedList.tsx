@@ -123,8 +123,14 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
 })
 
 function getLauncherItemKindLabel(item: LauncherMixedItem, locale: Locale) {
-  if (item.kind === 'domain' && item.domainItem.display.kindLabel) {
-    return item.domainItem.display.kindLabel
+  if (item.kind === 'domain' && item.domainItem.display) {
+    const display = item.domainItem.display
+    const i18n = display.kindLabelI18n
+    if (i18n) {
+      const localized = i18n[locale] ?? i18n.en ?? i18n.zh
+      if (localized) return localized
+    }
+    if (display.kindLabel) return display.kindLabel
   }
   if (isAppIconRef(item.icon)) return t(locale, 'palette.kindApp')
   return t(locale, 'palette.kindCommand')

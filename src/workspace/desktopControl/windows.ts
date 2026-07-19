@@ -117,8 +117,12 @@ function windowDisplayTitle(win: DesktopWindow): string {
 
 function buildFocusItem(win: DesktopWindow): LauncherItem {
   const title = windowDisplayTitle(win)
+  const listId = `host.window:focus:native:${win.id}`
+  const usageKey = win.appName
+    ? `host:window:focus:app:${win.appName}`
+    : null
   return {
-    systemKey: `host:window:focus:${win.id}`,
+    systemKey: listId,
     kind: 'host',
     display: {
       title,
@@ -127,11 +131,14 @@ function buildFocusItem(win: DesktopWindow): LauncherItem {
       subtitleI18n: { en: `${win.appName} · Window`, zh: `${win.appName} · 窗口` },
       icon: 'AppWindow',
       aliases: ['窗口', '切到', 'focus', 'window', win.appName, win.title].filter(Boolean),
+      kindLabel: 'Window',
+      kindLabelI18n: { en: 'Window', zh: '窗口' },
     },
     behavior: { type: 'perform' },
     surfaces: ['global-launcher'],
     requiredCapabilities: ['desktop-windows'],
     recordUsage: true,
+    legacyUsageKeys: usageKey ? [usageKey] : undefined,
     execute: async () => {
       try {
         await focusDesktopWindow(win.id)
@@ -181,7 +188,7 @@ function buildCloseConfirmResult(win: DesktopWindow): LauncherExecuteResult {
 function buildCloseItem(win: DesktopWindow): LauncherItem {
   const title = windowDisplayTitle(win)
   return {
-    systemKey: `host:window:close:${win.id}`,
+    systemKey: `host.window:close:native:${win.id}`,
     kind: 'host',
     display: {
       title: `Close: ${title}`,
@@ -190,11 +197,13 @@ function buildCloseItem(win: DesktopWindow): LauncherItem {
       subtitleI18n: { en: `${win.appName} · Close window`, zh: `${win.appName} · 关闭窗口` },
       icon: 'X',
       aliases: ['关闭', '关掉', 'close', '窗口', win.appName, win.title].filter(Boolean),
+      kindLabel: 'Window',
+      kindLabelI18n: { en: 'Window', zh: '窗口' },
     },
     behavior: { type: 'perform' },
     surfaces: ['global-launcher'],
     requiredCapabilities: ['desktop-windows'],
-    recordUsage: true,
+    recordUsage: false,
     execute: async () => buildCloseConfirmResult(win),
   }
 }

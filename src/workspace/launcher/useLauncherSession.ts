@@ -155,7 +155,13 @@ export function useLauncherSession({
           makeT: (item) => makePluginT(item.pluginId ?? '', locale),
           getSettings: getLauncherItemSettings,
           recordSelection: (surfaceId, item) => {
+            // List identity may be volatile (window/tab id); also record stable usage keys.
             recordLauncherSelection(surfaceId, item.systemKey)
+            for (const key of item.legacyUsageKeys ?? []) {
+              if (key && key !== item.systemKey) {
+                recordLauncherSelection(surfaceId, key)
+              }
+            }
           },
           requestClose: () => requestCloseRef.current(),
           onChange: (state) => {

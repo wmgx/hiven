@@ -3291,12 +3291,16 @@ fn list_macos_desktop_processes(_query: Option<&str>) -> Result<Vec<DesktopProce
 
 #[tauri::command]
 fn list_desktop_processes(query: Option<String>) -> Result<Vec<DesktopProcess>, String> {
-    let q = query.as_deref().map(str::trim).filter(|s| !s.is_empty());
-    // Empty query: return nothing (frontend should also skip invoke).
-    if q.is_none() {
+    let raw = query.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    // Empty query: return nothing (normal launcher search must not list processes).
+    // Special token "*" = process-mode bare "kill": list all non-denied (frontend only).
+    if raw.is_none() {
         return Ok(Vec::new());
     }
-    list_macos_desktop_processes(q)
+    if raw == Some("*") {
+        return list_macos_desktop_processes(None);
+    }
+    list_macos_desktop_processes(raw)
 }
 
 #[tauri::command]

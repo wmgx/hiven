@@ -56,7 +56,8 @@ const CONTEXT_BOOST_MAX = 400
  * app rows so content tools can rank above heavily-used apps. Pure `url` is
  * excluded so web-open / direct-open can still compete with apps.
  */
-const STRONG_TEXT_INTENT_APP_PENALTY = 2500
+/** Demote host navigation targets (app/window/tab) under strong text content intent. */
+const STRONG_TEXT_INTENT_NAV_PENALTY = 2500
 const STRONG_TEXT_CONTENT_KINDS = new Set([
   'jwt',
   'json',
@@ -114,6 +115,21 @@ function getCachedSearchableFields(item: LauncherItem, locale: Locale): Searchab
 
 function isHostAppLauncherItem(item: LauncherItem): boolean {
   return item.systemKey.startsWith('host:app-launcher:app:')
+}
+
+/** App / window / tab navigation rows eligible for strong-text demotion. */
+function isDesktopNavigationItem(item: LauncherItem): boolean {
+  if (isHostAppLauncherItem(item)) return true
+  if (item.systemKey.startsWith('host:window:focus:')) return true
+  if (item.systemKey.startsWith('host.window:')) return true
+  if (item.systemKey.startsWith('host:tab:focus:')) return true
+  if (item.systemKey.startsWith('browser.chromium:')) return true
+  // DesktopTarget ids: host.window:… / host.app:…
+  if (item.systemKey.startsWith('host.window:') || item.systemKey.startsWith('host.app:')) return true
+  if (item.display.kindLabelI18n || item.requiredCapabilities?.includes('desktop-windows')) {
+    if (item.systemKey.includes(':focus:') || item.systemKey.includes(':window:')) return true
+  }
+  return item.requiredCapabilities?.includes('desktop-browser-tabs') === true
 }
 
 /** True when detections include a high-confidence structured-text kind (not plain url). */
@@ -267,6 +283,10 @@ export function scoreLauncherItem(ctx: RankContext, item: LauncherItem): number 
     ? (safeTextMatch(item.textMatch, ctx.contentText) ? TEXT_MATCH_BOOST : 0)
     : 0
   const dynamicBoost = item.kind === 'dynamic' ? DYNAMIC_ITEM_BOOST : 0
+  const providerPriorityBoost = Math.max(
+    0,
+    Math.min(50, item.ranking?.providerPriorityBoost ?? 0),
+  )
   let score =
     matchScore +
     usageScore(ctx, item) +
@@ -275,9 +295,10 @@ export function scoreLauncherItem(ctx: RankContext, item: LauncherItem): number 
     textMatchBoost +
     dynamicBoost +
     intentScore(item, ctx) +
-    contextBoost(item, ctx)
-  if (isHostAppLauncherItem(item) && hasStrongTextContentIntent(ctx.detections)) {
-    score -= STRONG_TEXT_INTENT_APP_PENALTY
+    contextBoost(item, ctx) +
+    providerPriorityBoost
+  if (isDesktopNavigationItem(item) && hasStrongTextContentIntent(ctx.detections)) {
+    score -= STRONG_TEXT_INTENT_NAV_PENALTY
   }
   return score
 }

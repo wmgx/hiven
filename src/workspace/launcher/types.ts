@@ -42,6 +42,7 @@ export type LauncherHostCapability =
   | 'parameter-customization'
   | 'desktop-windows'
   | 'desktop-processes'
+  | 'desktop-browser-tabs'
 
 export type LauncherHostDescriptor = {
   id: LauncherHostId
@@ -169,6 +170,8 @@ export type LauncherItemDisplay = {
   aliases?: string[]
   /** Custom kind label shown as the tag pill. Overrides the default derived label. */
   kindLabel?: string
+  /** i18n for kindLabel (design §5.1); UI resolves by locale when present. */
+  kindLabelI18n?: Partial<Record<Locale, string>>
 }
 
 // ─── Behavior (lifecycle types) ──────────────────────────────────────────────
@@ -478,6 +481,11 @@ export type LauncherItem = {
   ranking?: {
     /** Milliseconds since epoch; used as a small freshness boost for recently installed apps. */
     installedAt?: number
+    /**
+     * Source-level boost from DesktopTargetProvider.priority (clamped ≤ 50).
+     * Host-owned; see desktopTargets/constants.ts PROVIDER_PRIORITY_CAP.
+     */
+    providerPriorityBoost?: number
   }
   /**
    * Host-only legacy usage keys (e.g. the backing command id) consulted as a

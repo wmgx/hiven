@@ -76,8 +76,11 @@ assert.match(files.tauriLib, /deny_list_blocks_critical_system_process_names/, '
 assert.match(files.windows, /WINDOW_LIST_TTL_MS\s*=\s*2000/, 'window list TTL must be 2s')
 assert.match(files.windows, /listDesktopWindowsCached|windowListCache/, 'window TTL cache helper required')
 assert.match(files.windows, /getHostWindowLauncherDynamicItems/, 'window dynamic items provider required')
-assert.match(files.windows, /host:window:focus:\$\{/, 'focus systemKey required')
-assert.match(files.windows, /host:window:close:\$\{/, 'close systemKey required')
+assert.match(files.windows, /host\.window:focus:native:\$\{/, 'focus systemKey required')
+assert.match(files.windows, /host\.window:close:native:\$\{/, 'close systemKey required')
+assert.match(files.windows, /kindLabelI18n/, 'window kindLabel i18n required')
+assert.match(files.processes, /isProcessModeQuery/, 'process mode gate required')
+assert.match(files.processes, /recordUsage:\s*false/, 'process items must not record usage')
 assert.match(files.windows, /invoke\(['"]list_desktop_windows['"]\)/, 'windows must invoke list_desktop_windows')
 assert.match(files.windows, /invoke\(['"]focus_desktop_window['"]/, 'windows must invoke focus')
 assert.match(files.windows, /invoke\(['"]close_desktop_window['"]/, 'windows must invoke close')
@@ -111,8 +114,13 @@ assert.match(files.processes, /stripProcessQueryPrefix/, 'process prefix strip h
 assert.match(files.processes, /杀|结束|kill/, 'process kill prefixes required')
 assert.match(
   files.processes,
-  /if\s*\(!stripped\)\s*return\s*\[\]/,
-  'empty process query must not list processes',
+  /if\s*\(!isProcessModeQuery\(query\)\)\s*return\s*\[\]/,
+  'ordinary queries must not list processes (process mode gate)',
+)
+assert.match(
+  files.hostProvider,
+  /isProcessModeQuery/,
+  'host provider must gate process mode',
 )
 assert.match(files.processes, /confirm-terminate-process|Confirm terminate|确认结束/, 'terminate L2 confirm required')
 assert.match(files.processes, /cancel-terminate-process|Cancel|取消/, 'terminate L2 cancel required')

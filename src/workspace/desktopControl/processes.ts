@@ -41,6 +41,7 @@ export async function listDesktopProcessesCached(
   options: { force?: boolean } = {},
 ): Promise<DesktopProcess[]> {
   const q = query.trim()
+  // Empty string is invalid for native list; use "*" for process-mode "list all".
   if (!q) return []
 
   const now = Date.now()
@@ -135,13 +136,33 @@ function buildTerminateItem(proc: DesktopProcess): LauncherItem {
       subtitleI18n: { en: `pid ${proc.pid} · Process`, zh: `pid ${proc.pid} · 进程` },
       icon: 'Cpu',
       aliases: ['杀', '结束', 'kill', 'process', '进程', base, proc.name].filter(Boolean),
+      kindLabel: 'Process',
+      kindLabelI18n: { en: 'Process', zh: '进程' },
     },
     behavior: { type: 'perform' },
     surfaces: ['global-launcher'],
     requiredCapabilities: ['desktop-processes'],
-    recordUsage: true,
+    recordUsage: false,
     execute: async () => buildTerminateConfirmResult(proc),
   }
+}
+
+/** True only when the user explicitly entered a kill/terminate intent prefix. */
+export function isProcessModeQuery(query: string): boolean {
+  const trimmed = query.trim()
+  if (!trimmed) return false
+  const lower = trimmed.toLowerCase()
+  for (const prefix of TERMINATE_PREFIXES) {
+    if (
+      lower === prefix ||
+      lower.startsWith(`${prefix} `) ||
+      lower.startsWith(`${prefix}:`) ||
+      lower.startsWith(`${prefix}：`)
+    ) {
+      return true
+    }
+  }
+  return false
 }
 
 export async function getHostProcessLauncherDynamicItems({
@@ -155,10 +176,12 @@ export async function getHostProcessLauncherDynamicItems({
 }): Promise<LauncherItem[]> {
   if (surfaceId !== 'global-launcher') return []
 
-  // Empty query: never list processes (avoid dangerous / noisy defaults).
-  const stripped = stripProcessQueryPrefix(query).trim()
-  if (!stripped) return []
+  // D2: only process-manager mode (explicit kill/杀/结束). Ordinary queries must not list terminate.
+  if (!isProcessModeQuery(query)) return []
 
-  const processes = await listDesktopProcessesCached(stripped)
-  return processes.slice(0, QUERY_PROCESS_LIMIT).map(buildTerminateItem)
+  const stripped = stripProcessQueryPrefix(query).trim()
+  // Bare "kill" → "*" lists all non-denied processes (native special token).
+  const listQuery = stripped || '*'
+  const list = await listDesktopProcessesCached(listQuery)
+  return list.slice(0, QUERY_PROCESS_LIMIT).map(buildTerminateItem)
 }
