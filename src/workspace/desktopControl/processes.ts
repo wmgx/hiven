@@ -147,22 +147,44 @@ function buildTerminateItem(proc: DesktopProcess): LauncherItem {
   }
 }
 
-/** True only when the user explicitly entered a kill/terminate intent prefix. */
-export function isProcessModeQuery(query: string): boolean {
+/**
+ * Process manager is a **secondary mode**:
+ *   1. User types kill / 杀 / 结束  → enter mode
+ *   2. List processes (all if no further text)
+ *   3. Further text after the prefix filters the list by process name
+ * Ordinary search must never show terminate rows.
+ */
+export type ProcessModeParse = {
+  active: boolean
+  /** Name filter after the kill prefix; empty = list all (subject to limit). */
+  filter: string
+}
+
+export function parseProcessModeQuery(query: string): ProcessModeParse {
   const trimmed = query.trim()
-  if (!trimmed) return false
+  if (!trimmed) return { active: false, filter: '' }
   const lower = trimmed.toLowerCase()
   for (const prefix of TERMINATE_PREFIXES) {
+    if (lower === prefix) {
+      return { active: true, filter: '' }
+    }
     if (
-      lower === prefix ||
       lower.startsWith(`${prefix} `) ||
       lower.startsWith(`${prefix}:`) ||
       lower.startsWith(`${prefix}：`)
     ) {
-      return true
+      return {
+        active: true,
+        filter: trimmed.slice(prefix.length).replace(/^[\s:：]+/, '').trim(),
+      }
     }
   }
-  return false
+  return { active: false, filter: '' }
+}
+
+/** True only when the user explicitly entered a kill/terminate intent prefix. */
+export function isProcessModeQuery(query: string): boolean {
+  return parseProcessModeQuery(query).active
 }
 
 export async function getHostProcessLauncherDynamicItems({
@@ -176,12 +198,13 @@ export async function getHostProcessLauncherDynamicItems({
 }): Promise<LauncherItem[]> {
   if (surfaceId !== 'global-launcher') return []
 
-  // D2: only process-manager mode (explicit kill/杀/结束). Ordinary queries must not list terminate.
-  if (!isProcessModeQuery(query)) return []
+  const mode = parseProcessModeQuery(query)
+  if (!mode.active) return []
 
-  const stripped = stripProcessQueryPrefix(query).trim()
-  // Bare "kill" → "*" lists all non-denied processes (native special token).
-  const listQuery = stripped || '*'
+  // Secondary mode list:
+  // - bare "kill" / "杀" → all non-denied processes ("*")
+  // - "kill node" → filter by "node" at the native list layer
+  const listQuery = mode.filter || '*'
   const list = await listDesktopProcessesCached(listQuery)
   return list.slice(0, QUERY_PROCESS_LIMIT).map(buildTerminateItem)
 }

@@ -38,36 +38,37 @@ export function registerHostLauncherProviders(): void {
     ...getTextPipelineLauncherItems(),
   ])
   setHostLauncherDynamicItemsProvider(async (ctx) => {
-    const processMode = isProcessModeQuery(ctx.query)
-    const [workflowItems, appItems, windowItems, processItems] = await Promise.all([
+    // Secondary process mode: ONLY process rows — no apps/windows/workflow mixed in.
+    if (isProcessModeQuery(ctx.query)) {
+      return measureLauncherPerf(
+        'host-provider:process-mode',
+        () => getHostProcessLauncherDynamicItems(ctx),
+        (items) => ({
+          queryLength: ctx.query.trim().length,
+          itemCount: items.length,
+          processMode: true,
+        }),
+      )
+    }
+
+    const [workflowItems, appItems, windowItems] = await Promise.all([
       measureLauncherPerf('host-provider:workflow-items', () => getWorkflowObjectLauncherItems(ctx), (items) => ({
         queryLength: ctx.query.trim().length,
         itemCount: items.length,
       })),
-      // In process mode, skip noisy app/window flood so kill list dominates.
-      processMode
-        ? Promise.resolve([])
-        : measureLauncherPerf('host-provider:app-items', () => getHostAppLauncherDynamicItems(ctx), (items) => ({
-            queryLength: ctx.query.trim().length,
-            itemCount: items.length,
-          })),
-      processMode
-        ? Promise.resolve([])
-        : measureLauncherPerf('host-provider:window-items', () => getHostWindowLauncherDynamicItems(ctx), (items) => ({
-            queryLength: ctx.query.trim().length,
-            itemCount: items.length,
-          })),
-      measureLauncherPerf('host-provider:process-items', () => getHostProcessLauncherDynamicItems(ctx), (items) => ({
+      measureLauncherPerf('host-provider:app-items', () => getHostAppLauncherDynamicItems(ctx), (items) => ({
         queryLength: ctx.query.trim().length,
         itemCount: items.length,
-        processMode,
+      })),
+      measureLauncherPerf('host-provider:window-items', () => getHostWindowLauncherDynamicItems(ctx), (items) => ({
+        queryLength: ctx.query.trim().length,
+        itemCount: items.length,
       })),
     ])
     return [
       ...workflowItems,
       ...appItems,
       ...windowItems,
-      ...processItems,
     ]
   })
 }

@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObjec
 import { makePluginT } from '../../i18n/pluginI18nRegistry'
 import { detectContent } from '../../kits/content'
 import { useAppStore } from '../../store'
+import {
+  isProcessModeQuery,
+  stripProcessQueryPrefix,
+} from '../desktopControl/processes'
 import { pluginRegistry, usePluginRegistryVersion } from '../pluginRegistry'
 import { resolvePluginSettings } from '../pluginSettingsStore'
 import type { ContributionSource } from '../pluginTypes'
@@ -186,6 +190,14 @@ export function useLauncherSession({
   useEffect(() => {
     if (!open) return
     const q = query.trim()
+    // Secondary kill mode: no plugin dynamic items at all.
+    if (normalizedHostId === 'global-launcher' && isProcessModeQuery(q)) {
+      setPluginDynamicItems([])
+      pluginQueryRef.current = q
+      pluginPartialsRef.current.clear()
+      pluginAbortRef.current?.abort()
+      return
+    }
     const inputText = q || objectBlockText?.trim() || ''
     if (!inputText && !collectDynamicWhenEmpty) {
       setPluginDynamicItems([])
@@ -296,6 +308,28 @@ export function useLauncherSession({
   }, [normalizedHostId, pluginRegistryVersion, staticItemFilter])
 
   const rankedItems = useMemo<LauncherItem[]>(() => {
+    // Secondary process mode: rank only process host items; filter by text after "kill" prefix.
+    // Bare "kill"/"杀" → empty rank query → show full process list without name match.
+    if (normalizedHostId === 'global-launcher' && isProcessModeQuery(query)) {
+      const filter = stripProcessQueryPrefix(query).trim()
+      return measureLauncherPerfSync('session:rank-items:process-mode', () => rankLauncherItems(
+        {
+          query: filter,
+          locale,
+          surfaceId: normalizedHostId,
+          usage: launcherUsageBySurface,
+          now: Date.now(),
+        },
+        hostDynamicItems,
+      ), (items) => ({
+        surfaceId: normalizedHostId,
+        processMode: true,
+        filterLength: filter.length,
+        inputCount: hostDynamicItems.length,
+        resultCount: items.length,
+      }))
+    }
+
     // contentText for textMatch: Object Block takes precedence (it IS the text to process);
     // only fall back to query when no Object Block is present.
     const contentText = objectBlockText ?? (query.trim() || undefined)

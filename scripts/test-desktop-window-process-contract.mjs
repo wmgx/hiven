@@ -112,9 +112,11 @@ assert.match(files.processes, /invoke\(['"]list_desktop_processes['"]/, 'process
 assert.match(files.processes, /invoke\(['"]terminate_desktop_process['"]/, 'processes must invoke terminate')
 assert.match(files.processes, /stripProcessQueryPrefix/, 'process prefix strip helper required')
 assert.match(files.processes, /杀|结束|kill/, 'process kill prefixes required')
+assert.match(files.processes, /parseProcessModeQuery/, 'process mode parser required')
+assert.match(files.processes, /active:\s*true/, 'process mode active flag required')
 assert.match(
   files.processes,
-  /if\s*\(!isProcessModeQuery\(query\)\)\s*return\s*\[\]/,
+  /if\s*\(!mode\.active\)\s*return\s*\[\]/,
   'ordinary queries must not list processes (process mode gate)',
 )
 assert.match(
@@ -122,6 +124,16 @@ assert.match(
   /isProcessModeQuery/,
   'host provider must gate process mode',
 )
+assert.match(
+  files.hostProvider,
+  /process-mode|processMode:\s*true/,
+  'host provider process mode should only return process rows',
+)
+// Session must rank process mode with stripped filter (secondary list UX)
+const sessionSrc = readFileSync('src/workspace/launcher/useLauncherSession.ts', 'utf8')
+assert.match(sessionSrc, /isProcessModeQuery/, 'session must detect process mode')
+assert.match(sessionSrc, /stripProcessQueryPrefix/, 'session must strip kill prefix for ranking filter')
+assert.match(sessionSrc, /process-mode/, 'session process-mode rank path required')
 assert.match(files.processes, /confirm-terminate-process|Confirm terminate|确认结束/, 'terminate L2 confirm required')
 assert.match(files.processes, /cancel-terminate-process|Cancel|取消/, 'terminate L2 cancel required')
 assert.match(files.processes, /titleI18n/, 'process items must use titleI18n')
@@ -143,10 +155,16 @@ assert.doesNotMatch(files.audit, /clipboard\.content|clipboardText|pasteText/, '
 assert.match(files.hostProvider, /getHostWindowLauncherDynamicItems/, 'host provider must wire windows')
 assert.match(files.hostProvider, /getHostProcessLauncherDynamicItems/, 'host provider must wire processes')
 assert.match(files.hostProvider, /getHostAppLauncherDynamicItems/, 'host provider must keep apps')
+// Normal mode merges apps+windows; process mode is exclusive (secondary kill list only).
 assert.match(
   files.hostProvider,
-  /appItems[\s\S]*windowItems[\s\S]*processItems|apps[\s\S]*windows[\s\S]*processes/,
-  'host provider should merge apps + windows + processes',
+  /appItems[\s\S]*windowItems/,
+  'normal mode should merge apps + windows',
+)
+assert.match(
+  files.hostProvider,
+  /Secondary process mode|process-mode/,
+  'process mode must be exclusive secondary list',
 )
 
 // ── Permissions ──────────────────────────────────────────────────────────────
