@@ -334,6 +334,23 @@ usage                        ≤ ~100
 | 8 | 桌面控制安全分级 L0-L3；L2 必确认；高 confidence 不跳确认 | Intent 设计 |
 | 9 | 平台一期主攻 macOS | Intent 设计 |
 
+
+## 15.1 实施状态（2026-07-19 收官）
+
+| 包 | 状态 | 说明 |
+|----|------|------|
+| ① 地基 + 协议 + content 推荐 | ✅ 已交付 | content-kit、intentEngine、accepts 推荐、journal |
+| ② 别名 + ranking 抬分 + 前台 | ✅ 已交付 | pathway OR、intentScore/contextBoost、foreground |
+| ③ App + URL | ✅ 已交付 | 空 query 限流、强文本 App 让位、`{clipboard}` 模板 |
+| ④ 窗口 | ✅ 已交付 | list/focus/close + L2 choices 确认（macOS） |
+| ⑤ 进程 | ✅ 已交付 | 搜索/SIGTERM + deny 表 + L2 确认（macOS） |
+| ⑥ 线性工作流 | ✅ MVP | 纯函数 pipeline + launcher item |
+| ⑦ 脚本脚手架 | ✅ MVP | `script-command` 模板 + `shell.run` 权限（不默认执行 shell） |
+| ⑧ 飞书生态 | ⏸ 延期 | 需独立 OAuth / background / 合规设计，不进本分支 |
+
+分支：`feat/launcher-intelligence-package-1`
+
+
 ## 16. 相关文档
 
 - 被本文吸收：`docs/superpowers/specs/2026-07-19-control-hub-intent-design.md`（其 §4 排序、§6 桌面控制、§7 安全、§9 测试被整体采纳；其 §3 纯命令式协议被 §5 两级混合取代）
