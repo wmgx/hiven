@@ -114,7 +114,7 @@ export default definePlugin<TranslateSettings>({
               labelI18n: { zh: '默认配置组' },
               description: 'Pick from existing API profiles.',
               descriptionI18n: { zh: '从已有配置组中选择，无需填写 ID。' },
-              options: DEFAULT_TRANSLATE_SETTINGS.profiles.map((profile) => ({
+              options: (DEFAULT_TRANSLATE_SETTINGS?.profiles ?? []).map((profile) => ({
                 value: profile.id,
                 label: profile.name,
               })),

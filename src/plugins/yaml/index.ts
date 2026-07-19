@@ -26,6 +26,7 @@ export const yamlPlugin = definePlugin({
       icon: 'FileJson',
       aliases: ['yaml to json', 'yaml2json', 'yaml转json'],
       inputPolicy: { mode: 'auto' },
+      accepts: { kinds: ['yaml'], aliases: ['yaml', '转json'] },
       run(ctx) {
         try {
           return ctx.output.text(yamlToJson(ctx.input.text))
@@ -40,8 +41,9 @@ export const yamlPlugin = definePlugin({
       title: 'command.fromJson.title',
       subtitle: 'command.fromJson.description',
       icon: 'FileJson',
-      aliases: ['json to yaml', 'json2yaml', 'json转yaml'],
+      aliases: ['转yaml', 'json to yaml', 'json2yaml', 'json转yaml'],
       inputPolicy: { mode: 'auto' },
+      accepts: { kinds: ['json'], aliases: ['转yaml', 'json to yaml', 'json2yaml'] },
       run(ctx) {
         try {
           return ctx.output.text(jsonToYaml(ctx.input.text))

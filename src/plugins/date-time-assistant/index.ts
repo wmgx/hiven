@@ -337,9 +337,9 @@ export const dateTimeAssistantPlugin = definePlugin({
       title: 'command.timestamp.title',
       subtitle: 'command.timestamp.description',
       icon: 'Clock',
-      aliases: ['unix-time', 'epoch', 'date-convert'],
+      aliases: ['ts', '时间戳', 'unix-time', 'epoch', 'date-convert'],
       inputPolicy: { mode: 'auto' },
-      accepts: { kinds: ['timestamp'] },
+      accepts: { kinds: ['timestamp'], aliases: ['ts', '时间戳'] },
       params: TIMESTAMP_PARAMS,
       run(ctx) {
         return ctx.output.replaceActiveText(convertTimestampText(ctx.input.text, ctx.params, ctx.input.source === 'all'))
@@ -353,7 +353,7 @@ export const dateTimeAssistantPlugin = definePlugin({
       title: 'command.timestamp.title',
       description: 'command.timestamp.description',
       icon: 'Clock',
-      aliases: ['unix-time', 'epoch', 'date-convert'],
+      aliases: ['ts', '时间戳', 'unix-time', 'epoch', 'date-convert'],
       live: { live: { enabled: true, trigger: 'on-input', sideEffects: 'none', debounceMs: 250 } },
       params: TIMESTAMP_PARAMS,
       inputs: [
