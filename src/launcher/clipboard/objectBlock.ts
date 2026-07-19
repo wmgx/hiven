@@ -7,8 +7,13 @@
  */
 
 import type { ClipboardDetectedType, ClipboardSnapshot } from './clipboardSnapshot'
-import { detectClipboardFilePath, fileNameFromPath } from './clipboardSnapshot'
-import { shouldAutoAttachClipboard, shouldShowRecentClipboardHint } from './clipboardSnapshot'
+import {
+  detectClipboardFilePath,
+  detectClipboardType,
+  fileNameFromPath,
+  shouldAutoAttachClipboard,
+  shouldShowRecentClipboardHint,
+} from './clipboardSnapshot'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -21,11 +26,14 @@ export type ObjectBlockSource =
   | 'history-item'
   | 'query'
   | 'snapshot'
+  | 'tool-result'
 
 export type ObjectBlockKind =
   | ClipboardDetectedType
   | 'markdown'
   | 'plain-text'
+  | 'image'
+  | 'files'
 
 export type ObjectBlockValidity = 'valid' | 'invalid' | 'partial' | 'unknown'
 
@@ -52,6 +60,18 @@ export type ObjectBlockMeta = {
   rightTitle?: string
 }
 
+export type ObjectBlockImagePayload = {
+  blobId: string
+  contentType: string
+  width?: number
+  height?: number
+}
+
+export type ObjectBlockFilesPayload = {
+  paths: string[]
+  fileNames: string[]
+}
+
 export type LauncherObjectBlock = {
   id: string
   source: ObjectBlockSource
@@ -62,6 +82,10 @@ export type LauncherObjectBlock = {
   preview?: string
   /** Full text payload for action execution. Not exposed to UI. */
   payloadText?: string
+  /** Image payload for history-item / future non-text objects. */
+  payloadImage?: ObjectBlockImagePayload
+  /** File-path payload for history-item / future non-text objects. */
+  payloadFiles?: ObjectBlockFilesPayload
   ageLabel?: string
   createdAt: number
   removable: boolean
@@ -103,6 +127,8 @@ const KIND_LABELS: Record<ObjectBlockKind, string> = {
   timestamp: 'Timestamp',
   yaml: 'YAML',
   'query-string': 'Query String',
+  image: 'Image',
+  files: 'Files',
 }
 
 export function getKindLabel(kind: ObjectBlockKind): string {
@@ -120,6 +146,7 @@ const SOURCE_LABELS: Record<ObjectBlockSource, string> = {
   'history-item': '剪贴板历史',
   query: 'Query',
   snapshot: 'Snapshot',
+  'tool-result': '计算结果',
 }
 
 export function getSourceLabel(source: ObjectBlockSource): string {
@@ -303,24 +330,93 @@ export function createSnapshotObjectBlock(params: {
   })
 }
 
-export function createHistoryItemObjectBlock(params: {
-  text: string
-  kind: ObjectBlockKind
-  ageLabel: string
-  sizeLabel?: string
-}): LauncherObjectBlock {
-  const kind = normalizeSecretKind(params.kind)
-  return createGenericObjectBlock({
+export type CreateHistoryItemObjectBlockParams =
+  | {
+      kind: 'text'
+      text: string
+      ageLabel?: string
+      sizeLabel?: string
+      detectedKind?: ObjectBlockKind
+    }
+  | {
+      kind: 'image'
+      blobId: string
+      contentType: string
+      width?: number
+      height?: number
+      ageLabel?: string
+      sizeLabel?: string
+    }
+  | {
+      kind: 'files'
+      paths: string[]
+      fileNames: string[]
+      ageLabel?: string
+      sizeLabel?: string
+    }
+
+export function createHistoryItemObjectBlock(params: CreateHistoryItemObjectBlockParams): LauncherObjectBlock {
+  if (params.kind === 'text') {
+    const detected = params.detectedKind ?? detectClipboardType(params.text)
+    const kind = normalizeSecretKind(detected)
+    const block = createGenericObjectBlock({
+      source: 'history-item',
+      kind,
+      title: getSourceLabel('history-item'),
+      subtitle: `${params.ageLabel ?? ''} · ${getKindLabel(kind)}${params.sizeLabel ? ` · ${params.sizeLabel}` : ''}`.replace(/^\s·\s/, ''),
+      text: params.text,
+      masked: isSecretKind(kind),
+      removable: true,
+      validity: 'unknown',
+      meta: { age: params.ageLabel, size: params.sizeLabel },
+    })
+    return block
+  }
+
+  if (params.kind === 'image') {
+    const dim =
+      params.width && params.height ? `${params.width}×${params.height}` : undefined
+    const subtitleParts = [params.ageLabel, getKindLabel('image'), dim, params.sizeLabel].filter(Boolean)
+    return {
+      id: `object-block:history-item:${++blockIdCounter}`,
+      source: 'history-item',
+      kind: 'image',
+      title: getSourceLabel('history-item'),
+      subtitle: subtitleParts.join(' · '),
+      preview: undefined,
+      payloadImage: {
+        blobId: params.blobId,
+        contentType: params.contentType,
+        width: params.width,
+        height: params.height,
+      },
+      ageLabel: params.ageLabel,
+      createdAt: Date.now(),
+      removable: true,
+      validity: 'valid',
+      meta: { age: params.ageLabel, size: params.sizeLabel },
+    }
+  }
+
+  const names = params.fileNames?.length ? params.fileNames.join(', ') : `${params.paths.length} files`
+  const subtitleParts = [params.ageLabel, getKindLabel('files'), names, params.sizeLabel].filter(Boolean)
+  return {
+    id: `object-block:history-item:${++blockIdCounter}`,
     source: 'history-item',
-    kind,
+    kind: 'files',
     title: getSourceLabel('history-item'),
-    subtitle: `${params.ageLabel} · ${getKindLabel(kind)}${params.sizeLabel ? ` · ${params.sizeLabel}` : ''}`,
-    text: params.text,
-    masked: isSecretKind(kind),
-    removable: false,
-    validity: 'unknown',
+    subtitle: subtitleParts.join(' · '),
+    preview: names.slice(0, 120),
+    payloadFiles: {
+      paths: params.paths,
+      fileNames: params.fileNames,
+    },
+    ageLabel: params.ageLabel,
+    createdAt: Date.now(),
+    removable: true,
+    validity: 'valid',
     meta: { age: params.ageLabel, size: params.sizeLabel },
-  })
+  }
 }
 
 export function createQueryObjectBlock(params: {
@@ -334,6 +430,20 @@ export function createQueryObjectBlock(params: {
     text: params.query,
     removable: false,
     validity: 'unknown',
+  })
+}
+
+export function createToolResultObjectBlock(text: string): LauncherObjectBlock {
+  const kind = normalizeSecretKind(detectClipboardType(text))
+  return createGenericObjectBlock({
+    source: 'tool-result',
+    kind,
+    title: getSourceLabel('tool-result'),
+    subtitle: getKindLabel(kind),
+    text,
+    masked: isSecretKind(kind),
+    removable: true,
+    validity: kind === 'json' ? 'valid' : 'unknown',
   })
 }
 
