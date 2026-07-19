@@ -26,9 +26,9 @@ function loadKillCommand() {
   }).outputText
 
   const fakeProcesses = [
-    { pid: 11, name: '/usr/bin/node' },
-    { pid: 22, name: 'Google Chrome' },
-    { pid: 33, name: 'node-helper' },
+    { pid: 11, name: '/usr/bin/node', cpuPercent: 12.5, memoryBytes: 180 * 1024 * 1024 },
+    { pid: 22, name: 'Google Chrome', cpuPercent: 3.1, memoryBytes: 512 * 1024 * 1024 },
+    { pid: 33, name: 'node-helper', cpuPercent: 0.2, memoryBytes: 40 * 1024 * 1024 },
   ]
 
   const moduleExports = {}
@@ -80,6 +80,7 @@ const all = await item.suggest({
 })
 assert.ok(all?.choices?.length >= 3, 'empty second-level input lists processes')
 assert.ok(all.choices.every((c) => c.id.startsWith('process:') || c.id === 'process-empty'))
+assert.match(all.choices[0].subtitle || '', /CPU|MEM|pid/, 'process row should show CPU/MEM/pid')
 
 // Filter "node"
 const filtered = await item.suggest({

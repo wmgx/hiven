@@ -109,14 +109,31 @@ async function closeDesktopWindow(id: string): Promise<void> {
   await invoke('close_desktop_window', { id })
 }
 
+/**
+ * Primary line: window title (document / page name).
+ * Never fall back to bare appName when title is empty — native layer should
+ * already enrich; last resort is "App · Untitled window".
+ */
 function windowDisplayTitle(win: DesktopWindow): string {
   const title = win.title?.trim()
+  const app = win.appName?.trim() || 'Window'
+  if (title && title.toLowerCase() !== app.toLowerCase()) {
+    // Prefer real window / page title over bare app name.
+    return title
+  }
   if (title) return title
-  return win.appName || 'Window'
+  return `${app} · Untitled`
+}
+
+function windowSubtitle(win: DesktopWindow): string {
+  const app = win.appName?.trim() || 'App'
+  // Always show app as context under the window title.
+  return app
 }
 
 function buildFocusItem(win: DesktopWindow): LauncherItem {
   const title = windowDisplayTitle(win)
+  const subtitle = windowSubtitle(win)
   const listId = `host.window:focus:native:${win.id}`
   const usageKey = win.appName
     ? `host:window:focus:app:${win.appName}`
@@ -127,10 +144,10 @@ function buildFocusItem(win: DesktopWindow): LauncherItem {
     display: {
       title,
       titleI18n: { en: title, zh: title },
-      subtitle: win.appName,
-      subtitleI18n: { en: `${win.appName} · Window`, zh: `${win.appName} · 窗口` },
+      subtitle,
+      subtitleI18n: { en: subtitle, zh: subtitle },
       icon: 'AppWindow',
-      aliases: ['窗口', '切到', 'focus', 'window', win.appName, win.title].filter(Boolean),
+      aliases: ['窗口', '切到', 'focus', 'window', win.appName, win.title, title].filter(Boolean) as string[],
       kindLabel: 'Window',
       kindLabelI18n: { en: 'Window', zh: '窗口' },
     },
@@ -187,16 +204,17 @@ function buildCloseConfirmResult(win: DesktopWindow): LauncherExecuteResult {
 
 function buildCloseItem(win: DesktopWindow): LauncherItem {
   const title = windowDisplayTitle(win)
+  const subtitle = windowSubtitle(win)
   return {
     systemKey: `host.window:close:native:${win.id}`,
     kind: 'host',
     display: {
       title: `Close: ${title}`,
       titleI18n: { en: `Close: ${title}`, zh: `关闭：${title}` },
-      subtitle: win.appName,
-      subtitleI18n: { en: `${win.appName} · Close window`, zh: `${win.appName} · 关闭窗口` },
+      subtitle,
+      subtitleI18n: { en: subtitle, zh: subtitle },
       icon: 'X',
-      aliases: ['关闭', '关掉', 'close', '窗口', win.appName, win.title].filter(Boolean),
+      aliases: ['关闭', '关掉', 'close', '窗口', win.appName, win.title, title].filter(Boolean) as string[],
       kindLabel: 'Window',
       kindLabelI18n: { en: 'Window', zh: '窗口' },
     },

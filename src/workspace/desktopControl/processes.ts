@@ -5,6 +5,10 @@ import { auditL2Action } from './audit'
 export type DesktopProcess = {
   pid: number
   name: string
+  /** CPU percent, e.g. 12.3 */
+  cpuPercent?: number
+  /** Resident set size in bytes */
+  memoryBytes?: number
 }
 
 const PROCESS_LIST_TTL_MS = 2000

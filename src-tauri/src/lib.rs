@@ -2969,6 +2969,12 @@ struct DesktopWindow {
 struct DesktopProcess {
     pid: u32,
     name: String,
+    /// CPU percent (e.g. 12.3), from `ps -o pcpu`.
+    #[serde(rename = "cpuPercent")]
+    cpu_percent: f64,
+    /// Resident memory in bytes (from `ps -o rss` KB × 1024).
+    #[serde(rename = "memoryBytes")]
+    memory_bytes: u64,
 }
 
 /// Critical system processes that must never be terminated from the launcher.
@@ -3042,6 +3048,112 @@ fn run_osascript(source: &str) -> Result<(), String> {
     } else {
         Err("osascript failed".to_string())
     }
+}
+
+/// Fetch window titles for a process via System Events (works when kCGWindowName is empty).
+#[cfg(target_os = "macos")]
+fn ax_window_titles_for_pid(pid: u32) -> Vec<String> {
+    let script = format!(
+        r#"tell application "System Events"
+  try
+    set proc to first process whose unix id is {pid}
+    set names to name of every window of proc
+    set AppleScript's text item delimiters to linefeed
+    return names as text
+  on error
+    return ""
+  end try
+end tell"#
+    );
+    let output = match Command::new("osascript").args(["-e", &script]).output() {
+        Ok(o) if o.status.success() => o,
+        _ => return Vec::new(),
+    };
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect()
+}
+
+/// Fill empty CG window titles from Accessibility / System Events, then drop useless duplicates.
+#[cfg(target_os = "macos")]
+fn enrich_and_dedupe_desktop_windows(mut windows: Vec<DesktopWindow>) -> Vec<DesktopWindow> {
+    use std::collections::{HashMap, HashSet};
+
+    // Per-pid: CG often returns empty kCGWindowName (Screen Recording / privacy).
+    // Assign System Events window names in order to empty-title rows of that pid.
+    let mut pids_needing_titles: HashSet<u32> = HashSet::new();
+    for w in &windows {
+        if w.title.trim().is_empty() {
+            pids_needing_titles.insert(w.pid);
+        }
+    }
+    let mut titles_by_pid: HashMap<u32, Vec<String>> = HashMap::new();
+    for pid in pids_needing_titles {
+        let names = ax_window_titles_for_pid(pid);
+        if !names.is_empty() {
+            titles_by_pid.insert(pid, names);
+        }
+    }
+    let mut ax_index: HashMap<u32, usize> = HashMap::new();
+    for w in &mut windows {
+        if !w.title.trim().is_empty() {
+            continue;
+        }
+        if let Some(names) = titles_by_pid.get(&w.pid) {
+            let idx = ax_index.entry(w.pid).or_insert(0);
+            if *idx < names.len() {
+                w.title = names[*idx].clone();
+                *idx += 1;
+            }
+        }
+    }
+
+    // Prefer titled windows; if multiple share app+title keep first (z-order).
+    // Drop empty-title extras when the same pid already has a titled window.
+    let mut seen_key: HashSet<String> = HashSet::new();
+    let mut titled_pids: HashSet<u32> = HashSet::new();
+    for w in &windows {
+        if !w.title.trim().is_empty() {
+            titled_pids.insert(w.pid);
+        }
+    }
+
+    let mut out = Vec::new();
+    let mut empty_index_by_app: HashMap<String, usize> = HashMap::new();
+    for mut w in windows {
+        let title_trim = w.title.trim().to_string();
+        if title_trim.is_empty() {
+            // Skip empty-title CG noise when we already have real titled windows for this pid.
+            if titled_pids.contains(&w.pid) {
+                continue;
+            }
+            // Sole untitled window(s) for this app: number them so users can tell them apart.
+            let n = empty_index_by_app.entry(w.app_name.clone()).or_insert(0);
+            *n += 1;
+            w.title = format!("{} · 窗口 {}", w.app_name, *n);
+        } else if title_trim.eq_ignore_ascii_case(w.app_name.trim()) {
+            // Title is just the app name — still try to differentiate multiples.
+            let key = format!("{}||{}", w.app_name.to_lowercase(), title_trim.to_lowercase());
+            if !seen_key.insert(key) {
+                let n = empty_index_by_app.entry(w.app_name.clone()).or_insert(1);
+                *n += 1;
+                w.title = format!("{} · 窗口 {}", w.app_name, *n);
+            }
+        } else {
+            let key = format!(
+                "{}||{}",
+                w.app_name.to_lowercase(),
+                title_trim.to_lowercase()
+            );
+            if !seen_key.insert(key) {
+                continue; // exact duplicate app+title
+            }
+        }
+        out.push(w);
+    }
+    out
 }
 
 #[cfg(target_os = "macos")]
@@ -3124,7 +3236,7 @@ fn list_macos_desktop_windows() -> Result<Vec<DesktopWindow>, String> {
             pid,
         });
     }
-    Ok(windows)
+    Ok(enrich_and_dedupe_desktop_windows(windows))
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -3234,8 +3346,9 @@ end tell"#
 
 #[cfg(target_os = "macos")]
 fn list_macos_desktop_processes(query: Option<&str>) -> Result<Vec<DesktopProcess>, String> {
+    // pid, cpu%, rss(KB), command — enough for kill list UX
     let output = Command::new("ps")
-        .args(["-axo", "pid=,comm="])
+        .args(["-axo", "pid=,pcpu=,rss=,comm="])
         .output()
         .map_err(|e| format!("Failed to list processes: {e}"))?;
     if !output.status.success() {
@@ -3265,6 +3378,17 @@ fn list_macos_desktop_processes(query: Option<&str>) -> Result<Vec<DesktopProces
             Ok(value) => value,
             Err(_) => continue,
         };
+        let cpu_str = match parts.next() {
+            Some(value) => value,
+            None => continue,
+        };
+        let rss_str = match parts.next() {
+            Some(value) => value,
+            None => continue,
+        };
+        let cpu_percent: f64 = cpu_str.parse().unwrap_or(0.0);
+        let rss_kb: u64 = rss_str.parse().unwrap_or(0);
+        let memory_bytes = rss_kb.saturating_mul(1024);
         let name = parts.collect::<Vec<_>>().join(" ");
         if name.is_empty() {
             continue;
@@ -3279,8 +3403,19 @@ fn list_macos_desktop_processes(query: Option<&str>) -> Result<Vec<DesktopProces
                 continue;
             }
         }
-        processes.push(DesktopProcess { pid, name });
+        processes.push(DesktopProcess {
+            pid,
+            name,
+            cpu_percent,
+            memory_bytes,
+        });
     }
+    // Highest CPU first (kill UX: noisy processes on top)
+    processes.sort_by(|a, b| {
+        b.cpu_percent
+            .partial_cmp(&a.cpu_percent)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     Ok(processes)
 }
 

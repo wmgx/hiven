@@ -25,6 +25,40 @@ function processBaseName(name: string): string {
   return parts[parts.length - 1] || name
 }
 
+function formatMemory(bytes: number | undefined): string {
+  if (bytes == null || !Number.isFinite(bytes) || bytes <= 0) return '—'
+  const mb = bytes / (1024 * 1024)
+  if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`
+  if (mb >= 10) return `${Math.round(mb)} MB`
+  if (mb >= 1) return `${mb.toFixed(1)} MB`
+  return `${Math.round(bytes / 1024)} KB`
+}
+
+function formatCpu(cpu: number | undefined): string {
+  if (cpu == null || !Number.isFinite(cpu)) return '—'
+  return `${cpu.toFixed(1)}%`
+}
+
+/** Heuristic app icon for known apps; falls back to Cpu. */
+function processIcon(name: string): string {
+  const base = processBaseName(name).toLowerCase()
+  // Common macOS app process names → prefer generic brand icons when no app-icon id.
+  if (base.includes('chrome') || base.includes('helper')) return 'Globe'
+  if (base.includes('edge')) return 'Globe'
+  if (base.includes('safari')) return 'Globe'
+  if (base.includes('code') || base.includes('cursor')) return 'Code'
+  if (base.includes('node') || base.includes('npm')) return 'Terminal'
+  if (base.includes('python') || base.includes('ruby')) return 'Terminal'
+  if (base.includes('lark') || base.includes('feishu') || base.includes('飞书')) return 'MessageSquare'
+  return 'Cpu'
+}
+
+function processSubtitle(proc: DesktopProcess): string {
+  const cpu = formatCpu(proc.cpuPercent)
+  const mem = formatMemory(proc.memoryBytes)
+  return `CPU ${cpu} · MEM ${mem} · pid ${proc.pid}`
+}
+
 function isTauriRuntime(): boolean {
   return Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
 }
@@ -37,7 +71,7 @@ async function terminateDesktopProcess(pid: number, force = false): Promise<void
 
 function buildTerminateConfirmResult(proc: DesktopProcess): LauncherExecuteResult {
   const base = processBaseName(proc.name)
-  const summary = `${base} (pid ${proc.pid})`
+  const summary = `${base} · ${processSubtitle(proc)}`
   return {
     ok: true,
     output: {
@@ -48,6 +82,7 @@ function buildTerminateConfirmResult(proc: DesktopProcess): LauncherExecuteResul
           titleI18n: { en: 'Confirm terminate', zh: '确认结束' },
           subtitle: summary,
           subtitleI18n: { en: summary, zh: summary },
+          icon: processIcon(proc.name),
           primaryAction: async () => {
             try {
               auditL2Action({ action: 'process.terminate', targetSummary: summary })
@@ -75,13 +110,14 @@ function buildTerminateConfirmResult(proc: DesktopProcess): LauncherExecuteResul
 
 function processToChoice(proc: DesktopProcess): LauncherResultChoice {
   const base = processBaseName(proc.name)
+  const subtitle = processSubtitle(proc)
   return {
     id: `process:${proc.pid}`,
     title: base,
     titleI18n: { en: base, zh: base },
-    subtitle: `pid ${proc.pid}`,
-    subtitleI18n: { en: `pid ${proc.pid}`, zh: `pid ${proc.pid}` },
-    icon: 'Cpu',
+    subtitle,
+    subtitleI18n: { en: subtitle, zh: subtitle },
+    icon: processIcon(proc.name),
     primaryAction: async () => buildTerminateConfirmResult(proc),
   }
 }
