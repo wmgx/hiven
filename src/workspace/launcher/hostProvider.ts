@@ -2,10 +2,7 @@ import {
   getHostAppLauncherDynamicItems,
   getHostAppLauncherStaticItems,
 } from '../appLauncher/hostAppLauncher'
-import {
-  getHostProcessLauncherDynamicItems,
-  isProcessModeQuery,
-} from '../desktopControl/processes'
+import { getKillProcessHostItem } from '../desktopControl/killProcessCommand'
 import { getHostWindowLauncherDynamicItems } from '../desktopControl/windows'
 import {
   registerDesktopTargetProvider,
@@ -36,21 +33,11 @@ export function registerHostLauncherProviders(): void {
     ...getHostSystemPowerItems(),
     ...getHostAppLauncherStaticItems(),
     ...getTextPipelineLauncherItems(),
+    // Kill Process: first-level command → collect-input second level (suggest list).
+    getKillProcessHostItem(),
   ])
   setHostLauncherDynamicItemsProvider(async (ctx) => {
-    // Secondary process mode: ONLY process rows — no apps/windows/workflow mixed in.
-    if (isProcessModeQuery(ctx.query)) {
-      return measureLauncherPerf(
-        'host-provider:process-mode',
-        () => getHostProcessLauncherDynamicItems(ctx),
-        (items) => ({
-          queryLength: ctx.query.trim().length,
-          itemCount: items.length,
-          processMode: true,
-        }),
-      )
-    }
-
+    // Process terminate is NOT first-level dynamic. Use getKillProcessHostItem (static).
     const [workflowItems, appItems, windowItems] = await Promise.all([
       measureLauncherPerf('host-provider:workflow-items', () => getWorkflowObjectLauncherItems(ctx), (items) => ({
         queryLength: ctx.query.trim().length,

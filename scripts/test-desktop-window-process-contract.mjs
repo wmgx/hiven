@@ -103,68 +103,42 @@ assert.doesNotMatch(
   'close must not execute without L2 choices',
 )
 
-// ── TS processes ─────────────────────────────────────────────────────────────
+// ── TS processes primitives ──────────────────────────────────────────────────
 assert.match(files.processes, /PROCESS_LIST_TTL_MS\s*=\s*2000/, 'process list TTL must be 2s')
 assert.match(files.processes, /listDesktopProcessesCached|processListCache/, 'process TTL cache helper required')
-assert.match(files.processes, /getHostProcessLauncherDynamicItems/, 'process dynamic items provider required')
-assert.match(files.processes, /host:process:terminate:\$\{/, 'terminate systemKey required')
 assert.match(files.processes, /invoke\(['"]list_desktop_processes['"]/, 'processes must invoke list')
-assert.match(files.processes, /invoke\(['"]terminate_desktop_process['"]/, 'processes must invoke terminate')
-assert.match(files.processes, /stripProcessQueryPrefix/, 'process prefix strip helper required')
-assert.match(files.processes, /杀|结束|kill/, 'process kill prefixes required')
-assert.match(files.processes, /parseProcessModeQuery/, 'process mode parser required')
-assert.match(files.processes, /active:\s*true/, 'process mode active flag required')
+// First-level dynamic process rows removed (collect-input command owns UX)
 assert.match(
   files.processes,
-  /if\s*\(!mode\.active\)\s*return\s*\[\]/,
-  'ordinary queries must not list processes (process mode gate)',
+  /return\s*\[\]/,
+  'getHostProcessLauncherDynamicItems must not emit first-level rows',
 )
-assert.match(
-  files.hostProvider,
-  /isProcessModeQuery/,
-  'host provider must gate process mode',
-)
-assert.match(
-  files.hostProvider,
-  /process-mode|processMode:\s*true/,
-  'host provider process mode should only return process rows',
-)
-// Session must rank process mode with stripped filter (secondary list UX)
-const sessionSrc = readFileSync('src/workspace/launcher/useLauncherSession.ts', 'utf8')
-assert.match(sessionSrc, /isProcessModeQuery/, 'session must detect process mode')
-assert.match(sessionSrc, /stripProcessQueryPrefix/, 'session must strip kill prefix for ranking filter')
-assert.match(sessionSrc, /process-mode/, 'session process-mode rank path required')
-assert.match(files.processes, /confirm-terminate-process|Confirm terminate|确认结束/, 'terminate L2 confirm required')
-assert.match(files.processes, /cancel-terminate-process|Cancel|取消/, 'terminate L2 cancel required')
-assert.match(files.processes, /titleI18n/, 'process items must use titleI18n')
-assert.match(files.processes, /auditL2Action/, 'terminate confirm must audit L2')
-assert.match(
-  files.processes,
-  /execute:\s*async\s*\(\)\s*=>\s*buildTerminateConfirmResult/,
-  'process execute must return L2 choices',
-)
-// Soft terminate default; force not default UI path
-assert.match(files.processes, /terminateDesktopProcess\(proc\.pid,\s*false\)/, 'default terminate must be soft (force=false)')
+
+// ── Kill command = collect-input second level (same as web-open) ─────────────
+const killCmd = readFileSync('src/workspace/desktopControl/killProcessCommand.ts', 'utf8')
+assert.match(killCmd, /host:process:kill-command/, 'stable kill command systemKey')
+assert.match(killCmd, /type:\s*'collect-input'/, 'kill must use collect-input second level')
+assert.match(killCmd, /suggest:\s*async/, 'kill must suggest process list on second level')
+assert.match(killCmd, /confirm-terminate-process|确认结束/, 'L2 confirm required')
+assert.match(killCmd, /cancel-terminate-process|取消/, 'L2 cancel required')
+assert.match(killCmd, /terminate_desktop_process/, 'must invoke terminate')
+assert.match(killCmd, /force.*false|false\s*\/\* soft/, 'default soft terminate')
+// Soft terminate
+assert.match(killCmd, /terminateDesktopProcess\(proc\.pid,\s*false\)/, 'default terminate soft')
 
 // ── Audit ────────────────────────────────────────────────────────────────────
 assert.match(files.audit, /export function auditL2Action/, 'auditL2Action export required')
 assert.match(files.audit, /targetSummary/, 'audit records target summary')
 assert.doesNotMatch(files.audit, /clipboard\.content|clipboardText|pasteText/, 'audit must not log clipboard body')
 
-// ── Host provider merge ──────────────────────────────────────────────────────
+// ── Host provider ────────────────────────────────────────────────────────────
 assert.match(files.hostProvider, /getHostWindowLauncherDynamicItems/, 'host provider must wire windows')
-assert.match(files.hostProvider, /getHostProcessLauncherDynamicItems/, 'host provider must wire processes')
 assert.match(files.hostProvider, /getHostAppLauncherDynamicItems/, 'host provider must keep apps')
-// Normal mode merges apps+windows; process mode is exclusive (secondary kill list only).
-assert.match(
+assert.match(files.hostProvider, /getKillProcessHostItem/, 'host must register kill as static collect-input command')
+assert.doesNotMatch(
   files.hostProvider,
-  /appItems[\s\S]*windowItems/,
-  'normal mode should merge apps + windows',
-)
-assert.match(
-  files.hostProvider,
-  /Secondary process mode|process-mode/,
-  'process mode must be exclusive secondary list',
+  /getHostProcessLauncherDynamicItems/,
+  'host must not put processes on first-level dynamic list',
 )
 
 // ── Permissions ──────────────────────────────────────────────────────────────

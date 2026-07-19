@@ -187,24 +187,15 @@ export function isProcessModeQuery(query: string): boolean {
   return parseProcessModeQuery(query).active
 }
 
-export async function getHostProcessLauncherDynamicItems({
-  query,
-  surfaceId,
-  locale: _locale,
-}: {
+/**
+ * @deprecated First-level dynamic process rows are removed.
+ * Use {@link getKillProcessHostItem} (static collect-input command) instead.
+ * Kept as empty for any stale callers.
+ */
+export async function getHostProcessLauncherDynamicItems(_ctx: {
   query: string
   surfaceId: LauncherSurfaceId
   locale: Locale
 }): Promise<LauncherItem[]> {
-  if (surfaceId !== 'global-launcher') return []
-
-  const mode = parseProcessModeQuery(query)
-  if (!mode.active) return []
-
-  // Secondary mode list:
-  // - bare "kill" / "杀" → all non-denied processes ("*")
-  // - "kill node" → filter by "node" at the native list layer
-  const listQuery = mode.filter || '*'
-  const list = await listDesktopProcessesCached(listQuery)
-  return list.slice(0, QUERY_PROCESS_LIMIT).map(buildTerminateItem)
+  return []
 }
