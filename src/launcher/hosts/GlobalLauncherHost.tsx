@@ -85,7 +85,10 @@ export function GlobalLauncherHost() {
     objectBlockText,
   })
 
-  const objectActions: RecommendedAction[] = [] // Disabled: recommendations now come from plugin dynamicItems + textMatch
+  const objectActions = useMemo(() => {
+    if (!clipboardBlock.block) return []
+    return recommendActionsForBlock(clipboardBlock.block)
+  }, [clipboardBlock.block])
 
   useEffect(() => {
     if (!open) return

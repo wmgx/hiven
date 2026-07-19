@@ -457,6 +457,8 @@ export function getSearchOnlyActions(): RecommendedAction[] {
 
 
 // ─── Merged recommendation (static + plugin manifest) ─────────────────────────
+// Accepts-based tool recommendations live in acceptsRecommendation.ts
+// (recommendActionsFromToolAccepts). Hosts may merge both sources.
 
 export function recommendActionsWithPlugins(block: LauncherObjectBlock): RecommendedAction[] {
   const staticActions = recommendActionsForBlock(block)

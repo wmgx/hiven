@@ -40,6 +40,12 @@ export {
 } from './actionRecommendation'
 
 export {
+  recommendActionsFromToolAccepts,
+  type AcceptsToolDescriptor,
+  type RecommendFromToolAcceptsParams,
+} from './acceptsRecommendation'
+
+export {
   type ClipboardObjectBlockMode,
   type ClipboardObjectBlockState,
   useClipboardObjectBlock,
