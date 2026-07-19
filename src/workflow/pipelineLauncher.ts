@@ -1,5 +1,5 @@
 import type { Locale } from '../i18n'
-import { textResult, errorResult } from '../workspace/launcher/output'
+import { surfaceTextResult, errorResult } from '../workspace/launcher/output'
 import type { LauncherExecutionContext, LauncherItem } from '../workspace/launcher/types'
 import {
   listTextPipelines,
@@ -71,7 +71,7 @@ function pipelineToLauncherItem(pipeline: TextPipeline): LauncherItem {
       }
       try {
         const output = await runTextPipeline(pipeline, input)
-        return textResult(output, ctx.api, ctx.locale as Locale)
+        return surfaceTextResult(output, ctx.api, ctx.locale as Locale, ctx.surfaceId)
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         return errorResult(message)

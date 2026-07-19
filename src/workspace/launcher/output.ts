@@ -16,6 +16,7 @@ import type {
   LauncherResultChoice,
   PluginLauncherApi,
 } from './types'
+import { normalizeLauncherSurfaceId } from './types'
 import { translate, type Locale } from '../../i18n'
 
 export const TEXT_OUTPUT_CHOICE_ID = 'launcher.text-output'
@@ -40,17 +41,12 @@ export function textResult(text: string, api: PluginLauncherApi, locale: Locale 
     },
     secondaryActions: [
       {
-        id: 'replace-active',
-        title: palette(locale, 'replaceActiveText'),
+        id: 'return-to-launcher',
+        title: palette(locale, 'returnToLauncher'),
+        icon: 'CornerDownLeft',
         run: async () => {
-          await api.replaceActiveText(text)
-        },
-      },
-      {
-        id: 'insert',
-        title: palette(locale, 'insert'),
-        run: async () => {
-          await api.insertText(text)
+          await api.returnToLauncher(text)
+          return { ok: true, keepOpen: true }
         },
       },
     ],
@@ -74,14 +70,44 @@ export function replaceActiveTextResult(text: string, api: PluginLauncherApi, lo
       {
         id: 'copy',
         title: palette(locale, 'copy'),
+        icon: 'Copy',
         run: async () => {
           await api.copyText(text)
           api.showMessage(palette(locale, 'copied'), 'success')
         },
       },
+      {
+        id: 'insert',
+        title: palette(locale, 'insert'),
+        icon: 'TextCursorInput',
+        run: async () => {
+          await api.insertText(text)
+        },
+      },
     ],
   }
   return { ok: true, output: { choices: [choice] } }
+}
+
+/**
+ * Pick the surface-appropriate text-output builder for a plain text result.
+ * Global Launcher has no bound pane, so it gets textResult (primary=copy,
+ * secondary=return-to-launcher); pane-bound surfaces (editor-command-bar,
+ * quick-editor-command) get replaceActiveTextResult (primary=replace,
+ * secondary=copy+insert). Shared by any host-owned launcher item that
+ * produces text output across multiple surfaces (e.g. pipelineLauncher.ts).
+ * toolAdapter.ts's per-tool makeOutput() has its own equivalent inline branch
+ * and is intentionally left as-is (not this task's scope).
+ */
+export function surfaceTextResult(
+  text: string,
+  api: PluginLauncherApi,
+  locale: Locale,
+  surfaceId: string,
+): LauncherExecuteResult {
+  return normalizeLauncherSurfaceId(surfaceId) === 'global-launcher'
+    ? textResult(text, api, locale)
+    : replaceActiveTextResult(text, api, locale)
 }
 
 export function errorResult(message: string): LauncherExecuteResult {
