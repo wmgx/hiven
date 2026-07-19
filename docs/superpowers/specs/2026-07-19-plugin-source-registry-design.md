@@ -1,7 +1,7 @@
 # 插件源（Plugin Source）机制设计
 
 日期：2026-07-19
-状态：草案 v3.1（收回命名空间机制；补运行时交接与三轮评审修订，待批准）
+状态：v3.2 已批准（enable 覆盖失败回滚与 check_updates 版本 map 约定为批准后补充）
 
 > 术语：本设计中的"插件源"是**安装通道（install channel）**，与 TS 现有的贡献注册表 `pluginRegistry`（command/renderer/panel 注册）完全无关。代码命名一律用 `plugin_source` / `PluginSource*`，不用 `plugin_registry`。
 
@@ -71,6 +71,7 @@ hiven 计划公网发布，但部分内部工具插件不能走公网分发。�
 现状约束：bundled first-party 由 `registerBundledPluginPackages()` 在模块加载时一次性注册（once 门闩）；贡献表是 `Map.set`，同 id 覆盖、不同 id 残留；`disablePlugin` 只做 `unregisterByPlugin(pluginId)`，不会自动把 bundled 注册回来。因此覆盖的挂载/回退必须显式交接：
 
 - **enable 覆盖**：先 `unregisterProductionPlugin(pluginId)`（卸掉 bundled 或旧覆盖的全部贡献，杜绝旧版本多余 command/renderer id 残留）→ 从 installed 目录 load + register → 重注该插件 i18n 与 background 贡献（settings 域仍为 builtin）。
+- **enable 覆盖失败（load/register/授权任一步）**：必须 `registerBundledPluginPackage(pluginId)` 回注随包版本，避免该 pluginId 在会话内既无 bundled 也无覆盖的空窗；store 保留覆盖记录为 `error`（目录不回滚），UI 显示"已安装但启用失败"可重试。首次安装覆盖后的自动 enable 是主要风险路径（升级路径的 disable 已会回注 bundled）。
 - **disable / 卸载覆盖**：`unregisterProductionPlugin(pluginId)` → 按 pluginId 重新注册随包 bundled 版本 → 恢复 bundled i18n、按需重启 background。需要提供**可按单包重复调用**的 bundled 注册函数（如 `registerBundledPluginPackage(pluginId)`），不能依赖 once 门闩的整体注册入口。
 - **启动顺序**（过期丢弃钉在 enable 任何覆盖之前，避免先挂旧覆盖再删的闪烁）：
 
@@ -105,7 +106,7 @@ release builtin 目录
 | `plugin_source_available` | 返回聚合可安装列表（默认读缓存） | 标注已安装 / 内置更新 / `id-conflict` 状态 |
 | `plugin_source_install` | 首次安装：同 id 已存在（builtin 覆盖场景除外）报 `id-conflict` / `already-installed` | sha256 不符 `checksum-mismatch`；manifest id 不符 `manifest-mismatch` |
 | `plugin_source_update` | 同 id 升级（含覆盖版升级）：要求远端版本更高，staging 替换 | 失败保留原版本 |
-| `plugin_source_check_updates` | 节流刷新各启用源，比对本地版本返回可更新列表 | 禁用源不参与 |
+| `plugin_source_check_updates` | 节流刷新各启用源，比对本地版本返回可更新列表；本地版本由 TS 传入 version map（installed + bundled first-party），Rust 只做远端比对与节流（Rust 读不到 vite bundled manifest） | 禁用源不参与 |
 
 ### 前端职责
 
