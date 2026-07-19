@@ -73,7 +73,7 @@ assert.match(files.tauriLib, /desktop_process_deny_tests/, 'Rust unit tests for 
 assert.match(files.tauriLib, /deny_list_blocks_critical_system_process_names/, 'deny unit test required')
 
 // ── TS windows ───────────────────────────────────────────────────────────────
-assert.match(files.windows, /WINDOW_LIST_TTL_MS\s*=\s*2000/, 'window list TTL must be 2s')
+assert.match(files.windows, /WINDOW_LIST_TTL_MS\s*=\s*8000/, 'window list TTL must be 8s (perf)')
 assert.match(files.windows, /listDesktopWindowsCached|windowListCache/, 'window TTL cache helper required')
 assert.match(files.windows, /getHostWindowLauncherDynamicItems/, 'window dynamic items provider required')
 assert.match(files.windows, /host\.window:focus:native:\$\{/, 'focus systemKey required')
@@ -81,7 +81,7 @@ assert.match(files.windows, /host\.window:close:native:\$\{/, 'close systemKey r
 assert.match(files.windows, /kindLabelI18n/, 'window kindLabel i18n required')
 assert.match(files.processes, /isProcessModeQuery/, 'process mode gate required')
 assert.match(files.processes, /recordUsage:\s*false/, 'process items must not record usage')
-assert.match(files.windows, /invoke\(['"]list_desktop_windows['"]\)/, 'windows must invoke list_desktop_windows')
+assert.match(files.windows, /invoke\(['"]list_desktop_windows['"]/, 'windows must invoke list_desktop_windows')
 assert.match(files.windows, /invoke\(['"]focus_desktop_window['"]/, 'windows must invoke focus')
 assert.match(files.windows, /invoke\(['"]close_desktop_window['"]/, 'windows must invoke close')
 assert.match(files.windows, /stripWindowQueryPrefix/, 'window prefix strip helper required')
@@ -104,7 +104,7 @@ assert.doesNotMatch(
 )
 
 // ── TS processes primitives ──────────────────────────────────────────────────
-assert.match(files.processes, /PROCESS_LIST_TTL_MS\s*=\s*2000/, 'process list TTL must be 2s')
+assert.match(files.processes, /PROCESS_LIST_TTL_MS\s*=\s*3000/, 'process list TTL must be 3s')
 assert.match(files.processes, /listDesktopProcessesCached|processListCache/, 'process TTL cache helper required')
 assert.match(files.processes, /invoke\(['"]list_desktop_processes['"]/, 'processes must invoke list')
 // First-level dynamic process rows removed (collect-input command owns UX)

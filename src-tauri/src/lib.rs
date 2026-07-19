@@ -3050,68 +3050,72 @@ fn run_osascript(source: &str) -> Result<(), String> {
     }
 }
 
-/// Fetch window titles for a process via System Events (works when kCGWindowName is empty).
+/// Cap how many PIDs we will AX-enrich per list call (each osascript is ~100–300ms).
+const AX_TITLE_ENRICH_MAX_PIDS: usize = 4;
+
+/// One osascript for many PIDs (avoids N process spawns that freeze the launcher).
+/// Format per line: `pid\tname1\x1fname2\x1f...`
 #[cfg(target_os = "macos")]
-fn ax_window_titles_for_pid(pid: u32) -> Vec<String> {
-    let script = format!(
-        r#"tell application "System Events"
-  try
-    set proc to first process whose unix id is {pid}
-    set names to name of every window of proc
-    set AppleScript's text item delimiters to linefeed
-    return names as text
-  on error
-    return ""
-  end try
-end tell"#
+fn ax_window_titles_for_pids_batched(pids: &[u32]) -> std::collections::HashMap<u32, Vec<String>> {
+    use std::collections::HashMap;
+    let mut out: HashMap<u32, Vec<String>> = HashMap::new();
+    if pids.is_empty() {
+        return out;
+    }
+    // Build a single script: for each pid, print pid + tab + window names joined by unit separator.
+    let mut lines = String::from(
+        r#"set output to ""
+tell application "System Events"
+"#,
     );
-    let output = match Command::new("osascript").args(["-e", &script]).output() {
+    for pid in pids {
+        lines.push_str(&format!(
+            r#"  try
+    set proc to first process whose unix id is {pid}
+    set ns to name of every window of proc
+    set AppleScript's text item delimiters to (ASCII character 31)
+    set output to output & "{pid}" & tab & (ns as text) & linefeed
+  end try
+"#
+        ));
+    }
+    lines.push_str(
+        r#"end tell
+return output
+"#,
+    );
+    let output = match Command::new("osascript").args(["-e", &lines]).output() {
         Ok(o) if o.status.success() => o,
-        _ => return Vec::new(),
+        _ => return out,
     };
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .map(|l| l.trim().to_string())
-        .filter(|l| !l.is_empty())
-        .collect()
-}
-
-/// Fill empty CG window titles from Accessibility / System Events, then drop useless duplicates.
-#[cfg(target_os = "macos")]
-fn enrich_and_dedupe_desktop_windows(mut windows: Vec<DesktopWindow>) -> Vec<DesktopWindow> {
-    use std::collections::{HashMap, HashSet};
-
-    // Per-pid: CG often returns empty kCGWindowName (Screen Recording / privacy).
-    // Assign System Events window names in order to empty-title rows of that pid.
-    let mut pids_needing_titles: HashSet<u32> = HashSet::new();
-    for w in &windows {
-        if w.title.trim().is_empty() {
-            pids_needing_titles.insert(w.pid);
-        }
-    }
-    let mut titles_by_pid: HashMap<u32, Vec<String>> = HashMap::new();
-    for pid in pids_needing_titles {
-        let names = ax_window_titles_for_pid(pid);
-        if !names.is_empty() {
-            titles_by_pid.insert(pid, names);
-        }
-    }
-    let mut ax_index: HashMap<u32, usize> = HashMap::new();
-    for w in &mut windows {
-        if !w.title.trim().is_empty() {
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let line = line.trim();
+        if line.is_empty() {
             continue;
         }
-        if let Some(names) = titles_by_pid.get(&w.pid) {
-            let idx = ax_index.entry(w.pid).or_insert(0);
-            if *idx < names.len() {
-                w.title = names[*idx].clone();
-                *idx += 1;
-            }
+        let mut parts = line.splitn(2, '\t');
+        let pid: u32 = match parts.next().and_then(|s| s.parse().ok()) {
+            Some(p) => p,
+            None => continue,
+        };
+        let names = parts
+            .next()
+            .unwrap_or("")
+            .split('\u{001f}')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>();
+        if !names.is_empty() {
+            out.insert(pid, names);
         }
     }
+    out
+}
 
-    // Prefer titled windows; if multiple share app+title keep first (z-order).
-    // Drop empty-title extras when the same pid already has a titled window.
+/// Fast dedupe without AX. Empty titles become "App · 窗口 N".
+#[cfg(target_os = "macos")]
+fn dedupe_desktop_windows_fast(windows: Vec<DesktopWindow>) -> Vec<DesktopWindow> {
+    use std::collections::{HashMap, HashSet};
     let mut seen_key: HashSet<String> = HashSet::new();
     let mut titled_pids: HashSet<u32> = HashSet::new();
     for w in &windows {
@@ -3119,22 +3123,18 @@ fn enrich_and_dedupe_desktop_windows(mut windows: Vec<DesktopWindow>) -> Vec<Des
             titled_pids.insert(w.pid);
         }
     }
-
     let mut out = Vec::new();
     let mut empty_index_by_app: HashMap<String, usize> = HashMap::new();
     for mut w in windows {
         let title_trim = w.title.trim().to_string();
         if title_trim.is_empty() {
-            // Skip empty-title CG noise when we already have real titled windows for this pid.
             if titled_pids.contains(&w.pid) {
                 continue;
             }
-            // Sole untitled window(s) for this app: number them so users can tell them apart.
             let n = empty_index_by_app.entry(w.app_name.clone()).or_insert(0);
             *n += 1;
             w.title = format!("{} · 窗口 {}", w.app_name, *n);
         } else if title_trim.eq_ignore_ascii_case(w.app_name.trim()) {
-            // Title is just the app name — still try to differentiate multiples.
             let key = format!("{}||{}", w.app_name.to_lowercase(), title_trim.to_lowercase());
             if !seen_key.insert(key) {
                 let n = empty_index_by_app.entry(w.app_name.clone()).or_insert(1);
@@ -3148,7 +3148,7 @@ fn enrich_and_dedupe_desktop_windows(mut windows: Vec<DesktopWindow>) -> Vec<Des
                 title_trim.to_lowercase()
             );
             if !seen_key.insert(key) {
-                continue; // exact duplicate app+title
+                continue;
             }
         }
         out.push(w);
@@ -3156,8 +3156,85 @@ fn enrich_and_dedupe_desktop_windows(mut windows: Vec<DesktopWindow>) -> Vec<Des
     out
 }
 
+/// Optionally enrich a small set of PIDs (query-matched apps) with real window titles.
+/// Never blocks on more than AX_TITLE_ENRICH_MAX_PIDS processes.
 #[cfg(target_os = "macos")]
-fn list_macos_desktop_windows() -> Result<Vec<DesktopWindow>, String> {
+fn enrich_and_dedupe_desktop_windows(
+    mut windows: Vec<DesktopWindow>,
+    title_query: Option<&str>,
+) -> Vec<DesktopWindow> {
+    use std::collections::{HashMap, HashSet};
+
+    let q = title_query
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty());
+
+    // Only spend AX budget when user is filtering (typing an app/window name).
+    // Empty-query launcher open must stay CG-only (fast).
+    if let Some(ref needle) = q {
+        let mut pids_needing: Vec<u32> = Vec::new();
+        let mut seen_pid: HashSet<u32> = HashSet::new();
+        for w in &windows {
+            if !w.title.trim().is_empty() {
+                continue;
+            }
+            // Prefer PIDs whose app name matches the query (Edge / 飞书 / Chrome…).
+            if !w.app_name.to_lowercase().contains(needle.as_str()) {
+                continue;
+            }
+            if seen_pid.insert(w.pid) {
+                pids_needing.push(w.pid);
+            }
+            if pids_needing.len() >= AX_TITLE_ENRICH_MAX_PIDS {
+                break;
+            }
+        }
+        // If nothing matched app name, still try top few empty-title pids (cap 2).
+        if pids_needing.is_empty() {
+            for w in &windows {
+                if w.title.trim().is_empty() && seen_pid.insert(w.pid) {
+                    pids_needing.push(w.pid);
+                }
+                if pids_needing.len() >= 2 {
+                    break;
+                }
+            }
+        }
+
+        let titles_by_pid = ax_window_titles_for_pids_batched(&pids_needing);
+        let mut ax_index: HashMap<u32, usize> = HashMap::new();
+        for w in &mut windows {
+            if !w.title.trim().is_empty() {
+                continue;
+            }
+            if let Some(names) = titles_by_pid.get(&w.pid) {
+                let idx = ax_index.entry(w.pid).or_insert(0);
+                if *idx < names.len() {
+                    w.title = names[*idx].clone();
+                    *idx += 1;
+                }
+            }
+        }
+    }
+
+    dedupe_desktop_windows_fast(windows)
+}
+
+/// CG list + optional AX title enrich. `query` non-empty enables limited AX for matching apps.
+#[cfg(target_os = "macos")]
+fn list_macos_desktop_windows(query: Option<&str>) -> Result<Vec<DesktopWindow>, String> {
+    let raw = list_macos_desktop_windows_raw()?;
+    Ok(enrich_and_dedupe_desktop_windows(raw, query))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn list_macos_desktop_windows(_query: Option<&str>) -> Result<Vec<DesktopWindow>, String> {
+    Ok(Vec::new())
+}
+
+/// CG-only list without enrich.
+#[cfg(target_os = "macos")]
+fn list_macos_desktop_windows_raw() -> Result<Vec<DesktopWindow>, String> {
     use core_foundation::base::{CFType, TCFType, ToVoid};
     use core_foundation::dictionary::CFDictionary;
     use core_foundation::number::CFNumber;
@@ -3212,7 +3289,6 @@ fn list_macos_desktop_windows() -> Result<Vec<DesktopWindow>, String> {
         if owner.trim().is_empty() && title.trim().is_empty() {
             continue;
         }
-        // Skip menu-bar / status extras that still report layer 0 without a title.
         if title.trim().is_empty() && owner.eq_ignore_ascii_case("Window Server") {
             continue;
         }
@@ -3236,21 +3312,26 @@ fn list_macos_desktop_windows() -> Result<Vec<DesktopWindow>, String> {
             pid,
         });
     }
-    Ok(enrich_and_dedupe_desktop_windows(windows))
+    Ok(windows)
 }
 
 #[cfg(not(target_os = "macos"))]
-fn list_macos_desktop_windows() -> Result<Vec<DesktopWindow>, String> {
+fn list_macos_desktop_windows_raw() -> Result<Vec<DesktopWindow>, String> {
     Ok(Vec::new())
 }
 
 #[tauri::command]
-fn list_desktop_windows() -> Result<Vec<DesktopWindow>, String> {
-    list_macos_desktop_windows()
+fn list_desktop_windows(query: Option<String>) -> Result<Vec<DesktopWindow>, String> {
+    let q = query
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    list_macos_desktop_windows(q)
 }
 
 fn find_desktop_window(id: &str) -> Result<DesktopWindow, String> {
-    let windows = list_macos_desktop_windows()?;
+    // Focus path: fast CG-only (no AX) is enough to resolve by id.
+    let windows = list_macos_desktop_windows(None)?;
     windows
         .into_iter()
         .find(|window| window.id == id)

@@ -10,17 +10,20 @@ export type DesktopWindow = {
   pid: number
 }
 
-const WINDOW_LIST_TTL_MS = 2000
+/** Longer TTL: listing is native and must not re-hit every keystroke. */
+const WINDOW_LIST_TTL_MS = 8000
 const EMPTY_QUERY_WINDOW_LIMIT = 8
 const QUERY_WINDOW_LIMIT = 40
 
-const FOCUS_PREFIXES = ['切到', '窗口', 'focus', 'window', 'switch to', 'switch'] as const
-const CLOSE_PREFIXES = ['关闭', '关掉', 'close'] as const
-
 type WindowListCache = {
   fetchedAt: number
+  /** Cache key: '' for fast empty-query list; non-empty for filtered+AX enrich. */
+  queryKey: string
   windows: DesktopWindow[]
 }
+
+const FOCUS_PREFIXES = ['切到', '窗口', 'focus', 'window', 'switch to', 'switch'] as const
+const CLOSE_PREFIXES = ['关闭', '关掉', 'close'] as const
 
 let windowListCache: WindowListCache | null = null
 
@@ -66,28 +69,38 @@ function windowMatchesFilter(win: DesktopWindow, filter: string, locale: Locale)
   )
 }
 
-export async function listDesktopWindowsCached(options: { force?: boolean } = {}): Promise<DesktopWindow[]> {
+/**
+ * @param filterQuery When non-empty, native may AX-enrich titles for matching apps
+ * (slow path, capped). Empty query is CG-only and must stay fast for launcher open.
+ */
+export async function listDesktopWindowsCached(
+  options: { force?: boolean; filterQuery?: string } = {},
+): Promise<DesktopWindow[]> {
   const now = Date.now()
+  const queryKey = (options.filterQuery ?? '').trim().toLowerCase()
   if (
     options.force !== true &&
     windowListCache &&
+    windowListCache.queryKey === queryKey &&
     now - windowListCache.fetchedAt < WINDOW_LIST_TTL_MS
   ) {
     return windowListCache.windows
   }
   if (!isTauriRuntime()) {
-    windowListCache = { fetchedAt: now, windows: [] }
+    windowListCache = { fetchedAt: now, queryKey, windows: [] }
     return []
   }
   try {
     const { invoke } = await import('@tauri-apps/api/core')
-    const windows = (await invoke('list_desktop_windows')) as DesktopWindow[]
+    const windows = (await invoke('list_desktop_windows', {
+      query: queryKey || null,
+    })) as DesktopWindow[]
     const list = Array.isArray(windows) ? windows : []
-    windowListCache = { fetchedAt: Date.now(), windows: list }
+    windowListCache = { fetchedAt: Date.now(), queryKey, windows: list }
     return list
   } catch {
     // Probe failure: hide entry rather than error-spam launcher.
-    windowListCache = { fetchedAt: Date.now(), windows: [] }
+    windowListCache = { fetchedAt: Date.now(), queryKey, windows: [] }
     return []
   }
 }
@@ -239,15 +252,15 @@ export async function getHostWindowLauncherDynamicItems({
 
   const { rest, mode } = stripWindowQueryPrefix(query)
   const q = normalizeQuery(query)
-  // Empty query: at most a few windows (avoid flooding). Non-empty: filter.
+  // Empty query: fast CG-only list, few rows (avoid flooding + avoid AX).
   if (!q && mode === 'search') {
-    const windows = await listDesktopWindowsCached()
+    const windows = await listDesktopWindowsCached({ filterQuery: '' })
     return windows.slice(0, EMPTY_QUERY_WINDOW_LIMIT).map(buildFocusItem)
   }
 
   const filter = rest.trim()
-  // Prefix-only query like "切到" / "focus" / "关闭" with empty rest: list limited windows.
-  const windows = await listDesktopWindowsCached()
+  // Non-empty filter: allow limited AX title enrich for matching apps (capped on native side).
+  const windows = await listDesktopWindowsCached({ filterQuery: filter || q })
   const matched = windows
     .filter((win) => windowMatchesFilter(win, filter, locale))
     .slice(0, QUERY_WINDOW_LIMIT)

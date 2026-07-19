@@ -11,7 +11,8 @@ export type DesktopProcess = {
   memoryBytes?: number
 }
 
-const PROCESS_LIST_TTL_MS = 2000
+/** Process list only on kill second-level; 3s is enough and avoids re-ps every keystroke. */
+const PROCESS_LIST_TTL_MS = 3000
 const QUERY_PROCESS_LIMIT = 40
 
 const TERMINATE_PREFIXES = ['杀', '结束', 'kill', 'terminate', 'stop process'] as const
