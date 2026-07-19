@@ -5,6 +5,8 @@ import {
 import { getHostProcessLauncherDynamicItems } from '../desktopControl/processes'
 import { getHostWindowLauncherDynamicItems } from '../desktopControl/windows'
 import { registerDefaultWorkflowProviders } from '../../workflow/defaultWorkflowProviders'
+import { getTextPipelineLauncherItems } from '../../workflow/pipelineLauncher'
+import { registerBuiltinTextPipelines } from '../../workflow/pipeline'
 import { getWorkflowObjectLauncherItems } from '../../workflow/workflowLauncherAdapter'
 import {
   setHostLauncherDynamicItemsProvider,
@@ -19,10 +21,12 @@ export function registerHostLauncherProviders(): void {
   registerPluginSurfacePanelProvider()
   registerWorkflowOutputShelfPanelProvider()
   registerDefaultWorkflowProviders()
+  registerBuiltinTextPipelines()
   setHostLauncherItemsProvider(() => [
     ...getHostPaneControlItems(),
     ...getHostSystemPowerItems(),
     ...getHostAppLauncherStaticItems(),
+    ...getTextPipelineLauncherItems(),
   ])
   setHostLauncherDynamicItemsProvider(async (ctx) => {
     const [workflowItems, appItems, windowItems, processItems] = await Promise.all([

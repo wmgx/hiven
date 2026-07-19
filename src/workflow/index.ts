@@ -27,6 +27,19 @@ export {
 export { getWorkflowObjectLauncherItems } from './workflowLauncherAdapter'
 export { createDefaultOutputRouterContext, routeTextOutput } from './outputRouter'
 export {
+  clearTextPipelinesForTests,
+  getTextPipeline,
+  listTextPipelines,
+  registerBuiltinTextPipelines,
+  registerTextPipeline,
+  runTextPipeline,
+} from './pipeline'
+export type { TextPipeline, TextPipelineStep } from './pipeline'
+export {
+  createTextPipelineLauncherItem,
+  getTextPipelineLauncherItems,
+} from './pipelineLauncher'
+export {
   collectWorkObjects,
   getWorkActions,
   getWorkActionProviders,
