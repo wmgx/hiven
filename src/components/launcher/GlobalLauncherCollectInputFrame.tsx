@@ -1,11 +1,81 @@
-import { type RefObject } from 'react'
+import { useEffect, useRef, type RefObject } from 'react'
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
 import type { CollectInputFrame } from '../../workspace/launcher/controller'
 import { resolveDisplayTitle } from '../../workspace/launcher/display'
-import type { LauncherResultChoice } from '../../workspace/launcher/types'
+import type { IconRef, LauncherResultChoice } from '../../workspace/launcher/types'
 import { resolveIcon } from '../../utils/resolveIcon'
 import { LauncherHintKey, LauncherHintText } from './LauncherFooterHints'
+
+/** Suggest row: keep keyboard highlight in view (same as result / mixed list). */
+function CollectInputSuggestRow({
+  choice,
+  selected,
+  fallbackIcon,
+  onActivateChoice,
+  onSecondaryAction,
+}: {
+  choice: LauncherResultChoice
+  selected: boolean
+  fallbackIcon?: IconRef
+  onActivateChoice: (choice: LauncherResultChoice) => void
+  onSecondaryAction?: (choice: LauncherResultChoice, actionId: string) => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const secondary = choice.secondaryActions ?? []
+
+  useEffect(() => {
+    if (selected) ref.current?.scrollIntoView({ block: 'nearest' })
+  }, [selected])
+
+  return (
+    <div
+      ref={ref}
+      className={`l-suggest-row ${selected ? 'sel' : ''}`}
+    >
+      <button
+        type="button"
+        tabIndex={-1}
+        className="l-suggest-row-main"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => onActivateChoice(choice)}
+      >
+        <span className="r-ico r-favicon" aria-hidden>
+          {resolveIcon(
+            choice.icon ?? fallbackIcon,
+            18,
+            choice.title,
+          )}
+        </span>
+        <div className="r-main">
+          <span className="r-title">{choice.title}</span>
+          {choice.subtitle ? (
+            <span className="r-desc" title={choice.subtitle}>{choice.subtitle}</span>
+          ) : null}
+        </div>
+        {selected ? <span className="r-kbd">↵</span> : null}
+      </button>
+      {onSecondaryAction && secondary.map((action) => (
+        <button
+          key={action.id}
+          type="button"
+          tabIndex={-1}
+          className="l-suggest-row-secondary"
+          title={action.title}
+          aria-label={action.title}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            onSecondaryAction(choice, action.id)
+          }}
+        >
+          ×
+        </button>
+      ))}
+    </div>
+  )
+}
 
 export function GlobalLauncherCollectInputFrame({
   inputRef,
@@ -79,57 +149,16 @@ export function GlobalLauncherCollectInputFrame({
       )}
       {hasSuggestions && (
         <div className="global-launcher-body l-results l-suggest-list">
-          {previewChoices.map((choice, index) => {
-            const selected = index === selectedIndex
-            const secondary = choice.secondaryActions ?? []
-            return (
-              <div
-                key={choice.id}
-                className={`l-suggest-row ${selected ? 'sel' : ''}`}
-              >
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  className="l-suggest-row-main"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => onActivateChoice(choice)}
-                >
-                  <span className="r-ico r-favicon" aria-hidden>
-                    {resolveIcon(
-                      choice.icon ?? frame.item.display.icon,
-                      18,
-                      choice.title,
-                    )}
-                  </span>
-                  <div className="r-main">
-                    <span className="r-title">{choice.title}</span>
-                    {choice.subtitle ? (
-                      <span className="r-desc" title={choice.subtitle}>{choice.subtitle}</span>
-                    ) : null}
-                  </div>
-                  {selected ? <span className="r-kbd">↵</span> : null}
-                </button>
-                {onSecondaryAction && secondary.map((action) => (
-                  <button
-                    key={action.id}
-                    type="button"
-                    tabIndex={-1}
-                    className="l-suggest-row-secondary"
-                    title={action.title}
-                    aria-label={action.title}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={(event) => {
-                      event.preventDefault()
-                      event.stopPropagation()
-                      onSecondaryAction(choice, action.id)
-                    }}
-                  >
-                    ×
-                  </button>
-                ))}
-              </div>
-            )
-          })}
+          {previewChoices.map((choice, index) => (
+            <CollectInputSuggestRow
+              key={choice.id}
+              choice={choice}
+              selected={index === selectedIndex}
+              fallbackIcon={frame.item.display.icon}
+              onActivateChoice={onActivateChoice}
+              onSecondaryAction={onSecondaryAction}
+            />
+          ))}
         </div>
       )}
       {showEmptyState && (

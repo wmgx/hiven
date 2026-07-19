@@ -187,6 +187,11 @@ assert.match(killCmd, /terminateDesktopProcess\(proc\.pid,\s*false\)/, 'default 
 
 const collectFrame = readFileSync('src/components/launcher/GlobalLauncherCollectInputFrame.tsx', 'utf8')
 assert.match(collectFrame, /collectInputEmptyTitle|showEmptyState/, 'collect-input must render true empty state')
+assert.match(
+  collectFrame,
+  /scrollIntoView\(\{\s*block:\s*['"]nearest['"]\s*\}\)/,
+  'collect-input suggest rows must scrollIntoView on keyboard selection (kill/switch window lists)',
+)
 
 // ── Audit ────────────────────────────────────────────────────────────────────
 assert.match(files.audit, /export function auditL2Action/, 'auditL2Action export required')
@@ -197,11 +202,21 @@ assert.doesNotMatch(files.audit, /clipboard\.content|clipboardText|pasteText/, '
 assert.match(files.hostProvider, /getHostWindowLauncherDynamicItems/, 'host provider must wire windows')
 assert.match(files.hostProvider, /getHostAppLauncherDynamicItems/, 'host provider must keep apps')
 assert.match(files.hostProvider, /getKillProcessHostItem/, 'host must register kill as static collect-input command')
+assert.match(files.hostProvider, /getSwitchWindowHostItem/, 'host must register switch window as static collect-input command')
+assert.match(files.hostProvider, /getHostWindowLauncherDynamicItems/, 'host must keep window global mix dynamic items')
 assert.doesNotMatch(
   files.hostProvider,
   /getHostProcessLauncherDynamicItems/,
   'host must not put processes on first-level dynamic list',
 )
+
+// ── Switch Window command = collect-input second level ───────────────────────
+const switchCmd = readFileSync('src/workspace/desktopControl/switchWindowCommand.ts', 'utf8')
+assert.match(switchCmd, /host:window:switch-command/, 'stable switch-window systemKey')
+assert.match(switchCmd, /type:\s*'collect-input'/, 'switch window must use collect-input second level')
+assert.match(switchCmd, /suggest:\s*async/, 'switch window must suggest window list on second level')
+assert.match(switchCmd, /focusDesktopWindow/, 'switch window must focus on pick')
+assert.doesNotMatch(switchCmd, /confirm-close|confirm-terminate/, 'focus has no confirm step')
 
 // ── Permissions ──────────────────────────────────────────────────────────────
 assert.match(files.pluginTypes, /'desktop\.windows'/, 'PluginPermission must include desktop.windows')

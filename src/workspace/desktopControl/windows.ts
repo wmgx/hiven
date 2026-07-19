@@ -332,10 +332,40 @@ export function clearDesktopWindowListCache(): void {
   }
 }
 
-async function focusDesktopWindow(id: string): Promise<void> {
+export async function focusDesktopWindow(id: string): Promise<void> {
   if (!isTauriRuntime()) throw new Error('Window focus is only available in the desktop runtime.')
   const { invoke } = await import('@tauri-apps/api/core')
   await invoke('focus_desktop_window', { id })
+}
+
+/**
+ * Blocking window list for collect-input L2 (Switch Window).
+ * Respects TTL so keystrokes do not re-hit CG; cold cache waits for one load.
+ */
+export async function listSwitchableWindowsForFilter(
+  filter: string,
+  locale: Locale,
+  limit = QUERY_WINDOW_LIMIT,
+): Promise<Array<{ win: DesktopWindow; title: string; subtitle: string; icon: string }>> {
+  let windows: DesktopWindow[]
+  if (windowListCache && isCacheFresh(windowListCache)) {
+    windows = windowListCache.windows
+  } else if (listInflight) {
+    windows = await listInflight
+  } else {
+    windows = await ensureWindowListLoading()
+  }
+
+  return windows
+    .filter(isSwitchableDesktopWindow)
+    .filter((win) => windowMatchesFilter(win, filter, locale))
+    .slice(0, limit)
+    .map((win) => ({
+      win,
+      title: windowDisplayTitle(win),
+      subtitle: windowSubtitle(win),
+      icon: windowIcon(win),
+    }))
 }
 
 async function closeDesktopWindow(id: string): Promise<void> {

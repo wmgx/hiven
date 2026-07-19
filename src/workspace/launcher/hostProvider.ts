@@ -3,6 +3,7 @@ import {
   getHostAppLauncherStaticItems,
 } from '../appLauncher/hostAppLauncher'
 import { getKillProcessHostItem } from '../desktopControl/killProcessCommand'
+import { getSwitchWindowHostItem } from '../desktopControl/switchWindowCommand'
 import { getHostWindowLauncherDynamicItems } from '../desktopControl/windows'
 import { getDesktopBridgeLauncherDynamicItems } from '../desktopTargets/collectBridgeLauncherItems'
 import {
@@ -37,9 +38,13 @@ export function registerHostLauncherProviders(): void {
     ...getTextPipelineLauncherItems(),
     // Kill Process: first-level command → collect-input second level (suggest list).
     getKillProcessHostItem(),
+    // Switch Window: first-level command → collect-input second level (windows only).
+    // Individual windows still appear in global mix via getHostWindowLauncherDynamicItems.
+    getSwitchWindowHostItem(),
   ])
   setHostLauncherDynamicItemsProvider(async (ctx) => {
     // Process terminate is NOT first-level dynamic. Use getKillProcessHostItem (static).
+    // Window focus: both static L2 command and first-level dynamic mix (below).
     // Empty open: apps only (memo top-N) + cached windows if any. No workflow, no waiting.
     // Query present: apps + windows (+ light workflow). Windows never block (lazy cache).
     const q = ctx.query.trim()

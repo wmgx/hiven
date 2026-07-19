@@ -3130,6 +3130,15 @@ struct DesktopWindow {
     /// Installed-app id for `app-icon:` when resolvable (bundle / path hash).
     #[serde(rename = "appId", skip_serializing_if = "Option::is_none")]
     app_id: Option<String>,
+    /// CG global bounds (points) for precise AX raise when titles collide/empty.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    x: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    y: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    width: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    height: Option<f64>,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -3525,6 +3534,11 @@ fn list_macos_desktop_windows_raw() -> Result<Vec<DesktopWindow>, String> {
 
     /// Real user windows have a positive CG bounds; helpers often report 0×0.
     fn window_bounds_size(dict: &CFDictionary) -> Option<(f64, f64)> {
+        let (_x, _y, w, h) = window_bounds_rect(dict)?;
+        Some((w, h))
+    }
+
+    fn window_bounds_rect(dict: &CFDictionary) -> Option<(f64, f64, f64, f64)> {
         let cf_key = CFString::new("kCGWindowBounds");
         let value_ptr = *dict.find(cf_key.to_void())?;
         if value_ptr.is_null() {
@@ -3532,9 +3546,11 @@ fn list_macos_desktop_windows_raw() -> Result<Vec<DesktopWindow>, String> {
         }
         let cftype = unsafe { CFType::wrap_under_get_rule(value_ptr as *const c_void) };
         let bounds: CFDictionary = cftype.downcast::<CFDictionary>()?;
+        let x = dict_f64(&bounds, "X").unwrap_or(0.0);
+        let y = dict_f64(&bounds, "Y").unwrap_or(0.0);
         let w = dict_f64(&bounds, "Width")?;
         let h = dict_f64(&bounds, "Height")?;
-        Some((w, h))
+        Some((x, y, w, h))
     }
 
     let options = kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements;
@@ -3598,12 +3614,17 @@ fn list_macos_desktop_windows_raw() -> Result<Vec<DesktopWindow>, String> {
         } else {
             owner
         };
+        let (x, y, width, height) = window_bounds_rect(&dict).unwrap_or((0.0, 0.0, 0.0, 0.0));
         windows.push(DesktopWindow {
             id: number.to_string(),
             app_name,
             title,
             pid,
             app_id: None,
+            x: Some(x),
+            y: Some(y),
+            width: Some(width),
+            height: Some(height),
         });
     }
     Ok(windows)
@@ -3638,12 +3659,239 @@ fn list_desktop_windows_enriched() -> Result<Vec<DesktopWindow>, String> {
 }
 
 fn find_desktop_window(id: &str) -> Result<DesktopWindow, String> {
-    // Focus path: fast CG-only (no AX) is enough to resolve by id.
+    // Focus path: CG-only is enough to resolve by stable kCGWindowNumber id + bounds.
     let windows = list_macos_desktop_windows(None)?;
     windows
         .into_iter()
         .find(|window| window.id == id)
         .ok_or_else(|| "Window is no longer available".to_string())
+}
+
+/// Raise one CG window via the Accessibility C API and report which match path
+/// worked. System Events title/position matching proved unreliable for
+/// multi-window apps (empty or duplicate titles raise the wrong window), so the
+/// target AXWindow is resolved by CGWindowNumber via the private-but-stable
+/// `_AXUIElementGetWindow` bridge (same as AltTab / yabai), with CG-bounds
+/// matching as the public-API fallback.
+#[cfg(target_os = "macos")]
+fn ax_raise_window(
+    pid: u32,
+    target_cg_id: u32,
+    cg_bounds: Option<(f64, f64, f64, f64)>,
+) -> Result<&'static str, String> {
+    use core_foundation::array::{CFArray, CFArrayRef};
+    use core_foundation::base::{CFType, CFTypeRef, TCFType};
+    use core_foundation::boolean::CFBoolean;
+    use core_foundation::string::{CFString, CFStringRef};
+    use core_graphics::geometry::{CGPoint, CGSize};
+    use std::os::raw::{c_char, c_void};
+
+    type AXUIElementRef = *mut c_void;
+    type AXError = i32;
+
+    const AX_SUCCESS: AXError = 0;
+    const AX_VALUE_TYPE_CGPOINT: u32 = 1;
+    const AX_VALUE_TYPE_CGSIZE: u32 = 2;
+    // CG bounds and AXPosition/AXSize are both top-left global coordinates, so a
+    // real match is exact; tolerances only absorb rounding.
+    const BOUNDS_POS_TOLERANCE: f64 = 8.0;
+    const BOUNDS_SIZE_TOLERANCE: f64 = 4.0;
+
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXUIElementCreateApplication(pid: i32) -> AXUIElementRef;
+        fn AXUIElementCopyAttributeValue(
+            element: AXUIElementRef,
+            attribute: CFStringRef,
+            value: *mut CFTypeRef,
+        ) -> AXError;
+        fn AXUIElementSetAttributeValue(
+            element: AXUIElementRef,
+            attribute: CFStringRef,
+            value: CFTypeRef,
+        ) -> AXError;
+        fn AXUIElementPerformAction(element: AXUIElementRef, action: CFStringRef) -> AXError;
+        fn AXValueGetValue(value: CFTypeRef, value_type: u32, out: *mut c_void) -> bool;
+        fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
+    }
+
+    unsafe fn copy_attribute(element: AXUIElementRef, name: &str) -> Result<CFType, AXError> {
+        let attr = CFString::new(name);
+        let mut value: CFTypeRef = std::ptr::null();
+        let err = AXUIElementCopyAttributeValue(element, attr.as_concrete_TypeRef(), &mut value);
+        if err != AX_SUCCESS || value.is_null() {
+            return Err(err);
+        }
+        Ok(CFType::wrap_under_create_rule(value))
+    }
+
+    /// CGWindowID of an AXWindow. Resolved via dlsym so an OS that drops the
+    /// private symbol degrades to the bounds fallback instead of failing launch.
+    unsafe fn ax_window_cg_id(window: AXUIElementRef) -> Option<u32> {
+        const RTLD_DEFAULT: *mut c_void = -2isize as *mut c_void;
+        let sym = dlsym(RTLD_DEFAULT, c"_AXUIElementGetWindow".as_ptr());
+        if sym.is_null() {
+            return None;
+        }
+        let get_window: unsafe extern "C" fn(AXUIElementRef, *mut u32) -> AXError =
+            std::mem::transmute(sym);
+        let mut id: u32 = 0;
+        if get_window(window, &mut id) == AX_SUCCESS && id != 0 {
+            Some(id)
+        } else {
+            None
+        }
+    }
+
+    unsafe fn ax_window_frame(window: AXUIElementRef) -> Option<(f64, f64, f64, f64)> {
+        let pos_value = copy_attribute(window, "AXPosition").ok()?;
+        let mut pos = CGPoint::new(0.0, 0.0);
+        if !AXValueGetValue(
+            pos_value.as_CFTypeRef(),
+            AX_VALUE_TYPE_CGPOINT,
+            &mut pos as *mut CGPoint as *mut c_void,
+        ) {
+            return None;
+        }
+        let size_value = copy_attribute(window, "AXSize").ok()?;
+        let mut size = CGSize::new(0.0, 0.0);
+        if !AXValueGetValue(
+            size_value.as_CFTypeRef(),
+            AX_VALUE_TYPE_CGSIZE,
+            &mut size as *mut CGSize as *mut c_void,
+        ) {
+            return None;
+        }
+        Some((pos.x, pos.y, size.width, size.height))
+    }
+
+    unsafe {
+        let app = AXUIElementCreateApplication(pid as i32);
+        if app.is_null() {
+            return Err(format!("AXUIElementCreateApplication failed for pid {pid}"));
+        }
+        let _app_guard = CFType::wrap_under_create_rule(app as CFTypeRef);
+
+        let windows_value = copy_attribute(app, "AXWindows")
+            .map_err(|err| format!("reading AXWindows of pid {pid} failed (AXError {err})"))?;
+        let windows: CFArray =
+            CFArray::wrap_under_get_rule(windows_value.as_CFTypeRef() as CFArrayRef);
+        let window_refs: Vec<AXUIElementRef> = windows
+            .get_all_values()
+            .into_iter()
+            .filter(|value| !value.is_null())
+            .map(|value| value as AXUIElementRef)
+            .collect();
+        if window_refs.is_empty() {
+            return Err(format!("pid {pid} exposes no AX windows"));
+        }
+
+        let mut matched: Option<(AXUIElementRef, &'static str)> = None;
+        for &window in &window_refs {
+            if ax_window_cg_id(window) == Some(target_cg_id) {
+                matched = Some((window, "cg-window-id"));
+                break;
+            }
+        }
+        if matched.is_none() {
+            if let Some((tx, ty, tw, th)) = cg_bounds {
+                let mut best: Option<(f64, AXUIElementRef)> = None;
+                for &window in &window_refs {
+                    let Some((x, y, w, h)) = ax_window_frame(window) else {
+                        continue;
+                    };
+                    if (w - tw).abs() > BOUNDS_SIZE_TOLERANCE
+                        || (h - th).abs() > BOUNDS_SIZE_TOLERANCE
+                    {
+                        continue;
+                    }
+                    let distance = (x - tx).abs() + (y - ty).abs();
+                    if distance <= BOUNDS_POS_TOLERANCE
+                        && best.map_or(true, |(b, _)| distance < b)
+                    {
+                        best = Some((distance, window));
+                    }
+                }
+                matched = best.map(|(_, window)| (window, "bounds"));
+            }
+        }
+        let Some((target, method)) = matched else {
+            return Err(format!(
+                "CG window {target_cg_id} not found among {count} AX windows of pid {pid}",
+                count = window_refs.len()
+            ));
+        };
+
+        // Make it main/focused first so the follow-up app activation lands on
+        // this window, then raise it above its siblings. Main/focused writes are
+        // best-effort — AXRaise is the one that must succeed.
+        let main_attr = CFString::new("AXMain");
+        let _ = AXUIElementSetAttributeValue(
+            target,
+            main_attr.as_concrete_TypeRef(),
+            CFBoolean::true_value().as_CFTypeRef(),
+        );
+        let focused_attr = CFString::new("AXFocusedWindow");
+        let _ = AXUIElementSetAttributeValue(
+            app,
+            focused_attr.as_concrete_TypeRef(),
+            target as CFTypeRef,
+        );
+        let raise_action = CFString::new("AXRaise");
+        let raise_err = AXUIElementPerformAction(target, raise_action.as_concrete_TypeRef());
+        if raise_err != AX_SUCCESS {
+            return Err(format!("AXRaise failed (AXError {raise_err})"));
+        }
+        Ok(method)
+    }
+}
+
+/// Raise one window of a process, not just its app: multi-window apps must land
+/// on the exact CG window the launcher listed. Raise errors are returned to the
+/// frontend (permission vs. match failure must stay observable), but the app is
+/// still activated as graceful degradation.
+#[cfg(target_os = "macos")]
+fn focus_macos_desktop_window(window: &DesktopWindow) -> Result<(), String> {
+    let raised = window
+        .id
+        .parse::<u32>()
+        .map_err(|_| format!("invalid CG window id: {}", window.id))
+        .and_then(|cg_id| {
+            if !ax_is_trusted(false) {
+                return Err(
+                    "Accessibility permission is not granted (System Settings → Privacy & Security → Accessibility)"
+                        .to_string(),
+                );
+            }
+            let bounds = match (window.x, window.y, window.width, window.height) {
+                (Some(x), Some(y), Some(w), Some(h)) if w >= 2.0 && h >= 2.0 => {
+                    Some((x, y, w, h))
+                }
+                _ => None,
+            };
+            ax_raise_window(window.pid, cg_id, bounds)
+        });
+
+    // AX raise happens before activation so the app comes forward with the
+    // target already main; activate even on failure — "right app, maybe wrong
+    // window" beats doing nothing.
+    activate_process(window.pid);
+    // Launcher hide path must not bounce focus back to the pre-launcher app.
+    clear_previous_foreground_app();
+
+    match raised {
+        Ok(method) => {
+            eprintln!(
+                "[hiven] focus_desktop_window: raised window {} of {} via {}",
+                window.id, window.app_name, method
+            );
+            Ok(())
+        }
+        Err(reason) => Err(format!(
+            "Could not raise \"{}\" window {}: {reason}",
+            window.app_name, window.id
+        )),
+    }
 }
 
 #[tauri::command]
@@ -3656,31 +3904,7 @@ fn focus_desktop_window(id: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         let window = find_desktop_window(&id)?;
-        activate_process(window.pid);
-        let pid = window.pid;
-        let title = applescript_escape(&window.title);
-        let script = if window.title.trim().is_empty() {
-            format!(
-                r#"tell application "System Events" to set frontmost of first process whose unix id is {pid} to true"#
-            )
-        } else {
-            format!(
-                r#"tell application "System Events"
-  tell (first process whose unix id is {pid})
-    set frontmost to true
-    try
-      perform action "AXRaise" of (first window whose name is "{title}")
-    end try
-  end tell
-end tell"#
-            )
-        };
-        // Activation already happened; AppleScript raise is best-effort.
-        let _ = run_osascript(&script);
-        // Launcher hide path calls restore_previous_foreground_app — clear so we do not
-        // immediately bounce focus back to the app that was frontmost when launcher opened.
-        clear_previous_foreground_app();
-        Ok(())
+        focus_macos_desktop_window(&window)
     }
 }
 
