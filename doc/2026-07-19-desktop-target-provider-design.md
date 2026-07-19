@@ -1,18 +1,21 @@
 # 桌面目标可扩展协议（Desktop Target Provider）设计
 
 **日期:** 2026-07-19  
-**状态:** 评审修订稿（v1.1）— 已吸收外部评审实质意见，§15 开放问题已关闭  
+**状态:** 评审修订稿（v1.2）— 二刷问题已并入；可关评审开工  
 **产品:** hiven（原 FluxText）  
 **读者:** 实现 AI / 评审 / 后续维护者  
 **关联:**
 
-- `doc/2026-07-19-launcher-intelligence-roadmap-design.md`（控制中枢总路线；包③–⑤ 已有窗口/进程骨架）
+- `doc/2026-07-19-launcher-intelligence-roadmap-design.md`（控制中枢总路线；包③–⑤ 已有窗口/进程骨架；**§6 量级表与本文 desktopAffinity 已核对一致**）
 - `docs/superpowers/specs/2026-07-19-control-hub-intent-design.md`（已被路线图吸收）
+- `doc/2026-07-19-launcher-interaction-redesign-demo.html`（交互 demo；§5.1 行样式应对齐）
 - `doc/diff-plugin-boundary-decision.md`、`Agents.md`（host / plugin / kit 边界）
-- 现状实现参考：`src/workspace/appLauncher/`、`src/workspace/desktopControl/`、`src/workspace/launcher/hostProvider.ts`、`src/workspace/launcher/registry.ts`（`onPartial`）、`src/workspace/launcher/types.ts`（`LauncherHostCapability`）
+- 现状实现参考：`src/workspace/appLauncher/`、`src/workspace/desktopControl/`、`src/workspace/launcher/hostProvider.ts`、`src/workspace/launcher/registry.ts`（`onPartial`）、`src/workspace/launcher/types.ts`（`LauncherHostCapability`、`isEditorCommandBarItem`、`kindLabel`）、`src/components/launcher/LauncherMixedList.tsx`（kindLabel 渲染）、`scripts/check-architecture.mjs`（workspace 深 import 禁令）
 
-**修订摘要（v1.1）：** 聚合契约补 partial；usage/systemKey 规范；关窗口产出路径；权限 key 与现有连字符对齐；关闭 §15；写明 D2 修复「任意 query 混出 terminate」的现网缺陷。
+**修订摘要：**
 
+- **v1.1：** partial；usage/systemKey；close 路径；capability 连字符；关闭 §15；D2 现网 terminate 缺陷  
+- **v1.2：** D1 完成定义改为可检验 delta；kindLabel i18n 落点；detections 仅性能短路；priority 量级定义；两层去重 key 对齐；surfaces 协议化；与 demo 交叉引用
 ---
 
 ## 1. 背景与问题
@@ -197,7 +200,11 @@ type DesktopTargetQueryContext = {
   query: string
   locale: Locale
   surfaceId: LauncherSurfaceId
-  /** 可选：content detections，用于「强文本 intent 时导航目标让位」 */
+  /**
+   * 可选 content detections。
+   * **用途仅限性能短路**（见 list() 约束）：例如强文本 intent 时 provider 可少列/不列，
+   * 以省 I/O。**产品级「让位/抬分」不得在 provider 内分叉**——统一由 host ranking 做。
+   */
   detections?: Array<{ kind: string; confidence: number }>
   /** 查询取消（query 变更 / 关闭 Launcher）；provider 应尊重 abort */
   signal?: AbortSignal
@@ -216,13 +223,21 @@ type DesktopTargetProvider = {
   title: string
   titleI18n?: Partial<Record<Locale, string>>
 
-  /** 默认优先级：同 query 下 provider 间微调（最终仍以 item score 为准） */
+  /**
+   * 源级轻量加分（可选）。语义 **已钉死**（见下），禁止「说不清的 tie-break」。
+   * 缺省 = 0。
+   */
   priority?: number
 
   /**
    * 同步或异步列出候选。Host 负责超时与失败隔离。
    * 应在 provider 内做粗过滤；host 再统一 rank。
    * 一级 registry 的 list **只应**返回 actionClass 为 focus/open（或默认 focus）的导航目标。
+   *
+   * **detections 用途限制：** 仅允许作 **性能短路**（例如强文本 intent 时本源少列/空列，
+   * 少打原生/扩展 I/O）。**禁止** 在 provider 内各自发明「让位/抬分」产品策略——
+   * 强文本 intent 让位由 **host ranking 统一**执行（§3.1、§5.2）。若 provider 因短路
+   * 返回空数组，不得被解释为「该源永久禁用」。
    */
   list(ctx: DesktopTargetQueryContext): Promise<DesktopTarget[]> | DesktopTarget[]
 
@@ -236,6 +251,17 @@ type DesktopTargetProvider = {
   health?(): Promise<{ ok: boolean; reason?: string }>
 }
 ```
+
+#### `priority` 语义（已钉死）
+
+| 项 | 规定 |
+|----|------|
+| 含义 | 该 provider 产出的 **每一条** 一级导航 item 在 ranking 中增加同一常数 `providerPriorityBoost` |
+| 映射 | `providerPriorityBoost = clamp(provider.priority ?? 0, 0, PROVIDER_PRIORITY_CAP)` |
+| 量级 | **`PROVIDER_PRIORITY_CAP = 50`**（≤ usage 上沿量级，远小于 contextBoost 400 / 精确匹配 3000+） |
+| 不用作 | 不单独做 sort comparator 的 tie-break 字段；不参与 provider 调度顺序的「必须」语义（调度可仍按注册序 + 并行） |
+| 缺省 | `undefined` / 0 → 不加分 |
+| 删除条件 | 若全仓 priority 皆 0，允许删字段；在有值前必须按本表实现，禁止「神秘 tie-break」 |
 
 ### 4.3 Host 注册表职责（含渐进渲染）
 
@@ -282,8 +308,10 @@ collectDesktopTargets(ctx, options?: {
 3. 生产日志不打 tab URL/标题全文（或 debug 开关才打）。  
 4. 禁止新来源绕过注册表直接改 `rankLauncherItems` 私有常量。  
 5. **D0 必须实现 partial 契约**；禁止先批式落地、D3 再返工。  
-6. 注册表 API **不**导出到插件 SDK（一期仅 first-party 注册）。
----
+6. 注册表 API **不**导出到插件 SDK（一期仅 first-party 注册）。  
+7. **表面隔离（协议要求，非巧合）：** 桌面导航 target 映射的 `LauncherItem.surfaces` **必须** 仅含 `global-launcher`（除非未来显式设计编辑器内桌面目标）。  
+   - 现状：`windows.ts` / `processes.ts` 已写 `surfaces: ['global-launcher']`，且 `isEditorCommandBarItem` 对 host key 白名单天然排除 `host:window:*`。  
+   - D0 `toLauncherItem` **必须** 强制该 surfaces 约束并加契约测试，防止回归漏进编辑器 Cmd+K。---
 
 ## 5. 混排与列表融合
 
@@ -297,8 +325,27 @@ collectDesktopTargets(ctx, options?: {
 [图标] JWT 解码                   命令    来自剪贴板
 ```
 
-- type / kindLabel 必须可 i18n（应用 / 窗口 / 标签 / 命令…）  
 - 主标题优先「用户记得住的名字」：tab 标题 > 窗口标题 > App 名  
+- 行样式与 **`doc/2026-07-19-launcher-interaction-redesign-demo.html`** 对齐（type 标签 pill + 主副标题层级）；实现时以设计文档 + demo 共同为准，冲突先改文档/demo 再改代码  
+
+#### kindLabel 与 i18n（D1 必做）
+
+**现状缺口：** `LauncherItemDisplay.kindLabel?: string` 为裸字符串，**无** `kindLabelI18n`（同类型的 `title`/`subtitle` 已有 I18n 变体）。`LauncherMixedList.tsx` 直接渲染 `kindLabel`。
+
+**裁决（二选一实现，D1 完成定义绑定）：**
+
+| 方案 | 做法 | 推荐 |
+|------|------|------|
+| **A. 扩展类型（推荐）** | `LauncherItemDisplay` 增加 `kindLabelI18n?: Partial<Record<Locale, string>>`；列表渲染走与 title 相同的 `resolveDisplay*` 管线 | ✅ |
+| **B. Host 派生** | `toLauncherItem` **禁止**写死中文/英文 kindLabel 字符串；只写稳定 `kind` 枚举，由 host/UI 按 `locale` 查表生成标签 | 可接受 |
+
+无论 A/B：
+
+- 标签文案 key 建议：`desktop.kind.app` / `.window` / `.tab` / `.document`（中英：应用/窗口/标签/文档）  
+- **禁止** 在 provider 内 hardcode 用户可见 kind 文案  
+- 契约测试：locale=zh 与 en 下 kind 标签不同且非空  
+
+**说明：** type 标签 **不是新造 UI 组件**——现有 `display.kindLabel` + `LauncherMixedList` 已承载；D1 增量是 **i18n 正确性与桌面 kind 全覆盖**，不是重做列表。
 
 ### 5.2 排序原则（与路线图 §6 一致，桌面侧补充）
 
@@ -324,7 +371,10 @@ score =
 | 空 query | 少量最近 App + 窗口上限维持 **8**（见下「最近」数据源）；**标签空搜默认 0 条**（D3 后再放开 2–3） |
 | 普通中文空搜 | 不乱推编解码；也不应被上百 tab 淹没 |
 
-`desktopAffinity`（若做）建议 ≤ 200 量级，避免「永远打开着的 Chrome」压过精确命令匹配。
+`desktopAffinity`（若做）建议 ≤ 200 量级，落在路线图 §6 的 usage(≤~100) 与 contextBoost(≤400) 之间，避免压过精确命令匹配（~3000+）。  
+`provider.priority` 加分见 §4.2（cap 50），与 affinity **分开**，两者之和仍应 ≪ 精确匹配。
+
+**强文本 intent 让位：** 仅在 **host `ranking.ts`**（或等价单一模块）实现；providers 不得复制让位表。`detections` 下发仅用于 §4.2 性能短路。
 
 #### 「最近」数据来源（D1 前必须落地其一）
 
@@ -338,13 +388,38 @@ score =
 
 文案：空搜窗口副标题/注释避免写死「最近」除非已实现 B。
 
-### 5.3 去重
+### 5.3 去重（两层 key 必须对齐）
+
+Launcher 最终列表去重以 **`LauncherItem.systemKey`** 为准（现有 ranking/列表路径）。  
+Registry 层按 **`target.id`** 去重。两层必须一致，否则 registry 去重完、ranking 再按另一套 key 合并会漏去重或误伤。
+
+**硬约束（`toLauncherItem.ts`）：**
+
+```text
+// 列表身份（去重 + React key + 选中）
+listSystemKey = target.id
+// 必须：LauncherItem.systemKey 对于「列表行身份」=== target.id
+// 例外见 §5.6：usage 聚合 key 可与 list 身份分离
+```
+
+| 概念 | 字段 | 规则 |
+|------|------|------|
+| **列表去重 key** | `target.id` → `item.systemKey` | **必须相等**（确定性派生：identity，或 `target.id` 本身） |
+| **usage 聚合 key** | §5.6 的 usage 维度 | 可与 list key **不同**；通过 `legacyUsageKeys` **或** 单独 `usageKey` 字段写入 usage，**不得**为了 usage 去改 list 的 systemKey 导致窗口实例被错误合并成一行 |
+| 推荐实现 | `systemKey = target.id`；`usageRecordKeys = [stableUsageKey]`（若 API 尚无独立字段，用 `legacyUsageKeys` 只读 usage、选中仍用 systemKey） | D0 定稿一种并写测试 |
+
+若现有 `legacyUsageKeys` 语义是「额外 usage 查找键」而非「替代 systemKey」，则：
+
+- `systemKey = target.id`（每行唯一，列表不去重掉多个 Chrome 窗口）  
+- usage 写入/读取使用 `appStableKey` 派生的稳定键（§5.6）  
+
+**冲突策略（在 list key 对齐前提下）：**
 
 | 冲突 | 策略 |
 |------|------|
-| 同一 `target.id` | 保留一条（partial 场景后写覆盖，见 §4.3） |
-| 同一浏览器窗口 vs 其下 tab | **都可保留**：窗口 = 整窗聚焦；tab = 精确页。展示上 kind 不同 |
-| 同一 URL 多个 tab | 都保留或按「活跃 tab 优先」保留 N 条（实现可选，需可测） |
+| 同一 `target.id` | 保留一条（partial 后写覆盖，见 §4.3） |
+| 同一浏览器窗口 vs 其下 tab | **都可保留**（id 不同） |
+| 同一 URL 多个 tab | 都保留或按活跃 tab 限 N |
 | App 项 vs 仅窗口 | 都可保留 |
 
 ### 5.4 与现有 App / 窗口实现的关系
@@ -376,21 +451,24 @@ D1 完成定义必须包含：前缀触发的关窗口仍可用，且必经 L2�
 
 **映射规范（`toLauncherItem` 必须遵守）：**
 
-| kind / 动作 | `recordUsage` | `systemKey`（usage 维度） | 说明 |
-|-------------|---------------|---------------------------|------|
-| `app` + open | **true** | 现有 `host:app-launcher:app:${appId}` | appId 已相对稳定 |
-| `window` + focus | **true** | `host:window:focus:app:${appStableKey}` | **按应用聚合**，不按瞬时 window id |
-| `window` + close | **false** | `host:window:close:ephemeral:${windowId}` | 危险/低频；不记 usage，或仅 journal 不参与 score |
-| `tab` + focus | **true** | `host:tab:focus:app:${appStableKey}` 或 `…:origin:${origin}`（若有 URL） | 优先 app；有稳定 origin 时可更细，仍避免 tabId |
-| `terminate` 进程 | **false** | 任意仅作列表身份 | **禁止** `recordUsage: true`；pid 不可作 usage key |
-| 文本 pipeline 等 | 按现有 host 策略 | 稳定 pipeline id | 不变 |
+| kind / 动作 | `recordUsage` | **列表** `systemKey`（= target.id） | **usage 写入键**（可 ≠ systemKey） |
+|-------------|---------------|-------------------------------------|-------------------------------------|
+| `app` + open | **true** | 现有 appId 键（稳定，可与 usage 相同） | 同左 |
+| `window` + focus | **true** | 含原生 window id 的唯一 id | `host:window:focus:app:${appStableKey}` |
+| `window` + close | **false** | 唯一 close id（≠ focus id） | 不写 usage |
+| `tab` + focus | **true** | 含 tab id 的唯一 id | `host:tab:focus:app:${appStableKey}`（或 + origin） |
+| `terminate` 进程 | **false** | 任意列表身份 | 禁止写 usage |
+| 文本 pipeline 等 | 按现有策略 | 稳定 pipeline id | 同左 |
 
-**列表渲染 id** 仍可用含原生 id 的 `DesktopTarget.id` / LauncherItem 运行时 key，与 **usage systemKey** 分离：
+**列表身份 vs usage（与 §5.3 对齐，修正 v1.1 歧义）：**
 
-- `LauncherItem.systemKey` = 上表 usage 维度（可重复出现多个「Chrome 窗口」行，但 usage 记到同一 app 桶——可接受；若需区分窗口实例，**仍不写 usage**）。  
-- 可选：`legacyUsageKeys` 不用于桌面瞬时 id。
+| 字段 | 窗口 focus 示例 | 说明 |
+|------|-----------------|------|
+| `target.id` / `item.systemKey` | `host.window:focus:native:0x12ab` | **每行唯一**；列表去重用此 key |
+| usage 写入 key | `host:window:focus:app:com.google.Chrome` | 稳定聚合；**多个窗口行可写同一 usage 桶** |
+| 实现手段 | `systemKey = target.id`；usage API 使用稳定键（`legacyUsageKeys` 或显式 `usageKeys`） | 禁止把 systemKey 直接改成 app 聚合键（会把多窗口合成一行） |
 
-D0 引入 `toLauncherItem` 时一并修正 window focus；D2 修正 process `recordUsage: false` 并移出一级列表。
+D0 引入 `toLauncherItem` 时一并修正 window focus 的 `recordUsage` + 稳定 usage 键；D2 修正 process `recordUsage: false` 并移出一级列表。
 
 ---
 
@@ -572,11 +650,29 @@ src/workspace/launcher/
 
 | 期 | 交付 | 完成定义 |
 |----|------|----------|
-| **D0 协议** | types + registry（**含 onPartial + signal**）+ 超时/限条/失败隔离；`toLauncherItem` usage 规范；app/window 适配迁入 | 假 provider partial 可先于慢源渲染；坏 provider 不影响其它；window focus usage 不再按瞬时 window id |
-| **D1 窗口混排产品化** | 与 App 同框；type 标签；空搜窗口上限 8（z-order 近似，文案诚实）；强文本让位；**close 前缀路径 + L2**（§5.5） | 搜应用名可见 App+窗口；关窗口仍可用且必确认；「切到」前缀可保留作 boost |
+| **D0 协议** | types + registry（**含 onPartial + signal**）+ 超时/限条；`toLauncherItem`（**systemKey≡target.id**、usage 键分离、**surfaces 仅 global-launcher**）；app/window 适配迁入；priority cap 实现 | 假 provider partial 先于慢源；坏 provider 隔离；契约：editor-command-bar **无** host:window；usage 不按瞬时 window id 污染 |
+| **D1 窗口混排产品化** | 见下方 **D1 可检验 delta**（**不可**用「已能搜到窗口」冒充完成） | 下列验收项 **全部** 通过 |
 | **D2 进程二级模式** | 显式 kill 模式；CPU 降序 + 过滤；L2 确认；**移出一级列表**；`recordUsage: false` | **任意普通 query 不再出现 terminate**（修 §7.0）；仅 kill 模式可见进程 |
 | **D3 Chromium 标签** | 扩展 + 本机桥 + `browser.chromium`；capability `desktop-browser-tabs`；空搜 tab=0 | 有扩展则 tab 进混排且 partial 不堵 App；无扩展静默 |
 | **D4 更多来源** | VS Code 等按接入清单 | 仅 adapter；registry 核心不动 |
+
+#### D1 可检验 delta（相对 **今日骨架**，二刷指出的验收失效问题）
+
+> **背景：** 现状 `windows.ts` 在普通 search 模式（无「切到」前缀）已返回窗口 focus 项，空搜最多 8 条。  
+> 因此「搜应用名能看到窗口 / 不必记前缀」**今天即可零改动满足**，**不得**再作为 D1 完成定义。
+
+D1 **真实增量**（验收必须覆盖）：
+
+| # | Delta | 验收方式 |
+|---|--------|----------|
+| D1.1 | **kindLabel i18n** | §5.1 A 或 B 落地；zh/en 标签不同；窗口/App 均有 kind pill |
+| D1.2 | **强文本 intent 让位覆盖窗口（不仅 App）** | jwt/json 等高 conf detections 下，**窗口与 App** 分数均低于对应文本工具（扩展现有 `STRONG_TEXT_INTENT_APP_PENALTY` 或统一 `desktop navigation penalty`） |
+| D1.3 | **ranking 常量集中对齐路线图 §6** | `desktopAffinity`（若启用）≤200；`PROVIDER_PRIORITY_CAP=50`；与 INTENT/CONTEXT 同表可测 |
+| D1.4 | **空搜策略诚实化** | 窗口仍 ≤8；文案/注释不称「最近」除非已有聚焦历史；可选收紧与 App 的配比（文档化数字） |
+| D1.5 | **close 前缀 + L2**（§5.5） | `关闭 xxx` 仍可用；确认前不关；与 focus 不同 systemKey |
+| D1.6 | **与 demo 行样式一致** | 对照 `launcher-interaction-redesign-demo.html` 的 type 标签层级（允许视觉 token 微调，信息架构一致） |
+
+**非 D1 范围（已存在或属其他期）：** 无前缀搜出窗口（已有）；进程二级（D2）；tab（D3）。
 
 与路线图包③–⑤：现有是 **骨架**；本设计是 **可扩展收口 + 产品形态修正 + 缺陷修复**（D2 含现网危险混排）。
 ---
@@ -585,8 +681,9 @@ src/workspace/launcher/
 
 | 层 | 覆盖 |
 |----|------|
-| 单测 | registry 超时隔离；**partial 顺序**（快源先 onPartial）；限条；去重后写覆盖；Target→LauncherItem **usage key** |
-| 契约 | 未启用/health 失败源无输出；**普通 query 一级 collect 无 terminate**；close 前缀产出 L2 |
+| 单测 | registry 超时隔离；**partial 顺序**；限条；去重后写覆盖；`systemKey === target.id`；usage 稳定键；**priority 加分 ≤50** |
+| 契约 | 未启用/health 失败源无输出；**普通 query 一级 collect 无 terminate**；close 前缀产出 L2；**editor-command-bar 无 desktop target**；kindLabel zh≠en |
+
 | 排序 | 强 jwt detection 下导航 target 分低于文本工具；精确 App 名仍可赢 |
 | 集成/手工 | macOS：混排搜 Chrome；kill 模式 CPU 序；扩展断连降级；关窗口确认 |
 | 架构 | `check:architecture`；注册表不进插件 SDK |
@@ -626,6 +723,11 @@ src/workspace/launcher/
 | 12 | Capability **连字符**：`desktop-windows` / `desktop-processes` / `desktop-browser-tabs` | v1.1 评审补入 |
 | 13 | 一期仅 first-party（注册表不进插件 SDK） | v1.1 关闭 §15 |
 | 14 | 空搜标签 0；窗口上限 8；D0→D1→D2 先于 D3 | v1.1 关闭 §15 |
+| 15 | D1 完成定义 = 可检验 delta（i18n kind、导航让位、常量、close、demo），非「能搜到窗口」 | v1.2 二刷 |
+| 16 | detections 仅性能短路；让位只在 host ranking | v1.2 |
+| 17 | `priority` = 源级 ≤50 统一加分，非神秘 tie-break | v1.2 |
+| 18 | 列表 `systemKey ≡ target.id`；usage 键可分离 | v1.2 |
+| 19 | `surfaces: ['global-launcher']` 为协议强制 + 测试 | v1.2 |
 
 ---
 
@@ -642,27 +744,34 @@ src/workspace/launcher/
 
 ---
 
-## 16. 评审关注清单（v1.1 自检）
+## 16. 评审关注清单（v1.2 自检）
 
-- [x] 与 `Agents.md` host/plugin 边界一致  
-- [x] 不把 Chrome 产品语义塞进 framework 核心（chromium 为 host 子系统 / provider）  
-- [x] partial + 超时/限条写入 §4.3 契约  
-- [x] 进程二级与 Target 一级分离（§4.1 / §7 / D2 缺陷）  
-- [x] Chromium 共享实现写清  
-- [x] 渐进迁移 + 不丢 onPartial  
-- [x] L1/L2/L3、close 路径、usage 规范闭环  
-- [x] §15 已关闭  
+### 一轮（维持）
 
-若二次评审仅需抽查：**§4.3 partial、§5.5 close、§5.6 usage、§7.0 缺陷、§9.2 连字符 capability**。
+- [x] host/plugin 边界；partial；close；usage；capability 连字符；§15 关闭；D2 缺陷  
+
+### 二刷新增
+
+- [x] D1 完成定义改为可检验 delta（非现状已满足项）  
+- [x] kindLabel i18n 落点（扩类型或 host 派生）  
+- [x] detections 仅短路 vs ranking 让位  
+- [x] priority 量级与计分方式  
+- [x] target.id ↔ systemKey 去重对齐  
+- [x] surfaces 协议化 + 与 `isEditorCommandBarItem` 关系写明  
+- [x] 与路线图 §6 / architecture 脚本 / demo 交叉核对  
+
+**开工前抽查：** §4.2 priority+detections、§4.3 surfaces、§5.1 kindLabel、§5.3 双层 key、§11 D1 delta 表。
 
 ---
 
 ## 17. 下一步
 
-1. ~~关闭 §15~~（v1.1 已关闭）。  
-2. 拆实施计划（D0→D1→D2→D3），任务含：partial 契约测试、usage key 修正、process 一级混出回归测试、close 前缀 L2。  
-3. 扩展通信协议另文：`doc/…-browser-extension-bridge-design.md`（D3 前）。  
-4. 实现落在独立分支/worktree，避免直接在 main 大改。
+1. ~~§15 开放问题~~ / ~~二刷实质问题~~ 已并入 v1.2。  
+2. **可拆实施计划并开工**（D0→D1→D2→D3）。  
+3. D0 任务必须含：partial 契约、systemKey≡id、usage 键分离、surfaces 仅 global-launcher、process 不得进一级（可先 gate 再 D2 完整模式）。  
+4. D1 任务必须含：kindLabel i18n、窗口纳入强文本让位、close L2、demo 对齐。  
+5. 扩展桥另文（D3 前）。  
+6. 独立分支/worktree 实现。
 
 ---
 
@@ -671,4 +780,5 @@ src/workspace/launcher/
 | 版本 | 说明 |
 |------|------|
 | v1.0 | 初稿草案 |
-| v1.1 | 吸收评审：partial 聚合、usage/systemKey、close 路径、capability 连字符、注释/ActivateContext/类型共享说明、无痕默认、最近数据源、关闭 §15、D2 现网缺陷论据 |
+| v1.1 | partial、usage/close、capability 连字符、§15 关闭、D2 现网缺陷 |
+| v1.2 | D1 delta 重写；kindLabel i18n；detections 短路；priority≤50；双层去重 key；surfaces 协议；demo/架构交叉引用 |
