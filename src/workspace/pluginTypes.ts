@@ -267,6 +267,13 @@ export type PluginSettingsFieldBase<TSettings = unknown> = {
   icon?: string
   requires?: PluginPermission[]
   disabled?: boolean
+  /** When true, empty string / null / undefined shows an inline error. */
+  required?: boolean
+  /**
+   * Optional field validator. Return an error message string (or i18n key via
+   * host-side translate later); return null/undefined when valid.
+   */
+  validate?: (value: unknown, settings: TSettings) => string | null | undefined
 }
 
 export type PluginSettingsSwitchField<TSettings = unknown> = PluginSettingsFieldBase<TSettings> & {
@@ -339,6 +346,8 @@ export type PluginSettingsObjectListItemField = {
   step?: number
   unit?: string
   unitI18n?: Partial<Record<Locale, string>>
+  required?: boolean
+  validate?: (value: unknown, item: Record<string, unknown>) => string | null | undefined
 }
 
 export type PluginSettingsObjectListField<TSettings = unknown> = PluginSettingsFieldBase<TSettings> & {
@@ -596,6 +605,24 @@ export type PluginSurfaceShell = {
   breadcrumbTitleI18n?: Partial<Record<Locale, string>>
 }
 
+/** Neutral input for returning a snapshot object into Global Launcher as Object Block. */
+export type PluginObjectBlockInput =
+  | { kind: 'text'; text: string; ageLabel?: string }
+  | {
+      kind: 'image'
+      blobId: string
+      contentType: string
+      width?: number
+      height?: number
+      ageLabel?: string
+    }
+  | {
+      kind: 'files'
+      paths: string[]
+      fileNames: string[]
+      ageLabel?: string
+    }
+
 export type PluginSurfaceHostApi = {
   close(): void
   requestBack(): void
@@ -604,6 +631,11 @@ export type PluginSurfaceHostApi = {
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
   showToast(message: string, level?: 'info' | 'success' | 'warning' | 'error', options?: { action?: { label: string; onClick: () => void }; duration?: number }): string
   dismissToast(id: string): void
+  /**
+   * Attach a snapshot Object Block and return to Global Launcher (leave surface / open launcher).
+   * Host owns factory + pending bridge; plugins must not import launcher private modules.
+   */
+  returnToLauncherWithObject(block: PluginObjectBlockInput): void
   storage: PluginPrivateStorageApi
   clipboard: PluginClipboardApi
   paste: PluginPasteApi

@@ -394,6 +394,40 @@ const EDITOR_TEXT_ACTIONS: RecommendedAction[] = [
 
 // ─── Recommendation logic ──────────────────────────────────────────────────────
 
+const IMAGE_HISTORY_ACTIONS: RecommendedAction[] = [
+  {
+    id: 'paste-history-image',
+    title: 'Paste Image',
+    titleZh: '粘贴图片',
+    provider: 'Clipboard History',
+    defaultOutput: 'copy',
+  },
+  {
+    id: 'copy-history-image',
+    title: 'Copy Image to Clipboard',
+    titleZh: '复制图片到剪贴板',
+    provider: 'Clipboard History',
+    defaultOutput: 'copy',
+  },
+]
+
+const FILES_HISTORY_ACTIONS: RecommendedAction[] = [
+  {
+    id: 'paste-history-files',
+    title: 'Paste Files',
+    titleZh: '粘贴文件',
+    provider: 'Clipboard History',
+    defaultOutput: 'copy',
+  },
+  {
+    id: 'copy-history-file-paths',
+    title: 'Copy File Paths',
+    titleZh: '复制文件路径',
+    provider: 'Clipboard History',
+    defaultOutput: 'copy',
+  },
+]
+
 const CLIPBOARD_ACTIONS_BY_KIND: Record<ObjectBlockKind, RecommendedAction[]> = {
   json: JSON_ACTIONS,
   url: URL_ACTIONS,
@@ -412,6 +446,8 @@ const CLIPBOARD_ACTIONS_BY_KIND: Record<ObjectBlockKind, RecommendedAction[]> = 
   timestamp: FORMATTER_ACTIONS_BY_KIND.timestamp ?? FALLBACK_ACTIONS,
   yaml: YAML_ACTIONS,
   'query-string': QUERY_STRING_ACTIONS,
+  image: IMAGE_HISTORY_ACTIONS,
+  files: FILES_HISTORY_ACTIONS,
 }
 
 const EDITOR_ACTIONS_BY_KIND: Partial<Record<ObjectBlockKind, RecommendedAction[]>> = {
@@ -426,6 +462,12 @@ const EDITOR_ACTIONS_BY_KIND: Partial<Record<ObjectBlockKind, RecommendedAction[
 }
 
 export function recommendActionsForBlock(block: LauncherObjectBlock): RecommendedAction[] {
+  if (block.source === 'history-item') {
+    // text history-item uses ranking + objectBlockText (no dual list)
+    if (block.kind === 'image') return IMAGE_HISTORY_ACTIONS
+    if (block.kind === 'files') return FILES_HISTORY_ACTIONS
+    return []
+  }
   if (block.source === 'clipboard') {
     return CLIPBOARD_ACTIONS_BY_KIND[block.kind] ?? FALLBACK_ACTIONS
   }

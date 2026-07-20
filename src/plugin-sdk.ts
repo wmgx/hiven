@@ -67,6 +67,7 @@ export type {
   PluginSurfaceOpenContext,
   PluginSurfaceProps,
   PluginSurfaceHostApi,
+  PluginObjectBlockInput,
   // Plugin Background types
   PluginBackgroundContribution,
   PluginBackgroundContext,

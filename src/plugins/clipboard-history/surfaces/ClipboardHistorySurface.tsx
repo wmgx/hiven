@@ -400,9 +400,72 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     }
   }, [])
 
+  const handleReturnToLauncher = useCallback(async (item: ClipboardHistoryItem) => {
+    try {
+      let fullItem = item
+      if ((item.kind === 'text' && !item.text) || (item.kind === 'image' && !item.blobId) || (item.kind === 'files' && item.paths.length === 0)) {
+        const loaded = await repository.getItem(item.id)
+        if (!loaded) {
+          host.showToast(t('error.loadFailed'), 'error')
+          return
+        }
+        fullItem = loaded
+      }
+
+      const ageMs = Date.now() - fullItem.lastCopiedAt
+      const ageLabel =
+        ageMs < 1000 ? undefined
+          : ageMs < 60_000 ? `${Math.floor(ageMs / 1000)}s`
+            : ageMs < 3_600_000 ? `${Math.floor(ageMs / 60_000)}m`
+              : undefined
+
+      if (fullItem.kind === 'text') {
+        if (!fullItem.text) {
+          host.showToast(t('error.returnFailed'), 'error')
+          return
+        }
+        host.returnToLauncherWithObject({ kind: 'text', text: fullItem.text, ageLabel })
+        return
+      }
+      if (fullItem.kind === 'image') {
+        if (!fullItem.blobId) {
+          host.showToast(t('error.returnFailed'), 'error')
+          return
+        }
+        host.returnToLauncherWithObject({
+          kind: 'image',
+          blobId: fullItem.blobId,
+          contentType: fullItem.contentType,
+          width: fullItem.width,
+          height: fullItem.height,
+          ageLabel,
+        })
+        return
+      }
+      if (fullItem.kind === 'files') {
+        if (!fullItem.paths?.length) {
+          host.showToast(t('error.returnFailed'), 'error')
+          return
+        }
+        host.returnToLauncherWithObject({
+          kind: 'files',
+          paths: fullItem.paths,
+          fileNames: fullItem.fileNames,
+          ageLabel,
+        })
+      }
+    } catch {
+      host.showToast(t('error.returnFailed'), 'error')
+    }
+  }, [host, repository, t])
+
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (!selectedItem) return
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      if (imeKeyDown.shouldIgnoreKeyDown(e)) return
+      e.preventDefault()
+      void handleReturnToLauncher(selectedItem)
+    } else if (e.key === 'Enter') {
       if (imeKeyDown.shouldIgnoreKeyDown(e)) return
       e.preventDefault()
       void handlePaste(selectedItem)
@@ -438,7 +501,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         if (flatIndex >= 0) virtualizer.scrollToIndex(flatIndex, { align: 'auto' })
       }
     }
-  }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleDelete, host, t, imeKeyDown])
+  }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleReturnToLauncher, handleDelete, host, t, imeKeyDown])
 
   const renderContent = () => {
     if (loading) {
@@ -597,6 +660,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
         <SurfaceFooterHints className="clipboard-history-footer">
           <span>↵ {t('hint.paste')}</span>
+          <span>{typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}↵ {t('hint.returnToLauncher')}</span>
           <span>⌫ {t('hint.delete')}</span>
         </SurfaceFooterHints>
       </>

@@ -15,6 +15,7 @@ import {
   buildRecentClipboardHint,
   createClipboardObjectBlock,
 } from './objectBlock'
+import { consumePendingObjectBlock, subscribePendingObjectBlock } from './pendingObjectBlock'
 import {
   clearClipboardSnapshot,
   createClipboardSnapshotFromUnknownAge,
@@ -47,7 +48,18 @@ export function useClipboardObjectBlock(params: {
   const [hint, setHint] = useState<RecentClipboardHint | null>(null)
   const didReadRef = useRef(false)
 
-  // On open: read clipboard after first paint — never compete with window show / list paint.
+  // Live deliver pending blocks while launcher stays open (history stack → list).
+  useEffect(() => {
+    return subscribePendingObjectBlock((pending) => {
+      setBlock(pending)
+      setHint(null)
+      didReadRef.current = true
+      // Consume so a later open/read path does not overwrite.
+      consumePendingObjectBlock()
+    })
+  }, [])
+
+  // On open: prefer pending history-item block; else read clipboard after first paint.
   useEffect(() => {
     if (!open) {
       didReadRef.current = false
@@ -55,6 +67,13 @@ export function useClipboardObjectBlock(params: {
     }
     if (didReadRef.current) return
     didReadRef.current = true
+
+    const pending = consumePendingObjectBlock()
+    if (pending) {
+      setBlock(pending)
+      setHint(null)
+      return
+    }
 
     let cancelled = false
     const timer = window.setTimeout(() => {

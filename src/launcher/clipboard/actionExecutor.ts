@@ -36,6 +36,10 @@ export type ActionExecutionHandlers = {
   setRenderer?: (actionId: string, text: string) => Promise<void>
   /** Resolve a local file path to its text content when the clipboard holds a path. */
   readLocalFileText?: (path: string) => Promise<string>
+  pasteImage?: (blobId: string) => Promise<void>
+  writeImage?: (blobId: string) => Promise<void>
+  pasteFiles?: (paths: string[]) => Promise<void>
+  writeFiles?: (paths: string[]) => Promise<void>
 }
 
 // ─── Executor ──────────────────────────────────────────────────────────────────
@@ -48,6 +52,35 @@ export async function executeRecommendedAction(
   const text = block.payloadText ?? block.preview ?? ''
 
   try {
+    // Non-text history object actions (bypass text transform pipeline)
+    if (action.id === 'paste-history-image') {
+      const blobId = block.payloadImage?.blobId
+      if (!blobId) return { ok: false, error: 'Image payload missing' }
+      if (!handlers.pasteImage) return { ok: false, error: 'Paste image handler unavailable' }
+      await handlers.pasteImage(blobId)
+      return { ok: true }
+    }
+    if (action.id === 'copy-history-image') {
+      const blobId = block.payloadImage?.blobId
+      if (!blobId) return { ok: false, error: 'Image payload missing' }
+      if (!handlers.writeImage) return { ok: false, error: 'Write image handler unavailable' }
+      await handlers.writeImage(blobId)
+      return { ok: true, message: '已复制' }
+    }
+    if (action.id === 'paste-history-files') {
+      const paths = block.payloadFiles?.paths
+      if (!paths?.length) return { ok: false, error: 'Files payload missing' }
+      if (!handlers.pasteFiles) return { ok: false, error: 'Paste files handler unavailable' }
+      await handlers.pasteFiles(paths)
+      return { ok: true }
+    }
+    if (action.id === 'copy-history-file-paths') {
+      const paths = block.payloadFiles?.paths
+      if (!paths?.length) return { ok: false, error: 'Files payload missing' }
+      await handlers.copyText(paths.join('\n'))
+      return { ok: true, message: '已复制' }
+    }
+
     switch (target) {
       case 'copy': {
         const result = await transformActionText(action, text)

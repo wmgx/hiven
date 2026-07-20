@@ -29,8 +29,19 @@ export {
   createClipboardObjectBlock,
   createEditorSelectionObjectBlock,
   createEditorDocumentObjectBlock,
+  createHistoryItemObjectBlock,
   buildRecentClipboardHint,
+  type CreateHistoryItemObjectBlockParams,
+  type ObjectBlockImagePayload,
+  type ObjectBlockFilesPayload,
 } from './objectBlock'
+
+export {
+  setPendingObjectBlock,
+  consumePendingObjectBlock,
+  clearPendingObjectBlock,
+  peekPendingObjectBlock,
+} from './pendingObjectBlock'
 
 export {
   type RecommendedOutputTarget,

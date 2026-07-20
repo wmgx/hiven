@@ -13,7 +13,16 @@ import { showToast, dismissToast } from '../../workspace/toast'
 import { createPluginPaste } from '../../workspace/pluginPaste'
 import { createPluginNetwork } from '../../workspace/pluginNetwork'
 import { ensurePluginRuntimeReady } from '../../workspace/pluginRuntimeBootstrap'
-import type { PluginDefinition, PluginPermission, PluginPermissionSnapshot, PluginUiSurfaceContribution } from '../../workspace/pluginTypes'
+import type {
+  PluginDefinition,
+  PluginObjectBlockInput,
+  PluginPermission,
+  PluginPermissionSnapshot,
+  PluginUiSurfaceContribution,
+} from '../../workspace/pluginTypes'
+import { createHistoryItemObjectBlock } from '../../launcher/clipboard/objectBlock'
+import { setPendingObjectBlock } from '../../launcher/clipboard/pendingObjectBlock'
+import { showLauncherWindow } from '../../workspace/windowManager/launcherWindow'
 
 type ResolvedPluginSurface = {
   definition: PluginDefinition<unknown>
@@ -194,6 +203,49 @@ export function PluginSurfaceRenderer({
             },
             showToast: (message, level, options) => showToast(message, level, options),
             dismissToast,
+            returnToLauncherWithObject: (input: PluginObjectBlockInput) => {
+              const block =
+                input.kind === 'text'
+                  ? createHistoryItemObjectBlock({
+                      kind: 'text',
+                      text: input.text,
+                      ageLabel: input.ageLabel,
+                    })
+                  : input.kind === 'image'
+                    ? createHistoryItemObjectBlock({
+                        kind: 'image',
+                        blobId: input.blobId,
+                        contentType: input.contentType,
+                        width: input.width,
+                        height: input.height,
+                        ageLabel: input.ageLabel,
+                      })
+                    : createHistoryItemObjectBlock({
+                        kind: 'files',
+                        paths: input.paths,
+                        fileNames: input.fileNames,
+                        ageLabel: input.ageLabel,
+                      })
+
+              // Cross-webview when this surface is not the launcher frame
+              const persist = presentation === 'plugin-surface-window'
+              setPendingObjectBlock(block, { persist })
+
+              // Leave tool surface / clear host target but keep launcher session when possible
+              useAppStore.getState().clearPluginSurfaceTool()
+              onBack()
+
+              useAppStore.getState().openGlobalLauncherOverlay()
+              if (persist || typeof window !== 'undefined') {
+                void showLauncherWindow().catch((error) => {
+                  console.warn('[hiven] Failed to show launcher after returnToLauncherWithObject:', error)
+                  showToast(
+                    locale === 'zh' ? '无法带回 Launcher' : 'Could not return to Launcher',
+                    'error',
+                  )
+                })
+              }
+            },
             storage: hostStorage,
             clipboard: createPluginClipboard(target.pluginId, surfaceState.permissions, hostStorage),
             paste: createPluginPaste(surfaceState.permissions, hostStorage),
