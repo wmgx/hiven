@@ -5,7 +5,7 @@
  * The plugin provides the body content via its settings.component.
  */
 
-import { Component, useCallback, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from 'react'
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { t } from '../i18n'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
@@ -22,6 +22,15 @@ import { createPluginNetwork } from '../workspace/pluginNetwork'
 import { getPluginPermissionSnapshot, usePluginPermissionStore } from '../workspace/pluginPermissions'
 import { PluginSettingsSchemaRenderer } from './PluginSettingsSchemaRenderer'
 import { resolvePluginSettingsModal, type ResolvedPluginSettingsModal } from './pluginSettingsModalResolution'
+
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+function getFocusableElements(container: HTMLElement): HTMLElement[] {
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+    (el) => !el.hasAttribute('disabled') && el.tabIndex !== -1 && el.offsetParent !== null,
+  )
+}
 
 // ─── Error Boundary ──────────────────────────────────────────────────────────
 
@@ -57,19 +66,64 @@ export function PluginSettingsDialog() {
   const locale = useAppStore((s) => s.locale)
   const target = usePluginSettingsStore((s) => s.settingsDialogTarget)
   const closeSettingsDialog = usePluginSettingsStore((s) => s.closeSettingsDialog)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null)
+  const titleId = 'plugin-settings-dialog-title'
 
   useEffect(() => {
-    if (!target) return
+    if (!target || target.presentation === 'global-launcher') return
+    previouslyFocusedRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+
+    const frame = requestAnimationFrame(() => {
+      const panel = panelRef.current
+      if (!panel) return
+      const focusables = getFocusableElements(panel)
+      const preferred = panel.querySelector<HTMLElement>('[data-settings-dialog-close]')
+      ;(preferred ?? focusables[0] ?? panel).focus()
+    })
+
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         event.preventDefault()
         event.stopPropagation()
         event.stopImmediatePropagation()
         closeSettingsDialog()
+        return
+      }
+      if (event.key !== 'Tab') return
+      const panel = panelRef.current
+      if (!panel) return
+      const focusables = getFocusableElements(panel)
+      if (focusables.length === 0) {
+        event.preventDefault()
+        panel.focus()
+        return
+      }
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      const active = document.activeElement as HTMLElement | null
+      if (event.shiftKey) {
+        if (!active || active === first || !panel.contains(active)) {
+          event.preventDefault()
+          last.focus()
+        }
+      } else if (!active || active === last || !panel.contains(active)) {
+        event.preventDefault()
+        first.focus()
       }
     }
+
     window.addEventListener('keydown', handleKeyDown, true)
-    return () => window.removeEventListener('keydown', handleKeyDown, true)
+    return () => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('keydown', handleKeyDown, true)
+      const restore = previouslyFocusedRef.current
+      if (restore && typeof restore.focus === 'function') {
+        restore.focus()
+      }
+    }
   }, [closeSettingsDialog, target])
 
   if (!target) return null
@@ -82,7 +136,12 @@ export function PluginSettingsDialog() {
       onClick={(e) => { if (e.target === e.currentTarget) closeSettingsDialog() }}
     >
       <div
-        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col overflow-hidden plugin-settings-dialog-panel"
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col overflow-hidden plugin-settings-dialog-panel anim-dropdown"
         style={{
           width: 'min(780px, calc(100vw - 40px))',
           height: 'min(680px, calc(100vh - 48px))',
@@ -90,7 +149,8 @@ export function PluginSettingsDialog() {
           background: 'var(--panel, var(--bg-surface, #ffffff))',
           border: '1px solid var(--border, var(--color-border-secondary))',
           borderRadius: '14px',
-          boxShadow: '0 20px 50px -12px rgba(18, 22, 28, 0.22), 0 0 0 1px rgba(18, 22, 28, 0.06)',
+          boxShadow: 'var(--shadow-panel, 0 20px 50px -12px rgba(18, 22, 28, 0.22), 0 0 0 1px rgba(18, 22, 28, 0.06))',
+          outline: 'none',
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -99,6 +159,7 @@ export function PluginSettingsDialog() {
           source={target.source}
           locale={locale}
           onClose={closeSettingsDialog}
+          titleId={titleId}
         />
       </div>
     </div>
@@ -112,11 +173,13 @@ export function PluginSettingsContent({
   source,
   locale,
   onClose,
+  titleId,
 }: {
   pluginId: string
   source: PluginSettingsSource
   locale: 'zh' | 'en'
   onClose: () => void
+  titleId?: string
 }) {
   // Resolve the plugin's settings contribution from the registry
   const contribution = useMemo(() => {
@@ -138,11 +201,12 @@ export function PluginSettingsContent({
   if (!contribution) {
     return (
       <div className="p-6 text-center" style={{ color: 'var(--color-text-secondary)' }}>
-        <p>No settings available for this plugin.</p>
+        <p>{t(locale, 'scripts.settingsNoSettings')}</p>
         <button
           className="mt-4 px-3 py-1.5 rounded-md text-[13px]"
           style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-primary)' }}
           onClick={onClose}
+          data-settings-dialog-close
         >
           {t(locale, 'scripts.settingsClose')}
         </button>
@@ -157,6 +221,7 @@ export function PluginSettingsContent({
       contribution={contribution}
       locale={locale}
       onClose={onClose}
+      titleId={titleId}
     />
   )
 }
@@ -169,12 +234,14 @@ function SettingsDialogBody({
   contribution,
   locale,
   onClose,
+  titleId,
 }: {
   pluginId: string
   source: PluginSettingsSource
   contribution: PluginSettingsContribution<unknown>
   locale: 'zh' | 'en'
   onClose: () => void
+  titleId?: string
 }) {
   const setPluginSettings = usePluginSettingsStore((s) => s.setPluginSettings)
   // Subscribe to the store record reactively so UI updates on setValue
@@ -308,7 +375,11 @@ function SettingsDialogBody({
         className="flex items-center justify-between px-5 py-3.5 shrink-0"
         style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}
       >
-        <h2 className="text-[15px] font-semibold m-0" style={{ color: 'var(--color-text-primary)' }}>
+        <h2
+          id={titleId}
+          className="text-[15px] font-semibold m-0"
+          style={{ color: 'var(--color-text-primary)' }}
+        >
           {title}
         </h2>
         <button
@@ -316,6 +387,8 @@ function SettingsDialogBody({
           style={{ color: 'var(--color-text-tertiary)', background: 'transparent' }}
           onClick={onClose}
           title={t(locale, 'scripts.settingsClose')}
+          aria-label={t(locale, 'scripts.settingsClose')}
+          data-settings-dialog-close
         >
           <X size={16} />
         </button>
@@ -364,11 +437,14 @@ function SettingsDialogBody({
           onClick={() => setSettingsModalTarget(null)}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={settingsModalTitle}
             className="flex max-h-[calc(100%-48px)] w-[min(520px,calc(100%-48px))] flex-col overflow-hidden rounded-lg"
             style={{
               background: 'var(--panel, var(--bg-surface, #ffffff))',
               border: '0.5px solid var(--color-border-secondary)',
-              boxShadow: '0 20px 44px rgba(0, 0, 0, 0.22)',
+              boxShadow: 'var(--shadow-panel, 0 20px 44px rgba(0, 0, 0, 0.22))',
             }}
             onClick={(event) => event.stopPropagation()}
           >

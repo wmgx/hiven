@@ -175,7 +175,7 @@ export function LauncherParamStep({
         <span className="vbar" />
         <input
           ref={inputRef}
-          className={isTextParam ? 'mono' : ''}
+          className={[isTextParam ? 'mono' : '', param.type === 'number' ? 'l-number-input' : ''].filter(Boolean).join(' ')}
           placeholder={placeholder}
           value={frame.query}
           type={param.type === 'number' ? 'number' : 'text'}
@@ -226,7 +226,11 @@ export function LauncherParamStep({
           }}
           disabled={busy}
         />
-        <span className="meta">{countLabel}</span>
+        {busy ? (
+          <span className="meta anim-running-pulse" aria-live="polite">...</span>
+        ) : (
+          <span className="meta">{countLabel}</span>
+        )}
       </div>
       {!isTextParam && (
         <div className={bodyClassName}>

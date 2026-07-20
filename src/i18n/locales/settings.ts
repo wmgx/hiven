@@ -50,6 +50,8 @@ export default {
     'currentVersion': 'Current version',
     'currentVersionInfo': 'App and bundled plugin updates',
     'switchingLanguage': 'Switching language…',
+    'copyError': 'Copy',
+    'errorCopied': 'Copied',
   },
   zh: {
     'title': '设置',
@@ -102,5 +104,7 @@ export default {
     'currentVersion': '当前版本',
     'currentVersionInfo': '应用与内置插件更新',
     'switchingLanguage': '正在切换语言…',
+    'copyError': '复制',
+    'errorCopied': '已复制',
   },
 }

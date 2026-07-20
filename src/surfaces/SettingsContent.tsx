@@ -23,18 +23,25 @@ export function SettingsContent() {
   return (
     <div className="sscroll">
       {switchingLocale && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'var(--color-bg-overlay, rgba(0,0,0,0.4))',
-          zIndex: 9999,
-          fontSize: 'var(--text-base)',
-          color: 'var(--color-text-primary)',
-        }}>
-          {t('switchingLanguage')}
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 12,
+            background: 'var(--color-bg-overlay, rgba(0,0,0,0.4))',
+            zIndex: 9999,
+            fontSize: 'var(--text-base)',
+            color: 'var(--color-text-primary)',
+          }}
+        >
+          <RefreshCw size={22} className="animate-spin" aria-hidden="true" />
+          <span>{t('switchingLanguage')}</span>
         </div>
       )}
       <SettingGroup title={t('general')}>
@@ -53,10 +60,10 @@ export function SettingsContent() {
           />
         </SettingsListRow>
         <SettingsListRow icon={<Moon size={15} strokeWidth={2} />} name={t('darkTheme')} desc={t('darkThemeInfo')}>
-          <Toggle value={settings.theme === 'dark'} onChange={(value) => updateSetting('theme', value ? 'dark' : 'light')} />
+          <Toggle value={settings.theme === 'dark'} onChange={(value) => updateSetting('theme', value ? 'dark' : 'light')} label={t('darkTheme')} />
         </SettingsListRow>
         <SettingsListRow icon={<Save size={15} strokeWidth={2} />} name={t('persistParams')} desc={t('persistParamsInfo')}>
-          <Toggle value={settings.persistParams} onChange={(value) => updateSetting('persistParams', value)} />
+          <Toggle value={settings.persistParams} onChange={(value) => updateSetting('persistParams', value)} label={t('persistParams')} />
         </SettingsListRow>
       </SettingGroup>
 
@@ -78,16 +85,30 @@ export function SettingsContent() {
       <SettingGroup title={t('editor')}>
         <SettingsListRow icon={<Type size={15} strokeWidth={2} />} name={t('fontSize')} desc={t('fontSizeInfo')}>
           <span className="num">
-            <button type="button" onClick={() => updateSetting('fontSize', Math.max(10, settings.fontSize - 1))}>−</button>
+            <button
+              type="button"
+              disabled={settings.fontSize <= 10}
+              aria-disabled={settings.fontSize <= 10}
+              onClick={() => updateSetting('fontSize', Math.max(10, settings.fontSize - 1))}
+            >
+              −
+            </button>
             <span className="v">{settings.fontSize}</span>
-            <button type="button" onClick={() => updateSetting('fontSize', Math.min(24, settings.fontSize + 1))}>＋</button>
+            <button
+              type="button"
+              disabled={settings.fontSize >= 24}
+              aria-disabled={settings.fontSize >= 24}
+              onClick={() => updateSetting('fontSize', Math.min(24, settings.fontSize + 1))}
+            >
+              ＋
+            </button>
           </span>
         </SettingsListRow>
         <SettingsListRow icon={<WrapText size={15} strokeWidth={2} />} name={t('wordWrap')} desc={t('wordWrapInfo')}>
-          <Toggle value={settings.wordWrap} onChange={(value) => updateSetting('wordWrap', value)} />
+          <Toggle value={settings.wordWrap} onChange={(value) => updateSetting('wordWrap', value)} label={t('wordWrap')} />
         </SettingsListRow>
         <SettingsListRow icon={<Hash size={15} strokeWidth={2} />} name={t('lineNumbers')} desc={t('lineNumbersInfo')}>
-          <Toggle value={settings.lineNumbers} onChange={(value) => updateSetting('lineNumbers', value)} />
+          <Toggle value={settings.lineNumbers} onChange={(value) => updateSetting('lineNumbers', value)} label={t('lineNumbers')} />
         </SettingsListRow>
       </SettingGroup>
 
@@ -131,15 +152,31 @@ export function SettingsListRow({ icon, name, desc, children }: { icon: ReactNod
   )
 }
 
-function Toggle({ value, onChange }: { value: boolean; onChange: (value: boolean) => void }) {
+function Toggle({
+  value,
+  onChange,
+  label,
+}: {
+  value: boolean
+  onChange: (value: boolean) => void
+  label?: string
+}) {
   return (
     <button
       type="button"
       className={`sw toggle ${value ? 'on' : ''}`}
       aria-pressed={value}
+      aria-label={label}
       onClick={() => onChange(!value)}
     />
   )
+}
+
+function formatUserFacingError(err: unknown, maxLen = 160): { short: string; full: string } {
+  const full = err instanceof Error ? (err.message || String(err)) : String(err)
+  const single = full.replace(/\s+/g, ' ').trim()
+  if (single.length <= maxLen) return { short: single, full: single }
+  return { short: `${single.slice(0, maxLen - 1)}…`, full: single }
 }
 
 function LocaleSelect({ options, value, onChange }: { options: { value: string; label: string }[]; value: string; onChange: (value: string) => void }) {
@@ -281,16 +318,23 @@ function UpdateChecker({ compact = false }: { compact?: boolean }) {
   const [status, setStatus] = useState<UpdateStatus>('idle')
   const [version, setVersion] = useState('')
   const [error, setError] = useState('')
+  const [errorFull, setErrorFull] = useState('')
   const [pluginStatus, setPluginStatus] = useState<'idle' | 'checking' | 'updated' | 'up-to-date' | 'error'>('idle')
   const [pluginVersion, setPluginVersion] = useState(0)
   const [pluginError, setPluginError] = useState('')
+  const [pluginErrorFull, setPluginErrorFull] = useState('')
+  const [copiedWhich, setCopiedWhich] = useState<'app' | 'plugin' | null>(null)
   const updateRef = useRef<Awaited<ReturnType<typeof check>> | null>(null)
+  const settingsT = useT('settings')
 
   const handleCheck = async () => {
     setStatus('checking')
     setPluginStatus('checking')
     setError('')
+    setErrorFull('')
     setPluginError('')
+    setPluginErrorFull('')
+    setCopiedWhich(null)
     try {
       const update = await check()
       if (update) {
@@ -301,7 +345,9 @@ function UpdateChecker({ compact = false }: { compact?: boolean }) {
         setStatus('no-update')
       }
     } catch (err) {
-      setError(String(err))
+      const formatted = formatUserFacingError(err)
+      setError(formatted.short)
+      setErrorFull(formatted.full)
       setStatus('error')
     }
 
@@ -311,13 +357,17 @@ function UpdateChecker({ compact = false }: { compact?: boolean }) {
         setPluginStatus('updated')
         setPluginVersion(result.version || 0)
       } else if (result.error) {
-        setPluginError(result.error)
+        const formatted = formatUserFacingError(result.error)
+        setPluginError(formatted.short)
+        setPluginErrorFull(formatted.full)
         setPluginStatus('error')
       } else {
         setPluginStatus('up-to-date')
       }
     } catch (err) {
-      setPluginError(String(err))
+      const formatted = formatUserFacingError(err)
+      setPluginError(formatted.short)
+      setPluginErrorFull(formatted.full)
       setPluginStatus('error')
     }
   }
@@ -330,8 +380,20 @@ function UpdateChecker({ compact = false }: { compact?: boolean }) {
       await update.downloadAndInstall()
       setStatus('ready')
     } catch (err) {
-      setError(String(err))
+      const formatted = formatUserFacingError(err)
+      setError(formatted.short)
+      setErrorFull(formatted.full)
       setStatus('error')
+    }
+  }
+
+  const copyErrorDetail = async (which: 'app' | 'plugin', detail: string) => {
+    try {
+      await navigator.clipboard.writeText(detail)
+      setCopiedWhich(which)
+      window.setTimeout(() => setCopiedWhich((cur) => (cur === which ? null : cur)), 1500)
+    } catch {
+      // ignore clipboard failures
     }
   }
 
@@ -384,6 +446,16 @@ function UpdateChecker({ compact = false }: { compact?: boolean }) {
       {status !== 'idle' && status !== 'checking' && status !== 'downloading' && (
         <span style={{ fontSize: 'var(--text-sm)', color: status === 'error' ? 'var(--color-error-text)' : status === 'no-update' ? 'var(--text-3)' : 'var(--accent)' }}>
           {statusText()}
+          {status === 'error' && errorFull && (
+            <button
+              type="button"
+              className="scripts-btn"
+              style={{ marginLeft: 8, padding: '2px 6px', fontSize: 11 }}
+              onClick={() => void copyErrorDetail('app', errorFull)}
+            >
+              {copiedWhich === 'app' ? settingsT('errorCopied') : settingsT('copyError')}
+            </button>
+          )}
         </span>
       )}
       {pluginStatus !== 'idle' && pluginStatus !== 'checking' && (
@@ -393,6 +465,16 @@ function UpdateChecker({ compact = false }: { compact?: boolean }) {
             : pluginStatus === 'up-to-date'
               ? t('pluginsUpToDate')
               : `${t('pluginsUpdateError')}: ${pluginError}`}
+          {pluginStatus === 'error' && pluginErrorFull && (
+            <button
+              type="button"
+              className="scripts-btn"
+              style={{ marginLeft: 8, padding: '2px 6px', fontSize: 11 }}
+              onClick={() => void copyErrorDetail('plugin', pluginErrorFull)}
+            >
+              {copiedWhich === 'plugin' ? settingsT('errorCopied') : settingsT('copyError')}
+            </button>
+          )}
         </span>
       )}
     </div>

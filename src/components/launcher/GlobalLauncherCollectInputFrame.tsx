@@ -5,6 +5,7 @@ import type { CollectInputFrame } from '../../workspace/launcher/controller'
 import { resolveDisplayTitle } from '../../workspace/launcher/display'
 import type { IconRef, LauncherResultChoice } from '../../workspace/launcher/types'
 import { resolveIcon } from '../../utils/resolveIcon'
+import { Tooltip } from '../Tooltip'
 import { LauncherHintKey, LauncherHintText } from './LauncherFooterHints'
 
 /** Suggest row: keep keyboard highlight in view (same as result / mixed list). */
@@ -56,22 +57,22 @@ function CollectInputSuggestRow({
         {selected ? <span className="r-kbd">↵</span> : null}
       </button>
       {onSecondaryAction && secondary.map((action) => (
-        <button
-          key={action.id}
-          type="button"
-          tabIndex={-1}
-          className="l-suggest-row-secondary"
-          title={action.title}
-          aria-label={action.title}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            onSecondaryAction(choice, action.id)
-          }}
-        >
-          ×
-        </button>
+        <Tooltip key={action.id} label={action.title}>
+          <button
+            type="button"
+            tabIndex={-1}
+            className="l-suggest-row-secondary"
+            aria-label={action.title}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              onSecondaryAction(choice, action.id)
+            }}
+          >
+            {action.icon ? resolveIcon(action.icon, 14) : '×'}
+          </button>
+        </Tooltip>
       ))}
     </div>
   )
@@ -139,7 +140,7 @@ export function GlobalLauncherCollectInputFrame({
           style={{ caretColor: 'var(--text, currentColor)' }}
         />
         {busy && (
-          <span className="meta">...</span>
+          <span className="meta anim-running-pulse" aria-live="polite">...</span>
         )}
       </div>
       {error && (

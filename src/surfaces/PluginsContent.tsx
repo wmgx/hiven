@@ -92,13 +92,14 @@ type PluginDetailRow = {
   plugin: InstalledPlugin | DevPlugin | PluginPackageSummary
 }
 
+/** Brand blue + cool gray palette — no purple/pink (V3). */
 const ICON_BG_PALETTE = [
+  { bg: '#eff6ff', fg: '#1d4ed8' },
   { bg: '#e0f2fe', fg: '#0369a1' },
-  { bg: '#f3e8ff', fg: '#7e22ce' },
-  { bg: '#ffedd5', fg: '#c2410c' },
-  { bg: '#dcfce7', fg: '#15803d' },
-  { bg: '#fce7f3', fg: '#be185d' },
   { bg: '#f1f5f9', fg: '#475569' },
+  { bg: '#ecfeff', fg: '#0e7490' },
+  { bg: '#f8fafc', fg: '#334155' },
+  { bg: '#dbeafe', fg: '#1e40af' },
 ]
 
 const PLUGIN_ICON_MAP: Record<string, LucideIcon> = {
@@ -263,6 +264,8 @@ export function PluginsContent({ onOpenPluginEditor }: PluginsContentProps) {
   const [addMenuOpen, setAddMenuOpen] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'done' | 'error'>('idle')
   const [openMenuKey, setOpenMenuKey] = useState<string | null>(null)
+  const [pendingDangerKey, setPendingDangerKey] = useState<string | null>(null)
+  const [menuFocusIndex, setMenuFocusIndex] = useState(0)
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
   const [recordingSurfaceKey, setRecordingSurfaceKey] = useState<string | null>(null)
   const grantPermissions = usePluginPermissionStore((s) => s.grantPermissions)
@@ -270,17 +273,62 @@ export function PluginsContent({ onOpenPluginEditor }: PluginsContentProps) {
   const clearSurfaceShortcut = usePluginSurfaceShortcutStore((s) => s.clearShortcut)
   const isImeComposingRef = useRef(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const menuItemRefs = useRef<(HTMLButtonElement | null)[]>([])
 
-  // Close dropdown menu on outside click
+  // Close dropdown menu on outside click; clear two-step danger confirm
   useEffect(() => {
-    if (!openMenuKey) return
+    if (!openMenuKey) {
+      setPendingDangerKey(null)
+      setMenuFocusIndex(0)
+      return
+    }
+    setMenuFocusIndex(0)
+    requestAnimationFrame(() => menuItemRefs.current[0]?.focus())
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setOpenMenuKey(null)
+        setPendingDangerKey(null)
+      }
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setOpenMenuKey(null)
+        setPendingDangerKey(null)
+        return
+      }
+      const items = menuItemRefs.current.filter(Boolean) as HTMLButtonElement[]
+      if (items.length === 0) return
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        setMenuFocusIndex((idx) => {
+          const next = (idx + 1) % items.length
+          items[next]?.focus()
+          return next
+        })
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        setMenuFocusIndex((idx) => {
+          const next = (idx - 1 + items.length) % items.length
+          items[next]?.focus()
+          return next
+        })
+      } else if (event.key === 'Home') {
+        event.preventDefault()
+        setMenuFocusIndex(0)
+        items[0]?.focus()
+      } else if (event.key === 'End') {
+        event.preventDefault()
+        setMenuFocusIndex(items.length - 1)
+        items[items.length - 1]?.focus()
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
   }, [openMenuKey])
 
   const installedList = useMemo(() => {
@@ -490,7 +538,9 @@ export function PluginsContent({ onOpenPluginEditor }: PluginsContentProps) {
     try {
       await task()
     } catch (error) {
-      setItemError(key, error instanceof Error ? error.message : String(error))
+      const raw = error instanceof Error ? error.message : String(error)
+      const single = raw.replace(/\s+/g, ' ').trim()
+      setItemError(key, single.length > 160 ? `${single.slice(0, 159)}…` : single)
     } finally {
       setItemBusy(key, false)
     }
@@ -620,7 +670,14 @@ export function PluginsContent({ onOpenPluginEditor }: PluginsContentProps) {
   // --- Dropdown menu actions ---
   function getDropdownMenuItems(row: PluginDetailRow) {
     const key = row.kind === 'dev' ? `dev:${row.pluginId}` : row.pluginId
-    const items: { label: string; danger?: boolean; action: () => void }[] = []
+    const items: {
+      label: string
+      danger?: boolean
+      /** Two-step confirm id; second click executes action */
+      confirmKey?: string
+      confirmLabel?: string
+      action: () => void
+    }[] = []
 
     if (row.kind === 'builtin') {
       // builtin has no menu items (open panel/editor removed)
@@ -655,6 +712,8 @@ export function PluginsContent({ onOpenPluginEditor }: PluginsContentProps) {
       items.push({
         label: t(locale, 'scripts.actionUninstall'),
         danger: true,
+        confirmKey: `${key}:uninstall`,
+        confirmLabel: t(locale, 'scripts.actionUninstallConfirm'),
         action: () => void runTask(key, async () => {
           await uninstallPlugin(plugin.pluginId)
           setUpdateStatus('checking')
@@ -684,6 +743,8 @@ export function PluginsContent({ onOpenPluginEditor }: PluginsContentProps) {
     items.push({
       label: t(locale, 'scripts.actionRemoveDev'),
       danger: true,
+      confirmKey: `${key}:remove-dev`,
+      confirmLabel: t(locale, 'scripts.actionRemoveDevConfirm'),
       action: () => removeDevPlugin(plugin.pluginId),
     })
     return items
@@ -692,17 +753,44 @@ export function PluginsContent({ onOpenPluginEditor }: PluginsContentProps) {
   function renderDropdownMenu(row: PluginDetailRow) {
     const items = getDropdownMenuItems(row)
     if (items.length === 0) return null
+    menuItemRefs.current = []
     return (
-      <div className="plugins-dropdown-menu" ref={menuRef}>
-        {items.map((item, i) => (
-          <button
-            key={i}
-            className={`plugins-dropdown-item ${item.danger ? 'plugins-dropdown-item--danger' : ''}`}
-            onClick={() => { setOpenMenuKey(null); item.action() }}
-          >
-            {item.label}
-          </button>
-        ))}
+      <div
+        className="plugins-dropdown-menu anim-dropdown"
+        ref={menuRef}
+        role="menu"
+        aria-label={row.title}
+      >
+        {items.map((item, i) => {
+          const isPending = Boolean(item.confirmKey && pendingDangerKey === item.confirmKey)
+          return (
+            <button
+              key={i}
+              ref={(node) => { menuItemRefs.current[i] = node }}
+              type="button"
+              role="menuitem"
+              tabIndex={menuFocusIndex === i ? 0 : -1}
+              className={`plugins-dropdown-item ${item.danger ? 'plugins-dropdown-item--danger' : ''}`}
+              onClick={() => {
+                if (item.confirmKey) {
+                  if (pendingDangerKey === item.confirmKey) {
+                    setOpenMenuKey(null)
+                    setPendingDangerKey(null)
+                    item.action()
+                  } else {
+                    setPendingDangerKey(item.confirmKey)
+                  }
+                  return
+                }
+                setOpenMenuKey(null)
+                setPendingDangerKey(null)
+                item.action()
+              }}
+            >
+              {isPending ? (item.confirmLabel ?? item.label) : item.label}
+            </button>
+          )
+        })}
       </div>
     )
   }

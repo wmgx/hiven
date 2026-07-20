@@ -173,6 +173,61 @@ function formatNumberInputValue(value: number): string {
   return String(Number(value.toFixed(4)))
 }
 
+function isEmptySettingsValue(value: unknown): boolean {
+  if (value == null) return true
+  if (typeof value === 'string') return value.trim() === ''
+  if (Array.isArray(value)) return value.length === 0
+  return false
+}
+
+function validateSettingsFieldValue(
+  field: {
+    required?: boolean
+    validate?: (value: unknown, ctx: never) => string | null | undefined
+    kind?: string
+    min?: number
+    max?: number
+  },
+  raw: unknown,
+  ctx: unknown,
+  locale: Locale,
+  draft?: string,
+): string {
+  if (field.kind === 'number' && draft !== undefined) {
+    if (draft.trim() === '') {
+      if (field.required) return translate(locale, 'scripts', 'settingsFieldRequired')
+    } else if (!Number.isFinite(Number.parseFloat(draft))) {
+      return translate(locale, 'scripts', 'settingsFieldInvalidNumber')
+    }
+  }
+  if (field.required && isEmptySettingsValue(raw)) {
+    return translate(locale, 'scripts', 'settingsFieldRequired')
+  }
+  if (field.kind === 'number' && typeof raw === 'number' && Number.isFinite(raw)) {
+    if (Number.isFinite(field.min) && raw < Number(field.min)) {
+      return translate(locale, 'scripts', 'settingsFieldOutOfRange', {
+        min: String(field.min),
+        max: String(field.max ?? field.min),
+      })
+    }
+    if (Number.isFinite(field.max) && raw > Number(field.max)) {
+      return translate(locale, 'scripts', 'settingsFieldOutOfRange', {
+        min: String(field.min ?? field.max),
+        max: String(field.max),
+      })
+    }
+  }
+  if (typeof field.validate === 'function') {
+    try {
+      const message = field.validate(raw, ctx as never)
+      if (typeof message === 'string' && message.trim()) return message
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error)
+    }
+  }
+  return ''
+}
+
 export function PluginSettingsSchemaRenderer<TSettings = unknown>({
   schema,
   locale,
@@ -186,8 +241,27 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
   const [openSelectId, setOpenSelectId] = useState<string | null>(null)
   const [numberDrafts, setNumberDrafts] = useState<Record<string, string>>({})
   const [visibleSensitiveKeys, setVisibleSensitiveKeys] = useState<Set<string>>(new Set())
+  const [touchedKeys, setTouchedKeys] = useState<Set<string>>(() => new Set())
   function setFieldValue(key: string, next: unknown) {
     updateValue({ [key]: next } as Partial<TSettings>)
+  }
+
+  function markTouched(key: string) {
+    setTouchedKeys((prev) => {
+      if (prev.has(key)) return prev
+      const next = new Set(prev)
+      next.add(key)
+      return next
+    })
+  }
+
+  function renderFieldError(message: string) {
+    if (!message) return null
+    return (
+      <div className="schema-field-error" role="alert">
+        {message}
+      </div>
+    )
   }
 
   function renderFieldTitle(label: string, description: string, reason = '') {
@@ -400,7 +474,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
             <button
               type="button"
               className="wr-sensitive-toggle"
-              aria-label={isVisible ? 'Hide' : 'Show'}
+              aria-label={isVisible ? translate(locale, 'scripts', 'settingsSensitiveHide') : translate(locale, 'scripts', 'settingsSensitiveShow')}
               onClick={() => setVisibleSensitiveKeys((prev) => {
                 const next = new Set(prev)
                 if (next.has(sensitiveKey)) next.delete(sensitiveKey)
@@ -467,6 +541,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
         setFieldValue(field.key, scale === 1 ? clamped : Math.round(clamped * scale))
       }
       const commitDraft = () => {
+        markTouched(field.key)
         const draft = numberDrafts[field.key]
         if (draft === undefined) return
         const next = Number.parseFloat(draft)
@@ -478,8 +553,17 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
           return rest
         })
       }
+      const errorMessage = touchedKeys.has(field.key)
+        ? validateSettingsFieldValue(
+          { ...field, kind: 'number' },
+          scale === 1 ? rawValue : displayValue,
+          value,
+          locale,
+          numberDrafts[field.key],
+        )
+        : ''
       return (
-        <label className={`schema-row ${disabled ? 'is-disabled' : ''}`}>
+        <label className={`schema-row ${disabled ? 'is-disabled' : ''} ${errorMessage ? 'has-error' : ''}`}>
           <span className="schema-row-icon"><Icon size={14} strokeWidth={1.8} /></span>
           {commonLabel}
           <div className="schema-row-control schema-row-control-number">
@@ -489,6 +573,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
                 inputMode="decimal"
                 value={displayText}
                 disabled={disabled}
+                aria-invalid={Boolean(errorMessage)}
                 onChange={(event: ChangeEvent<HTMLInputElement>) => {
                   const next = event.currentTarget.value.trim()
                   setNumberDrafts((current) => ({ ...current, [field.key]: next }))
@@ -502,6 +587,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
               />
             </span>
             {unitLabel && <span className="plugin-settings-num-unit">{unitLabel}</span>}
+            {renderFieldError(errorMessage)}
           </div>
         </label>
       )
@@ -521,8 +607,11 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
     }
 
     if (field.kind === 'text') {
+      const errorMessage = touchedKeys.has(field.key)
+        ? validateSettingsFieldValue(field, record[field.key], value, locale)
+        : ''
       return (
-        <label className={`schema-field-block ${disabled ? 'is-disabled' : ''}`}>
+        <label className={`schema-field-block ${disabled ? 'is-disabled' : ''} ${errorMessage ? 'has-error' : ''}`}>
           {commonLabel}
           <input
             className={field.mono ? 'schema-mono' : undefined}
@@ -530,15 +619,21 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
             value={String(record[field.key] ?? '')}
             placeholder={localize(field.placeholder, field.placeholderI18n, locale)}
             disabled={disabled}
+            aria-invalid={Boolean(errorMessage)}
             onChange={(event: ChangeEvent<HTMLInputElement>) => setFieldValue(field.key, event.currentTarget.value)}
+            onBlur={() => markTouched(field.key)}
           />
+          {renderFieldError(errorMessage)}
         </label>
       )
     }
 
     if (field.kind === 'textarea') {
+      const errorMessage = touchedKeys.has(field.key)
+        ? validateSettingsFieldValue(field, record[field.key], value, locale)
+        : ''
       return (
-        <label className={`schema-field-block ${disabled ? 'is-disabled' : ''}`}>
+        <label className={`schema-field-block ${disabled ? 'is-disabled' : ''} ${errorMessage ? 'has-error' : ''}`}>
           {commonLabel}
           <textarea
             className={field.mono ? 'schema-mono' : undefined}
@@ -546,8 +641,11 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
             value={String(record[field.key] ?? '')}
             placeholder={localize(field.placeholder, field.placeholderI18n, locale)}
             disabled={disabled}
+            aria-invalid={Boolean(errorMessage)}
             onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setFieldValue(field.key, event.currentTarget.value)}
+            onBlur={() => markTouched(field.key)}
           />
+          {renderFieldError(errorMessage)}
         </label>
       )
     }
