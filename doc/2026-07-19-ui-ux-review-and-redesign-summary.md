@@ -1,9 +1,30 @@
 # hiven UI/UX 审查总结与重设计方向
 
-> 日期：2026-07-19
-> 方法：ui-ux-pro-max 规则库对照 + 源码审查（未运行界面，结论均附代码位置）；同日二轮补 emilkowalski/skills（emil-design-eng + apple-design）动效专项复审，产出 §5 M 系列
-> 范围：Global Launcher 全帧、设置页、插件页、插件设置对话框与 Schema 渲染器；二轮加审动效/手感全链路
-> 视觉基线：「立体白」——白色主背景、发丝线 + 分层阴影、键帽质感、品牌蓝 `#2563eb` 仅作 accent（2026-07-07 拍板，见 `doc/2026-07-07-light-theme-tactile-white.html`）
+**日期:** 2026-07-19
+**状态:** 审查完成 · 包一–三可直接实施；包四需另出正式交互稿后开工
+**产品:** hiven
+**读者:** 执行 AI / 评审 / 产品（包级规格见 §7；假定执行者零上下文）
+**方法:** ui-ux-pro-max 规则库对照 + 源码审查（未运行界面，结论均附代码位置）；同日二轮补 emilkowalski/skills（emil-design-eng + apple-design）动效专项复审，产出 §5 M 系列
+**范围:** Global Launcher 全帧、设置页、插件页、插件设置对话框与 Schema 渲染器；二轮加审动效/手感全链路
+**视觉基线:** 「立体白」——白色主背景、发丝线 + 分层阴影、键帽质感、品牌蓝 `#2563eb` 仅作 accent（2026-07-07 拍板，见 `doc/2026-07-07-light-theme-tactile-white.html`）
+
+**关联:**
+
+- 交互 demo：`doc/2026-07-19-launcher-interaction-redesign-demo.html`
+- 立体白基线：`doc/2026-07-07-light-theme-tactile-white.html`
+- 前序打磨：`doc/2026-07-07-ui-experience-polish-design.md`
+- 插件边界：`doc/diff-plugin-boundary-decision.md`、`Agents.md`
+- M 系列规则：emilkowalski/skills（`~/.claude/skills/`：emil-design-eng、apple-design 等）
+
+**文档完成度:**
+
+- [x] 总评与「不要动」清单
+- [x] §2 交互重设计方向（已拍板）
+- [x] P1–P4 / V1–V11 / M1–M9 问题清单
+- [x] 建议实施顺序（包一–四）
+- [x] §7 包级实施规格（文件路径 + 规格 + 验收）
+- [x] §8 非目标与依赖
+- [x] 验证命令与交付约定
 
 ---
 
@@ -159,16 +180,192 @@
 
 1. **包一 · 红线修复**：P1-1 卸载确认、P1-2/M4 busy 反馈（启用 running-pulse）、P2-3 对话框焦点管理、**V8 清 indigo 残留**（红线级，3 个 token 值）、V9 中的 `--radius-sm` 6/7px 冲突消除
 2. **包二 · 合规清理**：i18n 8 处 + 死代码（P4 原 4 项 + 二轮动效死线 + V11 `.search-highlight` 一并清，一次 PR 清完）
-3. **包三 · 视觉质感与动效**：V1 键帽 + V2 浮层规格 + **V7 字体切系统栈** + V10 发丝线 token + P3-6 浮层动画（按 M 频率裁决：浮层加 150ms 入场、launcher 本体保持瞬开）+ M1 toast 进出场 + M2 列表行去动画 + M5–M9 顺手修（纯 CSS token 层，低风险；V3 色板随包出稿挑选）；V9 存量硬编码色随本包顺手回收，并自此立"新代码只准用 launcher 系 token"规矩
-4. **包四 · 交互重设计**：§2 三屏方案（token 输入行 + live preview + 去向徽章），实施前按流程出正式设计稿逐段确认；V4 立体黑、V5 空井可并行出稿
+3. **包三 · 视觉质感与动效**：V1 键帽 + V2 浮层规格 + **V7 字体切系统栈** + V10 发丝线 token + P3-6 浮层动画（按 M 频率裁决：浮层加 150ms 入场、launcher 本体保持瞬开）+ M1 toast 进出场 + M2 列表行去动画 + M5–M9 顺手修（纯 CSS token 层，低风险；V3 色板随包出稿挑选）；V9 存量硬编码色随本包顺手回收，并自此立「新代码只准用 launcher 系 token」规矩
+4. **包四 · 交互重设计**：§2 三屏方案（token 输入行 + live preview + 去向徽章），**实施前按流程出正式设计稿逐段确认**；V4 立体黑、V5 空井可并行出稿
 
-每包完成后按项目验证要求执行：`npm run check:architecture`、`npm run build`、`git diff --check`；涉及可视 UI 的包必须补浏览器真实 DOM 验证。
+包一 → 包二 → 包三 串行风险最低（包二不依赖包一视觉，但包一含 P1 应优先）。包三与包四无代码硬依赖，但包四会改输入行 DOM，键帽/token 样式宜在包三稳定后再动包四。
+
+每包完成后执行 §9 验证四件套；涉及可视 UI 的包必须补浏览器真实 DOM 验证。
 
 ---
 
-## 附：相关文件
+## 7. 包级实施规格（执行 AI 照做）
+
+> 行号为 2026-07-19 审查快照，执行前以符号名 / 选择器重新定位。
+> 全局约束：用户可见文案走 i18n；外科手术式修改；不顺手重构无关代码；不碰 §2 已否方案（行内 chips、参数键帽 token）。
+
+### 包一 · 红线修复（建议单 PR）
+
+#### 1.1 P1-1 卸载/移除插件两段式确认
+
+| 项 | 内容 |
+|----|------|
+| 现状 | `PluginsContent.tsx` danger 菜单项点击即 `uninstallPlugin` / 移除，无确认无撤销 |
+| 规格 | 第一次点击进入预备态（菜单项文案变为确认语义，如「再点一次确认卸载」）；第二次才执行；失焦/Esc/选其它项取消预备。或轻量 confirm 面板二选一，**推荐两段式**（与 ⌫ 删标签语义一致，无额外 modal）。文案 i18n 中英齐全 |
+| 文件 | `src/surfaces/PluginsContent.tsx`；`src/locales` 或设置/插件相关 locale |
+| 验收 | 点一次不卸载；点两次卸载；Esc/点外部取消预备；中英文正确 |
+
+#### 1.2 P1-2 / M4 busy 反馈
+
+| 项 | 内容 |
+|----|------|
+| 现状 | `GlobalLauncherCollectInputFrame` / `LauncherParamStep` busy 仅静态 `"..."` 或禁用输入；`anim-running-pulse` 已在 `index.css` 定义未用 |
+| 规格 | busy 态挂 `anim-running-pulse`（或等价 class）；脉冲周期约 0.8s；`prefers-reduced-motion` 下无脉冲（沿用全局 reduced-motion 规则）。不在此包做 live preview |
+| 文件 | 上述组件 + `src/index.css`（可微调 pulse 时长） |
+| 验收 | 触发需等待的 collect-input（如翻译）可见脉冲；reduced-motion 下无动画 |
+
+#### 1.3 P2-3 插件设置对话框焦点管理
+
+| 项 | 内容 |
+|----|------|
+| 现状 | `PluginSettingsDialog.tsx` 无 focus trap、无打开移焦、无关闭还原、缺 `role="dialog"` / `aria-modal` |
+| 规格 | 打开：焦点移入对话框内首个可聚焦控件；Tab 循环限制在对话框内；Esc 关闭（若尚未有）；关闭：焦点回到触发控件。补 `role="dialog"`、`aria-modal="true"`、`aria-labelledby`（标题 id）。内嵌二级 modal 同样最小可用 |
+| 文件 | `src/components/PluginSettingsDialog.tsx`（及相关 hook 若已有焦点工具则复用） |
+| 验收 | 键盘 Tab 不穿透遮罩；Esc 关；关后焦点回到打开按钮 |
+
+#### 1.4 V8 清 indigo 残留
+
+| 项 | 内容 |
+|----|------|
+| 现状 | `--accent-tint: #eef2ff`（indigo-50 系）；多处边框 `#c7d2fe`（indigo-200）；`--accent-soft` 应用混用 |
+| 规格 | soft/tint 从品牌蓝派生：`color-mix(in srgb, var(--accent) 8%, #fff)`（dark 用对应暗底 mix）；所有 `#c7d2fe` 边框改为 `color-mix` 或 blue-200 `#bfdbfe` 的 token 化写法。禁止残留 indigo 色板硬编码 |
+| 文件 | `src/index.css` token 段及引用处 |
+| 验收 | 选中行 / footer primary kbd 无肉眼可辨紫向；dark/light 各扫一眼 |
+
+#### 1.5 V9 `--radius-sm` 冲突消除
+
+| 项 | 内容 |
+|----|------|
+| 现状 | 同文件两处 `:root` 级 `--radius-sm`（6px vs 7px），后者静默胜出 |
+| 规格 | 只保留一个定义（建议 6px 或 7px 与 launcher 块统一，**拍板：以 launcher redesign 块为准 7px**，删除早期 6px 重复定义）；不在本包清全部硬编码色 |
+| 文件 | `src/index.css` |
+| 验收 | 全文件仅一处 `--radius-sm` 赋值；构建通过 |
+
+---
+
+### 包二 · 合规清理（建议单 PR）
+
+#### 2.1 i18n 八处硬编码
+
+| 位置 | 处理 |
+|------|------|
+| `GlobalLauncherFrames.tsx` "Surface not found" | locale key |
+| `ObjectBlockToken.tsx` 「内容已隐藏」/「再按 Backspace 删除」/`aria-label` / badge snapshot·invalid | locale keys（中英） |
+| `OutputTargetExpansion.tsx` 「默认」「↵ 确认 · esc 返回」 | 若组件删除则随死代码去；若保留则 i18n |
+| `PluginSettingsDialog.tsx` "No settings available…" | locale |
+| `PluginSettingsSchemaRenderer.tsx` Hide/Show aria-label | locale |
+
+#### 2.2 死代码与假入场
+
+删除或接线（本包以**删除未使用**为主；接线留给包三的仅 `anim-dropdown` / `anim-running-pulse` 已在包一用 pulse）：
+
+- `RecommendedActionRow` / `OutputTargetExpansion`：确认无引用后删除，或明确注释「禁用保留」二选一——**拍板：删除死 UI 路径**（推荐动作已走 ranking，见 `GlobalLauncherSearchFrame` 空数组）
+- CSS：`view-enter*`、`anim-card-in`、`anim-console-line`、`anim-bump`、`anim-badge-pop`、未使用的 `.toast-container` 底弹套、`object-target-push`、`.search-highlight`（V11）
+- `.palette-panel` 假入场 transition：删除 transition 声明，保留瞬开为显式决定
+- `anim-dropdown`：**保留**给包三 P3-6 接线，不删
+- `anim-running-pulse`：包一已用则保留
+- 重复选择器 `.l-suggest-row-secondary:focus-visible`
+- `ObjectBlockToken` 注释 "purple border" → 改为品牌蓝描述
+
+#### 2.3 验收
+
+- 全仓 grep 上述硬编码英文/中文 UI 串为零（测试 fixture 除外）
+- 无新增用户可见 hardcode
+- `npm run build` 通过；手动开 launcher / 设置 / 插件页无白屏
+
+---
+
+### 包三 · 视觉质感与动效（可拆 1–2 个 PR）
+
+| ID | 规格摘要 | 主文件 |
+|----|----------|--------|
+| V1 键帽 | `.kbd` 微渐变 + 底边加重 + 1px 投影 + inset 高光；与 demo 一致 | `index.css` |
+| V2 浮层规格 | 对话框/菜单统一：圆角档位、描边、三层影、引用 `--shadow-panel`；去掉设置对话框内联阴影魔法数 | `PluginSettingsDialog`、`index.css` |
+| V7 字体 | 删除 Google Fonts `@import`；全局使用系统栈（与 launcher 块对齐的 `-apple-system, "SF Pro Text", "PingFang SC", …` mono 用系统 mono） | `index.css` |
+| V10 发丝线 | 新增 `--hairline`；高频 0.5px/1px 混用处逐步替换（本包至少：卡片、按钮、kbd、launcher 边框主路径） | `index.css` |
+| P3-6 | 设置对话框 / ⋯ 菜单 150ms ease-out 入场；`anim-dropdown` 接线；`transform-origin` 指向触发点（菜单）；launcher 本体保持瞬开 | 对话框、菜单、`index.css` |
+| M1 | Toast 入场/退场 transition（非不存在的 `animate-slide-in-right`）；exiting 延迟卸载 | `ToastContainer.tsx` + css |
+| M2 | 去掉搜索驱动列表行 `anim-palette-item` 入场（或仅首次打开播一次） | `LauncherMixedList.tsx` / css |
+| M5 | 删 `.global-launcher-panel` / `.global-launcher-body` 的 height/max-height 70ms transition | `index.css` |
+| M6 | tab indicator 改 transform，去 overshoot | `index.css` |
+| M7 | 6 处 `transition: all` 改为具体属性 | `index.css` |
+| M8 | `.l-search .back`、`.object-block-remove` 补 `:active scale(0.93)` | `index.css` |
+| M9 | 删 `.l-row` 的 `will-change: background` | `index.css` |
+| V3 | 插件图标六色板去紫粉；需出小稿或按「品牌蓝+冷灰」直接改 `PluginsContent.tsx` hash 色板 + dark 值 | `PluginsContent.tsx` |
+| V9 规矩 | 本包改动处只用 launcher 系 token；不强制清全部 132 处硬编码 | 约定写入 PR 说明 |
+
+**P3 其它（7–16）**：本包有余力可顺手做 7（菜单键盘）、8（plugins-row focus-visible）、9（tertiary 对比度升 text-2）、11–15；做不完可记 follow-up，**不阻塞包三合并**。P3-10 全局 focus-visible 审计可单开 PR。
+
+**验收：** light/dark 下 launcher + 设置 + 插件页截图或手测；toast 进出可见；搜索打字列表无左右滑入；字体离线可开无 FOUT；四件套通过。
+
+---
+
+### 包四 · 交互重设计（独立设计稿门禁）
+
+**本审查文档不替代包四正式设计。** 开工前必须另文（建议 `doc/YYYY-MM-DD-launcher-token-input-live-preview-design.md`）分段确认，并对照 demo `doc/2026-07-19-launcher-interaction-redesign-demo.html`。
+
+已拍板摘要（防止执行漂移）：
+
+| 阶段 | 必须 | 禁止 |
+|------|------|------|
+| 01 搜索 | 维持交互；可享用包三键帽 | 改信息架构 |
+| 02 参数 | 命令塌缩为行首**蓝色标签**；参数**下拉列表**同构搜索列表；⌫ 两段式删标签返回 | 行内 chips；返回按钮；参数键帽 token |
+| 03 执行 | 纯函数 **live preview**；回车只定去向；去向徽章 `↵ 复制` / `⌘↵ 粘贴到前台` / `⇥ 切换`；已选参数轻量灰值块 | 为键盘导航加帧过渡动画 |
+
+并行出稿（不阻塞 02/03 代码，但建议同里程碑）：V4 立体黑、V5 空井（兼解 P2-5 fallback）。
+
+**验收：** 以包四正式设计文档的验收表为准；另加 architecture / build / 真机 DOM。
+
+---
+
+## 8. 非目标与依赖
+
+### 8.1 非目标（本文不覆盖）
+
+- 剪贴板历史 ⌘Enter 带回 Launcher（见 `doc/2026-07-19-clipboard-history-return-to-launcher-design.md`）
+- Launcher 智能化 / Desktop Target（见同日路线与 desktop 设计）
+- 重做整套组件库或引入第三方 UI kit
+- 为「看起来一致」给 Global Launcher 窗口本身加 show/hide 动画（明确禁止）
+- 包四未确认前的 live preview / token 输入行实现
+
+### 8.2 依赖
+
+| 依赖 | 说明 |
+|------|------|
+| 包一 → 无 | 可直接开工 |
+| 包二 → 无硬依赖 | 建议包一之后，避免与焦点/对话框同 PR 冲突 |
+| 包三 → 包一 V8/radius 更干净 | 可合并前 rebase |
+| 包四 → §2 正式稿 + 建议包三键帽/token 稳定 | 硬门禁：无正式稿不写包四代码 |
+
+### 8.3 与现网推荐动作架构的关系
+
+`GlobalLauncherSearchFrame` 中 `RecommendedActionRow` 已禁用，推荐走 ranking + `objectBlockText`。包二删除死 UI 时**不要**误删 ranking / `textMatch` 路径。包四 live preview 是命令执行帧协议，与 Object Block 推荐是不同层。
+
+---
+
+## 9. 验证与交付
+
+每包完成后：
+
+```bash
+git status --short --ignored
+npm run check:architecture
+git diff --check
+npm run build
+```
+
+涉及可视 UI：至少手测 Global Launcher、设置页、插件页、插件设置对话框；包三加 toast 与 dark 主题。
+
+PR 说明须列出：本包关闭的问题编号（P/V/M）、未做的 follow-up、截图或手测步骤。
+
+---
+
+## 附：相关文件与规则来源
 
 - 交互 demo：`doc/2026-07-19-launcher-interaction-redesign-demo.html`
 - 立体白基线：`doc/2026-07-07-light-theme-tactile-white.html`
-- 插件边界决策：`doc/diff-plugin-boundary-decision.md`
-- M 系列规则来源：emilkowalski/skills（已装入本地 `~/.claude/skills/`：emil-design-eng、apple-design、review-animations 等；更严门禁可跑 `/review-animations`）
+- 前序打磨：`doc/2026-07-07-ui-experience-polish-design.md`
+- 插件边界：`doc/diff-plugin-boundary-decision.md`
+- M 系列：emilkowalski/skills（emil-design-eng、apple-design；更严可跑 `/review-animations`）
+
+**结论：审查文档完成。包一–三可交执行 AI 按 §7 开工；包四先出正式交互设计再实现。**
