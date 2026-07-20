@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type MutableRefObject, type RefObject } from 'react'
+import type { MutableRefObject, RefObject } from 'react'
 import { Search } from 'lucide-react'
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
@@ -7,9 +7,7 @@ import { LauncherMixedList, type LauncherMixedItem } from './LauncherMixedList'
 import type { ClipboardObjectBlockState } from '../../launcher/clipboard/useClipboardObjectBlock'
 import { ObjectBlockToken } from './ObjectBlockToken'
 import { RecentClipboardHint } from './RecentClipboardHint'
-import { RecommendedActionRow } from './RecommendedActionRow'
-import { OutputTargetExpansion } from './OutputTargetExpansion'
-import { recommendActionsForBlock, type RecommendedAction, type RecommendedOutputTarget } from '../../launcher/clipboard/actionRecommendation'
+import type { RecommendedAction, RecommendedOutputTarget } from '../../launcher/clipboard/actionRecommendation'
 
 export function GlobalLauncherSearchFrame({
   inputRef,
@@ -29,10 +27,6 @@ export function GlobalLauncherSearchFrame({
   onHoverIndex,
   onMouseMove,
   isKeyboardNavRef,
-  onExecuteAction,
-  selectedActionIndex = 0,
-  onSelectedActionIndexChange,
-  onObjectActionController,
 }: {
   inputRef: RefObject<HTMLInputElement | null>
   bindSearchInputRef?: (node: HTMLInputElement | null) => void
@@ -51,6 +45,7 @@ export function GlobalLauncherSearchFrame({
   onHoverIndex: (index: number) => void
   onMouseMove: () => void
   isKeyboardNavRef?: MutableRefObject<boolean>
+  /** @deprecated Dedicated object-action rows removed; ranking + textMatch is the path. */
   onExecuteAction?: (action: RecommendedAction, target: RecommendedOutputTarget) => void
   selectedActionIndex?: number
   onSelectedActionIndexChange?: (index: number) => void
@@ -61,43 +56,6 @@ export function GlobalLauncherSearchFrame({
   const resolvedPlaceholder = block
     ? t(locale, 'palette.objectActionPlaceholder', { source: block.title })
     : placeholder
-  const recommendedActions: RecommendedAction[] = [] // Disabled: recommendations now come from plugin dynamicItems + textMatch
-  const [expandedAction, setExpandedAction] = useState<RecommendedAction | null>(null)
-  const [targetIndex, setTargetIndex] = useState(0)
-
-  // Filter recommended actions by query when in object-action mode
-  const filteredActions = useMemo(() => {
-    if (!query) return recommendedActions
-    const lowerQuery = query.toLowerCase()
-    return recommendedActions.filter((action) =>
-      action.title.toLowerCase().includes(lowerQuery) ||
-      action.titleZh.toLowerCase().includes(lowerQuery) ||
-      action.id.toLowerCase().includes(lowerQuery) ||
-      (action.subtitle?.toLowerCase().includes(lowerQuery) ?? false) ||
-      (action.provider?.toLowerCase().includes(lowerQuery) ?? false)
-    )
-  }, [recommendedActions, query])
-
-  const activeAction = filteredActions[Math.min(selectedActionIndex, Math.max(0, filteredActions.length - 1))]
-
-  // Clamp selected action index when filtered list changes
-  useEffect(() => {
-    if (filteredActions.length > 0 && selectedActionIndex >= filteredActions.length) {
-      onSelectedActionIndexChange?.(Math.max(0, filteredActions.length - 1))
-    }
-  }, [filteredActions.length, selectedActionIndex, onSelectedActionIndexChange])
-
-  useEffect(() => {
-    if (!block || !activeAction) {
-      onObjectActionController?.(null)
-      return
-    }
-    onObjectActionController?.({
-      expand: () => { setExpandedAction(activeAction); setTargetIndex(0) },
-      execute: (keepOpen = false) => onExecuteAction?.(activeAction, keepOpen ? 'copy-and-keep-open' : activeAction.defaultOutput),
-    })
-    return () => onObjectActionController?.(null)
-  }, [activeAction, block, onExecuteAction, onObjectActionController])
 
   return (
     <>
@@ -106,6 +64,7 @@ export function GlobalLauncherSearchFrame({
         {block && (
           <ObjectBlockToken
             block={block}
+            locale={locale}
             onRemove={() => clipboardBlock?.removeBlock()}
           />
         )}

@@ -1,5 +1,5 @@
 import { type MutableRefObject, type RefObject } from 'react'
-import type { Locale } from '../../i18n'
+import { t, type Locale } from '../../i18n'
 import { localized, type LauncherHostSurfaceTarget, type PluginSurfaceOpenTarget } from '../../store'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import type { CollectInputFrame, ParamInputFrame, ResultFrame } from '../../workspace/launcher/controller'
@@ -140,7 +140,7 @@ export function GlobalLauncherFrameSwitch({
 
   if (surfaceFrame) {
     if (!activeSurfaceFrame) {
-      return <div className="p-4 text-center text-[12px]" style={{ color: 'var(--color-text-tertiary)' }}>Surface not found</div>
+      return <div className="p-4 text-center text-[12px]" style={{ color: 'var(--color-text-tertiary)' }}>{t(locale, 'palette.surfaceNotFound')}</div>
     }
     const shell = activeSurfaceFrame.surface.shell
     const breadcrumbTitle = shell?.breadcrumbTitle

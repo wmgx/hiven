@@ -591,15 +591,6 @@ export function GlobalLauncherHost() {
         onObjectActionController={(controller) => { objectActionControllerRef.current = controller }}
         expandSelectedObjectAction={() => objectActionControllerRef.current?.expand()}
         executeSelectedObjectAction={(keepOpen) => objectActionControllerRef.current?.execute(keepOpen)}
-        onSearchWeb={(searchQuery) => {
-          const q = searchQuery.trim()
-          if (!q) return
-          void openUrl(`https://www.google.com/search?q=${encodeURIComponent(q)}`)
-            .then(() => closeLauncherAfterAction())
-            .catch((error) => {
-              showToast(error instanceof Error ? error.message : String(error), 'error')
-            })
-        }}
       />
     </div>
   )
