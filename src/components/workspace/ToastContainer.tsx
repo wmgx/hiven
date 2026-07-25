@@ -9,7 +9,10 @@ import { useToastStore, type ToastItem, type ToastLevel } from '../../workspace/
 const levelStyles: Record<ToastLevel, { bg: string; color: string }> = {
   info: { bg: 'var(--color-background-tertiary)', color: 'var(--color-text-primary)' },
   success: { bg: 'var(--accent-soft)', color: 'var(--accent)' },
-  error: { bg: 'color-mix(in srgb, var(--color-error, #dc2626) 10%, #fff)', color: 'var(--color-error, #dc2626)' },
+  error: {
+    bg: 'color-mix(in srgb, var(--color-error) 12%, var(--bg-surface, #fff))',
+    color: 'var(--color-error)',
+  },
   warning: { bg: 'color-mix(in srgb, #d97706 12%, #fff)', color: '#d97706' },
 }
 

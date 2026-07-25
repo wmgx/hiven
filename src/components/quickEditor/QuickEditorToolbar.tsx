@@ -48,7 +48,7 @@ export function QuickEditorToolbar() {
     <div
       className="flex items-center justify-between px-3 h-8 shrink-0 select-none"
       style={{
-        borderBottom: '0.5px solid var(--color-border-tertiary)',
+        borderBottom: 'var(--hairline) solid var(--color-border-tertiary)',
         background: 'var(--color-background-secondary)',
       }}
       data-no-drag

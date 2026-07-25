@@ -373,7 +373,7 @@ function SettingsDialogBody({
       {/* Header */}
       <div
         className="flex items-center justify-between px-5 py-3.5 shrink-0"
-        style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}
+        style={{ borderBottom: 'var(--hairline) solid var(--color-border-tertiary)' }}
       >
         <h2
           id={titleId}
@@ -443,14 +443,14 @@ function SettingsDialogBody({
             className="flex max-h-[calc(100%-48px)] w-[min(520px,calc(100%-48px))] flex-col overflow-hidden rounded-lg"
             style={{
               background: 'var(--panel, var(--bg-surface, #ffffff))',
-              border: '0.5px solid var(--color-border-secondary)',
+              border: 'var(--hairline) solid var(--color-border-secondary)',
               boxShadow: 'var(--shadow-panel, 0 20px 44px rgba(0, 0, 0, 0.22))',
             }}
             onClick={(event) => event.stopPropagation()}
           >
             <div
               className="flex items-center justify-between px-4 py-3"
-              style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}
+              style={{ borderBottom: 'var(--hairline) solid var(--color-border-tertiary)' }}
             >
               <h3 className="m-0 text-[14px] font-semibold" style={{ color: 'var(--color-text-primary)' }}>
                 {settingsModalTitle}

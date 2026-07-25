@@ -1,10 +1,18 @@
 @import 'tailwindcss';
 
+/* Non-retina: 0.5px borders can vanish; bump hairline to 1px. */
+@media (max-resolution: 1.5dppx) {
+  :root {
+    --hairline: 1px;
+  }
+}
+
 :root {
   --font-sans:
     -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "PingFang SC", "Segoe UI", system-ui, sans-serif;
   --font-mono:
     "SF Mono", ui-monospace, "JetBrains Mono", "Cascadia Code", "Fira Code", Menlo, monospace;
+  /* Retina hairline; non-retina falls back to 1px via media query above. */
   --hairline: 0.5px;
 
   /* ─── Type Scale ─── */
@@ -1281,7 +1289,7 @@ html[data-window='quick-editor'] #root {
   cursor: pointer;
   font-size: var(--text-base);
   font-family: var(--font-mono);
-  border: 0.5px solid var(--color-border-secondary);
+  border: var(--hairline) solid var(--color-border-secondary);
   background: none;
   color: var(--color-text-secondary);
   transition:
@@ -1629,7 +1637,7 @@ html[data-window='quick-editor'] #root {
   gap: 10px;
   padding: 0 14px;
   height: 40px;
-  border: 0.5px solid var(--color-border-tertiary);
+  border: var(--hairline) solid var(--color-border-tertiary);
   border-radius: var(--radius-lg);
   background: var(--color-background-secondary);
   margin-bottom: 12px;
@@ -1681,7 +1689,7 @@ html[data-window='quick-editor'] #root {
   display: flex;
   position: relative;
   margin-bottom: 16px;
-  border-bottom: 0.5px solid var(--color-border-tertiary);
+  border-bottom: var(--hairline) solid var(--color-border-tertiary);
 }
 .scripts-tab {
   display: flex;
@@ -1754,7 +1762,7 @@ html[data-window='quick-editor'] #root {
   gap: 12px;
   padding: 12px 16px;
   border-radius: var(--radius-lg);
-  border: 0.5px solid var(--color-border-tertiary);
+  border: var(--hairline) solid var(--color-border-tertiary);
   background: var(--color-background-primary);
   margin-bottom: 8px;
   transition:
@@ -1817,7 +1825,7 @@ html[data-window='quick-editor'] #root {
 }
 .plugin-master-list {
   min-width: 0;
-  border: 0.5px solid var(--color-border-tertiary);
+  border: var(--hairline) solid var(--color-border-tertiary);
   border-radius: var(--radius-lg);
   background: var(--color-background-primary);
   overflow: hidden;
@@ -1831,7 +1839,7 @@ html[data-window='quick-editor'] #root {
   gap: 8px;
   padding: 9px 10px;
   border: 0;
-  border-bottom: 0.5px solid var(--color-border-tertiary);
+  border-bottom: var(--hairline) solid var(--color-border-tertiary);
   background: transparent;
   color: var(--color-text-primary);
   text-align: left;
@@ -1889,7 +1897,7 @@ html[data-window='quick-editor'] #root {
   flex-direction: column;
   gap: 12px;
   padding: 14px;
-  border: 0.5px solid var(--color-border-tertiary);
+  border: var(--hairline) solid var(--color-border-tertiary);
   border-radius: var(--radius-lg);
   background: var(--color-background-primary);
 }
@@ -1953,7 +1961,7 @@ html[data-window='quick-editor'] #root {
   font-size: var(--text-sm);
 }
 .plugin-permissions.is-missing {
-  border: 0.5px solid color-mix(in srgb, var(--color-warning) 38%, transparent);
+  border: var(--hairline) solid color-mix(in srgb, var(--color-warning) 38%, transparent);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--color-warning) 8%, var(--color-background-secondary));
   padding: 8px 10px;
@@ -1975,7 +1983,7 @@ html[data-window='quick-editor'] #root {
   position: relative;
   margin-top: 10px;
   padding: 10px;
-  border: 0.5px solid var(--color-border-tertiary);
+  border: var(--hairline) solid var(--color-border-tertiary);
   border-radius: var(--radius-md);
   background: var(--color-background-secondary);
 }
@@ -1997,7 +2005,7 @@ html[data-window='quick-editor'] #root {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 0.5px solid var(--color-border-secondary);
+  border: var(--hairline) solid var(--color-border-secondary);
   border-radius: var(--radius-lg);
   background: var(--color-background-primary);
   box-shadow: 0 22px 54px rgba(0, 0, 0, 0.22);
@@ -2008,7 +2016,7 @@ html[data-window='quick-editor'] #root {
   justify-content: space-between;
   gap: 10px;
   padding: 12px 14px;
-  border-bottom: 0.5px solid var(--color-border-tertiary);
+  border-bottom: var(--hairline) solid var(--color-border-tertiary);
 }
 .plugin-settings-inline-modal-header h3 {
   margin: 0;
@@ -3208,7 +3216,7 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
 }
 .editor-topbar-system {
   padding-right: 7px;
-  border-right: 0.5px solid var(--color-border-tertiary);
+  border-right: var(--hairline) solid var(--color-border-tertiary);
 }
 .editor-topbar-button {
   width: 28px;
@@ -3327,7 +3335,7 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
 .modal-panel {
   width: min(480px, 90vw);
   background: var(--color-background-primary);
-  border: 0.5px solid var(--color-border-secondary);
+  border: var(--hairline) solid var(--color-border-secondary);
   border-radius: var(--radius-xl);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.18);
   transform: scale(0.92) translateY(10px);
@@ -3346,7 +3354,7 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px 12px;
-  border-bottom: 0.5px solid var(--color-border-tertiary);
+  border-bottom: var(--hairline) solid var(--color-border-tertiary);
 }
 .modal-title {
   font-weight: 600;
@@ -3394,7 +3402,7 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
 .modal-url-input {
   flex: 1;
   height: 36px;
-  border: 0.5px solid var(--color-border-secondary);
+  border: var(--hairline) solid var(--color-border-secondary);
   border-radius: var(--radius-md);
   padding: 0 12px;
   font-size: 12px;
@@ -3415,7 +3423,7 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  border-top: 0.5px solid var(--color-border-tertiary);
+  border-top: var(--hairline) solid var(--color-border-tertiary);
 }
 
 /* ─── Unified Button System ─── */
@@ -3472,7 +3480,7 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
 /* Outline (secondary) */
 .ft-btn-outline {
   background: none;
-  border: 0.5px solid var(--color-border-secondary);
+  border: var(--hairline) solid var(--color-border-secondary);
   color: var(--color-text-secondary);
 }
 .ft-btn-outline:hover {
@@ -4008,7 +4016,7 @@ body[data-theme='dark'] .monaco-editor .find-widget {
   gap: 6px;
   min-width: 0;
   padding: 8px;
-  border: 0.5px solid var(--color-border-tertiary);
+  border: var(--hairline) solid var(--color-border-tertiary);
   border-radius: 6px;
   background: var(--color-background-secondary);
 }
@@ -4052,7 +4060,7 @@ body[data-theme='dark'] .monaco-editor .find-widget {
   max-width: 100%;
   height: 32px;
   padding: 0 12px;
-  border: 0.5px solid var(--color-border-tertiary);
+  border: var(--hairline) solid var(--color-border-tertiary);
   border-radius: var(--radius-md);
   outline: none;
   background: var(--color-background-tertiary);
@@ -4124,7 +4132,7 @@ body[data-theme='dark'] .monaco-editor .find-widget {
 .hiven-ui-button,
 .hiven-ui-icon-button,
 .hiven-ui-surface-list-item {
-  border: 0.5px solid var(--hiven-color-border, var(--color-border-tertiary));
+  border: var(--hairline) solid var(--hiven-color-border, var(--color-border-tertiary));
   border-radius: var(--hiven-radius-md);
   cursor: pointer;
   color: var(--hiven-color-text-primary, var(--color-text-primary));
@@ -4167,7 +4175,7 @@ body[data-theme='dark'] .monaco-editor .find-widget {
   min-height: 28px;
   min-width: 0;
   padding: 5px 8px;
-  border: 0.5px solid var(--hiven-color-border);
+  border: var(--hairline) solid var(--hiven-color-border);
   border-radius: var(--hiven-radius-md);
   outline: none;
   color: var(--hiven-color-text-primary);
@@ -4183,7 +4191,7 @@ body[data-theme='dark'] .monaco-editor .find-widget {
   --hiven-select-text: var(--text, var(--hiven-color-text-primary, #1c1c1e));
   --hiven-select-text-3: var(--text-3, var(--hiven-color-text-tertiary, #8e8e93));
   --hiven-select-accent: var(--accent, var(--hiven-color-accent, #2563eb));
-  --hiven-select-accent-soft: var(--accent-soft, rgba(37, 99, 235, 0.14));
+  --hiven-select-accent-soft: var(--accent-soft, color-mix(in srgb, var(--accent) 14%, transparent));
   position: relative;
   display: inline-flex;
   align-items: stretch;
@@ -4355,7 +4363,7 @@ button.hiven-ui-select-option.is-selected:hover {
     var(--hiven-color-text-primary, var(--color-text-primary, #1c1c1e)) 8%,
     var(--hiven-color-bg-secondary, var(--color-background-secondary, #f3f3f3))
   );
-  border: 0.5px solid color-mix(in srgb, var(--hiven-color-border, var(--color-border-tertiary, #e7e8e9)) 80%, transparent);
+  border: var(--hairline) solid color-mix(in srgb, var(--hiven-color-border, var(--color-border-tertiary, #e7e8e9)) 80%, transparent);
   box-sizing: border-box;
 }
 
@@ -4405,7 +4413,7 @@ button.hiven-ui-select-option.is-selected:hover {
   font-weight: 650;
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.08),
-    0 0 0 0.5px color-mix(in srgb, var(--hiven-color-border, var(--color-border-tertiary, #d0d0d0)) 70%, transparent);
+    0 0 0 var(--hairline) color-mix(in srgb, var(--hiven-color-border, var(--color-border-tertiary, #d0d0d0)) 70%, transparent);
 }
 
 .hiven-ui-surface-list-item.is-selected {
@@ -4456,7 +4464,7 @@ button.hiven-ui-select-option.is-selected:hover {
 .hiven-ui-confirm-panel {
   width: min(320px, 100%);
   padding: 14px;
-  border: 0.5px solid var(--hiven-color-border);
+  border: var(--hairline) solid var(--hiven-color-border);
   border-radius: var(--hiven-radius-lg);
   background: var(--hiven-color-bg-primary);
 }
@@ -4594,7 +4602,7 @@ html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-lau
 
 /* Editor command bar 与 Global Launcher 面板使用干净不模糊的样式，匹配简单风格 */
 .flux-spatial-shell .palette-panel {
-  border: 0.5px solid var(--color-border-secondary) !important;
+  border: var(--hairline) solid var(--color-border-secondary) !important;
   background: var(--bg-surface) !important;  /* pure surface like editor content (white in light, solid dark in dark), keeps launcher crisp */
   /* 干净的立体阴影，让 launcher 在暗色蒙层上更 crisp、更有存在感（避免平坦模糊感） */
   box-shadow:
@@ -4937,15 +4945,25 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
   margin: 6px 8px 4px;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
+  border: var(--hairline) solid transparent;
   background: var(--accent-soft);
   cursor: pointer;
-  transition: background 0.14s;
+  transition: background 0.14s, border-color 0.14s;
   user-select: none;
   box-sizing: border-box;
 }
 
 .recent-clipboard-hint:hover {
-  background: rgba(37, 99, 235, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.recent-clipboard-hint.is-selected {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.recent-clipboard-hint.is-selected .hint-enter {
+  color: var(--accent);
 }
 
 .recent-clipboard-hint .hint-icon {
@@ -5082,7 +5100,7 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
 
 .l-row.sel .r-app > .app-icon,
 .l-row.selected .r-app > .app-icon {
-  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.4) inset;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent) inset;
 }
 
 .l-row .r-main {
@@ -5234,20 +5252,20 @@ body[data-theme='dark'] .l-row.selected .launcher-kind-tag {
 .l-result-danger .ri,
 .l-result-danger .r-ico {
   background: rgba(239, 68, 68, 0.12);
-  color: #dc2626;
+  color: var(--color-error);
 }
 
 .l-result-danger.sel,
 .l-result-danger.is-selected {
   background: rgba(239, 68, 68, 0.1);
-  box-shadow: inset 2px 0 0 #dc2626;
+  box-shadow: inset 2px 0 0 var(--color-error);
 }
 
 .l-result-danger.sel .ri,
 .l-result-danger.is-selected .ri,
 .l-result-danger.sel .r-ico,
 .l-result-danger.is-selected .r-ico {
-  background: #dc2626;
+  background: var(--color-error);
   color: #fff;
 }
 
@@ -5576,7 +5594,7 @@ body[data-theme='dark'] .check {
 
 .l-result-block.sel,
 .l-result-block.is-selected {
-  background: rgba(37, 99, 235, 0.06);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 
 .l-result-block.disabled {
@@ -6197,7 +6215,7 @@ body[data-theme='dark'] .settings-about-card,
   color: #fff;
   font-weight: 700;
   font-size: 14px;
-  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--accent) 28%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 
 .settings-about-text {
@@ -6249,7 +6267,7 @@ body[data-theme='dark'] .settings-about-right .scripts-btn,
   border-color: var(--accent);
   background: linear-gradient(180deg, #3b76f0, var(--accent));
   color: #fff;
-  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 28%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 .scard {
@@ -7950,7 +7968,7 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
 .csv-tools-surface__file-btn {
   height: 28px;
   padding: 0 11px;
-  border: 0.5px solid var(--color-border-secondary, var(--border));
+  border: var(--hairline) solid var(--color-border-secondary, var(--border));
   border-radius: 8px;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--color-background-primary) 70%, transparent) 0%, transparent 100%),
@@ -8442,7 +8460,7 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
 .csv-tools-surface__ib {
   width: 28px !important;
   height: 28px !important;
-  border: 0.5px solid transparent !important;
+  border: var(--hairline) solid transparent !important;
   border-radius: 8px !important;
   background: transparent !important;
   color: var(--color-text-tertiary);
@@ -8584,7 +8602,7 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   max-height: 220px;
   overflow: auto;
   border-radius: 8px;
-  border: 0.5px solid var(--color-border-secondary, var(--color-border-tertiary));
+  border: var(--hairline) solid var(--color-border-secondary, var(--color-border-tertiary));
   background: var(--color-background-primary);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   z-index: 20;
@@ -8982,7 +9000,7 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   color: #fff;
   font-size: 13px;
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 28%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 .plugins-content-inner .btn.primary.split:hover {
