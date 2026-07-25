@@ -103,14 +103,15 @@ function buildDestinations(params: {
   hasReturn: boolean
   metaLabel: string
 }): OutputDestination[] {
+  // Package 4 keys (2026-07-26 handoff): ↵ copy · ⇧↵ paste front · ⌘/Ctrl↵ return to launcher
   const list: OutputDestination[] = [
     { id: 'copy', keys: '↵', labelKey: 'outputCopy' },
   ]
   if (params.hasPaste) {
-    list.push({ id: 'paste-foreground', keys: `${params.metaLabel}↵`, labelKey: 'outputPasteForeground' })
+    list.push({ id: 'paste-foreground', keys: '⇧↵', labelKey: 'outputPasteForeground' })
   }
   if (params.hasReturn) {
-    list.push({ id: 'return-to-launcher', keys: '', labelKey: 'returnToLauncher' })
+    list.push({ id: 'return-to-launcher', keys: `${params.metaLabel}↵`, labelKey: 'returnToLauncher' })
   }
   return list
 }
@@ -217,7 +218,13 @@ export function GlobalLauncherCollectInputFrame({
       if (isSuggestMode) return
       event.preventDefault()
       event.stopPropagation()
+      // ⌘/Ctrl↵ → return to launcher; ⇧↵ → paste to front; bare ↵ → active destination (default copy)
       if (event.metaKey || event.ctrlKey) {
+        const ret = destinations.find((d) => d.id === 'return-to-launcher')
+        void runDestination(ret?.id ?? 'copy')
+        return
+      }
+      if (event.shiftKey) {
         const paste = destinations.find((d) => d.id === 'paste-foreground')
         void runDestination(paste?.id ?? 'copy')
         return
@@ -346,10 +353,16 @@ export function GlobalLauncherCollectInputFrame({
       <div className="global-launcher-footer l-foot">
         {showLivePreview && livePreviewText ? (
           <>
-            <LauncherHintKey keys="↵" label={t(locale, `palette.${activeDest?.labelKey ?? 'outputCopy'}`)} />
-            {destinations.length > 1 && (
+            <LauncherHintKey keys="↵" label={t(locale, 'palette.outputCopy')} />
+            {onPastePreviewText ? (
+              <LauncherHintKey keys="⇧↵" label={t(locale, 'palette.outputPasteForeground')} />
+            ) : null}
+            {hasReturn ? (
+              <LauncherHintKey keys={`${metaLabel}↵`} label={t(locale, 'palette.returnToLauncher')} />
+            ) : null}
+            {destinations.length > 1 ? (
               <LauncherHintKey keys="⇥" label={t(locale, 'palette.outputSwitchTarget')} />
-            )}
+            ) : null}
           </>
         ) : isSuggestMode && hasSuggestions ? (
           <LauncherHintText label={t(locale, 'palette.collectInputSuggestHint')} />
