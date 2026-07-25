@@ -15,9 +15,9 @@ import { readFileSync } from 'node:fs'
 
 const objectBlockToken = readFileSync('src/components/launcher/ObjectBlockToken.tsx', 'utf8')
 const recentClipboardHint = readFileSync('src/components/launcher/RecentClipboardHint.tsx', 'utf8')
-const recommendedActionRow = readFileSync('src/components/launcher/RecommendedActionRow.tsx', 'utf8')
 const useClipboardObjectBlockSrc = readFileSync('src/launcher/clipboard/useClipboardObjectBlock.ts', 'utf8')
 const globalLauncherHost = readFileSync('src/launcher/hosts/GlobalLauncherHost.tsx', 'utf8')
+const globalLauncherKeyboard = readFileSync('src/components/launcher/GlobalLauncherKeyboard.ts', 'utf8')
 const globalLauncherSearchFrame = readFileSync('src/components/launcher/GlobalLauncherSearchFrame.tsx', 'utf8')
 
 // ObjectBlockToken contract
@@ -27,22 +27,15 @@ assert.match(objectBlockToken, /data-kind=\{block\.kind\}/, 'ObjectBlockToken sh
 assert.match(objectBlockToken, /data-state=/, 'ObjectBlockToken should show age label')
 assert.match(objectBlockToken, /onRemove/, 'ObjectBlockToken should expose remove callback')
 assert.match(objectBlockToken, /selectedForDelete/, 'ObjectBlockToken should handle selected-for-delete state')
-assert.match(objectBlockToken, /再按 Backspace 删除/, 'ObjectBlockToken should show delete hint when selected')
+assert.match(objectBlockToken, /objectBlockDeleteHint|object-block-delete-hint/, 'ObjectBlockToken should support delete hint when selected')
 assert.match(objectBlockToken, /secretMasked/, 'ObjectBlockToken should handle secret masking')
-assert.match(objectBlockToken, /预览已隐藏/, 'ObjectBlockToken should show masked label for secrets')
+assert.match(objectBlockToken, /objectBlockMasked/, 'ObjectBlockToken should show masked label via i18n')
 
 // RecentClipboardHint contract
 assert.match(recentClipboardHint, /data-testid="recent-clipboard-hint"/, 'RecentClipboardHint should have test id')
-assert.match(recentClipboardHint, /hint\.ageLabel/, 'RecentClipboardHint should show source label')
-assert.match(recentClipboardHint, /复制/, 'RecentClipboardHint should show attach action')
+assert.match(recentClipboardHint, /hint\.ageLabel|recentClipboardHintSubtitle/, 'RecentClipboardHint should show age/kind subtitle')
+assert.match(recentClipboardHint, /selected/, 'RecentClipboardHint should support selection state')
 assert.match(recentClipboardHint, /onAttach/, 'RecentClipboardHint should expose attach callback')
-
-// RecommendedActionRow contract
-assert.match(recommendedActionRow, /data-testid="recommended-action-row"/, 'RecommendedActionRow should have test id')
-assert.match(recommendedActionRow, /action\.titleZh/, 'RecommendedActionRow should display Chinese title')
-assert.match(recommendedActionRow, /action\.pluginId/, 'RecommendedActionRow should display plugin attribution')
-assert.match(recommendedActionRow, /输出/, 'RecommendedActionRow should display output targets')
-assert.match(recommendedActionRow, /onSelect/, 'RecommendedActionRow should expose select callback')
 
 // useClipboardObjectBlock hook shape
 assert.match(useClipboardObjectBlockSrc, /export function useClipboardObjectBlock/, 'hook should be exported')
@@ -53,8 +46,17 @@ assert.match(useClipboardObjectBlockSrc, /removeBlock/, 'hook should expose remo
 assert.match(useClipboardObjectBlockSrc, /handleBackspace/, 'hook should expose handleBackspace')
 assert.match(useClipboardObjectBlockSrc, /attachHintAsBlock/, 'hook should expose attachHintAsBlock')
 assert.match(useClipboardObjectBlockSrc, /readClipboard/, 'hook should accept readClipboard param')
+// One-shot Backspace: empty query removes block without select-for-delete intermediate step
+assert.match(useClipboardObjectBlockSrc, /if \(!queryEmpty\) return false/, 'backspace only when query empty')
+assert.match(useClipboardObjectBlockSrc, /if \(!block\) return false[\s\S]*?setBlock\(null\)/, 'backspace removes block in one press')
 assert.doesNotMatch(useClipboardObjectBlockSrc, /simulateCopy|simulate_copy|⌘C|Cmd\+C/, 'hook must not auto-simulate Cmd+C')
 assert.doesNotMatch(useClipboardObjectBlockSrc, /externalSelection|readExternalSelection/, 'hook must not read external selection')
+
+// Enter on recent clipboard hint must respect selection (not steal from list rows)
+assert.match(globalLauncherKeyboard, /isClipboardHintSelected/, 'keyboard must know if clipboard hint is selected')
+assert.match(globalLauncherKeyboard, /selectedIndex === -1/, 'keyboard treats -1 as hint focus')
+assert.match(globalLauncherHost, /hasClipboardHint \? -1 : 0/, 'host allows selectedIndex -1 for hint')
+assert.match(globalLauncherSearchFrame, /clipboardHintSelected/, 'search frame passes hint selected state')
 
 // GlobalLauncher regressions
 assert.doesNotMatch(globalLauncherHost, /simulateCopy|simulate_copy/, 'GlobalLauncherHost must not auto-simulate copy')

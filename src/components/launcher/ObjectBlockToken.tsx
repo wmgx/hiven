@@ -6,7 +6,7 @@
  *
  * UI:
  *   [ 剪贴板 · JSON · 12 秒前  × ]
- *   When selectedForDelete: brand-blue border + delete hint
+ *   Empty-query Backspace removes in one press (no two-step select).
  *   When secretMasked: masked label
  */
 

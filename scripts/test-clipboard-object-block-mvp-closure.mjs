@@ -170,9 +170,17 @@ console.log('Scenario 6: Object Block deletion restores search-only mode')
   // When block is null, LauncherMixedList is rendered
   assert.match(searchFrameSrc, /\) : \(\s*<LauncherMixedList/, 'LauncherMixedList renders when block is null (else branch)')
 
-  // Verify Backspace handling in hook
+  // Verify Backspace handling in hook — single press removes when query empty
   const hookSrc = readFileSync('src/launcher/clipboard/useClipboardObjectBlock.ts', 'utf8')
-  assert.match(hookSrc, /if \(block\.selectedForDelete\) \{\s*setBlock\(null\)/, 'Second Backspace removes block')
+  assert.match(hookSrc, /if \(!queryEmpty\) return false/, 'Backspace only when query empty')
+  assert.match(
+    hookSrc,
+    /const handleBackspace = useCallback\(\(queryEmpty: boolean\): boolean => \{[\s\S]*?setBlock\(null\)[\s\S]*?return true/,
+    'Backspace removes block in one press',
+  )
+  // Intermediate select-for-delete must not appear inside handleBackspace
+  const backspaceBody = hookSrc.match(/const handleBackspace = useCallback\([\s\S]*?\}, \[block\]\)/)?.[0] ?? ''
+  assert.doesNotMatch(backspaceBody, /selectedForDelete/, 'handleBackspace must not use two-step selectedForDelete')
   assert.match(hookSrc, /removeBlock/, 'removeBlock callback exposed')
   console.log('  ✓ Block deletion restores search-only mode')
 }

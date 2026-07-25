@@ -141,21 +141,15 @@ export function useClipboardObjectBlock(params: {
   }, [])
 
   /**
-   * Handle Backspace key when query is empty:
-   *  - First press: select block for delete
-   *  - Second press: delete block
+   * Handle Backspace when query is empty: remove the object block in one press.
    * Returns true if Backspace was consumed.
    */
   const handleBackspace = useCallback((queryEmpty: boolean): boolean => {
     if (!queryEmpty) return false
     if (!block) return false
-    if (block.selectedForDelete) {
-      const snapshot = getLastClipboardSnapshot()
-      if (snapshot) dismissClipboardBlock(snapshot)
-      setBlock(null)
-      return true
-    }
-    setBlock({ ...block, selectedForDelete: true })
+    const snapshot = getLastClipboardSnapshot()
+    if (snapshot) dismissClipboardBlock(snapshot)
+    setBlock(null)
     return true
   }, [block])
 

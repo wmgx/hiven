@@ -22,6 +22,7 @@ export function GlobalLauncherSearchFrame({
   showWorkflowObjectHint,
   customizeShortcutLabel,
   clipboardBlock,
+  clipboardHintSelected,
   onQueryChange,
   onSelectItem,
   onHoverIndex,
@@ -40,6 +41,7 @@ export function GlobalLauncherSearchFrame({
   showWorkflowObjectHint: boolean
   customizeShortcutLabel: string
   clipboardBlock?: ClipboardObjectBlockState
+  clipboardHintSelected?: boolean
   onQueryChange: (value: string) => void
   onSelectItem: (item: LauncherMixedItem) => void
   onHoverIndex: (index: number) => void
@@ -82,7 +84,7 @@ export function GlobalLauncherSearchFrame({
         />
       </div>
       {error && (
-        <div className="px-3.5 py-1.5 text-[12px]" style={{ color: 'var(--color-error)', borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
+        <div className="px-3.5 py-1.5 text-[12px]" style={{ color: 'var(--color-error)', borderBottom: 'var(--hairline) solid var(--color-border-tertiary)' }}>
           {error}
         </div>
       )}
@@ -90,6 +92,8 @@ export function GlobalLauncherSearchFrame({
         {hint && !block && (
           <RecentClipboardHint
             hint={hint}
+            selected={Boolean(clipboardHintSelected)}
+            locale={locale}
             onAttach={() => clipboardBlock?.attachHintAsBlock()}
           />
         )}

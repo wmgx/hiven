@@ -358,8 +358,16 @@ export function GlobalLauncherHost() {
     closeLauncher: closeLauncherOnBlur,
   })
 
-  const clampedSelectedIndex = Math.min(selectedIndex, Math.max(0, visibleFiltered.length - 1))
-  const selectedItem = visibleFiltered.length === 1 ? visibleFiltered[0] : visibleFiltered[clampedSelectedIndex]
+  // -1 focuses the recent-clipboard hint row (2–10 min) above the command list.
+  const hasClipboardHint = Boolean(clipboardBlock.hint && !clipboardBlock.block)
+  const minSelectedIndex = hasClipboardHint ? -1 : 0
+  const maxSelectedIndex = Math.max(0, visibleFiltered.length - 1)
+  const clampedSelectedIndex = Math.min(Math.max(selectedIndex, minSelectedIndex), maxSelectedIndex)
+  const selectedItem = clampedSelectedIndex < 0
+    ? undefined
+    : visibleFiltered.length === 1
+      ? visibleFiltered[0]
+      : visibleFiltered[clampedSelectedIndex]
   const activeResultFrame = controllerState?.frames.length
     ? controllerState.frames[controllerState.frames.length - 1]
     : null
@@ -570,6 +578,7 @@ export function GlobalLauncherHost() {
         closeLauncher={closeLauncher}
         visibleFiltered={visibleFiltered}
         selectedItem={selectedItem}
+        selectedIndex={clampedSelectedIndex}
         setSelectedIndex={setSelectedIndex}
         isWorkflowObjectLauncherItem={isWorkflowObjectLauncherItem}
         selectItem={selectItemWithHistoryActions}

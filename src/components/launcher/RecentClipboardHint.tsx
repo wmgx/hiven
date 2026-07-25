@@ -4,8 +4,11 @@
  * Design: hiven_clipboard_object_block_recommendation_ai_task.md §9.3
  *
  * Renders as a subtle card at the top of the launcher list with content preview.
+ * Keyboard: selectedIndex === -1 focuses this row; only then does Enter attach.
  */
 
+import type { Locale } from '../../i18n'
+import { t } from '../../i18n'
 import type { RecentClipboardHint as HintType } from '../../launcher/clipboard/objectBlock'
 import { getKindLabel } from '../../launcher/clipboard/objectBlock'
 
@@ -18,9 +21,13 @@ function truncatePreview(text: string, maxLen = 60): string {
 
 export function RecentClipboardHint({
   hint,
+  selected,
+  locale = 'zh',
   onAttach,
 }: {
   hint: HintType
+  selected?: boolean
+  locale?: Locale
   onAttach: () => void
 }) {
   const preview = truncatePreview(hint.snapshot.text)
@@ -28,20 +35,26 @@ export function RecentClipboardHint({
 
   return (
     <div
-      className="recent-clipboard-hint"
+      className={`recent-clipboard-hint${selected ? ' is-selected' : ''}`}
       data-testid="recent-clipboard-hint"
+      data-selected={selected ? 'true' : undefined}
+      role="option"
+      aria-selected={selected ? true : false}
       onClick={onAttach}
     >
-      <div className="hint-icon">📋</div>
+      <div className="hint-icon" aria-hidden="true">📋</div>
       <div className="hint-body">
         {preview && (
           <span className="hint-title">{preview}</span>
         )}
         <span className="hint-subtitle">
-          {hint.ageLabel}复制 · {kindLabel}
+          {t(locale, 'palette.recentClipboardHintSubtitle', {
+            age: hint.ageLabel,
+            kind: kindLabel,
+          })}
         </span>
       </div>
-      <div className="hint-enter">↵</div>
+      <div className="hint-enter" aria-hidden="true">↵</div>
     </div>
   )
 }

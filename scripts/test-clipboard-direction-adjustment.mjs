@@ -103,11 +103,16 @@ assert.match(tokenSrc, /data-source=/, '#6: token shows source')
 assert.match(tokenSrc, /data-kind=/, '#6: token shows kind')
 assert.match(tokenSrc, /data-state=/, '#6: token shows age/state')
 
-// ─── #7: × delete + Backspace select-then-delete ──────────────────────────────
+// ─── #7: × delete + empty-query Backspace one-shot remove ─────────────────────
 assert.match(tokenSrc, /onRemove/, '#7: ObjectBlockToken has × remove')
 assert.match(keyboard, /handleClipboardBackspace/, '#7: keyboard handles Backspace')
-assert.match(tokenSrc, /selectedForDelete/, '#7: token shows selected-for-delete state')
-assert.match(tokenSrc, /再按 Backspace 删除/, '#7: token shows delete hint when selected')
+assert.match(tokenSrc, /selectedForDelete/, '#7: token still supports selected-for-delete visual')
+assert.match(keyboard, /isClipboardHintSelected|selectedIndex === -1/, '#7b: Enter only attaches hint when selected')
+assert.doesNotMatch(
+  keyboard,
+  /if \(event\.key === 'Enter' && hasClipboardHint && attachHintAsBlock\) \{\s*event\.preventDefault\(\)\s*attachHintAsBlock\(\)/,
+  '#7b: must not attach clipboard hint on bare Enter without selection',
+)
 
 // ─── #8: Object Block shows recommended actions, not clipboard as search ───────
 assert.match(searchFrame, /recommendActionsForBlock/, '#8: recommended actions computed from block')

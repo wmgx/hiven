@@ -46,6 +46,8 @@ type GlobalLauncherPanelProps = {
   closeLauncher: () => void
   visibleFiltered: GlobalLauncherItem[]
   selectedItem?: GlobalLauncherItem
+  /** List selection; -1 means recent-clipboard hint is focused. */
+  selectedIndex?: number
   setSelectedIndex: (index: number | ((index: number) => number)) => void
   isWorkflowObjectLauncherItem: (item: GlobalLauncherItem | undefined) => boolean
   selectItem: (item: GlobalLauncherItem | undefined, customizeParams?: boolean) => void
@@ -99,6 +101,7 @@ export function GlobalLauncherPanel({
   closeLauncher,
   visibleFiltered,
   selectedItem,
+  selectedIndex = 0,
   setSelectedIndex,
   isWorkflowObjectLauncherItem,
   selectItem,
@@ -167,6 +170,8 @@ export function GlobalLauncherPanel({
         handleClipboardBackspace: clipboardBlock?.handleBackspace,
         hasClipboardHint: Boolean(clipboardBlock?.hint && !clipboardBlock?.block),
         attachHintAsBlock: clipboardBlock?.attachHintAsBlock,
+        isClipboardHintSelected: selectedIndex < 0,
+        selectedIndex,
         // Clipboard recommendations are rendered as normal launcher list rows
         // (plugin dynamicItems). Dedicated RecommendedActionRow UI is disabled,
         // so arrow keys must drive selectedIndex — not selectedObjectActionIndex.
@@ -227,6 +232,7 @@ export function GlobalLauncherPanel({
         onSearchMouseMove={handleSearchMouseMove}
         isKeyboardNavRef={isKeyboardNavRef}
         clipboardBlock={clipboardBlock}
+        clipboardHintSelected={selectedIndex < 0}
         onExecuteAction={onExecuteObjectAction}
         selectedActionIndex={selectedActionIndex}
         onSelectedActionIndexChange={setSelectedActionIndex}

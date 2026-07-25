@@ -63,6 +63,7 @@ export function GlobalLauncherFrameSwitch({
   onSearchMouseMove,
   isKeyboardNavRef,
   clipboardBlock,
+  clipboardHintSelected,
   onExecuteAction,
   selectedActionIndex,
   onSelectedActionIndexChange,
@@ -110,6 +111,8 @@ export function GlobalLauncherFrameSwitch({
   onSearchMouseMove: () => void
   isKeyboardNavRef?: MutableRefObject<boolean>
   clipboardBlock: ClipboardObjectBlockState
+  /** Recent-clipboard hint is the focused row (selectedIndex === -1). */
+  clipboardHintSelected?: boolean
   onExecuteAction?: (action: RecommendedAction, target: RecommendedOutputTarget) => void
   selectedActionIndex?: number
   onSelectedActionIndexChange?: (index: number) => void
@@ -244,6 +247,7 @@ export function GlobalLauncherFrameSwitch({
       query={query}
       placeholder={searchPlaceholder}
       clipboardBlock={clipboardBlock}
+      clipboardHintSelected={clipboardHintSelected}
       error={controllerState?.error}
       items={visibleFiltered}
       selectedItem={selectedItem}

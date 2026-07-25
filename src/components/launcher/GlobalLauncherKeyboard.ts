@@ -25,6 +25,9 @@ export function handleGlobalLauncherKeyDown({
   handleClipboardBackspace,
   hasClipboardHint,
   attachHintAsBlock,
+  /** When true, Enter attaches the recent-clipboard hint (must be the focused row). */
+  isClipboardHintSelected,
+  selectedIndex,
   hasObjectActions,
   objectActionCount,
   setSelectedObjectActionIndex,
@@ -55,6 +58,9 @@ export function handleGlobalLauncherKeyDown({
   handleClipboardBackspace?: (queryEmpty: boolean) => boolean
   hasClipboardHint?: boolean
   attachHintAsBlock?: () => void
+  isClipboardHintSelected?: boolean
+  /** Current list selection index; -1 means recent-clipboard hint is focused. */
+  selectedIndex?: number
   hasObjectActions?: boolean
   objectActionCount?: number
   setSelectedObjectActionIndex?: (updater: number | ((index: number) => number)) => void
@@ -159,7 +165,9 @@ export function handleGlobalLauncherKeyDown({
   if (event.key === 'ArrowUp') {
     event.preventDefault()
     isKeyboardNavRef.current = true
-    setSelectedIndex((index) => Math.max(index - 1, 0))
+    // When a recent-clipboard hint is shown, index -1 focuses the hint row above the list.
+    const minIndex = hasClipboardHint ? -1 : 0
+    setSelectedIndex((index) => Math.max(index - 1, minIndex))
     return
   }
   if (event.key === 'Tab' && isWorkflowObjectLauncherItem(selectedItem)) {
@@ -175,7 +183,13 @@ export function handleGlobalLauncherKeyDown({
       return
     }
   }
-  if (event.key === 'Enter' && hasClipboardHint && attachHintAsBlock) {
+  // Only attach the timeout clipboard hint when it is the focused row — never steal Enter from list selection.
+  if (
+    event.key === 'Enter'
+    && hasClipboardHint
+    && (isClipboardHintSelected || selectedIndex === -1)
+    && attachHintAsBlock
+  ) {
     event.preventDefault()
     attachHintAsBlock()
     return
