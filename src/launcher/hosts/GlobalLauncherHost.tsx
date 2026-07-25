@@ -73,10 +73,8 @@ export function GlobalLauncherHost() {
     open,
     readClipboard: readLauncherClipboard,
   })
-  // Recommendations only while the block is active (not during remove exit animation).
-  const objectBlockText = clipboardBlock.mode === 'object-action'
-    ? (clipboardBlock.block?.payloadText ?? undefined)
-    : undefined
+  // Recommendations while block is mounted (exit keeps mode stable to avoid ranking jank).
+  const objectBlockText = clipboardBlock.block?.payloadText ?? undefined
   const [foregroundApp, setForegroundApp] = useState<string | undefined>()
 
   const {
@@ -425,9 +423,7 @@ export function GlobalLauncherHost() {
     openPluginSurface,
     grantPluginPermissions,
     focusSearchInputAfterBack,
-    objectBlockText: clipboardBlock.mode === 'object-action'
-      ? (clipboardBlock.block?.payloadText ?? undefined)
-      : undefined,
+    objectBlockText: clipboardBlock.block?.payloadText ?? undefined,
   })
 
   useGlobalLauncherHostEscape({

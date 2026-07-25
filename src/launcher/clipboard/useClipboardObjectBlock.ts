@@ -27,8 +27,8 @@ import {
 } from './clipboardSnapshot'
 import { launcherPerfNow, logLauncherPerfDuration } from '../../workspace/launcher/perf'
 
-/** Keep token mounted long enough for CSS exit (opacity + scale + max-width). */
-export const OBJECT_BLOCK_EXIT_MS = 160
+/** Keep token mounted for compositor-only exit (opacity + transform). */
+export const OBJECT_BLOCK_EXIT_MS = 130
 
 export type ClipboardObjectBlockMode = 'object-action' | 'search-only'
 
@@ -158,6 +158,7 @@ export function useClipboardObjectBlock(params: {
 
   /**
    * Dismiss snapshot immediately (no re-attach), keep token mounted for exit CSS, then unmount.
+   * Unmount is deferred one frame so the exiting class paints before the timer starts.
    */
   const removeBlock = useCallback(() => {
     if (!block || isExiting) return
@@ -165,11 +166,14 @@ export function useClipboardObjectBlock(params: {
     if (snapshot) dismissClipboardBlock(snapshot)
     setIsExiting(true)
     clearExitTimer()
-    exitTimerRef.current = window.setTimeout(() => {
-      setBlock(null)
-      setIsExiting(false)
-      exitTimerRef.current = null
-    }, OBJECT_BLOCK_EXIT_MS)
+    // rAF: apply .is-exiting paint first; avoid unmount racing the first transition frame.
+    requestAnimationFrame(() => {
+      exitTimerRef.current = window.setTimeout(() => {
+        setBlock(null)
+        setIsExiting(false)
+        exitTimerRef.current = null
+      }, OBJECT_BLOCK_EXIT_MS)
+    })
   }, [block, isExiting, clearExitTimer])
 
   const selectBlockForDelete = useCallback(() => {
@@ -203,8 +207,8 @@ export function useClipboardObjectBlock(params: {
     }
   }, [hint, clearExitTimer])
 
-  // While exiting, drop object-action mode so ranking/list switch without waiting for unmount.
-  const mode: ClipboardObjectBlockMode = block && !isExiting ? 'object-action' : 'search-only'
+  // Keep object-action until unmount so ranking/list do not re-render mid-exit (jank source).
+  const mode: ClipboardObjectBlockMode = block ? 'object-action' : 'search-only'
 
   return {
     mode,

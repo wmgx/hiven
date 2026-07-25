@@ -56,8 +56,8 @@ export function GlobalLauncherSearchFrame({
   const block = clipboardBlock?.block ?? null
   const blockExiting = Boolean(clipboardBlock?.isExiting)
   const hint = clipboardBlock?.hint ?? null
-  // During exit, drop action placeholder immediately so the bar doesn't feel stuck on object mode.
-  const resolvedPlaceholder = block && !blockExiting
+  // Keep placeholder stable during exit to avoid input layout shift mid-animation.
+  const resolvedPlaceholder = block
     ? t(locale, 'palette.objectActionPlaceholder', { source: block.title })
     : placeholder
 

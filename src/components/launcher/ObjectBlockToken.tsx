@@ -41,7 +41,7 @@ export function ObjectBlockToken({
       className={[
         'object-block-token',
         selected ? 'selected-for-delete' : '',
-        exiting ? 'is-exiting' : 'is-entered',
+        exiting ? 'is-exiting' : '',
       ].filter(Boolean).join(' ')}
       data-testid="object-block-token"
       data-source={block.source}
