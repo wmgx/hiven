@@ -55,6 +55,8 @@ export function GlobalLauncherFrameSwitch({
   onCollectInputChange,
   onActivateResultChoice,
   onSecondaryAction,
+  onPastePreviewText,
+  onSubmitCollectInput,
   onHoverResultChoice,
   onToggleResultChoice,
   onSearchQueryChange,
@@ -103,6 +105,10 @@ export function GlobalLauncherFrameSwitch({
   onActivateResultChoice: (choice: LauncherResultChoice) => void
   /** Collect-input / result secondary actions (id is plugin-defined). */
   onSecondaryAction?: (choice: LauncherResultChoice, actionId: string) => void
+  /** Package 4: paste live-preview text into the foreground app. */
+  onPastePreviewText?: (text: string) => void | Promise<void>
+  /** Package 4: default collect-input submit when no destination chrome. */
+  onSubmitCollectInput?: () => void
   onHoverResultChoice: (index: number) => void
   onToggleResultChoice: (choice: LauncherResultChoice, frame: ResultFrame) => void
   onSearchQueryChange: (value: string) => void
@@ -220,6 +226,8 @@ export function GlobalLauncherFrameSwitch({
         onBack={onFrameBack}
         onActivateChoice={onActivateResultChoice}
         onSecondaryAction={onSecondaryAction}
+        onPastePreviewText={onPastePreviewText}
+        onSubmitPrimary={onSubmitCollectInput}
       />
     )
   }

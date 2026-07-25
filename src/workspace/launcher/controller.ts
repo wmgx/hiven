@@ -636,7 +636,8 @@ export class LauncherController {
     }
 
     const runId = ++this.previewRunId
-    this.setState({ busy: true, error: null })
+    // Package 4: pure-function live preview must not flash busy (reflow jank).
+    this.setState({ error: null })
 
     let result: LauncherExecuteResult
     try {
@@ -647,14 +648,13 @@ export class LauncherController {
       )
     } catch (error) {
       if (runId !== this.previewRunId) return
-      this.setState({ busy: false, error: error instanceof Error ? error.message : String(error) })
+      this.setState({ error: error instanceof Error ? error.message : String(error) })
       return
     }
 
     if (runId !== this.previewRunId) return
     const latestTop = this.topFrame()
     if (latestTop.kind !== 'collect-input' || latestTop.item.systemKey !== item.systemKey || latestTop.inputText !== inputText) {
-      this.setState({ busy: false })
       return
     }
 
@@ -674,7 +674,7 @@ export class LauncherController {
       previewInputText: inputText,
       selectedSuggestionIndex: -1,
     })
-    this.setState({ frames, busy: false, error: null })
+    this.setState({ frames, error: null })
   }
 
   private clearCollectInputPreview(frame: CollectInputFrame, error: string | null = null): void {

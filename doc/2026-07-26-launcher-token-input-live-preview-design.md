@@ -1,6 +1,7 @@
 # Global Launcher 包四 · Token 输入行 + Live Preview 正式设计
 
-> **状态:** 正式设计稿（基于 2026-07-19 审查 §2 已拍板方向 + demo）  
+> **状态:** 正式设计稿 · **MVP 已落地**（命令标签 / 参数灰值块 / live preview 井 / 去向徽章；V4/V5 视觉仍并行）  
+
 > **演示对照:** `doc/2026-07-19-launcher-interaction-redesign-demo.html`  
 > **前置:** 包一–三已落地；包四代码实现以本文验收表为准  
 > **关联:** `doc/2026-07-19-ui-ux-review-and-redesign-summary.md` §2 / §7.4；视觉并行见 `doc/2026-07-26-launcher-v4-stereo-black-v5-empty-well-design.md`

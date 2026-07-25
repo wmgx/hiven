@@ -521,6 +521,20 @@ export function GlobalLauncherHost() {
     selectItem(item)
   }, [executeObjectAction, objectActions, selectItem])
 
+  const pastePreviewText = useCallback(async (text: string) => {
+    try {
+      const paste = createPluginPaste()
+      const result = await paste.pasteText(text)
+      if (!result.ok) {
+        showToast(result.message || t(locale, 'palette.quickEntryError'), 'error')
+        return
+      }
+      closeLauncherAfterAction()
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error), 'error')
+    }
+  }, [closeLauncherAfterAction, locale])
+
   const beginDrag = useGlobalLauncherNativeDrag(standaloneLauncher)
 
   // The launcher is always horizontally centered. In the standalone window the
@@ -574,6 +588,7 @@ export function GlobalLauncherHost() {
         selectedResultChoiceIds={selectedResultChoiceIds}
         activateResultChoice={activateResultChoice}
         activateSecondaryAction={activateSecondaryAction}
+        pastePreviewText={pastePreviewText}
         toggleResultChoice={toggleResultChoice}
         closeLauncher={closeLauncher}
         visibleFiltered={visibleFiltered}

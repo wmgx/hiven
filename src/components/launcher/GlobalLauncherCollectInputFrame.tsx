@@ -1,12 +1,14 @@
-import { useEffect, useRef, type RefObject } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
 import type { CollectInputFrame } from '../../workspace/launcher/controller'
 import { resolveDisplayTitle } from '../../workspace/launcher/display'
-import type { IconRef, LauncherResultChoice } from '../../workspace/launcher/types'
+import type { IconRef, LauncherOutput, LauncherResultChoice } from '../../workspace/launcher/types'
 import { resolveIcon } from '../../utils/resolveIcon'
 import { Tooltip } from '../Tooltip'
 import { LauncherHintKey, LauncherHintText } from './LauncherFooterHints'
+import { LauncherCommandTag, LauncherParamValueChip } from './LauncherCommandTag'
+import { getPlatformShortcutMeta } from './launcherParamShortcuts'
 
 /** Suggest row: keep keyboard highlight in view (same as result / mixed list). */
 function CollectInputSuggestRow({
@@ -78,6 +80,41 @@ function CollectInputSuggestRow({
   )
 }
 
+export type OutputDestinationId = 'copy' | 'paste-foreground' | 'return-to-launcher'
+
+type OutputDestination = {
+  id: OutputDestinationId
+  keys: string
+  labelKey: 'outputCopy' | 'outputPasteForeground' | 'returnToLauncher'
+}
+
+/** Extract single-text live preview from pure-function preview output. */
+export function extractLivePreviewText(output?: LauncherOutput): string | null {
+  if (!output?.choices?.length) return null
+  // Suggest lists are multi-row navigation, not a preview well.
+  if (output.choices.length !== 1) return null
+  const choice = output.choices[0]
+  const text = (choice.preview ?? choice.title ?? '').trim()
+  return text || null
+}
+
+function buildDestinations(params: {
+  hasPaste: boolean
+  hasReturn: boolean
+  metaLabel: string
+}): OutputDestination[] {
+  const list: OutputDestination[] = [
+    { id: 'copy', keys: '↵', labelKey: 'outputCopy' },
+  ]
+  if (params.hasPaste) {
+    list.push({ id: 'paste-foreground', keys: `${params.metaLabel}↵`, labelKey: 'outputPasteForeground' })
+  }
+  if (params.hasReturn) {
+    list.push({ id: 'return-to-launcher', keys: '', labelKey: 'returnToLauncher' })
+  }
+  return list
+}
+
 export function GlobalLauncherCollectInputFrame({
   inputRef,
   bindSearchInputRef,
@@ -90,6 +127,8 @@ export function GlobalLauncherCollectInputFrame({
   onBack,
   onActivateChoice,
   onSecondaryAction,
+  onPastePreviewText,
+  onSubmitPrimary,
 }: {
   inputRef: RefObject<HTMLInputElement | null>
   bindSearchInputRef?: (node: HTMLInputElement | null) => void
@@ -103,38 +142,108 @@ export function GlobalLauncherCollectInputFrame({
   onActivateChoice: (choice: LauncherResultChoice) => void
   /** Host wiring: run a secondary action by id (plugin defines the action ids). */
   onSecondaryAction?: (choice: LauncherResultChoice, actionId: string) => void
+  /** Paste live-preview text into the frontmost app (package 4 destination). */
+  onPastePreviewText?: (text: string) => void | Promise<void>
+  /** Enter when no destination chrome — default submit path. */
+  onSubmitPrimary?: () => void
 }) {
   const placeholder = frame.input.placeholder ?? ''
   const previewChoices = frame.previewOutput?.choices ?? []
   const selectedIndex = frame.selectedSuggestionIndex ?? -1
   const hasSuggestions = previewChoices.length > 0
+  const isSuggestMode = Boolean(frame.item.suggest)
+  const livePreviewText = !isSuggestMode ? extractLivePreviewText(frame.previewOutput) : null
+  const showLivePreview = !isSuggestMode
   const filterText = frame.inputText.trim()
   // Suggest-backed collect-input: empty choices after load = true empty state (not a fake row).
-  const showEmptyState = Boolean(frame.item.suggest) && !busy && !hasSuggestions && frame.previewInputText !== undefined
+  const showEmptyState = isSuggestMode && !busy && !hasSuggestions && frame.previewInputText !== undefined
+  const commandTitle = resolveDisplayTitle(frame.item.display, locale)
+  const metaLabel = getPlatformShortcutMeta().label
+  const previewChoice = livePreviewText ? previewChoices[0] : undefined
+  const hasReturn = Boolean(previewChoice?.secondaryActions?.some((a) => a.id === 'return-to-launcher'))
+  const destinations = useMemo(
+    () => buildDestinations({
+      hasPaste: Boolean(onPastePreviewText),
+      hasReturn,
+      metaLabel,
+    }),
+    [onPastePreviewText, hasReturn, metaLabel],
+  )
+  const [destIndex, setDestIndex] = useState(0)
+  const activeDest = destinations[Math.min(destIndex, Math.max(0, destinations.length - 1))] ?? destinations[0]
+
+  useEffect(() => {
+    setDestIndex(0)
+  }, [frame.item.systemKey, livePreviewText])
+
+  const cycleDestination = (delta: number) => {
+    if (destinations.length < 2) return
+    setDestIndex((index) => (index + delta + destinations.length) % destinations.length)
+  }
+
+  const runDestination = async (destId: OutputDestinationId) => {
+    if (!previewChoice || !livePreviewText) {
+      onSubmitPrimary?.()
+      return
+    }
+    if (destId === 'copy') {
+      await onActivateChoice(previewChoice)
+      return
+    }
+    if (destId === 'paste-foreground') {
+      await onPastePreviewText?.(livePreviewText)
+      return
+    }
+    if (destId === 'return-to-launcher') {
+      onSecondaryAction?.(previewChoice, 'return-to-launcher')
+    }
+  }
+
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Backspace' && !frame.inputText) {
+      event.preventDefault()
+      event.stopPropagation()
+      onBack()
+      return
+    }
+    if (showLivePreview && livePreviewText && event.key === 'Tab' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      event.preventDefault()
+      event.stopPropagation()
+      cycleDestination(event.shiftKey ? -1 : 1)
+      return
+    }
+    if (event.key === 'Enter') {
+      // Suggest mode: panel keyboard owns ↑↓/Enter via controller.
+      if (isSuggestMode) return
+      event.preventDefault()
+      event.stopPropagation()
+      if (event.metaKey || event.ctrlKey) {
+        const paste = destinations.find((d) => d.id === 'paste-foreground')
+        void runDestination(paste?.id ?? 'copy')
+        return
+      }
+      void runDestination(activeDest?.id ?? 'copy')
+    }
+  }
 
   return (
     <>
       <div className="global-launcher-header l-search" style={{ borderBottom: '1px solid var(--border)' }}>
-        <button className="back" type="button" onClick={onBack}>‹</button>
-        <span className="title">
-          <span className="t-ico">{resolveIcon(frame.item.display.icon, 14, resolveDisplayTitle(frame.item.display, locale))}</span>
-          {resolveDisplayTitle(frame.item.display, locale)}
-        </span>
+        <LauncherCommandTag
+          title={commandTitle}
+          icon={frame.item.display.icon}
+          locale={locale}
+          onRemove={onBack}
+        />
         {paramChips.map((chip) => (
-          <span
-            key={chip.label}
-            className="kbd shrink-0 max-w-[100px] truncate"
-            title={`${chip.label}: ${chip.value}`}
-          >
-            {chip.value}
-          </span>
+          <LauncherParamValueChip key={chip.label} label={chip.label} value={chip.value} />
         ))}
-        <span className="vbar" />
         <input
           ref={bindSearchInputRef ?? inputRef}
           value={frame.inputText}
           autoFocus
           onChange={(event) => onInputChange(event.target.value)}
+          onKeyDown={handleInputKeyDown}
           placeholder={placeholder}
           className="mono"
           style={{ caretColor: 'var(--text, currentColor)' }}
@@ -148,7 +257,54 @@ export function GlobalLauncherCollectInputFrame({
           {error}
         </div>
       )}
-      {hasSuggestions && (
+      {showLivePreview && (
+        <>
+          {livePreviewText ? (
+            <div
+              className={`launcher-preview-well${busy ? ' is-stale' : ''}`}
+              data-testid="launcher-preview-well"
+              aria-live="polite"
+            >
+              <pre>{livePreviewText}</pre>
+            </div>
+          ) : (
+            <div
+              className="launcher-preview-well is-empty"
+              data-testid="launcher-preview-well"
+              role="status"
+            >
+              {busy ? t(locale, 'palette.livePreviewStale') : t(locale, 'palette.livePreviewEmpty')}
+            </div>
+          )}
+          {livePreviewText && destinations.length > 0 && (
+            <div
+              className="launcher-output-targets"
+              data-testid="launcher-output-targets"
+              role="listbox"
+              aria-label={t(locale, 'palette.outputSwitchTarget')}
+            >
+              {destinations.map((dest) => (
+                <button
+                  key={dest.id}
+                  type="button"
+                  role="option"
+                  aria-selected={activeDest?.id === dest.id}
+                  className={`launcher-output-target${activeDest?.id === dest.id ? ' is-active' : ''}`}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    setDestIndex(destinations.findIndex((d) => d.id === dest.id))
+                    void runDestination(dest.id)
+                  }}
+                >
+                  {dest.keys ? <kbd>{dest.keys}</kbd> : null}
+                  <span>{t(locale, `palette.${dest.labelKey}`)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+      {isSuggestMode && hasSuggestions && (
         <div className="global-launcher-body l-results l-suggest-list">
           {previewChoices.map((choice, index) => (
             <CollectInputSuggestRow
@@ -188,11 +344,20 @@ export function GlobalLauncherCollectInputFrame({
         </div>
       )}
       <div className="global-launcher-footer l-foot">
-        {hasSuggestions
-          ? <LauncherHintText label={t(locale, 'palette.collectInputSuggestHint')} />
-          : showEmptyState
-            ? <LauncherHintText label={t(locale, 'palette.collectInputEmptyFooter')} />
-            : <LauncherHintKey keys="↵" label={t(locale, 'palette.quickEntryRun')} />}
+        {showLivePreview && livePreviewText ? (
+          <>
+            <LauncherHintKey keys="↵" label={t(locale, `palette.${activeDest?.labelKey ?? 'outputCopy'}`)} />
+            {destinations.length > 1 && (
+              <LauncherHintKey keys="⇥" label={t(locale, 'palette.outputSwitchTarget')} />
+            )}
+          </>
+        ) : isSuggestMode && hasSuggestions ? (
+          <LauncherHintText label={t(locale, 'palette.collectInputSuggestHint')} />
+        ) : showEmptyState ? (
+          <LauncherHintText label={t(locale, 'palette.collectInputEmptyFooter')} />
+        ) : (
+          <LauncherHintKey keys="↵" label={t(locale, 'palette.quickEntryRun')} />
+        )}
         <LauncherHintKey keys="esc" label={t(locale, 'palette.back')} />
       </div>
     </>

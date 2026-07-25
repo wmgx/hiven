@@ -6,6 +6,7 @@ import type { ParamInputFrame } from '../../workspace/launcher/controller'
 import type { LauncherParamSpec } from '../../workspace/launcher/types'
 import { searchableFieldsMatch, type SearchableFields } from '../../workspace/searchRanking'
 import { resolveDisplayTitle } from '../../workspace/launcher/display'
+import { LauncherCommandTag, LauncherParamValueChip } from './LauncherCommandTag'
 
 type LauncherParamStepProps = {
   frame: ParamInputFrame
@@ -162,17 +163,20 @@ export function LauncherParamStep({
     ? t(locale, 'palette.selectedCountMax', { count: selectedCount, max: maxSelect })
     : `${frame.paramIndex + 1}/${params.length}`
 
+  const commandTitle = resolveDisplayTitle(frame.item.display, locale)
+
   return (
     <>
       <div className={headerClassName} style={{ borderBottom: '1px solid var(--border)' }}>
-        <button className="back" type="button" onClick={onBack}>‹</button>
-        <span className="title">
-          {resolveDisplayTitle(frame.item.display, locale)}
-          {breadcrumbChips.length > 0 && (
-            <span className="t-sub">{breadcrumbChips.map((chip) => chip.value).join(' / ')}</span>
-          )}
-        </span>
-        <span className="vbar" />
+        <LauncherCommandTag
+          title={commandTitle}
+          icon={frame.item.display.icon}
+          locale={locale}
+          onRemove={onBack}
+        />
+        {breadcrumbChips.map((chip) => (
+          <LauncherParamValueChip key={chip.label} label={chip.label} value={chip.value} />
+        ))}
         <input
           ref={inputRef}
           className={[isTextParam ? 'mono' : '', param.type === 'number' ? 'l-number-input' : ''].filter(Boolean).join(' ')}
@@ -187,6 +191,7 @@ export function LauncherParamStep({
               if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
               event.preventDefault()
               event.stopPropagation()
+              // Package 4: empty ⌫ removes command tag → back one step (one press).
               onBack()
               return
             }
