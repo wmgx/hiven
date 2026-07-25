@@ -16,6 +16,8 @@ export function handleGlobalLauncherKeyDown({
   resultSelectedIndex,
   setResultSelectedIndex,
   toggleResultChoice,
+  activateResultSecondary,
+  pastePreviewText,
   isKeyboardNavRef,
   visibleFilteredLength,
   setSelectedIndex,
@@ -49,6 +51,9 @@ export function handleGlobalLauncherKeyDown({
   resultSelectedIndex: number
   setResultSelectedIndex: (updater: number | ((index: number) => number)) => void
   toggleResultChoice: (choice: unknown, frame: ResultFrame) => void
+  /** Package 4: result secondary e.g. return-to-launcher */
+  activateResultSecondary?: (choice: { secondaryActions?: Array<{ id: string }>; preview?: string; title?: string }, actionId: string) => void
+  pastePreviewText?: (text: string) => void | Promise<void>
   isKeyboardNavRef: MutableRefObject<boolean>
   visibleFilteredLength: number
   setSelectedIndex: (updater: number | ((index: number) => number)) => void
@@ -126,8 +131,25 @@ export function handleGlobalLauncherKeyDown({
       if (event.key === 'Enter' || isSpace) {
         event.preventDefault()
         event.stopPropagation()
-        const choice = choices[Math.min(resultSelectedIndex, Math.max(0, choices.length - 1))]
-        if (choice) toggleResultChoice(choice, resultFrame)
+        const choice = choices[Math.min(resultSelectedIndex, Math.max(0, choices.length - 1))] as
+          | { secondaryActions?: Array<{ id: string }>; preview?: string; title?: string }
+          | undefined
+        if (!choice) return
+        // Align with collect-input destinations: ⇧↵ paste · ⌘↵ return · ↵ primary
+        if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+          if (choice.secondaryActions?.some((a) => a.id === 'return-to-launcher')) {
+            activateResultSecondary?.(choice, 'return-to-launcher')
+            return
+          }
+        }
+        if (event.key === 'Enter' && event.shiftKey && pastePreviewText) {
+          const text = (choice.preview ?? choice.title ?? '').trim()
+          if (text) {
+            void pastePreviewText(text)
+            return
+          }
+        }
+        toggleResultChoice(choice, resultFrame)
         return
       }
       return

@@ -8,6 +8,7 @@ import type { ClipboardObjectBlockState } from '../../launcher/clipboard/useClip
 import { ObjectBlockToken } from './ObjectBlockToken'
 import { RecentClipboardHint } from './RecentClipboardHint'
 import type { RecommendedAction, RecommendedOutputTarget } from '../../launcher/clipboard/actionRecommendation'
+import { LauncherEmptyWell } from './LauncherEmptyWell'
 
 export function GlobalLauncherSearchFrame({
   inputRef,
@@ -101,9 +102,10 @@ export function GlobalLauncherSearchFrame({
           />
         )}
         {items.length === 0 && query ? (
-          <div className="flex-1 flex items-center justify-center py-8" style={{ color: 'var(--color-text-tertiary)' }}>
-            <span className="text-[13px]">{t(locale, 'palette.noResults')}</span>
-          </div>
+          <LauncherEmptyWell
+            title={t(locale, 'palette.noResults')}
+            hint={t(locale, 'palette.noResultsHint')}
+          />
         ) : (
           <LauncherMixedList
               items={items}

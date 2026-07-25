@@ -162,6 +162,8 @@ export function GlobalLauncherPanel({
         resultSelectedIndex,
         setResultSelectedIndex,
         toggleResultChoice,
+        activateResultSecondary: activateSecondaryAction,
+        pastePreviewText,
         isKeyboardNavRef,
         visibleFilteredLength: !query && visibleFiltered.length > MAX_VISIBLE_IDLE
           ? MAX_VISIBLE_IDLE

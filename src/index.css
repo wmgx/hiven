@@ -135,7 +135,12 @@ body[data-theme='dark'],
   --text-3: #6d6d75;
   --accent: #3b82f6;
   --accent-hover: #5a95f8;
-  --accent-soft: rgba(59, 130, 246, 0.16);
+  /* V4 stereo black: depth via face layering + top hairline, not heavy drop shadows */
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  --elev-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --elev-panel: var(--elev-highlight), 0 0 0 var(--hairline) rgba(0, 0, 0, 0.35);
+  --well-bg: color-mix(in srgb, #000 22%, var(--panel));
+  --well-inset: inset 0 1px 0 rgba(0, 0, 0, 0.35), inset 0 -1px 0 rgba(255, 255, 255, 0.03);
 
   --bg-page: #161618;
   --bg-surface: var(--panel);
@@ -4644,6 +4649,13 @@ html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-lau
   --accent-soft: color-mix(in srgb, var(--accent) 12%, #fff);
   --accent-tint: color-mix(in srgb, var(--accent) 8%, #fff);
   --accent-border-soft: color-mix(in srgb, var(--accent) 28%, #fff);
+  --elev-highlight: inset 0 1px 0 #ffffff;
+  --elev-panel:
+    0 12px 36px -10px rgba(0, 0, 0, 0.12),
+    0 4px 10px -2px rgba(0, 0, 0, 0.06),
+    0 0 0 var(--hairline) var(--border);
+  --well-bg: var(--surface);
+  --well-inset: inset 0 1px 2px rgba(26, 28, 30, 0.05);
   --radius: 10px;
   /* --radius-sm defined once at top :root (7px) */
   --launcher-panel-width: calc(100vw / 3);
@@ -4657,6 +4669,10 @@ body[data-theme='dark'] {
   --surface: #2e2e32;
   --surface-2: #3a3a3f;
   --border: #36363b;
+  --elev-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --elev-panel: var(--elev-highlight), 0 0 0 var(--hairline) rgba(0, 0, 0, 0.35);
+  --well-bg: color-mix(in srgb, #000 22%, var(--panel));
+  --well-inset: inset 0 1px 0 rgba(0, 0, 0, 0.35), inset 0 -1px 0 rgba(255, 255, 255, 0.03);
   --border-2: #43434a;
   --text: #f2f2f4;
   --text-2: #a0a0a8;
@@ -4696,9 +4712,17 @@ body[data-theme='dark'] {
   box-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 0, 0, 0.06) !important;
 }
 
+/* V4: dark launcher — face layering + top hairline (stereo black), soft ambient only */
 .flux-spatial-shell[data-theme='dark'] .global-launcher-panel.palette-panel,
-body[data-theme='dark'] .global-launcher-panel.palette-panel {
-  box-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+body[data-theme='dark'] .global-launcher-panel.palette-panel,
+.flux-spatial-shell[data-theme='dark'] .palette-panel,
+body[data-theme='dark'] .palette-panel {
+  background: var(--panel) !important;
+  border-color: var(--border) !important;
+  box-shadow:
+    var(--elev-highlight),
+    0 20px 48px -16px rgba(0, 0, 0, 0.55),
+    0 0 0 var(--hairline) rgba(0, 0, 0, 0.4) !important;
 }
 
 .quick-editor-command-layer {
@@ -4830,7 +4854,9 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
   gap: 9px;
   min-height: 52px;
   padding: 14px 16px;
-  background: var(--panel);
+  /* V4/V5: input row as inset well vs panel face */
+  background: var(--surface);
+  box-shadow: var(--well-inset);
 }
 
 .l-search .ico {
@@ -4959,16 +4985,56 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
   flex: none;
 }
 
-/* Package 4: live preview well (V5-well cousin) */
-.launcher-preview-well {
+/* Package 4 + V5: live preview / empty wells share inset material */
+.launcher-preview-well,
+.launcher-empty-well {
   margin: 8px 10px 6px;
+  border-radius: var(--radius-md, 10px);
+  background: var(--well-bg, var(--well, var(--surface)));
+  box-shadow: var(--well-inset);
+  border: var(--hairline) solid var(--border);
+}
+
+.launcher-preview-well {
   max-height: min(40vh, 220px);
   overflow: auto;
   padding: 12px 14px;
-  border-radius: var(--radius-md, 10px);
-  background: var(--well, var(--bg-surface-2, var(--surface)));
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
-  border: var(--hairline) solid var(--border);
+}
+
+.launcher-empty-well {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 112px;
+  padding: 28px 20px;
+  text-align: center;
+}
+
+.launcher-empty-well-icon {
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+  opacity: 0.9;
+}
+
+.launcher-empty-well-title {
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--text-2);
+  line-height: 1.35;
+}
+
+.launcher-empty-well-hint {
+  font-size: 12px;
+  color: var(--text-3);
+  max-width: 320px;
+  line-height: 1.4;
+}
+
+.launcher-empty-well-action {
+  margin-top: 4px;
 }
 
 .launcher-preview-well pre {

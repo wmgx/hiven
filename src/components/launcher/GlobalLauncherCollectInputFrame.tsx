@@ -8,6 +8,7 @@ import { resolveIcon } from '../../utils/resolveIcon'
 import { Tooltip } from '../Tooltip'
 import { LauncherHintKey, LauncherHintText } from './LauncherFooterHints'
 import { LauncherCommandTag, LauncherParamValueChip } from './LauncherCommandTag'
+import { LauncherEmptyWell } from './LauncherEmptyWell'
 import { getPlatformShortcutMeta } from './launcherParamShortcuts'
 
 /** Suggest row: keep keyboard highlight in view (same as result / mixed list). */
@@ -275,13 +276,10 @@ export function GlobalLauncherCollectInputFrame({
               <pre>{livePreviewText}</pre>
             </div>
           ) : (
-            <div
-              className="launcher-preview-well is-empty"
-              data-testid="launcher-preview-well"
-              role="status"
-            >
-              {busy ? t(locale, 'palette.livePreviewStale') : t(locale, 'palette.livePreviewEmpty')}
-            </div>
+            <LauncherEmptyWell
+              testId="launcher-preview-well"
+              title={busy ? t(locale, 'palette.livePreviewStale') : t(locale, 'palette.livePreviewEmpty')}
+            />
           )}
           {livePreviewText && destinations.length > 0 && (
             <div
@@ -326,29 +324,14 @@ export function GlobalLauncherCollectInputFrame({
         </div>
       )}
       {showEmptyState && (
-        <div
-          className="global-launcher-body l-results"
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 6,
-            padding: '28px 20px',
-            textAlign: 'center',
-            minHeight: 96,
-          }}
-          role="status"
-        >
-          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-secondary, var(--muted-foreground, #888))' }}>
-            {t(locale, 'palette.collectInputEmptyTitle')}
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--text-tertiary, var(--muted-foreground, #999))', maxWidth: 320 }}>
-            {filterText
-              ? t(locale, 'palette.collectInputEmptyFilterHint').replace('{query}', filterText)
-              : t(locale, 'palette.collectInputEmptyHint')}
-          </div>
-        </div>
+        <LauncherEmptyWell
+          title={t(locale, 'palette.collectInputEmptyTitle')}
+          hint={
+            filterText
+              ? t(locale, 'palette.collectInputEmptyFilterHint', { query: filterText })
+              : t(locale, 'palette.collectInputEmptyHint')
+          }
+        />
       )}
       <div className="global-launcher-footer l-foot">
         {showLivePreview && livePreviewText ? (

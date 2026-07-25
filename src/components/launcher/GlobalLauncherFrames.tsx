@@ -244,6 +244,8 @@ export function GlobalLauncherFrameSwitch({
         onBack={onFrameBack}
         onHoverChoice={onHoverResultChoice}
         onToggleChoice={onToggleResultChoice}
+        onSecondaryAction={onSecondaryAction}
+        onPastePreviewText={onPastePreviewText}
       />
     )
   }

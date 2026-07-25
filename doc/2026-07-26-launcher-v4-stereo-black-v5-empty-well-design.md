@@ -1,6 +1,7 @@
 # Launcher 视觉 · V4 立体黑 + V5 空井 设计稿
 
-> **状态:** 并行出稿（不阻塞包四 02/03 代码，建议同里程碑落地）  
+> **状态:** 设计稿 · **MVP 已落地**（V4 dark elev + well-inset；V5 LauncherEmptyWell；单文本 result 对齐去向徽章）  
+
 > **来源:** `doc/2026-07-19-ui-ux-review-and-redesign-summary.md` V4 / V5（及可选 V6）  
 > **依赖 token:** `--hairline`、launcher 系 `--panel / --surface / --text*`、包三键帽
 

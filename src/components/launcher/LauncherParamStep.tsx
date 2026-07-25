@@ -7,6 +7,7 @@ import type { LauncherParamSpec } from '../../workspace/launcher/types'
 import { searchableFieldsMatch, type SearchableFields } from '../../workspace/searchRanking'
 import { resolveDisplayTitle } from '../../workspace/launcher/display'
 import { LauncherCommandTag, LauncherParamValueChip } from './LauncherCommandTag'
+import { LauncherEmptyWell } from './LauncherEmptyWell'
 
 type LauncherParamStepProps = {
   frame: ParamInputFrame
@@ -262,7 +263,10 @@ export function LauncherParamStep({
             )
           })}
           {options.length === 0 && (
-            <div className="px-3.5 py-4 text-center text-xs" style={{ color: 'var(--color-text-tertiary)' }}>{t(locale, 'palette.noOptions')}</div>
+            <LauncherEmptyWell
+              title={t(locale, 'palette.noOptions')}
+              hint={t(locale, 'palette.noOptionsHint')}
+            />
           )}
         </div>
       )}
