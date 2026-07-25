@@ -54,8 +54,10 @@ export function GlobalLauncherSearchFrame({
   onObjectActionController?: (controller: { expand: () => void; execute: (keepOpen?: boolean) => void } | null) => void
 }) {
   const block = clipboardBlock?.block ?? null
+  const blockExiting = Boolean(clipboardBlock?.isExiting)
   const hint = clipboardBlock?.hint ?? null
-  const resolvedPlaceholder = block
+  // During exit, drop action placeholder immediately so the bar doesn't feel stuck on object mode.
+  const resolvedPlaceholder = block && !blockExiting
     ? t(locale, 'palette.objectActionPlaceholder', { source: block.title })
     : placeholder
 
@@ -67,6 +69,7 @@ export function GlobalLauncherSearchFrame({
           <ObjectBlockToken
             block={block}
             locale={locale}
+            exiting={blockExiting}
             onRemove={() => clipboardBlock?.removeBlock()}
           />
         )}

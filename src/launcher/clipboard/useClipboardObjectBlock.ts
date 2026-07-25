@@ -4,7 +4,7 @@
  * Responsibilities:
  *  1. On launcher open: read system clipboard, build ClipboardSnapshot.
  *  2. Apply freshness rules to decide whether to auto-attach ObjectBlock.
- *  3. Expose Backspace-to-select-to-delete interaction state.
+ *  3. Expose Backspace one-shot remove with short exit transition.
  *  4. Expose mode: 'object-action' | 'search-only'.
  *  5. Expose recent clipboard hint when in 2–10 min window.
  */
@@ -27,11 +27,16 @@ import {
 } from './clipboardSnapshot'
 import { launcherPerfNow, logLauncherPerfDuration } from '../../workspace/launcher/perf'
 
+/** Keep token mounted long enough for CSS exit (opacity + scale + max-width). */
+export const OBJECT_BLOCK_EXIT_MS = 160
+
 export type ClipboardObjectBlockMode = 'object-action' | 'search-only'
 
 export type ClipboardObjectBlockState = {
   mode: ClipboardObjectBlockMode
   block: LauncherObjectBlock | null
+  /** True while the token plays its remove transition (block still rendered). */
+  isExiting: boolean
   hint: RecentClipboardHint | null
   removeBlock: () => void
   selectBlockForDelete: () => void
@@ -45,19 +50,30 @@ export function useClipboardObjectBlock(params: {
 }): ClipboardObjectBlockState {
   const { open, readClipboard } = params
   const [block, setBlock] = useState<LauncherObjectBlock | null>(null)
+  const [isExiting, setIsExiting] = useState(false)
   const [hint, setHint] = useState<RecentClipboardHint | null>(null)
   const didReadRef = useRef(false)
+  const exitTimerRef = useRef<number | null>(null)
+
+  const clearExitTimer = useCallback(() => {
+    if (exitTimerRef.current != null) {
+      window.clearTimeout(exitTimerRef.current)
+      exitTimerRef.current = null
+    }
+  }, [])
 
   // Live deliver pending blocks while launcher stays open (history stack → list).
   useEffect(() => {
     return subscribePendingObjectBlock((pending) => {
+      clearExitTimer()
+      setIsExiting(false)
       setBlock(pending)
       setHint(null)
       didReadRef.current = true
       // Consume so a later open/read path does not overwrite.
       consumePendingObjectBlock()
     })
-  }, [])
+  }, [clearExitTimer])
 
   // On open: prefer pending history-item block; else read clipboard after first paint.
   useEffect(() => {
@@ -70,6 +86,8 @@ export function useClipboardObjectBlock(params: {
 
     const pending = consumePendingObjectBlock()
     if (pending) {
+      clearExitTimer()
+      setIsExiting(false)
       setBlock(pending)
       setHint(null)
       return
@@ -88,6 +106,7 @@ export function useClipboardObjectBlock(params: {
           })
           if (!text) {
             setBlock(null)
+            setIsExiting(false)
             setHint(null)
             return
           }
@@ -105,12 +124,15 @@ export function useClipboardObjectBlock(params: {
 
           if (cancelled) return
           const newBlock = isClipboardDismissed(snapshot) ? null : createClipboardObjectBlock(snapshot)
+          clearExitTimer()
+          setIsExiting(false)
           setBlock(newBlock)
           setHint(newBlock ? null : buildRecentClipboardHint(snapshot))
         } catch {
           if (cancelled) return
           logLauncherPerfDuration('clipboard-object-block:read', startedAt, { failed: true })
           setBlock(null)
+          setIsExiting(false)
           setHint(null)
         }
       })()
@@ -120,38 +142,51 @@ export function useClipboardObjectBlock(params: {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [open, readClipboard])
+  }, [open, readClipboard, clearExitTimer])
 
   // When launcher closes, clear block state
   useEffect(() => {
     if (!open) {
+      clearExitTimer()
       setBlock(null)
+      setIsExiting(false)
       setHint(null)
     }
-  }, [open])
+  }, [open, clearExitTimer])
 
+  useEffect(() => () => clearExitTimer(), [clearExitTimer])
+
+  /**
+   * Dismiss snapshot immediately (no re-attach), keep token mounted for exit CSS, then unmount.
+   */
   const removeBlock = useCallback(() => {
+    if (!block || isExiting) return
     const snapshot = getLastClipboardSnapshot()
     if (snapshot) dismissClipboardBlock(snapshot)
-    setBlock(null)
-  }, [])
+    setIsExiting(true)
+    clearExitTimer()
+    exitTimerRef.current = window.setTimeout(() => {
+      setBlock(null)
+      setIsExiting(false)
+      exitTimerRef.current = null
+    }, OBJECT_BLOCK_EXIT_MS)
+  }, [block, isExiting, clearExitTimer])
 
   const selectBlockForDelete = useCallback(() => {
     setBlock((prev) => prev ? { ...prev, selectedForDelete: true } : null)
   }, [])
 
   /**
-   * Handle Backspace when query is empty: remove the object block in one press.
-   * Returns true if Backspace was consumed.
+   * Handle Backspace when query is empty: remove the object block in one press
+   * (with exit transition). Returns true if Backspace was consumed.
    */
   const handleBackspace = useCallback((queryEmpty: boolean): boolean => {
     if (!queryEmpty) return false
     if (!block) return false
-    const snapshot = getLastClipboardSnapshot()
-    if (snapshot) dismissClipboardBlock(snapshot)
-    setBlock(null)
+    if (isExiting) return true
+    removeBlock()
     return true
-  }, [block])
+  }, [block, isExiting, removeBlock])
 
   const attachHintAsBlock = useCallback(() => {
     if (!hint) return
@@ -161,16 +196,20 @@ export function useClipboardObjectBlock(params: {
     const now = Date.now()
     const forcedBlock = createClipboardObjectBlock(snapshot, now, { forceAttach: true })
     if (forcedBlock) {
+      clearExitTimer()
+      setIsExiting(false)
       setBlock(forcedBlock)
       setHint(null)
     }
-  }, [hint])
+  }, [hint, clearExitTimer])
 
-  const mode: ClipboardObjectBlockMode = block ? 'object-action' : 'search-only'
+  // While exiting, drop object-action mode so ranking/list switch without waiting for unmount.
+  const mode: ClipboardObjectBlockMode = block && !isExiting ? 'object-action' : 'search-only'
 
   return {
     mode,
     block,
+    isExiting,
     hint,
     removeBlock,
     selectBlockForDelete,

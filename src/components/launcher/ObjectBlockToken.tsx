@@ -6,7 +6,7 @@
  *
  * UI:
  *   [ 剪贴板 · JSON · 12 秒前  × ]
- *   Empty-query Backspace removes in one press (no two-step select).
+ *   Empty-query Backspace removes in one press with a short exit transition.
  *   When secretMasked: masked label
  */
 
@@ -25,22 +25,31 @@ export function ObjectBlockToken({
   block,
   onRemove,
   locale: localeProp,
+  exiting = false,
 }: {
   block: LauncherObjectBlock
   onRemove: () => void
   locale?: Locale
+  /** Play remove transition while parent keeps this mounted. */
+  exiting?: boolean
 }) {
   const storeLocale = useAppStore((s) => s.locale)
   const locale = localeProp ?? storeLocale
   const selected = block.selectedForDelete
   return (
     <span
-      className={`object-block-token${selected ? ' selected-for-delete' : ''}`}
+      className={[
+        'object-block-token',
+        selected ? 'selected-for-delete' : '',
+        exiting ? 'is-exiting' : 'is-entered',
+      ].filter(Boolean).join(' ')}
       data-testid="object-block-token"
       data-source={block.source}
       data-kind={block.kind}
       data-selected={selected ? 'true' : undefined}
+      data-exiting={exiting ? 'true' : undefined}
       data-state={selected ? 'selected-for-deletion' : block.state}
+      aria-hidden={exiting ? true : undefined}
     >
       {!block.secretMasked && block.preview ? (
         <span className="object-block-content">{truncatePreview(block.preview, 30)}</span>

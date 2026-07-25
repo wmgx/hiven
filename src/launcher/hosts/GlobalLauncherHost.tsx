@@ -73,8 +73,10 @@ export function GlobalLauncherHost() {
     open,
     readClipboard: readLauncherClipboard,
   })
-  // Only use clipboard for recommendations when the Object Block is showing (fresh enough)
-  const objectBlockText = clipboardBlock.block?.payloadText ?? undefined
+  // Recommendations only while the block is active (not during remove exit animation).
+  const objectBlockText = clipboardBlock.mode === 'object-action'
+    ? (clipboardBlock.block?.payloadText ?? undefined)
+    : undefined
   const [foregroundApp, setForegroundApp] = useState<string | undefined>()
 
   const {
@@ -423,7 +425,9 @@ export function GlobalLauncherHost() {
     openPluginSurface,
     grantPluginPermissions,
     focusSearchInputAfterBack,
-    objectBlockText: clipboardBlock.block?.payloadText ?? undefined,
+    objectBlockText: clipboardBlock.mode === 'object-action'
+      ? (clipboardBlock.block?.payloadText ?? undefined)
+      : undefined,
   })
 
   useGlobalLauncherHostEscape({

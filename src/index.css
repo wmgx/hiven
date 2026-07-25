@@ -7370,7 +7370,7 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   align-items: center;
   gap: 6px;
   min-height: 30px;
-  max-width: 62%;
+  max-width: min(62%, 280px);
   padding: 0 8px 0 10px;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -7380,11 +7380,56 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   font-weight: 550;
   white-space: nowrap;
   flex: none;
-  transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+  overflow: hidden;
+  transform-origin: left center;
+  transition:
+    opacity 0.14s var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+    transform 0.14s var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+    max-width 0.16s var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+    padding 0.16s var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+    gap 0.16s var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+    border-color 0.12s ease,
+    background 0.12s ease,
+    box-shadow 0.12s ease,
+    min-height 0.16s var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
+}
+
+.object-block-token.is-entered {
+  animation: object-block-enter 0.16s var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) both;
+}
+
+.object-block-token.is-exiting {
+  opacity: 0;
+  transform: scale(0.9);
+  max-width: 0;
+  min-height: 0;
+  padding-left: 0;
+  padding-right: 0;
+  gap: 0;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+@keyframes object-block-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .object-block-token:has(.object-block-content) {
   padding: 0 8px 0 10px;
+}
+
+.object-block-token.is-exiting:has(.object-block-content) {
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .object-block-token.selected-for-delete,

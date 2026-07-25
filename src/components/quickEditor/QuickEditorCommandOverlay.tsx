@@ -67,6 +67,7 @@ export function QuickEditorCommandOverlay() {
   const emptyClipboardBlock = useMemo<ClipboardObjectBlockState>(() => ({
     mode: 'search-only',
     block: null,
+    isExiting: false,
     hint: null,
     removeBlock: () => {},
     selectBlockForDelete: () => {},

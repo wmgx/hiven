@@ -46,9 +46,11 @@ assert.match(useClipboardObjectBlockSrc, /removeBlock/, 'hook should expose remo
 assert.match(useClipboardObjectBlockSrc, /handleBackspace/, 'hook should expose handleBackspace')
 assert.match(useClipboardObjectBlockSrc, /attachHintAsBlock/, 'hook should expose attachHintAsBlock')
 assert.match(useClipboardObjectBlockSrc, /readClipboard/, 'hook should accept readClipboard param')
-// One-shot Backspace: empty query removes block without select-for-delete intermediate step
+// One-shot Backspace: empty query removes with exit transition (no select-for-delete step)
 assert.match(useClipboardObjectBlockSrc, /if \(!queryEmpty\) return false/, 'backspace only when query empty')
-assert.match(useClipboardObjectBlockSrc, /if \(!block\) return false[\s\S]*?setBlock\(null\)/, 'backspace removes block in one press')
+assert.match(useClipboardObjectBlockSrc, /OBJECT_BLOCK_EXIT_MS|isExiting/, 'remove uses exit transition state')
+assert.match(useClipboardObjectBlockSrc, /removeBlock\(\)/, 'backspace delegates to removeBlock')
+assert.match(useClipboardObjectBlockSrc, /setIsExiting\(true\)/, 'remove starts exit animation before unmount')
 assert.doesNotMatch(useClipboardObjectBlockSrc, /simulateCopy|simulate_copy|⌘C|Cmd\+C/, 'hook must not auto-simulate Cmd+C')
 assert.doesNotMatch(useClipboardObjectBlockSrc, /externalSelection|readExternalSelection/, 'hook must not read external selection')
 
