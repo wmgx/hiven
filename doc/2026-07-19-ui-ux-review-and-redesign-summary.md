@@ -1,7 +1,7 @@
 # hiven UI/UX 审查总结与重设计方向
 
 **日期:** 2026-07-19
-**状态:** 审查完成 · 包一–三可直接实施；包四需另出正式交互稿后开工
+**状态:** 审查完成 · 包一–三已实施；包四正式稿见 `doc/2026-07-26-launcher-token-input-live-preview-design.md`；V4/V5 见 `doc/2026-07-26-launcher-v4-stereo-black-v5-empty-well-design.md`
 **产品:** hiven
 **读者:** 执行 AI / 评审 / 产品（包级规格见 §7；假定执行者零上下文）
 **方法:** ui-ux-pro-max 规则库对照 + 源码审查（未运行界面，结论均附代码位置）；同日二轮补 emilkowalski/skills（emil-design-eng + apple-design）动效专项复审，产出 §5 M 系列
