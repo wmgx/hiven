@@ -82,25 +82,84 @@ fn launcher_perf_enabled() -> bool {
     std::env::var(LAUNCHER_PERF_ENV).ok().as_deref() == Some("1")
 }
 
-fn log_launcher_perf(label: &str, started_at: Instant, detail: impl AsRef<str>) {
-    if !launcher_perf_enabled() {
-        return;
-    }
-    eprintln!(
-        "[hiven:launcher-perf] {} durationMs={} {}",
-        label,
-        started_at.elapsed().as_millis(),
-        detail.as_ref()
-    );
+/// Always-on diagnosis log: ~/.local/hiven/logs/launcher-perf.ndjson
+fn launcher_perf_log_path() -> Result<PathBuf, String> {
+    let dir = config_dir()?.join("logs");
+    fs::create_dir_all(&dir).map_err(|e| format!("create logs dir: {}", e))?;
+    Ok(dir.join("launcher-perf.ndjson"))
 }
 
-/// Frontend perf lines land in the same stderr stream as native ones.
+fn append_launcher_perf_file(line: &str) {
+    let Ok(path) = launcher_perf_log_path() else {
+        return;
+    };
+    // Soft rotate ~5MB so agents can always read a bounded file.
+    if let Ok(meta) = fs::metadata(&path) {
+        if meta.len() > 5 * 1024 * 1024 {
+            let bak = path.with_extension("ndjson.1");
+            let _ = fs::rename(&path, &bak);
+        }
+    }
+    if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(&path) {
+        use std::io::Write;
+        let _ = writeln!(file, "{}", line);
+    }
+}
+
+fn now_unix_ms() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0)
+}
+
+fn log_launcher_perf(label: &str, started_at: Instant, detail: impl AsRef<str>) {
+    let duration_ms = started_at.elapsed().as_millis();
+    let detail = detail.as_ref();
+    // NDJSON for file (always on) — no secrets, no command bodies.
+    let line = format!(
+        "{{\"ts\":{},\"source\":\"native\",\"label\":{},\"durationMs\":{},\"detail\":{}}}",
+        now_unix_ms(),
+        serde_json::to_string(label).unwrap_or_else(|_| "\"?\"".to_string()),
+        duration_ms,
+        serde_json::to_string(detail).unwrap_or_else(|_| "\"\"".to_string()),
+    );
+    append_launcher_perf_file(&line);
+    if launcher_perf_enabled() {
+        eprintln!(
+            "[hiven:launcher-perf] {} durationMs={} {}",
+            label, duration_ms, detail
+        );
+    }
+}
+
+/// Frontend perf lines → always-on log file; stderr only when HIVEN_LAUNCHER_PERF=1.
 #[tauri::command]
 fn log_launcher_perf_frontend(line: String) {
-    if !launcher_perf_enabled() {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
         return;
     }
-    eprintln!("[hiven:launcher-perf] frontend:{}", line);
+    // Prefer structured NDJSON from frontend; wrap plain lines.
+    let file_line = if trimmed.starts_with('{') {
+        trimmed.to_string()
+    } else {
+        format!(
+            "{{\"ts\":{},\"source\":\"frontend\",\"line\":{}}}",
+            now_unix_ms(),
+            serde_json::to_string(trimmed).unwrap_or_else(|_| "\"\"".to_string()),
+        )
+    };
+    append_launcher_perf_file(&file_line);
+    if launcher_perf_enabled() {
+        eprintln!("[hiven:launcher-perf] frontend:{}", trimmed);
+    }
+}
+
+/// Absolute path of the always-on launcher perf log (for agents / DevTools).
+#[tauri::command]
+fn launcher_perf_log_file() -> Result<String, String> {
+    launcher_perf_log_path().map(|p| p.to_string_lossy().to_string())
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -6140,6 +6199,7 @@ pub fn run() {
             show_launcher_window,
             focus_launcher_webview,
             log_launcher_perf_frontend,
+            launcher_perf_log_file,
             hide_launcher_window,
             hide_launcher_and_paste,
             show_quick_editor_window,

@@ -5,6 +5,8 @@ const SLOW_MS = 50
 /** Hard jank threshold — usually user-visible stutter. */
 const JANK_MS = 120
 const RING_CAPACITY = 300
+/** Always-on diagnosis log on disk (native append). */
+export const LAUNCHER_PERF_LOG_HINT = '~/.local/hiven/logs/launcher-perf.ndjson'
 
 export type LauncherPerfSample = {
   t: number
@@ -16,21 +18,20 @@ export type LauncherPerfSample = {
 }
 
 const ring: LauncherPerfSample[] = []
-let sampleSeq = 0
 
 export function isLauncherPerfEnabled(): boolean {
   try {
     const stored = window.localStorage.getItem(LAUNCHER_PERF_STORAGE_KEY)
     if (stored === '0') return false
     if (stored === '1') return true
-    // Dev builds default on so perf lines reach native stderr without devtools.
+    // Dev builds default on so perf lines reach console without extra setup.
     return import.meta.env.DEV
   } catch {
     return false
   }
 }
 
-/** Force console/native logging on for the current page session (ring always records). */
+/** Force console logging on for the current page session. File logging is always on. */
 export function enableLauncherPerfLogging(): void {
   try {
     window.localStorage.setItem(LAUNCHER_PERF_STORAGE_KEY, '1')
@@ -42,20 +43,52 @@ export function enableLauncherPerfLogging(): void {
 type InvokeFn = (cmd: string, args?: Record<string, unknown>) => Promise<unknown>
 let nativeInvoke: InvokeFn | null = null
 let nativeInvokeLoading = false
+let cachedLogPath: string | null = null
 
-/** Fire-and-forget mirror of perf lines into native stderr (dev diagnosis). */
-function forwardLauncherPerfLine(line: string): void {
+function ensureNativeInvoke(): void {
+  if (nativeInvoke || nativeInvokeLoading) return
   if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
-  if (nativeInvoke) {
-    void nativeInvoke('log_launcher_perf_frontend', { line }).catch(() => {})
-    return
-  }
-  if (nativeInvokeLoading) return
   nativeInvokeLoading = true
   void import('@tauri-apps/api/core')
     .then(({ invoke }) => {
       nativeInvoke = invoke as InvokeFn
-      void invoke('log_launcher_perf_frontend', { line }).catch(() => {})
+      nativeInvokeLoading = false
+      void invoke<string>('launcher_perf_log_file')
+        .then((path) => {
+          cachedLogPath = path
+        })
+        .catch(() => {})
+    })
+    .catch(() => {
+      nativeInvokeLoading = false
+    })
+}
+
+/**
+ * Always append sample to ~/.local/hiven/logs/launcher-perf.ndjson via native.
+ * Console output remains gated by isLauncherPerfEnabled().
+ */
+function forwardLauncherPerfSample(sample: LauncherPerfSample): void {
+  if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+  const payload = JSON.stringify({
+    ts: sample.t,
+    source: 'frontend',
+    label: sample.label,
+    durationMs: sample.durationMs ?? null,
+    slow: sample.slow ?? false,
+    jank: sample.jank ?? false,
+    details: sample.details ?? null,
+  })
+  if (nativeInvoke) {
+    void nativeInvoke('log_launcher_perf_frontend', { line: payload }).catch(() => {})
+    return
+  }
+  ensureNativeInvoke()
+  // Retry once invoke is loaded (drop if still cold — next sample will hit).
+  void import('@tauri-apps/api/core')
+    .then(({ invoke }) => {
+      nativeInvoke = invoke as InvokeFn
+      void invoke('log_launcher_perf_frontend', { line: payload }).catch(() => {})
     })
     .catch(() => {})
 }
@@ -82,18 +115,16 @@ export function logLauncherPerf(label: string, details?: Record<string, unknown>
     jank: durationMs != null ? durationMs >= JANK_MS : undefined,
     details,
   }
-  // Always keep ring samples for post-hoc diagnosis (even when console is off).
+  // Always: ring + file. Console only when enabled.
   pushRing(sample)
-  sampleSeq += 1
+  forwardLauncherPerfSample(sample)
 
   if (!isLauncherPerfEnabled()) return
   if (details) {
     console.info(LAUNCHER_PERF_PREFIX, label, details)
-    forwardLauncherPerfLine(`${label} ${JSON.stringify(details)}`)
     return
   }
   console.info(LAUNCHER_PERF_PREFIX, label)
-  forwardLauncherPerfLine(label)
 }
 
 export function logLauncherPerfDuration(
@@ -158,6 +189,8 @@ export type LauncherPerfSummary = {
   slow: LauncherPerfSample[]
   jank: LauncherPerfSample[]
   byLabel: Array<{ label: string; count: number; maxMs: number; avgMs: number; sumMs: number }>
+  logPathHint: string
+  logPath?: string | null
 }
 
 /** Aggregate ring samples for diagnosis (slow/jank + per-label stats). */
@@ -183,13 +216,21 @@ export function summarizeLauncherPerfRing(minMs = 0): LauncherPerfSummary {
       sumMs: Math.round(v.sumMs * 10) / 10,
     }))
     .sort((a, b) => b.maxMs - a.maxMs)
-  return { total: samples.length, slow, jank, byLabel }
+  return {
+    total: samples.length,
+    slow,
+    jank,
+    byLabel,
+    logPathHint: LAUNCHER_PERF_LOG_HINT,
+    logPath: cachedLogPath,
+  }
 }
 
 export function dumpLauncherPerfRing(): string {
   const summary = summarizeLauncherPerfRing()
   const lines = [
     `launcher-perf samples=${summary.total} slow(>=${SLOW_MS}ms)=${summary.slow.length} jank(>=${JANK_MS}ms)=${summary.jank.length}`,
+    `logFile=${summary.logPath ?? summary.logPathHint}`,
     '--- by label (maxMs desc) ---',
     ...summary.byLabel.map(
       (r) => `${r.label} count=${r.count} max=${r.maxMs}ms avg=${r.avgMs}ms sum=${r.sumMs}ms`,
@@ -207,6 +248,19 @@ export function dumpLauncherPerfRing(): string {
   return text
 }
 
+export async function resolveLauncherPerfLogPath(): Promise<string | null> {
+  if (cachedLogPath) return cachedLogPath
+  if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return null
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    const path = await invoke<string>('launcher_perf_log_file')
+    cachedLogPath = path
+    return path
+  } catch {
+    return null
+  }
+}
+
 declare global {
   interface Window {
     __hivenLauncherPerf?: {
@@ -215,6 +269,8 @@ declare global {
       summary: () => LauncherPerfSummary
       ring: () => readonly LauncherPerfSample[]
       clear: () => void
+      logPath: () => Promise<string | null>
+      logPathHint: string
     }
   }
 }
@@ -222,11 +278,14 @@ declare global {
 /** Expose diagnosis helpers on window for DevTools. */
 export function installLauncherPerfDebugApi(): void {
   if (typeof window === 'undefined') return
+  ensureNativeInvoke()
   window.__hivenLauncherPerf = {
     enable: enableLauncherPerfLogging,
     dump: dumpLauncherPerfRing,
     summary: () => summarizeLauncherPerfRing(),
     ring: () => getLauncherPerfRing(),
     clear: clearLauncherPerfRing,
+    logPath: () => resolveLauncherPerfLogPath(),
+    logPathHint: LAUNCHER_PERF_LOG_HINT,
   }
 }
