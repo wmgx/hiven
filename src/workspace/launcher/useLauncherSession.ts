@@ -47,10 +47,11 @@ const HOST_DYNAMIC_DEBOUNCE_MS = 200
  */
 const HOST_EMPTY_OPEN_DELAY_MS = 120
 /**
- * Remote document Desktop Targets (feishu.docs / lark-cli, …).
- * Longer debounce so keystrokes do not spawn a CLI per character.
+ * Remote document Desktop Targets (feishu.docs / chats / contacts via lark-cli).
+ * Longer debounce so intermediate IME / pinyin fragments do not stack CLI processes.
+ * (Perf log showed 10–19s pile-ups when 3×CLI fired per partial query.)
  */
-const DOCUMENT_DYNAMIC_DEBOUNCE_MS = 320
+const DOCUMENT_DYNAMIC_DEBOUNCE_MS = 520
 
 type UseLauncherSessionOptions = {
   hostId: LauncherSurfaceId

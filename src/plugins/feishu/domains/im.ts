@@ -35,14 +35,16 @@ export async function searchChats(options: {
   binaryPath?: string
   signal?: AbortSignal
   timeoutMs?: number
+  pageSize?: number
 }): Promise<{ ok: boolean; chats: FeishuChat[]; message?: string; code?: string | number; hint?: string }> {
   const query = options.query.trim()
   if (!query) return { ok: true, chats: [] }
 
+  const pageSize = options.pageSize ?? 12
   const result = await runLarkCli({
     shell: options.shell,
     binaryPath: options.binaryPath,
-    args: ['im', '+chat-search', '--query', query, '--as', 'user', '--page-size', '20'],
+    args: ['im', '+chat-search', '--query', query, '--as', 'user', '--page-size', String(pageSize)],
     timeoutMs: options.timeoutMs ?? 10000,
     signal: options.signal,
     risk: 'read',

@@ -3,13 +3,22 @@
  */
 
 import { getPluginHostSdk, type DesktopTargetProvider } from '@hiven/plugin'
-import { mapUsersToRows, searchUsers } from '../domains/contact'
+import { mapUsersToRows, searchUsers, type FeishuUserRow } from '../domains/contact'
 import { openFeishuTarget } from '../domains/windowFocus'
 import { getFeishuRuntime } from '../runtime'
+import {
+  beginL1Generation,
+  getL1Cache,
+  isL1GenerationCurrent,
+  isL1QueryReady,
+  L1_PAGE_SIZE,
+  L1_SEARCH_TIMEOUT_MS,
+  setL1Cache,
+  type L1Domain,
+} from '../search/l1Cache'
 
 export const FEISHU_CONTACTS_SOURCE_ID = 'feishu.contacts' as const
-
-let listGeneration = 0
+const DOMAIN: L1Domain = 'contacts'
 
 export function createFeishuContactsProvider(): DesktopTargetProvider {
   return {
@@ -17,14 +26,17 @@ export function createFeishuContactsProvider(): DesktopTargetProvider {
     title: 'Feishu Contacts',
     titleI18n: { en: 'Feishu Contacts', zh: '飞书联系人' },
     priority: 6,
-    listTimeoutMs: 8000,
+    listTimeoutMs: L1_SEARCH_TIMEOUT_MS + 400,
     async list(ctx) {
       if (ctx.surfaceId !== 'global-launcher') return []
       const q = ctx.query.trim()
-      if (!q) return []
+      if (!q || !isL1QueryReady(q)) return []
       if (ctx.signal?.aborted) return []
 
-      const generation = ++listGeneration
+      const cached = getL1Cache<FeishuUserRow[]>(DOMAIN, q)
+      if (cached) return toTargets(cached)
+
+      const generation = beginL1Generation(DOMAIN)
       try {
         const runtime = getFeishuRuntime()
         const settings = runtime.settings
@@ -36,27 +48,17 @@ export function createFeishuContactsProvider(): DesktopTargetProvider {
           query: q,
           binaryPath: settings.binaryPath || undefined,
           signal: ctx.signal,
-          timeoutMs: 8000,
+          timeoutMs: L1_SEARCH_TIMEOUT_MS,
+          pageSize: L1_PAGE_SIZE,
         })
-        if (generation !== listGeneration || ctx.signal?.aborted) return []
+        if (!isL1GenerationCurrent(DOMAIN, generation) || ctx.signal?.aborted) return []
         if (!search.ok) return []
 
-        return mapUsersToRows(search.users)
+        const rows = mapUsersToRows(search.users)
           .filter((row) => Boolean(row.openUrl))
-          .slice(0, 12)
-          .map((row) => ({
-            id: `feishu.contacts:person:${row.id}`,
-            sourceId: FEISHU_CONTACTS_SOURCE_ID,
-            kind: 'person' as const,
-            title: row.title,
-            subtitle: row.subtitle,
-            keywords: row.keywords,
-            meta: { url: row.openUrl },
-            actionClass: 'open' as const,
-            icon: 'User',
-            appName: 'Feishu',
-            appStableKey: 'feishu',
-          }))
+          .slice(0, L1_PAGE_SIZE)
+        setL1Cache(DOMAIN, q, rows)
+        return toTargets(rows)
       } catch {
         return []
       }
@@ -79,6 +81,22 @@ export function createFeishuContactsProvider(): DesktopTargetProvider {
       }
     },
   }
+}
+
+function toTargets(rows: FeishuUserRow[]) {
+  return rows.map((row) => ({
+    id: `feishu.contacts:person:${row.id}`,
+    sourceId: FEISHU_CONTACTS_SOURCE_ID,
+    kind: 'person' as const,
+    title: row.title,
+    subtitle: row.subtitle,
+    keywords: row.keywords,
+    meta: { url: row.openUrl },
+    actionClass: 'open' as const,
+    icon: 'User',
+    appName: 'Feishu',
+    appStableKey: 'feishu',
+  }))
 }
 
 export function registerFeishuContactsProvider(): void {

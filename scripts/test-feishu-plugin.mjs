@@ -92,8 +92,12 @@ assert.ok(
   ) || /if\s*\(!q\)\s*return\s*\[\]/.test(provider),
   'provider list must return [] for empty query',
 )
-// Explicit empty-query guard (same product rule as browser-tabs)
-assert.match(provider, /if\s*\(!q\)\s*return\s*\[\]/, 'provider must short-circuit empty query with []')
+// Explicit empty/short-query guard (same product rule as browser-tabs + L1 min length)
+assert.match(
+  provider,
+  /if\s*\(!q\)\s*return\s*\[\]|if\s*\(!q\s*\|\|\s*!isL1QueryReady/,
+  'provider must short-circuit empty/short query with []',
+)
 assert.match(provider, /listTimeoutMs/, 'provider must declare listTimeoutMs')
 assert.match(provider, /kind\s*:\s*['"]document['"]|['"]document['"]/, 'provider targets must use kind document')
 
@@ -104,10 +108,10 @@ const chatsProvider = read(`${pluginDir}/provider/chatsTargetProvider.ts`)
 const contactsProvider = read(`${pluginDir}/provider/contactsTargetProvider.ts`)
 assert.match(chatsProvider, /feishu\.chats/, 'chats provider source id')
 assert.match(chatsProvider, /kind\s*:\s*['"]chat['"]/, 'chats use kind chat')
-assert.match(chatsProvider, /if\s*\(!q\)\s*return\s*\[\]/, 'chats empty query []')
+assert.match(chatsProvider, /!q|isL1QueryReady/, 'chats empty/short query guard')
 assert.match(contactsProvider, /feishu\.contacts/, 'contacts provider source id')
 assert.match(contactsProvider, /kind\s*:\s*['"]person['"]/, 'contacts use kind person')
-assert.match(contactsProvider, /if\s*\(!q\)\s*return\s*\[\]/, 'contacts empty query []')
+assert.match(contactsProvider, /!q|isL1QueryReady/, 'contacts empty/short query guard')
 const runtime = read(`${pluginDir}/runtime.ts`)
 assert.match(runtime, /registerFeishuChatsProvider|chatsMixEnabled/, 'runtime registers chats provider')
 assert.match(runtime, /registerFeishuContactsProvider|contactsMixEnabled/, 'runtime registers contacts provider')

@@ -135,6 +135,13 @@ check('5. plugin_shell_run off main thread', () => {
     'plugin_shell_run must be async + spawn_blocking (sync shell freezes UI)',
   )
 })
+check('5. plugin_shell kill process group on timeout', () => {
+  assert.match(
+    files.tauriLib,
+    /setpgid|kill_shell_process_tree|kill\(-/,
+    'timeout must kill process group so zsh→lark-cli trees die (not 19s hangs)',
+  )
+})
 check('5. generate_handler registration', () => {
   assert.match(
     files.tauriLib,

@@ -37,16 +37,27 @@ export async function searchDocs(options: {
   binaryPath?: string
   signal?: AbortSignal
   timeoutMs?: number
+  pageSize?: number
 }): Promise<{ ok: boolean; results: FeishuDocsSearchHit[]; message?: string; code?: string | number }> {
   const query = options.query.trim()
   if (!query) {
     return { ok: true, results: [] }
   }
 
+  const pageSize = options.pageSize ?? 12
   const result = await runLarkCli({
     shell: options.shell,
     binaryPath: options.binaryPath,
-    args: ['docs', '+search', '--query', query, '--as', 'user'],
+    args: [
+      'docs',
+      '+search',
+      '--query',
+      query,
+      '--as',
+      'user',
+      '--page-size',
+      String(pageSize),
+    ],
     timeoutMs: options.timeoutMs ?? 8000,
     signal: options.signal,
     risk: 'read',

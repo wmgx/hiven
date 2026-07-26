@@ -4410,6 +4410,23 @@ fn read_limited_output(reader: Option<impl Read>, max_bytes: usize) -> (Vec<u8>,
     (buf, total)
 }
 
+/// Kill shell process tree. On Unix, prefer process-group kill (negative pid).
+fn kill_shell_process_tree(child: &mut std::process::Child) {
+    #[cfg(unix)]
+    {
+        let pid = child.id() as i32;
+        // Negative pid = process group. SIGKILL entire tree (shell + lark-cli).
+        unsafe {
+            let _ = libc::kill(-pid, libc::SIGKILL);
+        }
+        let _ = child.kill();
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = child.kill();
+    }
+}
+
 /// Blocking implementation. Must not run on the async runtime / UI thread —
 /// a multi-second lark-cli call would freeze the launcher webview.
 fn plugin_shell_run_blocking(request: PluginShellRunRequest) -> Result<PluginShellRunResult, String> {
@@ -4441,6 +4458,23 @@ fn plugin_shell_run_blocking(request: PluginShellRunRequest) -> Result<PluginShe
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
+
+    // Put shell + descendants in their own process group so timeout can kill the
+    // whole tree (zsh -lc → lark-cli). Without this, kill(child) leaves CLI running
+    // and try_wait/wait can hang well past timeout_ms (seen 12–19s on 8s budgets).
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        unsafe {
+            cmd.pre_exec(|| {
+                // SAFETY: setpgid(0,0) in the child is standard process-group isolation.
+                if libc::setpgid(0, 0) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+    }
 
     if let Some(cwd) = request.cwd.as_ref() {
         let cwd_path = Path::new(cwd);
@@ -4475,10 +4509,25 @@ fn plugin_shell_run_blocking(request: PluginShellRunRequest) -> Result<PluginShe
             Ok(None) => {
                 if started.elapsed() >= timeout {
                     timed_out = true;
-                    let _ = child.kill();
-                    break child
-                        .wait()
-                        .map_err(|e| format!("Failed to wait for timed-out shell: {}", e))?;
+                    kill_shell_process_tree(&mut child);
+                    // Bounded wait after kill so we never hang past timeout + grace.
+                    let kill_deadline = Instant::now() + Duration::from_millis(800);
+                    break loop {
+                        match child.try_wait() {
+                            Ok(Some(status)) => break status,
+                            Ok(None) if Instant::now() < kill_deadline => {
+                                thread::sleep(Duration::from_millis(20));
+                            }
+                            Ok(None) => {
+                                kill_shell_process_tree(&mut child);
+                                // Last resort wait — process group already SIGKILL'd.
+                                break child
+                                    .wait()
+                                    .map_err(|e| format!("Failed to wait after kill: {}", e))?;
+                            }
+                            Err(e) => return Err(format!("Failed to wait for shell: {}", e)),
+                        }
+                    };
                 }
                 thread::sleep(Duration::from_millis(20));
             }

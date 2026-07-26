@@ -50,8 +50,8 @@ assert.match(
 )
 assert.ok(
   /DOCUMENT_DYNAMIC_DEBOUNCE_MS\s*=\s*(\d+)/.test(session) &&
-    Number(session.match(/DOCUMENT_DYNAMIC_DEBOUNCE_MS\s*=\s*(\d+)/)[1]) >= 250,
-  'document debounce should be >= 250ms to avoid CLI-per-keystroke',
+    Number(session.match(/DOCUMENT_DYNAMIC_DEBOUNCE_MS\s*=\s*(\d+)/)[1]) >= 450,
+  'document debounce should be >= 450ms to avoid CLI pile-up on partial queries',
 )
 
 console.log('desktop document async path checks passed')

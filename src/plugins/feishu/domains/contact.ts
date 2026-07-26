@@ -38,14 +38,25 @@ export async function searchUsers(options: {
   binaryPath?: string
   signal?: AbortSignal
   timeoutMs?: number
+  pageSize?: number
 }): Promise<{ ok: boolean; users: FeishuUser[]; message?: string; code?: string | number; hint?: string }> {
   const query = options.query.trim()
   if (!query) return { ok: true, users: [] }
 
+  const pageSize = options.pageSize ?? 12
   const result = await runLarkCli({
     shell: options.shell,
     binaryPath: options.binaryPath,
-    args: ['contact', '+search-user', '--query', query, '--as', 'user', '--page-size', '20'],
+    args: [
+      'contact',
+      '+search-user',
+      '--query',
+      query,
+      '--as',
+      'user',
+      '--page-size',
+      String(pageSize),
+    ],
     timeoutMs: options.timeoutMs ?? 10000,
     signal: options.signal,
     risk: 'read',
