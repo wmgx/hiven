@@ -5105,6 +5105,13 @@ body[data-theme='dark'] .launcher-empty-well {
   opacity: 0.72;
 }
 
+.launcher-preview-well .launcher-preview-pending {
+  color: var(--text-3);
+  font-family: var(--font);
+  font-size: 12px;
+  text-align: center;
+}
+
 .launcher-output-targets {
   display: flex;
   flex-wrap: wrap;

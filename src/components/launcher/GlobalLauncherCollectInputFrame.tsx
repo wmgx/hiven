@@ -142,6 +142,15 @@ export function GlobalLauncherCollectInputFrame({
   const livePreviewText = !isSuggestMode ? extractLivePreviewText(frame.previewOutput) : null
   const showLivePreview = !isSuggestMode
   const filterText = frame.inputText.trim()
+  // Preview is fresh only when it was computed for the current inputText.
+  const previewFresh = Boolean(
+    livePreviewText
+    && frame.previewInputText !== undefined
+    && frame.previewInputText === frame.inputText,
+  )
+  const previewStale = Boolean(livePreviewText && !previewFresh)
+  // Empty well only when input is empty (not between keystrokes while a prior result still exists).
+  const showLiveEmpty = showLivePreview && !filterText
   // Suggest-backed collect-input: empty choices after load = true empty state (not a fake row).
   const showEmptyState = isSuggestMode && !busy && !hasSuggestions && frame.previewInputText !== undefined
   const commandTitle = resolveDisplayTitle(frame.item.display, locale)
@@ -162,7 +171,8 @@ export function GlobalLauncherCollectInputFrame({
   })
 
   const runDestination = async (destId: OutputDestinationId) => {
-    if (!previewChoice || !livePreviewText) {
+    // No preview yet, or still catching up to typed text → run full submit (fresh execute).
+    if (!previewChoice || !livePreviewText || !previewFresh) {
       onSubmitPrimary?.()
       return
     }
@@ -232,19 +242,30 @@ export function GlobalLauncherCollectInputFrame({
       )}
       {showLivePreview && (
         <>
-          {livePreviewText ? (
+          {showLiveEmpty ? (
+            <LauncherEmptyWell
+              testId="launcher-preview-well"
+              title={t(locale, 'palette.livePreviewEmpty')}
+            />
+          ) : livePreviewText ? (
             <div
-              className={`launcher-preview-well${busy ? ' is-stale' : ''}`}
+              className={`launcher-preview-well${previewStale || busy ? ' is-stale' : ''}`}
               data-testid="launcher-preview-well"
+              data-stale={previewStale ? 'true' : undefined}
               aria-live="polite"
             >
               <pre>{livePreviewText}</pre>
             </div>
           ) : (
-            <LauncherEmptyWell
-              testId="launcher-preview-well"
-              title={busy ? t(locale, 'palette.livePreviewStale') : t(locale, 'palette.livePreviewEmpty')}
-            />
+            // Typed but first preview still loading — keep a quiet well, not the empty icon flip.
+            <div
+              className="launcher-preview-well is-stale"
+              data-testid="launcher-preview-well"
+              data-stale="true"
+              aria-live="polite"
+            >
+              <pre className="launcher-preview-pending">{t(locale, 'palette.livePreviewStale')}</pre>
+            </div>
           )}
           {livePreviewText && destinations.length > 0 && (
             <LauncherOutputTargetsBar
@@ -284,7 +305,7 @@ export function GlobalLauncherCollectInputFrame({
         />
       )}
       <div className="global-launcher-footer l-foot">
-        {showLivePreview && livePreviewText ? (
+        {showLivePreview && livePreviewText && !showLiveEmpty ? (
           <LauncherOutputTargetsFooter
             destinations={destinations}
             locale={locale}

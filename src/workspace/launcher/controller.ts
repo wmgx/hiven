@@ -505,12 +505,21 @@ export class LauncherController {
     const frames = this.state.frames.slice(0, -1)
     if (top.item.suggest) {
       frames.push({ ...top, inputText: text })
-    } else {
+    } else if (!text.trim()) {
+      // Empty input → true empty well (clear last preview).
       frames.push({
         ...top,
         inputText: text,
         previewOutput: undefined,
         previewInputText: undefined,
+        selectedSuggestionIndex: -1,
+      })
+    } else {
+      // Keep last preview while typing so UI does not flash empty ↔ result every keystroke.
+      // previewInputText stays until previewInput() refreshes for the new text (stale until then).
+      frames.push({
+        ...top,
+        inputText: text,
         selectedSuggestionIndex: -1,
       })
     }
