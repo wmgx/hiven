@@ -12,8 +12,11 @@ import {
   searchEvents,
 } from './domains/calendar'
 import { mapUsersToRows, searchUsers } from './domains/contact'
-import { mapSearchResultsToTargets, searchDocs } from './domains/docs'
+import { fetchDocContent, mapSearchResultsToTargets, searchDocs } from './domains/docs'
 import { listRecentChats, mapChatsToRows, searchChats } from './domains/im'
+import { mapMessagesToRows, searchMessages } from './domains/messages'
+import { mapMinutesToRows, searchMinutes } from './domains/minutes'
+import { listMyTasks, mapTasksToRows } from './domains/tasks'
 import { createCalendarEvent, createDoc, sendMessage } from './domains/write'
 import { getFeishuRuntime } from './runtime'
 import type { FeishuSettings } from './settings/model'
@@ -711,6 +714,255 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           primaryAction: async () => ({ ok: true as const, message: ctx.t('action.cancelled') }),
         },
       ])
+    },
+  },
+  {
+    id: 'feishu.docs-fetch',
+    title: 'tool.docsFetch.title',
+    subtitle: 'tool.docsFetch.subtitle',
+    icon: 'FileDown',
+    aliases: ['拉取文档', '文档进编辑器', 'fetch doc', 'docs fetch', '打开文档内容'],
+    requireParamSelection: true,
+    params: [
+      {
+        key: 'doc',
+        label: 'param.docRef.label',
+        type: 'text',
+        required: true,
+        hint: 'param.docRef.hint',
+      },
+    ],
+    surfaces: { launcher: true },
+    async run(ctx) {
+      const settings = resolveSettings(ctx.settings)
+      const shell = getFeishuRuntime().shell
+      if (!shell) {
+        return ctx.output.error(ctx.t('error.shellMissing'))
+      }
+
+      const doc = String(ctx.params.doc ?? ctx.input?.text ?? '').trim()
+      if (!doc) {
+        return ctx.output.error(ctx.t('param.docRef.hint'))
+      }
+
+      const fetched = await fetchDocContent({
+        shell,
+        doc,
+        binaryPath: settings.binaryPath || undefined,
+      })
+      if (!fetched.ok || !fetched.content) {
+        const parts = [fetched.message || ctx.t('error.fetchFailed')]
+        if (fetched.hint) parts.push(fetched.hint)
+        return ctx.output.error(parts.join('\n'))
+      }
+
+      const title = fetched.title || ctx.t('tool.docsFetch.title')
+      try {
+        await ctx.api.createPane({
+          text: fetched.content,
+          title,
+          language: 'markdown',
+          focus: true,
+        })
+        return ctx.output.text(ctx.t('action.openedInEditor') + ': ' + title)
+      } catch {
+        // Fallback: text result in launcher / clipboard path
+        return ctx.output.text(fetched.content)
+      }
+    },
+  },
+  {
+    id: 'feishu.messages-search',
+    title: 'tool.messagesSearch.title',
+    subtitle: 'tool.messagesSearch.subtitle',
+    icon: 'MessageSquareSearch',
+    aliases: ['搜消息', '消息搜索', 'search messages', '飞书消息'],
+    requireParamSelection: true,
+    params: [
+      {
+        key: 'query',
+        label: 'param.messageQuery.label',
+        type: 'text',
+        required: true,
+        hint: 'param.messageQuery.hint',
+      },
+    ],
+    surfaces: { launcher: true },
+    async run(ctx) {
+      const settings = resolveSettings(ctx.settings)
+      const shell = getFeishuRuntime().shell
+      if (!shell) {
+        return ctx.output.error(ctx.t('error.shellMissing'))
+      }
+
+      const query = String(ctx.params.query ?? ctx.input?.text ?? '').trim()
+      if (!query) {
+        return ctx.output.error(ctx.t('param.messageQuery.hint'))
+      }
+
+      const search = await searchMessages({
+        shell,
+        query,
+        binaryPath: settings.binaryPath || undefined,
+      })
+      if (!search.ok) {
+        const parts = [search.message || ctx.t('error.messagesSearchFailed')]
+        if (search.hint) parts.push(search.hint)
+        return ctx.output.error(parts.join('\n'))
+      }
+
+      const rows = mapMessagesToRows(search.messages)
+      if (rows.length === 0) {
+        return ctx.output.text(ctx.t('error.noMessages'))
+      }
+
+      return ctx.output.choices(
+        rows.map((row) => ({
+          id: `feishu.im:message:${row.id}`,
+          title: row.title,
+          subtitle: row.subtitle,
+          icon: 'MessageSquare',
+          primaryAction: async () => {
+            try {
+              if (row.url) {
+                await openRuntimeUrl(row.url, (url) => ctx.api.openUrl(url))
+                return { ok: true as const }
+              }
+              await ctx.api.copyText(row.summaryText)
+              return { ok: true as const, message: ctx.t('action.copied') }
+            } catch (error) {
+              return {
+                ok: false as const,
+                message: error instanceof Error ? error.message : String(error),
+              }
+            }
+          },
+        })),
+      )
+    },
+  },
+  {
+    id: 'feishu.my-tasks',
+    title: 'tool.myTasks.title',
+    subtitle: 'tool.myTasks.subtitle',
+    icon: 'ListTodo',
+    aliases: ['我的待办', '任务', 'my tasks', 'todos', '飞书待办'],
+    surfaces: { launcher: true },
+    async run(ctx) {
+      const settings = resolveSettings(ctx.settings)
+      const shell = getFeishuRuntime().shell
+      if (!shell) {
+        return ctx.output.error(ctx.t('error.shellMissing'))
+      }
+
+      const listed = await listMyTasks({
+        shell,
+        binaryPath: settings.binaryPath || undefined,
+      })
+      if (!listed.ok) {
+        const parts = [listed.message || ctx.t('error.tasksFailed')]
+        if (listed.hint) parts.push(listed.hint)
+        return ctx.output.error(parts.join('\n'))
+      }
+
+      const rows = mapTasksToRows(listed.tasks)
+      if (rows.length === 0) {
+        return ctx.output.text(ctx.t('error.noTasks'))
+      }
+
+      return ctx.output.choices(
+        rows.map((row) => ({
+          id: `feishu.task:${row.id}`,
+          title: row.title,
+          subtitle: row.subtitle,
+          icon: 'ListTodo',
+          primaryAction: async () => {
+            try {
+              if (row.url) {
+                await openRuntimeUrl(row.url, (url) => ctx.api.openUrl(url))
+                return { ok: true as const }
+              }
+              await ctx.api.copyText(row.summaryText)
+              return { ok: true as const, message: ctx.t('action.copied') }
+            } catch (error) {
+              return {
+                ok: false as const,
+                message: error instanceof Error ? error.message : String(error),
+              }
+            }
+          },
+        })),
+      )
+    },
+  },
+  {
+    id: 'feishu.minutes-search',
+    title: 'tool.minutesSearch.title',
+    subtitle: 'tool.minutesSearch.subtitle',
+    icon: 'Mic',
+    aliases: ['妙记', '搜妙记', 'minutes', '飞书妙记'],
+    requireParamSelection: true,
+    params: [
+      {
+        key: 'query',
+        label: 'param.minutesQuery.label',
+        type: 'text',
+        required: true,
+        hint: 'param.minutesQuery.hint',
+      },
+    ],
+    surfaces: { launcher: true },
+    async run(ctx) {
+      const settings = resolveSettings(ctx.settings)
+      const shell = getFeishuRuntime().shell
+      if (!shell) {
+        return ctx.output.error(ctx.t('error.shellMissing'))
+      }
+
+      const query = String(ctx.params.query ?? ctx.input?.text ?? '').trim()
+      if (!query) {
+        return ctx.output.error(ctx.t('param.minutesQuery.hint'))
+      }
+
+      const search = await searchMinutes({
+        shell,
+        query,
+        binaryPath: settings.binaryPath || undefined,
+      })
+      if (!search.ok) {
+        const parts = [search.message || ctx.t('error.minutesSearchFailed')]
+        if (search.hint) parts.push(search.hint)
+        return ctx.output.error(parts.join('\n'))
+      }
+
+      const rows = mapMinutesToRows(search.minutes)
+      if (rows.length === 0) {
+        return ctx.output.text(ctx.t('error.noMinutes'))
+      }
+
+      return ctx.output.choices(
+        rows.map((row) => ({
+          id: `feishu.minutes:${row.id}`,
+          title: row.title,
+          subtitle: row.subtitle,
+          icon: 'Mic',
+          primaryAction: async () => {
+            try {
+              if (row.url) {
+                await openRuntimeUrl(row.url, (url) => ctx.api.openUrl(url))
+                return { ok: true as const }
+              }
+              await ctx.api.copyText(row.summaryText)
+              return { ok: true as const, message: ctx.t('action.copied') }
+            } catch (error) {
+              return {
+                ok: false as const,
+                message: error instanceof Error ? error.message : String(error),
+              }
+            }
+          },
+        })),
+      )
     },
   },
 ]

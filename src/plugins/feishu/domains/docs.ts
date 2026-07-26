@@ -124,3 +124,115 @@ function safeTokenFromUrl(url: string): string | undefined {
     return undefined
   }
 }
+
+/**
+ * Fetch document body for editor / copy (B5).
+ * Uses markdown export when possible; falls back to raw content string.
+ */
+export async function fetchDocContent(options: {
+  shell: LarkCliShell
+  doc: string
+  binaryPath?: string
+  signal?: AbortSignal
+  timeoutMs?: number
+}): Promise<{
+  ok: boolean
+  content?: string
+  title?: string
+  documentId?: string
+  message?: string
+  code?: string | number
+  hint?: string
+}> {
+  const doc = options.doc.trim()
+  if (!doc) {
+    return { ok: false, code: 'invalid_input', message: 'Document URL or token is required' }
+  }
+
+  const result = await runLarkCli({
+    shell: options.shell,
+    binaryPath: options.binaryPath,
+    args: [
+      'docs',
+      '+fetch',
+      '--doc',
+      doc,
+      '--doc-format',
+      'markdown',
+      '--detail',
+      'simple',
+      '--as',
+      'user',
+    ],
+    timeoutMs: options.timeoutMs ?? 20000,
+    signal: options.signal,
+    risk: 'read',
+  })
+
+  if (!result.ok) {
+    return {
+      ok: false,
+      message: result.message,
+      code: result.code,
+      hint: result.hint,
+    }
+  }
+
+  const extracted = extractFetchedDocument(result.data)
+  if (!extracted.content) {
+    return {
+      ok: false,
+      code: 'empty_content',
+      message: 'Document content was empty',
+    }
+  }
+
+  return {
+    ok: true,
+    content: extracted.content,
+    title: extracted.title,
+    documentId: extracted.documentId,
+  }
+}
+
+function extractFetchedDocument(data: unknown): {
+  content?: string
+  title?: string
+  documentId?: string
+} {
+  if (!data || typeof data !== 'object') return {}
+  const obj = data as Record<string, unknown>
+  const doc =
+    obj.document && typeof obj.document === 'object'
+      ? (obj.document as Record<string, unknown>)
+      : obj.data && typeof obj.data === 'object' && (obj.data as Record<string, unknown>).document
+        ? ((obj.data as Record<string, unknown>).document as Record<string, unknown>)
+        : obj
+
+  const content =
+    typeof doc.content === 'string'
+      ? doc.content
+      : typeof doc.markdown === 'string'
+        ? doc.markdown
+        : typeof doc.text === 'string'
+          ? doc.text
+          : undefined
+
+  const documentId =
+    typeof doc.document_id === 'string'
+      ? doc.document_id
+      : typeof doc.documentId === 'string'
+        ? doc.documentId
+        : typeof doc.token === 'string'
+          ? doc.token
+          : undefined
+
+  let title: string | undefined
+  if (typeof doc.title === 'string') title = doc.title
+  else if (content) {
+    const titleMatch = content.match(/<title>([\s\S]*?)<\/title>/i) || content.match(/^#\s+(.+)$/m)
+    if (titleMatch?.[1]) title = stripSearchHighlight(titleMatch[1]).trim()
+  }
+
+  return { content, title, documentId }
+}

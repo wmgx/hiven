@@ -28,6 +28,9 @@ const domainFiles = [
   'src/plugins/feishu/domains/im.ts',
   'src/plugins/feishu/domains/contact.ts',
   'src/plugins/feishu/domains/write.ts',
+  'src/plugins/feishu/domains/messages.ts',
+  'src/plugins/feishu/domains/tasks.ts',
+  'src/plugins/feishu/domains/minutes.ts',
 ]
 
 // --- required modules must exist ---
@@ -109,6 +112,16 @@ assert.match(writeSrc, /createDoc|docs.*\+create/, 'write.ts must support docs c
 assert.match(writeSrc, /confirmed/, 'write helpers must accept confirmed flag')
 assert.match(writeSrc, /risk:\s*['"]write['"]/, 'write helpers must use risk write')
 assert.match(runSrc, /ensureYesFlag|--yes/, 'runLarkCli should attach --yes after write confirmation')
+
+// --- B5 enhancements ---
+const docsSrcFull = read('src/plugins/feishu/domains/docs.ts')
+const messagesSrc = read('src/plugins/feishu/domains/messages.ts')
+const tasksSrc = read('src/plugins/feishu/domains/tasks.ts')
+const minutesSrc = read('src/plugins/feishu/domains/minutes.ts')
+assert.match(docsSrcFull, /fetchDocContent|\+fetch/, 'docs.ts must support docs +fetch')
+assert.match(messagesSrc, /\+messages-search|searchMessages/, 'messages.ts must support messages-search')
+assert.match(tasksSrc, /\+get-my-tasks|listMyTasks/, 'tasks.ts must support get-my-tasks')
+assert.match(minutesSrc, /\+search|searchMinutes/, 'minutes.ts must support minutes search')
 
 // --- no workspace deep imports in feishu plugin sources ---
 const pluginRoot = join(root, 'src/plugins/feishu')

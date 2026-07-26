@@ -72,6 +72,11 @@ assert.match(toolsSrc, /feishu\.send-message|send-message|sendMessage/, 'must ex
 assert.match(toolsSrc, /confirm\.sendMessage|Confirm send|确认发送|confirmed:\s*true/, 'send message must go through L2 confirm')
 assert.match(toolsSrc, /feishu\.create-event|create-event|createCalendarEvent/, 'must expose create-event tool')
 assert.match(toolsSrc, /feishu\.create-doc|create-doc|createDoc/, 'must expose create-doc tool')
+assert.match(toolsSrc, /feishu\.docs-fetch|docs-fetch|fetchDocContent/, 'must expose docs-fetch tool')
+assert.match(toolsSrc, /createPane|openedInEditor/, 'docs-fetch should open content in editor pane')
+assert.match(toolsSrc, /feishu\.messages-search|messages-search|searchMessages/, 'must expose messages-search tool')
+assert.match(toolsSrc, /feishu\.my-tasks|my-tasks|listMyTasks/, 'must expose my-tasks tool')
+assert.match(toolsSrc, /feishu\.minutes-search|minutes-search|searchMinutes/, 'must expose minutes-search tool')
 
 // --- provider: feishu.docs DesktopTargetProvider ---
 assert.match(provider, /feishu\.docs/, 'provider must use source id feishu.docs')
