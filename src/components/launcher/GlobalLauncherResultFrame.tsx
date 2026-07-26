@@ -115,6 +115,8 @@ export function GlobalLauncherResultFrame({
         <div
           className="launcher-preview-well"
           data-testid="launcher-result-preview-well"
+          data-no-drag
+          data-launcher-scrollable
           aria-live="polite"
         >
           <pre>{previewText}</pre>

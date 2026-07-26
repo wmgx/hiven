@@ -262,6 +262,8 @@ export function GlobalLauncherCollectInputFrame({
             <div
               className="launcher-preview-well"
               data-testid="launcher-preview-well"
+              data-no-drag
+              data-launcher-scrollable
               data-stale={displayPreviewText && !previewFresh ? 'true' : undefined}
               aria-live="polite"
             >

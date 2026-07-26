@@ -1076,6 +1076,7 @@ html[data-window='launcher'] .global-launcher-panel :is(
   button,
   a,
   pre,
+  .launcher-preview-well,
   [role='button'],
   [role='grid'],
   [role='row'],
@@ -5049,6 +5050,12 @@ body[data-theme='dark'] .launcher-empty-well {
   overflow: auto;
   padding: 12px 14px;
   box-sizing: border-box;
+  /* Override panel user-select:none so users can select + copy preview text */
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .launcher-empty-well {
@@ -5095,6 +5102,9 @@ body[data-theme='dark'] .launcher-empty-well {
   color: var(--text);
   white-space: pre-wrap;
   word-break: break-word;
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
 }
 
 .launcher-preview-well.is-empty {
