@@ -46,23 +46,27 @@ export function registerHostLauncherProviders(): void {
     // Process terminate is NOT first-level dynamic. Use getKillProcessHostItem (static).
     // Window focus: both static L2 command and first-level dynamic mix (below).
     // Empty open: apps only (memo top-N) + cached windows if any. No workflow, no waiting.
-    // Query present: apps + windows (+ light workflow). Windows never block (lazy cache).
+    // Query present: apps + windows + bridge tabs in parallel.
+    // Slow remote document sources (feishu.docs) are NOT collected here — they stream
+    // on a separate progressive path in useLauncherSession so typing stays responsive.
     const q = ctx.query.trim()
-    const appItems = await measureLauncherPerf('host-provider:app-items', () => getHostAppLauncherDynamicItems(ctx), (items) => ({
+
+    const appPromise = measureLauncherPerf('host-provider:app-items', () => getHostAppLauncherDynamicItems(ctx), (items) => ({
       queryLength: q.length,
       itemCount: items.length,
     }))
-    const windowItems = await measureLauncherPerf('host-provider:window-items', () => getHostWindowLauncherDynamicItems(ctx), (items) => ({
+    const windowPromise = measureLauncherPerf('host-provider:window-items', () => getHostWindowLauncherDynamicItems(ctx), (items) => ({
       queryLength: q.length,
       itemCount: items.length,
     }))
 
     if (!q) {
       // Empty open path: skip workflow + bridge tabs (empty-search tabs = 0).
+      const [appItems, windowItems] = await Promise.all([appPromise, windowPromise])
       return [...appItems, ...windowItems]
     }
 
-    const workflowItems = await measureLauncherPerf('host-provider:workflow-items', () => getWorkflowObjectLauncherItems(ctx), (items) => ({
+    const workflowPromise = measureLauncherPerf('host-provider:workflow-items', () => getWorkflowObjectLauncherItems(ctx), (items) => ({
       queryLength: q.length,
       itemCount: items.length,
     })).catch((error) => {
@@ -70,8 +74,8 @@ export function registerHostLauncherProviders(): void {
       return [] as Awaited<ReturnType<typeof getWorkflowObjectLauncherItems>>
     })
 
-    // D3: Chromium tabs via desktop bridge (plugin-registered; silent if offline).
-    const bridgeItems = await measureLauncherPerf(
+    // D3: Chromium tabs only (never fan-out to all DesktopTarget providers).
+    const bridgePromise = measureLauncherPerf(
       'host-provider:bridge-items',
       () => getDesktopBridgeLauncherDynamicItems(ctx),
       (items) => ({ queryLength: q.length, itemCount: items.length }),
@@ -79,6 +83,13 @@ export function registerHostLauncherProviders(): void {
       console.warn('[launcher] desktop bridge dynamic items failed:', error)
       return [] as Awaited<ReturnType<typeof getDesktopBridgeLauncherDynamicItems>>
     })
+
+    const [appItems, windowItems, workflowItems, bridgeItems] = await Promise.all([
+      appPromise,
+      windowPromise,
+      workflowPromise,
+      bridgePromise,
+    ])
 
     // Window vs tab de-dupe is soft ranking (title near-dup + capability tier),
     // not a host product filter that knows about browser plugins.

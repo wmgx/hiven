@@ -12,6 +12,7 @@ import { createPluginShell } from '../pluginShell'
 import { getPluginPermissionSnapshot } from '../pluginPermissions'
 import { resolvePluginSettingsSource } from './pluginSource'
 import { subscribeDesktopWindowsUpdated } from '../desktopControl/windows'
+import { getDesktopDocumentLauncherDynamicItems } from '../desktopTargets/collectDocumentLauncherItems'
 import { rankLauncherItems } from './ranking'
 import {
   collectDynamicItems,
@@ -39,6 +40,11 @@ const HOST_DYNAMIC_DEBOUNCE_MS = 200
  * Previously debounce was 0 on empty open and felt like a freeze on first show.
  */
 const HOST_EMPTY_OPEN_DELAY_MS = 120
+/**
+ * Remote document Desktop Targets (feishu.docs / lark-cli, …).
+ * Longer debounce so keystrokes do not spawn a CLI per character.
+ */
+const DOCUMENT_DYNAMIC_DEBOUNCE_MS = 320
 
 type UseLauncherSessionOptions = {
   hostId: LauncherSurfaceId
@@ -94,17 +100,26 @@ export function useLauncherSession({
   const [controller, setController] = useState<LauncherController | null>(null)
   /** Plugin dynamicItems (calc, timestamp, web-open, …) — progressive. */
   const [pluginDynamicItems, setPluginDynamicItems] = useState<LauncherItem[]>([])
-  /** Host dynamic items (apps / workflow) — isolated from plugin path. */
+  /** Host dynamic items (apps / workflow / bridge tabs) — isolated from plugin path. */
   const [hostDynamicItems, setHostDynamicItems] = useState<LauncherItem[]>([])
+  /**
+   * Slow remote document Desktop Targets (e.g. feishu.docs).
+   * Progressive + long debounce; never blocks host apps/windows path.
+   */
+  const [documentDynamicItems, setDocumentDynamicItems] = useState<LauncherItem[]>([])
   const controllerRef = useRef<LauncherController | null>(null)
   const pluginQueryRef = useRef('')
   const hostQueryRef = useRef('')
+  const documentQueryRef = useRef('')
   const requestCloseRef = useRef(requestClose)
   const prevControllerStateRef = useRef<LauncherControllerState | null>(null)
   const pluginAbortRef = useRef<AbortController | null>(null)
   const hostAbortRef = useRef<AbortController | null>(null)
+  const documentAbortRef = useRef<AbortController | null>(null)
   /** Per-plugin partial results for the in-flight generation. */
   const pluginPartialsRef = useRef(new Map<string, LauncherItem[]>())
+  /** Per document-source partial results for the in-flight generation. */
+  const documentPartialsRef = useRef(new Map<string, LauncherItem[]>())
 
   useEffect(() => {
     requestCloseRef.current = requestClose
@@ -115,11 +130,15 @@ export function useLauncherSession({
     setSelectedIndex(0)
     setPluginDynamicItems([])
     setHostDynamicItems([])
+    setDocumentDynamicItems([])
     pluginQueryRef.current = ''
     hostQueryRef.current = ''
+    documentQueryRef.current = ''
     pluginPartialsRef.current.clear()
+    documentPartialsRef.current.clear()
     pluginAbortRef.current?.abort()
     hostAbortRef.current?.abort()
+    documentAbortRef.current?.abort()
     controllerRef.current?.reset()
   }, [])
 
@@ -132,9 +151,12 @@ export function useLauncherSession({
       if (cancelled) return
       setPluginDynamicItems([])
       setHostDynamicItems([])
+      setDocumentDynamicItems([])
       pluginQueryRef.current = ''
       hostQueryRef.current = ''
+      documentQueryRef.current = ''
       pluginPartialsRef.current.clear()
+      documentPartialsRef.current.clear()
       if (!controllerRef.current) {
         const nextController = new LauncherController({
           surfaceId: normalizedHostId,
@@ -312,6 +334,70 @@ export function useLauncherSession({
     }
   }, [collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query])
 
+  // ── Remote document Desktop Targets (feishu.docs, …) — progressive, slow debounce ──
+  useEffect(() => {
+    if (!open) return
+    const q = query.trim()
+    if (!q) {
+      setDocumentDynamicItems([])
+      documentQueryRef.current = ''
+      documentPartialsRef.current.clear()
+      documentAbortRef.current?.abort()
+      return
+    }
+    if (normalizedHostId !== 'global-launcher') {
+      setDocumentDynamicItems([])
+      return
+    }
+
+    documentQueryRef.current = q
+    const timer = window.setTimeout(() => {
+      if (documentQueryRef.current !== q) return
+      documentAbortRef.current?.abort()
+      const abortController = new AbortController()
+      documentAbortRef.current = abortController
+      documentPartialsRef.current = new Map()
+      setDocumentDynamicItems([])
+      const startedAt = launcherPerfNow()
+      void getDesktopDocumentLauncherDynamicItems(
+        {
+          query: q,
+          locale,
+          surfaceId: normalizedHostId,
+          signal: abortController.signal,
+        },
+        {
+          onPartial: (update) => {
+            if (abortController.signal.aborted) return
+            if (documentQueryRef.current !== q) return
+            documentPartialsRef.current.set(update.sourceId, update.items)
+            const merged = filterDynamicForSurface(
+              [...documentPartialsRef.current.values()].flat(),
+              normalizedHostId,
+            )
+            setDocumentDynamicItems(merged)
+          },
+        },
+      )
+        .then((items) => {
+          if (abortController.signal.aborted) return
+          logLauncherPerfDuration('session:document-dynamic-items', startedAt, {
+            surfaceId: normalizedHostId,
+            queryLength: q.length,
+            itemCount: items.length,
+          })
+          if (documentQueryRef.current !== q) return
+          setDocumentDynamicItems(filterDynamicForSurface(items, normalizedHostId))
+        })
+        .catch(() => { /* aborted or failed */ })
+    }, DOCUMENT_DYNAMIC_DEBOUNCE_MS)
+
+    return () => {
+      window.clearTimeout(timer)
+      documentAbortRef.current?.abort()
+    }
+  }, [locale, normalizedHostId, open, query])
+
   // When offline window-title enrich finishes, re-collect host items so titles/icons update.
   useEffect(() => {
     if (!open) return
@@ -362,16 +448,21 @@ export function useLauncherSession({
         detections,
         foregroundApp,
       },
-      [...staticCandidates, ...pluginDynamicItems, ...hostDynamicItems],
+      [...staticCandidates, ...pluginDynamicItems, ...hostDynamicItems, ...documentDynamicItems],
     ), (items) => ({
       surfaceId: normalizedHostId,
       queryLength: rankQuery.length,
       hasObjectBlockText: Boolean(objectBlockText),
-      inputCount: staticCandidates.length + pluginDynamicItems.length + hostDynamicItems.length,
+      inputCount:
+        staticCandidates.length +
+        pluginDynamicItems.length +
+        hostDynamicItems.length +
+        documentDynamicItems.length,
       resultCount: items.length,
     }))
   }, [
     deferredQuery,
+    documentDynamicItems,
     foregroundApp,
     hostDynamicItems,
     launcherUsageBySurface,

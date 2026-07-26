@@ -10,6 +10,9 @@ import { getFeishuRuntime } from '../runtime'
 
 export const FEISHU_DOCS_SOURCE_ID = 'feishu.docs' as const
 
+/** Ignore stale CLI results when a newer list() superseded this call. */
+let listGeneration = 0
+
 export function createFeishuDocsProvider(): DesktopTargetProvider {
   return {
     id: FEISHU_DOCS_SOURCE_ID,
@@ -21,6 +24,9 @@ export function createFeishuDocsProvider(): DesktopTargetProvider {
       if (ctx.surfaceId !== 'global-launcher') return []
       const q = ctx.query.trim()
       if (!q) return []
+      if (ctx.signal?.aborted) return []
+
+      const generation = ++listGeneration
 
       try {
         const runtime = getFeishuRuntime()
@@ -35,6 +41,8 @@ export function createFeishuDocsProvider(): DesktopTargetProvider {
           signal: ctx.signal,
           timeoutMs: 8000,
         })
+        // Newer keystroke / aborted request: drop late results.
+        if (generation !== listGeneration || ctx.signal?.aborted) return []
         if (!search.ok) return []
 
         return mapSearchResultsToTargets(search.results).map((t) => ({
