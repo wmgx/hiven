@@ -56,6 +56,11 @@ function ensureJsonFlag(args: string[]): string[] {
   return [...args, '--json']
 }
 
+function ensureYesFlag(args: string[]): string[] {
+  if (args.includes('--yes') || args.includes('-y')) return [...args]
+  return [...args, '--yes']
+}
+
 function buildCommand(binaryPath: string | undefined, args: string[]): string {
   const binary = resolveBinary(binaryPath)
   const withJson = ensureJsonFlag(args)
@@ -89,7 +94,12 @@ export async function runLarkCli(options: RunLarkCliOptions): Promise<LarkCliRes
     }
   }
 
-  const command = buildCommand(options.binaryPath, options.args)
+  // After L2 confirmation, attach --yes for write / high-risk-write when CLI expects it.
+  const args =
+    (risk === 'write' || risk === 'high-risk-write') && options.confirmed === true
+      ? ensureYesFlag(options.args)
+      : options.args
+  const command = buildCommand(options.binaryPath, args)
   let shellResult: {
     stdout: string
     stderr: string

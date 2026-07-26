@@ -14,6 +14,7 @@ import {
 import { mapUsersToRows, searchUsers } from './domains/contact'
 import { mapSearchResultsToTargets, searchDocs } from './domains/docs'
 import { listRecentChats, mapChatsToRows, searchChats } from './domains/im'
+import { createCalendarEvent, createDoc, sendMessage } from './domains/write'
 import { getFeishuRuntime } from './runtime'
 import type { FeishuSettings } from './settings/model'
 import { DEFAULT_FEISHU_SETTINGS } from './settings/model'
@@ -480,6 +481,236 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           },
         })),
       )
+    },
+  },
+  {
+    id: 'feishu.send-message',
+    title: 'tool.sendMessage.title',
+    subtitle: 'tool.sendMessage.subtitle',
+    icon: 'Send',
+    aliases: ['发消息', 'send message', '飞书发消息'],
+    requireParamSelection: true,
+    params: [
+      {
+        key: 'chatId',
+        label: 'param.chatId.label',
+        type: 'text',
+        required: true,
+        hint: 'param.chatId.hint',
+      },
+      {
+        key: 'text',
+        label: 'param.messageText.label',
+        type: 'text',
+        required: true,
+        hint: 'param.messageText.hint',
+      },
+    ],
+    surfaces: { launcher: true },
+    async run(ctx) {
+      const settings = resolveSettings(ctx.settings)
+      const shell = getFeishuRuntime().shell
+      if (!shell) {
+        return ctx.output.error(ctx.t('error.shellMissing'))
+      }
+
+      const chatId = String(ctx.params.chatId ?? '').trim()
+      const text = String(ctx.params.text ?? ctx.input?.text ?? '').trim()
+      if (!chatId || !text) {
+        return ctx.output.error(ctx.t('error.writeParams'))
+      }
+
+      const preview = text.length > 80 ? text.slice(0, 80) + '…' : text
+      // L2 confirmation: no CLI write until user picks Confirm
+      return ctx.output.choices([
+        {
+          id: 'feishu.write:send-confirm',
+          title: ctx.t('confirm.sendMessage'),
+          subtitle: chatId + ' · ' + preview,
+          icon: 'Send',
+          primaryAction: async () => {
+            const sent = await sendMessage({
+              shell,
+              binaryPath: settings.binaryPath || undefined,
+              chatId,
+              text,
+              confirmed: true,
+            })
+            if (!sent.ok) {
+              const parts = [sent.message || ctx.t('error.sendFailed')]
+              if (sent.hint) parts.push(sent.hint)
+              return { ok: false as const, message: parts.join('\n') }
+            }
+            return { ok: true as const, message: ctx.t('action.sent') }
+          },
+        },
+        {
+          id: 'feishu.write:send-cancel',
+          title: ctx.t('confirm.cancel'),
+          subtitle: ctx.t('confirm.cancelHint'),
+          icon: 'X',
+          primaryAction: async () => ({ ok: true as const, message: ctx.t('action.cancelled') }),
+        },
+      ])
+    },
+  },
+  {
+    id: 'feishu.create-event',
+    title: 'tool.createEvent.title',
+    subtitle: 'tool.createEvent.subtitle',
+    icon: 'CalendarPlus',
+    aliases: ['建日程', '创建日程', 'create event', '飞书建日程'],
+    requireParamSelection: true,
+    params: [
+      {
+        key: 'summary',
+        label: 'param.eventSummary.label',
+        type: 'text',
+        required: true,
+        hint: 'param.eventSummary.hint',
+      },
+      {
+        key: 'start',
+        label: 'param.eventStart.label',
+        type: 'text',
+        required: true,
+        hint: 'param.eventStart.hint',
+      },
+      {
+        key: 'end',
+        label: 'param.eventEnd.label',
+        type: 'text',
+        required: true,
+        hint: 'param.eventEnd.hint',
+      },
+    ],
+    surfaces: { launcher: true },
+    async run(ctx) {
+      const settings = resolveSettings(ctx.settings)
+      const shell = getFeishuRuntime().shell
+      if (!shell) {
+        return ctx.output.error(ctx.t('error.shellMissing'))
+      }
+
+      const summary = String(ctx.params.summary ?? '').trim()
+      const start = String(ctx.params.start ?? '').trim()
+      const end = String(ctx.params.end ?? '').trim()
+      if (!summary || !start || !end) {
+        return ctx.output.error(ctx.t('error.writeParams'))
+      }
+
+      return ctx.output.choices([
+        {
+          id: 'feishu.write:event-confirm',
+          title: ctx.t('confirm.createEvent'),
+          subtitle: summary + ' · ' + start + ' → ' + end,
+          icon: 'CalendarPlus',
+          primaryAction: async () => {
+            const created = await createCalendarEvent({
+              shell,
+              binaryPath: settings.binaryPath || undefined,
+              summary,
+              start,
+              end,
+              confirmed: true,
+            })
+            if (!created.ok) {
+              const parts = [created.message || ctx.t('error.createEventFailed')]
+              if (created.hint) parts.push(created.hint)
+              return { ok: false as const, message: parts.join('\n') }
+            }
+            return { ok: true as const, message: ctx.t('action.eventCreated') }
+          },
+        },
+        {
+          id: 'feishu.write:event-cancel',
+          title: ctx.t('confirm.cancel'),
+          subtitle: ctx.t('confirm.cancelHint'),
+          icon: 'X',
+          primaryAction: async () => ({ ok: true as const, message: ctx.t('action.cancelled') }),
+        },
+      ])
+    },
+  },
+  {
+    id: 'feishu.create-doc',
+    title: 'tool.createDoc.title',
+    subtitle: 'tool.createDoc.subtitle',
+    icon: 'FilePlus',
+    aliases: ['建文档', '创建文档', 'create doc', '飞书建文档'],
+    requireParamSelection: true,
+    params: [
+      {
+        key: 'title',
+        label: 'param.docTitle.label',
+        type: 'text',
+        required: true,
+        hint: 'param.docTitle.hint',
+      },
+      {
+        key: 'content',
+        label: 'param.docContent.label',
+        type: 'text',
+        required: false,
+        hint: 'param.docContent.hint',
+      },
+    ],
+    surfaces: { launcher: true },
+    async run(ctx) {
+      const settings = resolveSettings(ctx.settings)
+      const shell = getFeishuRuntime().shell
+      if (!shell) {
+        return ctx.output.error(ctx.t('error.shellMissing'))
+      }
+
+      const title = String(ctx.params.title ?? '').trim()
+      const content = String(ctx.params.content ?? ctx.input?.text ?? '').trim()
+      if (!title) {
+        return ctx.output.error(ctx.t('error.writeParams'))
+      }
+
+      return ctx.output.choices([
+        {
+          id: 'feishu.write:doc-confirm',
+          title: ctx.t('confirm.createDoc'),
+          subtitle: title,
+          icon: 'FilePlus',
+          primaryAction: async () => {
+            const created = await createDoc({
+              shell,
+              binaryPath: settings.binaryPath || undefined,
+              title,
+              content: content || undefined,
+              confirmed: true,
+            })
+            if (!created.ok) {
+              const parts = [created.message || ctx.t('error.createDocFailed')]
+              if (created.hint) parts.push(created.hint)
+              return { ok: false as const, message: parts.join('\n') }
+            }
+            if (created.url) {
+              try {
+                await openRuntimeUrl(created.url, (url) => ctx.api.openUrl(url))
+              } catch {
+                // ignore open failure; still report success
+              }
+            }
+            return {
+              ok: true as const,
+              message: created.url
+                ? ctx.t('action.docCreated') + ': ' + created.url
+                : ctx.t('action.docCreated'),
+            }
+          },
+        },
+        {
+          id: 'feishu.write:doc-cancel',
+          title: ctx.t('confirm.cancel'),
+          subtitle: ctx.t('confirm.cancelHint'),
+          icon: 'X',
+          primaryAction: async () => ({ ok: true as const, message: ctx.t('action.cancelled') }),
+        },
+      ])
     },
   },
 ]

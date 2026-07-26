@@ -27,6 +27,7 @@ const domainFiles = [
   'src/plugins/feishu/domains/calendar.ts',
   'src/plugins/feishu/domains/im.ts',
   'src/plugins/feishu/domains/contact.ts',
+  'src/plugins/feishu/domains/write.ts',
 ]
 
 // --- required modules must exist ---
@@ -99,6 +100,15 @@ assert.match(imSrc, /\+chat-list|listRecentChats/, 'im.ts must support chat list
 assert.doesNotMatch(imSrc, /\+messages-send/, 'B3 im domain must not send messages')
 assert.match(contactSrc, /\+search-user|searchUsers/, 'contact.ts must support user search')
 assert.match(contactSrc, /open_id|mapUsersToRows/, 'contact.ts must surface open_id for copy')
+
+// --- write domain (B4) must require confirmation ---
+const writeSrc = read('src/plugins/feishu/domains/write.ts')
+assert.match(writeSrc, /sendMessage|\+messages-send/, 'write.ts must support messages-send')
+assert.match(writeSrc, /createCalendarEvent|\+create/, 'write.ts must support calendar create')
+assert.match(writeSrc, /createDoc|docs.*\+create/, 'write.ts must support docs create')
+assert.match(writeSrc, /confirmed/, 'write helpers must accept confirmed flag')
+assert.match(writeSrc, /risk:\s*['"]write['"]/, 'write helpers must use risk write')
+assert.match(runSrc, /ensureYesFlag|--yes/, 'runLarkCli should attach --yes after write confirmation')
 
 // --- no workspace deep imports in feishu plugin sources ---
 const pluginRoot = join(root, 'src/plugins/feishu')
