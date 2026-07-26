@@ -248,25 +248,16 @@ export function GlobalLauncherCollectInputFrame({
               title={t(locale, 'palette.livePreviewEmpty')}
             />
           ) : livePreviewText ? (
+            // Keep last result while typing; no empty-well / "更新中" intermediate.
             <div
-              className={`launcher-preview-well${previewStale || busy ? ' is-stale' : ''}`}
+              className="launcher-preview-well"
               data-testid="launcher-preview-well"
               data-stale={previewStale ? 'true' : undefined}
               aria-live="polite"
             >
               <pre>{livePreviewText}</pre>
             </div>
-          ) : (
-            // Typed but first preview still loading — keep a quiet well, not the empty icon flip.
-            <div
-              className="launcher-preview-well is-stale"
-              data-testid="launcher-preview-well"
-              data-stale="true"
-              aria-live="polite"
-            >
-              <pre className="launcher-preview-pending">{t(locale, 'palette.livePreviewStale')}</pre>
-            </div>
-          )}
+          ) : null}
           {livePreviewText && destinations.length > 0 && (
             <LauncherOutputTargetsBar
               destinations={destinations}
