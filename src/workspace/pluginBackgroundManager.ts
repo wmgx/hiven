@@ -16,6 +16,7 @@ import { createPluginPrivateStorage } from './pluginStorage'
 import { createPluginClipboard } from './pluginClipboard'
 import { createPluginPaste } from './pluginPaste'
 import { createPluginNetwork } from './pluginNetwork'
+import { createPluginShell } from './pluginShell'
 import { useAppStore } from '../store'
 import { getPluginPermissionSnapshot, missingPluginPermissions, usePluginPermissionStore } from './pluginPermissions'
 import { resolvePluginSettingsSource } from './launcher/pluginSource'
@@ -52,6 +53,7 @@ function buildBackgroundContext(
     clipboard: createPluginClipboard(pluginId, permissions, storage),
     paste: createPluginPaste(permissions, storage),
     network: createPluginNetwork(permissions),
+    shell: createPluginShell(permissions),
     showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error') {
       useAppStore.getState().setLastCommandStatus({
         title: message,

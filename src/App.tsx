@@ -8,7 +8,7 @@ import { ToastContainer } from './components/workspace/ToastContainer'
 import { loadInstalledPluginsFromStore } from './workspace/pluginRuntime'
 import { registerBundledPluginPackages } from './workspace/bundledPluginLoader'
 import { initializePluginBackgrounds, setupBackgroundPermissionWatcher, setupBackgroundSettingsWatcher, stopAllPluginBackgrounds } from './workspace/pluginBackgroundManager'
-import { runPluginStartupHooks } from './workspace/pluginHookManager'
+import { runPluginStartupHooks, setupStartupPermissionWatcher } from './workspace/pluginHookManager'
 import { refreshHostApplicationIndexOnStartup } from './workspace/appLauncher/hostAppLauncher'
 import { prefetchDesktopWindowsOnStartup } from './workspace/desktopControl/windows'
 import { registerHostLauncherProviders } from './workspace/launcher/hostProvider'
@@ -53,6 +53,7 @@ function LauncherRuntimeApp() {
     let disposed = false
     let cleanupSettingsWatcher: (() => void) | undefined
     let cleanupPermissionWatcher: (() => void) | undefined
+    let cleanupStartupPermissionWatcher: (() => void) | undefined
 
     initConfigDir().then(async (dir) => {
       if (dir) {
@@ -79,6 +80,7 @@ function LauncherRuntimeApp() {
       // Warm on-screen window list in idle time so first Global Launcher open is snappy.
       prefetchDesktopWindowsOnStartup()
       runPluginStartupHooks()
+      cleanupStartupPermissionWatcher = setupStartupPermissionWatcher()
       try {
         initializePluginBackgrounds()
         cleanupSettingsWatcher = setupBackgroundSettingsWatcher()
@@ -92,6 +94,7 @@ function LauncherRuntimeApp() {
       disposed = true
       cleanupSettingsWatcher?.()
       cleanupPermissionWatcher?.()
+      cleanupStartupPermissionWatcher?.()
       void stopAllPluginBackgrounds()
     }
   }, [])

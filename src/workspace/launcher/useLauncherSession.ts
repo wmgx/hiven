@@ -8,6 +8,7 @@ import type { ContributionSource } from '../pluginTypes'
 import { LauncherController, type LauncherControllerState } from './controller'
 import { createPluginLauncherApi, createPluginLauncherStorage } from './pluginApi'
 import { createPluginNetwork } from '../pluginNetwork'
+import { createPluginShell } from '../pluginShell'
 import { getPluginPermissionSnapshot } from '../pluginPermissions'
 import { resolvePluginSettingsSource } from './pluginSource'
 import { subscribeDesktopWindowsUpdated } from '../desktopControl/windows'
@@ -166,6 +167,14 @@ export function useLauncherSession({
             const source = item.source ?? 'builtin'
             const pluginId = item.pluginId ?? ''
             return createPluginNetwork(getPluginPermissionSnapshot(source, pluginId, requestedPermissions))
+          },
+          getShell: (item) => {
+            const requestedPermissions = item.pluginId && item.source
+              ? pluginRegistry.getPluginPermissions(item.pluginId, item.source)
+              : []
+            const source = item.source ?? 'builtin'
+            const pluginId = item.pluginId ?? ''
+            return createPluginShell(getPluginPermissionSnapshot(source, pluginId, requestedPermissions))
           },
           locale,
           makeT: (item) => makePluginT(item.pluginId ?? '', locale),

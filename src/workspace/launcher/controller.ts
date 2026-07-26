@@ -27,7 +27,7 @@ import type {
   LauncherSurfaceId,
   PluginLauncherApi,
 } from './types'
-import type { PluginNetworkApi, PluginPrivateStorageApi } from '../pluginTypes'
+import type { PluginNetworkApi, PluginPrivateStorageApi, PluginShellApi } from '../pluginTypes'
 import { appendUsageJournal } from '../usageJournal'
 import { isOutputResult } from './output'
 import { translate, type Locale } from '../../i18n'
@@ -90,6 +90,7 @@ export type LauncherControllerDeps = {
   makeApi?: (item: LauncherItem) => PluginLauncherApi
   getStorage?: (item: LauncherItem) => PluginPrivateStorageApi
   getNetwork?: (item: LauncherItem) => PluginNetworkApi
+  getShell?: (item: LauncherItem) => PluginShellApi
   locale: string
   /** Translate function scoped to the item's plugin. */
   makeT: (item: LauncherItem) => (key: string, vars?: Record<string, string | number>) => string
@@ -127,6 +128,12 @@ const emptyStorage: PluginPrivateStorageApi = {
 const emptyNetwork: PluginNetworkApi = {
   request: async () => {
     throw new Error('Plugin network is not available for this launcher item')
+  },
+}
+
+const emptyShell: PluginShellApi = {
+  run: async () => {
+    throw new Error('Plugin shell is not available for this launcher item')
   },
 }
 
@@ -592,6 +599,7 @@ export class LauncherController {
           api: this.deps.makeApi?.(item) ?? this.deps.api,
           storage: this.deps.getStorage?.(item) ?? emptyStorage,
           network: this.deps.getNetwork?.(item) ?? emptyNetwork,
+          shell: this.deps.getShell?.(item) ?? emptyShell,
           t: this.deps.makeT(item),
           pluginId: item.pluginId,
           source: item.source,

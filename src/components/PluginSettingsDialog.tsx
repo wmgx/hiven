@@ -19,6 +19,7 @@ import { openExternalUrl } from '../workspace/effectRunner'
 import type { PluginSettingsContribution } from '../workspace/pluginTypes'
 import { createPluginPrivateStorage } from '../workspace/pluginStorage'
 import { createPluginNetwork } from '../workspace/pluginNetwork'
+import { createPluginShell } from '../workspace/pluginShell'
 import { getPluginPermissionSnapshot, usePluginPermissionStore } from '../workspace/pluginPermissions'
 import { PluginSettingsSchemaRenderer } from './PluginSettingsSchemaRenderer'
 import { resolvePluginSettingsModal, type ResolvedPluginSettingsModal } from './pluginSettingsModalResolution'
@@ -298,6 +299,10 @@ function SettingsDialogBody({
     () => createPluginNetwork(permissions),
     [permissions],
   )
+  const settingsShell = useMemo(
+    () => createPluginShell(permissions),
+    [permissions],
+  )
 
   const notifySettingsChange = useCallback((next: unknown) => {
     if (!contribution.onChange) return
@@ -308,11 +313,12 @@ function SettingsDialogBody({
         source,
         storage: settingsHost.storage,
         network: settingsNetwork,
+        shell: settingsShell,
       }),
     ).catch((error) => {
       console.warn(`[hiven] Plugin settings onChange failed for "${pluginId}":`, error)
     })
-  }, [contribution, pluginId, source, settingsHost.storage, settingsNetwork])
+  }, [contribution, pluginId, source, settingsHost.storage, settingsNetwork, settingsShell])
 
   const setValue = useCallback(
     (next: unknown) => {

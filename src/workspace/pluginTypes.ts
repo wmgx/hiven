@@ -412,6 +412,7 @@ export type PluginSettingsChangeContext<TSettings = unknown> = {
   source: 'builtin' | 'installed' | 'dev'
   storage: PluginPrivateStorageApi
   network: PluginNetworkApi
+  shell: PluginShellApi
 }
 
 export type PluginSettingsContribution<TSettings = unknown> = {
@@ -584,6 +585,33 @@ export type PluginNetworkApi = {
   request(input: PluginNetworkRequest): Promise<PluginNetworkResponse>
 }
 
+// ─── Plugin Shell API ────────────────────────────────────────────────────────
+
+export type ShellRunOptions = {
+  command: string
+  cwd?: string
+  env?: Record<string, string>
+  timeoutMs?: number
+  maxOutputBytes?: number
+  shellProgram?: string
+  shellArgs?: string[]
+}
+
+export type ShellRunResult = {
+  stdout: string
+  stderr: string
+  exitCode: number | null
+  signal?: string
+  timedOut: boolean
+  durationMs: number
+  stdoutBytes: number
+  stderrBytes: number
+}
+
+export type PluginShellApi = {
+  run(options: ShellRunOptions): Promise<ShellRunResult>
+}
+
 // ─── Plugin UI Surface Types ─────────────────────────────────────────────────
 
 export type PluginUiSurfaceKind = 'custom-view'
@@ -640,6 +668,7 @@ export type PluginSurfaceHostApi = {
   clipboard: PluginClipboardApi
   paste: PluginPasteApi
   network: PluginNetworkApi
+  shell: PluginShellApi
 }
 
 export type PluginSurfaceProps<TSettings = unknown> = {
@@ -666,6 +695,7 @@ export type PluginSurfaceOpenContext<TSettings = unknown> = {
   clipboard: PluginClipboardApi
   paste: PluginPasteApi
   network: PluginNetworkApi
+  shell: PluginShellApi
 }
 
 export type PluginUiSurfaceContribution<TSettings = unknown> = {
@@ -709,6 +739,7 @@ export type PluginBackgroundContext<TSettings = unknown> = {
   clipboard: PluginClipboardApi
   paste: PluginPasteApi
   network: PluginNetworkApi
+  shell: PluginShellApi
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
 }
 
@@ -728,6 +759,7 @@ export type PluginStartupHookContext<TSettings = unknown> = {
   clipboard: PluginClipboardApi
   paste: PluginPasteApi
   network: PluginNetworkApi
+  shell: PluginShellApi
   api: PluginLauncherApi
   t: (key: string, vars?: Record<string, string | number>) => string
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void

@@ -16,7 +16,7 @@
 
 import type { ComponentType } from 'react'
 import type { Locale } from '../../i18n'
-import type { PluginNetworkApi, PluginPrivateStorageApi } from '../pluginTypes'
+import type { PluginNetworkApi, PluginPrivateStorageApi, PluginShellApi } from '../pluginTypes'
 import type { FluxEffect } from '../types'
 import type { DiffSource } from '../workspaceStore'
 import type { EffectRunnerResult } from '../effectRunner'
@@ -396,6 +396,7 @@ export type LauncherSuggestContext<TSettings = unknown> = {
   api: PluginLauncherApi
   storage: PluginPrivateStorageApi
   network: PluginNetworkApi
+  shell: PluginShellApi
   t: (key: string, vars?: Record<string, string | number>) => string
   /** Plugin identity for storage-scoped assets (e.g. favicon blob refs). */
   pluginId?: string
@@ -460,6 +461,7 @@ export type LauncherDynamicContext = {
   api: PluginLauncherApi
   storage: PluginPrivateStorageApi
   network: PluginNetworkApi
+  shell: PluginShellApi
   t: (key: string, vars?: Record<string, string | number>) => string
   source: 'builtin' | 'installed' | 'dev'
   pluginId: string

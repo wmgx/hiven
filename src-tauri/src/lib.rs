@@ -7,8 +7,9 @@ use std::io::{Cursor, Read};
 #[cfg(target_os = "macos")]
 use std::os::raw::{c_char, c_int, c_void};
 use std::path::{Component, Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
+use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
 use tauri::tray::TrayIconBuilder;
@@ -4266,6 +4267,195 @@ struct ProxyHttpResponse {
     body_bytes: Option<Vec<u8>>,
 }
 
+#[derive(serde::Deserialize)]
+struct PluginShellRunRequest {
+    command: String,
+    cwd: Option<String>,
+    env: Option<HashMap<String, String>>,
+    #[serde(rename = "timeoutMs")]
+    timeout_ms: Option<u64>,
+    #[serde(rename = "maxOutputBytes")]
+    max_output_bytes: Option<u64>,
+    #[serde(rename = "shellProgram")]
+    shell_program: Option<String>,
+    #[serde(rename = "shellArgs")]
+    shell_args: Option<Vec<String>>,
+}
+
+#[derive(serde::Serialize)]
+struct PluginShellRunResult {
+    stdout: String,
+    stderr: String,
+    #[serde(rename = "exitCode")]
+    exit_code: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    signal: Option<String>,
+    #[serde(rename = "timedOut")]
+    timed_out: bool,
+    #[serde(rename = "durationMs")]
+    duration_ms: u64,
+    #[serde(rename = "stdoutBytes")]
+    stdout_bytes: usize,
+    #[serde(rename = "stderrBytes")]
+    stderr_bytes: usize,
+}
+
+fn default_shell_program() -> String {
+    #[cfg(windows)]
+    {
+        std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_string())
+    }
+    #[cfg(not(windows))]
+    {
+        std::env::var("SHELL").unwrap_or_else(|_| {
+            if Path::new("/bin/zsh").exists() {
+                "/bin/zsh".to_string()
+            } else {
+                "/bin/sh".to_string()
+            }
+        })
+    }
+}
+
+fn default_shell_args() -> Vec<String> {
+    #[cfg(windows)]
+    {
+        vec!["/C".to_string()]
+    }
+    #[cfg(not(windows))]
+    {
+        vec!["-lc".to_string()]
+    }
+}
+
+fn read_limited_output(reader: Option<impl Read>, max_bytes: usize) -> (Vec<u8>, usize) {
+    let Some(mut reader) = reader else {
+        return (Vec::new(), 0);
+    };
+    let mut buf = Vec::new();
+    let mut total = 0usize;
+    let mut chunk = [0u8; 8192];
+    loop {
+        match reader.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => {
+                total = total.saturating_add(n);
+                if buf.len() < max_bytes {
+                    let take = (max_bytes - buf.len()).min(n);
+                    buf.extend_from_slice(&chunk[..take]);
+                }
+            }
+            Err(_) => break,
+        }
+    }
+    (buf, total)
+}
+
+/// Run a one-shot shell command for plugins. Non-zero exit codes return Ok(result).
+#[tauri::command]
+fn plugin_shell_run(request: PluginShellRunRequest) -> Result<PluginShellRunResult, String> {
+    if request.command.trim().is_empty() {
+        return Err("Shell command must not be empty".to_string());
+    }
+
+    let timeout_ms = request
+        .timeout_ms
+        .filter(|value| *value > 0)
+        .unwrap_or(10_000);
+    let max_output_bytes = request
+        .max_output_bytes
+        .filter(|value| *value > 0)
+        .unwrap_or(512_000) as usize;
+
+    let program = request
+        .shell_program
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(default_shell_program);
+    let mut args = request
+        .shell_args
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(default_shell_args);
+    args.push(request.command);
+
+    let mut cmd = Command::new(&program);
+    cmd.args(&args);
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+
+    if let Some(cwd) = request.cwd.as_ref() {
+        let cwd_path = Path::new(cwd);
+        if !cwd_path.exists() {
+            return Err(format!("Shell cwd does not exist: {}", cwd));
+        }
+        cmd.current_dir(cwd_path);
+    }
+
+    if let Some(env) = request.env {
+        for (key, value) in env {
+            cmd.env(key, value);
+        }
+    }
+
+    let started = Instant::now();
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to spawn shell `{}`: {}", program, e))?;
+
+    let stdout_reader = child.stdout.take();
+    let stderr_reader = child.stderr.take();
+    let max_out = max_output_bytes;
+    let stdout_thread = thread::spawn(move || read_limited_output(stdout_reader, max_out));
+    let stderr_thread = thread::spawn(move || read_limited_output(stderr_reader, max_out));
+
+    let timeout = Duration::from_millis(timeout_ms);
+    let mut timed_out = false;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {
+                if started.elapsed() >= timeout {
+                    timed_out = true;
+                    let _ = child.kill();
+                    break child
+                        .wait()
+                        .map_err(|e| format!("Failed to wait for timed-out shell: {}", e))?;
+                }
+                thread::sleep(Duration::from_millis(20));
+            }
+            Err(e) => return Err(format!("Failed to wait for shell: {}", e)),
+        }
+    };
+
+    let (stdout_bytes_buf, stdout_total) = stdout_thread
+        .join()
+        .unwrap_or_else(|_| (Vec::new(), 0));
+    let (stderr_bytes_buf, stderr_total) = stderr_thread
+        .join()
+        .unwrap_or_else(|_| (Vec::new(), 0));
+
+    let duration_ms = started.elapsed().as_millis() as u64;
+    let exit_code = status.code();
+    #[cfg(unix)]
+    let signal = {
+        use std::os::unix::process::ExitStatusExt;
+        status.signal().map(|sig| sig.to_string())
+    };
+    #[cfg(not(unix))]
+    let signal: Option<String> = None;
+
+    Ok(PluginShellRunResult {
+        stdout: String::from_utf8_lossy(&stdout_bytes_buf).into_owned(),
+        stderr: String::from_utf8_lossy(&stderr_bytes_buf).into_owned(),
+        exit_code,
+        signal,
+        timed_out,
+        duration_ms,
+        stdout_bytes: stdout_total,
+        stderr_bytes: stderr_total,
+    })
+}
+
 #[tauri::command]
 async fn plugin_http_request(request: ProxyHttpRequest) -> Result<ProxyHttpResponse, String> {
     let parsed = reqwest::Url::parse(&request.url).map_err(|e| e.to_string())?;
@@ -5895,6 +6085,7 @@ pub fn run() {
             read_clipboard_file_paths,
             fetch_url,
             plugin_http_request,
+            plugin_shell_run,
             list_plugin_dirs,
             remove_plugin_dir,
             replace_plugin_dir,

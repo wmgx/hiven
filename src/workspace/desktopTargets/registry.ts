@@ -92,7 +92,6 @@ export async function collectDesktopTargets(
   options: CollectDesktopTargetsOptions = {},
 ): Promise<DesktopTarget[]> {
   const signal = options.signal ?? ctx.signal
-  const timeoutMs = options.timeoutMs ?? DESKTOP_TARGET_PROVIDER_TIMEOUT_MS
   const maxPerSource = options.maxPerSource ?? DESKTOP_TARGET_MAX_PER_SOURCE
   const maxGlobal = options.maxGlobal ?? DESKTOP_TARGET_MAX_GLOBAL
   const onPartial = options.onPartial
@@ -108,6 +107,8 @@ export async function collectDesktopTargets(
         onPartial?.({ sourceId: provider.id, targets: [], done: true })
         return
       }
+
+      const timeoutMs = provider.listTimeoutMs ?? options.timeoutMs ?? DESKTOP_TARGET_PROVIDER_TIMEOUT_MS
 
       let healthy = true
       if (provider.health) {

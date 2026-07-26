@@ -62,6 +62,8 @@ export type DesktopTargetProvider = {
   titleI18n?: Partial<Record<Locale, string>>
   /** Source-level score boost, clamped by PROVIDER_PRIORITY_CAP. */
   priority?: number
+  /** Soft timeout for this provider's list() only; falls back to collect options / default. */
+  listTimeoutMs?: number
   list(ctx: DesktopTargetQueryContext): Promise<DesktopTarget[]> | DesktopTarget[]
   activate?(target: DesktopTarget, ctx: DesktopTargetActivateContext): Promise<void>
   health?(): Promise<{ ok: boolean; reason?: string }>

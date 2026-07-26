@@ -84,6 +84,10 @@ export type {
   PluginNetworkApi,
   PluginNetworkRequest,
   PluginNetworkResponse,
+  // Plugin Shell types
+  PluginShellApi,
+  ShellRunOptions,
+  ShellRunResult,
   // Plugin Settings change hook
   PluginSettingsChangeContext,
   // Plugin Clipboard types
