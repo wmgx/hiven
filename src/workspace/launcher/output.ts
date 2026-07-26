@@ -37,8 +37,8 @@ export function textResult(text: string, api: PluginLauncherApi, locale: Locale 
     title: text,
     preview: text,
     primaryAction: async () => {
+      // Silent copy: toast after ↵ 复制 is noise (launcher often closes anyway).
       await api.copyText(text)
-      api.showMessage(palette(locale, 'copied'), 'success')
     },
     secondaryActions: [
       {
@@ -74,7 +74,6 @@ export function replaceActiveTextResult(text: string, api: PluginLauncherApi, lo
         icon: 'Copy',
         run: async () => {
           await api.copyText(text)
-          api.showMessage(palette(locale, 'copied'), 'success')
         },
       },
       {
