@@ -3,6 +3,11 @@ export type FeishuSettings = {
   enabled: boolean
   /** When true, register feishu.docs DesktopTargetProvider for L1 mix-in. */
   docsMixEnabled: boolean
+  /**
+   * Prefer focusing an already-open Feishu/Lark window (title fuzzy match)
+   * before falling back to system open URL. macOS only; best-effort.
+   */
+  preferWindowFocus: boolean
   /** Absolute path to lark-cli; empty = resolve `lark-cli` from PATH. */
   binaryPath: string
 }
@@ -10,5 +15,6 @@ export type FeishuSettings = {
 export const DEFAULT_FEISHU_SETTINGS: FeishuSettings = {
   enabled: true,
   docsMixEnabled: true,
+  preferWindowFocus: true,
   binaryPath: '',
 }

@@ -31,6 +31,7 @@ const domainFiles = [
   'src/plugins/feishu/domains/messages.ts',
   'src/plugins/feishu/domains/tasks.ts',
   'src/plugins/feishu/domains/minutes.ts',
+  'src/plugins/feishu/domains/windowFocus.ts',
 ]
 
 // --- required modules must exist ---
@@ -122,6 +123,13 @@ assert.match(docsSrcFull, /fetchDocContent|\+fetch/, 'docs.ts must support docs 
 assert.match(messagesSrc, /\+messages-search|searchMessages/, 'messages.ts must support messages-search')
 assert.match(tasksSrc, /\+get-my-tasks|listMyTasks/, 'tasks.ts must support get-my-tasks')
 assert.match(minutesSrc, /\+search|searchMinutes/, 'minutes.ts must support minutes search')
+
+// --- B5 window focus helpers (pure) ---
+const windowFocusSrc = read('src/plugins/feishu/domains/windowFocus.ts')
+assert.match(windowFocusSrc, /scoreWindowTitleMatch/, 'windowFocus must export title scoring')
+assert.match(windowFocusSrc, /pickBestFeishuWindow|tryFocusFeishuWindowByTitle/, 'windowFocus must pick or focus windows')
+assert.match(windowFocusSrc, /openFeishuTarget/, 'windowFocus must provide openFeishuTarget open path')
+assert.match(windowFocusSrc, /osascript|AXRaise|Feishu|Lark/, 'window focus should target Feishu/Lark via osascript')
 
 // --- no workspace deep imports in feishu plugin sources ---
 const pluginRoot = join(root, 'src/plugins/feishu')

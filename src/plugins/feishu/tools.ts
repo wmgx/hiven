@@ -17,6 +17,7 @@ import { listRecentChats, mapChatsToRows, searchChats } from './domains/im'
 import { mapMessagesToRows, searchMessages } from './domains/messages'
 import { mapMinutesToRows, searchMinutes } from './domains/minutes'
 import { listMyTasks, mapTasksToRows } from './domains/tasks'
+import { openFeishuTarget } from './domains/windowFocus'
 import { createCalendarEvent, createDoc, sendMessage } from './domains/write'
 import { getFeishuRuntime } from './runtime'
 import type { FeishuSettings } from './settings/model'
@@ -34,13 +35,17 @@ function resolveSettings(ctxSettings: unknown): FeishuSettings {
 async function openRuntimeUrl(
   url: string,
   fallback: (url: string) => Promise<void>,
+  titleHint?: string,
 ): Promise<void> {
   const runtime = getFeishuRuntime()
-  if (runtime.openUrl) {
-    await runtime.openUrl(url)
-    return
-  }
-  await fallback(url)
+  const openUrl = runtime.openUrl ?? fallback
+  await openFeishuTarget({
+    shell: runtime.shell,
+    openUrl,
+    url,
+    titleHint,
+    preferWindowFocus: runtime.settings.preferWindowFocus !== false,
+  })
 }
 
 export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
@@ -166,7 +171,11 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           icon: target.icon ?? 'FileText',
           primaryAction: async () => {
             try {
-              await openRuntimeUrl(target.meta.url, (url) => ctx.api.openUrl(url))
+              await openRuntimeUrl(
+                target.meta.url,
+                (url) => ctx.api.openUrl(url),
+                target.title,
+              )
               return { ok: true as const }
             } catch (error) {
               return {
@@ -217,7 +226,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           primaryAction: async () => {
             try {
               if (row.url) {
-                await openRuntimeUrl(row.url, (url) => ctx.api.openUrl(url))
+                await openRuntimeUrl(row.url, (url) => ctx.api.openUrl(url), row.title)
                 return { ok: true as const }
               }
               await ctx.api.copyText(row.summaryText)
@@ -287,7 +296,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           primaryAction: async () => {
             try {
               if (row.url) {
-                await openRuntimeUrl(row.url, (url) => ctx.api.openUrl(url))
+                await openRuntimeUrl(row.url, (url) => ctx.api.openUrl(url), row.title)
                 return { ok: true as const }
               }
               await ctx.api.copyText(row.summaryText)
@@ -825,7 +834,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           primaryAction: async () => {
             try {
               if (row.url) {
-                await openRuntimeUrl(row.url, (url) => ctx.api.openUrl(url))
+                await openRuntimeUrl(row.url, (url) => ctx.api.openUrl(url), row.title)
                 return { ok: true as const }
               }
               await ctx.api.copyText(row.summaryText)
@@ -879,7 +888,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           primaryAction: async () => {
             try {
               if (row.url) {
-                await openRuntimeUrl(row.url, (url) => ctx.api.openUrl(url))
+                await openRuntimeUrl(row.url, (url) => ctx.api.openUrl(url), row.title)
                 return { ok: true as const }
               }
               await ctx.api.copyText(row.summaryText)
@@ -949,7 +958,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           primaryAction: async () => {
             try {
               if (row.url) {
-                await openRuntimeUrl(row.url, (url) => ctx.api.openUrl(url))
+                await openRuntimeUrl(row.url, (url) => ctx.api.openUrl(url), row.title)
                 return { ok: true as const }
               }
               await ctx.api.copyText(row.summaryText)

@@ -9,6 +9,7 @@
   "settings.enable": "启用飞书",
   "settings.enablePlugin": "启用飞书插件",
   "settings.enableDocsMix": "在 Global Launcher 混排飞书文档",
+  "settings.preferWindowFocus": "优先聚焦已打开的飞书窗口（macOS）",
   "settings.binaryPath": "lark-cli 路径",
   "settings.binaryPathHint": "留空则从 PATH 解析 `lark-cli`。",
   "settings.login": "登录",

@@ -9,6 +9,7 @@
   "settings.enable": "Enable Feishu",
   "settings.enablePlugin": "Enable Feishu plugin",
   "settings.enableDocsMix": "Show Feishu docs in Global Launcher",
+  "settings.preferWindowFocus": "Prefer focusing open Feishu windows (macOS)",
   "settings.binaryPath": "lark-cli path",
   "settings.binaryPathHint": "Leave empty to use `lark-cli` from PATH.",
   "settings.login": "Login",

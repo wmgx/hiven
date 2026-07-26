@@ -78,6 +78,11 @@ assert.match(toolsSrc, /feishu\.messages-search|messages-search|searchMessages/,
 assert.match(toolsSrc, /feishu\.my-tasks|my-tasks|listMyTasks/, 'must expose my-tasks tool')
 assert.match(toolsSrc, /feishu\.minutes-search|minutes-search|searchMinutes/, 'must expose minutes-search tool')
 
+// B5 window focus wiring
+assert.match(provider, /openFeishuTarget|preferWindowFocus|titleHint/, 'docs provider activate should try window focus')
+const settingsModel = read(`${pluginDir}/settings/model.ts`)
+assert.match(settingsModel, /preferWindowFocus/, 'settings model must include preferWindowFocus')
+
 // --- provider: feishu.docs DesktopTargetProvider ---
 assert.match(provider, /feishu\.docs/, 'provider must use source id feishu.docs')
 assert.ok(

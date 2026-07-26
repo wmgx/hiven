@@ -5,6 +5,7 @@
 
 import { getPluginHostSdk, type DesktopTargetProvider } from '@hiven/plugin'
 import { mapSearchResultsToTargets, searchDocs } from '../domains/docs'
+import { openFeishuTarget } from '../domains/windowFocus'
 import { getFeishuRuntime } from '../runtime'
 
 export const FEISHU_DOCS_SOURCE_ID = 'feishu.docs' as const
@@ -60,7 +61,13 @@ export function createFeishuDocsProvider(): DesktopTargetProvider {
       const runtime = getFeishuRuntime()
       if (!runtime.openUrl) return
       try {
-        await runtime.openUrl(url)
+        await openFeishuTarget({
+          shell: runtime.shell,
+          openUrl: runtime.openUrl,
+          url,
+          titleHint: target.title,
+          preferWindowFocus: runtime.settings.preferWindowFocus !== false,
+        })
       } catch {
         // provider must not throw into host ranking
       }

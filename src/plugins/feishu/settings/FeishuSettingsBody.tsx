@@ -139,6 +139,19 @@ export function FeishuSettingsBody(props: PluginSettingsBodyProps<FeishuSettings
             '在 Global Launcher 混排飞书文档',
           )}
         </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+          <ui.Checkbox
+            checked={value.preferWindowFocus !== false}
+            onChange={(event: { target: { checked: boolean } }) => {
+              setValue({ ...value, preferWindowFocus: event.target.checked })
+            }}
+          />
+          {label(
+            'settings.preferWindowFocus',
+            'Prefer focusing open Feishu windows (macOS)',
+            '优先聚焦已打开的飞书窗口（macOS）',
+          )}
+        </label>
       </ui.Stack>
 
       <ui.Stack gap={6}>
