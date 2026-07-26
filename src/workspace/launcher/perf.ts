@@ -133,9 +133,15 @@ export function logLauncherPerfDuration(
   details?: Record<string, unknown>,
 ): void {
   const durationMs = Math.round((performance.now() - startedAt) * 10) / 10
+  // Debounce / intentional sleeps are not UI jank — mark expectedWait to skip flags.
+  const expectedWait = details?.expectedWait === true
   logLauncherPerf(label, {
     durationMs,
-    ...(durationMs >= JANK_MS ? { jank: true } : durationMs >= SLOW_MS ? { slow: true } : {}),
+    ...(!expectedWait && durationMs >= JANK_MS
+      ? { jank: true }
+      : !expectedWait && durationMs >= SLOW_MS
+        ? { slow: true }
+        : {}),
     ...details,
   })
 }

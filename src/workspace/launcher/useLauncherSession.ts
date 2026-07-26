@@ -321,6 +321,7 @@ export function useLauncherSession({
       logLauncherPerfDuration('session:host-dynamic-debounce-wait', scheduledAt, {
         queryLength: q.length,
         debounceMs: delayMs,
+        expectedWait: true,
       })
       hostAbortRef.current?.abort()
       const abortController = new AbortController()
@@ -384,6 +385,7 @@ export function useLauncherSession({
       if (documentQueryRef.current !== q) return
       logLauncherPerfDuration('session:document-dynamic-debounce-wait', scheduledAt, {
         queryLength: q.length,
+        expectedWait: true,
       })
       documentAbortRef.current?.abort()
       const abortController = new AbortController()
