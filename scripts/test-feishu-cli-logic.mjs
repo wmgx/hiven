@@ -25,6 +25,8 @@ const domainFiles = [
   'src/plugins/feishu/domains/docs.ts',
   'src/plugins/feishu/domains/auth.ts',
   'src/plugins/feishu/domains/calendar.ts',
+  'src/plugins/feishu/domains/im.ts',
+  'src/plugins/feishu/domains/contact.ts',
 ]
 
 // --- required modules must exist ---
@@ -88,6 +90,15 @@ assert.match(calendarSrc, /fetchAgenda|\+agenda/, 'calendar.ts must support +age
 assert.match(calendarSrc, /searchEvents|\+search-event/, 'calendar.ts must support +search-event')
 assert.match(calendarSrc, /mapEventsToRows/, 'calendar.ts must map events to launcher rows')
 assert.doesNotMatch(calendarSrc, /\+create|\+rsvp/, 'B2 calendar domain must stay read-only (no create/rsvp)')
+
+// --- im / contact domain (B3 read-only) ---
+const imSrc = read('src/plugins/feishu/domains/im.ts')
+const contactSrc = read('src/plugins/feishu/domains/contact.ts')
+assert.match(imSrc, /\+chat-search|searchChats/, 'im.ts must support chat search')
+assert.match(imSrc, /\+chat-list|listRecentChats/, 'im.ts must support chat list')
+assert.doesNotMatch(imSrc, /\+messages-send/, 'B3 im domain must not send messages')
+assert.match(contactSrc, /\+search-user|searchUsers/, 'contact.ts must support user search')
+assert.match(contactSrc, /open_id|mapUsersToRows/, 'contact.ts must surface open_id for copy')
 
 // --- no workspace deep imports in feishu plugin sources ---
 const pluginRoot = join(root, 'src/plugins/feishu')

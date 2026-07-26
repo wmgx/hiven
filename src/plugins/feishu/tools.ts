@@ -11,7 +11,9 @@ import {
   mapEventsToRows,
   searchEvents,
 } from './domains/calendar'
+import { mapUsersToRows, searchUsers } from './domains/contact'
 import { mapSearchResultsToTargets, searchDocs } from './domains/docs'
+import { listRecentChats, mapChatsToRows, searchChats } from './domains/im'
 import { getFeishuRuntime } from './runtime'
 import type { FeishuSettings } from './settings/model'
 import { DEFAULT_FEISHU_SETTINGS } from './settings/model'
@@ -286,6 +288,189 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
               }
               await ctx.api.copyText(row.summaryText)
               return { ok: true as const, message: ctx.t('action.copied') }
+            } catch (error) {
+              return {
+                ok: false as const,
+                message: error instanceof Error ? error.message : String(error),
+              }
+            }
+          },
+        })),
+      )
+    },
+  },
+  {
+    id: 'feishu.chat-search',
+    title: 'tool.chatSearch.title',
+    subtitle: 'tool.chatSearch.subtitle',
+    icon: 'MessagesSquare',
+    aliases: ['搜群', '搜会话', 'chat search', '飞书群', '找群'],
+    requireParamSelection: true,
+    params: [
+      {
+        key: 'query',
+        label: 'param.chatQuery.label',
+        type: 'text',
+        required: true,
+        hint: 'param.chatQuery.hint',
+      },
+    ],
+    surfaces: { launcher: true },
+    async run(ctx) {
+      const settings = resolveSettings(ctx.settings)
+      const shell = getFeishuRuntime().shell
+      if (!shell) {
+        return ctx.output.error(ctx.t('error.shellMissing'))
+      }
+
+      const query = String(ctx.params.query ?? ctx.input?.text ?? '').trim()
+      if (!query) {
+        return ctx.output.error(ctx.t('param.chatQuery.hint'))
+      }
+
+      const search = await searchChats({
+        shell,
+        query,
+        binaryPath: settings.binaryPath || undefined,
+      })
+      if (!search.ok) {
+        const parts = [search.message || ctx.t('error.chatSearchFailed')]
+        if (search.hint) parts.push(search.hint)
+        return ctx.output.error(parts.join('\n'))
+      }
+
+      const rows = mapChatsToRows(search.chats)
+      if (rows.length === 0) {
+        return ctx.output.text(ctx.t('error.noChats'))
+      }
+
+      return ctx.output.choices(
+        rows.map((row) => ({
+          id: `feishu.im:chat:${row.id}`,
+          title: row.title,
+          subtitle: row.subtitle,
+          icon: 'MessagesSquare',
+          primaryAction: async () => {
+            try {
+              await ctx.api.copyText(row.summaryText)
+              return { ok: true as const, message: ctx.t('action.copiedChatId') }
+            } catch (error) {
+              return {
+                ok: false as const,
+                message: error instanceof Error ? error.message : String(error),
+              }
+            }
+          },
+        })),
+      )
+    },
+  },
+  {
+    id: 'feishu.chat-list',
+    title: 'tool.chatList.title',
+    subtitle: 'tool.chatList.subtitle',
+    icon: 'MessageCircle',
+    aliases: ['最近会话', '会话列表', 'recent chats', 'chat list', '我的群'],
+    surfaces: { launcher: true },
+    async run(ctx) {
+      const settings = resolveSettings(ctx.settings)
+      const shell = getFeishuRuntime().shell
+      if (!shell) {
+        return ctx.output.error(ctx.t('error.shellMissing'))
+      }
+
+      const listed = await listRecentChats({
+        shell,
+        binaryPath: settings.binaryPath || undefined,
+      })
+      if (!listed.ok) {
+        const parts = [listed.message || ctx.t('error.chatListFailed')]
+        if (listed.hint) parts.push(listed.hint)
+        return ctx.output.error(parts.join('\n'))
+      }
+
+      const rows = mapChatsToRows(listed.chats)
+      if (rows.length === 0) {
+        return ctx.output.text(ctx.t('error.noChats'))
+      }
+
+      return ctx.output.choices(
+        rows.map((row) => ({
+          id: `feishu.im:recent:${row.id}`,
+          title: row.title,
+          subtitle: row.subtitle,
+          icon: 'MessageCircle',
+          primaryAction: async () => {
+            try {
+              await ctx.api.copyText(row.summaryText)
+              return { ok: true as const, message: ctx.t('action.copiedChatId') }
+            } catch (error) {
+              return {
+                ok: false as const,
+                message: error instanceof Error ? error.message : String(error),
+              }
+            }
+          },
+        })),
+      )
+    },
+  },
+  {
+    id: 'feishu.contact-search',
+    title: 'tool.contactSearch.title',
+    subtitle: 'tool.contactSearch.subtitle',
+    icon: 'UserSearch',
+    aliases: ['找人', '搜人', '联系人', 'contact', 'search user', '飞书找人'],
+    requireParamSelection: true,
+    params: [
+      {
+        key: 'query',
+        label: 'param.userQuery.label',
+        type: 'text',
+        required: true,
+        hint: 'param.userQuery.hint',
+      },
+    ],
+    surfaces: { launcher: true },
+    async run(ctx) {
+      const settings = resolveSettings(ctx.settings)
+      const shell = getFeishuRuntime().shell
+      if (!shell) {
+        return ctx.output.error(ctx.t('error.shellMissing'))
+      }
+
+      const query = String(ctx.params.query ?? ctx.input?.text ?? '').trim()
+      if (!query) {
+        return ctx.output.error(ctx.t('param.userQuery.hint'))
+      }
+
+      const search = await searchUsers({
+        shell,
+        query,
+        binaryPath: settings.binaryPath || undefined,
+      })
+      if (!search.ok) {
+        const parts = [search.message || ctx.t('error.contactSearchFailed')]
+        if (search.hint) parts.push(search.hint)
+        return ctx.output.error(parts.join('\n'))
+      }
+
+      const rows = mapUsersToRows(search.users)
+      if (rows.length === 0) {
+        return ctx.output.text(ctx.t('error.noUsers'))
+      }
+
+      return ctx.output.choices(
+        rows.map((row) => ({
+          id: `feishu.contact:user:${row.id}`,
+          title: row.title,
+          subtitle: row.subtitle,
+          icon: 'User',
+          primaryAction: async () => {
+            try {
+              // Prefer p2p chat id when present (useful for later send-message); always copy full card.
+              await ctx.api.copyText(row.summaryText)
+              return { ok: true as const, message: ctx.t('action.copiedContact') }
             } catch (error) {
               return {
                 ok: false as const,

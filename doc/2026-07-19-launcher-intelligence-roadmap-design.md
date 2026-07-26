@@ -346,7 +346,7 @@ usage                        ≤ ~100
 | ⑤ 进程 | ✅ 已交付 | 搜索/SIGTERM + deny 表 + L2 确认（macOS） |
 | ⑥ 线性工作流 | ✅ MVP | 纯函数 pipeline + launcher item |
 | ⑦ 脚本脚手架 | ✅ MVP | `script-command` 模板 + `shell.run` 权限（不默认执行 shell） |
-| ⑧ 飞书生态 | 🚧 B0–B2 进行中（基于 lark-cli） | 设计：`docs/superpowers/specs/2026-07-26-feishu-lark-cli-integration-design.md`；B0 shell + B1 文档 L1 + B2 日程只读已落地；B3–B5 分期 |
+| ⑧ 飞书生态 | 🚧 B0–B3 进行中（基于 lark-cli） | 设计：`docs/superpowers/specs/2026-07-26-feishu-lark-cli-integration-design.md`；B0 shell + B1 文档 + B2 日程 + B3 会话/联系人已落地；B4 写操作 / B5 增强分期 |
 
 分支：`feat/launcher-intelligence-package-1`
 

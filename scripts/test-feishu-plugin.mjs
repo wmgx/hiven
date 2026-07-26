@@ -65,6 +65,9 @@ const toolsSrc = existsSync(join(root, `${pluginDir}/tools.ts`))
 assert.match(toolsSrc, /feishu\.calendar-agenda|calendar-agenda/, 'must expose calendar agenda tool')
 assert.match(toolsSrc, /feishu\.calendar-search|calendar-search|\+search-event|searchEvents/, 'must expose calendar search tool')
 assert.match(toolsSrc, /agenda|今日议程|日程/, 'agenda tool should be searchable via 日程/agenda aliases')
+assert.match(toolsSrc, /feishu\.chat-search|chat-search|searchChats/, 'must expose chat search tool')
+assert.match(toolsSrc, /feishu\.contact-search|contact-search|searchUsers/, 'must expose contact search tool')
+assert.match(toolsSrc, /找人|搜群|contact|chat/, 'B3 tools should be searchable via 找人/搜群 aliases')
 
 // --- provider: feishu.docs DesktopTargetProvider ---
 assert.match(provider, /feishu\.docs/, 'provider must use source id feishu.docs')
