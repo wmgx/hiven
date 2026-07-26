@@ -1,5 +1,22 @@
 const LAUNCHER_PERF_STORAGE_KEY = 'hiven:launcher-perf'
 const LAUNCHER_PERF_PREFIX = '[hiven:launcher-perf]'
+/** Samples slower than this (ms) are flagged `slow: true` for quick scanning. */
+const SLOW_MS = 50
+/** Hard jank threshold — usually user-visible stutter. */
+const JANK_MS = 120
+const RING_CAPACITY = 300
+
+export type LauncherPerfSample = {
+  t: number
+  label: string
+  durationMs?: number
+  slow?: boolean
+  jank?: boolean
+  details?: Record<string, unknown>
+}
+
+const ring: LauncherPerfSample[] = []
+let sampleSeq = 0
 
 export function isLauncherPerfEnabled(): boolean {
   try {
@@ -10,6 +27,15 @@ export function isLauncherPerfEnabled(): boolean {
     return import.meta.env.DEV
   } catch {
     return false
+  }
+}
+
+/** Force console/native logging on for the current page session (ring always records). */
+export function enableLauncherPerfLogging(): void {
+  try {
+    window.localStorage.setItem(LAUNCHER_PERF_STORAGE_KEY, '1')
+  } catch {
+    // ignore
   }
 }
 
@@ -34,11 +60,32 @@ function forwardLauncherPerfLine(line: string): void {
     .catch(() => {})
 }
 
+function pushRing(sample: LauncherPerfSample): void {
+  ring.push(sample)
+  if (ring.length > RING_CAPACITY) {
+    ring.splice(0, ring.length - RING_CAPACITY)
+  }
+}
+
 export function launcherPerfNow(): number {
   return performance.now()
 }
 
 export function logLauncherPerf(label: string, details?: Record<string, unknown>): void {
+  const durationMs =
+    details && typeof details.durationMs === 'number' ? details.durationMs : undefined
+  const sample: LauncherPerfSample = {
+    t: Date.now(),
+    label,
+    durationMs,
+    slow: durationMs != null ? durationMs >= SLOW_MS : undefined,
+    jank: durationMs != null ? durationMs >= JANK_MS : undefined,
+    details,
+  }
+  // Always keep ring samples for post-hoc diagnosis (even when console is off).
+  pushRing(sample)
+  sampleSeq += 1
+
   if (!isLauncherPerfEnabled()) return
   if (details) {
     console.info(LAUNCHER_PERF_PREFIX, label, details)
@@ -54,9 +101,10 @@ export function logLauncherPerfDuration(
   startedAt: number,
   details?: Record<string, unknown>,
 ): void {
-  if (!isLauncherPerfEnabled()) return
+  const durationMs = Math.round((performance.now() - startedAt) * 10) / 10
   logLauncherPerf(label, {
-    durationMs: Math.round((performance.now() - startedAt) * 10) / 10,
+    durationMs,
+    ...(durationMs >= JANK_MS ? { jank: true } : durationMs >= SLOW_MS ? { slow: true } : {}),
     ...details,
   })
 }
@@ -94,5 +142,91 @@ export async function measureLauncherPerf<T>(
       message: error instanceof Error ? error.message : String(error),
     })
     throw error
+  }
+}
+
+export function getLauncherPerfRing(): readonly LauncherPerfSample[] {
+  return ring.slice()
+}
+
+export function clearLauncherPerfRing(): void {
+  ring.length = 0
+}
+
+export type LauncherPerfSummary = {
+  total: number
+  slow: LauncherPerfSample[]
+  jank: LauncherPerfSample[]
+  byLabel: Array<{ label: string; count: number; maxMs: number; avgMs: number; sumMs: number }>
+}
+
+/** Aggregate ring samples for diagnosis (slow/jank + per-label stats). */
+export function summarizeLauncherPerfRing(minMs = 0): LauncherPerfSummary {
+  const samples = ring.filter((s) => (s.durationMs ?? 0) >= minMs)
+  const slow = samples.filter((s) => (s.durationMs ?? 0) >= SLOW_MS)
+  const jank = samples.filter((s) => (s.durationMs ?? 0) >= JANK_MS)
+  const map = new Map<string, { count: number; maxMs: number; sumMs: number }>()
+  for (const s of samples) {
+    if (s.durationMs == null) continue
+    const cur = map.get(s.label) ?? { count: 0, maxMs: 0, sumMs: 0 }
+    cur.count += 1
+    cur.maxMs = Math.max(cur.maxMs, s.durationMs)
+    cur.sumMs += s.durationMs
+    map.set(s.label, cur)
+  }
+  const byLabel = [...map.entries()]
+    .map(([label, v]) => ({
+      label,
+      count: v.count,
+      maxMs: Math.round(v.maxMs * 10) / 10,
+      avgMs: Math.round((v.sumMs / v.count) * 10) / 10,
+      sumMs: Math.round(v.sumMs * 10) / 10,
+    }))
+    .sort((a, b) => b.maxMs - a.maxMs)
+  return { total: samples.length, slow, jank, byLabel }
+}
+
+export function dumpLauncherPerfRing(): string {
+  const summary = summarizeLauncherPerfRing()
+  const lines = [
+    `launcher-perf samples=${summary.total} slow(>=${SLOW_MS}ms)=${summary.slow.length} jank(>=${JANK_MS}ms)=${summary.jank.length}`,
+    '--- by label (maxMs desc) ---',
+    ...summary.byLabel.map(
+      (r) => `${r.label} count=${r.count} max=${r.maxMs}ms avg=${r.avgMs}ms sum=${r.sumMs}ms`,
+    ),
+    '--- jank samples ---',
+    ...summary.jank.slice(-40).map((s) => {
+      const d = s.details ? ` ${JSON.stringify(s.details)}` : ''
+      return `${s.label} ${s.durationMs}ms${d}`
+    }),
+  ]
+  const text = lines.join('\n')
+  if (isLauncherPerfEnabled()) {
+    console.info(LAUNCHER_PERF_PREFIX, 'dump\n' + text)
+  }
+  return text
+}
+
+declare global {
+  interface Window {
+    __hivenLauncherPerf?: {
+      enable: () => void
+      dump: () => string
+      summary: () => LauncherPerfSummary
+      ring: () => readonly LauncherPerfSample[]
+      clear: () => void
+    }
+  }
+}
+
+/** Expose diagnosis helpers on window for DevTools. */
+export function installLauncherPerfDebugApi(): void {
+  if (typeof window === 'undefined') return
+  window.__hivenLauncherPerf = {
+    enable: enableLauncherPerfLogging,
+    dump: dumpLauncherPerfRing,
+    summary: () => summarizeLauncherPerfRing(),
+    ring: () => getLauncherPerfRing(),
+    clear: clearLauncherPerfRing,
   }
 }

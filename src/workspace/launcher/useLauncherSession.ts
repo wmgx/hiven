@@ -19,7 +19,13 @@ import {
   collectStaticCandidates,
   filterDynamicForSurface,
 } from './registry'
-import { logLauncherPerf, logLauncherPerfDuration, launcherPerfNow, measureLauncherPerfSync } from './perf'
+import {
+  installLauncherPerfDebugApi,
+  logLauncherPerf,
+  logLauncherPerfDuration,
+  launcherPerfNow,
+  measureLauncherPerfSync,
+} from './perf'
 import type {
   LauncherHostId,
   LauncherItem,
@@ -124,6 +130,10 @@ export function useLauncherSession({
   useEffect(() => {
     requestCloseRef.current = requestClose
   }, [requestClose])
+
+  useEffect(() => {
+    installLauncherPerfDebugApi()
+  }, [])
 
   const reset = useCallback(() => {
     setQuery('')
@@ -300,8 +310,18 @@ export function useLauncherSession({
     hostQueryRef.current = q
     // Empty open: delay past first paint. Typing: normal debounce.
     const delayMs = q ? HOST_DYNAMIC_DEBOUNCE_MS : HOST_EMPTY_OPEN_DELAY_MS
+    const scheduledAt = launcherPerfNow()
+    logLauncherPerf('session:host-dynamic-schedule', {
+      queryLength: q.length,
+      debounceMs: delayMs,
+      emptyOpen: !q,
+    })
     const timer = window.setTimeout(() => {
       if (hostQueryRef.current !== q) return
+      logLauncherPerfDuration('session:host-dynamic-debounce-wait', scheduledAt, {
+        queryLength: q.length,
+        debounceMs: delayMs,
+      })
       hostAbortRef.current?.abort()
       const abortController = new AbortController()
       hostAbortRef.current = abortController
@@ -314,7 +334,11 @@ export function useLauncherSession({
           if (abortController.signal.aborted) return
           if (hostQueryRef.current !== q) return
           if (update.kind !== 'host') return
+          const applyStartedAt = launcherPerfNow()
           setHostDynamicItems(filterDynamicForSurface(update.items, normalizedHostId))
+          logLauncherPerfDuration('session:host-dynamic-partial-apply', applyStartedAt, {
+            itemCount: update.items.length,
+          })
         },
       }).then((items) => {
         if (abortController.signal.aborted) return
@@ -351,8 +375,16 @@ export function useLauncherSession({
     }
 
     documentQueryRef.current = q
+    const scheduledAt = launcherPerfNow()
+    logLauncherPerf('session:document-dynamic-schedule', {
+      queryLength: q.length,
+      debounceMs: DOCUMENT_DYNAMIC_DEBOUNCE_MS,
+    })
     const timer = window.setTimeout(() => {
       if (documentQueryRef.current !== q) return
+      logLauncherPerfDuration('session:document-dynamic-debounce-wait', scheduledAt, {
+        queryLength: q.length,
+      })
       documentAbortRef.current?.abort()
       const abortController = new AbortController()
       documentAbortRef.current = abortController
@@ -370,12 +402,18 @@ export function useLauncherSession({
           onPartial: (update) => {
             if (abortController.signal.aborted) return
             if (documentQueryRef.current !== q) return
+            const mergeStartedAt = launcherPerfNow()
             documentPartialsRef.current.set(update.sourceId, update.items)
             const merged = filterDynamicForSurface(
               [...documentPartialsRef.current.values()].flat(),
               normalizedHostId,
             )
             setDocumentDynamicItems(merged)
+            logLauncherPerfDuration('session:document-dynamic-partial-apply', mergeStartedAt, {
+              sourceId: update.sourceId,
+              itemCount: update.items.length,
+              mergedCount: merged.length,
+            })
           },
         },
       )

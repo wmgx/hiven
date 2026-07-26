@@ -50,54 +50,63 @@ export function registerHostLauncherProviders(): void {
     // Slow remote document sources (feishu.docs) are NOT collected here — they stream
     // on a separate progressive path in useLauncherSession so typing stays responsive.
     const q = ctx.query.trim()
+    return measureLauncherPerf(
+      'host-provider:all',
+      async () => {
+        const appPromise = measureLauncherPerf('host-provider:app-items', () => getHostAppLauncherDynamicItems(ctx), (items) => ({
+          queryLength: q.length,
+          itemCount: items.length,
+        }))
+        const windowPromise = measureLauncherPerf('host-provider:window-items', () => getHostWindowLauncherDynamicItems(ctx), (items) => ({
+          queryLength: q.length,
+          itemCount: items.length,
+        }))
 
-    const appPromise = measureLauncherPerf('host-provider:app-items', () => getHostAppLauncherDynamicItems(ctx), (items) => ({
-      queryLength: q.length,
-      itemCount: items.length,
-    }))
-    const windowPromise = measureLauncherPerf('host-provider:window-items', () => getHostWindowLauncherDynamicItems(ctx), (items) => ({
-      queryLength: q.length,
-      itemCount: items.length,
-    }))
+        if (!q) {
+          // Empty open path: skip workflow + bridge tabs (empty-search tabs = 0).
+          const [appItems, windowItems] = await Promise.all([appPromise, windowPromise])
+          return [...appItems, ...windowItems]
+        }
 
-    if (!q) {
-      // Empty open path: skip workflow + bridge tabs (empty-search tabs = 0).
-      const [appItems, windowItems] = await Promise.all([appPromise, windowPromise])
-      return [...appItems, ...windowItems]
-    }
+        const workflowPromise = measureLauncherPerf('host-provider:workflow-items', () => getWorkflowObjectLauncherItems(ctx), (items) => ({
+          queryLength: q.length,
+          itemCount: items.length,
+        })).catch((error) => {
+          console.warn('[launcher] workflow dynamic items failed:', error)
+          return [] as Awaited<ReturnType<typeof getWorkflowObjectLauncherItems>>
+        })
 
-    const workflowPromise = measureLauncherPerf('host-provider:workflow-items', () => getWorkflowObjectLauncherItems(ctx), (items) => ({
-      queryLength: q.length,
-      itemCount: items.length,
-    })).catch((error) => {
-      console.warn('[launcher] workflow dynamic items failed:', error)
-      return [] as Awaited<ReturnType<typeof getWorkflowObjectLauncherItems>>
-    })
+        // D3: Chromium tabs only (never fan-out to all DesktopTarget providers).
+        const bridgePromise = measureLauncherPerf(
+          'host-provider:bridge-items',
+          () => getDesktopBridgeLauncherDynamicItems(ctx),
+          (items) => ({ queryLength: q.length, itemCount: items.length }),
+        ).catch((error) => {
+          console.warn('[launcher] desktop bridge dynamic items failed:', error)
+          return [] as Awaited<ReturnType<typeof getDesktopBridgeLauncherDynamicItems>>
+        })
 
-    // D3: Chromium tabs only (never fan-out to all DesktopTarget providers).
-    const bridgePromise = measureLauncherPerf(
-      'host-provider:bridge-items',
-      () => getDesktopBridgeLauncherDynamicItems(ctx),
-      (items) => ({ queryLength: q.length, itemCount: items.length }),
-    ).catch((error) => {
-      console.warn('[launcher] desktop bridge dynamic items failed:', error)
-      return [] as Awaited<ReturnType<typeof getDesktopBridgeLauncherDynamicItems>>
-    })
+        const [appItems, windowItems, workflowItems, bridgeItems] = await Promise.all([
+          appPromise,
+          windowPromise,
+          workflowPromise,
+          bridgePromise,
+        ])
 
-    const [appItems, windowItems, workflowItems, bridgeItems] = await Promise.all([
-      appPromise,
-      windowPromise,
-      workflowPromise,
-      bridgePromise,
-    ])
-
-    // Window vs tab de-dupe is soft ranking (title near-dup + capability tier),
-    // not a host product filter that knows about browser plugins.
-    return [
-      ...workflowItems,
-      ...appItems,
-      ...windowItems,
-      ...bridgeItems,
-    ]
+        // Window vs tab de-dupe is soft ranking (title near-dup + capability tier),
+        // not a host product filter that knows about browser plugins.
+        return [
+          ...workflowItems,
+          ...appItems,
+          ...windowItems,
+          ...bridgeItems,
+        ]
+      },
+      (items) => ({
+        queryLength: q.length,
+        itemCount: items.length,
+        emptyOpen: !q,
+      }),
+    )
   })
 }

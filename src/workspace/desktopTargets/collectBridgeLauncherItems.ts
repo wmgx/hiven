@@ -8,6 +8,7 @@
 
 import type { Locale } from '../../i18n'
 import type { LauncherItem, LauncherSurfaceId } from '../launcher/types'
+import { launcherPerfNow, logLauncherPerfDuration } from '../launcher/perf'
 import { listDesktopTargetProviders } from './registry'
 import { desktopTargetToLauncherItem } from './toLauncherItem'
 import type { DesktopTarget, DesktopTargetQueryContext } from './types'
@@ -53,8 +54,12 @@ export async function getDesktopBridgeLauncherDynamicItems(ctx: {
   if (!ctx.query.trim()) return []
   if (ctx.signal?.aborted) return []
 
+  const startedAt = launcherPerfNow()
   const provider = listDesktopTargetProviders().find((p) => p.id === CHROMIUM_SOURCE_ID)
-  if (!provider) return []
+  if (!provider) {
+    logLauncherPerfDuration('bridge-target:collect', startedAt, { missingProvider: true })
+    return []
+  }
 
   const queryCtx: DesktopTargetQueryContext = {
     query: ctx.query,
@@ -66,19 +71,32 @@ export async function getDesktopBridgeLauncherDynamicItems(ctx: {
   try {
     if (provider.health) {
       try {
+        const healthStartedAt = launcherPerfNow()
         const h = await provider.health()
-        if (!h.ok) return []
+        logLauncherPerfDuration('bridge-target:health', healthStartedAt, { ok: h.ok })
+        if (!h.ok) {
+          logLauncherPerfDuration('bridge-target:collect', startedAt, { unhealthy: true })
+          return []
+        }
       } catch {
+        logLauncherPerfDuration('bridge-target:collect', startedAt, { healthFailed: true })
         return []
       }
     }
 
+    const listStartedAt = launcherPerfNow()
     const raw = await withTimeout(
       Promise.resolve(provider.list(queryCtx)),
       provider.listTimeoutMs ?? BRIDGE_LIST_TIMEOUT_MS,
       ctx.signal,
     )
-    if (ctx.signal?.aborted) return []
+    logLauncherPerfDuration('bridge-target:list', listStartedAt, {
+      rawCount: Array.isArray(raw) ? raw.length : -1,
+    })
+    if (ctx.signal?.aborted) {
+      logLauncherPerfDuration('bridge-target:collect', startedAt, { aborted: true })
+      return []
+    }
 
     const targets = (Array.isArray(raw) ? raw : [])
       .filter((t): t is DesktopTarget => Boolean(t && (t.actionClass ?? 'focus') !== 'close'))
@@ -86,7 +104,7 @@ export async function getDesktopBridgeLauncherDynamicItems(ctx: {
       .map((t) => ({ ...t, sourceId: t.sourceId || CHROMIUM_SOURCE_ID }))
       .slice(0, 40)
 
-    return targets.map((target) =>
+    const items = targets.map((target) =>
       desktopTargetToLauncherItem(target, {
         locale: ctx.locale,
         provider,
@@ -95,7 +113,14 @@ export async function getDesktopBridgeLauncherDynamicItems(ctx: {
           : undefined,
       }),
     )
-  } catch {
+    logLauncherPerfDuration('bridge-target:collect', startedAt, { itemCount: items.length })
+    return items
+  } catch (error) {
+    logLauncherPerfDuration('bridge-target:collect', startedAt, {
+      failed: true,
+      timedOut: error instanceof Error && /timeout/i.test(error.message),
+      message: error instanceof Error ? error.message : String(error),
+    })
     return []
   }
 }

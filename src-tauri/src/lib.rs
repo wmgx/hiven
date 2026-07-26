@@ -4351,9 +4351,9 @@ fn read_limited_output(reader: Option<impl Read>, max_bytes: usize) -> (Vec<u8>,
     (buf, total)
 }
 
-/// Run a one-shot shell command for plugins. Non-zero exit codes return Ok(result).
-#[tauri::command]
-fn plugin_shell_run(request: PluginShellRunRequest) -> Result<PluginShellRunResult, String> {
+/// Blocking implementation. Must not run on the async runtime / UI thread —
+/// a multi-second lark-cli call would freeze the launcher webview.
+fn plugin_shell_run_blocking(request: PluginShellRunRequest) -> Result<PluginShellRunResult, String> {
     if request.command.trim().is_empty() {
         return Err("Shell command must not be empty".to_string());
     }
@@ -4444,6 +4444,16 @@ fn plugin_shell_run(request: PluginShellRunRequest) -> Result<PluginShellRunResu
     #[cfg(not(unix))]
     let signal: Option<String> = None;
 
+    // Compact native perf line (no command body / secrets).
+    log_launcher_perf(
+        "native:plugin-shell-run",
+        started,
+        format!(
+            "timedOut={} exitCode={:?} stdoutBytes={} stderrBytes={}",
+            timed_out, exit_code, stdout_total, stderr_total
+        ),
+    );
+
     Ok(PluginShellRunResult {
         stdout: String::from_utf8_lossy(&stdout_bytes_buf).into_owned(),
         stderr: String::from_utf8_lossy(&stderr_bytes_buf).into_owned(),
@@ -4454,6 +4464,16 @@ fn plugin_shell_run(request: PluginShellRunRequest) -> Result<PluginShellRunResu
         stdout_bytes: stdout_total,
         stderr_bytes: stderr_total,
     })
+}
+
+/// Run a one-shot shell command for plugins on a blocking pool.
+/// Non-zero exit codes return Ok(result). Must stay async + spawn_blocking so
+/// long CLI calls (lark-cli docs search) never freeze the launcher UI thread.
+#[tauri::command]
+async fn plugin_shell_run(request: PluginShellRunRequest) -> Result<PluginShellRunResult, String> {
+    tauri::async_runtime::spawn_blocking(move || plugin_shell_run_blocking(request))
+        .await
+        .map_err(|e| format!("Shell task join failed: {}", e))?
 }
 
 #[tauri::command]

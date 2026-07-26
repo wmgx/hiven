@@ -142,7 +142,8 @@
     "test:step5-calculator-and-diff-panels": "node scripts/test-step5-calculator-and-diff-panels.mjs",
     "test:launcher-latin-query-input": "node scripts/test-launcher-latin-query-input.mjs",
     "test:launcher-default-english-input-source": "node scripts/test-launcher-default-english-input-source.mjs",
-    "test:desktop-document-async-path": "node scripts/test-desktop-document-async-path.mjs"
+    "test:desktop-document-async-path": "node scripts/test-desktop-document-async-path.mjs",
+    "test:launcher-perf-instrumentation": "node scripts/test-launcher-perf-instrumentation.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

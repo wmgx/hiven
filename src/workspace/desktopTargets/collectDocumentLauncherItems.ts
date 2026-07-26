@@ -6,6 +6,7 @@
 
 import type { Locale } from '../../i18n'
 import type { LauncherItem, LauncherSurfaceId } from '../launcher/types'
+import { launcherPerfNow, logLauncherPerf, logLauncherPerfDuration } from '../launcher/perf'
 import { listDesktopTargetProviders } from './registry'
 import { desktopTargetToLauncherItem } from './toLauncherItem'
 import type { DesktopTarget, DesktopTargetProvider, DesktopTargetQueryContext } from './types'
@@ -81,6 +82,11 @@ export async function getDesktopDocumentLauncherDynamicItems(
   if (ctx.signal?.aborted) return []
 
   const providers = listDocumentDesktopTargetProviders()
+  logLauncherPerf('document-target:collect-start', {
+    queryLength: ctx.query.trim().length,
+    providerCount: providers.length,
+    providerIds: providers.map((p) => p.id),
+  })
   if (providers.length === 0) return []
 
   const defaultTimeoutMs = options.defaultTimeoutMs ?? 8000
@@ -93,6 +99,7 @@ export async function getDesktopDocumentLauncherDynamicItems(
   }
 
   const bySource = new Map<string, LauncherItem[]>()
+  const collectStartedAt = launcherPerfNow()
 
   await Promise.all(
     providers.map(async (provider) => {
@@ -102,10 +109,16 @@ export async function getDesktopDocumentLauncherDynamicItems(
       }
 
       const timeoutMs = provider.listTimeoutMs ?? defaultTimeoutMs
+      const providerStartedAt = launcherPerfNow()
 
       try {
         if (provider.health) {
+          const healthStartedAt = launcherPerfNow()
           const h = await provider.health()
+          logLauncherPerfDuration('document-target:provider-health', healthStartedAt, {
+            sourceId: provider.id,
+            ok: h.ok,
+          })
           if (!h.ok) {
             bySource.set(provider.id, [])
             options.onPartial?.({ sourceId: provider.id, items: [], done: true })
@@ -113,12 +126,24 @@ export async function getDesktopDocumentLauncherDynamicItems(
           }
         }
 
+        const listStartedAt = launcherPerfNow()
         const raw = await withTimeout(
           Promise.resolve(provider.list(queryCtx)),
           timeoutMs,
           ctx.signal,
         )
-        if (ctx.signal?.aborted) return
+        logLauncherPerfDuration('document-target:provider-list', listStartedAt, {
+          sourceId: provider.id,
+          timeoutMs,
+          rawCount: Array.isArray(raw) ? raw.length : -1,
+        })
+        if (ctx.signal?.aborted) {
+          logLauncherPerfDuration('document-target:provider-total', providerStartedAt, {
+            sourceId: provider.id,
+            aborted: true,
+          })
+          return
+        }
 
         const targets = (Array.isArray(raw) ? raw : [])
           .filter(isOpenableTarget)
@@ -137,9 +162,25 @@ export async function getDesktopDocumentLauncherDynamicItems(
           }),
         )
         bySource.set(provider.id, items)
+        logLauncherPerfDuration('document-target:provider-total', providerStartedAt, {
+          sourceId: provider.id,
+          itemCount: items.length,
+        })
+        const partialStartedAt = launcherPerfNow()
         options.onPartial?.({ sourceId: provider.id, items, done: true })
-      } catch {
+        logLauncherPerfDuration('document-target:onPartial', partialStartedAt, {
+          sourceId: provider.id,
+          itemCount: items.length,
+        })
+      } catch (error) {
         bySource.set(provider.id, [])
+        logLauncherPerfDuration('document-target:provider-total', providerStartedAt, {
+          sourceId: provider.id,
+          failed: true,
+          timedOut: error instanceof Error && /timeout/i.test(error.message),
+          aborted: error instanceof DOMException && error.name === 'AbortError',
+          message: error instanceof Error ? error.message : String(error),
+        })
         if (!ctx.signal?.aborted) {
           options.onPartial?.({ sourceId: provider.id, items: [], done: true })
         }
@@ -147,6 +188,17 @@ export async function getDesktopDocumentLauncherDynamicItems(
     }),
   )
 
-  if (ctx.signal?.aborted) return []
-  return [...bySource.values()].flat()
+  if (ctx.signal?.aborted) {
+    logLauncherPerfDuration('document-target:collect-total', collectStartedAt, {
+      aborted: true,
+      providerCount: providers.length,
+    })
+    return []
+  }
+  const all = [...bySource.values()].flat()
+  logLauncherPerfDuration('document-target:collect-total', collectStartedAt, {
+    providerCount: providers.length,
+    itemCount: all.length,
+  })
+  return all
 }

@@ -128,6 +128,13 @@ check('5. plugin_shell_run fn', () => {
     'src-tauri/src/lib.rs must define plugin_shell_run',
   )
 })
+check('5. plugin_shell_run off main thread', () => {
+  assert.match(
+    files.tauriLib,
+    /async\s+fn\s+plugin_shell_run[\s\S]{0,400}spawn_blocking|spawn_blocking[\s\S]{0,200}plugin_shell_run_blocking/,
+    'plugin_shell_run must be async + spawn_blocking (sync shell freezes UI)',
+  )
+})
 check('5. generate_handler registration', () => {
   assert.match(
     files.tauriLib,
