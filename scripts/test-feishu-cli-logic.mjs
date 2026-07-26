@@ -24,6 +24,7 @@ const cliFiles = [
 const domainFiles = [
   'src/plugins/feishu/domains/docs.ts',
   'src/plugins/feishu/domains/auth.ts',
+  'src/plugins/feishu/domains/calendar.ts',
 ]
 
 // --- required modules must exist ---
@@ -80,6 +81,13 @@ assert.ok(
 
 // --- auth domain present ---
 assert.match(authSrc, /login|whoami|auth|token|profile/, 'auth.ts must cover auth/login/whoami surface')
+
+// --- calendar domain (B2 read-only) ---
+const calendarSrc = read('src/plugins/feishu/domains/calendar.ts')
+assert.match(calendarSrc, /fetchAgenda|\+agenda/, 'calendar.ts must support +agenda')
+assert.match(calendarSrc, /searchEvents|\+search-event/, 'calendar.ts must support +search-event')
+assert.match(calendarSrc, /mapEventsToRows/, 'calendar.ts must map events to launcher rows')
+assert.doesNotMatch(calendarSrc, /\+create|\+rsvp/, 'B2 calendar domain must stay read-only (no create/rsvp)')
 
 // --- no workspace deep imports in feishu plugin sources ---
 const pluginRoot = join(root, 'src/plugins/feishu')

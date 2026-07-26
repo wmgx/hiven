@@ -74,9 +74,12 @@ export function mapLarkCliError(input: {
   const lower = message.toLowerCase()
 
   let hint: string | undefined
-  if (/not\s+login|unauthoriz|not\s+authenticated|token.*(expir|invalid)|login\s+required/i.test(lower)) {
+  const missingScopes = extractMissingScopes(input.stderr, input.stdoutMessage)
+  if (missingScopes.length > 0) {
+    hint = `Run: lark-cli auth login --scope "${missingScopes.join(' ')}"`
+  } else if (/not\s+login|unauthoriz|not\s+authenticated|token.*(expir|invalid)|login\s+required/i.test(lower)) {
     hint = 'Open Feishu settings and run Login, or execute `lark-cli auth login`.'
-  } else if (/scope|permission denied|access denied/i.test(lower)) {
+  } else if (/scope|permission denied|access denied|missing_scope|authorization/i.test(lower)) {
     hint = 'Re-login with the required scopes via `lark-cli auth login --scope …`.'
   } else if (/not found|command not found|no such file/i.test(lower)) {
     hint = 'Install lark-cli or configure the binary path in Feishu settings.'
@@ -89,4 +92,26 @@ export function mapLarkCliError(input: {
     hint,
     code: input.code ?? (input.exitCode != null && input.exitCode !== 0 ? input.exitCode : undefined),
   }
+}
+
+function extractMissingScopes(...texts: Array<string | undefined>): string[] {
+  const found = new Set<string>()
+  for (const text of texts) {
+    if (!text) continue
+    // JSON-ish: "missing_scopes":["calendar:calendar.event:read"]
+    const arrayMatch = text.match(/"missing_scopes"\s*:\s*\[([^\]]+)\]/i)
+    if (arrayMatch?.[1]) {
+      for (const part of arrayMatch[1].matchAll(/"([^"]+)"/g)) {
+        if (part[1]) found.add(part[1])
+      }
+    }
+    // message: missing required scope(s): calendar:calendar.event:read
+    const msgMatch = text.match(/missing required scope\(s\):\s*([^\n"']+)/i)
+    if (msgMatch?.[1]) {
+      for (const scope of msgMatch[1].split(/[,\s]+/).map((s) => s.trim()).filter(Boolean)) {
+        found.add(scope)
+      }
+    }
+  }
+  return [...found]
 }

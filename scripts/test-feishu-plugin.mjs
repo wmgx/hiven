@@ -58,6 +58,14 @@ assert.ok(
   'index settings must expose schema and/or component',
 )
 
+// B2 calendar tools live in tools.ts (assembled by index)
+const toolsSrc = existsSync(join(root, `${pluginDir}/tools.ts`))
+  ? read(`${pluginDir}/tools.ts`)
+  : pluginIndex
+assert.match(toolsSrc, /feishu\.calendar-agenda|calendar-agenda/, 'must expose calendar agenda tool')
+assert.match(toolsSrc, /feishu\.calendar-search|calendar-search|\+search-event|searchEvents/, 'must expose calendar search tool')
+assert.match(toolsSrc, /agenda|今日议程|日程/, 'agenda tool should be searchable via 日程/agenda aliases')
+
 // --- provider: feishu.docs DesktopTargetProvider ---
 assert.match(provider, /feishu\.docs/, 'provider must use source id feishu.docs')
 assert.ok(

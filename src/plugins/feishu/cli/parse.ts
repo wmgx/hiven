@@ -52,7 +52,9 @@ export function parseLarkCliJson(stdout: string): LarkCliParsed {
   const ok = obj.ok !== false && obj.success !== false && obj.error == null
   const code =
     (typeof obj.code === 'string' || typeof obj.code === 'number' ? obj.code : undefined) ??
-    (typeof obj.err_code === 'string' || typeof obj.err_code === 'number' ? obj.err_code : undefined)
+    (typeof obj.err_code === 'string' || typeof obj.err_code === 'number' ? obj.err_code : undefined) ??
+    extractErrorField(obj.error, 'type') ??
+    extractErrorField(obj.error, 'subtype')
   const message =
     typeof obj.message === 'string'
       ? obj.message
@@ -60,7 +62,7 @@ export function parseLarkCliJson(stdout: string): LarkCliParsed {
         ? obj.msg
         : typeof obj.error === 'string'
           ? obj.error
-          : undefined
+          : extractErrorField(obj.error, 'message')
 
   return {
     ok: Boolean(ok),
@@ -71,6 +73,12 @@ export function parseLarkCliJson(stdout: string): LarkCliParsed {
     cliNotice,
     raw,
   }
+}
+
+function extractErrorField(error: unknown, key: string): string | undefined {
+  if (!error || typeof error !== 'object' || Array.isArray(error)) return undefined
+  const value = (error as Record<string, unknown>)[key]
+  return typeof value === 'string' ? value : undefined
 }
 
 /**

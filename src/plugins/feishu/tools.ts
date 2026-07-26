@@ -1,11 +1,16 @@
 /**
- * L2 tools: status / login / docs search.
+ * L2 tools: status / login / docs search / calendar agenda & search.
  * Kept out of index.tsx so the entry only assembles contributions.
  */
 
 import type { PluginToolContribution } from '@hiven/plugin'
 import { detectLarkCli } from './cli/detect'
 import { completeLogin, getAuthStatus, startLogin } from './domains/auth'
+import {
+  fetchAgenda,
+  mapEventsToRows,
+  searchEvents,
+} from './domains/calendar'
 import { mapSearchResultsToTargets, searchDocs } from './domains/docs'
 import { getFeishuRuntime } from './runtime'
 import type { FeishuSettings } from './settings/model'
@@ -157,6 +162,130 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
             try {
               await openRuntimeUrl(target.meta.url, (url) => ctx.api.openUrl(url))
               return { ok: true as const }
+            } catch (error) {
+              return {
+                ok: false as const,
+                message: error instanceof Error ? error.message : String(error),
+              }
+            }
+          },
+        })),
+      )
+    },
+  },
+  {
+    id: 'feishu.calendar-agenda',
+    title: 'tool.agenda.title',
+    subtitle: 'tool.agenda.subtitle',
+    icon: 'Calendar',
+    aliases: ['飞书日程', '今日议程', 'agenda', 'calendar', '日程', '今天日程'],
+    surfaces: { launcher: true },
+    async run(ctx) {
+      const settings = resolveSettings(ctx.settings)
+      const shell = getFeishuRuntime().shell
+      if (!shell) {
+        return ctx.output.error(ctx.t('error.shellMissing'))
+      }
+
+      const agenda = await fetchAgenda({
+        shell,
+        binaryPath: settings.binaryPath || undefined,
+      })
+      if (!agenda.ok) {
+        const parts = [agenda.message || ctx.t('error.agendaFailed')]
+        if (agenda.hint) parts.push(agenda.hint)
+        return ctx.output.error(parts.join('\n'))
+      }
+
+      const rows = mapEventsToRows(agenda.events)
+      if (rows.length === 0) {
+        return ctx.output.text(ctx.t('error.agendaEmpty'))
+      }
+
+      return ctx.output.choices(
+        rows.map((row) => ({
+          id: `feishu.calendar:event:${row.id}`,
+          title: row.title,
+          subtitle: row.subtitle,
+          icon: 'Calendar',
+          primaryAction: async () => {
+            try {
+              if (row.url) {
+                await openRuntimeUrl(row.url, (url) => ctx.api.openUrl(url))
+                return { ok: true as const }
+              }
+              await ctx.api.copyText(row.summaryText)
+              return { ok: true as const, message: ctx.t('action.copied') }
+            } catch (error) {
+              return {
+                ok: false as const,
+                message: error instanceof Error ? error.message : String(error),
+              }
+            }
+          },
+        })),
+      )
+    },
+  },
+  {
+    id: 'feishu.calendar-search',
+    title: 'tool.calendarSearch.title',
+    subtitle: 'tool.calendarSearch.subtitle',
+    icon: 'CalendarSearch',
+    aliases: ['搜日程', '搜索日程', 'search event', 'calendar search', '飞书搜日程'],
+    requireParamSelection: true,
+    params: [
+      {
+        key: 'query',
+        label: 'param.eventQuery.label',
+        type: 'text',
+        required: true,
+        hint: 'param.eventQuery.hint',
+      },
+    ],
+    surfaces: { launcher: true },
+    async run(ctx) {
+      const settings = resolveSettings(ctx.settings)
+      const shell = getFeishuRuntime().shell
+      if (!shell) {
+        return ctx.output.error(ctx.t('error.shellMissing'))
+      }
+
+      const query = String(ctx.params.query ?? ctx.input?.text ?? '').trim()
+      if (!query) {
+        return ctx.output.error(ctx.t('param.eventQuery.hint'))
+      }
+
+      const search = await searchEvents({
+        shell,
+        query,
+        binaryPath: settings.binaryPath || undefined,
+      })
+      if (!search.ok) {
+        const parts = [search.message || ctx.t('error.calendarSearchFailed')]
+        if (search.hint) parts.push(search.hint)
+        return ctx.output.error(parts.join('\n'))
+      }
+
+      const rows = mapEventsToRows(search.events)
+      if (rows.length === 0) {
+        return ctx.output.text(ctx.t('error.agendaEmpty'))
+      }
+
+      return ctx.output.choices(
+        rows.map((row) => ({
+          id: `feishu.calendar:search:${row.id}`,
+          title: row.title,
+          subtitle: row.subtitle,
+          icon: 'Calendar',
+          primaryAction: async () => {
+            try {
+              if (row.url) {
+                await openRuntimeUrl(row.url, (url) => ctx.api.openUrl(url))
+                return { ok: true as const }
+              }
+              await ctx.api.copyText(row.summaryText)
+              return { ok: true as const, message: ctx.t('action.copied') }
             } catch (error) {
               return {
                 ok: false as const,

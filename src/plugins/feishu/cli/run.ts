@@ -62,6 +62,14 @@ function buildCommand(binaryPath: string | undefined, args: string[]): string {
   return [shellQuote(binary), ...withJson.map(shellQuote)].join(' ')
 }
 
+function safeJsonSlice(value: unknown): string | undefined {
+  try {
+    return JSON.stringify(value).slice(0, 500)
+  } catch {
+    return undefined
+  }
+}
+
 export async function runLarkCli(options: RunLarkCliOptions): Promise<LarkCliResult> {
   const risk = options.risk ?? 'read'
 
@@ -156,10 +164,14 @@ export async function runLarkCli(options: RunLarkCliOptions): Promise<LarkCliRes
   }
 
   if (!parsed.ok || (shellResult.exitCode != null && shellResult.exitCode !== 0)) {
+    const stdoutMessage =
+      parsed.message ||
+      (parsed.error != null ? safeJsonSlice(parsed.error) : undefined) ||
+      shellResult.stdout.slice(0, 400)
     const mapped = mapLarkCliError({
       exitCode: shellResult.exitCode,
       stderr: shellResult.stderr,
-      stdoutMessage: parsed.message,
+      stdoutMessage,
       code: parsed.code,
     })
     return {
