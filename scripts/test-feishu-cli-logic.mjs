@@ -130,6 +130,16 @@ assert.match(windowFocusSrc, /scoreWindowTitleMatch/, 'windowFocus must export t
 assert.match(windowFocusSrc, /pickBestFeishuWindow|tryFocusFeishuWindowByTitle/, 'windowFocus must pick or focus windows')
 assert.match(windowFocusSrc, /openFeishuTarget/, 'windowFocus must provide openFeishuTarget open path')
 assert.match(windowFocusSrc, /osascript|AXRaise|Feishu|Lark/, 'window focus should target Feishu/Lark via osascript')
+// Open URL must not wait for osascript (doc open latency)
+assert.match(
+  windowFocusSrc,
+  /openUrl[\s\S]{0,200}preferWindowFocus|await options\.openUrl[\s\S]{0,400}void tryFocusFeishuWindowByTitle/,
+  'openFeishuTarget must open URL before optional background focus',
+)
+
+const linksSrc = read('src/plugins/feishu/domains/links.ts')
+assert.match(linksSrc, /buildChatOpenUrl|applink\.feishu\.cn|openChatId/, 'links must build chat applink')
+assert.match(linksSrc, /buildUserChatOpenUrl|p2pChatId|openId/, 'links must build user DM applink')
 
 // --- no workspace deep imports in feishu plugin sources ---
 const pluginRoot = join(root, 'src/plugins/feishu')

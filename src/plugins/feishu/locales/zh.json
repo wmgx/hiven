@@ -110,6 +110,7 @@
   "action.copied": "已复制",
   "action.copiedChatId": "已复制会话 ID",
   "action.copiedContact": "已复制联系人信息",
+  "action.openedChat": "已在飞书中打开",
   "action.sent": "已发送",
   "action.eventCreated": "日程已创建",
   "action.docCreated": "文档已创建",

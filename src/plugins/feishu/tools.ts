@@ -365,6 +365,10 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           icon: 'MessagesSquare',
           primaryAction: async () => {
             try {
+              if (row.openUrl) {
+                await openRuntimeUrl(row.openUrl, (url) => ctx.api.openUrl(url), row.title)
+                return { ok: true as const, message: ctx.t('action.openedChat') }
+              }
               await ctx.api.copyText(row.summaryText)
               return { ok: true as const, message: ctx.t('action.copiedChatId') }
             } catch (error) {
@@ -415,6 +419,10 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           icon: 'MessageCircle',
           primaryAction: async () => {
             try {
+              if (row.openUrl) {
+                await openRuntimeUrl(row.openUrl, (url) => ctx.api.openUrl(url), row.title)
+                return { ok: true as const, message: ctx.t('action.openedChat') }
+              }
               await ctx.api.copyText(row.summaryText)
               return { ok: true as const, message: ctx.t('action.copiedChatId') }
             } catch (error) {
@@ -481,7 +489,10 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           icon: 'User',
           primaryAction: async () => {
             try {
-              // Prefer p2p chat id when present (useful for later send-message); always copy full card.
+              if (row.openUrl) {
+                await openRuntimeUrl(row.openUrl, (url) => ctx.api.openUrl(url), row.title)
+                return { ok: true as const, message: ctx.t('action.openedChat') }
+              }
               await ctx.api.copyText(row.summaryText)
               return { ok: true as const, message: ctx.t('action.copiedContact') }
             } catch (error) {

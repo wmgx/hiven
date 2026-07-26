@@ -3,6 +3,7 @@
  * No message send here — write is B4.
  */
 
+import { buildChatOpenUrl } from './links'
 import { runLarkCli, type LarkCliShell } from '../cli/run'
 
 export type FeishuChat = {
@@ -23,6 +24,8 @@ export type FeishuChatRow = {
   title: string
   subtitle: string
   summaryText: string
+  /** Client deep link to open this chat. */
+  openUrl?: string
   keywords: string[]
 }
 
@@ -93,12 +96,14 @@ export function mapChatsToRows(chats: FeishuChat[]): FeishuChatRow[] {
     if (chat.description) parts.push(String(chat.description).slice(0, 80))
     parts.push(id)
     const subtitle = parts.filter(Boolean).join(' · ')
-    const summaryText = [title, id, chat.description ?? ''].filter(Boolean).join('\n')
+    const openUrl = id.startsWith('oc_') ? buildChatOpenUrl(id) : undefined
+    const summaryText = [title, id, openUrl ?? '', chat.description ?? ''].filter(Boolean).join('\n')
     return {
       id,
       title,
       subtitle,
       summaryText,
+      openUrl,
       keywords: [title, id, chat.description ?? ''].filter(Boolean),
     }
   })

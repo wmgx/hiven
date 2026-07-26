@@ -2,6 +2,7 @@
  * Feishu contact domain (B3 read-only): search users by keyword.
  */
 
+import { buildUserChatOpenUrl } from './links'
 import { runLarkCli, type LarkCliShell } from '../cli/run'
 
 export type FeishuUser = {
@@ -26,6 +27,8 @@ export type FeishuUserRow = {
   subtitle: string
   summaryText: string
   p2pChatId?: string
+  /** Client deep link to open DM / chat. */
+  openUrl?: string
   keywords: string[]
 }
 
@@ -68,12 +71,14 @@ export function mapUsersToRows(users: FeishuUser[]): FeishuUserRow[] {
     ].filter(Boolean) as string[]
     const p2pChatId = user.p2p_chat_id ?? user.p2pChatId
     const subtitle = parts.join(' · ')
+    const openUrl = buildUserChatOpenUrl({ p2pChatId, openId: id })
     const summaryText = [
       title,
       email ? `email: ${email}` : '',
       user.department ? `dept: ${user.department}` : '',
       `open_id: ${id}`,
       p2pChatId ? `p2p_chat_id: ${p2pChatId}` : '',
+      openUrl ?? '',
     ]
       .filter(Boolean)
       .join('\n')
@@ -84,6 +89,7 @@ export function mapUsersToRows(users: FeishuUser[]): FeishuUserRow[] {
       subtitle,
       summaryText,
       p2pChatId: p2pChatId || undefined,
+      openUrl,
       keywords: [title, email ?? '', user.department ?? '', id].filter(Boolean),
     }
   })

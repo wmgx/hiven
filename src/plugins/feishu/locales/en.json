@@ -110,6 +110,7 @@
   "action.copied": "Copied",
   "action.copiedChatId": "Copied chat id",
   "action.copiedContact": "Copied contact card",
+  "action.openedChat": "Opened in Feishu",
   "action.sent": "Message sent",
   "action.eventCreated": "Event created",
   "action.docCreated": "Document created",

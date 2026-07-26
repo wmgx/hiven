@@ -68,6 +68,7 @@ assert.match(toolsSrc, /agenda|今日议程|日程/, 'agenda tool should be sear
 assert.match(toolsSrc, /feishu\.chat-search|chat-search|searchChats/, 'must expose chat search tool')
 assert.match(toolsSrc, /feishu\.contact-search|contact-search|searchUsers/, 'must expose contact search tool')
 assert.match(toolsSrc, /找人|搜群|contact|chat/, 'B3 tools should be searchable via 找人/搜群 aliases')
+assert.match(toolsSrc, /openUrl|openedChat|buildChatOpenUrl|row\.openUrl/, 'chat/contact tools should open Feishu chat, not only copy id')
 assert.match(toolsSrc, /feishu\.send-message|send-message|sendMessage/, 'must expose send-message tool')
 assert.match(toolsSrc, /confirm\.sendMessage|Confirm send|确认发送|confirmed:\s*true/, 'send message must go through L2 confirm')
 assert.match(toolsSrc, /feishu\.create-event|create-event|createCalendarEvent/, 'must expose create-event tool')

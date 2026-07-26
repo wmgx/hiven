@@ -111,7 +111,8 @@ export async function tryFocusFeishuWindowByTitle(options: {
   try {
     const result = await options.shell.run({
       command: `osascript -e ${shellQuote(script)}`,
-      timeoutMs: options.timeoutMs ?? 3000,
+      // Keep short: must never block openUrl on the critical path.
+      timeoutMs: options.timeoutMs ?? 900,
     })
     const out = `${result.stdout ?? ''}${result.stderr ?? ''}`.toLowerCase()
     if (result.timedOut) return false
@@ -122,7 +123,9 @@ export async function tryFocusFeishuWindowByTitle(options: {
 }
 
 /**
- * Open a Feishu resource: prefer focusing an existing client window, else open URL.
+ * Open a Feishu resource.
+ * **Always open URL first** (fast path). Optional window focus runs in the
+ * background so osascript never delays document / chat open.
  */
 export async function openFeishuTarget(options: {
   shell?: LarkCliShell | null
@@ -130,20 +133,23 @@ export async function openFeishuTarget(options: {
   url: string
   titleHint?: string
   preferWindowFocus?: boolean
-}): Promise<'focused' | 'opened'> {
+}): Promise<'opened'> {
+  await options.openUrl(options.url)
+
   if (
     options.preferWindowFocus !== false &&
     options.shell &&
     options.titleHint &&
     options.titleHint.trim().length >= 2
   ) {
-    const focused = await tryFocusFeishuWindowByTitle({
+    // Fire-and-forget: raise matching client window after URL is already opening.
+    void tryFocusFeishuWindowByTitle({
       shell: options.shell,
       titleHint: options.titleHint,
-    })
-    if (focused) return 'focused'
+      timeoutMs: 900,
+    }).catch(() => {})
   }
-  await options.openUrl(options.url)
+
   return 'opened'
 }
 
