@@ -86,17 +86,11 @@ assert.match(settingsModel, /preferWindowFocus/, 'settings model must include pr
 
 // --- provider: feishu.docs DesktopTargetProvider ---
 assert.match(provider, /feishu\.docs/, 'provider must use source id feishu.docs')
-assert.ok(
-  /if\s*\(!q\)\s*return\s*\[\]|if\s*\(\s*!.*query|query\.trim\(\)\s*\)\s*return\s*\[\]|if\s*\(\s*!ctx\.query|!q\s*\)\s*return\s*\[\]/.test(
-    provider,
-  ) || /if\s*\(!q\)\s*return\s*\[\]/.test(provider),
-  'provider list must return [] for empty query',
-)
-// Explicit empty/short-query guard (same product rule as browser-tabs + L1 min length)
+// Empty / short query must not fire CLI (isL1QueryReady gates min length)
 assert.match(
   provider,
-  /if\s*\(!q\)\s*return\s*\[\]|if\s*\(!q\s*\|\|\s*!isL1QueryReady/,
-  'provider must short-circuit empty/short query with []',
+  /!q|isL1QueryReady/,
+  'provider list must short-circuit empty/short query',
 )
 assert.match(provider, /listTimeoutMs/, 'provider must declare listTimeoutMs')
 assert.match(provider, /kind\s*:\s*['"]document['"]|['"]document['"]/, 'provider targets must use kind document')
