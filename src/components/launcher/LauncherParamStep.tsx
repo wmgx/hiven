@@ -21,7 +21,10 @@ type LauncherParamStepProps = {
   onSelectedIndexChange: (index: number) => void
   onCommit: (value?: unknown) => void
   onMultiToggle: (value: unknown) => void
+  /** Empty ⌫ / Esc: stack-style one step (previous param or leave command). */
   onBack: () => void
+  /** Command-tag ×: exit whole command to search list. */
+  onExitCommand?: () => void
 }
 
 type ParamOption = {
@@ -100,6 +103,7 @@ export function LauncherParamStep({
   onCommit,
   onMultiToggle,
   onBack,
+  onExitCommand,
 }: LauncherParamStepProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const isImeComposingRef = useRef(false)
@@ -173,7 +177,7 @@ export function LauncherParamStep({
           title={commandTitle}
           icon={frame.item.display.icon}
           locale={locale}
-          onRemove={onBack}
+          onRemove={onExitCommand ?? onBack}
         />
         {breadcrumbChips.map((chip) => (
           <LauncherParamValueChip key={chip.label} label={chip.label} value={chip.value} />
@@ -192,7 +196,7 @@ export function LauncherParamStep({
               if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
               event.preventDefault()
               event.stopPropagation()
-              // Package 4: empty ⌫ removes command tag → back one step (one press).
+              // Stack-style: empty ⌫ steps back one param (or leaves command on first param).
               onBack()
               return
             }

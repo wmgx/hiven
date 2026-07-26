@@ -226,6 +226,12 @@ export function GlobalLauncherPanel({
           controllerRef.current?.back()
           focusSearchInputAfterBack()
         }}
+        onExitCommand={() => {
+          const ctl = controllerRef.current as { exitCommand?: () => boolean; back?: () => boolean } | null
+          if (ctl?.exitCommand) ctl.exitCommand()
+          else ctl?.back?.()
+          focusSearchInputAfterBack()
+        }}
         onCollectInputChange={(value) => controllerRef.current?.setInputText(value)}
         onActivateResultChoice={activateResultChoice}
         onSecondaryAction={activateSecondaryAction}

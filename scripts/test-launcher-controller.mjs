@@ -453,6 +453,56 @@ function flushAsyncChoiceAction() {
   assert.deepEqual(order, ['record', 'execute:Abc:lower'], 'manual input and chosen params are submitted together')
 }
 
+// --- 17b. empty ⌫ / back is stack-style: collect → last param → previous param → list ---
+{
+  const { ctrl } = makeController({ surfaceId: 'global-launcher' })
+  const item = {
+    ...performItem('plugin:p:tool:param-stack', async () => ({ ok: true })),
+    inputPolicy: { mode: 'auto' },
+    params: [
+      { key: 'from', label: 'From', type: 'single-select', options: ['Dec', 'Bin'], default: 'Dec' },
+      { key: 'to', label: 'To', type: 'single-select', options: ['Bin', 'Hex'], default: 'Bin' },
+    ],
+    defaultParams: { from: 'Dec', to: 'Bin' },
+    executeWithParams: async () => ({ ok: true }),
+  }
+  await ctrl.selectItem(item, { customizeParams: true })
+  await ctrl.commitCurrentParam('Dec')
+  assert.equal(ctrl.getState().frames.at(-1).paramIndex, 1)
+  await ctrl.commitCurrentParam('Bin')
+  assert.equal(ctrl.getState().frames.at(-1).kind, 'collect-input')
+  assert.equal(ctrl.getState().frames.at(-1).params.to, 'Bin')
+
+  // collect empty back → re-enter last param, drop its value
+  assert.equal(ctrl.back(), true)
+  let top = ctrl.getState().frames.at(-1)
+  assert.equal(top.kind, 'param-input')
+  assert.equal(top.paramIndex, 1)
+  assert.equal(top.params.to, undefined, 'last param value cleared')
+  assert.equal(top.params.from, 'Dec', 'earlier params kept')
+
+  // paramIndex 1 empty back → previous param
+  assert.equal(ctrl.back(), true)
+  top = ctrl.getState().frames.at(-1)
+  assert.equal(top.kind, 'param-input')
+  assert.equal(top.paramIndex, 0)
+  assert.equal(top.params.from, undefined)
+
+  // first param empty back → leave command (list only)
+  assert.equal(ctrl.back(), true)
+  assert.equal(ctrl.getState().frames.length, 1)
+  assert.equal(ctrl.getState().frames[0].kind, 'list')
+
+  // exitCommand jumps to list from deep stack
+  await ctrl.selectItem(item, { customizeParams: true })
+  await ctrl.commitCurrentParam('Dec')
+  await ctrl.commitCurrentParam('Bin')
+  assert.equal(ctrl.getState().frames.at(-1).kind, 'collect-input')
+  assert.equal(ctrl.exitCommand(), true)
+  assert.equal(ctrl.getState().frames.length, 1)
+  assert.equal(ctrl.getState().frames[0].kind, 'list')
+}
+
 // --- 18. global manual input tools can preview output while typing ---
 {
   const cap = makeApi()

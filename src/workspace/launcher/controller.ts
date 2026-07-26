@@ -757,13 +757,65 @@ export class LauncherController {
   }
 
   /**
-   * Escape: pop one frame. From the base list frame, returns false so the host
-   * can close the launcher.
+   * Escape / empty ⌫: stack-style step back.
+   * - param-input paramIndex > 0 → previous param (drop values from that step on)
+   * - collect-input with params → re-enter last param step (drop last param value)
+   * - otherwise → pop one frame (list keeps launcher open)
+   * From the base list frame, returns false so the host can close the launcher.
    */
   back(): boolean {
     if (this.state.frames.length <= 1) return false
+    const top = this.topFrame()
+
+    if (top.kind === 'param-input' && top.paramIndex > 0) {
+      const prevIndex = top.paramIndex - 1
+      const nextParams = this.paramsUpToIndex(top.item, top.params, prevIndex)
+      const frames = this.state.frames.slice(0, -1)
+      frames.push(this.paramFrameFor(top.item, nextParams, prevIndex, top.objectBlockText))
+      this.setState({ frames, error: null })
+      return true
+    }
+
+    if (top.kind === 'collect-input' && top.item.params && top.item.params.length > 0) {
+      const lastIndex = top.item.params.length - 1
+      const nextParams = this.paramsUpToIndex(top.item, top.params ?? {}, lastIndex)
+      const frames = this.state.frames.slice(0, -1)
+      frames.push(this.paramFrameFor(top.item, nextParams, lastIndex))
+      this.setState({ frames, error: null })
+      return true
+    }
+
     this.setState({ frames: this.state.frames.slice(0, -1), error: null })
     return true
+  }
+
+  /**
+   * Command-tag × : leave the whole command and return to search list in one step.
+   * Does not step through intermediate params (unlike empty ⌫ / Esc).
+   */
+  exitCommand(): boolean {
+    if (this.state.frames.length <= 1) return false
+    const base = this.state.frames[0]
+    if (!base || base.kind !== 'list') {
+      this.setState({ frames: this.state.frames.slice(0, 1), error: null })
+      return true
+    }
+    this.setState({ frames: [base], error: null })
+    return true
+  }
+
+  /** Keep only params strictly before `index` (values for index..end are dropped). */
+  private paramsUpToIndex(
+    item: LauncherItem,
+    params: Record<string, unknown>,
+    index: number,
+  ): Record<string, unknown> {
+    const next: Record<string, unknown> = { ...params }
+    for (let i = index; i < (item.params?.length ?? 0); i++) {
+      const key = item.params?.[i]?.key
+      if (key) delete next[key]
+    }
+    return next
   }
 
   // ─── Execution plumbing ────────────────────────────────────────────────────

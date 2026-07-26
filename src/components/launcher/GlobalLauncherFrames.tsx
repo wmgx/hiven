@@ -52,6 +52,7 @@ export function GlobalLauncherFrameSwitch({
   onParamCommit,
   onParamMultiToggle,
   onFrameBack,
+  onExitCommand,
   onCollectInputChange,
   onActivateResultChoice,
   onSecondaryAction,
@@ -101,6 +102,8 @@ export function GlobalLauncherFrameSwitch({
   onParamCommit: (value: unknown) => void
   onParamMultiToggle: (value: unknown) => void
   onFrameBack: () => void
+  /** Command-tag × — pop entire command stack to list. */
+  onExitCommand?: () => void
   onCollectInputChange: (value: string) => void
   onActivateResultChoice: (choice: LauncherResultChoice) => void
   /** Collect-input / result secondary actions (id is plugin-defined). */
@@ -198,6 +201,7 @@ export function GlobalLauncherFrameSwitch({
         onCommit={onParamCommit}
         onMultiToggle={onParamMultiToggle}
         onBack={onFrameBack}
+        onExitCommand={onExitCommand}
       />
     )
   }
@@ -224,6 +228,7 @@ export function GlobalLauncherFrameSwitch({
         paramChips={paramChips}
         onInputChange={onCollectInputChange}
         onBack={onFrameBack}
+        onExitCommand={onExitCommand}
         onActivateChoice={onActivateResultChoice}
         onSecondaryAction={onSecondaryAction}
         onPastePreviewText={onPastePreviewText}

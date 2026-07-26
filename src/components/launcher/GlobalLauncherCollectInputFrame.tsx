@@ -127,6 +127,7 @@ export function GlobalLauncherCollectInputFrame({
   paramChips,
   onInputChange,
   onBack,
+  onExitCommand,
   onActivateChoice,
   onSecondaryAction,
   onPastePreviewText,
@@ -140,7 +141,10 @@ export function GlobalLauncherCollectInputFrame({
   locale: Locale
   paramChips: { label: string; value: string }[]
   onInputChange: (value: string) => void
+  /** Empty ⌫ / Esc: stack-style (re-enter last param, then leave command). */
   onBack: () => void
+  /** Command-tag ×: exit whole command to search. */
+  onExitCommand?: () => void
   onActivateChoice: (choice: LauncherResultChoice) => void
   /** Host wiring: run a secondary action by id (plugin defines the action ids). */
   onSecondaryAction?: (choice: LauncherResultChoice, actionId: string) => void
@@ -241,7 +245,7 @@ export function GlobalLauncherCollectInputFrame({
           title={commandTitle}
           icon={frame.item.display.icon}
           locale={locale}
-          onRemove={onBack}
+          onRemove={onExitCommand ?? onBack}
         />
         {paramChips.map((chip) => (
           <LauncherParamValueChip key={chip.label} label={chip.label} value={chip.value} />
