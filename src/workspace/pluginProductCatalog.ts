@@ -30,6 +30,7 @@ const PRODUCT_CATALOG: PluginProductMetadata[] = [
   product('count', 'Count', ['count']),
   product('web-open', 'Web Open', ['web-open']),
   product('browser-tabs', 'Browser Tabs', ['browser-tabs'], '浏览器标签'),
+  product('feishu', 'Feishu', ['feishu'], '飞书'),
 ]
 
 export const REMOVED_PLUGIN_CAPABILITIES = [
