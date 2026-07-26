@@ -138,8 +138,17 @@ assert.match(
 )
 
 const linksSrc = read('src/plugins/feishu/domains/links.ts')
-assert.match(linksSrc, /buildChatOpenUrl|applink\.feishu\.cn|openChatId/, 'links must build chat applink')
+assert.match(linksSrc, /buildChatOpenUrl|openChatId/, 'links must build chat open url')
+// Prefer native client scheme over https applink (browser hop)
+assert.match(linksSrc, /lark:\/\/|feishu:\/\//, 'chat open must use native client scheme')
+assert.doesNotMatch(
+  linksSrc.replace(/buildChatOpenHttpsUrl[\s\S]*?^}/m, ''),
+  /buildChatOpenUrl[\s\S]*https:\/\/applink/,
+  'primary buildChatOpenUrl must not use https applink (browser hop)',
+)
 assert.match(linksSrc, /buildUserChatOpenUrl|p2pChatId|openId/, 'links must build user DM applink')
+const windowFocusSrc2 = read('src/plugins/feishu/domains/windowFocus.ts')
+assert.match(windowFocusSrc2, /open \$\{|open \$\{shellQuote|`open /, 'native schemes should use macOS open')
 
 // --- no workspace deep imports in feishu plugin sources ---
 const pluginRoot = join(root, 'src/plugins/feishu')

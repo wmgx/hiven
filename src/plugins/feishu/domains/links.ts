@@ -1,6 +1,9 @@
 /**
- * Feishu / Lark client deep links (applink).
- * Used to open chats / DMs without extra CLI round-trips.
+ * Feishu / Lark client deep links.
+ *
+ * Prefer native URL schemes (`lark://` / `feishu://`) so macOS/Windows launch the
+ * desktop client directly. `https://applink.feishu.cn/...` always hops through a
+ * browser first — that is what felt like "open via browser".
  */
 
 export type FeishuBrand = 'feishu' | 'lark'
@@ -8,22 +11,37 @@ export type FeishuBrand = 'feishu' | 'lark'
 /** Default brand for ByteDance CN tenants; can be extended from whoami later. */
 export const DEFAULT_FEISHU_BRAND: FeishuBrand = 'feishu'
 
-function applinkHost(brand: FeishuBrand): string {
-  return brand === 'lark' ? 'applink.larksuite.com' : 'applink.feishu.cn'
+/**
+ * Native scheme for the installed desktop app.
+ * CN Feishu desktop (bundle com.electron.lark) registers `lark://`.
+ * International Lark also uses `lark://`. Keep `feishu://` as a secondary candidate.
+ */
+export function clientScheme(brand: FeishuBrand = DEFAULT_FEISHU_BRAND): 'lark' | 'feishu' {
+  // Even CN Feishu desktop is Electron Lark shell — lark:// is the reliable handler.
+  return brand === 'feishu' || brand === 'lark' ? 'lark' : 'lark'
 }
 
 /**
- * Open a group or p2p chat in the Feishu/Lark desktop client.
+ * Open a group or p2p chat in the Feishu/Lark desktop client (no browser).
  * `chatId` is typically `oc_…`.
  */
 export function buildChatOpenUrl(chatId: string, brand: FeishuBrand = DEFAULT_FEISHU_BRAND): string {
   const id = chatId.trim()
-  return `https://${applinkHost(brand)}/client/chat/open?openChatId=${encodeURIComponent(id)}`
+  const scheme = clientScheme(brand)
+  return `${scheme}://client/chat/open?openChatId=${encodeURIComponent(id)}`
 }
 
 /**
- * Best-effort open a user DM. Prefer `p2pChatId` when search returns it;
- * otherwise try openId-based chat open (client may resolve or no-op).
+ * HTTPS applink fallback (browser hop). Prefer {@link buildChatOpenUrl} first.
+ */
+export function buildChatOpenHttpsUrl(chatId: string, brand: FeishuBrand = DEFAULT_FEISHU_BRAND): string {
+  const host = brand === 'lark' ? 'applink.larksuite.com' : 'applink.feishu.cn'
+  return `https://${host}/client/chat/open?openChatId=${encodeURIComponent(chatId.trim())}`
+}
+
+/**
+ * Best-effort open a user DM via native scheme.
+ * Prefer `p2pChatId` when search returns it.
  */
 export function buildUserChatOpenUrl(options: {
   p2pChatId?: string
@@ -36,6 +54,11 @@ export function buildUserChatOpenUrl(options: {
   }
   const openId = options.openId?.trim()
   if (!openId) return undefined
-  // Client applink for opening chat by user open_id (supported by Feishu client).
-  return `https://${applinkHost(brand)}/client/chat/open?openId=${encodeURIComponent(openId)}`
+  const scheme = clientScheme(brand)
+  return `${scheme}://client/chat/open?openId=${encodeURIComponent(openId)}`
+}
+
+/** True if URL is a native Feishu/Lark client scheme (should not open as https). */
+export function isFeishuClientScheme(url: string): boolean {
+  return /^(lark|feishu):\/\//i.test(url.trim())
 }

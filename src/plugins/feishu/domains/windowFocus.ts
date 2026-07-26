@@ -124,8 +124,9 @@ export async function tryFocusFeishuWindowByTitle(options: {
 
 /**
  * Open a Feishu resource.
- * **Always open URL first** (fast path). Optional window focus runs in the
- * background so osascript never delays document / chat open.
+ * Native schemes (`lark://` / `feishu://`) go through macOS `open` so the
+ * desktop client launches directly — not Safari/Chrome via https applink.
+ * Optional window title focus runs in the background after open.
  */
 export async function openFeishuTarget(options: {
   shell?: LarkCliShell | null
@@ -134,7 +135,11 @@ export async function openFeishuTarget(options: {
   titleHint?: string
   preferWindowFocus?: boolean
 }): Promise<'opened'> {
-  await options.openUrl(options.url)
+  await openFeishuClientOrUrl({
+    shell: options.shell,
+    openUrl: options.openUrl,
+    url: options.url,
+  })
 
   if (
     options.preferWindowFocus !== false &&
@@ -151,6 +156,33 @@ export async function openFeishuTarget(options: {
   }
 
   return 'opened'
+}
+
+async function openFeishuClientOrUrl(options: {
+  shell?: LarkCliShell | null
+  openUrl: (url: string) => Promise<void>
+  url: string
+}): Promise<void> {
+  const url = options.url.trim()
+  const isClient = /^(lark|feishu):\/\//i.test(url)
+
+  // macOS: `open lark://...` hits the registered desktop handler, no browser.
+  if (isClient && options.shell) {
+    try {
+      const result = await options.shell.run({
+        command: `open ${shellQuote(url)}`,
+        timeoutMs: 2500,
+      })
+      // `open` usually exits 0 even when no handler; still try host open as backup only on failure.
+      if (!result.timedOut && (result.exitCode === 0 || result.exitCode == null)) {
+        return
+      }
+    } catch {
+      // fall through to host openUrl
+    }
+  }
+
+  await options.openUrl(url)
 }
 
 function shellQuote(arg: string): string {
