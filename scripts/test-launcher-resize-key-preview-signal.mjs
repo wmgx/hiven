@@ -177,15 +177,16 @@ const state0 = controller.getState()
 await controller.previewInput()
 const state1 = controller.getState()
 
-// ─── Byte-for-byte copy of GlobalLauncherHost.tsx's controllerResizeKey ─────
-// Keep in sync with src/launcher/hosts/GlobalLauncherHost.tsx's controllerResizeKey
-// useMemo. This test exists specifically to prove the formula reflects
-// previewOutput.choices / previewInputText changing on a collect-input frame.
+// ─── Keep in sync with GlobalLauncherHost.tsx controllerResizeKey ───────────
+// Signals empty-vs-has-preview only (not every previewInputText keystroke), so
+// the native window does not thrash while results replace in place. Still must
+// change when preview first appears (0 → 1).
 function resizeKey(state) {
   const top = state.frames[state.frames.length - 1]
   const topKind = top?.kind ?? 'none'
-  const previewSignal =
-    top?.kind === 'collect-input' ? `:${top.previewOutput?.choices.length ?? 0}:${top.previewInputText ?? ''}` : ''
+  const previewSignal = top?.kind === 'collect-input'
+    ? `:${top.inputText?.trim() ? 1 : 0}:${top.previewOutput?.choices?.length ? 1 : 0}`
+    : ''
   return `${state.busy ? 1 : 0}:${state.frames.length}:${topKind}:${state.error ?? ''}${previewSignal}`
 }
 

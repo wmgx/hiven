@@ -273,15 +273,16 @@ export function GlobalLauncherHost() {
 
   /**
    * Primitive resize trigger — controllerState object identity changes every setState.
-   * Also folds in collect-input preview content, since that can change while
-   * busy/frames.length/kind/error all stay the same (e.g. previewInput() resolving).
+   * For collect-input live preview: only signal empty vs has-preview (not each keystroke /
+   * each preview text), so native window does not thrash while results replace in place.
    */
   const controllerResizeKey = useMemo(() => {
     if (!controllerState) return 'idle'
     const top = controllerState.frames[controllerState.frames.length - 1]
     const topKind = top?.kind ?? 'none'
-    const previewSignal =
-      top?.kind === 'collect-input' ? `:${top.previewOutput?.choices.length ?? 0}:${top.previewInputText ?? ''}` : ''
+    const previewSignal = top?.kind === 'collect-input'
+      ? `:${top.inputText.trim() ? 1 : 0}:${top.previewOutput?.choices?.length ? 1 : 0}`
+      : ''
     return `${controllerState.busy ? 1 : 0}:${controllerState.frames.length}:${topKind}:${controllerState.error ?? ''}${previewSignal}`
   }, [controllerState])
 

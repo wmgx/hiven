@@ -1,4 +1,5 @@
 import { useEffect, useRef, type KeyboardEvent, type RefObject } from 'react'
+// note: lastPreviewRef keeps display text across brief controller gaps
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
 import type { CollectInputFrame } from '../../workspace/launcher/controller'
@@ -142,14 +143,21 @@ export function GlobalLauncherCollectInputFrame({
   const livePreviewText = !isSuggestMode ? extractLivePreviewText(frame.previewOutput) : null
   const showLivePreview = !isSuggestMode
   const filterText = frame.inputText.trim()
+  // Local latch: never blank the well while typing — only replace when a new text arrives.
+  const lastPreviewRef = useRef<string | null>(null)
+  if (!filterText) {
+    lastPreviewRef.current = null
+  } else if (livePreviewText) {
+    lastPreviewRef.current = livePreviewText
+  }
+  const displayPreviewText = filterText ? (livePreviewText ?? lastPreviewRef.current) : null
   // Preview is fresh only when it was computed for the current inputText.
   const previewFresh = Boolean(
     livePreviewText
     && frame.previewInputText !== undefined
     && frame.previewInputText === frame.inputText,
   )
-  const previewStale = Boolean(livePreviewText && !previewFresh)
-  // Empty well only when input is empty (not between keystrokes while a prior result still exists).
+  // Empty well only when input is empty.
   const showLiveEmpty = showLivePreview && !filterText
   // Suggest-backed collect-input: empty choices after load = true empty state (not a fake row).
   const showEmptyState = isSuggestMode && !busy && !hasSuggestions && frame.previewInputText !== undefined
@@ -167,11 +175,12 @@ export function GlobalLauncherCollectInputFrame({
   } = useOutputDestinations({
     hasPaste,
     hasReturn,
-    resetKey: `${frame.item.systemKey}:${livePreviewText ?? ''}`,
+    // Do not reset destination index on every preview text change (avoids bar remount thrash).
+    resetKey: frame.item.systemKey,
   })
 
   const runDestination = async (destId: OutputDestinationId) => {
-    // No preview yet, or still catching up to typed text → run full submit (fresh execute).
+    // No fresh preview for current input → full submit (fresh execute).
     if (!previewChoice || !livePreviewText || !previewFresh) {
       onSubmitPrimary?.()
       return
@@ -196,7 +205,7 @@ export function GlobalLauncherCollectInputFrame({
       onBack()
       return
     }
-    if (showLivePreview && livePreviewText && event.key === 'Tab' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    if (showLivePreview && displayPreviewText && event.key === 'Tab' && !event.metaKey && !event.ctrlKey && !event.altKey) {
       event.preventDefault()
       event.stopPropagation()
       cycle(event.shiftKey ? -1 : 1)
@@ -247,18 +256,19 @@ export function GlobalLauncherCollectInputFrame({
               testId="launcher-preview-well"
               title={t(locale, 'palette.livePreviewEmpty')}
             />
-          ) : livePreviewText ? (
-            // Keep last result while typing; no empty-well / "更新中" intermediate.
+          ) : (
+            // Always keep the well mounted while typing so window height does not thrash.
+            // Text only replaces when a new preview arrives (lastPreviewRef latch).
             <div
               className="launcher-preview-well"
               data-testid="launcher-preview-well"
-              data-stale={previewStale ? 'true' : undefined}
+              data-stale={displayPreviewText && !previewFresh ? 'true' : undefined}
               aria-live="polite"
             >
-              <pre>{livePreviewText}</pre>
+              {displayPreviewText ? <pre>{displayPreviewText}</pre> : null}
             </div>
-          ) : null}
-          {livePreviewText && destinations.length > 0 && (
+          )}
+          {displayPreviewText && destinations.length > 0 && (
             <LauncherOutputTargetsBar
               destinations={destinations}
               activeId={activeDest?.id ?? 'copy'}
@@ -296,7 +306,7 @@ export function GlobalLauncherCollectInputFrame({
         />
       )}
       <div className="global-launcher-footer l-foot">
-        {showLivePreview && livePreviewText && !showLiveEmpty ? (
+        {showLivePreview && displayPreviewText && !showLiveEmpty ? (
           <LauncherOutputTargetsFooter
             destinations={destinations}
             locale={locale}

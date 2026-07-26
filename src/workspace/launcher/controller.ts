@@ -668,11 +668,14 @@ export class LauncherController {
     }
 
     if (!result.ok) {
-      this.clearCollectInputPreview(latestTop, result.message)
+      // Keep last good preview while typing; only surface the error.
+      // Clearing here collapses the well and makes the native window thrash.
+      this.setState({ busy: false, error: result.message })
       return
     }
     if (!isOutputResult(result)) {
-      this.clearCollectInputPreview(latestTop)
+      // No output payload — keep previous preview, do not clear.
+      this.setState({ busy: false, error: null })
       return
     }
 
@@ -689,6 +692,11 @@ export class LauncherController {
   private clearCollectInputPreview(frame: CollectInputFrame, error: string | null = null): void {
     const top = this.topFrame()
     if (top.kind !== 'collect-input' || top.item.systemKey !== frame.item.systemKey) {
+      this.setState({ busy: false, error })
+      return
+    }
+    // Only clear when input is empty. Non-empty keeps last result (replace-on-success only).
+    if (top.inputText.trim()) {
       this.setState({ busy: false, error })
       return
     }

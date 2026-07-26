@@ -5043,9 +5043,12 @@ body[data-theme='dark'] .launcher-empty-well {
 }
 
 .launcher-preview-well {
+  /* Stable shell: avoid native window shrink/grow when content is empty between replaces */
+  min-height: 112px;
   max-height: min(40vh, 220px);
   overflow: auto;
   padding: 12px 14px;
+  box-sizing: border-box;
 }
 
 .launcher-empty-well {
@@ -5108,7 +5111,9 @@ body[data-theme='dark'] .launcher-empty-well {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  min-height: 36px;
   padding: 4px 10px 8px;
+  box-sizing: border-box;
 }
 
 .launcher-output-target {
