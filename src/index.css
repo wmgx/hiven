@@ -5050,10 +5050,10 @@ body[data-theme='dark'] .launcher-empty-well {
   overflow: auto;
   padding: 12px 14px;
   box-sizing: border-box;
-  /* Override panel user-select:none so users can select + copy preview text */
-  -webkit-user-select: text;
-  user-select: text;
-  cursor: text;
+  /* Shell is not selectable — only the text node is, so selection doesn't fill empty well area */
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
@@ -5096,12 +5096,25 @@ body[data-theme='dark'] .launcher-empty-well {
 
 .launcher-preview-well pre {
   margin: 0;
+  padding: 0;
+  /* height follows text only — block pre that fills the well made selection a tall blue slab */
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  height: fit-content;
+  min-height: 0;
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.45;
   color: var(--text);
   white-space: pre-wrap;
   word-break: break-word;
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+
+.launcher-preview-well .launcher-preview-text {
   -webkit-user-select: text;
   user-select: text;
   cursor: text;

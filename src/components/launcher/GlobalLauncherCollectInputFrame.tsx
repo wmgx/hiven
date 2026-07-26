@@ -267,7 +267,9 @@ export function GlobalLauncherCollectInputFrame({
               data-stale={displayPreviewText && !previewFresh ? 'true' : undefined}
               aria-live="polite"
             >
-              {displayPreviewText ? <pre>{displayPreviewText}</pre> : null}
+              {displayPreviewText ? (
+                <pre><span className="launcher-preview-text">{displayPreviewText}</span></pre>
+              ) : null}
             </div>
           )}
           {displayPreviewText && destinations.length > 0 && (

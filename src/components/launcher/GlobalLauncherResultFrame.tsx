@@ -119,7 +119,7 @@ export function GlobalLauncherResultFrame({
           data-launcher-scrollable
           aria-live="polite"
         >
-          <pre>{previewText}</pre>
+          <pre><span className="launcher-preview-text">{previewText}</span></pre>
         </div>
         <LauncherOutputTargetsBar
           destinations={destinations}
