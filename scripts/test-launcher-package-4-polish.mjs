@@ -21,6 +21,13 @@ assert.match(dest, /LauncherOutputTargetsFooter/, 'shared footer')
 assert.match(dest, /useOutputDestinations/, 'shared hook')
 assert.match(dest, /⇧↵/, 'shift-enter paste key')
 assert.match(dest, /return-to-launcher/, 'return destination')
+// Footer is compact when bar is present (no full ↵/⇧↵/⌘↵ duplicate strip)
+assert.match(dest, /Compact footer when the destination bar/, 'footer documents bar/hint split')
+assert.doesNotMatch(
+  dest.match(/export function LauncherOutputTargetsFooter[\s\S]*?^}/m)?.[0] ?? '',
+  /outputPasteForeground/,
+  'compact footer must not re-list paste shortcut',
+)
 
 assert.match(collect, /LauncherParamChipTrail/, 'collect uses chip trail')
 assert.match(collect, /LauncherOutputTargetsBar/, 'collect uses shared bar')

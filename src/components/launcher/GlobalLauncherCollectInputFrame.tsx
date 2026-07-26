@@ -167,7 +167,6 @@ export function GlobalLauncherCollectInputFrame({
   const hasPaste = Boolean(onPastePreviewText)
   const {
     destinations,
-    metaLabel,
     activeDest,
     cycle,
     selectId,
@@ -266,9 +265,36 @@ export function GlobalLauncherCollectInputFrame({
               data-launcher-scrollable
               data-stale={displayPreviewText && !previewFresh ? 'true' : undefined}
               aria-live="polite"
+              onMouseDown={(event) => {
+                // Keep focus/selection inside the well; don't let panel drag steal the gesture.
+                event.stopPropagation()
+              }}
+              onWheel={(event) => {
+                event.stopPropagation()
+              }}
             >
               {displayPreviewText ? (
-                <pre><span className="launcher-preview-text">{displayPreviewText}</span></pre>
+                <pre
+                  tabIndex={0}
+                  aria-label={t(locale, 'palette.preview')}
+                  onKeyDown={(event) => {
+                    // ⌘/Ctrl+A selects only the preview text (not the whole launcher).
+                    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      const range = document.createRange()
+                      const sel = window.getSelection()
+                      const node = event.currentTarget.querySelector('.launcher-preview-text')
+                      if (node && sel) {
+                        range.selectNodeContents(node)
+                        sel.removeAllRanges()
+                        sel.addRange(range)
+                      }
+                    }
+                  }}
+                >
+                  <span className="launcher-preview-text">{displayPreviewText}</span>
+                </pre>
               ) : null}
             </div>
           )}
@@ -311,13 +337,7 @@ export function GlobalLauncherCollectInputFrame({
       )}
       <div className="global-launcher-footer l-foot">
         {showLivePreview && displayPreviewText && !showLiveEmpty ? (
-          <LauncherOutputTargetsFooter
-            destinations={destinations}
-            locale={locale}
-            metaLabel={metaLabel}
-            hasPaste={hasPaste}
-            hasReturn={hasReturn}
-          />
+          <LauncherOutputTargetsFooter destinations={destinations} locale={locale} />
         ) : isSuggestMode && hasSuggestions ? (
           <LauncherHintText label={t(locale, 'palette.collectInputSuggestHint')} />
         ) : showEmptyState ? (

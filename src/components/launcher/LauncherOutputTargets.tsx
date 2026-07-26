@@ -73,32 +73,29 @@ export function LauncherOutputTargetsBar({
   )
 }
 
+/**
+ * Compact footer when the destination bar is already visible.
+ * Badges carry ↵ / ⇧↵ / ⌘↵ — footer only keeps Tab + Esc so the strip is not doubled.
+ */
 export function LauncherOutputTargetsFooter({
   destinations,
   locale,
-  metaLabel,
-  hasPaste,
-  hasReturn,
 }: {
   destinations: OutputDestination[]
   locale: Locale
-  metaLabel: string
-  hasPaste: boolean
-  hasReturn: boolean
+  /** @deprecated kept for call-site compatibility */
+  metaLabel?: string
+  hasPaste?: boolean
+  hasReturn?: boolean
 }) {
   if (destinations.length === 0) return null
   return (
     <>
-      <LauncherHintKey keys="↵" label={t(locale, 'palette.outputCopy')} />
-      {hasPaste ? (
-        <LauncherHintKey keys="⇧↵" label={t(locale, 'palette.outputPasteForeground')} />
-      ) : null}
-      {hasReturn ? (
-        <LauncherHintKey keys={`${metaLabel}↵`} label={t(locale, 'palette.returnToLauncher')} />
-      ) : null}
       {destinations.length > 1 ? (
         <LauncherHintKey keys="⇥" label={t(locale, 'palette.outputSwitchTarget')} />
-      ) : null}
+      ) : (
+        <LauncherHintKey keys="↵" label={t(locale, `palette.${destinations[0]?.labelKey ?? 'outputCopy'}`)} />
+      )}
     </>
   )
 }

@@ -5046,8 +5046,9 @@ body[data-theme='dark'] .launcher-empty-well {
 .launcher-preview-well {
   /* Stable shell: avoid native window shrink/grow when content is empty between replaces */
   min-height: 112px;
-  max-height: min(40vh, 220px);
+  max-height: min(48vh, 320px);
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 12px 14px;
   box-sizing: border-box;
   /* Shell is not selectable — only the text node is, so selection doesn't fill empty well area */
@@ -5056,6 +5057,7 @@ body[data-theme='dark'] .launcher-empty-well {
   cursor: default;
   -webkit-app-region: no-drag;
   app-region: no-drag;
+  scrollbar-gutter: stable;
 }
 
 .launcher-empty-well {
@@ -5097,17 +5099,18 @@ body[data-theme='dark'] .launcher-empty-well {
 .launcher-preview-well pre {
   margin: 0;
   padding: 0;
-  /* height follows text only — block pre that fills the well made selection a tall blue slab */
+  /* Text box only as tall as content; width fills well so long lines wrap inside the scrollport */
   display: block;
-  width: fit-content;
+  width: 100%;
   max-width: 100%;
   height: fit-content;
   min-height: 0;
   font-family: var(--font-mono);
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.5;
   color: var(--text);
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   word-break: break-word;
   -webkit-user-select: text;
   user-select: text;
@@ -5115,9 +5118,17 @@ body[data-theme='dark'] .launcher-empty-well {
 }
 
 .launcher-preview-well .launcher-preview-text {
+  /* inline so drag-selection hugs glyphs, not the full well padding */
+  display: inline;
   -webkit-user-select: text;
   user-select: text;
   cursor: text;
+}
+
+/* Long output: slightly stronger scroll affordance on dark */
+.flux-spatial-shell[data-theme='dark'] .launcher-preview-well,
+body[data-theme='dark'] .launcher-preview-well {
+  scrollbar-color: var(--scrollbar-thumb, #45454b) transparent;
 }
 
 .launcher-preview-well.is-empty {

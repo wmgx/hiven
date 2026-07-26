@@ -61,7 +61,6 @@ export function GlobalLauncherResultFrame({
   const hasPaste = Boolean(onPastePreviewText)
   const {
     destinations,
-    metaLabel,
     activeDest,
     cycle,
     selectId,
@@ -118,8 +117,29 @@ export function GlobalLauncherResultFrame({
           data-no-drag
           data-launcher-scrollable
           aria-live="polite"
+          onMouseDown={(event) => event.stopPropagation()}
+          onWheel={(event) => event.stopPropagation()}
         >
-          <pre><span className="launcher-preview-text">{previewText}</span></pre>
+          <pre
+            tabIndex={0}
+            aria-label={t(locale, 'palette.preview')}
+            onKeyDown={(event) => {
+              if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
+                event.preventDefault()
+                event.stopPropagation()
+                const range = document.createRange()
+                const sel = window.getSelection()
+                const node = event.currentTarget.querySelector('.launcher-preview-text')
+                if (node && sel) {
+                  range.selectNodeContents(node)
+                  sel.removeAllRanges()
+                  sel.addRange(range)
+                }
+              }
+            }}
+          >
+            <span className="launcher-preview-text">{previewText}</span>
+          </pre>
         </div>
         <LauncherOutputTargetsBar
           destinations={destinations}
@@ -136,13 +156,7 @@ export function GlobalLauncherResultFrame({
           </div>
         )}
         <div className="global-launcher-footer l-foot">
-          <LauncherOutputTargetsFooter
-            destinations={destinations}
-            locale={locale}
-            metaLabel={metaLabel}
-            hasPaste={hasPaste}
-            hasReturn={hasReturn}
-          />
+          <LauncherOutputTargetsFooter destinations={destinations} locale={locale} />
           <LauncherHintKey keys="esc" label={t(locale, 'palette.back')} />
         </div>
       </div>
