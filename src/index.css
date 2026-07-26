@@ -4884,7 +4884,7 @@ body[data-theme='dark'] .l-search {
 
 .l-search input {
   flex: 1;
-  min-width: 50px;
+  min-width: 72px;
   border: 0;
   outline: 0;
   background: transparent;
@@ -4982,10 +4982,20 @@ body[data-theme='dark'] .l-search {
   color: var(--accent);
 }
 
+.launcher-param-chip-trail {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: min(42%, 220px);
+  flex: 0 1 auto;
+  overflow: hidden;
+}
+
 .launcher-param-chip {
   display: inline-flex;
   align-items: center;
-  max-width: 88px;
+  max-width: 72px;
   min-height: 22px;
   padding: 0 8px;
   border-radius: 6px;
@@ -4997,7 +5007,21 @@ body[data-theme='dark'] .l-search {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.launcher-param-chip-more {
+  max-width: 40px;
   flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+
+/* Command tag + chips must not starve the text input */
+.l-search .launcher-command-tag {
+  max-width: min(36%, 160px);
+  flex: 0 1 auto;
 }
 
 /* Package 4 + V5: live preview / empty wells share inset material */
@@ -9644,25 +9668,14 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   color: var(--text-2);
 }
 
-/* Empty & Error */
+/* Empty & Error — plugins-empty now rides LauncherEmptyWell material */
+.plugins-empty.launcher-empty-well {
+  margin: 12px 8px 20px;
+  min-height: 160px;
+  padding: 40px 20px 48px;
+}
+
 .plugins-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 48px 20px 60px;
-  color: var(--text-3);
-}
-
-.plugins-empty-text {
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--text-2);
-}
-
-.plugins-empty-hint {
-  font-size: 12.5px;
   color: var(--text-3);
 }
 

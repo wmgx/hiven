@@ -31,6 +31,7 @@ import type { PluginEditorState } from './pluginEditorState'
 import { getConfigDir } from '../configInit'
 import { listBundledPluginPackageSummaries } from '../workspace/bundledPluginLoader'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../utils/imeKeyboard'
+import { LauncherEmptyWell } from '../components/launcher/LauncherEmptyWell'
 import { usePluginStore } from '../workspace/pluginStore'
 import { usePluginSettingsStore } from '../workspace/pluginSettingsStore'
 import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
@@ -1086,15 +1087,13 @@ export function PluginsContent({ onOpenPluginEditor }: PluginsContentProps) {
       {/* Plugin list */}
       <div className="plugins-list">
         {pluginDetailRows.length === 0 ? (
-          <div className="plugins-empty">
-            <Package size={40} strokeWidth={1.5} />
-            <div className="plugins-empty-text">
-              {normalizedQuery ? t(locale, 'scripts.noResults') : t(locale, 'scripts.emptyPlugins')}
-            </div>
-            {normalizedQuery && (
-              <div className="plugins-empty-hint">{t(locale, 'scripts.emptySearchHint')}</div>
-            )}
-          </div>
+          <LauncherEmptyWell
+            className="plugins-empty"
+            testId="plugins-empty-well"
+            icon={<Package size={28} strokeWidth={1.5} />}
+            title={normalizedQuery ? t(locale, 'scripts.noResults') : t(locale, 'scripts.emptyPlugins')}
+            hint={normalizedQuery ? t(locale, 'scripts.emptySearchHint') : undefined}
+          />
         ) : (
           pluginDetailRows.map(renderRow)
         )}

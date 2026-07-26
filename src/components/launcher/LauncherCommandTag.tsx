@@ -65,3 +65,40 @@ export function LauncherParamValueChip({
     </span>
   )
 }
+
+const MAX_VISIBLE_PARAM_CHIPS = 2
+
+/**
+ * Committed param trail: keep the row single-line.
+ * Shows the most recent chips; older ones collapse into +N (title lists all).
+ */
+export function LauncherParamChipTrail({
+  chips,
+  maxVisible = MAX_VISIBLE_PARAM_CHIPS,
+}: {
+  chips: Array<{ label: string; value: string }>
+  maxVisible?: number
+}) {
+  if (chips.length === 0) return null
+  const limit = Math.max(1, maxVisible)
+  const overflow = chips.length > limit ? chips.slice(0, chips.length - limit) : []
+  const visible = chips.length > limit ? chips.slice(-limit) : chips
+  const overflowTitle = overflow.map((chip) => `${chip.label}: ${chip.value}`).join('\n')
+
+  return (
+    <span className="launcher-param-chip-trail" data-testid="launcher-param-chip-trail">
+      {overflow.length > 0 && (
+        <span
+          className="launcher-param-chip launcher-param-chip-more"
+          data-testid="launcher-param-chip-more"
+          title={overflowTitle}
+        >
+          +{overflow.length}
+        </span>
+      )}
+      {visible.map((chip) => (
+        <LauncherParamValueChip key={`${chip.label}:${chip.value}`} label={chip.label} value={chip.value} />
+      ))}
+    </span>
+  )
+}

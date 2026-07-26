@@ -6,7 +6,7 @@ import type { ParamInputFrame } from '../../workspace/launcher/controller'
 import type { LauncherParamSpec } from '../../workspace/launcher/types'
 import { searchableFieldsMatch, type SearchableFields } from '../../workspace/searchRanking'
 import { resolveDisplayTitle } from '../../workspace/launcher/display'
-import { LauncherCommandTag, LauncherParamValueChip } from './LauncherCommandTag'
+import { LauncherCommandTag, LauncherParamChipTrail } from './LauncherCommandTag'
 import { LauncherEmptyWell } from './LauncherEmptyWell'
 
 type LauncherParamStepProps = {
@@ -179,9 +179,7 @@ export function LauncherParamStep({
           locale={locale}
           onRemove={onExitCommand ?? onBack}
         />
-        {breadcrumbChips.map((chip) => (
-          <LauncherParamValueChip key={chip.label} label={chip.label} value={chip.value} />
-        ))}
+        <LauncherParamChipTrail chips={breadcrumbChips} />
         <input
           ref={inputRef}
           className={[isTextParam ? 'mono' : '', param.type === 'number' ? 'l-number-input' : ''].filter(Boolean).join(' ')}

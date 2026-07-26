@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
+import { useEffect, useRef, type KeyboardEvent, type RefObject } from 'react'
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
 import type { CollectInputFrame } from '../../workspace/launcher/controller'
@@ -7,9 +7,14 @@ import type { IconRef, LauncherOutput, LauncherResultChoice } from '../../worksp
 import { resolveIcon } from '../../utils/resolveIcon'
 import { Tooltip } from '../Tooltip'
 import { LauncherHintKey, LauncherHintText } from './LauncherFooterHints'
-import { LauncherCommandTag, LauncherParamValueChip } from './LauncherCommandTag'
+import { LauncherCommandTag, LauncherParamChipTrail } from './LauncherCommandTag'
 import { LauncherEmptyWell } from './LauncherEmptyWell'
-import { getPlatformShortcutMeta } from './launcherParamShortcuts'
+import {
+  type OutputDestinationId,
+  LauncherOutputTargetsBar,
+  LauncherOutputTargetsFooter,
+  useOutputDestinations,
+} from './LauncherOutputTargets'
 
 /** Suggest row: keep keyboard highlight in view (same as result / mixed list). */
 function CollectInputSuggestRow({
@@ -81,13 +86,7 @@ function CollectInputSuggestRow({
   )
 }
 
-export type OutputDestinationId = 'copy' | 'paste-foreground' | 'return-to-launcher'
-
-type OutputDestination = {
-  id: OutputDestinationId
-  keys: string
-  labelKey: 'outputCopy' | 'outputPasteForeground' | 'returnToLauncher'
-}
+export type { OutputDestinationId } from './LauncherOutputTargets'
 
 /** Extract single-text live preview from pure-function preview output. */
 export function extractLivePreviewText(output?: LauncherOutput): string | null {
@@ -97,24 +96,6 @@ export function extractLivePreviewText(output?: LauncherOutput): string | null {
   const choice = output.choices[0]
   const text = (choice.preview ?? choice.title ?? '').trim()
   return text || null
-}
-
-function buildDestinations(params: {
-  hasPaste: boolean
-  hasReturn: boolean
-  metaLabel: string
-}): OutputDestination[] {
-  // Package 4 keys (2026-07-26 handoff): ↵ copy · ⇧↵ paste front · ⌘/Ctrl↵ return to launcher
-  const list: OutputDestination[] = [
-    { id: 'copy', keys: '↵', labelKey: 'outputCopy' },
-  ]
-  if (params.hasPaste) {
-    list.push({ id: 'paste-foreground', keys: '⇧↵', labelKey: 'outputPasteForeground' })
-  }
-  if (params.hasReturn) {
-    list.push({ id: 'return-to-launcher', keys: `${params.metaLabel}↵`, labelKey: 'returnToLauncher' })
-  }
-  return list
 }
 
 export function GlobalLauncherCollectInputFrame({
@@ -164,28 +145,21 @@ export function GlobalLauncherCollectInputFrame({
   // Suggest-backed collect-input: empty choices after load = true empty state (not a fake row).
   const showEmptyState = isSuggestMode && !busy && !hasSuggestions && frame.previewInputText !== undefined
   const commandTitle = resolveDisplayTitle(frame.item.display, locale)
-  const metaLabel = getPlatformShortcutMeta().label
   const previewChoice = livePreviewText ? previewChoices[0] : undefined
   const hasReturn = Boolean(previewChoice?.secondaryActions?.some((a) => a.id === 'return-to-launcher'))
-  const destinations = useMemo(
-    () => buildDestinations({
-      hasPaste: Boolean(onPastePreviewText),
-      hasReturn,
-      metaLabel,
-    }),
-    [onPastePreviewText, hasReturn, metaLabel],
-  )
-  const [destIndex, setDestIndex] = useState(0)
-  const activeDest = destinations[Math.min(destIndex, Math.max(0, destinations.length - 1))] ?? destinations[0]
-
-  useEffect(() => {
-    setDestIndex(0)
-  }, [frame.item.systemKey, livePreviewText])
-
-  const cycleDestination = (delta: number) => {
-    if (destinations.length < 2) return
-    setDestIndex((index) => (index + delta + destinations.length) % destinations.length)
-  }
+  const hasPaste = Boolean(onPastePreviewText)
+  const {
+    destinations,
+    metaLabel,
+    activeDest,
+    cycle,
+    selectId,
+    resolveFromKeyboard,
+  } = useOutputDestinations({
+    hasPaste,
+    hasReturn,
+    resetKey: `${frame.item.systemKey}:${livePreviewText ?? ''}`,
+  })
 
   const runDestination = async (destId: OutputDestinationId) => {
     if (!previewChoice || !livePreviewText) {
@@ -215,7 +189,7 @@ export function GlobalLauncherCollectInputFrame({
     if (showLivePreview && livePreviewText && event.key === 'Tab' && !event.metaKey && !event.ctrlKey && !event.altKey) {
       event.preventDefault()
       event.stopPropagation()
-      cycleDestination(event.shiftKey ? -1 : 1)
+      cycle(event.shiftKey ? -1 : 1)
       return
     }
     if (event.key === 'Enter') {
@@ -223,18 +197,7 @@ export function GlobalLauncherCollectInputFrame({
       if (isSuggestMode) return
       event.preventDefault()
       event.stopPropagation()
-      // ⌘/Ctrl↵ → return to launcher; ⇧↵ → paste to front; bare ↵ → active destination (default copy)
-      if (event.metaKey || event.ctrlKey) {
-        const ret = destinations.find((d) => d.id === 'return-to-launcher')
-        void runDestination(ret?.id ?? 'copy')
-        return
-      }
-      if (event.shiftKey) {
-        const paste = destinations.find((d) => d.id === 'paste-foreground')
-        void runDestination(paste?.id ?? 'copy')
-        return
-      }
-      void runDestination(activeDest?.id ?? 'copy')
+      void runDestination(resolveFromKeyboard(event))
     }
   }
 
@@ -247,9 +210,7 @@ export function GlobalLauncherCollectInputFrame({
           locale={locale}
           onRemove={onExitCommand ?? onBack}
         />
-        {paramChips.map((chip) => (
-          <LauncherParamValueChip key={chip.label} label={chip.label} value={chip.value} />
-        ))}
+        <LauncherParamChipTrail chips={paramChips} />
         <input
           ref={bindSearchInputRef ?? inputRef}
           value={frame.inputText}
@@ -286,30 +247,15 @@ export function GlobalLauncherCollectInputFrame({
             />
           )}
           {livePreviewText && destinations.length > 0 && (
-            <div
-              className="launcher-output-targets"
-              data-testid="launcher-output-targets"
-              role="listbox"
-              aria-label={t(locale, 'palette.outputSwitchTarget')}
-            >
-              {destinations.map((dest) => (
-                <button
-                  key={dest.id}
-                  type="button"
-                  role="option"
-                  aria-selected={activeDest?.id === dest.id}
-                  className={`launcher-output-target${activeDest?.id === dest.id ? ' is-active' : ''}`}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => {
-                    setDestIndex(destinations.findIndex((d) => d.id === dest.id))
-                    void runDestination(dest.id)
-                  }}
-                >
-                  {dest.keys ? <kbd>{dest.keys}</kbd> : null}
-                  <span>{t(locale, `palette.${dest.labelKey}`)}</span>
-                </button>
-              ))}
-            </div>
+            <LauncherOutputTargetsBar
+              destinations={destinations}
+              activeId={activeDest?.id ?? 'copy'}
+              locale={locale}
+              onSelect={(id) => {
+                selectId(id)
+                void runDestination(id)
+              }}
+            />
           )}
         </>
       )}
@@ -339,18 +285,13 @@ export function GlobalLauncherCollectInputFrame({
       )}
       <div className="global-launcher-footer l-foot">
         {showLivePreview && livePreviewText ? (
-          <>
-            <LauncherHintKey keys="↵" label={t(locale, 'palette.outputCopy')} />
-            {onPastePreviewText ? (
-              <LauncherHintKey keys="⇧↵" label={t(locale, 'palette.outputPasteForeground')} />
-            ) : null}
-            {hasReturn ? (
-              <LauncherHintKey keys={`${metaLabel}↵`} label={t(locale, 'palette.returnToLauncher')} />
-            ) : null}
-            {destinations.length > 1 ? (
-              <LauncherHintKey keys="⇥" label={t(locale, 'palette.outputSwitchTarget')} />
-            ) : null}
-          </>
+          <LauncherOutputTargetsFooter
+            destinations={destinations}
+            locale={locale}
+            metaLabel={metaLabel}
+            hasPaste={hasPaste}
+            hasReturn={hasReturn}
+          />
         ) : isSuggestMode && hasSuggestions ? (
           <LauncherHintText label={t(locale, 'palette.collectInputSuggestHint')} />
         ) : showEmptyState ? (
