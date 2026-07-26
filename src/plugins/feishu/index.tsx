@@ -1,6 +1,7 @@
 /**
- * Feishu / Lark first-party plugin (B0 + B1).
- * Controlled shell → lark-cli; L1 docs mix-in + L2 status/login/search tools.
+ * Feishu / Lark first-party plugin.
+ * L1 mix-in: docs / chats / contacts via Desktop Targets.
+ * L2 tools: status, login, search, writes, fetch, etc.
  */
 
 import { definePlugin } from '@hiven/plugin'
@@ -13,25 +14,28 @@ import { DEFAULT_FEISHU_SETTINGS } from './settings/model'
 import { FeishuSettingsBody } from './settings/FeishuSettingsBody'
 import { feishuTools } from './tools'
 
-function shouldRegisterProvider(settings: FeishuSettings): boolean {
-  return settings.enabled !== false && settings.docsMixEnabled !== false
-}
-
 export default definePlugin<FeishuSettings>({
   settings: {
     title: 'Feishu',
     titleI18n: { zh: '飞书' },
-    version: 1,
+    version: 2,
     defaultValue: DEFAULT_FEISHU_SETTINGS,
+    migrate: (stored) => {
+      const base = { ...DEFAULT_FEISHU_SETTINGS }
+      if (stored && typeof stored === 'object') {
+        return { ...base, ...(stored as Partial<FeishuSettings>) }
+      }
+      return base
+    },
     schema: {
       sections: [
         {
           id: 'feishu',
           title: 'Feishu',
           titleI18n: { zh: '飞书' },
-          description: 'Search Feishu docs in Global Launcher via local lark-cli.',
+          description: 'Search Feishu docs, chats, and people in Global Launcher via local lark-cli.',
           descriptionI18n: {
-            zh: '通过本机 lark-cli 在 Global Launcher 中搜索飞书文档。',
+            zh: '通过本机 lark-cli 在 Global Launcher 中混排飞书文档、会话与联系人。',
           },
           fields: [],
         },
@@ -43,7 +47,7 @@ export default definePlugin<FeishuSettings>({
         shell,
         settings: value,
       })
-      applyFeishuProviderRegistration(shouldRegisterProvider(value))
+      applyFeishuProviderRegistration(value)
     },
   },
   tools: feishuTools,
@@ -56,7 +60,7 @@ export default definePlugin<FeishuSettings>({
         openUrl: (url) => ctx.api.openUrl(url),
         t: ctx.t,
       })
-      applyFeishuProviderRegistration(shouldRegisterProvider(settings))
+      applyFeishuProviderRegistration(settings)
     },
   },
 })

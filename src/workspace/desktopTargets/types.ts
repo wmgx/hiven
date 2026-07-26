@@ -6,7 +6,7 @@
 import type { Locale } from '../../i18n'
 import type { LauncherSurfaceId } from '../launcher/types'
 
-export type DesktopTargetKind = 'app' | 'window' | 'tab' | 'document'
+export type DesktopTargetKind = 'app' | 'window' | 'tab' | 'document' | 'chat' | 'person'
 
 export type DesktopTargetSourceId = string
 

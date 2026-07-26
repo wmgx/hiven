@@ -15,6 +15,8 @@ const KIND_LABELS: Record<string, { en: string; zh: string }> = {
   window: { en: 'Window', zh: '窗口' },
   tab: { en: 'Browser', zh: '浏览器' },
   document: { en: 'Document', zh: '文档' },
+  chat: { en: 'Chat', zh: '会话' },
+  person: { en: 'Person', zh: '联系人' },
 }
 
 export function kindLabelFor(kind: string, locale: Locale): string {
@@ -41,10 +43,13 @@ export function stableUsageKeyForTarget(target: DesktopTarget): string | null {
     if (!key) return null
     return `host:tab:focus:app:${key}`
   }
-  if (target.kind === 'document' && action === 'focus') {
+  if (
+    (target.kind === 'document' || target.kind === 'chat' || target.kind === 'person') &&
+    (action === 'focus' || action === 'open')
+  ) {
     const key = target.appStableKey || target.appName
     if (!key) return null
-    return `host:document:focus:app:${key}`
+    return `host:${target.kind}:open:app:${key}`
   }
   return null
 }
@@ -52,7 +57,14 @@ export function stableUsageKeyForTarget(target: DesktopTarget): string | null {
 export function shouldRecordUsage(target: DesktopTarget): boolean {
   const action = target.actionClass ?? 'focus'
   if (action === 'close' || action === 'terminate') return false
-  return target.kind === 'app' || target.kind === 'window' || target.kind === 'tab' || target.kind === 'document'
+  return (
+    target.kind === 'app' ||
+    target.kind === 'window' ||
+    target.kind === 'tab' ||
+    target.kind === 'document' ||
+    target.kind === 'chat' ||
+    target.kind === 'person'
+  )
 }
 
 export type ToLauncherItemOptions = {

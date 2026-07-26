@@ -141,6 +141,32 @@ export function FeishuSettingsBody(props: PluginSettingsBodyProps<FeishuSettings
         </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
           <ui.Checkbox
+            checked={value.chatsMixEnabled !== false}
+            onChange={(event: { target: { checked: boolean } }) => {
+              setValue({ ...value, chatsMixEnabled: event.target.checked })
+            }}
+          />
+          {label(
+            'settings.enableChatsMix',
+            'Show Feishu chats in Global Launcher',
+            '在 Global Launcher 混排飞书会话',
+          )}
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+          <ui.Checkbox
+            checked={value.contactsMixEnabled !== false}
+            onChange={(event: { target: { checked: boolean } }) => {
+              setValue({ ...value, contactsMixEnabled: event.target.checked })
+            }}
+          />
+          {label(
+            'settings.enableContactsMix',
+            'Show Feishu people in Global Launcher',
+            '在 Global Launcher 混排飞书联系人',
+          )}
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+          <ui.Checkbox
             checked={value.preferWindowFocus !== false}
             onChange={(event: { target: { checked: boolean } }) => {
               setValue({ ...value, preferWindowFocus: event.target.checked })
@@ -148,8 +174,8 @@ export function FeishuSettingsBody(props: PluginSettingsBodyProps<FeishuSettings
           />
           {label(
             'settings.preferWindowFocus',
-            'Prefer focusing open Feishu windows (macOS)',
-            '优先聚焦已打开的飞书窗口（macOS）',
+            'After open, try raising Feishu window (macOS)',
+            '打开后尝试聚焦飞书窗口（macOS）',
           )}
         </label>
       </ui.Stack>

@@ -3,9 +3,13 @@ export type FeishuSettings = {
   enabled: boolean
   /** When true, register feishu.docs DesktopTargetProvider for L1 mix-in. */
   docsMixEnabled: boolean
+  /** When true, mix Feishu chats into Global Launcher L1 search. */
+  chatsMixEnabled: boolean
+  /** When true, mix Feishu contacts (people) into Global Launcher L1 search. */
+  contactsMixEnabled: boolean
   /**
-   * Prefer focusing an already-open Feishu/Lark window (title fuzzy match)
-   * before falling back to system open URL. macOS only; best-effort.
+   * After openUrl, best-effort raise a matching Feishu/Lark window (macOS).
+   * Does not delay open.
    */
   preferWindowFocus: boolean
   /** Absolute path to lark-cli; empty = resolve `lark-cli` from PATH. */
@@ -15,6 +19,8 @@ export type FeishuSettings = {
 export const DEFAULT_FEISHU_SETTINGS: FeishuSettings = {
   enabled: true,
   docsMixEnabled: true,
+  chatsMixEnabled: true,
+  contactsMixEnabled: true,
   preferWindowFocus: true,
   binaryPath: '',
 }

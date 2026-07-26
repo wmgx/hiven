@@ -148,8 +148,15 @@ export async function getDesktopDocumentLauncherDynamicItems(
         const targets = (Array.isArray(raw) ? raw : [])
           .filter(isOpenableTarget)
           .map((t) => ({ ...t, sourceId: t.sourceId || provider.id }))
-          // Prefer document-like nav targets from plugin sources
-          .filter((t) => t.kind === 'document' || t.kind === 'tab' || Boolean(t.meta?.url))
+          // Remote plugin sources: docs / chats / people (must be openable via meta.url)
+          .filter(
+            (t) =>
+              t.kind === 'document' ||
+              t.kind === 'chat' ||
+              t.kind === 'person' ||
+              t.kind === 'tab' ||
+              Boolean(t.meta?.url),
+          )
           .slice(0, maxPerSource)
 
         const items = targets.map((target) =>

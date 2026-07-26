@@ -7,6 +7,14 @@ import type { LarkCliShell } from './cli/run'
 import type { FeishuSettings } from './settings/model'
 import { DEFAULT_FEISHU_SETTINGS } from './settings/model'
 import {
+  registerFeishuChatsProvider,
+  unregisterFeishuChatsProvider,
+} from './provider/chatsTargetProvider'
+import {
+  registerFeishuContactsProvider,
+  unregisterFeishuContactsProvider,
+} from './provider/contactsTargetProvider'
+import {
   registerFeishuDocsProvider,
   unregisterFeishuDocsProvider,
 } from './provider/docsTargetProvider'
@@ -45,7 +53,20 @@ export function getFeishuRuntime(): FeishuRuntime {
   return runtime
 }
 
-export function applyFeishuProviderRegistration(enabled: boolean): void {
-  if (enabled) registerFeishuDocsProvider()
+/**
+ * Register/unregister L1 Desktop Target providers based on settings.
+ * Plugin enabled is required; each mix-in has its own switch.
+ */
+export function applyFeishuProviderRegistration(settings?: FeishuSettings): void {
+  const s = settings ?? runtime.settings
+  const pluginOn = s.enabled !== false
+
+  if (pluginOn && s.docsMixEnabled !== false) registerFeishuDocsProvider()
   else unregisterFeishuDocsProvider()
+
+  if (pluginOn && s.chatsMixEnabled !== false) registerFeishuChatsProvider()
+  else unregisterFeishuChatsProvider()
+
+  if (pluginOn && s.contactsMixEnabled !== false) registerFeishuContactsProvider()
+  else unregisterFeishuContactsProvider()
 }
