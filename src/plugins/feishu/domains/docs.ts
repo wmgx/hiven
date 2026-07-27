@@ -3,6 +3,7 @@
  */
 
 import { stripSearchHighlight } from '../cli/parse'
+import { iconForFeishuDoc } from './icons'
 import { runLarkCli, type LarkCliShell } from '../cli/run'
 
 export type FeishuDocsSearchHit = {
@@ -14,6 +15,10 @@ export type FeishuDocsSearchHit = {
     url?: string
     owner_name?: string
     owner?: string
+    doc_types?: string
+    docTypes?: string
+    icon_info?: unknown
+    iconInfo?: unknown
   }
   token?: string
   url?: string
@@ -108,8 +113,15 @@ export function mapSearchResultsToTargets(results: FeishuDocsSearchHit[]): Feish
     const rawTitle = hit.title_highlighted ?? hit.title ?? token
     const title = stripSearchHighlight(String(rawTitle)) || token
     const entity = hit.entity_type ?? 'DOC'
+    const docTypes = hit.result_meta?.doc_types ?? hit.result_meta?.docTypes
     const owner = hit.result_meta?.owner_name ?? hit.result_meta?.owner
-    const subtitle = owner ? `${entity} · ${owner}` : String(entity)
+    const typeLabel = String(docTypes || entity)
+    const subtitle = owner ? `${typeLabel} · ${owner}` : typeLabel
+    const icon = iconForFeishuDoc({
+      entityType: entity,
+      docTypes: docTypes ? String(docTypes) : undefined,
+      iconInfo: hit.result_meta?.icon_info ?? hit.result_meta?.iconInfo,
+    })
 
     out.push({
       id: `feishu.docs:document:${token}`,
@@ -117,10 +129,10 @@ export function mapSearchResultsToTargets(results: FeishuDocsSearchHit[]): Feish
       kind: 'document',
       title,
       subtitle,
-      keywords: [title, entity, owner ?? '', url].filter(Boolean),
+      keywords: [title, entity, typeLabel, owner ?? '', url].filter(Boolean),
       meta: { url },
       actionClass: 'open',
-      icon: 'FileText',
+      icon,
     })
   }
   return out

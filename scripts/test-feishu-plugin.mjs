@@ -73,6 +73,15 @@ assert.match(toolsSrc, /feishu\.send-message|send-message|sendMessage/, 'must ex
 assert.match(toolsSrc, /confirm\.sendMessage|Confirm send|确认发送|confirmed:\s*true/, 'send message must go through L2 confirm')
 assert.match(toolsSrc, /feishu\.create-event|create-event|createCalendarEvent/, 'must expose create-event tool')
 assert.match(toolsSrc, /feishu\.create-doc|create-doc|createDoc/, 'must expose create-doc tool')
+assert.match(toolsSrc, /requireParamSelection:\s*false|createDocEmpty|doc\.defaultTitle/, 'create-doc should allow empty one-tap create')
+assert.match(toolsSrc, /feishu\.create-sheet|create-sheet|createSheet/, 'must expose create-sheet tool')
+assert.match(toolsSrc, /sheetType|bitable|workbook|\+create/, 'create-sheet must let user pick type')
+assert.match(toolsSrc, /presentFeishuCliFailure|openAuthUrl|completeAuth/, 'missing scope should offer auth URL flow')
+assert.match(
+  read('src/i18n/pluginI18nRegistry.ts'),
+  /descriptionI18n|optDesc|option\.description/,
+  'plugin i18n must localize param option descriptions',
+)
 assert.match(toolsSrc, /feishu\.docs-fetch|docs-fetch|fetchDocContent/, 'must expose docs-fetch tool')
 assert.match(toolsSrc, /createPane|openedInEditor/, 'docs-fetch should open content in editor pane')
 assert.match(toolsSrc, /feishu\.messages-search|messages-search|searchMessages/, 'must expose messages-search tool')
@@ -92,6 +101,29 @@ assert.match(
   /!q|isL1QueryReady/,
   'provider list must short-circuit empty/short query',
 )
+assert.match(
+  provider,
+  /resolveL1List|getL1Cache|getL1FastHits/,
+  'docs provider must use L1 cache path',
+)
+assert.match(
+  provider,
+  /scoreBias|DOCS_MIXIN_SCORE_BIAS/,
+  'docs mix-in product ranking bias must live on the provider, not host hardcode',
+)
+assert.match(
+  provider,
+  /kindLabelI18n|飞书文档|Feishu Doc/,
+  'docs provider should set product kindLabel override',
+)
+assert.match(
+  read(`${pluginDir}/provider/contactsTargetProvider.ts`),
+  /kindLabelI18n|飞书联系人/,
+  'contacts provider should set product kindLabel override',
+)
+
+const l1 = read(`${pluginDir}/search/l1Cache.ts`)
+assert.match(l1, /rememberL1Entities|resolveL1List|withL1Inflight/, 'l1Cache multi-layer cache required')
 assert.match(provider, /listTimeoutMs/, 'provider must declare listTimeoutMs')
 assert.match(provider, /kind\s*:\s*['"]document['"]|['"]document['"]/, 'provider targets must use kind document')
 

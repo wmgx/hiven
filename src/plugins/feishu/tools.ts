@@ -5,20 +5,21 @@
 
 import type { PluginToolContribution } from '@hiven/plugin'
 import { detectLarkCli } from './cli/detect'
+import { presentFeishuCliFailure } from './cli/formatError'
 import { completeLogin, getAuthStatus, startLogin } from './domains/auth'
 import {
   fetchAgenda,
   mapEventsToRows,
   searchEvents,
 } from './domains/calendar'
-import { mapUsersToRows, searchUsers } from './domains/contact'
+import { mapUsersToRows, searchUsersWithAvatars, sortUsersByIntersection } from './domains/contact'
 import { fetchDocContent, mapSearchResultsToTargets, searchDocs } from './domains/docs'
 import { listRecentChats, mapChatsToRows, searchChats } from './domains/im'
 import { mapMessagesToRows, searchMessages } from './domains/messages'
 import { mapMinutesToRows, searchMinutes } from './domains/minutes'
 import { listMyTasks, mapTasksToRows } from './domains/tasks'
 import { openFeishuTarget } from './domains/windowFocus'
-import { createCalendarEvent, createDoc, sendMessage } from './domains/write'
+import { createCalendarEvent, createDoc, createSheet, deriveTitleFromContent, sendMessage } from './domains/write'
 import { getFeishuRuntime } from './runtime'
 import type { FeishuSettings } from './settings/model'
 import { DEFAULT_FEISHU_SETTINGS } from './settings/model'
@@ -155,7 +156,15 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         binaryPath: settings.binaryPath || undefined,
       })
       if (!search.ok) {
-        return ctx.output.error(search.message || ctx.t('error.searchFailed'))
+        return await presentFeishuCliFailure({
+          t: ctx.t,
+          output: ctx.output,
+          failure: search,
+          fallbackKey: 'error.searchFailed',
+          shell,
+          binaryPath: settings.binaryPath || undefined,
+          openUrl: (url) => openRuntimeUrl(url, (u) => ctx.api.openUrl(u)),
+        })
       }
 
       const targets = mapSearchResultsToTargets(search.results)
@@ -207,9 +216,15 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         binaryPath: settings.binaryPath || undefined,
       })
       if (!agenda.ok) {
-        const parts = [agenda.message || ctx.t('error.agendaFailed')]
-        if (agenda.hint) parts.push(agenda.hint)
-        return ctx.output.error(parts.join('\n'))
+        return await presentFeishuCliFailure({
+          t: ctx.t,
+          output: ctx.output,
+          failure: agenda,
+          fallbackKey: 'error.agendaFailed',
+          shell,
+          binaryPath: settings.binaryPath || undefined,
+          openUrl: (url) => openRuntimeUrl(url, (u) => ctx.api.openUrl(u)),
+        })
       }
 
       const rows = mapEventsToRows(agenda.events)
@@ -277,9 +292,15 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         binaryPath: settings.binaryPath || undefined,
       })
       if (!search.ok) {
-        const parts = [search.message || ctx.t('error.calendarSearchFailed')]
-        if (search.hint) parts.push(search.hint)
-        return ctx.output.error(parts.join('\n'))
+        return await presentFeishuCliFailure({
+          t: ctx.t,
+          output: ctx.output,
+          failure: search,
+          fallbackKey: 'error.calendarSearchFailed',
+          shell,
+          binaryPath: settings.binaryPath || undefined,
+          openUrl: (url) => openRuntimeUrl(url, (u) => ctx.api.openUrl(u)),
+        })
       }
 
       const rows = mapEventsToRows(search.events)
@@ -347,9 +368,15 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         binaryPath: settings.binaryPath || undefined,
       })
       if (!search.ok) {
-        const parts = [search.message || ctx.t('error.chatSearchFailed')]
-        if (search.hint) parts.push(search.hint)
-        return ctx.output.error(parts.join('\n'))
+        return await presentFeishuCliFailure({
+          t: ctx.t,
+          output: ctx.output,
+          failure: search,
+          fallbackKey: 'error.chatSearchFailed',
+          shell,
+          binaryPath: settings.binaryPath || undefined,
+          openUrl: (url) => openRuntimeUrl(url, (u) => ctx.api.openUrl(u)),
+        })
       }
 
       const rows = mapChatsToRows(search.chats)
@@ -362,7 +389,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           id: `feishu.im:chat:${row.id}`,
           title: row.title,
           subtitle: row.subtitle,
-          icon: 'MessagesSquare',
+          icon: row.icon || 'MessagesSquare',
           primaryAction: async () => {
             try {
               if (row.openUrl) {
@@ -401,9 +428,15 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         binaryPath: settings.binaryPath || undefined,
       })
       if (!listed.ok) {
-        const parts = [listed.message || ctx.t('error.chatListFailed')]
-        if (listed.hint) parts.push(listed.hint)
-        return ctx.output.error(parts.join('\n'))
+        return await presentFeishuCliFailure({
+          t: ctx.t,
+          output: ctx.output,
+          failure: listed,
+          fallbackKey: 'error.chatListFailed',
+          shell,
+          binaryPath: settings.binaryPath || undefined,
+          openUrl: (url) => openRuntimeUrl(url, (u) => ctx.api.openUrl(u)),
+        })
       }
 
       const rows = mapChatsToRows(listed.chats)
@@ -416,7 +449,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           id: `feishu.im:recent:${row.id}`,
           title: row.title,
           subtitle: row.subtitle,
-          icon: 'MessageCircle',
+          icon: row.icon || 'MessageCircle',
           primaryAction: async () => {
             try {
               if (row.openUrl) {
@@ -465,18 +498,25 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         return ctx.output.error(ctx.t('param.userQuery.hint'))
       }
 
-      const search = await searchUsers({
+      const search = await searchUsersWithAvatars({
         shell,
         query,
         binaryPath: settings.binaryPath || undefined,
       })
       if (!search.ok) {
-        const parts = [search.message || ctx.t('error.contactSearchFailed')]
-        if (search.hint) parts.push(search.hint)
-        return ctx.output.error(parts.join('\n'))
+        return await presentFeishuCliFailure({
+          t: ctx.t,
+          output: ctx.output,
+          failure: search,
+          fallbackKey: 'error.contactSearchFailed',
+          shell,
+          binaryPath: settings.binaryPath || undefined,
+          openUrl: (url) => openRuntimeUrl(url, (u) => ctx.api.openUrl(u)),
+        })
       }
 
-      const rows = mapUsersToRows(search.users)
+      // Full search still includes strangers, but people you've chatted with rank first.
+      const rows = sortUsersByIntersection(mapUsersToRows(search.users))
       if (rows.length === 0) {
         return ctx.output.text(ctx.t('error.noUsers'))
       }
@@ -486,7 +526,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           id: `feishu.contact:user:${row.id}`,
           title: row.title,
           subtitle: row.subtitle,
-          icon: 'User',
+          icon: row.icon || 'User',
           primaryAction: async () => {
             try {
               if (row.openUrl) {
@@ -660,24 +700,9 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
     title: 'tool.createDoc.title',
     subtitle: 'tool.createDoc.subtitle',
     icon: 'FilePlus',
-    aliases: ['建文档', '创建文档', 'create doc', '飞书建文档'],
-    requireParamSelection: true,
-    params: [
-      {
-        key: 'title',
-        label: 'param.docTitle.label',
-        type: 'text',
-        required: true,
-        hint: 'param.docTitle.hint',
-      },
-      {
-        key: 'content',
-        label: 'param.docContent.label',
-        type: 'text',
-        required: false,
-        hint: 'param.docContent.hint',
-      },
-    ],
+    aliases: ['建文档', '创建文档', 'create doc', '飞书建文档', '写文档', '空白文档'],
+    // No param form: one-tap confirm creates empty doc (or uses selection/input as body).
+    requireParamSelection: false,
     surfaces: { launcher: true },
     async run(ctx) {
       const settings = resolveSettings(ctx.settings)
@@ -686,17 +711,21 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         return ctx.output.error(ctx.t('error.shellMissing'))
       }
 
-      const title = String(ctx.params.title ?? '').trim()
+      // Prefer explicit param if host ever prefilled; else selection/active text; else empty.
       const content = String(ctx.params.content ?? ctx.input?.text ?? '').trim()
-      if (!title) {
-        return ctx.output.error(ctx.t('error.writeParams'))
-      }
+      const title = deriveTitleFromContent(content) || ctx.t('doc.defaultTitle')
+      const preview = content
+        ? ctx.t('confirm.createDocWithBody', {
+            title,
+            preview: content.slice(0, 36) + (content.length > 36 ? '…' : ''),
+          })
+        : ctx.t('confirm.createDocEmpty')
 
       return ctx.output.choices([
         {
           id: 'feishu.write:doc-confirm',
           title: ctx.t('confirm.createDoc'),
-          subtitle: title,
+          subtitle: preview,
           icon: 'FilePlus',
           primaryAction: async () => {
             const created = await createDoc({
@@ -707,9 +736,10 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
               confirmed: true,
             })
             if (!created.ok) {
-              const parts = [created.message || ctx.t('error.createDocFailed')]
-              if (created.hint) parts.push(created.hint)
-              return { ok: false as const, message: parts.join('\n') }
+              return {
+                ok: false as const,
+                message: created.message || ctx.t('error.createDocFailed'),
+              }
             }
             if (created.url) {
               try {
@@ -728,6 +758,109 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         },
         {
           id: 'feishu.write:doc-cancel',
+          title: ctx.t('confirm.cancel'),
+          subtitle: ctx.t('confirm.cancelHint'),
+          icon: 'X',
+          primaryAction: async () => ({ ok: true as const, message: ctx.t('action.cancelled') }),
+        },
+      ])
+    },
+  },
+  {
+    id: 'feishu.create-sheet',
+    title: 'tool.createSheet.title',
+    subtitle: 'tool.createSheet.subtitle',
+    icon: 'Sheet',
+    aliases: [
+      '建表格',
+      '创建表格',
+      '创建电子表格',
+      '建多维表格',
+      'create sheet',
+      'create spreadsheet',
+      'bitable',
+      '飞书表格',
+    ],
+    requireParamSelection: true,
+    params: [
+      {
+        key: 'type',
+        label: 'param.sheetType.label',
+        type: 'single-select',
+        required: true,
+        default: 'sheet',
+        options: [
+          {
+            label: 'param.sheetType.sheet',
+            value: 'sheet',
+            description: 'param.sheetType.sheetDesc',
+          },
+          {
+            label: 'param.sheetType.bitable',
+            value: 'bitable',
+            description: 'param.sheetType.bitableDesc',
+          },
+        ],
+      },
+      {
+        key: 'title',
+        label: 'param.sheetTitle.label',
+        type: 'text',
+        required: false,
+        hint: 'param.sheetTitle.hint',
+      },
+    ],
+    surfaces: { launcher: true },
+    async run(ctx) {
+      const settings = resolveSettings(ctx.settings)
+      const shell = getFeishuRuntime().shell
+      if (!shell) {
+        return ctx.output.error(ctx.t('error.shellMissing'))
+      }
+
+      const kindRaw = String(ctx.params.type ?? 'sheet').trim()
+      const kind = kindRaw === 'bitable' ? 'bitable' : 'sheet'
+      const title =
+        String(ctx.params.title ?? '').trim() ||
+        (kind === 'bitable' ? ctx.t('sheet.defaultBaseTitle') : ctx.t('sheet.defaultSheetTitle'))
+
+      return ctx.output.choices([
+        {
+          id: 'feishu.write:sheet-confirm',
+          title: ctx.t('confirm.createSheet'),
+          subtitle: `${kind === 'bitable' ? ctx.t('param.sheetType.bitable') : ctx.t('param.sheetType.sheet')} · ${title}`,
+          icon: kind === 'bitable' ? 'Table2' : 'Sheet',
+          primaryAction: async () => {
+            const created = await createSheet({
+              shell,
+              binaryPath: settings.binaryPath || undefined,
+              kind,
+              title,
+              confirmed: true,
+            })
+            if (!created.ok) {
+              return {
+                ok: false as const,
+                message: created.message || ctx.t('error.createSheetFailed'),
+              }
+            }
+            if (created.url) {
+              try {
+                await openRuntimeUrl(created.url, (url) => ctx.api.openUrl(url))
+              } catch {
+                // ignore
+              }
+            }
+            return {
+              ok: true as const,
+              message: created.url
+                ? ctx.t('action.sheetCreated') + ': ' + created.url
+                : ctx.t('action.sheetCreated'),
+            }
+          },
+        },
+        {
+          id: 'feishu.write:sheet-cancel',
           title: ctx.t('confirm.cancel'),
           subtitle: ctx.t('confirm.cancelHint'),
           icon: 'X',
@@ -771,9 +904,15 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         binaryPath: settings.binaryPath || undefined,
       })
       if (!fetched.ok || !fetched.content) {
-        const parts = [fetched.message || ctx.t('error.fetchFailed')]
-        if (fetched.hint) parts.push(fetched.hint)
-        return ctx.output.error(parts.join('\n'))
+        return await presentFeishuCliFailure({
+          t: ctx.t,
+          output: ctx.output,
+          failure: fetched,
+          fallbackKey: 'error.fetchFailed',
+          shell,
+          binaryPath: settings.binaryPath || undefined,
+          openUrl: (url) => openRuntimeUrl(url, (u) => ctx.api.openUrl(u)),
+        })
       }
 
       const title = fetched.title || ctx.t('tool.docsFetch.title')
@@ -826,9 +965,15 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         binaryPath: settings.binaryPath || undefined,
       })
       if (!search.ok) {
-        const parts = [search.message || ctx.t('error.messagesSearchFailed')]
-        if (search.hint) parts.push(search.hint)
-        return ctx.output.error(parts.join('\n'))
+        return await presentFeishuCliFailure({
+          t: ctx.t,
+          output: ctx.output,
+          failure: search,
+          fallbackKey: 'error.messagesSearchFailed',
+          shell,
+          binaryPath: settings.binaryPath || undefined,
+          openUrl: (url) => openRuntimeUrl(url, (u) => ctx.api.openUrl(u)),
+        })
       }
 
       const rows = mapMessagesToRows(search.messages)
@@ -866,7 +1011,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
     title: 'tool.myTasks.title',
     subtitle: 'tool.myTasks.subtitle',
     icon: 'ListTodo',
-    aliases: ['我的待办', '任务', 'my tasks', 'todos', '飞书待办'],
+    aliases: ['我的待办', '我的任务', '任务', '待办', 'my tasks', 'todos', 'wode', 'wodedaiban', '飞书待办'],
     surfaces: { launcher: true },
     async run(ctx) {
       const settings = resolveSettings(ctx.settings)
@@ -880,9 +1025,15 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         binaryPath: settings.binaryPath || undefined,
       })
       if (!listed.ok) {
-        const parts = [listed.message || ctx.t('error.tasksFailed')]
-        if (listed.hint) parts.push(listed.hint)
-        return ctx.output.error(parts.join('\n'))
+        return await presentFeishuCliFailure({
+          t: ctx.t,
+          output: ctx.output,
+          failure: listed,
+          fallbackKey: 'error.tasksFailed',
+          shell,
+          binaryPath: settings.binaryPath || undefined,
+          openUrl: (url) => openRuntimeUrl(url, (u) => ctx.api.openUrl(u)),
+        })
       }
 
       const rows = mapTasksToRows(listed.tasks)
@@ -950,9 +1101,15 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         binaryPath: settings.binaryPath || undefined,
       })
       if (!search.ok) {
-        const parts = [search.message || ctx.t('error.minutesSearchFailed')]
-        if (search.hint) parts.push(search.hint)
-        return ctx.output.error(parts.join('\n'))
+        return await presentFeishuCliFailure({
+          t: ctx.t,
+          output: ctx.output,
+          failure: search,
+          fallbackKey: 'error.minutesSearchFailed',
+          shell,
+          binaryPath: settings.binaryPath || undefined,
+          openUrl: (url) => openRuntimeUrl(url, (u) => ctx.api.openUrl(u)),
+        })
       }
 
       const rows = mapMinutesToRows(search.minutes)

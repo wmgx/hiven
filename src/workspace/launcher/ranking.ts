@@ -7,6 +7,7 @@
  *   score = matchScore + usageScore(surface) + hostStaticPriority
  *     + installFreshnessScore + textMatchBoost + dynamicBoost
  *     + intentScore + contextBoost
+ *     + scoreBias (optional, provider-declared, |bias| < one match tier)
  *
  * Rules:
  *  - Match relevance dominates (match tier contributes thousands; the rest are
@@ -15,6 +16,8 @@
  *  - Intent slots are large (1.6k–2.4k) but still below exact title match (6k).
  *  - Usage is per surface.
  *  - Plugins cannot set static priority; only host-owned items may.
+ *  - Product policy (e.g. demote doc mix-in vs commands) is declared by providers
+ *    via scoreBias — host only applies a clamped bias, no product hardcoding.
  *  - Query-empty and query-present modes use the same pipeline, different weights.
  */
 
@@ -43,6 +46,8 @@ const INSTALL_FRESHNESS_WINDOW_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 const MAX_STATIC_PRIORITY = 300 // host-only ceiling, still < 1000
 const TEXT_MATCH_BOOST = 800 // strong boost when tool can process the content; below match tier (1000) so an exact name match still wins
 const DYNAMIC_ITEM_BOOST = 900 // dynamic items are plugin-asserted matches; rank above static items without text match
+/** |scoreBias| cap — must stay below one match tier (1000). */
+const SCORE_BIAS_CAP = 500
 
 /** Content conf ≥ 0.85 or exact accepts.alias match. */
 const INTENT_SCORE_STRONG = 2400
@@ -116,6 +121,12 @@ function getCachedSearchableFields(item: LauncherItem, locale: Locale): Searchab
 
 function isHostAppLauncherItem(item: LauncherItem): boolean {
   return item.systemKey.startsWith('host:app-launcher:app:')
+}
+
+/** Clamp provider-declared score bias so it cannot overturn a match tier. */
+export function clampScoreBias(bias: number | undefined): number {
+  if (bias == null || !Number.isFinite(bias)) return 0
+  return Math.max(-SCORE_BIAS_CAP, Math.min(SCORE_BIAS_CAP, bias))
 }
 
 /** App / window / tab navigation rows eligible for strong-text demotion. */
@@ -293,6 +304,7 @@ export function scoreLauncherItem(
     0,
     Math.min(50, item.ranking?.providerPriorityBoost ?? 0),
   )
+  const scoreBias = clampScoreBias(item.ranking?.scoreBias)
   let score =
     matchScore +
     usageScore(ctx, item) +
@@ -302,7 +314,8 @@ export function scoreLauncherItem(
     dynamicBoost +
     intentScore(item, ctx) +
     contextBoost(item, ctx) +
-    providerPriorityBoost
+    providerPriorityBoost +
+    scoreBias
   if (isDesktopNavigationItem(item) && hasStrongTextContentIntent(ctx.detections)) {
     score -= STRONG_TEXT_INTENT_NAV_PENALTY
   }

@@ -68,7 +68,12 @@ function item(systemKey, title, opts = {}) {
   return {
     systemKey,
     kind: opts.kind ?? 'plugin',
-    display: { title, aliases: opts.aliases },
+    display: {
+      title,
+      aliases: opts.aliases,
+      kindLabel: opts.kindLabel,
+      kindLabelI18n: opts.kindLabelI18n,
+    },
     behavior: { type: 'perform' },
     staticPriority: opts.staticPriority,
     ranking: opts.ranking,
@@ -190,6 +195,64 @@ const rankedPattern = ranking.rankLauncherItems(
 assert.ok(
   rankedPattern.some((row) => row.systemKey === patternHit.systemKey),
   'dynamic matchPattern item must remain after ranking filter even when title lacks the query',
+)
+
+// --- 10. Provider-declared scoreBias (product policy), host only clamps/applies ---
+const createDocCmd = item('plugin:feishu:launcher:feishu.create-doc', 'Create Document', {
+  kind: 'plugin',
+  aliases: ['创建文档', '建文档'],
+})
+// Feishu docs provider sets scoreBias: -180; host must not hardcode feishu.
+const hostDoc = item('feishu.docs:document:tok_abc', 'Create Document', {
+  kind: 'host',
+  kindLabel: 'Document',
+  kindLabelI18n: { en: 'Document', zh: '文档' },
+  ranking: { providerPriorityBoost: 50, scoreBias: -180 },
+})
+let uDocs = usage.emptyUsageBySurface()
+for (let i = 0; i < 30; i++) uDocs = usage.recordSelection(uDocs, 'global-launcher', hostDoc.systemKey, now)
+const rankedPluginOverDoc = ranking.rankLauncherItems(
+  {
+    query: 'Create Document',
+    locale: 'en',
+    surfaceId: 'global-launcher',
+    usage: uDocs,
+    now,
+  },
+  [hostDoc, createDocCmd],
+)
+assert.equal(
+  rankedPluginOverDoc[0].systemKey,
+  createDocCmd.systemKey,
+  'provider scoreBias demotes doc mix-in under same match tier',
+)
+assert.equal(ranking.clampScoreBias(-180), -180, 'scoreBias within cap is preserved')
+assert.equal(ranking.clampScoreBias(-9999), -500, 'scoreBias is clamped below one match tier')
+
+// Stronger title match on the doc still wins (higher match tier beats bias < 1000).
+const exactDoc = item('feishu.docs:document:tok_exact', 'UniqueDocTitleXYZ', {
+  kind: 'host',
+  kindLabel: 'Document',
+  ranking: { scoreBias: -180 },
+})
+const weakCmd = item('plugin:feishu:launcher:feishu.other', 'Other command', {
+  kind: 'plugin',
+  aliases: ['other'],
+})
+const rankedDocWins = ranking.rankLauncherItems(
+  {
+    query: 'UniqueDocTitleXYZ',
+    locale: 'en',
+    surfaceId: 'global-launcher',
+    usage: usage.emptyUsageBySurface(),
+    now,
+  },
+  [weakCmd, exactDoc],
+)
+assert.equal(
+  rankedDocWins[0].systemKey,
+  exactDoc.systemKey,
+  'stronger document title match still outranks weaker plugin',
 )
 
 console.log('✓ test-launcher-ranking passed')

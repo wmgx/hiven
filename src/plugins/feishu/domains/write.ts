@@ -98,19 +98,18 @@ export async function createCalendarEvent(options: {
 export async function createDoc(options: {
   shell: LarkCliShell
   binaryPath?: string
-  title: string
+  /** Optional; derived from content or defaulted by caller when empty. */
+  title?: string
   content?: string
   confirmed: boolean
   signal?: AbortSignal
 }): Promise<{ ok: boolean; message?: string; code?: string | number; hint?: string; data?: unknown; url?: string }> {
-  const title = options.title.trim()
-  if (!title) {
-    return { ok: false, code: 'invalid_input', message: 'title is required' }
-  }
+  const content = options.content?.trim() ?? ''
+  const title = (options.title?.trim() || deriveTitleFromContent(content) || 'Untitled').slice(0, 120)
 
   const args = ['docs', '+create', '--as', 'user', '--title', title]
-  if (options.content?.trim()) {
-    args.push('--doc-format', 'markdown', '--content', options.content.trim())
+  if (content) {
+    args.push('--doc-format', 'markdown', '--content', content)
   }
 
   const result = await runLarkCli({
@@ -134,17 +133,70 @@ export async function createDoc(options: {
   }
 }
 
+export type FeishuSheetKind = 'sheet' | 'bitable'
+
+/**
+ * Create a spreadsheet (`sheets +create`) or multi-dimensional table (`base +base-create`).
+ */
+export async function createSheet(options: {
+  shell: LarkCliShell
+  binaryPath?: string
+  kind: FeishuSheetKind
+  title?: string
+  confirmed: boolean
+  signal?: AbortSignal
+}): Promise<{ ok: boolean; message?: string; code?: string | number; hint?: string; data?: unknown; url?: string }> {
+  const kind = options.kind === 'bitable' ? 'bitable' : 'sheet'
+  const title = (options.title?.trim() || (kind === 'bitable' ? 'Untitled base' : 'Untitled sheet')).slice(0, 120)
+
+  const args =
+    kind === 'bitable'
+      ? ['base', '+base-create', '--as', 'user', '--name', title]
+      : ['sheets', '+create', '--as', 'user', '--title', title]
+
+  const result = await runLarkCli({
+    shell: options.shell,
+    binaryPath: options.binaryPath,
+    args,
+    timeoutMs: 20000,
+    signal: options.signal,
+    risk: 'write',
+    confirmed: options.confirmed,
+  })
+
+  const url = extractUrl(result.data)
+  return {
+    ok: result.ok,
+    message: result.message,
+    code: result.code,
+    hint: result.hint,
+    data: result.data,
+    url,
+  }
+}
+
+/** First non-empty markdown line as title (strip leading #). */
+export function deriveTitleFromContent(content: string): string | undefined {
+  for (const line of content.split(/\r?\n/)) {
+    const t = line.trim().replace(/^#{1,6}\s+/, '').trim()
+    if (t) return t.slice(0, 80)
+  }
+  return undefined
+}
+
 function extractUrl(data: unknown): string | undefined {
   if (!data || typeof data !== 'object') return undefined
   const obj = data as Record<string, unknown>
-  for (const key of ['url', 'doc_url', 'document_url', 'share_url']) {
+  for (const key of ['url', 'doc_url', 'document_url', 'share_url', 'spreadsheet_url', 'link']) {
     if (typeof obj[key] === 'string' && obj[key]) return obj[key] as string
   }
-  if (obj.document && typeof obj.document === 'object') {
-    return extractUrl(obj.document)
-  }
-  if (obj.data && typeof obj.data === 'object') {
-    return extractUrl(obj.data)
+  // Common nested shapes from sheets/base create
+  for (const nest of ['document', 'spreadsheet', 'base', 'app', 'data']) {
+    const child = obj[nest]
+    if (child && typeof child === 'object') {
+      const found = extractUrl(child)
+      if (found) return found
+    }
   }
   return undefined
 }

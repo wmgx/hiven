@@ -19,6 +19,11 @@ import {
   collectStaticCandidates,
   filterDynamicForSurface,
 } from './registry'
+import { resolvePreservedSelection } from './selectionPreserve'
+import {
+  buildPersistableRecentLauncherItems,
+  payloadFromLauncherItem,
+} from './persistableRecents'
 import {
   installLauncherPerfDebugApi,
   logLauncherPerf,
@@ -97,12 +102,14 @@ export function useLauncherSession({
   const locale = useAppStore((s) => s.locale)
   const launcherUsageBySurface = useAppStore((s) => s.launcherUsageBySurface)
   const recordLauncherSelection = useAppStore((s) => s.recordLauncherSelection)
+  const launcherPersistableRecents = useAppStore((s) => s.launcherPersistableRecents)
+  const recordPersistableLauncherSelection = useAppStore((s) => s.recordPersistableLauncherSelection)
   const pluginRegistryVersion = usePluginRegistryVersion()
 
-  const [query, setQuery] = useState('')
+  const [query, setQueryState] = useState('')
   /** Keep the input box on the live query; defer ranking so keystrokes stay responsive. */
   const deferredQuery = useDeferredValue(query)
-  const [selectedIndex, setSelectedIndex] = useState(0)
+  const [selectedIndex, setSelectedIndexState] = useState(0)
   const [controllerState, setControllerState] = useState<LauncherControllerState | null>(null)
   const [controller, setController] = useState<LauncherController | null>(null)
   /** Plugin dynamicItems (calc, timestamp, web-open, …) — progressive. */
@@ -127,6 +134,13 @@ export function useLauncherSession({
   const pluginPartialsRef = useRef(new Map<string, LauncherItem[]>())
   /** Per document-source partial results for the in-flight generation. */
   const documentPartialsRef = useRef(new Map<string, LauncherItem[]>())
+  /**
+   * Identity of the highlighted row. When async partials append / re-rank,
+   * re-resolve index to this key so the user's selection does not jump.
+   */
+  const selectedKeyRef = useRef<string | null>(null)
+  const rankedItemsRef = useRef<LauncherItem[]>([])
+  const selectedIndexRef = useRef(0)
 
   useEffect(() => {
     requestCloseRef.current = requestClose
@@ -136,9 +150,34 @@ export function useLauncherSession({
     installLauncherPerfDebugApi()
   }, [])
 
+  const setSelectedIndex = useCallback((value: number | ((current: number) => number)) => {
+    setSelectedIndexState((prev) => {
+      const next = typeof value === 'function' ? value(prev) : value
+      selectedIndexRef.current = next
+      const item = rankedItemsRef.current[next]
+      // Pin identity on user / host-driven index changes (arrow keys, hover, query reset).
+      selectedKeyRef.current = item?.systemKey ?? null
+      return next
+    })
+  }, [])
+
+  /** Typing starts a new result generation — drop sticky key so highlight resets cleanly. */
+  const setQuery = useCallback((value: string) => {
+    setQueryState((prev) => {
+      if (prev !== value) {
+        selectedKeyRef.current = null
+        selectedIndexRef.current = 0
+        setSelectedIndexState(0)
+      }
+      return value
+    })
+  }, [])
+
   const reset = useCallback(() => {
-    setQuery('')
-    setSelectedIndex(0)
+    setQueryState('')
+    selectedKeyRef.current = null
+    selectedIndexRef.current = 0
+    setSelectedIndexState(0)
     setPluginDynamicItems([])
     setHostDynamicItems([])
     setDocumentDynamicItems([])
@@ -152,7 +191,6 @@ export function useLauncherSession({
     documentAbortRef.current?.abort()
     controllerRef.current?.reset()
   }, [])
-
   useEffect(() => {
     if (!open) return
     const openedAt = launcherPerfNow()
@@ -220,6 +258,11 @@ export function useLauncherSession({
                 recordLauncherSelection(surfaceId, key)
               }
             }
+            // Plugin-declared durable content → host recents for next-session recommend.
+            const payload = payloadFromLauncherItem(item)
+            if (payload) {
+              recordPersistableLauncherSelection(payload)
+            }
           },
           requestClose: () => requestCloseRef.current(),
           onChange: (state) => {
@@ -238,7 +281,7 @@ export function useLauncherSession({
       logLauncherPerfDuration('session:open:controller-reset', openedAt, { surfaceId: normalizedHostId })
     })
     return () => { cancelled = true }
-  }, [locale, makeApi, normalizedHostId, open, recordLauncherSelection])
+  }, [locale, makeApi, normalizedHostId, open, recordLauncherSelection, recordPersistableLauncherSelection])
 
   // ── Plugin dynamic path (fast debounce, progressive partials) ──────────────
   useEffect(() => {
@@ -471,6 +514,17 @@ export function useLauncherSession({
     return staticItemFilter ? staticItemFilter(raw) : raw
   }, [normalizedHostId, pluginRegistryVersion, staticItemFilter])
 
+  /** Host recents from plugin-opted persistable selections (contacts/chats/docs). */
+  const persistableRecentItems = useMemo<LauncherItem[]>(() => {
+    if (normalizedHostId !== 'global-launcher') return []
+    return buildPersistableRecentLauncherItems({
+      recents: launcherPersistableRecents,
+      query: deferredQuery.trim(),
+      locale,
+      max: deferredQuery.trim() ? 10 : 8,
+    })
+  }, [deferredQuery, launcherPersistableRecents, locale, normalizedHostId])
+
   const rankedItems = useMemo<LauncherItem[]>(() => {
     // contentText for textMatch: Object Block takes precedence (it IS the text to process);
     // only fall back to query when no Object Block is present.
@@ -478,6 +532,9 @@ export function useLauncherSession({
     const rankQuery = deferredQuery.trim()
     const contentText = objectBlockText ?? (rankQuery || undefined)
     const detections = contentText ? detectContent(contentText) : []
+    // Dedupe: live document results win over rehydrated recents with the same systemKey.
+    const liveKeys = new Set(documentDynamicItems.map((item) => item.systemKey))
+    const recentsDeduped = persistableRecentItems.filter((item) => !liveKeys.has(item.systemKey))
     return measureLauncherPerfSync('session:rank-items', () => rankLauncherItems(
       {
         query: rankQuery,
@@ -489,7 +546,13 @@ export function useLauncherSession({
         detections,
         foregroundApp,
       },
-      [...staticCandidates, ...pluginDynamicItems, ...hostDynamicItems, ...documentDynamicItems],
+      [
+        ...staticCandidates,
+        ...pluginDynamicItems,
+        ...hostDynamicItems,
+        ...recentsDeduped,
+        ...documentDynamicItems,
+      ],
     ), (items) => ({
       surfaceId: normalizedHostId,
       queryLength: rankQuery.length,
@@ -498,6 +561,7 @@ export function useLauncherSession({
         staticCandidates.length +
         pluginDynamicItems.length +
         hostDynamicItems.length +
+        recentsDeduped.length +
         documentDynamicItems.length,
       resultCount: items.length,
     }))
@@ -510,9 +574,27 @@ export function useLauncherSession({
     locale,
     normalizedHostId,
     objectBlockText,
+    persistableRecentItems,
     pluginDynamicItems,
     staticCandidates,
   ])
+  // After progressive partials / re-rank: keep highlight on the same systemKey.
+  useEffect(() => {
+    rankedItemsRef.current = rankedItems
+    const resolved = resolvePreservedSelection({
+      selectedKey: selectedKeyRef.current,
+      selectedIndex: selectedIndexRef.current,
+      items: rankedItems,
+    })
+    selectedKeyRef.current = resolved.key
+    if (resolved.index !== selectedIndexRef.current) {
+      selectedIndexRef.current = resolved.index
+      setSelectedIndexState(resolved.index)
+    } else if (!selectedKeyRef.current && rankedItems[resolved.index]) {
+      // First paint with items: pin identity so later appends track this row.
+      selectedKeyRef.current = rankedItems[resolved.index]!.systemKey
+    }
+  }, [rankedItems])
 
   return {
     hostId: normalizedHostId,

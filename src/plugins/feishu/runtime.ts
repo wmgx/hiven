@@ -18,6 +18,8 @@ import {
   registerFeishuDocsProvider,
   unregisterFeishuDocsProvider,
 } from './provider/docsTargetProvider'
+import { listRecentChats, mapChatsToRows } from './domains/im'
+import { rememberL1Entities } from './search/l1Cache'
 
 export type FeishuRuntime = {
   shell: LarkCliShell | null
@@ -32,6 +34,8 @@ let runtime: FeishuRuntime = {
   openUrl: null,
   t: null,
 }
+
+let warmStarted = false
 
 export function bindFeishuRuntime(partial: {
   shell?: LarkCliShell | null
@@ -69,4 +73,34 @@ export function applyFeishuProviderRegistration(settings?: FeishuSettings): void
 
   if (pluginOn && s.contactsMixEnabled !== false) registerFeishuContactsProvider()
   else unregisterFeishuContactsProvider()
+
+  if (pluginOn) {
+    void warmFeishuL1EntityIndex()
+  }
+}
+
+/**
+ * Prefetch recent chats into the L1 entity index so first launcher open can
+ * match common session names without waiting for +chat-search.
+ */
+export async function warmFeishuL1EntityIndex(): Promise<void> {
+  if (warmStarted) return
+  const shell = runtime.shell
+  const settings = runtime.settings
+  if (!shell || settings.enabled === false) return
+  if (settings.chatsMixEnabled === false) return
+  warmStarted = true
+  try {
+    const result = await listRecentChats({
+      shell,
+      binaryPath: settings.binaryPath || undefined,
+      timeoutMs: 5000,
+    })
+    if (!result.ok) return
+    const rows = mapChatsToRows(result.chats).filter((row) => Boolean(row.openUrl))
+    if (rows.length) rememberL1Entities('chats', rows)
+  } catch {
+    // warm is best-effort; allow retry next registration if still cold
+    warmStarted = false
+  }
 }

@@ -9,6 +9,12 @@ import type {
   SystemLauncherItemKey,
 } from './workspace/launcher/types'
 import {
+  emptyPersistableRecents,
+  recordPersistableRecent,
+  type PersistableLauncherPayload,
+  type PersistableRecentEntry,
+} from './workspace/launcher/persistableRecents'
+import {
   emptyUsageBySurface,
   recordSelection as recordSelectionPure,
   migrateLegacyUsage,
@@ -125,6 +131,13 @@ interface AppState {
   launcherUsageBySurface: LauncherUsageBySurface
   recordLauncherSelection: (surfaceId: LauncherSurfaceId, itemKey: SystemLauncherItemKey) => void
 
+  /**
+   * Plugin-opted durable content recents (contacts / chats / docs snapshots).
+   * Host-owned; plugins only declare persistable + payload at selection time.
+   */
+  launcherPersistableRecents: PersistableRecentEntry[]
+  recordPersistableLauncherSelection: (payload: PersistableLauncherPayload) => void
+
   // Saved params per action (for persistParams feature)
   savedActionParams: Record<string, Record<string, any>>
   saveActionParams: (actionName: string, params: Record<string, any>) => void
@@ -235,6 +248,15 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     launcherUsageBySurface: recordSelectionPure(state.launcherUsageBySurface, surfaceId, itemKey, Date.now()),
   })),
 
+  launcherPersistableRecents: emptyPersistableRecents(),
+  recordPersistableLauncherSelection: (payload: PersistableLauncherPayload) => set((state) => ({
+    launcherPersistableRecents: recordPersistableRecent(
+      state.launcherPersistableRecents,
+      payload,
+      Date.now(),
+    ),
+  })),
+
   // Saved params per action
   savedActionParams: {},
   saveActionParams: (actionName, params) => set((state) => ({
@@ -289,6 +311,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     locale: state.locale,
     savedActionParams: state.savedActionParams,
     launcherUsageBySurface: state.launcherUsageBySurface,
+    launcherPersistableRecents: state.launcherPersistableRecents,
   }),
   merge: (persisted, current) => {
     const persistedState = persisted as Partial<AppState> & {
@@ -296,6 +319,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
       actionUsageCounts?: Record<string, number>
       actionUsageBySource?: LegacyActionUsageBySource
       launcherUsageBySurface?: LauncherUsageBySurface
+      launcherPersistableRecents?: PersistableRecentEntry[]
     }
     // Drop legacy usage fields from the merged live state.
     const {
@@ -357,6 +381,20 @@ export const useAppStore = create<AppState>()(persist((set) => ({
         merged.launcherUsageBySurface = emptyUsageBySurface()
       }
     }
+
+    const recents = persistedState.launcherPersistableRecents
+    merged.launcherPersistableRecents = Array.isArray(recents)
+      ? recents.filter(
+          (row) =>
+            row &&
+            typeof row === 'object' &&
+            typeof row.persistKey === 'string' &&
+            typeof row.systemKey === 'string' &&
+            typeof row.url === 'string' &&
+            typeof row.title === 'string',
+        )
+      : emptyPersistableRecents()
+
     return merged
   },
 }))

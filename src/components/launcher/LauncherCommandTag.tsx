@@ -47,7 +47,7 @@ export function LauncherCommandTag({
   )
 }
 
-/** Lightweight gray value chip for committed params beside the command tag. */
+/** Lightweight gray chip for committed params — shows param name + value. */
 export function LauncherParamValueChip({
   label,
   value,
@@ -55,13 +55,24 @@ export function LauncherParamValueChip({
   label: string
   value: string
 }) {
+  const text = label ? `${label}: ${value}` : value
   return (
     <span
       className="launcher-param-chip"
       data-testid="launcher-param-chip"
-      title={`${label}: ${value}`}
+      title={text}
     >
-      {value}
+      {label ? (
+        <>
+          <span className="launcher-param-chip-label">{label}</span>
+          <span className="launcher-param-chip-sep" aria-hidden>
+            :
+          </span>
+          <span className="launcher-param-chip-value">{value}</span>
+        </>
+      ) : (
+        value
+      )}
     </span>
   )
 }

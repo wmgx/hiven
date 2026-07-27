@@ -502,6 +502,11 @@ export type LauncherItem = {
      * Host-owned; see desktopTargets/constants.ts PROVIDER_PRIORITY_CAP.
      */
     providerPriorityBoost?: number
+    /**
+     * Optional per-item score bias from DesktopTarget.scoreBias (clamped |bias| ≤ 500).
+     * Product policy lives on the provider; host only applies the clamp.
+     */
+    scoreBias?: number
   }
   /**
    * Host-only legacy usage keys (e.g. the backing command id) consulted as a
@@ -535,6 +540,15 @@ export type LauncherItem = {
    * Dynamic items must opt in with a stable systemKey; static items omit this (treated as true).
    */
   recordUsage?: boolean
+  /**
+   * Host may keep a cross-session recent snapshot when true (plugin-declared
+   * durable content such as contacts / chats / docs). Requires persistPayload.
+   */
+  persistable?: boolean
+  /**
+   * Snapshot used by host recents store. Only set when persistable is true.
+   */
+  persistPayload?: import('./persistableRecents').PersistableLauncherPayload
   /** Optional collect-input suggestions loader (host-resolved from contribution). */
   suggest?: LauncherSuggestHandler
   execute: LauncherExecuteHandler

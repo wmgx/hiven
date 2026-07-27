@@ -3,8 +3,8 @@
  * Write / high-risk-write require explicit confirmation before any shell call.
  */
 
-import { mapLarkCliError } from './errors'
-import { parseLarkCliJson } from './parse'
+import { extractMissingScopes, mapLarkCliError } from './errors'
+import { parseLarkCliJson, type LarkCliParsed } from './parse'
 
 export type LarkCliRisk = 'read' | 'write' | 'high-risk-write'
 
@@ -73,6 +73,28 @@ function safeJsonSlice(value: unknown): string | undefined {
   } catch {
     return undefined
   }
+}
+
+/**
+ * lark-cli often prints error envelopes on stderr (exit≠0) while stdout is empty.
+ * Prefer stdout when it parses; otherwise fall back to stderr JSON.
+ */
+export function pickCliJsonText(stdout: string, stderr: string): string {
+  const out = (stdout ?? '').trim()
+  const err = (stderr ?? '').trim()
+  if (out) {
+    const parsed = parseLarkCliJson(out)
+    if (parsed.code !== 'parse_error' && parsed.code !== 'empty_output') return out
+  }
+  if (err) {
+    const parsed = parseLarkCliJson(err)
+    if (parsed.code !== 'parse_error' && parsed.code !== 'empty_output') return err
+  }
+  return out || err
+}
+
+function parseCliStreams(stdout: string, stderr: string): LarkCliParsed {
+  return parseLarkCliJson(pickCliJsonText(stdout, stderr))
 }
 
 export async function runLarkCli(options: RunLarkCliOptions): Promise<LarkCliResult> {
@@ -146,24 +168,15 @@ export async function runLarkCli(options: RunLarkCliOptions): Promise<LarkCliRes
     }
   }
 
-  const parsed = parseLarkCliJson(shellResult.stdout)
+  const parsed = parseCliStreams(shellResult.stdout, shellResult.stderr)
   if (parsed.code === 'parse_error' || parsed.code === 'empty_output') {
-    // Non-zero exit without JSON still maps to a readable error
-    if (shellResult.exitCode != null && shellResult.exitCode !== 0) {
-      const mapped = mapLarkCliError({
-        exitCode: shellResult.exitCode,
-        stderr: shellResult.stderr,
-        stdoutMessage: shellResult.stdout.slice(0, 300),
-      })
-      return {
-        ok: false,
-        code: mapped.code,
-        message: mapped.message,
-        hint: mapped.hint,
-        stderr: shellResult.stderr,
-      }
-    }
-    const mapped = mapLarkCliError({ parseFailed: true, stderr: shellResult.stderr })
+    const mapped = mapLarkCliError({
+      exitCode: shellResult.exitCode,
+      stderr: shellResult.stderr,
+      stdoutMessage: shellResult.stdout.slice(0, 300),
+      parseFailed: true,
+      missingScopes: extractMissingScopes(shellResult.stderr, shellResult.stdout),
+    })
     return {
       ok: false,
       code: mapped.code,
@@ -174,15 +187,23 @@ export async function runLarkCli(options: RunLarkCliOptions): Promise<LarkCliRes
   }
 
   if (!parsed.ok || (shellResult.exitCode != null && shellResult.exitCode !== 0)) {
+    const scopes = extractMissingScopes(
+      shellResult.stderr,
+      shellResult.stdout,
+      parsed.message,
+      typeof parsed.error === 'string' ? parsed.error : safeJsonSlice(parsed.error),
+    )
     const stdoutMessage =
       parsed.message ||
-      (parsed.error != null ? safeJsonSlice(parsed.error) : undefined) ||
-      shellResult.stdout.slice(0, 400)
+      (scopes.length ? `missing required scope(s): ${scopes.join(', ')}` : undefined) ||
+      (parsed.error != null && !scopes.length ? humanErrorFromParsed(parsed) : undefined) ||
+      undefined
     const mapped = mapLarkCliError({
       exitCode: shellResult.exitCode,
       stderr: shellResult.stderr,
       stdoutMessage,
       code: parsed.code,
+      missingScopes: scopes,
     })
     return {
       ok: false,
@@ -203,4 +224,13 @@ export async function runLarkCli(options: RunLarkCliOptions): Promise<LarkCliRes
     cliNotice: parsed.cliNotice,
     stderr: shellResult.stderr || undefined,
   }
+}
+
+function humanErrorFromParsed(parsed: LarkCliParsed): string | undefined {
+  if (parsed.message) return parsed.message
+  if (parsed.error && typeof parsed.error === 'object' && !Array.isArray(parsed.error)) {
+    const msg = (parsed.error as Record<string, unknown>).message
+    if (typeof msg === 'string') return msg
+  }
+  return undefined
 }

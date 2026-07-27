@@ -3,17 +3,23 @@
  */
 
 import { getPluginHostSdk, type DesktopTargetProvider } from '@hiven/plugin'
-import { mapUsersToRows, searchUsers, type FeishuUserRow } from '../domains/contact'
+import {
+  hasContactIntersection,
+  mapUsersToRows,
+  searchUsersWithAvatars,
+  sortUsersByIntersection,
+  type FeishuUserRow,
+} from '../domains/contact'
 import { openFeishuTarget } from '../domains/windowFocus'
 import { getFeishuRuntime } from '../runtime'
 import {
   beginL1Generation,
-  getL1Cache,
   isL1GenerationCurrent,
   isL1QueryReady,
   L1_PAGE_SIZE,
   L1_SEARCH_TIMEOUT_MS,
-  setL1Cache,
+  resolveL1List,
+  touchL1EntityAccess,
   type L1Domain,
 } from '../search/l1Cache'
 
@@ -33,9 +39,6 @@ export function createFeishuContactsProvider(): DesktopTargetProvider {
       if (!q || !isL1QueryReady(q)) return []
       if (ctx.signal?.aborted) return []
 
-      const cached = getL1Cache<FeishuUserRow[]>(DOMAIN, q)
-      if (cached) return toTargets(cached)
-
       const generation = beginL1Generation(DOMAIN)
       try {
         const runtime = getFeishuRuntime()
@@ -43,22 +46,36 @@ export function createFeishuContactsProvider(): DesktopTargetProvider {
         if (settings.enabled === false || settings.contactsMixEnabled === false) return []
         if (!runtime.shell) return []
 
-        const search = await searchUsers({
-          shell: runtime.shell,
+        const rows = await resolveL1List<FeishuUserRow>({
+          domain: DOMAIN,
           query: q,
-          binaryPath: settings.binaryPath || undefined,
+          limit: L1_PAGE_SIZE,
           signal: ctx.signal,
-          timeoutMs: L1_SEARCH_TIMEOUT_MS,
-          pageSize: L1_PAGE_SIZE,
+          fetch: async () => {
+            // L1 mix-in: only people with intersection (already chatted).
+            // search-user has no avatar field — searchUsersWithAvatars best-effort enriches.
+            const search = await searchUsersWithAvatars({
+              shell: runtime.shell!,
+              query: q,
+              binaryPath: settings.binaryPath || undefined,
+              signal: ctx.signal,
+              timeoutMs: L1_SEARCH_TIMEOUT_MS,
+              pageSize: L1_PAGE_SIZE,
+              onlyChatted: true,
+            })
+            if (!search.ok) return []
+            return sortUsersByIntersection(
+              mapUsersToRows(search.users)
+                .filter((row) => Boolean(row.openUrl))
+                .filter((row) => hasContactIntersection(row)),
+            ).slice(0, L1_PAGE_SIZE)
+          },
         })
-        if (!isL1GenerationCurrent(DOMAIN, generation) || ctx.signal?.aborted) return []
-        if (!search.ok) return []
 
-        const rows = mapUsersToRows(search.users)
-          .filter((row) => Boolean(row.openUrl))
-          .slice(0, L1_PAGE_SIZE)
-        setL1Cache(DOMAIN, q, rows)
-        return toTargets(rows)
+        if (!isL1GenerationCurrent(DOMAIN, generation) || ctx.signal?.aborted) return []
+        // Drop cache hits that predate intersection filter / strangers.
+        const visible = rows.filter((row) => hasContactIntersection(row) && row.openUrl)
+        return toTargets(visible)
       } catch {
         return []
       }
@@ -68,13 +85,25 @@ export function createFeishuContactsProvider(): DesktopTargetProvider {
       if (!url) return
       const runtime = getFeishuRuntime()
       if (!runtime.openUrl) return
+      // Sticky: visited people stay in local index longer and rank higher next time.
+      const entityId =
+        (typeof target.meta?.entityId === 'string' && target.meta.entityId) ||
+        target.id.replace(/^feishu\.contacts:person:/, '')
+      touchL1EntityAccess(DOMAIN, {
+        id: entityId,
+        title: target.title,
+        subtitle: target.subtitle,
+        keywords: target.keywords,
+        openUrl: url,
+      })
       try {
+        // Chat deep link already routes + focuses; skip title AXRaise which can
+        // raise an unrelated window whose title merely contains the person name.
         await openFeishuTarget({
           shell: runtime.shell,
           openUrl: runtime.openUrl,
           url,
-          titleHint: target.title,
-          preferWindowFocus: runtime.settings.preferWindowFocus !== false,
+          preferWindowFocus: false,
         })
       } catch {
         // ignore
@@ -91,11 +120,16 @@ function toTargets(rows: FeishuUserRow[]) {
     title: row.title,
     subtitle: row.subtitle,
     keywords: row.keywords,
-    meta: { url: row.openUrl },
+    meta: { url: row.openUrl, entityId: row.id },
     actionClass: 'open' as const,
-    icon: 'User',
+    icon: row.icon || 'User',
     appName: 'Feishu',
     appStableKey: 'feishu',
+    kindLabel: 'Feishu Contact',
+    kindLabelI18n: { en: 'Feishu Contact', zh: '飞书联系人' },
+    // Durable identity for host recents / usage (open_id).
+    persistable: Boolean(row.openUrl),
+    persistKey: row.id,
   }))
 }
 

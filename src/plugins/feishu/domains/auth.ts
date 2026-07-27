@@ -87,23 +87,37 @@ export async function getAuthStatus(
 
 /**
  * Start device / browser login without blocking (`auth login --no-wait --json`).
+ * Optionally request additional scopes (e.g. after missing_scope errors).
  */
 export async function startLogin(
   shell: LarkCliShell,
   binaryPath?: string,
   signal?: AbortSignal,
+  scopes?: string[],
 ): Promise<FeishuLoginStart> {
+  const args = ['auth', 'login', '--no-wait']
+  const scopeList = (scopes ?? []).map((s) => s.trim()).filter(Boolean)
+  if (scopeList.length > 0) {
+    args.push('--scope', scopeList.join(','))
+  }
+
   const result = await runLarkCli({
     shell,
     binaryPath,
-    args: ['auth', 'login', '--no-wait'],
+    args,
     timeoutMs: 15000,
     signal,
     risk: 'read',
   })
 
-  if (!result.ok) {
-    // Best-effort: some CLI versions may not support --no-wait
+  // --no-wait returns device_code on success; payload is usually under data.
+  const data = extractLoginPayload(result.data) ?? {}
+  const verificationUrl =
+    pickString(data, ['verification_url', 'verificationUrl', 'url', 'auth_url', 'authUrl']) ??
+    pickNestedUrl(result.data) ??
+    pickNestedUrl(data)
+
+  if (!result.ok && !verificationUrl) {
     return {
       ok: false,
       message:
@@ -113,19 +127,31 @@ export async function startLogin(
     }
   }
 
-  const data = (result.data && typeof result.data === 'object' ? result.data : {}) as Record<string, unknown>
-  const verificationUrl =
-    pickString(data, ['verification_url', 'verificationUrl', 'url', 'auth_url', 'authUrl']) ??
-    pickNestedUrl(result.data)
-
   return {
     ok: true,
     verificationUrl,
     deviceCode: pickString(data, ['device_code', 'deviceCode']),
     userCode: pickString(data, ['user_code', 'userCode']),
     message: result.message,
-    raw: result.data,
+    raw: result.data ?? data,
   }
+}
+
+function extractLoginPayload(data: unknown): Record<string, unknown> | null {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null
+  const obj = data as Record<string, unknown>
+  if (
+    obj.verification_url ||
+    obj.verificationUrl ||
+    obj.device_code ||
+    obj.deviceCode
+  ) {
+    return obj
+  }
+  if (obj.data && typeof obj.data === 'object' && !Array.isArray(obj.data)) {
+    return extractLoginPayload(obj.data)
+  }
+  return obj
 }
 
 /**

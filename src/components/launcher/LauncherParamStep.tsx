@@ -161,12 +161,18 @@ export function LauncherParamStep({
   }
 
   if (!param) return null
+  const hint = param.hint ? localized(param.hint, param.hintI18n, locale) : ''
+  const stepTag = params.length > 1 ? `${frame.paramIndex + 1}/${params.length}` : ''
   const placeholder = isTextParam
-    ? `${label} · ${param.type === 'number' ? t(locale, 'palette.inputNumber') : t(locale, 'palette.inputText')}`
-    : `${label} · ${t(locale, 'palette.filterOptions')}`
+    ? [label, hint || (param.type === 'number' ? t(locale, 'palette.inputNumber') : t(locale, 'palette.inputText'))]
+        .filter(Boolean)
+        .join(' — ')
+    : [label, t(locale, 'palette.filterOptions')].filter(Boolean).join(' — ')
   const countLabel = isMultiParam
     ? t(locale, 'palette.selectedCountMax', { count: selectedCount, max: maxSelect })
-    : `${frame.paramIndex + 1}/${params.length}`
+    : stepTag
+      ? `${stepTag} · ${label}`
+      : label
 
   const commandTitle = resolveDisplayTitle(frame.item.display, locale)
 

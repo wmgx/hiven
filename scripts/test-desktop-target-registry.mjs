@@ -158,6 +158,42 @@ assert.equal(item.ranking?.providerPriorityBoost, 50, 'priority clamped to 50')
 assert.equal(item.display.kindLabelI18n?.zh, '窗口')
 assert.equal(toItem.kindLabelFor('window', 'en'), 'Window')
 
+// Provider kindLabel override (product copy); host only supplies protocol defaults.
+const personDefault = toItem.desktopTargetToLauncherItem(
+  {
+    id: 'feishu.contacts:person:ou_1',
+    sourceId: 'feishu.contacts',
+    kind: 'person',
+    title: 'Ada',
+    actionClass: 'open',
+    meta: { url: 'lark://x' },
+  },
+  { locale: 'zh' },
+)
+assert.equal(personDefault.display.kindLabel, '联系人', 'protocol default for person')
+
+const personOverride = toItem.desktopTargetToLauncherItem(
+  {
+    id: 'feishu.contacts:person:ou_2',
+    sourceId: 'feishu.contacts',
+    kind: 'person',
+    title: 'Ada',
+    actionClass: 'open',
+    meta: { url: 'lark://x' },
+    kindLabel: 'Feishu Contact',
+    kindLabelI18n: { en: 'Feishu Contact', zh: '飞书联系人' },
+  },
+  { locale: 'zh' },
+)
+assert.equal(personOverride.display.kindLabel, '飞书联系人', 'provider kindLabelI18n overrides protocol default')
+assert.equal(personOverride.display.kindLabelI18n?.en, 'Feishu Contact')
+
+const resolved = toItem.resolveKindLabel(
+  { kind: 'document', kindLabelI18n: { zh: '飞书文档', en: 'Feishu Doc' } },
+  'en',
+)
+assert.equal(resolved.kindLabel, 'Feishu Doc')
+
 const closeItem = toItem.desktopTargetToLauncherItem(
   {
     id: 'host.window:close:native:1',

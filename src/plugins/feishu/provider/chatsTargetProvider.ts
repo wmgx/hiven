@@ -8,12 +8,12 @@ import { openFeishuTarget } from '../domains/windowFocus'
 import { getFeishuRuntime } from '../runtime'
 import {
   beginL1Generation,
-  getL1Cache,
   isL1GenerationCurrent,
   isL1QueryReady,
   L1_PAGE_SIZE,
   L1_SEARCH_TIMEOUT_MS,
-  setL1Cache,
+  resolveL1List,
+  touchL1EntityAccess,
   type L1Domain,
 } from '../search/l1Cache'
 
@@ -33,9 +33,6 @@ export function createFeishuChatsProvider(): DesktopTargetProvider {
       if (!q || !isL1QueryReady(q)) return []
       if (ctx.signal?.aborted) return []
 
-      const cached = getL1Cache<FeishuChatRow[]>(DOMAIN, q)
-      if (cached) return toTargets(cached)
-
       const generation = beginL1Generation(DOMAIN)
       try {
         const runtime = getFeishuRuntime()
@@ -43,21 +40,28 @@ export function createFeishuChatsProvider(): DesktopTargetProvider {
         if (settings.enabled === false || settings.chatsMixEnabled === false) return []
         if (!runtime.shell) return []
 
-        const search = await searchChats({
-          shell: runtime.shell,
+        const rows = await resolveL1List<FeishuChatRow>({
+          domain: DOMAIN,
           query: q,
-          binaryPath: settings.binaryPath || undefined,
+          limit: L1_PAGE_SIZE,
           signal: ctx.signal,
-          timeoutMs: L1_SEARCH_TIMEOUT_MS,
-          pageSize: L1_PAGE_SIZE,
+          fetch: async () => {
+            const search = await searchChats({
+              shell: runtime.shell!,
+              query: q,
+              binaryPath: settings.binaryPath || undefined,
+              signal: ctx.signal,
+              timeoutMs: L1_SEARCH_TIMEOUT_MS,
+              pageSize: L1_PAGE_SIZE,
+            })
+            if (!search.ok) return []
+            return mapChatsToRows(search.chats)
+              .filter((row) => Boolean(row.openUrl))
+              .slice(0, L1_PAGE_SIZE)
+          },
         })
-        if (!isL1GenerationCurrent(DOMAIN, generation) || ctx.signal?.aborted) return []
-        if (!search.ok) return []
 
-        const rows = mapChatsToRows(search.chats)
-          .filter((row) => Boolean(row.openUrl))
-          .slice(0, L1_PAGE_SIZE)
-        setL1Cache(DOMAIN, q, rows)
+        if (!isL1GenerationCurrent(DOMAIN, generation) || ctx.signal?.aborted) return []
         return toTargets(rows)
       } catch {
         return []
@@ -68,13 +72,24 @@ export function createFeishuChatsProvider(): DesktopTargetProvider {
       if (!url) return
       const runtime = getFeishuRuntime()
       if (!runtime.openUrl) return
+      const entityId =
+        (typeof target.meta?.entityId === 'string' && target.meta.entityId) ||
+        target.id.replace(/^feishu\.chats:chat:/, '')
+      touchL1EntityAccess(DOMAIN, {
+        id: entityId,
+        title: target.title,
+        subtitle: target.subtitle,
+        keywords: target.keywords,
+        openUrl: url,
+      })
       try {
+        // Chat deep link already routes + focuses; skip title AXRaise which can
+        // raise an unrelated window and undo chat navigation.
         await openFeishuTarget({
           shell: runtime.shell,
           openUrl: runtime.openUrl,
           url,
-          titleHint: target.title,
-          preferWindowFocus: runtime.settings.preferWindowFocus !== false,
+          preferWindowFocus: false,
         })
       } catch {
         // ignore
@@ -91,11 +106,16 @@ function toTargets(rows: FeishuChatRow[]) {
     title: row.title,
     subtitle: row.subtitle,
     keywords: row.keywords,
-    meta: { url: row.openUrl },
+    meta: { url: row.openUrl, entityId: row.id },
     actionClass: 'open' as const,
-    icon: 'MessagesSquare',
+    icon: row.icon || 'MessagesSquare',
     appName: 'Feishu',
     appStableKey: 'feishu',
+    kindLabel: 'Feishu Chat',
+    kindLabelI18n: { en: 'Feishu Chat', zh: '飞书会话' },
+    // Durable identity for host recents / usage (chat_id).
+    persistable: Boolean(row.openUrl),
+    persistKey: row.id,
   }))
 }
 

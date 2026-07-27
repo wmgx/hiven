@@ -4996,7 +4996,8 @@ body[data-theme='dark'] .l-search {
 .launcher-param-chip {
   display: inline-flex;
   align-items: center;
-  max-width: 72px;
+  gap: 3px;
+  max-width: 140px;
   min-height: 22px;
   padding: 0 8px;
   border-radius: 6px;
@@ -5010,6 +5011,25 @@ body[data-theme='dark'] .l-search {
   text-overflow: ellipsis;
   flex: 0 1 auto;
   min-width: 0;
+}
+
+.launcher-param-chip-label {
+  color: var(--text-3);
+  flex: none;
+  max-width: 4.5em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.launcher-param-chip-sep {
+  color: var(--text-3);
+  flex: none;
+}
+
+.launcher-param-chip-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .launcher-param-chip-more {

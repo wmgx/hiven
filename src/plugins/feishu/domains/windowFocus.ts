@@ -164,21 +164,30 @@ async function openFeishuClientOrUrl(options: {
   url: string
 }): Promise<void> {
   const url = options.url.trim()
-  const isClient = /^(lark|feishu):\/\//i.test(url)
+  const isClient = /^(lark|feishu|x-feishu|x-lark):\/\//i.test(url)
 
-  // macOS: `open lark://...` hits the registered desktop handler, no browser.
+  // macOS: prefer explicit production client so multi-install BOE/main_end
+  // copies cannot swallow the scheme. Pass the full applink URL so the client
+  // routes to the chat (bare `open lark://client/...` only focuses the app).
   if (isClient && options.shell) {
-    try {
-      const result = await options.shell.run({
-        command: `open ${shellQuote(url)}`,
-        timeoutMs: 2500,
-      })
-      // `open` usually exits 0 even when no handler; still try host open as backup only on failure.
-      if (!result.timedOut && (result.exitCode === 0 || result.exitCode == null)) {
-        return
+    const candidates = [
+      // Preferred production install (CN Feishu packaged as Lark.app).
+      `open -a ${shellQuote('/Applications/Lark.app')} ${shellQuote(url)}`,
+      // Fallback: system default handler for the scheme.
+      `open ${shellQuote(url)}`,
+    ]
+    for (const command of candidates) {
+      try {
+        const result = await options.shell.run({
+          command,
+          timeoutMs: 2500,
+        })
+        if (!result.timedOut && (result.exitCode === 0 || result.exitCode == null)) {
+          return
+        }
+      } catch {
+        // try next candidate
       }
-    } catch {
-      // fall through to host openUrl
     }
   }
 

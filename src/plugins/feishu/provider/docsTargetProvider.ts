@@ -3,22 +3,25 @@
  */
 
 import { getPluginHostSdk, type DesktopTargetProvider } from '@hiven/plugin'
-import { mapSearchResultsToTargets, searchDocs } from '../domains/docs'
+import { mapSearchResultsToTargets, searchDocs, type FeishuDocsTarget } from '../domains/docs'
 import { openFeishuTarget } from '../domains/windowFocus'
 import { getFeishuRuntime } from '../runtime'
 import {
   beginL1Generation,
-  getL1Cache,
   isL1GenerationCurrent,
   isL1QueryReady,
   L1_PAGE_SIZE,
   L1_SEARCH_TIMEOUT_MS,
-  setL1Cache,
+  resolveL1List,
+  touchL1EntityAccess,
   type L1Domain,
+  type L1Matchable,
 } from '../search/l1Cache'
 
 export const FEISHU_DOCS_SOURCE_ID = 'feishu.docs' as const
 const DOMAIN: L1Domain = 'docs'
+
+type DocsCacheRow = FeishuDocsTarget & L1Matchable
 
 export function createFeishuDocsProvider(): DesktopTargetProvider {
   return {
@@ -33,9 +36,6 @@ export function createFeishuDocsProvider(): DesktopTargetProvider {
       if (!q || !isL1QueryReady(q)) return []
       if (ctx.signal?.aborted) return []
 
-      const cached = getL1Cache<ReturnType<typeof mapSearchResultsToTargets>>(DOMAIN, q)
-      if (cached) return toTargets(cached)
-
       const generation = beginL1Generation(DOMAIN)
       try {
         const runtime = getFeishuRuntime()
@@ -43,20 +43,33 @@ export function createFeishuDocsProvider(): DesktopTargetProvider {
         if (settings.enabled === false || settings.docsMixEnabled === false) return []
         if (!runtime.shell) return []
 
-        const search = await searchDocs({
-          shell: runtime.shell,
+        const rows = await resolveL1List<DocsCacheRow>({
+          domain: DOMAIN,
           query: q,
-          binaryPath: settings.binaryPath || undefined,
+          limit: L1_PAGE_SIZE,
           signal: ctx.signal,
-          timeoutMs: L1_SEARCH_TIMEOUT_MS,
-          pageSize: L1_PAGE_SIZE,
+          fetch: async () => {
+            const search = await searchDocs({
+              shell: runtime.shell!,
+              query: q,
+              binaryPath: settings.binaryPath || undefined,
+              signal: ctx.signal,
+              timeoutMs: L1_SEARCH_TIMEOUT_MS,
+              pageSize: L1_PAGE_SIZE,
+            })
+            if (!search.ok) return []
+            return mapSearchResultsToTargets(search.results)
+              .slice(0, L1_PAGE_SIZE)
+              .map((t) => ({
+                ...t,
+                // L1Matchable openUrl for entity index / prefix reuse
+                openUrl: t.meta?.url,
+              }))
+          },
         })
-        if (!isL1GenerationCurrent(DOMAIN, generation) || ctx.signal?.aborted) return []
-        if (!search.ok) return []
 
-        const mapped = mapSearchResultsToTargets(search.results).slice(0, L1_PAGE_SIZE)
-        setL1Cache(DOMAIN, q, mapped)
-        return toTargets(mapped)
+        if (!isL1GenerationCurrent(DOMAIN, generation) || ctx.signal?.aborted) return []
+        return toTargets(rows)
       } catch {
         return []
       }
@@ -66,6 +79,16 @@ export function createFeishuDocsProvider(): DesktopTargetProvider {
       if (!url) return
       const runtime = getFeishuRuntime()
       if (!runtime.openUrl) return
+      const entityId =
+        (typeof target.meta?.entityId === 'string' && target.meta.entityId) || target.id
+      touchL1EntityAccess(DOMAIN, {
+        id: entityId,
+        title: target.title,
+        subtitle: target.subtitle,
+        keywords: target.keywords,
+        openUrl: url,
+        meta: { url },
+      })
       try {
         await openFeishuTarget({
           shell: runtime.shell,
@@ -81,20 +104,39 @@ export function createFeishuDocsProvider(): DesktopTargetProvider {
   }
 }
 
-function toTargets(mapped: ReturnType<typeof mapSearchResultsToTargets>) {
-  return mapped.map((t) => ({
-    id: t.id,
-    sourceId: t.sourceId,
-    kind: 'document' as const,
-    title: t.title,
-    subtitle: t.subtitle,
-    keywords: t.keywords,
-    meta: { url: t.meta.url },
-    actionClass: 'open' as const,
-    icon: t.icon ?? 'FileText',
-    appName: 'Feishu',
-    appStableKey: 'feishu',
-  }))
+/**
+ * Product: within the same match tier, launcher commands should outrank doc
+ * mix-in rows. Host only applies clamped scoreBias — Feishu owns the policy.
+ * Magnitude < one match tier (1000) so a stronger doc title match still wins.
+ */
+const DOCS_MIXIN_SCORE_BIAS = -180
+
+function toTargets(mapped: DocsCacheRow[]) {
+  return mapped.map((t) => {
+    const url = t.meta?.url ?? t.openUrl ?? ''
+    // entity id without prefix for stable persist key
+    const persistKey = t.id.replace(/^feishu\.docs:document:/, '') || t.id
+    return {
+      id: t.id,
+      sourceId: t.sourceId,
+      kind: 'document' as const,
+      title: t.title,
+      subtitle: t.subtitle,
+      keywords: t.keywords,
+      meta: { url, entityId: t.id },
+      actionClass: 'open' as const,
+      icon: t.icon || 'FileText',
+      appName: 'Feishu',
+      appStableKey: 'feishu',
+      scoreBias: DOCS_MIXIN_SCORE_BIAS,
+      // Product kind pill (overrides host protocol default "Document").
+      kindLabel: 'Feishu Doc',
+      kindLabelI18n: { en: 'Feishu Doc', zh: '飞书文档' },
+      // Host may recommend this doc next session after selection.
+      persistable: Boolean(url),
+      persistKey,
+    }
+  })
 }
 
 export function registerFeishuDocsProvider(): void {

@@ -167,6 +167,13 @@ function isRemoteImageIcon(iconName: string): boolean {
   )
 }
 
+function isCircularRemoteIcon(src: string): boolean {
+  // Person/chat avatars & generated initials look better circular.
+  if (src.startsWith('data:image/svg+xml')) return true
+  if (/imfile\.feishucdn|avatar|larksuite\.com\/.*avatar/i.test(src)) return true
+  return false
+}
+
 function RemoteImageIcon({
   src,
   size,
@@ -178,13 +185,19 @@ function RemoteImageIcon({
 }) {
   const [failed, setFailed] = useState(false)
   if (failed) return resolveIcon('Globe', size, fallbackName)
+  const round = isCircularRemoteIcon(src)
   return (
     <img
       src={src}
       alt=""
       width={size}
       height={size}
-      style={{ width: size, height: size, objectFit: 'contain', borderRadius: 3 }}
+      style={{
+        width: size,
+        height: size,
+        objectFit: 'cover',
+        borderRadius: round ? '50%' : 3,
+      }}
       draggable={false}
       onError={() => setFailed(true)}
     />

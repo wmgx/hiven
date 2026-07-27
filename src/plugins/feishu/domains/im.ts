@@ -4,6 +4,7 @@
  */
 
 import { buildChatOpenUrl } from './links'
+import { iconForChat } from './icons'
 import { runLarkCli, type LarkCliShell } from '../cli/run'
 
 export type FeishuChat = {
@@ -17,6 +18,9 @@ export type FeishuChat = {
   chat_status?: string
   chat_mode?: string
   owner_id?: string
+  avatar?: string
+  avatar_url?: string
+  avatarUrl?: string
 }
 
 export type FeishuChatRow = {
@@ -26,6 +30,8 @@ export type FeishuChatRow = {
   summaryText: string
   /** Client deep link to open this chat. */
   openUrl?: string
+  /** Group avatar URL when available. */
+  icon?: string
   keywords: string[]
 }
 
@@ -99,6 +105,8 @@ export function mapChatsToRows(chats: FeishuChat[]): FeishuChatRow[] {
     parts.push(id)
     const subtitle = parts.filter(Boolean).join(' · ')
     const openUrl = id.startsWith('oc_') ? buildChatOpenUrl(id) : undefined
+    const avatarUrl = chat.avatar ?? chat.avatar_url ?? chat.avatarUrl
+    const icon = iconForChat({ name: title, id, avatarUrl })
     const summaryText = [title, id, openUrl ?? '', chat.description ?? ''].filter(Boolean).join('\n')
     return {
       id,
@@ -106,6 +114,7 @@ export function mapChatsToRows(chats: FeishuChat[]): FeishuChatRow[] {
       subtitle,
       summaryText,
       openUrl,
+      icon,
       keywords: [title, id, chat.description ?? ''].filter(Boolean),
     }
   })

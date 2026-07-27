@@ -84,7 +84,16 @@ type LocalizableParam = {
   labelI18n?: I18nMap
   hint?: string
   hintI18n?: I18nMap
-  options?: Array<string | { label: string; value: string; labelI18n?: I18nMap }>
+  options?: Array<
+    | string
+    | {
+        label: string
+        value: string
+        labelI18n?: I18nMap
+        description?: string
+        descriptionI18n?: I18nMap
+      }
+  >
 }
 
 /** Build a per-locale map for a key; returns null when no locale defines it. */
@@ -120,9 +129,26 @@ function localizeParam<TParam extends LocalizableParam>(messages: Messages, para
   if (Array.isArray(param.options)) {
     next.options = param.options.map((option) => {
       if (typeof option === 'string') return option
+      let nextOpt = { ...option }
       const optLabel = localizeKey(messages, option.label)
-      if (!optLabel) return option
-      return { ...option, label: optLabel.text, labelI18n: { ...optLabel.i18n, ...option.labelI18n } }
+      if (optLabel) {
+        nextOpt = {
+          ...nextOpt,
+          label: optLabel.text,
+          labelI18n: { ...optLabel.i18n, ...option.labelI18n },
+        }
+      }
+      if (option.description) {
+        const optDesc = localizeKey(messages, option.description)
+        if (optDesc) {
+          nextOpt = {
+            ...nextOpt,
+            description: optDesc.text,
+            descriptionI18n: { ...optDesc.i18n, ...option.descriptionI18n },
+          }
+        }
+      }
+      return nextOpt
     }) as TParam['options']
   }
   return next
