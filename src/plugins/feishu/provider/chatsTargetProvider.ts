@@ -68,12 +68,17 @@ export function createFeishuChatsProvider(): DesktopTargetProvider {
       }
     },
     async activate(target) {
-      const url = target.meta?.url
+      const meta = target.meta ?? {}
+      const openChatId =
+        (typeof meta.openChatId === 'string' && meta.openChatId.trim()) ||
+        target.id.replace(/^feishu\.chats:chat:/, '')
+      const url =
+        meta.url ||
+        (openChatId ? `https://applink.feishu.cn/client/chat/open?openChatId=${encodeURIComponent(openChatId)}` : '')
       if (!url) return
       const runtime = getFeishuRuntime()
       const entityId =
-        (typeof target.meta?.entityId === 'string' && target.meta.entityId) ||
-        target.id.replace(/^feishu\.chats:chat:/, '')
+        (typeof meta.entityId === 'string' && meta.entityId) || openChatId
       touchL1EntityAccess(DOMAIN, {
         id: entityId,
         title: target.title,
@@ -81,8 +86,6 @@ export function createFeishuChatsProvider(): DesktopTargetProvider {
         keywords: target.keywords,
         openUrl: url,
       })
-      // Chat deep link routes via AppLink; skip title AXRaise (wrong window risk).
-      // Propagate errors so launcher can keep open and show a message.
       await openFeishuTarget({
         shell: runtime.shell,
         openUrl: runtime.openUrl,
@@ -101,7 +104,11 @@ function toTargets(rows: FeishuChatRow[]) {
     title: row.title,
     subtitle: row.subtitle,
     keywords: row.keywords,
-    meta: { url: row.openUrl, entityId: row.id },
+    meta: {
+      url: row.openUrl,
+      openChatId: row.id,
+      entityId: row.id,
+    },
     actionClass: 'open' as const,
     icon: row.icon || 'MessagesSquare',
     appName: 'Feishu',

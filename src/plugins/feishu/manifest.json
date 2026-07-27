@@ -2,7 +2,7 @@
   "pluginId": "feishu",
   "displayName": "Feishu",
   "displayNameI18n": { "zh": "飞书" },
-  "version": "0.6.21",
+  "version": "0.6.22",
   "capabilities": ["settings"],
   "permissions": ["shell.run"]
 }

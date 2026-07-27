@@ -32,6 +32,12 @@ export type DesktopTarget = {
     faviconKey?: string
     cpuPercent?: number
     memoryBytes?: number
+    /** Feishu chat id (oc_…) for AppLink openChatId. */
+    openChatId?: string
+    /** Feishu user open_id (ou_…) for AppLink openId. */
+    openId?: string
+    /** Stable entity id for plugin-side indexes. */
+    entityId?: string
   }
   icon?: string
   /** Primary action; first-level list should be focus|open only. */

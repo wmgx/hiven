@@ -10,6 +10,7 @@ import {
   sortUsersByIntersection,
   type FeishuUserRow,
 } from '../domains/contact'
+import { buildUserChatOpenCandidates } from '../domains/links'
 import { openFeishuTarget } from '../domains/windowFocus'
 import { getFeishuRuntime } from '../runtime'
 import {
@@ -81,12 +82,23 @@ export function createFeishuContactsProvider(): DesktopTargetProvider {
       }
     },
     async activate(target) {
-      const url = target.meta?.url
+      const meta = target.meta ?? {}
+      const openChatId =
+        typeof meta.openChatId === 'string' ? meta.openChatId.trim() : ''
+      const openId =
+        (typeof meta.openId === 'string' && meta.openId.trim()) ||
+        target.id.replace(/^feishu\.contacts:person:/, '')
+      const candidates = buildUserChatOpenCandidates({
+        p2pChatId: openChatId || undefined,
+        openId: openId || undefined,
+      })
+      const url = meta.url || candidates[0]
       if (!url) return
       const runtime = getFeishuRuntime()
       // Sticky: visited people stay in local index longer and rank higher next time.
       const entityId =
-        (typeof target.meta?.entityId === 'string' && target.meta.entityId) ||
+        (typeof meta.entityId === 'string' && meta.entityId) ||
+        openId ||
         target.id.replace(/^feishu\.contacts:person:/, '')
       touchL1EntityAccess(DOMAIN, {
         id: entityId,
@@ -95,12 +107,13 @@ export function createFeishuContactsProvider(): DesktopTargetProvider {
         keywords: target.keywords,
         openUrl: url,
       })
-      // Chat deep link routes via AppLink; skip title AXRaise (wrong window risk).
-      // Propagate errors so launcher can keep open and show a message.
+      // Client AppLink only when shell available — do not chain browser https
+      // (Edge steals focus). openChatId then openId as separate links (docs).
       await openFeishuTarget({
         shell: runtime.shell,
         openUrl: runtime.openUrl,
-        url,
+        url: candidates[0] ?? url,
+        alternateUrls: candidates.slice(1),
         preferWindowFocus: false,
       })
     },
@@ -115,7 +128,12 @@ function toTargets(rows: FeishuUserRow[]) {
     title: row.title,
     subtitle: row.subtitle,
     keywords: row.keywords,
-    meta: { url: row.openUrl, entityId: row.id },
+    meta: {
+      url: row.openUrl,
+      openChatId: row.p2pChatId,
+      openId: row.id,
+      entityId: row.id,
+    },
     actionClass: 'open' as const,
     icon: row.icon || 'User',
     appName: 'Feishu',

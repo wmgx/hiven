@@ -1,7 +1,7 @@
 # 飞书 Launcher 回归验收清单
 
 > 分支：`feat/launcher-intelligence-package-1`
-> 插件版本：`feishu@0.6.21`
+> 插件版本：`feishu@0.6.22`
 > 用途：手工 / 半自动回归，覆盖 L1 混排、L2 工具、缓存、排序、头像与设置。
 
 ## 0. 前置
@@ -35,8 +35,9 @@ lark://applink.feishu.cn/client/chat/open?…   # 自定义 scheme，带 applink
 
 | # | 场景 | 预期 |
 |---|------|------|
-| 2.1 | 回车打开会话/联系人 | 先试 `lark://applink.feishu.cn/...`（`open -b com.electron.lark`），再走 https AppLink；**不得**因 native exit 0 跳过 https |
-| 2.2 | PC https AppLink | 可能先出现中间页再唤起飞书（官方 PC 行为）；默认浏览器若拦截 handoff 需用户点「打开飞书」 |
+| 2.1 | 回车打开会话/联系人 | **仅**客户端 scheme：`lark://applink.feishu.cn/...`（`open -b com.electron.lark`）；有 shell 时**不**再开 https（避免 Edge 抢焦点导致不跳转） |
+| 2.2 | 联系人 | 依次尝试 openChatId（p2p）与 openId 两条 AppLink（文档规定单链二选一，故分开发） |
+| 2.2b | 无 shell 时 | 才回退 host `openUrl(https AppLink)`（PC 中间页行为） |
 | 2.3 | 打开文档 | 浏览器或客户端打开文档链接 |
 | 2.4 | macOS + preferWindowFocus | 文档等带 titleHint 时 best-effort 置前；会话打开默认不靠 title 匹配 |
 | 2.5 | 打开失败 | launcher 应保留并显示错误，而非静默关闭 |

@@ -1,6 +1,15 @@
 /**
  * B5: best-effort focus of an already-open Feishu/Lark window by title.
  * Uses host shell.run → osascript (macOS). Never throws; miss falls through to open URL.
+ *
+ * Chat open follows official AppLink docs (open.feishu.cn):
+ *   lark://applink.feishu.cn/client/chat/open?openChatId=… | openId=…
+ *   https://applink.feishu.cn/client/chat/open?…
+ *
+ * Critical delivery rule on macOS:
+ *   Do NOT open https AppLink after a native scheme open when shell is available.
+ *   Default browser (e.g. Edge) steals focus and cancels client navigation.
+ *   Prefer client scheme only; https is fallback when shell is missing.
  */
 
 import type { LarkCliShell } from '../cli/run'
@@ -32,11 +41,9 @@ export function scoreWindowTitleMatch(windowTitle: string, titleHint: string): n
   if (win.includes(hint)) return 80 + Math.min(19, hint.length)
   if (hint.includes(win) && win.length >= 4) return 60 + Math.min(19, win.length)
 
-  // Prefix / significant substring (≥4 chars)
   const short = hint.length > 24 ? hint.slice(0, 24) : hint
   if (short.length >= 4 && win.includes(short)) return 50 + Math.min(20, short.length)
 
-  // Token overlap
   const hintTokens = short.split(/[\s\-_|/·:：]+/).filter((t) => t.length >= 2)
   if (hintTokens.length === 0) return 0
   let hits = 0
@@ -103,7 +110,6 @@ export async function tryFocusFeishuWindowByTitle(options: {
   const hint = normalizeTitleHint(options.titleHint)
   if (!hint || hint.length < 2) return false
 
-  // Cap length for AppleScript safety / performance
   const needle = options.titleHint.replace(/[\r\n\u0000]/g, ' ').trim().slice(0, 80)
   if (!needle) return false
 
@@ -111,7 +117,6 @@ export async function tryFocusFeishuWindowByTitle(options: {
   try {
     const result = await options.shell.run({
       command: `osascript -e ${shellQuote(script)}`,
-      // Keep short: must never block openUrl on the critical path.
       timeoutMs: options.timeoutMs ?? 900,
     })
     const out = `${result.stdout ?? ''}${result.stderr ?? ''}`.toLowerCase()
@@ -125,25 +130,23 @@ export async function tryFocusFeishuWindowByTitle(options: {
 /**
  * Open a Feishu resource (chat / doc / …).
  *
- * Chat open follows official AppLink docs:
- * 1) Custom scheme with applink host (direct client):
- *      lark://applink.feishu.cn/client/chat/open?…
- * 2) HTTPS AppLink (PC: intermediate webpage then tries Feishu):
- *      https://applink.feishu.cn/client/chat/open?…
- *
- * See links.ts for protocol references.
+ * Chat: client AppLink scheme only when shell is available (avoid browser steal).
+ * Docs / other https: host openUrl.
  */
 export async function openFeishuTarget(options: {
   shell?: LarkCliShell | null
   openUrl?: ((url: string) => Promise<void>) | null
   url: string
+  /** Extra candidate URLs (e.g. openId form after openChatId). Tried after `url`. */
+  alternateUrls?: string[]
   titleHint?: string
   preferWindowFocus?: boolean
 }): Promise<'opened'> {
+  const urls = dedupeUrls([options.url, ...(options.alternateUrls ?? [])])
   await openFeishuClientOrUrl({
     shell: options.shell,
     openUrl: options.openUrl ?? null,
-    url: options.url,
+    urls,
   })
 
   if (
@@ -152,7 +155,6 @@ export async function openFeishuTarget(options: {
     options.titleHint &&
     options.titleHint.trim().length >= 2
   ) {
-    // Fire-and-forget: raise matching client window after URL is already opening.
     void tryFocusFeishuWindowByTitle({
       shell: options.shell,
       titleHint: options.titleHint,
@@ -165,7 +167,7 @@ export async function openFeishuTarget(options: {
 
 /**
  * Normalize open URL for delivery.
- * Chat deep links → official https AppLink; repair legacy triple-slash bugs.
+ * Chat deep links → official https AppLink string form (for coerce / storage).
  */
 export function normalizeFeishuOpenUrl(url: string): string {
   const raw = url.trim()
@@ -205,93 +207,120 @@ export function coerceHttpsApplink(url: string): string | null {
  * https AppLink → custom scheme with applink host (docs structure).
  * https://applink.feishu.cn/client/… → lark://applink.feishu.cn/client/…
  */
-export function coerceNativeApplink(url: string): string | null {
+export function coerceNativeApplink(url: string, scheme: 'lark' | 'feishu' = 'lark'): string | null {
   const https = coerceHttpsApplink(url)
   if (!https) return null
-  return https.replace(/^https:\/\//i, 'lark://')
+  return https.replace(/^https:\/\//i, `${scheme}://`)
 }
 
-/**
- * Last-resort open without host SDK openUrl.
- * Architecture: plugins may only use shell.run / host-injected openUrl —
- * never import Tauri packages from plugin sources.
- */
-async function fallbackOpenUrl(
-  url: string,
-  shell?: LarkCliShell | null,
-): Promise<void> {
-  if (shell) {
-    await shell.run({
-      command: `open ${shellQuote(url)}`,
-      timeoutMs: 2500,
-    })
-    return
+/** Expand one chat URL into lark/feishu native candidates. */
+export function expandNativeChatCandidates(url: string): string[] {
+  const https = coerceHttpsApplink(url)
+  if (!https) return []
+  const out: string[] = []
+  for (const scheme of ['lark', 'feishu'] as const) {
+    const native = coerceNativeApplink(https, scheme)
+    if (native) out.push(native)
   }
-  if (typeof window !== 'undefined' && typeof window.open === 'function') {
-    window.open(url, '_blank')
-    return
-  }
-  throw new Error('No openUrl / shell available to open Feishu link')
+  return out
+}
+
+async function fallbackOpenViaShell(url: string, shell: LarkCliShell): Promise<void> {
+  await shell.run({
+    command: `open ${shellQuote(url)}`,
+    timeoutMs: 2500,
+  })
 }
 
 async function openFeishuClientOrUrl(options: {
   shell?: LarkCliShell | null
   openUrl?: ((url: string) => Promise<void>) | null
-  url: string
+  urls: string[]
 }): Promise<void> {
-  const httpsUrl = normalizeFeishuOpenUrl(options.url)
-  if (!httpsUrl) return
-  const nativeUrl = coerceNativeApplink(httpsUrl)
-  const hostOpen =
-    options.openUrl ?? ((u: string) => fallbackOpenUrl(u, options.shell))
-  const isChatApplink = Boolean(coerceHttpsApplink(httpsUrl))
+  const shell = options.shell
+  const hostOpen = options.openUrl
 
-  // Docs:
-  // - Custom scheme with applink host: lark://applink.feishu.cn/client/chat/open?…
-  // - HTTPS AppLink on PC: intermediate webpage then tries Feishu
-  // Native `open` often exits 0 without navigating — never skip the https path
-  // for chat links solely because native returned success.
-
-  // 1) Best-effort direct client delivery (bundle-id + plain open).
-  if (isChatApplink && nativeUrl && options.shell) {
-    for (const command of [
-      // Prefer the registered desktop handler (com.electron.lark).
-      `open -b com.electron.lark ${shellQuote(nativeUrl)}`,
-      `open ${shellQuote(nativeUrl)}`,
-    ]) {
-      try {
-        await options.shell.run({ command, timeoutMs: 2500 })
-      } catch {
-        // try next
-      }
+  const chatNatives: string[] = []
+  const nonChat: string[] = []
+  for (const raw of options.urls) {
+    const https = normalizeFeishuOpenUrl(raw)
+    if (!https) continue
+    if (coerceHttpsApplink(https)) {
+      chatNatives.push(...expandNativeChatCandidates(https))
+    } else {
+      nonChat.push(https)
     }
   }
+  const natives = dedupeUrls(chatNatives)
 
-  // 2) Official HTTPS AppLink (required path for chat; do not early-return above).
-  let hostError: unknown = null
-  try {
-    await hostOpen(httpsUrl)
-  } catch (error) {
-    hostError = error
-  }
-
-  // Non-chat (docs etc.): still try shell open of original/normalized URL.
-  if (!isChatApplink && options.shell) {
+  // ── Chat: client scheme only when shell available ────────────────────────
+  // Opening https AppLink after native causes Edge/Chrome to steal focus and
+  // abort Feishu navigation on many multi-browser macOS setups.
+  //
+  // `open` often exits 0 without navigating — try every candidate once via
+  // bundle-id delivery, then stop (do not fall through to https).
+  if (natives.length > 0 && shell) {
+    for (const native of natives) {
+      try {
+        await shell.run({
+          command: `open -b com.electron.lark ${shellQuote(native)}`,
+          timeoutMs: 2500,
+        })
+      } catch {
+        // try next candidate
+      }
+    }
+    // One LaunchServices fallback on the first candidate.
     try {
-      await options.shell.run({
-        command: `open ${shellQuote(httpsUrl)}`,
+      await shell.run({
+        command: `open ${shellQuote(natives[0])}`,
         timeoutMs: 2500,
       })
     } catch {
       // ignore
     }
+    // Soft raise after a beat so we don't race the deep-link handler.
+    setTimeout(() => {
+      void raiseFeishuProcess(shell)
+    }, 400)
+    return
   }
 
-  if (options.shell) void raiseFeishuProcess(options.shell)
-  if (hostError) throw hostError
+  // ── Fallback: https AppLink via host openUrl (docs PC intermediate page) ──
+  const httpsFallback = dedupeUrls(
+    options.urls.map((u) => normalizeFeishuOpenUrl(u)).filter(Boolean),
+  )
+  const primaryHttps =
+    httpsFallback.find((u) => coerceHttpsApplink(u)) ?? httpsFallback[0] ?? nonChat[0]
+  if (!primaryHttps) {
+    throw new Error('No Feishu open URL')
+  }
+
+  if (hostOpen) {
+    await hostOpen(primaryHttps)
+  } else if (shell) {
+    await fallbackOpenViaShell(primaryHttps, shell)
+  } else if (typeof window !== 'undefined' && typeof window.open === 'function') {
+    window.open(primaryHttps, '_blank')
+  } else {
+    throw new Error('No openUrl / shell available to open Feishu link')
+  }
+
+  // Non-chat extras (docs etc.)
+  for (const url of nonChat) {
+    if (url === primaryHttps) continue
+    try {
+      if (hostOpen) await hostOpen(url)
+      else if (shell) await fallbackOpenViaShell(url, shell)
+    } catch {
+      // ignore secondary failures
+    }
+  }
+
+  if (shell) void raiseFeishuProcess(shell)
 }
 
-/** Raise Feishu/Lark process without title matching (chat open already routed). */
+/** Raise Feishu/Lark process without title matching. */
 async function raiseFeishuProcess(shell: LarkCliShell): Promise<void> {
   try {
     await shell.run({
@@ -325,12 +354,22 @@ function shellQuote(arg: string): string {
   return `'${arg.replace(/'/g, `'\\''`)}'`
 }
 
+function dedupeUrls(urls: string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const u of urls) {
+    const t = u.trim()
+    if (!t || seen.has(t)) continue
+    seen.add(t)
+    out.push(t)
+  }
+  return out
+}
+
 /**
- * AppleScript: among Feishu/Lark processes, raise first window whose name contains needle
- * (case-insensitive via lowercase compare). Returns "focused" or "miss".
+ * AppleScript: among Feishu/Lark processes, raise first window whose name contains needle.
  */
 function buildFocusAppleScript(needle: string): string {
-  // Escape for AppleScript string literal
   const escaped = needle.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
   return [
     'set needle to "' + escaped + '"',

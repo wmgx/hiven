@@ -91,9 +91,9 @@ export function buildUserOpenIdNativeUrl(
 }
 
 /**
- * Best-effort user DM URL (primary = https).
+ * Best-effort user DM URL (primary = https for storage / display).
  * Prefer p2pChatId (openChatId) when search returns it; else openId.
- * Docs: openId and openChatId are mutually exclusive.
+ * Docs: openId and openChatId are mutually exclusive on a single link.
  */
 export function buildUserChatOpenUrl(options: {
   p2pChatId?: string
@@ -122,6 +122,28 @@ export function buildUserChatOpenNativeUrl(options: {
   const openId = options.openId?.trim()
   if (!openId) return undefined
   return buildUserOpenIdNativeUrl(openId, brand)
+}
+
+/**
+ * Ordered open candidates for a person (native schemes first).
+ * openChatId and openId are separate links (docs: mutually exclusive per URL).
+ */
+export function buildUserChatOpenCandidates(options: {
+  p2pChatId?: string
+  openId?: string
+  brand?: FeishuBrand
+}): string[] {
+  const brand = options.brand ?? DEFAULT_FEISHU_BRAND
+  const out: string[] = []
+  if (options.p2pChatId?.trim()) {
+    out.push(buildChatOpenNativeUrl(options.p2pChatId, brand))
+    out.push(buildChatOpenHttpsUrl(options.p2pChatId, brand))
+  }
+  if (options.openId?.trim()) {
+    out.push(buildUserOpenIdNativeUrl(options.openId, brand))
+    out.push(buildUserOpenIdHttpsUrl(options.openId, brand))
+  }
+  return out
 }
 
 /** True if URL is a native Feishu/Lark client scheme. */

@@ -172,7 +172,6 @@ assert.doesNotMatch(
 const windowFocusSrc2 = read('src/plugins/feishu/domains/windowFocus.ts')
 assert.match(windowFocusSrc2, /coerceNativeApplink|lark:\/\//, 'open path must try official native applink scheme')
 assert.match(windowFocusSrc2, /coerceHttpsApplink|normalizeFeishuOpenUrl/, 'must coerce chat URLs to https applink')
-assert.match(windowFocusSrc2, /fallbackOpenUrl/, 'must have open fallback when host openUrl missing')
 assert.doesNotMatch(
   windowFocusSrc2,
   /from\s+['"]@tauri-apps\/|import\s*\(\s*['"]@tauri-apps\//,
@@ -183,17 +182,26 @@ assert.match(
   /open -b com\.electron\.lark|com\.electron\.lark/,
   'native open should target Feishu/Lark bundle id',
 )
-// Chat: native open must not early-return before https path
+// Chat with shell: native only — https after native steals focus via Edge/Chrome
 assert.match(
   windowFocusSrc2,
-  /never skip the https path|do not early-return|required path for chat/i,
-  'chat open must still run https AppLink after native attempt',
+  /do not fall through to https|steal focus|client scheme only/i,
+  'chat open must not chain browser https after native when shell is available',
 )
-// Do not hardcode Safari as product policy — docs use system open of AppLink
 assert.doesNotMatch(
   windowFocusSrc2.replace(/\/\*[\s\S]*?\*\//g, ''),
   /open -a Safari/,
   'must not hardcode Safari handoff (not in Feishu AppLink docs)',
+)
+assert.match(
+  read('src/plugins/feishu/domains/links.ts'),
+  /buildUserChatOpenCandidates/,
+  'must build openChatId + openId candidate list',
+)
+assert.match(
+  read('src/plugins/feishu/provider/contactsTargetProvider.ts'),
+  /openChatId|buildUserChatOpenCandidates|alternateUrls/,
+  'contacts activate must pass openChatId/openId candidates',
 )
 // Providers must not swallow open errors (silent "no reaction")
 assert.doesNotMatch(
@@ -222,7 +230,7 @@ assert.doesNotMatch(
       /export function coerceHttpsApplink\(url: string\): string \| null \{[\s\S]*?\n\}/,
     )
     const coerceN = src.match(
-      /export function coerceNativeApplink\(url: string\): string \| null \{[\s\S]*?\n\}/,
+      /export function coerceNativeApplink\([\s\S]*?\): string \| null \{[\s\S]*?\n\}/,
     )
     const norm = src.match(
       /export function normalizeFeishuOpenUrl\(url: string\): string \{[\s\S]*?\n\}/,
