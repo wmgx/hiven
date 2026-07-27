@@ -1,7 +1,7 @@
 # 飞书 Launcher 回归验收清单
 
-> 分支：`feat/launcher-intelligence-package-1`  
-> 插件版本：`feishu@0.6.16`  
+> 分支：`feat/launcher-intelligence-package-1`
+> 插件版本：`feishu@0.6.21`
 > 用途：手工 / 半自动回归，覆盖 L1 混排、L2 工具、缓存、排序、头像与设置。
 
 ## 0. 前置
@@ -23,14 +23,23 @@
 | 1.6 | 连续快打字 | 无明显 CLI 堆积；旧请求被 abort；结果不闪回旧 query |
 | 1.7 | 再次搜同一关键词 | 实体/前缀缓存命中，明显更快 |
 
-## 2. 打开路径
+## 2. 打开路径（官方 AppLink）
+
+协议（[打开聊天页面](https://open.feishu.cn/document/common-capabilities/applink-protocol/supported-protocol/open-a-chat-page)）：
+
+```text
+https://applink.feishu.cn/client/chat/open?openChatId=oc_…
+https://applink.feishu.cn/client/chat/open?openId=ou_…
+lark://applink.feishu.cn/client/chat/open?…   # 自定义 scheme，带 applink host
+```
 
 | # | 场景 | 预期 |
 |---|------|------|
-| 2.1 | 回车打开会话 | 直接进 `Lark.app` 对应会话（`lark://applink.feishu.cn/...`），不经浏览器中转 |
-| 2.2 | 打开联系人 | 打开 p2p / openId 会话 |
+| 2.1 | 回车打开会话/联系人 | 先试 `lark://applink.feishu.cn/...`（`open -b com.electron.lark`），再走 https AppLink；**不得**因 native exit 0 跳过 https |
+| 2.2 | PC https AppLink | 可能先出现中间页再唤起飞书（官方 PC 行为）；默认浏览器若拦截 handoff 需用户点「打开飞书」 |
 | 2.3 | 打开文档 | 浏览器或客户端打开文档链接 |
-| 2.4 | macOS + preferWindowFocus | 打开后尽量把匹配标题的飞书窗口置前（best-effort） |
+| 2.4 | macOS + preferWindowFocus | 文档等带 titleHint 时 best-effort 置前；会话打开默认不靠 title 匹配 |
+| 2.5 | 打开失败 | launcher 应保留并显示错误，而非静默关闭 |
 
 ## 3. Persistable 最近推荐
 

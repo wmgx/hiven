@@ -211,18 +211,27 @@ export function coerceNativeApplink(url: string): string | null {
   return https.replace(/^https:\/\//i, 'lark://')
 }
 
-/** Last-resort open when host openUrl / shell are unavailable. */
-async function fallbackOpenUrl(url: string): Promise<void> {
-  try {
-    const { open } = await import('@tauri-apps/plugin-shell')
-    await open(url)
+/**
+ * Last-resort open without host SDK openUrl.
+ * Architecture: plugins may only use shell.run / host-injected openUrl —
+ * never import Tauri packages from plugin sources.
+ */
+async function fallbackOpenUrl(
+  url: string,
+  shell?: LarkCliShell | null,
+): Promise<void> {
+  if (shell) {
+    await shell.run({
+      command: `open ${shellQuote(url)}`,
+      timeoutMs: 2500,
+    })
     return
-  } catch {
-    // non-tauri / plugin missing
   }
   if (typeof window !== 'undefined' && typeof window.open === 'function') {
     window.open(url, '_blank')
+    return
   }
+  throw new Error('No openUrl / shell available to open Feishu link')
 }
 
 async function openFeishuClientOrUrl(options: {
@@ -233,27 +242,32 @@ async function openFeishuClientOrUrl(options: {
   const httpsUrl = normalizeFeishuOpenUrl(options.url)
   if (!httpsUrl) return
   const nativeUrl = coerceNativeApplink(httpsUrl)
-  const hostOpen = options.openUrl ?? fallbackOpenUrl
+  const hostOpen =
+    options.openUrl ?? ((u: string) => fallbackOpenUrl(u, options.shell))
   const isChatApplink = Boolean(coerceHttpsApplink(httpsUrl))
 
-  // 1) Official custom scheme with applink host — direct client attempt.
-  //    Docs: lark://applink.feishu.cn/client/chat/open?…
+  // Docs:
+  // - Custom scheme with applink host: lark://applink.feishu.cn/client/chat/open?…
+  // - HTTPS AppLink on PC: intermediate webpage then tries Feishu
+  // Native `open` often exits 0 without navigating — never skip the https path
+  // for chat links solely because native returned success.
+
+  // 1) Best-effort direct client delivery (bundle-id + plain open).
   if (isChatApplink && nativeUrl && options.shell) {
-    try {
-      const result = await options.shell.run({
-        command: `open ${shellQuote(nativeUrl)}`,
-        timeoutMs: 2500,
-      })
-      if (!result.timedOut && (result.exitCode === 0 || result.exitCode == null)) {
-        void raiseFeishuProcess(options.shell)
-        return
+    for (const command of [
+      // Prefer the registered desktop handler (com.electron.lark).
+      `open -b com.electron.lark ${shellQuote(nativeUrl)}`,
+      `open ${shellQuote(nativeUrl)}`,
+    ]) {
+      try {
+        await options.shell.run({ command, timeoutMs: 2500 })
+      } catch {
+        // try next
       }
-    } catch {
-      // fall through to https
     }
   }
 
-  // 2) Official HTTPS AppLink — PC opens intermediate page then tries Feishu.
+  // 2) Official HTTPS AppLink (required path for chat; do not early-return above).
   let hostError: unknown = null
   try {
     await hostOpen(httpsUrl)
@@ -261,8 +275,8 @@ async function openFeishuClientOrUrl(options: {
     hostError = error
   }
 
-  // Also shell-open https so default browser path runs even if host open is weak.
-  if (isChatApplink && options.shell) {
+  // Non-chat (docs etc.): still try shell open of original/normalized URL.
+  if (!isChatApplink && options.shell) {
     try {
       await options.shell.run({
         command: `open ${shellQuote(httpsUrl)}`,
@@ -271,9 +285,9 @@ async function openFeishuClientOrUrl(options: {
     } catch {
       // ignore
     }
-    void raiseFeishuProcess(options.shell)
   }
 
+  if (options.shell) void raiseFeishuProcess(options.shell)
   if (hostError) throw hostError
 }
 

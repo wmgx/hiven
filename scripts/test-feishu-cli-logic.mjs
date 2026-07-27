@@ -172,12 +172,39 @@ assert.doesNotMatch(
 const windowFocusSrc2 = read('src/plugins/feishu/domains/windowFocus.ts')
 assert.match(windowFocusSrc2, /coerceNativeApplink|lark:\/\//, 'open path must try official native applink scheme')
 assert.match(windowFocusSrc2, /coerceHttpsApplink|normalizeFeishuOpenUrl/, 'must coerce chat URLs to https applink')
-assert.match(windowFocusSrc2, /fallbackOpenUrl|plugin-shell/, 'must have host/Tauri open fallback')
+assert.match(windowFocusSrc2, /fallbackOpenUrl/, 'must have open fallback when host openUrl missing')
+assert.doesNotMatch(
+  windowFocusSrc2,
+  /from\s+['"]@tauri-apps\/|import\s*\(\s*['"]@tauri-apps\//,
+  'feishu plugin must not import Tauri APIs directly',
+)
+assert.match(
+  windowFocusSrc2,
+  /open -b com\.electron\.lark|com\.electron\.lark/,
+  'native open should target Feishu/Lark bundle id',
+)
+// Chat: native open must not early-return before https path
+assert.match(
+  windowFocusSrc2,
+  /never skip the https path|do not early-return|required path for chat/i,
+  'chat open must still run https AppLink after native attempt',
+)
 // Do not hardcode Safari as product policy — docs use system open of AppLink
 assert.doesNotMatch(
   windowFocusSrc2.replace(/\/\*[\s\S]*?\*\//g, ''),
   /open -a Safari/,
   'must not hardcode Safari handoff (not in Feishu AppLink docs)',
+)
+// Providers must not swallow open errors (silent "no reaction")
+assert.doesNotMatch(
+  read('src/plugins/feishu/provider/contactsTargetProvider.ts'),
+  /catch\s*\{\s*\/\/\s*ignore/,
+  'contacts activate must not swallow open errors',
+)
+assert.doesNotMatch(
+  read('src/plugins/feishu/provider/chatsTargetProvider.ts'),
+  /catch\s*\{\s*\/\/\s*ignore/,
+  'chats activate must not swallow open errors',
 )
 
 // Pure unit: coerceHttpsApplink / coerceNativeApplink / normalizeFeishuOpenUrl

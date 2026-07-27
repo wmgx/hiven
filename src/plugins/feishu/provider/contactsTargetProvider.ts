@@ -95,18 +95,14 @@ export function createFeishuContactsProvider(): DesktopTargetProvider {
         keywords: target.keywords,
         openUrl: url,
       })
-      try {
-        // Chat deep link already routes; skip title AXRaise (wrong window risk).
-        // openUrl may be null before hooks.startup — openFeishuTarget has fallbacks.
-        await openFeishuTarget({
-          shell: runtime.shell,
-          openUrl: runtime.openUrl,
-          url,
-          preferWindowFocus: false,
-        })
-      } catch {
-        // ignore — launcher still closes; host open / shell tried best-effort
-      }
+      // Chat deep link routes via AppLink; skip title AXRaise (wrong window risk).
+      // Propagate errors so launcher can keep open and show a message.
+      await openFeishuTarget({
+        shell: runtime.shell,
+        openUrl: runtime.openUrl,
+        url,
+        preferWindowFocus: false,
+      })
     },
   }
 }

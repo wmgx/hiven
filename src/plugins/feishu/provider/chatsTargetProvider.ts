@@ -81,18 +81,14 @@ export function createFeishuChatsProvider(): DesktopTargetProvider {
         keywords: target.keywords,
         openUrl: url,
       })
-      try {
-        // Chat deep link already routes + focuses; skip title AXRaise which can
-        // raise an unrelated window and undo chat navigation.
-        await openFeishuTarget({
-          shell: runtime.shell,
-          openUrl: runtime.openUrl,
-          url,
-          preferWindowFocus: false,
-        })
-      } catch {
-        // ignore — openFeishuTarget already tried host + shell fallbacks
-      }
+      // Chat deep link routes via AppLink; skip title AXRaise (wrong window risk).
+      // Propagate errors so launcher can keep open and show a message.
+      await openFeishuTarget({
+        shell: runtime.shell,
+        openUrl: runtime.openUrl,
+        url,
+        preferWindowFocus: false,
+      })
     },
   }
 }
