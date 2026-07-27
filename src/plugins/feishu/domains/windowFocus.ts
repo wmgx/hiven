@@ -123,10 +123,15 @@ export async function tryFocusFeishuWindowByTitle(options: {
 }
 
 /**
- * Open a Feishu resource.
- * Native schemes (`lark://` / `feishu://`) go through macOS `open` so the
- * desktop client launches directly — not Safari/Chrome via https applink.
- * Optional window title focus runs in the background after open.
+ * Open a Feishu resource (chat / doc / …).
+ *
+ * Chat open follows official AppLink docs:
+ * 1) Custom scheme with applink host (direct client):
+ *      lark://applink.feishu.cn/client/chat/open?…
+ * 2) HTTPS AppLink (PC: intermediate webpage then tries Feishu):
+ *      https://applink.feishu.cn/client/chat/open?…
+ *
+ * See links.ts for protocol references.
  */
 export async function openFeishuTarget(options: {
   shell?: LarkCliShell | null
@@ -159,30 +164,51 @@ export async function openFeishuTarget(options: {
 }
 
 /**
- * Normalize chat deep links so cached / older applink-host forms still open.
- *
- * `lark://applink.feishu.cn/client/...` → `lark://client/...`
- *
- * IMPORTANT: replacement must not produce a triple slash (`lark:///client`).
- * Capture group for the path already includes the leading `/client`, so the
- * scheme join is `$1:/$2` → `lark:` + `/client` → `lark://client`.
+ * Normalize open URL for delivery.
+ * Chat deep links → official https AppLink; repair legacy triple-slash bugs.
  */
 export function normalizeFeishuOpenUrl(url: string): string {
   const raw = url.trim()
   if (!raw) return raw
-
-  // Fix already-broken triple-slash forms from older buggy normalize.
-  const deTripled = raw.replace(
+  const https = coerceHttpsApplink(raw)
+  if (https) return https
+  return raw.replace(
     /^(lark|feishu|x-feishu|x-lark):\/\/\/+(client\/)/i,
     '$1://$2',
   )
+}
 
-  // lark://applink.feishu.cn/client/chat/open?... → lark://client/chat/open?...
-  // Group2 is `/client/...` (includes leading slash).
-  return deTripled.replace(
-    /^(lark|feishu|x-feishu|x-lark):\/\/applink\.(?:feishu\.cn|larksuite\.com)(\/client\/)/i,
-    '$1:/$2',
+/** Pure: known chat deep links → https://applink…/client/chat/open?… */
+export function coerceHttpsApplink(url: string): string | null {
+  const raw = url.trim()
+  if (!raw) return null
+  if (/^https:\/\/applink\.(feishu\.cn|larksuite\.com)\/client\/chat\/open\?/i.test(raw)) {
+    return raw
+  }
+
+  const host = /larksuite/i.test(raw) ? 'applink.larksuite.com' : 'applink.feishu.cn'
+
+  const native = raw.match(
+    /^(?:lark|feishu|x-feishu|x-lark):\/\/(?:applink\.(?:feishu\.cn|larksuite\.com)\/)?client\/chat\/open\?(.+)$/i,
   )
+  if (native) return `https://${host}/client/chat/open?${native[1]}`
+
+  const broken = raw.match(
+    /^(?:lark|feishu|x-feishu|x-lark):\/\/\/+client\/chat\/open\?(.+)$/i,
+  )
+  if (broken) return `https://${host}/client/chat/open?${broken[1]}`
+
+  return null
+}
+
+/**
+ * https AppLink → custom scheme with applink host (docs structure).
+ * https://applink.feishu.cn/client/… → lark://applink.feishu.cn/client/…
+ */
+export function coerceNativeApplink(url: string): string | null {
+  const https = coerceHttpsApplink(url)
+  if (!https) return null
+  return https.replace(/^https:\/\//i, 'lark://')
 }
 
 /** Last-resort open when host openUrl / shell are unavailable. */
@@ -204,61 +230,51 @@ async function openFeishuClientOrUrl(options: {
   openUrl?: ((url: string) => Promise<void>) | null
   url: string
 }): Promise<void> {
-  const url = normalizeFeishuOpenUrl(options.url)
-  if (!url) return
-  const isClient = /^(lark|feishu|x-feishu|x-lark):\/\//i.test(url)
+  const httpsUrl = normalizeFeishuOpenUrl(options.url)
+  if (!httpsUrl) return
+  const nativeUrl = coerceNativeApplink(httpsUrl)
   const hostOpen = options.openUrl ?? fallbackOpenUrl
+  const isChatApplink = Boolean(coerceHttpsApplink(httpsUrl))
 
-  // Always hit host/Tauri open first. Shell `open` exit codes are unreliable
-  // (returns 0 even when the URL is malformed / not delivered).
+  // 1) Official custom scheme with applink host — direct client attempt.
+  //    Docs: lark://applink.feishu.cn/client/chat/open?…
+  if (isChatApplink && nativeUrl && options.shell) {
+    try {
+      const result = await options.shell.run({
+        command: `open ${shellQuote(nativeUrl)}`,
+        timeoutMs: 2500,
+      })
+      if (!result.timedOut && (result.exitCode === 0 || result.exitCode == null)) {
+        void raiseFeishuProcess(options.shell)
+        return
+      }
+    } catch {
+      // fall through to https
+    }
+  }
+
+  // 2) Official HTTPS AppLink — PC opens intermediate page then tries Feishu.
   let hostError: unknown = null
   try {
-    await hostOpen(url)
+    await hostOpen(httpsUrl)
   } catch (error) {
     hostError = error
   }
 
-  // macOS: also deliver via LaunchServices for running Feishu instances.
-  // Do NOT early-return on shell success alone — still keep hostOpen above.
-  if (isClient && options.shell) {
-    const candidates = [
-      `open ${shellQuote(url)}`,
-      buildOpenLocationScript(url),
-    ]
-    for (const command of candidates) {
-      try {
-        const result = await options.shell.run({
-          command,
-          timeoutMs: 2500,
-        })
-        if (!result.timedOut && (result.exitCode === 0 || result.exitCode == null)) {
-          void raiseFeishuProcess(options.shell)
-          return
-        }
-      } catch {
-        // try next
-      }
+  // Also shell-open https so default browser path runs even if host open is weak.
+  if (isChatApplink && options.shell) {
+    try {
+      await options.shell.run({
+        command: `open ${shellQuote(httpsUrl)}`,
+        timeoutMs: 2500,
+      })
+    } catch {
+      // ignore
     }
+    void raiseFeishuProcess(options.shell)
   }
 
-  if (options.shell) void raiseFeishuProcess(options.shell)
-  // If host open failed and shell also failed to claim success, surface error.
   if (hostError) throw hostError
-}
-
-/** AppleScript: deliver URL into the Feishu/Lark desktop app by bundle id. */
-function buildOpenLocationScript(url: string): string {
-  const escaped = url.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-  // Bundle id is stable across Lark.app / Feishu branding on CN desktop.
-  const script = [
-    'try',
-    '  tell application id "com.electron.lark"',
-    '    activate',
-    `    open location "${escaped}"`,
-    '  end tell',
-    'end try',
-  ].join('\n')
-  return `osascript -e ${shellQuote(script)}`
 }
 
 /** Raise Feishu/Lark process without title matching (chat open already routed). */

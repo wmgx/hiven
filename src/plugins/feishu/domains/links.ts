@@ -1,63 +1,99 @@
 /**
- * Feishu / Lark client deep links.
+ * Feishu / Lark AppLink deep links.
  *
- * Prefer native URL schemes so macOS launches the desktop client directly.
+ * Official docs:
+ * - Open a chat page:
+ *   https://open.feishu.cn/document/common-capabilities/applink-protocol/supported-protocol/open-a-chat-page
+ * - AppLink application (PC opens https as webpage then tries Feishu):
+ *   https://open.feishu.cn/document/uAjLw4CM/uYjL24iN/applink-protocol/applink-introduction/applink-application
  *
- * Desktop delivery (macOS, empirically):
- *   lark://client/chat/open?openChatId=oc_...   ← works with `open` / open location
- *   lark://applink.feishu.cn/...                ← can be handed to the browser
- *   https://applink.feishu.cn/...               ← often hops browser (Edge/Chrome)
+ * Protocol (official):
+ *   https://applink.feishu.cn/client/chat/open?openChatId=oc_…
+ *   https://applink.feishu.cn/client/chat/open?openId=ou_…
  *
- * HTTPS remains available as an explicit fallback helper.
+ * Custom scheme (same path, direct client attempt):
+ *   lark://applink.feishu.cn/client/chat/open?…
+ *   feishu://applink.feishu.cn/client/chat/open?…
+ *
+ * Constraints from docs:
+ * - openId and openChatId are mutually exclusive (fill only one).
+ * - User must have joined the chat; same tenant only.
+ * - On PC, https AppLink first opens as a webpage which then tries to open Feishu.
  */
 
 export type FeishuBrand = 'feishu' | 'lark'
 
-/** Default brand for ByteDance CN tenants; can be extended from whoami later. */
+/** Default brand for ByteDance CN tenants. */
 export const DEFAULT_FEISHU_BRAND: FeishuBrand = 'feishu'
 
 /**
- * Native scheme for the installed desktop app.
- * CN Feishu desktop (bundle com.electron.lark) registers `lark://`.
- * International Lark also uses `lark://`.
+ * Native scheme registered by the desktop client (com.electron.lark).
+ * CN Feishu and international Lark both commonly register `lark://`.
  */
 export function clientScheme(brand: FeishuBrand = DEFAULT_FEISHU_BRAND): 'lark' | 'feishu' {
-  // Even CN Feishu desktop is Electron Lark shell — lark:// is the reliable handler.
-  return brand === 'feishu' || brand === 'lark' ? 'lark' : 'lark'
+  return brand === 'lark' ? 'lark' : 'lark'
 }
 
-/** Applink host embedded in native scheme / https URL. */
+/** Official applink host. */
 export function applinkHost(brand: FeishuBrand = DEFAULT_FEISHU_BRAND): string {
   return brand === 'lark' ? 'applink.larksuite.com' : 'applink.feishu.cn'
 }
 
 /**
- * Open a group or p2p chat in the Feishu/Lark desktop client (no browser).
- * `chatId` is typically `oc_…`.
- *
- * Uses bare `lark://client/chat/open?...` — this is what macOS LaunchServices
- * delivers into the running Feishu process. Embedding `applink.feishu.cn` as a
- * host often causes the URL to be handed to the default browser instead.
+ * Primary chat open URL — official HTTPS AppLink.
+ * PC: opens intermediate webpage then tries to launch Feishu (per AppLink docs).
  */
 export function buildChatOpenUrl(chatId: string, brand: FeishuBrand = DEFAULT_FEISHU_BRAND): string {
-  const id = chatId.trim()
-  const scheme = clientScheme(brand)
-  return `${scheme}://client/chat/open?openChatId=${encodeURIComponent(id)}`
+  return buildChatOpenHttpsUrl(chatId, brand)
 }
 
-/**
- * HTTPS applink fallback (may hop browser if not claimed by the desktop app).
- * Prefer {@link buildChatOpenUrl} first.
- */
-export function buildChatOpenHttpsUrl(chatId: string, brand: FeishuBrand = DEFAULT_FEISHU_BRAND): string {
+/** Official HTTPS AppLink for openChatId (oc_…). */
+export function buildChatOpenHttpsUrl(
+  chatId: string,
+  brand: FeishuBrand = DEFAULT_FEISHU_BRAND,
+): string {
   const host = applinkHost(brand)
   return `https://${host}/client/chat/open?openChatId=${encodeURIComponent(chatId.trim())}`
 }
 
 /**
- * Best-effort open a user DM via native scheme.
- * Prefer `p2pChatId` when search returns it (most reliable for navigation).
- * Fall back to openId (ou_…).
+ * Custom-scheme AppLink for direct client open (no browser intermediate).
+ * Path must keep the applink host segment per AppLink structure:
+ *   lark://applink.feishu.cn/client/chat/open?…
+ * Bare `lark://client/...` is NOT the documented form.
+ */
+export function buildChatOpenNativeUrl(
+  chatId: string,
+  brand: FeishuBrand = DEFAULT_FEISHU_BRAND,
+): string {
+  const scheme = clientScheme(brand)
+  const host = applinkHost(brand)
+  return `${scheme}://${host}/client/chat/open?openChatId=${encodeURIComponent(chatId.trim())}`
+}
+
+/** Official HTTPS AppLink for openId (ou_…) — 1:1 chat. */
+export function buildUserOpenIdHttpsUrl(
+  openId: string,
+  brand: FeishuBrand = DEFAULT_FEISHU_BRAND,
+): string {
+  const host = applinkHost(brand)
+  return `https://${host}/client/chat/open?openId=${encodeURIComponent(openId.trim())}`
+}
+
+/** Custom-scheme AppLink for openId. */
+export function buildUserOpenIdNativeUrl(
+  openId: string,
+  brand: FeishuBrand = DEFAULT_FEISHU_BRAND,
+): string {
+  const scheme = clientScheme(brand)
+  const host = applinkHost(brand)
+  return `${scheme}://${host}/client/chat/open?openId=${encodeURIComponent(openId.trim())}`
+}
+
+/**
+ * Best-effort user DM URL (primary = https).
+ * Prefer p2pChatId (openChatId) when search returns it; else openId.
+ * Docs: openId and openChatId are mutually exclusive.
  */
 export function buildUserChatOpenUrl(options: {
   p2pChatId?: string
@@ -66,15 +102,75 @@ export function buildUserChatOpenUrl(options: {
 }): string | undefined {
   const brand = options.brand ?? DEFAULT_FEISHU_BRAND
   if (options.p2pChatId?.trim()) {
-    return buildChatOpenUrl(options.p2pChatId, brand)
+    return buildChatOpenHttpsUrl(options.p2pChatId, brand)
   }
   const openId = options.openId?.trim()
   if (!openId) return undefined
-  const scheme = clientScheme(brand)
-  return `${scheme}://client/chat/open?openId=${encodeURIComponent(openId)}`
+  return buildUserOpenIdHttpsUrl(openId, brand)
 }
 
-/** True if URL is a native Feishu/Lark client scheme (should not open as https). */
+/** Native custom-scheme variant of {@link buildUserChatOpenUrl}. */
+export function buildUserChatOpenNativeUrl(options: {
+  p2pChatId?: string
+  openId?: string
+  brand?: FeishuBrand
+}): string | undefined {
+  const brand = options.brand ?? DEFAULT_FEISHU_BRAND
+  if (options.p2pChatId?.trim()) {
+    return buildChatOpenNativeUrl(options.p2pChatId, brand)
+  }
+  const openId = options.openId?.trim()
+  if (!openId) return undefined
+  return buildUserOpenIdNativeUrl(openId, brand)
+}
+
+/** True if URL is a native Feishu/Lark client scheme. */
 export function isFeishuClientScheme(url: string): boolean {
   return /^(lark|feishu|x-feishu|x-lark):\/\//i.test(url.trim())
+}
+
+/** True if URL is an official https applink. */
+export function isFeishuHttpsApplink(url: string): boolean {
+  return /^https:\/\/applink\.(feishu\.cn|larksuite\.com)\/client\//i.test(url.trim())
+}
+
+/**
+ * Convert any known chat-open form to official https AppLink.
+ * Returns null when the URL is not a recognized chat deep link.
+ */
+export function toHttpsApplink(url: string, brand: FeishuBrand = DEFAULT_FEISHU_BRAND): string | null {
+  const raw = url.trim()
+  if (!raw) return null
+  if (isFeishuHttpsApplink(raw)) return raw
+
+  const host = applinkHost(brand)
+
+  // lark://applink.feishu.cn/client/chat/open?…  or  lark://client/chat/open?…
+  const native = raw.match(
+    /^(?:lark|feishu|x-feishu|x-lark):\/\/(?:applink\.(?:feishu\.cn|larksuite\.com)\/)?client\/chat\/open\?(.+)$/i,
+  )
+  if (native) {
+    return `https://${host}/client/chat/open?${native[1]}`
+  }
+
+  // Broken triple-slash form from older bugs
+  const broken = raw.match(
+    /^(?:lark|feishu|x-feishu|x-lark):\/\/\/+client\/chat\/open\?(.+)$/i,
+  )
+  if (broken) {
+    return `https://${host}/client/chat/open?${broken[1]}`
+  }
+
+  return null
+}
+
+/**
+ * Convert https (or bare) chat AppLink to custom-scheme form with applink host.
+ *   https://applink.feishu.cn/client/chat/open?… → lark://applink.feishu.cn/client/chat/open?…
+ */
+export function toNativeApplink(url: string, brand: FeishuBrand = DEFAULT_FEISHU_BRAND): string | null {
+  const https = toHttpsApplink(url, brand) ?? (isFeishuHttpsApplink(url) ? url.trim() : null)
+  if (!https) return null
+  const scheme = clientScheme(brand)
+  return https.replace(/^https:\/\//i, `${scheme}://`)
 }
