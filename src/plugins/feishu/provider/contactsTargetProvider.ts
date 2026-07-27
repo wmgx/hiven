@@ -96,23 +96,16 @@ export function createFeishuContactsProvider(): DesktopTargetProvider {
         openUrl: url,
       })
       try {
-        // Prefer shell-delivered open even when openUrl is unbound (GL cold path).
         // Chat deep link already routes; skip title AXRaise (wrong window risk).
-        const openUrl =
-          runtime.openUrl ??
-          (async (u: string) => {
-            if (runtime.shell) {
-              await runtime.shell.run({ command: `open ${JSON.stringify(u)}`, timeoutMs: 2500 })
-            }
-          })
+        // openUrl may be null before hooks.startup — openFeishuTarget has fallbacks.
         await openFeishuTarget({
           shell: runtime.shell,
-          openUrl,
+          openUrl: runtime.openUrl,
           url,
           preferWindowFocus: false,
         })
       } catch {
-        // ignore
+        // ignore — launcher still closes; host open / shell tried best-effort
       }
     },
   }

@@ -130,14 +130,14 @@ export async function tryFocusFeishuWindowByTitle(options: {
  */
 export async function openFeishuTarget(options: {
   shell?: LarkCliShell | null
-  openUrl: (url: string) => Promise<void>
+  openUrl?: ((url: string) => Promise<void>) | null
   url: string
   titleHint?: string
   preferWindowFocus?: boolean
 }): Promise<'opened'> {
   await openFeishuClientOrUrl({
     shell: options.shell,
-    openUrl: options.openUrl,
+    openUrl: options.openUrl ?? null,
     url: options.url,
   })
 
@@ -160,44 +160,70 @@ export async function openFeishuTarget(options: {
 
 /**
  * Normalize chat deep links so cached / older applink-host forms still open.
- * `lark://applink.feishu.cn/client/...` can be handed to the browser; rewrite to
- * bare `lark://client/...` which LaunchServices delivers into Feishu.
+ *
+ * `lark://applink.feishu.cn/client/...` → `lark://client/...`
+ *
+ * IMPORTANT: replacement must not produce a triple slash (`lark:///client`).
+ * Capture group for the path already includes the leading `/client`, so the
+ * scheme join is `$1:/$2` → `lark:` + `/client` → `lark://client`.
  */
 export function normalizeFeishuOpenUrl(url: string): string {
   const raw = url.trim()
   if (!raw) return raw
-  // lark://applink.feishu.cn/client/chat/open?... → lark://client/chat/open?...
-  const rewritten = raw.replace(
-    /^(lark|feishu|x-feishu|x-lark):\/\/applink\.(?:feishu\.cn|larksuite\.com)(\/client\/)/i,
+
+  // Fix already-broken triple-slash forms from older buggy normalize.
+  const deTripled = raw.replace(
+    /^(lark|feishu|x-feishu|x-lark):\/\/\/+(client\/)/i,
     '$1://$2',
   )
-  return rewritten
+
+  // lark://applink.feishu.cn/client/chat/open?... → lark://client/chat/open?...
+  // Group2 is `/client/...` (includes leading slash).
+  return deTripled.replace(
+    /^(lark|feishu|x-feishu|x-lark):\/\/applink\.(?:feishu\.cn|larksuite\.com)(\/client\/)/i,
+    '$1:/$2',
+  )
+}
+
+/** Last-resort open when host openUrl / shell are unavailable. */
+async function fallbackOpenUrl(url: string): Promise<void> {
+  try {
+    const { open } = await import('@tauri-apps/plugin-shell')
+    await open(url)
+    return
+  } catch {
+    // non-tauri / plugin missing
+  }
+  if (typeof window !== 'undefined' && typeof window.open === 'function') {
+    window.open(url, '_blank')
+  }
 }
 
 async function openFeishuClientOrUrl(options: {
   shell?: LarkCliShell | null
-  openUrl: (url: string) => Promise<void>
+  openUrl?: ((url: string) => Promise<void>) | null
   url: string
 }): Promise<void> {
   const url = normalizeFeishuOpenUrl(options.url)
+  if (!url) return
   const isClient = /^(lark|feishu|x-feishu|x-lark):\/\//i.test(url)
+  const hostOpen = options.openUrl ?? fallbackOpenUrl
 
-  // macOS delivery notes (empirically):
-  // - `open <scheme-url>` hits LaunchServices and delivers to the running
-  //   Feishu/Lark instance (process name is often "Feishu" even when the
-  //   bundle is Lark.app).
-  // - `open -a /Applications/Lark.app <url>` returns exit 0 but frequently
-  //   does NOT deliver the URL when the app is already running — that was
-  //   the "jump to chat is broken" regression. Prefer plain `open` first.
-  // - AppleScript `open location` via bundle id is a strong second path.
+  // Always hit host/Tauri open first. Shell `open` exit codes are unreliable
+  // (returns 0 even when the URL is malformed / not delivered).
+  let hostError: unknown = null
+  try {
+    await hostOpen(url)
+  } catch (error) {
+    hostError = error
+  }
+
+  // macOS: also deliver via LaunchServices for running Feishu instances.
+  // Do NOT early-return on shell success alone — still keep hostOpen above.
   if (isClient && options.shell) {
     const candidates = [
-      // 1) System scheme handler (running instance + cold start).
       `open ${shellQuote(url)}`,
-      // 2) Bundle-id open location — forces delivery into com.electron.lark.
       buildOpenLocationScript(url),
-      // 3) Cold-start / multi-install last resort only.
-      `open -a ${shellQuote('/Applications/Lark.app')} ${shellQuote(url)}`,
     ]
     for (const command of candidates) {
       try {
@@ -206,18 +232,18 @@ async function openFeishuClientOrUrl(options: {
           timeoutMs: 2500,
         })
         if (!result.timedOut && (result.exitCode === 0 || result.exitCode == null)) {
-          // Best-effort raise Feishu after URL delivery (does not block).
           void raiseFeishuProcess(options.shell)
           return
         }
       } catch {
-        // try next candidate
+        // try next
       }
     }
   }
 
-  await options.openUrl(url)
   if (options.shell) void raiseFeishuProcess(options.shell)
+  // If host open failed and shell also failed to claim success, surface error.
+  if (hostError) throw hostError
 }
 
 /** AppleScript: deliver URL into the Feishu/Lark desktop app by bundle id. */

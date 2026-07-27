@@ -84,21 +84,14 @@ export function createFeishuChatsProvider(): DesktopTargetProvider {
       try {
         // Chat deep link already routes + focuses; skip title AXRaise which can
         // raise an unrelated window and undo chat navigation.
-        const openUrl =
-          runtime.openUrl ??
-          (async (u: string) => {
-            if (runtime.shell) {
-              await runtime.shell.run({ command: `open ${JSON.stringify(u)}`, timeoutMs: 2500 })
-            }
-          })
         await openFeishuTarget({
           shell: runtime.shell,
-          openUrl,
+          openUrl: runtime.openUrl,
           url,
           preferWindowFocus: false,
         })
       } catch {
-        // ignore
+        // ignore — openFeishuTarget already tried host + shell fallbacks
       }
     },
   }

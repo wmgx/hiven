@@ -175,25 +175,77 @@ assert.match(linksSrc, /applinkHost|applink\.feishu\.cn/, 'https helper resolves
 assert.match(linksSrc, /buildUserChatOpenUrl|p2pChatId|openId/, 'links must build user DM applink')
 const windowFocusSrc2 = read('src/plugins/feishu/domains/windowFocus.ts')
 assert.match(windowFocusSrc2, /open \$\{|open \$\{shellQuote|`open |open -a/, 'native schemes should use macOS open')
-// Critical: plain `open <url>` must come BEFORE `open -a Lark.app` — the latter
-// often returns 0 without delivering the URL to a running Feishu instance.
-{
-  const openFn = windowFocusSrc2
-  const plainOpenIdx = openFn.search(/`open \$\{shellQuote\(url\)\}`|open \$\{shellQuote\(url\)\}/)
-  const openAppIdx = openFn.search(/open -a \$\{shellQuote\('\/Applications\/Lark\.app'\)\}/)
-  assert.ok(plainOpenIdx >= 0, 'must try plain open <url>')
-  assert.ok(openAppIdx >= 0, 'may still keep open -a Lark.app as cold-start fallback')
-  assert.ok(
-    plainOpenIdx < openAppIdx,
-    'plain open must be attempted before open -a Lark.app (running-instance delivery)',
-  )
-}
+// Critical: must use plain `open <url>` (not only open -a Lark.app).
+assert.match(
+  windowFocusSrc2,
+  /open \$\{shellQuote\(url\)\}|`open \$\{shellQuote\(url\)\}`/,
+  'must try plain open <url>',
+)
+// open -a alone is unreliable for running instances — must not be the only path.
 assert.match(windowFocusSrc2, /open location|com\.electron\.lark/, 'should try AppleScript open location into Lark bundle')
+assert.match(windowFocusSrc2, /fallbackOpenUrl|plugin-shell/, 'must have host/Tauri open fallback')
 assert.match(
   windowFocusSrc2,
   /normalizeFeishuOpenUrl|applink\.\(\?:feishu/,
   'must rewrite cached applink-host URLs to bare client scheme',
 )
+// Critical: `$1://$2` with $2=`/client/` yields illegal `lark:///client` (triple slash).
+assert.match(
+  windowFocusSrc2,
+  /\$1:\/\$2/,
+  'normalize must use $1:/$2 so result is lark://client not lark:///client',
+)
+assert.doesNotMatch(
+  // replacement string only (ignore comments)
+  windowFocusSrc2.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, ''),
+  /replace\([\s\S]{0,120}'\$1:\/\/\$2'/,
+  'must not use $1://$2 replacement (produces triple slash)',
+)
+
+// Pure unit: normalizeFeishuOpenUrl
+{
+  let ts
+  try {
+    ts = createRequire(import.meta.url)('typescript')
+  } catch {
+    ts = null
+  }
+  if (ts) {
+    const tmp = mkdtempSync(join(tmpdir(), 'feishu-norm-'))
+    const src = read('src/plugins/feishu/domains/windowFocus.ts')
+    const match = src.match(
+      /export function normalizeFeishuOpenUrl\(url: string\): string \{[\s\S]*?\n\}/,
+    )
+    assert.ok(match, 'normalizeFeishuOpenUrl must exist')
+    const out = join(tmp, 'norm.mjs')
+    writeFileSync(
+      out,
+      ts.transpileModule(match[0], {
+        compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+        fileName: 'norm.ts',
+      }).outputText,
+    )
+    const { normalizeFeishuOpenUrl } = await import(pathToFileURL(out).href)
+    assert.equal(
+      normalizeFeishuOpenUrl(
+        'lark://applink.feishu.cn/client/chat/open?openChatId=oc_abc',
+      ),
+      'lark://client/chat/open?openChatId=oc_abc',
+      'applink host must rewrite to bare client path',
+    )
+    assert.equal(
+      normalizeFeishuOpenUrl('lark:///client/chat/open?openChatId=oc_abc'),
+      'lark://client/chat/open?openChatId=oc_abc',
+      'triple-slash bug form must be repaired',
+    )
+    assert.equal(
+      normalizeFeishuOpenUrl('lark://client/chat/open?openChatId=oc_abc'),
+      'lark://client/chat/open?openChatId=oc_abc',
+      'already-correct URL stays unchanged',
+    )
+    rmSync(tmp, { recursive: true, force: true })
+  }
+}
 
 // --- L1 multi-layer cache ---
 const l1CacheSrc = read('src/plugins/feishu/search/l1Cache.ts')
