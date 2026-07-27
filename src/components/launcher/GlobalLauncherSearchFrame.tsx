@@ -1,4 +1,4 @@
-import type { MutableRefObject, RefObject } from 'react'
+import type { MouseEvent as ReactMouseEvent, MutableRefObject, RefObject } from 'react'
 import { Search } from 'lucide-react'
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
@@ -46,7 +46,7 @@ export function GlobalLauncherSearchFrame({
   onQueryChange: (value: string) => void
   onSelectItem: (item: LauncherMixedItem) => void
   onHoverIndex: (index: number) => void
-  onMouseMove: () => void
+  onMouseMove: (event: ReactMouseEvent) => void
   isKeyboardNavRef?: MutableRefObject<boolean>
   /** @deprecated Dedicated object-action rows removed; ranking + textMatch is the path. */
   onExecuteAction?: (action: RecommendedAction, target: RecommendedOutputTarget) => void

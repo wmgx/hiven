@@ -1,4 +1,4 @@
-import { type MutableRefObject, type RefObject } from 'react'
+import { type MouseEvent as ReactMouseEvent, type MutableRefObject, type RefObject } from 'react'
 import { t, type Locale } from '../../i18n'
 import { localized, type LauncherHostSurfaceTarget, type PluginSurfaceOpenTarget } from '../../store'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
@@ -117,7 +117,7 @@ export function GlobalLauncherFrameSwitch({
   onSearchQueryChange: (value: string) => void
   onSearchSelectItem: (item: LauncherMixedItem) => void
   onSearchHoverIndex: (index: number) => void
-  onSearchMouseMove: () => void
+  onSearchMouseMove: (event: ReactMouseEvent) => void
   isKeyboardNavRef?: MutableRefObject<boolean>
   clipboardBlock: ClipboardObjectBlockState
   /** Recent-clipboard hint is the focused row (selectedIndex === -1). */

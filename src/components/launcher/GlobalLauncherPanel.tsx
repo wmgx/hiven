@@ -1,4 +1,4 @@
-import { useCallback, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, type RefObject } from 'react'
 import type { Locale } from '../../i18n'
 import type { LauncherHostSurfaceTarget, PluginSurfaceOpenTarget } from '../../store'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
@@ -131,12 +131,46 @@ export function GlobalLauncherPanel({
   const handleSearchSelectItem = useCallback((item: GlobalLauncherItem) => {
     selectItem(item)
   }, [selectItem])
+  /**
+   * Hover select only after real pointer movement.
+   * Initial overlap (open under cursor / list re-render under cursor) must not
+   * steal the keyboard/default selection.
+   */
+  const hoverSelectArmedRef = useRef(false)
+  const lastPointerRef = useRef<{ x: number; y: number } | null>(null)
+  const listIdentity = visibleFiltered.map((item) => item.id).join('\0')
+  useEffect(() => {
+    hoverSelectArmedRef.current = false
+    lastPointerRef.current = null
+  }, [query, listIdentity])
+
   const handleSearchHoverIndex = useCallback((index: number) => {
-    if (!isKeyboardNavRef.current) setSelectedIndex(index)
+    if (!hoverSelectArmedRef.current) return
+    if (isKeyboardNavRef.current) return
+    setSelectedIndex(index)
   }, [isKeyboardNavRef, setSelectedIndex])
-  const handleSearchMouseMove = useCallback(() => {
+
+  const handleSearchMouseMove = useCallback((event: { clientX: number; clientY: number; target: EventTarget | null }) => {
+    const prev = lastPointerRef.current
+    const next = { x: event.clientX, y: event.clientY }
+    lastPointerRef.current = next
+    // First sample only records position — no select yet.
+    if (!prev) return
+    const dx = next.x - prev.x
+    const dy = next.y - prev.y
+    // ~2px movement threshold filters layout/jitter without feeling laggy.
+    if (dx * dx + dy * dy < 4) return
+
+    hoverSelectArmedRef.current = true
     isKeyboardNavRef.current = false
-  }, [isKeyboardNavRef])
+
+    // After keyboard nav, mouseenter may not re-fire on the same row — pick under pointer.
+    const row = (event.target as HTMLElement | null)?.closest?.('[data-launcher-row-index]')
+    if (row instanceof HTMLElement) {
+      const index = Number(row.dataset.launcherRowIndex)
+      if (Number.isFinite(index)) setSelectedIndex(index)
+    }
+  }, [isKeyboardNavRef, setSelectedIndex])
   return (
     <LauncherView
       hostId="global-launcher"

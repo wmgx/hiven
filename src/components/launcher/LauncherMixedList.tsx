@@ -112,9 +112,11 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
       ref={ref}
       type="button"
       tabIndex={-1}
+      data-launcher-row-index={index}
       className={`l-row cmd-item w-full border-none text-left ${selected ? 'sel selected' : ''}`}
       style={{ animationDelay: staggerDelay }}
       onClick={handleClick}
+      // Hover select is gated by parent (must move pointer first); enter alone is not enough.
       onMouseEnter={onHoverIndex ? handleMouseEnter : undefined}
       // Keep the search caret — do not let list rows take focus on mousedown.
       onMouseDown={(event) => event.preventDefault()}
