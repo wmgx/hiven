@@ -2,16 +2,13 @@
  * Feishu / Lark client deep links.
  *
  * Prefer native URL schemes so macOS launches the desktop client directly.
- * Official applink path is `/client/chat/open`; the desktop client registers
- * hosts like `applink.feishu.cn` / `applink` on the `lark` / `feishu` schemes.
  *
- * Wrong (only activates app, does not navigate):
- *   lark://client/chat/open?openChatId=oc_...
+ * Desktop delivery (macOS, empirically):
+ *   lark://client/chat/open?openChatId=oc_...   ← works with `open` / open location
+ *   lark://applink.feishu.cn/...                ← can be handed to the browser
+ *   https://applink.feishu.cn/...               ← often hops browser (Edge/Chrome)
  *
- * Correct (native, no browser hop):
- *   lark://applink.feishu.cn/client/chat/open?openChatId=oc_...
- *
- * HTTPS remains available as fallback when native scheme fails.
+ * HTTPS remains available as an explicit fallback helper.
  */
 
 export type FeishuBrand = 'feishu' | 'lark'
@@ -38,14 +35,14 @@ export function applinkHost(brand: FeishuBrand = DEFAULT_FEISHU_BRAND): string {
  * Open a group or p2p chat in the Feishu/Lark desktop client (no browser).
  * `chatId` is typically `oc_…`.
  *
- * Uses `lark://applink.feishu.cn/client/chat/open?...` — the host segment is
- * required; bare `lark://client/...` only focuses the app without routing.
+ * Uses bare `lark://client/chat/open?...` — this is what macOS LaunchServices
+ * delivers into the running Feishu process. Embedding `applink.feishu.cn` as a
+ * host often causes the URL to be handed to the default browser instead.
  */
 export function buildChatOpenUrl(chatId: string, brand: FeishuBrand = DEFAULT_FEISHU_BRAND): string {
   const id = chatId.trim()
   const scheme = clientScheme(brand)
-  const host = applinkHost(brand)
-  return `${scheme}://${host}/client/chat/open?openChatId=${encodeURIComponent(id)}`
+  return `${scheme}://client/chat/open?openChatId=${encodeURIComponent(id)}`
 }
 
 /**
@@ -74,8 +71,7 @@ export function buildUserChatOpenUrl(options: {
   const openId = options.openId?.trim()
   if (!openId) return undefined
   const scheme = clientScheme(brand)
-  const host = applinkHost(brand)
-  return `${scheme}://${host}/client/chat/open?openId=${encodeURIComponent(openId)}`
+  return `${scheme}://client/chat/open?openId=${encodeURIComponent(openId)}`
 }
 
 /** True if URL is a native Feishu/Lark client scheme (should not open as https). */

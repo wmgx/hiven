@@ -324,8 +324,9 @@ body[data-theme='light'],
   padding-bottom: 7px;
   gap: 10px;
 }
-.global-launcher-panel .cmd-item.selected,
-.palette-panel .cmd-item.selected {
+/* Prefer .l-row.sel rules below for Global Launcher contrast; keep soft fill for non-l-row lists. */
+.global-launcher-panel .cmd-item.selected:not(.l-row),
+.palette-panel .cmd-item.selected:not(.l-row) {
   background: var(--accent-soft, var(--accent-tint));
   border-radius: var(--radius-sm);
 }
@@ -5349,20 +5350,61 @@ body[data-theme='dark'] .launcher-preview-well {
   padding: 0 12px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.14s, color 0.14s;
+  transition: background 0.14s, color 0.14s, box-shadow 0.14s;
   color: var(--text);
   background: transparent;
+  box-shadow: none;
   contain: inline-size style;
 }
 
-.l-row:hover:not(.sel) {
+/* Hover is neutral gray only — never accent, so it cannot look "selected". */
+.l-row:hover:not(.sel):not(.selected) {
   background: var(--surface);
+  box-shadow: none;
 }
 
+/* Selected must be unmistakably different from hover / idle. */
 .l-row.sel,
 .l-row.selected {
   height: 50px;
-  background: var(--accent-soft) !important;
+  background: color-mix(in srgb, var(--accent) 18%, #fff) !important;
+  box-shadow:
+    inset 3px 0 0 var(--accent),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.flux-spatial-shell[data-theme='dark'] .l-row.sel,
+.flux-spatial-shell[data-theme='dark'] .l-row.selected,
+body[data-theme='dark'] .l-row.sel,
+body[data-theme='dark'] .l-row.selected {
+  background: color-mix(in srgb, var(--accent) 28%, transparent) !important;
+  box-shadow:
+    inset 3px 0 0 var(--accent),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+/* Global launcher: kill legacy cmd-item hover/selected that wash out l-row contrast. */
+.global-launcher-panel .l-row.cmd-item:hover:not(.sel):not(.selected),
+.palette-panel .l-row.cmd-item:hover:not(.sel):not(.selected) {
+  background: var(--surface) !important;
+  box-shadow: none !important;
+}
+.global-launcher-panel .l-row.cmd-item.sel,
+.global-launcher-panel .l-row.cmd-item.selected,
+.palette-panel .l-row.cmd-item.sel,
+.palette-panel .l-row.cmd-item.selected {
+  background: color-mix(in srgb, var(--accent) 18%, #fff) !important;
+  box-shadow:
+    inset 3px 0 0 var(--accent),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent) !important;
+}
+.flux-spatial-shell[data-theme='dark'] .global-launcher-panel .l-row.cmd-item.sel,
+.flux-spatial-shell[data-theme='dark'] .global-launcher-panel .l-row.cmd-item.selected,
+.flux-spatial-shell[data-theme='dark'] .palette-panel .l-row.cmd-item.sel,
+.flux-spatial-shell[data-theme='dark'] .palette-panel .l-row.cmd-item.selected,
+body[data-theme='dark'] .global-launcher-panel .l-row.cmd-item.sel,
+body[data-theme='dark'] .global-launcher-panel .l-row.cmd-item.selected {
+  background: color-mix(in srgb, var(--accent) 28%, transparent) !important;
 }
 
 .l-row .r-ico,

@@ -149,26 +149,51 @@ const linksSrc = read('src/plugins/feishu/domains/links.ts')
 assert.match(linksSrc, /buildChatOpenUrl|openChatId/, 'links must build chat open url')
 // Prefer native client scheme over https applink (browser hop)
 assert.match(linksSrc, /lark:\/\/|feishu:\/\//, 'chat open must use native client scheme')
-// Host segment is required: lark://applink.feishu.cn/client/chat/open — bare lark://client/... does not navigate
+// Primary open must use bare lark://client/chat/open — applink host form can go to browser
 assert.match(
   linksSrc,
-  /applink\.feishu\.cn|applink\.larksuite\.com/,
-  'native chat open must embed applink host so client routes to chat',
+  /\$\{scheme\}:\/\/client\/chat\/open|scheme\}:\/\/client\/chat\/open/,
+  'buildChatOpenUrl must use scheme://client/chat/open (not applink host)',
 )
-assert.match(
-  linksSrc,
-  /\$\{scheme\}:\/\/\$\{host\}\/client\/chat\/open|scheme\}:\/\/\$\{host\}/,
-  'buildChatOpenUrl must use scheme://applink-host/client/chat/open',
+assert.doesNotMatch(
+  // strip https helper + comments so primary builder is checked
+  linksSrc
+    .replace(/buildChatOpenHttpsUrl[\s\S]*?^}/m, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*$/gm, ''),
+  /buildChatOpenUrl[\s\S]{0,200}applink\.feishu\.cn/,
+  'primary buildChatOpenUrl must not embed applink.feishu.cn host',
 )
 assert.doesNotMatch(
   linksSrc.replace(/buildChatOpenHttpsUrl[\s\S]*?^}/m, ''),
   /buildChatOpenUrl[\s\S]*https:\/\/applink/,
   'primary buildChatOpenUrl must not use https applink (browser hop)',
 )
+// HTTPS helper still available for explicit fallback
+assert.match(linksSrc, /buildChatOpenHttpsUrl/, 'https fallback helper kept')
+assert.match(linksSrc, /applinkHost|applink\.feishu\.cn/, 'https helper resolves applink host')
 assert.match(linksSrc, /buildUserChatOpenUrl|p2pChatId|openId/, 'links must build user DM applink')
 const windowFocusSrc2 = read('src/plugins/feishu/domains/windowFocus.ts')
 assert.match(windowFocusSrc2, /open \$\{|open \$\{shellQuote|`open |open -a/, 'native schemes should use macOS open')
-assert.match(windowFocusSrc2, /Lark\.app/, 'open path should prefer production Lark.app when present')
+// Critical: plain `open <url>` must come BEFORE `open -a Lark.app` — the latter
+// often returns 0 without delivering the URL to a running Feishu instance.
+{
+  const openFn = windowFocusSrc2
+  const plainOpenIdx = openFn.search(/`open \$\{shellQuote\(url\)\}`|open \$\{shellQuote\(url\)\}/)
+  const openAppIdx = openFn.search(/open -a \$\{shellQuote\('\/Applications\/Lark\.app'\)\}/)
+  assert.ok(plainOpenIdx >= 0, 'must try plain open <url>')
+  assert.ok(openAppIdx >= 0, 'may still keep open -a Lark.app as cold-start fallback')
+  assert.ok(
+    plainOpenIdx < openAppIdx,
+    'plain open must be attempted before open -a Lark.app (running-instance delivery)',
+  )
+}
+assert.match(windowFocusSrc2, /open location|com\.electron\.lark/, 'should try AppleScript open location into Lark bundle')
+assert.match(
+  windowFocusSrc2,
+  /normalizeFeishuOpenUrl|applink\.\(\?:feishu/,
+  'must rewrite cached applink-host URLs to bare client scheme',
+)
 
 // --- L1 multi-layer cache ---
 const l1CacheSrc = read('src/plugins/feishu/search/l1Cache.ts')

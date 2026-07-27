@@ -84,7 +84,6 @@ export function createFeishuContactsProvider(): DesktopTargetProvider {
       const url = target.meta?.url
       if (!url) return
       const runtime = getFeishuRuntime()
-      if (!runtime.openUrl) return
       // Sticky: visited people stay in local index longer and rank higher next time.
       const entityId =
         (typeof target.meta?.entityId === 'string' && target.meta.entityId) ||
@@ -97,11 +96,18 @@ export function createFeishuContactsProvider(): DesktopTargetProvider {
         openUrl: url,
       })
       try {
-        // Chat deep link already routes + focuses; skip title AXRaise which can
-        // raise an unrelated window whose title merely contains the person name.
+        // Prefer shell-delivered open even when openUrl is unbound (GL cold path).
+        // Chat deep link already routes; skip title AXRaise (wrong window risk).
+        const openUrl =
+          runtime.openUrl ??
+          (async (u: string) => {
+            if (runtime.shell) {
+              await runtime.shell.run({ command: `open ${JSON.stringify(u)}`, timeoutMs: 2500 })
+            }
+          })
         await openFeishuTarget({
           shell: runtime.shell,
-          openUrl: runtime.openUrl,
+          openUrl,
           url,
           preferWindowFocus: false,
         })

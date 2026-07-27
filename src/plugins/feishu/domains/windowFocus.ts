@@ -158,23 +158,46 @@ export async function openFeishuTarget(options: {
   return 'opened'
 }
 
+/**
+ * Normalize chat deep links so cached / older applink-host forms still open.
+ * `lark://applink.feishu.cn/client/...` can be handed to the browser; rewrite to
+ * bare `lark://client/...` which LaunchServices delivers into Feishu.
+ */
+export function normalizeFeishuOpenUrl(url: string): string {
+  const raw = url.trim()
+  if (!raw) return raw
+  // lark://applink.feishu.cn/client/chat/open?... → lark://client/chat/open?...
+  const rewritten = raw.replace(
+    /^(lark|feishu|x-feishu|x-lark):\/\/applink\.(?:feishu\.cn|larksuite\.com)(\/client\/)/i,
+    '$1://$2',
+  )
+  return rewritten
+}
+
 async function openFeishuClientOrUrl(options: {
   shell?: LarkCliShell | null
   openUrl: (url: string) => Promise<void>
   url: string
 }): Promise<void> {
-  const url = options.url.trim()
+  const url = normalizeFeishuOpenUrl(options.url)
   const isClient = /^(lark|feishu|x-feishu|x-lark):\/\//i.test(url)
 
-  // macOS: prefer explicit production client so multi-install BOE/main_end
-  // copies cannot swallow the scheme. Pass the full applink URL so the client
-  // routes to the chat (bare `open lark://client/...` only focuses the app).
+  // macOS delivery notes (empirically):
+  // - `open <scheme-url>` hits LaunchServices and delivers to the running
+  //   Feishu/Lark instance (process name is often "Feishu" even when the
+  //   bundle is Lark.app).
+  // - `open -a /Applications/Lark.app <url>` returns exit 0 but frequently
+  //   does NOT deliver the URL when the app is already running — that was
+  //   the "jump to chat is broken" regression. Prefer plain `open` first.
+  // - AppleScript `open location` via bundle id is a strong second path.
   if (isClient && options.shell) {
     const candidates = [
-      // Preferred production install (CN Feishu packaged as Lark.app).
-      `open -a ${shellQuote('/Applications/Lark.app')} ${shellQuote(url)}`,
-      // Fallback: system default handler for the scheme.
+      // 1) System scheme handler (running instance + cold start).
       `open ${shellQuote(url)}`,
+      // 2) Bundle-id open location — forces delivery into com.electron.lark.
+      buildOpenLocationScript(url),
+      // 3) Cold-start / multi-install last resort only.
+      `open -a ${shellQuote('/Applications/Lark.app')} ${shellQuote(url)}`,
     ]
     for (const command of candidates) {
       try {
@@ -183,6 +206,8 @@ async function openFeishuClientOrUrl(options: {
           timeoutMs: 2500,
         })
         if (!result.timedOut && (result.exitCode === 0 || result.exitCode == null)) {
+          // Best-effort raise Feishu after URL delivery (does not block).
+          void raiseFeishuProcess(options.shell)
           return
         }
       } catch {
@@ -192,6 +217,50 @@ async function openFeishuClientOrUrl(options: {
   }
 
   await options.openUrl(url)
+  if (options.shell) void raiseFeishuProcess(options.shell)
+}
+
+/** AppleScript: deliver URL into the Feishu/Lark desktop app by bundle id. */
+function buildOpenLocationScript(url: string): string {
+  const escaped = url.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+  // Bundle id is stable across Lark.app / Feishu branding on CN desktop.
+  const script = [
+    'try',
+    '  tell application id "com.electron.lark"',
+    '    activate',
+    `    open location "${escaped}"`,
+    '  end tell',
+    'end try',
+  ].join('\n')
+  return `osascript -e ${shellQuote(script)}`
+}
+
+/** Raise Feishu/Lark process without title matching (chat open already routed). */
+async function raiseFeishuProcess(shell: LarkCliShell): Promise<void> {
+  try {
+    await shell.run({
+      command: [
+        'osascript -e',
+        shellQuote(
+          [
+            'tell application "System Events"',
+            '  repeat with pname in {"Feishu", "Lark", "飞书", "LarkSuite"}',
+            '    try',
+            '      if exists process (pname as text) then',
+            '        set frontmost of process (pname as text) to true',
+            '        return "raised"',
+            '      end if',
+            '    end try',
+            '  end repeat',
+            'end tell',
+          ].join('\n'),
+        ),
+      ].join(' '),
+      timeoutMs: 800,
+    })
+  } catch {
+    // ignore
+  }
 }
 
 function shellQuote(arg: string): string {

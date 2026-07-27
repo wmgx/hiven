@@ -71,7 +71,6 @@ export function createFeishuChatsProvider(): DesktopTargetProvider {
       const url = target.meta?.url
       if (!url) return
       const runtime = getFeishuRuntime()
-      if (!runtime.openUrl) return
       const entityId =
         (typeof target.meta?.entityId === 'string' && target.meta.entityId) ||
         target.id.replace(/^feishu\.chats:chat:/, '')
@@ -85,9 +84,16 @@ export function createFeishuChatsProvider(): DesktopTargetProvider {
       try {
         // Chat deep link already routes + focuses; skip title AXRaise which can
         // raise an unrelated window and undo chat navigation.
+        const openUrl =
+          runtime.openUrl ??
+          (async (u: string) => {
+            if (runtime.shell) {
+              await runtime.shell.run({ command: `open ${JSON.stringify(u)}`, timeoutMs: 2500 })
+            }
+          })
         await openFeishuTarget({
           shell: runtime.shell,
-          openUrl: runtime.openUrl,
+          openUrl,
           url,
           preferWindowFocus: false,
         })
