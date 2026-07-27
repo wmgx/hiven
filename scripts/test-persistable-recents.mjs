@@ -84,8 +84,33 @@ const items = mod.buildPersistableRecentLauncherItems({
   openUrl: async () => {},
 })
 assert.ok(items.length >= 2)
-assert.equal(items[0].display.kindLabel, '最近会话')
+// Empty query: most frequent first — 李昊天 count=2 > 项目群 count=1
+assert.equal(items[0].display.title, '李昊天', 'empty query ranks by count then recency')
+assert.equal(items[0].display.kindLabel, '最近联系人')
 assert.equal(items[0].persistable, true)
+assert.ok(
+  (items[0].ranking?.providerPriorityBoost ?? 0) >= 40,
+  'empty-query recents get higher boost',
+)
+
+const typed = mod.buildPersistableRecentLauncherItems({
+  recents,
+  query: '项目',
+  locale: 'zh',
+  openUrl: async () => {},
+})
+assert.equal(typed.length, 1)
+assert.equal(typed[0].display.title, '项目群')
+assert.ok(
+  (typed[0].ranking?.providerPriorityBoost ?? 0) <= 40,
+  'typed-query boost is not higher than empty boost',
+)
+
+assert.match(
+  read('src/store.ts'),
+  /CLEAR_PERSISTABLE_RECENTS_EVENT|clearPersistableLauncherRecents/,
+  'host must expose clear path for settings',
+)
 
 rmSync(tmp, { recursive: true, force: true })
 console.log('persistable recents checks passed')

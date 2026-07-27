@@ -228,6 +228,31 @@ assert.match(
   /onlyChatted:\s*true|hasContactIntersection/,
   'L1 contacts mix-in must hide people without intersection',
 )
+assert.match(
+  read('src/plugins/feishu/settings/model.ts'),
+  /contactSearchOnlyChatted/,
+  'settings must expose L2 only-chatted toggle',
+)
+assert.match(
+  read('src/plugins/feishu/tools.ts'),
+  /onlyChatted:\s*settings\.contactSearchOnlyChatted/,
+  'L2 Find People must honor contactSearchOnlyChatted',
+)
+assert.match(
+  read('src/plugins/feishu/domains/avatarCache.ts'),
+  /localStorage|STORAGE_KEY|hiven-feishu-avatar-cache/,
+  'avatar cache must persist across sessions',
+)
+assert.match(
+  read('src/plugins/feishu/settings/FeishuSettingsBody.tsx'),
+  /avatarAuth|contact:contact\.base:readonly/,
+  'settings must offer avatar scope authorization',
+)
+assert.doesNotMatch(
+  read('src/plugins/feishu/settings/FeishuSettingsBody.tsx'),
+  /require\(['"]\.\.\/\.\.\/\.\.\/store['"]\)|from\s+['"]\.\.\/\.\.\/\.\.\/store['"]/,
+  'settings must not deep-import host store',
+)
 assert.match(read('src/plugins/feishu/domains/im.ts'), /iconForChat/, 'chats must set avatar icons')
 assert.match(
   read('src/components/launcher/LauncherCommandTag.tsx'),

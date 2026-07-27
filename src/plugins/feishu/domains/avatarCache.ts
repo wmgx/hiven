@@ -3,24 +3,75 @@
  *
  * `contact +search-user` does not return avatar URLs. Real avatars need a follow-up
  * contact batch API (scope contact:contact.base:readonly or contact:user.base:readonly).
- * We cache by open_id for the session and soft-request the scope once if missing.
+ * In-memory cache for the session + localStorage snapshot so restarts keep faces.
  */
 
 import { startLogin } from './auth'
 import { isHttpIconUrl } from './icons'
 import { runLarkCli, type LarkCliShell } from '../cli/run'
 
+const STORAGE_KEY = 'hiven-feishu-avatar-cache-v1'
+const MAX_PERSISTED = 200
 const avatarByOpenId = new Map<string, string>()
 let scopeMissing = false
 let scopeAuthAttempted = false
+let hydrated = false
+let persistTimer: ReturnType<typeof setTimeout> | null = null
+
+function canUseStorage(): boolean {
+  try {
+    return typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function'
+  } catch {
+    return false
+  }
+}
+
+/** Load disk snapshot once (best-effort; never throws). */
+function hydrateFromStorage(): void {
+  if (hydrated) return
+  hydrated = true
+  if (!canUseStorage()) return
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return
+    const parsed = JSON.parse(raw) as unknown
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return
+    for (const [id, url] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof id === 'string' && isHttpIconUrl(url as string)) {
+        avatarByOpenId.set(id.trim(), String(url).trim())
+      }
+    }
+  } catch {
+    // corrupt snapshot — ignore
+  }
+}
+
+function schedulePersist(): void {
+  if (!canUseStorage()) return
+  if (persistTimer != null) clearTimeout(persistTimer)
+  persistTimer = setTimeout(() => {
+    persistTimer = null
+    try {
+      const entries = [...avatarByOpenId.entries()].slice(-MAX_PERSISTED)
+      const obj: Record<string, string> = {}
+      for (const [id, url] of entries) obj[id] = url
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(obj))
+    } catch {
+      // quota / private mode
+    }
+  }, 250)
+}
 
 export function getCachedAvatar(openId: string): string | undefined {
+  hydrateFromStorage()
   return avatarByOpenId.get(openId)
 }
 
 export function setCachedAvatar(openId: string, url: string): void {
+  hydrateFromStorage()
   if (!openId || !isHttpIconUrl(url)) return
   avatarByOpenId.set(openId, url.trim())
+  schedulePersist()
 }
 
 /**
@@ -34,8 +85,15 @@ export async function fetchContactAvatars(options: {
   signal?: AbortSignal
   timeoutMs?: number
 }): Promise<Map<string, string>> {
+  hydrateFromStorage()
   const out = new Map<string, string>()
-  if (scopeMissing) return out
+  if (scopeMissing) {
+    for (const id of options.openIds) {
+      const hit = avatarByOpenId.get(id)
+      if (hit) out.set(id, hit)
+    }
+    return out
+  }
 
   const need = [...new Set(options.openIds.map((id) => id.trim()).filter(Boolean))].filter(
     (id) => !avatarByOpenId.has(id),
@@ -95,9 +153,15 @@ export async function fetchContactAvatars(options: {
         })
       }
     }
+    // Still return any hydrated disk hits
+    for (const id of options.openIds) {
+      const hit = avatarByOpenId.get(id)
+      if (hit) out.set(id, hit)
+    }
     return out
   }
 
+  let wrote = false
   const users = extractBatchUsers(result.data)
   for (const user of users) {
     const id = String(user.open_id ?? user.openId ?? user.user_id ?? '').trim()
@@ -105,8 +169,10 @@ export async function fetchContactAvatars(options: {
     if (id && url) {
       avatarByOpenId.set(id, url)
       out.set(id, url)
+      wrote = true
     }
   }
+  if (wrote) schedulePersist()
 
   // Also return previously cached hits for the full input set
   for (const id of options.openIds) {
@@ -164,4 +230,16 @@ export function clearAvatarCacheForTests(): void {
   avatarByOpenId.clear()
   scopeMissing = false
   scopeAuthAttempted = false
+  hydrated = false
+  if (persistTimer != null) {
+    clearTimeout(persistTimer)
+    persistTimer = null
+  }
+  if (canUseStorage()) {
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+    } catch {
+      // ignore
+    }
+  }
 }

@@ -92,6 +92,14 @@ assert.match(toolsSrc, /feishu\.minutes-search|minutes-search|searchMinutes/, 'm
 assert.match(provider, /openFeishuTarget|preferWindowFocus|titleHint/, 'docs provider activate should try window focus')
 const settingsModel = read(`${pluginDir}/settings/model.ts`)
 assert.match(settingsModel, /preferWindowFocus/, 'settings model must include preferWindowFocus')
+assert.match(settingsModel, /contactSearchOnlyChatted/, 'settings model must include contactSearchOnlyChatted')
+assert.match(localeEn, /settings\.avatarAuth|settings\.contactSearchOnlyChatted/, 'en locales cover new settings')
+assert.match(localeZh, /settings\.avatarAuth|settings\.contactSearchOnlyChatted/, 'zh locales cover new settings')
+assert.match(
+  toolsSrc,
+  /onlyChatted:\s*settings\.contactSearchOnlyChatted/,
+  'contact-search tool must honor contactSearchOnlyChatted',
+)
 
 // --- provider: feishu.docs DesktopTargetProvider ---
 assert.match(provider, /feishu\.docs/, 'provider must use source id feishu.docs')

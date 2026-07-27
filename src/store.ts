@@ -9,6 +9,7 @@ import type {
   SystemLauncherItemKey,
 } from './workspace/launcher/types'
 import {
+  CLEAR_PERSISTABLE_RECENTS_EVENT,
   emptyPersistableRecents,
   recordPersistableRecent,
   type PersistableLauncherPayload,
@@ -137,6 +138,7 @@ interface AppState {
    */
   launcherPersistableRecents: PersistableRecentEntry[]
   recordPersistableLauncherSelection: (payload: PersistableLauncherPayload) => void
+  clearPersistableLauncherRecents: () => void
 
   // Saved params per action (for persistParams feature)
   savedActionParams: Record<string, Record<string, any>>
@@ -256,6 +258,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
       Date.now(),
     ),
   })),
+  clearPersistableLauncherRecents: () => set({ launcherPersistableRecents: emptyPersistableRecents() }),
 
   // Saved params per action
   savedActionParams: {},
@@ -398,3 +401,11 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     return merged
   },
 }))
+
+// Plugin settings (first-party) may clear recents without importing this module:
+// window.dispatchEvent(new CustomEvent(CLEAR_PERSISTABLE_RECENTS_EVENT))
+if (typeof window !== 'undefined') {
+  window.addEventListener(CLEAR_PERSISTABLE_RECENTS_EVENT, () => {
+    useAppStore.getState().clearPersistableLauncherRecents()
+  })
+}

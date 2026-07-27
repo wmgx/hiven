@@ -8,6 +8,11 @@ export type FeishuSettings = {
   /** When true, mix Feishu contacts (people) into Global Launcher L1 search. */
   contactsMixEnabled: boolean
   /**
+   * L1 always hides people without chat intersection.
+   * When true, L2「找人」tool also only shows people you've chatted with.
+   */
+  contactSearchOnlyChatted: boolean
+  /**
    * After openUrl, best-effort raise a matching Feishu/Lark window (macOS).
    * Does not delay open.
    */
@@ -21,6 +26,7 @@ export const DEFAULT_FEISHU_SETTINGS: FeishuSettings = {
   docsMixEnabled: true,
   chatsMixEnabled: true,
   contactsMixEnabled: true,
+  contactSearchOnlyChatted: false,
   preferWindowFocus: true,
   binaryPath: '',
 }

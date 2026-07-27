@@ -521,7 +521,7 @@ export function useLauncherSession({
       recents: launcherPersistableRecents,
       query: deferredQuery.trim(),
       locale,
-      max: deferredQuery.trim() ? 10 : 8,
+      // empty / typed caps live in persistableRecents defaults
     })
   }, [deferredQuery, launcherPersistableRecents, locale, normalizedHostId])
 

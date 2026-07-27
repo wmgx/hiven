@@ -178,6 +178,26 @@ export function FeishuSettingsBody(props: PluginSettingsBodyProps<FeishuSettings
             '打开后尝试聚焦飞书窗口（macOS）',
           )}
         </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+          <ui.Checkbox
+            checked={value.contactSearchOnlyChatted === true}
+            onChange={(event: { target: { checked: boolean } }) => {
+              setValue({ ...value, contactSearchOnlyChatted: event.target.checked })
+            }}
+          />
+          {label(
+            'settings.contactSearchOnlyChatted',
+            'Find People: only show contacts I have chatted with',
+            '「找人」仅显示已聊过的联系人',
+          )}
+        </label>
+        <ui.Text style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.45 }}>
+          {label(
+            'settings.contactSearchOnlyChattedHint',
+            'Main launcher always hides strangers. This only affects the Find People tool.',
+            '主 launcher 混排始终隐藏无交集的人；此项只影响「找人」命令。',
+          )}
+        </ui.Text>
       </ui.Stack>
 
       <ui.Stack gap={6}>
@@ -306,10 +326,115 @@ export function FeishuSettingsBody(props: PluginSettingsBodyProps<FeishuSettings
           >
             {label('settings.loginComplete', 'Complete login', '完成登录')}
           </ui.Button>
+          <ui.Button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              const runtime = getFeishuRuntime()
+              if (!runtime.shell) {
+                setMessage(
+                  label(
+                    'error.shellMissing',
+                    'Shell permission required',
+                    '需要 shell.run 权限',
+                  ),
+                )
+                return
+              }
+              setBusy(true)
+              setMessage(null)
+              // Real avatars need contact.base; search alone has no avatar field.
+              void startLogin(runtime.shell, value.binaryPath || undefined, undefined, [
+                'contact:contact.base:readonly',
+                'contact:user.base:readonly',
+              ])
+                .then(async (started) => {
+                  if (!started.ok) {
+                    setMessage(started.message ?? 'Avatar auth failed')
+                    return
+                  }
+                  if (started.deviceCode) setPendingDeviceCode(started.deviceCode)
+                  if (started.verificationUrl) {
+                    try {
+                      if (runtime.openUrl) await runtime.openUrl(started.verificationUrl)
+                      else await openExternal(started.verificationUrl)
+                    } catch {
+                      // ignore
+                    }
+                    setMessage(
+                      label(
+                        'settings.avatarAuthOpened',
+                        'Opened avatar permission URL — authorize, then click Complete login and search people again.',
+                        '已打开头像权限授权页 — 授权后点「完成登录」，再搜一次联系人即可显示真头像。',
+                      ),
+                    )
+                  } else {
+                    setMessage(
+                      started.message ||
+                        label(
+                          'settings.avatarAuthStarted',
+                          'Avatar permission login started. Complete auth, then refresh.',
+                          '已发起头像权限登录，完成后请刷新状态。',
+                        ),
+                    )
+                  }
+                })
+                .catch((error: unknown) => {
+                  setMessage(error instanceof Error ? error.message : String(error))
+                })
+                .finally(() => setBusy(false))
+            }}
+          >
+            {label('settings.avatarAuth', 'Authorize avatars', '授权显示头像')}
+          </ui.Button>
         </ui.Stack>
+        <ui.Text style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.45 }}>
+          {label(
+            'settings.avatarAuthHint',
+            'Search returns no avatar field. Extra scope contact:contact.base:readonly is required for real profile photos.',
+            '搜人接口本身不带头像；需额外授权 contact:contact.base:readonly 才能显示真实头像。',
+          )}
+        </ui.Text>
         {message && (
           <ui.Text style={{ fontSize: 12, color: 'var(--text-2)' }}>{message}</ui.Text>
         )}
+      </ui.Stack>
+
+      <ui.Stack gap={6}>
+        <ui.Text style={{ fontSize: 13, fontWeight: 600 }}>
+          {label('settings.recents', 'Recents', '最近推荐')}
+        </ui.Text>
+        <ui.Text style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>
+          {label(
+            'settings.recentsHint',
+            'Opened Feishu people / chats / docs can reappear in Global Launcher without searching again.',
+            '打开过的飞书联系人 / 会话 / 文档会在 Global Launcher 里直接推荐，无需再搜。',
+          )}
+        </ui.Text>
+        <ui.Button
+          type="button"
+          onClick={() => {
+            try {
+              // Host listens for this event (no plugin→store import).
+              window.dispatchEvent(
+                new CustomEvent('hiven:launcher-clear-persistable-recents'),
+              )
+              setMessage(
+                label('settings.recentsCleared', 'Cleared recent recommendations', '已清除最近推荐'),
+              )
+            } catch {
+              setMessage(
+                label(
+                  'settings.recentsClearFailed',
+                  'Could not clear recents from this panel',
+                  '无法在此清除最近推荐',
+                ),
+              )
+            }
+          }}
+        >
+          {label('settings.clearRecents', 'Clear recent recommendations', '清除最近推荐')}
+        </ui.Button>
       </ui.Stack>
 
       <ui.Text style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.45 }}>

@@ -502,6 +502,8 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         shell,
         query,
         binaryPath: settings.binaryPath || undefined,
+        // L1 always filters; L2「找人」honors settings.contactSearchOnlyChatted.
+        onlyChatted: settings.contactSearchOnlyChatted === true,
       })
       if (!search.ok) {
         return await presentFeishuCliFailure({
@@ -515,7 +517,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         })
       }
 
-      // Full search still includes strangers, but people you've chatted with rank first.
+      // When not restricted, still rank chatted contacts first.
       const rows = sortUsersByIntersection(mapUsersToRows(search.users))
       if (rows.length === 0) {
         return ctx.output.text(ctx.t('error.noUsers'))

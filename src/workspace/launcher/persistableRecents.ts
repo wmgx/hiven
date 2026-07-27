@@ -36,6 +36,17 @@ export type PersistableRecentEntry = PersistableLauncherPayload & {
 }
 
 export const PERSISTABLE_RECENTS_MAX = 48
+/** Empty Global Launcher query: keep recents short so static tools stay scannable. */
+export const PERSISTABLE_RECENTS_EMPTY_QUERY_MAX = 8
+/** Non-empty query: allow a few more filtered matches. */
+export const PERSISTABLE_RECENTS_QUERY_MAX = 12
+/** Empty-query boost — max host providerPriorityBoost is 50. */
+export const PERSISTABLE_RECENTS_EMPTY_BOOST = 40
+/** Weak match boost when user is typing. */
+export const PERSISTABLE_RECENTS_QUERY_BOOST = 20
+
+/** Host bridge: plugin settings may dispatch this to clear recents without importing store. */
+export const CLEAR_PERSISTABLE_RECENTS_EVENT = 'hiven:launcher-clear-persistable-recents'
 
 const KIND_LABELS: Record<PersistableContentKind, { en: string; zh: string }> = {
   document: { en: 'Recent doc', zh: '最近文档' },
@@ -100,12 +111,27 @@ export function buildPersistableRecentLauncherItems(options: {
   openUrl?: (url: string) => Promise<void>
 }): LauncherItem[] {
   const openUrl = options.openUrl ?? openExternalUrl
-  const max = options.max ?? 12
-  const matched = filterPersistableRecents(options.recents, options.query).slice(0, max)
+  const q = options.query.trim()
+  const emptyQuery = !q
+  const max =
+    options.max ??
+    (emptyQuery ? PERSISTABLE_RECENTS_EMPTY_QUERY_MAX : PERSISTABLE_RECENTS_QUERY_MAX)
+  // Prefer frequent + recent when empty; filter already keeps order for typed query.
+  const matched = (
+    emptyQuery
+      ? [...filterPersistableRecents(options.recents, options.query)].sort((a, b) => {
+          if (b.count !== a.count) return b.count - a.count
+          return b.lastSelectedAt - a.lastSelectedAt
+        })
+      : filterPersistableRecents(options.recents, options.query)
+  ).slice(0, max)
   const locale = options.locale
+  const boost = emptyQuery ? PERSISTABLE_RECENTS_EMPTY_BOOST : PERSISTABLE_RECENTS_QUERY_BOOST
 
-  return matched.map((row) => {
+  return matched.map((row, index) => {
     const labels = KIND_LABELS[row.kind]
+    // Slight within-list decay so order stays stable under equal usage scores.
+    const orderNudge = Math.max(0, 8 - index)
     return {
       systemKey: row.systemKey,
       kind: 'host' as const,
@@ -126,8 +152,7 @@ export function buildPersistableRecentLauncherItems(options: {
           : undefined,
       ranking: {
         ...(row.scoreBias != null ? { scoreBias: row.scoreBias } : {}),
-        // Mild boost so recents surface when query is empty / weak match.
-        providerPriorityBoost: 20,
+        providerPriorityBoost: Math.min(50, boost + orderNudge),
       },
       persistable: true,
       persistPayload: {
