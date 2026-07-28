@@ -112,6 +112,44 @@ export function getHostPaneControlItems(): LauncherItem[] {
         return { ok: true, keepOpen: true }
       },
     },
+    {
+      systemKey: 'host:view:devtools',
+      kind: 'host',
+      display: {
+        title: 'Open DevTools',
+        titleI18n: { zh: '打开控制台' },
+        subtitle: 'Open WebView developer tools for this window',
+        subtitleI18n: { zh: '打开当前窗口的开发者工具（看日志）' },
+        icon: 'Terminal',
+        aliases: [
+          'devtools',
+          'dev tools',
+          'console',
+          'inspector',
+          'debug console',
+          'web inspector',
+          '控制台',
+          '开发者工具',
+          '调试',
+          '日志',
+          '打开控制台',
+          '打开调试',
+        ],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['global-launcher', 'editor-command-bar', 'quick-editor-command'],
+      execute: async () => {
+        try {
+          const { invoke } = await import('@tauri-apps/api/core')
+          // Prefer the current window; fall back to launcher label.
+          await invoke('open_devtools')
+          return { ok: true, keepOpen: true }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          return { ok: false, message }
+        }
+      },
+    },
     // Pane split / new-pane live only on editor-command-bar & quick-editor-command
     // (see hostEditorActions). Global launcher should not expose panel controls.
     ...getHostEditorActionItems(),

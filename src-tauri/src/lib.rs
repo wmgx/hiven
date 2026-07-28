@@ -162,6 +162,27 @@ fn launcher_perf_log_file() -> Result<String, String> {
     launcher_perf_log_path().map(|p| p.to_string_lossy().to_string())
 }
 
+/// Open WebView DevTools for the invoking window (or a named label).
+/// Used by the host launcher command「打开控制台」so developers don't rely on
+/// hard-to-hit browser shortcuts in the transparent launcher window.
+#[tauri::command]
+fn open_devtools(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    label: Option<String>,
+) -> Result<(), String> {
+    use tauri::Manager;
+
+    let target = match label.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        Some(name) => app
+            .get_webview_window(name)
+            .ok_or_else(|| format!("window not found: {name}"))?,
+        None => window,
+    };
+    target.open_devtools();
+    Ok(())
+}
+
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SurfaceInstanceRecord {
@@ -6249,6 +6270,7 @@ pub fn run() {
             focus_launcher_webview,
             log_launcher_perf_frontend,
             launcher_perf_log_file,
+            open_devtools,
             hide_launcher_window,
             hide_launcher_and_paste,
             show_quick_editor_window,
