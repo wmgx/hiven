@@ -300,19 +300,40 @@ function applyAppEffect(effect: AppEffect) {
 }
 
 export async function openExternalUrl(url: string): Promise<void> {
+  const target = url.trim()
+  if (!target) return
+
+  // 1) plugin-shell open (scoped; now includes lark/feishu schemes in tauri.conf)
   try {
-    console.info('[hiven:openExternalUrl] try', { url })
+    console.info('[hiven:openExternalUrl] try shell.open', { url: target })
     const { open } = await import('@tauri-apps/plugin-shell')
-    await open(url)
-    console.info('[hiven:openExternalUrl] ok', { url })
+    await open(target)
+    console.info('[hiven:openExternalUrl] shell.open ok', { url: target })
+    return
   } catch (error) {
-    console.warn('[hiven:openExternalUrl] failed, falling back to window.open', {
-      url,
+    console.warn('[hiven:openExternalUrl] shell.open failed', {
+      url: target,
       message: error instanceof Error ? error.message : String(error),
     })
-    // Fallback to window.open for non-Tauri environments
-    window.open(url, '_blank')
   }
+
+  // 2) Native open_system_url — bypasses plugin-shell scope (custom schemes).
+  try {
+    console.info('[hiven:openExternalUrl] try open_system_url', { url: target })
+    const { invoke } = await import('@tauri-apps/api/core')
+    await invoke('open_system_url', { url: target })
+    console.info('[hiven:openExternalUrl] open_system_url ok', { url: target })
+    return
+  } catch (error) {
+    console.warn('[hiven:openExternalUrl] open_system_url failed', {
+      url: target,
+      message: error instanceof Error ? error.message : String(error),
+    })
+  }
+
+  // 3) Browser / non-Tauri last resort (custom schemes usually no-op here).
+  console.warn('[hiven:openExternalUrl] falling back to window.open', { url: target })
+  window.open(target, '_blank')
 }
 
 function applyPaneEffect(effect: PaneEffect) {

@@ -183,6 +183,46 @@ fn open_devtools(
     Ok(())
 }
 
+/// Open a URL/path with the OS default handler, bypassing plugin-shell open scope.
+/// Used as a reliable fallback for custom schemes (lark:// / feishu://) when
+/// `plugin-shell` open rejects them or is misconfigured.
+#[tauri::command]
+fn open_system_url(url: String) -> Result<(), String> {
+    let url = url.trim();
+    if url.is_empty() {
+        return Err("url must not be empty".into());
+    }
+    // Basic safety: only allow known schemes (no arbitrary shell flags).
+    let lower = url.to_ascii_lowercase();
+    let allowed = lower.starts_with("http://")
+        || lower.starts_with("https://")
+        || lower.starts_with("mailto:")
+        || lower.starts_with("tel:")
+        || lower.starts_with("lark://")
+        || lower.starts_with("feishu://")
+        || lower.starts_with("x-feishu://")
+        || lower.starts_with("x-lark://");
+    if !allowed {
+        return Err(format!("scheme not allowed: {url}"));
+    }
+
+    use std::process::Command;
+    let status = if cfg!(target_os = "macos") {
+        Command::new("open").arg(url).status()
+    } else if cfg!(target_os = "windows") {
+        Command::new("cmd").args(["/C", "start", "", url]).status()
+    } else {
+        Command::new("xdg-open").arg(url).status()
+    }
+    .map_err(|e| format!("failed to open url: {e}"))?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("open exited with {status}"))
+    }
+}
+
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SurfaceInstanceRecord {
@@ -6271,6 +6311,7 @@ pub fn run() {
             log_launcher_perf_frontend,
             launcher_perf_log_file,
             open_devtools,
+            open_system_url,
             hide_launcher_window,
             hide_launcher_and_paste,
             show_quick_editor_window,

@@ -54,6 +54,9 @@
     }
   },
   "plugins": {
+    "shell": {
+      "open": "((mailto:\\w+)|(tel:\\w+)|(https?://\\w+)|(lark://\\w+)|(feishu://\\w+)|(x-feishu://\\w+)|(x-lark://\\w+)).+"
+    },
     "updater": {
       "endpoints": [
         "https://proxy.github.wmgx.top/github/wmgx/hiven/releases/latest/download/latest.json",
