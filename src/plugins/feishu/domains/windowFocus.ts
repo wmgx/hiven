@@ -4,9 +4,66 @@
  */
 
 import type { LarkCliShell } from '../cli/run'
+import {
+  buildDeliveryCandidates,
+  isClientScheme,
+  shellQuote,
+  shouldStopAfterDelivery,
+} from './openPlan'
 
 /** Process names that may own Feishu / Lark desktop windows on macOS. */
 export const FEISHU_WINDOW_APP_NAMES = ['Feishu', 'Lark', '飞书', 'LarkSuite'] as const
+
+/** Bundle ids that may own the Feishu / Lark desktop client. */
+const FEISHU_BUNDLE_IDS = [
+  'com.electron.lark',
+  'com.bytedance.ee.lark',
+  'com.larksuite.desktop',
+] as const
+
+/** Cached resolution so we spawn `mdfind` at most once per session. */
+let resolvedAppPath: string | null | undefined
+
+/**
+ * Resolve the installed Feishu / Lark .app path.
+ *
+ * Returns undefined when nothing resolves, in which case delivery falls back
+ * to plain LaunchServices + bundle id. Never throws.
+ */
+export async function resolveFeishuAppPath(shell: LarkCliShell): Promise<string | undefined> {
+  if (resolvedAppPath !== undefined) return resolvedAppPath ?? undefined
+
+  for (const bundleId of FEISHU_BUNDLE_IDS) {
+    try {
+      // No pipes / redirects: LarkCliShell.run only guarantees a command string,
+      // not a full shell. Take the first line in JS instead.
+      const result = await shell.run({
+        command: `mdfind kMDItemCFBundleIdentifier=${bundleId}`,
+        timeoutMs: 1500,
+      })
+      const path = (result.stdout ?? '')
+        .split('\n')
+        .map((line) => line.trim())
+        .find((line) => line.endsWith('.app'))
+      if (path) {
+        logFeishuOpen('resolveApp:hit', { bundleId, path })
+        resolvedAppPath = path
+        return path
+      }
+    } catch {
+      // try next bundle id
+    }
+  }
+
+  logFeishuOpen('resolveApp:miss', { tried: FEISHU_BUNDLE_IDS.length })
+  resolvedAppPath = null
+  return undefined
+}
+
+/** Test seam: drop the cached app path so the next open re-resolves. */
+export function resetFeishuAppPathCache(): void {
+  resolvedAppPath = undefined
+}
 
 const OPEN_LOG = '[feishu:open]'
 const OPEN_LOG_MAX = 80
@@ -239,7 +296,7 @@ async function openFeishuClientOrUrl(options: {
     logFeishuOpen('openFeishuClientOrUrl:empty-url')
     return
   }
-  const isClient = /^(lark|feishu|x-feishu|x-lark):\/\//i.test(url)
+  const isClient = isClientScheme(url)
   logFeishuOpen('openFeishuClientOrUrl:dispatch', {
     url,
     isClient,
@@ -247,53 +304,45 @@ async function openFeishuClientOrUrl(options: {
     hasOpenUrl: Boolean(options.openUrl),
   })
 
-  // Client schemes: product delivery stays in the plugin (shell.run), not Tauri.
-  // Host openUrl is generic OS open — may only activate BOE/main_end without routing.
-  // Prefer: plain open → open -a production Lark.app → bundle id → host openUrl.
+  // Client schemes: deliver via shell so the deep link reaches the desktop
+  // client. Host openUrl is a generic OS open and may only activate the app.
   if (isClient && options.shell) {
-    const candidates = [
-      // Running instance via LaunchServices
-      `open ${shellQuote(url)}`,
-      // Explicit production client so BOE/main_end copies don't swallow the deep link
-      `open -a ${shellQuote('/Applications/Lark.app')} ${shellQuote(url)}`,
-      // Bundle id
-      `open -b com.electron.lark ${shellQuote(url)}`,
-    ]
-    let accepted = false
-    for (const command of candidates) {
+    const appPath = await resolveFeishuAppPath(options.shell)
+    const candidates = buildDeliveryCandidates(url, { appPath })
+
+    for (const candidate of candidates) {
       try {
-        logFeishuOpen('shell.run:try', { command })
+        logFeishuOpen('shell.run:try', { command: candidate.command, reason: candidate.reason })
         const result = await options.shell.run({
-          command,
+          command: candidate.command,
           timeoutMs: 2500,
         })
         logFeishuOpen('shell.run:result', {
-          command,
+          command: candidate.command,
+          reason: candidate.reason,
           exitCode: result.exitCode ?? null,
           timedOut: Boolean(result.timedOut),
           stdout: (result.stdout ?? '').slice(0, 200),
           stderr: (result.stderr ?? '').slice(0, 200),
         })
-        if (!result.timedOut && (result.exitCode === 0 || result.exitCode == null)) {
-          logFeishuOpen('shell.run:accepted', { command })
-          accepted = true
-          // Keep going: plain `open` may only activate; also deliver via -a Lark.app.
-          // After both plain + -a, stop (first two candidates when both succeed).
-          if (command.includes('Lark.app') || command.includes('com.electron.lark')) {
-            return
-          }
+
+        // Stop on first success: delivering the same deep link twice makes the
+        // client re-handle the URL and can reset an already-navigated window.
+        if (shouldStopAfterDelivery(result)) {
+          logFeishuOpen('shell.run:accepted', {
+            command: candidate.command,
+            reason: candidate.reason,
+          })
+          return
         }
       } catch (error) {
         logFeishuOpen('shell.run:throw', {
-          command,
+          command: candidate.command,
           message: error instanceof Error ? error.message : String(error),
         })
       }
     }
-    if (accepted) {
-      logFeishuOpen('shell.run:done-after-candidates', { url })
-      return
-    }
+
     logFeishuOpen('shell.run:all-failed', { url, candidateCount: candidates.length })
   } else if (isClient && !options.shell) {
     logFeishuOpen('shell.missing-for-client-scheme', { url })
@@ -317,12 +366,6 @@ async function openFeishuClientOrUrl(options: {
 
   logFeishuOpen('abort:no-openUrl-no-shell', { url })
   throw new Error('No openUrl / shell available to open Feishu link')
-}
-
-function shellQuote(arg: string): string {
-  if (arg.length === 0) return "''"
-  if (/^[a-zA-Z0-9_./:=+@%,-]+$/.test(arg)) return arg
-  return `'${arg.replace(/'/g, `'\\''`)}'`
 }
 
 /**

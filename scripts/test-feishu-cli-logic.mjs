@@ -166,8 +166,6 @@ assert.doesNotMatch(
 )
 
 const windowFocusSrc2 = read('src/plugins/feishu/domains/windowFocus.ts')
-assert.match(windowFocusSrc2, /open \$\{shellQuote\(url\)\}|`open \$\{shellQuote\(url\)\}`/, 'must try plain open <url>')
-assert.match(windowFocusSrc2, /Lark\.app/, 'must keep Lark.app open -a fallback')
 assert.match(windowFocusSrc2, /logFeishuOpen|\[feishu:open\]/, 'open path must emit feishu:open diagnostic logs')
 assert.match(
   read('src/plugins/feishu/provider/contactsTargetProvider.ts'),
@@ -194,14 +192,32 @@ assert.doesNotMatch(
   /open -a Safari/,
   'must not hardcode Safari',
 )
-// Plain open should be attempted (running-instance delivery)
-{
-  const plainIdx = windowFocusSrc2.search(/`open \$\{shellQuote\(url\)\}`/)
-  const appIdx = windowFocusSrc2.search(/open -a \$\{shellQuote\('\/Applications\/Lark\.app'\)\}/)
-  assert.ok(plainIdx >= 0, 'plain open present')
-  assert.ok(appIdx >= 0, 'open -a Lark.app present')
-  assert.ok(plainIdx < appIdx, 'plain open before open -a Lark.app')
-}
+
+// --- open path: no hardcoded app path, single delivery ---
+const windowFocusOpenPathSrc = read('src/plugins/feishu/domains/windowFocus.ts')
+assert.ok(
+  !windowFocusOpenPathSrc.includes('/Applications/Lark.app'),
+  'windowFocus must not hardcode /Applications/Lark.app; resolve the installed client instead',
+)
+assert.match(
+  windowFocusOpenPathSrc,
+  /resolveFeishuAppPath/,
+  'windowFocus must resolve the installed Feishu/Lark app path at runtime',
+)
+assert.match(
+  windowFocusOpenPathSrc,
+  /buildDeliveryCandidates|shouldStopAfterDelivery/,
+  'windowFocus must delegate delivery decisions to openPlan',
+)
+assert.ok(
+  existsSync(join(root, 'src/plugins/feishu/domains/openPlan.ts')),
+  'openPlan.ts must exist',
+)
+// Delivery command strings live in openPlan (pure, tested behaviorally)
+const openPlanSrc = read('src/plugins/feishu/domains/openPlan.ts')
+assert.match(openPlanSrc, /open \$\{quotedUrl\}|`open \$\{/, 'openPlan must try plain open <url>')
+assert.match(openPlanSrc, /open -a|resolved-app/, 'openPlan must support resolved-app open -a')
+assert.match(openPlanSrc, /shouldStopAfterDelivery/, 'openPlan must encode single-delivery stop rule')
 
 // --- L1 multi-layer cache ---
 const l1CacheSrc = read('src/plugins/feishu/search/l1Cache.ts')
