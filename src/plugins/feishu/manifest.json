@@ -1,8 +1,14 @@
 {
   "pluginId": "feishu",
   "displayName": "Feishu",
-  "displayNameI18n": { "zh": "飞书" },
-  "version": "0.6.22",
-  "capabilities": ["settings"],
-  "permissions": ["shell.run"]
+  "displayNameI18n": {
+    "zh": "\u98de\u4e66"
+  },
+  "version": "0.6.23",
+  "capabilities": [
+    "settings"
+  ],
+  "permissions": [
+    "shell.run"
+  ]
 }

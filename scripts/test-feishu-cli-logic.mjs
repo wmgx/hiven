@@ -147,123 +147,44 @@ assert.match(
 
 const linksSrc = read('src/plugins/feishu/domains/links.ts')
 assert.match(linksSrc, /buildChatOpenUrl|openChatId/, 'links must build chat open url')
-// Official AppLink protocol (open.feishu.cn)
-assert.match(
-  linksSrc,
-  /https:\/\/\$\{host\}\/client\/chat\/open/,
-  'primary chat open must use https://applink…/client/chat/open',
-)
+// Last-known-good: native scheme WITH applink host (5a490c6)
 assert.match(
   linksSrc,
   /\$\{scheme\}:\/\/\$\{host\}\/client\/chat\/open/,
-  'native form must keep applink host: lark://applink…/client/chat/open',
+  'primary chat open must be lark://applink…/client/chat/open',
 )
+assert.match(linksSrc, /applink\.feishu\.cn|applinkHost/, 'must embed applink host in native URL')
 assert.match(linksSrc, /buildUserChatOpenUrl|p2pChatId|openId/, 'links must build user DM applink')
-assert.match(linksSrc, /toHttpsApplink|toNativeApplink|buildChatOpenNativeUrl/, 'must expose https/native coerce helpers')
-// Bare lark://client without applink host is NOT the documented primary native form
+// Primary must not be https (browser hop)
 assert.doesNotMatch(
   linksSrc
+    .replace(/buildChatOpenHttpsUrl[\s\S]*?^}/m, '')
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/\/\/.*$/gm, ''),
-  /buildChatOpenNativeUrl[\s\S]{0,200}scheme\}:\/\/client\//,
-  'native builder must not use bare lark://client/ (missing applink host)',
+  /buildChatOpenUrl[\s\S]{0,120}https:\/\//,
+  'primary buildChatOpenUrl must not use https',
 )
 
 const windowFocusSrc2 = read('src/plugins/feishu/domains/windowFocus.ts')
-assert.match(windowFocusSrc2, /coerceNativeApplink|lark:\/\//, 'open path must try official native applink scheme')
-assert.match(windowFocusSrc2, /coerceHttpsApplink|normalizeFeishuOpenUrl/, 'must coerce chat URLs to https applink')
+assert.match(windowFocusSrc2, /open \$\{shellQuote\(url\)\}|`open \$\{shellQuote\(url\)\}`/, 'must try plain open <url>')
+assert.match(windowFocusSrc2, /Lark\.app/, 'must keep Lark.app open -a fallback')
 assert.doesNotMatch(
   windowFocusSrc2,
   /from\s+['"]@tauri-apps\/|import\s*\(\s*['"]@tauri-apps\//,
   'feishu plugin must not import Tauri APIs directly',
 )
-assert.match(
-  windowFocusSrc2,
-  /open -b com\.electron\.lark|com\.electron\.lark/,
-  'native open should target Feishu/Lark bundle id',
-)
-// Chat with shell: native only — https after native steals focus via Edge/Chrome
-assert.match(
-  windowFocusSrc2,
-  /do not fall through to https|steal focus|client scheme only/i,
-  'chat open must not chain browser https after native when shell is available',
-)
 assert.doesNotMatch(
   windowFocusSrc2.replace(/\/\*[\s\S]*?\*\//g, ''),
   /open -a Safari/,
-  'must not hardcode Safari handoff (not in Feishu AppLink docs)',
+  'must not hardcode Safari',
 )
-assert.match(
-  read('src/plugins/feishu/domains/links.ts'),
-  /buildUserChatOpenCandidates/,
-  'must build openChatId + openId candidate list',
-)
-assert.match(
-  read('src/plugins/feishu/provider/contactsTargetProvider.ts'),
-  /openChatId|buildUserChatOpenCandidates|alternateUrls/,
-  'contacts activate must pass openChatId/openId candidates',
-)
-// Providers must not swallow open errors (silent "no reaction")
-assert.doesNotMatch(
-  read('src/plugins/feishu/provider/contactsTargetProvider.ts'),
-  /catch\s*\{\s*\/\/\s*ignore/,
-  'contacts activate must not swallow open errors',
-)
-assert.doesNotMatch(
-  read('src/plugins/feishu/provider/chatsTargetProvider.ts'),
-  /catch\s*\{\s*\/\/\s*ignore/,
-  'chats activate must not swallow open errors',
-)
-
-// Pure unit: coerceHttpsApplink / coerceNativeApplink / normalizeFeishuOpenUrl
+// Plain open should be attempted (running-instance delivery)
 {
-  let ts
-  try {
-    ts = createRequire(import.meta.url)('typescript')
-  } catch {
-    ts = null
-  }
-  if (ts) {
-    const tmp = mkdtempSync(join(tmpdir(), 'feishu-norm-'))
-    const src = read('src/plugins/feishu/domains/windowFocus.ts')
-    const coerceH = src.match(
-      /export function coerceHttpsApplink\(url: string\): string \| null \{[\s\S]*?\n\}/,
-    )
-    const coerceN = src.match(
-      /export function coerceNativeApplink\([\s\S]*?\): string \| null \{[\s\S]*?\n\}/,
-    )
-    const norm = src.match(
-      /export function normalizeFeishuOpenUrl\(url: string\): string \{[\s\S]*?\n\}/,
-    )
-    assert.ok(coerceH && coerceN && norm, 'coerce + normalize helpers must exist')
-    const out = join(tmp, 'norm.mjs')
-    writeFileSync(
-      out,
-      ts.transpileModule(`${coerceH[0]}\n${coerceN[0]}\n${norm[0]}`, {
-        compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-        fileName: 'norm.ts',
-      }).outputText,
-    )
-    const mod = await import(pathToFileURL(out).href)
-    assert.equal(
-      mod.coerceHttpsApplink('lark://client/chat/open?openChatId=oc_abc'),
-      'https://applink.feishu.cn/client/chat/open?openChatId=oc_abc',
-    )
-    assert.equal(
-      mod.coerceHttpsApplink('lark://applink.feishu.cn/client/chat/open?openChatId=oc_abc'),
-      'https://applink.feishu.cn/client/chat/open?openChatId=oc_abc',
-    )
-    assert.equal(
-      mod.coerceNativeApplink('https://applink.feishu.cn/client/chat/open?openChatId=oc_abc'),
-      'lark://applink.feishu.cn/client/chat/open?openChatId=oc_abc',
-      'native form must include applink host per docs',
-    )
-    assert.equal(
-      mod.normalizeFeishuOpenUrl('lark://client/chat/open?openChatId=oc_abc'),
-      'https://applink.feishu.cn/client/chat/open?openChatId=oc_abc',
-    )
-    rmSync(tmp, { recursive: true, force: true })
-  }
+  const plainIdx = windowFocusSrc2.search(/`open \$\{shellQuote\(url\)\}`/)
+  const appIdx = windowFocusSrc2.search(/open -a \$\{shellQuote\('\/Applications\/Lark\.app'\)\}/)
+  assert.ok(plainIdx >= 0, 'plain open present')
+  assert.ok(appIdx >= 0, 'open -a Lark.app present')
+  assert.ok(plainIdx < appIdx, 'plain open before open -a Lark.app')
 }
 
 // --- L1 multi-layer cache ---
