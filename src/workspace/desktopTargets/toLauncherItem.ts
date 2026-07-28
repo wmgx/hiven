@@ -230,15 +230,28 @@ export function desktopTargetToLauncherItem(
     execute: async () => {
       if (activate) {
         try {
+          console.info('[desktop-target:execute]', {
+            id: target.id,
+            sourceId: target.sourceId,
+            kind: target.kind,
+            title: target.title,
+            url: target.meta?.url ?? null,
+          })
           await activate(target, { locale, surfaceId: 'global-launcher' })
+          console.info('[desktop-target:execute] ok', { id: target.id })
           return { ok: true as const }
         } catch (error) {
+          console.warn('[desktop-target:execute] error', {
+            id: target.id,
+            message: error instanceof Error ? error.message : String(error),
+          })
           return {
             ok: false as const,
             message: error instanceof Error ? error.message : String(error),
           }
         }
       }
+      console.warn('[desktop-target:execute] no activate handler', { id: target.id })
       return { ok: false as const, message: 'No activate handler' }
     },
   }

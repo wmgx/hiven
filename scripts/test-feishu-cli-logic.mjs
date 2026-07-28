@@ -168,6 +168,12 @@ assert.doesNotMatch(
 const windowFocusSrc2 = read('src/plugins/feishu/domains/windowFocus.ts')
 assert.match(windowFocusSrc2, /open \$\{shellQuote\(url\)\}|`open \$\{shellQuote\(url\)\}`/, 'must try plain open <url>')
 assert.match(windowFocusSrc2, /Lark\.app/, 'must keep Lark.app open -a fallback')
+assert.match(windowFocusSrc2, /logFeishuOpen|\[feishu:open\]/, 'open path must emit feishu:open diagnostic logs')
+assert.match(
+  read('src/plugins/feishu/provider/contactsTargetProvider.ts'),
+  /logFeishuOpen|contacts\.activate/,
+  'contacts activate must log open path',
+)
 assert.doesNotMatch(
   windowFocusSrc2,
   /from\s+['"]@tauri-apps\/|import\s*\(\s*['"]@tauri-apps\//,

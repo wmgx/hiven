@@ -10,7 +10,7 @@ import {
   sortUsersByIntersection,
   type FeishuUserRow,
 } from '../domains/contact'
-import { openFeishuTarget } from '../domains/windowFocus'
+import { logFeishuOpen, openFeishuTarget } from '../domains/windowFocus'
 import { getFeishuRuntime } from '../runtime'
 import {
   beginL1Generation,
@@ -82,8 +82,22 @@ export function createFeishuContactsProvider(): DesktopTargetProvider {
     },
     async activate(target) {
       const url = target.meta?.url
-      if (!url) return
+      logFeishuOpen('contacts.activate:enter', {
+        targetId: target.id,
+        title: target.title,
+        url: url ?? null,
+        metaKeys: target.meta ? Object.keys(target.meta) : [],
+      })
+      if (!url) {
+        logFeishuOpen('contacts.activate:abort-no-url', { targetId: target.id })
+        return
+      }
       const runtime = getFeishuRuntime()
+      logFeishuOpen('contacts.activate:runtime', {
+        hasShell: Boolean(runtime.shell),
+        hasOpenUrl: Boolean(runtime.openUrl),
+        enabled: runtime.settings?.enabled !== false,
+      })
       // Sticky: visited people stay in local index longer and rank higher next time.
       const entityId =
         (typeof target.meta?.entityId === 'string' && target.meta.entityId) ||
@@ -96,12 +110,22 @@ export function createFeishuContactsProvider(): DesktopTargetProvider {
         openUrl: url,
       })
       // Chat deep link already routes; skip title AXRaise (wrong window risk).
-      await openFeishuTarget({
-        shell: runtime.shell,
-        openUrl: runtime.openUrl,
-        url,
-        preferWindowFocus: false,
-      })
+      try {
+        await openFeishuTarget({
+          shell: runtime.shell,
+          openUrl: runtime.openUrl,
+          url,
+          preferWindowFocus: false,
+        })
+        logFeishuOpen('contacts.activate:ok', { targetId: target.id, url })
+      } catch (error) {
+        logFeishuOpen('contacts.activate:error', {
+          targetId: target.id,
+          url,
+          message: error instanceof Error ? error.message : String(error),
+        })
+        throw error
+      }
     },
   }
 }

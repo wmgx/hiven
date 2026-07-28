@@ -4,7 +4,7 @@
 
 import { getPluginHostSdk, type DesktopTargetProvider } from '@hiven/plugin'
 import { mapChatsToRows, searchChats, type FeishuChatRow } from '../domains/im'
-import { openFeishuTarget } from '../domains/windowFocus'
+import { logFeishuOpen, openFeishuTarget } from '../domains/windowFocus'
 import { getFeishuRuntime } from '../runtime'
 import {
   beginL1Generation,
@@ -69,8 +69,20 @@ export function createFeishuChatsProvider(): DesktopTargetProvider {
     },
     async activate(target) {
       const url = target.meta?.url
-      if (!url) return
+      logFeishuOpen('chats.activate:enter', {
+        targetId: target.id,
+        title: target.title,
+        url: url ?? null,
+      })
+      if (!url) {
+        logFeishuOpen('chats.activate:abort-no-url', { targetId: target.id })
+        return
+      }
       const runtime = getFeishuRuntime()
+      logFeishuOpen('chats.activate:runtime', {
+        hasShell: Boolean(runtime.shell),
+        hasOpenUrl: Boolean(runtime.openUrl),
+      })
       const entityId =
         (typeof target.meta?.entityId === 'string' && target.meta.entityId) ||
         target.id.replace(/^feishu\.chats:chat:/, '')
@@ -82,12 +94,22 @@ export function createFeishuChatsProvider(): DesktopTargetProvider {
         openUrl: url,
       })
       // Chat deep link already routes; skip title AXRaise (wrong window risk).
-      await openFeishuTarget({
-        shell: runtime.shell,
-        openUrl: runtime.openUrl,
-        url,
-        preferWindowFocus: false,
-      })
+      try {
+        await openFeishuTarget({
+          shell: runtime.shell,
+          openUrl: runtime.openUrl,
+          url,
+          preferWindowFocus: false,
+        })
+        logFeishuOpen('chats.activate:ok', { targetId: target.id, url })
+      } catch (error) {
+        logFeishuOpen('chats.activate:error', {
+          targetId: target.id,
+          url,
+          message: error instanceof Error ? error.message : String(error),
+        })
+        throw error
+      }
     },
   }
 }

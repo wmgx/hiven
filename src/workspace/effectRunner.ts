@@ -301,10 +301,15 @@ function applyAppEffect(effect: AppEffect) {
 
 export async function openExternalUrl(url: string): Promise<void> {
   try {
+    console.info('[hiven:openExternalUrl] try', { url })
     const { open } = await import('@tauri-apps/plugin-shell')
     await open(url)
+    console.info('[hiven:openExternalUrl] ok', { url })
   } catch (error) {
-    console.warn('[hiven] Failed to open external URL:', error)
+    console.warn('[hiven:openExternalUrl] failed, falling back to window.open', {
+      url,
+      message: error instanceof Error ? error.message : String(error),
+    })
     // Fallback to window.open for non-Tauri environments
     window.open(url, '_blank')
   }

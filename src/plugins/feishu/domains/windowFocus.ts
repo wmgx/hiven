@@ -8,6 +8,17 @@ import type { LarkCliShell } from '../cli/run'
 /** Process names that may own Feishu / Lark desktop windows on macOS. */
 export const FEISHU_WINDOW_APP_NAMES = ['Feishu', 'Lark', '飞书', 'LarkSuite'] as const
 
+const OPEN_LOG = '[feishu:open]'
+
+/** Structured open-path logs — filter DevTools / tauri console by `feishu:open`. */
+export function logFeishuOpen(step: string, details?: Record<string, unknown>): void {
+  if (details && Object.keys(details).length > 0) {
+    console.info(OPEN_LOG, step, details)
+  } else {
+    console.info(OPEN_LOG, step)
+  }
+}
+
 /**
  * Normalize for fuzzy contains matching.
  */
@@ -136,11 +147,27 @@ export async function openFeishuTarget(options: {
   titleHint?: string
   preferWindowFocus?: boolean
 }): Promise<'opened'> {
-  await openFeishuClientOrUrl({
-    shell: options.shell,
-    openUrl: options.openUrl ?? null,
+  logFeishuOpen('openFeishuTarget:start', {
     url: options.url,
+    hasShell: Boolean(options.shell),
+    hasOpenUrl: Boolean(options.openUrl),
+    titleHint: options.titleHint ?? null,
+    preferWindowFocus: options.preferWindowFocus !== false,
   })
+  try {
+    await openFeishuClientOrUrl({
+      shell: options.shell,
+      openUrl: options.openUrl ?? null,
+      url: options.url,
+    })
+    logFeishuOpen('openFeishuTarget:done', { url: options.url })
+  } catch (error) {
+    logFeishuOpen('openFeishuTarget:error', {
+      url: options.url,
+      message: error instanceof Error ? error.message : String(error),
+    })
+    throw error
+  }
 
   if (
     options.preferWindowFocus !== false &&
@@ -165,8 +192,17 @@ async function openFeishuClientOrUrl(options: {
   url: string
 }): Promise<void> {
   const url = options.url.trim()
-  if (!url) return
+  if (!url) {
+    logFeishuOpen('openFeishuClientOrUrl:empty-url')
+    return
+  }
   const isClient = /^(lark|feishu|x-feishu|x-lark):\/\//i.test(url)
+  logFeishuOpen('openFeishuClientOrUrl:dispatch', {
+    url,
+    isClient,
+    hasShell: Boolean(options.shell),
+    hasOpenUrl: Boolean(options.openUrl),
+  })
 
   // macOS: deliver native scheme into production Lark/Feishu.
   // Prefer plain `open <url>` so a *running* instance receives the deep link;
@@ -178,30 +214,59 @@ async function openFeishuClientOrUrl(options: {
     ]
     for (const command of candidates) {
       try {
+        logFeishuOpen('shell.run:try', { command })
         const result = await options.shell.run({
           command,
           timeoutMs: 2500,
         })
+        logFeishuOpen('shell.run:result', {
+          command,
+          exitCode: result.exitCode ?? null,
+          timedOut: Boolean(result.timedOut),
+          stdout: (result.stdout ?? '').slice(0, 200),
+          stderr: (result.stderr ?? '').slice(0, 200),
+        })
         if (!result.timedOut && (result.exitCode === 0 || result.exitCode == null)) {
+          logFeishuOpen('shell.run:accepted', { command })
           return
         }
-      } catch {
+      } catch (error) {
+        logFeishuOpen('shell.run:throw', {
+          command,
+          message: error instanceof Error ? error.message : String(error),
+        })
         // try next candidate
       }
     }
+    logFeishuOpen('shell.run:all-failed', { url, candidateCount: candidates.length })
+  } else if (isClient && !options.shell) {
+    logFeishuOpen('shell.missing-for-client-scheme', { url })
   }
 
   if (options.openUrl) {
-    await options.openUrl(url)
-    return
+    try {
+      logFeishuOpen('host.openUrl:try', { url })
+      await options.openUrl(url)
+      logFeishuOpen('host.openUrl:ok', { url })
+      return
+    } catch (error) {
+      logFeishuOpen('host.openUrl:error', {
+        url,
+        message: error instanceof Error ? error.message : String(error),
+      })
+      throw error
+    }
   }
   if (options.shell) {
+    logFeishuOpen('shell.run:final-fallback', { url })
     await options.shell.run({
       command: `open ${shellQuote(url)}`,
       timeoutMs: 2500,
     })
+    logFeishuOpen('shell.run:final-fallback:done', { url })
     return
   }
+  logFeishuOpen('abort:no-openUrl-no-shell', { url })
   throw new Error('No openUrl / shell available to open Feishu link')
 }
 
