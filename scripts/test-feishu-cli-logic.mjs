@@ -344,6 +344,7 @@ async function tryRunPureHelpers() {
     'src/plugins/feishu/cli/errors.ts',
     'src/plugins/feishu/cli/formatError.ts',
     'src/plugins/feishu/domains/docs.ts',
+    'src/plugins/feishu/domains/openPlan.ts',
     'src/plugins/feishu/search/l1Cache.ts',
     'src/plugins/feishu/domains/icons.ts',
   ].filter((p) => existsSync(join(root, p)))
@@ -370,6 +371,55 @@ async function tryRunPureHelpers() {
       writeFileSync(outFile, outputText, 'utf8')
       // Dynamic import validates the module evaluates (side-effect free pure helpers)
       const mod = await import(pathToFileURL(outFile).href)
+
+      // Behavioral checks for open plan (single-delivery contract)
+      if (rel.endsWith('openPlan.ts')) {
+        // 1) 客户端 scheme 识别
+        assert.equal(mod.isClientScheme('lark://applink.feishu.cn/client/chat/open?openChatId=oc_1'), true, 'lark:// is client scheme')
+        assert.equal(mod.isClientScheme('https://applink.feishu.cn/client/chat/open?openChatId=oc_1'), false, 'https is not client scheme')
+
+        // 2) 候选顺序：解析到 app 路径时优先用它，且不含硬编码 /Applications/Lark.app
+        const withApp = mod.buildDeliveryCandidates('lark://x/y', { appPath: '/Users/me/Applications/Feishu.app' })
+        assert.ok(withApp.length >= 1, 'must produce at least one candidate')
+        assert.match(withApp[0].command, /Feishu\.app/, 'resolved app path must be preferred first')
+        assert.ok(
+          !withApp.some((c) => c.command.includes('/Applications/Lark.app')),
+          'must not hardcode /Applications/Lark.app when app path resolved',
+        )
+
+        // 3) 未解析到 app 路径时，回退候选仍可用
+        const noApp = mod.buildDeliveryCandidates('lark://x/y', {})
+        assert.ok(noApp.length >= 1, 'fallback candidates must exist without appPath')
+
+        // 4) 核心契约：投递成功后必须停止，不得重复投递
+        assert.equal(
+          mod.shouldStopAfterDelivery({ exitCode: 0, timedOut: false }),
+          true,
+          'exit 0 must stop delivery loop (no double open)',
+        )
+        assert.equal(
+          mod.shouldStopAfterDelivery({ exitCode: null, timedOut: false }),
+          true,
+          'null exit code must also stop (open returned without error)',
+        )
+        assert.equal(
+          mod.shouldStopAfterDelivery({ exitCode: 1, timedOut: false }),
+          false,
+          'non-zero exit must fall through to next candidate',
+        )
+        assert.equal(
+          mod.shouldStopAfterDelivery({ exitCode: 0, timedOut: true }),
+          false,
+          'timeout must not count as success even with exit 0',
+        )
+
+        // 5) https 链接不进客户端投递通道
+        assert.deepEqual(
+          mod.buildDeliveryCandidates('https://example.feishu.cn/docx/abc', {}),
+          [],
+          'https must produce no client candidates (host openUrl handles it)',
+        )
+      }
 
       // Behavioral checks for L1 cache
       if (rel.endsWith('l1Cache.ts')) {
