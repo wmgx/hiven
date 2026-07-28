@@ -6,7 +6,9 @@
 import type { LarkCliShell } from '../cli/run'
 import {
   buildDeliveryCandidates,
+  collectRunningAppPathsFromPs,
   isClientScheme,
+  pickPreferredFeishuAppPath,
   shellQuote,
   shouldStopAfterDelivery,
 } from './openPlan'
@@ -21,48 +23,80 @@ const FEISHU_BUNDLE_IDS = [
   'com.larksuite.desktop',
 ] as const
 
-/** Cached resolution so we spawn `mdfind` at most once per session. */
-let resolvedAppPath: string | null | undefined
+/**
+ * Cached *installed* (mdfind) resolution only.
+ * Running-client resolution is re-checked every open so we always target the
+ * session the user currently has open.
+ */
+let cachedInstalledAppPath: string | null | undefined
 
 /**
- * Resolve the installed Feishu / Lark .app path.
+ * Resolve which Feishu / Lark .app should receive deep links.
  *
- * Returns undefined when nothing resolves, in which case delivery falls back
- * to plain LaunchServices + bundle id. Never throws.
+ * Prefer the currently running client (user's live session). Fall back to a
+ * scored mdfind result so production `Lark.app` / `Feishu.app` beat BOE copies
+ * that share the same bundle id. Never throws.
  */
 export async function resolveFeishuAppPath(shell: LarkCliShell): Promise<string | undefined> {
-  if (resolvedAppPath !== undefined) return resolvedAppPath ?? undefined
+  // 1) Live process — always re-check (user may switch clients mid-session).
+  try {
+    const ps = await shell.run({
+      command: 'ps -ax -o comm=',
+      timeoutMs: 1500,
+    })
+    const running = collectRunningAppPathsFromPs(ps.stdout ?? '')
+    const fromRunning = pickPreferredFeishuAppPath({ runningAppPaths: running })
+    if (fromRunning) {
+      logFeishuOpen('resolveApp:hit', { source: 'running', path: fromRunning, running })
+      return fromRunning
+    }
+  } catch {
+    // fall through to installed lookup
+  }
 
+  // 2) Installed copies via Spotlight (cached; order is not product order).
+  if (cachedInstalledAppPath !== undefined) return cachedInstalledAppPath ?? undefined
+
+  const installed: string[] = []
   for (const bundleId of FEISHU_BUNDLE_IDS) {
     try {
       // No pipes / redirects: LarkCliShell.run only guarantees a command string,
-      // not a full shell. Take the first line in JS instead.
+      // not a full shell. Collect all hits and pick in JS.
       const result = await shell.run({
         command: `mdfind kMDItemCFBundleIdentifier=${bundleId}`,
         timeoutMs: 1500,
       })
-      const path = (result.stdout ?? '')
-        .split('\n')
-        .map((line) => line.trim())
-        .find((line) => line.endsWith('.app'))
-      if (path) {
-        logFeishuOpen('resolveApp:hit', { bundleId, path })
-        resolvedAppPath = path
-        return path
+      for (const line of (result.stdout ?? '').split('\n')) {
+        const path = line.trim()
+        if (path.endsWith('.app') && !installed.includes(path)) installed.push(path)
       }
     } catch {
       // try next bundle id
     }
   }
 
-  logFeishuOpen('resolveApp:miss', { tried: FEISHU_BUNDLE_IDS.length })
-  resolvedAppPath = null
+  const picked = pickPreferredFeishuAppPath({ installedAppPaths: installed })
+  if (picked) {
+    logFeishuOpen('resolveApp:hit', {
+      source: 'installed',
+      path: picked,
+      candidates: installed,
+    })
+    cachedInstalledAppPath = picked
+    return picked
+  }
+
+  logFeishuOpen('resolveApp:miss', {
+    tried: FEISHU_BUNDLE_IDS.length,
+    installedCount: installed.length,
+  })
+  cachedInstalledAppPath = null
   return undefined
 }
 
-/** Test seam: drop the cached app path so the next open re-resolves. */
+/** Test seam: drop the cached installed-app path so the next open re-resolves. */
 export function resetFeishuAppPathCache(): void {
-  resolvedAppPath = undefined
+  cachedInstalledAppPath = undefined
 }
 
 const OPEN_LOG = '[feishu:open]'

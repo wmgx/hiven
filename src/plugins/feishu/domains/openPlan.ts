@@ -35,6 +35,99 @@ export function isClientScheme(url: string): boolean {
   return /^(lark|feishu|x-feishu|x-lark):\/\//i.test(url.trim())
 }
 
+/**
+ * Collapse a process executable path to its enclosing .app bundle root.
+ * `/Applications/Lark.app/Contents/MacOS/Feishu` → `/Applications/Lark.app`
+ */
+export function normalizeToAppBundle(path: string): string | undefined {
+  const trimmed = path.trim()
+  if (!trimmed) return undefined
+  const match = trimmed.match(/^(.*\.app)(?:\/|$)/i)
+  return match?.[1]
+}
+
+/**
+ * Score an installed Feishu/Lark .app so production clients beat BOE/staging copies.
+ * Higher is better.
+ */
+export function scoreFeishuAppPath(appPath: string): number {
+  const base = (appPath.split('/').pop() ?? '').toLowerCase()
+  if (!base.endsWith('.app')) return 0
+  // Explicit staging / internal channel builds — never prefer these over prod.
+  if (/boe|main_end|staging|canary|test|debug|alpha|beta/.test(base)) return 10
+  if (base === 'lark.app' || base === 'feishu.app') return 100
+  if (base === 'larksuite.app') return 80
+  return 50
+}
+
+/**
+ * Choose which .app should receive deep links.
+ *
+ * Priority:
+ * 1. Currently running client (user's live session) — always wins.
+ * 2. Highest-scored installed path (production over BOE/staging).
+ *
+ * This exists because `mdfind kMDItemCFBundleIdentifier=…` returns every copy
+ * that shares the bundle id, and Spotlight order is not product order — on
+ * developer machines the first hit is often `feishu_main_end.app`.
+ */
+export function pickPreferredFeishuAppPath(options: {
+  runningAppPaths?: readonly string[]
+  installedAppPaths?: readonly string[]
+}): string | undefined {
+  const running = uniqueAppBundles(options.runningAppPaths)
+  if (running.length > 0) return running[0]
+
+  const installed = uniqueAppBundles(options.installedAppPaths)
+  if (installed.length === 0) return undefined
+
+  let best = installed[0]
+  let bestScore = scoreFeishuAppPath(best)
+  for (let i = 1; i < installed.length; i += 1) {
+    const candidate = installed[i]
+    const score = scoreFeishuAppPath(candidate)
+    if (score > bestScore) {
+      best = candidate
+      bestScore = score
+    }
+  }
+  return best
+}
+
+function uniqueAppBundles(paths: readonly string[] | undefined): string[] {
+  if (!paths || paths.length === 0) return []
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const raw of paths) {
+    const app = normalizeToAppBundle(raw)
+    if (!app || seen.has(app)) continue
+    seen.add(app)
+    out.push(app)
+  }
+  return out
+}
+
+/**
+ * Extract Feishu/Lark .app bundle paths from `ps -ax -o comm=` output.
+ */
+export function collectRunningAppPathsFromPs(stdout: string): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const line of stdout.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    if (!/feishu|lark|飞书/i.test(trimmed)) continue
+    // Skip Electron helper apps under Frameworks — only the product bundle.
+    // e.g. …/Lark.app/Contents/Frameworks/…Helper.app must not win over Lark.app.
+    if (/\/Contents\/Frameworks\//i.test(trimmed)) continue
+    const app = normalizeToAppBundle(trimmed)
+    if (!app || seen.has(app)) continue
+    seen.add(app)
+    out.push(app)
+  }
+  return out
+}
+
 /** POSIX-safe single-quoting for shell arguments. */
 export function shellQuote(arg: string): string {
   if (arg.length === 0) return "''"

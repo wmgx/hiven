@@ -206,6 +206,11 @@ assert.match(
 )
 assert.match(
   windowFocusOpenPathSrc,
+  /collectRunningAppPathsFromPs|source:\s*['"]running['"]|pickPreferredFeishuAppPath/,
+  'windowFocus must prefer the currently running Feishu/Lark client over mdfind order',
+)
+assert.match(
+  windowFocusOpenPathSrc,
   /buildDeliveryCandidates|shouldStopAfterDelivery/,
   'windowFocus must delegate delivery decisions to openPlan',
 )
@@ -435,6 +440,44 @@ async function tryRunPureHelpers() {
           [],
           'https must produce no client candidates (host openUrl handles it)',
         )
+
+        // 6) Prefer the running client; never let mdfind's first BOE hit win
+        assert.equal(
+          mod.normalizeToAppBundle('/Applications/Lark.app/Contents/MacOS/Feishu'),
+          '/Applications/Lark.app',
+          'normalize process path to .app bundle',
+        )
+        assert.equal(
+          mod.pickPreferredFeishuAppPath({
+            runningAppPaths: ['/Applications/Lark.app/Contents/MacOS/Feishu'],
+            installedAppPaths: [
+              '/Applications/feishu_main_end.app',
+              '/Applications/feishu_boe.app',
+              '/Applications/Lark.app',
+            ],
+          }),
+          '/Applications/Lark.app',
+          'running production client must beat mdfind BOE-first order',
+        )
+        assert.equal(
+          mod.pickPreferredFeishuAppPath({
+            installedAppPaths: [
+              '/Applications/feishu_main_end.app',
+              '/Applications/feishu_boe.app',
+              '/Applications/Lark.app',
+            ],
+          }),
+          '/Applications/Lark.app',
+          'when nothing is running, production Lark.app beats staging copies',
+        )
+        const fromPs = mod.collectRunningAppPathsFromPs(
+          [
+            '/Applications/Lark.app/Contents/MacOS/Feishu',
+            '/Applications/Lark.app/Contents/Frameworks/Lark Framework.framework/Versions/1/Helpers/Lark Helper.app/Contents/MacOS/Lark Helper',
+            '/usr/bin/ssh',
+          ].join('\n'),
+        )
+        assert.deepEqual(fromPs, ['/Applications/Lark.app'], 'ps helper apps must be ignored')
       }
 
       // Behavioral checks for L1 cache
