@@ -87,6 +87,14 @@ assert.match(toolsSrc, /createPane|openedInEditor/, 'docs-fetch should open cont
 assert.match(toolsSrc, /feishu\.messages-search|messages-search|searchMessages/, 'must expose messages-search tool')
 assert.match(toolsSrc, /feishu\.my-tasks|my-tasks|listMyTasks/, 'must expose my-tasks tool')
 assert.match(toolsSrc, /feishu\.minutes-search|minutes-search|searchMinutes/, 'must expose minutes-search tool')
+assert.match(toolsSrc, /feishu\.debug-open|debug-open|resolveDebugOpenTarget/, 'must expose debug-open tool for dev open path')
+assert.match(
+  read(`${pluginDir}/domains/links.ts`),
+  /resolveDebugOpenTarget/,
+  'links must resolve oc_/ou_/URL for debug open',
+)
+assert.match(localeEn, /tool\.debugOpen\.title/, 'en locale has debug open')
+assert.match(localeZh, /tool\.debugOpen\.title/, 'zh locale has debug open')
 
 // B5 window focus wiring
 assert.match(provider, /openFeishuTarget|preferWindowFocus|titleHint/, 'docs provider activate should try window focus')

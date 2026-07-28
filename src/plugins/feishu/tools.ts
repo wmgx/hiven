@@ -18,7 +18,13 @@ import { listRecentChats, mapChatsToRows, searchChats } from './domains/im'
 import { mapMessagesToRows, searchMessages } from './domains/messages'
 import { mapMinutesToRows, searchMinutes } from './domains/minutes'
 import { listMyTasks, mapTasksToRows } from './domains/tasks'
-import { openFeishuTarget } from './domains/windowFocus'
+import { resolveDebugOpenTarget } from './domains/links'
+import {
+  clearFeishuOpenLogs,
+  formatFeishuOpenLogDump,
+  logFeishuOpen,
+  openFeishuTarget,
+} from './domains/windowFocus'
 import { createCalendarEvent, createDoc, createSheet, deriveTitleFromContent, sendMessage } from './domains/write'
 import { getFeishuRuntime } from './runtime'
 import type { FeishuSettings } from './settings/model'
@@ -1142,6 +1148,81 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           },
         })),
       )
+    },
+  },
+  {
+    id: 'feishu.debug-open',
+    title: 'tool.debugOpen.title',
+    subtitle: 'tool.debugOpen.subtitle',
+    icon: 'Bug',
+    aliases: [
+      '测试打开',
+      '开发打开',
+      'debug open',
+      'feishu open test',
+      '飞书测试打开',
+      '打开调试',
+      'debug-open',
+    ],
+    requireParamSelection: true,
+    params: [
+      {
+        key: 'target',
+        label: 'param.debugOpenTarget.label',
+        type: 'text',
+        required: true,
+        hint: 'param.debugOpenTarget.hint',
+      },
+    ],
+    surfaces: { launcher: true },
+    async run(ctx) {
+      const raw = String(ctx.params.target ?? ctx.input?.text ?? '').trim()
+      if (!raw) {
+        return ctx.output.error(ctx.t('param.debugOpenTarget.hint'))
+      }
+
+      const resolved = resolveDebugOpenTarget(raw)
+      if (!resolved) {
+        return ctx.output.error(ctx.t('error.debugOpenInvalidTarget'))
+      }
+
+      const runtime = getFeishuRuntime()
+      clearFeishuOpenLogs()
+      logFeishuOpen('debug-open:start', {
+        raw,
+        kind: resolved.kind,
+        url: resolved.url,
+        hasShell: Boolean(runtime.shell),
+        hasOpenUrl: Boolean(runtime.openUrl),
+      })
+
+      const lines: string[] = [
+        ctx.t('debugOpen.header'),
+        `kind: ${resolved.kind}`,
+        `url: ${resolved.url}`,
+        `shell: ${runtime.shell ? 'yes' : 'NO'}`,
+        `openUrl: ${runtime.openUrl ? 'yes' : 'NO'}`,
+        '',
+      ]
+
+      try {
+        await openFeishuTarget({
+          shell: runtime.shell,
+          openUrl: runtime.openUrl ?? ((url) => ctx.api.openUrl(url)),
+          url: resolved.url,
+          preferWindowFocus: false,
+        })
+        lines.push(ctx.t('debugOpen.ok'))
+      } catch (error) {
+        lines.push(
+          ctx.t('debugOpen.failed') +
+            ': ' +
+            (error instanceof Error ? error.message : String(error)),
+        )
+      }
+
+      lines.push('', ctx.t('debugOpen.logHeader'), formatFeishuOpenLogDump(50))
+      return ctx.output.text(lines.join('\n'))
     },
   },
 ]

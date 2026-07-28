@@ -9,14 +9,57 @@ import type { LarkCliShell } from '../cli/run'
 export const FEISHU_WINDOW_APP_NAMES = ['Feishu', 'Lark', '飞书', 'LarkSuite'] as const
 
 const OPEN_LOG = '[feishu:open]'
+const OPEN_LOG_MAX = 80
+
+export type FeishuOpenLogEntry = {
+  at: number
+  step: string
+  details?: Record<string, unknown>
+}
+
+const openLogRing: FeishuOpenLogEntry[] = []
 
 /** Structured open-path logs — filter DevTools / tauri console by `feishu:open`. */
 export function logFeishuOpen(step: string, details?: Record<string, unknown>): void {
+  const entry: FeishuOpenLogEntry = {
+    at: Date.now(),
+    step,
+    ...(details && Object.keys(details).length > 0 ? { details } : {}),
+  }
+  openLogRing.push(entry)
+  while (openLogRing.length > OPEN_LOG_MAX) openLogRing.shift()
+
   if (details && Object.keys(details).length > 0) {
     console.info(OPEN_LOG, step, details)
   } else {
     console.info(OPEN_LOG, step)
   }
+}
+
+/** Recent open-path steps for the in-app debug tool (newest last). */
+export function getFeishuOpenLogDump(limit = 40): FeishuOpenLogEntry[] {
+  const n = Math.max(1, Math.min(OPEN_LOG_MAX, limit))
+  return openLogRing.slice(-n)
+}
+
+export function clearFeishuOpenLogs(): void {
+  openLogRing.length = 0
+}
+
+/** Format ring buffer as plain text for launcher output. */
+export function formatFeishuOpenLogDump(limit = 40): string {
+  const rows = getFeishuOpenLogDump(limit)
+  if (rows.length === 0) return '(no feishu:open logs yet)'
+  return rows
+    .map((row) => {
+      const t = new Date(row.at).toISOString().slice(11, 23)
+      const detail =
+        row.details && Object.keys(row.details).length > 0
+          ? ' ' + JSON.stringify(row.details)
+          : ''
+      return `${t} ${row.step}${detail}`
+    })
+    .join('\n')
 }
 
 /**

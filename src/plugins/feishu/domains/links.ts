@@ -82,3 +82,38 @@ export function buildUserChatOpenUrl(options: {
 export function isFeishuClientScheme(url: string): boolean {
   return /^(lark|feishu|x-feishu|x-lark):\/\//i.test(url.trim())
 }
+
+/**
+ * Resolve a free-form debug target into an openable AppLink.
+ * Accepts full URL, openChatId (oc_…), or openId (ou_…).
+ */
+export function resolveDebugOpenTarget(raw: string): {
+  url: string
+  kind: 'url' | 'openChatId' | 'openId'
+} | null {
+  const input = raw.trim()
+  if (!input) return null
+
+  if (/^(https?:\/\/|lark:\/\/|feishu:\/\/|x-feishu:\/\/|x-lark:\/\/)/i.test(input)) {
+    return { url: input, kind: 'url' }
+  }
+  if (/^oc_[a-zA-Z0-9]+$/i.test(input)) {
+    return { url: buildChatOpenUrl(input), kind: 'openChatId' }
+  }
+  if (/^ou_[a-zA-Z0-9]+$/i.test(input)) {
+    return { url: buildUserChatOpenUrl({ openId: input })!, kind: 'openId' }
+  }
+  // openChatId=… / openId=… query fragments
+  const chatMatch = input.match(/(?:^|[?&])openChatId=([^&\s]+)/i)
+  if (chatMatch?.[1]) {
+    return { url: buildChatOpenUrl(decodeURIComponent(chatMatch[1])), kind: 'openChatId' }
+  }
+  const userMatch = input.match(/(?:^|[?&])openId=([^&\s]+)/i)
+  if (userMatch?.[1]) {
+    return {
+      url: buildUserChatOpenUrl({ openId: decodeURIComponent(userMatch[1]) })!,
+      kind: 'openId',
+    }
+  }
+  return null
+}
