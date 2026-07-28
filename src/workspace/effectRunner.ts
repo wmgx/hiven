@@ -303,35 +303,55 @@ export async function openExternalUrl(url: string): Promise<void> {
   const target = url.trim()
   if (!target) return
 
-  // 1) plugin-shell open (scoped; now includes lark/feishu schemes in tauri.conf)
-  try {
-    console.info('[hiven:openExternalUrl] try shell.open', { url: target })
-    const { open } = await import('@tauri-apps/plugin-shell')
-    await open(target)
-    console.info('[hiven:openExternalUrl] shell.open ok', { url: target })
-    return
-  } catch (error) {
-    console.warn('[hiven:openExternalUrl] shell.open failed', {
-      url: target,
-      message: error instanceof Error ? error.message : String(error),
-    })
+  // Host-layer routing: plugins register custom schemes; do not expand Tauri shell scope.
+  const { routeHostOpenUrl, canHostOpenUrl, extractUrlScheme } = await import('./urlSchemeRegistry')
+  const route = routeHostOpenUrl(target)
+  const scheme = extractUrlScheme(target)
+  console.info('[hiven:openExternalUrl] route', { url: target, scheme, route })
+
+  if (route === 'deny') {
+    throw new Error(
+      `URL scheme not allowed by host (register via plugin urlSchemes): ${scheme ?? '(none)'}`,
+    )
   }
 
-  // 2) Native open_system_url — bypasses plugin-shell scope (custom schemes).
-  try {
-    console.info('[hiven:openExternalUrl] try open_system_url', { url: target })
-    const { invoke } = await import('@tauri-apps/api/core')
-    await invoke('open_system_url', { url: target })
-    console.info('[hiven:openExternalUrl] open_system_url ok', { url: target })
-    return
-  } catch (error) {
-    console.warn('[hiven:openExternalUrl] open_system_url failed', {
-      url: target,
-      message: error instanceof Error ? error.message : String(error),
-    })
+  // Built-in schemes → plugin-shell open (Tauri default http/mailto/tel scope).
+  if (route === 'shell-open') {
+    try {
+      console.info('[hiven:openExternalUrl] try shell.open', { url: target })
+      const { open } = await import('@tauri-apps/plugin-shell')
+      await open(target)
+      console.info('[hiven:openExternalUrl] shell.open ok', { url: target })
+      return
+    } catch (error) {
+      console.warn('[hiven:openExternalUrl] shell.open failed, try open_system_url', {
+        url: target,
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 
-  // 3) Browser / non-Tauri last resort (custom schemes usually no-op here).
+  // Plugin-registered custom schemes (and shell-open fallback) → native open_system_url.
+  if (route === 'system-url' || route === 'shell-open') {
+    if (!canHostOpenUrl(target) && route === 'system-url') {
+      throw new Error(`URL scheme not registered: ${scheme}`)
+    }
+    try {
+      console.info('[hiven:openExternalUrl] try open_system_url', { url: target })
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('open_system_url', { url: target })
+      console.info('[hiven:openExternalUrl] open_system_url ok', { url: target })
+      return
+    } catch (error) {
+      console.warn('[hiven:openExternalUrl] open_system_url failed', {
+        url: target,
+        message: error instanceof Error ? error.message : String(error),
+      })
+      if (route === 'system-url') throw error
+    }
+  }
+
+  // Non-Tauri / last resort (custom schemes usually no-op in webview).
   console.warn('[hiven:openExternalUrl] falling back to window.open', { url: target })
   window.open(target, '_blank')
 }

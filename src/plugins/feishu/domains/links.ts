@@ -57,6 +57,15 @@ export function buildChatOpenHttpsUrl(chatId: string, brand: FeishuBrand = DEFAU
   return `https://${host}/client/chat/open?openChatId=${encodeURIComponent(chatId.trim())}`
 }
 
+/** HTTPS AppLink for openId (ou_…) — 1:1 chat fallback. */
+export function buildUserOpenIdHttpsUrl(
+  openId: string,
+  brand: FeishuBrand = DEFAULT_FEISHU_BRAND,
+): string {
+  const host = applinkHost(brand)
+  return `https://${host}/client/chat/open?openId=${encodeURIComponent(openId.trim())}`
+}
+
 /**
  * Best-effort open a user DM via native scheme.
  * Prefer `p2pChatId` when search returns it (most reliable for navigation).

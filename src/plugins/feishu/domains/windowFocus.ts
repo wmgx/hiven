@@ -247,14 +247,19 @@ async function openFeishuClientOrUrl(options: {
     hasOpenUrl: Boolean(options.openUrl),
   })
 
-  // macOS: deliver native scheme into production Lark/Feishu.
-  // Prefer plain `open <url>` so a *running* instance receives the deep link;
-  // `open -a Lark.app` is cold-start / multi-install fallback.
+  // Client schemes: product delivery stays in the plugin (shell.run), not Tauri.
+  // Host openUrl is generic OS open — may only activate BOE/main_end without routing.
+  // Prefer: plain open → open -a production Lark.app → bundle id → host openUrl.
   if (isClient && options.shell) {
     const candidates = [
+      // Running instance via LaunchServices
       `open ${shellQuote(url)}`,
+      // Explicit production client so BOE/main_end copies don't swallow the deep link
       `open -a ${shellQuote('/Applications/Lark.app')} ${shellQuote(url)}`,
+      // Bundle id
+      `open -b com.electron.lark ${shellQuote(url)}`,
     ]
+    let accepted = false
     for (const command of candidates) {
       try {
         logFeishuOpen('shell.run:try', { command })
@@ -271,21 +276,30 @@ async function openFeishuClientOrUrl(options: {
         })
         if (!result.timedOut && (result.exitCode === 0 || result.exitCode == null)) {
           logFeishuOpen('shell.run:accepted', { command })
-          return
+          accepted = true
+          // Keep going: plain `open` may only activate; also deliver via -a Lark.app.
+          // After both plain + -a, stop (first two candidates when both succeed).
+          if (command.includes('Lark.app') || command.includes('com.electron.lark')) {
+            return
+          }
         }
       } catch (error) {
         logFeishuOpen('shell.run:throw', {
           command,
           message: error instanceof Error ? error.message : String(error),
         })
-        // try next candidate
       }
+    }
+    if (accepted) {
+      logFeishuOpen('shell.run:done-after-candidates', { url })
+      return
     }
     logFeishuOpen('shell.run:all-failed', { url, candidateCount: candidates.length })
   } else if (isClient && !options.shell) {
     logFeishuOpen('shell.missing-for-client-scheme', { url })
   }
 
+  // Host openUrl: registered custom schemes → open_system_url; https → shell.open.
   if (options.openUrl) {
     try {
       logFeishuOpen('host.openUrl:try', { url })
@@ -297,18 +311,10 @@ async function openFeishuClientOrUrl(options: {
         url,
         message: error instanceof Error ? error.message : String(error),
       })
-      throw error
+      if (!isClient) throw error
     }
   }
-  if (options.shell) {
-    logFeishuOpen('shell.run:final-fallback', { url })
-    await options.shell.run({
-      command: `open ${shellQuote(url)}`,
-      timeoutMs: 2500,
-    })
-    logFeishuOpen('shell.run:final-fallback:done', { url })
-    return
-  }
+
   logFeishuOpen('abort:no-openUrl-no-shell', { url })
   throw new Error('No openUrl / shell available to open Feishu link')
 }

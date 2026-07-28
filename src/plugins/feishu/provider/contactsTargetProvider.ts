@@ -10,6 +10,12 @@ import {
   sortUsersByIntersection,
   type FeishuUserRow,
 } from '../domains/contact'
+import {
+  buildChatOpenHttpsUrl,
+  buildChatOpenUrl,
+  buildUserChatOpenUrl,
+  buildUserOpenIdHttpsUrl,
+} from '../domains/links'
 import { logFeishuOpen, openFeishuTarget } from '../domains/windowFocus'
 import { getFeishuRuntime } from '../runtime'
 import {
@@ -81,12 +87,27 @@ export function createFeishuContactsProvider(): DesktopTargetProvider {
       }
     },
     async activate(target) {
-      const url = target.meta?.url
+      const openId =
+        (typeof target.meta?.openId === 'string' && target.meta.openId.trim()) ||
+        target.id.replace(/^feishu\.contacts:person:/, '')
+      const openChatId =
+        typeof target.meta?.openChatId === 'string' ? target.meta.openChatId.trim() : ''
+      // Docs: openChatId / openId mutually exclusive per URL — try separately.
+      // Prefer p2p openChatId (most reliable locate), then openId, then HTTPS.
+      const candidates = uniqueUrls([
+        openChatId ? buildChatOpenUrl(openChatId) : undefined,
+        openId ? buildUserChatOpenUrl({ openId }) : undefined,
+        typeof target.meta?.url === 'string' ? target.meta.url : undefined,
+        openChatId ? buildChatOpenHttpsUrl(openChatId) : undefined,
+        openId ? buildUserOpenIdHttpsUrl(openId) : undefined,
+      ])
+      const url = candidates[0]
       logFeishuOpen('contacts.activate:enter', {
         targetId: target.id,
         title: target.title,
-        url: url ?? null,
-        metaKeys: target.meta ? Object.keys(target.meta) : [],
+        openId: openId || null,
+        openChatId: openChatId || null,
+        candidates,
       })
       if (!url) {
         logFeishuOpen('contacts.activate:abort-no-url', { targetId: target.id })
@@ -98,10 +119,8 @@ export function createFeishuContactsProvider(): DesktopTargetProvider {
         hasOpenUrl: Boolean(runtime.openUrl),
         enabled: runtime.settings?.enabled !== false,
       })
-      // Sticky: visited people stay in local index longer and rank higher next time.
       const entityId =
-        (typeof target.meta?.entityId === 'string' && target.meta.entityId) ||
-        target.id.replace(/^feishu\.contacts:person:/, '')
+        (typeof target.meta?.entityId === 'string' && target.meta.entityId) || openId
       touchL1EntityAccess(DOMAIN, {
         id: entityId,
         title: target.title,
@@ -109,25 +128,75 @@ export function createFeishuContactsProvider(): DesktopTargetProvider {
         keywords: target.keywords,
         openUrl: url,
       })
-      // Chat deep link already routes; skip title AXRaise (wrong window risk).
-      try {
-        await openFeishuTarget({
-          shell: runtime.shell,
-          openUrl: runtime.openUrl,
-          url,
-          preferWindowFocus: false,
-        })
-        logFeishuOpen('contacts.activate:ok', { targetId: target.id, url })
-      } catch (error) {
-        logFeishuOpen('contacts.activate:error', {
-          targetId: target.id,
-          url,
-          message: error instanceof Error ? error.message : String(error),
-        })
-        throw error
+      // open() exit 0 only means delivery accepted — not that Feishu navigated.
+      // Fire native candidates in order (p2p openChatId → openId); last successful
+      // deep link wins. HTTPS only if every native attempt throws.
+      const native = candidates.filter((u) => /^(lark|feishu|x-feishu|x-lark):\/\//i.test(u))
+      const https = candidates.filter((u) => /^https?:\/\//i.test(u))
+      let lastError: unknown = null
+      let anyOk = false
+      for (const candidate of native.length > 0 ? native : candidates) {
+        try {
+          await openFeishuTarget({
+            shell: runtime.shell,
+            openUrl: runtime.openUrl,
+            url: candidate,
+            preferWindowFocus: false,
+          })
+          anyOk = true
+          logFeishuOpen('contacts.activate:delivered', { targetId: target.id, url: candidate })
+        } catch (error) {
+          lastError = error
+          logFeishuOpen('contacts.activate:candidate-failed', {
+            url: candidate,
+            message: error instanceof Error ? error.message : String(error),
+          })
+        }
       }
+      if (anyOk) {
+        logFeishuOpen('contacts.activate:ok', {
+          targetId: target.id,
+          delivered: native.length > 0 ? native : candidates,
+        })
+        return
+      }
+      for (const candidate of https) {
+        try {
+          await openFeishuTarget({
+            shell: runtime.shell,
+            openUrl: runtime.openUrl,
+            url: candidate,
+            preferWindowFocus: false,
+          })
+          logFeishuOpen('contacts.activate:ok-https', { targetId: target.id, url: candidate })
+          return
+        } catch (error) {
+          lastError = error
+          logFeishuOpen('contacts.activate:candidate-failed', {
+            url: candidate,
+            message: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
+      logFeishuOpen('contacts.activate:error', {
+        targetId: target.id,
+        message: lastError instanceof Error ? lastError.message : String(lastError),
+      })
+      if (lastError) throw lastError
     },
   }
+}
+
+function uniqueUrls(urls: Array<string | undefined | null>): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const raw of urls) {
+    const u = raw?.trim()
+    if (!u || seen.has(u)) continue
+    seen.add(u)
+    out.push(u)
+  }
+  return out
 }
 
 function toTargets(rows: FeishuUserRow[]) {
@@ -138,7 +207,12 @@ function toTargets(rows: FeishuUserRow[]) {
     title: row.title,
     subtitle: row.subtitle,
     keywords: row.keywords,
-    meta: { url: row.openUrl, entityId: row.id },
+    meta: {
+      url: row.openUrl,
+      openId: row.id,
+      openChatId: row.p2pChatId,
+      entityId: row.id,
+    },
     actionClass: 'open' as const,
     icon: row.icon || 'User',
     appName: 'Feishu',

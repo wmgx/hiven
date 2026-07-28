@@ -183,44 +183,71 @@ fn open_devtools(
     Ok(())
 }
 
-/// Open a URL/path with the OS default handler, bypassing plugin-shell open scope.
-/// Used as a reliable fallback for custom schemes (lark:// / feishu://) when
-/// `plugin-shell` open rejects them or is misconfigured.
+/// Open a URL with the OS default handler (no plugin-shell scope).
+///
+/// Product allowlist lives in host JS (`urlSchemeRegistry` + plugin register).
+/// This command is intentionally product-agnostic: no Feishu/Lark/app hardcoding.
+/// Plugins that need special delivery (e.g. `open -a Lark.app`) do it via shell.run.
 #[tauri::command]
 fn open_system_url(url: String) -> Result<(), String> {
     let url = url.trim();
     if url.is_empty() {
         return Err("url must not be empty".into());
     }
-    // Basic safety: only allow known schemes (no arbitrary shell flags).
-    let lower = url.to_ascii_lowercase();
-    let allowed = lower.starts_with("http://")
-        || lower.starts_with("https://")
-        || lower.starts_with("mailto:")
-        || lower.starts_with("tel:")
-        || lower.starts_with("lark://")
-        || lower.starts_with("feishu://")
-        || lower.starts_with("x-feishu://")
-        || lower.starts_with("x-lark://");
-    if !allowed {
-        return Err(format!("scheme not allowed: {url}"));
+    // Host filters schemes; here only block empty / flag-like / control chars.
+    if url.starts_with('-') {
+        return Err("url must not look like a CLI flag".into());
+    }
+    if !url.contains("://") && !url.starts_with("mailto:") && !url.starts_with("tel:") {
+        return Err(format!("expected scheme:// URL, got: {url}"));
+    }
+    if url.chars().any(|c| c == '\n' || c == '\r' || c == '\0') {
+        return Err("url contains invalid characters".into());
     }
 
     use std::process::Command;
-    let status = if cfg!(target_os = "macos") {
-        Command::new("open").arg(url).status()
-    } else if cfg!(target_os = "windows") {
-        Command::new("cmd").args(["/C", "start", "", url]).status()
-    } else {
-        Command::new("xdg-open").arg(url).status()
-    }
-    .map_err(|e| format!("failed to open url: {e}"))?;
 
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("open exited with {status}"))
+    #[cfg(target_os = "macos")]
+    {
+        let status = Command::new("open")
+            .arg(url)
+            .status()
+            .map_err(|e| format!("failed to open url: {e}"))?;
+        return if status.success() {
+            Ok(())
+        } else {
+            Err(format!("open exited with {status}"))
+        };
     }
+
+    #[cfg(target_os = "windows")]
+    {
+        let status = Command::new("cmd")
+            .args(["/C", "start", "", url])
+            .status()
+            .map_err(|e| format!("failed to open url: {e}"))?;
+        return if status.success() {
+            Ok(())
+        } else {
+            Err(format!("open exited with {status}"))
+        };
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let status = Command::new("xdg-open")
+            .arg(url)
+            .status()
+            .map_err(|e| format!("failed to open url: {e}"))?;
+        return if status.success() {
+            Ok(())
+        } else {
+            Err(format!("open exited with {status}"))
+        };
+    }
+
+    #[allow(unreachable_code)]
+    Err("open_system_url unsupported on this platform".into())
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]

@@ -174,6 +174,16 @@ assert.match(
   /logFeishuOpen|contacts\.activate/,
   'contacts activate must log open path',
 )
+assert.match(
+  read('src/plugins/feishu/provider/contactsTargetProvider.ts'),
+  /buildChatOpenUrl\(openChatId\)/,
+  'contacts must prefer p2p openChatId for locate',
+)
+assert.match(
+  read('src/plugins/feishu/provider/contactsTargetProvider.ts'),
+  /buildUserOpenIdHttpsUrl|buildChatOpenHttpsUrl/,
+  'contacts must keep https AppLink fallback',
+)
 assert.doesNotMatch(
   windowFocusSrc2,
   /from\s+['"]@tauri-apps\/|import\s*\(\s*['"]@tauri-apps\//,

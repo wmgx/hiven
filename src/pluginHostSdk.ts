@@ -38,6 +38,11 @@ import {
   createDesktopTargetsHostApi,
   type DesktopTargetsHostApi,
 } from './workspace/desktopTargets/pluginApi'
+import {
+  listRegisteredUrlSchemes,
+  registerUrlSchemes,
+  unregisterUrlSchemes,
+} from './workspace/urlSchemeRegistry'
 
 export type { PluginHostUi, PluginHostEffects, TextCommandDefinition } from './pluginHostCore.ts'
 export type { DesktopTargetsHostApi, DesktopTargetProvider } from './workspace/desktopTargets/pluginApi'
@@ -103,6 +108,13 @@ export type PluginHostI18n = {
   makeT: (pluginId: string, locale: Locale) => PluginT
 }
 
+export type UrlSchemeRegistryApi = {
+  /** Register non-http schemes this plugin may open via host openUrl (e.g. lark, feishu). */
+  register: (pluginId: string, schemes: string[]) => void
+  unregister: (pluginId: string) => void
+  list: () => string[]
+}
+
 export type PluginHostSdk = {
   definePlugin: typeof definePlugin
   react: typeof React
@@ -119,6 +131,11 @@ export type PluginHostSdk = {
    * that feed Global Launcher mix — not parallel dynamicItems lists.
    */
   desktopTargets: DesktopTargetsHostApi
+  /**
+   * Plugin-declared URL schemes for host openUrl routing.
+   * Custom schemes are opened via open_system_url — not Tauri shell.open scope.
+   */
+  urlSchemes: UrlSchemeRegistryApi
 }
 
 declare global {
@@ -142,6 +159,11 @@ export function createPluginHostSdk(): PluginHostSdk {
     textError: core.textError,
     defineTextCommand: core.defineTextCommand,
     desktopTargets: createDesktopTargetsHostApi(),
+    urlSchemes: {
+      register: registerUrlSchemes,
+      unregister: unregisterUrlSchemes,
+      list: listRegisteredUrlSchemes,
+    },
   }
 }
 

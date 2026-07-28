@@ -4,7 +4,7 @@
  * L2 tools: status, login, search, writes, fetch, etc.
  */
 
-import { definePlugin } from '@hiven/plugin'
+import { definePlugin, getPluginHostSdk } from '@hiven/plugin'
 import {
   applyFeishuProviderRegistration,
   bindFeishuRuntime,
@@ -13,6 +13,17 @@ import type { FeishuSettings } from './settings/model'
 import { DEFAULT_FEISHU_SETTINGS } from './settings/model'
 import { FeishuSettingsBody } from './settings/FeishuSettingsBody'
 import { feishuTools } from './tools'
+
+/** Client schemes Feishu needs host openUrl to deliver (not Tauri shell scope). */
+const FEISHU_OPEN_SCHEMES = ['lark', 'feishu', 'x-feishu', 'x-lark'] as const
+
+function registerFeishuUrlSchemes(): void {
+  try {
+    getPluginHostSdk().urlSchemes.register('feishu', [...FEISHU_OPEN_SCHEMES])
+  } catch {
+    // SDK may be unavailable in pure unit tests
+  }
+}
 
 export default definePlugin<FeishuSettings>({
   settings: {
@@ -48,6 +59,7 @@ export default definePlugin<FeishuSettings>({
         settings: value,
       })
       applyFeishuProviderRegistration(value)
+      registerFeishuUrlSchemes()
     },
   },
   tools: feishuTools,
@@ -61,6 +73,8 @@ export default definePlugin<FeishuSettings>({
         t: ctx.t,
       })
       applyFeishuProviderRegistration(settings)
+      // Host openUrl routes lark:// via open_system_url after plugin registration.
+      registerFeishuUrlSchemes()
     },
   },
 })
