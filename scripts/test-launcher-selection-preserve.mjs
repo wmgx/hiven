@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Progressive list append must not steal the user's highlighted row.
- * Selection is tracked by systemKey and re-resolved after re-rank / partials.
+ * Only user-pinned selection (systemKey) is sticky; default top is not.
  */
 
 import assert from 'node:assert/strict'
@@ -19,6 +19,15 @@ assert.match(src, /resolvePreservedSelection/, 'selectionPreserve must export re
 
 const session = readFileSync(join(root, 'src/workspace/launcher/useLauncherSession.ts'), 'utf8')
 assert.match(session, /resolvePreservedSelection|selectedKeyRef/, 'session must preserve selection by systemKey')
+assert.match(session, /pin:\s*false|options\?\.pin/, 'session must support pin:false for default selection')
+assert.doesNotMatch(
+  session,
+  /First paint with items: pin identity/,
+  'must not auto-pin default top-of-list selection',
+)
+
+const panel = readFileSync(join(root, 'src/components/launcher/GlobalLauncherPanel.tsx'), 'utf8')
+assert.match(panel, /setSelectedIndex\(0,\s*\{\s*pin:\s*false\s*\}\)/, 'query change must not pin default selection')
 
 const tmp = mkdtempSync(join(tmpdir(), 'sel-preserve-'))
 const out = join(tmp, 'selectionPreserve.mjs')
@@ -32,7 +41,7 @@ writeFileSync(
 
 const { resolvePreservedSelection } = await import(pathToFileURL(out).href)
 
-// 1) No key yet → pin item under current index
+// 1) No user pin → always ranking top, no sticky key
 {
   const r = resolvePreservedSelection({
     selectedKey: null,
@@ -40,10 +49,25 @@ const { resolvePreservedSelection } = await import(pathToFileURL(out).href)
     items: [{ systemKey: 'a' }, { systemKey: 'b' }],
   })
   assert.equal(r.index, 0)
-  assert.equal(r.key, 'a')
+  assert.equal(r.key, null, 'default selection must not adopt a sticky key')
 }
 
-// 2) Partial append + re-rank moves selected item down → follow key
+// 1b) Default must not stick to old index when list grows above
+{
+  const r = resolvePreservedSelection({
+    selectedKey: null,
+    selectedIndex: 2,
+    items: [
+      { systemKey: 'feishu.docs:1' },
+      { systemKey: 'tool:create-doc' },
+      { systemKey: 'old-top' },
+    ],
+  })
+  assert.equal(r.index, 0, 'unpinned selection follows new ranking top')
+  assert.equal(r.key, null)
+}
+
+// 2) Partial append + re-rank moves user-selected item down → follow key
 {
   const r = resolvePreservedSelection({
     selectedKey: 'tool:create-doc',
@@ -58,15 +82,15 @@ const { resolvePreservedSelection } = await import(pathToFileURL(out).href)
   assert.equal(r.key, 'tool:create-doc')
 }
 
-// 3) Selected item disappeared → clamp index, adopt new key
+// 3) User-selected item disappeared → drop pin, default to top
 {
   const r = resolvePreservedSelection({
     selectedKey: 'gone',
     selectedIndex: 5,
     items: [{ systemKey: 'a' }, { systemKey: 'b' }],
   })
-  assert.equal(r.index, 1)
-  assert.equal(r.key, 'b')
+  assert.equal(r.index, 0)
+  assert.equal(r.key, null)
 }
 
 // 4) Empty list

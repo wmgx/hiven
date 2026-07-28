@@ -121,12 +121,12 @@ export function QuickEditorCommandOverlay() {
     if (open) {
       if (initialQuery) {
         setQuery(initialQuery)
-        setSelectedIndex(0)
+        setSelectedIndex(0, { pin: false })
       }
       requestAnimationFrame(() => inputRef.current?.focus())
     } else {
       setQuery('')
-      setSelectedIndex(0)
+      setSelectedIndex(0, { pin: false })
     }
   }, [open, initialQuery, setQuery, setSelectedIndex])
 
@@ -308,7 +308,7 @@ export function QuickEditorCommandOverlay() {
         onSecondaryAction={activateSecondaryAction}
         onHoverResultChoice={setResultSelectedIndex}
         onToggleResultChoice={toggleResultChoice}
-        onSearchQueryChange={(value) => { setQuery(value); setSelectedIndex(0) }}
+        onSearchQueryChange={(value) => { setQuery(value); setSelectedIndex(0, { pin: false }) }}
         onSearchSelectItem={(item) => selectMixedItem(item)}
         onSearchHoverIndex={(index) => { if (!isKeyboardNavRef.current) setSelectedIndex(index) }}
         onSearchMouseMove={() => { isKeyboardNavRef.current = false }}

@@ -56,7 +56,10 @@ export function handleGlobalLauncherKeyDown({
   pastePreviewText?: (text: string) => void | Promise<void>
   isKeyboardNavRef: MutableRefObject<boolean>
   visibleFilteredLength: number
-  setSelectedIndex: (updater: number | ((index: number) => number)) => void
+  setSelectedIndex: (
+    updater: number | ((index: number) => number),
+    options?: { pin?: boolean },
+  ) => void
   selectedItem?: LauncherMixedItem
   isWorkflowObjectLauncherItem: (item?: LauncherMixedItem) => boolean
   selectItem: (item: LauncherMixedItem | undefined, customizeParams?: boolean) => void

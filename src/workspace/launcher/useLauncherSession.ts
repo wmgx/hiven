@@ -80,7 +80,15 @@ export type LauncherSession = {
   rankingQuery: string
   setQuery: (value: string) => void
   selectedIndex: number
-  setSelectedIndex: (value: number | ((current: number) => number)) => void
+  /**
+   * Update highlight index.
+   * - User paths (↑↓ / intentional hover): default `pin: true` — sticky across partials.
+   * - Programmatic defaults (query change / open / close): pass `{ pin: false }`.
+   */
+  setSelectedIndex: (
+    value: number | ((current: number) => number),
+    options?: { pin?: boolean },
+  ) => void
   controller: LauncherController | null
   controllerRef: MutableRefObject<LauncherController | null>
   controllerState: LauncherControllerState | null
@@ -135,8 +143,8 @@ export function useLauncherSession({
   /** Per document-source partial results for the in-flight generation. */
   const documentPartialsRef = useRef(new Map<string, LauncherItem[]>())
   /**
-   * Identity of the highlighted row. When async partials append / re-rank,
-   * re-resolve index to this key so the user's selection does not jump.
+   * User-pinned row identity. Only set when the user moves selection (↑↓ / hover).
+   * Default top-of-list highlight must stay unpinned so async partials re-rank freely.
    */
   const selectedKeyRef = useRef<string | null>(null)
   const rankedItemsRef = useRef<LauncherItem[]>([])
@@ -150,18 +158,26 @@ export function useLauncherSession({
     installLauncherPerfDebugApi()
   }, [])
 
-  const setSelectedIndex = useCallback((value: number | ((current: number) => number)) => {
+  const setSelectedIndex = useCallback((
+    value: number | ((current: number) => number),
+    options?: { pin?: boolean },
+  ) => {
+    // Default pin=true: keyboard / hover are intentional user selection.
+    const pin = options?.pin !== false
     setSelectedIndexState((prev) => {
       const next = typeof value === 'function' ? value(prev) : value
       selectedIndexRef.current = next
-      const item = rankedItemsRef.current[next]
-      // Pin identity on user / host-driven index changes (arrow keys, hover, query reset).
-      selectedKeyRef.current = item?.systemKey ?? null
+      if (pin) {
+        const item = rankedItemsRef.current[next]
+        selectedKeyRef.current = item?.systemKey ?? null
+      } else {
+        selectedKeyRef.current = null
+      }
       return next
     })
   }, [])
 
-  /** Typing starts a new result generation — drop sticky key so highlight resets cleanly. */
+  /** Typing starts a new result generation — drop sticky key so highlight tracks ranking top. */
   const setQuery = useCallback((value: string) => {
     setQueryState((prev) => {
       if (prev !== value) {
@@ -578,7 +594,9 @@ export function useLauncherSession({
     pluginDynamicItems,
     staticCandidates,
   ])
-  // After progressive partials / re-rank: keep highlight on the same systemKey.
+  // After progressive partials / re-rank:
+  // - user-pinned key → follow that row
+  // - default (no pin) → stay on ranking top (index 0)
   useEffect(() => {
     rankedItemsRef.current = rankedItems
     const resolved = resolvePreservedSelection({
@@ -589,10 +607,8 @@ export function useLauncherSession({
     selectedKeyRef.current = resolved.key
     if (resolved.index !== selectedIndexRef.current) {
       selectedIndexRef.current = resolved.index
+      // Use state setter only — do not go through setSelectedIndex (would re-pin).
       setSelectedIndexState(resolved.index)
-    } else if (!selectedKeyRef.current && rankedItems[resolved.index]) {
-      // First paint with items: pin identity so later appends track this row.
-      selectedKeyRef.current = rankedItems[resolved.index]!.systemKey
     }
   }, [rankedItems])
 

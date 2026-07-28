@@ -32,7 +32,7 @@ export function useGlobalLauncherFocusSession({
   open: boolean
   inputRef: RefObject<HTMLInputElement | null>
   setQuery: (value: string) => void
-  setSelectedIndex: (value: number) => void
+  setSelectedIndex: (value: number, options?: { pin?: boolean }) => void
   retainSearchFocus?: boolean
 }) {
   const previousFocusRef = useRef<HTMLElement | null>(null)
@@ -100,7 +100,7 @@ export function useGlobalLauncherFocusSession({
     wasOpenRef.current = true
     previousFocusRef.current = document.activeElement as HTMLElement | null
     setQuery('')
-    setSelectedIndex(0)
+    setSelectedIndex(0, { pin: false })
     requestAnimationFrame(() => {
       if (!retainRef.current) return
       focusLauncherInput()

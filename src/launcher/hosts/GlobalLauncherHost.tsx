@@ -297,7 +297,7 @@ export function GlobalLauncherHost() {
       closeSettingsDialog()
     }
     setQuery('')
-    setSelectedIndex(0)
+    setSelectedIndex(0, { pin: false })
     controllerRef.current?.reset()
   }, [clearLauncherHostSurface, clearPluginSurfaceTool, closeSettingsDialog, setQuery, setSelectedIndex, controllerRef])
 

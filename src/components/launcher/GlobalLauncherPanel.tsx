@@ -50,7 +50,10 @@ type GlobalLauncherPanelProps = {
   selectedItem?: GlobalLauncherItem
   /** List selection; -1 means recent-clipboard hint is focused. */
   selectedIndex?: number
-  setSelectedIndex: (index: number | ((index: number) => number)) => void
+  setSelectedIndex: (
+    index: number | ((index: number) => number),
+    options?: { pin?: boolean },
+  ) => void
   isWorkflowObjectLauncherItem: (item: GlobalLauncherItem | undefined) => boolean
   selectItem: (item: GlobalLauncherItem | undefined, customizeParams?: boolean) => void
   hostSurfaceTarget: LauncherHostSurfaceTarget | null
@@ -273,7 +276,7 @@ export function GlobalLauncherPanel({
         onSubmitCollectInput={() => { void controllerRef.current?.submitInput?.() }}
         onHoverResultChoice={setResultSelectedIndex}
         onToggleResultChoice={toggleResultChoice}
-        onSearchQueryChange={(value) => { setQuery(value); setSelectedIndex(0) }}
+        onSearchQueryChange={(value) => { setQuery(value); setSelectedIndex(0, { pin: false }) }}
         onSearchSelectItem={handleSearchSelectItem}
         onSearchHoverIndex={handleSearchHoverIndex}
         onSearchMouseMove={handleSearchMouseMove}
