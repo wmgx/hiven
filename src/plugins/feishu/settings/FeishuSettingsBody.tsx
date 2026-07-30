@@ -180,6 +180,26 @@ export function FeishuSettingsBody(props: PluginSettingsBodyProps<FeishuSettings
         </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
           <ui.Checkbox
+            checked={value.advancedToolsEnabled === true}
+            onChange={(event: { target: { checked: boolean } }) => {
+              setValue({ ...value, advancedToolsEnabled: event.target.checked })
+            }}
+          />
+          {label(
+            'settings.advancedTools',
+            'Show all Feishu commands',
+            '显示全部飞书命令',
+          )}
+        </label>
+        <ui.Text style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.45 }}>
+          {label(
+            'settings.advancedToolsHint',
+            'Defaults to docs / chats / people / agenda search plus doc and sheet creation. Enable to surface messaging, minutes, tasks and the rest.',
+            '默认保留搜文档 / 搜会话 / 找人 / 看日程 / 建文档 / 建表格。开启后会显示发消息、搜妙记、我的任务等全部命令。',
+          )}
+        </ui.Text>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+          <ui.Checkbox
             checked={value.contactSearchOnlyChatted === true}
             onChange={(event: { target: { checked: boolean } }) => {
               setValue({ ...value, contactSearchOnlyChatted: event.target.checked })
