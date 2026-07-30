@@ -13,6 +13,7 @@ import type { FeishuSettings } from './settings/model'
 import { DEFAULT_FEISHU_SETTINGS } from './settings/model'
 import { FeishuSettingsBody } from './settings/FeishuSettingsBody'
 import { feishuTools } from './tools'
+import { selectVisibleFeishuTools } from './toolVisibility'
 
 /** Client schemes Feishu needs host openUrl to deliver (not Tauri shell scope). */
 const FEISHU_OPEN_SCHEMES = ['lark', 'feishu', 'x-feishu', 'x-lark'] as const
@@ -63,6 +64,10 @@ export default definePlugin<FeishuSettings>({
     },
   },
   tools: feishuTools,
+  toolsFor: (settings: FeishuSettings) =>
+    selectVisibleFeishuTools(feishuTools, {
+      advancedToolsEnabled: settings?.advancedToolsEnabled === true,
+    }),
   hooks: {
     startup(ctx) {
       const settings = (ctx.settings ?? DEFAULT_FEISHU_SETTINGS) as FeishuSettings

@@ -14,6 +14,8 @@
   "settings.preferWindowFocus": "After open, try raising Feishu window (macOS)",
   "settings.contactSearchOnlyChatted": "Find People: only show contacts I have chatted with",
   "settings.contactSearchOnlyChattedHint": "Main launcher always hides strangers. This only affects the Find People tool.",
+  "settings.advancedTools": "Show all Feishu commands",
+  "settings.advancedToolsHint": "Defaults to docs / chats / people / agenda search plus doc and sheet creation. Enable to surface messaging, minutes, tasks and the rest.",
   "settings.binaryPath": "lark-cli path",
   "settings.binaryPathHint": "Leave empty to use `lark-cli` from PATH.",
   "settings.login": "Login",

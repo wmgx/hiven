@@ -17,6 +17,11 @@ export type FeishuSettings = {
    * Does not delay open.
    */
   preferWindowFocus: boolean
+  /**
+   * Show the full 19-tool surface (writes, fetch, tasks, minutes, debug).
+   * Default false: the launcher only carries the high-frequency read commands.
+   */
+  advancedToolsEnabled: boolean
   /** Absolute path to lark-cli; empty = resolve `lark-cli` from PATH. */
   binaryPath: string
 }
@@ -28,5 +33,6 @@ export const DEFAULT_FEISHU_SETTINGS: FeishuSettings = {
   contactsMixEnabled: true,
   contactSearchOnlyChatted: false,
   preferWindowFocus: true,
+  advancedToolsEnabled: false,
   binaryPath: '',
 }

@@ -14,6 +14,8 @@
   "settings.preferWindowFocus": "打开后尝试聚焦飞书窗口（macOS）",
   "settings.contactSearchOnlyChatted": "「找人」仅显示已聊过的联系人",
   "settings.contactSearchOnlyChattedHint": "主 launcher 混排始终隐藏无交集的人；此项只影响「找人」命令。",
+  "settings.advancedTools": "显示全部飞书命令",
+  "settings.advancedToolsHint": "默认保留搜文档 / 搜会话 / 找人 / 看日程 / 建文档 / 建表格。开启后会显示发消息、搜妙记、我的任务等全部命令。",
   "settings.binaryPath": "lark-cli 路径",
   "settings.binaryPathHint": "留空则从 PATH 解析 `lark-cli`。",
   "settings.login": "登录",

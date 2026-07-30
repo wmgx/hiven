@@ -211,4 +211,69 @@ assert.equal(
   'package.json must expose test:feishu-cli-logic',
 )
 
+// --- scope cut: core tools visible by default, advanced ones gated ---
+const modelSrc = read(`${pluginDir}/settings/model.ts`)
+assert.match(modelSrc, /advancedToolsEnabled/, 'settings model must declare advancedToolsEnabled')
+assert.match(
+  modelSrc,
+  /advancedToolsEnabled:\s*false/,
+  'advancedToolsEnabled must default to false (scope cut is the default experience)',
+)
+
+assert.ok(
+  existsSync(join(root, `${pluginDir}/toolVisibility.ts`)),
+  'toolVisibility.ts must exist to gate advanced tools',
+)
+const visibilitySrc = read(`${pluginDir}/toolVisibility.ts`)
+
+for (const coreId of [
+  'feishu.docs-search',
+  'feishu.chat-search',
+  'feishu.contact-search',
+  'feishu.calendar-agenda',
+  'feishu.create-doc',
+  'feishu.create-sheet',
+  'feishu.status',
+  'feishu.login',
+]) {
+  assert.ok(
+    visibilitySrc.includes(coreId),
+    `${coreId} must be listed as a core tool`,
+  )
+}
+
+// Commands that stay hidden by default must NOT leak into the core list.
+for (const gatedId of ['feishu.send-message', 'feishu.my-tasks', 'feishu.debug-open']) {
+  assert.ok(
+    !visibilitySrc.includes(gatedId),
+    `${gatedId} must stay gated behind advancedToolsEnabled`,
+  )
+}
+
+const indexSrc = read(`${pluginDir}/index.tsx`)
+assert.match(
+  indexSrc,
+  /selectVisibleFeishuTools|visibleFeishuTools/,
+  'index.tsx must filter tools through the visibility helper, not pass feishuTools raw',
+)
+assert.match(
+  indexSrc,
+  /toolsFor/,
+  'index.tsx must use host toolsFor for settings-aware tool visibility',
+)
+
+// locale keys for the new setting must exist in BOTH languages
+const zh = JSON.parse(read(`${pluginDir}/locales/zh.json`))
+const en = JSON.parse(read(`${pluginDir}/locales/en.json`))
+for (const key of ['settings.advancedTools', 'settings.advancedToolsHint']) {
+  assert.ok(zh[key], `zh.json must define ${key}`)
+  assert.ok(en[key], `en.json must define ${key}`)
+}
+
+// Host contract: PluginDefinition exposes toolsFor and launcher collect uses it
+const pluginTypesSrc = read('src/workspace/pluginTypes.ts')
+assert.match(pluginTypesSrc, /toolsFor\?/, 'PluginDefinition must declare optional toolsFor')
+const registrySrc = read('src/workspace/launcher/registry.ts')
+assert.match(registrySrc, /toolsFor|resolvePluginTools/, 'launcher registry must resolve tools via toolsFor')
+
 console.log('feishu plugin contract checks passed')
