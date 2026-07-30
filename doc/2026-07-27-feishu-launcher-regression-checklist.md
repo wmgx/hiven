@@ -1,7 +1,7 @@
 # 飞书 Launcher 回归验收清单
 
 > 分支：`feat/launcher-intelligence-package-1`
-> 插件版本：`feishu@0.6.22`
+> 插件版本：`feishu@0.7.0`
 > 用途：手工 / 半自动回归，覆盖 L1 混排、L2 工具、缓存、排序、头像与设置。
 
 ## 0. 前置
@@ -42,6 +42,17 @@ lark://applink.feishu.cn/client/chat/open?…   # 自定义 scheme，带 applink
 | 2.4 | macOS + preferWindowFocus | 文档等带 titleHint 时 best-effort 置前；会话打开默认不靠 title 匹配 |
 | 2.5 | 打开失败 | launcher 应保留并显示错误，而非静默关闭 |
 
+### 2.6 单次投递契约（0.7.0 新增）
+
+| # | 场景 | 预期 |
+|---|------|------|
+| 2.6.1 | 打开任一会话后运行 `feishu.debug-open` | 日志中 `shell.run:try` **只出现一次**，紧跟一条 `shell.run:accepted` |
+| 2.6.2 | 日志含 `resolveApp:hit` | `path` 为本机真实客户端路径，不是硬编码的 `/Applications/Lark.app` |
+| 2.6.3 | 连续打开 10 个不同会话 | 10/10 跳转成功；若有失败，附 `debug-open` 日志复盘 |
+
+> 背景：0.7.0 之前候选 1 `open <url>` 成功后不返回、继续投递候选 2，同一 deep link 被投递两次，
+> 客户端二次处理 URL 会把已跳转的窗口重置回默认页——这是此前「有时跳转有时不跳转」的根因。
+
 ## 3. Persistable 最近推荐
 
 | # | 场景 | 预期 |
@@ -72,16 +83,32 @@ lark://applink.feishu.cn/client/chat/open?…   # 自定义 scheme，带 applink
 | 5.7 | missing_scope | 友好提示 + 可打开授权；非 stderr 整段 JSON |
 | 5.8 | 发消息 / 建日程 | L2 确认后才执行 |
 
-## 6. 交互细节
+## 6. 命令范围（0.7.0 新增）
 
 | # | 场景 | 预期 |
 |---|------|------|
-| 6.1 | 异步追加结果时键盘选中 | 选中项不因 partial 刷新跳走（systemKey 保留） |
-| 6.2 | 鼠标悬停 | 仅真实 pointer 移动后才 hover 选中，打开后光标静止不偷选 |
-| 6.3 | 中文 IME | composition 期间 Enter 不上屏触发确认 |
-| 6.4 | 多步参数 | chip 显示参数 label，option description 中英本地化 |
+| 6.1 | 默认设置下 launcher 搜 `feishu` | 只出现 8 个命令：状态、登录、搜文档、搜会话、找人、看日程、建文档、建表格 |
+| 6.2 | 设置勾选「显示全部飞书命令」 | 19 个命令全部出现 |
+| 6.3 | 取消勾选 | 恢复 8 个 |
+| 6.4 | 切换到 English | 新开关文案为英文，无硬编码中文 |
+| 6.5 | 选中一段文字后运行「建文档」 | L2 确认卡显示正文预览；确认后创建成功并自动打开，正文即选中内容 |
+| 6.6 | 直接运行「建表格」不带输入 | L2 确认卡出现；确认后创建成功并自动打开 |
 
-## 7. 自动化（开发机）
+> 设计依据：保留标准是「能否不切换上下文完成」，不是「读 vs 写」。
+> 搜文档与建文档都符合——敲一下就拿到链接；建文档还能把选区直接作为正文。
+> 发消息不符合：发完必然要切到飞书看回复。搜妙记 / 我的任务等在飞书原生里体验更好，
+> 保留代码但默认关闭。
+
+## 7. 交互细节
+
+| # | 场景 | 预期 |
+|---|------|------|
+| 7.1 | 异步追加结果时键盘选中 | 选中项不因 partial 刷新跳走（systemKey 保留） |
+| 7.2 | 鼠标悬停 | 仅真实 pointer 移动后才 hover 选中，打开后光标静止不偷选 |
+| 7.3 | 中文 IME | composition 期间 Enter 不上屏触发确认 |
+| 7.4 | 多步参数 | chip 显示参数 label，option description 中英本地化 |
+
+## 8. 自动化（开发机）
 
 ```bash
 node scripts/test-feishu-plugin.mjs
@@ -94,7 +121,7 @@ git diff --check
 npm run build
 ```
 
-## 8. 已知非阻塞
+## 9. 已知非阻塞
 
 - `src-tauri/*.dylib` 为本地动态库，**不提交**
 - 窗口 focus 为 macOS best-effort，多显示器/多客户端时可能失败
