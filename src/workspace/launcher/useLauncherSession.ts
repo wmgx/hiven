@@ -3,7 +3,7 @@ import { makePluginT } from '../../i18n/pluginI18nRegistry'
 import { detectContent } from '../../kits/content'
 import { useAppStore } from '../../store'
 import { pluginRegistry, usePluginRegistryVersion } from '../pluginRegistry'
-import { resolvePluginSettings } from '../pluginSettingsStore'
+import { resolvePluginSettings, usePluginSettingsStore } from '../pluginSettingsStore'
 import type { ContributionSource } from '../pluginTypes'
 import { LauncherController, type LauncherControllerState } from './controller'
 import { createPluginLauncherApi, createPluginLauncherStorage } from './pluginApi'
@@ -113,6 +113,8 @@ export function useLauncherSession({
   const launcherPersistableRecents = useAppStore((s) => s.launcherPersistableRecents)
   const recordPersistableLauncherSelection = useAppStore((s) => s.recordPersistableLauncherSelection)
   const pluginRegistryVersion = usePluginRegistryVersion()
+  // toolsFor depends on live settings — recollect static tools when any plugin settings change.
+  const pluginSettings = usePluginSettingsStore((s) => s.pluginSettings)
 
   const [query, setQueryState] = useState('')
   /** Keep the input box on the live query; defer ranking so keystrokes stay responsive. */
@@ -520,15 +522,16 @@ export function useLauncherSession({
     })
   }, [collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open])
 
-  // Collect static candidates separately — they only change with pluginRegistryVersion,
-  // not on every keystroke.
+  // Collect static candidates separately — they change with plugin registry or
+  // plugin settings (toolsFor filters), not on every keystroke.
   const staticCandidates = useMemo<LauncherItem[]>(() => {
     void pluginRegistryVersion
+    void pluginSettings
     const raw = measureLauncherPerfSync('session:static-candidates', () => collectStaticCandidates(normalizedHostId), () => ({
       surfaceId: normalizedHostId,
     }))
     return staticItemFilter ? staticItemFilter(raw) : raw
-  }, [normalizedHostId, pluginRegistryVersion, staticItemFilter])
+  }, [normalizedHostId, pluginRegistryVersion, pluginSettings, staticItemFilter])
 
   /** Host recents from plugin-opted persistable selections (contacts/chats/docs). */
   const persistableRecentItems = useMemo<LauncherItem[]>(() => {

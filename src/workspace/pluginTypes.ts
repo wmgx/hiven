@@ -773,8 +773,18 @@ export type PluginHooksContribution<TSettings = unknown> = {
 
 /** The full plugin definition returned by definePlugin */
 export type PluginDefinition<TSettings = unknown> = {
-  /** Preferred tool-first authoring API (host adapts into launcher items + panel actions). */
+  /**
+   * Preferred tool-first authoring API (host adapts into launcher items + panel actions).
+   * Full catalog — keep this as the complete tool list even when `toolsFor` filters at runtime.
+   */
   tools?: PluginToolContribution<TSettings>[]
+  /**
+   * Optional settings-aware filter for which tools the launcher surfaces.
+   * When set, host calls this at collect time with the resolved plugin settings
+   * and uses the returned array instead of the raw `tools` list.
+   * Return a subset of `tools` (or fresh contributions); host re-localizes by id when possible.
+   */
+  toolsFor?: (settings: TSettings) => PluginToolContribution<TSettings>[]
   /** Launcher contributions (custom launcher lifecycle/output UX). */
   launcher?: {
     items?: LauncherItemContribution<TSettings>[]

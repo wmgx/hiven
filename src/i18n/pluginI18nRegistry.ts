@@ -318,6 +318,25 @@ export function localizeContributions(
 ): LocalizedContributions {
   const messages = getMessages(pluginId) ?? {}
   const tools = (contributions.tools ?? []).map((tool) => localizeTool(messages, tool))
+  const toolsById = new Map(tools.map((tool) => [tool.id, tool]))
+  // Wrap toolsFor so launcher collect gets localized titles even when the
+  // plugin closure returns the raw (pre-localize) tool objects by id.
+  const toolsFor = contributions.toolsFor
+    ? (settings: unknown) => {
+        try {
+          const selected = contributions.toolsFor!(settings as never)
+          if (!Array.isArray(selected)) return tools
+          return selected.map((tool) => {
+            const existing = toolsById.get(tool.id)
+            if (existing) return existing
+            return localizeTool(messages, tool)
+          })
+        } catch (error) {
+          console.warn(`[plugin-i18n] toolsFor failed for "${pluginId}":`, error)
+          return tools
+        }
+      }
+    : undefined
   const launcherItems = contributions.launcher?.items?.map((item) => localizeLauncherItem(messages, item))
   const panelActions = contributions.panel?.actions?.map((action) => localizePanelAction(messages, action))
   const launcher = contributions.launcher
@@ -334,6 +353,7 @@ export function localizeContributions(
   const definition: PluginDefinition = {
     ...contributions,
     tools,
+    toolsFor,
     launcher,
     panel,
     commands,

@@ -17,6 +17,7 @@ import { makePluginT } from '../../i18n/pluginI18nRegistry'
 import { pluginRegistry } from '../pluginRegistry'
 import { requestOpenLauncherPluginSettingsSurface } from '../launcherHostSurfaceBridge'
 import type { ContributionSource, PluginDefinition } from '../pluginTypes'
+import { resolvePluginSettings } from '../pluginSettingsStore'
 import type {
   LauncherDynamicItemProvider,
   LauncherItem,
@@ -181,6 +182,25 @@ function shouldExposePluginSettingsLauncherItem(definition: PluginDefinition<unk
 }
 
 /**
+ * Resolve the tool list for a plugin definition.
+ * Prefer settings-aware `toolsFor` when present; fall back to static `tools`.
+ */
+export function resolvePluginTools(
+  def: PluginDefinition<unknown>,
+  settings: unknown,
+): PluginToolContribution[] {
+  if (typeof def.toolsFor === 'function') {
+    try {
+      const selected = def.toolsFor(settings)
+      if (Array.isArray(selected)) return selected as PluginToolContribution[]
+    } catch (error) {
+      console.warn('[launcher] toolsFor failed; falling back to static tools:', error)
+    }
+  }
+  return (def.tools ?? []) as PluginToolContribution[]
+}
+
+/**
  * Collect all static plugin launcher items (from launcher.items + tools),
  * validating ids per plugin. Duplicate/invalid ids are skipped with a warning.
  */
@@ -188,6 +208,10 @@ export function collectStaticPluginItems(): LauncherItem[] {
   const items: LauncherItem[] = []
   for (const { definition, pluginId, source } of pluginRegistry.getAllPluginDefinitions()) {
     const def = definition as PluginDefinition<unknown>
+    const settingsSource = resolvePluginSettingsSource(pluginId, source)
+    const settings = def.settings
+      ? resolvePluginSettings(settingsSource, pluginId, def.settings).value
+      : {}
 
     // launcher.items
     const contributions = def.launcher?.items ?? []
@@ -206,8 +230,8 @@ export function collectStaticPluginItems(): LauncherItem[] {
       }
     }
 
-    // tools (adapted)
-    const tools = def.tools ?? []
+    // tools (adapted) — settings-aware via toolsFor when declared
+    const tools = resolvePluginTools(def, settings)
     const toolIds = tools.map((t) => t.id)
     const toolIdErrors = validateLauncherItemIds(toolIds)
     const badToolIds = new Set(toolIdErrors.map((e) => e.itemId))
@@ -226,7 +250,6 @@ export function collectStaticPluginItems(): LauncherItem[] {
     const surfaces = def.ui?.surfaces ?? []
     for (const surface of surfaces) {
       if (surface.entry?.launcher === false) continue
-      const settingsSource = resolvePluginSettingsSource(pluginId, source)
       const item: LauncherItem = applyProductProviderToLauncherItem({
         systemKey: getPluginSurfaceItemKey(settingsSource, pluginId, surface.id),
         kind: 'plugin',
