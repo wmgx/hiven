@@ -206,8 +206,8 @@ assert.match(
 )
 assert.match(
   windowFocusOpenPathSrc,
-  /collectRunningAppPathsFromPs|source:\s*['"]running['"]|pickPreferredFeishuAppPath/,
-  'windowFocus must prefer the currently running Feishu/Lark client over mdfind order',
+  /collectRunningAppPathsFromPs|pickDeliveryAppPath/,
+  'windowFocus must derive the target client from the running process, not a lookup order',
 )
 assert.match(
   windowFocusOpenPathSrc,
@@ -223,6 +223,21 @@ const openPlanSrc = read('src/plugins/feishu/domains/openPlan.ts')
 assert.match(openPlanSrc, /open \$\{quotedUrl\}|`open \$\{/, 'openPlan must try plain open <url>')
 assert.match(openPlanSrc, /open -a|resolved-app/, 'openPlan must support resolved-app open -a')
 assert.match(openPlanSrc, /shouldStopAfterDelivery/, 'openPlan must encode single-delivery stop rule')
+
+// The open path must never guess which install is "the real one" from its file
+// name: a staging build and a production build ship the same bundle id AND the
+// same bundle name, so the name is not evidence. When it is ambiguous, don't
+// guess — hand the URL to LaunchServices and let the user's default handler win.
+for (const src of [openPlanSrc, windowFocusOpenPathSrc]) {
+  assert.ok(
+    !/boe|main_end|staging|canary/i.test(src),
+    'open path must not guess the release channel from app file names',
+  )
+  assert.ok(
+    !/mdfind/.test(src),
+    'open path must not shell out to mdfind: it returns every copy sharing the bundle id, in no meaningful order',
+  )
+}
 
 // --- L1 multi-layer cache ---
 const l1CacheSrc = read('src/plugins/feishu/search/l1Cache.ts')
@@ -441,34 +456,38 @@ async function tryRunPureHelpers() {
           'https must produce no client candidates (host openUrl handles it)',
         )
 
-        // 6) Prefer the running client; never let mdfind's first BOE hit win
+        // 6) A running client is the only trustworthy signal. Two installed
+        //    copies can share a bundle id and name, so anything else is a guess.
         assert.equal(
           mod.normalizeToAppBundle('/Applications/Lark.app/Contents/MacOS/Feishu'),
           '/Applications/Lark.app',
           'normalize process path to .app bundle',
         )
         assert.equal(
-          mod.pickPreferredFeishuAppPath({
-            runningAppPaths: ['/Applications/Lark.app/Contents/MacOS/Feishu'],
-            installedAppPaths: [
-              '/Applications/feishu_main_end.app',
-              '/Applications/feishu_boe.app',
-              '/Applications/Lark.app',
-            ],
-          }),
+          mod.pickDeliveryAppPath(['/Applications/Lark.app/Contents/MacOS/Feishu']),
           '/Applications/Lark.app',
-          'running production client must beat mdfind BOE-first order',
+          'a single running client is unambiguous — address it directly',
         )
         assert.equal(
-          mod.pickPreferredFeishuAppPath({
-            installedAppPaths: [
-              '/Applications/feishu_main_end.app',
-              '/Applications/feishu_boe.app',
-              '/Applications/Lark.app',
-            ],
-          }),
+          mod.pickDeliveryAppPath([
+            '/Applications/Lark.app/Contents/MacOS/Feishu',
+            '/Applications/feishu_boe.app/Contents/MacOS/Feishu',
+          ]),
+          undefined,
+          'two running clients are ambiguous — must not guess, fall back to LaunchServices',
+        )
+        assert.equal(
+          mod.pickDeliveryAppPath([]),
+          undefined,
+          'nothing running — let LaunchServices use the user default handler',
+        )
+        assert.equal(
+          mod.pickDeliveryAppPath([
+            '/Applications/Lark.app/Contents/MacOS/Feishu',
+            '/Applications/Lark.app/Contents/MacOS/Feishu',
+          ]),
           '/Applications/Lark.app',
-          'when nothing is running, production Lark.app beats staging copies',
+          'multiple processes of the SAME bundle still resolve to one client',
         )
         const fromPs = mod.collectRunningAppPathsFromPs(
           [

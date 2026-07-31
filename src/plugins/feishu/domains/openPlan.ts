@@ -47,51 +47,23 @@ export function normalizeToAppBundle(path: string): string | undefined {
 }
 
 /**
- * Score an installed Feishu/Lark .app so production clients beat BOE/staging copies.
- * Higher is better.
- */
-export function scoreFeishuAppPath(appPath: string): number {
-  const base = (appPath.split('/').pop() ?? '').toLowerCase()
-  if (!base.endsWith('.app')) return 0
-  // Explicit staging / internal channel builds — never prefer these over prod.
-  if (/boe|main_end|staging|canary|test|debug|alpha|beta/.test(base)) return 10
-  if (base === 'lark.app' || base === 'feishu.app') return 100
-  if (base === 'larksuite.app') return 80
-  return 50
-}
-
-/**
- * Choose which .app should receive deep links.
+ * Choose which .app should be addressed by name (`open -a`) for a deep link.
  *
- * Priority:
- * 1. Currently running client (user's live session) — always wins.
- * 2. Highest-scored installed path (production over BOE/staging).
+ * Returns a path ONLY when exactly one Feishu/Lark client is running, because
+ * that is the one case with an unambiguous answer: the user has a live session
+ * and it can only be that one.
  *
- * This exists because `mdfind kMDItemCFBundleIdentifier=…` returns every copy
- * that shares the bundle id, and Spotlight order is not product order — on
- * developer machines the first hit is often `feishu_main_end.app`.
+ * Everything else returns undefined on purpose. Multiple installs routinely
+ * share both the bundle id (`com.electron.lark`) and the bundle name
+ * (`Feishu`), so nothing about an install identifies it as "the real one" —
+ * ranking them by file name would just be a guess wearing a score. When it is
+ * ambiguous we drop `open -a` and let LaunchServices apply the user's default
+ * handler, which is at least consistent with every other place they click a
+ * Feishu link.
  */
-export function pickPreferredFeishuAppPath(options: {
-  runningAppPaths?: readonly string[]
-  installedAppPaths?: readonly string[]
-}): string | undefined {
-  const running = uniqueAppBundles(options.runningAppPaths)
-  if (running.length > 0) return running[0]
-
-  const installed = uniqueAppBundles(options.installedAppPaths)
-  if (installed.length === 0) return undefined
-
-  let best = installed[0]
-  let bestScore = scoreFeishuAppPath(best)
-  for (let i = 1; i < installed.length; i += 1) {
-    const candidate = installed[i]
-    const score = scoreFeishuAppPath(candidate)
-    if (score > bestScore) {
-      best = candidate
-      bestScore = score
-    }
-  }
-  return best
+export function pickDeliveryAppPath(runningAppPaths: readonly string[]): string | undefined {
+  const running = uniqueAppBundles(runningAppPaths)
+  return running.length === 1 ? running[0] : undefined
 }
 
 function uniqueAppBundles(paths: readonly string[] | undefined): string[] {
@@ -138,9 +110,11 @@ export function shellQuote(arg: string): string {
 /**
  * Build the ordered delivery attempts for a client-scheme URL.
  *
- * Order matters: the most specific target goes first so the deep link is
- * handed to the exact installed client instead of whatever LaunchServices
- * happens to have registered (a BOE / staging build can otherwise swallow it).
+ * Order matters. When `appPath` is set it means exactly one client is running,
+ * so addressing it directly lands the link in the session the user already has
+ * open. Without it we ask LaunchServices instead of picking an install
+ * ourselves — see `pickDeliveryAppPath`. The bundle id is a last resort for
+ * when no handler is registered at all.
  *
  * Non-client URLs return [] — https is the host openUrl's job.
  */

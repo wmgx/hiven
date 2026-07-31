@@ -1,7 +1,7 @@
 # 飞书 Launcher 回归验收清单
 
 > 分支：`feat/launcher-intelligence-package-1`
-> 插件版本：`feishu@0.7.0`
+> 插件版本：`feishu@0.7.1`
 > 用途：手工 / 半自动回归，覆盖 L1 混排、L2 工具、缓存、排序、头像与设置。
 
 ## 0. 前置
@@ -44,14 +44,25 @@ lark://applink.feishu.cn/client/chat/open?…   # 自定义 scheme，带 applink
 
 ### 2.6 单次投递契约（0.7.0 新增）
 
+> ⚠️ **前置条件**：`feishu.debug-open` 属于高级命令，默认设置下 launcher 里**搜不到**。
+> 执行本节前先到 设置 → 飞书 勾选「显示全部飞书命令」，验证完可以关回去。
+> （诊断工具不占日常命令位是有意为之，见 §6。）
+
 | # | 场景 | 预期 |
 |---|------|------|
 | 2.6.1 | 打开任一会话后运行 `feishu.debug-open` | 日志中 `shell.run:try` **只出现一次**，紧跟一条 `shell.run:accepted` |
-| 2.6.2 | 日志含 `resolveApp:hit` | `path` 为本机真实客户端路径，不是硬编码的 `/Applications/Lark.app` |
-| 2.6.3 | 连续打开 10 个不同会话 | 10/10 跳转成功；若有失败，附 `debug-open` 日志复盘 |
+| 2.6.2 | 飞书客户端已开着时看日志 | 有 `resolveApp:hit`，`path` 为该运行中客户端的真实路径；首条候选 `reason` 为 `resolved-app` |
+| 2.6.3 | 飞书完全没开 / 同时开着多个客户端时看日志 | 有 `resolveApp:defer-to-launch-services`（`reason` 为 `no-client-running` 或 `multiple-clients-running`），首条候选 `reason` 为 `launch-services`。**这是正常结果，不是失败** |
+| 2.6.4 | 连续打开 10 个不同会话 | 10/10 跳转成功；若有失败，附 `debug-open` 日志复盘 |
 
-> 背景：0.7.0 之前候选 1 `open <url>` 成功后不返回、继续投递候选 2，同一 deep link 被投递两次，
+> 背景一（单次投递）：0.7.0 之前候选 1 `open <url>` 成功后不返回、继续投递候选 2，同一 deep link 被投递两次，
 > 客户端二次处理 URL 会把已跳转的窗口重置回默认页——这是此前「有时跳转有时不跳转」的根因。
+>
+> 背景二（不猜客户端）：同一台机器上的多个飞书安装可能共用同一个 `CFBundleIdentifier`
+> （`com.electron.lark`）**和**同一个 `CFBundleName`（`Feishu`），因此「哪个安装才是用户要的那个」
+> 在系统层面没有可靠信号。0.7.0 只在**恰好一个客户端正在运行**时用 `open -a <path>` 指名投递；
+> 零个或多个时不猜，直接交给 LaunchServices 走用户的默认 handler。
+> 曾经用文件名（`boe` / `main_end` 等关键字）给安装打分的做法已删除——那是猜测，不是判据。
 
 ## 3. Persistable 最近推荐
 
@@ -98,6 +109,9 @@ lark://applink.feishu.cn/client/chat/open?…   # 自定义 scheme，带 applink
 > 搜文档与建文档都符合——敲一下就拿到链接；建文档还能把选区直接作为正文。
 > 发消息不符合：发完必然要切到飞书看回复。搜妙记 / 我的任务等在飞书原生里体验更好，
 > 保留代码但默认关闭。
+>
+> `feishu.debug-open` 同样默认隐藏：它是排查打开路径用的诊断工具，不该占日常命令位。
+> 需要跑 §2.6 时先勾选「显示全部飞书命令」。
 
 ## 7. 交互细节
 

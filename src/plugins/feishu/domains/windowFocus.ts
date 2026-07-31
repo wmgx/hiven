@@ -8,7 +8,7 @@ import {
   buildDeliveryCandidates,
   collectRunningAppPathsFromPs,
   isClientScheme,
-  pickPreferredFeishuAppPath,
+  pickDeliveryAppPath,
   shellQuote,
   shouldStopAfterDelivery,
 } from './openPlan'
@@ -16,87 +16,40 @@ import {
 /** Process names that may own Feishu / Lark desktop windows on macOS. */
 export const FEISHU_WINDOW_APP_NAMES = ['Feishu', 'Lark', '飞书', 'LarkSuite'] as const
 
-/** Bundle ids that may own the Feishu / Lark desktop client. */
-const FEISHU_BUNDLE_IDS = [
-  'com.electron.lark',
-  'com.bytedance.ee.lark',
-  'com.larksuite.desktop',
-] as const
-
 /**
- * Cached *installed* (mdfind) resolution only.
- * Running-client resolution is re-checked every open so we always target the
- * session the user currently has open.
- */
-let cachedInstalledAppPath: string | null | undefined
-
-/**
- * Resolve which Feishu / Lark .app should receive deep links.
+ * Resolve which Feishu / Lark .app should be addressed by name for deep links.
  *
- * Prefer the currently running client (user's live session). Fall back to a
- * scored mdfind result so production `Lark.app` / `Feishu.app` beat BOE copies
- * that share the same bundle id. Never throws.
+ * Only the running process is consulted, and only when there is exactly one —
+ * see `pickDeliveryAppPath` for why an install path is not evidence of which
+ * client the user means. Undefined is a normal, healthy result: delivery then
+ * falls back to LaunchServices, which honours the user's default handler.
+ *
+ * Never cached: the user can quit or switch clients between two opens, and `ps`
+ * is cheap enough to re-read each time. Never throws.
  */
 export async function resolveFeishuAppPath(shell: LarkCliShell): Promise<string | undefined> {
-  // 1) Live process — always re-check (user may switch clients mid-session).
+  let running: string[] = []
   try {
     const ps = await shell.run({
       command: 'ps -ax -o comm=',
       timeoutMs: 1500,
     })
-    const running = collectRunningAppPathsFromPs(ps.stdout ?? '')
-    const fromRunning = pickPreferredFeishuAppPath({ runningAppPaths: running })
-    if (fromRunning) {
-      logFeishuOpen('resolveApp:hit', { source: 'running', path: fromRunning, running })
-      return fromRunning
-    }
+    running = collectRunningAppPathsFromPs(ps.stdout ?? '')
   } catch {
-    // fall through to installed lookup
+    // Treat as "nothing running" — LaunchServices fallback still works.
   }
 
-  // 2) Installed copies via Spotlight (cached; order is not product order).
-  if (cachedInstalledAppPath !== undefined) return cachedInstalledAppPath ?? undefined
-
-  const installed: string[] = []
-  for (const bundleId of FEISHU_BUNDLE_IDS) {
-    try {
-      // No pipes / redirects: LarkCliShell.run only guarantees a command string,
-      // not a full shell. Collect all hits and pick in JS.
-      const result = await shell.run({
-        command: `mdfind kMDItemCFBundleIdentifier=${bundleId}`,
-        timeoutMs: 1500,
-      })
-      for (const line of (result.stdout ?? '').split('\n')) {
-        const path = line.trim()
-        if (path.endsWith('.app') && !installed.includes(path)) installed.push(path)
-      }
-    } catch {
-      // try next bundle id
-    }
-  }
-
-  const picked = pickPreferredFeishuAppPath({ installedAppPaths: installed })
+  const picked = pickDeliveryAppPath(running)
   if (picked) {
-    logFeishuOpen('resolveApp:hit', {
-      source: 'installed',
-      path: picked,
-      candidates: installed,
-    })
-    cachedInstalledAppPath = picked
+    logFeishuOpen('resolveApp:hit', { source: 'running', path: picked })
     return picked
   }
 
-  logFeishuOpen('resolveApp:miss', {
-    tried: FEISHU_BUNDLE_IDS.length,
-    installedCount: installed.length,
+  logFeishuOpen('resolveApp:defer-to-launch-services', {
+    reason: running.length > 1 ? 'multiple-clients-running' : 'no-client-running',
+    running,
   })
-  cachedInstalledAppPath = null
   return undefined
-}
-
-/** Test seam: drop the cached installed-app path so the next open re-resolves. */
-export function resetFeishuAppPathCache(): void {
-  cachedInstalledAppPath = undefined
 }
 
 const OPEN_LOG = '[feishu:open]'
