@@ -44,13 +44,16 @@ export type ClipboardSnapshot = {
 // ─── Configuration ─────────────────────────────────────────────────────────────
 
 /** Clipboard copied within this window is "fresh" and auto-attaches. */
-export const FRESH_CLIPBOARD_TTL_MS = 2 * 60 * 1000
+export const FRESH_CLIPBOARD_TTL_MS = 30 * 1000
 
 /** Clipboard older than fresh but within this window shows a weak hint. */
-export const RECENT_CLIPBOARD_HINT_TTL_MS = 10 * 60 * 1000
+export const RECENT_CLIPBOARD_HINT_TTL_MS = 2 * 60 * 1000
 
 /** Unknown-age clipboard is never auto-attached. */
 export const UNKNOWN_AGE_AUTO_ATTACH = false
+
+/** Background age tracker poll interval (ms). Keeps changedAt near real copy time. */
+export const CLIPBOARD_AGE_TRACKER_INTERVAL_MS = 1000
 
 // ─── Hash ──────────────────────────────────────────────────────────────────────
 
@@ -287,8 +290,81 @@ export function createClipboardSnapshotFromUnknownAge(text: string): ClipboardSn
   return lastSnapshot
 }
 
+/**
+ * Observe clipboard text without treating first discovery as a copy event.
+ *
+ * - No prior snapshot → baseline with unknown age (never auto-attach).
+ * - Same content → leave age fields untouched (no thrash).
+ * - Content change → known age with changedAt = now (real observation clock).
+ */
+export function observeClipboardText(text: string): ClipboardSnapshot | null {
+  if (!text) return lastSnapshot
+  const hash = hashClipboardText(text)
+  if (!lastSnapshot) {
+    return createClipboardSnapshotFromUnknownAge(text)
+  }
+  if (lastSnapshot.hash === hash) {
+    return lastSnapshot
+  }
+  return updateClipboardSnapshot(text)
+}
+
 export function clearClipboardSnapshot(): void {
   lastSnapshot = null
+}
+
+// ─── Background age tracker ───────────────────────────────────────────────────
+
+type ClipboardAgeReadFn = () => Promise<string>
+
+let ageTrackerStop: (() => void) | null = null
+
+/**
+ * Poll clipboard in the background so changedAt reflects when content actually
+ * changed while the app is running — not when Global Launcher happens to open.
+ *
+ * First observation is always unknown-age baseline; only subsequent changes are
+ * marked known/fresh. Safe to call multiple times (idempotent).
+ */
+export function startClipboardAgeTracker(
+  readClipboard: ClipboardAgeReadFn,
+  intervalMs: number = CLIPBOARD_AGE_TRACKER_INTERVAL_MS,
+): () => void {
+  if (ageTrackerStop) return ageTrackerStop
+
+  let stopped = false
+  let polling = false
+
+  const tick = async () => {
+    if (stopped || polling) return
+    polling = true
+    try {
+      const text = await readClipboard()
+      if (stopped) return
+      if (text) observeClipboardText(text)
+    } catch {
+      // Ignore transient clipboard / permission errors.
+    } finally {
+      polling = false
+    }
+  }
+
+  // Seed baseline soon after start (don't wait a full interval).
+  void tick()
+  const intervalId = window.setInterval(() => {
+    void tick()
+  }, intervalMs)
+
+  ageTrackerStop = () => {
+    stopped = true
+    window.clearInterval(intervalId)
+    ageTrackerStop = null
+  }
+  return ageTrackerStop
+}
+
+export function stopClipboardAgeTracker(): void {
+  ageTrackerStop?.()
 }
 
 // ─── Freshness rules ───────────────────────────────────────────────────────────

@@ -6,7 +6,7 @@
  *  2. Apply freshness rules to decide whether to auto-attach ObjectBlock.
  *  3. Expose Backspace one-shot remove with short exit transition.
  *  4. Expose mode: 'object-action' | 'search-only'.
- *  5. Expose recent clipboard hint when in 2–10 min window.
+ *  5. Expose recent clipboard hint when past fresh TTL (30s) but within 2 min.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -17,11 +17,12 @@ import {
 } from './objectBlock'
 import { consumePendingObjectBlock, subscribePendingObjectBlock } from './pendingObjectBlock'
 import {
-  clearClipboardSnapshot,
   createClipboardSnapshotFromUnknownAge,
   dismissClipboardBlock,
   getLastClipboardSnapshot,
+  hashClipboardText,
   isClipboardDismissed,
+  observeClipboardText,
   updateClipboardSnapshot,
   type ClipboardSnapshot,
 } from './clipboardSnapshot'
@@ -111,15 +112,20 @@ export function useClipboardObjectBlock(params: {
             return
           }
 
+          // Clock rules (must not treat "first read at open" as copy time):
+          // - No prior observation → unknown age (no auto-attach).
+          // - Same content as tracker/open baseline → preserve changedAt / ageConfidence.
+          // - Content changed since last observation → known age at observation time
+          //   (race with background tracker; user likely just copied).
           const lastSnapshot = getLastClipboardSnapshot()
           let snapshot: ClipboardSnapshot
-
-          if (lastSnapshot && lastSnapshot.text === text) {
-            snapshot = updateClipboardSnapshot(text)
-          } else if (lastSnapshot) {
+          if (!lastSnapshot) {
+            snapshot = createClipboardSnapshotFromUnknownAge(text)
+          } else if (lastSnapshot.hash === hashClipboardText(text) || lastSnapshot.text === text) {
             snapshot = updateClipboardSnapshot(text)
           } else {
-            snapshot = createClipboardSnapshotFromUnknownAge(text)
+            // Prefer observe path so first-ever change after unknown baseline is known.
+            snapshot = observeClipboardText(text) ?? updateClipboardSnapshot(text)
           }
 
           if (cancelled) return

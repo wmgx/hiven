@@ -1,0 +1,7 @@
+{
+  "pluginId": "variable-case",
+  "displayName": "Variable Case",
+  "displayNameI18n": { "zh": "变量转换" },
+  "version": "1.0.0",
+  "capabilities": ["command"]
+}

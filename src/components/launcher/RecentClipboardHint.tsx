@@ -1,5 +1,5 @@
 /**
- * RecentClipboardHint — Recommendation card shown when clipboard is 2–10 min old.
+ * RecentClipboardHint — Recommendation card shown when clipboard is 30s–2 min old.
  *
  * Design: hiven_clipboard_object_block_recommendation_ai_task.md §9.3
  *

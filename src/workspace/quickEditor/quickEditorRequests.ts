@@ -2,6 +2,7 @@ import { useAppStore } from '../../store'
 import { useQuickEditorStore } from './quickEditorStore'
 import type { QuickEditorPaneId } from './quickEditorTypes'
 import { isQuickEditorWindowOpen, showQuickEditorWindow } from '../windowManager/quickEditorWindow'
+import { requestOpenLauncherHostSurface } from '../launcherHostSurfaceBridge'
 
 export const QUICK_EDITOR_CREATE_PANE_EVENT = 'hiven://quick-editor-create-pane'
 export const QUICK_EDITOR_SET_PANE_TEXT_EVENT = 'hiven://quick-editor-set-pane-text'
@@ -25,12 +26,25 @@ function normalizeDirection(direction: QuickEditorPaneRequest['direction']): 'ri
   return direction === 'top' || direction === 'bottom' ? 'bottom' : 'right'
 }
 
+/**
+ * Summon Quick Editor: focus detached window if open, otherwise open the
+ * host surface inside the global launcher (showing the launcher window).
+ */
 export async function showQuickEditorSurface(): Promise<void> {
   if (await isQuickEditorWindowOpen()) {
     await showQuickEditorWindow()
     return
   }
-  useAppStore.getState().openLauncherHostSurface('quick-editor')
+  // Already open as launcher host surface — re-show launcher so it comes forward.
+  const state = useAppStore.getState()
+  if (state.globalLauncherOpen && state.launcherHostSurfaceTarget === 'quick-editor') {
+    if (isTauriRuntime()) {
+      const { showLauncherWindow } = await import('../windowManager/launcherWindow')
+      await showLauncherWindow()
+    }
+    return
+  }
+  await requestOpenLauncherHostSurface('quick-editor')
 }
 
 export async function createQuickEditorPane(input: QuickEditorPaneRequest = {}): Promise<QuickEditorPaneId | undefined> {

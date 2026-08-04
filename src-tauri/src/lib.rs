@@ -2936,11 +2936,20 @@ fn extract_app_icon(_entry: &InstalledAppEntry) -> Option<DiscoveredAppIcon> {
 
 #[cfg(target_os = "macos")]
 fn system_open_app_target(target: &str) -> Result<(), String> {
-    std::process::Command::new("open")
+    // Wait for `open` so a missing/stale path fails the launcher item instead of
+    // looking like a successful click that did nothing.
+    let status = std::process::Command::new("open")
         .arg(target)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+        .status()
+        .map_err(|e| e.to_string())?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "Failed to open application (exit {})",
+            status.code().unwrap_or(-1)
+        ))
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -3240,6 +3249,81 @@ fn launch_installed_app(app_id: String) -> Result<(), String> {
     // Same as focus_desktop_window: hide_launcher must not restore the prior app.
     clear_previous_foreground_app();
     Ok(())
+}
+
+/// Tinycast-style per-app hotkey: if the app is already frontmost, hide it;
+/// otherwise launch/activate. Returns `"hidden" | "launched"`.
+#[tauri::command]
+fn toggle_installed_app(app_id: String) -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(bundle_id) = macos_bundle_id_from_app_id(&app_id) {
+            if macos_frontmost_bundle_id()
+                .as_deref()
+                .is_some_and(|front| front.eq_ignore_ascii_case(&bundle_id))
+            {
+                if macos_hide_frontmost_app() {
+                    clear_previous_foreground_app();
+                    return Ok("hidden".into());
+                }
+            }
+        }
+    }
+    launch_installed_app(app_id)?;
+    Ok("launched".into())
+}
+
+#[cfg(target_os = "macos")]
+fn macos_bundle_id_from_app_id(app_id: &str) -> Option<String> {
+    const PREFIX: &str = "macos:bundle:";
+    app_id
+        .strip_prefix(PREFIX)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+#[cfg(target_os = "macos")]
+fn macos_frontmost_bundle_id() -> Option<String> {
+    unsafe {
+        let workspace_cls = objc2::runtime::AnyClass::get(c"NSWorkspace")?;
+        let workspace: *mut objc2::runtime::AnyObject = objc2::msg_send![workspace_cls, sharedWorkspace];
+        if workspace.is_null() {
+            return None;
+        }
+        let front: *mut objc2::runtime::AnyObject = objc2::msg_send![workspace, frontmostApplication];
+        if front.is_null() {
+            return None;
+        }
+        let bundle: *mut objc2::runtime::AnyObject = objc2::msg_send![front, bundleIdentifier];
+        if bundle.is_null() {
+            return None;
+        }
+        let utf8: *const std::ffi::c_char = objc2::msg_send![bundle, UTF8String];
+        if utf8.is_null() {
+            return None;
+        }
+        Some(std::ffi::CStr::from_ptr(utf8).to_string_lossy().into_owned())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_hide_frontmost_app() -> bool {
+    unsafe {
+        let workspace_cls = match objc2::runtime::AnyClass::get(c"NSWorkspace") {
+            Some(cls) => cls,
+            None => return false,
+        };
+        let workspace: *mut objc2::runtime::AnyObject = objc2::msg_send![workspace_cls, sharedWorkspace];
+        if workspace.is_null() {
+            return false;
+        }
+        let front: *mut objc2::runtime::AnyObject = objc2::msg_send![workspace, frontmostApplication];
+        if front.is_null() {
+            return false;
+        }
+        let ok: bool = objc2::msg_send![front, hide];
+        ok
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -6356,6 +6440,7 @@ pub fn run() {
             read_installed_app_icon_url,
             cache_installed_app_icons,
             launch_installed_app,
+            toggle_installed_app,
             list_desktop_windows,
             list_desktop_windows_enriched,
             focus_desktop_window,

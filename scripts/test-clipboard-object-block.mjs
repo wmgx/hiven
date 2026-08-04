@@ -58,20 +58,44 @@ const s3 = snapshot.createClipboardSnapshotFromUnknownAge('unknown content')
 assert.equal(s3.ageConfidence, 'unknown')
 assert.equal(snapshot.shouldAutoAttachClipboard(s3), false, 'unknown age should not auto attach')
 
-// <= 2 min → auto attach
-const freshSnapshot = { ...s1, changedAt: Date.now() - 30_000, ageConfidence: 'known' }
-assert.equal(snapshot.shouldAutoAttachClipboard(freshSnapshot), true, '<= 2min should auto attach')
+// Fresh TTL is 30s
+assert.equal(snapshot.FRESH_CLIPBOARD_TTL_MS, 30_000, 'fresh TTL should be 30s')
 
-// 2-10 min → weak hint
-const recentSnapshot = { ...s1, changedAt: Date.now() - 5 * 60_000, ageConfidence: 'known' }
-assert.equal(snapshot.shouldAutoAttachClipboard(recentSnapshot), false, '5 min should not auto attach')
-assert.equal(snapshot.shouldShowRecentClipboardHint(recentSnapshot), true, '5 min should show hint')
+// <= 30s → auto attach
+const freshSnapshot = { ...s1, changedAt: Date.now() - 10_000, ageConfidence: 'known' }
+assert.equal(snapshot.shouldAutoAttachClipboard(freshSnapshot), true, '<= 30s should auto attach')
+const atBoundary = { ...s1, changedAt: Date.now() - 30_000, ageConfidence: 'known' }
+assert.equal(snapshot.shouldAutoAttachClipboard(atBoundary), true, 'exactly 30s should still auto attach')
 
-// > 10 min → no hint
-const oldSnapshot = { ...s1, changedAt: Date.now() - 15 * 60_000, ageConfidence: 'known' }
+// > 30s → not auto attach
+const justStale = { ...s1, changedAt: Date.now() - 45_000, ageConfidence: 'known' }
+assert.equal(snapshot.shouldAutoAttachClipboard(justStale), false, '>30s should not auto attach')
+
+// 30s-2 min → weak hint
+assert.equal(snapshot.RECENT_CLIPBOARD_HINT_TTL_MS, 2 * 60_000, 'hint TTL should be 2 min')
+const recentSnapshot = { ...s1, changedAt: Date.now() - 60_000, ageConfidence: 'known' }
+assert.equal(snapshot.shouldAutoAttachClipboard(recentSnapshot), false, '60s should not auto attach')
+assert.equal(snapshot.shouldShowRecentClipboardHint(recentSnapshot), true, '60s should show hint')
+
+// > 2 min → no hint
+const oldSnapshot = { ...s1, changedAt: Date.now() - 3 * 60_000, ageConfidence: 'known' }
 assert.equal(snapshot.shouldAutoAttachClipboard(oldSnapshot), false)
-assert.equal(snapshot.shouldShowRecentClipboardHint(oldSnapshot), false, '>10 min should not hint')
+assert.equal(snapshot.shouldShowRecentClipboardHint(oldSnapshot), false, '>2 min should not hint')
 assert.equal(snapshot.isClipboardExpired(oldSnapshot), true)
+
+// observeClipboardText: first see = unknown baseline; change = known
+snapshot.clearClipboardSnapshot()
+const observed1 = snapshot.observeClipboardText('baseline content')
+assert.equal(observed1.ageConfidence, 'unknown', 'first observe must be unknown age')
+assert.equal(observed1.changedAt, undefined, 'first observe must not set changedAt')
+assert.equal(snapshot.shouldAutoAttachClipboard(observed1), false, 'baseline must not auto-attach')
+const observedSame = snapshot.observeClipboardText('baseline content')
+assert.equal(observedSame.ageConfidence, 'unknown', 'same content keeps unknown')
+assert.equal(observedSame.changedAt, undefined)
+const observedChange = snapshot.observeClipboardText('new content after copy')
+assert.equal(observedChange.ageConfidence, 'known', 'content change must be known age')
+assert.ok(observedChange.changedAt !== undefined, 'content change must set changedAt')
+assert.equal(snapshot.shouldAutoAttachClipboard(observedChange), true, 'fresh change should auto-attach')
 
 // ─── Detection ─────────────────────────────────────────────────────────────────
 
@@ -115,7 +139,7 @@ assert.equal(block.removable, true)
 assert.equal(block.selectedForDelete, false)
 
 // Stale clipboard should not create block
-const staleSnap = { ...s1, changedAt: Date.now() - 15 * 60_000, ageConfidence: 'known', detectedType: 'text' }
+const staleSnap = { ...s1, changedAt: Date.now() - 3 * 60_000, ageConfidence: 'known', detectedType: 'text' }
 const noBlock = objectBlock.createClipboardObjectBlock(staleSnap)
 assert.equal(noBlock, null, 'stale clipboard should not create block')
 
@@ -131,14 +155,14 @@ assert.ok(secretBlock, 'secret fresh clipboard should create block')
 assert.equal(secretBlock.secretMasked, true)
 assert.equal(secretBlock.preview, undefined, 'secret preview should be hidden')
 
-// Recent clipboard hint
-const recentSnap = { ...s1, changedAt: Date.now() - 6 * 60_000, ageConfidence: 'known', detectedType: 'url' }
+// Recent clipboard hint (30s–2 min)
+const recentSnap = { ...s1, changedAt: Date.now() - 90_000, ageConfidence: 'known', detectedType: 'url' }
 const hint = objectBlock.buildRecentClipboardHint(recentSnap)
 assert.ok(hint, 'recent clipboard should show hint')
-assert.ok(hint.ageLabel.includes('分钟前'))
+assert.ok(hint.ageLabel.includes('分钟前') || hint.ageLabel.includes('秒前'))
 
-// Expired clipboard hint
-const expiredSnap = { ...s1, changedAt: Date.now() - 12 * 60_000, ageConfidence: 'known', detectedType: 'text' }
+// Expired clipboard hint (>2 min)
+const expiredSnap = { ...s1, changedAt: Date.now() - 3 * 60_000, ageConfidence: 'known', detectedType: 'text' }
 const noHint = objectBlock.buildRecentClipboardHint(expiredSnap)
 assert.equal(noHint, null, 'expired clipboard should not show hint')
 

@@ -57,7 +57,7 @@ assert.doesNotMatch(files.appTsx, /openGlobalLauncherOverlay\('/, 'openGlobalLau
 // ── 2. quick-editor is a host surface target ──────────────────────────────
 assert.match(
   files.store,
-  /LauncherHostSurfaceTarget = 'settings' \| 'plugins' \| 'system-settings' \| 'system-plugins' \| 'quick-editor'/,
+  /LauncherHostSurfaceTarget\s*=\s*[\s\S]*'quick-editor'/,
   'quick-editor must be a launcher host surface target',
 )
 assert.doesNotMatch(files.host, /QuickEditorPanel/, 'GlobalLauncherHost must not render QuickEditorPanel directly')
@@ -91,8 +91,8 @@ assert.doesNotMatch(
 )
 assert.match(
   files.quickEditorRequests,
-  /showQuickEditorSurface[\s\S]*openLauncherHostSurface\(['"]quick-editor['"]\)/,
-  'legacy editor open paths must fall back to the quick editor surface',
+  /showQuickEditorSurface[\s\S]*requestOpenLauncherHostSurface\(['"]quick-editor['"]\)/,
+  'legacy editor open paths must fall back to the quick editor surface via launcher host bridge',
 )
 assert.match(
   files.pluginApi,

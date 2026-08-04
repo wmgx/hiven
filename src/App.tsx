@@ -14,14 +14,31 @@ import { prefetchDesktopWindowsOnStartup } from './workspace/desktopControl/wind
 import { registerHostLauncherProviders } from './workspace/launcher/hostProvider'
 import { installGlobalPinnedLauncherHotkeys, routeGlobalPinnedLauncherShortcut } from './hotkeys/globalPinnedLauncher'
 import { installPluginSurfaceShortcutHotkeys } from './hotkeys/pluginSurfaceShortcuts'
+import { installAppHotkeys } from './hotkeys/appHotkeys'
+import { installQuickEditorHotkeys } from './hotkeys/quickEditor'
 import { consumePendingPluginSurfaceOpenTarget, isPluginSurfaceOpenTarget, openLauncherHostedPluginSurface } from './workspace/pluginSurfaceOpenRequest'
 import { LAUNCHER_HOST_SURFACE_OPEN_EVENT, consumePendingLauncherHostSurfaceOpen, isLauncherHostSurfaceOpenRequest, isLauncherHostSurfaceTarget, openLauncherHostSurfaceLocally, openLauncherHostSurfaceRequestLocally } from './workspace/launcherHostSurfaceBridge'
 import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from './workspace/launcherWindowEvents'
 import { onCurrentLauncherWindowMoved, setCurrentLauncherWindowPosition, type LauncherWindowMovedPosition } from './workspace/windowManager/launcherWindow'
 import { launcherPerfNow, logLauncherPerfDuration } from './workspace/launcher/perf'
+import { startClipboardAgeTracker } from './launcher/clipboard/clipboardSnapshot'
 
 // Register built-in panels
 import './panels/register'
+
+/** Lightweight text-only read for age tracking (avoid file-path IPC every tick). */
+async function readClipboardTextForAgeTracker(): Promise<string> {
+  try {
+    const { readText } = await import('@tauri-apps/plugin-clipboard-manager')
+    return (await readText()) ?? ''
+  } catch {
+    try {
+      return await navigator.clipboard.readText()
+    } catch {
+      return ''
+    }
+  }
+}
 
 // Register first-party product plugin packages
 registerHostLauncherProviders()
@@ -113,6 +130,14 @@ function LauncherRuntimeApp() {
 
   useEffect(() => installGlobalPinnedLauncherHotkeys(), [])
   useEffect(() => installPluginSurfaceShortcutHotkeys(), [])
+  useEffect(() => installAppHotkeys(), [])
+  useEffect(() => installQuickEditorHotkeys(), [])
+
+  // Background clipboard age clock: first see = unknown baseline; real changes get known changedAt.
+  // Prevents Global Launcher open from treating long-sitting clipboard as "just copied".
+  useEffect(() => {
+    return startClipboardAgeTracker(readClipboardTextForAgeTracker)
+  }, [])
 
   useEffect(() => {
     if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return

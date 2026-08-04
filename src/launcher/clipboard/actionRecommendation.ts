@@ -394,6 +394,24 @@ const EDITOR_TEXT_ACTIONS: RecommendedAction[] = [
 
 // ─── Recommendation logic ──────────────────────────────────────────────────────
 
+/** History-item text: paste/copy first; transforms still come from ranking + objectBlockText. */
+const TEXT_HISTORY_ACTIONS: RecommendedAction[] = [
+  {
+    id: 'paste-history-text',
+    title: 'Paste to Front App',
+    titleZh: '粘贴到前台应用',
+    provider: 'Clipboard History',
+    defaultOutput: 'copy',
+  },
+  {
+    id: 'copy-history-text',
+    title: 'Copy to Clipboard',
+    titleZh: '复制到剪贴板',
+    provider: 'Clipboard History',
+    defaultOutput: 'copy',
+  },
+]
+
 const IMAGE_HISTORY_ACTIONS: RecommendedAction[] = [
   {
     id: 'paste-history-image',
@@ -463,10 +481,11 @@ const EDITOR_ACTIONS_BY_KIND: Partial<Record<ObjectBlockKind, RecommendedAction[
 
 export function recommendActionsForBlock(block: LauncherObjectBlock): RecommendedAction[] {
   if (block.source === 'history-item') {
-    // text history-item uses ranking + objectBlockText (no dual list)
+    // Image/files: host injects these as list rows (no textMatch path).
+    // Text: paste/copy as primary host rows; format/encode still via ranking + objectBlockText.
     if (block.kind === 'image') return IMAGE_HISTORY_ACTIONS
     if (block.kind === 'files') return FILES_HISTORY_ACTIONS
-    return []
+    return TEXT_HISTORY_ACTIONS
   }
   if (block.source === 'clipboard') {
     return CLIPBOARD_ACTIONS_BY_KIND[block.kind] ?? FALLBACK_ACTIONS
@@ -502,6 +521,9 @@ export function getSearchOnlyActions(): RecommendedAction[] {
 // Accepts-based tool recommendations live in acceptsRecommendation.ts
 // (recommendActionsFromToolAccepts). Hosts may merge both sources.
 
+/** Max actions returned for one object block (1 primary + secondaries). */
+export const RECOMMENDED_ACTIONS_MAX = 5
+
 export function recommendActionsWithPlugins(block: LauncherObjectBlock): RecommendedAction[] {
   const staticActions = recommendActionsForBlock(block)
 
@@ -526,5 +548,6 @@ export function recommendActionsWithPlugins(block: LauncherObjectBlock): Recomme
       alternativeOutputs: d.outputTargets.filter((t) => t !== d.defaultOutput),
     }))
 
-  return [...staticActions, ...pluginActions]
+  // Primary = first static (kind catalog order); then plugins; cap for scannable list.
+  return [...staticActions, ...pluginActions].slice(0, RECOMMENDED_ACTIONS_MAX)
 }

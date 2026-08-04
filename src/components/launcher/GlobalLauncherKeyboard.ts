@@ -22,6 +22,7 @@ export function handleGlobalLauncherKeyDown({
   visibleFilteredLength,
   setSelectedIndex,
   selectedItem,
+  visibleItems,
   isWorkflowObjectLauncherItem,
   selectItem,
   handleClipboardBackspace,
@@ -35,6 +36,7 @@ export function handleGlobalLauncherKeyDown({
   setSelectedObjectActionIndex,
   expandSelectedObjectAction,
   executeSelectedObjectAction,
+  onToggleFavorite,
 }: {
   event: ReactKeyboardEvent<HTMLElement>
   isImeComposingRef: MutableRefObject<boolean>
@@ -61,6 +63,8 @@ export function handleGlobalLauncherKeyDown({
     options?: { pin?: boolean },
   ) => void
   selectedItem?: LauncherMixedItem
+  /** Visible list rows for ⌘1–8 quick-run (same order as rendered). */
+  visibleItems?: LauncherMixedItem[]
   isWorkflowObjectLauncherItem: (item?: LauncherMixedItem) => boolean
   selectItem: (item: LauncherMixedItem | undefined, customizeParams?: boolean) => void
   handleClipboardBackspace?: (queryEmpty: boolean) => boolean
@@ -74,6 +78,8 @@ export function handleGlobalLauncherKeyDown({
   setSelectedObjectActionIndex?: (updater: number | ((index: number) => number)) => void
   expandSelectedObjectAction?: () => void
   executeSelectedObjectAction?: (keepOpen?: boolean) => void
+  /** Pin / unpin the focused list row (⌘P). */
+  onToggleFavorite?: (item: LauncherMixedItem) => void
 }) {
   if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
   if (event.defaultPrevented) return
@@ -181,6 +187,35 @@ export function handleGlobalLauncherKeyDown({
     executeSelectedObjectAction?.(event.metaKey || event.ctrlKey)
     return
   }
+
+  // Search frame only (no multi-frame controller stack above).
+  const onSearchRoot =
+    !controllerState || controllerState.frames.length <= 1
+
+  // ⌘1–8 / Ctrl+1–8: select and immediately run the Nth visible row (SuperCmd-style).
+  if (onSearchRoot && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey) {
+    const digit = event.key >= '1' && event.key <= '8' ? Number(event.key) : -1
+    if (digit >= 1 && digit <= 8) {
+      const list = visibleItems ?? []
+      const target = list[digit - 1]
+      if (target) {
+        event.preventDefault()
+        event.stopPropagation()
+        isKeyboardNavRef.current = true
+        setSelectedIndex(digit - 1)
+        selectItem(target, false)
+        return
+      }
+    }
+    // ⌘P / Ctrl+P: pin / unpin favorite
+    if ((event.key === 'p' || event.key === 'P') && selectedItem && onToggleFavorite) {
+      event.preventDefault()
+      event.stopPropagation()
+      onToggleFavorite(selectedItem)
+      return
+    }
+  }
+
   if (event.key === 'ArrowDown') {
     event.preventDefault()
     isKeyboardNavRef.current = true

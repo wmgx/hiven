@@ -87,6 +87,7 @@ const repoFile = read('src/plugins/clipboard-history/storage/clipboardHistoryRep
 
 // Must export repository creation function
 assert.match(repoFile, /createClipboardHistoryRepository/, 'Must export createClipboardHistoryRepository')
+assert.match(repoFile, /withWriteLock|writeTail/, 'Repository mutations must be serialized to prevent concurrent index lost-updates')
 assert.match(repoFile, /getAllItems/, 'Must export getAllItems')
 assert.match(repoFile, /deleteItem/, 'Must export deleteItem')
 assert.match(repoFile, /clearAll/, 'Must export clearAll')

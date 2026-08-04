@@ -543,7 +543,10 @@ export type PluginClipboardApi = {
   writeText(text: string): Promise<void>
   writeImage(blobId: string): Promise<void>
   writeFiles(paths: string[]): Promise<void>
-  watch(options: ClipboardWatchOptions, onChange: (change: ClipboardChange) => void): Promise<() => void>
+  watch(
+    options: ClipboardWatchOptions,
+    onChange: (change: ClipboardChange) => void | Promise<void>,
+  ): Promise<() => void>
 }
 
 // ─── Plugin Paste API ────────────────────────────────────────────────────────

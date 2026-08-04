@@ -85,7 +85,9 @@ export function iconForChat(options: {
   avatarUrl?: string | null
 }): string {
   if (isHttpIconUrl(options.avatarUrl)) return options.avatarUrl.trim()
-  return 'MessagesSquare'
+  // Same as people: stable colored initials. Lucide MessagesSquare is nearly
+  // invisible on the dark launcher charcoal face next to colorful avatars.
+  return initialsAvatarDataUrl(options.name, options.id ?? options.name)
 }
 
 /** Deterministic pastel SVG circle with 1–2 initials (works offline, no CLI). */

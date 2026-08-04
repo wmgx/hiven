@@ -60,6 +60,7 @@ rankingSrc = rankingSrc
   .replace(/import\s+type\s*\{[^}]*\}\s*from\s*'\.\/intentTypes'\s*;?\s*\n?/, '')
   .replace(/import\s*\{[^}]*\}\s*from\s*'\.\/intentEngine'\s*;?\s*\n?/, '')
   .replace(/import\s*\{[^}]*\}\s*from\s*'\.\/intentTypes'\s*;?\s*\n?/, '')
+  .replace(/import\s*\{[^}]*\}\s*from\s*'\.\.\/desktopTargets\/browserWindowPolicy'\s*;?\s*\n?/, '')
 const rankingOut = ts.transpileModule(rankingSrc, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, esModuleInterop: true },
 }).outputText
@@ -72,6 +73,7 @@ const rankingSandbox = {
   searchableFieldsMatch: searchRanking.searchableFieldsMatch,
   getUsageRecord: usage.getUsageRecord,
   localizedDisplay: display.localizedDisplay,
+  navNearDuplicateDemotion: () => 0,
 }
 try {
   const engine = loadTs('src/workspace/launcher/intentEngine.ts', [

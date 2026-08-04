@@ -170,7 +170,14 @@ function isRemoteImageIcon(iconName: string): boolean {
 function isCircularRemoteIcon(src: string): boolean {
   // Person/chat avatars & generated initials look better circular.
   if (src.startsWith('data:image/svg+xml')) return true
-  if (/imfile\.feishucdn|avatar|larksuite\.com\/.*avatar/i.test(src)) return true
+  // Feishu/Lark CDN hosts for profile + group avatars (imfile, s*-imfile, etc.).
+  if (
+    /imfile\.feishucdn|feishucdn\.com|larksuite\.com|larkusercontent\.com|byteimg\.com|avatar/i.test(
+      src,
+    )
+  ) {
+    return true
+  }
   return false
 }
 
@@ -184,7 +191,13 @@ function RemoteImageIcon({
   fallbackName?: string
 }) {
   const [failed, setFailed] = useState(false)
-  if (failed) return resolveIcon('Globe', size, fallbackName)
+  if (failed) {
+    // Prefer stable initials over a faint Globe glyph when the row title exists.
+    if (fallbackName?.trim()) {
+      return resolveIcon(undefined, size, fallbackName)
+    }
+    return resolveIcon('Globe', size, fallbackName)
+  }
   const round = isCircularRemoteIcon(src)
   return (
     <img
@@ -192,11 +205,14 @@ function RemoteImageIcon({
       alt=""
       width={size}
       height={size}
+      className={round ? 'r-avatar-img' : 'r-remote-img'}
       style={{
         width: size,
         height: size,
         objectFit: 'cover',
         borderRadius: round ? '50%' : 3,
+        display: 'block',
+        flex: 'none',
       }}
       draggable={false}
       onError={() => setFailed(true)}

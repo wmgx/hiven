@@ -10,7 +10,7 @@ import { buildGlobalLauncherPanelStyle } from '../../components/launcher/GlobalL
 import { usePluginPermissionStore } from '../../workspace/pluginPermissions'
 import { useLauncherSession } from '../../workspace/launcher/useLauncherSession'
 import { useGlobalLauncherSurfaceRegistry } from '../../components/launcher/GlobalLauncherSurfaceRegistry'
-import { useCloseStandaloneLauncherOnBlur, useFocusGlobalLauncherSurfaceShell, useGlobalLauncherNativeDrag, useStandaloneLauncherResize } from '../../components/launcher/GlobalLauncherWindowLifecycle'
+import { useAutoCloseStandaloneLauncherOnBackgroundIdle, useCloseStandaloneLauncherOnBlur, useFocusGlobalLauncherSurfaceShell, useGlobalLauncherNativeDrag, useStandaloneLauncherResize } from '../../components/launcher/GlobalLauncherWindowLifecycle'
 import { isStandaloneLauncherWindow, useGlobalLauncherCollectInputPreview, useGlobalLauncherFocusSession, useGlobalLauncherHostEscape, useGlobalLauncherImeComposition } from '../../components/launcher/GlobalLauncherHostLifecycle'
 import { closeGlobalLauncherWindow } from '../../components/launcher/GlobalLauncherClose'
 import { isWorkflowObjectLauncherItem } from '../../components/launcher/GlobalLauncherSelection'
@@ -227,11 +227,20 @@ export function GlobalLauncherHost() {
     })
   }, [locale, pluginRegistryVersion, rankingQuery, rankedLauncherItems])
 
-  /** Image/files history Object Blocks cannot use textMatch; inject host actions at list top. */
+  /**
+   * History Object Blocks (⌘Enter from clipboard history): inject host paste/copy
+   * rows at list top. Text still gets ranking tools via objectBlockText.
+   */
   const historyObjectActionItems = useMemo((): GlobalLauncherItem[] => {
     const block = clipboardBlock.block
-    if (!block || (block.kind !== 'image' && block.kind !== 'files')) return []
+    if (!block || block.source !== 'history-item') return []
     const q = rankingQuery.trim().toLowerCase()
+    const kindLabel =
+      block.kind === 'image'
+        ? { en: 'Image', zh: '图片' }
+        : block.kind === 'files'
+          ? { en: 'Files', zh: '文件' }
+          : { en: 'History', zh: '历史' }
     return objectActions
       .filter((action) => {
         if (!q) return true
@@ -250,8 +259,8 @@ export function GlobalLauncherHost() {
             title,
             titleI18n: { en: action.title, zh: action.titleZh },
             subtitle: action.provider,
-            kindLabel: block.kind === 'image' ? 'Image' : 'Files',
-            kindLabelI18n: { en: block.kind === 'image' ? 'Image' : 'Files', zh: block.kind === 'image' ? '图片' : '文件' },
+            kindLabel: kindLabel.en,
+            kindLabelI18n: kindLabel,
           },
           behavior: { type: 'perform' },
           execute: async () => ({ ok: true }),
@@ -359,7 +368,15 @@ export function GlobalLauncherHost() {
     closeLauncher: closeLauncherOnBlur,
   })
 
-  // -1 focuses the recent-clipboard hint row (2–10 min) above the command list.
+  // Surfaces with closeOnBlur:false can stay open after app switch; exit if
+  // the standalone window has not been foreground for 5 minutes.
+  useAutoCloseStandaloneLauncherOnBackgroundIdle({
+    open,
+    standaloneLauncher,
+    closeLauncher,
+  })
+
+  // -1 focuses the recent-clipboard hint row (30s–2 min) above the command list.
   const hasClipboardHint = Boolean(clipboardBlock.hint && !clipboardBlock.block)
   const minSelectedIndex = hasClipboardHint ? -1 : 0
   const maxSelectedIndex = Math.max(0, visibleFiltered.length - 1)
@@ -489,16 +506,38 @@ export function GlobalLauncherHost() {
       setRenderer: async (actionId, text) => {
         await createQuickEditorPane({ text: `${actionId}\n\n${text}` })
       },
+      pasteText: async (text) => {
+        const pasteResult = await historyPaste.pasteText(text)
+        if (!pasteResult.ok) {
+          if (pasteResult.fallback === 'copied') {
+            showToast(pasteResult.message || (locale === 'zh' ? '已复制到剪贴板' : 'Copied to clipboard'), 'info')
+            return
+          }
+          throw new Error(pasteResult.message || 'Paste text failed')
+        }
+      },
       pasteImage: async (blobId) => {
         const pasteResult = await historyPaste.pasteImage(blobId)
-        if (!pasteResult.ok) throw new Error(pasteResult.message || 'Paste image failed')
+        if (!pasteResult.ok) {
+          if (pasteResult.fallback === 'copied') {
+            showToast(pasteResult.message || (locale === 'zh' ? '已复制到剪贴板' : 'Copied to clipboard'), 'info')
+            return
+          }
+          throw new Error(pasteResult.message || 'Paste image failed')
+        }
       },
       writeImage: async (blobId) => {
         await historyClipboard.writeImage(blobId)
       },
       pasteFiles: async (paths) => {
         const pasteResult = await historyPaste.pasteFiles(paths)
-        if (!pasteResult.ok) throw new Error(pasteResult.message || 'Paste files failed')
+        if (!pasteResult.ok) {
+          if (pasteResult.fallback === 'copied') {
+            showToast(pasteResult.message || (locale === 'zh' ? '已复制到剪贴板' : 'Copied to clipboard'), 'info')
+            return
+          }
+          throw new Error(pasteResult.message || 'Paste files failed')
+        }
       },
     })
 
@@ -510,7 +549,7 @@ export function GlobalLauncherHost() {
     if (result.ok && target !== 'copy-and-keep-open') {
       closeLauncherAfterAction()
     }
-  }, [clipboardBlock.block, closeLauncherAfterAction, openPluginSurface])
+  }, [clipboardBlock.block, closeLauncherAfterAction, locale, openPluginSurface])
 
   const selectItemWithHistoryActions = useCallback((item: GlobalLauncherItem) => {
     if (item.id.startsWith('history-object-action:')) {

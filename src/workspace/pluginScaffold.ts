@@ -82,22 +82,28 @@ function scriptCommandScaffold(pluginId: string, title: string): PluginScaffoldF
 
 Script-command plugin template for hiven.
 
-- Declares \`shell.run\` (L3). Host does **not** grant this by default.
-- Entry uses the tools API. The sample \`run\` handler does **not** execute a real shell —
-  wire host shell runtime (see \`doc/future/shell-effect-runtime-design.md\`) before enabling.
+- Declares \`shell.run\` (L3). Host does **not** grant this by default — authorize in Plugins UI.
+- Entry uses the tools API and calls \`ctx.shell.run\` after an L2 confirm choice.
+- Prefer editing command text in the tool \`run\` handler, or use first-party **Custom Commands**.
 - i18n strings live in \`locales/en.json\` and \`locales/zh.json\`.
 `,
     localeEn: JSON.stringify({
       'tool.script.title': title,
-      'tool.script.subtitle': 'Script command template (shell runtime not wired)',
-      'tool.script.placeholder':
-        'Script command template — wire shell runtime to enable',
+      'tool.script.subtitle': 'Script command (needs shell.run)',
+      'confirm.title': 'Run script?',
+      'confirm.run': 'Run',
+      'confirm.cancel': 'Cancel',
+      'error.permission': 'Grant shell.run permission first',
+      'error.shell': 'Shell failed: {message}',
     }, null, 2) + '\n',
     localeZh: JSON.stringify({
       'tool.script.title': title,
-      'tool.script.subtitle': '脚本命令模板（尚未接入 Shell 运行时）',
-      'tool.script.placeholder':
-        '脚本命令模板 — 接入 Shell 运行时后即可使用',
+      'tool.script.subtitle': '脚本命令（需要 shell.run）',
+      'confirm.title': '运行脚本？',
+      'confirm.run': '运行',
+      'confirm.cancel': '取消',
+      'error.permission': '请先授予 shell.run 权限',
+      'error.shell': 'Shell 失败：{message}',
     }, null, 2) + '\n',
   }
 }
@@ -137,16 +143,16 @@ export default definePlugin({
 }
 
 function scriptCommandTemplate(pluginId: string) {
-  // Intentionally does not call shell — host shell API is not productized yet.
-  // See doc/future/shell-effect-runtime-design.md. Template returns explanatory text.
   return `const { definePlugin } = globalThis.HivenPlugin
 
 /**
  * Script-command scaffold.
  * Manifest requests permissions: ['shell.run'] (L3, default denied).
- * Do not execute real shell here until the host exposes a shell runtime API.
- * When available, call it only after requirePluginPermissions(permissions, ['shell.run']).
+ * Host injects ctx.shell; unauthorized calls throw.
+ * Edit COMMAND below (or switch to first-party Custom Commands for a settings UI).
  */
+const COMMAND = 'echo "hello from ${pluginId}"'
+
 export default definePlugin({
   tools: [{
     id: ${JSON.stringify(`${pluginId}.script`)},
@@ -155,12 +161,41 @@ export default definePlugin({
     icon: 'Terminal',
     aliases: ['script', 'shell', '脚本'],
     inputPolicy: { mode: 'auto' },
-    run(ctx) {
-      // Placeholder only — real shell execution is intentionally not wired.
-      return ctx.output.text(
-        ctx.t('tool.script.placeholder') ||
-          'Script command template — wire shell runtime to enable',
-      )
+    async run(ctx) {
+      const runLabel = ctx.t('confirm.run')
+      const cancelLabel = ctx.t('confirm.cancel')
+      return ctx.output.choices([
+        {
+          id: 'confirm-run-script',
+          title: runLabel,
+          subtitle: COMMAND,
+          icon: 'Terminal',
+          tone: 'danger',
+          primaryAction: async () => {
+            try {
+              const result = await ctx.shell.run({ command: COMMAND, timeoutMs: 15000 })
+              const out = (result.stdout || result.stderr || '').trim()
+              if (result.timedOut || (result.exitCode ?? 0) !== 0) {
+                return { ok: false, message: out || 'command failed' }
+              }
+              if (out) await ctx.api.copyText(out)
+              return { ok: true, message: out || 'ok' }
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error)
+              if (/permission|shell\\.run|not granted/i.test(message)) {
+                return { ok: false, message: ctx.t('error.permission') }
+              }
+              return { ok: false, message: ctx.t('error.shell', { message }) }
+            }
+          },
+        },
+        {
+          id: 'cancel-run-script',
+          title: cancelLabel,
+          icon: 'X',
+          primaryAction: async () => ({ ok: true }),
+        },
+      ])
     },
     surfaces: { launcher: true, panel: false },
   }],

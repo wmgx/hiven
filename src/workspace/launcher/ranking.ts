@@ -4,8 +4,8 @@
  * One scoring pipeline for both surfaces. There is no "Common Features" group —
  * a single ranked list is produced.
  *
- *   score = matchScore + usageScore(surface) + hostStaticPriority
- *     + installFreshnessScore + textMatchBoost + dynamicBoost
+ *   score = matchScore + frecencyScore(surface) + favoriteBoost
+ *     + hostStaticPriority + installFreshnessScore + textMatchBoost + dynamicBoost
  *     + intentScore + contextBoost
  *     + scoreBias (optional, provider-declared, |bias| < one match tier)
  *
@@ -14,7 +14,9 @@
  *    bounded well below one tier so a strong match always beats a weak match
  *    with high usage).
  *  - Intent slots are large (1.6k–2.4k) but still below exact title match (6k).
- *  - Usage is per surface.
+ *  - Usage is per surface (frecency = log frequency × recency decay).
+ *  - Favorites get a bounded boost so pinned commands float on empty open.
+ *  - Empty query drops cold unused plugins so the list stays scannable.
  *  - Plugins cannot set static priority; only host-owned items may.
  *  - Product policy (e.g. demote doc mix-in vs commands) is declared by providers
  *    via scoreBias — host only applies a clamped bias, no product hardcoding.
@@ -38,9 +40,13 @@ import { getUsageRecord } from './usage'
 import { localizedDisplay } from './display'
 
 // Bounded sub-components (kept below one match tier = 1000 so match dominates).
-const USAGE_FREQ_WEIGHT = 6 // * log1p(count)  → ~ up to ~40 for very frequent
-const USAGE_RECENCY_WEIGHT = 60 // decays over RECENCY_WINDOW_MS
+/** Frequency limb of frecency: log1p(count) * weight → ~0–50 for heavy use. */
+const USAGE_FREQ_WEIGHT = 8
+/** Recency limb: linear decay over RECENCY_WINDOW_MS (recent selections win ties). */
+const USAGE_RECENCY_WEIGHT = 90
 const RECENCY_WINDOW_MS = 14 * 24 * 60 * 60 * 1000 // 14 days
+/** User-pinned favorites (⌘P). Below one match tier; above typical frecency. */
+const FAVORITE_BOOST = 420
 const INSTALL_FRESHNESS_WEIGHT = 70 // decays over INSTALL_FRESHNESS_WINDOW_MS
 const INSTALL_FRESHNESS_WINDOW_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 const MAX_STATIC_PRIORITY = 300 // host-only ceiling, still < 1000
@@ -48,6 +54,8 @@ const TEXT_MATCH_BOOST = 800 // strong boost when tool can process the content; 
 const DYNAMIC_ITEM_BOOST = 900 // dynamic items are plugin-asserted matches; rank above static items without text match
 /** |scoreBias| cap — must stay below one match tier (1000). */
 const SCORE_BIAS_CAP = 500
+/** Empty-open ranked cap after scoring (UI may show fewer). */
+const EMPTY_QUERY_RANK_CAP = 16
 
 /** Content conf ≥ 0.85 or exact accepts.alias match. */
 const INTENT_SCORE_STRONG = 2400
@@ -93,6 +101,11 @@ export type RankContext = {
   detections?: Array<{ kind: string; confidence: number; normalized: string }>
   /** Foreground application name when available; drives contextBoost. */
   foregroundApp?: string
+  /**
+   * User-pinned favorite system keys (global, not per-surface).
+   * When present, matching rows receive {@link favoriteBoost}.
+   */
+  favoriteKeys?: ReadonlySet<string> | readonly string[]
 }
 
 /** Inline normalize (trim + lower + collapse whitespace). Avoids intentEngine import for test harnesses that stub ranking imports. */
@@ -192,8 +205,13 @@ export function itemMatchesQuery(item: LauncherItem, query: string, locale: Loca
   return false
 }
 
-/** Bounded usage contribution for a surface. Always < 1000. */
-export function usageScore(ctx: RankContext, item: LauncherItem): number {
+/**
+ * Frecency: frequency (log count) + recency decay for one surface.
+ * Always < 1000 so match tiers still dominate.
+ *
+ * `usageScore` is kept as a stable alias for existing call sites / tests.
+ */
+export function frecencyScore(ctx: RankContext, item: LauncherItem): number {
   let best = 0
   // Primary: the item's own system key.
   const keys: SystemLauncherItemKey[] = [item.systemKey, ...(item.legacyUsageKeys ?? [])]
@@ -206,6 +224,49 @@ export function usageScore(ctx: RankContext, item: LauncherItem): number {
     best = Math.max(best, freq + recency)
   }
   return best
+}
+
+/** @deprecated Prefer {@link frecencyScore}; same implementation. */
+export function usageScore(ctx: RankContext, item: LauncherItem): number {
+  return frecencyScore(ctx, item)
+}
+
+function favoriteKeySet(ctx: RankContext): ReadonlySet<string> | null {
+  const keys = ctx.favoriteKeys
+  if (!keys) return null
+  if (keys instanceof Set) return keys.size > 0 ? keys : null
+  return keys.length > 0 ? new Set(keys) : null
+}
+
+/** Bounded boost when the item is user-pinned. Always < 1000. */
+export function favoriteBoost(ctx: RankContext, item: LauncherItem): number {
+  const set = favoriteKeySet(ctx)
+  if (!set) return 0
+  if (set.has(item.systemKey)) return FAVORITE_BOOST
+  for (const legacy of item.legacyUsageKeys ?? []) {
+    if (set.has(legacy)) return FAVORITE_BOOST
+  }
+  return 0
+}
+
+/**
+ * Empty-open: keep rows that earned score or belong to "always-scannable" kinds.
+ * Cold unused plugin commands stay hidden until the user types.
+ */
+export function shouldKeepOnEmptyQuery(
+  item: LauncherItem,
+  score: number,
+  ctx: RankContext,
+): boolean {
+  if (score > 0) return true
+  if (item.kind === 'dynamic') return true
+  if (isHostAppLauncherItem(item) || isDesktopNavigationItem(item)) return true
+  if (item.kind === 'host') return true
+  if (favoriteBoost(ctx, item) > 0) return true
+  // Intent can be non-zero while total score is still 0 only if all limbs zero —
+  // still keep high-confidence content tools when detections exist.
+  if (intentScore(item, ctx) > 0) return true
+  return false
 }
 
 function staticPriority(item: LauncherItem): number {
@@ -286,7 +347,7 @@ export function contextBoost(item: LauncherItem, ctx: RankContext): number {
  * host static priority, install freshness, content textMatch, dynamic boost,
  * intent score, and context boost.
  *
- * Usage is solely from `launcherUsageBySurface` via {@link usageScore}.
+ * Usage is solely from `launcherUsageBySurface` via {@link frecencyScore}.
  */
 export function scoreLauncherItem(
   ctx: RankContext,
@@ -307,7 +368,8 @@ export function scoreLauncherItem(
   const scoreBias = clampScoreBias(item.ranking?.scoreBias)
   let score =
     matchScore +
-    usageScore(ctx, item) +
+    frecencyScore(ctx, item) +
+    favoriteBoost(ctx, item) +
     staticPriority(item) +
     installFreshnessScore(ctx, item) +
     textMatchBoost +
@@ -370,13 +432,19 @@ export function rankLauncherItems(ctx: RankContext, items: LauncherItem[]): Laun
     ? items.filter((item) => item.kind === 'dynamic' || itemMatchesQuery(item, q, ctx.locale))
     : items.slice()
 
-  const scored: ScoredItem[] = candidates.map((item, index) => ({
+  let scored: ScoredItem[] = candidates.map((item, index) => ({
     item,
     index,
     score: scoreLauncherItem(ctx, item, candidates),
   }))
 
-  const limit = Math.min(scored.length, MAX_RANKED_RESULTS)
+  // Empty open: drop cold unused plugins so Recent/Favorites/Apps stay scannable.
+  if (!q) {
+    scored = scored.filter((row) => shouldKeepOnEmptyQuery(row.item, row.score, ctx))
+  }
+
+  const maxResults = q ? MAX_RANKED_RESULTS : Math.min(MAX_RANKED_RESULTS, EMPTY_QUERY_RANK_CAP)
+  const limit = Math.min(scored.length, maxResults)
 
   if (scored.length <= limit) {
     // Small enough — full sort is fine

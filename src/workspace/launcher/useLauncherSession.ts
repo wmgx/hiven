@@ -110,6 +110,7 @@ export function useLauncherSession({
   const locale = useAppStore((s) => s.locale)
   const launcherUsageBySurface = useAppStore((s) => s.launcherUsageBySurface)
   const recordLauncherSelection = useAppStore((s) => s.recordLauncherSelection)
+  const launcherFavoriteKeys = useAppStore((s) => s.launcherFavoriteKeys)
   const launcherPersistableRecents = useAppStore((s) => s.launcherPersistableRecents)
   const recordPersistableLauncherSelection = useAppStore((s) => s.recordPersistableLauncherSelection)
   const pluginRegistryVersion = usePluginRegistryVersion()
@@ -564,6 +565,7 @@ export function useLauncherSession({
         contentText,
         detections,
         foregroundApp,
+        favoriteKeys: launcherFavoriteKeys,
       },
       [
         ...staticCandidates,
@@ -589,6 +591,7 @@ export function useLauncherSession({
     documentDynamicItems,
     foregroundApp,
     hostDynamicItems,
+    launcherFavoriteKeys,
     launcherUsageBySurface,
     locale,
     normalizedHostId,

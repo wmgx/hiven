@@ -38,11 +38,16 @@ const snapshot = transpileAndRun('src/launcher/clipboard/clipboardSnapshot.ts')
 const objectBlock = transpileAndRun('src/launcher/clipboard/objectBlock.ts', {
   shouldAutoAttachClipboard: snapshot.shouldAutoAttachClipboard,
   shouldShowRecentClipboardHint: snapshot.shouldShowRecentClipboardHint,
+  detectClipboardFilePath: snapshot.detectClipboardFilePath,
+  detectClipboardType: snapshot.detectClipboardType,
+  fileNameFromPath: snapshot.fileNameFromPath,
 })
 const recommendation = transpileAndRun('src/launcher/clipboard/actionRecommendation.ts', {
   discoverActionsForBlock: () => [],
 })
-const executor = transpileAndRun('src/launcher/clipboard/actionExecutor.ts')
+const executor = transpileAndRun('src/launcher/clipboard/actionExecutor.ts', {
+  detectClipboardFilePath: snapshot.detectClipboardFilePath,
+})
 
 // ─── Scenario 1: Recommended action click calls executor ─────────────────────
 
@@ -99,30 +104,41 @@ console.log('Scenario 2: Executor uses full payloadText, not preview')
   console.log('  ✓ Executor uses payloadText for full content')
 }
 
-// ─── Scenario 3: Query filters recommended actions ───────────────────────────
+// ─── Scenario 3: Query filters history object actions (host list path) ───────
 
-console.log('Scenario 3: Query filters recommended actions')
+console.log('Scenario 3: Query filters history object actions')
 {
-  const searchFrameSrc = readFileSync('src/components/launcher/GlobalLauncherSearchFrame.tsx', 'utf8')
-  // Verify filtering logic exists
-  assert.match(searchFrameSrc, /filteredActions\s*=\s*useMemo/, 'SearchFrame computes filteredActions with useMemo')
-  assert.match(searchFrameSrc, /action\.title\.toLowerCase\(\)\.includes\(lowerQuery\)/, 'Filters by title')
-  assert.match(searchFrameSrc, /action\.titleZh\.toLowerCase\(\)\.includes\(lowerQuery\)/, 'Filters by titleZh')
-  assert.match(searchFrameSrc, /action\.id\.toLowerCase\(\)\.includes\(lowerQuery\)/, 'Filters by id')
-  // Verify "no matching" empty state
-  assert.match(searchFrameSrc, /noMatchingActions/, 'Shows noMatchingActions when filtered list is empty')
-  console.log('  ✓ Query filtering implemented for recommended actions')
+  const hostSrc = readFileSync('src/launcher/hosts/GlobalLauncherHost.tsx', 'utf8')
+  // Retired RecommendedActionRow — filtering lives on historyObjectActionItems
+  assert.match(hostSrc, /historyObjectActionItems/, 'Host builds historyObjectActionItems')
+  assert.match(
+    hostSrc,
+    /action\.title\.toLowerCase\(\)\.includes\(q\)/,
+    'Filters history actions by title',
+  )
+  assert.match(
+    hostSrc,
+    /action\.titleZh\.toLowerCase\(\)\.includes\(q\)/,
+    'Filters history actions by titleZh',
+  )
+  assert.match(
+    hostSrc,
+    /action\.id\.toLowerCase\(\)\.includes\(q\)/,
+    'Filters history actions by id',
+  )
+  console.log('  ✓ Query filtering implemented for history object actions')
 }
 
-// ─── Scenario 4: Object Block present → no LauncherMixedList ─────────────────
+// ─── Scenario 4: Object Block coexists with LauncherMixedList ────────────────
 
-console.log('Scenario 4: Object Block present → no LauncherMixedList fallback')
+console.log('Scenario 4: Object Block token + mixed list (ranking path)')
 {
   const searchFrameSrc = readFileSync('src/components/launcher/GlobalLauncherSearchFrame.tsx', 'utf8')
-  // The condition must be `block ?` (without `&& !query`)
-  assert.match(searchFrameSrc, /\{block \? \(/, 'Rendering uses block ? (actions) : (MixedList) pattern')
-  assert.doesNotMatch(searchFrameSrc, /block && recommendedActions\.length > 0 && !query/, 'Old !query guard must be removed')
-  console.log('  ✓ When block exists, always shows recommended actions (never MixedList)')
+  // Current product: ObjectBlockToken in header + LauncherMixedList for tools/actions
+  assert.match(searchFrameSrc, /ObjectBlockToken/, 'Object block token renders in search frame')
+  assert.match(searchFrameSrc, /LauncherMixedList/, 'Mixed list remains the action surface')
+  assert.doesNotMatch(searchFrameSrc, /RecommendedActionRow/, 'Dedicated action rows stay retired')
+  console.log('  ✓ Block token + ranking/mixed list is the object-action surface')
 }
 
 // ─── Scenario 5: RecentClipboardHint attach preserves original ageLabel ──────
@@ -139,26 +155,26 @@ console.log('Scenario 5: RecentClipboardHint attach preserves original ageLabel'
   assert.match(hookSrc, /forceAttach:\s*true/, 'attachHintAsBlock uses forceAttach: true')
   assert.doesNotMatch(hookSrc, /changedAt:\s*now/, 'attachHintAsBlock does NOT override changedAt')
 
-  // Functional test: 6 minutes old clipboard should show "6 分钟前" after attach
-  const sixMinAgo = Date.now() - 6 * 60 * 1000
+  // Functional test: 90s old clipboard (in 30s–2min hint window) keeps ageLabel after attach
+  const ninetySecAgo = Date.now() - 90_000
   const snap = {
-    text: 'hello from 6 min ago',
-    hash: snapshot.hashClipboardText('hello from 6 min ago'),
+    text: 'hello from 90s ago',
+    hash: snapshot.hashClipboardText('hello from 90s ago'),
     detectedType: 'text',
-    firstSeenAt: sixMinAgo,
+    firstSeenAt: ninetySecAgo,
     lastSeenAt: Date.now(),
-    changedAt: sixMinAgo,
+    changedAt: ninetySecAgo,
     ageConfidence: 'known',
   }
 
-  // Verify it's in "recent hint" window (not fresh)
-  assert.equal(snapshot.shouldAutoAttachClipboard(snap), false, '6 min old should not auto-attach')
-  assert.equal(snapshot.shouldShowRecentClipboardHint(snap), true, '6 min old should show hint')
+  // Verify it's in "recent hint" window (not fresh; max hint is 2 min)
+  assert.equal(snapshot.shouldAutoAttachClipboard(snap), false, '90s old should not auto-attach')
+  assert.equal(snapshot.shouldShowRecentClipboardHint(snap), true, '90s old should show hint')
 
   // Force attach should create block
   const forcedBlock = objectBlock.createClipboardObjectBlock(snap, Date.now(), { forceAttach: true })
   assert.ok(forcedBlock, 'forceAttach should create block even for non-fresh clipboard')
-  assert.equal(forcedBlock.ageLabel, '6 分钟前', 'ageLabel must reflect original time, not "刚刚"')
+  assert.equal(forcedBlock.ageLabel, '1 分钟前', 'ageLabel must reflect original time, not "刚刚"')
   console.log('  ✓ RecentClipboardHint attach preserves original age')
 }
 
@@ -167,21 +183,18 @@ console.log('Scenario 5: RecentClipboardHint attach preserves original ageLabel'
 console.log('Scenario 6: Object Block deletion restores search-only mode')
 {
   const searchFrameSrc = readFileSync('src/components/launcher/GlobalLauncherSearchFrame.tsx', 'utf8')
-  // When block is null, LauncherMixedList is rendered
-  assert.match(searchFrameSrc, /\) : \(\s*<LauncherMixedList/, 'LauncherMixedList renders when block is null (else branch)')
+  assert.match(searchFrameSrc, /LauncherMixedList/, 'LauncherMixedList is always the list surface')
 
-  // Verify Backspace handling in hook — single press removes when query empty
+  // Verify Backspace handling in hook — single press starts remove transition when query empty
   const hookSrc = readFileSync('src/launcher/clipboard/useClipboardObjectBlock.ts', 'utf8')
   assert.match(hookSrc, /if \(!queryEmpty\) return false/, 'Backspace only when query empty')
   assert.match(
     hookSrc,
-    /const handleBackspace = useCallback\(\(queryEmpty: boolean\): boolean => \{[\s\S]*?setBlock\(null\)[\s\S]*?return true/,
-    'Backspace removes block in one press',
+    /const handleBackspace = useCallback\(\(queryEmpty: boolean\): boolean => \{[\s\S]*?removeBlock\(\)[\s\S]*?return true/,
+    'Backspace removes block in one press via removeBlock()',
   )
-  // Intermediate select-for-delete must not appear inside handleBackspace
-  const backspaceBody = hookSrc.match(/const handleBackspace = useCallback\([\s\S]*?\}, \[block\]\)/)?.[0] ?? ''
-  assert.doesNotMatch(backspaceBody, /selectedForDelete/, 'handleBackspace must not use two-step selectedForDelete')
   assert.match(hookSrc, /removeBlock/, 'removeBlock callback exposed')
+  assert.match(hookSrc, /OBJECT_BLOCK_EXIT_MS|setIsExiting\(true\)/, 'remove plays exit transition then clears block')
   console.log('  ✓ Block deletion restores search-only mode')
 }
 

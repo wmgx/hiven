@@ -21,6 +21,18 @@ import {
   migrateLegacyUsage,
   type LegacyActionUsageBySource,
 } from './workspace/launcher/usage'
+import {
+  emptyLauncherFavorites,
+  normalizeLauncherFavorites,
+  toggleLauncherFavorite,
+} from './workspace/launcher/favorites'
+import {
+  emptyAppHotkeys,
+  normalizeAppHotkeys,
+  removeAppHotkey,
+  upsertAppHotkey,
+  type AppHotkeyBinding,
+} from './workspace/appHotkeys'
 
 migrateLocalStorageKey('fluxtext-settings', 'hiven-settings')
 
@@ -133,6 +145,13 @@ interface AppState {
   recordLauncherSelection: (surfaceId: LauncherSurfaceId, itemKey: SystemLauncherItemKey) => void
 
   /**
+   * User-pinned launcher favorites (global system keys).
+   * Boosted on empty open via ranking favoriteBoost; toggle with ⌘P.
+   */
+  launcherFavoriteKeys: SystemLauncherItemKey[]
+  toggleLauncherFavorite: (itemKey: SystemLauncherItemKey) => void
+
+  /**
    * Plugin-opted durable content recents (contacts / chats / docs snapshots).
    * Host-owned; plugins only declare persistable + payload at selection time.
    */
@@ -156,10 +175,16 @@ interface AppState {
     disabledBuiltins: string[]
     disabledCustoms: string[]
     globalPinnedLauncherShortcut: GlobalPinnedLauncherShortcut
+    /** Global shortcut to summon Quick Editor (host surface or detached window). */
+    quickEditorShortcut: GlobalPinnedLauncherShortcut
     globalLauncherWindowPosition?: GlobalLauncherPosition
     globalLauncherWindowPositionSource?: 'user'
+    /** Per-app global shortcuts (focus/hide toggle). */
+    appHotkeys: AppHotkeyBinding[]
   }
   updateSetting: (key: string, value: any) => void
+  setAppHotkey: (binding: AppHotkeyBinding) => void
+  removeAppHotkey: (appId: string) => void
   toggleBuiltinDisabled: (name: string) => void
   toggleCustomDisabled: (name: string) => void
   locale: Locale
@@ -250,6 +275,11 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     launcherUsageBySurface: recordSelectionPure(state.launcherUsageBySurface, surfaceId, itemKey, Date.now()),
   })),
 
+  launcherFavoriteKeys: emptyLauncherFavorites(),
+  toggleLauncherFavorite: (itemKey: SystemLauncherItemKey) => set((state) => ({
+    launcherFavoriteKeys: toggleLauncherFavorite(state.launcherFavoriteKeys, itemKey),
+  })),
+
   launcherPersistableRecents: emptyPersistableRecents(),
   recordPersistableLauncherSelection: (payload: PersistableLauncherPayload) => set((state) => ({
     launcherPersistableRecents: recordPersistableRecent(
@@ -278,8 +308,10 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     disabledBuiltins: [],
     disabledCustoms: [],
     globalPinnedLauncherShortcut: { kind: 'accelerator', accelerator: 'Shift+Cmd+Space' },
+    quickEditorShortcut: { kind: 'disabled' },
     globalLauncherWindowPosition: undefined,
     globalLauncherWindowPositionSource: undefined,
+    appHotkeys: emptyAppHotkeys(),
   },
   updateSetting: (key, value) =>
     set((state) => {
@@ -289,6 +321,20 @@ export const useAppStore = create<AppState>()(persist((set) => ({
       }
       return { settings: newSettings }
     }),
+  setAppHotkey: (binding) =>
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        appHotkeys: upsertAppHotkey(state.settings.appHotkeys ?? [], binding),
+      },
+    })),
+  removeAppHotkey: (appId) =>
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        appHotkeys: removeAppHotkey(state.settings.appHotkeys ?? [], appId),
+      },
+    })),
   toggleBuiltinDisabled: (name) =>
     set((state) => {
       const list = state.settings.disabledBuiltins
@@ -310,10 +356,12 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     settings: {
       ...state.settings,
       globalPinnedLauncherShortcut: stripShortcutRuntimeStatus(state.settings.globalPinnedLauncherShortcut),
+      quickEditorShortcut: stripShortcutRuntimeStatus(state.settings.quickEditorShortcut),
     },
     locale: state.locale,
     savedActionParams: state.savedActionParams,
     launcherUsageBySurface: state.launcherUsageBySurface,
+    launcherFavoriteKeys: state.launcherFavoriteKeys,
     launcherPersistableRecents: state.launcherPersistableRecents,
   }),
   merge: (persisted, current) => {
@@ -322,6 +370,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
       actionUsageCounts?: Record<string, number>
       actionUsageBySource?: LegacyActionUsageBySource
       launcherUsageBySurface?: LauncherUsageBySurface
+      launcherFavoriteKeys?: SystemLauncherItemKey[]
       launcherPersistableRecents?: PersistableRecentEntry[]
     }
     // Drop legacy usage fields from the merged live state.
@@ -343,6 +392,12 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     merged.settings = { ...current.settings, ...persistedState.settings }
     merged.settings.globalPinnedLauncherShortcut = stripShortcutRuntimeStatus(
       merged.settings.globalPinnedLauncherShortcut ?? current.settings.globalPinnedLauncherShortcut
+    )
+    merged.settings.quickEditorShortcut = stripShortcutRuntimeStatus(
+      merged.settings.quickEditorShortcut ?? current.settings.quickEditorShortcut
+    )
+    merged.settings.appHotkeys = normalizeAppHotkeys(
+      persistedState.settings?.appHotkeys ?? current.settings.appHotkeys,
     )
 
     // Restore persisted launcher usage; one-shot seed from legacy action usage if needed.
@@ -384,6 +439,10 @@ export const useAppStore = create<AppState>()(persist((set) => ({
         merged.launcherUsageBySurface = emptyUsageBySurface()
       }
     }
+
+    merged.launcherFavoriteKeys = normalizeLauncherFavorites(
+      persistedState.launcherFavoriteKeys,
+    )
 
     const recents = persistedState.launcherPersistableRecents
     merged.launcherPersistableRecents = Array.isArray(recents)

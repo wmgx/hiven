@@ -103,6 +103,21 @@ export function indexToListItems(index: ClipboardHistoryIndex): ClipboardHistory
 export function createClipboardHistoryRepository(storage: PluginPrivateStorageApi): ClipboardHistoryRepository {
   const store: ClipboardHistoryStore = createClipboardHistoryStore(storage)
 
+  /**
+   * Serialize index/item mutations. Clipboard watch fires onChange without awaiting,
+   * so concurrent addItem/prune used to race on read-modify-write of history/index
+   * and drop entries (intermittent "clipboard not recorded").
+   */
+  let writeTail: Promise<unknown> = Promise.resolve()
+  function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+    const run = writeTail.then(fn, fn)
+    writeTail = run.then(
+      () => undefined,
+      () => undefined,
+    )
+    return run
+  }
+
   /** Save index to storage and update in-memory cache. */
   async function saveIndexAndCache(index: ClipboardHistoryIndex): Promise<void> {
     await store.saveIndex(index)
@@ -429,18 +444,18 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
   }
 
   return {
-    addItem,
+    addItem: (input) => withWriteLock(() => addItem(input)),
     getItem,
     getAllItems,
     getListItems,
     getFreshListItems,
     getListItemsSync,
-    deleteItem,
-    clearAll,
-    pruneItems,
+    deleteItem: (id) => withWriteLock(() => deleteItem(id)),
+    clearAll: () => withWriteLock(() => clearAll()),
+    pruneItems: (policy) => withWriteLock(() => pruneItems(policy)),
     findByHash,
-    recordPaste,
-    setFavorite,
-    updateFavoriteTitle,
+    recordPaste: (id) => withWriteLock(() => recordPaste(id)),
+    setFavorite: (id, favorite, title) => withWriteLock(() => setFavorite(id, favorite, title)),
+    updateFavoriteTitle: (id, title) => withWriteLock(() => updateFavoriteTitle(id, title)),
   }
 }

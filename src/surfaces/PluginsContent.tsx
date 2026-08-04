@@ -8,6 +8,7 @@ import {
   Calendar,
   Clipboard,
   Code2,
+  Dices,
   FileCode2,
   FileDiff,
   Globe,
@@ -23,6 +24,7 @@ import {
   Table2,
   Type,
   AlignLeft,
+  CaseSensitive,
 } from 'lucide-react'
 import { t } from '../i18n'
 import type { Locale } from '../i18n'
@@ -120,6 +122,8 @@ const PLUGIN_ICON_MAP: Record<string, LucideIcon> = {
   'regex-tester': Regex,
   'text-utils': Type,
   yaml: FileCode2,
+  random: Dices,
+  'variable-case': CaseSensitive,
 }
 
 function pluginIconTone(pluginId: string) {

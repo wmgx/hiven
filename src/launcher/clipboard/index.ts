@@ -7,15 +7,19 @@ export {
   FRESH_CLIPBOARD_TTL_MS,
   RECENT_CLIPBOARD_HINT_TTL_MS,
   UNKNOWN_AGE_AUTO_ATTACH,
+  CLIPBOARD_AGE_TRACKER_INTERVAL_MS,
   hashClipboardText,
   detectClipboardType,
   getLastClipboardSnapshot,
   updateClipboardSnapshot,
   createClipboardSnapshotFromUnknownAge,
+  observeClipboardText,
   clearClipboardSnapshot,
   shouldAutoAttachClipboard,
   shouldShowRecentClipboardHint,
   isClipboardExpired,
+  startClipboardAgeTracker,
+  stopClipboardAgeTracker,
 } from './clipboardSnapshot'
 
 export {

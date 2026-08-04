@@ -15,6 +15,7 @@ import type { ClipboardObjectBlockState } from '../../launcher/clipboard/useClip
 import type { RecommendedAction, RecommendedOutputTarget } from '../../launcher/clipboard/actionRecommendation'
 import { GLOBAL_LAUNCHER_SETTINGS_HEIGHT, STANDALONE_SURFACE_MAX_HEIGHT } from './GlobalLauncherLayout'
 import { MAX_VISIBLE_IDLE } from './LauncherMixedList'
+import { useAppStore } from '../../store'
 
 type GlobalLauncherPanelProps = {
   panelRef: RefObject<HTMLDivElement | null>
@@ -134,6 +135,18 @@ export function GlobalLauncherPanel({
   const handleSearchSelectItem = useCallback((item: GlobalLauncherItem) => {
     selectItem(item)
   }, [selectItem])
+  const toggleLauncherFavorite = useAppStore((s) => s.toggleLauncherFavorite)
+  const launcherFavoriteKeys = useAppStore((s) => s.launcherFavoriteKeys)
+  const handleToggleFavorite = useCallback((item: GlobalLauncherItem) => {
+    const key = item.kind === 'domain' ? item.domainItem.systemKey : item.id
+    if (key) toggleLauncherFavorite(key)
+  }, [toggleLauncherFavorite])
+  const isFavoriteSelected = Boolean(
+    selectedItem
+      && launcherFavoriteKeys.includes(
+        selectedItem.kind === 'domain' ? selectedItem.domainItem.systemKey : selectedItem.id,
+      ),
+  )
   /**
    * Hover select only after real pointer movement.
    * Initial overlap (open under cursor / list re-render under cursor) must not
@@ -207,6 +220,9 @@ export function GlobalLauncherPanel({
           : visibleFiltered.length,
         setSelectedIndex,
         selectedItem,
+        visibleItems: !query && visibleFiltered.length > MAX_VISIBLE_IDLE
+          ? visibleFiltered.slice(0, MAX_VISIBLE_IDLE)
+          : visibleFiltered,
         isWorkflowObjectLauncherItem,
         selectItem,
         handleClipboardBackspace: clipboardBlock?.handleBackspace,
@@ -222,6 +238,7 @@ export function GlobalLauncherPanel({
         setSelectedObjectActionIndex: setSelectedActionIndex,
         expandSelectedObjectAction,
         executeSelectedObjectAction,
+        onToggleFavorite: handleToggleFavorite,
       })}
       onCompositionStart={handleCompositionStart}
       onCompositionEnd={handleCompositionEnd}
@@ -247,6 +264,7 @@ export function GlobalLauncherPanel({
         showCustomizeHint={selectedItem?.kind === 'domain' && supportsParamCustomization(selectedItem.domainItem)}
         showWorkflowObjectHint={isWorkflowObjectLauncherItem(selectedItem)}
         customizeShortcutLabel={getPlatformShortcutMeta().label}
+        isFavoriteSelected={isFavoriteSelected}
         onSettingsClose={() => {
           closeSettingsDialog()
           focusSearchInputAfterBack()

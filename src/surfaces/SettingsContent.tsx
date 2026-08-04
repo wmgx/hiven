@@ -8,6 +8,7 @@ import { useAppStore } from '../store'
 import { useT } from '../i18n'
 import { checkBuiltinPluginsUpdate } from '../configInit'
 import { ShortcutRecorder } from '../components/ShortcutRecorder'
+import { AppHotkeysSettings } from '../components/AppHotkeysSettings'
 
 export function SettingsContent() {
   const { settings, updateSetting } = useAppStore()
@@ -79,6 +80,17 @@ export function SettingsContent() {
             onRecord={(recordedShortcut) => updateSetting('globalPinnedLauncherShortcut', recordedShortcut)}
             onClear={() => updateSetting('globalPinnedLauncherShortcut', { kind: 'disabled' })}
           />
+        </SettingsListRow>
+        <SettingsListRow icon={<Command size={15} strokeWidth={2} />} name={t('quickEditorShortcut')} desc={t('quickEditorShortcutInfo')}>
+          <ShortcutRecorder
+            value={settings.quickEditorShortcut ?? { kind: 'disabled' }}
+            status={formatHotkeyRegistrationStatus(settings.quickEditorShortcut, t)}
+            onRecord={(recordedShortcut) => updateSetting('quickEditorShortcut', recordedShortcut)}
+            onClear={() => updateSetting('quickEditorShortcut', { kind: 'disabled' })}
+          />
+        </SettingsListRow>
+        <SettingsListRow icon={<Command size={15} strokeWidth={2} />} name={t('appHotkeys')} desc={t('appHotkeysInfo')}>
+          <AppHotkeysSettings />
         </SettingsListRow>
       </SettingGroup>
 

@@ -76,7 +76,7 @@ export function createFeishuChatsProvider(): DesktopTargetProvider {
       })
       if (!url) {
         logFeishuOpen('chats.activate:abort-no-url', { targetId: target.id })
-        return
+        throw new Error('Chat has no open URL')
       }
       const runtime = getFeishuRuntime()
       logFeishuOpen('chats.activate:runtime', {

@@ -447,7 +447,7 @@ export function createToolResultObjectBlock(text: string): LauncherObjectBlock {
   })
 }
 
-// ─── Hint for recent clipboard (2-10 min) ──────────────────────────────────────
+// ─── Hint for recent clipboard (30s–2 min) ─────────────────────────────────────
 
 export type RecentClipboardHint = {
   snapshot: ClipboardSnapshot

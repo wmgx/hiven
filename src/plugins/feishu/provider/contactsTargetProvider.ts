@@ -111,7 +111,7 @@ export function createFeishuContactsProvider(): DesktopTargetProvider {
       })
       if (!url) {
         logFeishuOpen('contacts.activate:abort-no-url', { targetId: target.id })
-        return
+        throw new Error('Contact has no open URL')
       }
       const runtime = getFeishuRuntime()
       logFeishuOpen('contacts.activate:runtime', {

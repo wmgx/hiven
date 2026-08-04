@@ -3,12 +3,23 @@ import { t, type Locale } from '../../i18n'
 import { resolveIcon } from '../../utils/resolveIcon'
 import type { LauncherItem as DomainLauncherItem } from '../../workspace/launcher/types'
 import type { MatchRange, MatchType } from '../../workspace/searchRanking'
+import { getPlatformShortcutMeta, isMacPlatform } from './launcherParamShortcuts'
+
+/** Rows 1–8 are quick-run via ⌘N / Ctrl+N (see GlobalLauncherKeyboard). */
+export const QUICK_SELECT_MAX = 8
+
+function quickSelectBadge(index: number): string | null {
+  if (index < 0 || index >= QUICK_SELECT_MAX) return null
+  // Compact glyph on both platforms so the trailing column stays narrow.
+  const mod = isMacPlatform() ? getPlatformShortcutMeta().label : '⌃'
+  return `${mod}${index + 1}`
+}
 
 export type LauncherMixedItem =
   | { kind: 'domain'; id: string; title: string; subtitle: string; icon?: string; aliases?: string[]; shortcut?: string; domainItem: DomainLauncherItem; matchRanges?: MatchRange[]; matchType?: MatchType }
 
-/** Maximum items rendered in the list when no query is active. */
-export const MAX_VISIBLE_IDLE = 20
+/** Maximum items rendered in the list when no query is active (scannable empty-open). */
+export const MAX_VISIBLE_IDLE = 12
 
 export function LauncherMixedList({
   items,
@@ -87,7 +98,11 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
 }) {
   const ref = useRef<HTMLButtonElement>(null)
   const appIcon = isAppIconRef(item.icon)
+  const avatarIcon = isRemoteAvatarIcon(item.icon)
   const tag = getLauncherItemKindLabel(item, locale)
+  // SuperCmd-style: show ⌘1…⌘8 on the first eight rows so quick-run is discoverable.
+  const quickSelectLabel = quickSelectBadge(index)
+  const iconSlotClass = appIcon ? 'r-app' : avatarIcon ? 'r-ico r-avatar' : 'r-ico'
 
   useEffect(() => {
     // Keyboard nav only — hover selection already keeps the row under the cursor.
@@ -113,6 +128,7 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
       type="button"
       tabIndex={-1}
       data-launcher-row-index={index}
+      data-quick-select={quickSelectLabel ?? undefined}
       className={`l-row cmd-item w-full border-none text-left ${selected ? 'sel selected' : ''}`}
       style={{ animationDelay: staggerDelay }}
       onClick={handleClick}
@@ -121,13 +137,13 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
       // Keep the search caret — do not let list rows take focus on mousedown.
       onMouseDown={(event) => event.preventDefault()}
     >
-      <span className={appIcon ? 'r-app' : 'r-ico'}>
+      <span className={iconSlotClass}>
         {appIcon ? (
           <span className="app-icon">
-            {resolveIcon(item.icon, 16, item.title)}
+            {resolveIcon(item.icon, 20, item.title)}
           </span>
         ) : (
-          resolveIcon(item.icon, 16, item.title)
+          resolveIcon(item.icon, 18, item.title)
         )}
       </span>
 
@@ -139,16 +155,23 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
           <span className="r-desc">{item.subtitle}</span>
         )}
       </div>
-      {item.shortcut && (
+      {item.shortcut && !quickSelectLabel && (
         <kbd className="r-shortcut-badge">{item.shortcut}</kbd>
       )}
-      <span className="r-tag launcher-kind-tag">
-        {tag}
-        {item.matchType === 'pinyin' && (
-          <span className="launcher-pinyin-badge">{t(locale, 'palette.pinyinBadge')}</span>
-        )}
-      </span>
-      {selected && <span className="r-kbd">↵</span>}
+      {/* Prefer ⌘N over noisy kind pills; keep kind only when no quick-select. */}
+      {!quickSelectLabel && (
+        <span className="r-tag launcher-kind-tag">
+          {tag}
+          {item.matchType === 'pinyin' && (
+            <span className="launcher-pinyin-badge">{t(locale, 'palette.pinyinBadge')}</span>
+          )}
+        </span>
+      )}
+      {quickSelectLabel && (
+        <kbd className={`r-shortcut-badge r-quick-select${selected ? ' is-selected' : ''}`}>
+          {quickSelectLabel}
+        </kbd>
+      )}
     </button>
   )
 })
@@ -169,6 +192,16 @@ function getLauncherItemKindLabel(item: LauncherMixedItem, locale: Locale) {
 
 function isAppIconRef(icon?: string): boolean {
   return icon?.startsWith('app-icon:') === true
+}
+
+/** Feishu person/group avatars (https / data-URL) need the avatar plate, not lucide color. */
+function isRemoteAvatarIcon(icon?: string): boolean {
+  if (!icon) return false
+  return (
+    icon.startsWith('https://') ||
+    icon.startsWith('http://') ||
+    icon.startsWith('data:image/')
+  )
 }
 
 // ─── Highlighted Title Rendering ─────────────────────────────────────────────

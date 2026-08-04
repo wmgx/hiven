@@ -616,6 +616,11 @@ export type PluginToolContext<TSettings = unknown> = {
   locale: Locale
   api: PluginLauncherApi
   storage: PluginPrivateStorageApi
+  /**
+   * Shell runtime when the plugin requested `shell.run`.
+   * Unauthorized / missing → calls throw a permission error.
+   */
+  shell: PluginShellApi
   t: (key: string, vars?: Record<string, string | number>) => string
   output: PluginToolOutput
 }

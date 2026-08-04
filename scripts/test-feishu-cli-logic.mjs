@@ -576,6 +576,12 @@ async function tryRunPureHelpers() {
           avatarUrl: 'https://s1-imfile.feishucdn.com/static-resource/v1/x',
         })
         assert.ok(chatIcon.startsWith('https://'), 'chat uses remote avatar when present')
+        const chatFallback = mod.iconForChat({ name: '产品讨论群', id: 'oc_1' })
+        assert.ok(
+          chatFallback.startsWith('data:image/svg+xml'),
+          'chat without avatar uses initials svg (visible on dark launcher)',
+        )
+        assert.ok(!chatFallback.includes('MessagesSquare'), 'chat fallback must not be lucide name')
       }
 
       if (rel.endsWith('errors.ts')) {

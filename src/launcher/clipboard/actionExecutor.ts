@@ -36,6 +36,8 @@ export type ActionExecutionHandlers = {
   setRenderer?: (actionId: string, text: string) => Promise<void>
   /** Resolve a local file path to its text content when the clipboard holds a path. */
   readLocalFileText?: (path: string) => Promise<string>
+  /** Paste plain text into the app that was foreground before launcher. */
+  pasteText?: (text: string) => Promise<void>
   pasteImage?: (blobId: string) => Promise<void>
   writeImage?: (blobId: string) => Promise<void>
   pasteFiles?: (paths: string[]) => Promise<void>
@@ -52,7 +54,18 @@ export async function executeRecommendedAction(
   const text = block.payloadText ?? block.preview ?? ''
 
   try {
-    // Non-text history object actions (bypass text transform pipeline)
+    // History object actions (bypass text transform pipeline)
+    if (action.id === 'paste-history-text') {
+      if (!text) return { ok: false, error: 'Text payload missing' }
+      if (!handlers.pasteText) return { ok: false, error: 'Paste text handler unavailable' }
+      await handlers.pasteText(text)
+      return { ok: true }
+    }
+    if (action.id === 'copy-history-text') {
+      if (!text) return { ok: false, error: 'Text payload missing' }
+      await handlers.copyText(text)
+      return { ok: true, message: '已复制' }
+    }
     if (action.id === 'paste-history-image') {
       const blobId = block.payloadImage?.blobId
       if (!blobId) return { ok: false, error: 'Image payload missing' }

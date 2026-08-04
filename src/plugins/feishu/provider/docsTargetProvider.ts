@@ -76,9 +76,14 @@ export function createFeishuDocsProvider(): DesktopTargetProvider {
     },
     async activate(target) {
       const url = target.meta?.url
-      if (!url) return
+      if (!url || typeof url !== 'string') {
+        throw new Error('Document has no open URL')
+      }
       const runtime = getFeishuRuntime()
-      if (!runtime.openUrl) return
+      // shell can deliver client schemes even when host openUrl is not bound yet.
+      if (!runtime.openUrl && !runtime.shell) {
+        throw new Error('Feishu open path is not ready (no shell / openUrl)')
+      }
       const entityId =
         (typeof target.meta?.entityId === 'string' && target.meta.entityId) || target.id
       touchL1EntityAccess(DOMAIN, {
@@ -89,17 +94,13 @@ export function createFeishuDocsProvider(): DesktopTargetProvider {
         openUrl: url,
         meta: { url },
       })
-      try {
-        await openFeishuTarget({
-          shell: runtime.shell,
-          openUrl: runtime.openUrl,
-          url,
-          titleHint: target.title,
-          preferWindowFocus: runtime.settings.preferWindowFocus !== false,
-        })
-      } catch {
-        // ignore
-      }
+      await openFeishuTarget({
+        shell: runtime.shell,
+        openUrl: runtime.openUrl,
+        url,
+        titleHint: target.title,
+        preferWindowFocus: runtime.settings.preferWindowFocus !== false,
+      })
     },
   }
 }

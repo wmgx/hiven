@@ -42,6 +42,7 @@ export function GlobalLauncherFrameSwitch({
   showCustomizeHint,
   showWorkflowObjectHint,
   customizeShortcutLabel,
+  isFavoriteSelected,
   onSettingsClose,
   onSurfaceBack,
   onSurfaceClose,
@@ -92,6 +93,8 @@ export function GlobalLauncherFrameSwitch({
   showCustomizeHint: boolean
   showWorkflowObjectHint: boolean
   customizeShortcutLabel: string
+  /** Focused row is in launcher favorites. */
+  isFavoriteSelected?: boolean
   onSettingsClose: () => void
   onSurfaceBack: () => void
   onSurfaceClose: () => void
@@ -270,6 +273,7 @@ export function GlobalLauncherFrameSwitch({
       showCustomizeHint={showCustomizeHint}
       showWorkflowObjectHint={showWorkflowObjectHint}
       customizeShortcutLabel={customizeShortcutLabel}
+      isFavoriteSelected={isFavoriteSelected}
       onQueryChange={onSearchQueryChange}
       onSelectItem={onSearchSelectItem}
       onHoverIndex={onSearchHoverIndex}
