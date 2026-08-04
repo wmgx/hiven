@@ -2,7 +2,7 @@ import type { ActionResult, OutputTarget } from './outputTarget'
 import { createPluginPaste } from '../workspace/pluginPaste'
 import { createPluginLauncherApi } from '../workspace/launcher/pluginApi'
 import { showPluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
-import { createQuickEditorPane } from '../workspace/quickEditor/quickEditorRequests'
+import { createQuickEditorPane, overwriteQuickEditorText } from '../workspace/quickEditor/quickEditorRequests'
 
 export type OutputRouterContext = {
   copy(text: string): Promise<void> | void
@@ -25,9 +25,9 @@ export function createDefaultOutputRouterContext(): OutputRouterContext {
     replaceEditorSelection: (text) => createQuickEditorPane({ text }),
     insertIntoEditor: (text) => createQuickEditorPane({ text }),
     openInEditor: async (text, options) => {
-      await createQuickEditorPane({
-        text,
+      await overwriteQuickEditorText(text, {
         language: options?.language,
+        source: 'workflow',
       })
     },
     openPluginSurface: async (text, options) => {

@@ -2,8 +2,8 @@
 /**
  * Clipboard Object Block Integration Test (current product path)
  *
- * RecommendedActionRow was retired; history + clipboard object actions ride
- * ranking / host-injected history-object-action rows.
+ * RecommendedActionRow was retired; host pins object-action rows (history
+ * paste/copy/open + clipboard open-to-quick-editor) above ranking tools.
  */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -31,18 +31,28 @@ assert.match(
 )
 assert.match(
   globalLauncherHost,
-  /historyObjectActionItems/,
-  'Host injects history object actions into the mixed list',
+  /pinnedObjectActionItems/,
+  'Host injects Object Block actions into the mixed list',
 )
 assert.match(
   globalLauncherHost,
-  /history-object-action:/,
-  'History actions use dedicated systemKey prefix',
+  /object-action:/,
+  'Object actions use dedicated systemKey prefix',
+)
+assert.match(
+  globalLauncherHost,
+  /defaultOutput === ['"]open-editor['"]/,
+  'Text Object Blocks must pin open-editor (Quick Editor overwrite) rows',
 )
 assert.match(
   globalLauncherHost,
   /pasteText:\s*async/,
   'Host wires pasteText for history text paste-to-front',
+)
+assert.match(
+  globalLauncherHost,
+  /selectItemWithObjectActions/,
+  'Selecting pinned object-action rows must run executeObjectAction',
 )
 
 // ─── Panel / frames passthrough ────────────────────────────────────────────────

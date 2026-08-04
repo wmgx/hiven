@@ -50,6 +50,15 @@ export function textResult(text: string, api: PluginLauncherApi, locale: Locale 
           return { ok: true, keepOpen: true }
         },
       },
+      {
+        id: 'open-quick-editor',
+        title: palette(locale, 'openQuickEditor'),
+        icon: 'SquarePen',
+        run: async () => {
+          // Default replaceActiveText overwrites Quick Editor with one-step rollback.
+          await api.replaceActiveText(text)
+        },
+      },
     ],
   }
   return { ok: true, output: { choices: [choice] } }

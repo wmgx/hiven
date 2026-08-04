@@ -61,12 +61,12 @@ const fakeApi = {
   showMessage: () => {},
 }
 
-// --- textResult (Global Launcher): primary = copy, secondary = [return-to-launcher] only ---
+// --- textResult (Global Launcher): primary = copy, secondary = return-to-launcher + open-quick-editor ---
 const textChoice = output.textResult('6', fakeApi, 'zh').output.choices[0]
-assert.equal(textChoice.secondaryActions.length, 1, 'textResult must expose exactly one secondary action (no more fake replace/insert duo)')
-const returnAction = textChoice.secondaryActions[0]
-assert.equal(returnAction.id, 'return-to-launcher', 'the single secondary action must be return-to-launcher')
-assert.equal(returnAction.icon, 'CornerDownLeft', 'return-to-launcher must carry a CornerDownLeft icon, not the generic × fallback')
+assert.equal(textChoice.secondaryActions.length, 2, 'textResult must expose return-to-launcher + open-quick-editor')
+const textSecondaryById = Object.fromEntries(textChoice.secondaryActions.map((a) => [a.id, a]))
+assert.equal(textSecondaryById['return-to-launcher']?.icon, 'CornerDownLeft', 'return-to-launcher must carry a CornerDownLeft icon, not the generic × fallback')
+assert.equal(textSecondaryById['open-quick-editor']?.icon, 'SquarePen', 'open-quick-editor must carry a SquarePen icon')
 
 // run() must call api.returnToLauncher with the result text, and signal the
 // controller to stay open (popped back to the root list, not closed) —
@@ -74,9 +74,15 @@ assert.equal(returnAction.icon, 'CornerDownLeft', 'return-to-launcher must carry
 let returnToLauncherCalledWith
 const spyApi = { ...fakeApi, returnToLauncher: async (text) => { returnToLauncherCalledWith = text } }
 const spiedChoice = output.textResult('6', spyApi, 'zh').output.choices[0]
-const runResult = await spiedChoice.secondaryActions[0].run()
+const runResult = await spiedChoice.secondaryActions.find((a) => a.id === 'return-to-launcher').run()
 assert.equal(returnToLauncherCalledWith, '6', 'return-to-launcher action must call api.returnToLauncher(text) with the result text')
 assert.deepEqual(JSON.parse(JSON.stringify(runResult)), { ok: true, keepOpen: true }, 'return-to-launcher action must return { ok: true, keepOpen: true } so the launcher stays open')
+
+let replaceActiveCalledWith
+const spyQuickApi = { ...fakeApi, replaceActiveText: async (text) => { replaceActiveCalledWith = text } }
+const spiedQuickChoice = output.textResult('6', spyQuickApi, 'zh').output.choices[0]
+await spiedQuickChoice.secondaryActions.find((a) => a.id === 'open-quick-editor').run()
+assert.equal(replaceActiveCalledWith, '6', 'open-quick-editor must call api.replaceActiveText(text) (host overwrites Quick Editor)')
 
 // --- replaceActiveTextResult (pane-bound): primary = replace, secondary = [copy, insert] ---
 const replaceChoice = output.replaceActiveTextResult('6', fakeApi, 'zh').output.choices[0]

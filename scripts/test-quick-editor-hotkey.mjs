@@ -67,13 +67,33 @@ assert.match(app, /installQuickEditorHotkeys/, 'App must install Quick Editor ho
 
 assert.match(
   requests,
-  /requestOpenLauncherHostSurface\(['"]quick-editor['"]\)/,
-  'showQuickEditorSurface must open host surface through the launcher bridge (shows window)',
+  /export async function showQuickEditorSurface[\s\S]*showQuickEditorWindow\(\)/,
+  'showQuickEditorSurface must open the independent quick-editor window on desktop',
+)
+assert.match(
+  requests,
+  /showQuickEditorSurface[\s\S]*requestOpenLauncherHostSurface\(['"]quick-editor['"]\)/,
+  'showQuickEditorSurface must fall back to launcher host surface outside Tauri',
+)
+assert.doesNotMatch(
+  requests,
+  /showQuickEditorSurface[\s\S]*await isQuickEditorWindowOpen\(\)[\s\S]*requestOpenLauncherHostSurface\(['"]quick-editor['"]\)/,
+  'desktop shortcut path must not prefer launcher host surface when the detached window is closed',
 )
 assert.match(
   bridge,
   /value === ['"]quick-editor['"]/,
   'launcher host surface bridge must accept quick-editor target',
+)
+assert.match(
+  i18n,
+  /['"]quickEditorShortcutInfo['"]\s*:\s*['"][^'"]*independent window/,
+  'en shortcut help text must describe independent-window presentation',
+)
+assert.match(
+  i18n,
+  /['"]quickEditorShortcutInfo['"]\s*:\s*['"][^'"]*独立窗口/,
+  'zh shortcut help text must describe independent-window presentation',
 )
 
 console.log('quick-editor-hotkey: ok')

@@ -3302,6 +3302,258 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
   font-size: 11px;
   color: var(--color-text-secondary);
 }
+
+/*
+ * Quick Editor version history — full-height right-edge drawer (not a
+ * floating popover). Rows are self-contained rounded hover chips inset
+ * within the panel (no hairline dividers).
+ */
+.qe-version-trigger {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  padding: 0;
+  transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
+}
+.qe-version-trigger:hover,
+.qe-version-trigger.is-open {
+  background: var(--color-background-tertiary, #ecedee);
+  border-color: color-mix(in srgb, var(--color-text-primary, #1a1c1e) 18%, transparent);
+  color: var(--color-text-primary, #1a1c1e);
+}
+
+/* Full-screen click-catcher behind the drawer — invisible. It only exists to
+   detect outside clicks; dimming the editor behind it muddies the exact
+   content the user still needs to read and *reduces* contrast at the edge
+   instead of sharpening it, so it carries no background of its own. */
+.qe-version-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: transparent;
+}
+
+.qe-version-drawer {
+  --qe-v-ink: var(--color-text-primary, #1a1c1e);
+  --qe-v-muted: var(--color-text-secondary, #686d71);
+  --qe-v-faint: var(--color-text-tertiary, #8a8f94);
+  --qe-v-surface: var(--color-background-primary, #ffffff);
+  --qe-v-hover: var(--color-surface-hover, #f7f8f8);
+  --qe-v-border: color-mix(in srgb, var(--qe-v-ink) 16%, transparent);
+  --qe-v-border-strong: color-mix(in srgb, var(--qe-v-ink) 24%, transparent);
+  --qe-v-edge: color-mix(in srgb, var(--qe-v-ink) 34%, transparent);
+  --qe-v-accent: var(--color-accent, #2563eb);
+
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(340px, 88vw);
+  display: flex;
+  flex-direction: column;
+  color: var(--qe-v-ink);
+  background: var(--qe-v-surface);
+  border-left: 1px solid var(--qe-v-edge);
+  /* Two layers: a tight, higher-contrast near-shadow that reads as a crisp
+     seam even against busy editor content, plus a soft ambient falloff. */
+  box-shadow:
+    -10px 0 18px -6px rgba(17, 24, 39, 0.22),
+    -40px 0 64px -20px rgba(17, 24, 39, 0.2);
+  animation: qe-version-drawer-in 180ms var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) both;
+}
+.qe-version-drawer[data-theme='dark'] {
+  box-shadow:
+    inset 1px 0 0 rgba(255, 255, 255, 0.06),
+    -10px 0 18px -6px rgba(0, 0, 0, 0.55),
+    -40px 0 64px -20px rgba(0, 0, 0, 0.5);
+}
+@keyframes qe-version-drawer-in {
+  from { transform: translateX(28px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .qe-version-drawer { animation: none; }
+}
+
+.qe-version-drawer__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: none;
+  height: 52px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--qe-v-border);
+}
+.qe-version-drawer__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.1px;
+  color: var(--qe-v-ink);
+}
+.qe-version-drawer__title svg {
+  flex: none;
+  color: var(--qe-v-faint);
+}
+.qe-version-drawer__head-trailing {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+/* Plain numeral — no pill/badge chrome. */
+.qe-version-drawer__count {
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--qe-v-faint);
+}
+.qe-version-drawer__close {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--qe-v-faint);
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+}
+.qe-version-drawer__close:hover,
+.qe-version-drawer__close:focus-visible {
+  background: var(--qe-v-hover);
+  color: var(--qe-v-ink);
+  outline: none;
+}
+
+.qe-version-drawer__list {
+  margin: 0;
+  padding: 8px 0;
+  list-style: none;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+.qe-version-drawer__list > li {
+  position: relative;
+}
+/* Inset hairline between rows — aligned to the hover chip's own bounds, not
+   touching the drawer edges. Rows still read as chips, but stay grouped at rest. */
+.qe-version-drawer__list > li + li::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 6px;
+  right: 6px;
+  height: 1px;
+  background: var(--qe-v-border);
+  pointer-events: none;
+  transition: opacity 80ms ease;
+}
+/* Don't let the divider cut across a hovered chip's rounded top/bottom edge. */
+.qe-version-drawer__list > li:hover::before,
+.qe-version-drawer__list > li:hover + li::before {
+  opacity: 0;
+}
+
+/* Self-contained rounded row chip. */
+.qe-version-item {
+  width: calc(100% - 12px);
+  margin: 0 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background 80ms ease;
+}
+.qe-version-item:hover,
+.qe-version-item:focus-visible {
+  background: var(--qe-v-hover);
+  outline: none;
+}
+
+.qe-version-item__meta {
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+  min-width: 0;
+  height: 17px;
+}
+.qe-version-item__source {
+  flex: none;
+  max-width: 7em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--qe-v-ink);
+}
+.qe-version-item__dot {
+  flex: none;
+  margin: 0 6px;
+  font-size: 12px;
+  color: var(--qe-v-faint);
+  line-height: 1;
+}
+.qe-version-item__time {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--qe-v-faint);
+}
+/* Reserved-space reveal (opacity/transform only) — the row never reflows on hover. */
+.qe-version-item__restore {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--qe-v-accent);
+  opacity: 0;
+  transform: translateX(3px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+.qe-version-item:hover .qe-version-item__restore,
+.qe-version-item:focus-visible .qe-version-item__restore {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.qe-version-item__preview {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--qe-v-muted);
+}
+
 .script-action-btn {
   width: 28px;
   height: 28px;

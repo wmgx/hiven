@@ -175,7 +175,7 @@ interface AppState {
     disabledBuiltins: string[]
     disabledCustoms: string[]
     globalPinnedLauncherShortcut: GlobalPinnedLauncherShortcut
-    /** Global shortcut to summon Quick Editor (host surface or detached window). */
+    /** Global shortcut to summon Quick Editor as an independent window. */
     quickEditorShortcut: GlobalPinnedLauncherShortcut
     globalLauncherWindowPosition?: GlobalLauncherPosition
     globalLauncherWindowPositionSource?: 'user'

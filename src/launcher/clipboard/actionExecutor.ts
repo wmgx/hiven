@@ -308,7 +308,7 @@ function htmlDecode(text: string): string {
 export const OUTPUT_TARGET_LABELS: Record<RecommendedOutputTarget, { en: string; zh: string }> = {
   copy: { en: 'Copy result', zh: '复制结果' },
   'copy-and-keep-open': { en: 'Copy and keep open', zh: '复制并保持打开' },
-  'open-editor': { en: 'Open in Editor', zh: '打开到 Editor' },
+  'open-editor': { en: 'Overwrite Quick Editor', zh: '覆盖到快捷编辑器' },
   'open-plugin-surface': { en: 'Open tool window', zh: '打开工具窗口' },
   'open-url': { en: 'Open URL', zh: '打开 URL' },
   'replace-selection': { en: 'Replace selection', zh: '覆盖选区' },

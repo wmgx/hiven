@@ -69,8 +69,9 @@ export function EditorStatusBar({
           {selectedCharCount} {t('selectedChars')}
         </span>
       )}
+      <span className="ml-auto" aria-hidden />
       {showLanguage && (
-        <span className="ml-auto min-w-0 truncate text-right" title={languageStatus}>
+        <span className="min-w-0 truncate text-right" title={languageStatus}>
           {languageStatus}
         </span>
       )}

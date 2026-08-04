@@ -228,20 +228,52 @@ export function GlobalLauncherHost() {
   }, [locale, pluginRegistryVersion, rankingQuery, rankedLauncherItems])
 
   /**
-   * History Object Blocks (⌘Enter from clipboard history): inject host paste/copy
-   * rows at list top. Text still gets ranking tools via objectBlockText.
+   * Object Block host rows pinned above ranking tools.
+   *
+   * Ranking / textMatch no longer shows static recommendActionsForBlock entries
+   * (RecommendedActionRow UI is disabled). History keeps paste/copy/open rows;
+   * any other text-bearing block always pins "Open in Quick Editor" so overwrite
+   * is one Enter away.
    */
-  const historyObjectActionItems = useMemo((): GlobalLauncherItem[] => {
+  const pinnedObjectActionItems = useMemo((): GlobalLauncherItem[] => {
     const block = clipboardBlock.block
-    if (!block || block.source !== 'history-item') return []
+    if (!block) return []
+
     const q = rankingQuery.trim().toLowerCase()
+    const hasText = Boolean((block.payloadText ?? block.preview)?.length)
+    const isMedia = block.kind === 'image' || block.kind === 'files'
+
+    let actions: RecommendedAction[]
+    if (block.source === 'history-item') {
+      actions = objectActions
+    } else if (hasText && !isMedia) {
+      // Prefer catalog open-editor actions; fall back to a host-owned pin.
+      const openEditorActions = objectActions.filter((action) => action.defaultOutput === 'open-editor')
+      actions = openEditorActions.length > 0
+        ? openEditorActions
+        : [{
+            id: 'open-in-quick-editor',
+            title: 'Open in Quick Editor',
+            titleZh: '打开到快捷编辑器',
+            provider: 'Quick Editor',
+            defaultOutput: 'open-editor',
+          }]
+    } else {
+      return []
+    }
+
     const kindLabel =
       block.kind === 'image'
         ? { en: 'Image', zh: '图片' }
         : block.kind === 'files'
           ? { en: 'Files', zh: '文件' }
-          : { en: 'History', zh: '历史' }
-    return objectActions
+          : block.source === 'history-item'
+            ? { en: 'History', zh: '历史' }
+            : block.source === 'tool-result'
+              ? { en: 'Result', zh: '结果' }
+              : { en: 'Clipboard', zh: '剪贴板' }
+
+    return actions
       .filter((action) => {
         if (!q) return true
         return (
@@ -253,7 +285,7 @@ export function GlobalLauncherHost() {
       .map((action) => {
         const title = locale === 'zh' ? action.titleZh : action.title
         const domainItem: LauncherItem = {
-          systemKey: `history-object-action:${action.id}`,
+          systemKey: `object-action:${action.id}`,
           kind: 'host',
           display: {
             title,
@@ -276,8 +308,8 @@ export function GlobalLauncherHost() {
   }, [clipboardBlock.block, locale, objectActions, rankingQuery])
 
   const visibleFiltered = useMemo(
-    () => [...historyObjectActionItems, ...rankedVisible],
-    [historyObjectActionItems, rankedVisible],
+    () => [...pinnedObjectActionItems, ...rankedVisible],
+    [pinnedObjectActionItems, rankedVisible],
   )
 
   /**
@@ -474,7 +506,11 @@ export function GlobalLauncherHost() {
       copyText: writeClipboardText,
       copyAndKeepOpen: writeClipboardText,
       openInEditor: async (text, options) => {
-        await createQuickEditorPane({ text, language: options?.language })
+        const { overwriteQuickEditorText } = await import('../../workspace/quickEditor/quickEditorRequests')
+        await overwriteQuickEditorText(text, {
+          language: options?.language,
+          source: block.source,
+        })
       },
       openPluginSurface: async (pluginId, options) => {
         await openPluginSurface({
@@ -551,11 +587,23 @@ export function GlobalLauncherHost() {
     }
   }, [clipboardBlock.block, closeLauncherAfterAction, locale, openPluginSurface])
 
-  const selectItemWithHistoryActions = useCallback((item: GlobalLauncherItem) => {
-    if (item.id.startsWith('history-object-action:')) {
-      const actionId = item.id.slice('history-object-action:'.length)
-      const action = objectActions.find((entry) => entry.id === actionId)
-      if (action) void executeObjectAction(action, action.defaultOutput)
+  const selectItemWithObjectActions = useCallback((item: GlobalLauncherItem) => {
+    // Support both current prefix and the retired history-only prefix.
+    const objectActionId = item.id.startsWith('object-action:')
+      ? item.id.slice('object-action:'.length)
+      : item.id.startsWith('history-object-action:')
+        ? item.id.slice('history-object-action:'.length)
+        : null
+    if (objectActionId != null) {
+      const fromCatalog = objectActions.find((entry) => entry.id === objectActionId)
+      const action: RecommendedAction = fromCatalog ?? {
+        id: objectActionId,
+        title: 'Open in Quick Editor',
+        titleZh: '打开到快捷编辑器',
+        provider: 'Quick Editor',
+        defaultOutput: 'open-editor',
+      }
+      void executeObjectAction(action, action.defaultOutput)
       return
     }
     selectItem(item)
@@ -636,7 +684,7 @@ export function GlobalLauncherHost() {
         selectedIndex={clampedSelectedIndex}
         setSelectedIndex={setSelectedIndex}
         isWorkflowObjectLauncherItem={isWorkflowObjectLauncherItem}
-        selectItem={selectItemWithHistoryActions}
+        selectItem={selectItemWithObjectActions}
         hostSurfaceTarget={hostSurfaceTarget}
         clearLauncherHostSurface={clearLauncherHostSurface}
         query={query}

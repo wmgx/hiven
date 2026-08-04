@@ -91,13 +91,23 @@ assert.doesNotMatch(
 )
 assert.match(
   files.quickEditorRequests,
+  /export async function showQuickEditorSurface[\s\S]*showQuickEditorWindow\(\)/,
+  'summon paths must open the independent quick-editor window on desktop',
+)
+assert.match(
+  files.quickEditorRequests,
   /showQuickEditorSurface[\s\S]*requestOpenLauncherHostSurface\(['"]quick-editor['"]\)/,
-  'legacy editor open paths must fall back to the quick editor surface via launcher host bridge',
+  'non-Tauri summon path must fall back to the quick editor host surface',
 )
 assert.match(
   files.pluginApi,
-  /showEditorWindow:\s*openEditorWindow[\s\S]*showQuickEditorSurface/,
-  'plugin showEditorWindow compatibility must route to quick editor instead of the retired editor window',
+  /async function openEditorWindow[\s\S]*showQuickEditorSurface\(\)/,
+  'plugin openEditorWindow compatibility must route to quick editor instead of the retired editor window',
+)
+assert.match(
+  files.pluginApi,
+  /showEditorWindow:\s*openEditorWindow/,
+  'plugin launcher API must expose showEditorWindow via openEditorWindow',
 )
 assert.match(
   files.outputRouter,

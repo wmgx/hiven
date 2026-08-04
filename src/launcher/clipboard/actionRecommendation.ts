@@ -57,9 +57,9 @@ const JSON_ACTIONS: RecommendedAction[] = [
   },
   {
     id: 'open-clipboard-editor',
-    title: 'Open Clipboard in Editor',
-    titleZh: '打开剪贴板到编辑器',
-    provider: 'Editor',
+    title: 'Open in Quick Editor',
+    titleZh: '打开到快捷编辑器',
+    provider: 'Quick Editor',
     defaultOutput: 'open-editor',
   },
   {
@@ -106,9 +106,9 @@ const JSON_ACTIONS: RecommendedAction[] = [
 const URL_ACTIONS: RecommendedAction[] = [
   {
     id: 'open-clipboard-editor',
-    title: 'Open Clipboard in Editor',
-    titleZh: '打开剪贴板到编辑器',
-    provider: 'Editor',
+    title: 'Open in Quick Editor',
+    titleZh: '打开到快捷编辑器',
+    provider: 'Quick Editor',
     defaultOutput: 'open-editor',
   },
   {
@@ -203,9 +203,9 @@ const TEXT_ACTIONS: RecommendedAction[] = [
   ...ENCODE_DECODE_ACTIONS,
   {
     id: 'open-clipboard-editor',
-    title: 'Open Clipboard in Editor',
-    titleZh: '打开剪贴板到编辑器',
-    provider: 'Editor',
+    title: 'Open in Quick Editor',
+    titleZh: '打开到快捷编辑器',
+    provider: 'Quick Editor',
     defaultOutput: 'open-editor',
   },
   {
@@ -253,9 +253,9 @@ const FORMATTER_ACTIONS_BY_KIND: Partial<Record<ObjectBlockKind, RecommendedActi
 const COMMAND_ACTIONS: RecommendedAction[] = [
   {
     id: 'open-clipboard-editor',
-    title: 'Open Clipboard in Editor',
-    titleZh: '打开剪贴板到编辑器',
-    provider: 'Editor',
+    title: 'Open in Quick Editor',
+    titleZh: '打开到快捷编辑器',
+    provider: 'Quick Editor',
     defaultOutput: 'open-editor',
   },
 ]
@@ -272,9 +272,9 @@ const YAML_ACTIONS: RecommendedAction[] = [
   },
   {
     id: 'open-clipboard-editor',
-    title: 'Open Clipboard in Editor',
-    titleZh: '打开剪贴板到编辑器',
-    provider: 'Editor',
+    title: 'Open in Quick Editor',
+    titleZh: '打开到快捷编辑器',
+    provider: 'Quick Editor',
     defaultOutput: 'open-editor',
   },
 ]
@@ -291,9 +291,9 @@ const QUERY_STRING_ACTIONS: RecommendedAction[] = [
   },
   {
     id: 'open-clipboard-editor',
-    title: 'Open Clipboard in Editor',
-    titleZh: '打开剪贴板到编辑器',
-    provider: 'Editor',
+    title: 'Open in Quick Editor',
+    titleZh: '打开到快捷编辑器',
+    provider: 'Quick Editor',
     defaultOutput: 'open-editor',
   },
 ]
@@ -302,9 +302,9 @@ const SECRET_ACTIONS: RecommendedAction[] = [
   // Secret content: suppressed network actions, only local open
   {
     id: 'open-clipboard-editor',
-    title: 'Open Clipboard in Editor',
-    titleZh: '打开剪贴板到编辑器',
-    provider: 'Editor',
+    title: 'Open in Quick Editor',
+    titleZh: '打开到快捷编辑器',
+    provider: 'Quick Editor',
     defaultOutput: 'open-editor',
   },
 ]
@@ -312,9 +312,9 @@ const SECRET_ACTIONS: RecommendedAction[] = [
 const FALLBACK_ACTIONS: RecommendedAction[] = [
   {
     id: 'open-clipboard-editor',
-    title: 'Open Clipboard in Editor',
-    titleZh: '打开剪贴板到编辑器',
-    provider: 'Editor',
+    title: 'Open in Quick Editor',
+    titleZh: '打开到快捷编辑器',
+    provider: 'Quick Editor',
     defaultOutput: 'open-editor',
   },
   {
@@ -410,6 +410,13 @@ const TEXT_HISTORY_ACTIONS: RecommendedAction[] = [
     provider: 'Clipboard History',
     defaultOutput: 'copy',
   },
+  {
+    id: 'open-history-in-quick-editor',
+    title: 'Open in Quick Editor',
+    titleZh: '打开到快捷编辑器',
+    provider: 'Quick Editor',
+    defaultOutput: 'open-editor',
+  },
 ]
 
 const IMAGE_HISTORY_ACTIONS: RecommendedAction[] = [
@@ -493,6 +500,19 @@ export function recommendActionsForBlock(block: LauncherObjectBlock): Recommende
   if (block.source === 'editor-selection' || block.source === 'editor-document') {
     return EDITOR_ACTIONS_BY_KIND[block.kind] ?? EDITOR_TEXT_ACTIONS
   }
+  // tool-result / snapshot / query / etc.: always offer Quick Editor overwrite
+  if (block.payloadText != null || block.preview != null) {
+    return [
+      {
+        id: 'open-in-quick-editor',
+        title: 'Open in Quick Editor',
+        titleZh: '打开到快捷编辑器',
+        provider: 'Quick Editor',
+        defaultOutput: 'open-editor',
+      },
+      ...FALLBACK_ACTIONS.filter((action) => action.id !== 'open-clipboard-editor'),
+    ]
+  }
   return FALLBACK_ACTIONS
 }
 
@@ -500,9 +520,9 @@ export function getSearchOnlyActions(): RecommendedAction[] {
   return [
     {
       id: 'open-editor',
-      title: 'Open Editor',
-      titleZh: '打开编辑器',
-      provider: 'Editor',
+      title: 'Open Quick Editor',
+      titleZh: '打开快捷编辑器',
+      provider: 'Quick Editor',
       defaultOutput: 'open-editor',
     },
     {

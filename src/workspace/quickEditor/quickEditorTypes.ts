@@ -9,6 +9,26 @@ export interface QuickEditorPaneState {
   scrollPosition: { scrollTop: number; scrollLeft: number }
 }
 
+/**
+ * One archived pane state created only by external overwrite
+ * (Object Block / tool result → Quick Editor). User typing never appends entries.
+ */
+export type QuickEditorExternalVersion = {
+  id: string
+  paneId: QuickEditorPaneId
+  text: string
+  language: string
+  languageSource: 'manual' | 'auto'
+  at: number
+  /**
+   * What triggered the overwrite that archived this content
+   * (e.g. clipboard, tool-result, history-item).
+   */
+  source?: string
+  /** Short list preview (first line / truncated). */
+  preview: string
+}
+
 export interface QuickEditorState {
   panes: Record<QuickEditorPaneId, QuickEditorPaneState>
   paneOrder: QuickEditorPaneId[]
@@ -24,6 +44,16 @@ export interface QuickEditorState {
   cursorPosition: { lineNumber: number; column: number }
   /** 滚动位置 */
   scrollPosition: { scrollTop: number; scrollLeft: number }
+  /**
+   * External-overwrite version history (newest first).
+   * Only written by overwriteActiveText — never by setText / setPaneText.
+   */
+  externalVersionHistory: QuickEditorExternalVersion[]
+}
+
+export type QuickEditorOverwriteOptions = {
+  language?: string
+  source?: string
 }
 
 export interface QuickEditorActions {
@@ -40,6 +70,23 @@ export interface QuickEditorActions {
   closeActivePane: () => boolean
   focusNextPane: () => void
   focusPreviousPane: () => void
+  /**
+   * Replace active pane via external source: archive current content into
+   * externalVersionHistory (if non-empty), then write the new text.
+   * Does not record user typing paths (setText / setPaneText).
+   */
+  overwriteActiveText: (text: string, options?: QuickEditorOverwriteOptions) => QuickEditorPaneId
+  /** Load an archived external version into the active pane (no new history entry). */
+  restoreExternalVersion: (versionId: string) => boolean
+  clearExternalVersionHistory: () => void
+  /** Apply a remote overwrite (detached window sync) including history. */
+  applyOverwriteFromRemote: (input: {
+    paneId: QuickEditorPaneId
+    text: string
+    language?: string
+    languageSource?: 'manual' | 'auto'
+    externalVersionHistory?: QuickEditorExternalVersion[]
+  }) => boolean
   reset: () => void
 }
 
