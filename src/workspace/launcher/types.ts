@@ -568,7 +568,11 @@ export function isEditorCommandBarItem(item: LauncherItem): boolean {
     item.systemKey.startsWith('host:pane:') ||
     item.systemKey.startsWith('host:editor:') ||
     item.systemKey.startsWith('host:text:') ||
-    item.systemKey.startsWith('host:pipeline:')
+    item.systemKey.startsWith('host:pipeline:') ||
+    // host:view:devtools opts into editor-command-bar/quick-editor-command via
+    // its own `surfaces` (see hostActions.ts) so it can debug those windows —
+    // the surfaces check above already scopes this, this only widens the prefix.
+    item.systemKey.startsWith('host:view:')
   )
 }
 

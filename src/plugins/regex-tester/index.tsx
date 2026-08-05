@@ -38,7 +38,7 @@ export const regexTesterPlugin = definePlugin({
         display: {
           title: 'command.open.title',
           subtitle: 'command.open.description',
-          icon: 'regex',
+          icon: 'Regex',
           aliases: ['regex', 'regexp', '正则'],
         },
         surfaces: ['command-palette'],
@@ -61,7 +61,7 @@ export const regexTesterPlugin = definePlugin({
       id: 'regex-tester.open',
       title: 'command.open.title',
       description: 'command.open.description',
-      icon: 'regex',
+      icon: 'Regex',
       aliases: ['regex', 'regexp', '正则'],
       inputs: [{ key: 'input', label: 'Input', kind: 'pane' as const, required: true }],
       inputResolution: { strategy: 'use-active', fallback: 'fail' },

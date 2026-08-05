@@ -49,7 +49,7 @@ export const currentContextObjectProvider: WorkObjectProvider = {
         type: 'text',
         title: 'Selected Text',
         subtitle: preview(selectedText),
-        icon: 'TextSelect',
+        icon: 'TextCursorInput',
         source: 'context.editor-selection',
         text: selectedText,
         language: editor.language,

@@ -942,7 +942,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
     id: 'feishu.messages-search',
     title: 'tool.messagesSearch.title',
     subtitle: 'tool.messagesSearch.subtitle',
-    icon: 'MessageSquareSearch',
+    icon: 'Search',
     aliases: ['搜消息', '消息搜索', 'search messages', '飞书消息'],
     requireParamSelection: true,
     params: [

@@ -75,7 +75,7 @@ export const textUtilsPlugin = definePlugin({
       id: 'count.run',
       title: 'count.title',
       subtitle: 'count.description',
-      icon: 'BarChart',
+      icon: 'ChartBar',
       aliases: ['stats', 'wc', '文本统计', '字数统计'],
       inputPolicy: { mode: 'auto' },
       run(ctx) { return ctx.output.text(textStats(ctx.input.text)) },

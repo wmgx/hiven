@@ -1127,8 +1127,18 @@ html[data-window='quick-editor'] #root {
   -webkit-app-region: no-drag;
 }
 
+.quick-editor-detached-window .editor-topbar {
+  /* Backup for platforms that honor CSS regions; primary drag is Tauri
+     startDragging() (QuickEditorDetachedView.tsx handleWindowDrag). Without
+     this, the window-level `no-drag` above leaves nothing marked draggable
+     and the titlebar can't be dragged at all. */
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
 .quick-editor-detached-window :is(button, input, textarea, select, a, [role='button'], [data-no-drag], .monaco-editor) {
   -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .quick-editor-resize-handle {
@@ -3235,6 +3245,9 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
   gap: 8px;
   flex-shrink: 0;
   padding: 0 10px;
+  background: var(--color-background-secondary);
+  border-style: solid;
+  border-color: var(--color-border-tertiary);
   border-width: 0 0 1px;
 }
 .editor-topbar-system,

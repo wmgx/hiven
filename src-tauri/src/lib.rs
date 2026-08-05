@@ -32,8 +32,10 @@ const PLUGIN_SURFACE_WINDOW_DEFAULT_MIN_WIDTH: f64 = 320.0;
 const PLUGIN_SURFACE_WINDOW_DEFAULT_MIN_HEIGHT: f64 = 240.0;
 const PLUGIN_SURFACE_WINDOW_DEFAULT_DESTROY_TIMEOUT_MS: u64 = 120_000;
 const QUICK_EDITOR_WINDOW_LABEL: &str = "quick-editor";
-const QUICK_EDITOR_WINDOW_WIDTH: f64 = LAUNCHER_COMPACT_WIDTH;
-const QUICK_EDITOR_WINDOW_HEIGHT: f64 = LAUNCHER_MAX_HEIGHT;
+// Quick Editor is a real editor window, not a Spotlight-style popup — give it
+// its own (larger) default footprint instead of borrowing the launcher's.
+const QUICK_EDITOR_WINDOW_WIDTH: f64 = 900.0;
+const QUICK_EDITOR_WINDOW_HEIGHT: f64 = 680.0;
 const QUICK_EDITOR_WINDOW_MIN_WIDTH: f64 = 480.0;
 const QUICK_EDITOR_WINDOW_MIN_HEIGHT: f64 = 320.0;
 static PREVIOUS_FOREGROUND_PROCESS_ID: OnceLock<Mutex<Option<u32>>> = OnceLock::new();
@@ -850,6 +852,25 @@ fn launcher_default_window_size_for_window(window: &tauri::WebviewWindow) -> (f6
         .unwrap_or((LAUNCHER_COMPACT_WIDTH, LAUNCHER_COMPACT_HEIGHT))
 }
 
+/// Quick Editor's default size, clamped to fit whichever monitor it opens on
+/// (unlike the launcher popup, it doesn't need to shrink on smaller screens —
+/// only cap out so it never exceeds the visible work area).
+fn quick_editor_default_window_size(window: &tauri::WebviewWindow) -> (f64, f64) {
+    monitor_under_cursor(window)
+        .or_else(|| window.current_monitor().ok().flatten())
+        .or_else(|| window.primary_monitor().ok().flatten())
+        .map(|monitor| {
+            let scale = monitor.scale_factor();
+            let logical_w = monitor.size().width as f64 / scale;
+            let logical_h = monitor.size().height as f64 / scale;
+            (
+                QUICK_EDITOR_WINDOW_WIDTH.min(logical_w * 0.92),
+                QUICK_EDITOR_WINDOW_HEIGHT.min(logical_h * 0.88),
+            )
+        })
+        .unwrap_or((QUICK_EDITOR_WINDOW_WIDTH, QUICK_EDITOR_WINDOW_HEIGHT))
+}
+
 fn center_launcher_window(window: &tauri::WebviewWindow) {
     let monitor = monitor_under_cursor(window)
         .or_else(|| window.current_monitor().ok().flatten())
@@ -1199,7 +1220,7 @@ async fn show_quick_editor_window(app: tauri::AppHandle) -> Result<(), String> {
     .build()
     .map_err(|e| e.to_string())?;
 
-    let (quick_width, quick_height) = launcher_default_window_size_for_window(&window);
+    let (quick_width, quick_height) = quick_editor_default_window_size(&window);
     window.set_size(LogicalSize::new(quick_width, quick_height))
         .map_err(|e| e.to_string())?;
     window.show().map_err(|e| e.to_string())?;

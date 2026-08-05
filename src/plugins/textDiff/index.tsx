@@ -85,7 +85,7 @@ export const textDiffPlugin = definePlugin({
         kind: 'custom-view',
         title: 'Text Compare',
         titleI18n: { zh: '文本对比' },
-        icon: 'git-compare',
+        icon: 'GitCompare',
         aliases: ['diff', 'compare', 'text diff', '文本对比', 'duibi'],
         component: TextDiffSurface,
         entry: { launcher: false, shortcutBindable: false },
@@ -108,7 +108,7 @@ export const textDiffPlugin = definePlugin({
         display: {
           title: 'command.compare.title',
           subtitle: 'command.compare.description',
-          icon: 'git-compare',
+          icon: 'GitCompare',
           aliases: ['diff', 'compare', 'text diff', 'text-diff', 'duibi', 'wenben duibi'],
         },
         surfaces: ['command-palette', 'global-launcher', 'quick-editor-command'],

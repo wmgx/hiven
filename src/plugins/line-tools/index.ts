@@ -181,7 +181,7 @@ export const lineToolsPlugin = definePlugin({
       id: 'line-affix.wrap',
       title: 'wrap.title',
       subtitle: 'wrap.description',
-      icon: 'WrapText',
+      icon: 'TextWrap',
       aliases: ['wrap lines', 'surround', '行包裹'],
       inputPolicy: { mode: 'auto' },
       params: [

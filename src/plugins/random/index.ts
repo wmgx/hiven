@@ -249,7 +249,7 @@ export const randomPlugin = definePlugin({
       id: 'random.uuid',
       title: 'uuid.title',
       subtitle: 'uuid.description',
-      icon: 'Fingerprint',
+      icon: 'Hash',
       aliases: ['uuid', 'guid', 'uuidv4', '随机uuid', '生成uuid'],
       inputPolicy: { mode: 'auto' },
       params: [

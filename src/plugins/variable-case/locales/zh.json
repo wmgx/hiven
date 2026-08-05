@@ -1,7 +1,7 @@
 {
   "camel.title": "camelCase 驼峰",
   "camel.description": "将标识符转为 camelCase",
-  "pascal.title": "PascalCase 帕斯卡",
+  "pascal.title": "PascalCase 大驼峰",
   "pascal.description": "将标识符转为 PascalCase",
   "snake.title": "snake_case 下划线",
   "snake.description": "将标识符转为 snake_case",

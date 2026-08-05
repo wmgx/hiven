@@ -18,9 +18,15 @@ export async function closeQuickEditorWindow(): Promise<void> {
 }
 
 export async function startQuickEditorWindowDrag(): Promise<void> {
-  if (!isTauriRuntime()) return
+  if (!isTauriRuntime()) {
+    console.warn('[hiven][drag] skipped: not running inside Tauri (isTauriRuntime() is false)')
+    return
+  }
   const { getCurrentWindow } = await import('@tauri-apps/api/window')
-  await getCurrentWindow().startDragging()
+  const win = getCurrentWindow()
+  console.info('[hiven][drag] calling startDragging() on window label:', win.label)
+  await win.startDragging()
+  console.info('[hiven][drag] startDragging() resolved')
 }
 
 export async function startQuickEditorWindowResize(direction: ResizeDirection): Promise<void> {
