@@ -15,6 +15,9 @@ dist-ssr
 # Rust/Tauri build artifacts
 src-tauri/target/
 
+# Local runtime native libs (symlinked at runtime by aha_ipc_native)
+src-tauri/*.dylib
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
