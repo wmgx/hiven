@@ -1,5 +1,5 @@
-import { type RefObject } from 'react'
-import type { Locale } from '../../i18n'
+import { type MouseEvent as ReactMouseEvent, type MutableRefObject, type RefObject } from 'react'
+import { t, type Locale } from '../../i18n'
 import { localized, type LauncherHostSurfaceTarget, type PluginSurfaceOpenTarget } from '../../store'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import type { CollectInputFrame, ParamInputFrame, ResultFrame } from '../../workspace/launcher/controller'
@@ -31,6 +31,7 @@ export function GlobalLauncherFrameSwitch({
   itemPermissionFrame,
   controllerState,
   inputRef,
+  bindSearchInputRef,
   query,
   searchPlaceholder,
   visibleFiltered,
@@ -41,6 +42,7 @@ export function GlobalLauncherFrameSwitch({
   showCustomizeHint,
   showWorkflowObjectHint,
   customizeShortcutLabel,
+  isFavoriteSelected,
   onSettingsClose,
   onSurfaceBack,
   onSurfaceClose,
@@ -51,16 +53,21 @@ export function GlobalLauncherFrameSwitch({
   onParamCommit,
   onParamMultiToggle,
   onFrameBack,
+  onExitCommand,
   onCollectInputChange,
   onActivateResultChoice,
   onSecondaryAction,
+  onPastePreviewText,
+  onSubmitCollectInput,
   onHoverResultChoice,
   onToggleResultChoice,
   onSearchQueryChange,
   onSearchSelectItem,
   onSearchHoverIndex,
   onSearchMouseMove,
+  isKeyboardNavRef,
   clipboardBlock,
+  clipboardHintSelected,
   onExecuteAction,
   selectedActionIndex,
   onSelectedActionIndexChange,
@@ -75,6 +82,7 @@ export function GlobalLauncherFrameSwitch({
   itemPermissionFrame: GlobalLauncherPermissionFrameState | null
   controllerState: { frames: Array<CollectInputFrame | ParamInputFrame | ResultFrame | { kind: string }>; error?: string | null; busy: boolean } | null | undefined
   inputRef: RefObject<HTMLInputElement | null>
+  bindSearchInputRef?: (node: HTMLInputElement | null) => void
   query: string
   searchPlaceholder: string
   visibleFiltered: LauncherMixedItem[]
@@ -85,6 +93,8 @@ export function GlobalLauncherFrameSwitch({
   showCustomizeHint: boolean
   showWorkflowObjectHint: boolean
   customizeShortcutLabel: string
+  /** Focused row is in launcher favorites. */
+  isFavoriteSelected?: boolean
   onSettingsClose: () => void
   onSurfaceBack: () => void
   onSurfaceClose: () => void
@@ -95,17 +105,26 @@ export function GlobalLauncherFrameSwitch({
   onParamCommit: (value: unknown) => void
   onParamMultiToggle: (value: unknown) => void
   onFrameBack: () => void
+  /** Command-tag × — pop entire command stack to list. */
+  onExitCommand?: () => void
   onCollectInputChange: (value: string) => void
   onActivateResultChoice: (choice: LauncherResultChoice) => void
   /** Collect-input / result secondary actions (id is plugin-defined). */
   onSecondaryAction?: (choice: LauncherResultChoice, actionId: string) => void
+  /** Package 4: paste live-preview text into the foreground app. */
+  onPastePreviewText?: (text: string) => void | Promise<void>
+  /** Package 4: default collect-input submit when no destination chrome. */
+  onSubmitCollectInput?: () => void
   onHoverResultChoice: (index: number) => void
   onToggleResultChoice: (choice: LauncherResultChoice, frame: ResultFrame) => void
   onSearchQueryChange: (value: string) => void
   onSearchSelectItem: (item: LauncherMixedItem) => void
   onSearchHoverIndex: (index: number) => void
-  onSearchMouseMove: () => void
+  onSearchMouseMove: (event: ReactMouseEvent) => void
+  isKeyboardNavRef?: MutableRefObject<boolean>
   clipboardBlock: ClipboardObjectBlockState
+  /** Recent-clipboard hint is the focused row (selectedIndex === -1). */
+  clipboardHintSelected?: boolean
   onExecuteAction?: (action: RecommendedAction, target: RecommendedOutputTarget) => void
   selectedActionIndex?: number
   onSelectedActionIndexChange?: (index: number) => void
@@ -136,7 +155,7 @@ export function GlobalLauncherFrameSwitch({
 
   if (surfaceFrame) {
     if (!activeSurfaceFrame) {
-      return <div className="p-4 text-center text-[12px]" style={{ color: 'var(--color-text-tertiary)' }}>Surface not found</div>
+      return <div className="p-4 text-center text-[12px]" style={{ color: 'var(--color-text-tertiary)' }}>{t(locale, 'palette.surfaceNotFound')}</div>
     }
     const shell = activeSurfaceFrame.surface.shell
     const breadcrumbTitle = shell?.breadcrumbTitle
@@ -185,6 +204,7 @@ export function GlobalLauncherFrameSwitch({
         onCommit={onParamCommit}
         onMultiToggle={onParamMultiToggle}
         onBack={onFrameBack}
+        onExitCommand={onExitCommand}
       />
     )
   }
@@ -203,6 +223,7 @@ export function GlobalLauncherFrameSwitch({
     return (
       <GlobalLauncherCollectInputFrame
         inputRef={inputRef}
+        bindSearchInputRef={bindSearchInputRef}
         frame={frame}
         busy={controllerState?.busy ?? false}
         error={controllerState?.error}
@@ -210,8 +231,11 @@ export function GlobalLauncherFrameSwitch({
         paramChips={paramChips}
         onInputChange={onCollectInputChange}
         onBack={onFrameBack}
+        onExitCommand={onExitCommand}
         onActivateChoice={onActivateResultChoice}
         onSecondaryAction={onSecondaryAction}
+        onPastePreviewText={onPastePreviewText}
+        onSubmitPrimary={onSubmitCollectInput}
       />
     )
   }
@@ -228,6 +252,8 @@ export function GlobalLauncherFrameSwitch({
         onBack={onFrameBack}
         onHoverChoice={onHoverResultChoice}
         onToggleChoice={onToggleResultChoice}
+        onSecondaryAction={onSecondaryAction}
+        onPastePreviewText={onPastePreviewText}
       />
     )
   }
@@ -235,9 +261,11 @@ export function GlobalLauncherFrameSwitch({
   return (
     <GlobalLauncherSearchFrame
       inputRef={inputRef}
+      bindSearchInputRef={bindSearchInputRef}
       query={query}
       placeholder={searchPlaceholder}
       clipboardBlock={clipboardBlock}
+      clipboardHintSelected={clipboardHintSelected}
       error={controllerState?.error}
       items={visibleFiltered}
       selectedItem={selectedItem}
@@ -245,10 +273,12 @@ export function GlobalLauncherFrameSwitch({
       showCustomizeHint={showCustomizeHint}
       showWorkflowObjectHint={showWorkflowObjectHint}
       customizeShortcutLabel={customizeShortcutLabel}
+      isFavoriteSelected={isFavoriteSelected}
       onQueryChange={onSearchQueryChange}
       onSelectItem={onSearchSelectItem}
       onHoverIndex={onSearchHoverIndex}
       onMouseMove={onSearchMouseMove}
+      isKeyboardNavRef={isKeyboardNavRef}
       onExecuteAction={onExecuteAction}
       selectedActionIndex={selectedActionIndex}
       onSelectedActionIndexChange={onSelectedActionIndexChange}

@@ -49,7 +49,7 @@ export function QuickEditorBreadcrumbActions() {
       <span className="editor-topbar-divider" />
       <button
         type="button"
-        className="btn btn-ghost btn-sm ft-btn ft-btn-ghost ft-btn-sm editor-topbar-run"
+        className="ft-btn ft-btn-ghost ft-btn-sm editor-topbar-run"
         onClick={() => {
           suppressStandaloneLauncherBlur()
           openQuickEditorCommand()

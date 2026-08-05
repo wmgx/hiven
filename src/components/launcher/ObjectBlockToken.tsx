@@ -6,10 +6,13 @@
  *
  * UI:
  *   [ 剪贴板 · JSON · 12 秒前  × ]
- *   When selectedForDelete: purple border + "再按 Backspace 删除"
- *   When secretMasked: "预览已隐藏"
+ *   Empty-query Backspace removes in one press with a short exit transition.
+ *   When secretMasked: masked label
  */
 
+import { X } from 'lucide-react'
+import { t, type Locale } from '../../i18n'
+import { useAppStore } from '../../store'
 import type { LauncherObjectBlock } from '../../launcher/clipboard/objectBlock'
 
 function truncatePreview(text: string, maxLen: number): string {
@@ -21,43 +24,56 @@ function truncatePreview(text: string, maxLen: number): string {
 export function ObjectBlockToken({
   block,
   onRemove,
+  locale: localeProp,
+  exiting = false,
 }: {
   block: LauncherObjectBlock
   onRemove: () => void
+  locale?: Locale
+  /** Play remove transition while parent keeps this mounted. */
+  exiting?: boolean
 }) {
+  const storeLocale = useAppStore((s) => s.locale)
+  const locale = localeProp ?? storeLocale
   const selected = block.selectedForDelete
   return (
     <span
-      className={`object-block-token${selected ? ' selected-for-delete' : ''}`}
+      className={[
+        'object-block-token',
+        selected ? 'selected-for-delete' : '',
+        exiting ? 'is-exiting' : '',
+      ].filter(Boolean).join(' ')}
       data-testid="object-block-token"
       data-source={block.source}
       data-kind={block.kind}
       data-selected={selected ? 'true' : undefined}
+      data-exiting={exiting ? 'true' : undefined}
       data-state={selected ? 'selected-for-deletion' : block.state}
+      aria-hidden={exiting ? true : undefined}
     >
       {!block.secretMasked && block.preview ? (
         <span className="object-block-content">{truncatePreview(block.preview, 30)}</span>
       ) : block.secretMasked ? (
-        <span className="object-block-masked">内容已隐藏</span>
+        <span className="object-block-masked">{t(locale, 'palette.objectBlockMasked')}</span>
       ) : (
         <span className="object-block-content">{block.title}</span>
       )}
       {block.state === 'snapshot' && (
-        <span className="object-block-badge">snapshot</span>
+        <span className="object-block-badge">{t(locale, 'palette.objectBlockSnapshot')}</span>
       )}
       {block.validity === 'invalid' && (
-        <span className="object-block-badge">invalid</span>
+        <span className="object-block-badge">{t(locale, 'palette.objectBlockInvalid')}</span>
       )}
       {selected && (
-        <span className="object-block-delete-hint">再按 Backspace 删除</span>
+        <span className="object-block-delete-hint">{t(locale, 'palette.objectBlockDeleteHint')}</span>
       )}
       <button
         type="button"
         className="object-block-remove"
         onClick={(e) => { e.stopPropagation(); onRemove() }}
-        aria-label="Remove object block"
+        aria-label={t(locale, 'palette.objectBlockRemove')}
       >
-        ×
+        <X size={12} strokeWidth={2.2} aria-hidden="true" />
       </button>
     </span>
   )

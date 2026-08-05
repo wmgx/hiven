@@ -1,0 +1,8 @@
+{
+  "pluginId": "browser-tabs",
+  "displayName": "Browser Tabs",
+  "displayNameI18n": { "zh": "浏览器标签" },
+  "version": "0.1.2",
+  "capabilities": ["settings"],
+  "permissions": []
+}

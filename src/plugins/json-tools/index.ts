@@ -100,8 +100,9 @@ export const jsonToolsPlugin = definePlugin({
       title: 'json.prettify.title',
       subtitle: 'json.prettify.description',
       icon: 'Braces',
-      aliases: ['json format', 'json格式化', 'pretty json', 'json beautify'],
+      aliases: ['fmt', '格式化', 'pretty', 'json format', 'json格式化', 'pretty json', 'json beautify'],
       inputPolicy: { mode: 'auto' },
+      accepts: { kinds: ['json'], aliases: ['fmt', '格式化', 'pretty'] },
       textMatch: isJson,
       run(ctx) {
         try { return ctx.output.text(jsonPrettify(ctx.input.text)) }
@@ -116,6 +117,7 @@ export const jsonToolsPlugin = definePlugin({
       icon: 'Braces',
       aliases: ['json minify', 'json压缩', 'compact json', 'json compress'],
       inputPolicy: { mode: 'auto' },
+      accepts: { kinds: ['json'] },
       textMatch: isJson,
       run(ctx) {
         try { return ctx.output.text(jsonCompact(ctx.input.text)) }
@@ -130,6 +132,7 @@ export const jsonToolsPlugin = definePlugin({
       icon: 'ArrowUpNarrowWide',
       aliases: ['json sort', 'sort json keys', 'json key排序', 'json排序'],
       inputPolicy: { mode: 'auto' },
+      accepts: { kinds: ['json'] },
       textMatch: isJson,
       run(ctx) {
         try { return ctx.output.text(sortJsonKeys(ctx.input.text)) }
@@ -158,6 +161,7 @@ export const jsonToolsPlugin = definePlugin({
       icon: 'Search',
       aliases: ['json2qs', 'json to query', 'json to querystring', 'json转qs'],
       inputPolicy: { mode: 'auto' },
+      accepts: { kinds: ['json'] },
       textMatch: isJson,
       run(ctx) {
         try { return ctx.output.text(jsonToQueryString(ctx.input.text)) }

@@ -331,7 +331,7 @@ const definition: PluginDefinition = {
       id: 'calculator.sum',
       title: 'command.sum.title',
       subtitle: 'command.sum.description',
-      icon: 'Calculator',
+      icon: 'Sigma',
       aliases: ['sum', 'add', 'total'],
       inputPolicy: { mode: 'auto' },
       run(ctx) {
@@ -396,7 +396,7 @@ const definition: PluginDefinition = {
       id: 'calculator.sum',
       title: 'command.sum.title',
       description: 'command.sum.description',
-      icon: 'Calculator',
+      icon: 'Sigma',
       aliases: ['sum', 'add', 'total'],
       inputs: [
         { key: 'input', label: 'input.text.label', kind: 'text', required: true },

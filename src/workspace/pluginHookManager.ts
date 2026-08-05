@@ -6,8 +6,9 @@ import { createPluginPrivateStorage } from './pluginStorage'
 import { createPluginClipboard } from './pluginClipboard'
 import { createPluginPaste } from './pluginPaste'
 import { createPluginNetwork } from './pluginNetwork'
+import { createPluginShell } from './pluginShell'
 import { useAppStore } from '../store'
-import { getPluginPermissionSnapshot, missingPluginPermissions } from './pluginPermissions'
+import { getPluginPermissionSnapshot, missingPluginPermissions, usePluginPermissionStore } from './pluginPermissions'
 import { resolvePluginSettingsSource } from './launcher/pluginSource'
 import { createPluginLauncherApi } from './launcher/pluginApi'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
@@ -45,6 +46,7 @@ function buildStartupHookContext(
     clipboard: createPluginClipboard(pluginId, permissions, storage),
     paste: createPluginPaste(permissions, storage),
     network: createPluginNetwork(permissions),
+    shell: createPluginShell(permissions),
     api: createPluginLauncherApi({ pluginId, source, requestedPermissions }),
     t: makePluginT(pluginId, locale),
     showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error') {
@@ -96,6 +98,31 @@ export function runPluginStartupHooks(): void {
     const settings = getPluginSettings(settingsSource, pluginId, definition)
     void runStartupHook(settingsSource, pluginId, definition.hooks, settings, permissions)
   }
+}
+
+/**
+ * Subscribe to permission changes and re-run incomplete startup hooks when
+ * their declared permissions become fully granted (mirror background watcher).
+ */
+export function setupStartupPermissionWatcher(): () => void {
+  return usePluginPermissionStore.subscribe((state, prevState) => {
+    if (state.permissions === prevState.permissions) return
+
+    for (const { definition, pluginId, source, permissions: requestedPermissions } of pluginRegistry.getAllPluginDefinitions()) {
+      if (!definition.hooks?.startup || requestedPermissions.length === 0) continue
+
+      const settingsSource = resolvePluginSettingsSource(pluginId, source)
+      const key = hookKey(settingsSource, pluginId)
+      if (completedStartupHooks.has(key) || runningStartupHooks.has(key)) continue
+
+      const snapshot = getPluginPermissionSnapshot(settingsSource, pluginId, requestedPermissions)
+      const missing = missingPluginPermissions(snapshot, requestedPermissions)
+      if (missing.length > 0) continue
+
+      const settings = getPluginSettings(settingsSource, pluginId, definition)
+      void runStartupHook(settingsSource, pluginId, definition.hooks, settings, requestedPermissions)
+    }
+  })
 }
 
 export function clearCompletedStartupHooksForTests(): void {

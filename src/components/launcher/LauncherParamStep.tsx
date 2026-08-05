@@ -6,6 +6,8 @@ import type { ParamInputFrame } from '../../workspace/launcher/controller'
 import type { LauncherParamSpec } from '../../workspace/launcher/types'
 import { searchableFieldsMatch, type SearchableFields } from '../../workspace/searchRanking'
 import { resolveDisplayTitle } from '../../workspace/launcher/display'
+import { LauncherCommandTag, LauncherParamChipTrail } from './LauncherCommandTag'
+import { LauncherEmptyWell } from './LauncherEmptyWell'
 
 type LauncherParamStepProps = {
   frame: ParamInputFrame
@@ -19,7 +21,10 @@ type LauncherParamStepProps = {
   onSelectedIndexChange: (index: number) => void
   onCommit: (value?: unknown) => void
   onMultiToggle: (value: unknown) => void
+  /** Empty ⌫ / Esc: stack-style one step (previous param or leave command). */
   onBack: () => void
+  /** Command-tag ×: exit whole command to search list. */
+  onExitCommand?: () => void
 }
 
 type ParamOption = {
@@ -98,6 +103,7 @@ export function LauncherParamStep({
   onCommit,
   onMultiToggle,
   onBack,
+  onExitCommand,
 }: LauncherParamStepProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const isImeComposingRef = useRef(false)
@@ -155,27 +161,34 @@ export function LauncherParamStep({
   }
 
   if (!param) return null
+  const hint = param.hint ? localized(param.hint, param.hintI18n, locale) : ''
+  const stepTag = params.length > 1 ? `${frame.paramIndex + 1}/${params.length}` : ''
   const placeholder = isTextParam
-    ? `${label} · ${param.type === 'number' ? t(locale, 'palette.inputNumber') : t(locale, 'palette.inputText')}`
-    : `${label} · ${t(locale, 'palette.filterOptions')}`
+    ? [label, hint || (param.type === 'number' ? t(locale, 'palette.inputNumber') : t(locale, 'palette.inputText'))]
+        .filter(Boolean)
+        .join(' — ')
+    : [label, t(locale, 'palette.filterOptions')].filter(Boolean).join(' — ')
   const countLabel = isMultiParam
     ? t(locale, 'palette.selectedCountMax', { count: selectedCount, max: maxSelect })
-    : `${frame.paramIndex + 1}/${params.length}`
+    : stepTag
+      ? `${stepTag} · ${label}`
+      : label
+
+  const commandTitle = resolveDisplayTitle(frame.item.display, locale)
 
   return (
     <>
       <div className={headerClassName} style={{ borderBottom: '1px solid var(--border)' }}>
-        <button className="back" type="button" onClick={onBack}>‹</button>
-        <span className="title">
-          {resolveDisplayTitle(frame.item.display, locale)}
-          {breadcrumbChips.length > 0 && (
-            <span className="t-sub">{breadcrumbChips.map((chip) => chip.value).join(' / ')}</span>
-          )}
-        </span>
-        <span className="vbar" />
+        <LauncherCommandTag
+          title={commandTitle}
+          icon={frame.item.display.icon}
+          locale={locale}
+          onRemove={onExitCommand ?? onBack}
+        />
+        <LauncherParamChipTrail chips={breadcrumbChips} />
         <input
           ref={inputRef}
-          className={isTextParam ? 'mono' : ''}
+          className={[isTextParam ? 'mono' : '', param.type === 'number' ? 'l-number-input' : ''].filter(Boolean).join(' ')}
           placeholder={placeholder}
           value={frame.query}
           type={param.type === 'number' ? 'number' : 'text'}
@@ -187,6 +200,7 @@ export function LauncherParamStep({
               if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
               event.preventDefault()
               event.stopPropagation()
+              // Stack-style: empty ⌫ steps back one param (or leaves command on first param).
               onBack()
               return
             }
@@ -226,7 +240,11 @@ export function LauncherParamStep({
           }}
           disabled={busy}
         />
-        <span className="meta">{countLabel}</span>
+        {busy ? (
+          <span className="meta anim-running-pulse" aria-live="polite">...</span>
+        ) : (
+          <span className="meta">{countLabel}</span>
+        )}
       </div>
       {!isTextParam && (
         <div className={bodyClassName}>
@@ -253,7 +271,10 @@ export function LauncherParamStep({
             )
           })}
           {options.length === 0 && (
-            <div className="px-3.5 py-4 text-center text-xs" style={{ color: 'var(--color-text-tertiary)' }}>{t(locale, 'palette.noOptions')}</div>
+            <LauncherEmptyWell
+              title={t(locale, 'palette.noOptions')}
+              hint={t(locale, 'palette.noOptionsHint')}
+            />
           )}
         </div>
       )}

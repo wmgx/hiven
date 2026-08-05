@@ -5,6 +5,7 @@ import type { GlobalLauncherItem } from './GlobalLauncherItems'
 import {
   buildItemPermissionFrame,
   executeGlobalLauncherDomainItem,
+  getPluginSurfaceDefinition,
   grantGlobalLauncherItemPermissions,
   resolvePluginSurfaceTarget,
   type LauncherItemPermissionFrame,
@@ -15,6 +16,7 @@ import {
   showPluginSurfaceWindow,
 } from '../../workspace/windowManager/pluginSurfaceWindows'
 import { detectClipboardFilePath } from '../../launcher/clipboard/clipboardSnapshot'
+import { showToast } from '../../workspace/toast'
 
 type UseGlobalLauncherSelectionControllerInput = {
   controllerRef: RefObject<LauncherController | null>
@@ -75,6 +77,13 @@ export function useGlobalLauncherSelectionController({
       const pluginSurfaceTarget = resolvePluginSurfaceTarget(item.domainItem)
       if (pluginSurfaceTarget) {
         void (async () => {
+          if (!getPluginSurfaceDefinition(pluginSurfaceTarget)) {
+            showToast(
+              `Surface unavailable: ${pluginSurfaceTarget.pluginId}/${pluginSurfaceTarget.surfaceId}`,
+              'error',
+            )
+            return
+          }
           const initialText = await resolveSurfaceInitialText(objectBlockText)
           const target: PluginSurfaceTarget = {
             ...pluginSurfaceTarget,

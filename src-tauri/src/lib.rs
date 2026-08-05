@@ -7,8 +7,9 @@ use std::io::{Cursor, Read};
 #[cfg(target_os = "macos")]
 use std::os::raw::{c_char, c_int, c_void};
 use std::path::{Component, Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
+use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
 use tauri::tray::TrayIconBuilder;
@@ -18,6 +19,7 @@ use tauri::Manager;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use zip::ZipArchive;
 
+pub mod desktop_bridge;
 pub mod hotkeys;
 
 const LAUNCHER_COMPACT_WIDTH: f64 = 660.0;
@@ -30,8 +32,10 @@ const PLUGIN_SURFACE_WINDOW_DEFAULT_MIN_WIDTH: f64 = 320.0;
 const PLUGIN_SURFACE_WINDOW_DEFAULT_MIN_HEIGHT: f64 = 240.0;
 const PLUGIN_SURFACE_WINDOW_DEFAULT_DESTROY_TIMEOUT_MS: u64 = 120_000;
 const QUICK_EDITOR_WINDOW_LABEL: &str = "quick-editor";
-const QUICK_EDITOR_WINDOW_WIDTH: f64 = LAUNCHER_COMPACT_WIDTH;
-const QUICK_EDITOR_WINDOW_HEIGHT: f64 = LAUNCHER_MAX_HEIGHT;
+// Quick Editor is a real editor window, not a Spotlight-style popup — give it
+// its own (larger) default footprint instead of borrowing the launcher's.
+const QUICK_EDITOR_WINDOW_WIDTH: f64 = 900.0;
+const QUICK_EDITOR_WINDOW_HEIGHT: f64 = 680.0;
 const QUICK_EDITOR_WINDOW_MIN_WIDTH: f64 = 480.0;
 const QUICK_EDITOR_WINDOW_MIN_HEIGHT: f64 = 320.0;
 static PREVIOUS_FOREGROUND_PROCESS_ID: OnceLock<Mutex<Option<u32>>> = OnceLock::new();
@@ -80,16 +84,172 @@ fn launcher_perf_enabled() -> bool {
     std::env::var(LAUNCHER_PERF_ENV).ok().as_deref() == Some("1")
 }
 
+/// Always-on diagnosis log: ~/.local/hiven/logs/launcher-perf.ndjson
+fn launcher_perf_log_path() -> Result<PathBuf, String> {
+    let dir = config_dir()?.join("logs");
+    fs::create_dir_all(&dir).map_err(|e| format!("create logs dir: {}", e))?;
+    Ok(dir.join("launcher-perf.ndjson"))
+}
+
+fn append_launcher_perf_file(line: &str) {
+    let Ok(path) = launcher_perf_log_path() else {
+        return;
+    };
+    // Soft rotate ~5MB so agents can always read a bounded file.
+    if let Ok(meta) = fs::metadata(&path) {
+        if meta.len() > 5 * 1024 * 1024 {
+            let bak = path.with_extension("ndjson.1");
+            let _ = fs::rename(&path, &bak);
+        }
+    }
+    if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(&path) {
+        use std::io::Write;
+        let _ = writeln!(file, "{}", line);
+    }
+}
+
+fn now_unix_ms() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0)
+}
+
 fn log_launcher_perf(label: &str, started_at: Instant, detail: impl AsRef<str>) {
-    if !launcher_perf_enabled() {
+    let duration_ms = started_at.elapsed().as_millis();
+    let detail = detail.as_ref();
+    // NDJSON for file (always on) — no secrets, no command bodies.
+    let line = format!(
+        "{{\"ts\":{},\"source\":\"native\",\"label\":{},\"durationMs\":{},\"detail\":{}}}",
+        now_unix_ms(),
+        serde_json::to_string(label).unwrap_or_else(|_| "\"?\"".to_string()),
+        duration_ms,
+        serde_json::to_string(detail).unwrap_or_else(|_| "\"\"".to_string()),
+    );
+    append_launcher_perf_file(&line);
+    if launcher_perf_enabled() {
+        eprintln!(
+            "[hiven:launcher-perf] {} durationMs={} {}",
+            label, duration_ms, detail
+        );
+    }
+}
+
+/// Frontend perf lines → always-on log file; stderr only when HIVEN_LAUNCHER_PERF=1.
+#[tauri::command]
+fn log_launcher_perf_frontend(line: String) {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
         return;
     }
-    eprintln!(
-        "[hiven:launcher-perf] {} durationMs={} {}",
-        label,
-        started_at.elapsed().as_millis(),
-        detail.as_ref()
-    );
+    // Prefer structured NDJSON from frontend; wrap plain lines.
+    let file_line = if trimmed.starts_with('{') {
+        trimmed.to_string()
+    } else {
+        format!(
+            "{{\"ts\":{},\"source\":\"frontend\",\"line\":{}}}",
+            now_unix_ms(),
+            serde_json::to_string(trimmed).unwrap_or_else(|_| "\"\"".to_string()),
+        )
+    };
+    append_launcher_perf_file(&file_line);
+    if launcher_perf_enabled() {
+        eprintln!("[hiven:launcher-perf] frontend:{}", trimmed);
+    }
+}
+
+/// Absolute path of the always-on launcher perf log (for agents / DevTools).
+#[tauri::command]
+fn launcher_perf_log_file() -> Result<String, String> {
+    launcher_perf_log_path().map(|p| p.to_string_lossy().to_string())
+}
+
+/// Open WebView DevTools for the invoking window (or a named label).
+/// Used by the host launcher command「打开控制台」so developers don't rely on
+/// hard-to-hit browser shortcuts in the transparent launcher window.
+#[tauri::command]
+fn open_devtools(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    label: Option<String>,
+) -> Result<(), String> {
+    use tauri::Manager;
+
+    let target = match label.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        Some(name) => app
+            .get_webview_window(name)
+            .ok_or_else(|| format!("window not found: {name}"))?,
+        None => window,
+    };
+    target.open_devtools();
+    Ok(())
+}
+
+/// Open a URL with the OS default handler (no plugin-shell scope).
+///
+/// Product allowlist lives in host JS (`urlSchemeRegistry` + plugin register).
+/// This command is intentionally product-agnostic: no Feishu/Lark/app hardcoding.
+/// Plugins that need special delivery (e.g. `open -a Lark.app`) do it via shell.run.
+#[tauri::command]
+fn open_system_url(url: String) -> Result<(), String> {
+    let url = url.trim();
+    if url.is_empty() {
+        return Err("url must not be empty".into());
+    }
+    // Host filters schemes; here only block empty / flag-like / control chars.
+    if url.starts_with('-') {
+        return Err("url must not look like a CLI flag".into());
+    }
+    if !url.contains("://") && !url.starts_with("mailto:") && !url.starts_with("tel:") {
+        return Err(format!("expected scheme:// URL, got: {url}"));
+    }
+    if url.chars().any(|c| c == '\n' || c == '\r' || c == '\0') {
+        return Err("url contains invalid characters".into());
+    }
+
+    use std::process::Command;
+
+    #[cfg(target_os = "macos")]
+    {
+        let status = Command::new("open")
+            .arg(url)
+            .status()
+            .map_err(|e| format!("failed to open url: {e}"))?;
+        return if status.success() {
+            Ok(())
+        } else {
+            Err(format!("open exited with {status}"))
+        };
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let status = Command::new("cmd")
+            .args(["/C", "start", "", url])
+            .status()
+            .map_err(|e| format!("failed to open url: {e}"))?;
+        return if status.success() {
+            Ok(())
+        } else {
+            Err(format!("open exited with {status}"))
+        };
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let status = Command::new("xdg-open")
+            .arg(url)
+            .status()
+            .map_err(|e| format!("failed to open url: {e}"))?;
+        return if status.success() {
+            Ok(())
+        } else {
+            Err(format!("open exited with {status}"))
+        };
+    }
+
+    #[allow(unreachable_code)]
+    Err("open_system_url unsupported on this platform".into())
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -692,6 +852,25 @@ fn launcher_default_window_size_for_window(window: &tauri::WebviewWindow) -> (f6
         .unwrap_or((LAUNCHER_COMPACT_WIDTH, LAUNCHER_COMPACT_HEIGHT))
 }
 
+/// Quick Editor's default size, clamped to fit whichever monitor it opens on
+/// (unlike the launcher popup, it doesn't need to shrink on smaller screens —
+/// only cap out so it never exceeds the visible work area).
+fn quick_editor_default_window_size(window: &tauri::WebviewWindow) -> (f64, f64) {
+    monitor_under_cursor(window)
+        .or_else(|| window.current_monitor().ok().flatten())
+        .or_else(|| window.primary_monitor().ok().flatten())
+        .map(|monitor| {
+            let scale = monitor.scale_factor();
+            let logical_w = monitor.size().width as f64 / scale;
+            let logical_h = monitor.size().height as f64 / scale;
+            (
+                QUICK_EDITOR_WINDOW_WIDTH.min(logical_w * 0.92),
+                QUICK_EDITOR_WINDOW_HEIGHT.min(logical_h * 0.88),
+            )
+        })
+        .unwrap_or((QUICK_EDITOR_WINDOW_WIDTH, QUICK_EDITOR_WINDOW_HEIGHT))
+}
+
 fn center_launcher_window(window: &tauri::WebviewWindow) {
     let monitor = monitor_under_cursor(window)
         .or_else(|| window.current_monitor().ok().flatten())
@@ -816,10 +995,33 @@ fn global_cursor_position() -> Option<tauri::PhysicalPosition<f64>> {
     None
 }
 
+/// How hide_launcher_window should handle the remembered previous app.
+/// - `auto` (default): restore only if focus has not already moved to a third app
+/// - `never`: blur-dismiss / user already chose a new frontmost — do not steal focus
+/// - `force`: always restore (rare; paste uses hide_launcher_and_paste instead)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RestoreForegroundMode {
+    Auto,
+    Never,
+    Force,
+}
+
+fn parse_restore_foreground_mode(value: Option<&str>) -> RestoreForegroundMode {
+    match value.map(str::trim).map(str::to_ascii_lowercase).as_deref() {
+        Some("never") => RestoreForegroundMode::Never,
+        Some("force") => RestoreForegroundMode::Force,
+        _ => RestoreForegroundMode::Auto,
+    }
+}
+
 #[tauri::command]
-async fn hide_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
+async fn hide_launcher_window(
+    app: tauri::AppHandle,
+    restore_foreground: Option<String>,
+) -> Result<(), String> {
     use tauri::Manager;
 
+    let mode = parse_restore_foreground_mode(restore_foreground.as_deref());
     let app_clone = app.clone();
     app.run_on_main_thread(move || {
         if let Some(window) = app_clone.get_webview_window("launcher") {
@@ -830,7 +1032,7 @@ async fn hide_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
                 eprintln!("[hiven] Failed to hide launcher window: {}", error);
             }
         }
-        restore_previous_foreground_app();
+        apply_restore_foreground_mode(mode);
     })
     .map_err(|error| error.to_string())
 }
@@ -1018,7 +1220,7 @@ async fn show_quick_editor_window(app: tauri::AppHandle) -> Result<(), String> {
     .build()
     .map_err(|e| e.to_string())?;
 
-    let (quick_width, quick_height) = launcher_default_window_size_for_window(&window);
+    let (quick_width, quick_height) = quick_editor_default_window_size(&window);
     window.set_size(LogicalSize::new(quick_width, quick_height))
         .map_err(|e| e.to_string())?;
     window.show().map_err(|e| e.to_string())?;
@@ -1750,13 +1952,47 @@ fn simulate_copy_selection_impl() -> Result<(), String> {
     Err("Selection copy simulation is not supported on this platform".to_string())
 }
 
-fn restore_previous_foreground_app() {
-    let previous = previous_foreground_process_id()
+fn take_previous_foreground_process_id() -> Option<u32> {
+    previous_foreground_process_id()
         .lock()
         .ok()
-        .and_then(|mut stored| stored.take());
-    if let Some(pid) = previous {
-        activate_process(pid);
+        .and_then(|mut stored| stored.take())
+}
+
+fn apply_restore_foreground_mode(mode: RestoreForegroundMode) {
+    match mode {
+        RestoreForegroundMode::Never => {
+            // Drop memory so a later hide does not surprise-restore.
+            let _ = take_previous_foreground_process_id();
+        }
+        RestoreForegroundMode::Force => {
+            if let Some(pid) = take_previous_foreground_process_id() {
+                activate_process(pid);
+            }
+        }
+        RestoreForegroundMode::Auto => {
+            let Some(pid) = take_previous_foreground_process_id() else {
+                return;
+            };
+            // Blur-dismiss: user already activated another app (e.g. clicked a
+            // third window). Do not steal focus back. Escape dismiss usually
+            // leaves frontmost as the remembered app (non-activating panel).
+            let our_pid = std::process::id();
+            if let Some(current) = current_foreground_process_id() {
+                if current != pid && current != our_pid {
+                    return;
+                }
+            }
+            activate_process(pid);
+        }
+    }
+}
+
+/// Drop remembered "previous app" so hide_launcher does not undo an intentional switch
+/// (focus window / launch app). Call after successfully activating a new frontmost target.
+fn clear_previous_foreground_app() {
+    if let Ok(mut stored) = previous_foreground_process_id().lock() {
+        *stored = None;
     }
 }
 
@@ -1790,10 +2026,104 @@ fn show_launcher_window_without_app_activation_macos(
     promote_window_to_nonactivating_panel(ns_window);
     unsafe {
         let ns_window = ns_window as *mut objc2::runtime::AnyObject;
-        let ns_view = ns_view as *mut objc2::runtime::AnyObject;
         let _: () = objc2::msg_send![ns_window, orderFrontRegardless];
+    }
+    // First-responder is set here for early key routing, and again from the
+    // frontend after the search <input> mounts (see focus_launcher_webview).
+    rekey_launcher_window(window)
+}
+
+/// Re-establish key window + webview first responder without activating the app.
+///
+/// Non-activating HivenKeyablePanel can show with a "ghost" HTML focus: the
+/// <input> is document.activeElement but WKWebView does not accept keyboard /
+/// show a caret until first responder is re-applied *after* the DOM focus.
+/// Called on show and again from the frontend after focusing the search field.
+#[tauri::command]
+async fn focus_launcher_webview(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+
+    let app_clone = app.clone();
+    app.run_on_main_thread(move || {
+        if let Some(window) = app_clone.get_webview_window("launcher") {
+            if let Err(error) = rekey_launcher_window(&window) {
+                eprintln!("[hiven] Failed to rekey launcher webview: {}", error);
+            }
+        }
+    })
+    .map_err(|error| error.to_string())
+}
+
+/// Find the view keyboard focus belongs on: the WKWebView instance inside
+/// wry's container. On macOS WebKit only paints the caret / routes key events
+/// to the page while the WKWebView itself is the window's first responder —
+/// a responder stuck on the WryWebViewParent container leaves the page
+/// keyboard-inactive. Matched via isKindOfClass, not class-name strings: the
+/// container's own class name ("…WryWebViewParent0.55.1") contains "WryWebView".
+#[cfg(target_os = "macos")]
+unsafe fn launcher_first_responder_target(
+    ns_view: *mut objc2::runtime::AnyObject,
+) -> *mut objc2::runtime::AnyObject {
+    let Some(wk_webview_class) = objc2::runtime::AnyClass::get(c"WKWebView") else {
+        return ns_view;
+    };
+    let mut queue: Vec<*mut objc2::runtime::AnyObject> = vec![ns_view];
+    while let Some(view) = queue.pop() {
+        if view.is_null() {
+            continue;
+        }
+        let is_webview: bool = objc2::msg_send![view, isKindOfClass: wk_webview_class];
+        if is_webview {
+            return view;
+        }
+        let subviews: *mut objc2::runtime::AnyObject = objc2::msg_send![view, subviews];
+        if subviews.is_null() {
+            continue;
+        }
+        let count: usize = objc2::msg_send![subviews, count];
+        for index in 0..count {
+            let subview: *mut objc2::runtime::AnyObject =
+                objc2::msg_send![subviews, objectAtIndex: index];
+            queue.push(subview);
+        }
+    }
+    ns_view
+}
+
+fn rekey_launcher_window(window: &tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        rekey_launcher_window_macos(window)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        // Best-effort on other platforms; non-activating panel is macOS-only.
+        let _ = window.unminimize();
+        window.set_focus().map_err(|error| error.to_string())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn rekey_launcher_window_macos(window: &tauri::WebviewWindow) -> Result<(), String> {
+    let ns_window = window.ns_window().map_err(|error| error.to_string())?;
+    let ns_view = window.ns_view().map_err(|error| error.to_string())?;
+    if ns_window.is_null() {
+        return Err("launcher NSWindow is null".to_string());
+    }
+    if ns_view.is_null() {
+        return Err("launcher NSView is null".to_string());
+    }
+    unsafe {
+        let ns_window = ns_window as *mut objc2::runtime::AnyObject;
+        let ns_view = ns_view as *mut objc2::runtime::AnyObject;
+        // makeKeyWindow (not makeKeyAndOrderFront) keeps non-activating behavior
+        // while allowing the panel to receive keyboard events.
         let _: () = objc2::msg_send![ns_window, makeKeyWindow];
-        let _: bool = objc2::msg_send![ns_window, makeFirstResponder: ns_view];
+        // First responder must land on WebKit's content view (WKContentView),
+        // not wry's container: a responder stuck on WryWebViewParent leaves the
+        // page inactive — caret-less focus, keyboard never reaches the DOM.
+        let responder_target = launcher_first_responder_target(ns_view);
+        let _: bool = objc2::msg_send![ns_window, makeFirstResponder: responder_target];
     }
     Ok(())
 }
@@ -2627,11 +2957,20 @@ fn extract_app_icon(_entry: &InstalledAppEntry) -> Option<DiscoveredAppIcon> {
 
 #[cfg(target_os = "macos")]
 fn system_open_app_target(target: &str) -> Result<(), String> {
-    std::process::Command::new("open")
+    // Wait for `open` so a missing/stale path fails the launcher item instead of
+    // looking like a successful click that did nothing.
+    let status = std::process::Command::new("open")
         .arg(target)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+        .status()
+        .map_err(|e| e.to_string())?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "Failed to open application (exit {})",
+            status.code().unwrap_or(-1)
+        ))
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -2927,7 +3266,85 @@ fn launch_installed_app(app_id: String) -> Result<(), String> {
         }
         target
     };
-    system_open_app_target(&target)
+    system_open_app_target(&target)?;
+    // Same as focus_desktop_window: hide_launcher must not restore the prior app.
+    clear_previous_foreground_app();
+    Ok(())
+}
+
+/// Tinycast-style per-app hotkey: if the app is already frontmost, hide it;
+/// otherwise launch/activate. Returns `"hidden" | "launched"`.
+#[tauri::command]
+fn toggle_installed_app(app_id: String) -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(bundle_id) = macos_bundle_id_from_app_id(&app_id) {
+            if macos_frontmost_bundle_id()
+                .as_deref()
+                .is_some_and(|front| front.eq_ignore_ascii_case(&bundle_id))
+            {
+                if macos_hide_frontmost_app() {
+                    clear_previous_foreground_app();
+                    return Ok("hidden".into());
+                }
+            }
+        }
+    }
+    launch_installed_app(app_id)?;
+    Ok("launched".into())
+}
+
+#[cfg(target_os = "macos")]
+fn macos_bundle_id_from_app_id(app_id: &str) -> Option<String> {
+    const PREFIX: &str = "macos:bundle:";
+    app_id
+        .strip_prefix(PREFIX)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+#[cfg(target_os = "macos")]
+fn macos_frontmost_bundle_id() -> Option<String> {
+    unsafe {
+        let workspace_cls = objc2::runtime::AnyClass::get(c"NSWorkspace")?;
+        let workspace: *mut objc2::runtime::AnyObject = objc2::msg_send![workspace_cls, sharedWorkspace];
+        if workspace.is_null() {
+            return None;
+        }
+        let front: *mut objc2::runtime::AnyObject = objc2::msg_send![workspace, frontmostApplication];
+        if front.is_null() {
+            return None;
+        }
+        let bundle: *mut objc2::runtime::AnyObject = objc2::msg_send![front, bundleIdentifier];
+        if bundle.is_null() {
+            return None;
+        }
+        let utf8: *const std::ffi::c_char = objc2::msg_send![bundle, UTF8String];
+        if utf8.is_null() {
+            return None;
+        }
+        Some(std::ffi::CStr::from_ptr(utf8).to_string_lossy().into_owned())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_hide_frontmost_app() -> bool {
+    unsafe {
+        let workspace_cls = match objc2::runtime::AnyClass::get(c"NSWorkspace") {
+            Some(cls) => cls,
+            None => return false,
+        };
+        let workspace: *mut objc2::runtime::AnyObject = objc2::msg_send![workspace_cls, sharedWorkspace];
+        if workspace.is_null() {
+            return false;
+        }
+        let front: *mut objc2::runtime::AnyObject = objc2::msg_send![workspace, frontmostApplication];
+        if front.is_null() {
+            return false;
+        }
+        let ok: bool = objc2::msg_send![front, hide];
+        ok
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -2953,6 +3370,1010 @@ fn activate_process(pid: u32) {
 
 #[cfg(not(target_os = "macos"))]
 fn activate_process(_pid: u32) {}
+
+// ─── Desktop windows / processes (macOS-first; other platforms return empty) ───
+
+#[derive(Clone, serde::Serialize)]
+struct DesktopWindow {
+    id: String,
+    #[serde(rename = "appName")]
+    app_name: String,
+    title: String,
+    pid: u32,
+    /// Installed-app id for `app-icon:` when resolvable (bundle / path hash).
+    #[serde(rename = "appId", skip_serializing_if = "Option::is_none")]
+    app_id: Option<String>,
+    /// CG global bounds (points) for precise AX raise when titles collide/empty.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    x: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    y: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    width: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    height: Option<f64>,
+}
+
+#[derive(Clone, serde::Serialize)]
+struct DesktopProcess {
+    pid: u32,
+    name: String,
+    /// CPU percent (e.g. 12.3), from `ps -o pcpu`.
+    #[serde(rename = "cpuPercent")]
+    cpu_percent: f64,
+    /// Resident memory in bytes (from `ps -o rss` KB × 1024).
+    #[serde(rename = "memoryBytes")]
+    memory_bytes: u64,
+    /// Installed-app id for `app-icon:` when the process belongs to a .app bundle.
+    #[serde(rename = "appId", skip_serializing_if = "Option::is_none")]
+    app_id: Option<String>,
+}
+
+/// Critical system processes that must never be terminated from the launcher.
+const DESKTOP_PROCESS_DENY_NAMES: &[&str] = &[
+    "kernel_task",
+    "launchd",
+    "windowserver",
+    "loginwindow",
+    "systemuiserver",
+    "cfprefsd",
+    "opendirectoryd",
+    "securityd",
+    "coreaudiod",
+    "distnoted",
+    "notifyd",
+    "syslogd",
+    "useractivityd",
+    "dock",
+    "finder",
+    "coreservicesd",
+    "configd",
+    "mds",
+    "mds_stores",
+    "mdworker",
+    "mdworker_shared",
+    "spotlight",
+    "bluetoothd",
+    "airportd",
+    "powerd",
+    "fseventsd",
+    "hidd",
+    "trustd",
+    "tccd",
+    "amfid",
+    "syspolicyd",
+];
+
+fn process_basename_lower(name: &str) -> String {
+    Path::new(name)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or(name)
+        .to_lowercase()
+}
+
+fn is_denied_desktop_process_name(name: &str) -> bool {
+    let base = process_basename_lower(name);
+    DESKTOP_PROCESS_DENY_NAMES
+        .iter()
+        .any(|denied| *denied == base.as_str())
+}
+
+fn applescript_escape(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+fn run_osascript(source: &str) -> Result<(), String> {
+    let output = Command::new("osascript")
+        .args(["-e", source])
+        .output()
+        .map_err(|e| format!("Failed to run osascript: {e}"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if !stderr.is_empty() {
+        Err(stderr)
+    } else if !stdout.is_empty() {
+        Err(stdout)
+    } else {
+        Err("osascript failed".to_string())
+    }
+}
+
+/// Cap AX enrich batch size. One osascript for many PIDs; keep offline path bounded.
+const AX_TITLE_ENRICH_MAX_PIDS: usize = 28;
+
+/// PID → app_id cache so window/process lists do not re-stat the same process.
+#[cfg(target_os = "macos")]
+static PID_APP_ID_CACHE: OnceLock<Mutex<HashMap<u32, Option<String>>>> = OnceLock::new();
+
+#[cfg(target_os = "macos")]
+fn pid_app_id_cache() -> &'static Mutex<HashMap<u32, Option<String>>> {
+    PID_APP_ID_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Thread-safe process path via libproc.
+/// **Never call AppKit (NSRunningApplication / NSFileManager) from Tauri command threads** —
+/// that was crashing the process on first Global Launcher open.
+#[cfg(target_os = "macos")]
+fn process_executable_path(pid: u32) -> Option<PathBuf> {
+    const BUF_SIZE: usize = 4096;
+    unsafe {
+        extern "C" {
+            fn proc_pidpath(pid: c_int, buffer: *mut c_char, buffersize: u32) -> c_int;
+        }
+        let mut buf = [0i8; BUF_SIZE];
+        let ret = proc_pidpath(pid as c_int, buf.as_mut_ptr(), BUF_SIZE as u32);
+        if ret <= 0 {
+            return None;
+        }
+        let path = CStr::from_ptr(buf.as_ptr()).to_string_lossy();
+        if path.is_empty() {
+            None
+        } else {
+            Some(PathBuf::from(path.as_ref()))
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn find_app_bundle_path(path: &Path) -> Option<PathBuf> {
+    if path.extension().and_then(|e| e.to_str()) == Some("app") {
+        return Some(path.to_path_buf());
+    }
+    path.ancestors()
+        .find(|p| p.extension().and_then(|e| e.to_str()) == Some("app"))
+        .map(|p| p.to_path_buf())
+}
+
+/// Register path in icon target map and return a stable app id.
+/// **Plist-only** (no AppKit) so it is safe off the main thread.
+#[cfg(target_os = "macos")]
+fn app_id_for_bundle_path(path: &Path) -> String {
+    let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let canonical_str = canonical.to_string_lossy().to_string();
+    let info = canonical.join("Contents").join("Info.plist");
+    let raw = read_info_plist_xml(&info);
+    let bundle_id = parse_plist_string(&raw, "CFBundleIdentifier");
+    let app_id = bundle_id
+        .map(|id| format!("macos:bundle:{id}"))
+        .unwrap_or_else(|| format!("macos:path:{}", stable_hash(&canonical_str)));
+    if let Ok(mut targets) = installed_app_targets().lock() {
+        targets.insert(app_id.clone(), canonical_str);
+    }
+    app_id
+}
+
+#[cfg(target_os = "macos")]
+fn app_id_for_pid(pid: u32) -> Option<String> {
+    if let Ok(cache) = pid_app_id_cache().lock() {
+        if let Some(hit) = cache.get(&pid) {
+            return hit.clone();
+        }
+    }
+    let resolved = (|| {
+        let exe = process_executable_path(pid)?;
+        let bundle = find_app_bundle_path(&exe)?;
+        Some(app_id_for_bundle_path(&bundle))
+    })();
+    if let Ok(mut cache) = pid_app_id_cache().lock() {
+        cache.insert(pid, resolved.clone());
+    }
+    resolved
+}
+
+/// One osascript for many PIDs (avoids N process spawns that freeze the launcher).
+/// Format per line: `pid\tname1\x1fname2\x1f...`
+#[cfg(target_os = "macos")]
+fn ax_window_titles_for_pids_batched(pids: &[u32]) -> HashMap<u32, Vec<String>> {
+    let mut out: HashMap<u32, Vec<String>> = HashMap::new();
+    if pids.is_empty() {
+        return out;
+    }
+    let mut lines = String::from(
+        r#"set output to ""
+tell application "System Events"
+"#,
+    );
+    for pid in pids {
+        lines.push_str(&format!(
+            r#"  try
+    set proc to first process whose unix id is {pid}
+    set ns to name of every window of proc
+    set AppleScript's text item delimiters to (ASCII character 31)
+    set output to output & "{pid}" & tab & (ns as text) & linefeed
+  end try
+"#
+        ));
+    }
+    lines.push_str(
+        r#"end tell
+return output
+"#,
+    );
+    let output = match Command::new("osascript").args(["-e", &lines]).output() {
+        Ok(o) if o.status.success() => o,
+        _ => return out,
+    };
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let mut parts = line.splitn(2, '\t');
+        let pid: u32 = match parts.next().and_then(|s| s.parse().ok()) {
+            Some(p) => p,
+            None => continue,
+        };
+        let names = parts
+            .next()
+            .unwrap_or("")
+            .split('\u{001f}')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>();
+        if !names.is_empty() {
+            out.insert(pid, names);
+        }
+    }
+    out
+}
+
+/// Apply AX titles onto windows that still have empty CG titles (by pid order).
+#[cfg(target_os = "macos")]
+fn apply_ax_titles_to_windows(windows: &mut [DesktopWindow], titles_by_pid: &HashMap<u32, Vec<String>>) {
+    let mut ax_index: HashMap<u32, usize> = HashMap::new();
+    for w in windows.iter_mut() {
+        if !w.title.trim().is_empty() {
+            continue;
+        }
+        if let Some(names) = titles_by_pid.get(&w.pid) {
+            let idx = ax_index.entry(w.pid).or_insert(0);
+            if *idx < names.len() {
+                w.title = names[*idx].clone();
+                *idx += 1;
+            }
+        }
+    }
+}
+
+/// Fast dedupe for switch UX.
+///
+/// macOS often leaves `kCGWindowName` empty without Screen Recording. Keep the
+/// row with a **stable** app-name label (not "窗口 N" placeholders that later
+/// flash to a real title). Real titles from CG/AX win when present.
+#[cfg(target_os = "macos")]
+fn dedupe_desktop_windows_fast(windows: Vec<DesktopWindow>) -> Vec<DesktopWindow> {
+    use std::collections::{HashMap, HashSet};
+    let mut seen_key: HashSet<String> = HashSet::new();
+    let mut titled_pids: HashSet<u32> = HashSet::new();
+    for w in &windows {
+        if !w.title.trim().is_empty() {
+            titled_pids.insert(w.pid);
+        }
+    }
+    let mut out = Vec::new();
+    let mut empty_index_by_app: HashMap<String, usize> = HashMap::new();
+    for mut w in windows {
+        let title_trim = w.title.trim().to_string();
+        if title_trim.is_empty() {
+            // Same pid already has a real title → skip empty shell.
+            if titled_pids.contains(&w.pid) {
+                continue;
+            }
+            // Stable label: app name (+ ordinal only when multiple untitled of same app).
+            // Avoid "窗口 N" which later morphs into document titles (jarring UX).
+            let n = empty_index_by_app.entry(w.app_name.clone()).or_insert(0);
+            *n += 1;
+            w.title = if *n == 1 {
+                w.app_name.clone()
+            } else {
+                format!("{} ({})", w.app_name, *n)
+            };
+        } else {
+            let key = format!(
+                "{}||{}",
+                w.app_name.to_lowercase(),
+                title_trim.to_lowercase()
+            );
+            if !seen_key.insert(key) {
+                continue;
+            }
+        }
+        out.push(w);
+    }
+    out
+}
+
+/// CG list + app icons. AX titles stay on the enrich path.
+#[cfg(target_os = "macos")]
+fn list_macos_desktop_windows(_query: Option<&str>) -> Result<Vec<DesktopWindow>, String> {
+    let mut raw = list_macos_desktop_windows_raw()?;
+    // Resolve app_id once per pid (pid cache) so every window row can use app-icon:.
+    let mut pid_to_app: HashMap<u32, Option<String>> = HashMap::new();
+    for w in &mut raw {
+        let app_id = pid_to_app
+            .entry(w.pid)
+            .or_insert_with(|| app_id_for_pid(w.pid));
+        w.app_id = app_id.clone();
+    }
+    Ok(dedupe_desktop_windows_fast(raw))
+}
+
+/// Offline path: CG + one batched AX enrich for empty titles (Mission Control-like names).
+/// Must NOT be called on the typing hot path.
+#[cfg(target_os = "macos")]
+fn list_macos_desktop_windows_enriched() -> Result<Vec<DesktopWindow>, String> {
+    use std::collections::HashSet;
+    let mut raw = list_macos_desktop_windows_raw()?;
+    for w in &mut raw {
+        if w.app_id.is_none() {
+            w.app_id = app_id_for_pid(w.pid);
+        }
+    }
+    let mut pids_needing: Vec<u32> = Vec::new();
+    let mut seen: HashSet<u32> = HashSet::new();
+    for w in &raw {
+        if w.title.trim().is_empty() && seen.insert(w.pid) {
+            pids_needing.push(w.pid);
+            if pids_needing.len() >= AX_TITLE_ENRICH_MAX_PIDS {
+                break;
+            }
+        }
+    }
+    if !pids_needing.is_empty() {
+        let titles = ax_window_titles_for_pids_batched(&pids_needing);
+        apply_ax_titles_to_windows(&mut raw, &titles);
+    }
+    Ok(dedupe_desktop_windows_fast(raw))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn list_macos_desktop_windows_enriched() -> Result<Vec<DesktopWindow>, String> {
+    Ok(Vec::new())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn list_macos_desktop_windows(_query: Option<&str>) -> Result<Vec<DesktopWindow>, String> {
+    Ok(Vec::new())
+}
+
+/// CG-only list without enrich.
+#[cfg(target_os = "macos")]
+fn list_macos_desktop_windows_raw() -> Result<Vec<DesktopWindow>, String> {
+    use core_foundation::base::{CFType, TCFType, ToVoid};
+    use core_foundation::dictionary::CFDictionary;
+    use core_foundation::number::CFNumber;
+    use core_foundation::string::CFString;
+    use core_graphics::display::{
+        kCGNullWindowID, kCGWindowListExcludeDesktopElements, kCGWindowListOptionOnScreenOnly,
+        CGWindowListCopyWindowInfo,
+    };
+    use std::os::raw::c_void;
+
+    fn dict_string(dict: &CFDictionary, key: &str) -> Option<String> {
+        let cf_key = CFString::new(key);
+        let value_ptr = *dict.find(cf_key.to_void())?;
+        if value_ptr.is_null() {
+            return None;
+        }
+        let cftype = unsafe { CFType::wrap_under_get_rule(value_ptr as *const c_void) };
+        cftype.downcast::<CFString>().map(|s| s.to_string())
+    }
+
+    fn dict_i64(dict: &CFDictionary, key: &str) -> Option<i64> {
+        let cf_key = CFString::new(key);
+        let value_ptr = *dict.find(cf_key.to_void())?;
+        if value_ptr.is_null() {
+            return None;
+        }
+        let cftype = unsafe { CFType::wrap_under_get_rule(value_ptr as *const c_void) };
+        cftype.downcast::<CFNumber>().and_then(|n| n.to_i64())
+    }
+
+    fn dict_f64(dict: &CFDictionary, key: &str) -> Option<f64> {
+        let cf_key = CFString::new(key);
+        let value_ptr = *dict.find(cf_key.to_void())?;
+        if value_ptr.is_null() {
+            return None;
+        }
+        let cftype = unsafe { CFType::wrap_under_get_rule(value_ptr as *const c_void) };
+        let num = cftype.downcast::<CFNumber>()?;
+        num.to_f64()
+            .or_else(|| num.to_i64().map(|v| v as f64))
+    }
+
+    /// Real user windows have a positive CG bounds; helpers often report 0×0.
+    fn window_bounds_size(dict: &CFDictionary) -> Option<(f64, f64)> {
+        let (_x, _y, w, h) = window_bounds_rect(dict)?;
+        Some((w, h))
+    }
+
+    fn window_bounds_rect(dict: &CFDictionary) -> Option<(f64, f64, f64, f64)> {
+        let cf_key = CFString::new("kCGWindowBounds");
+        let value_ptr = *dict.find(cf_key.to_void())?;
+        if value_ptr.is_null() {
+            return None;
+        }
+        let cftype = unsafe { CFType::wrap_under_get_rule(value_ptr as *const c_void) };
+        let bounds: CFDictionary = cftype.downcast::<CFDictionary>()?;
+        let x = dict_f64(&bounds, "X").unwrap_or(0.0);
+        let y = dict_f64(&bounds, "Y").unwrap_or(0.0);
+        let w = dict_f64(&bounds, "Width")?;
+        let h = dict_f64(&bounds, "Height")?;
+        Some((x, y, w, h))
+    }
+
+    let options = kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements;
+    let array_ref = unsafe { CGWindowListCopyWindowInfo(options, kCGNullWindowID) };
+    if array_ref.is_null() {
+        return Ok(Vec::new());
+    }
+    let array: core_foundation::array::CFArray =
+        unsafe { TCFType::wrap_under_create_rule(array_ref) };
+    let self_pid = std::process::id();
+    let mut windows = Vec::new();
+    for raw in array.get_all_values() {
+        if raw.is_null() {
+            continue;
+        }
+        let dict: CFDictionary = unsafe {
+            CFDictionary::wrap_under_get_rule(raw as core_foundation::dictionary::CFDictionaryRef)
+        };
+        let layer = dict_i64(&dict, "kCGWindowLayer").unwrap_or(-1);
+        // Normal app windows are layer 0; skip overlays / menubar / dock helpers.
+        if layer != 0 {
+            continue;
+        }
+        let owner = dict_string(&dict, "kCGWindowOwnerName").unwrap_or_default();
+        let title = dict_string(&dict, "kCGWindowName").unwrap_or_default();
+        if owner.trim().is_empty() && title.trim().is_empty() {
+            continue;
+        }
+        if title.trim().is_empty() && owner.eq_ignore_ascii_case("Window Server") {
+            continue;
+        }
+        let pid = match dict_i64(&dict, "kCGWindowOwnerPID") {
+            Some(value) if value > 0 => value as u32,
+            _ => continue,
+        };
+        // Never list our own process (launcher / app chrome is not a switch target).
+        if pid == self_pid {
+            continue;
+        }
+        // Drop zero-size / invisible shells that look like "process without a window".
+        if let Some((w, h)) = window_bounds_size(&dict) {
+            if w < 2.0 || h < 2.0 {
+                continue;
+            }
+        } else {
+            // No bounds → not a real user window for switch UX.
+            continue;
+        }
+        // Alpha 0 = fully transparent non-window (rare but noisy).
+        if let Some(alpha) = dict_i64(&dict, "kCGWindowAlpha") {
+            if alpha == 0 {
+                continue;
+            }
+        }
+        let number = match dict_i64(&dict, "kCGWindowNumber") {
+            Some(value) if value > 0 => value as u32,
+            _ => continue,
+        };
+        let app_name = if owner.trim().is_empty() {
+            "Unknown".to_string()
+        } else {
+            owner
+        };
+        let (x, y, width, height) = window_bounds_rect(&dict).unwrap_or((0.0, 0.0, 0.0, 0.0));
+        windows.push(DesktopWindow {
+            id: number.to_string(),
+            app_name,
+            title,
+            pid,
+            app_id: None,
+            x: Some(x),
+            y: Some(y),
+            width: Some(width),
+            height: Some(height),
+        });
+    }
+    Ok(windows)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn list_macos_desktop_windows_raw() -> Result<Vec<DesktopWindow>, String> {
+    Ok(Vec::new())
+}
+
+#[tauri::command]
+fn list_desktop_windows(query: Option<String>) -> Result<Vec<DesktopWindow>, String> {
+    let q = query
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    // Hot path always CG-only (query is filtered client-side).
+    // catch_unwind: never let a list panic take down the whole app on first open.
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| list_macos_desktop_windows(q))) {
+        Ok(result) => result,
+        Err(_) => Err("list_desktop_windows panicked".to_string()),
+    }
+}
+
+/// Offline / open-path enrich: CG + batched Accessibility titles. Do not call per keystroke.
+#[tauri::command]
+fn list_desktop_windows_enriched() -> Result<Vec<DesktopWindow>, String> {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(list_macos_desktop_windows_enriched)) {
+        Ok(result) => result,
+        Err(_) => Err("list_desktop_windows_enriched panicked".to_string()),
+    }
+}
+
+fn find_desktop_window(id: &str) -> Result<DesktopWindow, String> {
+    // Focus path: CG-only is enough to resolve by stable kCGWindowNumber id + bounds.
+    let windows = list_macos_desktop_windows(None)?;
+    windows
+        .into_iter()
+        .find(|window| window.id == id)
+        .ok_or_else(|| "Window is no longer available".to_string())
+}
+
+/// Raise one CG window via the Accessibility C API and report which match path
+/// worked. System Events title/position matching proved unreliable for
+/// multi-window apps (empty or duplicate titles raise the wrong window), so the
+/// target AXWindow is resolved by CGWindowNumber via the private-but-stable
+/// `_AXUIElementGetWindow` bridge (same as AltTab / yabai), with CG-bounds
+/// matching as the public-API fallback.
+#[cfg(target_os = "macos")]
+fn ax_raise_window(
+    pid: u32,
+    target_cg_id: u32,
+    cg_bounds: Option<(f64, f64, f64, f64)>,
+) -> Result<&'static str, String> {
+    use core_foundation::array::{CFArray, CFArrayRef};
+    use core_foundation::base::{CFType, CFTypeRef, TCFType};
+    use core_foundation::boolean::CFBoolean;
+    use core_foundation::string::{CFString, CFStringRef};
+    use core_graphics::geometry::{CGPoint, CGSize};
+    use std::os::raw::{c_char, c_void};
+
+    type AXUIElementRef = *mut c_void;
+    type AXError = i32;
+
+    const AX_SUCCESS: AXError = 0;
+    const AX_VALUE_TYPE_CGPOINT: u32 = 1;
+    const AX_VALUE_TYPE_CGSIZE: u32 = 2;
+    // CG bounds and AXPosition/AXSize are both top-left global coordinates, so a
+    // real match is exact; tolerances only absorb rounding.
+    const BOUNDS_POS_TOLERANCE: f64 = 8.0;
+    const BOUNDS_SIZE_TOLERANCE: f64 = 4.0;
+
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXUIElementCreateApplication(pid: i32) -> AXUIElementRef;
+        fn AXUIElementCopyAttributeValue(
+            element: AXUIElementRef,
+            attribute: CFStringRef,
+            value: *mut CFTypeRef,
+        ) -> AXError;
+        fn AXUIElementSetAttributeValue(
+            element: AXUIElementRef,
+            attribute: CFStringRef,
+            value: CFTypeRef,
+        ) -> AXError;
+        fn AXUIElementPerformAction(element: AXUIElementRef, action: CFStringRef) -> AXError;
+        fn AXValueGetValue(value: CFTypeRef, value_type: u32, out: *mut c_void) -> bool;
+        fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
+    }
+
+    unsafe fn copy_attribute(element: AXUIElementRef, name: &str) -> Result<CFType, AXError> {
+        let attr = CFString::new(name);
+        let mut value: CFTypeRef = std::ptr::null();
+        let err = AXUIElementCopyAttributeValue(element, attr.as_concrete_TypeRef(), &mut value);
+        if err != AX_SUCCESS || value.is_null() {
+            return Err(err);
+        }
+        Ok(CFType::wrap_under_create_rule(value))
+    }
+
+    /// CGWindowID of an AXWindow. Resolved via dlsym so an OS that drops the
+    /// private symbol degrades to the bounds fallback instead of failing launch.
+    unsafe fn ax_window_cg_id(window: AXUIElementRef) -> Option<u32> {
+        const RTLD_DEFAULT: *mut c_void = -2isize as *mut c_void;
+        let sym = dlsym(RTLD_DEFAULT, c"_AXUIElementGetWindow".as_ptr());
+        if sym.is_null() {
+            return None;
+        }
+        let get_window: unsafe extern "C" fn(AXUIElementRef, *mut u32) -> AXError =
+            std::mem::transmute(sym);
+        let mut id: u32 = 0;
+        if get_window(window, &mut id) == AX_SUCCESS && id != 0 {
+            Some(id)
+        } else {
+            None
+        }
+    }
+
+    unsafe fn ax_window_frame(window: AXUIElementRef) -> Option<(f64, f64, f64, f64)> {
+        let pos_value = copy_attribute(window, "AXPosition").ok()?;
+        let mut pos = CGPoint::new(0.0, 0.0);
+        if !AXValueGetValue(
+            pos_value.as_CFTypeRef(),
+            AX_VALUE_TYPE_CGPOINT,
+            &mut pos as *mut CGPoint as *mut c_void,
+        ) {
+            return None;
+        }
+        let size_value = copy_attribute(window, "AXSize").ok()?;
+        let mut size = CGSize::new(0.0, 0.0);
+        if !AXValueGetValue(
+            size_value.as_CFTypeRef(),
+            AX_VALUE_TYPE_CGSIZE,
+            &mut size as *mut CGSize as *mut c_void,
+        ) {
+            return None;
+        }
+        Some((pos.x, pos.y, size.width, size.height))
+    }
+
+    unsafe {
+        let app = AXUIElementCreateApplication(pid as i32);
+        if app.is_null() {
+            return Err(format!("AXUIElementCreateApplication failed for pid {pid}"));
+        }
+        let _app_guard = CFType::wrap_under_create_rule(app as CFTypeRef);
+
+        let windows_value = copy_attribute(app, "AXWindows")
+            .map_err(|err| format!("reading AXWindows of pid {pid} failed (AXError {err})"))?;
+        let windows: CFArray =
+            CFArray::wrap_under_get_rule(windows_value.as_CFTypeRef() as CFArrayRef);
+        let window_refs: Vec<AXUIElementRef> = windows
+            .get_all_values()
+            .into_iter()
+            .filter(|value| !value.is_null())
+            .map(|value| value as AXUIElementRef)
+            .collect();
+        if window_refs.is_empty() {
+            return Err(format!("pid {pid} exposes no AX windows"));
+        }
+
+        let mut matched: Option<(AXUIElementRef, &'static str)> = None;
+        for &window in &window_refs {
+            if ax_window_cg_id(window) == Some(target_cg_id) {
+                matched = Some((window, "cg-window-id"));
+                break;
+            }
+        }
+        if matched.is_none() {
+            if let Some((tx, ty, tw, th)) = cg_bounds {
+                let mut best: Option<(f64, AXUIElementRef)> = None;
+                for &window in &window_refs {
+                    let Some((x, y, w, h)) = ax_window_frame(window) else {
+                        continue;
+                    };
+                    if (w - tw).abs() > BOUNDS_SIZE_TOLERANCE
+                        || (h - th).abs() > BOUNDS_SIZE_TOLERANCE
+                    {
+                        continue;
+                    }
+                    let distance = (x - tx).abs() + (y - ty).abs();
+                    if distance <= BOUNDS_POS_TOLERANCE
+                        && best.map_or(true, |(b, _)| distance < b)
+                    {
+                        best = Some((distance, window));
+                    }
+                }
+                matched = best.map(|(_, window)| (window, "bounds"));
+            }
+        }
+        let Some((target, method)) = matched else {
+            return Err(format!(
+                "CG window {target_cg_id} not found among {count} AX windows of pid {pid}",
+                count = window_refs.len()
+            ));
+        };
+
+        // Make it main/focused first so the follow-up app activation lands on
+        // this window, then raise it above its siblings. Main/focused writes are
+        // best-effort — AXRaise is the one that must succeed.
+        let main_attr = CFString::new("AXMain");
+        let _ = AXUIElementSetAttributeValue(
+            target,
+            main_attr.as_concrete_TypeRef(),
+            CFBoolean::true_value().as_CFTypeRef(),
+        );
+        let focused_attr = CFString::new("AXFocusedWindow");
+        let _ = AXUIElementSetAttributeValue(
+            app,
+            focused_attr.as_concrete_TypeRef(),
+            target as CFTypeRef,
+        );
+        let raise_action = CFString::new("AXRaise");
+        let raise_err = AXUIElementPerformAction(target, raise_action.as_concrete_TypeRef());
+        if raise_err != AX_SUCCESS {
+            return Err(format!("AXRaise failed (AXError {raise_err})"));
+        }
+        Ok(method)
+    }
+}
+
+/// Raise one window of a process, not just its app: multi-window apps must land
+/// on the exact CG window the launcher listed. Raise errors are returned to the
+/// frontend (permission vs. match failure must stay observable), but the app is
+/// still activated as graceful degradation.
+#[cfg(target_os = "macos")]
+fn focus_macos_desktop_window(window: &DesktopWindow) -> Result<(), String> {
+    let raised = window
+        .id
+        .parse::<u32>()
+        .map_err(|_| format!("invalid CG window id: {}", window.id))
+        .and_then(|cg_id| {
+            if !ax_is_trusted(false) {
+                return Err(
+                    "Accessibility permission is not granted (System Settings → Privacy & Security → Accessibility)"
+                        .to_string(),
+                );
+            }
+            let bounds = match (window.x, window.y, window.width, window.height) {
+                (Some(x), Some(y), Some(w), Some(h)) if w >= 2.0 && h >= 2.0 => {
+                    Some((x, y, w, h))
+                }
+                _ => None,
+            };
+            ax_raise_window(window.pid, cg_id, bounds)
+        });
+
+    // AX raise happens before activation so the app comes forward with the
+    // target already main; activate even on failure — "right app, maybe wrong
+    // window" beats doing nothing.
+    activate_process(window.pid);
+    // Launcher hide path must not bounce focus back to the pre-launcher app.
+    clear_previous_foreground_app();
+
+    match raised {
+        Ok(method) => {
+            eprintln!(
+                "[hiven] focus_desktop_window: raised window {} of {} via {}",
+                window.id, window.app_name, method
+            );
+            Ok(())
+        }
+        Err(reason) => Err(format!(
+            "Could not raise \"{}\" window {}: {reason}",
+            window.app_name, window.id
+        )),
+    }
+}
+
+#[tauri::command]
+fn focus_desktop_window(id: String) -> Result<(), String> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = id;
+        return Err("Window focus is only available on macOS".to_string());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let window = find_desktop_window(&id)?;
+        focus_macos_desktop_window(&window)
+    }
+}
+
+#[tauri::command]
+fn close_desktop_window(id: String) -> Result<(), String> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = id;
+        return Err("Window close is only available on macOS".to_string());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let window = find_desktop_window(&id)?;
+        let pid = window.pid;
+        let title = applescript_escape(&window.title);
+        let app_name = applescript_escape(&window.app_name);
+        let script = if !window.title.trim().is_empty() {
+            format!(
+                r#"tell application "System Events"
+  tell (first process whose unix id is {pid})
+    set frontmost to true
+    try
+      perform action "AXPress" of (first button whose subrole is "AXCloseButton") of (first window whose name is "{title}")
+    on error
+      try
+        click (first button whose subrole is "AXCloseButton") of (first window whose name is "{title}")
+      on error errMsg
+        error "Failed to close window: " & errMsg
+      end try
+    end try
+  end tell
+end tell"#
+            )
+        } else {
+            format!(
+                r#"tell application "System Events"
+  tell (first process whose unix id is {pid})
+    set frontmost to true
+    try
+      perform action "AXPress" of (first button whose subrole is "AXCloseButton") of window 1
+    on error
+      try
+        click (first button whose subrole is "AXCloseButton") of window 1
+      on error errMsg
+        error "Failed to close window of {app_name}: " & errMsg
+      end try
+    end try
+  end tell
+end tell"#
+            )
+        };
+        run_osascript(&script)
+    }
+}
+
+/// Snapshot size for kill-mode client-side filter (CPU-sorted). Frontend shows ~40.
+const PROCESS_LIST_RETURN_MAX: usize = 500;
+/// Resolve app icons only for the top rows after CPU sort.
+const PROCESS_LIST_ICON_RESOLVE_MAX: usize = 48;
+
+#[cfg(target_os = "macos")]
+fn list_macos_desktop_processes(query: Option<&str>) -> Result<Vec<DesktopProcess>, String> {
+    // pid, cpu%, rss(KB), command — enough for kill list UX
+    let output = Command::new("ps")
+        .args(["-axo", "pid=,pcpu=,rss=,comm="])
+        .output()
+        .map_err(|e| format!("Failed to list processes: {e}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            "Failed to list processes".to_string()
+        } else {
+            stderr
+        });
+    }
+    let needle = query
+        .map(|q| q.trim().to_lowercase())
+        .filter(|q| !q.is_empty());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut processes = Vec::new();
+    for line in stdout.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let mut parts = line.split_whitespace();
+        let pid_str = match parts.next() {
+            Some(value) => value,
+            None => continue,
+        };
+        let pid: u32 = match pid_str.parse() {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        let cpu_str = match parts.next() {
+            Some(value) => value,
+            None => continue,
+        };
+        let rss_str = match parts.next() {
+            Some(value) => value,
+            None => continue,
+        };
+        let cpu_percent: f64 = cpu_str.parse().unwrap_or(0.0);
+        let rss_kb: u64 = rss_str.parse().unwrap_or(0);
+        let memory_bytes = rss_kb.saturating_mul(1024);
+        let name = parts.collect::<Vec<_>>().join(" ");
+        if name.is_empty() {
+            continue;
+        }
+        if is_denied_desktop_process_name(&name) {
+            continue;
+        }
+        if let Some(ref q) = needle {
+            let name_l = name.to_lowercase();
+            let base_l = process_basename_lower(&name);
+            if !name_l.contains(q.as_str()) && !base_l.contains(q.as_str()) {
+                continue;
+            }
+        }
+        // Defer app_id until after sort+cap — never resolve for 900+ system processes.
+        processes.push(DesktopProcess {
+            pid,
+            name,
+            cpu_percent,
+            memory_bytes,
+            app_id: None,
+        });
+    }
+    // Highest CPU first (kill UX: noisy processes on top)
+    processes.sort_by(|a, b| {
+        b.cpu_percent
+            .partial_cmp(&a.cpu_percent)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    if processes.len() > PROCESS_LIST_RETURN_MAX {
+        processes.truncate(PROCESS_LIST_RETURN_MAX);
+    }
+    let icon_n = processes.len().min(PROCESS_LIST_ICON_RESOLVE_MAX);
+    for proc in processes.iter_mut().take(icon_n) {
+        proc.app_id = app_id_for_pid(proc.pid);
+    }
+    Ok(processes)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn list_macos_desktop_processes(_query: Option<&str>) -> Result<Vec<DesktopProcess>, String> {
+    Ok(Vec::new())
+}
+
+#[tauri::command]
+fn list_desktop_processes(query: Option<String>) -> Result<Vec<DesktopProcess>, String> {
+    let raw = query.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    // Empty query: return nothing (normal launcher search must not list processes).
+    // Special token "*" = process-mode bare "kill": list all non-denied (frontend only).
+    if raw.is_none() {
+        return Ok(Vec::new());
+    }
+    let q = if raw == Some("*") { None } else { raw.map(|s| s.to_string()) };
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        list_macos_desktop_processes(q.as_deref())
+    })) {
+        Ok(result) => result,
+        Err(_) => Err("list_desktop_processes panicked".to_string()),
+    }
+}
+
+#[tauri::command]
+fn terminate_desktop_process(pid: u32, force: bool) -> Result<(), String> {
+    if pid == 0 {
+        return Err("Invalid process id".to_string());
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = force;
+        return Err("Process terminate is only available on macOS".to_string());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // Resolve live name via ps so deny applies even when list filters hide the row.
+        if let Ok(output) = Command::new("ps")
+            .args(["-p", &pid.to_string(), "-o", "comm="])
+            .output()
+        {
+            if output.status.success() {
+                let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !name.is_empty() && is_denied_desktop_process_name(&name) {
+                    return Err(format!(
+                        "Refusing to terminate protected system process: {name}"
+                    ));
+                }
+            }
+        }
+        let pid_s = pid.to_string();
+        let mut cmd = Command::new("kill");
+        if force {
+            cmd.arg("-9");
+        } else {
+            cmd.arg("-TERM");
+        }
+        let output = cmd
+            .arg(&pid_s)
+            .output()
+            .map_err(|e| format!("Failed to terminate process {pid}: {e}"))?;
+        if output.status.success() {
+            return Ok(());
+        }
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        Err(if stderr.is_empty() {
+            format!("Failed to terminate process {pid}")
+        } else {
+            stderr
+        })
+    }
+}
 
 /// 配置根目录: ~/.local/hiven
 fn config_dir() -> Result<PathBuf, String> {
@@ -3096,6 +4517,264 @@ struct ProxyHttpResponse {
     /// Present when responseType is "binary".
     #[serde(rename = "bodyBytes", skip_serializing_if = "Option::is_none")]
     body_bytes: Option<Vec<u8>>,
+}
+
+#[derive(serde::Deserialize)]
+struct PluginShellRunRequest {
+    command: String,
+    cwd: Option<String>,
+    env: Option<HashMap<String, String>>,
+    #[serde(rename = "timeoutMs")]
+    timeout_ms: Option<u64>,
+    #[serde(rename = "maxOutputBytes")]
+    max_output_bytes: Option<u64>,
+    #[serde(rename = "shellProgram")]
+    shell_program: Option<String>,
+    #[serde(rename = "shellArgs")]
+    shell_args: Option<Vec<String>>,
+}
+
+#[derive(serde::Serialize)]
+struct PluginShellRunResult {
+    stdout: String,
+    stderr: String,
+    #[serde(rename = "exitCode")]
+    exit_code: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    signal: Option<String>,
+    #[serde(rename = "timedOut")]
+    timed_out: bool,
+    #[serde(rename = "durationMs")]
+    duration_ms: u64,
+    #[serde(rename = "stdoutBytes")]
+    stdout_bytes: usize,
+    #[serde(rename = "stderrBytes")]
+    stderr_bytes: usize,
+}
+
+fn default_shell_program() -> String {
+    #[cfg(windows)]
+    {
+        std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_string())
+    }
+    #[cfg(not(windows))]
+    {
+        std::env::var("SHELL").unwrap_or_else(|_| {
+            if Path::new("/bin/zsh").exists() {
+                "/bin/zsh".to_string()
+            } else {
+                "/bin/sh".to_string()
+            }
+        })
+    }
+}
+
+fn default_shell_args() -> Vec<String> {
+    #[cfg(windows)]
+    {
+        vec!["/C".to_string()]
+    }
+    #[cfg(not(windows))]
+    {
+        vec!["-lc".to_string()]
+    }
+}
+
+fn read_limited_output(reader: Option<impl Read>, max_bytes: usize) -> (Vec<u8>, usize) {
+    let Some(mut reader) = reader else {
+        return (Vec::new(), 0);
+    };
+    let mut buf = Vec::new();
+    let mut total = 0usize;
+    let mut chunk = [0u8; 8192];
+    loop {
+        match reader.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => {
+                total = total.saturating_add(n);
+                if buf.len() < max_bytes {
+                    let take = (max_bytes - buf.len()).min(n);
+                    buf.extend_from_slice(&chunk[..take]);
+                }
+            }
+            Err(_) => break,
+        }
+    }
+    (buf, total)
+}
+
+/// Kill shell process tree. On Unix, prefer process-group kill (negative pid).
+fn kill_shell_process_tree(child: &mut std::process::Child) {
+    #[cfg(unix)]
+    {
+        let pid = child.id() as i32;
+        // Negative pid = process group. SIGKILL entire tree (shell + lark-cli).
+        unsafe {
+            let _ = libc::kill(-pid, libc::SIGKILL);
+        }
+        let _ = child.kill();
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = child.kill();
+    }
+}
+
+/// Blocking implementation. Must not run on the async runtime / UI thread —
+/// a multi-second lark-cli call would freeze the launcher webview.
+fn plugin_shell_run_blocking(request: PluginShellRunRequest) -> Result<PluginShellRunResult, String> {
+    if request.command.trim().is_empty() {
+        return Err("Shell command must not be empty".to_string());
+    }
+
+    let timeout_ms = request
+        .timeout_ms
+        .filter(|value| *value > 0)
+        .unwrap_or(10_000);
+    let max_output_bytes = request
+        .max_output_bytes
+        .filter(|value| *value > 0)
+        .unwrap_or(512_000) as usize;
+
+    let program = request
+        .shell_program
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(default_shell_program);
+    let mut args = request
+        .shell_args
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(default_shell_args);
+    args.push(request.command);
+
+    let mut cmd = Command::new(&program);
+    cmd.args(&args);
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+
+    // Put shell + descendants in their own process group so timeout can kill the
+    // whole tree (zsh -lc → lark-cli). Without this, kill(child) leaves CLI running
+    // and try_wait/wait can hang well past timeout_ms (seen 12–19s on 8s budgets).
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        unsafe {
+            cmd.pre_exec(|| {
+                // SAFETY: setpgid(0,0) in the child is standard process-group isolation.
+                if libc::setpgid(0, 0) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+    }
+
+    if let Some(cwd) = request.cwd.as_ref() {
+        let cwd_path = Path::new(cwd);
+        if !cwd_path.exists() {
+            return Err(format!("Shell cwd does not exist: {}", cwd));
+        }
+        cmd.current_dir(cwd_path);
+    }
+
+    if let Some(env) = request.env {
+        for (key, value) in env {
+            cmd.env(key, value);
+        }
+    }
+
+    let started = Instant::now();
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to spawn shell `{}`: {}", program, e))?;
+
+    let stdout_reader = child.stdout.take();
+    let stderr_reader = child.stderr.take();
+    let max_out = max_output_bytes;
+    let stdout_thread = thread::spawn(move || read_limited_output(stdout_reader, max_out));
+    let stderr_thread = thread::spawn(move || read_limited_output(stderr_reader, max_out));
+
+    let timeout = Duration::from_millis(timeout_ms);
+    let mut timed_out = false;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {
+                if started.elapsed() >= timeout {
+                    timed_out = true;
+                    kill_shell_process_tree(&mut child);
+                    // Bounded wait after kill so we never hang past timeout + grace.
+                    let kill_deadline = Instant::now() + Duration::from_millis(800);
+                    break loop {
+                        match child.try_wait() {
+                            Ok(Some(status)) => break status,
+                            Ok(None) if Instant::now() < kill_deadline => {
+                                thread::sleep(Duration::from_millis(20));
+                            }
+                            Ok(None) => {
+                                kill_shell_process_tree(&mut child);
+                                // Last resort wait — process group already SIGKILL'd.
+                                break child
+                                    .wait()
+                                    .map_err(|e| format!("Failed to wait after kill: {}", e))?;
+                            }
+                            Err(e) => return Err(format!("Failed to wait for shell: {}", e)),
+                        }
+                    };
+                }
+                thread::sleep(Duration::from_millis(20));
+            }
+            Err(e) => return Err(format!("Failed to wait for shell: {}", e)),
+        }
+    };
+
+    let (stdout_bytes_buf, stdout_total) = stdout_thread
+        .join()
+        .unwrap_or_else(|_| (Vec::new(), 0));
+    let (stderr_bytes_buf, stderr_total) = stderr_thread
+        .join()
+        .unwrap_or_else(|_| (Vec::new(), 0));
+
+    let duration_ms = started.elapsed().as_millis() as u64;
+    let exit_code = status.code();
+    #[cfg(unix)]
+    let signal = {
+        use std::os::unix::process::ExitStatusExt;
+        status.signal().map(|sig| sig.to_string())
+    };
+    #[cfg(not(unix))]
+    let signal: Option<String> = None;
+
+    // Compact native perf line (no command body / secrets).
+    log_launcher_perf(
+        "native:plugin-shell-run",
+        started,
+        format!(
+            "timedOut={} exitCode={:?} stdoutBytes={} stderrBytes={}",
+            timed_out, exit_code, stdout_total, stderr_total
+        ),
+    );
+
+    Ok(PluginShellRunResult {
+        stdout: String::from_utf8_lossy(&stdout_bytes_buf).into_owned(),
+        stderr: String::from_utf8_lossy(&stderr_bytes_buf).into_owned(),
+        exit_code,
+        signal,
+        timed_out,
+        duration_ms,
+        stdout_bytes: stdout_total,
+        stderr_bytes: stderr_total,
+    })
+}
+
+/// Run a one-shot shell command for plugins on a blocking pool.
+/// Non-zero exit codes return Ok(result). Must stay async + spawn_blocking so
+/// long CLI calls (lark-cli docs search) never freeze the launcher UI thread.
+#[tauri::command]
+async fn plugin_shell_run(request: PluginShellRunRequest) -> Result<PluginShellRunResult, String> {
+    tauri::async_runtime::spawn_blocking(move || plugin_shell_run_blocking(request))
+        .await
+        .map_err(|e| format!("Shell task join failed: {}", e))?
 }
 
 #[tauri::command]
@@ -3314,6 +4993,16 @@ fn open_plugin_kv_db(path: PathBuf) -> Result<PluginKvDb, String> {
                 );
                 CREATE INDEX IF NOT EXISTS idx_plugin_kv_namespace_updated
                   ON plugin_kv (source, plugin_id, updated_at);
+                CREATE TABLE IF NOT EXISTS usage_journal (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  command_id TEXT NOT NULL,
+                  surface_id TEXT NOT NULL,
+                  executed_at INTEGER NOT NULL,
+                  prev_command_id TEXT,
+                  object_kind TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_usage_journal_executed_at
+                  ON usage_journal (executed_at);
                 "#,
         )
         .map_err(|e| e.to_string())?;
@@ -3637,6 +5326,83 @@ fn plugin_kv_clear(source: String, plugin_id: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Append a single launcher usage journal row (metadata only; no content body).
+#[tauri::command]
+fn usage_journal_append(
+    command_id: String,
+    surface_id: String,
+    executed_at: i64,
+    prev_command_id: Option<String>,
+    object_kind: Option<String>,
+) -> Result<(), String> {
+    if command_id.trim().is_empty() {
+        return Err("command_id must be non-empty".to_string());
+    }
+    if surface_id.trim().is_empty() {
+        return Err("surface_id must be non-empty".to_string());
+    }
+    let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
+    db.connection
+        .execute(
+            r#"
+                INSERT INTO usage_journal (
+                  command_id, surface_id, executed_at, prev_command_id, object_kind
+                ) VALUES (?1, ?2, ?3, ?4, ?5)
+            "#,
+            params![
+                command_id,
+                surface_id,
+                executed_at,
+                prev_command_id,
+                object_kind
+            ],
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Prune usage journal rows older than `max_age_days` and/or beyond `max_rows` (keep newest).
+#[tauri::command]
+fn usage_journal_prune(
+    max_age_days: Option<i64>,
+    max_rows: Option<i64>,
+) -> Result<(), String> {
+    if max_age_days.is_some_and(|value| value < 0) || max_rows.is_some_and(|value| value < 0) {
+        return Err("usage_journal prune limits must be non-negative".to_string());
+    }
+
+    let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
+
+    if let Some(days) = max_age_days {
+        let cutoff = current_millis_i64()?.saturating_sub(days.saturating_mul(86_400_000));
+        db.connection
+            .execute(
+                "DELETE FROM usage_journal WHERE executed_at < ?1",
+                params![cutoff],
+            )
+            .map_err(|e| e.to_string())?;
+    }
+
+    if let Some(max_rows) = max_rows {
+        // Delete oldest rows beyond max_rows, keeping the newest by executed_at then id.
+        db.connection
+            .execute(
+                r#"
+                    DELETE FROM usage_journal
+                    WHERE id IN (
+                      SELECT id FROM usage_journal
+                      ORDER BY executed_at DESC, id DESC
+                      LIMIT -1 OFFSET ?1
+                    )
+                "#,
+                params![max_rows],
+            )
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 fn plugin_blob_save(
     source: String,
@@ -3886,18 +5652,141 @@ fn open_plugin_dir(path: String) -> Result<(), String> {
     }
 
     // Fall back to the system file manager.
+    reveal_path_in_file_manager_impl(&dir_str)
+}
+
+/// Open a path in the OS file manager (Finder / Explorer). Used by desktop-bridge
+/// extension install guides — do not prefer VS Code here.
+#[tauri::command]
+fn reveal_path_in_file_manager(path: String) -> Result<(), String> {
+    let expanded = expand_path(&path);
+    if !expanded.exists() {
+        return Err(format!("Path does not exist: {}", expanded.display()));
+    }
+    reveal_path_in_file_manager_impl(&expanded.to_string_lossy())
+}
+
+fn reveal_path_in_file_manager_impl(path: &str) -> Result<(), String> {
     let (program, args): (&str, Vec<&str>) = if cfg!(target_os = "macos") {
-        ("open", vec![dir_str.as_str()])
+        ("open", vec![path])
     } else if cfg!(target_os = "windows") {
-        ("explorer", vec![dir_str.as_str()])
+        ("explorer", vec![path])
     } else {
-        ("xdg-open", vec![dir_str.as_str()])
+        ("xdg-open", vec![path])
     };
     std::process::Command::new(program)
         .args(&args)
         .spawn()
         .map(|_| ())
         .map_err(|e| e.to_string())
+}
+
+/// Chromium extension is part of the first-party `browser-tabs` plugin package.
+/// Embedded at compile time so prepare works even when the app cwd is not the repo
+/// and even when an older builtin release missed the `extension/` folder.
+const BROWSER_TABS_EXTENSION_MANIFEST: &str =
+    include_str!("../../src/plugins/browser-tabs/extension/manifest.json");
+const BROWSER_TABS_EXTENSION_BACKGROUND: &str =
+    include_str!("../../src/plugins/browser-tabs/extension/background.js");
+
+/// Ensure `plugins/builtin/browser-tabs/extension` exists (plugin dir, not bridges/)
+/// and return that path for Chrome “Load unpacked”.
+#[tauri::command]
+fn prepare_chromium_extension_package() -> Result<String, String> {
+    let config = init_config_dir()?;
+    let plugin_root = PathBuf::from(&config)
+        .join("plugins")
+        .join("builtin")
+        .join("browser-tabs");
+    let dest = plugin_root.join("extension");
+    fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
+
+    // Always (re)write core files so Load unpacked never opens an empty folder
+    // after version bumps or incomplete prior releases.
+    fs::write(dest.join("manifest.json"), BROWSER_TABS_EXTENSION_MANIFEST)
+        .map_err(|e| e.to_string())?;
+    fs::write(dest.join("background.js"), BROWSER_TABS_EXTENSION_BACKGROUND)
+        .map_err(|e| e.to_string())?;
+
+    // Best-effort: also copy any extra files from an on-disk plugin package.
+    if let Ok(source) = resolve_chromium_extension_source_dir() {
+        if source != dest {
+            let _ = copy_dir_recursive(&source, &dest);
+        }
+    }
+
+    // Ensure parent plugin package has a manifest so the path is clearly under plugins/.
+    let plugin_manifest = plugin_root.join("manifest.json");
+    if !plugin_manifest.is_file() {
+        let _ = fs::write(
+            &plugin_manifest,
+            r#"{
+  "pluginId": "browser-tabs",
+  "displayName": "Browser Tabs",
+  "displayNameI18n": { "zh": "浏览器标签" },
+  "version": "0.1.1",
+  "capabilities": ["settings"]
+}
+"#,
+        );
+    }
+
+    Ok(dest.to_string_lossy().to_string())
+}
+
+fn resolve_chromium_extension_source_dir() -> Result<PathBuf, String> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(cwd) = std::env::current_dir() {
+        candidates.push(
+            cwd.join("src")
+                .join("plugins")
+                .join("browser-tabs")
+                .join("extension"),
+        );
+        candidates.push(
+            cwd.join("plugins")
+                .join("builtin")
+                .join("browser-tabs")
+                .join("extension"),
+        );
+        candidates.push(cwd.join("extensions").join("hiven-chromium-tabs"));
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            candidates.push(
+                dir.join("..")
+                    .join("..")
+                    .join("..")
+                    .join("src")
+                    .join("plugins")
+                    .join("browser-tabs")
+                    .join("extension"),
+            );
+        }
+    }
+    for path in candidates {
+        let canonical = path.canonicalize().unwrap_or(path);
+        if canonical.is_dir() && canonical.join("manifest.json").is_file() {
+            return Ok(canonical);
+        }
+    }
+    Err("on-disk extension source not found (embedded files still written)".to_string())
+}
+
+fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<(), String> {
+    fs::create_dir_all(dest).map_err(|e| e.to_string())?;
+    for entry in fs::read_dir(src).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let ty = entry.file_type().map_err(|e| e.to_string())?;
+        let from = entry.path();
+        let to = dest.join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir_recursive(&from, &to)?;
+        } else if ty.is_file() {
+            fs::copy(&from, &to).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -4503,6 +6392,10 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            // D3/D4: localhost bridge for Chromium tabs + editor documents.
+            desktop_bridge::start_desktop_bridge_server();
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -4513,11 +6406,14 @@ pub fn run() {
             read_clipboard_file_paths,
             fetch_url,
             plugin_http_request,
+            plugin_shell_run,
             list_plugin_dirs,
             remove_plugin_dir,
             replace_plugin_dir,
             list_plugin_files,
             open_plugin_dir,
+            reveal_path_in_file_manager,
+            prepare_chromium_extension_package,
             read_plugin_file,
             save_plugin_file,
             plugin_kv_get,
@@ -4527,6 +6423,8 @@ pub fn run() {
             plugin_kv_usage,
             plugin_kv_prune,
             plugin_kv_clear,
+            usage_journal_append,
+            usage_journal_prune,
             plugin_blob_save,
             plugin_blob_read,
             plugin_blob_delete,
@@ -4541,6 +6439,11 @@ pub fn run() {
             prepare_launcher_input_source,
             restore_launcher_input_source,
             show_launcher_window,
+            focus_launcher_webview,
+            log_launcher_perf_frontend,
+            launcher_perf_log_file,
+            open_devtools,
+            open_system_url,
             hide_launcher_window,
             hide_launcher_and_paste,
             show_quick_editor_window,
@@ -4558,6 +6461,16 @@ pub fn run() {
             read_installed_app_icon_url,
             cache_installed_app_icons,
             launch_installed_app,
+            toggle_installed_app,
+            list_desktop_windows,
+            list_desktop_windows_enriched,
+            focus_desktop_window,
+            close_desktop_window,
+            list_desktop_processes,
+            terminate_desktop_process,
+            desktop_bridge::desktop_bridge_status,
+            desktop_bridge::list_desktop_bridge_targets,
+            desktop_bridge::focus_desktop_bridge_target,
             perform_system_power_action,
             surface_registry_snapshot,
             surface_registry_upsert,
@@ -4877,6 +6790,55 @@ HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\App Paths\Example.e
         assert_eq!(app.name, "Missing Icon");
         assert_eq!(app.installed_at, Some(42));
         assert!(extract_app_icon(&entry).is_none());
+    }
+
+    #[test]
+    fn usage_journal_append_and_prune_keep_newest_rows() {
+        with_isolated_home("usage-journal-append-prune", |_home| {
+            usage_journal_append(
+                "cmd-a".to_string(),
+                "global-launcher".to_string(),
+                1_000,
+                None,
+                None,
+            )
+            .expect("append a");
+            usage_journal_append(
+                "cmd-b".to_string(),
+                "global-launcher".to_string(),
+                2_000,
+                Some("cmd-a".to_string()),
+                Some("clipboard".to_string()),
+            )
+            .expect("append b");
+            usage_journal_append(
+                "cmd-c".to_string(),
+                "editor-command-bar".to_string(),
+                3_000,
+                Some("cmd-b".to_string()),
+                None,
+            )
+            .expect("append c");
+
+            usage_journal_prune(None, Some(2)).expect("prune to 2 rows");
+
+            let db = get_plugin_kv_db().expect("db").lock().expect("lock");
+            let count: i64 = db
+                .connection
+                .query_row("SELECT COUNT(*) FROM usage_journal", [], |row| row.get(0))
+                .expect("count");
+            assert_eq!(count, 2);
+
+            let oldest_cmd: String = db
+                .connection
+                .query_row(
+                    "SELECT command_id FROM usage_journal ORDER BY executed_at ASC LIMIT 1",
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("oldest");
+            assert_eq!(oldest_cmd, "cmd-b");
+        });
     }
 
     #[test]
@@ -5271,5 +7233,39 @@ HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\App Paths\Example.e
             .expect_err("plugin write paths with parent components should be rejected");
             assert!(parent_error.contains("parent directory"));
         });
+    }
+}
+
+#[cfg(test)]
+mod desktop_process_deny_tests {
+    use super::*;
+
+    #[test]
+    fn deny_list_blocks_critical_system_process_names() {
+        assert!(is_denied_desktop_process_name("kernel_task"));
+        assert!(is_denied_desktop_process_name("launchd"));
+        assert!(is_denied_desktop_process_name("WindowServer"));
+        assert!(is_denied_desktop_process_name("loginwindow"));
+        assert!(is_denied_desktop_process_name("SystemUIServer"));
+        assert!(is_denied_desktop_process_name("cfprefsd"));
+        assert!(is_denied_desktop_process_name("opendirectoryd"));
+        assert!(is_denied_desktop_process_name("securityd"));
+        assert!(is_denied_desktop_process_name("/usr/sbin/WindowServer"));
+        assert!(is_denied_desktop_process_name("/sbin/launchd"));
+    }
+
+    #[test]
+    fn deny_list_allows_ordinary_user_processes() {
+        assert!(!is_denied_desktop_process_name("node"));
+        assert!(!is_denied_desktop_process_name("Chrome"));
+        assert!(!is_denied_desktop_process_name("/Applications/Example.app/Contents/MacOS/Example"));
+    }
+
+    #[test]
+    fn list_desktop_processes_empty_query_returns_empty() {
+        let result = list_desktop_processes(None).expect("empty query should succeed");
+        assert!(result.is_empty());
+        let result = list_desktop_processes(Some("   ".to_string())).expect("blank query should succeed");
+        assert!(result.is_empty());
     }
 }

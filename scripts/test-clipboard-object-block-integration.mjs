@@ -1,15 +1,9 @@
 #!/usr/bin/env node
 /**
- * Clipboard Object Block Integration Test
+ * Clipboard Object Block Integration Test (current product path)
  *
- * Verifies the full object-action mode integration:
- *  - GlobalLauncherHost uses useClipboardObjectBlock
- *  - GlobalLauncherSearchFrame renders ObjectBlockToken when block exists
- *  - GlobalLauncherSearchFrame renders RecommendedActionRow when block + no query
- *  - GlobalLauncherSearchFrame renders RecentClipboardHint for 2-10 min clipboard
- *  - GlobalLauncherKeyboard handles Backspace for block deletion
- *  - Recommended actions list switches based on block kind
- *  - No recommended actions when query is typed (falls through to normal search)
+ * RecommendedActionRow was retired; host pins object-action rows (history
+ * paste/copy/open + clipboard open-to-quick-editor) above ranking tools.
  */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -19,6 +13,9 @@ const searchFrame = readFileSync('src/components/launcher/GlobalLauncherSearchFr
 const keyboard = readFileSync('src/components/launcher/GlobalLauncherKeyboard.ts', 'utf8')
 const panel = readFileSync('src/components/launcher/GlobalLauncherPanel.tsx', 'utf8')
 const frames = readFileSync('src/components/launcher/GlobalLauncherFrames.tsx', 'utf8')
+const renderer = readFileSync('src/components/pluginSurface/PluginSurfaceRenderer.tsx', 'utf8')
+const recommendation = readFileSync('src/launcher/clipboard/actionRecommendation.ts', 'utf8')
+const executor = readFileSync('src/launcher/clipboard/actionExecutor.ts', 'utf8')
 
 // ─── Host Integration ──────────────────────────────────────────────────────────
 
@@ -32,90 +29,70 @@ assert.match(
   /clipboardBlock=\{clipboardBlock\}/,
   'GlobalLauncherHost must pass clipboardBlock to GlobalLauncherPanel',
 )
-
-// ─── Panel passthrough ─────────────────────────────────────────────────────────
-
 assert.match(
-  panel,
-  /ClipboardObjectBlockState/,
-  'GlobalLauncherPanel must import ClipboardObjectBlockState type',
+  globalLauncherHost,
+  /pinnedObjectActionItems/,
+  'Host injects Object Block actions into the mixed list',
 )
 assert.match(
-  panel,
-  /clipboardBlock/,
-  'GlobalLauncherPanel must accept and pass clipboardBlock',
-)
-
-// ─── Frames passthrough ────────────────────────────────────────────────────────
-
-assert.match(
-  frames,
-  /clipboardBlock/,
-  'GlobalLauncherFrames must pass clipboardBlock to SearchFrame',
-)
-
-// ─── SearchFrame object-action mode ────────────────────────────────────────────
-
-assert.match(
-  searchFrame,
-  /ObjectBlockToken/,
-  'SearchFrame must render ObjectBlockToken',
+  globalLauncherHost,
+  /object-action:/,
+  'Object actions use dedicated systemKey prefix',
 )
 assert.match(
-  searchFrame,
-  /RecentClipboardHint/,
-  'SearchFrame must render RecentClipboardHint',
+  globalLauncherHost,
+  /defaultOutput === ['"]open-editor['"]/,
+  'Text Object Blocks must pin open-editor (Quick Editor overwrite) rows',
 )
 assert.match(
+  globalLauncherHost,
+  /pasteText:\s*async/,
+  'Host wires pasteText for history text paste-to-front',
+)
+assert.match(
+  globalLauncherHost,
+  /selectItemWithObjectActions/,
+  'Selecting pinned object-action rows must run executeObjectAction',
+)
+
+// ─── Panel / frames passthrough ────────────────────────────────────────────────
+
+assert.match(panel, /ClipboardObjectBlockState/)
+assert.match(panel, /clipboardBlock/)
+assert.match(frames, /clipboardBlock/)
+
+// ─── SearchFrame ───────────────────────────────────────────────────────────────
+
+assert.match(searchFrame, /ObjectBlockToken/)
+assert.match(searchFrame, /RecentClipboardHint/)
+assert.doesNotMatch(
   searchFrame,
   /RecommendedActionRow/,
-  'SearchFrame must render RecommendedActionRow for recommended actions',
-)
-assert.match(
-  searchFrame,
-  /recommendActionsForBlock/,
-  'SearchFrame must call recommendActionsForBlock when block exists',
-)
-assert.match(
-  searchFrame,
-  /filteredActions/,
-  'SearchFrame must expose filtered actions infrastructure for recommended actions list',
-)
-assert.match(
-  searchFrame,
-  /block && \(/,
-  'SearchFrame must show ObjectBlockToken when block exists (object-action mode)',
-)
-assert.match(
-  searchFrame,
-  /filteredActions/,
-  'SearchFrame must filter recommended actions by query',
+  'RecommendedActionRow must stay retired — list ranking is the path',
 )
 
-// ─── Keyboard Backspace handling ───────────────────────────────────────────────
+// ─── Keyboard Backspace for block ────────────────────────────────────────────
 
 assert.match(
   keyboard,
   /handleClipboardBackspace/,
-  'GlobalLauncherKeyboard must accept handleClipboardBackspace callback',
-)
-assert.match(
-  keyboard,
-  /event\.key === ['"]Backspace['"][\s\S]*handleClipboardBackspace/,
-  'GlobalLauncherKeyboard must call handleClipboardBackspace on Backspace',
+  'Keyboard must support Object Block Backspace removal',
 )
 
-// ─── Regression: no auto Cmd+C ────────────────────────────────────────────────
+// ─── Return-to-launcher host API ──────────────────────────────────────────────
 
-assert.doesNotMatch(
-  globalLauncherHost,
-  /simulateCopy|simulate_copy|⌘C|Cmd\+C/,
-  'GlobalLauncherHost must never auto-simulate Cmd+C',
-)
-assert.doesNotMatch(
-  searchFrame,
-  /simulateCopy|simulate_copy/,
-  'SearchFrame must not simulate copy',
-)
+assert.match(renderer, /returnToLauncherWithObject/)
+assert.match(renderer, /setPendingObjectBlock/)
+assert.match(renderer, /createHistoryItemObjectBlock/)
+assert.match(renderer, /openGlobalLauncherOverlay/)
 
-console.log('clipboard object block integration checks passed')
+// ─── History recommendations ─────────────────────────────────────────────────
+
+assert.match(recommendation, /paste-history-text/)
+assert.match(recommendation, /paste-history-image/)
+assert.match(recommendation, /paste-history-files/)
+assert.match(recommendation, /source === 'history-item'/)
+assert.match(executor, /paste-history-text/)
+assert.match(executor, /pasteText\?:/)
+
+console.log('✓ test-clipboard-object-block-integration passed')

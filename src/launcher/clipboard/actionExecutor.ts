@@ -36,6 +36,12 @@ export type ActionExecutionHandlers = {
   setRenderer?: (actionId: string, text: string) => Promise<void>
   /** Resolve a local file path to its text content when the clipboard holds a path. */
   readLocalFileText?: (path: string) => Promise<string>
+  /** Paste plain text into the app that was foreground before launcher. */
+  pasteText?: (text: string) => Promise<void>
+  pasteImage?: (blobId: string) => Promise<void>
+  writeImage?: (blobId: string) => Promise<void>
+  pasteFiles?: (paths: string[]) => Promise<void>
+  writeFiles?: (paths: string[]) => Promise<void>
 }
 
 // ─── Executor ──────────────────────────────────────────────────────────────────
@@ -48,6 +54,46 @@ export async function executeRecommendedAction(
   const text = block.payloadText ?? block.preview ?? ''
 
   try {
+    // History object actions (bypass text transform pipeline)
+    if (action.id === 'paste-history-text') {
+      if (!text) return { ok: false, error: 'Text payload missing' }
+      if (!handlers.pasteText) return { ok: false, error: 'Paste text handler unavailable' }
+      await handlers.pasteText(text)
+      return { ok: true }
+    }
+    if (action.id === 'copy-history-text') {
+      if (!text) return { ok: false, error: 'Text payload missing' }
+      await handlers.copyText(text)
+      return { ok: true, message: '已复制' }
+    }
+    if (action.id === 'paste-history-image') {
+      const blobId = block.payloadImage?.blobId
+      if (!blobId) return { ok: false, error: 'Image payload missing' }
+      if (!handlers.pasteImage) return { ok: false, error: 'Paste image handler unavailable' }
+      await handlers.pasteImage(blobId)
+      return { ok: true }
+    }
+    if (action.id === 'copy-history-image') {
+      const blobId = block.payloadImage?.blobId
+      if (!blobId) return { ok: false, error: 'Image payload missing' }
+      if (!handlers.writeImage) return { ok: false, error: 'Write image handler unavailable' }
+      await handlers.writeImage(blobId)
+      return { ok: true, message: '已复制' }
+    }
+    if (action.id === 'paste-history-files') {
+      const paths = block.payloadFiles?.paths
+      if (!paths?.length) return { ok: false, error: 'Files payload missing' }
+      if (!handlers.pasteFiles) return { ok: false, error: 'Paste files handler unavailable' }
+      await handlers.pasteFiles(paths)
+      return { ok: true }
+    }
+    if (action.id === 'copy-history-file-paths') {
+      const paths = block.payloadFiles?.paths
+      if (!paths?.length) return { ok: false, error: 'Files payload missing' }
+      await handlers.copyText(paths.join('\n'))
+      return { ok: true, message: '已复制' }
+    }
+
     switch (target) {
       case 'copy': {
         const result = await transformActionText(action, text)
@@ -262,7 +308,7 @@ function htmlDecode(text: string): string {
 export const OUTPUT_TARGET_LABELS: Record<RecommendedOutputTarget, { en: string; zh: string }> = {
   copy: { en: 'Copy result', zh: '复制结果' },
   'copy-and-keep-open': { en: 'Copy and keep open', zh: '复制并保持打开' },
-  'open-editor': { en: 'Open in Editor', zh: '打开到 Editor' },
+  'open-editor': { en: 'Overwrite Quick Editor', zh: '覆盖到快捷编辑器' },
   'open-plugin-surface': { en: 'Open tool window', zh: '打开工具窗口' },
   'open-url': { en: 'Open URL', zh: '打开 URL' },
   'replace-selection': { en: 'Replace selection', zh: '覆盖选区' },

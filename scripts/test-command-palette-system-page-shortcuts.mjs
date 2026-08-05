@@ -27,6 +27,13 @@ const hostActionsSource = read('src/workspace/launcher/hostActions.ts')
 assert.match(hostProviderSource, /getHostPaneControlItems\(\)/, 'host provider should include system page and pane controls')
 assert.match(hostActionsSource, /systemKey:\s*['"]host:view:plugins['"]/, 'host actions should contribute plugins page shortcut')
 assert.match(hostActionsSource, /systemKey:\s*['"]host:view:settings['"]/, 'host actions should contribute settings page shortcut')
+assert.match(hostActionsSource, /systemKey:\s*['"]host:view:devtools['"]/, 'host actions should contribute open DevTools shortcut')
+assert.match(hostActionsSource, /打开控制台|Open DevTools/, 'devtools command should be searchable in zh/en')
+assert.match(
+  read('src-tauri/src/lib.rs'),
+  /fn open_devtools|open_devtools,/,
+  'native open_devtools command must be registered',
+)
 assert.match(hostActionsSource, /requestOpenLauncherHostSurface\(['"]system-plugins['"]\)/, 'plugins shortcut should navigate through the launcher API')
 assert.match(hostActionsSource, /requestOpenLauncherHostSurface\(['"]system-settings['"]\)/, 'settings shortcut should navigate through the launcher API')
 assert.match(hostActionsSource, /aliases:\s*\[[\s\S]*['"]plugins['"][\s\S]*['"]插件['"]/, 'plugins shortcut should be searchable by English and Chinese terms')

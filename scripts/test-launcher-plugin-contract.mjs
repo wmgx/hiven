@@ -237,7 +237,8 @@ function assertLauncherParamsAreLocalized() {
 function assertLauncherSystemMessagesAreLocalized() {
   const output = read('src/workspace/launcher/output.ts')
   assert.match(output, /translate\(locale,\s*['"]palette['"],\s*key\)/, 'launcher output should resolve labels through palette i18n')
-  assert.match(output, /showMessage\(palette\(locale,\s*['"]copied['"]\)/, 'launcher copy message should use palette i18n')
+  // Silent copy: success toast after ↵ 复制 is noise; do not require showMessage('copied').
+  assert.doesNotMatch(output, /showMessage\(palette\(locale,\s*['"]copied['"]\)/, 'launcher copy must not toast "copied"')
   assert.match(output, /palette\(locale,\s*['"]replaceActiveText['"]\)/, 'launcher replace action should use palette i18n')
   assert.match(output, /palette\(locale,\s*['"]insert['"]\)/, 'launcher insert action should use palette i18n')
   assert.match(output, /palette\(locale,\s*['"]copy['"]\)/, 'launcher copy action should use palette i18n')

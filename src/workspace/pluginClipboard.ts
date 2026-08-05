@@ -233,7 +233,7 @@ export function createPluginClipboard(
 
     async watch(
       options: ClipboardWatchOptions,
-      onChange: (change: ClipboardChange) => void,
+      onChange: (change: ClipboardChange) => void | Promise<void>,
     ): Promise<() => void> {
       requirePermissions(watchPermissions(options))
       const pollInterval = options.pollIntervalMs ?? 1000
@@ -243,6 +243,15 @@ export function createPluginClipboard(
       let lastImagePollAt = 0
       let polling = false
       let stopped = false
+      // Serialize async onChange handlers so concurrent writes (addItem+prune) cannot interleave.
+      let changeTail: Promise<unknown> = Promise.resolve()
+      const emitChange = (change: ClipboardChange) => {
+        changeTail = changeTail
+          .then(() => Promise.resolve(onChange(change)))
+          .catch((error) => {
+            console.warn('[plugin-clipboard] onChange error:', error)
+          })
+      }
 
       // Initialize with current clipboard content
       try {
@@ -277,7 +286,7 @@ export function createPluginClipboard(
                   const blobRef = await storage.blob.put({ bytes: storedImage.bytes, contentType: storedImage.contentType })
                   const sourceApp = await readClipboardSourceApp()
                   lastImageHash = imageHash
-                  onChange({
+                  emitChange({
                     kind: 'image',
                     blobId: blobRef.blobId,
                     previewBlobId: blobRef.blobId,
@@ -310,7 +319,7 @@ export function createPluginClipboard(
 
             if (filePaths.length > 0) {
               const sourceApp = await readClipboardSourceApp()
-              onChange({
+              emitChange({
                 kind: 'files',
                 paths: filePaths,
                 fileNames: filePaths.map(fileNameForPath),
@@ -331,7 +340,7 @@ export function createPluginClipboard(
               changedAt: Date.now(),
               sourceApp: await readClipboardSourceApp(),
             }
-            onChange(change)
+            emitChange(change)
           }
         } catch (error) {
           console.warn('[plugin-clipboard] watch poll error:', error)

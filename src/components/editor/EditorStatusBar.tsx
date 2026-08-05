@@ -45,7 +45,7 @@ export function EditorStatusBar({
       ref={barRef}
       className="h-[22px] flex items-center px-2 gap-2 shrink-0 overflow-hidden whitespace-nowrap text-[10px]"
       style={{
-        borderTop: '0.5px solid var(--color-border-tertiary)',
+        borderTop: 'var(--hairline) solid var(--color-border-tertiary)',
         background: 'var(--color-background-secondary)',
         color: 'var(--color-text-tertiary)',
       }}
@@ -69,8 +69,9 @@ export function EditorStatusBar({
           {selectedCharCount} {t('selectedChars')}
         </span>
       )}
+      <span className="ml-auto" aria-hidden />
       {showLanguage && (
-        <span className="ml-auto min-w-0 truncate text-right" title={languageStatus}>
+        <span className="min-w-0 truncate text-right" title={languageStatus}>
           {languageStatus}
         </span>
       )}

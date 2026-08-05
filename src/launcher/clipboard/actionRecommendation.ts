@@ -57,9 +57,9 @@ const JSON_ACTIONS: RecommendedAction[] = [
   },
   {
     id: 'open-clipboard-editor',
-    title: 'Open Clipboard in Editor',
-    titleZh: '打开剪贴板到编辑器',
-    provider: 'Editor',
+    title: 'Open in Quick Editor',
+    titleZh: '打开到快捷编辑器',
+    provider: 'Quick Editor',
     defaultOutput: 'open-editor',
   },
   {
@@ -106,9 +106,9 @@ const JSON_ACTIONS: RecommendedAction[] = [
 const URL_ACTIONS: RecommendedAction[] = [
   {
     id: 'open-clipboard-editor',
-    title: 'Open Clipboard in Editor',
-    titleZh: '打开剪贴板到编辑器',
-    provider: 'Editor',
+    title: 'Open in Quick Editor',
+    titleZh: '打开到快捷编辑器',
+    provider: 'Quick Editor',
     defaultOutput: 'open-editor',
   },
   {
@@ -203,9 +203,9 @@ const TEXT_ACTIONS: RecommendedAction[] = [
   ...ENCODE_DECODE_ACTIONS,
   {
     id: 'open-clipboard-editor',
-    title: 'Open Clipboard in Editor',
-    titleZh: '打开剪贴板到编辑器',
-    provider: 'Editor',
+    title: 'Open in Quick Editor',
+    titleZh: '打开到快捷编辑器',
+    provider: 'Quick Editor',
     defaultOutput: 'open-editor',
   },
   {
@@ -253,9 +253,9 @@ const FORMATTER_ACTIONS_BY_KIND: Partial<Record<ObjectBlockKind, RecommendedActi
 const COMMAND_ACTIONS: RecommendedAction[] = [
   {
     id: 'open-clipboard-editor',
-    title: 'Open Clipboard in Editor',
-    titleZh: '打开剪贴板到编辑器',
-    provider: 'Editor',
+    title: 'Open in Quick Editor',
+    titleZh: '打开到快捷编辑器',
+    provider: 'Quick Editor',
     defaultOutput: 'open-editor',
   },
 ]
@@ -272,9 +272,9 @@ const YAML_ACTIONS: RecommendedAction[] = [
   },
   {
     id: 'open-clipboard-editor',
-    title: 'Open Clipboard in Editor',
-    titleZh: '打开剪贴板到编辑器',
-    provider: 'Editor',
+    title: 'Open in Quick Editor',
+    titleZh: '打开到快捷编辑器',
+    provider: 'Quick Editor',
     defaultOutput: 'open-editor',
   },
 ]
@@ -291,9 +291,9 @@ const QUERY_STRING_ACTIONS: RecommendedAction[] = [
   },
   {
     id: 'open-clipboard-editor',
-    title: 'Open Clipboard in Editor',
-    titleZh: '打开剪贴板到编辑器',
-    provider: 'Editor',
+    title: 'Open in Quick Editor',
+    titleZh: '打开到快捷编辑器',
+    provider: 'Quick Editor',
     defaultOutput: 'open-editor',
   },
 ]
@@ -302,9 +302,9 @@ const SECRET_ACTIONS: RecommendedAction[] = [
   // Secret content: suppressed network actions, only local open
   {
     id: 'open-clipboard-editor',
-    title: 'Open Clipboard in Editor',
-    titleZh: '打开剪贴板到编辑器',
-    provider: 'Editor',
+    title: 'Open in Quick Editor',
+    titleZh: '打开到快捷编辑器',
+    provider: 'Quick Editor',
     defaultOutput: 'open-editor',
   },
 ]
@@ -312,9 +312,9 @@ const SECRET_ACTIONS: RecommendedAction[] = [
 const FALLBACK_ACTIONS: RecommendedAction[] = [
   {
     id: 'open-clipboard-editor',
-    title: 'Open Clipboard in Editor',
-    titleZh: '打开剪贴板到编辑器',
-    provider: 'Editor',
+    title: 'Open in Quick Editor',
+    titleZh: '打开到快捷编辑器',
+    provider: 'Quick Editor',
     defaultOutput: 'open-editor',
   },
   {
@@ -394,6 +394,65 @@ const EDITOR_TEXT_ACTIONS: RecommendedAction[] = [
 
 // ─── Recommendation logic ──────────────────────────────────────────────────────
 
+/** History-item text: paste/copy first; transforms still come from ranking + objectBlockText. */
+const TEXT_HISTORY_ACTIONS: RecommendedAction[] = [
+  {
+    id: 'paste-history-text',
+    title: 'Paste to Front App',
+    titleZh: '粘贴到前台应用',
+    provider: 'Clipboard History',
+    defaultOutput: 'copy',
+  },
+  {
+    id: 'copy-history-text',
+    title: 'Copy to Clipboard',
+    titleZh: '复制到剪贴板',
+    provider: 'Clipboard History',
+    defaultOutput: 'copy',
+  },
+  {
+    id: 'open-history-in-quick-editor',
+    title: 'Open in Quick Editor',
+    titleZh: '打开到快捷编辑器',
+    provider: 'Quick Editor',
+    defaultOutput: 'open-editor',
+  },
+]
+
+const IMAGE_HISTORY_ACTIONS: RecommendedAction[] = [
+  {
+    id: 'paste-history-image',
+    title: 'Paste Image',
+    titleZh: '粘贴图片',
+    provider: 'Clipboard History',
+    defaultOutput: 'copy',
+  },
+  {
+    id: 'copy-history-image',
+    title: 'Copy Image to Clipboard',
+    titleZh: '复制图片到剪贴板',
+    provider: 'Clipboard History',
+    defaultOutput: 'copy',
+  },
+]
+
+const FILES_HISTORY_ACTIONS: RecommendedAction[] = [
+  {
+    id: 'paste-history-files',
+    title: 'Paste Files',
+    titleZh: '粘贴文件',
+    provider: 'Clipboard History',
+    defaultOutput: 'copy',
+  },
+  {
+    id: 'copy-history-file-paths',
+    title: 'Copy File Paths',
+    titleZh: '复制文件路径',
+    provider: 'Clipboard History',
+    defaultOutput: 'copy',
+  },
+]
+
 const CLIPBOARD_ACTIONS_BY_KIND: Record<ObjectBlockKind, RecommendedAction[]> = {
   json: JSON_ACTIONS,
   url: URL_ACTIONS,
@@ -412,6 +471,8 @@ const CLIPBOARD_ACTIONS_BY_KIND: Record<ObjectBlockKind, RecommendedAction[]> = 
   timestamp: FORMATTER_ACTIONS_BY_KIND.timestamp ?? FALLBACK_ACTIONS,
   yaml: YAML_ACTIONS,
   'query-string': QUERY_STRING_ACTIONS,
+  image: IMAGE_HISTORY_ACTIONS,
+  files: FILES_HISTORY_ACTIONS,
 }
 
 const EDITOR_ACTIONS_BY_KIND: Partial<Record<ObjectBlockKind, RecommendedAction[]>> = {
@@ -426,11 +487,31 @@ const EDITOR_ACTIONS_BY_KIND: Partial<Record<ObjectBlockKind, RecommendedAction[
 }
 
 export function recommendActionsForBlock(block: LauncherObjectBlock): RecommendedAction[] {
+  if (block.source === 'history-item') {
+    // Image/files: host injects these as list rows (no textMatch path).
+    // Text: paste/copy as primary host rows; format/encode still via ranking + objectBlockText.
+    if (block.kind === 'image') return IMAGE_HISTORY_ACTIONS
+    if (block.kind === 'files') return FILES_HISTORY_ACTIONS
+    return TEXT_HISTORY_ACTIONS
+  }
   if (block.source === 'clipboard') {
     return CLIPBOARD_ACTIONS_BY_KIND[block.kind] ?? FALLBACK_ACTIONS
   }
   if (block.source === 'editor-selection' || block.source === 'editor-document') {
     return EDITOR_ACTIONS_BY_KIND[block.kind] ?? EDITOR_TEXT_ACTIONS
+  }
+  // tool-result / snapshot / query / etc.: always offer Quick Editor overwrite
+  if (block.payloadText != null || block.preview != null) {
+    return [
+      {
+        id: 'open-in-quick-editor',
+        title: 'Open in Quick Editor',
+        titleZh: '打开到快捷编辑器',
+        provider: 'Quick Editor',
+        defaultOutput: 'open-editor',
+      },
+      ...FALLBACK_ACTIONS.filter((action) => action.id !== 'open-clipboard-editor'),
+    ]
   }
   return FALLBACK_ACTIONS
 }
@@ -439,9 +520,9 @@ export function getSearchOnlyActions(): RecommendedAction[] {
   return [
     {
       id: 'open-editor',
-      title: 'Open Editor',
-      titleZh: '打开编辑器',
-      provider: 'Editor',
+      title: 'Open Quick Editor',
+      titleZh: '打开快捷编辑器',
+      provider: 'Quick Editor',
       defaultOutput: 'open-editor',
     },
     {
@@ -457,6 +538,11 @@ export function getSearchOnlyActions(): RecommendedAction[] {
 
 
 // ─── Merged recommendation (static + plugin manifest) ─────────────────────────
+// Accepts-based tool recommendations live in acceptsRecommendation.ts
+// (recommendActionsFromToolAccepts). Hosts may merge both sources.
+
+/** Max actions returned for one object block (1 primary + secondaries). */
+export const RECOMMENDED_ACTIONS_MAX = 5
 
 export function recommendActionsWithPlugins(block: LauncherObjectBlock): RecommendedAction[] {
   const staticActions = recommendActionsForBlock(block)
@@ -482,5 +568,6 @@ export function recommendActionsWithPlugins(block: LauncherObjectBlock): Recomme
       alternativeOutputs: d.outputTargets.filter((t) => t !== d.defaultOutput),
     }))
 
-  return [...staticActions, ...pluginActions]
+  // Primary = first static (kind catalog order); then plugins; cap for scannable list.
+  return [...staticActions, ...pluginActions].slice(0, RECOMMENDED_ACTIONS_MAX)
 }

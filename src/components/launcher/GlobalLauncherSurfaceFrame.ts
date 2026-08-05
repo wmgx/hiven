@@ -34,7 +34,14 @@ export function useGlobalLauncherSurfaceFrame({
   const [surfaceFocusVersion, setSurfaceFocusVersion] = useState(0)
 
   const openPluginSurface = useCallback(async (target: GlobalLauncherSurfaceFrameTarget) => {
-    if (!getPluginSurfaceDefinition(target)) return
+    if (!getPluginSurfaceDefinition(target)) {
+      console.warn(
+        '[hiven] Cannot open plugin surface — definition missing:',
+        target.pluginId,
+        target.surfaceId,
+      )
+      return
+    }
     setSurfaceFrame(target)
     setSurfaceFocusVersion((version) => version + 1)
   }, [pluginRegistryVersion])

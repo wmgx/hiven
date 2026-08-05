@@ -27,6 +27,9 @@ import type {
 import { normalizeLauncherSurfaceId } from './types'
 import { emptyResult, textResult, replaceActiveTextResult, errorResult, choicesResult, REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID } from './output'
 import type { Locale } from '../../i18n'
+import { getPluginPermissionSnapshot } from '../pluginPermissions'
+import { createPluginShell } from '../pluginShell'
+import { pluginRegistry } from '../pluginRegistry'
 
 export type ToolAdaptOptions = {
   pluginId: string
@@ -105,6 +108,9 @@ export function adaptToolToLauncherItem(
     const input = hasManualInput
       ? manualTextInput(ctx.input?.text ?? '', mode)
       : resolveTextInput(ctx.api, mode)
+    const requestedPermissions = pluginRegistry.getPluginPermissions(options.pluginId, options.source)
+    const permissions = getPluginPermissionSnapshot(options.source, options.pluginId, requestedPermissions)
+    const shell = createPluginShell(permissions)
     const result = await Promise.resolve(
       tool.run({
         input,
@@ -113,6 +119,7 @@ export function adaptToolToLauncherItem(
         locale: ctx.locale,
         api: ctx.api,
         storage: ctx.storage,
+        shell,
         t: ctx.t,
         output: makeOutput(ctx.api, ctx.locale, ctx.surfaceId ?? ''),
       }),
@@ -147,6 +154,9 @@ export function adaptToolToLauncherItem(
     defaultParams,
     requireParamSelection: tool.requireParamSelection,
     textMatch: tool.textMatch,
+    // Intent: declarative accepts + optional runtime match (same as textMatch — runtime-only)
+    accepts: tool.accepts,
+    match: tool.match,
     // Legacy usage keys: the tool id may match a command id used in old usage data
     legacyUsageKeys: [tool.id],
     execute,

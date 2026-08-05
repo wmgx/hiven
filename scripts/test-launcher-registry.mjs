@@ -52,8 +52,15 @@ const translate = (locale, namespace, key, vars = {}) => {
 
 // output.ts (only depends on types)
 const output = loadModule('src/workspace/launcher/output.ts', {
-  stripImports: [...stripTypeImports, stripI18nImport],
-  globals: { translate },
+  stripImports: [
+    ...stripTypeImports,
+    stripI18nImport,
+    /import\s*\{\s*normalizeLauncherSurfaceId\s*\}\s*from\s*'\.\/types'\s*;?\s*\n?/,
+  ],
+  globals: {
+    translate,
+    normalizeLauncherSurfaceId: (surfaceId) => surfaceId === 'command-palette' ? 'editor-command-bar' : surfaceId,
+  },
 })
 
 // toolAdapter.ts depends on ./output + types

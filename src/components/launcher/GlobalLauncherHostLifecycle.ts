@@ -1,35 +1,112 @@
-import { useCallback, useEffect, useRef, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, type MutableRefObject, type RefObject } from 'react'
 import type { LauncherControllerState } from '../../workspace/launcher/controller'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../../utils/imeKeyboard'
 import { runLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
 import { usePluginSettingsStore } from '../../workspace/pluginSettingsStore'
+import { focusLauncherWebview } from '../../workspace/windowManager/launcherWindow'
 
 export function isStandaloneLauncherWindow() {
   return new URLSearchParams(window.location.search).get('window') === 'launcher'
 }
 
+/**
+ * Focus for the launcher search field.
+ *
+ * Intentionally minimal: repeated window.focus / makeFirstResponder / setSelectionRange
+ * broke both list selection and click-to-focus on the non-activating macOS panel.
+ * Native show already keys the webview; here we only focus the <input> on open/mount,
+ * plus ONE native rekey on the cold first mount — native show rekeys before the page
+ * has loaded, so without a rekey after DOM focus the caret stays ghost (no input).
+ */
 export function useGlobalLauncherFocusSession({
   open,
   inputRef,
   setQuery,
   setSelectedIndex,
+  /**
+   * When true, focus the search input on open/mount.
+   * Disable on result frames, surfaces, settings, param steps that own their own fields.
+   */
+  retainSearchFocus = true,
 }: {
   open: boolean
   inputRef: RefObject<HTMLInputElement | null>
   setQuery: (value: string) => void
-  setSelectedIndex: (value: number) => void
+  setSelectedIndex: (value: number, options?: { pin?: boolean }) => void
+  retainSearchFocus?: boolean
 }) {
   const previousFocusRef = useRef<HTMLElement | null>(null)
+  const retainRef = useRef(retainSearchFocus)
+  retainRef.current = retainSearchFocus
 
-  useEffect(() => {
-    if (!open) return
+  const openRef = useRef(open)
+  openRef.current = open
+  /** Only reset query/selection on false→true open edge. */
+  const wasOpenRef = useRef(false)
+  /** Cold open only: warm rekeys caused caret thrash / broke list clicks. */
+  const didColdRekeyRef = useRef(false)
+
+  const focusLauncherInput = useCallback(() => {
+    const el = inputRef.current
+    if (!el) return false
+    try {
+      el.focus({ preventScroll: true })
+    } catch {
+      try { el.focus() } catch { /* ignore */ }
+    }
+    return document.activeElement === el
+  }, [inputRef])
+
+  /**
+   * Called when the search <input> mounts (Host renders null while closed).
+   * One focus attempt only; the sole native rekey happens on the cold first
+   * mount, after DOM focus — the order the WKWebView ghost-focus fix requires.
+   */
+  const bindSearchInputRef = useCallback((node: HTMLInputElement | null) => {
+    ;(inputRef as MutableRefObject<HTMLInputElement | null>).current = node
+    if (node && openRef.current && retainRef.current) {
+      // Defer past commit so the node is in the document before focus.
+      requestAnimationFrame(() => {
+        if (!openRef.current || !retainRef.current) return
+        if (inputRef.current !== node) return
+        try {
+          node.focus({ preventScroll: true })
+        } catch {
+          try { node.focus() } catch { /* ignore */ }
+        }
+        if (!didColdRekeyRef.current) {
+          didColdRekeyRef.current = true
+          focusLauncherWebview()
+            .then(() => {
+              // Cold open: the window only became key during this rekey, so the
+              // DOM focus above ran against an inactive page. Re-assert it.
+              if (inputRef.current === node && openRef.current && retainRef.current) {
+                try { node.focus({ preventScroll: true }) } catch { /* ignore */ }
+              }
+            })
+            .catch(() => { /* best-effort rekey */ })
+        }
+      })
+    }
+  }, [inputRef])
+
+  // Open edge: clear query/selection and focus once.
+  useLayoutEffect(() => {
+    if (!open) {
+      wasOpenRef.current = false
+      return
+    }
+    if (wasOpenRef.current) return
+    wasOpenRef.current = true
     previousFocusRef.current = document.activeElement as HTMLElement | null
+    setQuery('')
+    setSelectedIndex(0, { pin: false })
     requestAnimationFrame(() => {
-      setQuery('')
-      setSelectedIndex(0)
-      inputRef.current?.focus()
+      if (!retainRef.current) return
+      focusLauncherInput()
     })
-  }, [inputRef, open, setQuery, setSelectedIndex])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open-edge only
+  }, [open])
 
   const restoreFocus = useCallback(() => {
     const el = previousFocusRef.current
@@ -40,10 +117,10 @@ export function useGlobalLauncherFocusSession({
   }, [])
 
   const focusSearchInputAfterBack = useCallback(() => {
-    requestAnimationFrame(() => inputRef.current?.focus())
-  }, [inputRef])
+    requestAnimationFrame(() => { focusLauncherInput() })
+  }, [focusLauncherInput])
 
-  return { restoreFocus, focusSearchInputAfterBack }
+  return { restoreFocus, focusSearchInputAfterBack, focusLauncherInput, bindSearchInputRef }
 }
 
 export function useGlobalLauncherImeComposition() {
@@ -54,6 +131,21 @@ export function useGlobalLauncherImeComposition() {
   const handleCompositionEnd = useCallback(() => {
     finishImeComposition(isImeComposingRef)
   }, [])
+
+  // Capture-phase document listeners: composition events target the focused <input>
+  // and can miss parent React handlers in some webviews / focus paths. Global
+  // capture keeps Enter-上屏 suppressed even when panel handlers do not fire.
+  useEffect(() => {
+    const onStart = () => startImeComposition(isImeComposingRef)
+    const onEnd = () => finishImeComposition(isImeComposingRef)
+    document.addEventListener('compositionstart', onStart, true)
+    document.addEventListener('compositionend', onEnd, true)
+    return () => {
+      document.removeEventListener('compositionstart', onStart, true)
+      document.removeEventListener('compositionend', onEnd, true)
+    }
+  }, [])
+
   return { isImeComposingRef, handleCompositionStart, handleCompositionEnd }
 }
 

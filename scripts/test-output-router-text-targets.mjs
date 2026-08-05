@@ -34,7 +34,7 @@ assert.match(outputRouter, /copy:\s*\(text\) => launcherApi\.copyText\(text\)/, 
 assert.match(outputRouter, /pasteToForegroundApp:[\s\S]*createPluginPaste\(\)\.pasteText\(text\)/, 'paste target must use paste host API')
 assert.match(outputRouter, /replaceEditorSelection:[\s\S]*replaceEditorSelection\(text/, 'replace selection target must route through editor bridge')
 assert.match(outputRouter, /insertIntoEditor:[\s\S]*insertIntoEditor\(text/, 'insert target must route through editor bridge')
-assert.match(outputRouter, /openInEditor:[\s\S]*createQuickEditorPane\(\{[\s\S]*text,[\s\S]*language:/, 'open-in-editor target must send text through editor bridge')
+assert.match(outputRouter, /openInEditor:[\s\S]*overwriteQuickEditorText\(text,[\s\S]*language:/, 'open-in-editor target must overwrite Quick Editor with rollback snapshot')
 assert.match(outputRouter, /import \{ showPluginSurfaceWindow \} from ['"]\.\.\/workspace\/windowManager\/pluginSurfaceWindows['"]/, 'open-plugin-surface target must import the plugin surface window manager')
 assert.match(outputRouter, /openPluginSurface:\s*async \(text, options\)[\s\S]*showPluginSurfaceWindow\(\{[\s\S]*pluginId:[\s\S]*surfaceId:/, 'open-plugin-surface target must route through the plugin surface window manager with routed text')
 assert.match(outputRouter, /initialText:\s*options\.initialText \?\? text/, 'open-plugin-surface target must pass routed text as initialText fallback')

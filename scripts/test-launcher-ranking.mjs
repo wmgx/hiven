@@ -45,6 +45,7 @@ rankingSrc = rankingSrc
   .replace(/import\s+type\s*\{[^}]*\}\s*from\s*'\.\/types'\s*;?\s*\n?/, '')
   .replace(/import\s*\{[^}]*\}\s*from\s*'\.\/usage'\s*;?\s*\n?/, '')
   .replace(/import\s*\{[^}]*\}\s*from\s*'\.\/display'\s*;?\s*\n?/, '')
+  .replace(/import\s*\{[^}]*\}\s*from\s*'\.\.\/desktopTargets\/browserWindowPolicy'\s*;?\s*\n?/, '')
 const rankingOut = ts.transpileModule(rankingSrc, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, esModuleInterop: true },
 }).outputText
@@ -57,6 +58,8 @@ const sandbox = {
   searchableFieldsMatch: searchRanking.searchableFieldsMatch,
   getUsageRecord: usage.getUsageRecord,
   localizedDisplay: display.localizedDisplay,
+  // Soft nav demotion optional in ranking; stub for harness.
+  navNearDuplicateDemotion: () => 0,
 }
 vm.runInNewContext(rankingOut, sandbox)
 const ranking = sandbox.module.exports
@@ -65,7 +68,12 @@ function item(systemKey, title, opts = {}) {
   return {
     systemKey,
     kind: opts.kind ?? 'plugin',
-    display: { title, aliases: opts.aliases },
+    display: {
+      title,
+      aliases: opts.aliases,
+      kindLabel: opts.kindLabel,
+      kindLabelI18n: opts.kindLabelI18n,
+    },
     behavior: { type: 'perform' },
     staticPriority: opts.staticPriority,
     ranking: opts.ranking,
@@ -91,12 +99,16 @@ const a = item('plugin:p:launcher:a', 'Alpha')
 const b = item('plugin:p:launcher:b', 'Beta')
 let u2 = usage.emptyUsageBySurface()
 for (let i = 0; i < 10; i++) u2 = usage.recordSelection(u2, 'global-launcher', b.systemKey, now)
-// query empty in command-palette: b has no cp usage, so order is input order (stable)
+// query empty in command-palette: neither has cp usage → cold plugins dropped on empty open
 const cpEmpty = ranking.rankLauncherItems({ query: '', locale: 'en', surfaceId: 'command-palette', usage: u2, now }, [a, b])
-assert.equal(cpEmpty[0].systemKey, a.systemKey, 'global-launcher usage does not affect command-palette order')
-// query empty in global-launcher: b should rank first
+assert.equal(cpEmpty.length, 0, 'empty-open drops cold unused plugins (no surface usage)')
+// query empty in global-launcher: b has usage → kept and first; a cold → dropped
 const glEmpty = ranking.rankLauncherItems({ query: '', locale: 'en', surfaceId: 'global-launcher', usage: u2, now }, [a, b])
+assert.equal(glEmpty.length, 1, 'only used plugin survives empty-open')
 assert.equal(glEmpty[0].systemKey, b.systemKey, 'global-launcher usage influences global-launcher order')
+// With a typed query both match titles and surface isolation still holds
+const cpTyped = ranking.rankLauncherItems({ query: 'alph', locale: 'en', surfaceId: 'command-palette', usage: u2, now }, [a, b])
+assert.equal(cpTyped[0]?.systemKey, a.systemKey, 'typed query: global-launcher usage does not reorder command-palette matches')
 
 // --- 3. Equal match is stable by input order (no pin boost) ---
 const eqA = item('plugin:p:launcher:samea', 'Same')
@@ -166,5 +178,148 @@ const rankedDyn = ranking.rankLauncherItems(
   [dynA, dynB],
 )
 assert.equal(rankedDyn[0].systemKey, dynB.systemKey, 'recorded dynamic usage ranks that dynamic item higher')
+
+// --- 9. Plugin dynamic pattern hits survive query filter without title match ---
+// web-open matchPattern items use site title; query only appears in URL subtitle.
+// searchableFieldsMatch ignores subtitle — dynamic kind must not be dropped.
+const patternHit = item('plugin:web-open:dynamic:meego-quick', 'Meego 工单', {
+  kind: 'dynamic',
+  aliases: [],
+})
+const rankedPattern = ranking.rankLauncherItems(
+  {
+    query: '202607181649026C0B034AEF46D9FBA2C7',
+    locale: 'zh',
+    surfaceId: 'global-launcher',
+    usage: usage.emptyUsageBySurface(),
+    now,
+  },
+  [patternHit, reverse],
+)
+assert.ok(
+  rankedPattern.some((row) => row.systemKey === patternHit.systemKey),
+  'dynamic matchPattern item must remain after ranking filter even when title lacks the query',
+)
+
+// --- 10. Provider-declared scoreBias (product policy), host only clamps/applies ---
+const createDocCmd = item('plugin:feishu:launcher:feishu.create-doc', 'Create Document', {
+  kind: 'plugin',
+  aliases: ['创建文档', '建文档'],
+})
+// Feishu docs provider sets scoreBias: -180; host must not hardcode feishu.
+const hostDoc = item('feishu.docs:document:tok_abc', 'Create Document', {
+  kind: 'host',
+  kindLabel: 'Document',
+  kindLabelI18n: { en: 'Document', zh: '文档' },
+  ranking: { providerPriorityBoost: 50, scoreBias: -180 },
+})
+let uDocs = usage.emptyUsageBySurface()
+for (let i = 0; i < 30; i++) uDocs = usage.recordSelection(uDocs, 'global-launcher', hostDoc.systemKey, now)
+const rankedPluginOverDoc = ranking.rankLauncherItems(
+  {
+    query: 'Create Document',
+    locale: 'en',
+    surfaceId: 'global-launcher',
+    usage: uDocs,
+    now,
+  },
+  [hostDoc, createDocCmd],
+)
+assert.equal(
+  rankedPluginOverDoc[0].systemKey,
+  createDocCmd.systemKey,
+  'provider scoreBias demotes doc mix-in under same match tier',
+)
+assert.equal(ranking.clampScoreBias(-180), -180, 'scoreBias within cap is preserved')
+assert.equal(ranking.clampScoreBias(-9999), -500, 'scoreBias is clamped below one match tier')
+
+// Stronger title match on the doc still wins (higher match tier beats bias < 1000).
+const exactDoc = item('feishu.docs:document:tok_exact', 'UniqueDocTitleXYZ', {
+  kind: 'host',
+  kindLabel: 'Document',
+  ranking: { scoreBias: -180 },
+})
+const weakCmd = item('plugin:feishu:launcher:feishu.other', 'Other command', {
+  kind: 'plugin',
+  aliases: ['other'],
+})
+const rankedDocWins = ranking.rankLauncherItems(
+  {
+    query: 'UniqueDocTitleXYZ',
+    locale: 'en',
+    surfaceId: 'global-launcher',
+    usage: usage.emptyUsageBySurface(),
+    now,
+  },
+  [weakCmd, exactDoc],
+)
+assert.equal(
+  rankedDocWins[0].systemKey,
+  exactDoc.systemKey,
+  'stronger document title match still outranks weaker plugin',
+)
+
+// --- 11. Frecency: recent selection beats older with same count ---
+const oldHabit = item('plugin:p:launcher:old-habit', 'Habit A')
+const newHabit = item('plugin:p:launcher:new-habit', 'Habit B')
+let uFreq = usage.emptyUsageBySurface()
+for (let i = 0; i < 5; i++) uFreq = usage.recordSelection(uFreq, 'global-launcher', oldHabit.systemKey, now - 10 * 24 * 60 * 60 * 1000)
+for (let i = 0; i < 5; i++) uFreq = usage.recordSelection(uFreq, 'global-launcher', newHabit.systemKey, now - 60_000)
+const frecOld = ranking.frecencyScore(
+  { query: '', locale: 'en', surfaceId: 'global-launcher', usage: uFreq, now },
+  oldHabit,
+)
+const frecNew = ranking.frecencyScore(
+  { query: '', locale: 'en', surfaceId: 'global-launcher', usage: uFreq, now },
+  newHabit,
+)
+assert.ok(frecNew > frecOld, 'recent equal-count usage outranks stale usage (frecency)')
+assert.equal(
+  ranking.usageScore(
+    { query: '', locale: 'en', surfaceId: 'global-launcher', usage: uFreq, now },
+    newHabit,
+  ),
+  frecNew,
+  'usageScore is alias of frecencyScore',
+)
+
+// --- 12. Favorites boost on empty open ---
+const cold = item('plugin:p:launcher:cold-fav', 'Cold Fav')
+const hot = item('plugin:p:launcher:hot-nofav', 'Hot NoFav')
+let uFav = usage.emptyUsageBySurface()
+for (let i = 0; i < 20; i++) uFav = usage.recordSelection(uFav, 'global-launcher', hot.systemKey, now)
+const rankedFav = ranking.rankLauncherItems(
+  {
+    query: '',
+    locale: 'en',
+    surfaceId: 'global-launcher',
+    usage: uFav,
+    now,
+    favoriteKeys: [cold.systemKey],
+  },
+  [hot, cold],
+)
+assert.equal(rankedFav[0].systemKey, cold.systemKey, 'favorite boosts cold pin above heavy usage on empty open')
+assert.ok(
+  ranking.favoriteBoost(
+    { query: '', locale: 'en', surfaceId: 'global-launcher', usage: uFav, now, favoriteKeys: [cold.systemKey] },
+    cold,
+  ) > 0,
+  'favoriteBoost positive for pinned key',
+)
+
+// --- 13. Empty-open rank cap ---
+const many = Array.from({ length: 40 }, (_, i) =>
+  item(`plugin:p:launcher:many-${i}`, `Many ${i}`),
+)
+let uMany = usage.emptyUsageBySurface()
+for (const row of many) {
+  uMany = usage.recordSelection(uMany, 'global-launcher', row.systemKey, now)
+}
+const rankedMany = ranking.rankLauncherItems(
+  { query: '', locale: 'en', surfaceId: 'global-launcher', usage: uMany, now },
+  many,
+)
+assert.ok(rankedMany.length <= 16, 'empty-open ranked list is capped')
 
 console.log('✓ test-launcher-ranking passed')

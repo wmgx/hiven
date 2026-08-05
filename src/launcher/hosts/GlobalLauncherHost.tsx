@@ -10,7 +10,7 @@ import { buildGlobalLauncherPanelStyle } from '../../components/launcher/GlobalL
 import { usePluginPermissionStore } from '../../workspace/pluginPermissions'
 import { useLauncherSession } from '../../workspace/launcher/useLauncherSession'
 import { useGlobalLauncherSurfaceRegistry } from '../../components/launcher/GlobalLauncherSurfaceRegistry'
-import { useCloseStandaloneLauncherOnBlur, useFocusGlobalLauncherSurfaceShell, useGlobalLauncherNativeDrag, useStandaloneLauncherResize } from '../../components/launcher/GlobalLauncherWindowLifecycle'
+import { useAutoCloseStandaloneLauncherOnBackgroundIdle, useCloseStandaloneLauncherOnBlur, useFocusGlobalLauncherSurfaceShell, useGlobalLauncherNativeDrag, useStandaloneLauncherResize } from '../../components/launcher/GlobalLauncherWindowLifecycle'
 import { isStandaloneLauncherWindow, useGlobalLauncherCollectInputPreview, useGlobalLauncherFocusSession, useGlobalLauncherHostEscape, useGlobalLauncherImeComposition } from '../../components/launcher/GlobalLauncherHostLifecycle'
 import { closeGlobalLauncherWindow } from '../../components/launcher/GlobalLauncherClose'
 import { isWorkflowObjectLauncherItem } from '../../components/launcher/GlobalLauncherSelection'
@@ -21,12 +21,19 @@ import { useGlobalLauncherSelectionController } from '../../components/launcher/
 import { useClipboardObjectBlock } from '../clipboard/useClipboardObjectBlock'
 import { executeRecommendedAction } from '../clipboard/actionExecutor'
 import { recommendActionsForBlock, type RecommendedAction, type RecommendedOutputTarget } from '../clipboard/actionRecommendation'
-import { writeClipboardText } from '../../workspace/pluginClipboard'
+import { createPluginClipboard, writeClipboardText } from '../../workspace/pluginClipboard'
+import { createGlobalLauncherPluginApi } from '../clipboard/globalLauncherApi'
+import { createPluginPaste } from '../../workspace/pluginPaste'
+import { createPluginPrivateStorage } from '../../workspace/pluginStorage'
 import { createQuickEditorPane } from '../../workspace/quickEditor/quickEditorRequests'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
-import { prepareLauncherInputSource, restoreLauncherInputSource } from '../../workspace/windowManager/launcherWindow'
+import { restoreLauncherInputSource } from '../../workspace/windowManager/launcherWindow'
 import { getHostSurfaceShell } from '../../components/launcher/hostSurfaceShell'
+import { logLauncherPerf } from '../../workspace/launcher/perf'
+import type { LauncherItem } from '../../workspace/launcher/types'
+import { getPluginPermissionSnapshot } from '../../workspace/pluginPermissions'
+import { showToast } from '../../workspace/toast'
 
 export function GlobalLauncherHost() {
   const {
@@ -50,6 +57,7 @@ export function GlobalLauncherHost() {
   const settingsDialogTarget = usePluginSettingsStore((s) => s.settingsDialogTarget)
   const closeSettingsDialog = usePluginSettingsStore((s) => s.closeSettingsDialog)
   const closeAfterActionRef = useRef<() => void>(() => {})
+  const focusSearchInputAfterBackRef = useRef<() => void>(() => {})
   const isKeyboardNavRef = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -65,11 +73,13 @@ export function GlobalLauncherHost() {
     open,
     readClipboard: readLauncherClipboard,
   })
-  // Only use clipboard for recommendations when the Object Block is showing (fresh enough)
+  // Recommendations while block is mounted (exit keeps mode stable to avoid ranking jank).
   const objectBlockText = clipboardBlock.block?.payloadText ?? undefined
+  const [foregroundApp, setForegroundApp] = useState<string | undefined>()
 
   const {
     query,
+    rankingQuery,
     setQuery,
     selectedIndex,
     setSelectedIndex,
@@ -83,15 +93,66 @@ export function GlobalLauncherHost() {
     requestClose: () => closeAfterActionRef.current(),
     collectDynamicWhenEmpty: true,
     objectBlockText,
+    foregroundApp,
+    makeApi: createGlobalLauncherPluginApi,
   })
 
-  const objectActions: RecommendedAction[] = [] // Disabled: recommendations now come from plugin dynamicItems + textMatch
+  const objectActions = useMemo(() => {
+    if (!clipboardBlock.block) return []
+    return recommendActionsForBlock(clipboardBlock.block)
+  }, [clipboardBlock.block])
 
   useEffect(() => {
     if (!open) return
-    void prepareLauncherInputSource().catch((error) => {
-      console.warn('[hiven] Failed to prepare launcher input source:', error)
+    // Total open-event → first painted frame (double rAF ≈ paint).
+    const raf = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const t0 = (window as unknown as { __hivenLauncherOpenT0?: number }).__hivenLauncherOpenT0
+        if (typeof t0 !== 'number') return
+        ;(window as unknown as { __hivenLauncherOpenT0?: number }).__hivenLauncherOpenT0 = undefined
+        logLauncherPerf('open:event-to-first-paint', {
+          durationMs: Math.round((performance.now() - t0) * 10) / 10,
+        })
+      })
     })
+    return () => cancelAnimationFrame(raf)
+  }, [open])
+
+  useEffect(() => {
+    if (!open) {
+      setForegroundApp(undefined)
+      return
+    }
+    // Defer after first paint — AppKit foreground lookup must not delay show.
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
+            if (!cancelled) setForegroundApp(undefined)
+            return
+          }
+          const { invoke } = await import('@tauri-apps/api/core')
+          const foreground = await invoke<{ appName?: string | null } | null>('current_foreground_app_context')
+          if (cancelled) return
+          const name = foreground?.appName?.trim()
+          setForegroundApp(name || undefined)
+        } catch {
+          if (!cancelled) setForegroundApp(undefined)
+        }
+      })()
+    }, 200)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [open])
+
+  useEffect(() => {
+    // Native show_launcher already switches to English IME before show.
+    // Frontend must NOT call prepare again (duplicate TIS on main thread).
+    // Restore previous input source only when leaving the open state.
+    if (!open) return
     return () => {
       void restoreLauncherInputSource().catch((error) => {
         console.warn('[hiven] Failed to restore launcher input source:', error)
@@ -102,13 +163,6 @@ export function GlobalLauncherHost() {
   useEffect(() => {
     setSelectedObjectActionIndex((index) => Math.min(index, Math.max(0, objectActions.length - 1)))
   }, [objectActions.length])
-
-  const { restoreFocus, focusSearchInputAfterBack } = useGlobalLauncherFocusSession({
-    open,
-    inputRef,
-    setQuery,
-    setSelectedIndex,
-  })
 
   const {
     surfaceFrame,
@@ -123,10 +177,31 @@ export function GlobalLauncherHost() {
     open,
     pluginRegistryVersion,
     pluginSurfaceToolTarget,
-    closeLauncher: () => closeLauncher(),
+    closeLauncher: () => closeAfterActionRef.current(),
     // ESC/back pops the tool surface; keep the launcher open and refocus search.
-    onReturnedToList: focusSearchInputAfterBack,
+    onReturnedToList: () => focusSearchInputAfterBackRef.current(),
   })
+
+  // Root list + collect-input keep the caret; result/param/surface own their own focus.
+  const retainSearchFocus = useMemo(() => {
+    if (surfaceFrame || launcherSettingsTarget || hostSurfaceTarget) return false
+    const top = controllerState?.frames[controllerState.frames.length - 1]
+    if (!top || top.kind === 'list') return true
+    if (top.kind === 'collect-input') return true
+    return false
+  }, [controllerState, hostSurfaceTarget, launcherSettingsTarget, surfaceFrame])
+
+  const { restoreFocus, focusSearchInputAfterBack, bindSearchInputRef } = useGlobalLauncherFocusSession({
+    open,
+    inputRef,
+    setQuery,
+    setSelectedIndex,
+    retainSearchFocus,
+  })
+
+  useEffect(() => {
+    focusSearchInputAfterBackRef.current = focusSearchInputAfterBack
+  }, [focusSearchInputAfterBack])
 
   useGlobalLauncherSurfaceRegistry({
     open,
@@ -141,14 +216,116 @@ export function GlobalLauncherHost() {
     }, [controllerRef]),
   })
 
-  const visibleFiltered = useMemo(() => {
+  // Use rankingQuery (deferred), not live query — otherwise every keystroke rebuilds
+  // all list item objects and busts row memo before deferred rank catches up.
+  const rankedVisible = useMemo(() => {
     void pluginRegistryVersion
     return buildGlobalLauncherItems({
       rankedLauncherItems,
-      query,
+      query: rankingQuery,
       locale,
     })
-  }, [locale, pluginRegistryVersion, query, rankedLauncherItems])
+  }, [locale, pluginRegistryVersion, rankingQuery, rankedLauncherItems])
+
+  /**
+   * Object Block host rows pinned above ranking tools.
+   *
+   * Ranking / textMatch no longer shows static recommendActionsForBlock entries
+   * (RecommendedActionRow UI is disabled). History keeps paste/copy/open rows;
+   * any other text-bearing block always pins "Open in Quick Editor" so overwrite
+   * is one Enter away.
+   */
+  const pinnedObjectActionItems = useMemo((): GlobalLauncherItem[] => {
+    const block = clipboardBlock.block
+    if (!block) return []
+
+    const q = rankingQuery.trim().toLowerCase()
+    const hasText = Boolean((block.payloadText ?? block.preview)?.length)
+    const isMedia = block.kind === 'image' || block.kind === 'files'
+
+    let actions: RecommendedAction[]
+    if (block.source === 'history-item') {
+      actions = objectActions
+    } else if (hasText && !isMedia) {
+      // Prefer catalog open-editor actions; fall back to a host-owned pin.
+      const openEditorActions = objectActions.filter((action) => action.defaultOutput === 'open-editor')
+      actions = openEditorActions.length > 0
+        ? openEditorActions
+        : [{
+            id: 'open-in-quick-editor',
+            title: 'Open in Quick Editor',
+            titleZh: '打开到快捷编辑器',
+            provider: 'Quick Editor',
+            defaultOutput: 'open-editor',
+          }]
+    } else {
+      return []
+    }
+
+    const kindLabel =
+      block.kind === 'image'
+        ? { en: 'Image', zh: '图片' }
+        : block.kind === 'files'
+          ? { en: 'Files', zh: '文件' }
+          : block.source === 'history-item'
+            ? { en: 'History', zh: '历史' }
+            : block.source === 'tool-result'
+              ? { en: 'Result', zh: '结果' }
+              : { en: 'Clipboard', zh: '剪贴板' }
+
+    return actions
+      .filter((action) => {
+        if (!q) return true
+        return (
+          action.title.toLowerCase().includes(q) ||
+          action.titleZh.toLowerCase().includes(q) ||
+          action.id.toLowerCase().includes(q)
+        )
+      })
+      .map((action) => {
+        const title = locale === 'zh' ? action.titleZh : action.title
+        const domainItem: LauncherItem = {
+          systemKey: `object-action:${action.id}`,
+          kind: 'host',
+          display: {
+            title,
+            titleI18n: { en: action.title, zh: action.titleZh },
+            subtitle: action.provider,
+            kindLabel: kindLabel.en,
+            kindLabelI18n: kindLabel,
+          },
+          behavior: { type: 'perform' },
+          execute: async () => ({ ok: true }),
+        }
+        return {
+          kind: 'domain' as const,
+          id: domainItem.systemKey,
+          title,
+          subtitle: action.provider ?? '',
+          domainItem,
+        }
+      })
+  }, [clipboardBlock.block, locale, objectActions, rankingQuery])
+
+  const visibleFiltered = useMemo(
+    () => [...pinnedObjectActionItems, ...rankedVisible],
+    [pinnedObjectActionItems, rankedVisible],
+  )
+
+  /**
+   * Primitive resize trigger — controllerState object identity changes every setState.
+   * For collect-input live preview: only signal empty vs has-preview (not each keystroke /
+   * each preview text), so native window does not thrash while results replace in place.
+   */
+  const controllerResizeKey = useMemo(() => {
+    if (!controllerState) return 'idle'
+    const top = controllerState.frames[controllerState.frames.length - 1]
+    const topKind = top?.kind ?? 'none'
+    const previewSignal = top?.kind === 'collect-input'
+      ? `:${top.inputText.trim() ? 1 : 0}:${top.previewOutput?.choices?.length ? 1 : 0}`
+      : ''
+    return `${controllerState.busy ? 1 : 0}:${controllerState.frames.length}:${topKind}:${controllerState.error ?? ''}${previewSignal}`
+  }, [controllerState])
 
   const resetLauncherSession = useCallback(() => {
     clearPluginSurfaceTool()
@@ -161,10 +338,11 @@ export function GlobalLauncherHost() {
       closeSettingsDialog()
     }
     setQuery('')
-    setSelectedIndex(0)
+    setSelectedIndex(0, { pin: false })
     controllerRef.current?.reset()
-  }, [clearLauncherHostSurface, clearPluginSurfaceTool, closeSettingsDialog])
+  }, [clearLauncherHostSurface, clearPluginSurfaceTool, closeSettingsDialog, setQuery, setSelectedIndex, controllerRef])
 
+  // Esc / overlay click / surface close: smart restore (skip if user already left).
   const closeLauncher = useCallback(() => {
     resetLauncherSession()
     void closeGlobalLauncherWindow({
@@ -173,6 +351,20 @@ export function GlobalLauncherHost() {
       hideOverlayWindow: true,
       restoreFocus,
       setOpen,
+      restoreForeground: 'auto',
+    })
+  }, [overlay, resetLauncherSession, setOpen, standaloneLauncher, restoreFocus])
+
+  // Blur-dismiss (clicked another app/window): never steal focus back.
+  const closeLauncherOnBlur = useCallback(() => {
+    resetLauncherSession()
+    void closeGlobalLauncherWindow({
+      standaloneLauncher,
+      overlay,
+      hideOverlayWindow: true,
+      restoreFocus,
+      setOpen,
+      restoreForeground: 'never',
     })
   }, [overlay, resetLauncherSession, setOpen, standaloneLauncher, restoreFocus])
 
@@ -190,6 +382,9 @@ export function GlobalLauncherHost() {
       hideOverlayWindow: false,
       restoreFocus,
       setOpen,
+      // Intentionally switched targets already clear_previous_foreground_app;
+      // auto still restores when the action only wrote clipboard / stayed put.
+      restoreForeground: 'auto',
     })
   }, [overlay, resetLauncherSession, setOpen, standaloneLauncher, restoreFocus])
 
@@ -202,11 +397,27 @@ export function GlobalLauncherHost() {
     standaloneLauncher,
     closeOnBlur: getHostSurfaceShell(launcherHostSurfaceTarget)?.closeOnBlur
       ?? activeSurfaceFrame?.surface.shell?.closeOnBlur,
+    closeLauncher: closeLauncherOnBlur,
+  })
+
+  // Surfaces with closeOnBlur:false can stay open after app switch; exit if
+  // the standalone window has not been foreground for 5 minutes.
+  useAutoCloseStandaloneLauncherOnBackgroundIdle({
+    open,
+    standaloneLauncher,
     closeLauncher,
   })
 
-  const clampedSelectedIndex = Math.min(selectedIndex, Math.max(0, visibleFiltered.length - 1))
-  const selectedItem = visibleFiltered.length === 1 ? visibleFiltered[0] : visibleFiltered[clampedSelectedIndex]
+  // -1 focuses the recent-clipboard hint row (30s–2 min) above the command list.
+  const hasClipboardHint = Boolean(clipboardBlock.hint && !clipboardBlock.block)
+  const minSelectedIndex = hasClipboardHint ? -1 : 0
+  const maxSelectedIndex = Math.max(0, visibleFiltered.length - 1)
+  const clampedSelectedIndex = Math.min(Math.max(selectedIndex, minSelectedIndex), maxSelectedIndex)
+  const selectedItem = clampedSelectedIndex < 0
+    ? undefined
+    : visibleFiltered.length === 1
+      ? visibleFiltered[0]
+      : visibleFiltered[clampedSelectedIndex]
   const activeResultFrame = controllerState?.frames.length
     ? controllerState.frames[controllerState.frames.length - 1]
     : null
@@ -243,7 +454,7 @@ export function GlobalLauncherHost() {
     launcherSettingsTarget,
     surfaceShell: activeSurfaceFrame?.surface.shell,
     visibleFilteredLength: visibleFiltered.length,
-    controllerState,
+    controllerResizeKey,
   })
 
   const {
@@ -278,11 +489,28 @@ export function GlobalLauncherHost() {
     const block = clipboardBlock.block
     if (!block) return
 
+    // History image/files blobs live in clipboard-history private storage
+    const historyPermissions = getPluginPermissionSnapshot('builtin', 'clipboard-history', [
+      'clipboard.write',
+      'clipboard.image',
+      'clipboard.files',
+      'storage.private',
+      'storage.blob',
+      'accessibility.paste',
+    ])
+    const historyStorage = createPluginPrivateStorage('builtin', 'clipboard-history', historyPermissions)
+    const historyClipboard = createPluginClipboard('clipboard-history', historyPermissions, historyStorage)
+    const historyPaste = createPluginPaste(historyPermissions, historyStorage)
+
     const result = await executeRecommendedAction({ block, action, target }, {
       copyText: writeClipboardText,
       copyAndKeepOpen: writeClipboardText,
       openInEditor: async (text, options) => {
-        await createQuickEditorPane({ text, language: options?.language })
+        const { overwriteQuickEditorText } = await import('../../workspace/quickEditor/quickEditorRequests')
+        await overwriteQuickEditorText(text, {
+          language: options?.language,
+          source: block.source,
+        })
       },
       openPluginSurface: async (pluginId, options) => {
         await openPluginSurface({
@@ -314,12 +542,86 @@ export function GlobalLauncherHost() {
       setRenderer: async (actionId, text) => {
         await createQuickEditorPane({ text: `${actionId}\n\n${text}` })
       },
+      pasteText: async (text) => {
+        const pasteResult = await historyPaste.pasteText(text)
+        if (!pasteResult.ok) {
+          if (pasteResult.fallback === 'copied') {
+            showToast(pasteResult.message || (locale === 'zh' ? '已复制到剪贴板' : 'Copied to clipboard'), 'info')
+            return
+          }
+          throw new Error(pasteResult.message || 'Paste text failed')
+        }
+      },
+      pasteImage: async (blobId) => {
+        const pasteResult = await historyPaste.pasteImage(blobId)
+        if (!pasteResult.ok) {
+          if (pasteResult.fallback === 'copied') {
+            showToast(pasteResult.message || (locale === 'zh' ? '已复制到剪贴板' : 'Copied to clipboard'), 'info')
+            return
+          }
+          throw new Error(pasteResult.message || 'Paste image failed')
+        }
+      },
+      writeImage: async (blobId) => {
+        await historyClipboard.writeImage(blobId)
+      },
+      pasteFiles: async (paths) => {
+        const pasteResult = await historyPaste.pasteFiles(paths)
+        if (!pasteResult.ok) {
+          if (pasteResult.fallback === 'copied') {
+            showToast(pasteResult.message || (locale === 'zh' ? '已复制到剪贴板' : 'Copied to clipboard'), 'info')
+            return
+          }
+          throw new Error(pasteResult.message || 'Paste files failed')
+        }
+      },
     })
+
+    if (!result.ok) {
+      showToast(result.error, 'error')
+      return
+    }
 
     if (result.ok && target !== 'copy-and-keep-open') {
       closeLauncherAfterAction()
     }
-  }, [clipboardBlock.block, closeLauncherAfterAction, openPluginSurface])
+  }, [clipboardBlock.block, closeLauncherAfterAction, locale, openPluginSurface])
+
+  const selectItemWithObjectActions = useCallback((item: GlobalLauncherItem) => {
+    // Support both current prefix and the retired history-only prefix.
+    const objectActionId = item.id.startsWith('object-action:')
+      ? item.id.slice('object-action:'.length)
+      : item.id.startsWith('history-object-action:')
+        ? item.id.slice('history-object-action:'.length)
+        : null
+    if (objectActionId != null) {
+      const fromCatalog = objectActions.find((entry) => entry.id === objectActionId)
+      const action: RecommendedAction = fromCatalog ?? {
+        id: objectActionId,
+        title: 'Open in Quick Editor',
+        titleZh: '打开到快捷编辑器',
+        provider: 'Quick Editor',
+        defaultOutput: 'open-editor',
+      }
+      void executeObjectAction(action, action.defaultOutput)
+      return
+    }
+    selectItem(item)
+  }, [executeObjectAction, objectActions, selectItem])
+
+  const pastePreviewText = useCallback(async (text: string) => {
+    try {
+      const paste = createPluginPaste()
+      const result = await paste.pasteText(text)
+      if (!result.ok) {
+        showToast(result.message || t(locale, 'palette.quickEntryError'), 'error')
+        return
+      }
+      closeLauncherAfterAction()
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error), 'error')
+    }
+  }, [closeLauncherAfterAction, locale])
 
   const beginDrag = useGlobalLauncherNativeDrag(standaloneLauncher)
 
@@ -352,6 +654,7 @@ export function GlobalLauncherHost() {
       <GlobalLauncherPanel
         panelRef={panelRef}
         inputRef={inputRef}
+        bindSearchInputRef={bindSearchInputRef}
         controllerRef={controllerRef}
         isImeComposingRef={isImeComposingRef}
         isKeyboardNavRef={isKeyboardNavRef}
@@ -373,13 +676,15 @@ export function GlobalLauncherHost() {
         selectedResultChoiceIds={selectedResultChoiceIds}
         activateResultChoice={activateResultChoice}
         activateSecondaryAction={activateSecondaryAction}
+        pastePreviewText={pastePreviewText}
         toggleResultChoice={toggleResultChoice}
         closeLauncher={closeLauncher}
         visibleFiltered={visibleFiltered}
         selectedItem={selectedItem}
+        selectedIndex={clampedSelectedIndex}
         setSelectedIndex={setSelectedIndex}
         isWorkflowObjectLauncherItem={isWorkflowObjectLauncherItem}
-        selectItem={selectItem}
+        selectItem={selectItemWithObjectActions}
         hostSurfaceTarget={hostSurfaceTarget}
         clearLauncherHostSurface={clearLauncherHostSurface}
         query={query}

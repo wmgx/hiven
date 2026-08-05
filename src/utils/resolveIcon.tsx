@@ -159,12 +159,76 @@ function AppIcon({ iconName, size, fallbackName }: { iconName: string; size: num
   )
 }
 
+function isRemoteImageIcon(iconName: string): boolean {
+  return (
+    iconName.startsWith('https://') ||
+    iconName.startsWith('http://') ||
+    iconName.startsWith('data:image/')
+  )
+}
+
+function isCircularRemoteIcon(src: string): boolean {
+  // Person/chat avatars & generated initials look better circular.
+  if (src.startsWith('data:image/svg+xml')) return true
+  // Feishu/Lark CDN hosts for profile + group avatars (imfile, s*-imfile, etc.).
+  if (
+    /imfile\.feishucdn|feishucdn\.com|larksuite\.com|larkusercontent\.com|byteimg\.com|avatar/i.test(
+      src,
+    )
+  ) {
+    return true
+  }
+  return false
+}
+
+function RemoteImageIcon({
+  src,
+  size,
+  fallbackName,
+}: {
+  src: string
+  size: number
+  fallbackName?: string
+}) {
+  const [failed, setFailed] = useState(false)
+  if (failed) {
+    // Prefer stable initials over a faint Globe glyph when the row title exists.
+    if (fallbackName?.trim()) {
+      return resolveIcon(undefined, size, fallbackName)
+    }
+    return resolveIcon('Globe', size, fallbackName)
+  }
+  const round = isCircularRemoteIcon(src)
+  return (
+    <img
+      src={src}
+      alt=""
+      width={size}
+      height={size}
+      className={round ? 'r-avatar-img' : 'r-remote-img'}
+      style={{
+        width: size,
+        height: size,
+        objectFit: 'cover',
+        borderRadius: round ? '50%' : 3,
+        display: 'block',
+        flex: 'none',
+      }}
+      draggable={false}
+      onError={() => setFailed(true)}
+    />
+  )
+}
+
 /**
  * 根据 icon 名称解析 lucide 图标组件
  * fallback 为 name 前两个字母大写
  */
 export function resolveIcon(iconName?: string, size = 16, fallbackName?: string) {
   if (iconName) {
+    if (isRemoteImageIcon(iconName)) {
+      return <RemoteImageIcon src={iconName} size={size} fallbackName={fallbackName} />
+    }
     if (parsePluginBlobIcon(iconName)) {
       return <PluginBlobIcon iconName={iconName} size={size} fallbackName={fallbackName} />
     }

@@ -15,9 +15,21 @@ export async function showLauncherWindow(): Promise<void> {
   })
 }
 
-export async function hideLauncherWindow(): Promise<void> {
+/**
+ * How hide should handle the app that was frontmost when the launcher opened.
+ * - `auto` (default): restore only if focus has not already moved elsewhere
+ * - `never`: blur-dismiss — user chose another frontmost app; do not steal focus
+ * - `force`: always restore (prefer hide_launcher_and_paste for clipboard paste)
+ */
+export type RestoreForegroundMode = 'auto' | 'never' | 'force'
+
+export async function hideLauncherWindow(options?: {
+  restoreForeground?: RestoreForegroundMode
+}): Promise<void> {
   if (!isTauriRuntime()) return
-  await invoke('hide_launcher_window')
+  await invoke('hide_launcher_window', {
+    restoreForeground: options?.restoreForeground ?? 'auto',
+  })
   markSurfaceInstanceState(LAUNCHER_WINDOW_LABEL, 'hidden')
 }
 
@@ -64,6 +76,16 @@ export async function resizeCurrentLauncherWindow(size: { width: number; height:
   if (!isTauriRuntime()) return
   const { getCurrentWindow, LogicalSize } = await import('@tauri-apps/api/window')
   await getCurrentWindow().setSize(new LogicalSize(size.width, size.height))
+}
+
+/**
+ * Re-apply key window + webview first responder after the search input is
+ * focused in DOM. Required on macOS non-activating launcher panels: HTML
+ * focus alone often yields a caret-less "ghost" focus until the user clicks.
+ */
+export async function focusLauncherWebview(): Promise<void> {
+  if (!isTauriRuntime()) return
+  await invoke('focus_launcher_webview')
 }
 
 export async function onCurrentLauncherWindowFocusChanged(

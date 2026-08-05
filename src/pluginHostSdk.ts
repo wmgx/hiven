@@ -6,6 +6,7 @@ import { makePluginT, type PluginT } from './i18n/pluginI18nRegistry'
 import type { Locale } from './i18n'
 import { DualEditorView } from './kits/ui/DualEditorView'
 import { computeTextLineDiff } from './kits/diff/lineDiff'
+import { detectContent } from './kits/content'
 import { createMonacoDisposableBucket, disposeAllMonacoDisposables } from './utils/monacoDisposables'
 import {
   buildDiffTree,
@@ -33,8 +34,18 @@ import {
   textError,
   defineTextCommand,
 } from './pluginHostCore.ts'
+import {
+  createDesktopTargetsHostApi,
+  type DesktopTargetsHostApi,
+} from './workspace/desktopTargets/pluginApi'
+import {
+  listRegisteredUrlSchemes,
+  registerUrlSchemes,
+  unregisterUrlSchemes,
+} from './workspace/urlSchemeRegistry'
 
 export type { PluginHostUi, PluginHostEffects, TextCommandDefinition } from './pluginHostCore.ts'
+export type { DesktopTargetsHostApi, DesktopTargetProvider } from './workspace/desktopTargets/pluginApi'
 
 type HostSettings = ReturnType<typeof useAppStore.getState>['settings']
 
@@ -53,6 +64,9 @@ export type PluginHostKits = {
     computeJsonLineHighlights: typeof computeJsonLineHighlights
     formatJsonPreserveKeyOrder: typeof formatJsonPreserveKeyOrder
     parseJson: typeof parseJson
+  }
+  content: {
+    detectContent: typeof detectContent
   }
 }
 
@@ -94,6 +108,13 @@ export type PluginHostI18n = {
   makeT: (pluginId: string, locale: Locale) => PluginT
 }
 
+export type UrlSchemeRegistryApi = {
+  /** Register non-http schemes this plugin may open via host openUrl (e.g. lark, feishu). */
+  register: (pluginId: string, schemes: string[]) => void
+  unregister: (pluginId: string) => void
+  list: () => string[]
+}
+
 export type PluginHostSdk = {
   definePlugin: typeof definePlugin
   react: typeof React
@@ -105,6 +126,16 @@ export type PluginHostSdk = {
   textOutput: typeof textOutput
   textError: typeof textError
   defineTextCommand: typeof defineTextCommand
+  /**
+   * Desktop Target protocol: plugins register providers (browser tabs, Feishu, …)
+   * that feed Global Launcher mix — not parallel dynamicItems lists.
+   */
+  desktopTargets: DesktopTargetsHostApi
+  /**
+   * Plugin-declared URL schemes for host openUrl routing.
+   * Custom schemes are opened via open_system_url — not Tauri shell.open scope.
+   */
+  urlSchemes: UrlSchemeRegistryApi
 }
 
 declare global {
@@ -127,6 +158,12 @@ export function createPluginHostSdk(): PluginHostSdk {
     textOutput: core.textOutput,
     textError: core.textError,
     defineTextCommand: core.defineTextCommand,
+    desktopTargets: createDesktopTargetsHostApi(),
+    urlSchemes: {
+      register: registerUrlSchemes,
+      unregister: unregisterUrlSchemes,
+      list: listRegisteredUrlSchemes,
+    },
   }
 }
 
@@ -165,6 +202,9 @@ function createPluginHostKits(): PluginHostKits {
       computeJsonLineHighlights,
       formatJsonPreserveKeyOrder,
       parseJson,
+    },
+    content: {
+      detectContent,
     },
   }
 }

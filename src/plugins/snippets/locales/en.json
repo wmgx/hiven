@@ -1,0 +1,22 @@
+{
+  "plugin.name": "Snippets",
+  "plugin.description": "Expand reusable text templates with clipboard, date, and query placeholders.",
+  "settings.title": "Snippets",
+  "settings.enabled": "Enable snippets",
+  "settings.enabled.desc": "When off, snippet commands leave the launcher.",
+  "settings.keywordExpansion": "Keyword expansion (coming later)",
+  "settings.keywordExpansion.desc": "Background keyword expansion is intentionally disabled in v1. Manage snippets here and run them from the launcher.",
+  "settings.list": "Snippet library",
+  "settings.add": "Add snippet",
+  "settings.item": "Snippet",
+  "settings.empty": "No snippets yet.",
+  "field.title": "Name",
+  "field.body": "Template body",
+  "field.body.desc": "Placeholders: {clipboard} {selection} {query} {date} {time} {datetime}",
+  "field.aliases": "Aliases",
+  "field.aliases.desc": "Press Enter to add. Any alias finds this snippet in the launcher.",
+  "field.keyword": "Keyword (reserved)",
+  "field.enabled": "Enabled",
+  "tool.expand.subtitle": "Expand snippet",
+  "tool.expand.empty": "Snippet body is empty"
+}

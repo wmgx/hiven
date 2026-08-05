@@ -6,9 +6,9 @@
  *
  * 1. Global Launcher no longer reads external selection
  * 2. ClipboardSnapshot with hash/detectedType/firstSeenAt/lastSeenAt/changedAt/ageConfidence
- * 3. Auto attach only when changedAt known && <= 2 minutes
- * 4. 2-10 min shows RecentClipboardHint only
- * 5. >10 min or unknown age: nothing shown
+ * 3. Auto attach only when changedAt known && <= 30 seconds
+ * 4. 30s-2 min shows RecentClipboardHint only
+ * 5. >2 min or unknown age: nothing shown
  * 6. LauncherObjectBlock / ObjectBlockToken in search input
  * 7. × delete + Backspace select-then-delete
  * 8. Object Block shows recommended actions, not clipboard as search result
@@ -66,30 +66,32 @@ assert.equal(typeof s1.lastSeenAt, 'number', '#2: lastSeenAt')
 assert.ok(s1.changedAt !== undefined, '#2: changedAt for new content')
 assert.equal(s1.ageConfidence, 'known', '#2: ageConfidence')
 
-// ─── #3: Auto attach only when changedAt known && <= 2 min ─────────────────────
-const fresh = { ...s1, changedAt: Date.now() - 60_000, ageConfidence: 'known' }
-assert.equal(snapshot.shouldAutoAttachClipboard(fresh), true, '#3: fresh <= 2 min attaches')
+// ─── #3: Auto attach only when changedAt known && <= 30s ──────────────────────
+assert.equal(snapshot.FRESH_CLIPBOARD_TTL_MS, 30_000, '#3: fresh TTL is 30s')
+const fresh = { ...s1, changedAt: Date.now() - 10_000, ageConfidence: 'known' }
+assert.equal(snapshot.shouldAutoAttachClipboard(fresh), true, '#3: fresh <= 30s attaches')
 const block = objectBlock.createClipboardObjectBlock(fresh)
 assert.ok(block, '#3: fresh block created')
 
-const stale3min = { ...s1, changedAt: Date.now() - 3 * 60_000, ageConfidence: 'known' }
-assert.equal(snapshot.shouldAutoAttachClipboard(stale3min), false, '#3: 3 min does not auto attach')
+const stale45s = { ...s1, changedAt: Date.now() - 45_000, ageConfidence: 'known' }
+assert.equal(snapshot.shouldAutoAttachClipboard(stale45s), false, '#3: 45s does not auto attach')
 
 const unknownAge = { ...s1, changedAt: undefined, ageConfidence: 'unknown' }
 assert.equal(snapshot.shouldAutoAttachClipboard(unknownAge), false, '#3: unknown age does not auto attach')
 
-// ─── #4: 2-10 min shows hint only ─────────────────────────────────────────────
-const recent5min = { ...s1, changedAt: Date.now() - 5 * 60_000, ageConfidence: 'known' }
-assert.equal(snapshot.shouldShowRecentClipboardHint(recent5min), true, '#4: 5 min shows hint')
-assert.equal(objectBlock.createClipboardObjectBlock(recent5min), null, '#4: 5 min does not create block')
-const hint = objectBlock.buildRecentClipboardHint(recent5min)
+// ─── #4: 30s-2 min shows hint only ────────────────────────────────────────────
+assert.equal(snapshot.RECENT_CLIPBOARD_HINT_TTL_MS, 2 * 60_000, '#4: hint TTL is 2 min')
+const recent60s = { ...s1, changedAt: Date.now() - 60_000, ageConfidence: 'known' }
+assert.equal(snapshot.shouldShowRecentClipboardHint(recent60s), true, '#4: 60s shows hint')
+assert.equal(objectBlock.createClipboardObjectBlock(recent60s), null, '#4: 60s does not create block')
+const hint = objectBlock.buildRecentClipboardHint(recent60s)
 assert.ok(hint, '#4: hint created for recent clipboard')
 
-// ─── #5: >10 min or unknown: nothing ──────────────────────────────────────────
-const old15min = { ...s1, changedAt: Date.now() - 15 * 60_000, ageConfidence: 'known' }
-assert.equal(snapshot.shouldAutoAttachClipboard(old15min), false, '#5: 15 min no attach')
-assert.equal(snapshot.shouldShowRecentClipboardHint(old15min), false, '#5: 15 min no hint')
-assert.equal(objectBlock.buildRecentClipboardHint(old15min), null, '#5: no hint for old')
+// ─── #5: >2 min or unknown: nothing ───────────────────────────────────────────
+const old3min = { ...s1, changedAt: Date.now() - 3 * 60_000, ageConfidence: 'known' }
+assert.equal(snapshot.shouldAutoAttachClipboard(old3min), false, '#5: 3 min no attach')
+assert.equal(snapshot.shouldShowRecentClipboardHint(old3min), false, '#5: 3 min no hint')
+assert.equal(objectBlock.buildRecentClipboardHint(old3min), null, '#5: no hint for old')
 const unknownSnap = snapshot.createClipboardSnapshotFromUnknownAge('whatever')
 assert.equal(snapshot.shouldAutoAttachClipboard(unknownSnap), false, '#5: unknown no attach')
 assert.equal(snapshot.shouldShowRecentClipboardHint(unknownSnap), false, '#5: unknown no hint')
@@ -103,11 +105,16 @@ assert.match(tokenSrc, /data-source=/, '#6: token shows source')
 assert.match(tokenSrc, /data-kind=/, '#6: token shows kind')
 assert.match(tokenSrc, /data-state=/, '#6: token shows age/state')
 
-// ─── #7: × delete + Backspace select-then-delete ──────────────────────────────
+// ─── #7: × delete + empty-query Backspace one-shot remove ─────────────────────
 assert.match(tokenSrc, /onRemove/, '#7: ObjectBlockToken has × remove')
 assert.match(keyboard, /handleClipboardBackspace/, '#7: keyboard handles Backspace')
-assert.match(tokenSrc, /selectedForDelete/, '#7: token shows selected-for-delete state')
-assert.match(tokenSrc, /再按 Backspace 删除/, '#7: token shows delete hint when selected')
+assert.match(tokenSrc, /selectedForDelete/, '#7: token still supports selected-for-delete visual')
+assert.match(keyboard, /isClipboardHintSelected|selectedIndex === -1/, '#7b: Enter only attaches hint when selected')
+assert.doesNotMatch(
+  keyboard,
+  /if \(event\.key === 'Enter' && hasClipboardHint && attachHintAsBlock\) \{\s*event\.preventDefault\(\)\s*attachHintAsBlock\(\)/,
+  '#7b: must not attach clipboard hint on bare Enter without selection',
+)
 
 // ─── #8: Object Block shows recommended actions, not clipboard as search ───────
 assert.match(searchFrame, /recommendActionsForBlock/, '#8: recommended actions computed from block')

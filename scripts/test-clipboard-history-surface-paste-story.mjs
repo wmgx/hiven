@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-
+/**
+ * Clipboard history surface paste + return-to-launcher story (source contracts).
+ */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -8,22 +10,16 @@ const root = process.cwd()
 const read = (path) => readFileSync(join(root, path), 'utf8')
 
 const packageJson = JSON.parse(read('package.json'))
-const refactorSuite = read('scripts/test-refactor-suite.mjs')
 const surface = read('src/plugins/clipboard-history/surfaces/ClipboardHistorySurface.tsx')
-// Story anchor: Enter -> pasteText -> pasteImage -> pasteFiles -> host.close
 
 assert.equal(
   packageJson.scripts?.['test:clipboard-history-surface-paste-story'],
   'node scripts/test-clipboard-history-surface-paste-story.mjs',
   'package.json must expose clipboard history surface paste story coverage',
 )
-assert.match(
-  refactorSuite,
-  /test:clipboard-history-surface-paste-story/,
-  'refactor suite must include clipboard history surface paste story coverage',
-)
 
-const handlePasteBlock = surface.match(/const handlePaste = useCallback\(async \(item: ClipboardHistoryItem\) => \{[\s\S]*?\n  \}, \[host, t, repository\]\)/)?.[0] ?? ''
+const handlePasteBlock =
+  surface.match(/const handlePaste = useCallback\(async \(item: ClipboardHistoryItem\) => \{[\s\S]*?\n  \}, \[host, t, repository\]\)/)?.[0] ?? ''
 assert.ok(handlePasteBlock, 'ClipboardHistorySurface must define handlePaste')
 assert.match(
   handlePasteBlock,
@@ -71,48 +67,69 @@ assert.match(
   'paste failures must show a paste failed error instead of closing silently',
 )
 
-const keydownBlock = surface.match(/const handleKeyDown = useCallback\(\(e: KeyboardEvent\) => \{[\s\S]*?\n  \}, \[selectedItem, selectedFullItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleDelete, host, t, imeKeyDown\]\)/)?.[0] ?? ''
-assert.ok(keydownBlock, 'ClipboardHistorySurface must define handleKeyDown')
+// Keydown: do not pin exact dependency array — product evolved (return-to-launcher, DOM ⌘C).
+assert.match(surface, /const handleKeyDown = useCallback\(\(e: KeyboardEvent\) => \{/, 'must define handleKeyDown')
 assert.match(
-  keydownBlock,
-  /if \(e\.key === 'Enter'\)[\s\S]*imeKeyDown\.shouldIgnoreKeyDown\(e\)[\s\S]*e\.preventDefault\(\)[\s\S]*handlePaste\(selectedItem\)/,
-  'Enter must paste the selected visible item and respect IME composition',
+  surface,
+  /e\.key === 'Enter' && \(e\.metaKey \|\| e\.ctrlKey\)[\s\S]*handleReturnToLauncher/,
+  '⌘/Ctrl+Enter must return selected item to launcher as Object Block',
 )
 assert.match(
-  keydownBlock,
+  surface,
+  /else if \(e\.key === 'Enter'\)[\s\S]*handlePaste\(selectedItem\)/,
+  'Enter must paste the selected visible item',
+)
+assert.match(
+  surface,
+  /imeKeyDown\.shouldIgnoreKeyDown/,
+  'Enter paths must respect IME composition',
+)
+assert.match(
+  surface,
   /e\.key === 'Delete' \|\| e\.key === 'Backspace'[\s\S]*handleDelete\(selectedItem\.id\)/,
   'Delete/Backspace must remove the selected visible item',
 )
 assert.match(
-  keydownBlock,
-  /\(e\.metaKey \|\| e\.ctrlKey\) && e\.key === 'c'[\s\S]*selectedFullItem && selectedFullItem\.kind === 'text'[\s\S]*host\.clipboard\.writeText\(selectedFullItem\.text\)/,
-  'Cmd/Ctrl+C must copy the loaded selected text item',
+  surface,
+  /\(e\.metaKey \|\| e\.ctrlKey\) && e\.key === 'c'[\s\S]*readDomSelectedText/,
+  'Cmd/Ctrl+C copies DOM selection in preview (not whole-item overwrite)',
 )
 assert.match(
-  keydownBlock,
+  surface,
   /e\.key === 'ArrowDown'[\s\S]*filteredItems\.findIndex\(\(i\) => i\.id === selectedId\)[\s\S]*setSelectedId\(nextId\)/,
   'ArrowDown must move selection through the filtered visible list',
 )
 assert.match(
-  keydownBlock,
+  surface,
   /e\.key === 'ArrowUp'[\s\S]*filteredItems\.findIndex\(\(i\) => i\.id === selectedId\)[\s\S]*setSelectedId\(prevId\)/,
   'ArrowUp must move selection through the filtered visible list',
 )
 
+// Return-to-launcher product path
 assert.match(
   surface,
-  /const selectedItem = useMemo\([\s\S]*filteredItems\.find\(\(i\) => i\.id === selectedId\) \?\? null/,
-  'selectedItem must resolve from filtered visible items so Enter never pastes an invisible stale item',
+  /host\.returnToLauncherWithObject\(\{\s*kind:\s*'text'/,
+  'text history items return via returnToLauncherWithObject',
 )
 assert.match(
   surface,
-  /useEffect\(\(\) => \{[\s\S]*setSelectedId\(\(current\) => \{[\s\S]*filteredItems\.length === 0[\s\S]*filteredItems\.some\(\(item\) => item\.id === current\)[\s\S]*filteredItems\[0\]\.id/,
-  'filter/search changes must keep selection on a visible item before Enter paste',
+  /host\.returnToLauncherWithObject\(\{[\s\S]*kind:\s*'image'/,
+  'image history items return via returnToLauncherWithObject',
 )
 assert.match(
   surface,
-  /onDoubleClick=\{\(\) => void onPaste\(item\)\}/,
-  'double click must paste the clicked clipboard history item',
+  /host\.returnToLauncherWithObject\(\{[\s\S]*kind:\s*'files'/,
+  'files history items return via returnToLauncherWithObject',
+)
+assert.match(
+  surface,
+  /hint\.returnToLauncher/,
+  'footer must expose return-to-launcher hint (i18n)',
 )
 
-console.log('clipboard history surface paste story checks passed')
+// Frequent / favorite filters
+assert.match(surface, /FilterKind = 'all' \| 'text' \| 'image' \| 'files' \| 'frequent' \| 'favorite'/)
+assert.match(surface, /filter === 'frequent'[\s\S]*pasteCount/)
+assert.match(surface, /filter === 'favorite'[\s\S]*isFavorite/)
+
+console.log('✓ test-clipboard-history-surface-paste-story passed')

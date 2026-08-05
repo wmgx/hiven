@@ -5,7 +5,7 @@
  * The plugin provides the body content via its settings.component.
  */
 
-import { Component, useCallback, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from 'react'
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { t } from '../i18n'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
@@ -19,9 +19,19 @@ import { openExternalUrl } from '../workspace/effectRunner'
 import type { PluginSettingsContribution } from '../workspace/pluginTypes'
 import { createPluginPrivateStorage } from '../workspace/pluginStorage'
 import { createPluginNetwork } from '../workspace/pluginNetwork'
+import { createPluginShell } from '../workspace/pluginShell'
 import { getPluginPermissionSnapshot, usePluginPermissionStore } from '../workspace/pluginPermissions'
 import { PluginSettingsSchemaRenderer } from './PluginSettingsSchemaRenderer'
 import { resolvePluginSettingsModal, type ResolvedPluginSettingsModal } from './pluginSettingsModalResolution'
+
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+function getFocusableElements(container: HTMLElement): HTMLElement[] {
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+    (el) => !el.hasAttribute('disabled') && el.tabIndex !== -1 && el.offsetParent !== null,
+  )
+}
 
 // ─── Error Boundary ──────────────────────────────────────────────────────────
 
@@ -57,19 +67,64 @@ export function PluginSettingsDialog() {
   const locale = useAppStore((s) => s.locale)
   const target = usePluginSettingsStore((s) => s.settingsDialogTarget)
   const closeSettingsDialog = usePluginSettingsStore((s) => s.closeSettingsDialog)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null)
+  const titleId = 'plugin-settings-dialog-title'
 
   useEffect(() => {
-    if (!target) return
+    if (!target || target.presentation === 'global-launcher') return
+    previouslyFocusedRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+
+    const frame = requestAnimationFrame(() => {
+      const panel = panelRef.current
+      if (!panel) return
+      const focusables = getFocusableElements(panel)
+      const preferred = panel.querySelector<HTMLElement>('[data-settings-dialog-close]')
+      ;(preferred ?? focusables[0] ?? panel).focus()
+    })
+
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         event.preventDefault()
         event.stopPropagation()
         event.stopImmediatePropagation()
         closeSettingsDialog()
+        return
+      }
+      if (event.key !== 'Tab') return
+      const panel = panelRef.current
+      if (!panel) return
+      const focusables = getFocusableElements(panel)
+      if (focusables.length === 0) {
+        event.preventDefault()
+        panel.focus()
+        return
+      }
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      const active = document.activeElement as HTMLElement | null
+      if (event.shiftKey) {
+        if (!active || active === first || !panel.contains(active)) {
+          event.preventDefault()
+          last.focus()
+        }
+      } else if (!active || active === last || !panel.contains(active)) {
+        event.preventDefault()
+        first.focus()
       }
     }
+
     window.addEventListener('keydown', handleKeyDown, true)
-    return () => window.removeEventListener('keydown', handleKeyDown, true)
+    return () => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('keydown', handleKeyDown, true)
+      const restore = previouslyFocusedRef.current
+      if (restore && typeof restore.focus === 'function') {
+        restore.focus()
+      }
+    }
   }, [closeSettingsDialog, target])
 
   if (!target) return null
@@ -82,7 +137,12 @@ export function PluginSettingsDialog() {
       onClick={(e) => { if (e.target === e.currentTarget) closeSettingsDialog() }}
     >
       <div
-        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col overflow-hidden plugin-settings-dialog-panel"
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col overflow-hidden plugin-settings-dialog-panel anim-dropdown"
         style={{
           width: 'min(780px, calc(100vw - 40px))',
           height: 'min(680px, calc(100vh - 48px))',
@@ -90,7 +150,8 @@ export function PluginSettingsDialog() {
           background: 'var(--panel, var(--bg-surface, #ffffff))',
           border: '1px solid var(--border, var(--color-border-secondary))',
           borderRadius: '14px',
-          boxShadow: '0 20px 50px -12px rgba(18, 22, 28, 0.22), 0 0 0 1px rgba(18, 22, 28, 0.06)',
+          boxShadow: 'var(--shadow-panel, 0 20px 50px -12px rgba(18, 22, 28, 0.22), 0 0 0 1px rgba(18, 22, 28, 0.06))',
+          outline: 'none',
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -99,6 +160,7 @@ export function PluginSettingsDialog() {
           source={target.source}
           locale={locale}
           onClose={closeSettingsDialog}
+          titleId={titleId}
         />
       </div>
     </div>
@@ -112,11 +174,13 @@ export function PluginSettingsContent({
   source,
   locale,
   onClose,
+  titleId,
 }: {
   pluginId: string
   source: PluginSettingsSource
   locale: 'zh' | 'en'
   onClose: () => void
+  titleId?: string
 }) {
   // Resolve the plugin's settings contribution from the registry
   const contribution = useMemo(() => {
@@ -138,11 +202,12 @@ export function PluginSettingsContent({
   if (!contribution) {
     return (
       <div className="p-6 text-center" style={{ color: 'var(--color-text-secondary)' }}>
-        <p>No settings available for this plugin.</p>
+        <p>{t(locale, 'scripts.settingsNoSettings')}</p>
         <button
           className="mt-4 px-3 py-1.5 rounded-md text-[13px]"
           style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-primary)' }}
           onClick={onClose}
+          data-settings-dialog-close
         >
           {t(locale, 'scripts.settingsClose')}
         </button>
@@ -157,6 +222,7 @@ export function PluginSettingsContent({
       contribution={contribution}
       locale={locale}
       onClose={onClose}
+      titleId={titleId}
     />
   )
 }
@@ -169,12 +235,14 @@ function SettingsDialogBody({
   contribution,
   locale,
   onClose,
+  titleId,
 }: {
   pluginId: string
   source: PluginSettingsSource
   contribution: PluginSettingsContribution<unknown>
   locale: 'zh' | 'en'
   onClose: () => void
+  titleId?: string
 }) {
   const setPluginSettings = usePluginSettingsStore((s) => s.setPluginSettings)
   // Subscribe to the store record reactively so UI updates on setValue
@@ -231,6 +299,10 @@ function SettingsDialogBody({
     () => createPluginNetwork(permissions),
     [permissions],
   )
+  const settingsShell = useMemo(
+    () => createPluginShell(permissions),
+    [permissions],
+  )
 
   const notifySettingsChange = useCallback((next: unknown) => {
     if (!contribution.onChange) return
@@ -241,11 +313,12 @@ function SettingsDialogBody({
         source,
         storage: settingsHost.storage,
         network: settingsNetwork,
+        shell: settingsShell,
       }),
     ).catch((error) => {
       console.warn(`[hiven] Plugin settings onChange failed for "${pluginId}":`, error)
     })
-  }, [contribution, pluginId, source, settingsHost.storage, settingsNetwork])
+  }, [contribution, pluginId, source, settingsHost.storage, settingsNetwork, settingsShell])
 
   const setValue = useCallback(
     (next: unknown) => {
@@ -306,9 +379,13 @@ function SettingsDialogBody({
       {/* Header */}
       <div
         className="flex items-center justify-between px-5 py-3.5 shrink-0"
-        style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}
+        style={{ borderBottom: 'var(--hairline) solid var(--color-border-tertiary)' }}
       >
-        <h2 className="text-[15px] font-semibold m-0" style={{ color: 'var(--color-text-primary)' }}>
+        <h2
+          id={titleId}
+          className="text-[15px] font-semibold m-0"
+          style={{ color: 'var(--color-text-primary)' }}
+        >
           {title}
         </h2>
         <button
@@ -316,6 +393,8 @@ function SettingsDialogBody({
           style={{ color: 'var(--color-text-tertiary)', background: 'transparent' }}
           onClick={onClose}
           title={t(locale, 'scripts.settingsClose')}
+          aria-label={t(locale, 'scripts.settingsClose')}
+          data-settings-dialog-close
         >
           <X size={16} />
         </button>
@@ -336,7 +415,11 @@ function SettingsDialogBody({
       {/* Body */}
       <div className="flex-1 overflow-y-auto px-5 py-4" data-launcher-scrollable>
         <SettingsErrorBoundary fallback={errorFallback}>
-          {contribution.schema ? (
+          {/* Prefer custom body when present (install guides, connection UI).
+              Schema-only plugins keep the generated form renderer. */}
+          {SettingsComponent ? (
+            <SettingsComponent {...settingsBodyProps} />
+          ) : contribution.schema ? (
             <PluginSettingsSchemaRenderer
               schema={contribution.schema}
               locale={locale}
@@ -345,8 +428,6 @@ function SettingsDialogBody({
               onOpenModal={(field) => setSettingsModalTarget(resolvePluginSettingsModal(contribution, field))}
               permissions={permissions}
             />
-          ) : SettingsComponent ? (
-            <SettingsComponent {...settingsBodyProps} />
           ) : (
             <div className="text-[13px]" style={{ color: 'var(--color-text-secondary)' }}>
               {t(locale, 'scripts.settingsRenderError')}
@@ -362,17 +443,20 @@ function SettingsDialogBody({
           onClick={() => setSettingsModalTarget(null)}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={settingsModalTitle}
             className="flex max-h-[calc(100%-48px)] w-[min(520px,calc(100%-48px))] flex-col overflow-hidden rounded-lg"
             style={{
               background: 'var(--panel, var(--bg-surface, #ffffff))',
-              border: '0.5px solid var(--color-border-secondary)',
-              boxShadow: '0 20px 44px rgba(0, 0, 0, 0.22)',
+              border: 'var(--hairline) solid var(--color-border-secondary)',
+              boxShadow: 'var(--shadow-panel, 0 20px 44px rgba(0, 0, 0, 0.22))',
             }}
             onClick={(event) => event.stopPropagation()}
           >
             <div
               className="flex items-center justify-between px-4 py-3"
-              style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}
+              style={{ borderBottom: 'var(--hairline) solid var(--color-border-tertiary)' }}
             >
               <h3 className="m-0 text-[14px] font-semibold" style={{ color: 'var(--color-text-primary)' }}>
                 {settingsModalTitle}

@@ -16,20 +16,27 @@ export function handleGlobalLauncherKeyDown({
   resultSelectedIndex,
   setResultSelectedIndex,
   toggleResultChoice,
+  activateResultSecondary,
+  pastePreviewText,
   isKeyboardNavRef,
   visibleFilteredLength,
   setSelectedIndex,
   selectedItem,
+  visibleItems,
   isWorkflowObjectLauncherItem,
   selectItem,
   handleClipboardBackspace,
   hasClipboardHint,
   attachHintAsBlock,
+  /** When true, Enter attaches the recent-clipboard hint (must be the focused row). */
+  isClipboardHintSelected,
+  selectedIndex,
   hasObjectActions,
   objectActionCount,
   setSelectedObjectActionIndex,
   expandSelectedObjectAction,
   executeSelectedObjectAction,
+  onToggleFavorite,
 }: {
   event: ReactKeyboardEvent<HTMLElement>
   isImeComposingRef: MutableRefObject<boolean>
@@ -46,20 +53,33 @@ export function handleGlobalLauncherKeyDown({
   resultSelectedIndex: number
   setResultSelectedIndex: (updater: number | ((index: number) => number)) => void
   toggleResultChoice: (choice: unknown, frame: ResultFrame) => void
+  /** Package 4: result secondary e.g. return-to-launcher */
+  activateResultSecondary?: (choice: { secondaryActions?: Array<{ id: string }>; preview?: string; title?: string }, actionId: string) => void
+  pastePreviewText?: (text: string) => void | Promise<void>
   isKeyboardNavRef: MutableRefObject<boolean>
   visibleFilteredLength: number
-  setSelectedIndex: (updater: number | ((index: number) => number)) => void
+  setSelectedIndex: (
+    updater: number | ((index: number) => number),
+    options?: { pin?: boolean },
+  ) => void
   selectedItem?: LauncherMixedItem
+  /** Visible list rows for ⌘1–8 quick-run (same order as rendered). */
+  visibleItems?: LauncherMixedItem[]
   isWorkflowObjectLauncherItem: (item?: LauncherMixedItem) => boolean
   selectItem: (item: LauncherMixedItem | undefined, customizeParams?: boolean) => void
   handleClipboardBackspace?: (queryEmpty: boolean) => boolean
   hasClipboardHint?: boolean
   attachHintAsBlock?: () => void
+  isClipboardHintSelected?: boolean
+  /** Current list selection index; -1 means recent-clipboard hint is focused. */
+  selectedIndex?: number
   hasObjectActions?: boolean
   objectActionCount?: number
   setSelectedObjectActionIndex?: (updater: number | ((index: number) => number)) => void
   expandSelectedObjectAction?: () => void
   executeSelectedObjectAction?: (keepOpen?: boolean) => void
+  /** Pin / unpin the focused list row (⌘P). */
+  onToggleFavorite?: (item: LauncherMixedItem) => void
 }) {
   if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
   if (event.defaultPrevented) return
@@ -120,8 +140,25 @@ export function handleGlobalLauncherKeyDown({
       if (event.key === 'Enter' || isSpace) {
         event.preventDefault()
         event.stopPropagation()
-        const choice = choices[Math.min(resultSelectedIndex, Math.max(0, choices.length - 1))]
-        if (choice) toggleResultChoice(choice, resultFrame)
+        const choice = choices[Math.min(resultSelectedIndex, Math.max(0, choices.length - 1))] as
+          | { secondaryActions?: Array<{ id: string }>; preview?: string; title?: string }
+          | undefined
+        if (!choice) return
+        // Align with collect-input destinations: ⇧↵ paste · ⌘↵ return · ↵ primary
+        if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+          if (choice.secondaryActions?.some((a) => a.id === 'return-to-launcher')) {
+            activateResultSecondary?.(choice, 'return-to-launcher')
+            return
+          }
+        }
+        if (event.key === 'Enter' && event.shiftKey && pastePreviewText) {
+          const text = (choice.preview ?? choice.title ?? '').trim()
+          if (text) {
+            void pastePreviewText(text)
+            return
+          }
+        }
+        toggleResultChoice(choice, resultFrame)
         return
       }
       return
@@ -150,6 +187,35 @@ export function handleGlobalLauncherKeyDown({
     executeSelectedObjectAction?.(event.metaKey || event.ctrlKey)
     return
   }
+
+  // Search frame only (no multi-frame controller stack above).
+  const onSearchRoot =
+    !controllerState || controllerState.frames.length <= 1
+
+  // ⌘1–8 / Ctrl+1–8: select and immediately run the Nth visible row (SuperCmd-style).
+  if (onSearchRoot && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey) {
+    const digit = event.key >= '1' && event.key <= '8' ? Number(event.key) : -1
+    if (digit >= 1 && digit <= 8) {
+      const list = visibleItems ?? []
+      const target = list[digit - 1]
+      if (target) {
+        event.preventDefault()
+        event.stopPropagation()
+        isKeyboardNavRef.current = true
+        setSelectedIndex(digit - 1)
+        selectItem(target, false)
+        return
+      }
+    }
+    // ⌘P / Ctrl+P: pin / unpin favorite
+    if ((event.key === 'p' || event.key === 'P') && selectedItem && onToggleFavorite) {
+      event.preventDefault()
+      event.stopPropagation()
+      onToggleFavorite(selectedItem)
+      return
+    }
+  }
+
   if (event.key === 'ArrowDown') {
     event.preventDefault()
     isKeyboardNavRef.current = true
@@ -159,7 +225,9 @@ export function handleGlobalLauncherKeyDown({
   if (event.key === 'ArrowUp') {
     event.preventDefault()
     isKeyboardNavRef.current = true
-    setSelectedIndex((index) => Math.max(index - 1, 0))
+    // When a recent-clipboard hint is shown, index -1 focuses the hint row above the list.
+    const minIndex = hasClipboardHint ? -1 : 0
+    setSelectedIndex((index) => Math.max(index - 1, minIndex))
     return
   }
   if (event.key === 'Tab' && isWorkflowObjectLauncherItem(selectedItem)) {
@@ -175,7 +243,13 @@ export function handleGlobalLauncherKeyDown({
       return
     }
   }
-  if (event.key === 'Enter' && hasClipboardHint && attachHintAsBlock) {
+  // Only attach the timeout clipboard hint when it is the focused row — never steal Enter from list selection.
+  if (
+    event.key === 'Enter'
+    && hasClipboardHint
+    && (isClipboardHintSelected || selectedIndex === -1)
+    && attachHintAsBlock
+  ) {
     event.preventDefault()
     attachHintAsBlock()
     return

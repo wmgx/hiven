@@ -130,8 +130,9 @@ export const encodeDecodePlugin = definePlugin({
       title: 'base64.decode.title',
       subtitle: 'base64.decode.description',
       icon: 'Binary',
-      aliases: ['base64 decode', 'base64解码', 'b64 decode', 'atob'],
+      aliases: ['b64', 'base64', 'base64 decode', 'base64解码', 'b64 decode', 'atob'],
       inputPolicy: { mode: 'auto' },
+      accepts: { kinds: ['base64'], aliases: ['b64', 'base64', 'base64 decode', 'base64解码'] },
       textMatch: isBase64,
       run(ctx) {
         try { return ctx.output.text(base64Decode(ctx.input.text)) }
@@ -159,6 +160,7 @@ export const encodeDecodePlugin = definePlugin({
       icon: 'Link',
       aliases: ['urldecode', 'url解码', 'percent decode'],
       inputPolicy: { mode: 'auto' },
+      accepts: { kinds: ['url-encoded'] },
       textMatch: isUrlEncoded,
       run(ctx) {
         try { return ctx.output.text(urlDecode(ctx.input.text)) }
@@ -213,8 +215,9 @@ export const encodeDecodePlugin = definePlugin({
       title: 'jwt.decode.title',
       subtitle: 'jwt.decode.description',
       icon: 'Key',
-      aliases: ['jwt-decode', 'json-web-token', 'jwt解码'],
+      aliases: ['jwt', '解jwt', 'decode jwt', 'jwt-decode', 'json-web-token', 'jwt解码'],
       inputPolicy: { mode: 'auto' },
+      accepts: { kinds: ['jwt'], aliases: ['jwt', '解jwt', 'decode jwt', 'jwt-decode', 'jwt解码'] },
       textMatch: isJwt,
       run(ctx) {
         try { return ctx.output.text(decodeJwt(ctx.input.text)) }

@@ -267,6 +267,13 @@ export type PluginSettingsFieldBase<TSettings = unknown> = {
   icon?: string
   requires?: PluginPermission[]
   disabled?: boolean
+  /** When true, empty string / null / undefined shows an inline error. */
+  required?: boolean
+  /**
+   * Optional field validator. Return an error message string (or i18n key via
+   * host-side translate later); return null/undefined when valid.
+   */
+  validate?: (value: unknown, settings: TSettings) => string | null | undefined
 }
 
 export type PluginSettingsSwitchField<TSettings = unknown> = PluginSettingsFieldBase<TSettings> & {
@@ -339,6 +346,8 @@ export type PluginSettingsObjectListItemField = {
   step?: number
   unit?: string
   unitI18n?: Partial<Record<Locale, string>>
+  required?: boolean
+  validate?: (value: unknown, item: Record<string, unknown>) => string | null | undefined
 }
 
 export type PluginSettingsObjectListField<TSettings = unknown> = PluginSettingsFieldBase<TSettings> & {
@@ -403,6 +412,7 @@ export type PluginSettingsChangeContext<TSettings = unknown> = {
   source: 'builtin' | 'installed' | 'dev'
   storage: PluginPrivateStorageApi
   network: PluginNetworkApi
+  shell: PluginShellApi
 }
 
 export type PluginSettingsContribution<TSettings = unknown> = {
@@ -439,6 +449,11 @@ export type PluginPermission =
   | 'globalShortcut.register'
   | 'accessibility.paste'
   | 'network.request'
+  | 'context.foreground-app'
+  | 'desktop.windows'
+  | 'desktop.processes'
+  /** L3: run arbitrary local shell commands (default denied until user grants). */
+  | 'shell.run'
 
 export type PluginPermissionGrant = {
   granted: boolean
@@ -528,7 +543,10 @@ export type PluginClipboardApi = {
   writeText(text: string): Promise<void>
   writeImage(blobId: string): Promise<void>
   writeFiles(paths: string[]): Promise<void>
-  watch(options: ClipboardWatchOptions, onChange: (change: ClipboardChange) => void): Promise<() => void>
+  watch(
+    options: ClipboardWatchOptions,
+    onChange: (change: ClipboardChange) => void | Promise<void>,
+  ): Promise<() => void>
 }
 
 // ─── Plugin Paste API ────────────────────────────────────────────────────────
@@ -570,6 +588,33 @@ export type PluginNetworkApi = {
   request(input: PluginNetworkRequest): Promise<PluginNetworkResponse>
 }
 
+// ─── Plugin Shell API ────────────────────────────────────────────────────────
+
+export type ShellRunOptions = {
+  command: string
+  cwd?: string
+  env?: Record<string, string>
+  timeoutMs?: number
+  maxOutputBytes?: number
+  shellProgram?: string
+  shellArgs?: string[]
+}
+
+export type ShellRunResult = {
+  stdout: string
+  stderr: string
+  exitCode: number | null
+  signal?: string
+  timedOut: boolean
+  durationMs: number
+  stdoutBytes: number
+  stderrBytes: number
+}
+
+export type PluginShellApi = {
+  run(options: ShellRunOptions): Promise<ShellRunResult>
+}
+
 // ─── Plugin UI Surface Types ─────────────────────────────────────────────────
 
 export type PluginUiSurfaceKind = 'custom-view'
@@ -591,6 +636,24 @@ export type PluginSurfaceShell = {
   breadcrumbTitleI18n?: Partial<Record<Locale, string>>
 }
 
+/** Neutral input for returning a snapshot object into Global Launcher as Object Block. */
+export type PluginObjectBlockInput =
+  | { kind: 'text'; text: string; ageLabel?: string }
+  | {
+      kind: 'image'
+      blobId: string
+      contentType: string
+      width?: number
+      height?: number
+      ageLabel?: string
+    }
+  | {
+      kind: 'files'
+      paths: string[]
+      fileNames: string[]
+      ageLabel?: string
+    }
+
 export type PluginSurfaceHostApi = {
   close(): void
   requestBack(): void
@@ -599,10 +662,16 @@ export type PluginSurfaceHostApi = {
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
   showToast(message: string, level?: 'info' | 'success' | 'warning' | 'error', options?: { action?: { label: string; onClick: () => void }; duration?: number }): string
   dismissToast(id: string): void
+  /**
+   * Attach a snapshot Object Block and return to Global Launcher (leave surface / open launcher).
+   * Host owns factory + pending bridge; plugins must not import launcher private modules.
+   */
+  returnToLauncherWithObject(block: PluginObjectBlockInput): void
   storage: PluginPrivateStorageApi
   clipboard: PluginClipboardApi
   paste: PluginPasteApi
   network: PluginNetworkApi
+  shell: PluginShellApi
 }
 
 export type PluginSurfaceProps<TSettings = unknown> = {
@@ -629,6 +698,7 @@ export type PluginSurfaceOpenContext<TSettings = unknown> = {
   clipboard: PluginClipboardApi
   paste: PluginPasteApi
   network: PluginNetworkApi
+  shell: PluginShellApi
 }
 
 export type PluginUiSurfaceContribution<TSettings = unknown> = {
@@ -672,6 +742,7 @@ export type PluginBackgroundContext<TSettings = unknown> = {
   clipboard: PluginClipboardApi
   paste: PluginPasteApi
   network: PluginNetworkApi
+  shell: PluginShellApi
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
 }
 
@@ -691,6 +762,7 @@ export type PluginStartupHookContext<TSettings = unknown> = {
   clipboard: PluginClipboardApi
   paste: PluginPasteApi
   network: PluginNetworkApi
+  shell: PluginShellApi
   api: PluginLauncherApi
   t: (key: string, vars?: Record<string, string | number>) => string
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
@@ -704,8 +776,18 @@ export type PluginHooksContribution<TSettings = unknown> = {
 
 /** The full plugin definition returned by definePlugin */
 export type PluginDefinition<TSettings = unknown> = {
-  /** Preferred tool-first authoring API (host adapts into launcher items + panel actions). */
+  /**
+   * Preferred tool-first authoring API (host adapts into launcher items + panel actions).
+   * Full catalog — keep this as the complete tool list even when `toolsFor` filters at runtime.
+   */
   tools?: PluginToolContribution<TSettings>[]
+  /**
+   * Optional settings-aware filter for which tools the launcher surfaces.
+   * When set, host calls this at collect time with the resolved plugin settings
+   * and uses the returned array instead of the raw `tools` list.
+   * Return a subset of `tools` (or fresh contributions); host re-localizes by id when possible.
+   */
+  toolsFor?: (settings: TSettings) => PluginToolContribution<TSettings>[]
   /** Launcher contributions (custom launcher lifecycle/output UX). */
   launcher?: {
     items?: LauncherItemContribution<TSettings>[]

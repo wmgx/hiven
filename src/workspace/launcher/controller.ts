@@ -27,7 +27,8 @@ import type {
   LauncherSurfaceId,
   PluginLauncherApi,
 } from './types'
-import type { PluginNetworkApi, PluginPrivateStorageApi } from '../pluginTypes'
+import type { PluginNetworkApi, PluginPrivateStorageApi, PluginShellApi } from '../pluginTypes'
+import { appendUsageJournal } from '../usageJournal'
 import { isOutputResult } from './output'
 import { translate, type Locale } from '../../i18n'
 
@@ -89,6 +90,7 @@ export type LauncherControllerDeps = {
   makeApi?: (item: LauncherItem) => PluginLauncherApi
   getStorage?: (item: LauncherItem) => PluginPrivateStorageApi
   getNetwork?: (item: LauncherItem) => PluginNetworkApi
+  getShell?: (item: LauncherItem) => PluginShellApi
   locale: string
   /** Translate function scoped to the item's plugin. */
   makeT: (item: LauncherItem) => (key: string, vars?: Record<string, string | number>) => string
@@ -129,6 +131,12 @@ const emptyNetwork: PluginNetworkApi = {
   },
 }
 
+const emptyShell: PluginShellApi = {
+  run: async () => {
+    throw new Error('Plugin shell is not available for this launcher item')
+  },
+}
+
 export type SelectOptions = {
   /** When false, usage is not recorded for this selection. */
   recordUsage?: boolean
@@ -145,6 +153,10 @@ export class LauncherController {
   private deps: LauncherControllerDeps
   private previewRunId = 0
   private suggestRunId = 0
+  /** Debounce timer for suggest refresh (kill process filter, history, …). */
+  private suggestDebounceTimer: ReturnType<typeof setTimeout> | null = null
+  /** Last journaled command id (for prev_command_id chain). */
+  private lastJournalCommandId: string | null = null
 
   constructor(deps: LauncherControllerDeps) {
     this.deps = deps
@@ -171,6 +183,10 @@ export class LauncherController {
 
   /** Reset to the base list frame (e.g. when the launcher opens). */
   reset(): void {
+    if (this.suggestDebounceTimer != null) {
+      clearTimeout(this.suggestDebounceTimer)
+      this.suggestDebounceTimer = null
+    }
     this.setState({ frames: [{ kind: 'list' }], error: null, busy: false })
   }
 
@@ -195,6 +211,19 @@ export class LauncherController {
     // Dynamic items default off; stable actions opt in via recordUsage: true.
     if (item.kind === 'dynamic') return item.recordUsage === true
     return true
+  }
+
+  /** Record selection usage + fire-and-forget append-only journal row. */
+  private recordSelectionIfNeeded(item: LauncherItem, options: SelectOptions): void {
+    if (!this.shouldRecord(item, options)) return
+    this.deps.recordSelection(this.deps.surfaceId, item)
+    void appendUsageJournal({
+      commandId: item.systemKey,
+      surfaceId: this.deps.surfaceId,
+      executedAt: Date.now(),
+      prevCommandId: this.lastJournalCommandId ?? null,
+    }).catch(() => {})
+    this.lastJournalCommandId = item.systemKey
   }
 
   private defaultParamsFor(item: LauncherItem): Record<string, unknown> {
@@ -283,9 +312,7 @@ export class LauncherController {
     this.setState({ error: null })
 
     if (options.customizeParams && this.hasCustomizableParams(item)) {
-      if (this.shouldRecord(item, options)) {
-        this.deps.recordSelection(this.deps.surfaceId, item)
-      }
+      this.recordSelectionIfNeeded(item, options)
       this.setState({
         frames: [...this.state.frames, this.paramFrameFor(item, undefined, 0, options.objectBlockText)],
       })
@@ -293,9 +320,7 @@ export class LauncherController {
     }
 
     if (item.behavior.type === 'collect-input') {
-      if (this.shouldRecord(item, options)) {
-        this.deps.recordSelection(this.deps.surfaceId, item)
-      }
+      this.recordSelectionIfNeeded(item, options)
       if (this.hasObjectBlockText(options.objectBlockText)) {
         await this.runAndHandle(
           () => Promise.resolve(item.execute(this.buildExecutionContext(item, options.objectBlockText))),
@@ -313,18 +338,14 @@ export class LauncherController {
     if (this.shouldCollectTextInput(item)) {
       // If Object Block text is available, skip collect-input and execute directly.
       if (this.hasObjectBlockText(options.objectBlockText)) {
-        if (this.shouldRecord(item, options)) {
-          this.deps.recordSelection(this.deps.surfaceId, item)
-        }
+        this.recordSelectionIfNeeded(item, options)
         await this.runAndHandle(
           () => Promise.resolve(item.execute(this.buildExecutionContext(item, options.objectBlockText))),
           this.itemTitle(item),
         )
         return
       }
-      if (this.shouldRecord(item, options)) {
-        this.deps.recordSelection(this.deps.surfaceId, item)
-      }
+      this.recordSelectionIfNeeded(item, options)
       this.setState({
         frames: [...this.state.frames, this.collectInputFrameFor(item)],
       })
@@ -333,9 +354,7 @@ export class LauncherController {
     }
 
     // perform: record before execution
-    if (this.shouldRecord(item, options)) {
-      this.deps.recordSelection(this.deps.surfaceId, item)
-    }
+    this.recordSelectionIfNeeded(item, options)
     await this.runAndHandle(
       () => Promise.resolve(item.execute(this.buildExecutionContext(item))),
       this.itemTitle(item),
@@ -493,7 +512,8 @@ export class LauncherController {
     const frames = this.state.frames.slice(0, -1)
     if (top.item.suggest) {
       frames.push({ ...top, inputText: text })
-    } else {
+    } else if (!text.trim()) {
+      // Empty input → true empty well (clear last preview).
       frames.push({
         ...top,
         inputText: text,
@@ -501,9 +521,28 @@ export class LauncherController {
         previewInputText: undefined,
         selectedSuggestionIndex: -1,
       })
+    } else {
+      // Keep last preview while typing so UI does not flash empty ↔ result every keystroke.
+      // previewInputText stays until previewInput() refreshes for the new text (stale until then).
+      frames.push({
+        ...top,
+        inputText: text,
+        selectedSuggestionIndex: -1,
+      })
     }
     this.setState({ frames, error: null })
-    if (top.item.suggest) void this.refreshSuggestions()
+    if (top.item.suggest) this.scheduleRefreshSuggestions()
+  }
+
+  /** Debounce suggest reloads so typing does not thrash state/busy every keystroke. */
+  private scheduleRefreshSuggestions(): void {
+    if (this.suggestDebounceTimer != null) {
+      clearTimeout(this.suggestDebounceTimer)
+    }
+    this.suggestDebounceTimer = setTimeout(() => {
+      this.suggestDebounceTimer = null
+      void this.refreshSuggestions()
+    }, 60)
   }
 
   /**
@@ -544,6 +583,11 @@ export class LauncherController {
         : undefined
 
     const runId = ++this.suggestRunId
+    // Busy only on first load (no choices yet). Subsequent filter updates use the
+    // cached snapshot and must not flicker busy / reflow the whole collect frame.
+    const hasExistingChoices = (top.previewOutput?.choices?.length ?? 0) > 0
+    const shouldToggleBusy = !this.state.busy && !hasExistingChoices
+    if (shouldToggleBusy) this.setState({ busy: true, error: null })
     let output: LauncherOutput | null | undefined
     try {
       output = await Promise.resolve(
@@ -555,6 +599,7 @@ export class LauncherController {
           api: this.deps.makeApi?.(item) ?? this.deps.api,
           storage: this.deps.getStorage?.(item) ?? emptyStorage,
           network: this.deps.getNetwork?.(item) ?? emptyNetwork,
+          shell: this.deps.getShell?.(item) ?? emptyShell,
           t: this.deps.makeT(item),
           pluginId: item.pluginId,
           source: item.source,
@@ -563,6 +608,7 @@ export class LauncherController {
     } catch {
       if (runId !== this.suggestRunId) return
       this.clearCollectInputPreview(top)
+      if (shouldToggleBusy) this.setState({ busy: false })
       return
     }
 
@@ -573,6 +619,7 @@ export class LauncherController {
       latestTop.item.systemKey !== item.systemKey ||
       latestTop.inputText !== inputText
     ) {
+      if (shouldToggleBusy) this.setState({ busy: false })
       return
     }
 
@@ -590,7 +637,7 @@ export class LauncherController {
       previewInputText: inputText,
       selectedSuggestionIndex,
     })
-    this.setState({ frames, error: null })
+    this.setState({ frames, error: null, busy: shouldToggleBusy ? false : this.state.busy })
   }
 
   async previewInput(): Promise<void> {
@@ -606,7 +653,8 @@ export class LauncherController {
     }
 
     const runId = ++this.previewRunId
-    this.setState({ busy: true, error: null })
+    // Package 4: pure-function live preview must not flash busy (reflow jank).
+    this.setState({ error: null })
 
     let result: LauncherExecuteResult
     try {
@@ -617,23 +665,25 @@ export class LauncherController {
       )
     } catch (error) {
       if (runId !== this.previewRunId) return
-      this.setState({ busy: false, error: error instanceof Error ? error.message : String(error) })
+      this.setState({ error: error instanceof Error ? error.message : String(error) })
       return
     }
 
     if (runId !== this.previewRunId) return
     const latestTop = this.topFrame()
     if (latestTop.kind !== 'collect-input' || latestTop.item.systemKey !== item.systemKey || latestTop.inputText !== inputText) {
-      this.setState({ busy: false })
       return
     }
 
     if (!result.ok) {
-      this.clearCollectInputPreview(latestTop, result.message)
+      // Keep last good preview while typing; only surface the error.
+      // Clearing here collapses the well and makes the native window thrash.
+      this.setState({ busy: false, error: result.message })
       return
     }
     if (!isOutputResult(result)) {
-      this.clearCollectInputPreview(latestTop)
+      // No output payload — keep previous preview, do not clear.
+      this.setState({ busy: false, error: null })
       return
     }
 
@@ -644,12 +694,17 @@ export class LauncherController {
       previewInputText: inputText,
       selectedSuggestionIndex: -1,
     })
-    this.setState({ frames, busy: false, error: null })
+    this.setState({ frames, error: null })
   }
 
   private clearCollectInputPreview(frame: CollectInputFrame, error: string | null = null): void {
     const top = this.topFrame()
     if (top.kind !== 'collect-input' || top.item.systemKey !== frame.item.systemKey) {
+      this.setState({ busy: false, error })
+      return
+    }
+    // Only clear when input is empty. Non-empty keeps last result (replace-on-success only).
+    if (top.inputText.trim()) {
       this.setState({ busy: false, error })
       return
     }
@@ -727,13 +782,65 @@ export class LauncherController {
   }
 
   /**
-   * Escape: pop one frame. From the base list frame, returns false so the host
-   * can close the launcher.
+   * Escape / empty ⌫: stack-style step back.
+   * - param-input paramIndex > 0 → previous param (drop values from that step on)
+   * - collect-input with params → re-enter last param step (drop last param value)
+   * - otherwise → pop one frame (list keeps launcher open)
+   * From the base list frame, returns false so the host can close the launcher.
    */
   back(): boolean {
     if (this.state.frames.length <= 1) return false
+    const top = this.topFrame()
+
+    if (top.kind === 'param-input' && top.paramIndex > 0) {
+      const prevIndex = top.paramIndex - 1
+      const nextParams = this.paramsUpToIndex(top.item, top.params, prevIndex)
+      const frames = this.state.frames.slice(0, -1)
+      frames.push(this.paramFrameFor(top.item, nextParams, prevIndex, top.objectBlockText))
+      this.setState({ frames, error: null })
+      return true
+    }
+
+    if (top.kind === 'collect-input' && top.item.params && top.item.params.length > 0) {
+      const lastIndex = top.item.params.length - 1
+      const nextParams = this.paramsUpToIndex(top.item, top.params ?? {}, lastIndex)
+      const frames = this.state.frames.slice(0, -1)
+      frames.push(this.paramFrameFor(top.item, nextParams, lastIndex))
+      this.setState({ frames, error: null })
+      return true
+    }
+
     this.setState({ frames: this.state.frames.slice(0, -1), error: null })
     return true
+  }
+
+  /**
+   * Command-tag × : leave the whole command and return to search list in one step.
+   * Does not step through intermediate params (unlike empty ⌫ / Esc).
+   */
+  exitCommand(): boolean {
+    if (this.state.frames.length <= 1) return false
+    const base = this.state.frames[0]
+    if (!base || base.kind !== 'list') {
+      this.setState({ frames: this.state.frames.slice(0, 1), error: null })
+      return true
+    }
+    this.setState({ frames: [base], error: null })
+    return true
+  }
+
+  /** Keep only params strictly before `index` (values for index..end are dropped). */
+  private paramsUpToIndex(
+    item: LauncherItem,
+    params: Record<string, unknown>,
+    index: number,
+  ): Record<string, unknown> {
+    const next: Record<string, unknown> = { ...params }
+    for (let i = index; i < (item.params?.length ?? 0); i++) {
+      const key = item.params?.[i]?.key
+      if (key) delete next[key]
+    }
+    return next
   }
 
   // ─── Execution plumbing ────────────────────────────────────────────────────
@@ -796,6 +903,16 @@ export class LauncherController {
       if (top.kind === 'collect-input' && top.item.suggest) {
         this.setState({ busy: false, error: null })
         void this.refreshSuggestions()
+        return
+      }
+      // L2 confirm Cancel (kill / close-window): pop only the result frame so the
+      // user returns to the previous step (process list / window list), not root.
+      if (top.kind === 'result' && this.state.frames.length > 1) {
+        this.setState({
+          busy: false,
+          error: null,
+          frames: this.state.frames.slice(0, -1),
+        })
         return
       }
       // Stay open, but drop nested frames (e.g. multi-select result after Diff

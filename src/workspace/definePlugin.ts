@@ -54,6 +54,7 @@ export function definePlugin<TSettings = unknown>(
 ): PluginDefinition<TSettings> {
   const hasContributions =
     Array.isArray(definition.tools) ||
+    typeof definition.toolsFor === 'function' ||
     definition.launcher != null ||
     definition.panel != null ||
     Array.isArray(definition.commands) ||

@@ -20,7 +20,7 @@ import {
   getActiveEditorContextSnapshot,
   getActiveEditorPaneSnapshot,
 } from '../editorBridge'
-import { createQuickEditorPane, showQuickEditorSurface } from '../quickEditor/quickEditorRequests'
+import { createQuickEditorPane, overwriteQuickEditorText, showQuickEditorSurface } from '../quickEditor/quickEditorRequests'
 import { readQuickEditorPaneSnapshot } from '../quickEditor/quickEditorPaneSnapshot'
 import type { PluginPermission } from '../pluginTypes'
 import type { PluginSettingsSource } from '../pluginSettingsStore'
@@ -190,9 +190,18 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
     },
     getClipboardText: () => readClipboard(),
     replaceActiveText: async (text: string) => {
-      await createQuickEditorPane({ text })
+      // Default host path: overwrite Quick Editor active pane with one-step rollback.
+      // Pane-bound surfaces (quick-editor-command) override this with real in-place replace.
+      await overwriteQuickEditorText(text, { source: 'replace-active' })
     },
     insertText: async (text: string) => {
+      await createQuickEditorPane({ text })
+    },
+    // Real implementation lives in src/launcher/clipboard/globalLauncherApi.ts,
+    // injected via useLauncherSession's makeApi for the global-launcher surface
+    // (the only surface that ever calls this — see output.ts textResult()).
+    // This fallback only exists so the interface is total; unreachable in practice.
+    returnToLauncher: async (text: string) => {
       await createQuickEditorPane({ text })
     },
     copyText: async (text: string) => {

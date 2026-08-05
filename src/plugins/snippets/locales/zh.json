@@ -1,0 +1,22 @@
+{
+  "plugin.name": "文本片段",
+  "plugin.description": "用剪贴板、日期、查询等占位符展开可复用模板。",
+  "settings.title": "文本片段",
+  "settings.enabled": "启用片段",
+  "settings.enabled.desc": "关闭后片段命令不再出现在 Launcher。",
+  "settings.keywordExpansion": "关键词展开（后续版本）",
+  "settings.keywordExpansion.desc": "v1 故意不做后台击键展开。请在此管理片段，并从 Launcher 运行。",
+  "settings.list": "片段库",
+  "settings.add": "添加片段",
+  "settings.item": "片段",
+  "settings.empty": "还没有片段。",
+  "field.title": "名称",
+  "field.body": "模板正文",
+  "field.body.desc": "占位符：{clipboard} {selection} {query} {date} {time} {datetime}",
+  "field.aliases": "别名",
+  "field.aliases.desc": "回车添加。任一别名可在 Launcher 搜到该片段。",
+  "field.keyword": "关键词（预留）",
+  "field.enabled": "启用",
+  "tool.expand.subtitle": "展开片段",
+  "tool.expand.empty": "片段正文为空"
+}

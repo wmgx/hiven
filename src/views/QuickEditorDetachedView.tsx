@@ -4,16 +4,17 @@ import { useAppStore } from '../store'
 import { loadInstalledPluginsFromStore } from '../workspace/pluginRuntime'
 import { registerBundledPluginPackages } from '../workspace/bundledPluginLoader'
 import { registerHostLauncherProviders } from '../workspace/launcher/hostProvider'
-import { useQuickEditorStore } from '../workspace/quickEditor/quickEditorStore'
 import {
+  applyQuickEditorOverwrite,
   applyQuickEditorPaneRequest,
   applyQuickEditorSetPaneText,
+  isQuickEditorOverwriteRequest,
   isQuickEditorPaneRequest,
   isQuickEditorSetPaneTextRequest,
   QUICK_EDITOR_CREATE_PANE_EVENT,
+  QUICK_EDITOR_OVERWRITE_EVENT,
   QUICK_EDITOR_SET_PANE_TEXT_EVENT,
 } from '../workspace/quickEditor/quickEditorRequests'
-import { getLanguageOptionLabel } from '../workspace/languageOptions'
 import { QuickEditorPanel } from '../components/quickEditor/QuickEditorPanel'
 import { ToastContainer } from '../components/workspace/ToastContainer'
 import {
@@ -51,11 +52,8 @@ export function QuickEditorDetachedView() {
   const wordWrap = useAppStore((s) => s.settings.wordWrap)
   const updateSetting = useAppStore((s) => s.updateSetting)
   const openQuickEditorCommand = useAppStore((s) => s.openQuickEditorCommand)
-  const locale = useAppStore((s) => s.locale)
-  const language = useQuickEditorStore((s) => s.language)
   const tEditor = useT('editor')
   const tQuickEditor = useT('quickEditor')
-  const languageLabel = getLanguageOptionLabel(language, locale)
   const commandShortcut = navigator.platform.toLowerCase().includes('mac') ? 'Cmd+K' : 'Ctrl+K'
 
   useEffect(() => {
@@ -70,6 +68,7 @@ export function QuickEditorDetachedView() {
     let disposed = false
     let unlistenCreate: (() => void) | undefined
     let unlistenSetText: (() => void) | undefined
+    let unlistenOverwrite: (() => void) | undefined
     import('@tauri-apps/api/event')
       .then(async ({ listen }) => {
         const createCleanup = await listen<unknown>(QUICK_EDITOR_CREATE_PANE_EVENT, (event) => {
@@ -80,13 +79,19 @@ export function QuickEditorDetachedView() {
           if (!isQuickEditorSetPaneTextRequest(event.payload)) return
           applyQuickEditorSetPaneText(event.payload)
         })
+        const overwriteCleanup = await listen<unknown>(QUICK_EDITOR_OVERWRITE_EVENT, (event) => {
+          if (!isQuickEditorOverwriteRequest(event.payload)) return
+          applyQuickEditorOverwrite(event.payload)
+        })
         if (disposed) {
           createCleanup()
           setTextCleanup()
+          overwriteCleanup()
           return
         }
         unlistenCreate = createCleanup
         unlistenSetText = setTextCleanup
+        unlistenOverwrite = overwriteCleanup
       })
       .catch((error) => {
         console.warn('[hiven] Failed to listen for quick editor pane requests:', error)
@@ -95,6 +100,7 @@ export function QuickEditorDetachedView() {
       disposed = true
       unlistenCreate?.()
       unlistenSetText?.()
+      unlistenOverwrite?.()
     }
   }, [])
 
@@ -106,7 +112,14 @@ export function QuickEditorDetachedView() {
 
   const handleWindowDrag = useCallback((event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0) return
-    if (event.target instanceof HTMLElement && event.target.closest('button, input, textarea, select, a, [role="button"], [data-no-drag], .monaco-editor')) return
+    const excluded = event.target instanceof HTMLElement
+      ? event.target.closest('button, input, textarea, select, a, [role="button"], [data-no-drag], .monaco-editor')
+      : null
+    if (excluded) {
+      console.info('[hiven][drag] pointerdown ignored, target is inside excluded element:', excluded)
+      return
+    }
+    console.info('[hiven][drag] pointerdown on topbar, starting drag. target:', event.target)
     event.preventDefault()
     event.stopPropagation()
     void startQuickEditorWindowDrag().catch((error) => {
@@ -131,7 +144,7 @@ export function QuickEditorDetachedView() {
       data-theme={theme}
       style={{ fontSize }}
     >
-      <div className="editor-topbar glass" onPointerDown={handleWindowDrag}>
+      <div className="editor-topbar" onPointerDown={handleWindowDrag}>
         <div className="editor-topbar-system">
           <button
             type="button"
@@ -153,7 +166,7 @@ export function QuickEditorDetachedView() {
         <div className="editor-topbar-plugin-slot">
           <button
             type="button"
-            className="btn btn-ghost btn-sm ft-btn ft-btn-ghost ft-btn-sm editor-topbar-run"
+            className="ft-btn ft-btn-ghost ft-btn-sm editor-topbar-run"
             onClick={() => {
               suppressStandaloneLauncherBlur()
               openQuickEditorCommand()
@@ -163,7 +176,6 @@ export function QuickEditorDetachedView() {
             <Sparkles size={13} />
             <span>{tQuickEditor('runCommand')}</span>
           </button>
-          <span className="editor-topbar-status">{languageLabel}</span>
           <button
             type="button"
             className="editor-topbar-button"

@@ -1,0 +1,8 @@
+{
+  "pluginId": "user-commands",
+  "displayName": "Custom Commands",
+  "displayNameI18n": { "zh": "自定义命令" },
+  "version": "1.0.0",
+  "capabilities": ["command"],
+  "permissions": ["shell.run"]
+}

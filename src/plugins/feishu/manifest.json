@@ -1,0 +1,14 @@
+{
+  "pluginId": "feishu",
+  "displayName": "Feishu",
+  "displayNameI18n": {
+    "zh": "\u98de\u4e66"
+  },
+  "version": "0.7.1",
+  "capabilities": [
+    "settings"
+  ],
+  "permissions": [
+    "shell.run"
+  ]
+}

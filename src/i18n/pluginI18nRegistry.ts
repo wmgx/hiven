@@ -84,7 +84,16 @@ type LocalizableParam = {
   labelI18n?: I18nMap
   hint?: string
   hintI18n?: I18nMap
-  options?: Array<string | { label: string; value: string; labelI18n?: I18nMap }>
+  options?: Array<
+    | string
+    | {
+        label: string
+        value: string
+        labelI18n?: I18nMap
+        description?: string
+        descriptionI18n?: I18nMap
+      }
+  >
 }
 
 /** Build a per-locale map for a key; returns null when no locale defines it. */
@@ -120,9 +129,26 @@ function localizeParam<TParam extends LocalizableParam>(messages: Messages, para
   if (Array.isArray(param.options)) {
     next.options = param.options.map((option) => {
       if (typeof option === 'string') return option
+      let nextOpt = { ...option }
       const optLabel = localizeKey(messages, option.label)
-      if (!optLabel) return option
-      return { ...option, label: optLabel.text, labelI18n: { ...optLabel.i18n, ...option.labelI18n } }
+      if (optLabel) {
+        nextOpt = {
+          ...nextOpt,
+          label: optLabel.text,
+          labelI18n: { ...optLabel.i18n, ...option.labelI18n },
+        }
+      }
+      if (option.description) {
+        const optDesc = localizeKey(messages, option.description)
+        if (optDesc) {
+          nextOpt = {
+            ...nextOpt,
+            description: optDesc.text,
+            descriptionI18n: { ...optDesc.i18n, ...option.descriptionI18n },
+          }
+        }
+      }
+      return nextOpt
     }) as TParam['options']
   }
   return next
@@ -292,6 +318,25 @@ export function localizeContributions(
 ): LocalizedContributions {
   const messages = getMessages(pluginId) ?? {}
   const tools = (contributions.tools ?? []).map((tool) => localizeTool(messages, tool))
+  const toolsById = new Map(tools.map((tool) => [tool.id, tool]))
+  // Wrap toolsFor so launcher collect gets localized titles even when the
+  // plugin closure returns the raw (pre-localize) tool objects by id.
+  const toolsFor = contributions.toolsFor
+    ? (settings: unknown) => {
+        try {
+          const selected = contributions.toolsFor!(settings as never)
+          if (!Array.isArray(selected)) return tools
+          return selected.map((tool) => {
+            const existing = toolsById.get(tool.id)
+            if (existing) return existing
+            return localizeTool(messages, tool)
+          })
+        } catch (error) {
+          console.warn(`[plugin-i18n] toolsFor failed for "${pluginId}":`, error)
+          return tools
+        }
+      }
+    : undefined
   const launcherItems = contributions.launcher?.items?.map((item) => localizeLauncherItem(messages, item))
   const panelActions = contributions.panel?.actions?.map((action) => localizePanelAction(messages, action))
   const launcher = contributions.launcher
@@ -308,6 +353,7 @@ export function localizeContributions(
   const definition: PluginDefinition = {
     ...contributions,
     tools,
+    toolsFor,
     launcher,
     panel,
     commands,

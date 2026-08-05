@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light" />
+<title>hiven · Launcher 交互模型重设计 Demo</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --ink: #1a1c1e;
+    --ink-2: #686d71;
+    --ink-3: #999fa4;
+    --line: #e7e8e9;
+    --line-soft: #f0f1f2;
+    --well: #f7f8f8;
+    --well-deep: #fafbfb;
+    --blue: #2563eb;
+    --blue-deep: #1d56d8;
+    --blue-tint: #eef2ff;
+    --blue-line: rgba(37, 99, 235, 0.28);
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+    --mono: 'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #ffffff;
+    color: var(--ink);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    padding: 64px 24px 96px;
+  }
+
+  main { max-width: 680px; margin: 0 auto; }
+
+  /* ─── 页头 ─── */
+  .eyebrow {
+    font: 600 10.5px var(--mono);
+    letter-spacing: 0.14em;
+    color: var(--ink-3);
+    text-transform: uppercase;
+  }
+  h1 {
+    margin-top: 10px;
+    font-size: 21px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+  }
+  .lede {
+    margin-top: 10px;
+    max-width: 600px;
+    font-size: 13.5px;
+    color: var(--ink-2);
+  }
+
+  /* ─── 阶段说明 ─── */
+  section { margin-top: 56px; }
+  .stage {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    margin-bottom: 18px;
+  }
+  .stage-num {
+    flex: none;
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border-radius: 8px;
+    background: linear-gradient(180deg, #ffffff, var(--well));
+    border: 1px solid #e2e3e5;
+    border-bottom-color: #d5d7d9;
+    box-shadow: 0 1px 0 rgba(26, 28, 30, 0.06), inset 0 1px 0 #fff;
+    font: 600 11.5px var(--mono);
+    color: var(--ink-2);
+  }
+  .stage h2 { font-size: 14.5px; font-weight: 650; letter-spacing: -0.005em; }
+  .stage p { margin-top: 3px; font-size: 12.5px; color: var(--ink-2); max-width: 570px; }
+  .stage .reset {
+    color: var(--blue);
+    text-decoration: none;
+    border-bottom: 1px solid var(--blue-line);
+    cursor: pointer;
+  }
+
+  /* ─── Launcher 面板（立体白：白面板 + 发丝线 + 分层阴影） ─── */
+  .panel {
+    width: 100%;
+    max-width: 640px;
+    border-radius: 14px;
+    background: #ffffff;
+    box-shadow:
+      0 0 0 1px rgba(26, 28, 30, 0.065),
+      0 1px 2px rgba(26, 28, 30, 0.05),
+      0 10px 28px rgba(26, 28, 30, 0.07),
+      0 28px 72px rgba(26, 28, 30, 0.06);
+    overflow: hidden;
+  }
+
+  /* 输入行 */
+  .bar {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 54px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .bar .ico { flex: none; width: 16px; height: 16px; color: var(--ink); opacity: 0.4; }
+  .bar .typed { font-size: 16px; color: var(--ink); }
+  .bar .ghost { font-size: 16px; color: var(--ink-3); }
+  .bar input {
+    flex: 1;
+    min-width: 60px;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font: 400 15px var(--mono);
+    color: var(--ink);
+    caret-color: var(--blue);
+  }
+  .bar input::placeholder { color: var(--ink-3); font-family: var(--font); font-size: 15px; }
+
+  .caret {
+    display: inline-block;
+    width: 1.5px;
+    height: 19px;
+    margin-left: 1px;
+    vertical-align: text-bottom;
+    background: var(--ink);
+    animation: blink 1.1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ─── Token（方向一的核心物件） ─── */
+  .tok {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 550;
+    white-space: nowrap;
+    transition: border-color 0.14s, background 0.14s, box-shadow 0.14s;
+  }
+  .tok svg { width: 13px; height: 13px; }
+  /* 命令 token：身份，蓝 tint 微渐变 */
+  .tok-cmd {
+    color: var(--blue-deep);
+    background: linear-gradient(180deg, #f4f7ff, #e9efff);
+    border: 1px solid var(--blue-line);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  }
+  /* 参数值：沿用现状的轻量灰值块格式，不做键帽 */
+  .pval {
+    flex: none;
+    padding: 3px 7px;
+    border-radius: 5px;
+    background: var(--well);
+    border: 1px solid var(--line);
+    font: 500 11px var(--mono);
+    color: var(--ink-2);
+    transition: border-color 0.14s, box-shadow 0.14s, color 0.14s;
+  }
+  /* ⌫ 预备删除态 */
+  .pval.armed {
+    border-color: var(--blue);
+    color: var(--blue-deep);
+    box-shadow: 0 0 0 2px var(--blue-tint);
+  }
+
+  /* ─── 列表行 ─── */
+  .list { padding: 6px 8px; }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    height: 50px;
+    padding: 0 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.14s;
+  }
+  .row:hover:not(.sel) { background: var(--well); }
+  .row.sel { background: var(--blue-tint); }
+  .row .r-ico {
+    flex: none;
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    color: var(--ink-2);
+  }
+  .row.sel .r-ico { color: var(--blue); }
+  .row .r-ico svg { width: 16px; height: 16px; }
+  .r-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .r-title { font-size: 13.5px; font-weight: 500; }
+  .r-title .hl { color: var(--blue); font-weight: 650; }
+  .r-desc {
+    font-size: 12px;
+    color: var(--ink-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .r-tag {
+    flex: none;
+    font-size: 11px;
+    color: var(--ink-3);
+  }
+  .r-kbd { flex: none; font-size: 13px; color: var(--blue); }
+
+  /* ─── 实时预览井（面板 03，内凹） ─── */
+  .well-box {
+    margin: 12px 14px 0;
+    border-radius: 10px;
+    background: var(--well-deep);
+    border: 1px solid var(--line-soft);
+    box-shadow: inset 0 1px 3px rgba(26, 28, 30, 0.045);
+    overflow: hidden;
+  }
+  .well-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 14px 0;
+    font: 500 10.5px var(--mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .well-out {
+    padding: 8px 14px 13px;
+    font: 400 13.5px/1.6 var(--mono);
+    color: var(--ink);
+    word-break: break-all;
+    min-height: 42px;
+  }
+  .well-out .empty { color: var(--ink-3); font-family: var(--font); font-size: 12.5px; }
+
+  /* 去向徽章行（方向三） */
+  .dest-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 14px 14px;
+  }
+  .dest {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 30px;
+    padding: 0 11px;
+    border-radius: 8px;
+    background: linear-gradient(180deg, #ffffff, var(--well));
+    border: 1px solid #e2e3e5;
+    border-bottom-color: #d5d7d9;
+    box-shadow: 0 1px 0 rgba(26, 28, 30, 0.06), inset 0 1px 0 #fff;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--ink);
+    cursor: pointer;
+    transition: border-color 0.14s, background 0.14s, color 0.14s, box-shadow 0.14s;
+  }
+  .dest .dk {
+    font: 500 10.5px var(--mono);
+    color: var(--ink-2);
+  }
+  .dest.on {
+    color: var(--blue-deep);
+    background: linear-gradient(180deg, #f4f7ff, #e9efff);
+    border-color: var(--blue-line);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  }
+  .dest.on .dk { color: var(--blue); }
+  .dest-hint { margin-left: auto; font-size: 11.5px; color: var(--ink-2); }
+
+  /* ─── A/B 对照（面板 02） ─── */
+  .ab-label {
+    margin: 24px 0 10px;
+    font: 600 11px var(--mono);
+    letter-spacing: 0.08em;
+    color: var(--ink-3);
+    text-transform: uppercase;
+  }
+  .ab-label--new { color: var(--blue-deep); }
+  .ab-note {
+    margin-top: 10px;
+    font-size: 12.5px;
+    color: var(--ink-2);
+    max-width: 600px;
+  }
+  .bar .back {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ink-2);
+    font-size: 17px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .bar .back:hover { background: var(--well); }
+  .bar .btitle { font-size: 14px; font-weight: 600; }
+  .bar .vbar { flex: none; width: 1px; height: 16px; margin: 0 3px; background: var(--line); }
+  .bar .meta { margin-left: auto; font: 400 11px var(--mono); color: var(--ink-2); }
+
+  /* ─── Footer 键位提示 ─── */
+  .foot {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 9px 14px;
+    border-top: 1px solid var(--line-soft);
+    background: linear-gradient(180deg, #fcfcfd, var(--well));
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--ink-2);
+  }
+  .grp { display: inline-flex; align-items: center; gap: 5px; }
+  .kbd {
+    display: inline-grid;
+    place-items: center;
+    min-width: 19px;
+    height: 19px;
+    padding: 0 5px;
+    border-radius: 5px;
+    background: linear-gradient(180deg, #ffffff, var(--well));
+    border: 1px solid #e2e3e5;
+    border-bottom-color: #d0d2d5;
+    box-shadow: 0 1px 0 rgba(26, 28, 30, 0.07);
+    font: 500 10.5px var(--mono);
+    color: var(--ink-2);
+  }
+
+  /* ─── 页脚说明 ─── */
+  .note {
+    margin-top: 64px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line-soft);
+    font-size: 12px;
+    color: var(--ink-2);
+    max-width: 600px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">Hiven · Interaction Demo</div>
+    <h1>Launcher 交互模型重设计</h1>
+    <p class="lede">同一条命令（Base64 编码）在新模型下的三个阶段。视觉沿用「立体白」：白色主背景、发丝线与分层阴影、键帽质感控件，品牌蓝仅作 accent。</p>
+  </header>
+
+  <!-- ═══ 01 搜索 ═══ -->
+  <section>
+    <div class="stage">
+      <span class="stage-num">01</span>
+      <div>
+        <h2>搜索</h2>
+        <p>与现状一致的入口，这一层不动。选中行蓝 tint、匹配高亮、底部键位提示，仅精修键帽与阴影质感。</p>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="bar">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+        <span class="typed">base64<i class="caret"></i></span>
+      </div>
+      <div class="list">
+        <div class="row sel">
+          <span class="r-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span>
+          <span class="r-main">
+            <span class="r-title"><span class="hl">Base64</span> 编码</span>
+            <span class="r-desc">文本 → Base64</span>
+          </span>
+          <span class="r-tag">命令</span>
+          <span class="r-kbd">↵</span>
+        </div>
+        <div class="row">
+          <span class="r-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 18 2 12 8 6"/><polyline points="16 6 22 12 16 18"/></svg></span>
+          <span class="r-main">
+            <span class="r-title"><span class="hl">Base64</span> 解码</span>
+            <span class="r-desc">Base64 → 文本</span>
+          </span>
+          <span class="r-tag">命令</span>
+        </div>
+        <div class="row">
+          <span class="r-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></span>
+          <span class="r-main">
+            <span class="r-title">URL 编码</span>
+            <span class="r-desc">encodeURIComponent</span>
+          </span>
+          <span class="r-tag">命令</span>
+        </div>
+      </div>
+      <div class="foot">
+        <span class="grp"><span class="kbd">↑↓</span>选择</span>
+        <span class="grp"><span class="kbd">↵</span>确认</span>
+        <span class="grp"><span class="kbd">esc</span>返回</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ 02 参数这一步：换页 vs 不换页 ═══ -->
+  <section>
+    <div class="stage">
+      <span class="stage-num">02</span>
+      <div>
+        <h2>参数这一步：换页 vs 不换页</h2>
+        <p>接上一步——你在 01 选中「Base64 编码」按下 <span class="kbd" style="vertical-align:1px">↵</span>，命令需要你选一个变体参数。下面是同一时刻的两种做法。</p>
+      </div>
+    </div>
+
+    <div class="ab-label">A · 现状 — 整个面板翻页到参数界面</div>
+    <div class="panel">
+      <div class="bar">
+        <button class="back" type="button">‹</button>
+        <span class="btitle">Base64 编码</span>
+        <span class="vbar"></span>
+        <i class="caret"></i>
+        <span class="ghost">变体 · 筛选选项…</span>
+        <span class="meta">1/1</span>
+      </div>
+      <div class="list">
+        <div class="row sel">
+          <span class="r-main">
+            <span class="r-title">标准</span>
+            <span class="r-desc">RFC 4648 · 含 = 填充</span>
+          </span>
+          <span class="r-kbd">↵</span>
+        </div>
+        <div class="row">
+          <span class="r-main">
+            <span class="r-title">URL-safe</span>
+            <span class="r-desc">替换 + / 为 - _，去掉填充</span>
+          </span>
+        </div>
+        <div class="row">
+          <span class="r-main">
+            <span class="r-title">MIME 76 列</span>
+            <span class="r-desc">每 76 字符换行</span>
+          </span>
+        </div>
+      </div>
+      <div class="foot">
+        <span class="grp"><span class="kbd">↑↓</span>导航</span>
+        <span class="grp"><span class="kbd">↵</span>选择</span>
+        <span class="grp"><span class="kbd">esc</span>返回</span>
+      </div>
+    </div>
+    <p class="ab-note">搜索框消失了：出现返回按钮、新标题、选项列表，整屏内容都换掉。参数如果有多个，每选一个翻一页；已选的值只是标题旁一行小灰字。</p>
+
+    <div class="ab-label ab-label--new">B · 新模型 — 列表照旧，只是命令变成行首标签，不再翻页</div>
+    <div class="panel">
+      <div class="bar">
+        <span class="tok tok-cmd">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          Base64 编码
+        </span>
+        <i class="caret"></i>
+        <span class="ghost">选择变体，或输入以筛选…</span>
+      </div>
+      <div class="list">
+        <div class="row sel">
+          <span class="r-main">
+            <span class="r-title">标准</span>
+            <span class="r-desc">RFC 4648 · 含 = 填充</span>
+          </span>
+          <span class="r-kbd">↵</span>
+        </div>
+        <div class="row">
+          <span class="r-main">
+            <span class="r-title">URL-safe</span>
+            <span class="r-desc">替换 + / 为 - _，去掉填充</span>
+          </span>
+        </div>
+        <div class="row">
+          <span class="r-main">
+            <span class="r-title">MIME 76 列</span>
+            <span class="r-desc">每 76 字符换行</span>
+          </span>
+        </div>
+      </div>
+      <div class="foot">
+        <span class="grp"><span class="kbd">↑↓</span>选择</span>
+        <span class="grp"><span class="kbd">↵</span>确认</span>
+        <span class="grp"><span class="kbd">⌫</span>删除标签 / 返回</span>
+      </div>
+    </div>
+    <p class="ab-note">选项还是熟悉的下拉列表，选择体验不变。变化只发生在输入行：没有返回按钮、没有标题栏切换，命令以蓝色标签留在原地，输入框仍可打字筛选选项。选定后变体以轻量参数值的形式跟在命令标签后（见 03 的 URL-safe），<b>⌫ 删掉标签就是返回</b>。</p>
+  </section>
+
+  <!-- ═══ 03 即时预览与去向 ═══ -->
+  <section>
+    <div class="stage">
+      <span class="stage-num">03</span>
+      <div>
+        <h2>即时预览与去向 — 消灭等待</h2>
+        <p>文本变换是纯函数：输入即预览，回车只决定去向，去向徽章常驻可见。<b>此面板可交互</b>：试着打字、<span class="kbd" style="vertical-align:1px">⇥</span> 切换去向；清空输入后连按两次 <span class="kbd" style="vertical-align:1px">⌫</span> 删除 URL-safe 参数（输出随之变化）。<a class="reset" onclick="location.reload()">复位演示</a></p>
+      </div>
+    </div>
+    <div class="panel" id="live-panel">
+      <div class="bar">
+        <span class="tok tok-cmd">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          Base64 编码
+        </span>
+        <span class="pval" id="tok-urlsafe">URL-safe</span>
+        <input id="live-input" value="hello, hiven" spellcheck="false" autocomplete="off" placeholder="输入要编码的文本…" />
+      </div>
+      <div class="well-box">
+        <div class="well-head">
+          <span>实时预览</span>
+          <span id="live-count">0 chars</span>
+        </div>
+        <div class="well-out" id="live-out"></div>
+      </div>
+      <div class="dest-row" id="dest-row">
+        <span class="dest on"><span class="dk">↵</span>复制</span>
+        <span class="dest"><span class="dk">⌘↵</span>粘贴到前台应用</span>
+        <span class="dest-hint">⇥ 切换去向</span>
+      </div>
+      <div class="foot">
+        <span class="grp"><span class="kbd">↵</span><span id="foot-action">执行并复制</span></span>
+        <span class="grp"><span class="kbd">esc</span>返回</span>
+      </div>
+    </div>
+  </section>
+
+  <p class="note">
+    红线自检：白色主背景；灰仅出现在预览井、hover 与键帽等小件（#f7f8f8 冷调族）；品牌蓝 #2563eb 仅作 accent，无新增蓝紫色；立体感来自发丝线、分层阴影与键帽微渐变，不靠涂色。刷新页面可复位交互演示。
+  </p>
+</main>
+
+<script>
+  (function () {
+    var input = document.getElementById('live-input');
+    var out = document.getElementById('live-out');
+    var count = document.getElementById('live-count');
+    var tokUrlsafe = document.getElementById('tok-urlsafe');
+    var destRow = document.getElementById('dest-row');
+    var footAction = document.getElementById('foot-action');
+    var armed = false;
+
+    function encode(text) {
+      if (!text) return '';
+      var b = btoa(unescape(encodeURIComponent(text)));
+      if (tokUrlsafe && tokUrlsafe.isConnected) {
+        b = b.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      }
+      return b;
+    }
+
+    function render() {
+      var result = encode(input.value);
+      if (result) {
+        out.textContent = result;
+      } else {
+        out.innerHTML = '<span class="empty">输入后即时显示编码结果</span>';
+      }
+      count.textContent = result.length + ' chars';
+    }
+
+    function disarm() {
+      if (!armed) return;
+      armed = false;
+      if (tokUrlsafe) tokUrlsafe.classList.remove('armed');
+    }
+
+    input.addEventListener('input', function () { disarm(); render(); });
+
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        var badges = destRow.querySelectorAll('.dest');
+        var idx = 0;
+        badges.forEach(function (b, i) { if (b.classList.contains('on')) idx = i; });
+        badges[idx].classList.remove('on');
+        var next = badges[(idx + 1) % badges.length];
+        next.classList.add('on');
+        footAction.textContent = next.textContent.indexOf('粘贴') >= 0 ? '执行并粘贴到前台' : '执行并复制';
+        return;
+      }
+      if (e.key === 'Backspace' && input.value === '' && tokUrlsafe && tokUrlsafe.isConnected) {
+        e.preventDefault();
+        if (!armed) {
+          armed = true;
+          tokUrlsafe.classList.add('armed');
+        } else {
+          tokUrlsafe.remove();
+          armed = false;
+          render();
+        }
+        return;
+      }
+      if (e.key !== 'Backspace') disarm();
+    });
+
+    render();
+  })();
+</script>
+</body>
+</html>

@@ -83,6 +83,7 @@ const parameterizedPlugins = [
   'calculator',
   'date-time-assistant',
   'line-tools',
+  'random',
 ]
 
 for (const name of parameterizedPlugins) {
@@ -115,6 +116,8 @@ const defaultRunPlugins = [
   'json-tools',
   'csv',
   'yaml',
+  'random',
+  'variable-case',
 ]
 
 for (const name of defaultRunPlugins) {
@@ -135,6 +138,8 @@ const allPlugins = [
   'line-tools',
   'json-tools',
   'yaml',
+  'random',
+  'variable-case',
 ]
 
 for (const name of allPlugins) {

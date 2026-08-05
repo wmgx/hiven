@@ -1,11 +1,19 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 @import 'tailwindcss';
+
+/* Non-retina: 0.5px borders can vanish; bump hairline to 1px. */
+@media (max-resolution: 1.5dppx) {
+  :root {
+    --hairline: 1px;
+  }
+}
 
 :root {
   --font-sans:
-    'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "PingFang SC", "Segoe UI", system-ui, sans-serif;
   --font-mono:
-    'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    "SF Mono", ui-monospace, "JetBrains Mono", "Cascadia Code", "Fira Code", Menlo, monospace;
+  /* Retina hairline; non-retina falls back to 1px via media query above. */
+  --hairline: 0.5px;
 
   /* ─── Type Scale ─── */
   --text-xs: 10px;
@@ -15,7 +23,8 @@
   --text-lg: 16px;
 
   /* ─── Radius Scale ─── */
-  --radius-sm: 6px;
+  /* Single source: 7px matches launcher redesign block (was 6px then silently overridden) */
+  --radius-sm: 7px;
   --radius-md: 10px;
   --radius-lg: 16px;
   --radius-xl: 24px;
@@ -126,7 +135,12 @@ body[data-theme='dark'],
   --text-3: #6d6d75;
   --accent: #3b82f6;
   --accent-hover: #5a95f8;
-  --accent-soft: rgba(59, 130, 246, 0.16);
+  /* V4 stereo black: depth via face layering + top hairline, not heavy drop shadows */
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  --elev-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --elev-panel: var(--elev-highlight), 0 0 0 var(--hairline) rgba(0, 0, 0, 0.35);
+  --well-bg: color-mix(in srgb, #000 22%, var(--panel));
+  --well-inset: inset 0 1px 0 rgba(0, 0, 0, 0.35), inset 0 -1px 0 rgba(255, 255, 255, 0.03);
 
   --bg-page: #161618;
   --bg-surface: var(--panel);
@@ -189,16 +203,19 @@ body[data-theme='light'],
   --bg-surface-3: #ecedee;
   --text-primary: #1a1c1e;
   --text-secondary: #686d71;
-  --text-tertiary: #999fa4;
+  --text-tertiary: #686d71;
   --border: #e7e8e9;
   --border-subtle: #f0f1f2;
   --accent: #2563eb;
   --accent-hover: #1d56d8;
-  --accent-tint: #eef2ff;
+  /* Derive soft/tint from brand blue — no indigo residual */
+  --accent-tint: color-mix(in srgb, var(--accent) 8%, #fff);
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, #fff);
+  --accent-border-soft: color-mix(in srgb, var(--accent) 28%, #fff);
 
   /* 统一 light 模式下的 accent 变量，避免旧紫色 tint 残留 */
   --color-accent: #2563eb;
-  --color-accent-light: #eef2ff;
+  --color-accent-light: var(--accent-soft);
   --color-accent-hover: #1d56d8;
   --success: #2563eb;
   --error: #be1100;
@@ -233,7 +250,7 @@ body[data-theme='light'],
   --color-background-tertiary: #ecedee;
   --color-text-primary: #1a1c1e;
   --color-text-secondary: #686d71;
-  --color-text-tertiary: #999fa4;
+  --color-text-tertiary: #686d71;
   --color-border-secondary: #e7e8e9;
   --color-border-tertiary: #f0f1f2;
   --color-accent-bg: var(--accent-tint);
@@ -307,8 +324,9 @@ body[data-theme='light'],
   padding-bottom: 7px;
   gap: 10px;
 }
-.global-launcher-panel .cmd-item.selected,
-.palette-panel .cmd-item.selected {
+/* Prefer .l-row.sel rules below for Global Launcher contrast; keep soft fill for non-l-row lists. */
+.global-launcher-panel .cmd-item.selected:not(.l-row),
+.palette-panel .cmd-item.selected:not(.l-row) {
   background: var(--accent-soft, var(--accent-tint));
   border-radius: var(--radius-sm);
 }
@@ -391,10 +409,20 @@ html[data-window='launcher'] body,
 html[data-window='launcher'] #root {
   width: 100%;
   height: 100%;
-  background: transparent;
+  background: transparent !important;
   overflow: hidden;
   overscroll-behavior: none;
   touch-action: none;
+}
+
+/* Shell must stay transparent or it paints a full-window black slab behind the rounded panel (= 大黑边). */
+html[data-window='launcher'] .flux-spatial-shell,
+html[data-window='launcher'] .launcher-window-shell,
+html[data-window='launcher'] .global-launcher-overlay,
+html[data-window='launcher'] .global-launcher-overlay.open {
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
 }
 
 #root {
@@ -646,28 +674,7 @@ html[data-window='launcher'] #root {
   overflow: hidden;
 }
 
-.view-enter {
-  opacity: 0;
-  transform: translateY(12px);
-}
-.view-enter-active {
-  opacity: 1;
-  transform: translateY(0);
-  transition:
-    opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.view-enter-up {
-  opacity: 0;
-  transform: translateY(-12px);
-}
-.view-enter-up-active {
-  opacity: 1;
-  transform: translateY(0);
-  transition:
-    opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
+
 
 /* ─── Spatial Component Primitives ─── */
 .btn,
@@ -957,7 +964,7 @@ html[data-window='launcher'] #root {
     opacity: 1;
   }
   50% {
-    opacity: 0.8;
+    opacity: 0.45;
   }
 }
 
@@ -988,26 +995,37 @@ html[data-window='launcher'] #root {
 .anim-pulse-dot {
   animation: pulse-dot 2s ease-in-out infinite;
 }
-.anim-badge-pop {
-  animation: badge-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
-}
-.anim-card-in {
-  animation: card-in 0.3s ease both;
-}
-.anim-console-line {
-  animation: console-line-in 0.15s ease both;
-}
 .anim-dropdown {
   animation: dropdown-in 0.15s ease;
 }
 .anim-running-pulse {
-  animation: running-pulse 1s ease-in-out infinite;
+  animation: running-pulse 0.8s ease-in-out infinite;
 }
+/* ─── Toast motion (M1) ─── */
+.hiven-toast {
+  transform: translateX(16px);
+  opacity: 0;
+  transition:
+    transform 200ms var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+    opacity 200ms ease;
+}
+.hiven-toast.is-visible {
+  transform: translateX(0);
+  opacity: 1;
+}
+.hiven-toast.is-exiting {
+  transform: translateX(16px);
+  opacity: 0;
+}
+
+/* ─── Dropdown enter (P3-6) ─── */
+.plugins-dropdown-menu.anim-dropdown,
+.plugin-settings-dialog-panel.anim-dropdown {
+  animation: dropdown-in 0.15s var(--ease-out-expo, ease-out);
+}
+
 .anim-palette-item {
   animation: palette-item-in 0.12s ease both;
-}
-.anim-bump {
-  animation: bump 0.2s ease;
 }
 
 /* ─── Palette Overlay ─── */
@@ -1022,18 +1040,13 @@ html[data-window='launcher'] #root {
   backdrop-filter: none;
 }
 .palette-panel {
-  transform: scale(0.98) translateY(-6px);
-  opacity: 0;
+  /* Instant open by design (high-frequency command palette) — no enter transition */
   box-shadow:
     0 3px 8px rgba(15, 23, 42, 0.08),
     0 1px 2px rgba(15, 23, 42, 0.06);
-  transition:
-    transform 0.14s cubic-bezier(0.2, 0.8, 0.2, 1),
-    opacity 0.12s ease;
 }
 .palette-overlay.open .palette-panel {
-  transform: scale(1) translateY(0);
-  opacity: 1;
+  /* open state: no opacity/transform animation */
 }
 
 .global-launcher-overlay {
@@ -1057,7 +1070,7 @@ html[data-window='launcher'] .global-launcher-overlay.open {
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
-  transition: height 70ms ease-out, max-height 70ms ease-out;
+  /* height transitions removed: race with native window resize (M5) */
   -webkit-user-select: none;
   user-select: none;
 }
@@ -1074,6 +1087,7 @@ html[data-window='launcher'] .global-launcher-panel :is(
   button,
   a,
   pre,
+  .launcher-preview-well,
   [role='button'],
   [role='grid'],
   [role='row'],
@@ -1113,8 +1127,18 @@ html[data-window='quick-editor'] #root {
   -webkit-app-region: no-drag;
 }
 
+.quick-editor-detached-window .editor-topbar {
+  /* Backup for platforms that honor CSS regions; primary drag is Tauri
+     startDragging() (QuickEditorDetachedView.tsx handleWindowDrag). Without
+     this, the window-level `no-drag` above leaves nothing marked draggable
+     and the titlebar can't be dragged at all. */
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
 .quick-editor-detached-window :is(button, input, textarea, select, a, [role='button'], [data-no-drag], .monaco-editor) {
   -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .quick-editor-resize-handle {
@@ -1187,22 +1211,47 @@ html[data-window='quick-editor'] #root {
   cursor: nwse-resize;
 }
 
-.global-launcher-header {
+.global-launcher-header,
+.global-launcher-header.l-search,
+[data-launcher-drag-handle] {
   cursor: grab;
+  /* Backup for platforms that honor CSS regions; primary drag is Tauri startDragging. */
   -webkit-app-region: drag;
+  app-region: drag;
 }
 
-.global-launcher-header:active {
+.global-launcher-header:active,
+.global-launcher-header.l-search:active,
+[data-launcher-drag-handle]:active {
   cursor: grabbing;
 }
 
-.global-launcher-header input {
+/* Search field must remain clickable/focusable inside a drag region (WKWebView). */
+.global-launcher-header input,
+.global-launcher-header .l-search input,
+.l-search input,
+[data-launcher-drag-handle] input {
   -webkit-app-region: no-drag;
+  app-region: no-drag;
+  pointer-events: auto;
+  cursor: text;
+}
+
+/* Icon / chrome in the search row still participates in drag (not the input). */
+.global-launcher-header .ico,
+.l-search .ico {
+  -webkit-app-region: drag;
+  app-region: drag;
+  cursor: grab;
+  pointer-events: none; /* let pointerdown hit the header for startDragging */
 }
 
 .global-launcher-panel input {
   -webkit-user-select: text;
   user-select: text;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  pointer-events: auto;
 }
 
 .global-launcher-body {
@@ -1211,7 +1260,6 @@ html[data-window='quick-editor'] #root {
   max-height: var(--launcher-body-max-height, var(--launcher-list-max-height));
   overflow-x: hidden;
   overflow-y: auto;
-  transition: max-height 70ms ease-out;
   overscroll-behavior: contain;
   touch-action: pan-y;
 }
@@ -1229,30 +1277,9 @@ html[data-window='quick-editor'] #root {
   overflow-y: auto;
 }
 
-/* ─── Toast ─── */
-.toast-container {
-  position: fixed;
-  bottom: 30px;
-  left: 50%;
-  transform: translateX(-50%) translateY(20px);
-  opacity: 0;
-  transition:
-    opacity 0.25s ease,
-    transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-  z-index: 9999;
-  pointer-events: none;
-}
-.toast-container.show {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
 
-/* ─── Search Highlight ─── */
-.search-highlight {
-  background: #fde68a;
-  border-radius: 2px;
-  padding: 0 1px;
-}
+
+
 
 /* ─── Hover Card ─── */
 .hover-card {
@@ -1304,7 +1331,7 @@ html[data-window='quick-editor'] #root {
   cursor: pointer;
   font-size: var(--text-base);
   font-family: var(--font-mono);
-  border: 0.5px solid var(--color-border-secondary);
+  border: var(--hairline) solid var(--color-border-secondary);
   background: none;
   color: var(--color-text-secondary);
   transition:
@@ -1652,7 +1679,7 @@ html[data-window='quick-editor'] #root {
   gap: 10px;
   padding: 0 14px;
   height: 40px;
-  border: 0.5px solid var(--color-border-tertiary);
+  border: var(--hairline) solid var(--color-border-tertiary);
   border-radius: var(--radius-lg);
   background: var(--color-background-secondary);
   margin-bottom: 12px;
@@ -1704,7 +1731,7 @@ html[data-window='quick-editor'] #root {
   display: flex;
   position: relative;
   margin-bottom: 16px;
-  border-bottom: 0.5px solid var(--color-border-tertiary);
+  border-bottom: var(--hairline) solid var(--color-border-tertiary);
 }
 .scripts-tab {
   display: flex;
@@ -1751,9 +1778,9 @@ html[data-window='quick-editor'] #root {
   height: 2px;
   background: var(--color-accent);
   border-radius: 1px;
-  transition:
-    left 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
-    width 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform-origin: left center;
+  transition: transform 0.25s var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
+  will-change: transform;
 }
 
 /* Tab Panels */
@@ -1777,7 +1804,7 @@ html[data-window='quick-editor'] #root {
   gap: 12px;
   padding: 12px 16px;
   border-radius: var(--radius-lg);
-  border: 0.5px solid var(--color-border-tertiary);
+  border: var(--hairline) solid var(--color-border-tertiary);
   background: var(--color-background-primary);
   margin-bottom: 8px;
   transition:
@@ -1840,7 +1867,7 @@ html[data-window='quick-editor'] #root {
 }
 .plugin-master-list {
   min-width: 0;
-  border: 0.5px solid var(--color-border-tertiary);
+  border: var(--hairline) solid var(--color-border-tertiary);
   border-radius: var(--radius-lg);
   background: var(--color-background-primary);
   overflow: hidden;
@@ -1854,7 +1881,7 @@ html[data-window='quick-editor'] #root {
   gap: 8px;
   padding: 9px 10px;
   border: 0;
-  border-bottom: 0.5px solid var(--color-border-tertiary);
+  border-bottom: var(--hairline) solid var(--color-border-tertiary);
   background: transparent;
   color: var(--color-text-primary);
   text-align: left;
@@ -1912,7 +1939,7 @@ html[data-window='quick-editor'] #root {
   flex-direction: column;
   gap: 12px;
   padding: 14px;
-  border: 0.5px solid var(--color-border-tertiary);
+  border: var(--hairline) solid var(--color-border-tertiary);
   border-radius: var(--radius-lg);
   background: var(--color-background-primary);
 }
@@ -1976,7 +2003,7 @@ html[data-window='quick-editor'] #root {
   font-size: var(--text-sm);
 }
 .plugin-permissions.is-missing {
-  border: 0.5px solid color-mix(in srgb, var(--color-warning) 38%, transparent);
+  border: var(--hairline) solid color-mix(in srgb, var(--color-warning) 38%, transparent);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--color-warning) 8%, var(--color-background-secondary));
   padding: 8px 10px;
@@ -1998,7 +2025,7 @@ html[data-window='quick-editor'] #root {
   position: relative;
   margin-top: 10px;
   padding: 10px;
-  border: 0.5px solid var(--color-border-tertiary);
+  border: var(--hairline) solid var(--color-border-tertiary);
   border-radius: var(--radius-md);
   background: var(--color-background-secondary);
 }
@@ -2020,7 +2047,7 @@ html[data-window='quick-editor'] #root {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 0.5px solid var(--color-border-secondary);
+  border: var(--hairline) solid var(--color-border-secondary);
   border-radius: var(--radius-lg);
   background: var(--color-background-primary);
   box-shadow: 0 22px 54px rgba(0, 0, 0, 0.22);
@@ -2031,7 +2058,7 @@ html[data-window='quick-editor'] #root {
   justify-content: space-between;
   gap: 10px;
   padding: 12px 14px;
-  border-bottom: 0.5px solid var(--color-border-tertiary);
+  border-bottom: var(--hairline) solid var(--color-border-tertiary);
 }
 .plugin-settings-inline-modal-header h3 {
   margin: 0;
@@ -2299,9 +2326,26 @@ body[data-theme='dark'] .plugin-settings-num-field-row .wr-in,
   transition: border-color 0.12s, background 0.12s;
 }
 
+
+.schema-field-error {
+  margin-top: 6px;
+  color: var(--color-error, #be1100);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+.schema-row.has-error .plugin-settings-num-field input,
+.schema-field-block.has-error input,
+.schema-field-block.has-error textarea {
+  border-color: var(--color-error, #be1100);
+}
+.schema-row-control-number .schema-field-error {
+  width: 100%;
+  flex-basis: 100%;
+}
+
 .schema-field-block input:focus,
 .schema-field-block textarea:focus {
-  border-color: #c7d2fe;
+  border-color: var(--accent-border-soft, color-mix(in srgb, var(--accent) 28%, #fff));
   background: #fff;
 }
 
@@ -2350,11 +2394,11 @@ body[data-theme='dark'] .schema-field-block textarea:focus {
   font-size: 12px;
   font-weight: 550;
   padding: 0 11px;
-  transition: all 0.12s;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 
 .schema-object-list-add:hover {
-  border-color: #c7d2fe;
+  border-color: var(--accent-border-soft, color-mix(in srgb, var(--accent) 28%, #fff));
   background: var(--accent-soft);
 }
 
@@ -2858,7 +2902,7 @@ body[data-theme='dark'] .schema-field-block textarea:focus {
 .schema-object-list-field select:focus,
 .schema-object-list-field textarea:focus,
 .schema-alias-box:focus-within {
-  border-color: #c7d2fe;
+  border-color: var(--accent-border-soft, color-mix(in srgb, var(--accent) 28%, #fff));
   background: #fff;
 }
 
@@ -3103,7 +3147,7 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
 }
 
 .schema-object-list.d-rules .wr-in:focus {
-  border-color: #c7d2fe;
+  border-color: var(--accent-border-soft, color-mix(in srgb, var(--accent) 28%, #fff));
   background: #fff;
 }
 
@@ -3127,7 +3171,7 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
 }
 
 .schema-object-list.d-rules .wr-aliases:focus-within {
-  border-color: #c7d2fe;
+  border-color: var(--accent-border-soft, color-mix(in srgb, var(--accent) 28%, #fff));
   background: #fff;
 }
 
@@ -3187,7 +3231,7 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
 }
 
 .schema-object-list.d-rules .wr-add:hover {
-  border-color: #c7d2fe;
+  border-color: var(--accent-border-soft, color-mix(in srgb, var(--accent) 28%, #fff));
   background: var(--accent-soft);
 }
 
@@ -3201,6 +3245,9 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
   gap: 8px;
   flex-shrink: 0;
   padding: 0 10px;
+  background: var(--color-background-secondary);
+  border-style: solid;
+  border-color: var(--color-border-tertiary);
   border-width: 0 0 1px;
 }
 .editor-topbar-system,
@@ -3214,7 +3261,7 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
 }
 .editor-topbar-system {
   padding-right: 7px;
-  border-right: 0.5px solid var(--color-border-tertiary);
+  border-right: var(--hairline) solid var(--color-border-tertiary);
 }
 .editor-topbar-button {
   width: 28px;
@@ -3268,6 +3315,258 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
   font-size: 11px;
   color: var(--color-text-secondary);
 }
+
+/*
+ * Quick Editor version history — full-height right-edge drawer (not a
+ * floating popover). Rows are self-contained rounded hover chips inset
+ * within the panel (no hairline dividers).
+ */
+.qe-version-trigger {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  padding: 0;
+  transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
+}
+.qe-version-trigger:hover,
+.qe-version-trigger.is-open {
+  background: var(--color-background-tertiary, #ecedee);
+  border-color: color-mix(in srgb, var(--color-text-primary, #1a1c1e) 18%, transparent);
+  color: var(--color-text-primary, #1a1c1e);
+}
+
+/* Full-screen click-catcher behind the drawer — invisible. It only exists to
+   detect outside clicks; dimming the editor behind it muddies the exact
+   content the user still needs to read and *reduces* contrast at the edge
+   instead of sharpening it, so it carries no background of its own. */
+.qe-version-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: transparent;
+}
+
+.qe-version-drawer {
+  --qe-v-ink: var(--color-text-primary, #1a1c1e);
+  --qe-v-muted: var(--color-text-secondary, #686d71);
+  --qe-v-faint: var(--color-text-tertiary, #8a8f94);
+  --qe-v-surface: var(--color-background-primary, #ffffff);
+  --qe-v-hover: var(--color-surface-hover, #f7f8f8);
+  --qe-v-border: color-mix(in srgb, var(--qe-v-ink) 16%, transparent);
+  --qe-v-border-strong: color-mix(in srgb, var(--qe-v-ink) 24%, transparent);
+  --qe-v-edge: color-mix(in srgb, var(--qe-v-ink) 34%, transparent);
+  --qe-v-accent: var(--color-accent, #2563eb);
+
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(340px, 88vw);
+  display: flex;
+  flex-direction: column;
+  color: var(--qe-v-ink);
+  background: var(--qe-v-surface);
+  border-left: 1px solid var(--qe-v-edge);
+  /* Two layers: a tight, higher-contrast near-shadow that reads as a crisp
+     seam even against busy editor content, plus a soft ambient falloff. */
+  box-shadow:
+    -10px 0 18px -6px rgba(17, 24, 39, 0.22),
+    -40px 0 64px -20px rgba(17, 24, 39, 0.2);
+  animation: qe-version-drawer-in 180ms var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) both;
+}
+.qe-version-drawer[data-theme='dark'] {
+  box-shadow:
+    inset 1px 0 0 rgba(255, 255, 255, 0.06),
+    -10px 0 18px -6px rgba(0, 0, 0, 0.55),
+    -40px 0 64px -20px rgba(0, 0, 0, 0.5);
+}
+@keyframes qe-version-drawer-in {
+  from { transform: translateX(28px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .qe-version-drawer { animation: none; }
+}
+
+.qe-version-drawer__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: none;
+  height: 52px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--qe-v-border);
+}
+.qe-version-drawer__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.1px;
+  color: var(--qe-v-ink);
+}
+.qe-version-drawer__title svg {
+  flex: none;
+  color: var(--qe-v-faint);
+}
+.qe-version-drawer__head-trailing {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+/* Plain numeral — no pill/badge chrome. */
+.qe-version-drawer__count {
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--qe-v-faint);
+}
+.qe-version-drawer__close {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--qe-v-faint);
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+}
+.qe-version-drawer__close:hover,
+.qe-version-drawer__close:focus-visible {
+  background: var(--qe-v-hover);
+  color: var(--qe-v-ink);
+  outline: none;
+}
+
+.qe-version-drawer__list {
+  margin: 0;
+  padding: 8px 0;
+  list-style: none;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+.qe-version-drawer__list > li {
+  position: relative;
+}
+/* Inset hairline between rows — aligned to the hover chip's own bounds, not
+   touching the drawer edges. Rows still read as chips, but stay grouped at rest. */
+.qe-version-drawer__list > li + li::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 6px;
+  right: 6px;
+  height: 1px;
+  background: var(--qe-v-border);
+  pointer-events: none;
+  transition: opacity 80ms ease;
+}
+/* Don't let the divider cut across a hovered chip's rounded top/bottom edge. */
+.qe-version-drawer__list > li:hover::before,
+.qe-version-drawer__list > li:hover + li::before {
+  opacity: 0;
+}
+
+/* Self-contained rounded row chip. */
+.qe-version-item {
+  width: calc(100% - 12px);
+  margin: 0 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background 80ms ease;
+}
+.qe-version-item:hover,
+.qe-version-item:focus-visible {
+  background: var(--qe-v-hover);
+  outline: none;
+}
+
+.qe-version-item__meta {
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+  min-width: 0;
+  height: 17px;
+}
+.qe-version-item__source {
+  flex: none;
+  max-width: 7em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--qe-v-ink);
+}
+.qe-version-item__dot {
+  flex: none;
+  margin: 0 6px;
+  font-size: 12px;
+  color: var(--qe-v-faint);
+  line-height: 1;
+}
+.qe-version-item__time {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--qe-v-faint);
+}
+/* Reserved-space reveal (opacity/transform only) — the row never reflows on hover. */
+.qe-version-item__restore {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--qe-v-accent);
+  opacity: 0;
+  transform: translateX(3px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+.qe-version-item:hover .qe-version-item__restore,
+.qe-version-item:focus-visible .qe-version-item__restore {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.qe-version-item__preview {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--qe-v-muted);
+}
+
 .script-action-btn {
   width: 28px;
   height: 28px;
@@ -3333,7 +3632,7 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
 .modal-panel {
   width: min(480px, 90vw);
   background: var(--color-background-primary);
-  border: 0.5px solid var(--color-border-secondary);
+  border: var(--hairline) solid var(--color-border-secondary);
   border-radius: var(--radius-xl);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.18);
   transform: scale(0.92) translateY(10px);
@@ -3352,7 +3651,7 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px 12px;
-  border-bottom: 0.5px solid var(--color-border-tertiary);
+  border-bottom: var(--hairline) solid var(--color-border-tertiary);
 }
 .modal-title {
   font-weight: 600;
@@ -3400,7 +3699,7 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
 .modal-url-input {
   flex: 1;
   height: 36px;
-  border: 0.5px solid var(--color-border-secondary);
+  border: var(--hairline) solid var(--color-border-secondary);
   border-radius: var(--radius-md);
   padding: 0 12px;
   font-size: 12px;
@@ -3421,7 +3720,7 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  border-top: 0.5px solid var(--color-border-tertiary);
+  border-top: var(--hairline) solid var(--color-border-tertiary);
 }
 
 /* ─── Unified Button System ─── */
@@ -3478,7 +3777,7 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
 /* Outline (secondary) */
 .ft-btn-outline {
   background: none;
-  border: 0.5px solid var(--color-border-secondary);
+  border: var(--hairline) solid var(--color-border-secondary);
   color: var(--color-text-secondary);
 }
 .ft-btn-outline:hover {
@@ -3546,6 +3845,32 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
 .ft-btn-danger:hover {
   background: var(--color-error-bg);
   color: var(--color-error-text);
+}
+
+/* ─── Tooltip (generic, portaled) ─── */
+.hiven-tooltip {
+  position: fixed;
+  z-index: 10000;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: tooltip-in 0.1s ease both;
+}
+@keyframes tooltip-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* ─── Monaco ─── */
@@ -3988,7 +4313,7 @@ body[data-theme='dark'] .monaco-editor .find-widget {
   gap: 6px;
   min-width: 0;
   padding: 8px;
-  border: 0.5px solid var(--color-border-tertiary);
+  border: var(--hairline) solid var(--color-border-tertiary);
   border-radius: 6px;
   background: var(--color-background-secondary);
 }
@@ -4032,7 +4357,7 @@ body[data-theme='dark'] .monaco-editor .find-widget {
   max-width: 100%;
   height: 32px;
   padding: 0 12px;
-  border: 0.5px solid var(--color-border-tertiary);
+  border: var(--hairline) solid var(--color-border-tertiary);
   border-radius: var(--radius-md);
   outline: none;
   background: var(--color-background-tertiary);
@@ -4104,7 +4429,7 @@ body[data-theme='dark'] .monaco-editor .find-widget {
 .hiven-ui-button,
 .hiven-ui-icon-button,
 .hiven-ui-surface-list-item {
-  border: 0.5px solid var(--hiven-color-border, var(--color-border-tertiary));
+  border: var(--hairline) solid var(--hiven-color-border, var(--color-border-tertiary));
   border-radius: var(--hiven-radius-md);
   cursor: pointer;
   color: var(--hiven-color-text-primary, var(--color-text-primary));
@@ -4147,7 +4472,7 @@ body[data-theme='dark'] .monaco-editor .find-widget {
   min-height: 28px;
   min-width: 0;
   padding: 5px 8px;
-  border: 0.5px solid var(--hiven-color-border);
+  border: var(--hairline) solid var(--hiven-color-border);
   border-radius: var(--hiven-radius-md);
   outline: none;
   color: var(--hiven-color-text-primary);
@@ -4163,7 +4488,7 @@ body[data-theme='dark'] .monaco-editor .find-widget {
   --hiven-select-text: var(--text, var(--hiven-color-text-primary, #1c1c1e));
   --hiven-select-text-3: var(--text-3, var(--hiven-color-text-tertiary, #8e8e93));
   --hiven-select-accent: var(--accent, var(--hiven-color-accent, #2563eb));
-  --hiven-select-accent-soft: var(--accent-soft, rgba(37, 99, 235, 0.14));
+  --hiven-select-accent-soft: var(--accent-soft, color-mix(in srgb, var(--accent) 14%, transparent));
   position: relative;
   display: inline-flex;
   align-items: stretch;
@@ -4335,7 +4660,7 @@ button.hiven-ui-select-option.is-selected:hover {
     var(--hiven-color-text-primary, var(--color-text-primary, #1c1c1e)) 8%,
     var(--hiven-color-bg-secondary, var(--color-background-secondary, #f3f3f3))
   );
-  border: 0.5px solid color-mix(in srgb, var(--hiven-color-border, var(--color-border-tertiary, #e7e8e9)) 80%, transparent);
+  border: var(--hairline) solid color-mix(in srgb, var(--hiven-color-border, var(--color-border-tertiary, #e7e8e9)) 80%, transparent);
   box-sizing: border-box;
 }
 
@@ -4385,7 +4710,7 @@ button.hiven-ui-select-option.is-selected:hover {
   font-weight: 650;
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.08),
-    0 0 0 0.5px color-mix(in srgb, var(--hiven-color-border, var(--color-border-tertiary, #d0d0d0)) 70%, transparent);
+    0 0 0 var(--hairline) color-mix(in srgb, var(--hiven-color-border, var(--color-border-tertiary, #d0d0d0)) 70%, transparent);
 }
 
 .hiven-ui-surface-list-item.is-selected {
@@ -4436,7 +4761,7 @@ button.hiven-ui-select-option.is-selected:hover {
 .hiven-ui-confirm-panel {
   width: min(320px, 100%);
   padding: 14px;
-  border: 0.5px solid var(--hiven-color-border);
+  border: var(--hairline) solid var(--hiven-color-border);
   border-radius: var(--hiven-radius-lg);
   background: var(--hiven-color-bg-primary);
 }
@@ -4574,7 +4899,7 @@ html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-lau
 
 /* Editor command bar 与 Global Launcher 面板使用干净不模糊的样式，匹配简单风格 */
 .flux-spatial-shell .palette-panel {
-  border: 0.5px solid var(--color-border-secondary) !important;
+  border: var(--hairline) solid var(--color-border-secondary) !important;
   background: var(--bg-surface) !important;  /* pure surface like editor content (white in light, solid dark in dark), keeps launcher crisp */
   /* 干净的立体阴影，让 launcher 在暗色蒙层上更 crisp、更有存在感（避免平坦模糊感） */
   box-shadow:
@@ -4611,11 +4936,20 @@ html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-lau
   --border-2: #dcdee0;
   --text: #1a1c1e;
   --text-2: #686d71;
-  --text-3: #999fa4;
+  --text-3: #686d71;
   --accent: #2563eb;
-  --accent-soft: #eef2ff;
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, #fff);
+  --accent-tint: color-mix(in srgb, var(--accent) 8%, #fff);
+  --accent-border-soft: color-mix(in srgb, var(--accent) 28%, #fff);
+  --elev-highlight: inset 0 1px 0 #ffffff;
+  --elev-panel:
+    0 12px 36px -10px rgba(0, 0, 0, 0.12),
+    0 4px 10px -2px rgba(0, 0, 0, 0.06),
+    0 0 0 var(--hairline) var(--border);
+  --well-bg: var(--surface);
+  --well-inset: inset 0 1px 2px rgba(26, 28, 30, 0.05);
   --radius: 10px;
-  --radius-sm: 7px;
+  /* --radius-sm defined once at top :root (7px) */
   --launcher-panel-width: calc(100vw / 3);
   --font: -apple-system, "SF Pro Text", "PingFang SC", "Segoe UI", system-ui, sans-serif;
   --mono: "SF Mono", "JetBrains Mono", "Roboto Mono", ui-monospace, monospace;
@@ -4627,6 +4961,10 @@ body[data-theme='dark'] {
   --surface: #2e2e32;
   --surface-2: #3a3a3f;
   --border: #36363b;
+  --elev-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --elev-panel: var(--elev-highlight), 0 0 0 var(--hairline) rgba(0, 0, 0, 0.35);
+  --well-bg: color-mix(in srgb, #000 22%, var(--panel));
+  --well-inset: inset 0 1px 0 rgba(0, 0, 0, 0.35), inset 0 -1px 0 rgba(255, 255, 255, 0.03);
   --border-2: #43434a;
   --text: #f2f2f4;
   --text-2: #a0a0a8;
@@ -4666,9 +5004,20 @@ body[data-theme='dark'] {
   box-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 0, 0, 0.06) !important;
 }
 
+/* V4: dark launcher — face layering only; NO outer drop shadow (reads as a dirty second layer). */
 .flux-spatial-shell[data-theme='dark'] .global-launcher-panel.palette-panel,
-body[data-theme='dark'] .global-launcher-panel.palette-panel {
-  box-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+body[data-theme='dark'] .global-launcher-panel.palette-panel,
+.flux-spatial-shell[data-theme='dark'] .palette-panel,
+body[data-theme='dark'] .palette-panel {
+  background: var(--panel) !important;
+  border-color: var(--border) !important;
+  /* Top hairline only; ambient drop shadow removed per product feedback */
+  box-shadow: var(--elev-highlight) !important;
+}
+
+/* Standalone light: no extra outer ring. Dark skin is defined in the dark block at file end. */
+html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-launcher-panel.palette-panel {
+  border-color: transparent !important;
 }
 
 .quick-editor-command-layer {
@@ -4789,8 +5138,6 @@ body[data-theme='dark'] .quick-editor-command-panel {
 html[data-window='launcher'] .global-launcher-panel.palette-panel {
   --launcher-panel-width: calc(100vw - 24px);
   --launcher-panel-max-height: calc(100vh - 24px);
-  border-color: transparent !important;
-  box-shadow: none !important;
 }
 
 .global-launcher-header.l-search,
@@ -4800,7 +5147,18 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
   gap: 9px;
   min-height: 52px;
   padding: 14px 16px;
-  background: var(--panel);
+  /* V4/V5: slightly recessed face via color only — inset box-shadow read as a second layer */
+  background: var(--surface);
+  box-shadow: none;
+  border-bottom: var(--hairline) solid var(--border);
+}
+
+.flux-spatial-shell[data-theme='dark'] .global-launcher-header.l-search,
+.flux-spatial-shell[data-theme='dark'] .l-search,
+body[data-theme='dark'] .global-launcher-header.l-search,
+body[data-theme='dark'] .l-search {
+  /* Subtle top hairline only; no multi-edge inset shade */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .l-search .ico {
@@ -4813,11 +5171,14 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
 
 .l-search input {
   flex: 1;
-  min-width: 50px;
+  min-width: 72px;
   border: 0;
   outline: 0;
   background: transparent;
   color: var(--text);
+  caret-color: var(--text, #fff);
+  -webkit-user-select: text;
+  user-select: text;
   font-family: var(--font);
   font-size: 16px;
 }
@@ -4851,6 +5212,279 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
 
 .l-search .back:hover {
   background: var(--surface);
+}
+
+.l-search .back:active {
+  transform: scale(0.93);
+}
+
+/* Package 4: command tag (blue) + param value chips (gray) in shared input row */
+.launcher-command-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 42%;
+  min-height: 26px;
+  padding: 0 6px 0 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex: none;
+  overflow: hidden;
+}
+
+.launcher-command-tag-ico {
+  display: inline-flex;
+  flex: none;
+  color: var(--accent);
+  opacity: 0.9;
+}
+
+.launcher-command-tag-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.launcher-command-tag-remove {
+  width: 16px;
+  height: 16px;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: color-mix(in srgb, var(--accent) 70%, transparent);
+  cursor: pointer;
+  padding: 0;
+}
+
+.launcher-command-tag-remove:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+
+.launcher-param-chip-trail {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: min(42%, 220px);
+  flex: 0 1 auto;
+  overflow: hidden;
+}
+
+.launcher-param-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 140px;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: var(--hairline) solid var(--border);
+  background: var(--surface-2, var(--surface));
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.launcher-param-chip-label {
+  color: var(--text-3);
+  flex: none;
+  max-width: 4.5em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.launcher-param-chip-sep {
+  color: var(--text-3);
+  flex: none;
+}
+
+.launcher-param-chip-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.launcher-param-chip-more {
+  max-width: 40px;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+
+/* Command tag + chips must not starve the text input */
+.l-search .launcher-command-tag {
+  max-width: min(36%, 160px);
+  flex: 0 1 auto;
+}
+
+/* Package 4 + V5: live preview / empty wells share inset material */
+.launcher-preview-well,
+.launcher-empty-well {
+  margin: 8px 10px 6px;
+  border-radius: var(--radius-md, 10px);
+  background: var(--well-bg, var(--well, var(--surface)));
+  /* Color-only well; multi-edge inset shadow stacks into a muddy layer on dark */
+  box-shadow: none;
+  border: var(--hairline) solid var(--border);
+}
+
+.flux-spatial-shell[data-theme='dark'] .launcher-preview-well,
+.flux-spatial-shell[data-theme='dark'] .launcher-empty-well,
+body[data-theme='dark'] .launcher-preview-well,
+body[data-theme='dark'] .launcher-empty-well {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.launcher-preview-well {
+  /* Stable shell: avoid native window shrink/grow when content is empty between replaces */
+  min-height: 112px;
+  max-height: min(48vh, 320px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 12px 14px;
+  box-sizing: border-box;
+  /* Shell is not selectable — only the text node is, so selection doesn't fill empty well area */
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  scrollbar-gutter: stable;
+}
+
+.launcher-empty-well {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 112px;
+  padding: 28px 20px;
+  text-align: center;
+}
+
+.launcher-empty-well-icon {
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+  opacity: 0.9;
+}
+
+.launcher-empty-well-title {
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--text-2);
+  line-height: 1.35;
+}
+
+.launcher-empty-well-hint {
+  font-size: 12px;
+  color: var(--text-3);
+  max-width: 320px;
+  line-height: 1.4;
+}
+
+.launcher-empty-well-action {
+  margin-top: 4px;
+}
+
+.launcher-preview-well pre {
+  margin: 0;
+  padding: 0;
+  /* Text box only as tall as content; width fills well so long lines wrap inside the scrollport */
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: fit-content;
+  min-height: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+
+.launcher-preview-well .launcher-preview-text {
+  /* inline so drag-selection hugs glyphs, not the full well padding */
+  display: inline;
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+
+/* Long output: slightly stronger scroll affordance on dark */
+.flux-spatial-shell[data-theme='dark'] .launcher-preview-well,
+body[data-theme='dark'] .launcher-preview-well {
+  scrollbar-color: var(--scrollbar-thumb, #45454b) transparent;
+}
+
+.launcher-preview-well.is-empty {
+  color: var(--text-3);
+  font-size: 12px;
+  text-align: center;
+  padding: 20px 14px;
+}
+
+
+
+.launcher-output-targets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 4px 10px 8px;
+  box-sizing: border-box;
+}
+
+.launcher-output-target {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: var(--hairline) solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.launcher-output-target kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+.launcher-output-target.is-active {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+.launcher-output-target.is-active kbd {
+  color: var(--accent);
 }
 
 .l-search .title {
@@ -4908,15 +5542,25 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
   margin: 6px 8px 4px;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
+  border: var(--hairline) solid transparent;
   background: var(--accent-soft);
   cursor: pointer;
-  transition: background 0.14s;
+  transition: background 0.14s, border-color 0.14s;
   user-select: none;
   box-sizing: border-box;
 }
 
 .recent-clipboard-hint:hover {
-  background: rgba(37, 99, 235, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.recent-clipboard-hint.is-selected {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.recent-clipboard-hint.is-selected .hint-enter {
+  color: var(--accent);
 }
 
 .recent-clipboard-hint .hint-icon {
@@ -4974,41 +5618,94 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
 }
 
 .l-results {
-  padding: 6px 0 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0 4px;
   background: var(--panel);
 }
 
 .l-row {
   width: calc(100% - 16px);
-  height: 50px;
+  height: 48px;
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 12px;
   margin: 0 8px;
   padding: 0 12px;
-  border-radius: var(--radius-sm);
+  border-radius: 10px;
   cursor: pointer;
-  transition: background 0.14s, color 0.14s;
+  transition: background 0.12s ease, color 0.12s ease;
   color: var(--text);
   background: transparent;
-  will-change: background;
+  box-shadow: none;
   contain: inline-size style;
 }
 
-.l-row:hover:not(.sel) {
-  background: var(--surface);
+/* Light hover: readable surface grey (not near-invisible ink wash). */
+.l-row:hover:not(.sel):not(.selected) {
+  background: var(--surface, #f3f4f5);
+  box-shadow: none;
 }
 
+/*
+ * Light selected: clear accent tint (usable). No side stripe.
+ * Dark selected: white-alpha (Tinycast). Scoped overrides below for dark.
+ */
 .l-row.sel,
 .l-row.selected {
-  height: 50px;
-  background: var(--accent-soft) !important;
+  height: 48px;
+  background: color-mix(in srgb, var(--accent, #2563eb) 12%, #ffffff) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent, #2563eb) 16%, transparent) !important;
+}
+
+.flux-spatial-shell[data-theme='dark'] .l-row.sel,
+.flux-spatial-shell[data-theme='dark'] .l-row.selected,
+body[data-theme='dark'] .l-row.sel,
+body[data-theme='dark'] .l-row.selected {
+  background: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: none !important;
+}
+
+.flux-spatial-shell[data-theme='dark'] .l-row:hover:not(.sel):not(.selected),
+body[data-theme='dark'] .l-row:hover:not(.sel):not(.selected) {
+  background: rgba(255, 255, 255, 0.05) !important;
+  box-shadow: none !important;
+}
+
+/* Global launcher light: same readable surface/accent language. */
+.global-launcher-panel .l-row.cmd-item:hover:not(.sel):not(.selected),
+.palette-panel .l-row.cmd-item:hover:not(.sel):not(.selected) {
+  background: var(--surface, #f3f4f5) !important;
+  box-shadow: none !important;
+}
+.global-launcher-panel .l-row.cmd-item.sel,
+.global-launcher-panel .l-row.cmd-item.selected,
+.palette-panel .l-row.cmd-item.sel,
+.palette-panel .l-row.cmd-item.selected {
+  background: color-mix(in srgb, var(--accent, #2563eb) 12%, #ffffff) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent, #2563eb) 16%, transparent) !important;
+}
+.flux-spatial-shell[data-theme='dark'] .global-launcher-panel .l-row.cmd-item:hover:not(.sel):not(.selected),
+.flux-spatial-shell[data-theme='dark'] .palette-panel .l-row.cmd-item:hover:not(.sel):not(.selected),
+body[data-theme='dark'] .global-launcher-panel .l-row.cmd-item:hover:not(.sel):not(.selected) {
+  background: rgba(255, 255, 255, 0.05) !important;
+  box-shadow: none !important;
+}
+.flux-spatial-shell[data-theme='dark'] .global-launcher-panel .l-row.cmd-item.sel,
+.flux-spatial-shell[data-theme='dark'] .global-launcher-panel .l-row.cmd-item.selected,
+.flux-spatial-shell[data-theme='dark'] .palette-panel .l-row.cmd-item.sel,
+.flux-spatial-shell[data-theme='dark'] .palette-panel .l-row.cmd-item.selected,
+body[data-theme='dark'] .global-launcher-panel .l-row.cmd-item.sel,
+body[data-theme='dark'] .global-launcher-panel .l-row.cmd-item.selected {
+  background: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: none !important;
 }
 
 .l-row .r-ico,
 .l-row .r-app {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   flex: none;
 }
 
@@ -5017,8 +5714,32 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
   place-items: center;
   background: transparent;
   color: var(--text-2);
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1;
+  opacity: 0.92;
+}
+
+/* Remote person/group avatars: fixed slot so CDN imgs never collapse to 0. */
+.l-row .r-ico.r-avatar {
+  opacity: 1;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--surface, #f3f4f5);
+}
+
+.l-row .r-ico.r-avatar img,
+.l-row .r-ico img.r-avatar-img,
+.l-row .r-ico img.r-remote-img {
+  width: 20px;
+  height: 20px;
+  display: block;
+  object-fit: cover;
+  flex: none;
+}
+
+.l-row .r-ico.r-avatar img,
+.l-row .r-ico img.r-avatar-img {
+  border-radius: 50%;
 }
 
 .l-row.sel .r-ico,
@@ -5051,7 +5772,7 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
 
 .l-row.sel .r-app > .app-icon,
 .l-row.selected .r-app > .app-icon {
-  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.4) inset;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent) inset;
 }
 
 .l-row .r-main {
@@ -5085,15 +5806,18 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
   margin-top: 2px;
 }
 
+/* Light: small readable pill. Dark: demoted to faint trailing text (below). */
 .l-row .r-tag,
 .launcher-kind-tag {
   flex: none;
   padding: 2px 7px;
   border-radius: 5px;
-  background: var(--surface);
-  color: var(--text-2);
+  background: var(--surface, #f3f4f5);
+  color: var(--text-2, #6b7280);
   font-size: 10.5px;
   font-weight: 600;
+  letter-spacing: 0;
+  opacity: 1;
 }
 
 .l-row.sel .r-tag,
@@ -5101,7 +5825,16 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
 .l-row.sel .launcher-kind-tag,
 .l-row.selected .launcher-kind-tag {
   background: #fff;
-  color: var(--text-2);
+  color: var(--text-2, #6b7280);
+  opacity: 1;
+}
+
+.flux-spatial-shell[data-theme='dark'] .l-row .r-tag,
+.flux-spatial-shell[data-theme='dark'] .l-row .launcher-kind-tag,
+body[data-theme='dark'] .l-row .r-tag,
+body[data-theme='dark'] .l-row .launcher-kind-tag {
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.42);
 }
 
 .flux-spatial-shell[data-theme='dark'] .l-row.sel .r-tag,
@@ -5112,7 +5845,8 @@ body[data-theme='dark'] .l-row.sel .r-tag,
 body[data-theme='dark'] .l-row.selected .r-tag,
 body[data-theme='dark'] .l-row.sel .launcher-kind-tag,
 body[data-theme='dark'] .l-row.selected .launcher-kind-tag {
-  background: var(--surface-2);
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.52);
 }
 
 .l-row .r-kbd {
@@ -5136,11 +5870,34 @@ body[data-theme='dark'] .l-row.selected .launcher-kind-tag {
   letter-spacing: 0.5px;
 }
 
+/* ⌘1–⌘8 list-position quick run (SuperCmd-style discoverability) */
+.l-row .r-quick-select {
+  min-width: 1.75rem;
+  text-align: center;
+  letter-spacing: 0;
+  color: var(--text-3);
+}
+
+.l-row.sel .r-quick-select,
+.l-row.selected .r-quick-select,
+.l-row .r-quick-select.is-selected {
+  border-color: var(--accent-border-soft, color-mix(in srgb, var(--accent) 28%, transparent));
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+/* L2 result / confirm choices — align with suggest rows, not system dialog chrome */
+.l-results-confirm {
+  padding: 10px 0 8px;
+  gap: 4px;
+}
+
 .l-result {
   width: calc(100% - 16px);
+  min-height: 52px;
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 12px;
   margin: 0 8px;
   padding: 10px 12px;
   border: 0;
@@ -5148,16 +5905,30 @@ body[data-theme='dark'] .l-row.selected .launcher-kind-tag {
   background: transparent;
   color: var(--text);
   cursor: pointer;
-  transition: background 0.12s;
+  text-align: left;
+  transition: background 0.12s ease, box-shadow 0.12s ease;
 }
 
 .l-result:hover {
-  background: var(--surface);
+  background: var(--surface, rgba(0, 0, 0, 0.04));
 }
 
 .l-result.sel,
 .l-result.is-selected {
-  background: var(--accent-soft);
+  background: var(--accent-soft, var(--accent-tint, rgba(59, 130, 246, 0.12)));
+  box-shadow: inset 2px 0 0 var(--accent, #3b82f6);
+}
+
+.l-result .r-ico,
+.l-result .r-favicon {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--surface, rgba(0, 0, 0, 0.05));
+  color: var(--text-2, #666);
 }
 
 .l-result .ri {
@@ -5166,16 +5937,72 @@ body[data-theme='dark'] .l-row.selected .launcher-kind-tag {
   display: grid;
   place-items: center;
   flex: none;
-  border-radius: 7px;
-  background: var(--surface);
-  color: var(--text-2);
+  border-radius: 8px;
+  background: var(--surface, rgba(0, 0, 0, 0.05));
+  color: var(--text-2, #666);
   font-size: 13px;
+  font-weight: 600;
 }
 
 .l-result.sel .ri,
 .l-result.is-selected .ri {
-  background: var(--accent);
+  background: var(--accent, #3b82f6);
   color: #fff;
+}
+
+.l-result-danger .ri,
+.l-result-danger .r-ico {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--color-error);
+}
+
+.l-result-danger.sel,
+.l-result-danger.is-selected {
+  background: rgba(239, 68, 68, 0.1);
+  box-shadow: inset 2px 0 0 var(--color-error);
+}
+
+.l-result-danger.sel .ri,
+.l-result-danger.is-selected .ri,
+.l-result-danger.sel .r-ico,
+.l-result-danger.is-selected .r-ico {
+  background: var(--color-error);
+  color: #fff;
+}
+
+.l-result-muted .ri,
+.l-result-muted .r-ico {
+  background: var(--surface, rgba(0, 0, 0, 0.05));
+  color: var(--text-3, #999);
+}
+
+.l-result .r-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.l-result .r-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text, var(--color-text-primary));
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.l-result .r-desc {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-3, var(--color-text-tertiary, #888));
+  font-size: 12px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .l-result .rtext {
@@ -5183,22 +6010,24 @@ body[data-theme='dark'] .l-row.selected .launcher-kind-tag {
   min-width: 0;
   overflow: hidden;
   color: var(--text);
-  font-family: var(--mono);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .l-result .rkind,
-.l-result .rkbd {
+.l-result .rkbd,
+.l-result .r-kbd {
   flex: none;
-  color: var(--text-3);
+  color: var(--text-3, #999);
   font-size: 11px;
 }
 
-.l-result .rkbd {
-  font-family: var(--mono);
+.l-result .rkbd,
+.l-result .r-kbd {
+  font-family: var(--mono, ui-monospace, monospace);
+  opacity: 0.85;
 }
 
 /* ── Collect-input suggestions (generic; product data from plugins) ─────────── */
@@ -5466,7 +6295,7 @@ body[data-theme='dark'] .check {
 
 .l-result-block.sel,
 .l-result-block.is-selected {
-  background: rgba(37, 99, 235, 0.06);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 
 .l-result-block.disabled {
@@ -5489,13 +6318,28 @@ body[data-theme='dark'] .check {
 .l-foot {
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 12px;
   padding: 9px 14px;
-  border-top: 1px solid var(--border);
-  background: var(--surface);
+  border-top: var(--hairline) solid var(--border);
+  /* Same face as panel — surface band looked like a second shadow layer */
+  background: var(--panel);
   color: var(--text-2);
   font-size: 11.5px;
   font-weight: 500;
+}
+
+.l-foot-hints {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.l-foot-primary-label {
+  font-size: 12.5px;
+  font-weight: 560;
+  letter-spacing: -0.01em;
 }
 
 .l-foot .grp {
@@ -5509,12 +6353,31 @@ body[data-theme='dark'] .check {
   font-weight: 600;
 }
 
+/* Primary action sits trailing (Tinycast / SuperCmd action capsule language). */
+.l-foot .l-foot-primary {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.l-foot .l-foot-primary kbd {
+  border-color: var(--accent-border-soft, color-mix(in srgb, var(--accent) 28%, #fff));
+  color: var(--accent);
+}
+
 .l-foot kbd,
 .kbd {
   padding: 1px 5px;
-  border: 1px solid var(--border);
+  border: var(--hairline, 0.5px) solid var(--border);
+  border-bottom-width: 1.5px;
   border-radius: 4px;
-  background: #fff;
+  background: linear-gradient(180deg, #ffffff 0%, #f7f8f8 100%);
+  box-shadow:
+    0 1px 0 rgba(18, 22, 28, 0.06),
+    inset 0 1px 0 #fff;
   color: var(--text-2);
   font-family: var(--mono);
   font-size: 10.5px;
@@ -5524,12 +6387,15 @@ body[data-theme='dark'] .check {
 .flux-spatial-shell[data-theme='dark'] .kbd,
 body[data-theme='dark'] .l-foot kbd,
 body[data-theme='dark'] .kbd {
-  background: var(--surface);
+  background: linear-gradient(180deg, #323238 0%, #2a2a2e 100%);
   border-color: var(--border);
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .l-foot .primary kbd {
-  border-color: #c7d2fe;
+  border-color: var(--accent-border-soft, color-mix(in srgb, var(--accent) 28%, #fff));
   color: var(--accent);
 }
 
@@ -5651,7 +6517,7 @@ body[data-theme='dark'] .l-foot .primary kbd {
   font-size: 12.5px;
   font-weight: 550;
   padding: 0 12px;
-  transition: all 0.14s;
+  transition: background 0.14s, color 0.14s, border-color 0.14s, transform 0.1s;
 }
 
 .btn:hover {
@@ -5793,7 +6659,7 @@ body[data-theme='dark'] .menu {
   cursor: pointer;
   font-size: 13px;
   font-weight: 550;
-  transition: all 0.14s;
+  transition: color 0.14s, border-color 0.14s, background 0.14s;
 }
 
 .ptab:hover,
@@ -5882,7 +6748,7 @@ body[data-theme='dark'] .menu {
   border-radius: var(--radius-sm);
   background: transparent;
   cursor: pointer;
-  transition: all 0.14s;
+  transition: background 0.14s, color 0.14s;
   width: 100%;
 }
 
@@ -6080,7 +6946,7 @@ body[data-theme='dark'] .settings-about-card,
   color: #fff;
   font-weight: 700;
   font-size: 14px;
-  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--accent) 28%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 
 .settings-about-text {
@@ -6132,7 +6998,7 @@ body[data-theme='dark'] .settings-about-right .scripts-btn,
   border-color: var(--accent);
   background: linear-gradient(180deg, #3b76f0, var(--accent));
   color: #fff;
-  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 28%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 .scard {
@@ -7229,7 +8095,9 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   font: 12px/1.5 var(--font-mono);
 }
 
-/* Step 5 Object → Action → Output language */
+/* Step 5 Object → Action → Output language
+   Exit animation: only compositor props (opacity/transform). Animating max-width/
+   padding caused layout thrash + ranking re-render jank. */
 .object-block-token {
   display: inline-flex;
   align-items: center;
@@ -7245,7 +8113,20 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   font-weight: 550;
   white-space: nowrap;
   flex: none;
-  transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+  transform-origin: center center;
+  transition:
+    opacity 120ms ease-out,
+    transform 120ms ease-out,
+    border-color 0.12s ease,
+    background 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.object-block-token.is-exiting {
+  opacity: 0;
+  transform: scale(0.96);
+  pointer-events: none;
+  will-change: opacity, transform;
 }
 
 .object-block-token:has(.object-block-content) {
@@ -7303,140 +8184,14 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   background: var(--border);
 }
 
+.object-block-remove:active {
+  transform: scale(0.93);
+}
+
 .recommended-actions-list {
   padding: 6px 0 4px;
 }
 
-.recommended-action-row {
-  min-height: 54px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas: 'title key' 'meta meta';
-  align-items: center;
-  row-gap: 3px;
-  margin: 0 8px;
-  padding: 9px 12px;
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  cursor: pointer;
-  transition: background 0.12s ease, transform 0.12s ease;
-}
-
-.recommended-action-row:hover:not(.selected) {
-  background: var(--surface);
-}
-
-.recommended-action-row.selected {
-  background: var(--accent-soft);
-}
-
-.recommended-action-row .action-title {
-  grid-area: title;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13.5px;
-  font-weight: 620;
-  letter-spacing: -0.01em;
-}
-
-.recommended-action-row .action-key-hint {
-  grid-area: key;
-  color: var(--text-3);
-  font-family: var(--mono);
-  font-size: 11px;
-}
-
-.recommended-action-row .action-meta {
-  grid-area: meta;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  color: var(--text-2);
-  font-size: 11.5px;
-}
-
-.recommended-action-row .action-meta > span:not(:last-child)::after {
-  content: '·';
-  margin-left: 6px;
-  color: var(--text-3);
-}
-
-.recommended-action-row .action-provider {
-  color: var(--text-2);
-}
-
-.recommended-action-row .action-default-output {
-  color: var(--text-2);
-}
-
-.recommended-action-row .action-preview-hint {
-  color: var(--accent);
-}
-
-.output-target-expansion {
-  padding: 6px 0 4px;
-  animation: object-target-push 0.16s var(--ease-out-expo, ease-out);
-}
-
-.output-target-header,
-.output-target-footer {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 14px;
-  color: var(--text-2);
-  font-size: 11.5px;
-}
-
-.output-target-header .back {
-  width: 24px;
-  height: 24px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-2);
-  cursor: pointer;
-}
-
-.output-target-header .title {
-  color: var(--text);
-  font-weight: 600;
-}
-
-.output-target-row {
-  min-height: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin: 0 8px;
-  padding: 0 12px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  color: var(--text);
-}
-
-.output-target-row:hover,
-.output-target-row.selected {
-  background: var(--accent-soft);
-}
-
-.output-target-row .target-label {
-  font-size: 13px;
-  font-weight: 560;
-}
-
-.output-target-row .target-hint {
-  color: var(--text-3);
-  font-size: 11px;
-}
-
-@keyframes object-target-push {
-  from { opacity: 0; transform: translateX(10px); }
-  to { opacity: 1; transform: translateX(0); }
-}
 
 .json-surface {
   height: 100%;
@@ -7959,7 +8714,7 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
 .csv-tools-surface__file-btn {
   height: 28px;
   padding: 0 11px;
-  border: 0.5px solid var(--color-border-secondary, var(--border));
+  border: var(--hairline) solid var(--color-border-secondary, var(--border));
   border-radius: 8px;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--color-background-primary) 70%, transparent) 0%, transparent 100%),
@@ -8147,7 +8902,7 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   background: transparent;
   color: var(--color-text-tertiary);
   cursor: pointer;
-  transition: all 0.12s;
+  transition: background 0.12s, color 0.12s;
 }
 
 .csv-tools-surface__ib:hover:not(:disabled) {
@@ -8266,7 +9021,7 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   border-radius: 5px;
   cursor: pointer;
   white-space: nowrap;
-  transition: all 0.12s;
+  transition: background 0.12s, color 0.12s;
 }
 
 .csv-tools-surface__seg-item:hover:not(.is-on) {
@@ -8451,7 +9206,7 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
 .csv-tools-surface__ib {
   width: 28px !important;
   height: 28px !important;
-  border: 0.5px solid transparent !important;
+  border: var(--hairline) solid transparent !important;
   border-radius: 8px !important;
   background: transparent !important;
   color: var(--color-text-tertiary);
@@ -8593,7 +9348,7 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   max-height: 220px;
   overflow: auto;
   border-radius: 8px;
-  border: 0.5px solid var(--color-border-secondary, var(--color-border-tertiary));
+  border: var(--hairline) solid var(--color-border-secondary, var(--color-border-tertiary));
   background: var(--color-background-primary);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   z-index: 20;
@@ -8991,7 +9746,7 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   color: #fff;
   font-size: 13px;
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 28%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 .plugins-content-inner .btn.primary.split:hover {
@@ -9024,6 +9779,12 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   cursor: pointer;
   transition: background 0.12s ease;
 }
+
+.plugins-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 
 .plugins-row-wrapper:hover:not(.is-expanded) .plugins-row {
   background: var(--color-bg-hover);
@@ -9383,25 +10144,14 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   color: var(--text-2);
 }
 
-/* Empty & Error */
+/* Empty & Error — plugins-empty now rides LauncherEmptyWell material */
+.plugins-empty.launcher-empty-well {
+  margin: 12px 8px 20px;
+  min-height: 160px;
+  padding: 40px 20px 48px;
+}
+
 .plugins-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 48px 20px 60px;
-  color: var(--text-3);
-}
-
-.plugins-empty-text {
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--text-2);
-}
-
-.plugins-empty-hint {
-  font-size: 12.5px;
   color: var(--text-3);
 }
 
@@ -9423,4 +10173,457 @@ body[data-theme='dark'] .plugins-error-banner,
   background: rgba(190, 17, 0, 0.12);
   border-color: rgba(190, 17, 0, 0.35);
   color: #fca5a5;
+}
+
+/* Hide WebKit number spin buttons (P3-15) */
+.l-number-input::-webkit-outer-spin-button,
+.l-number-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.l-number-input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Font size stepper disabled */
+.num button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* P3-10 focus-visible baseline for interactive without custom ring */
+button:focus-visible,
+[role='button']:focus-visible,
+[role='menuitem']:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent, #2563eb);
+  outline-offset: 2px;
+}
+.sw:focus-visible,
+.toggle:focus-visible {
+  outline: 2px solid var(--accent, #2563eb);
+  outline-offset: 2px;
+}
+
+/* ── App hotkeys settings ───────────────────────────────────────────────── */
+.app-hotkeys-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: min(360px, 100%);
+  max-width: 420px;
+}
+.app-hotkeys-help,
+.app-hotkeys-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+.app-hotkeys-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.app-hotkeys-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--surface, rgba(0, 0, 0, 0.04));
+  border: 1px solid var(--border);
+}
+.app-hotkeys-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 560;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-hotkeys-acc {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+}
+.app-hotkeys-remove {
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+}
+.app-hotkeys-remove:hover {
+  color: var(--color-error, #dc2626);
+  background: color-mix(in srgb, var(--color-error, #dc2626) 10%, transparent);
+}
+.app-hotkeys-add {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: var(--hairline) solid var(--border);
+}
+.app-hotkeys-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.app-hotkeys-field input,
+.app-hotkeys-field select {
+  font-size: 12.5px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--panel, #fff);
+  color: var(--text);
+}
+.app-hotkeys-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 560;
+  cursor: pointer;
+}
+.app-hotkeys-add-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.app-hotkeys-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-error, #dc2626);
+}
+
+/* ── Launcher material ─────────────────────────────────────────────────────
+ * LIGHT: solid crisp workbench (previous usable baseline).
+ * DARK: Tinycast-ish blur scrim + white-alpha rows.
+ * Never apply light translucent glass — it washes contrast on macOS light desktops.
+ */
+
+/* —— Light: solid white, no blur, no mask fade —— */
+html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-launcher-panel.palette-panel {
+  background: #ffffff !important;
+  border: 1px solid rgba(17, 24, 39, 0.12) !important;
+  border-radius: 12px !important;
+  box-shadow:
+    0 18px 44px rgba(17, 24, 39, 0.14),
+    0 3px 10px rgba(17, 24, 39, 0.08) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  overflow: hidden;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-launcher-header.l-search,
+html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .l-search {
+  background: #f7f8f8 !important;
+  border-bottom: 1px solid rgba(17, 24, 39, 0.08) !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-launcher-footer.l-foot,
+html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .l-foot {
+  background: #ffffff !important;
+  border-top: 1px solid rgba(17, 24, 39, 0.08) !important;
+  padding: 9px 14px !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .l-search input,
+html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-launcher-header input {
+  font-size: 15px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0;
+  background: transparent !important;
+  color: #111827 !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .l-search input::placeholder,
+html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-launcher-header input::placeholder {
+  color: #9ca3af !important;
+}
+
+/* No edge mask on light — it makes top/bottom rows look broken. */
+html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-launcher-body.l-list {
+  mask-image: none !important;
+  -webkit-mask-image: none !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .l-foot .l-foot-primary {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-weight: 600;
+  color: #1e3a8a;
+  background: color-mix(in srgb, var(--accent, #2563eb) 10%, #fff);
+  border: 1px solid color-mix(in srgb, var(--accent, #2563eb) 22%, #e5e7eb);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .l-foot .l-foot-primary kbd {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 0 0 2px !important;
+  font-size: 12px !important;
+  color: inherit !important;
+  opacity: 0.8;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .l-foot-hints {
+  opacity: 0.85;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .l-row .r-quick-select {
+  min-width: 1.85rem;
+  border-color: rgba(17, 24, 39, 0.12);
+  background: #f3f4f6;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .l-row.sel .r-quick-select,
+html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .l-row.selected .r-quick-select,
+html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .l-row .r-quick-select.is-selected {
+  border-color: color-mix(in srgb, var(--accent, #2563eb) 28%, #d1d5db);
+  color: #1e40af;
+  background: color-mix(in srgb, var(--accent, #2563eb) 10%, #fff);
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .launcher-match-highlight {
+  color: var(--accent, #2563eb) !important;
+  font-weight: 650;
+}
+
+/*
+ * —— Dark: SuperCmd-grade solid charcoal (NOT failed glass) ——
+ * Fake translucency without native vibrancy reads as dirty mid-gray.
+ * Use solid near-black faces + clear row elevation instead.
+ */
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .global-launcher-panel.palette-panel,
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .palette-panel {
+  /*
+   * No double border / black ring. A hard 1px black outline against colorful
+   * desktops reads as 大黑边. Soft hairline + ambient only.
+   */
+  background: #1c1c1e !important;
+  border: 0 !important;
+  border-color: transparent !important;
+  border-radius: 12px !important;
+  outline: none !important;
+  /* soft ambient only — never 0 0 0 1px pure black */
+  box-shadow:
+    0 20px 50px rgba(0, 0, 0, 0.38),
+    0 0 0 0.5px rgba(255, 255, 255, 0.09) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  overflow: hidden;
+  color: #f5f5f7 !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .global-launcher-header.l-search,
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-search {
+  background: #1c1c1e !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  min-height: 52px !important;
+  box-shadow: none !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .global-launcher-body.l-list {
+  background: #1c1c1e !important;
+  mask-image: none !important;
+  -webkit-mask-image: none !important;
+  padding: 6px 0 4px !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .global-launcher-footer.l-foot,
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-foot {
+  background: #1c1c1e !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 10px 12px 12px !important;
+  color: rgba(235, 235, 245, 0.55) !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-search input,
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .global-launcher-header input {
+  font-size: 16px !important;
+  font-weight: 500 !important;
+  letter-spacing: -0.015em;
+  background: transparent !important;
+  color: #f5f5f7 !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-search input::placeholder,
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .global-launcher-header input::placeholder {
+  color: rgba(235, 235, 245, 0.35) !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-search .ico {
+  color: rgba(235, 235, 245, 0.4) !important;
+  opacity: 1 !important;
+}
+
+/* Rows: solid lifts, not muddy translucent grey */
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row {
+  border-radius: 10px !important;
+  color: #f5f5f7 !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .r-title,
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .launcher-item-title {
+  color: #f5f5f7 !important;
+  font-weight: 510 !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .r-desc {
+  color: rgba(235, 235, 245, 0.45) !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row:hover:not(.sel):not(.selected),
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row.cmd-item:hover:not(.sel):not(.selected) {
+  background: #2c2c2e !important;
+  box-shadow: none !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row.sel,
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row.selected,
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row.cmd-item.sel,
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row.cmd-item.selected {
+  background: #3a3a3c !important;
+  box-shadow: none !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .r-ico {
+  color: rgba(235, 235, 245, 0.72) !important;
+  opacity: 1 !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row.sel .r-ico,
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row.selected .r-ico {
+  color: #f5f5f7 !important;
+}
+
+/*
+ * Group/person CDN avatars are often dark-on-transparent. On charcoal they vanish.
+ * Light plate + hairline keeps the slot readable; color must NOT paint over <img>.
+ */
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .r-ico.r-avatar {
+  background: rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+  opacity: 1 !important;
+  /* Keep text/lucide color for load-failure fallbacks; img ignores color. */
+  color: rgba(235, 235, 245, 0.85) !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .r-ico.r-avatar img,
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .r-ico img.r-avatar-img,
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .r-ico img.r-remote-img {
+  opacity: 1 !important;
+  visibility: visible !important;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ⌘N chips — quiet, readable */
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .r-quick-select {
+  min-width: 1.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: rgba(235, 235, 245, 0.55) !important;
+  font-weight: 500;
+  border-radius: 6px;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row.sel .r-quick-select,
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row.selected .r-quick-select,
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .r-quick-select.is-selected {
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(245, 245, 247, 0.88) !important;
+}
+
+/* Kind tags: faint text only */
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .r-tag,
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .launcher-kind-tag {
+  padding: 0 !important;
+  border-radius: 0 !important;
+  font-size: 12px !important;
+  font-weight: 400 !important;
+  opacity: 1 !important;
+  background: transparent !important;
+  color: rgba(235, 235, 245, 0.35) !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .launcher-match-highlight {
+  color: #f5f5f7 !important;
+  font-weight: 650;
+}
+
+/* Primary action pill — solid elevated, not dirty glass */
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-foot .l-foot-primary {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #f5f5f7 !important;
+  background: #3a3a3c !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-foot .l-foot-primary kbd {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 0 0 2px !important;
+  font-size: 12px !important;
+  color: rgba(245, 245, 247, 0.7) !important;
+  opacity: 1 !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-foot-hints {
+  opacity: 0.75;
+}
+
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-foot kbd {
+  background: #2c2c2e !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-bottom-width: 1px !important;
+  box-shadow: none !important;
+  color: rgba(235, 235, 245, 0.7) !important;
+}
+
+/* Object block / empty well on dark solid face */
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .object-block-token,
+html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .recent-clipboard-hint {
+  background: #2c2c2e !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
 }

@@ -7,15 +7,19 @@ export {
   FRESH_CLIPBOARD_TTL_MS,
   RECENT_CLIPBOARD_HINT_TTL_MS,
   UNKNOWN_AGE_AUTO_ATTACH,
+  CLIPBOARD_AGE_TRACKER_INTERVAL_MS,
   hashClipboardText,
   detectClipboardType,
   getLastClipboardSnapshot,
   updateClipboardSnapshot,
   createClipboardSnapshotFromUnknownAge,
+  observeClipboardText,
   clearClipboardSnapshot,
   shouldAutoAttachClipboard,
   shouldShowRecentClipboardHint,
   isClipboardExpired,
+  startClipboardAgeTracker,
+  stopClipboardAgeTracker,
 } from './clipboardSnapshot'
 
 export {
@@ -29,8 +33,19 @@ export {
   createClipboardObjectBlock,
   createEditorSelectionObjectBlock,
   createEditorDocumentObjectBlock,
+  createHistoryItemObjectBlock,
   buildRecentClipboardHint,
+  type CreateHistoryItemObjectBlockParams,
+  type ObjectBlockImagePayload,
+  type ObjectBlockFilesPayload,
 } from './objectBlock'
+
+export {
+  setPendingObjectBlock,
+  consumePendingObjectBlock,
+  clearPendingObjectBlock,
+  peekPendingObjectBlock,
+} from './pendingObjectBlock'
 
 export {
   type RecommendedOutputTarget,
@@ -38,6 +53,12 @@ export {
   recommendActionsForBlock,
   getSearchOnlyActions,
 } from './actionRecommendation'
+
+export {
+  recommendActionsFromToolAccepts,
+  type AcceptsToolDescriptor,
+  type RecommendFromToolAcceptsParams,
+} from './acceptsRecommendation'
 
 export {
   type ClipboardObjectBlockMode,

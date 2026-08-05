@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>Quick Editor 命令面板 · 问题定位与修复</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --doc-bg: #fbfbfc;
+    --doc-bg-2: #f2f3f5;
+    --doc-ink: #14161a;
+    --doc-ink-2: #5b6270;
+    --doc-ink-3: #9096a1;
+    --doc-line: #e6e7eb;
+    --doc-card: #ffffff;
+    --doc-accent: #2563eb;
+    --doc-accent-soft: #eef2ff;
+    --doc-good: #16794f;
+    --doc-good-soft: #e6f6ee;
+    --doc-open: #9a5b13;
+    --doc-open-soft: #fbf1e0;
+    --font-ui: -apple-system, BlinkMacSystemFont, "PingFang SC", "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
+  }
+  :root[data-theme="dark"] {
+    --doc-bg: #101114;
+    --doc-bg-2: #17181c;
+    --doc-ink: #eceef2;
+    --doc-ink-2: #a3a9b5;
+    --doc-ink-3: #6d7280;
+    --doc-line: #2a2c32;
+    --doc-card: #17181c;
+    --doc-accent: #5b8dfb;
+    --doc-accent-soft: rgba(91,141,251,0.14);
+    --doc-good: #4fd39a;
+    --doc-good-soft: rgba(79,211,154,0.12);
+    --doc-open: #e0a75e;
+    --doc-open-soft: rgba(224,167,94,0.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --doc-bg: #101114;
+      --doc-bg-2: #17181c;
+      --doc-ink: #eceef2;
+      --doc-ink-2: #a3a9b5;
+      --doc-ink-3: #6d7280;
+      --doc-line: #2a2c32;
+      --doc-card: #17181c;
+      --doc-accent: #5b8dfb;
+      --doc-accent-soft: rgba(91,141,251,0.14);
+      --doc-good: #4fd39a;
+      --doc-good-soft: rgba(79,211,154,0.12);
+      --doc-open: #e0a75e;
+      --doc-open-soft: rgba(224,167,94,0.12);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--doc-bg);
+    color: var(--doc-ink);
+    font-family: var(--font-ui);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+  }
+  header.page-head {
+    margin-bottom: 40px;
+  }
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--doc-ink-3);
+    margin: 0 0 10px;
+  }
+  h1 {
+    font-size: 26px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    margin: 0 0 12px;
+    text-wrap: balance;
+  }
+  .lede {
+    font-size: 14.5px;
+    line-height: 1.7;
+    color: var(--doc-ink-2);
+    max-width: 62ch;
+    margin: 0 0 20px;
+  }
+  .stat-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .stat-chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 7px 12px;
+    border-radius: 8px;
+    background: var(--doc-card);
+    border: 1px solid var(--doc-line);
+    font-size: 12.5px;
+    color: var(--doc-ink-2);
+  }
+  .stat-chip b {
+    font-size: 15px;
+    color: var(--doc-ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-chip.good { border-color: color-mix(in srgb, var(--doc-good) 35%, var(--doc-line)); }
+  .stat-chip.good b { color: var(--doc-good); }
+  .stat-chip.open { border-color: color-mix(in srgb, var(--doc-open) 35%, var(--doc-line)); }
+  .stat-chip.open b { color: var(--doc-open); }
+
+  section { margin: 52px 0; }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 6px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--doc-line);
+  }
+  .section-head h2 {
+    font-size: 17px;
+    font-weight: 650;
+    margin: 0;
+    letter-spacing: -0.005em;
+  }
+  .section-head .tag {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .tag.fixed { background: var(--doc-good-soft); color: var(--doc-good); }
+  .tag.proposal { background: var(--doc-open-soft); color: var(--doc-open); }
+  .section-desc {
+    font-size: 13.5px;
+    line-height: 1.7;
+    color: var(--doc-ink-2);
+    max-width: 68ch;
+    margin: 16px 0 24px;
+  }
+  .section-desc code, .diff-table code, .callout code {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+    background: var(--doc-bg-2);
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: var(--doc-ink);
+  }
+
+  /* ── device frame comparison ── */
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 720px) {
+    .compare { grid-template-columns: 1fr; }
+  }
+  .frame-col .frame-label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11.5px;
+    font-weight: 650;
+    letter-spacing: 0.01em;
+    color: var(--doc-ink-2);
+    margin-bottom: 10px;
+  }
+  .frame-label .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+  }
+  .frame-col.before .dot { background: #d8562f; }
+  .frame-col.after .dot { background: var(--doc-good); }
+  .frame-shell {
+    border-radius: 14px;
+    padding: 14px;
+    background: var(--doc-bg-2);
+    border: 1px solid var(--doc-line);
+  }
+
+  /* ── recreated hiven surface (fixed light — mirrors the real product theme) ── */
+  .hiven-mock {
+    --panel: #ffffff;
+    --surface: #f7f8f8;
+    --border: #e7e8e9;
+    --border-2: #dcdee0;
+    --text: #1a1c1e;
+    --text-2: #686d71;
+    --text-3: #8a8f93;
+    --accent: #2563eb;
+    --accent-soft: color-mix(in srgb, var(--accent) 12%, #fff);
+    --font: -apple-system, "SF Pro Text", "PingFang SC", sans-serif;
+    --mono: "SF Mono", ui-monospace, monospace;
+    font-family: var(--font);
+    background: var(--panel);
+    border: 1px solid var(--border-2);
+    border-radius: 8px;
+    box-shadow: 0 18px 40px -22px rgba(0,0,0,0.28), 0 6px 16px -12px rgba(0,0,0,0.16);
+    overflow: hidden;
+    color: var(--text);
+  }
+
+  /* topbar (editor-topbar recreation) */
+  .m-topbar {
+    height: 38px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .m-topbar-system {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding-right: 7px;
+    border-right: 0.5px solid var(--border);
+  }
+  .m-tbtn {
+    width: 28px; height: 28px; border-radius: 7px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--text-2);
+  }
+  .m-tbtn.on { background: var(--accent-soft); color: var(--accent); }
+  .m-topbar-slot { margin-left: auto; display: inline-flex; align-items: center; gap: 3px; }
+  .m-run {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 28px; padding: 0 8px; border-radius: 7px;
+    font-size: 11px; font-weight: 600; color: var(--text-2);
+  }
+  .m-run.broken {
+    height: 34px; padding: 0 12px; margin: 0 -3px;
+    border: 1px solid var(--border-2); background: var(--panel);
+    box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+  }
+  .m-status { font-size: 11px; color: var(--text-2); padding: 0 2px; }
+  .m-topbar-x { width: 28px; height: 28px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-2); }
+
+  /* search row */
+  .m-search {
+    display: flex; align-items: center; gap: 9px;
+    min-height: 44px; padding: 10px 12px;
+    background: var(--surface);
+    border-bottom: 0.5px solid var(--border);
+    color: var(--text-3);
+    font-size: 13px;
+  }
+
+  /* list */
+  .m-list { padding: 6px; display: flex; flex-direction: column; gap: 1px; max-height: 328px; overflow: hidden; }
+  .m-row {
+    display: flex; align-items: center; gap: 9px;
+    height: 40px; padding: 0 10px; border-radius: 8px;
+  }
+  .m-row.sel { background: var(--accent-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent); }
+  .m-ico {
+    width: 24px; height: 24px; flex: none;
+    display: grid; place-items: center;
+    color: var(--text-2); opacity: .92;
+  }
+  .m-row.sel .m-ico { color: var(--accent); }
+  .m-ico svg { width: 17px; height: 17px; }
+  .m-ico.glyph { font-size: 15px; font-weight: 700; color: var(--text-2); }
+  .m-row.sel .m-ico.glyph { color: var(--accent); }
+  .m-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .m-title { font-size: 12.5px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .m-desc { display: none; font-size: 11px; color: var(--text-3); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .m-row.sel .m-desc { display: block; }
+  .m-badge {
+    flex: none; font-family: var(--mono); font-size: 10px; letter-spacing: 0.4px;
+    padding: 1px 5px; border-radius: 4px; border: 1px solid var(--border); color: var(--text-3);
+    background: var(--surface);
+  }
+  .m-row.sel .m-badge.key { border-color: color-mix(in srgb, var(--accent) 30%, transparent); color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  .m-badge.kind { font-family: var(--font); font-weight: 600; font-size: 10px; letter-spacing: 0; border: none; }
+  .m-group-label {
+    padding: 10px 12px 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--text-3);
+  }
+  .m-row.dup-warn .m-ico { position: relative; }
+  .m-flag {
+    position: absolute; inset: -3px -3px auto auto; width: 8px; height: 8px; border-radius: 50%;
+    background: #d8562f; box-shadow: 0 0 0 2px var(--panel);
+  }
+
+  /* footer */
+  .m-foot {
+    display: flex; align-items: center; justify-content: space-between;
+    min-height: 32px; padding: 7px 12px; gap: 10px;
+    background: color-mix(in srgb, var(--surface) 78%, transparent);
+    border-top: 0.5px solid var(--border);
+    font-size: 11px; color: var(--text-3);
+  }
+  .m-foot-hints { display: flex; gap: 12px; align-items: center; }
+  .m-kbd {
+    font-family: var(--mono); font-size: 10px; border: 1px solid var(--border); border-radius: 4px;
+    padding: 1px 5px; color: var(--text-2); background: var(--surface); margin-right: 5px;
+  }
+  .m-foot-primary { display: flex; align-items: center; gap: 6px; color: var(--text-2); font-weight: 500; }
+
+  /* callouts under before-frame */
+  .callout-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+  .callout-list li {
+    display: flex; gap: 8px; font-size: 12px; line-height: 1.55; color: var(--doc-ink-2);
+  }
+  .callout-num {
+    flex: none; width: 16px; height: 16px; border-radius: 50%;
+    background: #d8562f; color: #fff; font-size: 10px; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center; margin-top: 1px;
+  }
+
+  /* diff table */
+  .diff-table {
+    width: 100%; border-collapse: collapse; margin-top: 20px;
+    font-size: 12.5px;
+  }
+  .diff-table th {
+    text-align: left; font-size: 10.5px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--doc-ink-3); padding: 0 10px 8px; border-bottom: 1px solid var(--doc-line);
+  }
+  .diff-table td {
+    padding: 10px; border-bottom: 1px solid var(--doc-line); vertical-align: top; color: var(--doc-ink-2);
+  }
+  .diff-table tr:last-child td { border-bottom: none; }
+  .diff-table td.loc { font-family: var(--font-mono); font-size: 11.5px; color: var(--doc-ink); white-space: nowrap; }
+  .diff-table td.cmd { color: var(--doc-ink); font-weight: 500; white-space: nowrap; }
+  .diff-table .was { color: #b5502e; font-family: var(--font-mono); font-size: 11.5px; }
+  .diff-table .now { color: var(--doc-good); font-family: var(--font-mono); font-size: 11.5px; }
+  .diff-table .arrow { color: var(--doc-ink-3); padding: 0 2px; }
+
+  .proposal-note {
+    display: flex; gap: 10px; padding: 14px 16px; border-radius: 10px;
+    background: var(--doc-open-soft); border: 1px solid color-mix(in srgb, var(--doc-open) 30%, var(--doc-line));
+    font-size: 12.5px; line-height: 1.7; color: var(--doc-ink-2); margin-top: 20px;
+  }
+  .proposal-note b { color: var(--doc-ink); }
+
+  footer.page-foot {
+    margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--doc-line);
+    font-size: 12px; color: var(--doc-ink-3); line-height: 1.7;
+  }
+
+  /* focus visibility for a11y even though this page has no real controls */
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--doc-accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="page-head">
+    <p class="eyebrow">hiven · Quick Editor 命令面板</p>
+    <h1>命令面板的问题不是"审美"，是三处真的坏了的渲染</h1>
+    <p class="lede">
+      对着截图看第一眼像是图标风格不统一、快捷键列收尾不干净——查完组件代码和 <code>lucide-react</code> 依赖后发现，
+      两个"汉字缩写图标"和运行按钮的描边框都是可复现的 bug，不是设计取舍。已经直接修好并跑过
+      <code>npm run build</code> + <code>check:architecture</code>；还有两处属于信息设计的判断题，留在下面等你拍板。
+    </p>
+    <div class="stat-row">
+      <span class="stat-chip good"><b>11</b>处图标引用失效 → 已修复</span>
+      <span class="stat-chip good"><b>1</b>处图标重复（求和/批量计算） → 已修复</span>
+      <span class="stat-chip good"><b>1</b>处 CSS 层叠冲突（运行按钮边框） → 已修复</span>
+      <span class="stat-chip open"><b>2</b>处信息设计 → 待拍板</span>
+    </div>
+  </header>
+
+  <section id="fixed">
+    <div class="section-head">
+      <h2>已修复：图标失效 + 运行按钮边框</h2>
+      <span class="tag fixed">代码已改，已过 build</span>
+    </div>
+    <p class="section-desc">
+      根源是这版 <code>lucide-react</code>（1.14.0）重命名/移除了一批图标，而 <code>resolveIcon()</code>
+      （<code>src/utils/resolveIcon.tsx</code>）查不到对应组件时会静默退化成"标题首字符"当图标——这就是截图里
+      "设"「文」两个汉字的来源，不是产品刻意为之的极简风格。运行按钮的描边框则是三套按钮 CSS
+      （<code>.btn</code> / <code>.ft-btn</code> / <code>.editor-topbar-run</code>）叠在同一个
+      <code>className</code> 上互相覆盖的结果。
+    </p>
+
+    <div class="compare">
+      <div class="frame-col before">
+        <div class="frame-label"><span class="dot"></span>现状（截图还原）</div>
+        <div class="frame-shell">
+          <div class="hiven-mock">
+            <div class="m-topbar">
+              <div class="m-topbar-system">
+                <span class="m-tbtn on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M3 12h18M3 18h12"/></svg></span>
+                <span class="m-tbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+              </div>
+              <div class="m-topbar-slot">
+                <span class="m-run broken">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.8 5.9L20 10l-6.2 2.1L12 18l-1.8-5.9L4 10l6.2-2.1z"/></svg>
+                  运行
+                </span>
+                <span class="m-status">SQL</span>
+                <span class="m-topbar-x">✕</span>
+              </div>
+            </div>
+            <div class="m-search">运行命令...</div>
+            <div class="m-list">
+              <div class="m-row sel">
+                <span class="m-ico glyph">设</span>
+                <div class="m-main"><span class="m-title">设置语言</span><span class="m-desc">修改当前面板的语言模式</span></div>
+                <span class="m-badge key">⌘1</span>
+              </div>
+              <div class="m-row">
+                <span class="m-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></span>
+                <div class="m-main"><span class="m-title">行去重</span></div>
+                <span class="m-badge key">⌘2</span>
+              </div>
+              <div class="m-row">
+                <span class="m-ico glyph">Aa</span>
+                <div class="m-main"><span class="m-title">PascalCase 帕斯卡</span></div>
+                <span class="m-badge key">⌘3</span>
+              </div>
+              <div class="m-row">
+                <span class="m-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg></span>
+                <div class="m-main"><span class="m-title">URL 解码</span></div>
+                <span class="m-badge key">⌘4</span>
+              </div>
+              <div class="m-row">
+                <span class="m-ico glyph">{ }</span>
+                <div class="m-main"><span class="m-title">JSON 格式化</span></div>
+                <span class="m-badge key">⌘5</span>
+              </div>
+              <div class="m-row">
+                <span class="m-ico glyph">文</span>
+                <div class="m-main"><span class="m-title">文本对比</span></div>
+                <span class="m-badge key">⌘6</span>
+              </div>
+              <div class="m-row dup-warn">
+                <span class="m-ico glyph">Σ</span>
+                <div class="m-main"><span class="m-title">求和</span></div>
+                <span class="m-badge key">⌘7</span>
+              </div>
+              <div class="m-row">
+                <span class="m-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg></span>
+                <div class="m-main"><span class="m-title">向右分栏</span></div>
+                <span class="m-badge key">⌘8</span>
+              </div>
+              <div class="m-row dup-warn">
+                <span class="m-ico glyph" style="position:relative"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M9 10h.01M12 10h.01M15 10h.01M9 14h.01M12 14h.01M15 14h.01"/></svg><span class="m-flag"></span></span>
+                <div class="m-main"><span class="m-title">批量计算公式</span></div>
+                <span class="m-badge kind">命令</span>
+              </div>
+              <div class="m-row">
+                <span class="m-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 7h1M15 7h1M8 11h1M15 11h1M8 15h1M15 15h1"/></svg></span>
+                <div class="m-main"><span class="m-title">Base64 解码</span></div>
+                <span class="m-badge kind">命令</span>
+              </div>
+            </div>
+            <div class="m-foot">
+              <div class="m-foot-hints"><span><span class="m-kbd">⌘P</span>固定</span><span><span class="m-kbd">esc</span>返回</span></div>
+              <div class="m-foot-primary">执行<span class="m-kbd" style="margin:0">↵</span></div>
+            </div>
+          </div>
+        </div>
+        <ul class="callout-list">
+          <li><span class="callout-num">1</span>「设置语言」<code>icon: 'Code2'</code> —— 这版 lucide-react 里 <code>Code2</code> 已不存在，静默退化成"设"</li>
+          <li><span class="callout-num">2</span>「文本对比」<code>icon: 'git-compare'</code> —— lucide 导出是大驼峰 <code>GitCompare</code>，kebab-case 写法查不到，退化成"文"</li>
+          <li><span class="callout-num">3</span>「求和」和「批量计算公式」都写的 <code>icon: 'Calculator'</code>，扫读区分不出来</li>
+          <li><span class="callout-num">4</span>运行按钮同时挂了 <code>.btn</code>/<code>.btn-ghost</code>/<code>.btn-sm</code> 三个旧类，后定义的 <code>.btn</code>（index.css:6493）用 <code>border: 1px solid</code> 盖掉了 <code>.editor-topbar-run</code> 想要的无边框效果，34px 高度也和旁边 28px 的图标按钮对不齐</li>
+        </ul>
+      </div>
+
+      <div class="frame-col after">
+        <div class="frame-label"><span class="dot"></span>修复后</div>
+        <div class="frame-shell">
+          <div class="hiven-mock">
+            <div class="m-topbar">
+              <div class="m-topbar-system">
+                <span class="m-tbtn on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M3 12h18M3 18h12"/></svg></span>
+                <span class="m-tbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+              </div>
+              <div class="m-topbar-slot">
+                <span class="m-run">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.8 5.9L20 10l-6.2 2.1L12 18l-1.8-5.9L4 10l6.2-2.1z"/></svg>
+                  运行
+                </span>
+                <span class="m-status">SQL</span>
+                <span class="m-topbar-x">✕</span>
+              </div>
+            </div>
+            <div class="m-search">运行命令...</div>
+            <div class="m-list">
+              <div class="m-row sel">
+                <span class="m-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 8l6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14 18h6"/></svg></span>
+                <div class="m-main"><span class="m-title">设置语言</span><span class="m-desc">修改当前面板的语言模式</span></div>
+                <span class="m-badge key">⌘1</span>
+              </div>
+              <div class="m-row">
+                <span class="m-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></span>
+                <div class="m-main"><span class="m-title">行去重</span></div>
+                <span class="m-badge key">⌘2</span>
+              </div>
+              <div class="m-row">
+                <span class="m-ico glyph">Aa</span>
+                <div class="m-main"><span class="m-title">PascalCase 帕斯卡</span></div>
+                <span class="m-badge key">⌘3</span>
+              </div>
+              <div class="m-row">
+                <span class="m-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg></span>
+                <div class="m-main"><span class="m-title">URL 解码</span></div>
+                <span class="m-badge key">⌘4</span>
+              </div>
+              <div class="m-row">
+                <span class="m-ico glyph">{ }</span>
+                <div class="m-main"><span class="m-title">JSON 格式化</span></div>
+                <span class="m-badge key">⌘5</span>
+              </div>
+              <div class="m-row">
+                <span class="m-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3H5a2 2 0 0 0-2 2v3m0 8v3a2 2 0 0 0 2 2h3m8 0h3a2 2 0 0 0 2-2v-3m0-8V5a2 2 0 0 0-2-2h-3"/><path d="M7 12h10"/></svg></span>
+                <div class="m-main"><span class="m-title">文本对比</span></div>
+                <span class="m-badge key">⌘6</span>
+              </div>
+              <div class="m-row">
+                <span class="m-ico glyph">Σ</span>
+                <div class="m-main"><span class="m-title">求和</span></div>
+                <span class="m-badge key">⌘7</span>
+              </div>
+              <div class="m-row">
+                <span class="m-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg></span>
+                <div class="m-main"><span class="m-title">向右分栏</span></div>
+                <span class="m-badge key">⌘8</span>
+              </div>
+              <div class="m-row">
+                <span class="m-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/><circle cx="16" cy="16" r="0" /></svg></span>
+                <div class="m-main"><span class="m-title">批量计算公式</span></div>
+                <span class="m-badge kind">命令</span>
+              </div>
+              <div class="m-row">
+                <span class="m-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 7h1M15 7h1M8 11h1M15 11h1M8 15h1M15 15h1"/></svg></span>
+                <div class="m-main"><span class="m-title">Base64 解码</span></div>
+                <span class="m-badge kind">命令</span>
+              </div>
+            </div>
+            <div class="m-foot">
+              <div class="m-foot-hints"><span><span class="m-kbd">⌘P</span>固定</span><span><span class="m-kbd">esc</span>返回</span></div>
+              <div class="m-foot-primary">执行<span class="m-kbd" style="margin:0">↵</span></div>
+            </div>
+          </div>
+        </div>
+        <ul class="callout-list">
+          <li><span class="callout-num" style="background:var(--doc-good)">✓</span>「设置语言」→ <code>Languages</code>，比 <code>Code2</code> 语义也更准（这是语言切换，不是写代码）</li>
+          <li><span class="callout-num" style="background:var(--doc-good)">✓</span>「文本对比」→ <code>GitCompare</code>，改对大小写</li>
+          <li><span class="callout-num" style="background:var(--doc-good)">✓</span>「求和」→ <code>Sigma</code>（Σ），和「批量计算公式」的 <code>Calculator</code> 区分开</li>
+          <li><span class="callout-num" style="background:var(--doc-good)">✓</span>运行按钮去掉 <code>.btn .btn-ghost .btn-sm</code> 三个多余类，回到无边框 28px，和左右图标按钮对齐</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="section-desc" style="margin-top:28px;">
+      顺手把同一个根因（<code>resolveIcon</code> 查不到 lucide 组件时静默退化成文字）在全仓库扫了一遍——一共
+      97 处 <code>icon: '...'</code> 引用，11 处失效，已经全部改成当前 lucide-react 版本里真实存在、语义最接近的图标：
+    </p>
+    <table class="diff-table">
+      <thead>
+        <tr><th style="width:34%">位置</th><th style="width:22%">命令</th><th>图标</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="loc">hostEditorActions.ts:348</td><td class="cmd">设置语言</td><td><span class="was">Code2</span><span class="arrow">→</span><span class="now">Languages</span></td></tr>
+        <tr><td class="loc">hostEditorActions.ts:472</td><td class="cmd">JSON 转 YAML</td><td><span class="was">FileCode2</span><span class="arrow">→</span><span class="now">FileCode</span></td></tr>
+        <tr><td class="loc">textDiff/index.tsx:88, 111</td><td class="cmd">文本对比 ×2</td><td><span class="was">git-compare</span><span class="arrow">→</span><span class="now">GitCompare</span></td></tr>
+        <tr><td class="loc">calculator/index.ts:334, 399</td><td class="cmd">求和 ×2</td><td><span class="was">Calculator</span><span class="arrow">→</span><span class="now">Sigma</span></td></tr>
+        <tr><td class="loc">text-utils/index.ts:78</td><td class="cmd">文本统计</td><td><span class="was">BarChart</span><span class="arrow">→</span><span class="now">ChartBar</span></td></tr>
+        <tr><td class="loc">random/index.ts:252</td><td class="cmd">生成 UUID</td><td><span class="was">Fingerprint</span><span class="arrow">→</span><span class="now">Hash</span></td></tr>
+        <tr><td class="loc">regex-tester/index.tsx:41, 64</td><td class="cmd">正则测试 ×2</td><td><span class="was">regex</span><span class="arrow">→</span><span class="now">Regex</span></td></tr>
+        <tr><td class="loc">line-tools/index.ts:184</td><td class="cmd">行包裹</td><td><span class="was">WrapText</span><span class="arrow">→</span><span class="now">TextWrap</span></td></tr>
+        <tr><td class="loc">defaultWorkflowProviders.ts:52</td><td class="cmd">已选中文本（工作流对象）</td><td><span class="was">TextSelect</span><span class="arrow">→</span><span class="now">TextCursorInput</span></td></tr>
+        <tr><td class="loc">feishu/tools.ts:945</td><td class="cmd">飞书消息搜索</td><td><span class="was">MessageSquareSearch</span><span class="arrow">→</span><span class="now">Search</span></td></tr>
+        <tr><td class="loc">yaml/index.ts:26, 43</td><td class="cmd">YAML ⇄ JSON ×2</td><td><span class="was">FileJson</span><span class="arrow">→</span><span class="now">FileCode</span></td></tr>
+        <tr><td class="loc">jsFilter/index.tsx:231, 256</td><td class="cmd">JSON 表达式过滤 ×2</td><td><span class="was">Code2</span><span class="arrow">→</span><span class="now">Code</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="proposal">
+    <div class="section-head">
+      <h2>待拍板：快捷键列收尾 + 大小写转换族的图标</h2>
+      <span class="tag proposal">还没动代码</span>
+    </div>
+    <p class="section-desc">
+      这两处不是 bug，是产品判断，所以先不动手：
+    </p>
+    <p class="section-desc" style="margin-top:-8px;">
+      <b style="color:var(--doc-ink)">① 第 9 项之后的"命令"标签</b>——<code>LauncherMixedList.tsx</code> 里 ⌘1–⌘8
+      只覆盖前 8 行（<code>QUICK_SELECT_MAX</code>），第 9 行起用同一个视觉位置显示"分类标签"；「批量计算公式」「Base64 解码」
+      两个命令都没单独设置 <code>display.kindLabel</code>，于是都退回通用文案"命令"。视觉上它和前面的
+      ⌘ 键帽长得像，容易被读成"这里还能再打字触发"。可选方向：a) 给这两个命令补具体的分类文案（如"计算"「编码」）；
+      b) 超出 8 个直接留空，不强行塞一个不提供信息的标签。
+    </p>
+    <p class="section-desc" style="margin-top:-8px;">
+      <b style="color:var(--doc-ink)">② 「大小写转换」整个命令族共用一个图标</b>——<code>variable-case/index.ts</code>
+      里驼峰、帕斯卡、蛇形、常量、短横线等 11 个命令全部是 <code>icon: 'CaseSensitive'</code>。这个是合法的
+      lucide 图标（不是 bug），单看「PascalCase」一条没问题；但 11 个变体挤在同一列表里视觉上无法区分，
+      只能靠标题文字。截图只露出了其中一条，真要解决得看你是否认可"同族命令共享图标、靠分组/文字区分"这个方向，
+      还是想为每个变体做区分（例如用大小写示例文字如 <code>aB</code>/<code>Ab</code>/<code>AB</code> 代替统一图标）。
+    </p>
+    <div class="proposal-note">
+      这两条都是"信息设计"判断，不是能靠代码单方面判定对错的 bug，所以先没直接改——按 <code>[[hiven-visual-taste]]</code>
+      的老规矩，涉及视觉/信息密度的取舍最好让你看效果挑，不读文字描述。等你回个方向（选 a/b，或者"两个都先不动"），
+      我再落到代码。
+    </div>
+  </section>
+
+  <footer class="page-foot">
+    代码改动：11 处图标引用修复 + 1 处图标去重 + 2 处运行按钮 className 精简，均已跑过
+    <code>npm run build</code> 和 <code>npm run check:architecture</code>（均通过），尚未 commit。
+    截图来源命令面板对应组件：<code>src/components/launcher/LauncherMixedList.tsx</code>（列表行）、
+    <code>src/views/QuickEditorDetachedView.tsx</code> / <code>src/components/quickEditor/QuickEditorBreadcrumbActions.tsx</code>（顶部工具栏）。
+  </footer>
+
+</div>
+</body>
+</html>

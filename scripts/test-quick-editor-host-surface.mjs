@@ -57,7 +57,7 @@ assert.doesNotMatch(files.appTsx, /openGlobalLauncherOverlay\('/, 'openGlobalLau
 // ── 2. quick-editor is a host surface target ──────────────────────────────
 assert.match(
   files.store,
-  /LauncherHostSurfaceTarget = 'settings' \| 'plugins' \| 'system-settings' \| 'system-plugins' \| 'quick-editor'/,
+  /LauncherHostSurfaceTarget\s*=\s*[\s\S]*'quick-editor'/,
   'quick-editor must be a launcher host surface target',
 )
 assert.doesNotMatch(files.host, /QuickEditorPanel/, 'GlobalLauncherHost must not render QuickEditorPanel directly')
@@ -91,13 +91,23 @@ assert.doesNotMatch(
 )
 assert.match(
   files.quickEditorRequests,
-  /showQuickEditorSurface[\s\S]*openLauncherHostSurface\(['"]quick-editor['"]\)/,
-  'legacy editor open paths must fall back to the quick editor surface',
+  /export async function showQuickEditorSurface[\s\S]*showQuickEditorWindow\(\)/,
+  'summon paths must open the independent quick-editor window on desktop',
+)
+assert.match(
+  files.quickEditorRequests,
+  /showQuickEditorSurface[\s\S]*requestOpenLauncherHostSurface\(['"]quick-editor['"]\)/,
+  'non-Tauri summon path must fall back to the quick editor host surface',
 )
 assert.match(
   files.pluginApi,
-  /showEditorWindow:\s*openEditorWindow[\s\S]*showQuickEditorSurface/,
-  'plugin showEditorWindow compatibility must route to quick editor instead of the retired editor window',
+  /async function openEditorWindow[\s\S]*showQuickEditorSurface\(\)/,
+  'plugin openEditorWindow compatibility must route to quick editor instead of the retired editor window',
+)
+assert.match(
+  files.pluginApi,
+  /showEditorWindow:\s*openEditorWindow/,
+  'plugin launcher API must expose showEditorWindow via openEditorWindow',
 )
 assert.match(
   files.outputRouter,

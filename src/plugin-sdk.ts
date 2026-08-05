@@ -22,6 +22,8 @@ export type {
   PluginHostI18n,
   MonacoDisposable,
   TextCommandDefinition,
+  DesktopTargetsHostApi,
+  DesktopTargetProvider,
 } from './pluginHostSdk'
 export type { Locale } from './i18n'
 export type { TranslateFunction } from './i18n'
@@ -65,6 +67,7 @@ export type {
   PluginSurfaceOpenContext,
   PluginSurfaceProps,
   PluginSurfaceHostApi,
+  PluginObjectBlockInput,
   // Plugin Background types
   PluginBackgroundContribution,
   PluginBackgroundContext,
@@ -81,6 +84,10 @@ export type {
   PluginNetworkApi,
   PluginNetworkRequest,
   PluginNetworkResponse,
+  // Plugin Shell types
+  PluginShellApi,
+  ShellRunOptions,
+  ShellRunResult,
   // Plugin Settings change hook
   PluginSettingsChangeContext,
   // Plugin Clipboard types

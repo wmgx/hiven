@@ -8,6 +8,7 @@ import { suppressStandaloneLauncherBlur } from '../../workspace/launcherBlurGuar
 import { useQuickEditorEscape } from './useQuickEditorEscape'
 import { isQuickEditorDetachedWindow } from '../../workspace/windowManager/quickEditorWindow'
 import { quickEditorImperative } from './quickEditorImperative'
+import { QuickEditorVersionHistory } from './QuickEditorVersionHistory'
 import { useT } from '../../i18n'
 import type { QuickEditorPaneId, QuickEditorPaneState } from '../../workspace/quickEditor/quickEditorTypes'
 import { X } from 'lucide-react'
@@ -67,8 +68,8 @@ export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void 
             key={pane.id}
             className="min-w-0 min-h-0 flex-1"
             style={{
-              borderLeft: isHorizontal && index > 0 ? '0.5px solid var(--color-border-tertiary)' : undefined,
-              borderTop: !isHorizontal && index > 0 ? '0.5px solid var(--color-border-tertiary)' : undefined,
+              borderLeft: isHorizontal && index > 0 ? 'var(--hairline) solid var(--color-border-tertiary)' : undefined,
+              borderTop: !isHorizontal && index > 0 ? 'var(--hairline) solid var(--color-border-tertiary)' : undefined,
             }}
           >
             <QuickEditorPaneSurface pane={pane} autoFocus={index === visiblePanes.length - 1} />
@@ -175,19 +176,24 @@ function QuickEditorPaneSurface({
         },
       }]}
       onFocus={() => setActivePaneId(pane.id)}
-      statusBarTrailing={paneOrder.length > 1 ? (
-        <button
-          type="button"
-          className="pane-status-close"
-          title={tEditor('closePane')}
-          onClick={(event) => {
-            event.stopPropagation()
-            closePane(pane.id)
-          }}
-        >
-          <X size={11} />
-        </button>
-      ) : undefined}
+      statusBarTrailing={(
+        <div className="flex items-center gap-1 shrink-0 ml-1">
+          <QuickEditorVersionHistory />
+          {paneOrder.length > 1 && (
+            <button
+              type="button"
+              className="pane-status-close"
+              title={tEditor('closePane')}
+              onClick={(event) => {
+                event.stopPropagation()
+                closePane(pane.id)
+              }}
+            >
+              <X size={11} />
+            </button>
+          )}
+        </div>
+      )}
       onReady={(editor) => {
         const registerActiveEditor = () => {
           quickEditorImperative.registerFind(() => {

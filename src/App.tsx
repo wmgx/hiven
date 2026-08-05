@@ -8,18 +8,37 @@ import { ToastContainer } from './components/workspace/ToastContainer'
 import { loadInstalledPluginsFromStore } from './workspace/pluginRuntime'
 import { registerBundledPluginPackages } from './workspace/bundledPluginLoader'
 import { initializePluginBackgrounds, setupBackgroundPermissionWatcher, setupBackgroundSettingsWatcher, stopAllPluginBackgrounds } from './workspace/pluginBackgroundManager'
-import { runPluginStartupHooks } from './workspace/pluginHookManager'
+import { runPluginStartupHooks, setupStartupPermissionWatcher } from './workspace/pluginHookManager'
 import { refreshHostApplicationIndexOnStartup } from './workspace/appLauncher/hostAppLauncher'
+import { prefetchDesktopWindowsOnStartup } from './workspace/desktopControl/windows'
 import { registerHostLauncherProviders } from './workspace/launcher/hostProvider'
 import { installGlobalPinnedLauncherHotkeys, routeGlobalPinnedLauncherShortcut } from './hotkeys/globalPinnedLauncher'
 import { installPluginSurfaceShortcutHotkeys } from './hotkeys/pluginSurfaceShortcuts'
+import { installAppHotkeys } from './hotkeys/appHotkeys'
+import { installQuickEditorHotkeys } from './hotkeys/quickEditor'
 import { consumePendingPluginSurfaceOpenTarget, isPluginSurfaceOpenTarget, openLauncherHostedPluginSurface } from './workspace/pluginSurfaceOpenRequest'
 import { LAUNCHER_HOST_SURFACE_OPEN_EVENT, consumePendingLauncherHostSurfaceOpen, isLauncherHostSurfaceOpenRequest, isLauncherHostSurfaceTarget, openLauncherHostSurfaceLocally, openLauncherHostSurfaceRequestLocally } from './workspace/launcherHostSurfaceBridge'
 import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from './workspace/launcherWindowEvents'
 import { onCurrentLauncherWindowMoved, setCurrentLauncherWindowPosition, type LauncherWindowMovedPosition } from './workspace/windowManager/launcherWindow'
+import { launcherPerfNow, logLauncherPerfDuration } from './workspace/launcher/perf'
+import { startClipboardAgeTracker } from './launcher/clipboard/clipboardSnapshot'
 
 // Register built-in panels
 import './panels/register'
+
+/** Lightweight text-only read for age tracking (avoid file-path IPC every tick). */
+async function readClipboardTextForAgeTracker(): Promise<string> {
+  try {
+    const { readText } = await import('@tauri-apps/plugin-clipboard-manager')
+    return (await readText()) ?? ''
+  } catch {
+    try {
+      return await navigator.clipboard.readText()
+    } catch {
+      return ''
+    }
+  }
+}
 
 // Register first-party product plugin packages
 registerHostLauncherProviders()
@@ -51,6 +70,7 @@ function LauncherRuntimeApp() {
     let disposed = false
     let cleanupSettingsWatcher: (() => void) | undefined
     let cleanupPermissionWatcher: (() => void) | undefined
+    let cleanupStartupPermissionWatcher: (() => void) | undefined
 
     initConfigDir().then(async (dir) => {
       if (dir) {
@@ -74,7 +94,10 @@ function LauncherRuntimeApp() {
 
       if (disposed) return
       refreshHostApplicationIndexOnStartup()
+      // Warm on-screen window list in idle time so first Global Launcher open is snappy.
+      prefetchDesktopWindowsOnStartup()
       runPluginStartupHooks()
+      cleanupStartupPermissionWatcher = setupStartupPermissionWatcher()
       try {
         initializePluginBackgrounds()
         cleanupSettingsWatcher = setupBackgroundSettingsWatcher()
@@ -88,6 +111,7 @@ function LauncherRuntimeApp() {
       disposed = true
       cleanupSettingsWatcher?.()
       cleanupPermissionWatcher?.()
+      cleanupStartupPermissionWatcher?.()
       void stopAllPluginBackgrounds()
     }
   }, [])
@@ -106,6 +130,14 @@ function LauncherRuntimeApp() {
 
   useEffect(() => installGlobalPinnedLauncherHotkeys(), [])
   useEffect(() => installPluginSurfaceShortcutHotkeys(), [])
+  useEffect(() => installAppHotkeys(), [])
+  useEffect(() => installQuickEditorHotkeys(), [])
+
+  // Background clipboard age clock: first see = unknown baseline; real changes get known changedAt.
+  // Prevents Global Launcher open from treating long-sitting clipboard as "just copied".
+  useEffect(() => {
+    return startClipboardAgeTracker(readClipboardTextForAgeTracker)
+  }, [])
 
   useEffect(() => {
     if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
@@ -146,19 +178,28 @@ function LauncherRuntimeApp() {
 
   useEffect(() => {
     const openLauncher = () => {
-      void (async () => {
-        await rehydratePersistedAppState()
-        const pendingHostSurfaceTarget = consumePendingLauncherHostSurfaceOpen()
-        if (pendingHostSurfaceTarget) {
-          openLauncherHostSurfaceRequestLocally(pendingHostSurfaceTarget)
+      const eventReceivedAt = launcherPerfNow()
+      ;(window as unknown as { __hivenLauncherOpenT0?: number }).__hivenLauncherOpenT0 = eventReceivedAt
+      // Open the store *synchronously*. Awaiting rehydrate first left the panel
+      // visible with no mounted search input, so native first-responder could not
+      // land on a real caret until the user clicked.
+      const pendingHostSurfaceTarget = consumePendingLauncherHostSurfaceOpen()
+      if (pendingHostSurfaceTarget) {
+        openLauncherHostSurfaceRequestLocally(pendingHostSurfaceTarget)
+      } else {
+        const pendingSurfaceTarget = consumePendingPluginSurfaceOpenTarget()
+        if (pendingSurfaceTarget) {
+          openLauncherHostedPluginSurface(pendingSurfaceTarget)
         } else {
-          const pendingSurfaceTarget = consumePendingPluginSurfaceOpenTarget()
-          if (pendingSurfaceTarget) {
-            openLauncherHostedPluginSurface(pendingSurfaceTarget)
-          } else {
-            useAppStore.getState().openGlobalLauncherOverlay()
-          }
+          useAppStore.getState().openGlobalLauncherOverlay()
         }
+      }
+      logLauncherPerfDuration('open:event-to-store-open', eventReceivedAt)
+
+      void (async () => {
+        const rehydrateStartedAt = launcherPerfNow()
+        await rehydratePersistedAppState()
+        logLauncherPerfDuration('open:rehydrate', rehydrateStartedAt)
         if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
         const settings = useAppStore.getState().settings
         const saved = settings.globalLauncherWindowPositionSource === 'user'

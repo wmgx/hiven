@@ -1067,6 +1067,7 @@ export async function updateInstalledPlugin(pluginId: string): Promise<Installed
 export async function createDevPluginScaffold(options: {
   pluginId?: string
   title?: string
+  template?: 'default' | 'script-command'
 } = {}): Promise<DevPlugin> {
   const root = await getDevPluginRoot()
   const suffix = Date.now().toString(36)
@@ -1074,7 +1075,11 @@ export async function createDevPluginScaffold(options: {
   const title = options.title?.trim() || 'New Plugin'
   validatePackageRelativePath(pluginId, 'plugin id')
   const folderPath = joinPath(root, pluginId)
-  const scaffold = createPluginScaffoldFiles({ pluginId, title })
+  const scaffold = createPluginScaffoldFiles({
+    pluginId,
+    title,
+    template: options.template,
+  })
   await savePluginFile(joinPath(folderPath, 'manifest.json'), JSON.stringify(scaffold.manifest, null, 2))
   await savePluginFile(joinPath(folderPath, 'index.js'), scaffold.indexSource)
   await savePluginFile(joinPath(folderPath, 'README.md'), scaffold.readmeSource)

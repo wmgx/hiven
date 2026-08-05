@@ -228,7 +228,7 @@ export const jsFilterPlugin = definePlugin({
         display: {
           title: 'command.open.title',
           subtitle: 'command.open.description',
-          icon: 'Code2',
+          icon: 'Code',
           aliases: ['json-expression', 'jq', 'json-filter', 'expression'],
         },
         surfaces: ['command-palette'],
@@ -253,7 +253,7 @@ export const jsFilterPlugin = definePlugin({
       id: 'js-filter.toggle',
       title: 'command.open.title',
       description: 'command.open.description',
-      icon: 'Code2',
+      icon: 'Code',
       aliases: ['json-expression', 'jq', 'json-filter', 'expression'],
       inputs: [{ key: 'input', label: 'Input', kind: 'pane' as const, required: true }],
       inputResolution: { strategy: 'use-active', fallback: 'fail' },

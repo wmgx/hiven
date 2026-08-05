@@ -16,10 +16,13 @@
 
 import type { ComponentType } from 'react'
 import type { Locale } from '../../i18n'
-import type { PluginNetworkApi, PluginPrivateStorageApi } from '../pluginTypes'
+import type { PluginNetworkApi, PluginPrivateStorageApi, PluginShellApi } from '../pluginTypes'
 import type { FluxEffect } from '../types'
 import type { DiffSource } from '../workspaceStore'
 import type { EffectRunnerResult } from '../effectRunner'
+import type { ContentAccepts, IntentHit, IntentMatchContext } from './intentTypes'
+
+export type { ContentAccepts, IntentHit, IntentMatchContext } from './intentTypes'
 
 // ─── System Surfaces ───────────────────────────────────────────────────────
 
@@ -37,6 +40,9 @@ export type LauncherHostCapability =
   | 'pane-actions'
   | 'system-power'
   | 'parameter-customization'
+  | 'desktop-windows'
+  | 'desktop-processes'
+  | 'desktop-browser-tabs'
 
 export type LauncherHostDescriptor = {
   id: LauncherHostId
@@ -62,6 +68,9 @@ export const LAUNCHER_HOSTS: Record<LauncherHostId, LauncherHostConfig> = {
       'pane-actions',
       'system-power',
       'parameter-customization',
+      'desktop-windows',
+      'desktop-processes',
+      'desktop-browser-tabs',
     ],
   },
   'editor-command-bar': {
@@ -162,6 +171,8 @@ export type LauncherItemDisplay = {
   aliases?: string[]
   /** Custom kind label shown as the tag pill. Overrides the default derived label. */
   kindLabel?: string
+  /** i18n for kindLabel (design §5.1); UI resolves by locale when present. */
+  kindLabelI18n?: Partial<Record<Locale, string>>
 }
 
 // ─── Behavior (lifecycle types) ──────────────────────────────────────────────
@@ -219,6 +230,8 @@ export type LauncherResultAction = {
   id: string
   title: string
   titleI18n?: Partial<Record<Locale, string>>
+  /** Icon shown in place of the generic "×" glyph; omit for destructive actions (close/delete). */
+  icon?: IconRef
   run: LauncherResultActionHandler
 }
 
@@ -247,6 +260,11 @@ export type LauncherResultChoice = {
   subtitleI18n?: Partial<Record<Locale, string>>
   /** Optional leading icon (e.g. site favicon for history suggestions). */
   icon?: IconRef
+  /**
+   * Visual tone for L2 choice rows (confirm dialogs).
+   * `danger` = destructive primary; `muted` = cancel / secondary.
+   */
+  tone?: 'default' | 'danger' | 'muted'
   preview?: string
   metadata?: LauncherResultChoiceMetadata
   primaryAction: LauncherResultActionHandler
@@ -307,6 +325,12 @@ export type PluginLauncherApi = {
   getClipboardText(): Promise<string>
   replaceActiveText(text: string): Promise<void>
   insertText(text: string): Promise<void>
+  /**
+   * Hand text back to the surface that can turn it into a first-class object
+   * (e.g. Global Launcher's Object Block). Surfaces with no such concept (Quick
+   * Editor command bar) fall back to the same behavior as insertText.
+   */
+  returnToLauncher(text: string): Promise<void>
   copyText(text: string): Promise<void>
   openUrl(url: string): Promise<void>
   showEditorWindow(): Promise<string | undefined>
@@ -372,6 +396,7 @@ export type LauncherSuggestContext<TSettings = unknown> = {
   api: PluginLauncherApi
   storage: PluginPrivateStorageApi
   network: PluginNetworkApi
+  shell: PluginShellApi
   t: (key: string, vars?: Record<string, string | number>) => string
   /** Plugin identity for storage-scoped assets (e.g. favicon blob refs). */
   pluginId?: string
@@ -412,6 +437,11 @@ export type LauncherItemContribution<TSettings = unknown> = {
    */
   recordUsage?: boolean
   /**
+   * Declarative intent coarse filter. Host copies this onto the resolved item
+   * for ranking / accepts evaluation (static tools already carry accepts).
+   */
+  accepts?: ContentAccepts
+  /**
    * Optional suggestions for collect-input frames (filtered by current inputText).
    * Host infrastructure only — product semantics (history, etc.) stay in the plugin.
    */
@@ -431,6 +461,7 @@ export type LauncherDynamicContext = {
   api: PluginLauncherApi
   storage: PluginPrivateStorageApi
   network: PluginNetworkApi
+  shell: PluginShellApi
   t: (key: string, vars?: Record<string, string | number>) => string
   source: 'builtin' | 'installed' | 'dev'
   pluginId: string
@@ -466,6 +497,16 @@ export type LauncherItem = {
   ranking?: {
     /** Milliseconds since epoch; used as a small freshness boost for recently installed apps. */
     installedAt?: number
+    /**
+     * Source-level boost from DesktopTargetProvider.priority (clamped ≤ 50).
+     * Host-owned; see desktopTargets/constants.ts PROVIDER_PRIORITY_CAP.
+     */
+    providerPriorityBoost?: number
+    /**
+     * Optional per-item score bias from DesktopTarget.scoreBias (clamped |bias| ≤ 500).
+     * Product policy lives on the provider; host only applies the clamp.
+     */
+    scoreBias?: number
   }
   /**
    * Host-only legacy usage keys (e.g. the backing command id) consulted as a
@@ -485,10 +526,29 @@ export type LauncherItem = {
   /** Content matcher: returns true if this tool can process the given text. Boosted in ranking. */
   textMatch?: (text: string) => boolean
   /**
+   * Declarative intent coarse filter (host pure-data evaluation).
+   * Runtime field only — not serialized across process boundaries.
+   */
+  accepts?: ContentAccepts
+  /**
+   * Optional intent fine matcher; only invoked after accepts hits.
+   * Runtime function field (same lifetime as textMatch).
+   */
+  match?: (ctx: IntentMatchContext) => IntentHit[] | null
+  /**
    * When true, selection writes to launcher usage for ranking.
    * Dynamic items must opt in with a stable systemKey; static items omit this (treated as true).
    */
   recordUsage?: boolean
+  /**
+   * Host may keep a cross-session recent snapshot when true (plugin-declared
+   * durable content such as contacts / chats / docs). Requires persistPayload.
+   */
+  persistable?: boolean
+  /**
+   * Snapshot used by host recents store. Only set when persistable is true.
+   */
+  persistPayload?: import('./persistableRecents').PersistableLauncherPayload
   /** Optional collect-input suggestions loader (host-resolved from contribution). */
   suggest?: LauncherSuggestHandler
   execute: LauncherExecuteHandler
@@ -507,7 +567,12 @@ export function isEditorCommandBarItem(item: LauncherItem): boolean {
   return (
     item.systemKey.startsWith('host:pane:') ||
     item.systemKey.startsWith('host:editor:') ||
-    item.systemKey.startsWith('host:text:')
+    item.systemKey.startsWith('host:text:') ||
+    item.systemKey.startsWith('host:pipeline:') ||
+    // host:view:devtools opts into editor-command-bar/quick-editor-command via
+    // its own `surfaces` (see hostActions.ts) so it can debug those windows —
+    // the surfaces check above already scopes this, this only widens the prefix.
+    item.systemKey.startsWith('host:view:')
   )
 }
 
@@ -555,6 +620,11 @@ export type PluginToolContext<TSettings = unknown> = {
   locale: Locale
   api: PluginLauncherApi
   storage: PluginPrivateStorageApi
+  /**
+   * Shell runtime when the plugin requested `shell.run`.
+   * Unauthorized / missing → calls throw a permission error.
+   */
+  shell: PluginShellApi
   t: (key: string, vars?: Record<string, string | number>) => string
   output: PluginToolOutput
 }
@@ -580,6 +650,16 @@ export type PluginToolContribution<TSettings = unknown> = {
    * Matched tools are boosted to the top of the command list.
    */
   textMatch?: (text: string) => boolean
+  /**
+   * Declarative intent coarse filter. Host evaluates without running plugin code.
+   * Missing accepts → tool does not participate in intent recommendation.
+   */
+  accepts?: ContentAccepts
+  /**
+   * Optional fine-grained intent matcher. Only called after accepts hits.
+   * Synchronous, local, budgeted by the host intent engine.
+   */
+  match?: (ctx: IntentMatchContext) => IntentHit[] | null
   run(ctx: PluginToolContext<TSettings>): Promise<PluginToolResult> | PluginToolResult
   surfaces?: PluginToolSurfaces
 }

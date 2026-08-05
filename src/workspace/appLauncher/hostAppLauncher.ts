@@ -9,6 +9,10 @@ import { normalizeHostAppEntries } from './hostAppIndex'
 // and avoid matching internal ids/paths in search.
 const HOST_APP_INDEX_CACHE_KEY = 'hiven:host-app-launcher:index:v2'
 const APP_INDEX_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
+/** Empty query: only surface a few recent apps so they do not flood the mixed list. */
+const EMPTY_QUERY_APP_LIMIT = 5
+/** Query-present: hard cap after filter to keep dynamic provider cheap. */
+const QUERY_APP_LIMIT = 50
 
 type HostAppEntry = DiscoveredApp
 
@@ -24,6 +28,9 @@ const EMPTY_CACHE: HostAppLauncherCache = {
   apps: [],
 }
 
+/** Avoid JSON.parse(localStorage) on every keystroke — search hits memory first. */
+let memoryAppIndex: HostAppLauncherCache | null = null
+
 function storage(): Storage | null {
   try {
     return window.localStorage
@@ -37,16 +44,26 @@ function isTauriRuntime(): boolean {
 }
 
 function readCache(): HostAppLauncherCache {
+  if (memoryAppIndex) return memoryAppIndex
   const raw = storage()?.getItem(HOST_APP_INDEX_CACHE_KEY)
-  if (!raw) return EMPTY_CACHE
+  if (!raw) {
+    memoryAppIndex = EMPTY_CACHE
+    return EMPTY_CACHE
+  }
   try {
     const parsed = JSON.parse(raw) as HostAppLauncherCache
-    if (parsed.version !== 1 || !Array.isArray(parsed.apps)) return EMPTY_CACHE
-    return {
+    if (parsed.version !== 1 || !Array.isArray(parsed.apps)) {
+      memoryAppIndex = EMPTY_CACHE
+      return EMPTY_CACHE
+    }
+    const cache: HostAppLauncherCache = {
       ...parsed,
       apps: normalizeHostAppEntries(parsed.apps),
     }
+    memoryAppIndex = cache
+    return cache
   } catch {
+    memoryAppIndex = EMPTY_CACHE
     return EMPTY_CACHE
   }
 }
@@ -57,6 +74,9 @@ function writeCache(apps: HostAppEntry[]): HostAppLauncherCache {
     refreshedAt: Date.now(),
     apps: normalizeHostAppEntries(apps),
   }
+  memoryAppIndex = cache
+  emptyQueryTopApps = null
+  emptyQueryTopSourceRefreshedAt = -1
   storage()?.setItem(HOST_APP_INDEX_CACHE_KEY, JSON.stringify(cache))
   return cache
 }
@@ -137,6 +157,42 @@ function appMatchesQuery(app: HostAppEntry, query: string, locale: Locale): bool
   return searchableFieldsMatch(appSearchFields(app), q, locale)
 }
 
+/** Empty-query order: newest installedAt first; missing timestamps last; then name. */
+function compareAppsForEmptyQuery(a: HostAppEntry, b: HostAppEntry): number {
+  const aTime = typeof a.installedAt === 'number' ? a.installedAt : 0
+  const bTime = typeof b.installedAt === 'number' ? b.installedAt : 0
+  if (aTime !== bTime) return bTime - aTime
+  return a.name.localeCompare(b.name)
+}
+
+/** Memo empty-query top apps — avoid O(n log n) sort on every launcher open. */
+let emptyQueryTopApps: HostAppEntry[] | null = null
+let emptyQueryTopSourceRefreshedAt = -1
+
+function getEmptyQueryTopApps(apps: HostAppEntry[], refreshedAt: number): HostAppEntry[] {
+  if (emptyQueryTopApps && emptyQueryTopSourceRefreshedAt === refreshedAt) {
+    return emptyQueryTopApps
+  }
+  emptyQueryTopApps = apps.slice().sort(compareAppsForEmptyQuery).slice(0, EMPTY_QUERY_APP_LIMIT)
+  emptyQueryTopSourceRefreshedAt = refreshedAt
+  return emptyQueryTopApps
+}
+
+function limitMatchedApps(apps: HostAppEntry[], query: string, refreshedAt: number): HostAppEntry[] {
+  const q = query.trim()
+  if (!q) {
+    return getEmptyQueryTopApps(apps, refreshedAt)
+  }
+  // Query path: filter then hard-cap (do not sort entire catalog).
+  const matched: HostAppEntry[] = []
+  for (const app of apps) {
+    // Caller already filtered; keep this as a safety cap only when used directly.
+    matched.push(app)
+    if (matched.length >= QUERY_APP_LIMIT) break
+  }
+  return matched
+}
+
 function appIconRef(appId: string): string {
   return `app-icon:${appId}`
 }
@@ -163,6 +219,34 @@ export function refreshHostApplicationIndexOnStartup(): void {
   void refreshApplicationIndex({ force: true }).then((result) => {
     if (!result.ok) console.warn('[app-launcher] Startup application index refresh failed:', result.message)
   })
+}
+
+/**
+ * Resolve an installed-app id from a display / process / window owner name.
+ * Used by desktop window rows to load the same app-icon: assets as the app list.
+ */
+export function resolveInstalledAppIdByName(name: string): string | undefined {
+  const needle = name.trim().toLowerCase()
+  if (!needle) return undefined
+  const apps = readCache().apps
+  for (const app of apps) {
+    if (app.name.trim().toLowerCase() === needle) return app.appId
+    for (const localized of Object.values(app.nameI18n ?? {})) {
+      if (localized?.trim().toLowerCase() === needle) return app.appId
+    }
+    for (const alias of app.aliases ?? []) {
+      if (alias.trim().toLowerCase() === needle) return app.appId
+    }
+  }
+  // Soft contains for owner names like "Google Chrome Helper" → "Google Chrome"
+  let best: { appId: string; len: number } | undefined
+  for (const app of apps) {
+    const n = app.name.trim().toLowerCase()
+    if (n.length >= 3 && (needle.includes(n) || n.includes(needle))) {
+      if (!best || n.length > best.len) best = { appId: app.appId, len: n.length }
+    }
+  }
+  return best?.appId
 }
 
 export function getHostAppLauncherStaticItems(): LauncherItem[] {
@@ -202,8 +286,15 @@ export async function getHostAppLauncherDynamicItems({
   if (surfaceId !== 'global-launcher') return []
   const startedAt = launcherPerfNow()
   const cache = readCache()
-  const apps = cache.apps
-    .filter((app) => appMatchesQuery(app, query, locale))
+  const q = query.trim()
+  // Empty open: only top-N (memoized). Never filter/sort the whole catalog on open.
+  const apps = !q
+    ? getEmptyQueryTopApps(cache.apps, cache.refreshedAt)
+    : limitMatchedApps(
+      cache.apps.filter((app) => appMatchesQuery(app, query, locale)),
+      query,
+      cache.refreshedAt,
+    )
 
   const items = apps.map((app) => ({
     systemKey: `host:app-launcher:app:${app.appId}`,

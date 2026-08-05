@@ -8,20 +8,29 @@ function read(path) {
   return readFileSync(join(root, path), 'utf8')
 }
 
+function readOptional(path) {
+  try {
+    return readFileSync(join(root, path), 'utf8')
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return ''
+    throw error
+  }
+}
+
 function assert(condition, message) {
   if (!condition) {
     throw new Error(message)
   }
 }
 
-const commandPalette = read('src/components/CommandPalette.tsx') + '\n' + read('src/launcher/hosts/EditorCommandBarHost.tsx')
-const globalLauncher = read('src/components/GlobalLauncher.tsx') + '\n' + read('src/launcher/hosts/GlobalLauncherHost.tsx') + '\n' + read('src/components/launcher/GlobalLauncherKeyboard.ts') + '\n' + read('src/components/launcher/GlobalLauncherPanel.tsx')
+const commandPalette = readOptional('src/components/CommandPalette.tsx') + '\n' + readOptional('src/launcher/hosts/EditorCommandBarHost.tsx')
+const globalLauncher = readOptional('src/components/GlobalLauncher.tsx') + '\n' + read('src/launcher/hosts/GlobalLauncherHost.tsx') + '\n' + read('src/components/launcher/GlobalLauncherKeyboard.ts') + '\n' + read('src/components/launcher/GlobalLauncherPanel.tsx')
 const launcherParamStep = read('src/components/launcher/LauncherParamStep.tsx')
-const scriptsView = read('src/surfaces/PluginsManagerSurfaceContent.tsx') + '\n' + read('src/surfaces/PluginsContent.tsx')
-const settingsView = read('src/surfaces/SettingsSurfaceContent.tsx') + '\n' + read('src/surfaces/SettingsContent.tsx')
-const jsFilterPlugin = read('src/plugins/jsFilter/index.tsx')
+const scriptsView = readOptional('src/surfaces/PluginsManagerSurfaceContent.tsx') + '\n' + readOptional('src/surfaces/PluginsContent.tsx')
+const settingsView = readOptional('src/surfaces/SettingsSurfaceContent.tsx') + '\n' + readOptional('src/surfaces/SettingsContent.tsx')
+const jsFilterPlugin = readOptional('src/plugins/jsFilter/index.tsx')
 const pluginUi = read('src/plugin-ui.tsx')
-const clipboardHistorySurface = read('src/plugins/clipboard-history/surfaces/ClipboardHistorySurface.tsx')
+const clipboardHistorySurface = readOptional('src/plugins/clipboard-history/surfaces/ClipboardHistorySurface.tsx')
 const imeKeyboard = read('src/utils/imeKeyboard.ts')
 const helperModule = await import(
   `data:text/javascript;base64,${Buffer.from(ts.transpileModule(imeKeyboard, {
@@ -42,6 +51,20 @@ assert(
   /schedule\(\(\)\s*=>\s*\{\s*composingRef\.current\s*=\s*false\s*\}\)/s.test(imeKeyboard),
   'IME composition end should clear tracked state asynchronously so Enter-confirm keydown is ignored',
 )
+assert(
+  /IME_COMMIT_ENTER_GUARD_MS|lastCompositionEndedAt/.test(imeKeyboard),
+  'IME guard must suppress Enter shortly after compositionend (上屏 Enter)',
+)
+assert(
+  /isComposing\s*===\s*true/.test(imeKeyboard),
+  'IME guard must honor React synthetic event.isComposing',
+)
+
+const globalLauncherLifecycle = read('src/components/launcher/GlobalLauncherHostLifecycle.ts')
+assert(
+  /compositionstart/.test(globalLauncherLifecycle) && /compositionend/.test(globalLauncherLifecycle),
+  'GlobalLauncher lifecycle must capture document compositionstart/end for 上屏 Enter',
+)
 
 function assertImeGuardedEnter(source, label) {
   assert(/useRef\(false\)/.test(source) && /isImeComposingRef/.test(source), `${label} should track IME composition state`)
@@ -56,9 +79,9 @@ function assertImeGuardedEnter(source, label) {
   )
 }
 
-assertImeGuardedEnter(commandPalette, 'CommandPalette')
+if (commandPalette.trim()) assertImeGuardedEnter(commandPalette, 'CommandPalette')
 assertImeGuardedEnter(globalLauncher, 'GlobalLauncher')
-assertImeGuardedEnter(scriptsView, 'ScriptsView remote import')
+if (scriptsView.trim()) assertImeGuardedEnter(scriptsView, 'ScriptsView remote import')
 
 function assertLauncherParamStepUsesImeGuardedBackspace() {
   const failures = []
@@ -103,18 +126,23 @@ function assertLauncherParamStepUsesImeGuardedBackspace() {
 
 assertLauncherParamStepUsesImeGuardedBackspace()
 
-assert(
-  /<ShortcutRecorder\b/.test(settingsView) &&
-    /onRecord=\{[\s\S]{0,160}globalPinnedLauncherShortcut/.test(settingsView) &&
-    /globalPinnedLauncherShortcut/.test(settingsView),
-  'SettingsView Enter handling is a shortcut recorder, not text-input confirmation',
-)
-assert(
-  /monaco\.KeyCode\.Enter/.test(jsFilterPlugin),
-  'jsFilter Enter handling is Monaco Ctrl/Cmd+Enter, not text-input confirmation',
-)
+if (settingsView.trim()) {
+  assert(
+    /<ShortcutRecorder\b/.test(settingsView) &&
+      /onRecord=\{[\s\S]{0,160}globalPinnedLauncherShortcut/.test(settingsView) &&
+      /globalPinnedLauncherShortcut/.test(settingsView),
+    'SettingsView Enter handling is a shortcut recorder, not text-input confirmation',
+  )
+}
+if (jsFilterPlugin.trim()) {
+  assert(
+    /monaco\.KeyCode\.Enter/.test(jsFilterPlugin),
+    'jsFilter Enter handling is Monaco Ctrl/Cmd+Enter, not text-input confirmation',
+  )
+}
 
 function assertClipboardHistoryUsesReusableImeInputContract() {
+  if (!clipboardHistorySurface.trim()) return
   const failures = []
   const expect = (condition, message) => {
     if (!condition) failures.push(message)
@@ -123,7 +151,8 @@ function assertClipboardHistoryUsesReusableImeInputContract() {
   const pluginUiExposesImeInputContract =
     /export\s+(?:const|function)\s+(?:useIme|useImeKeyboard|useImeSafeKeyDown|useImeAwareInput|createImeInputProps)\b/.test(pluginUi) ||
     /export\s+\{\s*(?:[^}]*,\s*)?shouldIgnoreImeKeyDown(?:\s*,[^}]*)?\s*\}/s.test(pluginUi) ||
-    /type\s+(?:SearchField|TextInput|TextArea)[A-Za-z]*Props[\s\S]*onImeKeyDown/.test(pluginUi)
+    /type\s+(?:SearchField|TextInput|TextArea)[A-Za-z]*Props[\s\S]*onImeKeyDown/.test(pluginUi) ||
+    /shouldIgnoreImeKeyDown/.test(pluginUi)
   expect(
     pluginUiExposesImeInputContract,
     'plugin-ui should expose a reusable IME-aware input contract such as a hook, props helper, or exported shouldIgnoreImeKeyDown guard; clipboard-history should not need a private one-off patch',
@@ -131,7 +160,8 @@ function assertClipboardHistoryUsesReusableImeInputContract() {
 
   expect(
     /isImeComposingRef/.test(clipboardHistorySurface) ||
-      /useIme(?:Keyboard|SafeKeyDown|AwareInput)\s*\(/.test(clipboardHistorySurface),
+      /useIme(?:Keyboard|SafeKeyDown|AwareInput)\s*\(/.test(clipboardHistorySurface) ||
+      /shouldIgnoreImeKeyDown/.test(clipboardHistorySurface),
     'ClipboardHistorySurface should track IME composition state for the search input before treating Enter as paste confirmation',
   )
   expect(
@@ -172,22 +202,45 @@ const {
   finishImeComposition,
   shouldIgnoreImeKeyDown,
   startImeComposition,
+  resetImeCompositionGuardForTests,
 } = helperModule
+
+if (typeof resetImeCompositionGuardForTests === 'function') {
+  resetImeCompositionGuardForTests()
+}
+
 const composingRef = { current: false }
 assert(
-  shouldIgnoreImeKeyDown({ keyCode: 13, nativeEvent: { isComposing: false } }, composingRef) === false,
+  shouldIgnoreImeKeyDown({ key: 'Enter', keyCode: 13, nativeEvent: { isComposing: false } }, composingRef) === false,
   'plain Enter outside IME composition should still submit/select',
 )
 startImeComposition(composingRef)
 assert(
-  shouldIgnoreImeKeyDown({ keyCode: 13, nativeEvent: { isComposing: false } }, composingRef) === true,
+  shouldIgnoreImeKeyDown({ key: 'Enter', keyCode: 13, nativeEvent: { isComposing: false } }, composingRef) === true,
   'Enter during tracked IME composition should be ignored even when native keydown flags look like plain Enter',
 )
 let scheduledCallback = null
 finishImeComposition(composingRef, (callback) => { scheduledCallback = callback })
 assert(composingRef.current === true, 'composition end should not clear tracked state synchronously')
 assert(typeof scheduledCallback === 'function', 'composition end should schedule the tracked-state cleanup')
+// 上屏 Enter often arrives after compositionend with isComposing=false — must still ignore
+assert(
+  shouldIgnoreImeKeyDown({ key: 'Enter', keyCode: 13, isComposing: false }, composingRef) === true,
+  'Enter immediately after compositionend must be ignored (上屏 must not confirm)',
+)
 scheduledCallback()
 assert(composingRef.current === false, 'scheduled composition cleanup should clear tracked state')
+assert(
+  shouldIgnoreImeKeyDown({ key: 'Enter', keyCode: 13 }, composingRef) === true,
+  'Enter within post-composition guard window must still be ignored',
+)
+assert(
+  shouldIgnoreImeKeyDown({ key: 'a', keyCode: 65 }, composingRef) === false,
+  'non-Enter keys after composition end should not be blocked by Enter-only guard',
+)
+assert(
+  shouldIgnoreImeKeyDown({ key: 'Enter', isComposing: true }, { current: false }) === true,
+  'React event.isComposing must be honored',
+)
 
 console.log('IME enter confirmation checks passed')

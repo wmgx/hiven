@@ -38,8 +38,21 @@ const store = {
 
 // ─── Repository logic (mirrors clipboardHistoryRepository.ts) ────────────────
 
-async function addItem(input: any) {
+/** Serialize mutations — mirrors withWriteLock in clipboardHistoryRepository.ts */
+let writeTail: Promise<unknown> = Promise.resolve()
+function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = writeTail.then(fn, fn)
+  writeTail = run.then(
+    () => undefined,
+    () => undefined,
+  )
+  return run
+}
+
+async function addItemUnlocked(input: any) {
   const now = Date.now()
+  // Yield so concurrent callers interleave without the lock (repro race).
+  await Promise.resolve()
   const index = await store.getIndex()
   const existingEntry = index.entries.find((e: any) => e.hash === input.hash)
   if (existingEntry) {
@@ -63,9 +76,14 @@ async function addItem(input: any) {
     item = { id, kind: 'files', hash: input.hash, firstCopiedAt: now, lastCopiedAt: now, copyCount: 1, byteSize: input.byteSize, paths: input.paths, fileNames: input.fileNames }
   }
   await store.saveItem(item)
+  await Promise.resolve()
   index.entries.unshift({ id, kind: input.kind, hash: input.hash, lastCopiedAt: now, byteSize: input.byteSize })
   await store.saveIndex({ entries: index.entries, updatedAt: now })
   return item
+}
+
+function addItem(input: any) {
+  return withWriteLock(() => addItemUnlocked(input))
 }
 
 async function getAllItems() {
@@ -286,5 +304,25 @@ const frequent = mockList
     return (b.lastPastedAt ?? 0) - (a.lastPastedAt ?? 0)
   })
 assert.deepEqual(frequent.map((item) => item.id), ['c', 'a', 'd'])
+
+// Test: concurrent addItem must not drop index entries (lost-update race)
+await clearAll()
+const concurrentInputs = Array.from({ length: 30 }, (_, i) => ({
+  kind: 'text',
+  text: `concurrent-${i}`,
+  byteSize: 12,
+  hash: `concurrent-hash-${i}`,
+}))
+await Promise.all(concurrentInputs.map((input) => addItem(input)))
+const concurrentListed = await getAllItems()
+assert.equal(
+  concurrentListed.length,
+  concurrentInputs.length,
+  `concurrent addItem must keep all index entries, got ${concurrentListed.length}`,
+)
+const concurrentHashes = new Set(concurrentListed.map((item: any) => item.hash))
+for (const input of concurrentInputs) {
+  assert.ok(concurrentHashes.has(input.hash), `missing hash after concurrent add: ${input.hash}`)
+}
 
 console.log('clipboard-history functional logic tests passed')

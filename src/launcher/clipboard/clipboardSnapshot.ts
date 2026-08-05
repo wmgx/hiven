@@ -6,6 +6,11 @@
  * Phase R0: track clipboard text hash and change time to determine freshness.
  */
 
+// Import the file entry (…/index), not the directory, so pure-TS test harnesses
+// that resolve relative imports via existsSync() hit a real file, not EISDIR.
+import { detectContent } from '../../kits/content/index'
+import type { ContentKind } from '../../kits/content/types'
+
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 export type ClipboardDetectedType =
@@ -39,13 +44,16 @@ export type ClipboardSnapshot = {
 // ─── Configuration ─────────────────────────────────────────────────────────────
 
 /** Clipboard copied within this window is "fresh" and auto-attaches. */
-export const FRESH_CLIPBOARD_TTL_MS = 2 * 60 * 1000
+export const FRESH_CLIPBOARD_TTL_MS = 30 * 1000
 
 /** Clipboard older than fresh but within this window shows a weak hint. */
-export const RECENT_CLIPBOARD_HINT_TTL_MS = 10 * 60 * 1000
+export const RECENT_CLIPBOARD_HINT_TTL_MS = 2 * 60 * 1000
 
 /** Unknown-age clipboard is never auto-attached. */
 export const UNKNOWN_AGE_AUTO_ATTACH = false
+
+/** Background age tracker poll interval (ms). Keeps changedAt near real copy time. */
+export const CLIPBOARD_AGE_TRACKER_INTERVAL_MS = 1000
 
 // ─── Hash ──────────────────────────────────────────────────────────────────────
 
@@ -134,6 +142,40 @@ export function fileNameFromPath(path: string): string {
   return parts[parts.length - 1] ?? path
 }
 
+/**
+ * Map content-kit kinds onto clipboard taxonomy.
+ * Kit-only kinds collapse to the closest clipboard label (no type expansion required).
+ */
+function mapContentKindToClipboard(kind: ContentKind): ClipboardDetectedType | null {
+  switch (kind) {
+    case 'json':
+    case 'url':
+    case 'text':
+    case 'command':
+    case 'secret':
+    case 'unknown':
+    case 'sql':
+    case 'css':
+    case 'xml':
+    case 'csv':
+    case 'jwt':
+    case 'timestamp':
+    case 'secret-like':
+    case 'yaml':
+    case 'query-string':
+    case 'markdown':
+      return kind
+    case 'tsv':
+      return 'csv'
+    case 'base64':
+    case 'url-encoded':
+    case 'color':
+      return 'text'
+    default:
+      return null
+  }
+}
+
 export function detectClipboardType(text: string): ClipboardDetectedType {
   const trimmed = text.trim()
   if (!trimmed) return 'unknown'
@@ -142,36 +184,35 @@ export function detectClipboardType(text: string): ClipboardDetectedType {
   const filePath = detectClipboardFilePath(trimmed)
   if (filePath) return filePath.kind
 
-  // Secret detection (high priority — before JSON/URL)
+  // Delegate content classification to content-kit (confidence-ordered multi-label).
+  // `typeof` guards isolated test harnesses that strip ESM imports before transpile.
+  if (typeof detectContent === 'function') {
+    const results = detectContent(text)
+    for (const result of results) {
+      const mapped = mapContentKindToClipboard(result.kind)
+      if (mapped) return mapped
+    }
+    return 'text'
+  }
+
+  // Fallback when content-kit import is stripped (standalone transpile harnesses).
+  return legacyDetectClipboardType(trimmed)
+}
+
+/** Pre-kit heuristics kept only for import-stripped unit harnesses. */
+function legacyDetectClipboardType(trimmed: string): ClipboardDetectedType {
   if (/(?:sk-|token|password|Authorization|Bearer)/i.test(trimmed)) return 'secret-like'
-
-  // JSON
   if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && isValidJson(trimmed)) return 'json'
-
-  // URL
   if (/^https?:\/\//i.test(trimmed)) return 'url'
-
-  // JWT
   if (/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(trimmed)) return 'jwt'
-
-  // Timestamp
   if (/^\d{10,13}$/.test(trimmed)) return 'timestamp'
-
-  // XML / CSS / CSV / SQL heuristics
   if (/^<\?xml|^<[A-Za-z][\s\S]*>$/.test(trimmed)) return 'xml'
   if (/^[.#]?[A-Za-z0-9_-]+\s*\{[\s\S]*\}$/.test(trimmed)) return 'css'
   if (/\bselect\b[\s\S]+\bfrom\b|\binsert\s+into\b|\bupdate\b[\s\S]+\bset\b/i.test(trimmed)) return 'sql'
   if (looksLikeDelimitedTable(trimmed)) return 'csv'
-  // YAML (must come after JSON check — JSON is also valid YAML)
   if (looksLikeYaml(trimmed)) return 'yaml'
-
-  // Query String
   if (looksLikeQueryString(trimmed)) return 'query-string'
-
-  // Command
   if (/^(?:ssh|curl|npm|git|brew|pip|docker|kubectl|cargo|go |apt)\b/i.test(trimmed)) return 'command'
-
-  // Text (language heuristic)
   return 'text'
 }
 
@@ -191,17 +232,14 @@ function looksLikeDelimitedTable(text: string): boolean {
 }
 
 function looksLikeYaml(text: string): boolean {
-  // YAML typically starts with --- or has multiple key: value lines
   if (text.startsWith('---')) return true
   const lines = text.split(/\r?\n/).filter(Boolean)
   if (lines.length < 2) return false
-  // At least 2 lines matching "key: value" pattern (not URL-like colons)
   const kvCount = lines.filter((l) => /^[\w.-]+:\s+\S/.test(l)).length
   return kvCount >= 2
 }
 
 function looksLikeQueryString(text: string): boolean {
-  // Matches "key=value&key=value" pattern (at least 2 pairs)
   const qs = text.startsWith('?') ? text.slice(1) : text
   return /^[\w%+.-]+=[\w%+.*-]*(?:&[\w%+.-]+=[\w%+.*-]*)+$/.test(qs)
 }
@@ -252,8 +290,81 @@ export function createClipboardSnapshotFromUnknownAge(text: string): ClipboardSn
   return lastSnapshot
 }
 
+/**
+ * Observe clipboard text without treating first discovery as a copy event.
+ *
+ * - No prior snapshot → baseline with unknown age (never auto-attach).
+ * - Same content → leave age fields untouched (no thrash).
+ * - Content change → known age with changedAt = now (real observation clock).
+ */
+export function observeClipboardText(text: string): ClipboardSnapshot | null {
+  if (!text) return lastSnapshot
+  const hash = hashClipboardText(text)
+  if (!lastSnapshot) {
+    return createClipboardSnapshotFromUnknownAge(text)
+  }
+  if (lastSnapshot.hash === hash) {
+    return lastSnapshot
+  }
+  return updateClipboardSnapshot(text)
+}
+
 export function clearClipboardSnapshot(): void {
   lastSnapshot = null
+}
+
+// ─── Background age tracker ───────────────────────────────────────────────────
+
+type ClipboardAgeReadFn = () => Promise<string>
+
+let ageTrackerStop: (() => void) | null = null
+
+/**
+ * Poll clipboard in the background so changedAt reflects when content actually
+ * changed while the app is running — not when Global Launcher happens to open.
+ *
+ * First observation is always unknown-age baseline; only subsequent changes are
+ * marked known/fresh. Safe to call multiple times (idempotent).
+ */
+export function startClipboardAgeTracker(
+  readClipboard: ClipboardAgeReadFn,
+  intervalMs: number = CLIPBOARD_AGE_TRACKER_INTERVAL_MS,
+): () => void {
+  if (ageTrackerStop) return ageTrackerStop
+
+  let stopped = false
+  let polling = false
+
+  const tick = async () => {
+    if (stopped || polling) return
+    polling = true
+    try {
+      const text = await readClipboard()
+      if (stopped) return
+      if (text) observeClipboardText(text)
+    } catch {
+      // Ignore transient clipboard / permission errors.
+    } finally {
+      polling = false
+    }
+  }
+
+  // Seed baseline soon after start (don't wait a full interval).
+  void tick()
+  const intervalId = window.setInterval(() => {
+    void tick()
+  }, intervalMs)
+
+  ageTrackerStop = () => {
+    stopped = true
+    window.clearInterval(intervalId)
+    ageTrackerStop = null
+  }
+  return ageTrackerStop
+}
+
+export function stopClipboardAgeTracker(): void {
+  ageTrackerStop?.()
 }
 
 // ─── Freshness rules ───────────────────────────────────────────────────────────
