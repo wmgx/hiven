@@ -367,6 +367,33 @@ export function stopClipboardAgeTracker(): void {
   ageTrackerStop?.()
 }
 
+// ─── Soft operands (formula / calculator path) ────────────────────────────────
+
+/**
+ * Short pure numbers / currency-like snippets should NOT hard-attach as Object Block.
+ * User intent is usually "paste into a formula" or type around the value, not run
+ * object-action on the number itself. forceAttach still bypasses this.
+ *
+ * Matches:
+ *  - 42, -3.14, 1e6, 1,234.5, 12%
+ *  - $12.5 / ¥100 / €3.14 / £9 (optional currency prefix)
+ */
+export function isSoftClipboardOperand(text: string): boolean {
+  const trimmed = text.trim()
+  if (!trimmed) return false
+  // Keep hard-attach for multi-line / long blobs even if first line looks numeric.
+  if (trimmed.length > 32 || /[\r\n]/.test(trimmed)) return false
+  // Pure number (optional thousands separators, decimal, scientific, trailing %)
+  if (/^[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:[eE][+-]?\d+)?%?$/.test(trimmed)) {
+    return true
+  }
+  // Optional single currency prefix
+  if (/^[¥$€£]\s*[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?$/.test(trimmed)) {
+    return true
+  }
+  return false
+}
+
 // ─── Freshness rules ───────────────────────────────────────────────────────────
 
 export function shouldAutoAttachClipboard(snapshot: ClipboardSnapshot, now: number = Date.now()): boolean {

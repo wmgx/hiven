@@ -34,6 +34,7 @@ const snapshot = transpileAndRun('src/launcher/clipboard/clipboardSnapshot.ts')
 const objectBlock = transpileAndRun('src/launcher/clipboard/objectBlock.ts', {
   shouldAutoAttachClipboard: snapshot.shouldAutoAttachClipboard,
   shouldShowRecentClipboardHint: snapshot.shouldShowRecentClipboardHint,
+  isSoftClipboardOperand: snapshot.isSoftClipboardOperand,
   detectClipboardFilePath: snapshot.detectClipboardFilePath,
   fileNameFromPath: snapshot.fileNameFromPath,
 })
@@ -128,6 +129,31 @@ const readClip = readFileSync('src/launcher/clipboard/readLauncherClipboard.ts',
 assert.match(readClip, /read_clipboard_file_paths/, 'launcher clipboard read should prefer native file paths')
 
 // ─── §11.2 Object Block ───────────────────────────────────────────────────────
+
+// Soft operands (short numbers) must not hard-attach even when fresh
+assert.equal(snapshot.isSoftClipboardOperand('42'), true, 'integer is soft operand')
+assert.equal(snapshot.isSoftClipboardOperand('-3.14'), true, 'decimal is soft operand')
+assert.equal(snapshot.isSoftClipboardOperand('1e6'), true, 'scientific is soft operand')
+assert.equal(snapshot.isSoftClipboardOperand('$12.5'), true, 'currency is soft operand')
+assert.equal(snapshot.isSoftClipboardOperand('{"a":1}'), false, 'json is not soft')
+assert.equal(snapshot.isSoftClipboardOperand('hello world'), false, 'text is not soft')
+const numberSnap = {
+  text: '42',
+  hash: snapshot.hashClipboardText('42'),
+  detectedType: 'text',
+  firstSeenAt: Date.now(),
+  lastSeenAt: Date.now(),
+  changedAt: Date.now() - 5_000,
+  ageConfidence: 'known',
+}
+assert.equal(snapshot.shouldAutoAttachClipboard(numberSnap), true, 'fresh number still age-eligible')
+assert.equal(
+  objectBlock.createClipboardObjectBlock(numberSnap),
+  null,
+  'fresh short number must not hard-attach as object block',
+)
+const forcedNumber = objectBlock.createClipboardObjectBlock(numberSnap, Date.now(), { forceAttach: true })
+assert.ok(forcedNumber, 'forceAttach still allows number block')
 
 // Auto-create from fresh clipboard
 const freshSnap = { ...s1, changedAt: Date.now() - 10_000, ageConfidence: 'known', detectedType: 'json' }

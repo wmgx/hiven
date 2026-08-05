@@ -11,6 +11,7 @@ import {
   detectClipboardFilePath,
   detectClipboardType,
   fileNameFromPath,
+  isSoftClipboardOperand,
   shouldAutoAttachClipboard,
   shouldShowRecentClipboardHint,
 } from './clipboardSnapshot'
@@ -197,6 +198,8 @@ export function createClipboardObjectBlock(
   options?: { forceAttach?: boolean },
 ): LauncherObjectBlock | null {
   if (!options?.forceAttach && !shouldAutoAttachClipboard(snapshot, now)) return null
+  // Short numbers stay out of object-action so calculator / formula typing wins.
+  if (!options?.forceAttach && isSoftClipboardOperand(snapshot.text)) return null
   const ageMs = snapshot.changedAt !== undefined ? now - snapshot.changedAt : 0
   const kind = normalizeSecretKind(snapshot.detectedType)
   const filePath = detectClipboardFilePath(snapshot.text)
@@ -457,6 +460,8 @@ export type RecentClipboardHint = {
 
 export function buildRecentClipboardHint(snapshot: ClipboardSnapshot, now: number = Date.now()): RecentClipboardHint | null {
   if (!shouldShowRecentClipboardHint(snapshot, now)) return null
+  // Same soft-operand rule as hard attach: numbers are formula draft, not a hint chip.
+  if (isSoftClipboardOperand(snapshot.text)) return null
   const ageMs = snapshot.changedAt !== undefined ? now - snapshot.changedAt : 0
   return {
     snapshot,

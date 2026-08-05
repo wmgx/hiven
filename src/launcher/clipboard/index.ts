@@ -17,6 +17,7 @@ export {
   clearClipboardSnapshot,
   shouldAutoAttachClipboard,
   shouldShowRecentClipboardHint,
+  isSoftClipboardOperand,
   isClipboardExpired,
   startClipboardAgeTracker,
   stopClipboardAgeTracker,

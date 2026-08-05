@@ -4,6 +4,9 @@ import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } fro
 import { runLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
 import { usePluginSettingsStore } from '../../workspace/pluginSettingsStore'
 import { focusLauncherWebview } from '../../workspace/windowManager/launcherWindow'
+import { consumeStickyLauncherQuery } from '../../launcher/querySticky'
+
+const GLOBAL_LAUNCHER_STICKY_SURFACE = 'global-launcher'
 
 export function isStandaloneLauncherWindow() {
   return new URLSearchParams(window.location.search).get('window') === 'launcher'
@@ -90,7 +93,7 @@ export function useGlobalLauncherFocusSession({
     }
   }, [inputRef])
 
-  // Open edge: clear query/selection and focus once.
+  // Open edge: restore sticky query (blur leave-to-copy) or start empty; focus once.
   useLayoutEffect(() => {
     if (!open) {
       wasOpenRef.current = false
@@ -99,7 +102,8 @@ export function useGlobalLauncherFocusSession({
     if (wasOpenRef.current) return
     wasOpenRef.current = true
     previousFocusRef.current = document.activeElement as HTMLElement | null
-    setQuery('')
+    const sticky = consumeStickyLauncherQuery(GLOBAL_LAUNCHER_STICKY_SURFACE)
+    setQuery(sticky ?? '')
     setSelectedIndex(0, { pin: false })
     requestAnimationFrame(() => {
       if (!retainRef.current) return

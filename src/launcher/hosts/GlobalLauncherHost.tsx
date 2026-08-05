@@ -34,6 +34,12 @@ import { logLauncherPerf } from '../../workspace/launcher/perf'
 import type { LauncherItem } from '../../workspace/launcher/types'
 import { getPluginPermissionSnapshot } from '../../workspace/pluginPermissions'
 import { showToast } from '../../workspace/toast'
+import {
+  clearStickyLauncherQuery,
+  saveStickyLauncherQuery,
+} from '../querySticky'
+
+const GLOBAL_LAUNCHER_STICKY_SURFACE = 'global-launcher'
 
 export function GlobalLauncherHost() {
   const {
@@ -327,7 +333,11 @@ export function GlobalLauncherHost() {
     return `${controllerState.busy ? 1 : 0}:${controllerState.frames.length}:${topKind}:${controllerState.error ?? ''}${previewSignal}`
   }, [controllerState])
 
-  const resetLauncherSession = useCallback(() => {
+  /**
+   * @param discardQuery When true (after successful action), drop sticky query.
+   *   When false (Esc / blur leave-to-copy), keep typed input for a few minutes.
+   */
+  const resetLauncherSession = useCallback((options?: { discardQuery?: boolean }) => {
     clearPluginSurfaceTool()
     clearLauncherHostSurface()
     // Drop any suspended host (e.g. quick-editor under Diff) when fully closing.
@@ -337,10 +347,15 @@ export function GlobalLauncherHost() {
     if (usePluginSettingsStore.getState().settingsDialogTarget?.presentation === 'global-launcher') {
       closeSettingsDialog()
     }
+    if (options?.discardQuery) {
+      clearStickyLauncherQuery(GLOBAL_LAUNCHER_STICKY_SURFACE)
+    } else {
+      saveStickyLauncherQuery(GLOBAL_LAUNCHER_STICKY_SURFACE, query)
+    }
     setQuery('')
     setSelectedIndex(0, { pin: false })
     controllerRef.current?.reset()
-  }, [clearLauncherHostSurface, clearPluginSurfaceTool, closeSettingsDialog, setQuery, setSelectedIndex, controllerRef])
+  }, [clearLauncherHostSurface, clearPluginSurfaceTool, closeSettingsDialog, query, setQuery, setSelectedIndex, controllerRef])
 
   // Esc / overlay click / surface close: smart restore (skip if user already left).
   const closeLauncher = useCallback(() => {
@@ -356,6 +371,7 @@ export function GlobalLauncherHost() {
   }, [overlay, resetLauncherSession, setOpen, standaloneLauncher, restoreFocus])
 
   // Blur-dismiss (clicked another app/window): never steal focus back.
+  // Sticky query is saved so leave-to-copy formula resume works.
   const closeLauncherOnBlur = useCallback(() => {
     resetLauncherSession()
     void closeGlobalLauncherWindow({
@@ -375,7 +391,7 @@ export function GlobalLauncherHost() {
 
   // Close launcher after a command has been executed (don't hide the main window)
   const closeLauncherAfterAction = useCallback(() => {
-    resetLauncherSession()
+    resetLauncherSession({ discardQuery: true })
     void closeGlobalLauncherWindow({
       standaloneLauncher,
       overlay,

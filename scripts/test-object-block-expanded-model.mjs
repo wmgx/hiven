@@ -26,6 +26,7 @@ const snapshot = transpileAndRun('src/launcher/clipboard/clipboardSnapshot.ts')
 const objectBlock = transpileAndRun('src/launcher/clipboard/objectBlock.ts', {
   shouldAutoAttachClipboard: snapshot.shouldAutoAttachClipboard,
   shouldShowRecentClipboardHint: snapshot.shouldShowRecentClipboardHint,
+  isSoftClipboardOperand: snapshot.isSoftClipboardOperand,
 })
 
 const expectedSources = [
