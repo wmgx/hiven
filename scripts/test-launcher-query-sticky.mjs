@@ -100,6 +100,14 @@ const lifecycle = readFileSync('src/components/launcher/GlobalLauncherHostLifecy
 assert.match(lifecycle, /peekStickyLauncherQuery/, 'open edge peeks sticky query (not one-shot consume)')
 assert.match(lifecycle, /global-launcher/, 'sticky surface is global-launcher')
 assert.doesNotMatch(lifecycle, /consumeStickyLauncherQuery/, 'open edge must not consume (StrictMode safe)')
+assert.match(lifecycle, /startTransition/, 'sticky restore is non-urgent')
+assert.match(lifecycle, /requestAnimationFrame/, 'sticky restore deferred past first paint')
+// Open path must start empty so ranking/dynamic use empty-open fast path
+assert.match(
+  lifecycle,
+  /setQuery\(''\)[\s\S]*peekStickyLauncherQuery[\s\S]*startTransition/,
+  'empty open first, then deferred sticky restore',
+)
 
 const host = readFileSync('src/launcher/hosts/GlobalLauncherHost.tsx', 'utf8')
 assert.match(host, /saveStickyLauncherQuery/, 'blur/esc close saves sticky query')

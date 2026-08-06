@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, type MutableRefObject, type RefObject } from 'react'
+import { startTransition, useCallback, useEffect, useLayoutEffect, useRef, type MutableRefObject, type RefObject } from 'react'
 import type { LauncherControllerState } from '../../workspace/launcher/controller'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../../utils/imeKeyboard'
 import { runLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
@@ -93,23 +93,43 @@ export function useGlobalLauncherFocusSession({
     }
   }, [inputRef])
 
-  // Open edge: restore sticky query (blur leave-to-copy) or start empty; focus once.
-  // Use peek (not consume): StrictMode remount would otherwise wipe a one-shot consume.
+  // Open edge: empty + focus first (fast empty-open path), then restore sticky.
+  // Restoring sticky synchronously used to set a non-empty query before first
+  // paint → ranking/dynamic/document paths all ran on the open frame (felt like
+  // a freeze). Double-rAF ≈ after first paint; startTransition keeps restore off
+  // the urgent path.
   useLayoutEffect(() => {
     if (!open) {
       wasOpenRef.current = false
       return
     }
-    if (wasOpenRef.current) return
-    wasOpenRef.current = true
-    previousFocusRef.current = document.activeElement as HTMLElement | null
+    if (!wasOpenRef.current) {
+      wasOpenRef.current = true
+      previousFocusRef.current = document.activeElement as HTMLElement | null
+      // Empty first so static list paints via empty-open path.
+      setQuery('')
+      setSelectedIndex(0, { pin: false })
+    }
     const sticky = peekStickyLauncherQuery(GLOBAL_LAUNCHER_STICKY_SURFACE)
-    setQuery(sticky ?? '')
-    setSelectedIndex(0, { pin: false })
-    requestAnimationFrame(() => {
-      if (!retainRef.current) return
-      focusLauncherInput()
+    let cancelled = false
+    let raf2 = 0
+    const raf1 = requestAnimationFrame(() => {
+      if (!openRef.current) return
+      if (retainRef.current) focusLauncherInput()
+      if (!sticky || cancelled) return
+      raf2 = requestAnimationFrame(() => {
+        if (cancelled || !openRef.current) return
+        startTransition(() => {
+          if (cancelled || !openRef.current) return
+          setQuery(sticky)
+        })
+      })
     })
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(raf1)
+      if (raf2) cancelAnimationFrame(raf2)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- open-edge only
   }, [open])
 
