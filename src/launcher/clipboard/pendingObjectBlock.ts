@@ -6,7 +6,8 @@
 import type { LauncherObjectBlock } from './objectBlock'
 
 const PENDING_KEY = 'hiven-pending-object-block'
-const DEFAULT_TTL_MS = 10_000
+/** Long enough for hide-history → show-launcher across separate webviews. */
+const DEFAULT_TTL_MS = 60_000
 
 type PendingRecord = {
   block: LauncherObjectBlock
@@ -30,7 +31,15 @@ export function subscribePendingObjectBlock(listener: PendingListener): () => vo
   }
 }
 
-export function setPendingObjectBlock(block: LauncherObjectBlock, options?: { persist?: boolean; ttlMs?: number }): void {
+export function setPendingObjectBlock(
+  block: LauncherObjectBlock,
+  options?: {
+    persist?: boolean
+    ttlMs?: number
+    /** Skip live listeners (re-stash / persist-only; avoid notify loops). */
+    silent?: boolean
+  },
+): void {
   const record: PendingRecord = { block, createdAt: Date.now() }
   memoryPending = record
   if (options?.persist) {
@@ -40,6 +49,7 @@ export function setPendingObjectBlock(block: LauncherObjectBlock, options?: { pe
       console.warn('[hiven] Failed to persist pending object block:', error)
     }
   }
+  if (options?.silent) return
   // Notify already-mounted launcher hooks (stack path keeps open=true)
   for (const listener of listeners) {
     try {

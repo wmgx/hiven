@@ -229,24 +229,22 @@ export function PluginSurfaceRenderer({
                         ageLabel: input.ageLabel,
                       })
 
-              // Cross-webview when this surface is not the launcher frame
-              const persist = presentation === 'plugin-surface-window'
-              setPendingObjectBlock(block, { persist })
+              // Always persist: history is often a separate webview; hide/show races
+              // used to drop in-memory-only pending before Global Launcher reopened.
+              setPendingObjectBlock(block, { persist: true })
 
               // Leave tool surface / clear host target but keep launcher session when possible
               useAppStore.getState().clearPluginSurfaceTool()
               onBack()
 
               useAppStore.getState().openGlobalLauncherOverlay()
-              if (persist || typeof window !== 'undefined') {
-                void showLauncherWindow().catch((error) => {
-                  console.warn('[hiven] Failed to show launcher after returnToLauncherWithObject:', error)
-                  showToast(
-                    locale === 'zh' ? '无法带回 Launcher' : 'Could not return to Launcher',
-                    'error',
-                  )
-                })
-              }
+              void showLauncherWindow().catch((error) => {
+                console.warn('[hiven] Failed to show launcher after returnToLauncherWithObject:', error)
+                showToast(
+                  locale === 'zh' ? '无法带回 Launcher' : 'Could not return to Launcher',
+                  'error',
+                )
+              })
             },
             storage: hostStorage,
             clipboard: createPluginClipboard(target.pluginId, surfaceState.permissions, hostStorage),

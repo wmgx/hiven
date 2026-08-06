@@ -15,7 +15,12 @@ import {
   buildRecentClipboardHint,
   createClipboardObjectBlock,
 } from './objectBlock'
-import { consumePendingObjectBlock, subscribePendingObjectBlock } from './pendingObjectBlock'
+import {
+  clearPendingObjectBlock,
+  consumePendingObjectBlock,
+  setPendingObjectBlock,
+  subscribePendingObjectBlock,
+} from './pendingObjectBlock'
 import {
   createClipboardSnapshotFromUnknownAge,
   dismissClipboardBlock,
@@ -45,6 +50,13 @@ export type ClipboardObjectBlockState = {
   attachHintAsBlock: () => void
 }
 
+/** Blocks handed in from history / tools — re-stash on hide so ⌘↵ is not lost mid-transition. */
+const HANDOFF_BLOCK_SOURCES = new Set(['history-item', 'tool-result'])
+
+function isHandoffBlock(block: LauncherObjectBlock | null | undefined): boolean {
+  return Boolean(block && HANDOFF_BLOCK_SOURCES.has(block.source))
+}
+
 export function useClipboardObjectBlock(params: {
   open: boolean
   readClipboard: () => Promise<string>
@@ -60,6 +72,10 @@ export function useClipboardObjectBlock(params: {
   const [hint, setHint] = useState<RecentClipboardHint | null>(null)
   const didReadRef = useRef(false)
   const exitTimerRef = useRef<number | null>(null)
+  const blockRef = useRef<LauncherObjectBlock | null>(null)
+  blockRef.current = block
+  /** User dismissed the token — do not re-stash on close. */
+  const userDismissedRef = useRef(false)
 
   const clearExitTimer = useCallback(() => {
     if (exitTimerRef.current != null) {
@@ -68,18 +84,23 @@ export function useClipboardObjectBlock(params: {
     }
   }, [])
 
+  const applyHandoffBlock = useCallback((pending: LauncherObjectBlock) => {
+    clearExitTimer()
+    setIsExiting(false)
+    setBlock(pending)
+    setHint(null)
+    didReadRef.current = true
+    userDismissedRef.current = false
+  }, [clearExitTimer])
+
   // Live deliver pending blocks while launcher stays open (history stack → list).
   useEffect(() => {
     return subscribePendingObjectBlock((pending) => {
-      clearExitTimer()
-      setIsExiting(false)
-      setBlock(pending)
-      setHint(null)
-      didReadRef.current = true
-      // Consume so a later open/read path does not overwrite.
-      consumePendingObjectBlock()
+      applyHandoffBlock(pending)
+      // Re-persist without re-notifying so hide/show races can still recover.
+      setPendingObjectBlock(pending, { persist: true, silent: true })
     })
-  }, [clearExitTimer])
+  }, [applyHandoffBlock])
 
   // On open: prefer pending history-item block; else read clipboard after first paint.
   useEffect(() => {
@@ -87,17 +108,19 @@ export function useClipboardObjectBlock(params: {
       didReadRef.current = false
       return
     }
-    if (didReadRef.current) return
-    didReadRef.current = true
+    userDismissedRef.current = false
 
+    // Always prefer handoff pending when opening — even if a previous session
+    // left didReadRef true (listener path) without a surviving UI block.
     const pending = consumePendingObjectBlock()
     if (pending) {
-      clearExitTimer()
-      setIsExiting(false)
-      setBlock(pending)
-      setHint(null)
+      applyHandoffBlock(pending)
+      // Keep a silent backup until the open frame has fully settled (close race).
+      setPendingObjectBlock(pending, { persist: true, silent: true })
       return
     }
+    if (didReadRef.current) return
+    didReadRef.current = true
 
     let cancelled = false
     const timer = window.setTimeout(() => {
@@ -106,6 +129,8 @@ export function useClipboardObjectBlock(params: {
         try {
           const text = await readClipboard()
           if (cancelled) return
+          // Never clobber a history handoff that landed while we were reading.
+          if (isHandoffBlock(blockRef.current)) return
           logLauncherPerfDuration('clipboard-object-block:read', startedAt, {
             hasText: Boolean(text),
             textLength: text.length,
@@ -134,6 +159,7 @@ export function useClipboardObjectBlock(params: {
           }
 
           if (cancelled) return
+          if (isHandoffBlock(blockRef.current)) return
           const suppress = suppressAutoAttach?.() === true
           const newBlock = isClipboardDismissed(snapshot)
             ? null
@@ -145,6 +171,7 @@ export function useClipboardObjectBlock(params: {
           setHint(newBlock || suppress ? null : buildRecentClipboardHint(snapshot))
         } catch {
           if (cancelled) return
+          if (isHandoffBlock(blockRef.current)) return
           logLauncherPerfDuration('clipboard-object-block:read', startedAt, { failed: true })
           setBlock(null)
           setIsExiting(false)
@@ -157,12 +184,16 @@ export function useClipboardObjectBlock(params: {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [open, readClipboard, clearExitTimer, suppressAutoAttach])
+  }, [open, readClipboard, clearExitTimer, suppressAutoAttach, applyHandoffBlock])
 
-  // When launcher closes, clear block state
+  // When launcher closes: re-stash handoff blocks so ⌘↵ is not lost if hide races show.
   useEffect(() => {
     if (!open) {
       clearExitTimer()
+      const current = blockRef.current
+      if (!userDismissedRef.current && isHandoffBlock(current) && current) {
+        setPendingObjectBlock(current, { persist: true, silent: true })
+      }
       setBlock(null)
       setIsExiting(false)
       setHint(null)
@@ -177,6 +208,8 @@ export function useClipboardObjectBlock(params: {
    */
   const removeBlock = useCallback(() => {
     if (!block || isExiting) return
+    userDismissedRef.current = true
+    clearPendingObjectBlock()
     const snapshot = getLastClipboardSnapshot()
     if (snapshot) dismissClipboardBlock(snapshot)
     setIsExiting(true)
