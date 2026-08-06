@@ -4,7 +4,7 @@ import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } fro
 import { runLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
 import { usePluginSettingsStore } from '../../workspace/pluginSettingsStore'
 import { focusLauncherWebview } from '../../workspace/windowManager/launcherWindow'
-import { consumeStickyLauncherQuery } from '../../launcher/querySticky'
+import { peekStickyLauncherQuery } from '../../launcher/querySticky'
 
 const GLOBAL_LAUNCHER_STICKY_SURFACE = 'global-launcher'
 
@@ -94,6 +94,7 @@ export function useGlobalLauncherFocusSession({
   }, [inputRef])
 
   // Open edge: restore sticky query (blur leave-to-copy) or start empty; focus once.
+  // Use peek (not consume): StrictMode remount would otherwise wipe a one-shot consume.
   useLayoutEffect(() => {
     if (!open) {
       wasOpenRef.current = false
@@ -102,7 +103,7 @@ export function useGlobalLauncherFocusSession({
     if (wasOpenRef.current) return
     wasOpenRef.current = true
     previousFocusRef.current = document.activeElement as HTMLElement | null
-    const sticky = consumeStickyLauncherQuery(GLOBAL_LAUNCHER_STICKY_SURFACE)
+    const sticky = peekStickyLauncherQuery(GLOBAL_LAUNCHER_STICKY_SURFACE)
     setQuery(sticky ?? '')
     setSelectedIndex(0, { pin: false })
     requestAnimationFrame(() => {

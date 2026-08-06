@@ -334,6 +334,16 @@ export function GlobalLauncherHost() {
   }, [controllerState])
 
   /**
+   * Guard double blur/Esc: first close saves sticky + setQuery(''); a second
+   * close must not run with empty query and wipe (or re-hide) again.
+   */
+  const closingRef = useRef(false)
+
+  useEffect(() => {
+    if (open) closingRef.current = false
+  }, [open])
+
+  /**
    * @param discardQuery When true (after successful action), drop sticky query.
    *   When false (Esc / blur leave-to-copy), keep typed input for a few minutes.
    */
@@ -347,10 +357,15 @@ export function GlobalLauncherHost() {
     if (usePluginSettingsStore.getState().settingsDialogTarget?.presentation === 'global-launcher') {
       closeSettingsDialog()
     }
+    // Prefer live input value: blur can race React state by a frame.
+    const liveQuery = inputRef.current?.value ?? query
     if (options?.discardQuery) {
       clearStickyLauncherQuery(GLOBAL_LAUNCHER_STICKY_SURFACE)
+    } else if (liveQuery.trim()) {
+      saveStickyLauncherQuery(GLOBAL_LAUNCHER_STICKY_SURFACE, liveQuery)
     } else {
-      saveStickyLauncherQuery(GLOBAL_LAUNCHER_STICKY_SURFACE, query)
+      // Closed with empty box — start fresh next open.
+      clearStickyLauncherQuery(GLOBAL_LAUNCHER_STICKY_SURFACE)
     }
     setQuery('')
     setSelectedIndex(0, { pin: false })
@@ -359,6 +374,8 @@ export function GlobalLauncherHost() {
 
   // Esc / overlay click / surface close: smart restore (skip if user already left).
   const closeLauncher = useCallback(() => {
+    if (closingRef.current) return
+    closingRef.current = true
     resetLauncherSession()
     void closeGlobalLauncherWindow({
       standaloneLauncher,
@@ -373,6 +390,8 @@ export function GlobalLauncherHost() {
   // Blur-dismiss (clicked another app/window): never steal focus back.
   // Sticky query is saved so leave-to-copy formula resume works.
   const closeLauncherOnBlur = useCallback(() => {
+    if (closingRef.current) return
+    closingRef.current = true
     resetLauncherSession()
     void closeGlobalLauncherWindow({
       standaloneLauncher,
@@ -391,6 +410,8 @@ export function GlobalLauncherHost() {
 
   // Close launcher after a command has been executed (don't hide the main window)
   const closeLauncherAfterAction = useCallback(() => {
+    if (closingRef.current) return
+    closingRef.current = true
     resetLauncherSession({ discardQuery: true })
     void closeGlobalLauncherWindow({
       standaloneLauncher,
