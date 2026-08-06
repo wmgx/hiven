@@ -177,6 +177,58 @@ function detectTimestamp(trimmed: string): ContentDetection | null {
   }
 }
 
+/** base64url → utf8 string; null on failure. */
+function decodeBase64UrlJson(segment: string): unknown | null {
+  if (!segment || segment.length < 4) return null
+  try {
+    const padded = segment + '='.repeat((4 - (segment.length % 4)) % 4)
+    const b64 = padded.replace(/-/g, '+').replace(/_/g, '/')
+    let json: string
+    if (typeof Buffer !== 'undefined') {
+      json = Buffer.from(b64, 'base64').toString('utf8')
+    } else if (typeof atob === 'function') {
+      json = atob(b64)
+    } else {
+      return null
+    }
+    return JSON.parse(json)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Strong JWT: three base64url segments AND header decodes to JSON with `alg`.
+ * Rejects false positives like `ipb.xxx.yyy` / host-like dotted tokens.
+ */
+function detectJwt(trimmed: string): ContentDetection | null {
+  if (!JWT_RE.test(trimmed) || !trimmed.includes('.')) return null
+  const parts = trimmed.split('.')
+  if (parts.length !== 3 || parts.some((p) => !p)) return null
+
+  const header = decodeBase64UrlJson(parts[0])
+  if (!header || typeof header !== 'object' || Array.isArray(header)) return null
+  const alg = (header as { alg?: unknown }).alg
+  if (typeof alg !== 'string' || !alg) return null
+
+  // Prefer payload that also decodes as JSON (typical JWT); still accept bare signature.
+  const payload = decodeBase64UrlJson(parts[1])
+  const payloadOk = payload !== null && typeof payload === 'object'
+  const confidence = payloadOk ? 0.95 : 0.85
+
+  return {
+    kind: 'jwt',
+    confidence,
+    normalized: trimmed,
+    captures: {
+      header: parts[0],
+      payload: parts[1],
+      signature: parts[2],
+      alg,
+    },
+  }
+}
+
 function push(
   out: ContentDetection[],
   kind: ContentKind,
@@ -221,17 +273,9 @@ export function detectContent(text: string): ContentDetection[] {
     push(results, 'url', 0.97, normalized)
   }
 
-  // 4. JWT (three base64url segments)
-  if (JWT_RE.test(normalized) && normalized.includes('.')) {
-    const parts = normalized.split('.')
-    if (parts.length === 3 && parts.every((p) => p.length > 0)) {
-      push(results, 'jwt', 0.95, normalized, {
-        header: parts[0],
-        payload: parts[1],
-        signature: parts[2],
-      })
-    }
-  }
+  // 4. JWT (strong: header JSON + alg — not every a.b.c token)
+  const jwt = detectJwt(normalized)
+  if (jwt) results.push(jwt)
 
   // 5. Timestamp
   const ts = detectTimestamp(normalized)

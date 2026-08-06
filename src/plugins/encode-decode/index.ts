@@ -104,7 +104,25 @@ function hasEscapeSequences(text: string): boolean {
 }
 
 function isJwt(text: string): boolean {
-  return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(text.trim())
+  const t = text.trim()
+  if (!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(t)) return false
+  // Strong check: header must decode to JSON with `alg` (reject `ipb.xxx.yyy`).
+  try {
+    const headerSeg = t.split('.')[0] ?? ''
+    if (headerSeg.length < 4) return false
+    const padded = headerSeg + '='.repeat((4 - (headerSeg.length % 4)) % 4)
+    const b64 = padded.replace(/-/g, '+').replace(/_/g, '/')
+    const json =
+      typeof Buffer !== 'undefined'
+        ? Buffer.from(b64, 'base64').toString('utf8')
+        : typeof atob === 'function'
+          ? atob(b64)
+          : ''
+    const header = JSON.parse(json) as { alg?: unknown }
+    return Boolean(header && typeof header === 'object' && typeof header.alg === 'string' && header.alg)
+  } catch {
+    return false
+  }
 }
 
 // ─── Plugin Definition ────────────────────────────────────────────────────────

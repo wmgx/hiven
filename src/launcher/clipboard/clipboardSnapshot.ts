@@ -204,7 +204,27 @@ function legacyDetectClipboardType(trimmed: string): ClipboardDetectedType {
   if (/(?:sk-|token|password|Authorization|Bearer)/i.test(trimmed)) return 'secret-like'
   if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && isValidJson(trimmed)) return 'json'
   if (/^https?:\/\//i.test(trimmed)) return 'url'
-  if (/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(trimmed)) return 'jwt'
+  // Strong JWT only: header segment must base64url-decode to JSON with `alg`
+  // (avoids false positives like `ipb.xxx.yyy`).
+  if (/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(trimmed)) {
+    try {
+      const headerSeg = trimmed.split('.')[0] ?? ''
+      const padded = headerSeg + '='.repeat((4 - (headerSeg.length % 4)) % 4)
+      const b64 = padded.replace(/-/g, '+').replace(/_/g, '/')
+      const json =
+        typeof Buffer !== 'undefined'
+          ? Buffer.from(b64, 'base64').toString('utf8')
+          : typeof atob === 'function'
+            ? atob(b64)
+            : ''
+      const header = JSON.parse(json) as { alg?: unknown }
+      if (header && typeof header === 'object' && typeof header.alg === 'string' && header.alg) {
+        return 'jwt'
+      }
+    } catch {
+      // fall through
+    }
+  }
   if (/^\d{10,13}$/.test(trimmed)) return 'timestamp'
   if (/^<\?xml|^<[A-Za-z][\s\S]*>$/.test(trimmed)) return 'xml'
   if (/^[.#]?[A-Za-z0-9_-]+\s*\{[\s\S]*\}$/.test(trimmed)) return 'css'

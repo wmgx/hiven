@@ -158,13 +158,26 @@ function assertDetectionShape(results, label) {
   assert.ok(hit, `unix millis should detect timestamp; got kinds=${JSON.stringify(kindsOf(results))}`)
 }
 
-// ─── 3. 标准 JWT 三段 → jwt ──────────────────────────────────────────────────
+// ─── 3. 标准 JWT 三段 → jwt；假三段不得高置信 ───────────────────────────────
 {
   const input = 'eyJhbGciOiJub25lIn0.eyJzdWIiOiIxIn0.sig'
   const results = detectContent(input)
   assertDetectionShape(results, 'jwt')
   const hit = findKind(results, 'jwt')
   assert.ok(hit, `JWT should detect jwt; got kinds=${JSON.stringify(kindsOf(results))}`)
+}
+{
+  // Real-world false positive: forum cookie / dotted token mistaken for JWT
+  const input = 'ipb.xxx.yyy'
+  const results = detectContent(input)
+  const hit = findKind(results, 'jwt')
+  assert.equal(hit, undefined, `ipb.xxx.yyy must not detect as jwt; got kinds=${JSON.stringify(kindsOf(results))}`)
+}
+{
+  const input = 'ipb'
+  const results = detectContent(input)
+  const hit = findKind(results, 'jwt')
+  assert.equal(hit, undefined, 'bare "ipb" must not be jwt')
 }
 
 // ─── 4. 合法 base64 → base64；普通英文词不得高置信 base64 ───────────────────
