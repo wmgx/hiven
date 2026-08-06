@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { pluginRegistry } from './pluginRegistry'
 import { markSurfaceInstanceState, upsertSurfaceInstance } from '../surfaces/registry'
+import { suppressStandaloneLauncherBlur } from './launcherBlurGuard'
 import type { PluginSurfaceOpenTarget } from '../store'
 import type { PluginDefinition, PluginSurfaceShortcutPresentation, PluginUiSurfaceContribution } from './pluginTypes'
 
@@ -36,6 +37,9 @@ export async function requestOpenPluginSurfaceWindow(target: PluginSurfaceOpenTa
   const closeOnBlur = shell?.closeOnBlur !== false
   const destroyTimeoutMs = shell?.destroyTimeout ?? DEFAULT_DESTROY_TIMEOUT_MS
   const label = pluginSurfaceWindowLabel(target)
+
+  // Opening a focused companion window blurs the launcher; keep it for coexistence.
+  suppressStandaloneLauncherBlur(2_000)
 
   if (target.initialText) {
     await invoke('plugin_surface_payload_set', {

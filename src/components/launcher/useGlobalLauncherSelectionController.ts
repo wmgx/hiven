@@ -12,6 +12,11 @@ import {
   type PluginSurfaceTarget,
 } from './GlobalLauncherSelection'
 import { detectClipboardFilePath } from '../../launcher/clipboard/clipboardSnapshot'
+import { suppressStandaloneLauncherBlur } from '../../workspace/launcherBlurGuard'
+import {
+  getPluginSurfaceShortcutPresentation,
+  showPluginSurfaceWindow,
+} from '../../workspace/windowManager/pluginSurfaceWindows'
 import { showToast } from '../../workspace/toast'
 
 type UseGlobalLauncherSelectionControllerInput = {
@@ -85,9 +90,17 @@ export function useGlobalLauncherSelectionController({
             ...pluginSurfaceTarget,
             initialText,
           }
-          // Always stack inside Global Launcher when opened from the list so
-          // launcher + surface coexist (ESC returns to list; × closes both).
-          // Independent windows stay for global shortcuts (e.g. ⌘⇧V clipboard history).
+          // Window-presentation surfaces (clipboard history) open as independent
+          // windows. Suppress + smart blur keep Global Launcher open alongside them.
+          if (getPluginSurfaceShortcutPresentation(target) === 'window') {
+            const isTauri = Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
+            if (isTauri) {
+              // Cover focus handoff before the companion window is focused/visible.
+              suppressStandaloneLauncherBlur(2_000)
+              void showPluginSurfaceWindow(target)
+              return
+            }
+          }
           clearPluginSurfaceTool()
           await openPluginSurface(target)
         })()

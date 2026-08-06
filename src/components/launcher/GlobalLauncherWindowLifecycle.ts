@@ -2,7 +2,7 @@ import { useCallback, useLayoutEffect, useRef, type PointerEvent as ReactPointer
 import type { LauncherHostSurfaceTarget } from '../../store'
 import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from '../../workspace/launcherWindowEvents'
 import { onCurrentLauncherWindowFocusChanged, resizeCurrentLauncherWindow, startCurrentLauncherWindowDrag } from '../../workspace/windowManager/launcherWindow'
-import { shouldSuppressStandaloneLauncherBlur } from '../../workspace/launcherBlurGuard'
+import { shouldKeepLauncherOpenOnBlur } from '../../workspace/launcherBlurGuard'
 import { applyStandaloneLauncherGeometry, computeStandaloneLauncherGeometry } from './GlobalLauncherLayout'
 import { logLauncherPerf } from '../../workspace/launcher/perf'
 
@@ -54,9 +54,18 @@ export function useCloseStandaloneLauncherOnBlur({
 
     let disposed = false
     let unlisten: (() => void) | undefined
+    let blurGeneration = 0
     onCurrentLauncherWindowFocusChanged((focused) => {
-      if (!focused && shouldSuppressStandaloneLauncherBlur()) return
-      if (!focused && closeOnBlurRef.current !== false) closeLauncher()
+      if (focused) return
+      if (closeOnBlurRef.current === false) return
+      // Smart blur: keep open when focus moves to clipboard history / other hiven windows.
+      const generation = ++blurGeneration
+      void shouldKeepLauncherOpenOnBlur().then((keepOpen) => {
+        if (disposed || generation !== blurGeneration) return
+        if (keepOpen) return
+        if (closeOnBlurRef.current === false) return
+        closeLauncher()
+      })
     })
       .then((cleanup) => {
         if (disposed) cleanup()

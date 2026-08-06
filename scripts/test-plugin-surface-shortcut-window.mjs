@@ -28,18 +28,22 @@ assert.match(
   /requestOpenPluginSurfaceTool[\s\S]*getPluginSurfaceShortcutPresentation\(target\) === ['"]window['"][\s\S]*showPluginSurfaceWindow\(target\)/,
   'requestOpenPluginSurfaceTool must redirect window-presentation surfaces to an independent window',
 )
-// Global Launcher list selection: stack inside launcher so launcher + surface coexist
-// (clipboard history ⌘⇧V remains an independent window via shortcut hotkeys above).
+// Launcher list: window-presentation surfaces open as independent windows, with blur suppress
+// so Global Launcher stays open (smart companion blur — see launcherBlurGuard).
 assert.match(
   selectionController,
-  /openPluginSurface\(target\)/,
-  'launcher list selection must open surfaces in-launcher via openPluginSurface',
+  /getPluginSurfaceShortcutPresentation\(target\) === ['"]window['"][\s\S]*showPluginSurfaceWindow\(target\)/,
+  'launcher list selection must open window-presentation surfaces as independent windows',
 )
-assert.doesNotMatch(
+assert.match(
   selectionController,
-  /showPluginSurfaceWindow/,
-  'launcher list selection must not force independent windows (keeps launcher open)',
+  /suppressStandaloneLauncherBlur/,
+  'opening companion window from launcher must suppress blur-dismiss during focus handoff',
 )
+const blurGuard = read('src/workspace/launcherBlurGuard.ts')
+assert.match(blurGuard, /isHivenCompanionWindowActive|shouldKeepLauncherOpenOnBlur/, 'blur guard must keep launcher open for companion windows')
+const lifecycle = read('src/components/launcher/GlobalLauncherWindowLifecycle.ts')
+assert.match(lifecycle, /shouldKeepLauncherOpenOnBlur/, 'blur dismiss must use smart companion keep-open')
 assert.match(openRequest, /if \(!isTauriRuntime\(\)\) \{[\s\S]*openLauncherHostedPluginSurface\(target\)/, 'non-Tauri launcher-presentation shortcuts must use the bridge instead of duplicating store writes')
 assert.match(globalLauncher, /pluginSurfaceToolTarget/, 'global launcher must keep a separate tool-shell target')
 assert.match(globalLauncher, /samePluginSurfaceTarget/, 'global launcher must distinguish current launcher surface from shortcut tool target')
