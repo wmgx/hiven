@@ -76,6 +76,9 @@ export function useClipboardObjectBlock(params: {
   blockRef.current = block
   /** User dismissed the token — do not re-stash on close. */
   const userDismissedRef = useRef(false)
+  // Host often passes an inline suppress fn — keep in ref so open effect is stable.
+  const suppressAutoAttachRef = useRef(suppressAutoAttach)
+  suppressAutoAttachRef.current = suppressAutoAttach
 
   const clearExitTimer = useCallback(() => {
     if (exitTimerRef.current != null) {
@@ -160,7 +163,7 @@ export function useClipboardObjectBlock(params: {
 
           if (cancelled) return
           if (isHandoffBlock(blockRef.current)) return
-          const suppress = suppressAutoAttach?.() === true
+          const suppress = suppressAutoAttachRef.current?.() === true
           const newBlock = isClipboardDismissed(snapshot)
             ? null
             : createClipboardObjectBlock(snapshot, Date.now(), { suppressAutoAttach: suppress })
@@ -184,7 +187,7 @@ export function useClipboardObjectBlock(params: {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [open, readClipboard, clearExitTimer, suppressAutoAttach, applyHandoffBlock])
+  }, [open, readClipboard, clearExitTimer, applyHandoffBlock])
 
   // When launcher closes: re-stash handoff blocks so ⌘↵ is not lost if hide races show.
   useEffect(() => {
