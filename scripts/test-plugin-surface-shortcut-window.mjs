@@ -22,16 +22,23 @@ assert.doesNotMatch(shortcutHotkeys, /requestOpenPluginSurfaceWindow/, 'shortcut
 assert.match(shortcutHotkeys, /requestOpenPluginSurfaceTool\(target\)/, 'shortcut handler must keep launcher presentation fallback')
 assert.match(clipboardHistory, /shortcutPresentation:\s*['"]window['"]/, 'clipboard history shortcut must open as an independent window')
 
-// Window-presentation surfaces must never stack inside the launcher tool shell.
+// Global/tool open request: window-presentation surfaces still open as independent windows.
 assert.match(
   openRequest,
   /requestOpenPluginSurfaceTool[\s\S]*getPluginSurfaceShortcutPresentation\(target\) === ['"]window['"][\s\S]*showPluginSurfaceWindow\(target\)/,
   'requestOpenPluginSurfaceTool must redirect window-presentation surfaces to an independent window',
 )
+// Global Launcher list selection: stack inside launcher so launcher + surface coexist
+// (clipboard history ⌘⇧V remains an independent window via shortcut hotkeys above).
 assert.match(
   selectionController,
-  /getPluginSurfaceShortcutPresentation\(pluginSurfaceTarget\) === ['"]window['"][\s\S]*showPluginSurfaceWindow\(pluginSurfaceTarget\)/,
-  'launcher list selection must open window-presentation surfaces as independent windows, not in-launcher stack',
+  /openPluginSurface\(target\)/,
+  'launcher list selection must open surfaces in-launcher via openPluginSurface',
+)
+assert.doesNotMatch(
+  selectionController,
+  /showPluginSurfaceWindow/,
+  'launcher list selection must not force independent windows (keeps launcher open)',
 )
 assert.match(openRequest, /if \(!isTauriRuntime\(\)\) \{[\s\S]*openLauncherHostedPluginSurface\(target\)/, 'non-Tauri launcher-presentation shortcuts must use the bridge instead of duplicating store writes')
 assert.match(globalLauncher, /pluginSurfaceToolTarget/, 'global launcher must keep a separate tool-shell target')

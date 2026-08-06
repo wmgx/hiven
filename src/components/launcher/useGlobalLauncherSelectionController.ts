@@ -11,10 +11,6 @@ import {
   type LauncherItemPermissionFrame,
   type PluginSurfaceTarget,
 } from './GlobalLauncherSelection'
-import {
-  getPluginSurfaceShortcutPresentation,
-  showPluginSurfaceWindow,
-} from '../../workspace/windowManager/pluginSurfaceWindows'
 import { detectClipboardFilePath } from '../../launcher/clipboard/clipboardSnapshot'
 import { showToast } from '../../workspace/toast'
 
@@ -89,17 +85,9 @@ export function useGlobalLauncherSelectionController({
             ...pluginSurfaceTarget,
             initialText,
           }
-          // Surfaces that declare window presentation (e.g. clipboard history)
-          // must open as an independent window — never stack on top of the
-          // current launcher surface (text-diff, settings, …).
-          if (getPluginSurfaceShortcutPresentation(target) === 'window') {
-            // In Tauri open an independent window; in browser fall through to launcher shell.
-            const isTauri = Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
-            if (isTauri) {
-              void showPluginSurfaceWindow(target)
-              return
-            }
-          }
+          // Always stack inside Global Launcher when opened from the list so
+          // launcher + surface coexist (ESC returns to list; × closes both).
+          // Independent windows stay for global shortcuts (e.g. ⌘⇧V clipboard history).
           clearPluginSurfaceTool()
           await openPluginSurface(target)
         })()
