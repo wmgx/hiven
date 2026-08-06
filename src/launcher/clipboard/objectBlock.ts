@@ -11,10 +11,10 @@ import {
   detectClipboardFilePath,
   detectClipboardType,
   fileNameFromPath,
-  isSoftClipboardOperand,
   shouldAutoAttachClipboard,
   shouldShowRecentClipboardHint,
 } from './clipboardSnapshot'
+import { isStrongClipboardAttachEligible } from './attachPolicy'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -195,11 +195,18 @@ export function createGenericObjectBlock(params: {
 export function createClipboardObjectBlock(
   snapshot: ClipboardSnapshot,
   now: number = Date.now(),
-  options?: { forceAttach?: boolean },
+  options?: {
+    forceAttach?: boolean
+    /** Sticky / non-empty query: never auto-steal focus from typing. */
+    suppressAutoAttach?: boolean
+  },
 ): LauncherObjectBlock | null {
-  if (!options?.forceAttach && !shouldAutoAttachClipboard(snapshot, now)) return null
-  // Short numbers stay out of object-action so calculator / formula typing wins.
-  if (!options?.forceAttach && isSoftClipboardOperand(snapshot.text)) return null
+  if (!options?.forceAttach) {
+    if (options?.suppressAutoAttach) return null
+    if (!shouldAutoAttachClipboard(snapshot, now)) return null
+    // Strong structured content only (json/url/jwt/base64/…), not plain text.
+    if (!isStrongClipboardAttachEligible(snapshot.text)) return null
+  }
   const ageMs = snapshot.changedAt !== undefined ? now - snapshot.changedAt : 0
   const kind = normalizeSecretKind(snapshot.detectedType)
   const filePath = detectClipboardFilePath(snapshot.text)
@@ -460,8 +467,8 @@ export type RecentClipboardHint = {
 
 export function buildRecentClipboardHint(snapshot: ClipboardSnapshot, now: number = Date.now()): RecentClipboardHint | null {
   if (!shouldShowRecentClipboardHint(snapshot, now)) return null
-  // Same soft-operand rule as hard attach: numbers are formula draft, not a hint chip.
-  if (isSoftClipboardOperand(snapshot.text)) return null
+  // Hint only for content that would have hard-attached when fresher.
+  if (!isStrongClipboardAttachEligible(snapshot.text)) return null
   const ageMs = snapshot.changedAt !== undefined ? now - snapshot.changedAt : 0
   return {
     snapshot,

@@ -95,25 +95,30 @@ stickyA.saveStickyLauncherQuery(surface, 'from-storage')
 const stickyB = transpileAndRun('src/launcher/querySticky.ts', { sessionStorage: storage })
 assert.equal(stickyB.peekStickyLauncherQuery(surface), 'from-storage', 'sessionStorage backs sticky across remount')
 
-// Wiring: open edge peeks sticky; after-action discards
+// Restore-hold suppresses clipboard during startTransition delay
+sticky.clearAllStickyLauncherQueries()
+sticky.saveStickyLauncherQuery(surface, 'draft')
+sticky.holdStickyRestore(surface, 'draft')
+assert.equal(sticky.shouldSuppressClipboardForSticky(surface), true, 'hold suppresses clipboard attach')
+sticky.consumeStickyLauncherQuery(surface)
+assert.equal(sticky.shouldSuppressClipboardForSticky(surface), true, 'hold still suppresses after consume')
+sticky.releaseStickyRestore(surface)
+assert.equal(sticky.shouldSuppressClipboardForSticky(surface), false, 'release ends suppress')
+
+// Wiring: open edge holds + deferred consume; after-action discards
 const lifecycle = readFileSync('src/components/launcher/GlobalLauncherHostLifecycle.ts', 'utf8')
-assert.match(lifecycle, /peekStickyLauncherQuery/, 'open edge peeks sticky query (not one-shot consume)')
+assert.match(lifecycle, /holdStickyRestore/, 'open edge holds sticky for clipboard suppress')
+assert.match(lifecycle, /consumeStickyLauncherQuery/, 'open edge consumes sticky on apply')
 assert.match(lifecycle, /global-launcher/, 'sticky surface is global-launcher')
-assert.doesNotMatch(lifecycle, /consumeStickyLauncherQuery/, 'open edge must not consume (StrictMode safe)')
 assert.match(lifecycle, /startTransition/, 'sticky restore is non-urgent')
 assert.match(lifecycle, /requestAnimationFrame/, 'sticky restore deferred past first paint')
-// Open path must start empty so ranking/dynamic use empty-open fast path
-assert.match(
-  lifecycle,
-  /setQuery\(''\)[\s\S]*peekStickyLauncherQuery[\s\S]*startTransition/,
-  'empty open first, then deferred sticky restore',
-)
 
 const host = readFileSync('src/launcher/hosts/GlobalLauncherHost.tsx', 'utf8')
 assert.match(host, /saveStickyLauncherQuery/, 'blur/esc close saves sticky query')
 assert.match(host, /discardQuery:\s*true/, 'after-action discards sticky query')
 assert.match(host, /clearStickyLauncherQuery/, 'discard path clears sticky')
 assert.match(host, /closingRef/, 'double-close guard present')
+assert.match(host, /shouldSuppressClipboardForSticky/, 'clipboard suppress uses sticky hold')
 assert.match(host, /inputRef\.current\?\.value/, 'prefer live input value when saving')
 
 console.log('test-launcher-query-sticky: ok')

@@ -21,9 +21,38 @@ type StickyRecord = {
 }
 
 const stickyBySurface = new Map<string, StickyRecord>()
+/**
+ * In-flight restore hold: set when open will rehydrate sticky into the input.
+ * Survives startTransition delay so clipboard auto-attach (≈180ms) still sees
+ * "user has a draft" and stays suppressed.
+ */
+const restoreHoldBySurface = new Map<string, string>()
 
 function storageKey(surfaceId: string): string {
   return `${STORAGE_PREFIX}${surfaceId}`
+}
+
+/** Mark that this surface is about to / is restoring a sticky draft. */
+export function holdStickyRestore(surfaceId: string, query: string): void {
+  if (!query.trim()) {
+    restoreHoldBySurface.delete(surfaceId)
+    return
+  }
+  restoreHoldBySurface.set(surfaceId, query.slice(0, LAUNCHER_QUERY_STICKY_MAX_CHARS))
+}
+
+export function releaseStickyRestore(surfaceId: string): void {
+  restoreHoldBySurface.delete(surfaceId)
+}
+
+export function getStickyRestoreHold(surfaceId: string): string | null {
+  return restoreHoldBySurface.get(surfaceId) ?? null
+}
+
+/** True while sticky is stored or a restore is in flight / held for the session draft. */
+export function shouldSuppressClipboardForSticky(surfaceId: string): boolean {
+  if (getStickyRestoreHold(surfaceId)) return true
+  return peekStickyLauncherQuery(surfaceId) != null
 }
 
 function readStorage(surfaceId: string): StickyRecord | null {
@@ -105,8 +134,7 @@ export function peekStickyLauncherQuery(
 }
 
 /**
- * Peek + clear. Prefer {@link peekStickyLauncherQuery} for open restore.
- * Kept for tests / explicit one-shot handoff.
+ * Peek + clear storage. Keeps restore-hold so clipboard suppress still sees the draft.
  */
 export function consumeStickyLauncherQuery(
   surfaceId: string,
@@ -114,13 +142,17 @@ export function consumeStickyLauncherQuery(
   ttlMs: number = LAUNCHER_QUERY_STICKY_TTL_MS,
 ): string | null {
   const value = peekStickyLauncherQuery(surfaceId, now, ttlMs)
-  if (value != null) clearStickyLauncherQuery(surfaceId)
+  if (value != null) clearStickyLauncherQuery(surfaceId, { keepHold: true })
   return value
 }
 
-export function clearStickyLauncherQuery(surfaceId: string): void {
+export function clearStickyLauncherQuery(
+  surfaceId: string,
+  options?: { keepHold?: boolean },
+): void {
   stickyBySurface.delete(surfaceId)
   removeStorage(surfaceId)
+  if (!options?.keepHold) restoreHoldBySurface.delete(surfaceId)
 }
 
 /** Test helper. */
@@ -129,6 +161,7 @@ export function clearAllStickyLauncherQueries(): void {
     removeStorage(surfaceId)
   }
   stickyBySurface.clear()
+  restoreHoldBySurface.clear()
   // Also sweep known prefix keys in sessionStorage
   try {
     const keys: string[] = []

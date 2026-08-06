@@ -4,7 +4,12 @@ import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } fro
 import { runLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
 import { usePluginSettingsStore } from '../../workspace/pluginSettingsStore'
 import { focusLauncherWebview } from '../../workspace/windowManager/launcherWindow'
-import { peekStickyLauncherQuery } from '../../launcher/querySticky'
+import {
+  consumeStickyLauncherQuery,
+  holdStickyRestore,
+  peekStickyLauncherQuery,
+  releaseStickyRestore,
+} from '../../launcher/querySticky'
 
 const GLOBAL_LAUNCHER_STICKY_SURFACE = 'global-launcher'
 
@@ -110,15 +115,26 @@ export function useGlobalLauncherFocusSession({
       setQuery('')
       setSelectedIndex(0, { pin: false })
     }
-    const sticky = peekStickyLauncherQuery(GLOBAL_LAUNCHER_STICKY_SURFACE)
+    // Hold early so clipboard auto-attach (≈180ms) sees the draft even before
+    // startTransition applies setQuery.
+    const stickyPreview = peekStickyLauncherQuery(GLOBAL_LAUNCHER_STICKY_SURFACE)
+    if (stickyPreview) holdStickyRestore(GLOBAL_LAUNCHER_STICKY_SURFACE, stickyPreview)
+    else releaseStickyRestore(GLOBAL_LAUNCHER_STICKY_SURFACE)
+
     let cancelled = false
     let raf2 = 0
     const raf1 = requestAnimationFrame(() => {
       if (!openRef.current) return
       if (retainRef.current) focusLauncherInput()
-      if (!sticky || cancelled) return
+      if (cancelled) return
       raf2 = requestAnimationFrame(() => {
         if (cancelled || !openRef.current) return
+        const sticky = consumeStickyLauncherQuery(GLOBAL_LAUNCHER_STICKY_SURFACE)
+        if (!sticky) {
+          releaseStickyRestore(GLOBAL_LAUNCHER_STICKY_SURFACE)
+          return
+        }
+        holdStickyRestore(GLOBAL_LAUNCHER_STICKY_SURFACE, sticky)
         startTransition(() => {
           if (cancelled || !openRef.current) return
           setQuery(sticky)

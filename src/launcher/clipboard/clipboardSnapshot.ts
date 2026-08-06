@@ -43,8 +43,8 @@ export type ClipboardSnapshot = {
 
 // ─── Configuration ─────────────────────────────────────────────────────────────
 
-/** Clipboard copied within this window is "fresh" and auto-attaches. */
-export const FRESH_CLIPBOARD_TTL_MS = 30 * 1000
+/** Clipboard copied within this window is "fresh" and may hard-attach (if content-eligible). */
+export const FRESH_CLIPBOARD_TTL_MS = 12 * 1000
 
 /** Clipboard older than fresh but within this window shows a weak hint. */
 export const RECENT_CLIPBOARD_HINT_TTL_MS = 2 * 60 * 1000
@@ -383,6 +383,8 @@ export function isSoftClipboardOperand(text: string): boolean {
   if (!trimmed) return false
   // Keep hard-attach for multi-line / long blobs even if first line looks numeric.
   if (trimmed.length > 32 || /[\r\n]/.test(trimmed)) return false
+  // Unix timestamps are strong content (date-time tools), not formula drafts.
+  if (/^\d{10}$/.test(trimmed) || /^\d{13}$/.test(trimmed)) return false
   // Pure number (optional thousands separators, decimal, scientific, trailing %)
   if (/^[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:[eE][+-]?\d+)?%?$/.test(trimmed)) {
     return true

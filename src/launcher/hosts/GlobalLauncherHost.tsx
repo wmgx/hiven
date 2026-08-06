@@ -36,7 +36,9 @@ import { getPluginPermissionSnapshot } from '../../workspace/pluginPermissions'
 import { showToast } from '../../workspace/toast'
 import {
   clearStickyLauncherQuery,
+  releaseStickyRestore,
   saveStickyLauncherQuery,
+  shouldSuppressClipboardForSticky,
 } from '../querySticky'
 
 const GLOBAL_LAUNCHER_STICKY_SURFACE = 'global-launcher'
@@ -75,9 +77,17 @@ export function GlobalLauncherHost() {
     ? settingsDialogTarget
     : null
   const hostSurfaceTarget = launcherHostSurfaceTarget
+  // Live query for suppress gate (session is declared below; ref stays current each render).
+  const liveQueryRef = useRef('')
   const clipboardBlock = useClipboardObjectBlock({
     open,
     readClipboard: readLauncherClipboard,
+    // Sticky draft (stored or restore-hold) / non-empty typing → no clipboard block.
+    suppressAutoAttach: () => (
+      shouldSuppressClipboardForSticky(GLOBAL_LAUNCHER_STICKY_SURFACE)
+      || Boolean(liveQueryRef.current.trim())
+      || Boolean(inputRef.current?.value?.trim())
+    ),
   })
   // Recommendations while block is mounted (exit keeps mode stable to avoid ranking jank).
   const objectBlockText = clipboardBlock.block?.payloadText ?? undefined
@@ -102,6 +112,11 @@ export function GlobalLauncherHost() {
     foregroundApp,
     makeApi: createGlobalLauncherPluginApi,
   })
+  liveQueryRef.current = query
+  // User cleared the draft → release restore hold so a later open can attach clipboard.
+  if (!query.trim()) {
+    releaseStickyRestore(GLOBAL_LAUNCHER_STICKY_SURFACE)
+  }
 
   const objectActions = useMemo(() => {
     if (!clipboardBlock.block) return []

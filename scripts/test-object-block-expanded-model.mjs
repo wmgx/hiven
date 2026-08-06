@@ -26,6 +26,11 @@ const snapshot = transpileAndRun('src/launcher/clipboard/clipboardSnapshot.ts')
 const objectBlock = transpileAndRun('src/launcher/clipboard/objectBlock.ts', {
   shouldAutoAttachClipboard: snapshot.shouldAutoAttachClipboard,
   shouldShowRecentClipboardHint: snapshot.shouldShowRecentClipboardHint,
+  isStrongClipboardAttachEligible: (text) => {
+    const t = String(text||'').trim()
+    return t.startsWith('{') || t.startsWith('[') || /^https?:\/\//i.test(t) || /\.csv$/i.test(t)
+  },
+  isSoftClipboardOperand: snapshot.isSoftClipboardOperand,
   isSoftClipboardOperand: snapshot.isSoftClipboardOperand,
 })
 

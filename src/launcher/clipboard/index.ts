@@ -24,6 +24,14 @@ export {
 } from './clipboardSnapshot'
 
 export {
+  STRONG_ATTACH_MIN_CONFIDENCE,
+  STRONG_ATTACH_CONTENT_KINDS,
+  findStrongClipboardAttachHits,
+  isStrongClipboardAttachEligible,
+  type StrongAttachHit,
+} from './attachPolicy'
+
+export {
   type ObjectBlockSource,
   type ObjectBlockKind,
   type LauncherObjectBlock,

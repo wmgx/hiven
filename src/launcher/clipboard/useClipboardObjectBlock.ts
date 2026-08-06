@@ -48,8 +48,13 @@ export type ClipboardObjectBlockState = {
 export function useClipboardObjectBlock(params: {
   open: boolean
   readClipboard: () => Promise<string>
+  /**
+   * When true at open-read time, skip auto Object Block (sticky query / non-empty input).
+   * forceAttach / history pending still work.
+   */
+  suppressAutoAttach?: () => boolean
 }): ClipboardObjectBlockState {
-  const { open, readClipboard } = params
+  const { open, readClipboard, suppressAutoAttach } = params
   const [block, setBlock] = useState<LauncherObjectBlock | null>(null)
   const [isExiting, setIsExiting] = useState(false)
   const [hint, setHint] = useState<RecentClipboardHint | null>(null)
@@ -129,11 +134,15 @@ export function useClipboardObjectBlock(params: {
           }
 
           if (cancelled) return
-          const newBlock = isClipboardDismissed(snapshot) ? null : createClipboardObjectBlock(snapshot)
+          const suppress = suppressAutoAttach?.() === true
+          const newBlock = isClipboardDismissed(snapshot)
+            ? null
+            : createClipboardObjectBlock(snapshot, Date.now(), { suppressAutoAttach: suppress })
           clearExitTimer()
           setIsExiting(false)
           setBlock(newBlock)
-          setHint(newBlock ? null : buildRecentClipboardHint(snapshot))
+          // Hint only when not suppressed and content would qualify (policy inside builder).
+          setHint(newBlock || suppress ? null : buildRecentClipboardHint(snapshot))
         } catch {
           if (cancelled) return
           logLauncherPerfDuration('clipboard-object-block:read', startedAt, { failed: true })
@@ -148,7 +157,7 @@ export function useClipboardObjectBlock(params: {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [open, readClipboard, clearExitTimer])
+  }, [open, readClipboard, clearExitTimer, suppressAutoAttach])
 
   // When launcher closes, clear block state
   useEffect(() => {

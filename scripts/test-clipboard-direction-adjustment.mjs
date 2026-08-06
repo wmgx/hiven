@@ -37,6 +37,11 @@ const snapshot = transpileAndRun('src/launcher/clipboard/clipboardSnapshot.ts')
 const objectBlock = transpileAndRun('src/launcher/clipboard/objectBlock.ts', {
   shouldAutoAttachClipboard: snapshot.shouldAutoAttachClipboard,
   shouldShowRecentClipboardHint: snapshot.shouldShowRecentClipboardHint,
+  isStrongClipboardAttachEligible: (text) => {
+    const t = String(text||'').trim()
+    return t.startsWith('{') || t.startsWith('[') || /^https?:\/\//i.test(t) || /\.csv$/i.test(t)
+  },
+  isSoftClipboardOperand: snapshot.isSoftClipboardOperand,
   isSoftClipboardOperand: snapshot.isSoftClipboardOperand,
   detectClipboardFilePath: snapshot.detectClipboardFilePath,
   fileNameFromPath: snapshot.fileNameFromPath,
@@ -69,26 +74,32 @@ assert.equal(typeof s1.lastSeenAt, 'number', '#2: lastSeenAt')
 assert.ok(s1.changedAt !== undefined, '#2: changedAt for new content')
 assert.equal(s1.ageConfidence, 'known', '#2: ageConfidence')
 
-// ─── #3: Auto attach only when changedAt known && <= 30s ──────────────────────
-assert.equal(snapshot.FRESH_CLIPBOARD_TTL_MS, 30_000, '#3: fresh TTL is 30s')
-const fresh = { ...s1, changedAt: Date.now() - 10_000, ageConfidence: 'known' }
-assert.equal(snapshot.shouldAutoAttachClipboard(fresh), true, '#3: fresh <= 30s attaches')
+// ─── #3: Auto attach only when changedAt known && <= 12s + strong content ─────
+assert.equal(snapshot.FRESH_CLIPBOARD_TTL_MS, 12_000, '#3: fresh TTL is 12s')
+const strongBase = {
+  ...s1,
+  text: '{"a":1}',
+  hash: snapshot.hashClipboardText('{"a":1}'),
+  detectedType: 'json',
+}
+const fresh = { ...strongBase, changedAt: Date.now() - 5_000, ageConfidence: 'known' }
+assert.equal(snapshot.shouldAutoAttachClipboard(fresh), true, '#3: fresh <= 12s is age-eligible')
 const block = objectBlock.createClipboardObjectBlock(fresh)
-assert.ok(block, '#3: fresh block created')
+assert.ok(block, '#3: fresh strong content creates block')
 
-const stale45s = { ...s1, changedAt: Date.now() - 45_000, ageConfidence: 'known' }
-assert.equal(snapshot.shouldAutoAttachClipboard(stale45s), false, '#3: 45s does not auto attach')
+const stale15s = { ...strongBase, changedAt: Date.now() - 15_000, ageConfidence: 'known' }
+assert.equal(snapshot.shouldAutoAttachClipboard(stale15s), false, '#3: 15s does not auto attach')
 
-const unknownAge = { ...s1, changedAt: undefined, ageConfidence: 'unknown' }
+const unknownAge = { ...strongBase, changedAt: undefined, ageConfidence: 'unknown' }
 assert.equal(snapshot.shouldAutoAttachClipboard(unknownAge), false, '#3: unknown age does not auto attach')
 
-// ─── #4: 30s-2 min shows hint only ────────────────────────────────────────────
+// ─── #4: 12s-2 min shows hint only (strong content) ───────────────────────────
 assert.equal(snapshot.RECENT_CLIPBOARD_HINT_TTL_MS, 2 * 60_000, '#4: hint TTL is 2 min')
-const recent60s = { ...s1, changedAt: Date.now() - 60_000, ageConfidence: 'known' }
-assert.equal(snapshot.shouldShowRecentClipboardHint(recent60s), true, '#4: 60s shows hint')
+const recent60s = { ...strongBase, changedAt: Date.now() - 60_000, ageConfidence: 'known' }
+assert.equal(snapshot.shouldShowRecentClipboardHint(recent60s), true, '#4: 60s shows age-hint window')
 assert.equal(objectBlock.createClipboardObjectBlock(recent60s), null, '#4: 60s does not create block')
 const hint = objectBlock.buildRecentClipboardHint(recent60s)
-assert.ok(hint, '#4: hint created for recent clipboard')
+assert.ok(hint, '#4: hint created for recent strong clipboard')
 
 // ─── #5: >2 min or unknown: nothing ───────────────────────────────────────────
 const old3min = { ...s1, changedAt: Date.now() - 3 * 60_000, ageConfidence: 'known' }
