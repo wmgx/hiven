@@ -16,7 +16,7 @@
 
 ### 0.1 仓库与分支
 
-- 仓库根目录：`/Users/bytedance/flux_text`
+- 仓库根目录：本仓库根目录
 - 当前分支：`feat/launcher-intelligence-package-1`
 - **不要在 `main` 上做实现。** 如果 `git branch --show-current` 显示 `main`，先创建分支。
 

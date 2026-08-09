@@ -1,6 +1,6 @@
 # hiven 项目指令
 
-本文件补充全局 AGENTS.md，适用于 `/Users/bytedance/flux_text`。
+本文件补充全局 AGENTS.md，适用于本仓库（hiven）根目录。
 
 ## 语言与产物
 

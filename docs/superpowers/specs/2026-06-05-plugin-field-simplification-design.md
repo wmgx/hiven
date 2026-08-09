@@ -9,10 +9,10 @@
 1. **`PluginDefinition` 顶层与 `manifest.json` 字段重复**
    - 重复字段：`id↔pluginId`、`title↔displayName`、`version`。
    - 真相：注册链路全程用 **manifest 的 `pluginId`/`displayName`/`version`**；`definition.title`/`titleI18n` 是**死字段**（全仓零消费，命令展示用的是 command 级 `contribution.title`）；`definition.version` 仅做"是否字符串"的存在性校验，值从不被读；`definition.id` 仅用于 `validatePluginIdMatch` 与 manifest 比对一致性。
-   - 证据：[pluginRuntime.ts](file:///Users/bytedance/flux_text/src/workspace/pluginRuntime.ts) 的 `enablePlugin`(L383-394 用 `record.pluginId` 注册)、`loadPluginEntry`(L220-225 仅存在性校验)、`validatePluginIdMatch`(L254-260)；`registerProductionPlugin` 只收 `pluginId + commands/renderers/panels`。
+   - 证据：[pluginRuntime.ts](../../../src/workspace/pluginRuntime.ts) 的 `enablePlugin`(L383-394 用 `record.pluginId` 注册)、`loadPluginEntry`(L220-225 仅存在性校验)、`validatePluginIdMatch`(L254-260)；`registerProductionPlugin` 只收 `pluginId + commands/renderers/panels`。
 
 2. **`aliases` 与 `tags` 实质重叠**
-   - 两者唯一消费点都是命令面板搜索的"子串包含即命中"（[CommandPalette.tsx](file:///Users/bytedance/flux_text/src/components/CommandPalette.tsx#L1100-L1104)），逻辑对称、无差别。
+   - 两者唯一消费点都是命令面板搜索的"子串包含即命中"（[CommandPalette.tsx](../../../src/components/CommandPalette.tsx#L1100-L1104)），逻辑对称、无差别。
    - `tags` 没有用于任何分类/分组/过滤/展示，退化成了和 `aliases` 一样的"额外搜索关键词"。
 
 3. **（已与用户澄清，不改）`params` vs `inputs`** 是合理分层，保留。
@@ -27,7 +27,7 @@
 
 ## 方案 A：去 definition 顶层冗余
 
-### A1. 类型变更 — [pluginTypes.ts](file:///Users/bytedance/flux_text/src/workspace/pluginTypes.ts#L170-L178)
+### A1. 类型变更 — [pluginTypes.ts](../../../src/workspace/pluginTypes.ts#L170-L178)
 
 ```ts
 // 旧
@@ -49,7 +49,7 @@ export type PluginDefinition = {
 }
 ```
 
-### A2. 加载校验改判据 — [pluginRuntime.ts](file:///Users/bytedance/flux_text/src/workspace/pluginRuntime.ts#L207-L247)
+### A2. 加载校验改判据 — [pluginRuntime.ts](../../../src/workspace/pluginRuntime.ts#L207-L247)
 
 `loadPluginEntry` / `loadDevPluginEntry` 不再用 `id/version` 缺失判断合法性，改为"default export 是否为对象且含 `commands`/`renderers`/`panels` 至少之一"：
 
@@ -90,7 +90,7 @@ export const jwtPlugin = definePlugin({
 
 > 注意：`manifest.json` 已含 `pluginId`/`displayName`/`displayNameI18n`/`version`，是这些信息的唯一来源，无需在 index.ts 重复。
 
-### A6. dev 调试解析 — [pluginDebugRunner.ts](file:///Users/bytedance/flux_text/src/workspace/pluginDebugRunner.ts)
+### A6. dev 调试解析 — [pluginDebugRunner.ts](../../../src/workspace/pluginDebugRunner.ts)
 
 `parsePluginDefinitionSource` 当前以 `typeof value.id !== 'string'` 判定有效性（L20），改为用 A2 的 `isPluginDefinition` 判据。
 
@@ -100,17 +100,17 @@ export const jwtPlugin = definePlugin({
 
 ### B1. 新插件模型删除 `tags`
 
-- [pluginTypes.ts](file:///Users/bytedance/flux_text/src/workspace/pluginTypes.ts#L100) `CommandContribution.tags` 删除。
-- 33 个 `src/plugins/*/index.ts`、[textDiff/index.ts](file:///Users/bytedance/flux_text/src/plugins/textDiff/index.ts#L18)、[corePlugin.ts](file:///Users/bytedance/flux_text/src/workspace/corePlugin.ts)（3 处）、[pluginScaffold.ts](file:///Users/bytedance/flux_text/src/workspace/pluginScaffold.ts#L67) 删除 `tags: [...]` 行。
-- [workspaceCommands.ts](file:///Users/bytedance/flux_text/src/commands/workspaceCommands.ts)（2 处）删除。
+- [pluginTypes.ts](../../../src/workspace/pluginTypes.ts#L100) `CommandContribution.tags` 删除。
+- 33 个 `src/plugins/*/index.ts`、[textDiff/index.ts](../../../src/plugins/textDiff/index.ts#L18)、[corePlugin.ts](../../../src/workspace/corePlugin.ts)（3 处）、[pluginScaffold.ts](../../../src/workspace/pluginScaffold.ts#L67) 删除 `tags: [...]` 行。
+- [workspaceCommands.ts](../../../src/commands/workspaceCommands.ts)（2 处）删除。
 
 ### B2. 旧 legacy 模型删除 `tags`
 
-`tags` 也存在于 legacy `ActionDef`（[store.ts:107](file:///Users/bytedance/flux_text/src/store.ts#L107)、[store.ts:137](file:///Users/bytedance/flux_text/src/store.ts#L137) `ActionParam`? 实为 ActionDef）与 [types.ts:79](file:///Users/bytedance/flux_text/src/workspace/types.ts#L79)。
+`tags` 也存在于 legacy `ActionDef`（[store.ts:107](../../../src/store.ts#L107)、[store.ts:137](../../../src/store.ts#L137) `ActionParam`? 实为 ActionDef）与 [types.ts:79](../../../src/workspace/types.ts#L79)。
 
-> **范围（已定）**：采用**范围 2（彻底）**——`tags` 在新插件模型与旧 legacy 模型中全部删除。由于方案 C 会整体移除 legacy 体系，legacy `ActionDef.tags` 会随 `ActionDef` 一起消失，因此 tags 删除与方案 C 合并执行。命令面板 [CommandPalette.tsx:1103-1104](file:///Users/bytedance/flux_text/src/components/CommandPalette.tsx#L1103-L1104) 的 tags 搜索分支删除。
+> **范围（已定）**：采用**范围 2（彻底）**——`tags` 在新插件模型与旧 legacy 模型中全部删除。由于方案 C 会整体移除 legacy 体系，legacy `ActionDef.tags` 会随 `ActionDef` 一起消失，因此 tags 删除与方案 C 合并执行。命令面板 [CommandPalette.tsx:1103-1104](../../../src/components/CommandPalette.tsx#L1103-L1104) 的 tags 搜索分支删除。
 
-### B3. 命令面板搜索匹配 — [CommandPalette.tsx:1103-1104](file:///Users/bytedance/flux_text/src/components/CommandPalette.tsx#L1103-L1104)
+### B3. 命令面板搜索匹配 — [CommandPalette.tsx:1103-1104](../../../src/components/CommandPalette.tsx#L1103-L1104)
 
 删除 `paletteItemMatchesQuery` 中的 tags 匹配分支。`aliases` 分支保留。
 
@@ -124,43 +124,43 @@ export const jwtPlugin = definePlugin({
 
 ### C0. 唯一硬阻塞：先迁移分屏/关闭面板命令（必做前置）
 
-legacy `workspaceActions`（[workspaceCommands.ts](file:///Users/bytedance/flux_text/src/commands/workspaceCommands.ts)）的两个命令 `splitRightAction`（分屏）、`closePaneAction`（关闭当前面板）在新插件体系**无对应**，底层能力（`createPane`/`closeActiveSurfaceOrPane`/`workspace.split` effect）仍在但未被任何 plugin command 暴露。**直接删 legacy 会丢失这两个命令面板入口。**
+legacy `workspaceActions`（[workspaceCommands.ts](../../../src/commands/workspaceCommands.ts)）的两个命令 `splitRightAction`（分屏）、`closePaneAction`（关闭当前面板）在新插件体系**无对应**，底层能力（`createPane`/`closeActiveSurfaceOrPane`/`workspace.split` effect）仍在但未被任何 plugin command 暴露。**直接删 legacy 会丢失这两个命令面板入口。**
 
-迁移方案：在 [corePlugin.ts](file:///Users/bytedance/flux_text/src/workspace/corePlugin.ts) 新增两条 CommandContribution（如 `core.split-right`、`core.close-pane`），run 内分发对应 effect（`workspace.split` / 关闭面板 effect），复用现有 core plugin 注册链路。迁移后命令面板/Pin 入口不丢。
+迁移方案：在 [corePlugin.ts](../../../src/workspace/corePlugin.ts) 新增两条 CommandContribution（如 `core.split-right`、`core.close-pane`），run 内分发对应 effect（`workspace.split` / 关闭面板 effect），复用现有 core plugin 注册链路。迁移后命令面板/Pin 入口不丢。
 
 > 注意：corePlugin 的命令同样要遵守方案 A/B（无 definition 顶层冗余、无 tags）。
 
 ### C1. 删除 legacy 数据源
 
-- 删除 [src/actions/builtins.ts](file:///Users/bytedance/flux_text/src/actions/builtins.ts)（`builtinActions` 已是空数组）及 store 的 import/展开。
-- 删除 [src/commands/workspaceCommands.ts](file:///Users/bytedance/flux_text/src/commands/workspaceCommands.ts) 整个文件（能力已由 C0 迁移到 corePlugin）。
+- 删除 [src/actions/builtins.ts](../../../src/actions/builtins.ts)（`builtinActions` 已是空数组）及 store 的 import/展开。
+- 删除 [src/commands/workspaceCommands.ts](../../../src/commands/workspaceCommands.ts) 整个文件（能力已由 C0 迁移到 corePlugin）。
 
 ### C2. store.ts 删除 legacy 符号
 
-- 删 `actions: ActionDef[]` 字段（[store.ts:189/445](file:///Users/bytedance/flux_text/src/store.ts#L189)）及 `registerAction`（声明+实现）。
+- 删 `actions: ActionDef[]` 字段（[store.ts:189/445](../../../src/store.ts#L189)）及 `registerAction`（声明+实现）。
 - `pinAction` 收窄为只接受 `string`/plugin（删 `ActionDef` 分支与 `_actionToPinnedAction`、store 内 `shouldAutoRunLiveAction` 副本）。
 - `PinnedActionKind` 收窄为 `'plugin-command'`。
 - 删 `ActionDef`、`ActionContext` 接口。
-- **`ActionParam` 处理（已定：改名）**：它被 CommandPalette 的 `normalizePluginParams` 复用为 plugin 参数归一化目标类型（[CommandPalette.tsx:1198-1210](file:///Users/bytedance/flux_text/src/components/CommandPalette.tsx#L1198-L1210)）。**决策：改名为 `PaletteParamModel`**，彻底去掉 "Action" legacy 字样，明确其语义为"命令面板参数 UI 渲染模型"。需同步更新 store.ts 定义、CommandPalette.tsx、PinnedRunnerView.tsx（`ControlParam = ActionParam | CommandParam` → `PaletteParamModel | CommandParam`）等所有引用点。
+- **`ActionParam` 处理（已定：改名）**：它被 CommandPalette 的 `normalizePluginParams` 复用为 plugin 参数归一化目标类型（[CommandPalette.tsx:1198-1210](../../../src/components/CommandPalette.tsx#L1198-L1210)）。**决策：改名为 `PaletteParamModel`**，彻底去掉 "Action" legacy 字样，明确其语义为"命令面板参数 UI 渲染模型"。需同步更新 store.ts 定义、CommandPalette.tsx、PinnedRunnerView.tsx（`ControlParam = ActionParam | CommandParam` → `PaletteParamModel | CommandParam`）等所有引用点。
 
 ### C3. 持久化兼容
 
-`pinnedActions` 被 persist（[store.ts:522](file:///Users/bytedance/flux_text/src/store.ts#L522)），历史用户可能存有 `kind:'legacy'` 的 pinned 数据。收窄 kind 后需在 rehydrate/读取时**丢弃**这些 legacy pinned 项（它们已无 ActionDef 可解析），避免渲染崩溃。
+`pinnedActions` 被 persist（[store.ts:522](../../../src/store.ts#L522)），历史用户可能存有 `kind:'legacy'` 的 pinned 数据。收窄 kind 后需在 rehydrate/读取时**丢弃**这些 legacy pinned 项（它们已无 ActionDef 可解析），避免渲染崩溃。
 
 ### C4. CommandPalette / PinnedRunner / GlobalLauncher 收敛
 
-- [CommandPalette.tsx](file:///Users/bytedance/flux_text/src/components/CommandPalette.tsx)：`PaletteItem` 退化为单一 `{kind:'plugin'}`；删除 `runAction`/`selectAction`/`runLegacyAction` legacy 执行路径、所有 `kind==='legacy'` 三元分支、legacy items 收集（`:103-110`）。
-- [PinnedRunnerView.tsx](file:///Users/bytedance/flux_text/src/views/PinnedRunnerView.tsx)：删 legacy 执行分支（`:68-70/95-105`）与 `ActionContext` 依赖。
-- [GlobalLauncher.tsx](file:///Users/bytedance/flux_text/src/components/GlobalLauncher.tsx)：recent 项 title 反查从 `actions` 改为查 `pluginRegistry`（否则 recent 只显示原始 id）。
-- 删 [commandAdapter.ts](file:///Users/bytedance/flux_text/src/workspace/commandAdapter.ts)（`runLegacyAction`/`adaptLegacyResult`）。
+- [CommandPalette.tsx](../../../src/components/CommandPalette.tsx)：`PaletteItem` 退化为单一 `{kind:'plugin'}`；删除 `runAction`/`selectAction`/`runLegacyAction` legacy 执行路径、所有 `kind==='legacy'` 三元分支、legacy items 收集（`:103-110`）。
+- [PinnedRunnerView.tsx](../../../src/views/PinnedRunnerView.tsx)：删 legacy 执行分支（`:68-70/95-105`）与 `ActionContext` 依赖。
+- [GlobalLauncher.tsx](../../../src/components/GlobalLauncher.tsx)：recent 项 title 反查从 `actions` 改为查 `pluginRegistry`（否则 recent 只显示原始 id）。
+- 删 [commandAdapter.ts](../../../src/workspace/commandAdapter.ts)（`runLegacyAction`/`adaptLegacyResult`）。
 
 ### C5. 对外扩展 API 决策
 
-`registerCommand`（[pluginApi.ts:37-48](file:///Users/bytedance/flux_text/src/workspace/pluginApi.ts#L37-L48)）经 [index.ts:64](file:///Users/bytedance/flux_text/src/workspace/index.ts#L64) 作为 `fluxtext/workspace` 公共 API 导出，但**仓库内零调用**。随 `registerAction` 一并删除（破坏性 API 变更，但无一方依赖）。
+`registerCommand`（[pluginApi.ts:37-48](../../../src/workspace/pluginApi.ts#L37-L48)）经 [index.ts:64](../../../src/workspace/index.ts#L64) 作为 `fluxtext/workspace` 公共 API 导出，但**仓库内零调用**。随 `registerAction` 一并删除（破坏性 API 变更，但无一方依赖）。
 
 ### C6. disabled 机制
 
-`disabledBuiltins`/`disabledCustoms`（[CommandPalette.tsx:107-108](file:///Users/bytedance/flux_text/src/components/CommandPalette.tsx#L107-L108)）当前仅对 legacy items 生效。删 legacy 后这套过滤变空操作；本次**一并清理**该过滤代码（plugin 的启用/禁用已由 ScriptsView 的 enable/disable 承担）。
+`disabledBuiltins`/`disabledCustoms`（[CommandPalette.tsx:107-108](../../../src/components/CommandPalette.tsx#L107-L108)）当前仅对 legacy items 生效。删 legacy 后这套过滤变空操作；本次**一并清理**该过滤代码（plugin 的启用/禁用已由 ScriptsView 的 enable/disable 承担）。
 
 ## 影响面与改动清单
 

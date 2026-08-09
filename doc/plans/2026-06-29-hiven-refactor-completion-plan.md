@@ -1,7 +1,7 @@
 # Hiven 2026-06-26 重构设计完成计划
 
-来源设计：`/Users/bytedance/Downloads/hiven_refactor_design_2026-06-26 (1).md`  
-补充材料：`/Users/bytedance/.codex/attachments/5497c707-2943-4263-b1d5-c40cb119ff3e/pasted-text-1.txt`  
+来源设计：外部设计稿（本地未入库）`hiven_refactor_design_2026-06-26.md`  
+补充材料：本地会话附件（未入库，已省略路径）  
 代码分支：`refactor/workbench-window-architecture`  
 计划日期：2026-06-29
 

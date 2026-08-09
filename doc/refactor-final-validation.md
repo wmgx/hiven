@@ -1,6 +1,6 @@
 # Hiven Refactor Final Validation
 
-Source design: `/Users/bytedance/Downloads/hiven_refactor_design_2026-06-26 (1).md`.
+Source design: 外部设计稿（本地未入库）`hiven_refactor_design_2026-06-26.md`.
 
 This document is the final acceptance matrix for the workbench-window refactor. It separates automated evidence coverage from the product smoke items that still require a human-operated macOS desktop check.
 
@@ -202,7 +202,7 @@ Current automated status: covered for debug-start failure signature scan, hidden
 
 ## Reproducible debug runtime-state smoke - 2026-06-29
 
-Command now available from `/Users/bytedance/flux_text`:
+Command now available from the repository root:
 
 ```bash
 npm run test:tauri-debug-runtime-state

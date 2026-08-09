@@ -401,13 +401,13 @@ DiffPageView 复用 `.text-diff-surface` 类名，确保它是全屏 flex 布局
 
 **Run:**
 ```bash
-cd /Users/bytedance/flux_text && npm run build
+npm run build
 ```
 Expected: 构建成功，无 TypeScript 错误
 
 **Run:**
 ```bash
-cd /Users/bytedance/flux_text && npm run check:architecture
+npm run check:architecture
 ```
 Expected: 架构检查通过（diff 插件不应引用 framework 内部模块）
 
