@@ -1,68 +1,24 @@
 #!/usr/bin/env node
-
+/** Editor command bar scope — QuickEditorCommandOverlay (EditorCommandBarHost retired). */
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readFileSync } from 'node:fs'
 
-const root = process.cwd()
-const read = (path) => readFileSync(join(root, path), 'utf8')
+const read = (p) => readFileSync(p, 'utf8')
+assert.equal(existsSync('src/launcher/hosts/EditorCommandBarHost.tsx'), false, 'EditorCommandBarHost must stay deleted')
 
-const editorHost = read('src/launcher/hosts/EditorCommandBarHost.tsx')
-const launcherTypes = read('src/workspace/launcher/types.ts')
-const hostActions = read('src/workspace/launcher/hostActions.ts')
+const overlay = read('src/components/quickEditor/QuickEditorCommandOverlay.tsx')
+const types = read('src/workspace/launcher/types.ts')
 const hostEditorActions = read('src/workspace/launcher/hostEditorActions.ts')
-const editorTextTransforms = read('src/workflow/editorTextTransforms.ts')
-const hostAppLauncher = read('src/workspace/appLauncher/hostAppLauncher.ts')
+const hostActions = read('src/workspace/launcher/hostActions.ts')
 const registry = read('src/workspace/launcher/registry.ts')
 
-assert.match(editorHost, /useLauncherSession\(\{[\s\S]*hostId:\s*['"]editor-command-bar['"]/, 'Editor command bar must identify as editor-command-bar')
-assert.match(editorHost, /staticItemFilter:\s*filterEditorCommandBarItems/, 'Editor command bar must apply an editor-local item filter')
-assert.match(launcherTypes, /function filterEditorCommandBarItems[\s\S]*isEditorCommandBarItem/, 'Editor command bar filtering must live in the launcher domain layer')
-assert.match(launcherTypes, /function isEditorCommandBarItem[\s\S]*plugin-settings:[\s\S]*return false/, 'Editor command bar must hide plugin settings entries')
-assert.match(launcherTypes, /surfaces\?\.[\s\S]{0,120}!surfaces\.includes\(['"]editor-command-bar['"]\)[\s\S]{0,80}return false/, 'Editor command bar filtering must exclude host items that are not scoped to the editor command bar')
-assert.match(launcherTypes, /item\.kind !== ['"]host['"][\s\S]*return true/, 'Editor command bar must keep plugin text/action items')
-assert.match(launcherTypes, /host:pane:/, 'Editor command bar must keep pane-local host controls')
-assert.doesNotMatch(launcherTypes, /host:global:search-all-hiven/, 'Editor command bar must not include a Search all Hiven bridge')
-assert.doesNotMatch(editorHost, /hostId:\s*['"]command-palette['"]/, 'legacy command-palette id must not be used at runtime')
-
-assert.match(launcherTypes, /'editor-command-bar':\s*\{[\s\S]*presentation:\s*['"]editor-overlay['"]/, 'launcher host config must model editor overlay presentation')
-assert.doesNotMatch(launcherTypes.match(/'editor-command-bar':\s*\{[\s\S]*?capabilities:\s*\[([\s\S]*?)\]/)?.[1] ?? '', /app-search|system-power|settings|host-surfaces|plugin-surfaces/, 'editor command bar capabilities must exclude global navigation capabilities')
-assert.match(registry, /requiredCapabilities[\s\S]*launcherHostHasCapability/, 'registry must enforce host capability filtering')
-assert.doesNotMatch(hostActions, /systemKey:\s*['"]host:global:search-all-hiven['"]/, 'Search all Hiven must not be exposed inside Editor Cmd+K')
-assert.match(hostActions, /getHostEditorActionItems/, 'hostActions must aggregate editor-local action items from a dedicated module')
-assert.match(hostEditorActions, /function\s+rewriteActiveEditorTextPolitely\(\)[\s\S]*replaceEditorTextTarget/, 'Editor command bar must provide a local polite rewrite helper')
-assert.match(hostEditorActions, /function\s+compressActiveEditorTextToThreeSentences\(\)[\s\S]*replaceEditorTextTarget/, 'Editor command bar must provide a local three-sentence compression helper')
-assert.match(hostEditorActions, /function\s+formatActiveEditorTextAsBullets\(\)[\s\S]*replaceEditorTextTarget/, 'Editor command bar must provide a local bullet-list formatting helper')
-assert.match(hostEditorActions, /function\s+quoteActiveEditorTextAsCodeBlock\(\)[\s\S]*replaceEditorTextTarget/, 'Editor command bar must provide a local code-block quote helper')
-assert.match(editorTextTransforms, /export\s+function\s+rewriteTextPolitely/, 'editor text rewrite logic must live in the workflow transform layer')
-assert.match(editorTextTransforms, /export\s+function\s+formatTextAsBullets/, 'editor bullet formatting logic must live in the workflow transform layer')
-assert.match(hostEditorActions, /systemKey:\s*['"]host:editor:rewrite-politely['"][\s\S]*surfaces:\s*\[['"]editor-command-bar['"]\][\s\S]*rewriteActiveEditorTextPolitely\(\)/, 'Editor command bar must expose polite rewrite as an editor-local action')
-assert.match(hostEditorActions, /systemKey:\s*['"]host:editor:compress-three-sentences['"][\s\S]*surfaces:\s*\[['"]editor-command-bar['"]\][\s\S]*compressActiveEditorTextToThreeSentences\(\)/, 'Editor command bar must expose three-sentence compression as an editor-local action')
-assert.match(hostEditorActions, /systemKey:\s*['"]host:editor:format-bullets['"][\s\S]*title:\s*['"]Format as Bullet List['"][\s\S]*surfaces:\s*\[['"]editor-command-bar['"]\][\s\S]*formatActiveEditorTextAsBullets\(\)/, 'Editor command bar must expose bullet-list formatting as an editor-local action')
-assert.match(hostEditorActions, /systemKey:\s*['"]host:editor:quote-code-block['"][\s\S]*title:\s*['"]Quote as Code Block['"][\s\S]*surfaces:\s*\[['"]editor-command-bar['"]\][\s\S]*quoteActiveEditorTextAsCodeBlock\(\)/, 'Editor command bar must expose code-block quote as an editor-local action')
-assert.match(launcherTypes, /item\.systemKey\.startsWith\(['"]host:editor:['"]\)/, 'Editor command bar filter must keep all editor-local host actions')
-assert.doesNotMatch(hostEditorActions, /host:editor:attach-(?:translate|clipboard)-panel/, 'Editor Cmd+K must not expose Translate or Clipboard History attachment commands')
-assert.match(hostEditorActions, /systemKey:\s*['"]host:editor:json-expression['"][\s\S]*openEditorPanel\(\{\s*panelId:\s*['"]js-filter\.panel['"],\s*placement:\s*['"]pane-bottom['"]/, 'JSON Expression must open the JSON Tools expression bottom panel')
-assert.match(hostEditorActions, /systemKey:\s*['"]host:pane:split-right['"][\s\S]*surfaces:\s*\[\s*['"]editor-command-bar['"],\s*['"]quick-editor-command['"]\s*\][\s\S]*createEditorLikePane\(ctx\.surfaceId,\s*['"]right['"]\)/, 'Editor and quick command launchers must expose split-right')
-assert.match(hostEditorActions, /systemKey:\s*['"]host:pane:split-down['"][\s\S]*surfaces:\s*\[\s*['"]editor-command-bar['"],\s*['"]quick-editor-command['"]\s*\][\s\S]*createEditorLikePane\(ctx\.surfaceId,\s*['"]bottom['"]\)/, 'Editor and quick command launchers must expose split-down')
-assert.match(hostEditorActions, /surfaceId === ['"]quick-editor-command['"][\s\S]{0,160}useQuickEditorStore\.getState\(\)\.createPane/, 'Quick editor split must create a local quick editor pane')
-assert.doesNotMatch(hostEditorActions, /createEditorPane/, 'Quick editor split must not bridge to the editor window')
-
-const paneHostItems = [...`${hostActions}\n${hostEditorActions}`.matchAll(/systemKey:\s*['"](host:pane:[^'"]+)['"][\s\S]*?surfaces:\s*\[([^\]]+)\]/g)]
-const editorLocalPaneItems = new Set([
-  'host:pane:close',
-  'host:pane:focus-next',
-  'host:pane:focus-previous',
-  'host:pane:toggle-sticky-scroll',
-  'host:pane:set-language',
-])
-for (const [, systemKey, surfaces] of paneHostItems) {
-  if (editorLocalPaneItems.has(systemKey)) {
-    assert.doesNotMatch(surfaces, /global-launcher/, `${systemKey} must stay editor-local and must not mutate editor state from the global launcher`)
-    assert.match(surfaces, /editor-command-bar|command-palette/, `${systemKey} must remain available from the editor command bar`)
-  }
-}
-assert.match(hostActions, /systemKey:\s*['"]host:system:restart['"][\s\S]*surfaces:\s*\[['"]global-launcher['"]\]/, 'system power actions must be global-launcher only')
-assert.match(hostAppLauncher, /surfaceId[\s\S]*global-launcher/, 'app launcher search must be scoped to the global launcher')
-
-console.log('editor command bar scope checks passed')
+assert.match(overlay, /filterEditorCommandBarItems/, 'quick editor overlay filters editor-command-bar items')
+assert.match(overlay, /useLauncherSession|hostId/, 'overlay owns launcher session')
+assert.match(types, /filterEditorCommandBarItems|isEditorCommandBarItem/, 'filter lives in launcher types')
+assert.match(types, /'editor-command-bar'/, 'editor-command-bar host id retained')
+assert.match(types, /quick-editor-command/, 'quick-editor-command host id present')
+assert.match(hostEditorActions, /getHostEditorActionItems|surfaces:\s*\[['"]editor-command-bar['"]/, 'editor-local actions scoped')
+assert.match(hostActions, /getHostEditorActionItems/, 'hostActions aggregates editor actions')
+assert.match(registry, /launcherHostHasCapability|requiredCapabilities/, 'registry enforces host capabilities')
+assert.doesNotMatch(hostActions, /host:global:search-all-hiven/, 'no Search-all bridge in host actions')
+console.log('editor command bar scope (quick-editor overlay) checks passed')

@@ -3,7 +3,8 @@
  * Kept out of index.tsx so the entry only assembles contributions.
  */
 
-import type { PluginToolContribution } from '@hiven/plugin'
+import type {
+  LauncherExecuteResult, PluginToolContribution } from '@hiven/plugin'
 import { detectLarkCli } from './cli/detect'
 import { presentFeishuCliFailure } from './cli/formatError'
 import { completeLogin, getAuthStatus, startLogin } from './domains/auth'
@@ -63,7 +64,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
     icon: 'Activity',
     aliases: ['飞书', 'lark', 'feishu', '状态', 'status', '飞书状态'],
     surfaces: { launcher: true },
-    async run(ctx) {
+    async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
       if (!shell) {
@@ -94,7 +95,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
     icon: 'LogIn',
     aliases: ['飞书登录', 'lark login', 'feishu login', '登录飞书'],
     surfaces: { launcher: true },
-    async run(ctx) {
+    async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
       if (!shell) {
@@ -144,7 +145,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
       },
     ],
     surfaces: { launcher: true },
-    async run(ctx) {
+    async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
       if (!shell) {
@@ -170,7 +171,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           shell,
           binaryPath: settings.binaryPath || undefined,
           openUrl: (url) => openRuntimeUrl(url, (u) => ctx.api.openUrl(u)),
-        })
+        }) as LauncherExecuteResult
       }
 
       const targets = mapSearchResultsToTargets(search.results)
@@ -210,7 +211,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
     icon: 'Calendar',
     aliases: ['飞书日程', '今日议程', 'agenda', 'calendar', '日程', '今天日程'],
     surfaces: { launcher: true },
-    async run(ctx) {
+    async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
       if (!shell) {
@@ -230,7 +231,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           shell,
           binaryPath: settings.binaryPath || undefined,
           openUrl: (url) => openRuntimeUrl(url, (u) => ctx.api.openUrl(u)),
-        })
+        }) as LauncherExecuteResult
       }
 
       const rows = mapEventsToRows(agenda.events)
@@ -280,7 +281,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
       },
     ],
     surfaces: { launcher: true },
-    async run(ctx) {
+    async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
       if (!shell) {
@@ -306,7 +307,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           shell,
           binaryPath: settings.binaryPath || undefined,
           openUrl: (url) => openRuntimeUrl(url, (u) => ctx.api.openUrl(u)),
-        })
+        }) as LauncherExecuteResult
       }
 
       const rows = mapEventsToRows(search.events)
@@ -356,7 +357,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
       },
     ],
     surfaces: { launcher: true },
-    async run(ctx) {
+    async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
       if (!shell) {
@@ -382,7 +383,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           shell,
           binaryPath: settings.binaryPath || undefined,
           openUrl: (url) => openRuntimeUrl(url, (u) => ctx.api.openUrl(u)),
-        })
+        }) as LauncherExecuteResult
       }
 
       const rows = mapChatsToRows(search.chats)
@@ -422,7 +423,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
     icon: 'MessageCircle',
     aliases: ['最近会话', '会话列表', 'recent chats', 'chat list', '我的群'],
     surfaces: { launcher: true },
-    async run(ctx) {
+    async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
       if (!shell) {
@@ -442,7 +443,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           shell,
           binaryPath: settings.binaryPath || undefined,
           openUrl: (url) => openRuntimeUrl(url, (u) => ctx.api.openUrl(u)),
-        })
+        }) as LauncherExecuteResult
       }
 
       const rows = mapChatsToRows(listed.chats)
@@ -492,7 +493,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
       },
     ],
     surfaces: { launcher: true },
-    async run(ctx) {
+    async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
       if (!shell) {
@@ -520,7 +521,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           shell,
           binaryPath: settings.binaryPath || undefined,
           openUrl: (url) => openRuntimeUrl(url, (u) => ctx.api.openUrl(u)),
-        })
+        }) as LauncherExecuteResult
       }
 
       // When not restricted, still rank chatted contacts first.
@@ -578,7 +579,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
       },
     ],
     surfaces: { launcher: true },
-    async run(ctx) {
+    async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
       if (!shell) {
@@ -656,7 +657,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
       },
     ],
     surfaces: { launcher: true },
-    async run(ctx) {
+    async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
       if (!shell) {
@@ -712,7 +713,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
     // No param form: one-tap confirm creates empty doc (or uses selection/input as body).
     requireParamSelection: false,
     surfaces: { launcher: true },
-    async run(ctx) {
+    async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
       if (!shell) {
@@ -819,7 +820,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
       },
     ],
     surfaces: { launcher: true },
-    async run(ctx) {
+    async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
       if (!shell) {
@@ -894,7 +895,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
       },
     ],
     surfaces: { launcher: true },
-    async run(ctx) {
+    async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
       if (!shell) {
@@ -920,7 +921,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           shell,
           binaryPath: settings.binaryPath || undefined,
           openUrl: (url) => openRuntimeUrl(url, (u) => ctx.api.openUrl(u)),
-        })
+        }) as LauncherExecuteResult
       }
 
       const title = fetched.title || ctx.t('tool.docsFetch.title')
@@ -955,7 +956,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
       },
     ],
     surfaces: { launcher: true },
-    async run(ctx) {
+    async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
       if (!shell) {
@@ -981,7 +982,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           shell,
           binaryPath: settings.binaryPath || undefined,
           openUrl: (url) => openRuntimeUrl(url, (u) => ctx.api.openUrl(u)),
-        })
+        }) as LauncherExecuteResult
       }
 
       const rows = mapMessagesToRows(search.messages)
@@ -1021,7 +1022,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
     icon: 'ListTodo',
     aliases: ['我的待办', '我的任务', '任务', '待办', 'my tasks', 'todos', 'wode', 'wodedaiban', '飞书待办'],
     surfaces: { launcher: true },
-    async run(ctx) {
+    async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
       if (!shell) {
@@ -1041,7 +1042,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           shell,
           binaryPath: settings.binaryPath || undefined,
           openUrl: (url) => openRuntimeUrl(url, (u) => ctx.api.openUrl(u)),
-        })
+        }) as LauncherExecuteResult
       }
 
       const rows = mapTasksToRows(listed.tasks)
@@ -1091,7 +1092,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
       },
     ],
     surfaces: { launcher: true },
-    async run(ctx) {
+    async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
       if (!shell) {
@@ -1117,7 +1118,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
           shell,
           binaryPath: settings.binaryPath || undefined,
           openUrl: (url) => openRuntimeUrl(url, (u) => ctx.api.openUrl(u)),
-        })
+        }) as LauncherExecuteResult
       }
 
       const rows = mapMinutesToRows(search.minutes)
@@ -1175,7 +1176,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
       },
     ],
     surfaces: { launcher: true },
-    async run(ctx) {
+    async run(ctx): Promise<LauncherExecuteResult> {
       const raw = String(ctx.params.target ?? ctx.input?.text ?? '').trim()
       if (!raw) {
         return ctx.output.error(ctx.t('param.debugOpenTarget.hint'))

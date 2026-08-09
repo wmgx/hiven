@@ -130,3 +130,64 @@ npm run build
 如果执行 `npm run lint`，需注意当前仓库可能存在历史 lint 问题或 ignored worktree 干扰；最终结论要区分历史问题和本次新增问题。
 
 涉及可视化 diff/UI 的改动，尽量补浏览器验证，重点看真实 DOM/画面效果，而不是只看构建通过。
+
+## 埋点 / Telemetry（Agent 自助）
+
+用户反馈「卡 / 慢 / 行为不对」时，**先读埋点再猜代码**，不要盲改。
+
+### 数据落盘（always-on）
+
+```text
+~/.local/hiven/logs/launcher-perf.ndjson
+```
+
+- 前端 + native 共用同一 NDJSON；约 5MB 软轮转（`.ndjson.1`）。
+- 样本字段：`ts, source, kind, label, durationMs, slow, jank, openId, details`
+- **`kind`**：`behavior`（用户行为）/ `latency`（时延）/ `perf`（内部诊断）
+- 每次热键 open → `openId` 会话 → close 结束
+
+### 事件目录（节选）
+
+| kind | label | 含义 |
+|------|-------|------|
+| behavior | `behavior:launcher.open` / `.close` | 打开 / 关闭（含 reason） |
+| behavior | `behavior:launcher.query_change` | 输入（280ms debounce） |
+| behavior | `behavior:launcher.item_select` | 选中命令/应用 |
+| latency | `latency:launcher.item_execute` | 执行耗时 |
+| latency | `latency:launcher.first_paint` | 唤起到首帧 |
+| behavior | `behavior:clipboard.block_attach` | Object Block 挂上 |
+| behavior | `behavior:object_action.execute` | Object 推荐动作 |
+| behavior | `behavior:surface.open` | 打开插件 surface |
+| latency | `latency:paste` | 粘贴耗时 |
+
+API：`src/workspace/telemetry`（`trackBehavior` / `trackLatency` / `measureLatency`）。
+
+### Agent 工作流
+
+```bash
+# 1. 请用户复现 2～3 次完整操作（打开→输入→执行→关闭）
+# 2. 拉最近 open 会话（含 behavior 漏斗 + latencies）
+npm run telemetry -- --last 5
+# 或
+npm run perf:launcher -- --last 5
+
+# 机器可读
+npm run telemetry -- --last 5 --json
+
+# 大日志只看尾部
+npm run telemetry -- --tail 3000 --last 5
+```
+
+判读优先级：
+
+1. **`first-paint` ≥ 120ms** → 唤起 jank（remount / setState / rehydrate）。
+2. **`max-execute` 高** → 命令/插件执行慢。
+3. **`behavior` trail** → 还原用户路径（open→query→select→execute→close）。
+4. **`rank-items×` 很高** → open 路径重复 re-rank。
+5. **`event-gap` 大** → webview 唤醒慢。
+
+DevTools：`window.__hivenLauncherPerf.opens()` / `.dump()` / `.logPath()`。
+
+契约：`npm run test:telemetry`、`test:launcher-perf-instrumentation`、`test:launcher-perf-report`。
+
+文档：`doc/launcher-perf-telemetry.md`。

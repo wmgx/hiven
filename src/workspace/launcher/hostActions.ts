@@ -1,3 +1,4 @@
+import type { LauncherExecuteResult } from './types'
 import { requestOpenLauncherHostSurface } from '../launcherHostSurfaceBridge'
 import { useAppStore } from '../../store'
 import type { LauncherItem } from './types'
@@ -6,7 +7,7 @@ import { isQuickEditorWindowOpen, showQuickEditorWindow } from '../windowManager
 
 type SystemPowerAction = 'restart' | 'shutdown' | 'lock-screen'
 
-async function performSystemPowerAction(action: SystemPowerAction): Promise<{ ok: boolean; message?: string }> {
+async function performSystemPowerAction(action: SystemPowerAction): Promise<LauncherExecuteResult> {
   try {
     const { invoke } = await import('@tauri-apps/api/core')
     await invoke('perform_system_power_action', { action })

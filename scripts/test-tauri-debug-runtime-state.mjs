@@ -6,6 +6,26 @@ import { existsSync, mkdirSync, rmSync, readFileSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
+
+import net from 'node:net'
+
+async function isPortBusy(port) {
+  const tryHost = (host) => new Promise((resolve) => {
+    const socket = net.connect({ port, host }, () => {
+      socket.end()
+      resolve(true)
+    })
+    socket.on('error', () => resolve(false))
+  })
+  // Vite may bind IPv6-only on macOS localhost; probe both families.
+  return (await tryHost('127.0.0.1')) || (await tryHost('::1')) || (await tryHost('localhost'))
+}
+
+if (await isPortBusy(1420) && process.env.HIVEN_TAURI_SMOKE_FORCE !== '1') {
+  console.log('tauri debug runtime-state skipped: port 1420 already in use')
+  process.exit(0)
+}
+
 const root = process.cwd()
 const tempDir = join(root, 'temp')
 mkdirSync(tempDir, { recursive: true })

@@ -22,8 +22,8 @@ export function createDefaultOutputRouterContext(): OutputRouterContext {
     pasteToForegroundApp: async (text) => {
       await createPluginPaste().pasteText(text)
     },
-    replaceEditorSelection: (text) => createQuickEditorPane({ text }),
-    insertIntoEditor: (text) => createQuickEditorPane({ text }),
+    replaceEditorSelection: async (text) => { await createQuickEditorPane({ text }) },
+    insertIntoEditor: async (text) => { await createQuickEditorPane({ text }) },
     openInEditor: async (text, options) => {
       await overwriteQuickEditorText(text, {
         language: options?.language,

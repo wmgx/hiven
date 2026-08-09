@@ -18,6 +18,11 @@ import {
   showPluginSurfaceWindow,
 } from '../../workspace/windowManager/pluginSurfaceWindows'
 import { showToast } from '../../workspace/toast'
+import {
+  TelemetryEvents,
+  measureLatency,
+  trackBehavior,
+} from '../../workspace/telemetry'
 
 type UseGlobalLauncherSelectionControllerInput = {
   controllerRef: RefObject<LauncherController | null>
@@ -50,10 +55,10 @@ async function resolveSurfaceInitialText(raw: string | undefined): Promise<strin
 
 export function useGlobalLauncherSelectionController({
   controllerRef,
-  standaloneLauncher,
-  overlay,
-  restoreFocus,
-  setOpen,
+  standaloneLauncher: _omit_standaloneLauncher,
+  overlay: _omit_overlay,
+  restoreFocus: _omit_restoreFocus,
+  setOpen: _omit_setOpen,
   clearPluginSurfaceTool,
   openPluginSurface,
   grantPluginPermissions,
@@ -75,6 +80,7 @@ export function useGlobalLauncherSelectionController({
     if (!item) return
 
     if (item.kind === 'domain') {
+      // Controller.selectItem records general item_select; here only surface-routing.
       const pluginSurfaceTarget = resolvePluginSurfaceTarget(item.domainItem)
       if (pluginSurfaceTarget) {
         void (async () => {
@@ -95,6 +101,10 @@ export function useGlobalLauncherSelectionController({
           if (getPluginSurfaceShortcutPresentation(target) === 'window') {
             const isTauri = Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
             if (isTauri) {
+              trackBehavior(TelemetryEvents.surfaceWindowOpen, {
+                pluginId: target.pluginId,
+                surfaceId: target.surfaceId,
+              })
               // Cover focus handoff before the companion window is focused/visible.
               suppressStandaloneLauncherBlur(2_000)
               void showPluginSurfaceWindow(target)
@@ -102,7 +112,15 @@ export function useGlobalLauncherSelectionController({
             }
           }
           clearPluginSurfaceTool()
-          await openPluginSurface(target)
+          trackBehavior(TelemetryEvents.surfaceOpen, {
+            pluginId: target.pluginId,
+            surfaceId: target.surfaceId,
+            hasInitialText: Boolean(target.initialText?.trim()),
+          })
+          await measureLatency(TelemetryEvents.surfaceOpenLatency, () => openPluginSurface(target), {
+            pluginId: target.pluginId,
+            surfaceId: target.surfaceId,
+          })
         })()
         return
       }
@@ -120,7 +138,7 @@ export function useGlobalLauncherSelectionController({
 
   const grantItemPermissionsAndRun = useCallback(() => {
     if (!itemPermissionFrame) return
-    grantGlobalLauncherItemPermissions(itemPermissionFrame, grantPluginPermissions)
+    grantGlobalLauncherItemPermissions(itemPermissionFrame, grantPluginPermissions as never)
     const item = itemPermissionFrame.item
     const customizeParams = itemPermissionFrame.customizeParams
     setItemPermissionFrame(null)

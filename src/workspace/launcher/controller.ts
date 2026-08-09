@@ -31,6 +31,13 @@ import type { PluginNetworkApi, PluginPrivateStorageApi, PluginShellApi } from '
 import { appendUsageJournal } from '../usageJournal'
 import { isOutputResult } from './output'
 import { translate, type Locale } from '../../i18n'
+import {
+  TelemetryEvents,
+  itemTelemetryProps,
+  trackBehavior,
+  trackLatencyFrom,
+  telemetryNow,
+} from '../telemetry'
 
 // ─── Frames ──────────────────────────────────────────────────────────────────
 
@@ -310,9 +317,16 @@ export class LauncherController {
    */
   async selectItem(item: LauncherItem, options: SelectOptions = {}): Promise<void> {
     this.setState({ error: null })
+    trackBehavior(TelemetryEvents.launcherItemSelect, {
+      ...itemTelemetryProps(item),
+      surfaceId: this.state.surfaceId,
+      customizeParams: Boolean(options.customizeParams),
+      hasObjectBlock: this.hasObjectBlockText(options.objectBlockText),
+    })
 
     if (options.customizeParams && this.hasCustomizableParams(item)) {
       this.recordSelectionIfNeeded(item, options)
+      trackBehavior(TelemetryEvents.launcherEnterParamInput, itemTelemetryProps(item))
       this.setState({
         frames: [...this.state.frames, this.paramFrameFor(item, undefined, 0, options.objectBlockText)],
       })
@@ -325,9 +339,11 @@ export class LauncherController {
         await this.runAndHandle(
           () => Promise.resolve(item.execute(this.buildExecutionContext(item, options.objectBlockText))),
           this.itemTitle(item),
+          item,
         )
         return
       }
+      trackBehavior(TelemetryEvents.launcherEnterCollectInput, itemTelemetryProps(item))
       this.setState({
         frames: [...this.state.frames, this.collectInputFrameFor(item)],
       })
@@ -342,10 +358,12 @@ export class LauncherController {
         await this.runAndHandle(
           () => Promise.resolve(item.execute(this.buildExecutionContext(item, options.objectBlockText))),
           this.itemTitle(item),
+          item,
         )
         return
       }
       this.recordSelectionIfNeeded(item, options)
+      trackBehavior(TelemetryEvents.launcherEnterCollectInput, itemTelemetryProps(item))
       this.setState({
         frames: [...this.state.frames, this.collectInputFrameFor(item)],
       })
@@ -358,6 +376,7 @@ export class LauncherController {
     await this.runAndHandle(
       () => Promise.resolve(item.execute(this.buildExecutionContext(item))),
       this.itemTitle(item),
+      item,
     )
   }
 
@@ -726,12 +745,20 @@ export class LauncherController {
     const top = this.topFrame()
     if (top.kind !== 'collect-input') return
     const { item, inputText } = top
+    trackBehavior(TelemetryEvents.launcherSubmitInput, {
+      ...itemTelemetryProps(item),
+      inputLength: inputText.length,
+      suggestionIndex: top.selectedSuggestionIndex,
+    })
 
     // Highlighted suggestion wins (including empty input + history highlight).
     if (top.selectedSuggestionIndex >= 0) {
       const highlighted = top.previewOutput?.choices[top.selectedSuggestionIndex]
       if (highlighted) {
-        await this.runChoiceAction(() => highlighted.primaryAction(), highlighted.title)
+        await this.runChoiceAction(() => highlighted.primaryAction(), highlighted.title, {
+          via: 'suggestion',
+          systemKey: item.systemKey,
+        })
         return
       }
     }
@@ -748,7 +775,10 @@ export class LauncherController {
       ? top.previewOutput?.choices[0]
       : undefined
     if (firstPreviewChoice && this.shouldPreviewInput(top) && !item.suggest) {
-      await this.runChoiceAction(() => firstPreviewChoice.primaryAction(), firstPreviewChoice.title)
+      await this.runChoiceAction(() => firstPreviewChoice.primaryAction(), firstPreviewChoice.title, {
+        via: 'preview-choice',
+        systemKey: item.systemKey,
+      })
       return
     }
 
@@ -759,11 +789,17 @@ export class LauncherController {
           : item.execute(this.buildExecutionContext(item, inputText)),
       ),
       this.itemTitle(item),
+      item,
+      'submit-input',
     )
   }
 
   /** Activate a result choice's primary action. */
   async activateChoice(choice: LauncherResultChoice): Promise<void> {
+    trackBehavior(TelemetryEvents.launcherChoiceActivate, {
+      titlePreview: choice.title?.slice(0, 48),
+      via: 'primary',
+    })
     await this.runChoiceAction(() => choice.primaryAction(), choice.title)
   }
 
@@ -771,7 +807,12 @@ export class LauncherController {
   async activateSecondary(choice: LauncherResultChoice, actionId: string): Promise<void> {
     const action = choice.secondaryActions?.find((a) => a.id === actionId)
     if (!action) return
-    await this.runChoiceAction(() => action.run(), action.title)
+    trackBehavior(TelemetryEvents.launcherChoiceActivate, {
+      titlePreview: action.title?.slice(0, 48),
+      via: 'secondary',
+      actionId,
+    })
+    await this.runChoiceAction(() => action.run(), action.title, { via: 'secondary', actionId })
   }
 
   /** Submit a multi-select result frame. */
@@ -791,6 +832,11 @@ export class LauncherController {
   back(): boolean {
     if (this.state.frames.length <= 1) return false
     const top = this.topFrame()
+    trackBehavior(TelemetryEvents.launcherBack, {
+      surfaceId: this.state.surfaceId,
+      fromFrame: top.kind,
+      stackDepth: this.state.frames.length,
+    })
 
     if (top.kind === 'param-input' && top.paramIndex > 0) {
       const prevIndex = top.paramIndex - 1
@@ -845,27 +891,62 @@ export class LauncherController {
 
   // ─── Execution plumbing ────────────────────────────────────────────────────
 
-  private async runAndHandle(run: () => Promise<LauncherExecuteResult>, sourceTitle: string): Promise<void> {
+  private async runAndHandle(
+    run: () => Promise<LauncherExecuteResult>,
+    sourceTitle: string,
+    item?: LauncherItem,
+    via: string = 'select',
+  ): Promise<void> {
     this.setState({ busy: true, error: null })
+    const startedAt = telemetryNow()
     let result: LauncherExecuteResult
     try {
       result = await run()
     } catch (error) {
+      trackLatencyFrom(TelemetryEvents.launcherItemExecute, startedAt, {
+        ...(item ? itemTelemetryProps(item) : { titlePreview: sourceTitle.slice(0, 48) }),
+        via,
+        failed: true,
+        message: error instanceof Error ? error.message : String(error),
+      })
       this.setState({ busy: false, error: error instanceof Error ? error.message : String(error) })
       return
     }
+    trackLatencyFrom(TelemetryEvents.launcherItemExecute, startedAt, {
+      ...(item ? itemTelemetryProps(item) : { titlePreview: sourceTitle.slice(0, 48) }),
+      via,
+      ok: result.ok,
+      keepOpen: 'keepOpen' in result ? Boolean((result as { keepOpen?: boolean }).keepOpen) : undefined,
+      hasOutput: isOutputResult(result),
+    })
     this.applyResult(result, sourceTitle)
   }
 
-  private async runChoiceAction(run: () => ReturnType<LauncherResultChoice['primaryAction']>, sourceTitle: string): Promise<void> {
+  private async runChoiceAction(
+    run: () => ReturnType<LauncherResultChoice['primaryAction']>,
+    sourceTitle: string,
+    extra?: Record<string, unknown>,
+  ): Promise<void> {
     this.setState({ busy: true, error: null })
+    const startedAt = telemetryNow()
     let result: Awaited<ReturnType<LauncherResultChoice['primaryAction']>>
     try {
       result = await run()
     } catch (error) {
+      trackLatencyFrom(TelemetryEvents.launcherChoiceLatency, startedAt, {
+        titlePreview: sourceTitle.slice(0, 48),
+        failed: true,
+        message: error instanceof Error ? error.message : String(error),
+        ...extra,
+      })
       this.setState({ busy: false, error: error instanceof Error ? error.message : String(error) })
       return
     }
+    trackLatencyFrom(TelemetryEvents.launcherChoiceLatency, startedAt, {
+      titlePreview: sourceTitle.slice(0, 48),
+      terminal: !(result && typeof result === 'object' && 'ok' in result),
+      ...extra,
+    })
     // Choice actions may return more output (multi-level) or void (terminal).
     if (result && typeof result === 'object' && 'ok' in result) {
       this.applyResult(result as LauncherExecuteResult, sourceTitle)

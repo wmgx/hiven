@@ -15,7 +15,6 @@
 import { registerMessages, unregisterMessages, getMessages, type Locale, type Messages } from './registry'
 import type {
   CommandContribution,
-  CommandParam,
   InputSlot,
   PanelContributionV2,
   PluginDefinition,

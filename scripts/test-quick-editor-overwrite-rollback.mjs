@@ -1,3 +1,7 @@
+import assert from 'node:assert/strict'
+import { existsSync, readFileSync } from 'node:fs'
+
+assert.equal(existsSync('src/components/quickEditor/QuickEditorToolbar.tsx'), false, 'QuickEditorToolbar deleted')
 #!/usr/bin/env node
 /**
  * Quick Editor external-overwrite version history contracts.
@@ -18,7 +22,6 @@ const executor = read('src/launcher/clipboard/actionExecutor.ts')
 const recommendation = read('src/launcher/clipboard/actionRecommendation.ts')
 const output = read('src/workspace/launcher/output.ts')
 const pluginApi = read('src/workspace/launcher/pluginApi.ts')
-const toolbar = read('src/components/quickEditor/QuickEditorToolbar.tsx')
 const historyUi = read('src/components/quickEditor/QuickEditorVersionHistory.tsx')
 const detached = read('src/views/QuickEditorDetachedView.tsx')
 const locale = read('src/i18n/locales/quickEditor.ts')
@@ -70,7 +73,6 @@ const panel = read('src/components/quickEditor/QuickEditorPanel.tsx')
 const css = read('src/index.css')
 assert.match(panel, /QuickEditorVersionHistory/, 'version history icon lives on editor status bar trailing')
 assert.match(panel, /statusBarTrailing/, 'version history is wired into statusBarTrailing')
-assert.doesNotMatch(toolbar, /QuickEditorVersionHistory/, 'toolbar must not carry the bulky version history button')
 assert.match(historyUi, /externalVersionHistory/, 'version history UI must read external history')
 assert.match(historyUi, /restoreQuickEditorExternalVersion/, 'version history UI must restore by id')
 assert.match(historyUi, /qe-version-trigger/, 'version history trigger must be an icon control')

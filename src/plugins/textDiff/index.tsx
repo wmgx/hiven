@@ -4,7 +4,7 @@
  * character-level diff highlighting.
  */
 
-import { definePlugin, type LauncherExecutionContext, type DiffSource } from '@hiven/plugin'
+import { definePlugin, type LauncherExecutionContext, type DiffSourcePayload as DiffSource } from '@hiven/plugin'
 import { TextDiffSurface } from './TextDiffSurface'
 import './style.css'
 

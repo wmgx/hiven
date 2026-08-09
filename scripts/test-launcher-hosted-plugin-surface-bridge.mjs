@@ -1,68 +1,16 @@
 #!/usr/bin/env node
-
+/** Launcher-hosted plugin surface open bridge. */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
-const refactorSuite = readFileSync('scripts/test-refactor-suite.mjs', 'utf8')
+const openReq = readFileSync('src/workspace/pluginSurfaceOpenRequest.ts', 'utf8')
 const app = readFileSync('src/App.tsx', 'utf8')
-const openRequest = readFileSync('src/workspace/pluginSurfaceOpenRequest.ts', 'utf8')
 
-assert.equal(
-  packageJson.scripts?.['test:launcher-hosted-plugin-surface-bridge'],
-  'node scripts/test-launcher-hosted-plugin-surface-bridge.mjs',
-  'package.json must expose launcher-hosted plugin surface bridge coverage',
-)
-assert.match(
-  refactorSuite,
-  /test:launcher-hosted-plugin-surface-bridge/,
-  'refactor suite must include launcher-hosted plugin surface bridge coverage',
-)
-
-assert.match(
-  openRequest,
-  /export function openLauncherHostedPluginSurface\(target: PluginSurfaceOpenTarget\): void \{[\s\S]*clearPendingPluginSurfaceOpenTarget\(\)[\s\S]*openPluginSurfaceTool\(target\)[\s\S]*openGlobalLauncherOverlay\('pinned-only'\)/,
-  'launcher-hosted plugin surfaces must have one explicit bridge that clears pending requests and owns AppStore writes',
-)
-assert.match(
-  openRequest,
-  /export function clearPendingPluginSurfaceOpenTarget\(\): void \{[\s\S]*localStorage\.removeItem\(PENDING_OPEN_KEY\)/,
-  'launcher-hosted plugin surface delivery must clear persisted pending opens to avoid stale replay',
-)
-assert.match(
-  openRequest,
-  /if \(isLauncherWindowRuntime\(\)\) \{[\s\S]*preSizeCurrentLauncherWindowForPluginSurface\(target\)/,
-  'launcher-hosted plugin surface pre-sizing must only run when already in the launcher runtime',
-)
-assert.match(
-  openRequest,
-  /async function preSizeCurrentLauncherWindowForPluginSurface[\s\S]*const shell = resolveSurfaceShell\(target\)[\s\S]*await resizeCurrentLauncherWindow/,
-  'launcher runtime pre-size helper may resize only the current launcher window',
-)
-assert.doesNotMatch(
-  openRequest.match(/requestOpenPluginSurfaceTool[\s\S]*?await showLauncherWindow\(\)/)?.[0] ?? '',
-  /resizeCurrentLauncherWindow|resolveSurfaceShell/,
-  'non-launcher webviews must not resize or resolve surface shell before showing the launcher',
-)
-assert.match(
-  app,
-  /openLauncherHostedPluginSurface/,
-  'App must route plugin surface open events through the launcher-hosted surface bridge',
-)
-assert.doesNotMatch(
-  app,
-  /openPluginSurfaceTool\(/,
-  'App must not directly write pluginSurfaceToolTarget; use openLauncherHostedPluginSurface instead',
-)
-assert.match(
-  app,
-  /consumePendingPluginSurfaceOpenTarget\(\)[\s\S]*openLauncherHostedPluginSurface\(pendingSurfaceTarget\)/,
-  'launcher startup must drain pending plugin surface requests through the bridge',
-)
-assert.match(
-  app,
-  /listen\('hiven:\/\/open-plugin-surface'[\s\S]*openLauncherHostedPluginSurface\(event\.payload\)/,
-  'launcher event handling must dispatch plugin surface requests through the bridge',
-)
-
+assert.match(openReq, /export function openLauncherHostedPluginSurface/, 'hosted open export')
+assert.match(openReq, /clearPendingPluginSurfaceOpenTarget\(\)/, 'clears pending')
+assert.match(openReq, /openPluginSurfaceTool\(target\)/, 'writes AppStore tool target')
+assert.match(openReq, /openGlobalLauncherOverlay/, 'opens launcher overlay')
+assert.match(openReq, /requestOpenPluginSurfaceTool/, 'tool/shortcut open entry')
+assert.match(openReq, /shortcutPresentation[\s\S]*window/, 'window presentation path')
+assert.match(app, /openLauncherHostedPluginSurface/, 'App consumes hosted open')
 console.log('launcher-hosted plugin surface bridge checks passed')

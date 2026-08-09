@@ -18,7 +18,7 @@ import type { ComponentType } from 'react'
 import type { Locale } from '../../i18n'
 import type { PluginNetworkApi, PluginPrivateStorageApi, PluginShellApi } from '../pluginTypes'
 import type { FluxEffect } from '../types'
-import type { DiffSource } from '../workspaceStore'
+import type { DiffSourcePayload } from '../diffTypes'
 import type { EffectRunnerResult } from '../effectRunner'
 import type { ContentAccepts, IntentHit, IntentMatchContext } from './intentTypes'
 
@@ -339,7 +339,8 @@ export type PluginLauncherApi = {
   createPane(options?: { text?: string; title?: string; language?: string; focus?: boolean; direction?: 'left' | 'right' | 'top' | 'bottom' }): Promise<string | undefined>
   dispatchEffects(effects: FluxEffect[]): EffectRunnerResult
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
-  openDiffPage(payload: { original: DiffSource; modified: DiffSource }): void
+  /** Open text-diff plugin surface with two sides (product UI is the plugin). */
+  openDiffPage(payload: { original: DiffSourcePayload; modified: DiffSourcePayload }): void
   apps: PluginAppsApi
 }
 
@@ -442,6 +443,15 @@ export type LauncherItemContribution<TSettings = unknown> = {
    */
   accepts?: ContentAccepts
   /**
+   * Optional intent fine matcher (filter semantics). Only invoked after accepts
+   * hits; empty/null/throw/timeout → no intent boost. Copied onto resolved item.
+   */
+  match?: (ctx: IntentMatchContext) => IntentHit[] | null
+  /**
+   * Content matcher for ranking boost (textMatchBoost). Same field as tools.
+   */
+  textMatch?: (text: string) => boolean
+  /**
    * Optional suggestions for collect-input frames (filtered by current inputText).
    * Host infrastructure only — product semantics (history, etc.) stay in the plugin.
    */
@@ -465,6 +475,11 @@ export type LauncherDynamicContext = {
   t: (key: string, vars?: Record<string, string | number>) => string
   source: 'builtin' | 'installed' | 'dev'
   pluginId: string
+  /**
+   * Abort when the query changes or the session tears down.
+   * Providers should check signal.aborted and ideally pass it to network work.
+   */
+  signal?: AbortSignal
 }
 
 export type LauncherDynamicItemProvider = (

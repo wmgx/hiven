@@ -30,7 +30,15 @@ import { open as openUrl } from '@tauri-apps/plugin-shell'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import { restoreLauncherInputSource } from '../../workspace/windowManager/launcherWindow'
 import { getHostSurfaceShell } from '../../components/launcher/hostSurfaceShell'
-import { logLauncherPerf } from '../../workspace/launcher/perf'
+import { endLauncherPerfOpenSession, logLauncherPerf } from '../../workspace/launcher/perf'
+import {
+  TelemetryEvents,
+  createDebouncedTracker,
+  queryTelemetryProps,
+  trackBehavior,
+  trackLatencyFrom,
+  telemetryNow,
+} from '../../workspace/telemetry'
 import type { LauncherItem } from '../../workspace/launcher/types'
 import { getPluginPermissionSnapshot } from '../../workspace/pluginPermissions'
 import { showToast } from '../../workspace/toast'
@@ -113,27 +121,57 @@ export function GlobalLauncherHost() {
     makeApi: createGlobalLauncherPluginApi,
   })
   liveQueryRef.current = query
-  // User cleared the draft → release restore hold so a later open can attach clipboard.
-  if (!query.trim()) {
-    releaseStickyRestore(GLOBAL_LAUNCHER_STICKY_SURFACE)
-  }
+  // Only when the user clears a non-empty draft — never on every empty render.
+  // Open-path holdStickyRestore must survive until startTransition applies sticky,
+  // otherwise clipboard auto-attach races the restore and extra re-ranks fire.
+  const prevQueryForStickyRef = useRef(query)
+  const trackQueryChangeRef = useRef(
+    createDebouncedTracker(TelemetryEvents.launcherQueryChange, 280),
+  )
+  useEffect(() => {
+    const prev = prevQueryForStickyRef.current
+    prevQueryForStickyRef.current = query
+    if (prev.trim() && !query.trim()) {
+      releaseStickyRestore(GLOBAL_LAUNCHER_STICKY_SURFACE)
+    }
+    // Debounced typing signal for behavior funnel (not every keystroke).
+    if (open) {
+      trackQueryChangeRef.current(queryTelemetryProps(query))
+    }
+  }, [open, query])
 
   const objectActions = useMemo(() => {
     if (!clipboardBlock.block) return []
     return recommendActionsForBlock(clipboardBlock.block)
   }, [clipboardBlock.block])
 
+  // Keep the panel tree warm after the first open so later hotkeys do not pay a
+  // full remount (was ~190–300ms open:event-to-first-paint on every show).
+  // Adjust during render (not useEffect) so the first open mounts in the same commit.
+  const [panelMounted, setPanelMounted] = useState(false)
+  if (open && !panelMounted) {
+    setPanelMounted(true)
+  }
+
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      // Close ends the perf open session so agents can bound NDJSON by openId.
+      endLauncherPerfOpenSession({ reason: 'launcher-closed' })
+      return
+    }
+    trackBehavior(TelemetryEvents.launcherOpen, { host: 'global-launcher' })
     // Total open-event → first painted frame (double rAF ≈ paint).
     const raf = requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const t0 = (window as unknown as { __hivenLauncherOpenT0?: number }).__hivenLauncherOpenT0
         if (typeof t0 !== 'number') return
         ;(window as unknown as { __hivenLauncherOpenT0?: number }).__hivenLauncherOpenT0 = undefined
+        const durationMs = Math.round((performance.now() - t0) * 10) / 10
         logLauncherPerf('open:event-to-first-paint', {
-          durationMs: Math.round((performance.now() - t0) * 10) / 10,
+          kind: 'latency',
+          durationMs,
         })
+        trackLatencyFrom(TelemetryEvents.launcherFirstPaint, t0)
       })
     })
     return () => cancelAnimationFrame(raf)
@@ -228,7 +266,7 @@ export function GlobalLauncherHost() {
     open,
     standaloneLauncher,
     launcherSettingsTarget,
-    hostSurfaceTarget,
+    hostSurfaceTarget: hostSurfaceTarget as never,
     surfaceFrame,
     activeSurfaceFrame,
     controllerReset: useCallback(() => {
@@ -391,6 +429,10 @@ export function GlobalLauncherHost() {
   const closeLauncher = useCallback(() => {
     if (closingRef.current) return
     closingRef.current = true
+    trackBehavior(TelemetryEvents.launcherClose, {
+      reason: 'esc-or-overlay',
+      ...queryTelemetryProps(inputRef.current?.value ?? query),
+    })
     resetLauncherSession()
     void closeGlobalLauncherWindow({
       standaloneLauncher,
@@ -400,13 +442,17 @@ export function GlobalLauncherHost() {
       setOpen,
       restoreForeground: 'auto',
     })
-  }, [overlay, resetLauncherSession, setOpen, standaloneLauncher, restoreFocus])
+  }, [overlay, query, resetLauncherSession, setOpen, standaloneLauncher, restoreFocus])
 
   // Blur-dismiss (clicked another app/window): never steal focus back.
   // Sticky query is saved so leave-to-copy formula resume works.
   const closeLauncherOnBlur = useCallback(() => {
     if (closingRef.current) return
     closingRef.current = true
+    trackBehavior(TelemetryEvents.launcherClose, {
+      reason: 'blur',
+      ...queryTelemetryProps(inputRef.current?.value ?? query),
+    })
     resetLauncherSession()
     void closeGlobalLauncherWindow({
       standaloneLauncher,
@@ -416,7 +462,7 @@ export function GlobalLauncherHost() {
       setOpen,
       restoreForeground: 'never',
     })
-  }, [overlay, resetLauncherSession, setOpen, standaloneLauncher, restoreFocus])
+  }, [overlay, query, resetLauncherSession, setOpen, standaloneLauncher, restoreFocus])
 
   const leaveHostSurface = useCallback(() => {
     clearLauncherHostSurface()
@@ -427,6 +473,10 @@ export function GlobalLauncherHost() {
   const closeLauncherAfterAction = useCallback(() => {
     if (closingRef.current) return
     closingRef.current = true
+    trackBehavior(TelemetryEvents.launcherClose, {
+      reason: 'after-action',
+      ...queryTelemetryProps(inputRef.current?.value ?? query),
+    })
     resetLauncherSession({ discardQuery: true })
     void closeGlobalLauncherWindow({
       standaloneLauncher,
@@ -438,7 +488,7 @@ export function GlobalLauncherHost() {
       // auto still restores when the action only wrote clipboard / stayed put.
       restoreForeground: 'auto',
     })
-  }, [overlay, resetLauncherSession, setOpen, standaloneLauncher, restoreFocus])
+  }, [overlay, query, resetLauncherSession, setOpen, standaloneLauncher, restoreFocus])
 
   useEffect(() => {
     closeAfterActionRef.current = closeLauncherAfterAction
@@ -453,7 +503,7 @@ export function GlobalLauncherHost() {
   })
 
   // Surfaces with closeOnBlur:false can stay open after app switch; exit if
-  // the standalone window has not been foreground for 5 minutes.
+  // the standalone window has not been foreground for STANDALONE_SURFACE_BACKGROUND_IDLE_MS.
   useAutoCloseStandaloneLauncherOnBackgroundIdle({
     open,
     standaloneLauncher,
@@ -502,7 +552,7 @@ export function GlobalLauncherHost() {
     open,
     standaloneLauncher,
     panelRef,
-    hostSurfaceTarget,
+    hostSurfaceTarget: hostSurfaceTarget as never,
     launcherSettingsTarget,
     surfaceShell: activeSurfaceFrame?.surface.shell,
     visibleFilteredLength: visibleFiltered.length,
@@ -523,7 +573,7 @@ export function GlobalLauncherHost() {
     setOpen,
     clearPluginSurfaceTool,
     openPluginSurface,
-    grantPluginPermissions,
+    grantPluginPermissions: grantPluginPermissions as never,
     focusSearchInputAfterBack,
     objectBlockText: clipboardBlock.block?.payloadText ?? undefined,
   })
@@ -540,6 +590,13 @@ export function GlobalLauncherHost() {
   const executeObjectAction = useCallback(async (action: RecommendedAction, target: RecommendedOutputTarget) => {
     const block = clipboardBlock.block
     if (!block) return
+    const startedAt = telemetryNow()
+    trackBehavior(TelemetryEvents.objectActionExecute, {
+      actionId: action.id,
+      target,
+      blockKind: block.kind,
+      blockSource: block.source,
+    })
 
     // History image/files blobs live in clipboard-history private storage
     const historyPermissions = getPluginPermissionSnapshot('builtin', 'clipboard-history', [
@@ -629,6 +686,13 @@ export function GlobalLauncherHost() {
       },
     })
 
+    trackLatencyFrom(TelemetryEvents.objectActionLatency, startedAt, {
+      actionId: action.id,
+      target,
+      ok: result.ok,
+      blockKind: block.kind,
+    })
+
     if (!result.ok) {
       showToast(result.error, 'error')
       return
@@ -662,9 +726,16 @@ export function GlobalLauncherHost() {
   }, [executeObjectAction, objectActions, selectItem])
 
   const pastePreviewText = useCallback(async (text: string) => {
+    const startedAt = telemetryNow()
+    trackBehavior(TelemetryEvents.pasteText, { textLength: text.length, via: 'result-preview' })
     try {
       const paste = createPluginPaste()
       const result = await paste.pasteText(text)
+      trackLatencyFrom(TelemetryEvents.pasteLatency, startedAt, {
+        ok: result.ok,
+        textLength: text.length,
+        via: 'result-preview',
+      })
       if (!result.ok) {
         showToast(result.message || t(locale, 'palette.quickEntryError'), 'error')
         return
@@ -681,7 +752,7 @@ export function GlobalLauncherHost() {
   // window itself is positioned natively (see `center_launcher_window`); here
   // the panel just centers within whatever window renders it.
   const panelStyle = buildGlobalLauncherPanelStyle({
-    hostSurfaceTarget,
+    hostSurfaceTarget: hostSurfaceTarget as never,
     launcherSettingsTarget,
     surfaceShell: activeSurfaceFrame?.surface.shell,
     standaloneLauncher,
@@ -695,13 +766,23 @@ export function GlobalLauncherHost() {
     surfaceFocusVersion,
   })
 
-  if (!open) return null
+  // Cold start: stay unmounted until first open. After that, hide with CSS so
+  // the next hotkey reuses the React tree (input, list rows, icons).
+  if (!panelMounted) return null
 
   return (
     <div
-      className="fixed inset-0 palette-overlay global-launcher-overlay open"
-      style={{ pointerEvents: 'auto', visibility: 'visible', zIndex: 1100 }}
-      onClick={(event) => { if (event.target === event.currentTarget) closeLauncher() }}
+      className={`fixed inset-0 palette-overlay global-launcher-overlay${open ? ' open' : ''}`}
+      style={{
+        pointerEvents: open ? 'auto' : 'none',
+        visibility: open ? 'visible' : 'hidden',
+        zIndex: 1100,
+      }}
+      aria-hidden={!open}
+      onClick={(event) => {
+        if (!open) return
+        if (event.target === event.currentTarget) closeLauncher()
+      }}
     >
       <GlobalLauncherPanel
         panelRef={panelRef}
@@ -712,7 +793,7 @@ export function GlobalLauncherHost() {
         isKeyboardNavRef={isKeyboardNavRef}
         busy={controllerState?.busy ?? false}
         panelStyle={panelStyle}
-        beginDrag={beginDrag}
+        beginDrag={beginDrag as never}
         launcherSettingsTarget={launcherSettingsTarget}
         closeSettingsDialog={closeSettingsDialog}
         focusSearchInputAfterBack={focusSearchInputAfterBack}
@@ -736,7 +817,7 @@ export function GlobalLauncherHost() {
         selectedIndex={clampedSelectedIndex}
         setSelectedIndex={setSelectedIndex}
         isWorkflowObjectLauncherItem={isWorkflowObjectLauncherItem}
-        selectItem={selectItemWithObjectActions}
+        selectItem={selectItemWithObjectActions as never}
         hostSurfaceTarget={hostSurfaceTarget}
         clearLauncherHostSurface={clearLauncherHostSurface}
         query={query}

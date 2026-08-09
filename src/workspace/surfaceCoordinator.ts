@@ -88,21 +88,21 @@ export function resolveConflict(
 /**
  * Register a new surface occupancy.
  */
-export function registerOccupancy(occupancy: SurfaceOccupancy) {
+export function registerOccupancy(_occupancy: SurfaceOccupancy) {
   return
 }
 
 /**
  * Release an occupancy and clean up associated resources.
  */
-export function releaseOccupancy(occupancyId: string) {
+export function releaseOccupancy(_occupancyId: string) {
   return
 }
 
 /**
  * Execute exit policy for an occupancy.
  */
-export function executeExitPolicy(occupancyId: string): boolean {
+export function executeExitPolicy(_occupancyId: string): boolean {
   return true
 }
 

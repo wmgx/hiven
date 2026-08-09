@@ -363,7 +363,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     // Show undo toast
     const toastMessage = `${t('message.deleted.toast')} \u00b7 `
     const toastId = host.showToast(toastMessage, 'info', {
-      durationMs: 5000,
+      duration: 5000,
       action: {
         label: t('message.undo'),
         onClick: () => {

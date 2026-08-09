@@ -520,19 +520,41 @@ export type JsonHighlightRange = {
   endColumn: number
 }
 
-function indexToLineCol(text: string, index: number): { line: number; column: number } {
-  let line = 1
-  let column = 1
-  const end = Math.max(0, Math.min(index, text.length))
-  for (let i = 0; i < end; i++) {
-    if (text[i] === '\n') {
-      line++
-      column = 1
-    } else {
-      column++
-    }
+/**
+ * Offsets of the first character of each 1-based line.
+ * Built once so path→line/col conversion is O(log L) instead of O(text length).
+ * (The previous per-call scan from index 0 made large JSON path maps O(n²) and froze the UI.)
+ */
+function buildLineStarts(text: string): number[] {
+  const starts = [0]
+  for (let i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) === 10 /* \n */) starts.push(i + 1)
   }
-  return { line, column }
+  return starts
+}
+
+function indexToLineCol(lineStarts: number[], index: number, textLength: number): { line: number; column: number } {
+  const end = Math.max(0, Math.min(index, textLength))
+  // Largest lineStarts[lo] <= end
+  let lo = 0
+  let hi = lineStarts.length - 1
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1
+    if (lineStarts[mid]! <= end) lo = mid
+    else hi = mid - 1
+  }
+  return { line: lo + 1, column: end - lineStarts[lo]! + 1 }
+}
+
+function isJsonWs(ch: string | undefined): boolean {
+  return ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t'
+}
+
+function isNumberChar(ch: string | undefined): boolean {
+  if (!ch) return false
+  const c = ch.charCodeAt(0)
+  // 0-9 . e E + -
+  return (c >= 48 && c <= 57) || c === 46 || c === 101 || c === 69 || c === 43 || c === 45
 }
 
 /**
@@ -542,10 +564,11 @@ function indexToLineCol(text: string, index: number): { line: number; column: nu
 export function buildJsonPathLineMap(text: string): Map<string, JsonPathRange> | null {
   const source = text.replace(/^\uFEFF/, '')
   const ranges = new Map<string, JsonPathRange>()
+  const lineStarts = buildLineStarts(source)
   let i = 0
 
   const skipWs = () => {
-    while (i < source.length && /\s/.test(source[i]!)) i++
+    while (i < source.length && isJsonWs(source[i])) i++
   }
 
   const peek = () => source[i]
@@ -592,14 +615,14 @@ export function buildJsonPathLineMap(text: string): Map<string, JsonPathRange> |
     if (source.startsWith('null', i)) { i += 4; return }
     const start = i
     if (source[i] === '-') i++
-    while (i < source.length && /[0-9.eE+-]/.test(source[i]!)) i++
+    while (i < source.length && isNumberChar(source[i])) i++
     if (i === start || (source[start] === '-' && i === start + 1)) throw new Error('bad number')
   }
 
   const record = (path: string, start: number, end: number) => {
     const safeEnd = Math.max(start, end)
-    const startPos = indexToLineCol(source, start)
-    const endPos = indexToLineCol(source, Math.max(start, safeEnd - 1))
+    const startPos = indexToLineCol(lineStarts, start, source.length)
+    const endPos = indexToLineCol(lineStarts, Math.max(start, safeEnd - 1), source.length)
     ranges.set(path, {
       startOffset: start,
       endOffset: safeEnd,

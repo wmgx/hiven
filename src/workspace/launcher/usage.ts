@@ -133,7 +133,7 @@ export function migrateLegacyUsage(
   const result = emptyUsageBySurface()
   if (!legacy) return result
   for (const surfaceId of LAUNCHER_SURFACE_IDS) {
-    result[surfaceId] = migrateLegacyBucket(legacy[surfaceId], mapKey, baseTime)
+    result[surfaceId] = migrateLegacyBucket((legacy as Record<string, unknown>)[surfaceId] as never, mapKey, baseTime)
   }
   result['editor-command-bar'] = {
     ...result['command-palette'],

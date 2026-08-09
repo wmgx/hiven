@@ -333,6 +333,19 @@ export function GlobalLauncherCollectInputFrame({
               ? t(locale, 'palette.collectInputEmptyFilterHint', { query: filterText })
               : t(locale, 'palette.collectInputEmptyHint')
           }
+          action={(
+            <button
+              type="button"
+              className="launcher-empty-well-back"
+              data-testid="launcher-collect-empty-back"
+              data-no-drag
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => onBack()}
+            >
+              {t(locale, 'palette.back')}
+              <kbd>esc</kbd>
+            </button>
+          )}
         />
       )}
       <div className="global-launcher-footer l-foot">
@@ -345,7 +358,17 @@ export function GlobalLauncherCollectInputFrame({
         ) : (
           <LauncherHintKey keys="↵" label={t(locale, 'palette.quickEntryRun')} />
         )}
-        <LauncherHintKey keys="esc" label={t(locale, 'palette.back')} />
+        <button
+          type="button"
+          className="launcher-footer-back-btn"
+          data-testid="launcher-collect-footer-back"
+          data-no-drag
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => onBack()}
+          aria-label={t(locale, 'palette.back')}
+        >
+          <LauncherHintKey keys="esc" label={t(locale, 'palette.back')} />
+        </button>
       </div>
     </>
   )

@@ -53,6 +53,7 @@ const display = loadTs('src/workspace/launcher/display.ts', [
 let rankingSrc = readFileSync('src/workspace/launcher/ranking.ts', 'utf8')
 rankingSrc = rankingSrc
   .replace(/import\s+type\s*\{[^}]*\}\s*from\s*'\.\.\/\.\.\/i18n'\s*;?\s*\n?/, '')
+  .replace(/import\s+type\s*\{[^}]*\}\s*from\s*'\.\.\/\.\.\/kits\/content'\s*;?\s*\n?/, '')
   .replace(/import\s*\{[^}]*\}\s*from\s*'\.\.\/searchRanking'\s*;?\s*\n?/, '')
   .replace(/import\s+type\s*\{[^}]*\}\s*from\s*'\.\/types'\s*;?\s*\n?/, '')
   .replace(/import\s*\{[^}]*\}\s*from\s*'\.\/usage'\s*;?\s*\n?/, '')
@@ -81,6 +82,8 @@ try {
   ])
   Object.assign(rankingSandbox, {
     evaluateAccepts: engine.evaluateAccepts,
+    isIntentEligible: engine.isIntentEligible,
+    passesIntentMatchFilter: engine.passesIntentMatchFilter,
     normalizeIntentQuery: engine.normalizeIntentQuery,
   })
 } catch {
@@ -274,7 +277,16 @@ const model = loadTs('src/plugins/web-open/settings/model.ts', [
 const webOpenIndex = readFileSync('src/plugins/web-open/index.tsx', 'utf8')
 assert.match(webOpenIndex, /direct-url-open[\s\S]*accepts:\s*\{\s*kinds:\s*\[['"]url['"]\]/, 'direct-url-open must declare accepts.kinds url')
 const registry = readFileSync('src/workspace/launcher/registry.ts', 'utf8')
-assert.match(registry, /accepts:\s*contribution\.accepts/, 'resolveDynamicItem must pass through contribution.accepts')
+assert.match(
+  registry,
+  /resolveDynamicItem[\s\S]*normalizeContribution/,
+  'resolveDynamicItem must normalizeContribution (copies accepts/params/match protocol)',
+)
+assert.match(
+  readFileSync('src/workspace/launcher/normalizeContribution.ts', 'utf8'),
+  /accepts:\s*contribution\.accepts/,
+  'normalizeContribution must pass through contribution.accepts',
+)
 const manifest = JSON.parse(readFileSync('src/plugins/web-open/manifest.json', 'utf8'))
 assert.equal(manifest.version, '1.4.0', 'web-open manifest version bumped for package 3')
 

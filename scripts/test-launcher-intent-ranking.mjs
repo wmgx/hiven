@@ -43,6 +43,7 @@ const display = loadTs('src/workspace/launcher/display.ts', [
 let rankingSrc = readFileSync('src/workspace/launcher/ranking.ts', 'utf8')
 rankingSrc = rankingSrc
   .replace(/import\s+type\s*\{[^}]*\}\s*from\s*'\.\.\/\.\.\/i18n'\s*;?\s*\n?/, '')
+  .replace(/import\s+type\s*\{[^}]*\}\s*from\s*'\.\.\/\.\.\/kits\/content'\s*;?\s*\n?/, '')
   .replace(/import\s*\{[^}]*\}\s*from\s*'\.\.\/searchRanking'\s*;?\s*\n?/, '')
   .replace(/import\s+type\s*\{[^}]*\}\s*from\s*'\.\/types'\s*;?\s*\n?/, '')
   .replace(/import\s*\{[^}]*\}\s*from\s*'\.\/usage'\s*;?\s*\n?/, '')
@@ -72,10 +73,12 @@ try {
   ])
   Object.assign(sandbox, {
     evaluateAccepts: engine.evaluateAccepts,
+    isIntentEligible: engine.isIntentEligible,
+    passesIntentMatchFilter: engine.passesIntentMatchFilter,
     normalizeIntentQuery: engine.normalizeIntentQuery,
   })
 } catch {
-  // intentEngine may be unused by ranking yet
+  // intentEngine helpers required for intentScore match-filter path
 }
 vm.runInNewContext(rankingOut, sandbox)
 const ranking = sandbox.module.exports

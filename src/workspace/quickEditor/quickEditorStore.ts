@@ -339,12 +339,12 @@ export const useQuickEditorStore = create<QuickEditorStore>()(
           externalVersionHistory = [{
             id: `qe-ver-legacy-${legacy.at ?? Date.now()}`,
             paneId: typeof legacy.paneId === 'string' ? legacy.paneId : activePaneId,
-            text: legacy.text,
+            text: legacy.text ?? "",
             language: legacy.language ?? 'plaintext',
             languageSource: legacy.languageSource ?? 'auto',
             at: typeof legacy.at === 'number' ? legacy.at : Date.now(),
             source: legacy.source,
-            preview: previewFromText(legacy.text),
+            preview: previewFromText(legacy.text ?? ''),
           }]
         }
 

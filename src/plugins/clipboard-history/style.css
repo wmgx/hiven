@@ -739,20 +739,18 @@ body[data-theme='dark'] .clipboard-history-surface {
   --hiven-color-accent: var(--accent);
 }
 
-.global-launcher-panel .clipboard-history-item-row.is-selected,
-.palette-panel .clipboard-history-item-row.is-selected {
+/* Plugin-scoped only (architecture: do not select host private classes). */
+.clipboard-history-item-row.is-selected {
   background: var(--accent-soft);
   box-shadow: none;
   border-radius: var(--radius-sm, 7px);
 }
 
-.global-launcher-panel .clipboard-history-item-row:hover,
-.palette-panel .clipboard-history-item-row:hover {
+.clipboard-history-item-row:hover {
   background: var(--bg-surface-2);
 }
 
-.global-launcher-panel .clipboard-history-item,
-.palette-panel .clipboard-history-item {
+.clipboard-history-item {
   padding-top: 0;
   padding-right: 36px;
   padding-bottom: 0;

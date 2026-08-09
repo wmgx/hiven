@@ -22,10 +22,11 @@ import {
   startQuickEditorWindowDrag,
   startQuickEditorWindowResize,
 } from '../workspace/windowManager/quickEditorWindow'
+import { useAutoCloseCurrentWindowOnBackgroundIdle } from '../components/launcher/GlobalLauncherWindowLifecycle'
 import { quickEditorImperative } from '../components/quickEditor/quickEditorImperative'
 import { suppressStandaloneLauncherBlur } from '../workspace/launcherBlurGuard'
 import { useT } from '../i18n'
-import type { ResizeDirection } from '@tauri-apps/api/window'
+type ResizeDirection = 'East' | 'North' | 'NorthEast' | 'NorthWest' | 'South' | 'SouthEast' | 'SouthWest' | 'West'
 import '../panels/register'
 
 registerHostLauncherProviders()
@@ -109,6 +110,13 @@ export function QuickEditorDetachedView() {
       console.warn('[hiven] Failed to close quick editor window:', error)
     })
   }, [])
+
+  // Same policy as launcher host surfaces: closeOnBlur is false so brief app
+  // switches stay open, but continuous background idle still auto-closes.
+  useAutoCloseCurrentWindowOnBackgroundIdle({
+    enabled: true,
+    onClose: handleRequestExit,
+  })
 
   const handleWindowDrag = useCallback((event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0) return

@@ -89,7 +89,7 @@ export function isWorkflowObjectLauncherItem(item?: LauncherMixedItem): boolean 
 
 export function getPluginSurfaceDefinition(target: PluginSurfaceTarget): {
   definition: PluginDefinition<unknown>
-  surface: NonNullable<PluginDefinition<unknown>['ui']>['surfaces'][number]
+  surface: NonNullable<NonNullable<PluginDefinition<unknown>['ui']>['surfaces']>[number]
 } | null {
   const definition = pluginRegistry.getPluginDefinition(target.pluginId, target.source) as PluginDefinition<unknown> | undefined
   const surface = definition?.ui?.surfaces?.find((candidate) => candidate.id === target.surfaceId)

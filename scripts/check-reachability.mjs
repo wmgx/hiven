@@ -18,6 +18,7 @@ const EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs']
 
 const VITE_ALIASES = {
   '@hiven/plugin': join(srcDir, 'plugin-sdk.ts'),
+  '@hiven/plugin-diff': join(srcDir, 'pluginHostDiff.ts'),
   '@hiven/plugin-ui/icons': join(srcDir, 'plugin-ui-icons.ts'),
   '@hiven/plugin-ui': join(srcDir, 'plugin-ui.tsx'),
   '@fluxtext/plugin': join(srcDir, 'plugin-sdk.ts'),
@@ -25,21 +26,13 @@ const VITE_ALIASES = {
 
 // White-listed files that are allowed to be unreachable (with reason)
 const WHITELIST = new Set([
-  // Legacy diff page view — superseded by TextDiffSurface; kept for reference
-  'src/plugins/textDiff/DiffPageView.tsx',
   // Type declaration files are side-effect-free
   'src/hiven.d.ts',
-  // Plugin editor surface — loaded via subscription bridge, not static import
-  'src/surfaces/PluginEditorSurface.tsx',
-  'src/surfaces/PluginEditorSurfaceContent.tsx',
-  'src/surfaces/SurfaceShell.tsx',
-  // Quick Editor toolbar — orphan pending future reconnection
-  'src/components/quickEditor/QuickEditorToolbar.tsx',
   // Barrel files and utilities — disconnected but may be needed
   'src/launcher/clipboard/index.ts',
-  'src/utils/cdnLoader.ts',
-  'src/workflow/clipboardHistoryWorkflowProvider.ts',
   'src/workflow/index.ts',
+  // Barrel re-export only; consumers import concrete modules under desktopTargets/.
+  'src/workspace/desktopTargets/index.ts',
 ])
 
 function isWhitelisted(relPath) {

@@ -6,7 +6,7 @@ export type SurfaceInstanceKind =
   | 'plugin-surface'
   | 'settings'
   | 'plugins'
-  | 'plugin-editor'
+  | 'plugin-editor' // legacy: focus redirects to system-plugins + settings (no IDE UI)
 
 export type SurfaceInstanceState = 'visible' | 'hidden' | 'destroyed'
 

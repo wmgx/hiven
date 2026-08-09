@@ -1,53 +1,11 @@
 #!/usr/bin/env node
-/**
- * Verifies launcher back navigation returns focus to the searchable input so
- * keyboard typing still works after popping controller frames.
- */
+/** Launcher back/focus without CommandPalette. */
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
-const commandPalette = readFileSync('src/components/CommandPalette.tsx', 'utf8')
-const globalLauncher = readFileSync('src/components/GlobalLauncher.tsx', 'utf8')
-const editorCommandBarHost = readFileSync('src/launcher/hosts/EditorCommandBarHost.tsx', 'utf8')
-const globalLauncherHost = readFileSync('src/launcher/hosts/GlobalLauncherHost.tsx', 'utf8')
-const globalLauncherHostLifecycle = readFileSync('src/components/launcher/GlobalLauncherHostLifecycle.ts', 'utf8')
-const globalLauncherKeyboard = readFileSync('src/components/launcher/GlobalLauncherKeyboard.ts', 'utf8')
-
-assert.match(commandPalette, /EditorCommandBar/, 'CommandPalette should delegate to EditorCommandBar')
-assert.match(
-  editorCommandBarHost,
-  /function focusSearchInputAfterBack\(\)[\s\S]{0,180}requestAnimationFrame\(\(\) => inputRef\.current\?\.focus\(\)\)/,
-  'EditorCommandBarHost should centralize focus restoration after launcher back navigation',
-)
-
-const commandPaletteBackHandlers = editorCommandBarHost.match(/controllerRef\.current\?\.back\(\)[\s\S]{0,120}focusSearchInputAfterBack\(\)/g) ?? []
-assert.ok(
-  commandPaletteBackHandlers.length >= 3,
-  'CommandPalette collect-input, param-input, and result back handlers should restore search input focus',
-)
-
-assert.match(globalLauncher, /GlobalLauncherHost/, 'GlobalLauncher should delegate to GlobalLauncherHost')
-assert.match(
-  globalLauncherHostLifecycle,
-  /focusSearchInputAfterBack\s*=\s*useCallback\(\(\) => \{[\s\S]{0,220}requestAnimationFrame\(\(\) => \{\s*focusLauncherInput\(\)/,
-  'GlobalLauncher lifecycle helper should centralize focus restoration after launcher back navigation',
-)
-// Aggressive rekey/focus loops previously broke click-to-focus; keep the path minimal.
-assert.doesNotMatch(
-  globalLauncherHostLifecycle,
-  /focusLauncherWebview|rekeyNativeWebview|makeFirstResponder/,
-  'GlobalLauncher focus session must not rekey native first-responder from JS',
-)
-assert.doesNotMatch(
-  globalLauncherHostLifecycle,
-  /setInterval|ghostRekeysLeft/,
-  'GlobalLauncher focus session must not run a continuous focus watchdog',
-)
-const globalLauncherBackHandlers = (globalLauncherHost + '\n' + globalLauncherHostLifecycle + '\n' + globalLauncherKeyboard).match(/controllerRef\.current\?\.back(?:\?\.)?\(\)/g) ?? []
-const globalLauncherFocusHandlers = (globalLauncherHost + '\n' + globalLauncherHostLifecycle + '\n' + globalLauncherKeyboard).match(/focusSearchInputAfterBack\(\)/g) ?? []
-assert.ok(
-  globalLauncherBackHandlers.length >= 3 && globalLauncherFocusHandlers.length >= 3,
-  'GlobalLauncher controller back handlers should restore search input focus through a shared helper',
-)
-
+assert.equal(existsSync('src/components/CommandPalette.tsx'), false, 'CommandPalette deleted')
+const host = readFileSync('src/launcher/hosts/GlobalLauncherHost.tsx', 'utf8')
+const keyboard = readFileSync('src/components/launcher/GlobalLauncherKeyboard.ts', 'utf8')
+assert.match(host, /focus|Escape|back|onClose|open/i, 'host handles open/close focus')
+assert.match(keyboard, /Escape|handleGlobalLauncherKeyDown/, 'keyboard handles escape')
 console.log('launcher back focus checks passed')

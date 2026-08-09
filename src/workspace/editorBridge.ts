@@ -12,7 +12,6 @@ const EDITOR_BRIDGE_PENDING_REQUESTS_KEY = 'hiven:editor-bridge-pending-requests
 const EDITOR_ACTIVE_CONTEXT_SNAPSHOT_KEY = 'hiven:editor-active-context-snapshot'
 const EDITOR_ACTIVE_PANE_SNAPSHOT_KEY = 'hiven:editor-active-pane-snapshot'
 const EDITOR_BRIDGE_READY_AT_KEY = 'hiven:editor-bridge-ready-at'
-const EDITOR_BRIDGE_READY_TTL_MS = 5_000
 const EDITOR_ACTIVE_SNAPSHOT_TTL_MS = 30_000
 const EDITOR_BRIDGE_DEFAULT_TIMEOUT_MS = 1_200
 const EDITOR_BRIDGE_CONTEXT_TIMEOUT_MS = 500
@@ -250,7 +249,7 @@ async function sendEditorBridgeRequest<T extends EditorBridgeRequest['action']>(
   let persisted = false
   let responsePromise: Promise<EditorBridgeResponse> | undefined
   try {
-    request = createEditorBridgeRequest(action, payload, timeoutMs)
+    request = createEditorBridgeRequest(action, payload as never, timeoutMs)
 
     const tauriEvents = isTauriRuntime()
       ? await import('@tauri-apps/api/event')
@@ -272,7 +271,7 @@ async function sendEditorBridgeRequest<T extends EditorBridgeRequest['action']>(
 
     // Live path: editor already running, emit and wait for response.
     if (tauriEvents) {
-      responsePromise = await waitForEditorBridgeResponse(tauriEvents.listen, request.requestId, timeoutMs)
+      responsePromise = waitForEditorBridgeResponse(tauriEvents.listen, request.requestId, timeoutMs)
     }
 
     if (!tauriEvents || !responsePromise) return undefined
@@ -288,37 +287,6 @@ async function sendEditorBridgeRequest<T extends EditorBridgeRequest['action']>(
   }
 }
 
-async function waitForEditorBridgeReady(timeoutMs: number): Promise<void> {
-  if (hasRecentEditorBridgeReady()) return
-  const { listen } = await import('@tauri-apps/api/event')
-  await new Promise<void>((resolve, reject) => {
-    let settled = false
-    let unlistenReady: (() => void) | undefined
-    const timer = window.setTimeout(() => {
-      if (settled) return
-      settled = true
-      unlistenReady?.()
-      reject(new Error('Timed out waiting for editor bridge ready'))
-    }, timeoutMs)
-    listen<unknown>(EDITOR_BRIDGE_READY_EVENT, () => {
-      if (settled) return
-      settled = true
-      window.clearTimeout(timer)
-      unlistenReady?.()
-      resolve()
-    })
-      .then((unlisten) => {
-        unlistenReady = unlisten
-        if (settled) unlisten()
-      })
-      .catch((error) => {
-        if (settled) return
-        settled = true
-        window.clearTimeout(timer)
-        reject(error)
-      })
-  })
-}
 
 function createEditorBridgeRequest<T extends EditorBridgeRequest['action']>(
   action: T,
@@ -417,14 +385,7 @@ async function emitEditorBridgeReady(): Promise<void> {
   await emit(EDITOR_BRIDGE_READY_EVENT, { windowLabel: EDITOR_WINDOW_LABEL, readyAt })
 }
 
-function hasRecentEditorBridgeReady(): boolean {
-  try {
-    const readyAt = Number(localStorage.getItem(EDITOR_BRIDGE_READY_AT_KEY) ?? 0)
-    return Number.isFinite(readyAt) && Date.now() - readyAt < EDITOR_BRIDGE_READY_TTL_MS
-  } catch {
-    return false
-  }
-}
+
 
 function emitActiveEditorState(payload: { editor?: EditorContextSnapshot | null; pane?: EditorPaneSnapshot | null }): void {
   if (!isTauriRuntime()) return
@@ -595,9 +556,6 @@ function consumePendingEditorBridgeRequests(handle: (request: EditorBridgeReques
 }
 
 
-function isPendingEditorBridgeRequest(requestId: string): boolean {
-  return readPendingEditorBridgeRequests().some((request) => request.requestId === requestId)
-}
 
 function clearPendingEditorBridgeRequest(requestId: string): void {
   const pending = readPendingEditorBridgeRequests().filter((request) => request.requestId !== requestId)

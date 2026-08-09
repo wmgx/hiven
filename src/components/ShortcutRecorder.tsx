@@ -36,7 +36,6 @@ export function ShortcutRecorder({
   hint,
   onRecord,
   onClear,
-  clearLabel,
 }: ShortcutRecorderProps) {
   const locale = useAppStore((s) => s.locale)
   const [isRecording, setIsRecording] = useState(false)
@@ -44,7 +43,6 @@ export function ShortcutRecorder({
   const lastModifierTapRef = useRef<LastModifierTap | null>(null)
   const recorderRef = useRef<HTMLButtonElement>(null)
   const platformLabels = useMemo(() => getHotkeyPlatformLabels(), [])
-  const recordLabel = translate(locale, 'settings', 'hotkeyRecord')
   const recordingLabel = translate(locale, 'settings', 'hotkeyRecording')
   const recordError = translate(locale, 'settings', 'hotkeyRecordError')
   const disabledLabel = translate(locale, 'settings', 'hotkeyDisabled')

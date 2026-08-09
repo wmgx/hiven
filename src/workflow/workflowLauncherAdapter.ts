@@ -69,6 +69,7 @@ function workObjectToLauncherItem(object: WorkObject, locale: Locale): LauncherI
       objectId: object.id,
       objectType: object.type,
     },
+    // @ts-expect-error workflow adapter result shape
     execute: async () => {
       const ctx: WorkContext = {
         snapshot: await createDefaultWorkContextSnapshot('global-hotkey'),
@@ -101,7 +102,9 @@ function actionToChoice(action: WorkAction, object: WorkObject, ctx: WorkContext
       actionId: action.id,
       outputTarget: action.defaultOutputTarget,
     },
-    primaryAction: async () => action.run(object, ctx),
+    primaryAction: async () => {
+      await action.run(object, ctx)
+    },
   }
 }
 

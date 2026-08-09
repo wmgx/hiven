@@ -3,7 +3,6 @@ import { Settings, Puzzle } from 'lucide-react'
 import { useT } from '../i18n'
 import { SettingsContent } from '../surfaces/SettingsContent'
 import { PluginsContent } from '../surfaces/PluginsContent'
-import { requestOpenPluginEditorSurface } from '../surfaces/pluginEditorSurfaceBridge'
 import './SystemSettingsSurface.css'
 
 type TabId = 'settings' | 'plugins'
@@ -34,7 +33,7 @@ export function SystemSettingsSurface({ initialTab = 'settings' }: { initialTab?
       </div>
       <div className="system-settings-content" data-launcher-scrollable>
         {activeTab === 'settings' && <SettingsContent />}
-        {activeTab === 'plugins' && <PluginsContent onOpenPluginEditor={requestOpenPluginEditorSurface} />}
+        {activeTab === 'plugins' && <PluginsContent />}
       </div>
     </div>
   )

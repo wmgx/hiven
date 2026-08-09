@@ -125,4 +125,28 @@ function kinds(changes) {
   )
 }
 
+{
+  // Large JSON must stay interactive: path map used to be O(n²) via per-record
+  // index→line scans and froze ~10k-line pastes for tens of seconds.
+  const n = 3000
+  const items = []
+  for (let i = 0; i < n; i++) {
+    items.push(`  {"id": ${i}, "name": "item-${i}", "active": ${i % 2 === 0}, "score": ${i * 1.5}}`)
+  }
+  const left = `[\n${items.join(',\n')}\n]`
+  const right = left.replace('item-100', 'item-100-changed')
+  assert.ok(left.split('\n').length > 3000, 'fixture should be multi-thousand lines')
+
+  const t0 = performance.now()
+  const hl = computeJsonLineHighlights(left, right)
+  const ms = performance.now() - t0
+  assert.ok(hl, 'large JSON highlights must compute')
+  assert.equal(hl.changes.length, 1, 'only the renamed field differs')
+  assert.ok(
+    ms < 2500,
+    `computeJsonLineHighlights on ~${n} items should finish quickly (got ${ms.toFixed(0)}ms)`,
+  )
+  console.log(`large json highlight ok in ${ms.toFixed(0)}ms (${left.split('\n').length} lines)`)
+}
+
 console.log('json semantic diff checks passed')

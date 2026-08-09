@@ -6,7 +6,7 @@
  * line by line so lists of names work out of the box.
  */
 
-import { definePlugin } from '@hiven/plugin'
+import { definePlugin, type PluginToolContext } from '@hiven/plugin'
 
 export type CaseStyle =
   | 'camel'
@@ -96,7 +96,7 @@ export function convertText(text: string, style: CaseStyle): string {
 }
 
 function toolRun(style: CaseStyle) {
-  return (ctx: { input: { text: string }; output: { text: (v: string) => unknown; error: (m: string) => unknown } }) => {
+  return (ctx: PluginToolContext) => {
     try {
       return ctx.output.text(convertText(ctx.input.text, style))
     } catch (e: any) {

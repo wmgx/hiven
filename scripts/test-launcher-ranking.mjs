@@ -41,10 +41,13 @@ const display = loadTs('src/workspace/launcher/display.ts', [
 let rankingSrc = readFileSync('src/workspace/launcher/ranking.ts', 'utf8')
 rankingSrc = rankingSrc
   .replace(/import\s+type\s*\{[^}]*\}\s*from\s*'\.\.\/\.\.\/i18n'\s*;?\s*\n?/, '')
+  .replace(/import\s+type\s*\{[^}]*\}\s*from\s*'\.\.\/\.\.\/kits\/content'\s*;?\s*\n?/, '')
   .replace(/import\s*\{[^}]*\}\s*from\s*'\.\.\/searchRanking'\s*;?\s*\n?/, '')
   .replace(/import\s+type\s*\{[^}]*\}\s*from\s*'\.\/types'\s*;?\s*\n?/, '')
   .replace(/import\s*\{[^}]*\}\s*from\s*'\.\/usage'\s*;?\s*\n?/, '')
   .replace(/import\s*\{[^}]*\}\s*from\s*'\.\/display'\s*;?\s*\n?/, '')
+  .replace(/import\s+type\s*\{[^}]*\}\s*from\s*'\.\/intentTypes'\s*;?\s*\n?/, '')
+  .replace(/import\s*\{[^}]*\}\s*from\s*'\.\/intentEngine'\s*;?\s*\n?/, '')
   .replace(/import\s*\{[^}]*\}\s*from\s*'\.\.\/desktopTargets\/browserWindowPolicy'\s*;?\s*\n?/, '')
 const rankingOut = ts.transpileModule(rankingSrc, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, esModuleInterop: true },
@@ -60,6 +63,28 @@ const sandbox = {
   localizedDisplay: display.localizedDisplay,
   // Soft nav demotion optional in ranking; stub for harness.
   navNearDuplicateDemotion: () => 0,
+}
+// B2: intentScore uses isIntentEligible from intentEngine
+try {
+  let engineSrc = readFileSync('src/workspace/launcher/intentEngine.ts', 'utf8')
+  engineSrc = engineSrc.replace(/import\s+type\s*\{[^}]*\}\s*from\s*'\.\/intentTypes'\s*;?\s*\n?/, '')
+  const engineOut = ts.transpileModule(engineSrc, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, esModuleInterop: true },
+  }).outputText
+  const engineExports = {}
+  vm.runInNewContext(engineOut, {
+    exports: engineExports,
+    module: { exports: engineExports },
+    console,
+  })
+  Object.assign(sandbox, {
+    evaluateAccepts: engineExports.evaluateAccepts,
+    isIntentEligible: engineExports.isIntentEligible,
+    passesIntentMatchFilter: engineExports.passesIntentMatchFilter,
+    normalizeIntentQuery: engineExports.normalizeIntentQuery,
+  })
+} catch (error) {
+  console.warn('[test-launcher-ranking] intentEngine load failed:', error)
 }
 vm.runInNewContext(rankingOut, sandbox)
 const ranking = sandbox.module.exports

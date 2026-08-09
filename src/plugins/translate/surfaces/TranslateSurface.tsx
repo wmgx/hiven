@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { AlertTriangle, ArrowRight, Check, ChevronDown, Languages, LoaderCircle, Settings, X } from 'lucide-react'
-import type { LanguageCode, SourceLanguageCode, TargetLanguageCode, TranslateProfile, TranslateSettings } from '../settings/model'
+import type { SourceLanguageCode, TargetLanguageCode, TranslateProfile, TranslateSettings } from '../settings/model'
 import { currentUsageMonth } from '../settings/model'
 import { estimateBilledChars, resolveSmartTargetLang, translateText } from '../providers/adapters'
 

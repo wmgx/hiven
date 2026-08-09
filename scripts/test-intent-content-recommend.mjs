@@ -13,7 +13,8 @@
  *   1. Only tools whose accepts pass evaluateAccepts enter results
  *   2. Tools without accepts never appear
  *   3. Same toolId is de-duplicated
- *   4. match() throw must not break other tools
+ *   4. match() throw is isolated (skips that tool; others still recommended)
+ *   4b. match() empty/null filters out the tool (filter semantics, B2)
  *   5. timestamp kind + accepts.kinds:['timestamp'] → hit
  *   6. base64 detection + accepts.kinds:['base64'] → hit
  *   7. csv kind → csv tool
@@ -301,6 +302,38 @@ assert.equal(
   assert.equal(threw, false, 'match throw must be isolated and must not surface')
   assert.ok(Array.isArray(actions), 'must still return an array when a match throws')
   assert.ok(hasTool(actions, 'good-jwt'), 'other tools must still be recommended after a match throw')
+  assert.ok(!hasTool(actions, 'bad-match'), 'match throw must filter out that tool (filter semantics)')
+}
+
+// ─── 4b. match() empty filters out the tool ──────────────────────────────────
+{
+  const tools = [
+    tool({
+      toolId: 'empty-match',
+      pluginId: 'plugin-a',
+      title: 'Empty Match',
+      accepts: { kinds: ['jwt'] },
+      match() {
+        return []
+      },
+    }),
+    tool({
+      toolId: 'pass-match',
+      pluginId: 'plugin-b',
+      title: 'Pass Match',
+      accepts: { kinds: ['jwt'] },
+      match() {
+        return [{ id: 'hit', confidence: 1, target: { kind: 'command', id: 'pass-match' } }]
+      },
+    }),
+  ]
+  const actions = recommendActionsFromToolAccepts({
+    kind: 'jwt',
+    detections: [detection('jwt')],
+    tools,
+  })
+  assert.ok(!hasTool(actions, 'empty-match'), 'empty match() must filter the tool out')
+  assert.ok(hasTool(actions, 'pass-match'), 'non-empty match() must keep the tool')
 }
 
 // ─── 5. timestamp kind + accepts kinds:['timestamp'] → hit ───────────────────

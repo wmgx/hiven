@@ -29,7 +29,6 @@ import {
 import { t } from '../i18n'
 import type { Locale } from '../i18n'
 import { localized, useAppStore } from '../store'
-import type { PluginEditorState } from './pluginEditorState'
 import { getConfigDir } from '../configInit'
 import { listBundledPluginPackageSummaries } from '../workspace/bundledPluginLoader'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../utils/imeKeyboard'
@@ -160,8 +159,8 @@ function openPluginsSurfaceSettings(pluginId: string, source: PluginSettingsSour
   usePluginSettingsStore.getState().openSettingsDialog({
     pluginId,
     source,
-    presentation: 'overlay',
-    context: { surfaceId: 'system-settings' },
+    presentation: 'dialog' as const,
+    context: { surfaceId: 'global-launcher' as const },
   })
 }
 
@@ -248,10 +247,9 @@ function pluginMatchesQuery(
 }
 
 export type PluginsContentProps = {
-  onOpenPluginEditor: (pluginEditor: PluginEditorState) => void
-}
+  }
 
-export function PluginsContent({ onOpenPluginEditor }: PluginsContentProps) {
+export function PluginsContent({}: PluginsContentProps) {
   const locale = useAppStore((s) => s.locale)
   const pluginRegistryVersion = usePluginRegistryVersion()
   const pluginSurfaceShortcuts = usePluginSurfaceShortcutStore((s) => s.shortcuts)
@@ -616,7 +614,7 @@ export function PluginsContent({ onOpenPluginEditor }: PluginsContentProps) {
   function isPluginEnabled(row: PluginDetailRow): boolean {
     if (row.kind === 'builtin') return true
     if (row.kind === 'installed') return (row.plugin as InstalledPlugin).status === 'enabled'
-    if (row.kind === 'dev') return (row.plugin as DevPlugin).status === 'enabled' || (row.plugin as DevPlugin).status === 'active'
+    if (row.kind === 'dev') return (row.plugin as DevPlugin).status === 'active'
     return false
   }
 

@@ -6,6 +6,7 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { migrateStorageKey } from '../utils/persistMigration'
+import type { DiffSourcePayload } from './diffTypes'
 import type {
   PaneId,
   EditorPane,
@@ -19,26 +20,15 @@ import type {
   PanelInstanceV2,
 } from './types'
 
-// ─── Fullscreen View Types ──────────────────────────────────────────────────
+// ─── Fullscreen View Types (legacy workbench path; prefer plugin surfaces) ──
 
-export type DiffSource = {
-  sourceId: string
-  kind: 'editor-pane' | 'clipboard' | 'empty'
-  paneId?: string
-  /**
-   * Where a pane-backed source lives. Used for bidirectional Diff binding:
-   * edits write back to the matching pane store.
-   */
-  origin?: 'editor' | 'quick-editor'
-  title: string
-  language?: string
-  text?: string
-}
+/** @deprecated Prefer DiffSourcePayload from diffTypes — structural payload only. */
+export type DiffSource = DiffSourcePayload
 
 export type FullscreenView = {
   type: 'diff'
-  original: DiffSource
-  modified: DiffSource
+  original: DiffSourcePayload
+  modified: DiffSourcePayload
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────

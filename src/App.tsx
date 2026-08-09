@@ -20,7 +20,11 @@ import { consumePendingPluginSurfaceOpenTarget, isPluginSurfaceOpenTarget, openL
 import { LAUNCHER_HOST_SURFACE_OPEN_EVENT, consumePendingLauncherHostSurfaceOpen, isLauncherHostSurfaceOpenRequest, isLauncherHostSurfaceTarget, openLauncherHostSurfaceLocally, openLauncherHostSurfaceRequestLocally } from './workspace/launcherHostSurfaceBridge'
 import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from './workspace/launcherWindowEvents'
 import { onCurrentLauncherWindowMoved, setCurrentLauncherWindowPosition, type LauncherWindowMovedPosition } from './workspace/windowManager/launcherWindow'
-import { launcherPerfNow, logLauncherPerfDuration } from './workspace/launcher/perf'
+import {
+  beginLauncherPerfOpenSession,
+  launcherPerfNow,
+  logLauncherPerfDuration,
+} from './workspace/launcher/perf'
 import { startClipboardAgeTracker } from './launcher/clipboard/clipboardSnapshot'
 
 // Register built-in panels
@@ -179,6 +183,8 @@ function LauncherRuntimeApp() {
   useEffect(() => {
     const openLauncher = () => {
       const eventReceivedAt = launcherPerfNow()
+      // Correlates all frontend samples for this open in launcher-perf.ndjson.
+      beginLauncherPerfOpenSession({ trigger: 'hiven://launcher-open' })
       ;(window as unknown as { __hivenLauncherOpenT0?: number }).__hivenLauncherOpenT0 = eventReceivedAt
       // Open the store *synchronously*. Awaiting rehydrate first left the panel
       // visible with no mounted search input, so native first-responder could not
@@ -197,9 +203,14 @@ function LauncherRuntimeApp() {
       logLauncherPerfDuration('open:event-to-store-open', eventReceivedAt)
 
       void (async () => {
+        // Throttle rehydrate: full persist.rehydrate() mid-open can re-render the
+        // panel during first paint (p50 ~24ms, sometimes 70ms+). Settings rarely
+        // change between rapid open/close; position restore still uses live store.
         const rehydrateStartedAt = launcherPerfNow()
-        await rehydratePersistedAppState()
-        logLauncherPerfDuration('open:rehydrate', rehydrateStartedAt)
+        const didRehydrate = await rehydratePersistedAppState()
+        logLauncherPerfDuration('open:rehydrate', rehydrateStartedAt, {
+          skipped: !didRehydrate,
+        })
         if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
         const settings = useAppStore.getState().settings
         const saved = settings.globalLauncherWindowPositionSource === 'user'
@@ -418,11 +429,23 @@ function canScrollLauncherElement(element: HTMLElement, deltaY: number, deltaX =
   return true
 }
 
-async function rehydratePersistedAppState() {
+/** Skip rehydrate if we already did one this recently (open-path hot loop). */
+const REHYDRATE_MIN_INTERVAL_MS = 3_000
+let lastPersistedRehydrateAt = 0
+
+/** @returns true when rehydrate actually ran */
+async function rehydratePersistedAppState(): Promise<boolean> {
+  const now = Date.now()
+  if (now - lastPersistedRehydrateAt < REHYDRATE_MIN_INTERVAL_MS) {
+    return false
+  }
+  lastPersistedRehydrateAt = now
   try {
     await useAppStore.persist.rehydrate()
+    return true
   } catch (error) {
     console.warn('[hiven] Failed to rehydrate persisted settings:', error)
+    return false
   }
 }
 

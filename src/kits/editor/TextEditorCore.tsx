@@ -160,7 +160,7 @@ export const TextEditorCore = forwardRef<TextEditorCoreHandle, TextEditorCorePro
           disposablesRef.current?.dispose()
           const disposables = createMonacoDisposableBucket()
           disposablesRef.current = disposables
-          installMonacoHoverOverlay(editor)
+          installMonacoHoverOverlay(editor as never)
           editorRef.current = editor
           decorationIdsRef.current = []
 
@@ -256,7 +256,7 @@ export const TextEditorCore = forwardRef<TextEditorCoreHandle, TextEditorCorePro
           glyphMargin: false,
           lineDecorationsWidth,
           lineNumbersMinChars: 3,
-          padding: { top: 12, bottom: 12, left: 8 },
+          padding: { top: 12, bottom: 12 },
           fontFamily: 'var(--font-mono)',
           automaticLayout: true,
           tabSize: 2,

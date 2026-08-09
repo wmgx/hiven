@@ -75,7 +75,7 @@ async function writeClipboardImage(bytes: Uint8Array): Promise<void> {
   if (!navigator.clipboard?.write || !ClipboardItemCtor) {
     throw new Error('Image clipboard write is not supported in this environment')
   }
-  const blob = new Blob([bytes], { type: 'image/png' })
+  const blob = new Blob([bytes as BlobPart], { type: 'image/png' })
   await navigator.clipboard.write([new ClipboardItemCtor({ [blob.type]: blob })])
 }
 

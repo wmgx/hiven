@@ -58,8 +58,8 @@ function manualTextInput(text: string, mode: TextInputMode): ResolvedTextInput {
   return { kind: 'text', text, mode, source: text ? 'manual' : 'empty' }
 }
 
-function makeOutput(api: PluginLauncherApi, locale: Locale, surfaceId: string): PluginToolOutput {
-  const normalizedSurfaceId = normalizeLauncherSurfaceId(surfaceId)
+function makeOutput(api: PluginLauncherApi, locale: Locale, surfaceId: string | undefined): PluginToolOutput {
+  const normalizedSurfaceId = normalizeLauncherSurfaceId((surfaceId ?? "global-launcher") as import("./types").LauncherSurfaceId)
   const isGlobal = normalizedSurfaceId === 'global-launcher'
   return {
     text: (value: string) => isGlobal

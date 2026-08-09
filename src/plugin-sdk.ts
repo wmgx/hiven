@@ -142,5 +142,7 @@ export type {
   StatusEffect,
   TextReplaceEffect,
 } from './workspace/types'
-export type { DiffSource, FullscreenView } from './workspace/workspaceStore'
-export type { DiffSourceBinding } from './pluginHostSdk'
+// Diff product types are NOT on the public SDK.
+// text-diff uses `@hiven/plugin-diff` for DualEditorView / line diff / bound text.
+// Structural compare payload (transport only): DiffSourcePayload.
+export type { DiffSourcePayload } from './workspace/diffTypes'

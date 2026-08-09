@@ -68,8 +68,8 @@ export function useGlobalLauncherSurfaceRegistry({
 
   useEffect(() => {
     if (!open || !hostSurfaceTarget) return
-    const kind = hostSurfaceTarget === 'plugins' || hostSurfaceTarget === 'system-plugins' ? 'plugins' : 'settings'
-    const title = hostSurfaceTarget === 'plugins' || hostSurfaceTarget === 'system-plugins' ? 'Plugins' : 'Settings'
+    const kind = hostSurfaceTarget === 'system-plugins' ? 'plugins' : 'settings'
+    const title = hostSurfaceTarget === 'system-plugins' ? 'Plugins' : 'Settings'
     upsertSurfaceInstance({
       id: `host-surface:${hostSurfaceTarget}`,
       kind,

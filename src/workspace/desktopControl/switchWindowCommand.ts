@@ -113,7 +113,8 @@ export function getSwitchWindowHostItem(): LauncherItem {
       const filter = (ctx.input?.text ?? '').trim()
       const choices = await loadWindowChoices(filter, ctx.locale)
       if (choices.length === 1) {
-        return choices[0].primaryAction()
+        const result = await choices[0].primaryAction()
+        return (result ?? { ok: true }) as import('../launcher/types').LauncherExecuteResult
       }
       if (choices.length === 0) {
         return {

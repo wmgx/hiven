@@ -8,16 +8,82 @@ const RING_CAPACITY = 300
 /** Always-on diagnosis log on disk (native append). */
 export const LAUNCHER_PERF_LOG_HINT = '~/.local/hiven/logs/launcher-perf.ndjson'
 
+export type TelemetrySampleKind = 'behavior' | 'latency' | 'perf'
+
 export type LauncherPerfSample = {
   t: number
   label: string
   durationMs?: number
   slow?: boolean
   jank?: boolean
+  /** Correlates all samples for one hotkey-open → close lifecycle. */
+  openId?: string
+  /**
+   * Sample class for Agent reports:
+   * - behavior: user intent / product action
+   * - latency: timed user-visible or execute path
+   * - perf: internal diagnostics (rank, debounce, native)
+   */
+  kind?: TelemetrySampleKind
   details?: Record<string, unknown>
 }
 
 const ring: LauncherPerfSample[] = []
+
+/** Active open session id (null while launcher is closed). */
+let currentOpenId: string | null = null
+let openSessionStartedAt: number | null = null
+
+function nextOpenId(): string {
+  return `o_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+/**
+ * Mark the start of a launcher open (hotkey / event). All subsequent samples
+ * until {@link endLauncherPerfOpenSession} carry the same `openId` so agents
+ * can group NDJSON lines into one open.
+ */
+export function beginLauncherPerfOpenSession(details?: Record<string, unknown>): string {
+  // React StrictMode double-invokes mount effects in dev — keep one openId.
+  if (
+    currentOpenId &&
+    openSessionStartedAt != null &&
+    launcherPerfNow() - openSessionStartedAt < 80
+  ) {
+    return currentOpenId
+  }
+  // Nested begin (rapid re-open after a real close): close the previous session first.
+  if (currentOpenId) {
+    endLauncherPerfOpenSession({ reason: 'superseded' })
+  }
+  currentOpenId = nextOpenId()
+  openSessionStartedAt = launcherPerfNow()
+  logLauncherPerf('open:session-start', {
+    openId: currentOpenId,
+    ...details,
+  })
+  return currentOpenId
+}
+
+/** End the current open session (launcher closed / superseded). */
+export function endLauncherPerfOpenSession(details?: Record<string, unknown>): void {
+  if (!currentOpenId) return
+  const openId = currentOpenId
+  const startedAt = openSessionStartedAt
+  currentOpenId = null
+  openSessionStartedAt = null
+  logLauncherPerf('open:session-end', {
+    openId,
+    ...(startedAt != null
+      ? { durationMs: Math.round((performance.now() - startedAt) * 10) / 10 }
+      : {}),
+    ...details,
+  })
+}
+
+export function getCurrentLauncherPerfOpenId(): string | null {
+  return currentOpenId
+}
 
 export function isLauncherPerfEnabled(): boolean {
   try {
@@ -67,16 +133,21 @@ function ensureNativeInvoke(): void {
 /**
  * Always append sample to ~/.local/hiven/logs/launcher-perf.ndjson via native.
  * Console output remains gated by isLauncherPerfEnabled().
+ *
+ * NDJSON schema (agent-facing):
+ * `{ ts, source, kind, label, durationMs, slow, jank, openId?, details? }`
  */
 function forwardLauncherPerfSample(sample: LauncherPerfSample): void {
   if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
   const payload = JSON.stringify({
     ts: sample.t,
     source: 'frontend',
+    kind: sample.kind ?? 'perf',
     label: sample.label,
     durationMs: sample.durationMs ?? null,
     slow: sample.slow ?? false,
     jank: sample.jank ?? false,
+    openId: sample.openId ?? null,
     details: sample.details ?? null,
   })
   if (nativeInvoke) {
@@ -104,15 +175,49 @@ export function launcherPerfNow(): number {
   return performance.now()
 }
 
+function resolveSampleKind(details?: Record<string, unknown>): TelemetrySampleKind {
+  const k = details?.kind
+  if (k === 'behavior' || k === 'latency' || k === 'perf') return k
+  // Heuristic for legacy labels without explicit kind.
+  if (typeof details?.durationMs === 'number') return 'latency'
+  if (typeof details?.label === 'string' && String(details.label).startsWith('behavior:')) return 'behavior'
+  if (labelLooksLikeBehavior(String(details?.event ?? ''))) return 'behavior'
+  return 'perf'
+}
+
+function labelLooksLikeBehavior(label: string): boolean {
+  return label.startsWith('behavior:')
+}
+
 export function logLauncherPerf(label: string, details?: Record<string, unknown>): void {
   const durationMs =
     details && typeof details.durationMs === 'number' ? details.durationMs : undefined
+  // Prefer explicit openId in details (session-start/end); else current session.
+  const detailOpenId =
+    details && typeof details.openId === 'string' ? details.openId : undefined
+  const openId = detailOpenId ?? currentOpenId ?? undefined
+  // expectedWait: intentional debounce — not user jank.
+  const expectedWait = details?.expectedWait === true
+  const kind: TelemetrySampleKind =
+    label.startsWith('behavior:')
+      ? 'behavior'
+      : label.startsWith('latency:')
+        ? 'latency'
+        : resolveSampleKind(details)
   const sample: LauncherPerfSample = {
     t: Date.now(),
     label,
     durationMs,
-    slow: durationMs != null ? durationMs >= SLOW_MS : undefined,
-    jank: durationMs != null ? durationMs >= JANK_MS : undefined,
+    openId,
+    kind,
+    slow:
+      durationMs != null && !expectedWait && kind !== 'behavior'
+        ? durationMs >= SLOW_MS
+        : undefined,
+    jank:
+      durationMs != null && !expectedWait && kind !== 'behavior'
+        ? durationMs >= JANK_MS
+        : undefined,
     details,
   }
   // Always: ring + file. Console only when enabled.
@@ -121,10 +226,10 @@ export function logLauncherPerf(label: string, details?: Record<string, unknown>
 
   if (!isLauncherPerfEnabled()) return
   if (details) {
-    console.info(LAUNCHER_PERF_PREFIX, label, details)
+    console.info(LAUNCHER_PERF_PREFIX, label, { openId, ...details })
     return
   }
-  console.info(LAUNCHER_PERF_PREFIX, label)
+  console.info(LAUNCHER_PERF_PREFIX, label, openId ? { openId } : undefined)
 }
 
 export function logLauncherPerfDuration(
@@ -133,15 +238,9 @@ export function logLauncherPerfDuration(
   details?: Record<string, unknown>,
 ): void {
   const durationMs = Math.round((performance.now() - startedAt) * 10) / 10
-  // Debounce / intentional sleeps are not UI jank — mark expectedWait to skip flags.
-  const expectedWait = details?.expectedWait === true
+  // slow/jank flags are derived inside logLauncherPerf (respects expectedWait).
   logLauncherPerf(label, {
     durationMs,
-    ...(!expectedWait && durationMs >= JANK_MS
-      ? { jank: true }
-      : !expectedWait && durationMs >= SLOW_MS
-        ? { slow: true }
-        : {}),
     ...details,
   })
 }
@@ -267,6 +366,47 @@ export async function resolveLauncherPerfLogPath(): Promise<string | null> {
   }
 }
 
+/** Last N open sessions from the in-memory ring (agent / DevTools). */
+export function listLauncherPerfOpenSessionsFromRing(limit = 10): Array<{
+  openId: string
+  startedAt: number
+  endedAt?: number
+  firstPaintMs?: number
+  storeOpenMs?: number
+  rehydrateMs?: number
+  sampleCount: number
+  jankCount: number
+  rankItemCount: number
+}> {
+  const byId = new Map<string, LauncherPerfSample[]>()
+  for (const s of ring) {
+    if (!s.openId) continue
+    const list = byId.get(s.openId) ?? []
+    list.push(s)
+    byId.set(s.openId, list)
+  }
+  const sessions = [...byId.entries()].map(([openId, samples]) => {
+    const started = samples.find((s) => s.label === 'open:session-start')
+    const ended = samples.find((s) => s.label === 'open:session-end')
+    const firstPaint = samples.find((s) => s.label === 'open:event-to-first-paint')
+    const storeOpen = samples.find((s) => s.label === 'open:event-to-store-open')
+    const rehydrate = samples.find((s) => s.label === 'open:rehydrate')
+    return {
+      openId,
+      startedAt: started?.t ?? samples[0]?.t ?? 0,
+      endedAt: ended?.t,
+      firstPaintMs: firstPaint?.durationMs,
+      storeOpenMs: storeOpen?.durationMs,
+      rehydrateMs: rehydrate?.durationMs,
+      sampleCount: samples.length,
+      jankCount: samples.filter((s) => s.jank).length,
+      rankItemCount: samples.filter((s) => s.label === 'session:rank-items').length,
+    }
+  })
+  sessions.sort((a, b) => b.startedAt - a.startedAt)
+  return sessions.slice(0, Math.max(1, limit))
+}
+
 declare global {
   interface Window {
     __hivenLauncherPerf?: {
@@ -277,11 +417,15 @@ declare global {
       clear: () => void
       logPath: () => Promise<string | null>
       logPathHint: string
+      currentOpenId: () => string | null
+      opens: (limit?: number) => ReturnType<typeof listLauncherPerfOpenSessionsFromRing>
+      beginOpen: typeof beginLauncherPerfOpenSession
+      endOpen: typeof endLauncherPerfOpenSession
     }
   }
 }
 
-/** Expose diagnosis helpers on window for DevTools. */
+/** Expose diagnosis helpers on window for DevTools / agent CDP. */
 export function installLauncherPerfDebugApi(): void {
   if (typeof window === 'undefined') return
   ensureNativeInvoke()
@@ -293,5 +437,9 @@ export function installLauncherPerfDebugApi(): void {
     clear: clearLauncherPerfRing,
     logPath: () => resolveLauncherPerfLogPath(),
     logPathHint: LAUNCHER_PERF_LOG_HINT,
+    currentOpenId: () => getCurrentLauncherPerfOpenId(),
+    opens: (limit) => listLauncherPerfOpenSessionsFromRing(limit),
+    beginOpen: beginLauncherPerfOpenSession,
+    endOpen: endLauncherPerfOpenSession,
   }
 }

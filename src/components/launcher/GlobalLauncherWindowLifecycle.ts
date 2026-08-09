@@ -13,22 +13,28 @@ type SurfaceShellConfig = {
 type LauncherSettingsTarget = unknown
 
 /**
- * Standalone launcher windows (especially closeOnBlur:false surfaces) can stay
- * open after the user switches apps. Auto-exit after this much continuous
- * background time so orphaned windows do not linger indefinitely.
+ * Standalone surfaces (launcher host, detached quick editor, closeOnBlur:false
+ * panels) can stay open after the user switches apps. Auto-exit after this much
+ * continuous background time so orphaned windows do not linger indefinitely.
  */
-export const STANDALONE_LAUNCHER_BACKGROUND_IDLE_MS = 5 * 60 * 1000
+export const STANDALONE_SURFACE_BACKGROUND_IDLE_MS = 5 * 60 * 1000
+
+/** @deprecated Prefer STANDALONE_SURFACE_BACKGROUND_IDLE_MS */
+export const STANDALONE_LAUNCHER_BACKGROUND_IDLE_MS = STANDALONE_SURFACE_BACKGROUND_IDLE_MS
 
 /** True when the window has been continuously unfocused for idleMs. */
-export function isStandaloneLauncherBackgroundIdle(
+export function isStandaloneSurfaceBackgroundIdle(
   unfocusedAt: number | null | undefined,
   now: number,
-  idleMs: number = STANDALONE_LAUNCHER_BACKGROUND_IDLE_MS,
+  idleMs: number = STANDALONE_SURFACE_BACKGROUND_IDLE_MS,
 ): boolean {
   if (unfocusedAt == null || !Number.isFinite(unfocusedAt) || !Number.isFinite(now)) return false
   if (idleMs <= 0) return true
   return now - unfocusedAt >= idleMs
 }
+
+/** @deprecated Prefer isStandaloneSurfaceBackgroundIdle */
+export const isStandaloneLauncherBackgroundIdle = isStandaloneSurfaceBackgroundIdle
 
 export function useCloseStandaloneLauncherOnBlur({
   open,
@@ -82,35 +88,35 @@ export function useCloseStandaloneLauncherOnBlur({
 }
 
 /**
- * When the standalone global launcher window has not been foreground for
- * {@link STANDALONE_LAUNCHER_BACKGROUND_IDLE_MS}, close it (idle close).
+ * When the current standalone window has not been foreground for
+ * {@link STANDALONE_SURFACE_BACKGROUND_IDLE_MS}, call onClose (idle close).
+ * Uses getCurrentWindow() focus events — works for the launcher webview and
+ * the detached quick-editor webview alike.
  * Complements blur-dismiss: surfaces with closeOnBlur:false stay usable while
  * the user briefly switches apps, but do not stick around forever.
  */
-export function useAutoCloseStandaloneLauncherOnBackgroundIdle({
-  open,
-  standaloneLauncher,
-  closeLauncher,
-  idleMs = STANDALONE_LAUNCHER_BACKGROUND_IDLE_MS,
+export function useAutoCloseCurrentWindowOnBackgroundIdle({
+  enabled,
+  onClose,
+  idleMs = STANDALONE_SURFACE_BACKGROUND_IDLE_MS,
 }: {
-  open: boolean
-  standaloneLauncher: boolean
-  closeLauncher: () => void
+  enabled: boolean
+  onClose: () => void
   idleMs?: number
 }) {
-  const closeLauncherRef = useRef(closeLauncher)
+  const onCloseRef = useRef(onClose)
   const idleMsRef = useRef(idleMs)
 
   useLayoutEffect(() => {
-    closeLauncherRef.current = closeLauncher
-  }, [closeLauncher])
+    onCloseRef.current = onClose
+  }, [onClose])
 
   useLayoutEffect(() => {
     idleMsRef.current = idleMs
   }, [idleMs])
 
   useLayoutEffect(() => {
-    if (!open || !standaloneLauncher) return
+    if (!enabled) return
     if (!isTauriRuntime()) return
 
     let disposed = false
@@ -132,8 +138,8 @@ export function useAutoCloseStandaloneLauncherOnBackgroundIdle({
       timerId = window.setTimeout(() => {
         timerId = null
         if (disposed) return
-        if (isStandaloneLauncherBackgroundIdle(unfocusedAt, Date.now(), idleMsRef.current)) {
-          closeLauncherRef.current()
+        if (isStandaloneSurfaceBackgroundIdle(unfocusedAt, Date.now(), idleMsRef.current)) {
+          onCloseRef.current()
         }
       }, remaining)
     }
@@ -148,6 +154,7 @@ export function useAutoCloseStandaloneLauncherOnBackgroundIdle({
       armTimer(Date.now())
     }
 
+    // Name is historical; implementation is getCurrentWindow().onFocusChanged.
     onCurrentLauncherWindowFocusChanged(onFocusChanged)
       .then(async (cleanup) => {
         if (disposed) {
@@ -168,7 +175,7 @@ export function useAutoCloseStandaloneLauncherOnBackgroundIdle({
         }
       })
       .catch((error) => {
-        console.warn('[hiven] Failed to listen for launcher background idle:', error)
+        console.warn('[hiven] Failed to listen for window background idle:', error)
       })
 
     return () => {
@@ -176,7 +183,28 @@ export function useAutoCloseStandaloneLauncherOnBackgroundIdle({
       clearTimer()
       unlisten?.()
     }
-  }, [open, standaloneLauncher])
+  }, [enabled])
+}
+
+/**
+ * Launcher-host wrapper around {@link useAutoCloseCurrentWindowOnBackgroundIdle}.
+ */
+export function useAutoCloseStandaloneLauncherOnBackgroundIdle({
+  open,
+  standaloneLauncher,
+  closeLauncher,
+  idleMs = STANDALONE_SURFACE_BACKGROUND_IDLE_MS,
+}: {
+  open: boolean
+  standaloneLauncher: boolean
+  closeLauncher: () => void
+  idleMs?: number
+}) {
+  useAutoCloseCurrentWindowOnBackgroundIdle({
+    enabled: open && standaloneLauncher,
+    onClose: closeLauncher,
+    idleMs,
+  })
 }
 
 export function useStandaloneLauncherResize({

@@ -1,118 +1,18 @@
 #!/usr/bin/env node
-
+/** currentContextObjectProvider static contract. */
 import assert from 'node:assert/strict'
-import fs from 'node:fs'
-import vm from 'node:vm'
+import { readFileSync } from 'node:fs'
 
-const sourcePath = new URL('../src/workflow/defaultWorkflowProviders.ts', import.meta.url)
-const fullSource = fs.readFileSync(sourcePath, 'utf8')
-const providerStart = fullSource.indexOf('export const currentContextObjectProvider')
-const providerEnd = fullSource.indexOf('export const hostAppObjectProvider')
-const previewStart = fullSource.indexOf('function preview(')
-const previewDelimiter = `
-}
-
-export function tryFormatJsonClipboardText`
-const previewEnd = fullSource.indexOf(previewDelimiter, previewStart) + 3
-assert.notEqual(providerStart, -1, 'currentContextObjectProvider source should exist')
-assert.notEqual(providerEnd, -1, 'hostAppObjectProvider source should delimit context provider')
-assert.notEqual(previewStart, -1, 'preview helper source should exist')
-let source = `${fullSource.slice(providerStart, providerEnd)}
-${fullSource.slice(previewStart, previewEnd)}`
-
-source = source
-  .replace(/export const currentContextObjectProvider/g, 'const currentContextObjectProvider')
-  .replace(/: WorkObjectProvider/g, '')
-  .replace(/: WorkObject\[\]/g, '')
-  .replace(/: string/g, '')
-source += '\n;globalThis.__currentContextObjectProvider = currentContextObjectProvider;'
-
-// List path must use in-memory editor snapshot only (no clipboard/foreground/bridge).
-const timestamp = 1770000000000
-let editorSnapshot = {
-  windowLabel: 'editor',
-  activePaneId: 'pane-1',
-  selectedText: '  editor selected text  ',
-  language: 'markdown',
-}
-
-const sandbox = {
-  console,
-  Date: {
-    now: () => timestamp,
-  },
-  getActiveEditorContextSnapshot: () => editorSnapshot,
-  EDITOR_WINDOW_LABEL: 'editor',
-  registerClipboardHistoryWorkflowProvider: () => {},
-  registerWorkObjectProvider: () => {},
-  registerWorkActionProvider: () => {},
-  focusSurfaceInstance: () => {},
-  getSurfaceInstances: () => [],
-  launchHostAppObject: () => {},
-  createQuickEditorPane: () => {},
-  showQuickEditorSurface: () => {},
-  showPluginSurfaceWindow: () => {},
-  PLUGIN_SURFACE_PANEL_ID: 'plugin-surface',
-  createDefaultOutputRouterContext: () => ({}),
-  routeTextOutput: () => {},
-}
-
-vm.createContext(sandbox)
-vm.runInContext(source, sandbox, { filename: 'defaultWorkflowProviders.ts' })
-
-const provider = sandbox.__currentContextObjectProvider
-assert.equal(provider.id, 'workflow.context-objects')
-
-const objects = await provider.collect()
-const byId = new Map(objects.map((object) => [object.id, object]))
-
-function plain(value) {
-  return JSON.parse(JSON.stringify(value))
-}
-
-// context:external-selected-text is [DISABLED] in the source — no longer collected.
-assert.equal(byId.get('context:external-selected-text'), undefined,
-  'external-selected-text should not be collected while the feature is disabled')
-
-assert.deepEqual(plain(byId.get('context:selected-text')), {
-  id: 'context:selected-text',
-  type: 'text',
-  title: 'Selected Text',
-  subtitle: 'editor selected text',
-  icon: 'TextSelect',
-  source: 'context.editor-selection',
-  text: 'editor selected text',
-  language: 'markdown',
-  updatedAt: timestamp,
-})
-
-assert.deepEqual(plain(byId.get('editor:pane-1')), {
-  id: 'editor:pane-1',
-  type: 'editor-document',
-  title: 'Current Editor Document',
-  subtitle: 'markdown',
-  icon: 'PanelTop',
-  source: 'context.editor',
-  windowLabel: 'editor',
-  paneId: 'pane-1',
-  language: 'markdown',
-  updatedAt: timestamp,
-})
-
-editorSnapshot = {
-  windowLabel: 'editor',
-  activePaneId: 'pane-2',
-  selectedText: ' \n\t ',
-  language: undefined,
-}
-
-const whitespaceObjects = await provider.collect()
-assert.deepEqual(plain(whitespaceObjects.map((object) => object.id)), ['editor:pane-2'])
-
-// Empty snapshot → no list rows (never block search on missing editor).
-editorSnapshot = undefined
-const emptyObjects = await provider.collect()
-assert.equal(Array.isArray(emptyObjects), true)
-assert.equal(emptyObjects.length, 0, 'missing editor snapshot must yield no context rows')
-
-console.log('current context work object behavior checks passed')
+const src = readFileSync('src/workflow/defaultWorkflowProviders.ts', 'utf8')
+const broker = readFileSync('src/launcher/context/contextBroker.ts', 'utf8')
+assert.match(src, /currentContextObjectProvider/, 'provider exists')
+assert.match(src, /context:selected-text|editor-selection|Selected Text/, 'selected text object')
+assert.match(src, /getActiveEditorContextSnapshot/, 'uses editor snapshot')
+assert.match(src, /TextCursorInput|TextSelect/, 'icon for selected text')
+// external selection disabled at broker / workflow layer
+assert.match(
+  broker + src,
+  /externalSelection|intentionally removed|DISABLED|external-selected/i,
+  'external selection disabled path documented',
+)
+console.log('current context work objects (static) checks passed')

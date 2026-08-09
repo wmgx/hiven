@@ -175,7 +175,6 @@ export function desktopTargetToLauncherItem(
   options: ToLauncherItemOptions,
 ): LauncherItem {
   const locale = options.locale
-  const action = target.actionClass ?? 'focus'
   const usageKey = stableUsageKeyForTarget(target)
   const recordUsage = shouldRecordUsage(target)
   const providerBoost = clampProviderPriority(options.provider?.priority)

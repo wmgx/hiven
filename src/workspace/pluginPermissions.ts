@@ -105,16 +105,49 @@ export const usePluginPermissionStore = create<PluginPermissionStoreState>()(
   ),
 )
 
+/**
+ * Permissions that first-party / builtin plugins still must not auto-receive.
+ * User approval (or an explicit grant record) is always required.
+ */
+export const BUILTIN_PERMISSION_DENYLIST: ReadonlySet<PluginPermission> = new Set([
+  'shell.run',
+])
+
+/**
+ * Resolve effective grants for a plugin.
+ *
+ * Semantics (least privilege):
+ * - undeclared permission → denied (never treat "not requested" as granted)
+ * - declared, no user decision → denied for installed/dev; auto-grant for builtin
+ *   unless on BUILTIN_PERMISSION_DENYLIST
+ * - explicit store grant/deny → always wins
+ *
+ * This is an API convention for trusted plugins, not a sandbox boundary.
+ */
 export function getPluginPermissionSnapshot(
   source: PluginSettingsSource,
   pluginId: string,
-  requestedPermissions: readonly PluginPermission[] = ALL_PLUGIN_PERMISSIONS,
+  requestedPermissions: readonly PluginPermission[] = [],
 ): PluginPermissionSnapshot {
   const stored = usePluginPermissionStore.getState().permissions[source][pluginId] ?? {}
+  const declared = new Set(requestedPermissions)
   const snapshot = {} as PluginPermissionSnapshot
   for (const permission of ALL_PLUGIN_PERMISSIONS) {
     const explicit = stored[permission]
-    snapshot[permission] = explicit ?? { granted: !requestedPermissions.includes(permission) }
+    if (explicit) {
+      snapshot[permission] = explicit
+      continue
+    }
+    if (!declared.has(permission)) {
+      snapshot[permission] = { granted: false }
+      continue
+    }
+    // Declared but no user decision yet.
+    if (source === 'builtin' && !BUILTIN_PERMISSION_DENYLIST.has(permission)) {
+      snapshot[permission] = { granted: true }
+      continue
+    }
+    snapshot[permission] = { granted: false }
   }
   return snapshot
 }

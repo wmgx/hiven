@@ -26,7 +26,7 @@ export async function requestOpenNewEditorWindow(): Promise<string | undefined> 
   return await requestOpenEditorWindow()
 }
 
-export async function requestFocusEditorWindow(label: string): Promise<void> {
+export async function requestFocusEditorWindow(_label: string): Promise<void> {
   await showQuickEditorWindow()
   upsertSurfaceInstance({
     id: QUICK_EDITOR_WINDOW_LABEL,

@@ -130,13 +130,7 @@ type FullJobState =
   | { status: 'done'; rows: number; cols: number; bytes: number }
   | { status: 'error'; message: string }
 
-function rowsToTsv(headers: string[], rows: CsvGridRow[]): string {
-  const lines = [
-    headers.join('\t'),
-    ...rows.map((row) => headers.map((h) => String(row[h] ?? '')).join('\t')),
-  ]
-  return lines.join('\n')
-}
+
 
 function normalizeBlock(block: CellBlock, displayRows: CsvGridRow[], headers: string[]) {
   const rowOrder = displayRows.map((r) => r.id)
@@ -343,7 +337,6 @@ export function CsvSurface(props: PluginSurfaceProps) {
   }, [tableFull])
 
   const table = gridSlice?.table ?? null
-  const gridTruncated = gridSlice?.truncated ?? false
   const totalDataRows = gridSlice?.totalRows ?? tableFull?.rows.length ?? 0
 
   const outputPreviewTable = useMemo(() => {
@@ -370,7 +363,6 @@ export function CsvSurface(props: PluginSurfaceProps) {
     }
   }, [indent, isLargeSource, mainView, minify, output, outputPreviewTable, tableFull, tableName])
 
-  const outputTruncated =
     Boolean(tableFull) && tableFull!.rows.length > OUTPUT_PREVIEW_MAX_ROWS && mainView === 'output'
 
   /** True when preview parse did not cover the whole source — needs async full pipeline. */

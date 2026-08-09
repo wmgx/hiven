@@ -1,14 +1,13 @@
 /**
- * Content recommendations driven by tool `accepts` evaluation.
+ * Content recommendations driven by tool `accepts` + optional match filter.
  *
- * Unlike intentEngine match scheduling (accepts hit + match required),
- * the recommend layer treats an accepts hit as enough to surface an action.
- * Optional `match` is invoked when present; throws are isolated.
+ * Aligns with intentEngine / ranking:
+ *   accepts coarse filter → optional match fine filter (empty/null/throw = skip).
  */
 
 import type { ContentDetection, ContentKind } from '../../kits/content'
-import { evaluateAccepts } from '../../workspace/launcher/intentEngine'
-import type { ContentAccepts, IntentMatchContext } from '../../workspace/launcher/intentTypes'
+import { isIntentEligible } from '../../workspace/launcher/intentEngine'
+import type { ContentAccepts, IntentHit, IntentMatchContext } from '../../workspace/launcher/intentTypes'
 import type { RecommendedAction } from './actionRecommendation'
 
 export type AcceptsToolDescriptor = {
@@ -19,7 +18,7 @@ export type AcceptsToolDescriptor = {
   icon?: string
   provider?: string
   accepts?: ContentAccepts
-  match?: (ctx: IntentMatchContext) => unknown
+  match?: (ctx: IntentMatchContext) => IntentHit[] | null
 }
 
 export type RecommendFromToolAcceptsParams = {
@@ -58,10 +57,10 @@ function buildDetections(params: RecommendFromToolAcceptsParams): ContentDetecti
 }
 
 /**
- * Recommend actions for tools whose declarative `accepts` passes evaluateAccepts.
+ * Recommend actions for tools whose declarative `accepts` (+ optional match) pass.
  * - Tools without accepts are skipped
  * - toolId is de-duplicated (first hit wins)
- * - Optional match throws are isolated; accepts hit alone is sufficient
+ * - match is a filter: empty/null/throw/timeout → skip (does not surface on accepts alone)
  */
 export function recommendActionsFromToolAccepts(
   params: RecommendFromToolAcceptsParams,
@@ -82,15 +81,7 @@ export function recommendActionsFromToolAccepts(
   for (const tool of params.tools) {
     if (tool.accepts == null) continue
     if (seenToolIds.has(tool.toolId)) continue
-    if (!evaluateAccepts(tool.accepts, ctx)) continue
-
-    if (typeof tool.match === 'function') {
-      try {
-        tool.match(ctx)
-      } catch {
-        // Match failures must not block accepts-based recommendation.
-      }
-    }
+    if (!isIntentEligible(tool.accepts, tool.match, ctx)) continue
 
     seenToolIds.add(tool.toolId)
     actions.push({

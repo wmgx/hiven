@@ -62,8 +62,6 @@ const KEYWORDS = new Set([
   'limit',
 ])
 
-const TABLE_ALIASES = new Set(['data', 't', 'table', 'csv', 'rows'])
-
 function tokenize(input: string): Token[] | { error: string } {
   const tokens: Token[] = []
   let i = 0
@@ -233,7 +231,6 @@ export function parseSqlStructure(sql: string): SqlStructure {
     // bare WHERE or expression
     const whereOnly = body.match(/^\s*where\s+([\s\S]+)$/i)
     where = whereOnly ? whereOnly[1].trim() : body
-    const trailing = parseTrailingClauses(where.includes(' order ') || where.includes(' ORDER ') ? where : where)
     // If user wrote "age > 1 ORDER BY age", parseTrailing on full body
     const bareTrail = parseTrailingClauses(body.replace(/^\s*where\s+/i, ''))
     if (bareTrail.ok && (bareTrail.orderBy.length || bareTrail.limit != null || bareTrail.where !== body.replace(/^\s*where\s+/i, ''))) {
@@ -355,7 +352,10 @@ type Expr =
 
 class Parser {
   private i = 0
-  constructor(private tokens: Token[]) {}
+  private tokens: Token[]
+  constructor(tokens: Token[]) {
+    this.tokens = tokens
+  }
 
   parse(): Expr {
     if (this.tokens.length === 0) return { type: 'bool', value: true }

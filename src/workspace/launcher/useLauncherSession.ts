@@ -152,6 +152,8 @@ export function useLauncherSession({
   const selectedKeyRef = useRef<string | null>(null)
   const rankedItemsRef = useRef<LauncherItem[]>([])
   const selectedIndexRef = useRef(0)
+  /** Latest host dynamic rows — open path may keep empty-open cache warm. */
+  const hostDynamicItemsRef = useRef<LauncherItem[]>([])
 
   useEffect(() => {
     requestCloseRef.current = requestClose
@@ -217,11 +219,18 @@ export function useLauncherSession({
     let cancelled = false
     queueMicrotask(() => {
       if (cancelled) return
+      // Drop plugin/document partials (query-bound). Keep last empty-open host
+      // apps/windows when the previous host query was also empty — avoids a
+      // blank host strip + re-rank flash while the 120ms empty-open delay runs.
       setPluginDynamicItems([])
-      setHostDynamicItems([])
+      const keepWarmHost =
+        hostQueryRef.current === '' && hostDynamicItemsRef.current.length > 0
+      if (!keepWarmHost) {
+        setHostDynamicItems([])
+        hostQueryRef.current = ''
+      }
       setDocumentDynamicItems([])
       pluginQueryRef.current = ''
-      hostQueryRef.current = ''
       documentQueryRef.current = ''
       pluginPartialsRef.current.clear()
       documentPartialsRef.current.clear()
@@ -545,6 +554,9 @@ export function useLauncherSession({
     })
   }, [deferredQuery, launcherPersistableRecents, locale, normalizedHostId])
 
+  // Keep open-path warm-cache decision off the render dependency list.
+  hostDynamicItemsRef.current = hostDynamicItems
+
   const rankedItems = useMemo<LauncherItem[]>(() => {
     // contentText for textMatch: Object Block takes precedence (it IS the text to process);
     // only fall back to query when no Object Block is present.
@@ -643,5 +655,5 @@ function getPluginSettings(pluginId: string, source: ContributionSource): unknow
 
 function getLauncherItemSettings(item: LauncherItem): unknown {
   if (!item.pluginId || !item.source) return undefined
-  return getPluginSettings(item.pluginId, item.source)
+  return getPluginSettings(item.pluginId, item.source as never)
 }

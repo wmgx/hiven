@@ -99,7 +99,7 @@ export function GlobalLauncherSearchFrame({
         <input
           ref={bindSearchInputRef ?? inputRef}
           value={query}
-          inputMode="latin"
+          inputMode="text"
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}

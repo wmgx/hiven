@@ -36,6 +36,9 @@ import type {
   LauncherUsageBySurface,
   SystemLauncherItemKey,
 } from './types'
+import type { ContentDetection } from '../../kits/content'
+import type { IntentMatchContext } from './intentTypes'
+import { isIntentEligible } from './intentEngine'
 import { getUsageRecord } from './usage'
 import { localizedDisplay } from './display'
 
@@ -234,8 +237,9 @@ export function usageScore(ctx: RankContext, item: LauncherItem): number {
 function favoriteKeySet(ctx: RankContext): ReadonlySet<string> | null {
   const keys = ctx.favoriteKeys
   if (!keys) return null
-  if (keys instanceof Set) return keys.size > 0 ? keys : null
-  return keys.length > 0 ? new Set(keys) : null
+  if (Array.isArray(keys)) return keys.length > 0 ? new Set(keys) : null
+  const set = keys as ReadonlySet<string>
+  return set.size > 0 ? set : null
 }
 
 /** Bounded boost when the item is user-pinned. Always < 1000. */
@@ -284,13 +288,33 @@ export function installFreshnessScore(ctx: RankContext, item: LauncherItem): num
   return (1 - age / INSTALL_FRESHNESS_WINDOW_MS) * INSTALL_FRESHNESS_WEIGHT
 }
 
+function toIntentMatchContext(ctx: RankContext): IntentMatchContext {
+  const detections = (ctx.detections ?? []) as ContentDetection[]
+  return {
+    query: ctx.query ?? '',
+    locale: ctx.locale,
+    context: {},
+    detections,
+    contentText: ctx.contentText,
+    foregroundApp: ctx.foregroundApp,
+  }
+}
+
 /**
  * Intent score from accepts.aliases / accepts.kinds(+detections) / accepts.regex.
  * Takes max of alias and content pathways (not summed); capped at INTENT_SCORE_CAP.
+ *
+ * Match semantics (filter): when `item.match` is present it must return a non-empty
+ * IntentHit[] after accepts would apply; otherwise intent score is 0.
  */
 export function intentScore(item: LauncherItem, ctx: RankContext): number {
   const accepts = item.accepts
   if (!accepts) return 0
+
+  // Shared eligibility with recommend / intent engine (accepts → optional match filter).
+  if (!isIntentEligible(accepts, item.match, toIntentMatchContext(ctx))) {
+    return 0
+  }
 
   let aliasScore = 0
   if (accepts.aliases?.length) {

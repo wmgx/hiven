@@ -18,37 +18,36 @@ assert.match(
   'refactor suite must include surface coordinator window boundary coverage',
 )
 
-assert.match(
+// Retired isEditorWindowRuntime: occupancy mutations are hard no-ops.
+assert.doesNotMatch(
   source,
-  /function isEditorWindowRuntime\(\)[\s\S]*window\.location\.search[\s\S]*['"]editor['"]/,
-  'surface coordinator must detect the editor window runtime explicitly',
+  /isEditorWindowRuntime/,
+  'surface coordinator must not reintroduce retired isEditorWindowRuntime',
 )
 assert.match(
   source,
-  /function readEditorOccupancies\(\)[\s\S]*isEditorWindowRuntime\(\) \? useWorkspaceStore\.getState\(\)\.occupancies : \{\}/,
-  'surface coordinator must not read shadow occupancies outside the editor window',
+  /function readEditorOccupancies\(\): Record<string, SurfaceOccupancy> \{\s*return \{\}\s*\}/,
+  'readEditorOccupancies must return empty (no shadow workspace occupancies)',
 )
 assert.match(
   source,
-  /export function registerOccupancy[\s\S]*if \(!isEditorWindowRuntime\(\)\) return[\s\S]*useWorkspaceStore\.setState/,
-  'registerOccupancy must no-op outside the editor runtime',
+  /export function registerOccupancy\(_?occupancy: SurfaceOccupancy\) \{\s*return\s*\}/,
+  'registerOccupancy must no-op',
 )
 assert.match(
   source,
-  /export function releaseOccupancy[\s\S]*if \(!isEditorWindowRuntime\(\)\) return[\s\S]*runtimeRegistry\.disposeOwner/,
-  'releaseOccupancy must not dispose local runtime resources outside the editor runtime',
+  /export function releaseOccupancy\(_?occupancyId: string\) \{\s*return\s*\}/,
+  'releaseOccupancy must no-op',
 )
 assert.match(
   source,
-  /export function executeExitPolicy[\s\S]*if \(!isEditorWindowRuntime\(\)\) return true/,
-  'executeExitPolicy must not mutate shadow occupancy state outside the editor runtime',
+  /export function executeExitPolicy\(_?occupancyId: string\): boolean \{\s*return true\s*\}/,
+  'executeExitPolicy must no-op with success',
 )
-for (const fn of ['detectConflicts', 'getOccupanciesForSurface', 'getOccupanciesByOwner', 'isSurfaceExclusivelyOccupied']) {
-  assert.match(
-    source,
-    new RegExp(`${fn}[\\s\\S]*readEditorOccupancies\\(\\)`),
-    `${fn} must read occupancies through the editor-window guard`,
-  )
-}
+assert.match(
+  source,
+  /detectConflicts[\s\S]*readEditorOccupancies\(\)/,
+  'detectConflicts must read occupancies through the empty guard',
+)
 
 console.log('surface coordinator window boundary checks passed')

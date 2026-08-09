@@ -48,7 +48,7 @@ function readBundledPluginMessages(dir: string): PluginMessages {
     if (!path.includes(`/plugins/${dir}/locales/`)) continue
     const locale = localeFromPath(path)
     if (locale && SUPPORTED_BUNDLED_PLUGIN_LOCALES.has(locale)) {
-      messages[locale] = dict
+      messages[locale as keyof typeof messages] = dict
     }
   }
   return messages
@@ -86,8 +86,9 @@ export function listBundledPluginPackageSummaries(): PluginPackageSummary[] {
     displayName: manifest.displayName ?? manifest.pluginId,
     displayNameI18n: manifest.displayNameI18n,
     version: manifest.version ?? '0.0.0',
-    entry: manifest.entry ?? 'index.tsx',
+    entry: 'index.tsx',
     capabilities: manifest.capabilities ?? [],
+    permissions: manifest.permissions ?? [],
     folderPath: `src/plugins/${dir}`,
   }))
 }

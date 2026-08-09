@@ -2,7 +2,13 @@
  * Two-level hybrid Intent engine.
  *
  *   evaluateAccepts(accepts, ctx) → boolean   pure data filter; never calls match
+ *   passesIntentMatchFilter(match, ctx) → boolean   optional fine filter
  *   runIntentMatchers(matchers, ctx, options?) → IntentHit[]
+ *
+ * Match semantics (single, locked for production ranking + recommendation):
+ *   **filter** — after accepts hits, optional match() must return a non-empty
+ *   IntentHit[] within budget; empty/null/throw/timeout → intent does not apply.
+ *   Match is not a separate score pathway and does not inject extra list rows.
  */
 
 import type {
@@ -94,6 +100,46 @@ export function evaluateAccepts(
 
   // At least one path was active, but none succeeded.
   return false
+}
+
+/**
+ * Optional match fine-filter (filter semantics).
+ * - no match fn → pass (accepts alone is enough)
+ * - non-empty IntentHit[] within budget → pass
+ * - empty / null / throw / timeout → fail
+ */
+export function passesIntentMatchFilter(
+  match: IntentMatcher['match'] | undefined | null,
+  ctx: IntentMatchContext,
+  options?: Pick<IntentRunOptions, 'matchTimeoutMs' | 'now'>,
+): boolean {
+  if (typeof match !== 'function') return true
+
+  const matchTimeoutMs = options?.matchTimeoutMs ?? DEFAULT_MATCH_TIMEOUT_MS
+  const now = options?.now ?? defaultNow
+  const t0 = now()
+  try {
+    const produced = match(ctx)
+    if (now() - t0 > matchTimeoutMs) return false
+    if (produced == null || !Array.isArray(produced) || produced.length === 0) return false
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Combined eligibility: accepts coarse filter then optional match fine filter.
+ * This is the production path used by ranking intentScore and content recommend.
+ */
+export function isIntentEligible(
+  accepts: ContentAccepts | undefined | null,
+  match: IntentMatcher['match'] | undefined | null,
+  ctx: IntentMatchContext,
+  options?: Pick<IntentRunOptions, 'matchTimeoutMs' | 'now'>,
+): boolean {
+  if (!evaluateAccepts(accepts, ctx)) return false
+  return passesIntentMatchFilter(match, ctx, options)
 }
 
 /**

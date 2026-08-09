@@ -395,7 +395,12 @@ export function getHostEditorActionItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['text-input-actions'],
-      execute: async () => guardEditorWindowRuntime() ?? { ok: rewriteActiveEditorTextPolitely() },
+      execute: async () => {
+        const blocked = guardEditorWindowRuntime()
+        if (blocked) return blocked
+        const ok = rewriteActiveEditorTextPolitely()
+        return ok ? { ok: true as const } : { ok: false, message: 'Editor action failed' }
+      },
     },
     {
       systemKey: 'host:editor:compress-three-sentences',
@@ -411,7 +416,12 @@ export function getHostEditorActionItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['text-input-actions'],
-      execute: async () => guardEditorWindowRuntime() ?? { ok: compressActiveEditorTextToThreeSentences() },
+      execute: async () => {
+        const blocked = guardEditorWindowRuntime()
+        if (blocked) return blocked
+        const ok = compressActiveEditorTextToThreeSentences()
+        return ok ? { ok: true as const } : { ok: false, message: 'Editor action failed' }
+      },
     },
     {
       systemKey: 'host:editor:format-bullets',
@@ -427,7 +437,12 @@ export function getHostEditorActionItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['text-input-actions'],
-      execute: async () => guardEditorWindowRuntime() ?? { ok: formatActiveEditorTextAsBullets() },
+      execute: async () => {
+        const blocked = guardEditorWindowRuntime()
+        if (blocked) return blocked
+        const ok = formatActiveEditorTextAsBullets()
+        return ok ? { ok: true as const } : { ok: false, message: 'Editor action failed' }
+      },
     },
     {
       systemKey: 'host:editor:quote-code-block',
@@ -443,7 +458,12 @@ export function getHostEditorActionItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['text-input-actions'],
-      execute: async () => guardEditorWindowRuntime() ?? { ok: quoteActiveEditorTextAsCodeBlock() },
+      execute: async () => {
+        const blocked = guardEditorWindowRuntime()
+        if (blocked) return blocked
+        const ok = quoteActiveEditorTextAsCodeBlock()
+        return ok ? { ok: true as const } : { ok: false, message: 'Editor action failed' }
+      },
     },
     {
       systemKey: 'host:editor:json-minify',
@@ -459,7 +479,12 @@ export function getHostEditorActionItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['text-input-actions'],
-      execute: async () => guardEditorWindowRuntime() ?? { ok: minifyActiveEditorJson() },
+      execute: async () => {
+        const blocked = guardEditorWindowRuntime()
+        if (blocked) return blocked
+        const ok = minifyActiveEditorJson()
+        return ok ? { ok: true as const } : { ok: false, message: 'Editor action failed' }
+      },
     },
     {
       systemKey: 'host:editor:json-to-yaml',
@@ -475,7 +500,12 @@ export function getHostEditorActionItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['editor-command-bar'],
       requiredCapabilities: ['text-input-actions'],
-      execute: async () => guardEditorWindowRuntime() ?? { ok: convertActiveEditorJsonToYaml() },
+      execute: async () => {
+        const blocked = guardEditorWindowRuntime()
+        if (blocked) return blocked
+        const ok = convertActiveEditorJsonToYaml()
+        return ok ? { ok: true as const } : { ok: false, message: 'Editor action failed' }
+      },
     },
     {
       systemKey: 'host:editor:json-expression',

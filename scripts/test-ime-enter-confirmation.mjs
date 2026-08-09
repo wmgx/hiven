@@ -243,4 +243,30 @@ assert(
   'React event.isComposing must be honored',
 )
 
+// Escape must never be trapped by a stuck composition flag (collect-input exit).
+startImeComposition(composingRef)
+assert(composingRef.current === true, 'composition flag should be set')
+assert(
+  shouldIgnoreImeKeyDown({ key: 'Escape', keyCode: 27 }, composingRef) === false,
+  'Escape must not be ignored during tracked IME composition (exit must stay available)',
+)
+assert(
+  shouldIgnoreImeKeyDown({ key: 'Escape', isComposing: true }, { current: true }) === false,
+  'Escape must not be ignored when isComposing=true',
+)
+
+// Host Escape chain must clear stuck IME and consult interceptors (not early-return on settings).
+assert(
+  /isImeComposingRef\.current\s*=\s*false/.test(globalLauncherLifecycle),
+  'Host Escape must clear stuck IME composing flag',
+)
+assert(
+  /runLauncherEscapeInterceptor/.test(globalLauncherLifecycle),
+  'Host Escape must consult layer interceptors',
+)
+assert(
+  !/if\s*\(\s*usePluginSettingsStore\.getState\(\)\.settingsDialogTarget\s*\)\s*return/.test(globalLauncherLifecycle),
+  'Host Escape must not early-return on any settingsDialogTarget (that swallowed Esc)',
+)
+
 console.log('IME enter confirmation checks passed')

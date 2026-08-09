@@ -49,7 +49,7 @@ function toQuickEditorPaneSnapshot(state: Pick<QuickEditorState, 'panes' | 'pane
   return { activePaneId, paneIds, panes }
 }
 
-function defaultQuickPaneTitle(pane: QuickEditorPaneState, index: number): string {
+function defaultQuickPaneTitle(_pane: QuickEditorPaneState, index: number): string {
   return `Pane ${index + 1}`
 }
 

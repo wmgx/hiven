@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { ResizeDirection } from '@tauri-apps/api/window'
+type ResizeDirection = 'East' | 'North' | 'NorthEast' | 'NorthWest' | 'South' | 'SouthEast' | 'SouthWest' | 'West'
 
 export const QUICK_EDITOR_WINDOW_LABEL = 'quick-editor'
 

@@ -180,7 +180,6 @@ export const presentationApi: PresentationApi = {
     // Save previous options for restoration
     const prevOptions: Record<string, any> = {}
     for (const key of Object.keys(options)) {
-      const currentOptions = editor.getOptions()
       // Monaco getOptions returns a ComputedEditorOptions, but raw options
       // can be read via getRawOptions on the editor model.
       prevOptions[key] = undefined // We can't perfectly restore, so just note

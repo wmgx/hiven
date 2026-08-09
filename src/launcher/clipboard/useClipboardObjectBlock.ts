@@ -32,6 +32,7 @@ import {
   type ClipboardSnapshot,
 } from './clipboardSnapshot'
 import { launcherPerfNow, logLauncherPerfDuration } from '../../workspace/launcher/perf'
+import { TelemetryEvents, trackBehavior } from '../../workspace/telemetry'
 
 /** Keep token mounted for compositor-only exit (opacity + transform). */
 export const OBJECT_BLOCK_EXIT_MS = 130
@@ -135,6 +136,7 @@ export function useClipboardObjectBlock(params: {
           // Never clobber a history handoff that landed while we were reading.
           if (isHandoffBlock(blockRef.current)) return
           logLauncherPerfDuration('clipboard-object-block:read', startedAt, {
+            kind: 'latency',
             hasText: Boolean(text),
             textLength: text.length,
           })
@@ -172,10 +174,26 @@ export function useClipboardObjectBlock(params: {
           setBlock(newBlock)
           // Hint only when not suppressed and content would qualify (policy inside builder).
           setHint(newBlock || suppress ? null : buildRecentClipboardHint(snapshot))
+          if (newBlock) {
+            trackBehavior(TelemetryEvents.clipboardBlockAttach, {
+              kind: newBlock.kind,
+              source: newBlock.source,
+              auto: true,
+              suppressed: false,
+            })
+          } else if (suppress) {
+            trackBehavior(TelemetryEvents.clipboardBlockAttach, {
+              auto: false,
+              suppressed: true,
+            })
+          }
         } catch {
           if (cancelled) return
           if (isHandoffBlock(blockRef.current)) return
-          logLauncherPerfDuration('clipboard-object-block:read', startedAt, { failed: true })
+          logLauncherPerfDuration('clipboard-object-block:read', startedAt, {
+            kind: 'latency',
+            failed: true,
+          })
           setBlock(null)
           setIsExiting(false)
           setHint(null)
@@ -212,6 +230,10 @@ export function useClipboardObjectBlock(params: {
   const removeBlock = useCallback(() => {
     if (!block || isExiting) return
     userDismissedRef.current = true
+    trackBehavior(TelemetryEvents.clipboardBlockRemove, {
+      kind: block.kind,
+      source: block.source,
+    })
     clearPendingObjectBlock()
     const snapshot = getLastClipboardSnapshot()
     if (snapshot) dismissClipboardBlock(snapshot)
@@ -251,6 +273,10 @@ export function useClipboardObjectBlock(params: {
     const now = Date.now()
     const forcedBlock = createClipboardObjectBlock(snapshot, now, { forceAttach: true })
     if (forcedBlock) {
+      trackBehavior(TelemetryEvents.clipboardHintAttach, {
+        kind: forcedBlock.kind,
+        source: forcedBlock.source,
+      })
       clearExitTimer()
       setIsExiting(false)
       setBlock(forcedBlock)

@@ -129,12 +129,13 @@ async function writeClipboard(text: string): Promise<void> {
   }
 }
 
-async function openEditorWindow(): Promise<void> {
+async function openEditorWindow(): Promise<string | undefined> {
   try {
     await showQuickEditorSurface()
   } catch (error) {
     console.warn('[launcher] failed to show quick editor:', error)
-  }
+    return undefined
+}
 }
 
 async function showPluginsPage(): Promise<void> {

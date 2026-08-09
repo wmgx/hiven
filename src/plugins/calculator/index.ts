@@ -70,11 +70,14 @@ function parse(tokens: Token[]): BigNumber | null {
   function parseExpr(): BigNumber | null {
     let left = parseTerm()
     if (left === null) return null
-    while (peek()?.type === 'op' && (peek()!.value === '+' || peek()!.value === '-')) {
-      const op = consume().value as string
+    while (true) {
+      const token = peek()
+      if (token?.type !== 'op' || (token.value !== '+' && token.value !== '-')) break
+      const op = consume()
+      if (op.type !== 'op') return null
       const right = parseTerm()
       if (right === null) return null
-      left = op === '+' ? left.plus(right) : left.minus(right)
+      left = op.value === '+' ? left.plus(right) : left.minus(right)
     }
     return left
   }
@@ -82,11 +85,14 @@ function parse(tokens: Token[]): BigNumber | null {
   function parseTerm(): BigNumber | null {
     let left = parseUnary()
     if (left === null) return null
-    while (peek()?.type === 'op' && (peek()!.value === '*' || peek()!.value === '/')) {
-      const op = consume().value as string
+    while (true) {
+      const token = peek()
+      if (token?.type !== 'op' || (token.value !== '*' && token.value !== '/')) break
+      const op = consume()
+      if (op.type !== 'op') return null
       const right = parseUnary()
       if (right === null) return null
-      if (op === '/') {
+      if (op.value === '/') {
         if (right.isZero()) return null // division by zero
         left = left.div(right)
       } else {
@@ -450,7 +456,8 @@ const definition: PluginDefinition = {
       titleI18n: { zh: '计算结果', en: 'Calculation Result' },
       defaultPlacement: 'pane-bottom',
       height: '220px',
-      component: CalculationResultPanel,
+      // PanelPropsV2 generics are invariant in practice; cast for registration.
+      component: CalculationResultPanel as never,
     },
   ],
   launcher: {

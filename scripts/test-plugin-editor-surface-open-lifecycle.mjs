@@ -1,97 +1,30 @@
 #!/usr/bin/env node
-
+/**
+ * Plugin Editor surface was retired (no in-app plugin IDE).
+ * focusSurfaceInstance('plugin-editor') must land on Plugins + settings, not a dead bridge.
+ */
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
-const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
-const refactorSuite = readFileSync('scripts/test-refactor-suite.mjs', 'utf8')
-const bridge = readFileSync('src/surfaces/pluginEditorSurfaceBridge.ts', 'utf8')
-const pluginsSurface = readFileSync('src/surfaces/PluginsSurface.tsx', 'utf8')
+assert.equal(existsSync('src/surfaces/pluginEditorSurfaceBridge.ts'), false, 'plugin editor bridge must be deleted')
+assert.equal(existsSync('src/surfaces/pluginEditorState.ts'), false, 'plugin editor state type must be deleted')
+assert.equal(existsSync('src/surfaces/PluginEditorSurface.tsx'), false, 'PluginEditorSurface UI must stay deleted')
+
 const actions = readFileSync('src/surfaces/actions.ts', 'utf8')
-
-assert.equal(
-  packageJson.scripts?.['test:plugin-editor-surface-open-lifecycle'],
-  'node scripts/test-plugin-editor-surface-open-lifecycle.mjs',
-  'package.json must expose plugin editor surface lifecycle coverage',
-)
 assert.match(
-  refactorSuite,
-  /test:plugin-editor-surface-open-lifecycle/,
-  'refactor suite must include plugin editor surface lifecycle coverage',
-)
-
-assert.match(
-  bridge,
-  /PLUGIN_EDITOR_SURFACE_PENDING_KEY/,
-  'plugin editor surface bridge must keep a cross-window persistent pending-open queue',
-)
-assert.match(
-  bridge,
-  /PLUGIN_EDITOR_SURFACE_PENDING_TTL_MS\s*=\s*30_000/,
-  'plugin editor pending opens must expire so stale cross-window focus does not replay forever',
-)
-assert.match(
-  bridge,
-  /requestOpenPluginEditorSurface[\s\S]*persistPendingPluginEditorOpen\(pluginEditor\)[\s\S]*dispatchPluginEditorOpen\(pluginEditor\)[\s\S]*emit\(PLUGIN_EDITOR_SURFACE_OPEN_EVENT, pluginEditor\)/,
-  'plugin editor open requests must be persisted before same-webview and Tauri event delivery',
-)
-assert.match(
-  bridge,
-  /const drainQueuedOpens = \(\) => \{[\s\S]*drainPersistedPluginEditorOpenRequests\(\)[\s\S]*drainPendingPluginEditorOpenRequests\(\)/,
-  'plugin editor subscribers must drain persisted requests before in-memory requests',
-)
-assert.match(
-  bridge,
-  /listen<unknown>\(PLUGIN_EDITOR_SURFACE_OPEN_EVENT[\s\S]*unlistenTauri = unlisten[\s\S]*drainQueuedOpens\(\)/,
-  'Tauri subscribers must install the live event listener before draining pending plugin editor opens',
-)
-assert.match(
-  bridge,
-  /catch\(\(\) => \{[\s\S]*drainQueuedOpens\(\)/,
-  'plugin editor subscribers must still drain queued opens if Tauri listener registration fails',
-)
-
-assert.match(
-  bridge,
-  /listen<unknown>\(PLUGIN_EDITOR_SURFACE_OPEN_EVENT[\s\S]*isPluginEditorState\(event\.payload\)[\s\S]*dispatchPluginEditorOpen\(event\.payload\)/,
-  'Tauri plugin editor open events must use the same dispatch path so persistent pending entries are cleared',
-)
-
-assert.match(
-  bridge,
-  /function dispatchPluginEditorOpen[\s\S]*if \(listeners\.size === 0\)[\s\S]*enqueuePendingPluginEditorOpen\(pluginEditor\)[\s\S]*removePendingPluginEditorOpen\(pluginEditor\)[\s\S]*for \(const listener of listeners\)/,
-  'delivered plugin editor opens must clear persistent pending entries',
-)
-assert.match(
-  bridge,
-  /function enqueuePendingPluginEditorOpen[\s\S]*isPendingPluginEditorOpenFresh[\s\S]*pluginEditorOpenKey\(item\.pluginEditor\) !== key[\s\S]*createdAt: Date\.now\(\)/,
-  'in-memory plugin editor opens must be deduped and timestamped while waiting for PluginsSurface',
-)
-assert.match(
-  bridge,
-  /function readPendingPluginEditorOpens[\s\S]*window\.localStorage\.getItem\(PLUGIN_EDITOR_SURFACE_PENDING_KEY\)[\s\S]*normalizePendingPluginEditorOpen[\s\S]*filter\(isPendingPluginEditorOpenFresh\)/,
-  'pending plugin editor opens must be validated and TTL-filtered when read from cross-window local storage',
-)
-assert.match(
-  bridge,
-  /function normalizePendingPluginEditorOpen[\s\S]*isPluginEditorState\(value\)[\s\S]*pluginEditor: value[\s\S]*createdAt: Date\.now\(\)/,
-  'legacy plugin editor pending opens must be migrated into timestamped envelopes',
-)
-assert.match(
-  bridge,
-  /function pluginEditorOpenKey[\s\S]*pluginEditor\.source \?\? ['"]installed['"][\s\S]*pluginEditor\.pluginId[\s\S]*pluginEditor\.folderPath[\s\S]*pluginEditor\.activeFile \?\? ['"]/,
-  'pending plugin editor opens must dedupe by source/plugin/folder/active file',
-)
-
-assert.match(
-  pluginsSurface,
-  /subscribePluginEditorSurfaceOpen\(setPluginEditor\)/,
-  'PluginsSurface must subscribe to plugin editor surface open requests',
+  actions,
+  /surface\.kind === ['"]plugin-editor['"][\s\S]*requestOpenLauncherHostSurface\(['"]system-plugins['"]\)/,
+  'plugin-editor focus must open system-plugins host surface',
 )
 assert.match(
   actions,
-  /kind === ['"]plugin-editor['"][\s\S]*requestOpenLauncherHostSurface\(['"]system-plugins['"]\)[\s\S]*requestOpenPluginEditorSurface\(/,
-  'focusing a plugin-editor surface must bridge to the launcher-hosted plugins surface and request the editor sub-surface',
+  /requestOpenLauncherPluginSettingsSurface\(source, surface\.pluginId\)/,
+  'plugin-editor focus must open plugin settings when pluginId is known',
+)
+assert.doesNotMatch(
+  actions,
+  /requestOpenPluginEditorSurface/,
+  'actions must not call the deleted plugin editor bridge',
 )
 
-console.log('plugin editor surface open lifecycle checks passed')
+console.log('plugin-editor surface open lifecycle: retired path checks passed')

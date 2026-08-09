@@ -184,8 +184,8 @@ export function PluginSurfaceRenderer({
               openSettingsDialog({
                 pluginId: target.pluginId,
                 source: target.source,
-                presentation,
-                context: { surfaceId: contextSurfaceId },
+                presentation: presentation as 'global-launcher' | 'dialog' | undefined,
+                context: { surfaceId: contextSurfaceId as never },
               })
             },
             detachToWindow: (initialText?: string) => {

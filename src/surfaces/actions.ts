@@ -3,10 +3,15 @@ import type { PluginSettingsSource } from '../workspace/pluginSettingsStore'
 import { showLauncherWindow } from '../workspace/windowManager/launcherWindow'
 import { showPluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
 import { requestOpenLauncherHostSurface, requestOpenLauncherPluginSettingsSurface } from '../workspace/launcherHostSurfaceBridge'
-import { requestOpenPluginSurfaceTool } from '../workspace/pluginSurfaceOpenRequest'
-import { requestOpenPluginEditorSurface } from './pluginEditorSurfaceBridge'
 import { showQuickEditorSurface } from '../workspace/quickEditor/quickEditorRequests'
 
+/**
+ * Focus / restore a surface instance.
+ *
+ * Plugin Editor as a first-class surface was retired (no IDE-in-app product).
+ * Legacy `plugin-editor` kinds open Plugins host surface and, when possible,
+ * the plugin's settings dialog.
+ */
 export async function focusSurfaceInstance(surfaceOrId: SurfaceInstance | string): Promise<boolean> {
   const surface = typeof surfaceOrId === 'string' ? getSurfaceInstance(surfaceOrId) : surfaceOrId
   if (!surface) return false
@@ -43,16 +48,11 @@ export async function focusSurfaceInstance(surfaceOrId: SurfaceInstance | string
   }
 
   if (surface.kind === 'plugin-editor') {
+    // Retired surface: land on Plugins manager; open settings when we know the plugin.
     await requestOpenLauncherHostSurface('system-plugins')
-    if (surface.pluginId && surface.folderPath) {
+    if (surface.pluginId) {
       const source = sourceFromPluginEditorSurfaceInstanceId(surface.id)
-      requestOpenPluginEditorSurface({
-        pluginId: surface.pluginId,
-        folderPath: surface.folderPath,
-        activeFile: surface.surfaceId === 'plugin-editor' ? undefined : surface.surfaceId,
-        source,
-        readOnly: source === 'builtin',
-      })
+      await requestOpenLauncherPluginSettingsSurface(source, surface.pluginId)
     }
     markSurfaceInstanceState(surface.id, 'visible')
     return true
@@ -82,7 +82,7 @@ function sourceFromSettingsSurfaceInstanceId(id: string): PluginSettingsSource {
   return source === 'installed' || source === 'dev' ? source : 'builtin'
 }
 
-function sourceFromPluginEditorSurfaceInstanceId(id: string): 'builtin' | 'installed' | 'dev' {
+function sourceFromPluginEditorSurfaceInstanceId(id: string): PluginSettingsSource {
   const source = id.split(':')[2]
   return source === 'builtin' || source === 'dev' ? source : 'installed'
 }

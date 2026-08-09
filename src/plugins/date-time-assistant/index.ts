@@ -380,10 +380,10 @@ export const dateTimeAssistantPlugin = definePlugin({
       // "now" expressions produce multiple items (timestamp + datetime)
       const nowParsed = parseNowExpression(input, now)
       if (nowParsed) {
-        const separatorIndex = parsed.value.indexOf(' | ')
+        const separatorIndex = nowParsed.value.indexOf(' | ')
         if (separatorIndex >= 0) {
-          const timestampValue = parsed.value.slice(0, separatorIndex)
-          const dateTimeValue = parsed.value.slice(separatorIndex + 3)
+          const timestampValue = nowParsed.value.slice(0, separatorIndex)
+          const dateTimeValue = nowParsed.value.slice(separatorIndex + 3)
           const trimmed = input.trim()
           return [
             {
@@ -422,6 +422,7 @@ export const dateTimeAssistantPlugin = definePlugin({
       }
 
       // Single result (timestamp conversion, date offset, tomorrow, etc.)
+      if (!parsed) return []
       const trimmed = input.trim()
       return [{
         id: 'dt-result',

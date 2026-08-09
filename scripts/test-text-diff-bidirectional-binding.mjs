@@ -7,7 +7,7 @@ const read = (path) => readFileSync(path, 'utf8')
 
 const indexSrc = read('src/plugins/textDiff/index.tsx')
 const surfaceSrc = read('src/plugins/textDiff/TextDiffSurface.tsx')
-const pageSrc = read('src/plugins/textDiff/DiffPageView.tsx')
+const pageSrc = read('src/plugins/textDiff/TextDiffSurface.tsx')
 const hookSrc = read('src/plugins/textDiff/useDiffSourceText.ts')
 const pluginApiSrc = read('src/workspace/launcher/pluginApi.ts')
 const hostSdkSrc = read('src/pluginHostSdk.ts')
@@ -29,7 +29,7 @@ assert.match(quickReqSrc, /QUICK_EDITOR_SET_PANE_TEXT_EVENT/, 'cross-window set-
 assert.match(quickViewSrc, /QUICK_EDITOR_SET_PANE_TEXT_EVENT/, 'quick editor window must listen for set-pane-text')
 assert.match(hookSrc, /setBoundSourceText/, 'shared hook must write back')
 assert.match(surfaceSrc, /useDiffSourceText/, 'TextDiffSurface must bind via shared hook')
-assert.match(pageSrc, /useDiffSourceText/, 'DiffPageView must bind via shared hook')
-assert.doesNotMatch(pageSrc, /function useDiffSourceText/, 'DiffPageView must not keep local-only binding helper')
+assert.match(pageSrc, /useDiffSourceText/, 'TextDiffSurface must bind via shared hook')
+assert.doesNotMatch(pageSrc, /function useDiffSourceText/, 'TextDiffSurface must not keep local-only binding helper')
 
 console.log('text-diff bidirectional binding checks passed')

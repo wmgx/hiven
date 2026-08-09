@@ -193,7 +193,7 @@ export function GlobalLauncherFrameSwitch({
     return (
       <LauncherParamStep
         frame={frame}
-        error={controllerState?.error}
+        error={controllerState?.error ?? null}
         busy={controllerState?.busy ?? false}
         locale={locale}
         headerClassName="global-launcher-header l-search"
@@ -226,7 +226,7 @@ export function GlobalLauncherFrameSwitch({
         bindSearchInputRef={bindSearchInputRef}
         frame={frame}
         busy={controllerState?.busy ?? false}
-        error={controllerState?.error}
+        error={controllerState?.error ?? null}
         locale={locale}
         paramChips={paramChips}
         onInputChange={onCollectInputChange}
@@ -245,7 +245,7 @@ export function GlobalLauncherFrameSwitch({
     return (
       <GlobalLauncherResultFrame
         frame={frame}
-        error={controllerState?.error}
+        error={controllerState?.error ?? null}
         locale={locale}
         selectedIndex={resultSelectedIndex}
         selectedChoiceIds={selectedResultChoiceIds}
@@ -266,7 +266,7 @@ export function GlobalLauncherFrameSwitch({
       placeholder={searchPlaceholder}
       clipboardBlock={clipboardBlock}
       clipboardHintSelected={clipboardHintSelected}
-      error={controllerState?.error}
+      error={controllerState?.error ?? null}
       items={visibleFiltered}
       selectedItem={selectedItem}
       locale={locale}

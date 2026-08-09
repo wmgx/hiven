@@ -45,7 +45,8 @@ This is a hiven directory plugin.
 - \`index.js\` is the fixed entry.
 - Runtime helpers are injected as \`globalThis.HivenPlugin\`; no relative framework import is needed.
 - Host UI primitives are injected as \`ui.Button\`, \`ui.TextInput\`, \`ui.Select\`, \`ui.Checkbox\`, \`ui.Stack\`, \`ui.Text\`, \`ui.CodeBlock\`, and \`ui.EmptyState\`.
-- Reusable rendering kits are injected as \`kits.DualEditorView\` and \`kits.diff.*\`.
+- Content kits are injected as \`kits.content.detectContent\` (not Diff product kits).
+- Diff / DualEditorView are **not** public SDK; only the first-party text-diff plugin uses \`@hiven/plugin-diff\`.
 - Read-only store hooks are injected as \`hooks.useSettings\`, \`hooks.useLocale\`, \`hooks.usePaneText\`, and \`hooks.useT(pluginId)\`.
 - i18n strings live in \`locales/en.json\` and \`locales/zh.json\`; code writes only keys via \`hooks.useT('${pluginId}')\` or \`i18n.makeT('${pluginId}', locale)\`.
 `,

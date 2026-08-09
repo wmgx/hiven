@@ -45,15 +45,22 @@ export function finishImeComposition(
 
 /**
  * Global IME keydown guard.
- * Must be used for every launcher / palette Enter (and Esc) handler.
+ * Must be used for every launcher / palette Enter handler.
  *
  * Covers:
  * - tracked composition flag
  * - native / React isComposing
  * - keyCode 229 (IME processing key)
  * - Enter shortly after compositionend (上屏 Enter that looks like a plain confirm)
+ *
+ * Escape is NEVER ignored: a stuck composition flag (compositionend missed after
+ * remount/focus thrash) must not trap the user in collect-input / launcher.
+ * Hosts should still clear composingRef when handling Escape.
  */
 export function shouldIgnoreImeKeyDown(event: ImeKeyEvent, composingRef: CompositionRef): boolean {
+  // Global dismiss / step-back must work even if IME state is wrong.
+  if (event.key === 'Escape') return false
+
   if (composingRef.current) return true
   if (event.isComposing === true) return true
   if (event.nativeEvent?.isComposing === true) return true

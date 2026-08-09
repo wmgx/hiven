@@ -4870,6 +4870,7 @@ struct PluginDirSummary {
     version: String,
     entry: String,
     capabilities: Vec<String>,
+    permissions: Vec<String>,
     #[serde(rename = "folderPath")]
     folder_path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -5521,6 +5522,7 @@ fn list_plugin_dirs(path: String) -> Result<Vec<PluginDirSummary>, String> {
                         version: "0.0.0".to_string(),
                         entry: "".to_string(),
                         capabilities: Vec::new(),
+                        permissions: Vec::new(),
                         folder_path: folder.to_string_lossy().to_string(),
                         error: Some(error),
                     });
@@ -5963,6 +5965,16 @@ fn read_plugin_manifest_summary(folder: &Path) -> Result<PluginDirSummary, Strin
                 .collect()
         })
         .unwrap_or_default();
+    let permissions = value
+        .get("permissions")
+        .and_then(|v| v.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
 
     Ok(PluginDirSummary {
         plugin_id,
@@ -5971,6 +5983,7 @@ fn read_plugin_manifest_summary(folder: &Path) -> Result<PluginDirSummary, Strin
         version,
         entry,
         capabilities,
+        permissions,
         folder_path: folder.to_string_lossy().to_string(),
         error: None,
     })

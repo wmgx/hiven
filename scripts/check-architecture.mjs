@@ -21,7 +21,8 @@ function walkWithExtensions(dir, extensions) {
     const full = join(dir, name)
     const stat = statSync(full)
     if (stat.isDirectory()) {
-      out.push(...walk(full))
+      // Keep the caller's extension filter while descending (do not fall back to walk()).
+      out.push(...walkWithExtensions(full, extensions))
     } else if (extensions.has(full.slice(full.lastIndexOf('.')))) {
       out.push(full)
     }
@@ -270,6 +271,34 @@ const cbhDir = join(root, 'src/plugins/clipboard-history')
 for (const requiredDir of ['surfaces', 'settings', 'background', 'storage']) {
   if (!existsSync(join(cbhDir, requiredDir))) {
     addFailure(`clipboard-history must have ${requiredDir}/ directory`)
+  }
+}
+
+// ─── B3: Diff product stays out of public SDK ────────────────────────────────
+const pluginSdkPublic = read(join(root, 'src/plugin-sdk.ts'))
+const pluginHostSdk = read(join(root, 'src/pluginHostSdk.ts'))
+if (/export type \{[^}]*\bDiffSource\b/.test(pluginSdkPublic) && !/DiffSourcePayload/.test(pluginSdkPublic)) {
+  addFailure('public @hiven/plugin must not export product DiffSource from workspaceStore')
+}
+// Ignore comments: only fail on real imports / type members.
+if (/import\s*\{[^}]*\bDualEditorView\b|DualEditorView:\s*typeof|buildJsonDiffViewModel|computeTextLineDiff/.test(pluginHostSdk)) {
+  addFailure('PluginHostSdk must not expose DualEditorView / kits.diff (use @hiven/plugin-diff for text-diff only)')
+}
+if (/useWorkspaceActions\s*:|useBoundSourceText\s*:|useActiveFullscreenView\s*:/.test(pluginHostSdk)) {
+  addFailure('PluginHostSdk must not expose Diff write-back / fullscreen workspace hooks')
+}
+// Only text-diff may import @hiven/plugin-diff
+const pluginsDirForDiff = join(root, 'src/plugins')
+if (existsSync(pluginsDirForDiff)) {
+  for (const pluginName of readdirSync(pluginsDirForDiff)) {
+    if (pluginName === 'textDiff') continue
+    const pluginDir = join(pluginsDirForDiff, pluginName)
+    if (!statSync(pluginDir).isDirectory()) continue
+    for (const file of walk(pluginDir)) {
+      if (read(file).includes('@hiven/plugin-diff')) {
+        addFailure(`only text-diff may import @hiven/plugin-diff: ${rel(file)}`)
+      }
+    }
   }
 }
 

@@ -18,37 +18,34 @@ assert.match(
   'refactor suite must include monaco bridge window boundary coverage',
 )
 
-assert.match(
+// Retired isEditorWindowRuntime: monaco bridge is a hard no-op outside Quick Editor
+// (runtimeRegistry editors are not exposed from launcher / plugin surfaces).
+assert.doesNotMatch(
   source,
-  /function isEditorWindowRuntime\(\)[\s\S]*window\.location\.search[\s\S]*['"]editor['"]/,
-  'monaco bridge must detect the editor window runtime explicitly',
+  /isEditorWindowRuntime/,
+  'monaco bridge must not reintroduce retired isEditorWindowRuntime',
 )
 assert.match(
   source,
-  /function getEditorRuntime\(paneId: PaneId\)[\s\S]*isEditorWindowRuntime\(\) \? runtimeRegistry\.getCodeEditor\(paneId\) : null/,
-  'monaco bridge must not expose runtimeRegistry editors outside the editor window',
+  /function getEditorRuntime\(_paneId: PaneId\): any \| null \{\s*return null\s*\}/,
+  'getEditorRuntime must hard-return null (no shadow monaco outside editor host)',
 )
 assert.match(
   source,
-  /getMonaco\(\)[\s\S]*isEditorWindowRuntime\(\) \? \(\(window as any\)\.monaco \?\? null\) : null/,
-  'monaco bridge must not expose window.monaco outside the editor window',
+  /getMonaco\(\) \{\s*return null\s*\}/,
+  'getMonaco must hard-return null',
 )
 assert.doesNotMatch(
   source,
   /getCodeEditor\(paneId: PaneId\) \{\s*return runtimeRegistry\.getCodeEditor\(paneId\)/,
-  'monaco bridge getCodeEditor must go through the editor-window guard',
+  'monaco bridge getCodeEditor must not bypass getEditorRuntime',
 )
 for (const method of ['decorate', 'addViewZone', 'addContentWidget', 'addOverlayWidget', 'addGlyphMarginWidget', 'updateEditorOptions']) {
   assert.match(
     source,
     new RegExp(`${method}\\(paneId[\\s\\S]*const editor = getEditorRuntime\\(paneId\\)[\\s\\S]*if \\(!editor\\) return \\{ dispose\\(\\) \\{\\} \\}`),
-    `${method} must no-op through getEditorRuntime outside the editor window`,
+    `${method} must no-op through getEditorRuntime`,
   )
 }
-assert.match(
-  source,
-  /applyMonacoUpdateOptions\(paneId:[\s\S]*const editor = getEditorRuntime\(paneId\)/,
-  'Monaco effect helpers must also use the editor-window guarded runtime lookup',
-)
 
 console.log('monaco bridge window boundary checks passed')

@@ -13,7 +13,7 @@ export function registerWorkflowOutputShelfPanelProvider(): void {
     title: 'Output Shelf',
     titleI18n: { zh: '输出架' },
     defaultPlacement: 'right',
-    component: WorkflowOutputShelfPanel,
+    component: WorkflowOutputShelfPanel as never,
   }
 
   pluginRegistry.registerProductionPlugin(

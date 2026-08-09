@@ -49,6 +49,7 @@ export type PluginPackageSummary = {
   version: string
   entry: string
   capabilities: string[]
+  permissions: PluginManifest['permissions']
   folderPath: string
   error?: string
 }
@@ -951,6 +952,7 @@ async function fetchGithubManifest(sourceUrl: string, cacheBust = false): Promis
     version: typeof manifest.version === 'string' && manifest.version.trim() ? manifest.version : '1.0.0',
     entry: 'index.*',
     capabilities: manifest.capabilities || [],
+    permissions: manifest.permissions || [],
   }
 }
 

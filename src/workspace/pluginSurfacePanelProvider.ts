@@ -13,7 +13,7 @@ export function registerPluginSurfacePanelProvider(): void {
     title: 'Plugin Surface',
     titleI18n: { zh: '插件 Surface' },
     defaultPlacement: 'right',
-    component: PluginSurfacePanel,
+    component: PluginSurfacePanel as never,
   }
 
   pluginRegistry.registerProductionPlugin(

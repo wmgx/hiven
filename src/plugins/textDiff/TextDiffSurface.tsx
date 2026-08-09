@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { DiffSource, PluginSurfaceProps } from '@hiven/plugin'
-import { getPluginHostSdk } from '@hiven/plugin'
+import type { PluginSurfaceProps } from '@hiven/plugin'
+import { getPluginDiffHost, type DiffSource } from '@hiven/plugin-diff'
 import { canUseSemanticJsonDiff } from './autoDiffMode'
 import { useDiffSourceText } from './useDiffSourceText'
 
@@ -104,8 +104,15 @@ const IconDown = () => (
 )
 
 export function TextDiffSurface({ t, settings, host, initialText }: PluginSurfaceProps) {
-  const { kits } = getPluginHostSdk()
-  const { DualEditorView, diff } = kits
+  // Diff kits are first-party only (@hiven/plugin-diff), not public PluginHostSdk.
+  const { kits: diffKits } = getPluginDiffHost()
+  const {
+    DualEditorView,
+    computeTextLineDiff,
+    computeJsonLineHighlights,
+    formatJsonPreserveKeyOrder,
+    parseJson,
+  } = diffKits
 
   const payload = useMemo(() => parsePayload(initialText), [initialText])
   const [originalText, setOriginalText] = useDiffSourceText(payload.original)
@@ -133,14 +140,13 @@ export function TextDiffSurface({ t, settings, host, initialText }: PluginSurfac
 
   const renderMode: DiffMode = diffMode === 'json' && jsonAvailable ? 'json' : 'text'
 
-  const { leftText, rightText, leftHighlights, rightHighlights, leftRanges, rightRanges } = useMemo(() => {
+  // Editors stay live (originalText/modifiedText); only highlights use the debounce snapshot.
+  const { leftHighlights, rightHighlights, leftRanges, rightRanges } = useMemo(() => {
     // JSON mode: keep user text as-is; structural changes → character-range blocks.
     if (renderMode === 'json') {
-      const hl = diff.computeJsonLineHighlights(debouncedOriginal, debouncedModified)
+      const hl = computeJsonLineHighlights(debouncedOriginal, debouncedModified)
       if (hl) {
         return {
-          leftText: debouncedOriginal,
-          rightText: debouncedModified,
           leftHighlights: hl.leftHighlights,
           rightHighlights: hl.rightHighlights,
           leftRanges: hl.leftRanges,
@@ -149,15 +155,13 @@ export function TextDiffSurface({ t, settings, host, initialText }: PluginSurfac
       }
     }
 
-    const result = diff.computeTextLineDiff(debouncedOriginal, debouncedModified)
+    const result = computeTextLineDiff(debouncedOriginal, debouncedModified)
     return {
-      leftText: debouncedOriginal,
-      rightText: debouncedModified,
       ...result,
       leftRanges: undefined as undefined,
       rightRanges: undefined as undefined,
     }
-  }, [renderMode, debouncedOriginal, debouncedModified, diff])
+  }, [renderMode, debouncedOriginal, debouncedModified, computeJsonLineHighlights, computeTextLineDiff])
 
   const hunkLines = useMemo(() => {
     const hunks: number[] = []
@@ -186,16 +190,16 @@ export function TextDiffSurface({ t, settings, host, initialText }: PluginSurfac
 
   /** Pretty-print both sides without sorting keys; only rewrites parseable sides. */
   const handleFormat = useCallback(() => {
-    const left = diff.formatJsonPreserveKeyOrder(originalText)
-    const right = diff.formatJsonPreserveKeyOrder(modifiedText)
+    const left = formatJsonPreserveKeyOrder(originalText)
+    const right = formatJsonPreserveKeyOrder(modifiedText)
     if (left != null) setOriginalText(left)
     if (right != null) setModifiedText(right)
-  }, [diff, originalText, modifiedText])
+  }, [formatJsonPreserveKeyOrder, originalText, modifiedText])
 
   const canFormat = useMemo(() => {
     if (diffMode !== 'json') return false
-    return diff.parseJson(originalText).ok || diff.parseJson(modifiedText).ok
-  }, [diff, diffMode, originalText, modifiedText])
+    return parseJson(originalText).ok || parseJson(modifiedText).ok
+  }, [parseJson, diffMode, originalText, modifiedText])
 
   const handleDetach = useCallback(() => {
     const p = JSON.stringify({ original: { text: originalText }, modified: { text: modifiedText } })
@@ -273,8 +277,8 @@ export function TextDiffSurface({ t, settings, host, initialText }: PluginSurfac
       {/* Editor body */}
       <div className="td-body">
         <DualEditorView
-          leftText={leftText}
-          rightText={rightText}
+          leftText={originalText}
+          rightText={modifiedText}
           leftHighlights={leftHighlights}
           rightHighlights={rightHighlights}
           leftRanges={leftRanges}

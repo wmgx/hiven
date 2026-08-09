@@ -55,7 +55,6 @@ export const csvPlugin = definePlugin({
         titleI18n: { zh: 'CSV Tools' },
         icon: 'Table',
         aliases: ['csv', 'tsv', 'table convert', '表格转换', 'csv to json', 'sql insert'],
-        accepts: { kinds: ['csv'] },
         textMatch: csvSurfaceTextMatch,
         component: CsvSurface,
         entry: { launcher: true, shortcutBindable: true },

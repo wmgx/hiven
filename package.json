@@ -11,6 +11,15 @@
     "lint": "eslint .",
     "check:architecture": "node scripts/check-architecture.mjs",
     "check:reachability": "node scripts/check-reachability.mjs",
+    "check:typecheck": "tsc -p tsconfig.app.json --noEmit",
+    "test:plugin-permission-least-privilege": "node scripts/test-plugin-permission-least-privilege.mjs",
+    "test:plugin-permission-foreground": "node scripts/test-plugin-permission-foreground.mjs",
+    "test:launcher-normalize-contribution": "node scripts/test-launcher-normalize-contribution.mjs",
+    "test:plugin-diff-boundary": "node scripts/test-plugin-diff-boundary.mjs",
+    "test:intent-engine": "node scripts/test-intent-engine.mjs",
+    "test:intent-content-recommend": "node scripts/test-intent-content-recommend.mjs",
+    "test:launcher-intent-ranking": "node scripts/test-launcher-intent-ranking.mjs",
+    "test:quality-gate": "node scripts/test-quality-gate.mjs",
     "test:editor-primitive-boundary": "node scripts/test-editor-primitive-boundary.mjs",
     "test:calculator-command-mode": "node scripts/test-calculator-command-mode.mjs",
     "test:date-time-assistant": "node scripts/test-date-time-assistant.mjs",
@@ -151,7 +160,11 @@
     "test:launcher-latin-query-input": "node scripts/test-launcher-latin-query-input.mjs",
     "test:launcher-default-english-input-source": "node scripts/test-launcher-default-english-input-source.mjs",
     "test:desktop-document-async-path": "node scripts/test-desktop-document-async-path.mjs",
-    "test:launcher-perf-instrumentation": "node scripts/test-launcher-perf-instrumentation.mjs"
+    "test:launcher-perf-instrumentation": "node scripts/test-launcher-perf-instrumentation.mjs",
+    "test:launcher-perf-report": "node scripts/test-launcher-perf-report.mjs",
+    "test:telemetry": "node scripts/test-telemetry-contract.mjs",
+    "perf:launcher": "node scripts/launcher-perf-report.mjs",
+    "telemetry": "node scripts/launcher-perf-report.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

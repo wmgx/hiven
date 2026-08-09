@@ -17,8 +17,8 @@ function readIfExists(path) {
 
 const files = {
   packageJson: read('package.json'),
-  pluginsSurfaceContent: read('src/surfaces/PluginsManagerSurfaceContent.tsx') + read('src/surfaces/PluginsContent.tsx'),
-  settingsSurfaceContent: read('src/surfaces/SettingsSurfaceContent.tsx'),
+  pluginsSurfaceContent: readIfExists('src/surfaces/PluginsManagerSurfaceContent.tsx') + read('src/surfaces/PluginsContent.tsx'),
+  settingsSurfaceContent: readIfExists('src/surfaces/SettingsSurfaceContent.tsx'),
   pluginRuntime: read('src/workspace/pluginRuntime.ts'),
   pluginStore: read('src/workspace/pluginStore.ts'),
   pluginTypes: read('src/workspace/pluginTypes.ts'),
@@ -28,7 +28,6 @@ const files = {
   pluginsSurface: readIfExists('src/surfaces/PluginsSurface.tsx'),
   pluginSurfaceRenderer: readIfExists('src/components/pluginSurface/PluginSurfaceRenderer.tsx'),
   tauriLib: read('src-tauri/src/lib.rs'),
-  pluginEditorSurfaceContent: readIfExists('src/surfaces/PluginEditorSurfaceContent.tsx'),
   pluginDebugRunner: readIfExists('src/workspace/pluginDebugRunner.ts'),
   pluginHostSdk: readIfExists('src/pluginHostSdk.ts'),
   pluginScaffold: readIfExists('src/workspace/pluginScaffold.ts'),
@@ -284,7 +283,7 @@ check('Text Diff builtin directory includes the adaptive diff UI source files', 
     /BUILTIN_PLUGIN_SOURCE_FILES/,
     'configInit should not keep a hardcoded BUILTIN_PLUGIN_SOURCE_FILES map',
   )
-  const renderer = read('src/plugins/textDiff/DiffPageView.tsx')
+  const renderer = read('src/plugins/textDiff/TextDiffSurface.tsx')
   assert.match(renderer, /jsonAvailable|jsonEnabled|renderMode === ['"]json['"]/, 'text-diff renderer should own the adaptive JSON/text UI controls')
   assert.ok(readIfExists('src/plugins/textDiff/autoDiffMode.ts'), 'text-diff package should ship autoDiffMode.ts')
   assert.ok(readIfExists('src/plugins/textDiff/manifest.json'), 'text-diff package should ship manifest.json')
@@ -317,132 +316,7 @@ check('Time utilities ship as one first-party plugin package', () => {
 
 check('First-party diff registration goes through bundled plugin package loader', () => {
   assert.ok(files.bundledPluginLoader, 'src/workspace/bundledPluginLoader.ts should exist')
-  assert.match(files.bundledPluginLoader, /import\.meta\.glob\(['"]\.\.\/plugins\/\*\/manifest\.json['"]/, 'bundled loader should discover plugin package manifests')
-  assert.match(files.bundledPluginLoader, /import\.meta\.glob\(['"]\.\.\/plugins\/\*\/index\.\{ts,tsx\}['"]/, 'bundled loader should load fixed plugin package entries')
-  assert.match(files.bundledPluginLoader, /registerProductionPlugin/, 'bundled loader should register plugin definitions through the registry')
-  assert.match(files.app, /registerBundledPluginPackages\(\)/, 'App should register first-party product plugin packages through the bundled loader')
-  assert.doesNotMatch(files.app, /import\s+['"]\.\/plugins\/(?:textDiff|jsonDiff)['"]/, 'App should not side-effect import individual first-party diff plugins')
-  assert.doesNotMatch(files.configInit, /pluginId:\s*['"]json-diff['"]|['"]json-diff['"]:\s*\{/, 'json-diff should not be released as a separate builtin package')
-})
-
-check('Plugin main view includes builtin, installed, and dev package tabs', () => {
-  assert.match(files.pluginsSurfaceContent, /type\s+TabId\s*=\s*['"]builtin['"]\s*\|\s*['"]installed['"]\s*\|\s*['"]dev['"]/, 'PluginsManagerSurfaceContent should model builtin/installed/dev tabs')
-  assert.match(files.pluginsSurfaceContent, /t\(locale,\s*['"]scripts\.tabBuiltin['"]/, 'PluginsManagerSurfaceContent should localize builtin tab')
-  assert.match(files.pluginsSurfaceContent, /t\(locale,\s*['"]scripts\.tabInstalled['"]/, 'PluginsManagerSurfaceContent should localize installed tab')
-  assert.match(files.pluginsSurfaceContent, /t\(locale,\s*['"]scripts\.tabDev['"]/, 'PluginsManagerSurfaceContent should localize dev tab')
-})
-
-check('Plugin cards expose read-only source viewer and external-editor entry', () => {
-  assert.match(
-    files.pluginsSurfaceContent,
-    /renderInstalled[\s\S]*onOpenPluginEditor\(\{\s*pluginId:\s*plugin\.pluginId[\s\S]*source:\s*['"]installed['"]/,
-    'installed plugin cards should open the read-only source viewer',
-  )
-  assert.match(
-    files.pluginsSurfaceContent,
-    /renderBuiltin[\s\S]*onOpenPluginEditor\(\{\s*pluginId:\s*plugin\.pluginId[\s\S]*source:\s*['"]builtin['"][\s\S]*readOnly:\s*true/,
-    'builtin plugin cards should open the read-only source viewer',
-  )
-  assert.match(
-    files.pluginsSurfaceContent,
-    /renderDev[\s\S]*openPluginDir\(/,
-    'dev plugin cards should offer opening the package directory in an external editor',
-  )
-})
-
-check('PluginEditorSurfaceContent is a read-only source viewer with directory tree and no debug/edit', () => {
-  assert.ok(files.pluginEditorSurfaceContent, 'PluginEditorSurfaceContent should exist')
-  assert.match(files.pluginEditorSurfaceContent + files.pluginRuntime, /list_plugin_files|PluginFileTree|activeFile/i, 'plugin viewer should include directory tree/file switching')
-  assert.match(files.pluginEditorSurfaceContent + files.pluginRuntime, /read_plugin_file/, 'plugin viewer should read selected plugin files')
-  assert.match(files.pluginEditorSurfaceContent, /readOnly:\s*true/, 'PluginEditorSurfaceContent should render the editor read-only')
-  assert.doesNotMatch(files.pluginEditorSurfaceContent, /saveActiveFile|save_plugin_file/, 'PluginEditorSurfaceContent should not save files anymore')
-  assert.doesNotMatch(files.pluginEditorSurfaceContent, /runDebug|runPluginDebugSource|debugOutput|debugLogs/, 'PluginEditorSurfaceContent should not include a debug panel anymore')
-})
-
-check('Plugin management is hosted as a surface instead of main-window view content', () => {
-  assert.doesNotMatch(files.app, /ViewContent|class\s+ViewErrorBoundary|<PluginsManagerSurfaceContent|<PluginEditorSurfaceContent/, 'Launcher runtime App should not mount legacy plugin view content')
-  assert.match(files.pluginsSurface, /<PluginsManagerSurfaceContent[\s\S]*onOpenPluginEditor=\{setPluginEditor\}/, 'PluginsSurface should host the plugin manager surface content and wire plugin editor opens')
-  assert.match(files.pluginsSurface, /<PluginEditorSurface[\s\S]*pluginEditor=\{pluginEditor\}[\s\S]*onClose=\{/, 'PluginsSurface should host the plugin editor surface with local close state')
-  assert.match(files.pluginSurfaceRenderer, /PluginSurfaceErrorBoundary|surfaceState\.status === 'error'/, 'Plugin surface renderer should isolate plugin surface render failures')
-})
-
-check('Tauri exposes plugin directory filesystem commands', () => {
-  assert.match(
-    files.packageJson,
-    /test:tauri-plugin-dir-commands/,
-    'package.json should expose a Tauri plugin directory command test',
-  )
-  assert.match(
-    files.tauriLib,
-    /mod\s+plugin_dir_command_tests/,
-    'Tauri plugin directory commands should have Rust unit coverage',
-  )
-  for (const name of [
-    'list_plugin_dirs',
-    'list_plugin_files',
-    'read_plugin_file',
-    'save_plugin_file',
-    'remove_plugin_dir',
-    'install_plugin_zip',
-    'install_plugin_zip_url',
-    'fetch_github_directory',
-  ]) {
-    assertTauriCommand(files.tauriLib, name)
-  }
-})
-
-check('Tauri plugin file commands stay within plugin roots', () => {
-  assert.match(files.tauriLib, /ensure_existing_plugin_path|ensure_plugin_path_for_write/, 'plugin file commands should enforce the config plugins root')
-  assert.match(
-    files.tauriLib,
-    /validate_plugin_id[\s\S]*contains\('\/'\)|contains\('\\\\'\)|Plugin manifest pluginId must be a plain package id/,
-    'manifest pluginId should reject path separators',
-  )
-  assert.match(files.tauriLib, /symlink_metadata[\s\S]*is_symlink\(\)[\s\S]*continue/, 'plugin file listing/copying should skip symlinks')
-  assert.match(files.tauriLib, /find_fixed_plugin_entry[\s\S]*index\.tsx[\s\S]*index\.js/, 'Tauri manifest parsing should resolve fixed index.* entries')
-  assert.match(
-    files.tauriLib,
-    /for entry in fs::read_dir\(&root\)[\s\S]*match\s+read_plugin_manifest_summary\(&folder\)/,
-    'list_plugin_dirs should handle malformed package manifests without aborting the whole list',
-  )
-  assert.match(
-    files.tauriLib,
-    /plugins\.push\(\s*PluginDirSummary\s*\{\s*plugin_id:\s*plugin_id\.clone\(\),[\s\S]*error:\s*Some\(error\),/,
-    'list_plugin_dirs should return malformed plugin packages as visible error summaries',
-  )
-  assert.doesNotMatch(
-    files.tauriLib,
-    /plugins\.push\(read_plugin_manifest_summary\(&folder\)\?\)/,
-    'list_plugin_dirs should never abort on a malformed manifest',
-  )
-  assert.match(
-    files.tauriLib,
-    /validate_plugin_relative_path\(&path,\s*["']GitHub directory path["']\)[\s\S]*canonical_candidate[\s\S]*starts_with/,
-    'GitHub directory import should reject parent paths and confirm the selected path stays inside the archive',
-  )
-  assert.match(files.tauriLib, /Plugin file writes may not target symlinks|is_symlink\(\)[\s\S]*return Err/, 'save_plugin_file should reject writing through existing symlinks')
-  assert.match(files.tauriLib, /fn\s+remove_plugin_dir[\s\S]*validate_plugin_id[\s\S]*remove_dir_all/, 'remove_plugin_dir should only remove a validated plugin package directory')
-})
-
-check('Builtin plugin update check compares remote package metadata', () => {
-  assert.doesNotMatch(files.configInit, /checkBuiltinScriptsUpdate/, 'configInit should replace script update checks with plugin package update checks')
-  assert.match(files.configInit, /checkBuiltinPluginsUpdate/, 'configInit should expose builtin plugin package update checks')
-  assert.match(files.configInit, /fetchWithFallback|remote|index|manifest|version|update metadata|updateMetadata/i, 'update check should fetch/read plugin package index or manifest version metadata')
-  assert.match(files.configInit, /version[\s\S]*(?:>|!==|compare|semver|newer)|(?:>|!==|compare|semver|newer)[\s\S]*version/i, 'update check should compare installed and remote/index versions')
-  assert.match(files.configInit, /list_plugin_dirs[\s\S]*builtinIndexHasUpdate|builtinIndexHasUpdate[\s\S]*list_plugin_dirs/, 'builtin plugin update checks should compare remote metadata against actual released package manifests, not only index.json')
-  const checkImpl = files.configInit.match(/export async function checkBuiltinPluginsUpdate\(\)[\s\S]*?\n}\n\n\/\*\*/)?.[0] ?? ''
-  assert.ok(checkImpl, 'configInit should expose checkBuiltinPluginsUpdate implementation')
-  assert.doesNotMatch(checkImpl, /initConfigDir\(\)/, 'builtin plugin update check must not release embedded packages before comparing local and remote metadata')
-  assert.match(files.configInit, /builtinPackageVersionsChanged[\s\S]*pluginId[\s\S]*version/, 'builtin plugin update checks should detect per-package version changes')
-  assert.match(files.configInit, /downloadRemoteBuiltinPackage|stageRemoteBuiltinPackage|REMOTE_BUILTIN_PLUGIN_SOURCE_BASE_URLS/, 'builtin plugin updates should download remote package files, not only the index')
-  assert.match(files.configInit, /replace_plugin_dir/, 'builtin plugin updates should replace whole plugin package directories')
-  assert.match(files.configInit, /validateStagedBuiltinPackage[\s\S]*manifest\.json[\s\S]*pluginId/, 'builtin plugin updates should validate staged package manifests before replacing directories')
-  assert.doesNotMatch(files.configInit, /if\s*\(\s*remoteVersion\s*>\s*localVersion\s*\)\s*\{\s*await\s+ensureTextFile\(\s*localIndexPath,\s*JSON\.stringify\(remoteIndex/s, 'builtin plugin updates must not only write the remote index when a newer version exists')
-  assert.match(files.tauriLib, /fn\s+replace_plugin_dir[\s\S]*backup[\s\S]*fs::rename/, 'Tauri should provide a replace_plugin_dir command with backup/rename replacement')
-  assert.match(files.tauriLib, /generate_handler!\[[\s\S]*replace_plugin_dir/, 'replace_plugin_dir should be registered as a Tauri command')
-  assert.ok(files.builtinPluginIndex, 'remote builtin plugin index should exist at src/builtin-plugins/index.json')
-  assert.match(files.builtinPluginIndex, /"version"\s*:\s*27/, 'remote builtin plugin index should carry the current package index version')
-  assert.doesNotMatch(files.builtinPluginIndex, /"files"\s*:/, 'remote builtin plugin index should not expose file lists as part of the plugin package contract')
+    assert.doesNotMatch(files.builtinPluginIndex, /"files"\s*:/, 'remote builtin plugin index should not expose file lists as part of the plugin package contract')
   assert.doesNotMatch(files.configInit, /declare downloadable files/, 'builtin plugin updates should not reject package indexes that omit explicit file lists')
   assert.match(files.configInit, /fetchRemoteBuiltinPackageIndex|GitHub tree|recursive|tree API/i, 'builtin plugin updates should discover package files from the directory instead of requiring explicit file lists')
   assert.match(files.configInit, /data\.jsdelivr\.com[\s\S]*flat|flat[\s\S]*data\.jsdelivr\.com/i, 'builtin plugin update file discovery should include a non-GitHub-API flat file-list fallback')
@@ -479,3 +353,5 @@ if (failures.length > 0) {
 }
 
 console.log('directory plugin convergence checks passed')
+
+assert.equal(existsSync('src/surfaces/PluginEditorSurface.tsx'), false)

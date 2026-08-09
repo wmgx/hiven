@@ -249,11 +249,11 @@ export function resolveInstalledAppIdByName(name: string): string | undefined {
   return best?.appId
 }
 
-export function getHostAppLauncherStaticItems(): LauncherItem[] {
+export function getHostAppLauncherStaticItems(): import("../launcher/types").LauncherItem[] {
   return [
     {
       systemKey: 'host:app-launcher:refresh',
-      kind: 'host',
+      kind: 'host' as const,
       display: {
         title: 'Refresh Applications Index',
         titleI18n: { zh: '刷新应用索引' },
@@ -271,7 +271,7 @@ export function getHostAppLauncherStaticItems(): LauncherItem[] {
         return { ok: true }
       },
     },
-  ]
+  ] as import("../launcher/types").LauncherItem[]
 }
 
 export async function getHostAppLauncherDynamicItems({
@@ -298,7 +298,7 @@ export async function getHostAppLauncherDynamicItems({
 
   const items = apps.map((app) => ({
     systemKey: `host:app-launcher:app:${app.appId}`,
-    kind: 'host',
+    kind: 'host' as const,
     display: {
       title: app.name,
       titleI18n: app.nameI18n,
@@ -328,7 +328,7 @@ export async function getHostAppLauncherDynamicItems({
     matchedCount: apps.length,
     itemCount: items.length,
   })
-  return items
+  return items as import("../launcher/types").LauncherItem[]
 }
 
 export function getHostAppWorkObjects(query: string, locale: Locale): AppWorkObject[] {

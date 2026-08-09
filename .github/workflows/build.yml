@@ -121,6 +121,10 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      # Tag/release must not be weaker than PR quality gate (see quality.yml / test:quality-gate).
+      - name: Quality gate (architecture + contracts)
+        run: npm run test:quality-gate
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0.6
         env:

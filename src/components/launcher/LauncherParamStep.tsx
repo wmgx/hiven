@@ -115,7 +115,7 @@ export function LauncherParamStep({
   const options = param ? filterParamOptions(paramOptions(param, locale), frame.query, locale) : []
   const selectedIndex = Math.min(frame.selectedIndex, Math.max(0, options.length - 1))
   const currentMultiValue = param && isMultiParam && Array.isArray(frame.params[param.key])
-    ? frame.params[param.key].map(String)
+    ? (frame.params[param.key] as unknown[]).map(String)
     : []
   const maxSelect = isMultiParam ? (param.maxSelect ?? options.length) : 1
   const selectedCount = currentMultiValue.length

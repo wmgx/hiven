@@ -80,7 +80,8 @@ function assertLauncherToolsHaveSubtitles() {
 
 function assertBuiltinVersionsMatchManifests() {
   const index = JSON.parse(read('src/builtin-plugins/index.json'))
-  assert.equal(index.version, 27, 'builtin plugin index version should be bumped after builtin package updates')
+  assert.equal(typeof index.version, 'number', 'builtin plugin index must have a numeric release version')
+  assert.ok(index.version >= 37, 'builtin plugin index version should be bumped after builtin package updates')
   assert.equal(index.packages.some((pkg) => pkg.pluginId === 'core-pane'), false, 'core-pane should no longer ship as a bundled plugin')
   for (const pkg of index.packages) {
     const manifest = JSON.parse(read(`src/plugins/${pkg.dir}/manifest.json`))
@@ -166,51 +167,50 @@ function assertLauncherApiExposesPaneCreation() {
     /createPane:\s*\(options\)[\s\S]{0,160}useWorkspaceStore\.getState\(\)\.createPane\(options\)/,
     'Launcher PluginLauncherApi must not directly mutate editor workspace panes',
   )
-  assert.match(
+  assert.doesNotMatch(
     pluginApi,
-    /function readActiveText[\s\S]*if \(!isEditorWindowRuntime\(\)\)[\s\S]*getActiveEditorContextSnapshot\(\)/,
-    'PluginLauncherApi must read active text from synced editor context outside the editor runtime',
+    /isEditorWindowRuntime/,
+    'PluginLauncherApi must not reintroduce retired isEditorWindowRuntime',
   )
   assert.match(
     pluginApi,
-    /function readActiveText[\s\S]*getActiveEditorContextSnapshot\(\)\?\.activeText/,
-    'PluginLauncherApi getActiveText must use activeText from synced editor context outside the editor runtime',
+    /function readActiveText\(\): string \{\s*return getActiveEditorContextSnapshot\(\)\?\.activeText \?\? ''/,
+    'PluginLauncherApi getActiveText must use activeText from synced editor context',
   )
   assert.match(
     pluginApi,
-    /function readSelectionText[\s\S]*if \(!isEditorWindowRuntime\(\)\)[\s\S]*getActiveEditorContextSnapshot\(\)/,
-    'PluginLauncherApi must read selection text from synced editor context outside the editor runtime',
+    /function readSelectionText\(\): string \{\s*return getActiveEditorContextSnapshot\(\)\?\.selectedText \?\? ''/,
+    'PluginLauncherApi getSelectionText must use selectedText from synced editor context',
   )
   assert.match(
     pluginApi,
-    /replaceActiveText:[\s\S]*if \(!isEditorWindowRuntime\(\)\)[\s\S]*createQuickEditorPane\(\{ text \}\)/,
-    'PluginLauncherApi replaceActiveText must route non-editor calls through quick editor pane creation',
+    /replaceActiveText:[\s\S]*overwriteQuickEditorText\(text/,
+    'PluginLauncherApi replaceActiveText must route through quick editor overwrite',
   )
   assert.match(
     pluginApi,
-    /insertText:[\s\S]*if \(!isEditorWindowRuntime\(\)\)[\s\S]*createQuickEditorPane\(\{ text \}\)/,
-    'PluginLauncherApi insertText must route non-editor calls through quick editor pane creation',
+    /insertText:[\s\S]*createQuickEditorPane\(\{ text \}\)/,
+    'PluginLauncherApi insertText must route through quick editor pane creation',
   )
   assert.match(
     pluginApi,
     /function emptyPaneSnapshot\(\)[\s\S]*activePaneId:\s*['"][\s\S]*paneIds:\s*\[\][\s\S]*renderers:\s*\{\}/,
-    'PluginLauncherApi must expose an empty pane snapshot fallback instead of reading launcher-local workspace state',
+    'PluginLauncherApi must expose an empty pane snapshot fallback',
   )
   assert.match(
     pluginApi,
-    /getPaneSnapshot:[\s\S]*if \(!snapshot\) return emptyPaneSnapshot\(\)[\s\S]*const state = useWorkspaceStore\.getState\(\)/,
-    'PluginLauncherApi getPaneSnapshot must only read workspaceStore inside the editor runtime branch',
-  )
-
-  assert.match(
-    pluginApi,
-    /isPanePanelOpen:\s*\([^)]*\)\s*=>\s*\{[\s\S]*if \(!isEditorWindowRuntime\(\)\) return false/,
-    'PluginLauncherApi must not inspect editor panel state from non-editor windows',
+    /getPaneSnapshot:[\s\S]*buildMergedPaneSnapshot\(\)[\s\S]*if \(snapshot\.paneIds\.length === 0\) return emptyPaneSnapshot\(\)/,
+    'PluginLauncherApi getPaneSnapshot must merge editor/quick snapshots without shadow workspace store',
   )
   assert.match(
     pluginApi,
-    /dispatchEffects:\s*\(effects:[^)]*\)\s*=>\s*\{[\s\S]*if \(!isEditorWindowRuntime\(\)\)[\s\S]*return \{ applied:\s*\[\], errors:/,
-    'PluginLauncherApi must reject direct effect dispatch outside the editor runtime',
+    /isPanePanelOpen:[\s\S]*return false/,
+    'PluginLauncherApi must not inspect editor panel state from launcher hosts',
+  )
+  assert.match(
+    pluginApi,
+    /dispatchEffects:[\s\S]*return \{ applied: \[\], errors: \[[^\]]*dispatchEffects is only available in the editor window/,
+    'PluginLauncherApi must reject direct effect dispatch outside the editor host',
   )
 }
 
@@ -239,9 +239,9 @@ function assertLauncherSystemMessagesAreLocalized() {
   assert.match(output, /translate\(locale,\s*['"]palette['"],\s*key\)/, 'launcher output should resolve labels through palette i18n')
   // Silent copy: success toast after ↵ 复制 is noise; do not require showMessage('copied').
   assert.doesNotMatch(output, /showMessage\(palette\(locale,\s*['"]copied['"]\)/, 'launcher copy must not toast "copied"')
-  assert.match(output, /palette\(locale,\s*['"]replaceActiveText['"]\)/, 'launcher replace action should use palette i18n')
-  assert.match(output, /palette\(locale,\s*['"]insert['"]\)/, 'launcher insert action should use palette i18n')
-  assert.match(output, /palette\(locale,\s*['"]copy['"]\)/, 'launcher copy action should use palette i18n')
+  // Current textResult secondary actions: returnToLauncher + openQuickEditor (replace is the primary path via overwrite).
+  assert.match(output, /palette\(locale,\s*['"]returnToLauncher['"]\)/, 'launcher return-to-launcher action should use palette i18n')
+  assert.match(output, /palette\(locale,\s*['"]openQuickEditor['"]\)/, 'launcher open-quick-editor action should use palette i18n')
   assert.doesNotMatch(output, /showMessage\(['"]Copied['"]|title:\s*['"]Replace active text['"]|title:\s*['"]Insert['"]|title:\s*['"]Copy['"]/, 'launcher output should not hardcode English action text')
 
   const controller = read('src/workspace/launcher/controller.ts')

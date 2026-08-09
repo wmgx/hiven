@@ -22,6 +22,8 @@ assert.match(perf, /installLauncherPerfDebugApi/, 'window.__hivenLauncherPerf in
 assert.match(perf, /RING_CAPACITY|pushRing/, 'must keep ring samples even when console off')
 assert.match(perf, /forwardLauncherPerfSample|log_launcher_perf_frontend/, 'must forward samples to native file log')
 assert.match(perf, /launcher-perf\.ndjson|LAUNCHER_PERF_LOG_HINT/, 'must document log file path')
+assert.match(perf, /beginLauncherPerfOpenSession|endLauncherPerfOpenSession/, 'open session openId API required')
+assert.match(perf, /openId/, 'forwarded samples must include openId field')
 
 assert.match(shell, /plugin-shell:run/, 'shell.run must log duration')
 assert.match(docs, /document-target:provider-list/, 'document collect must time provider.list')

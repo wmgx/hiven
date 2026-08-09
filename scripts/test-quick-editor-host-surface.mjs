@@ -26,7 +26,6 @@ const files = {
   overlay: read('src/components/quickEditor/QuickEditorCommandOverlay.tsx'),
   panel: read('src/components/quickEditor/QuickEditorPanel.tsx'),
   breadcrumbActions: read('src/components/quickEditor/QuickEditorBreadcrumbActions.tsx'),
-  toolbar: read('src/components/quickEditor/QuickEditorToolbar.tsx'),
   detachedView: read('src/views/QuickEditorDetachedView.tsx'),
   quickEditorWindow: read('src/workspace/windowManager/quickEditorWindow.ts'),
   quickEditorRequests: read('src/workspace/quickEditor/quickEditorRequests.ts'),
@@ -150,12 +149,10 @@ assert.ok(existsSync(join(root, 'src/i18n/locales/quickEditor.ts')), 'quickEdito
 const quickEditorLocale = read('src/i18n/locales/quickEditor.ts')
 assert.match(quickEditorLocale, /en:/, 'quickEditor locale must define en')
 assert.match(quickEditorLocale, /zh:/, 'quickEditor locale must define zh')
-assert.doesNotMatch(files.toolbar, /"Quick Editor"|'Quick Editor'|>Quick Editor</, 'toolbar title must go through i18n')
 
 // ── 9. two-stage escape wiring in both hosts ───────────────────────────────
 assert.match(files.panel, /useQuickEditorEscape/, 'panel must own the two-stage escape state machine')
 assert.doesNotMatch(files.detachedView, /addEventListener\('keydown'/, 'detached view must not roll its own escape handling')
-assert.doesNotMatch(files.toolbar, /closeQuickEditor\(\)/, 'toolbar must not call the removed closeQuickEditor action')
 
 // ── 10. embedded Monaco keeps its own mouse and wheel semantics ───────────
 assert.match(

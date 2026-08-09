@@ -18,7 +18,7 @@ function offsetAt(text: string, position: { lineNumber: number; column: number }
 }
 
 function replaceRange(text: string, range: SerializedRange, replacement: string): string {
-  const start = offsetAt(text, range)
+  const start = offsetAt(text, range as never)
   const end = offsetAt(text, {
     lineNumber: range.endLineNumber,
     column: range.endColumn,

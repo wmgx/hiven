@@ -32,7 +32,6 @@ import {
   getPluginDynamicItemKey,
   getPluginSurfaceItemKey,
   validateLauncherItemIds,
-  sanitizeSurfaces,
   findUnknownSurfaces,
 } from './identity'
 import { createPluginLauncherApi, createPluginLauncherStorage } from './pluginApi'
@@ -42,6 +41,7 @@ import { getPluginPermissionSnapshot } from '../pluginPermissions'
 import { launcherPerfNow, logLauncherPerfDuration, measureLauncherPerf } from './perf'
 import { resolvePluginSettingsSource } from './pluginSource'
 import { adaptToolToLauncherItem } from './toolAdapter'
+import { normalizeContribution } from './normalizeContribution'
 import { applyProductProviderToLauncherItem, resolvePluginProductMetadata } from '../pluginProductCatalog'
 
 const DYNAMIC_QUERY_MAX_LENGTH = 500
@@ -99,24 +99,14 @@ function resolveStaticItemFromContribution(
     )
   }
   const productMetadata = resolvePluginProductMetadata(pluginId)
-  return applyProductProviderToLauncherItem({
+  const normalized = normalizeContribution(contribution, {
     systemKey: getPluginLauncherItemKey(pluginId, contribution.id),
     kind: 'plugin',
     pluginId,
-    source: resolvePluginSettingsSource(pluginId, source),
-    display: contribution.display,
-    behavior: contribution.behavior ?? { type: 'perform' },
-    surfaces: sanitizeSurfaces(contribution.surfaces),
-    inputPolicy: contribution.inputPolicy,
-    params: contribution.params,
-    defaultParams: contribution.defaultParams,
-    requireParamSelection: contribution.requireParamSelection,
-    executeWithParams: contribution.executeWithParams,
-    suggest: contribution.suggest,
-    // Legacy usage keys: item id may match a command id from old usage data.
-    // Prefer matching launcher item ids to old command ids during migration.
-    legacyUsageKeys: [contribution.id],
-    execute: contribution.execute,
+    source,
+  })
+  return applyProductProviderToLauncherItem({
+    ...normalized,
     productProvider: productMetadata.provider,
   })
 }
@@ -411,6 +401,7 @@ export async function collectDynamicItems(
             settings,
             source: settingsSource,
             pluginId,
+            signal,
             api: createPluginLauncherApi({ pluginId, source: settingsSource, requestedPermissions }),
             storage: createPluginLauncherStorage({ pluginId, source: settingsSource, requestedPermissions }),
             network: createPluginNetwork(getPluginPermissionSnapshot(settingsSource, pluginId, requestedPermissions)),
@@ -465,22 +456,13 @@ function resolveDynamicItem(
   pluginId: string,
   source: ContributionSource,
 ): LauncherItem | null {
-  return {
+  // Same protocol fields as static items / tools (params, accepts, match, textMatch…).
+  return normalizeContribution(contribution, {
     systemKey: getPluginDynamicItemKey(pluginId, contribution.id),
     kind: 'dynamic',
     pluginId,
-    source: resolvePluginSettingsSource(pluginId, source),
-    display: contribution.display,
-    behavior: contribution.behavior ?? { type: 'perform' },
-    surfaces: sanitizeSurfaces(contribution.surfaces),
-    inputPolicy: contribution.inputPolicy,
-    // Only stable dynamic intents should opt in; one-shot results leave this unset.
-    recordUsage: contribution.recordUsage === true ? true : undefined,
-    // Dynamic contributions may declare accepts (e.g. web-open direct-url → kinds:url).
-    accepts: contribution.accepts,
-    suggest: contribution.suggest,
-    execute: contribution.execute,
-  }
+    source,
+  })
 }
 
 // ─── Combined candidate collection ───────────────────────────────────────────

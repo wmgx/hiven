@@ -85,23 +85,7 @@ export {
   OUTPUT_TARGET_LABELS,
 } from './actionExecutor'
 
-export {
-  type EditorObjectBlockState,
-  useEditorObjectBlock,
-} from './useEditorObjectBlock'
-
-export {
-  type PluginActionAccepts,
-  type PluginActionPresentation,
-  type PluginActionManifestEntry,
-  type PluginActionManifest,
-  type DiscoveredPluginAction,
-  registerPluginActionManifest,
-  unregisterPluginActionManifest,
-  getPluginActionManifest,
-  getAllPluginActionManifests,
-  clearPluginActionManifests,
-  discoverActionsForBlock,
-} from './pluginActionManifest'
+// pluginActionManifest removed in B2 — transform actions use accepts/textMatch ranking.
+// See actionRecommendation.ts (host pins only) and workspace/launcher/normalizeContribution.ts.
 
 export { recommendActionsWithPlugins } from './actionRecommendation'

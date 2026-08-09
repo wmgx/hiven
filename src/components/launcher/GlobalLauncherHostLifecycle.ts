@@ -1,6 +1,6 @@
 import { startTransition, useCallback, useEffect, useLayoutEffect, useRef, type MutableRefObject, type RefObject } from 'react'
 import type { LauncherControllerState } from '../../workspace/launcher/controller'
-import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from '../../utils/imeKeyboard'
+import { finishImeComposition, startImeComposition } from '../../utils/imeKeyboard'
 import { runLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
 import { usePluginSettingsStore } from '../../workspace/pluginSettingsStore'
 import { focusLauncherWebview } from '../../workspace/windowManager/launcherWindow'
@@ -10,6 +10,7 @@ import {
   peekStickyLauncherQuery,
   releaseStickyRestore,
 } from '../../launcher/querySticky'
+import { TelemetryEvents, queryTelemetryProps, trackBehavior } from '../../workspace/telemetry'
 
 const GLOBAL_LAUNCHER_STICKY_SURFACE = 'global-launcher'
 
@@ -112,6 +113,7 @@ export function useGlobalLauncherFocusSession({
       wasOpenRef.current = true
       previousFocusRef.current = document.activeElement as HTMLElement | null
       // Empty first so static list paints via empty-open path.
+      // setQuery bails when already '' — no extra rank on warm re-open.
       setQuery('')
       setSelectedIndex(0, { pin: false })
     }
@@ -135,6 +137,7 @@ export function useGlobalLauncherFocusSession({
           return
         }
         holdStickyRestore(GLOBAL_LAUNCHER_STICKY_SURFACE, sticky)
+        trackBehavior(TelemetryEvents.launcherStickyRestore, queryTelemetryProps(sticky))
         startTransition(() => {
           if (cancelled || !openRef.current) return
           setQuery(sticky)
@@ -246,17 +249,28 @@ export function useGlobalLauncherHostEscape({
 }) {
   const handleHostEscape = useCallback((event: KeyboardEvent) => {
     if (event.key !== 'Escape') return
-    if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
-    // Settings modal owns its own Esc until dismissed.
-    if (usePluginSettingsStore.getState().settingsDialogTarget) return
 
-    // Layer interceptors: surface/host/permission pop themselves via leave*/onBack.
+    // Clear any stuck IME composition flag so Esc can never be permanently dead.
+    // (compositionend can be missed after remount / webview rekey / focus thrash.)
+    if (isImeComposingRef.current) {
+      isImeComposingRef.current = false
+    }
+
+    // Layer interceptors first: settings / plugin surface / permission / quick-editor.
+    // Do NOT early-return on settingsDialogTarget — global-launcher settings only
+    // owns Esc through this interceptor. Early-return previously swallowed Esc for
+    // the whole launcher while settings (or a stale target) was open.
     if (runLauncherEscapeInterceptor(event)) return
+
+    // Modal settings dialog mounts its own capture listener; if that presentation
+    // is open, leave Esc to it (it stopImmediatePropagations).
+    const settingsTarget = usePluginSettingsStore.getState().settingsDialogTarget
+    if (settingsTarget && settingsTarget.presentation !== 'global-launcher') return
 
     event.preventDefault()
     event.stopPropagation()
 
-    // Controller frame stack (result choices, params, …).
+    // Controller frame stack (result / param / collect-input empty state, …).
     if (controllerRef.current?.back?.()) {
       focusSearchInputAfterBack()
       return

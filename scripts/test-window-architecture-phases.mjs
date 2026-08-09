@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const root = process.cwd()
@@ -49,9 +49,6 @@ const files = {
   globalLauncher: read('src/components/GlobalLauncher.tsx'),
   globalLauncherHost: read('src/launcher/hosts/GlobalLauncherHost.tsx'),
   surfaceRegistry: read('src/surfaces/registry.ts'),
-  pluginEditorSurface: read('src/surfaces/PluginEditorSurface.tsx'),
-  pluginEditorSurfaceBridge: read('src/surfaces/pluginEditorSurfaceBridge.ts'),
-  surfaceShell: read('src/surfaces/SurfaceShell.tsx'),
   surfaceActions: read('src/surfaces/actions.ts'),
   windowManagerEditor: read('src/workspace/windowManager/editorWindow.ts'),
   windowManagerPluginSurfaces: read('src/workspace/windowManager/pluginSurfaceWindows.ts'),
@@ -161,16 +158,13 @@ assert.match(files.globalLauncherCollectInputFrame, /export function GlobalLaunc
 assert.match(files.globalLauncherResultFrame, /export function GlobalLauncherResultFrame/, 'global launcher result frame must live in its own module')
 assert.match(files.globalLauncherFrames, /export function GlobalLauncherFrameSwitch/, 'global launcher frames must provide a frame switch to keep the host thin')
 assert.match(files.globalLauncherSystemSurfaceFrame, /SystemSettingsSurface/, 'global launcher system frame must render the unified system settings surface')
-assert.match(files.surfaceShell, /export function SurfaceShell/, 'app surfaces must share an explicit surface shell boundary')
-assert.match(files.surfaceShell, /data-surface-id/, 'surface shell must stamp a surface id for lifecycle/debug verification')
-assert.match(files.surfaceShell, /data-surface-kind/, 'surface shell must stamp a registry kind for lifecycle/debug verification')
-assert.match(files.pluginEditorSurface, /export function PluginEditorSurface/, 'plugin editor must have a first-class surface wrapper')
-assert.match(files.pluginEditorSurface, /<SurfaceShell[\s\S]*id=['"]plugin-editor['"]/, 'plugin editor surface must render inside the explicit surface shell boundary')
-assert.match(files.pluginEditorSurface, /kind=['"]plugin-editor['"]/, 'plugin editor surface must publish its own registry kind instead of masquerading as Plugins')
-assert.match(files.pluginEditorSurface, /upsertSurfaceInstance\([\s\S]*kind:\s*['"]plugin-editor['"]/, 'plugin editor surface must register itself as a first-class surface instance')
-assert.match(files.pluginEditorSurface, /folderPath:\s*pluginEditor\.folderPath/, 'plugin editor surface records must preserve folderPath for focus restoration')
-assert.match(files.pluginEditorSurfaceBridge, /PLUGIN_EDITOR_SURFACE_OPEN_EVENT[\s\S]*emit\(PLUGIN_EDITOR_SURFACE_OPEN_EVENT/, 'plugin editor focus bridge must broadcast open requests across Tauri windows')
-assert.match(files.pluginEditorSurfaceBridge, /pendingPluginEditorOpenRequests[\s\S]*drainPendingPluginEditorOpenRequests/, 'plugin editor focus bridge must queue requests until PluginsSurface mounts')
+// Retired orphan surfaces (B3/B4 cleanup): no render subscribers in launcher-only form factor.
+assert.equal(existsSync('src/surfaces/PluginEditorSurface.tsx'), false, 'PluginEditorSurface must be deleted (orphan)')
+assert.equal(existsSync('src/surfaces/SurfaceShell.tsx'), false, 'SurfaceShell must be deleted (orphan)')
+assert.equal(existsSync('src/plugins/textDiff/DiffPageView.tsx'), false, 'DiffPageView must be deleted; TextDiffSurface is the path')
+assert.equal(existsSync('src/surfaces/pluginEditorSurfaceBridge.ts'), false, 'plugin editor bridge must be deleted')
+assert.match(files.surfaceActions, /surface\.kind === ['"]plugin-editor['"][\s\S]*requestOpenLauncherHostSurface\(['"]system-plugins['"]\)/, 'plugin-editor focus redirects to system-plugins')
+assert.match(files.surfaceActions, /requestOpenLauncherPluginSettingsSurface/, 'plugin-editor focus may open plugin settings')
 assert.match(files.globalLauncher, /return <GlobalLauncherHost \/>/, 'GlobalLauncher must be a compatibility wrapper')
 assert.doesNotMatch(files.pluginSettingsStore, /surfaceId\?:\s*['"]command-palette['"]|['"]command-palette['"]\s*\|\s*['"]global-launcher['"]/, 'plugin settings context must not model retired command-palette surface ids')
 assert.match(files.pluginSettingsStore, /LauncherHostId/, 'plugin settings context must use launcher host ids')
@@ -216,7 +210,7 @@ assert.match(files.surfaceActions, /focusSurfaceInstance/, 'Surface registry mus
 assert.match(files.surfaceActions, /requestOpenLauncherHostSurface\(['"]system-settings['"]\)/, 'Surface focus must reopen Settings through the launcher host surface')
 assert.match(files.surfaceActions, /requestOpenLauncherHostSurface\(['"]system-plugins['"]\)/, 'Surface focus must reopen Plugins through the launcher host surface')
 assert.match(files.surfaceActions, /surface\.kind === ['"]plugin-editor['"][\s\S]*requestOpenLauncherHostSurface\(['"]system-plugins['"]\)/, 'Surface focus must route PluginEditor instances back to the Plugins host surface')
-assert.match(files.surfaceActions, /requestOpenPluginEditorSurface\(\{[\s\S]*folderPath:\s*surface\.folderPath/, 'Surface focus must restore PluginEditor instances through the plugin editor bridge')
+assert.doesNotMatch(files.surfaceActions, /requestOpenPluginEditorSurface/, 'Surface focus must not use deleted plugin editor bridge')
 assert.match(files.pluginSurfaceWindowComponent, /upsertSurfaceInstance\([\s\S]*kind:\s*['"]plugin-surface['"]/, 'Plugin surface window component must upsert its own registry record')
 assert.match(files.pluginSurfaceWindowComponent, /markSurfaceInstanceState\([\s\S]*['"]hidden['"]/, 'Plugin surface window component must mark its surface hidden on teardown')
 assert.match(files.windowManagerEditor, /function\s+showEditorWindow\(\)[\s\S]*requestOpenEditorWindow\(\)/, 'window manager must expose editor window open operations through a facade')
