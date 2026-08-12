@@ -72,7 +72,15 @@ export async function getDesktopBridgeLauncherDynamicItems(ctx: {
     if (provider.health) {
       try {
         const healthStartedAt = launcherPerfNow()
-        const h = await provider.health()
+        // health() is a Tauri invoke reading in-memory bridge state; under main-thread
+        // IPC congestion it was seen stalling 1.4–3.5s per keystroke (blocking typing)
+        // while list() below is already timeout-bounded. Bound health the same way so a
+        // slow/contended status probe can never gate the launcher.
+        const h = await withTimeout(
+          Promise.resolve(provider.health()),
+          provider.listTimeoutMs ?? BRIDGE_LIST_TIMEOUT_MS,
+          ctx.signal,
+        )
         logLauncherPerfDuration('bridge-target:health', healthStartedAt, { ok: h.ok })
         if (!h.ok) {
           logLauncherPerfDuration('bridge-target:collect', startedAt, { unhealthy: true })

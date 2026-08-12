@@ -91,7 +91,26 @@ fn launcher_perf_log_path() -> Result<PathBuf, String> {
     Ok(dir.join("launcher-perf.ndjson"))
 }
 
-fn append_launcher_perf_file(line: &str) {
+/// Background writer so perf logging never does file I/O on the main thread.
+/// Each synchronous append was ~90–190ms during launcher show and, with ~7 native
+/// marks per open, gated first paint. Hand lines to a dedicated writer thread.
+fn perf_log_sender() -> &'static std::sync::mpsc::Sender<String> {
+    static SENDER: OnceLock<std::sync::mpsc::Sender<String>> = OnceLock::new();
+    SENDER.get_or_init(|| {
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        let _ = thread::Builder::new()
+            .name("hiven-perf-log".into())
+            .spawn(move || {
+                for line in rx {
+                    write_launcher_perf_line(&line);
+                }
+            });
+        tx
+    })
+}
+
+/// Actual NDJSON append (rotation + write). Runs only on the perf-log writer thread.
+fn write_launcher_perf_line(line: &str) {
     let Ok(path) = launcher_perf_log_path() else {
         return;
     };
@@ -106,6 +125,12 @@ fn append_launcher_perf_file(line: &str) {
         use std::io::Write;
         let _ = writeln!(file, "{}", line);
     }
+}
+
+/// Non-blocking: hand the line to the background writer thread (never blocks the
+/// main thread on disk I/O).
+fn append_launcher_perf_file(line: &str) {
+    let _ = perf_log_sender().send(line.to_string());
 }
 
 fn now_unix_ms() -> u128 {

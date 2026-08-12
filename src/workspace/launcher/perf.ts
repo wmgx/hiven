@@ -136,7 +136,58 @@ function ensureNativeInvoke(): void {
  *
  * NDJSON schema (agent-facing):
  * `{ ts, source, kind, label, durationMs, slow, jank, openId?, details? }`
+ *
+ * Batched on purpose: the native `log_launcher_perf_frontend` command is
+ * synchronous, so each invoke runs on the *main thread* and appends to the log
+ * file there. Firing one per event (rank-items×28, etc.) floods the main-thread
+ * command queue and stalls the clipboard / bridge / foreground invokes the user
+ * is actually waiting on. So buffer lines and flush one newline-joined NDJSON
+ * payload per tick — the native side writes multi-line `{...}` blocks verbatim.
  */
+const PERF_FLUSH_DEBOUNCE_MS = 400
+/** Hard cap so a burst can't grow the buffer unbounded before the timer fires. */
+const PERF_FLUSH_MAX_BUFFER = 64
+const pendingPerfLines: string[] = []
+let perfFlushTimer: ReturnType<typeof setTimeout> | null = null
+let perfUnloadFlushBound = false
+
+function sendPerfLines(lines: string[]): void {
+  if (lines.length === 0) return
+  const line = lines.join('\n')
+  if (nativeInvoke) {
+    void nativeInvoke('log_launcher_perf_frontend', { line }).catch(() => {})
+    return
+  }
+  ensureNativeInvoke()
+  void import('@tauri-apps/api/core')
+    .then(({ invoke }) => {
+      nativeInvoke = invoke as InvokeFn
+      void invoke('log_launcher_perf_frontend', { line }).catch(() => {})
+    })
+    .catch(() => {})
+}
+
+function flushPerfLines(): void {
+  if (perfFlushTimer != null) {
+    clearTimeout(perfFlushTimer)
+    perfFlushTimer = null
+  }
+  if (pendingPerfLines.length === 0) return
+  const batch = pendingPerfLines.splice(0, pendingPerfLines.length)
+  sendPerfLines(batch)
+}
+
+function bindPerfUnloadFlush(): void {
+  if (perfUnloadFlushBound || typeof window === 'undefined') return
+  perfUnloadFlushBound = true
+  // Best-effort: don't lose buffered samples when the launcher window hides/closes.
+  window.addEventListener('pagehide', flushPerfLines)
+  window.addEventListener('beforeunload', flushPerfLines)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushPerfLines()
+  })
+}
+
 function forwardLauncherPerfSample(sample: LauncherPerfSample): void {
   if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
   const payload = JSON.stringify({
@@ -150,18 +201,15 @@ function forwardLauncherPerfSample(sample: LauncherPerfSample): void {
     openId: sample.openId ?? null,
     details: sample.details ?? null,
   })
-  if (nativeInvoke) {
-    void nativeInvoke('log_launcher_perf_frontend', { line: payload }).catch(() => {})
+  bindPerfUnloadFlush()
+  pendingPerfLines.push(payload)
+  if (pendingPerfLines.length >= PERF_FLUSH_MAX_BUFFER) {
+    flushPerfLines()
     return
   }
-  ensureNativeInvoke()
-  // Retry once invoke is loaded (drop if still cold — next sample will hit).
-  void import('@tauri-apps/api/core')
-    .then(({ invoke }) => {
-      nativeInvoke = invoke as InvokeFn
-      void invoke('log_launcher_perf_frontend', { line: payload }).catch(() => {})
-    })
-    .catch(() => {})
+  if (perfFlushTimer == null) {
+    perfFlushTimer = setTimeout(flushPerfLines, PERF_FLUSH_DEBOUNCE_MS)
+  }
 }
 
 function pushRing(sample: LauncherPerfSample): void {
