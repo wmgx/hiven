@@ -26,6 +26,8 @@ import {
   logLauncherPerfDuration,
 } from './workspace/launcher/perf'
 import { startClipboardAgeTracker } from './launcher/clipboard/clipboardSnapshot'
+import { startLearningObserver } from './workspace/learning/observer'
+import { startPureTransformRunnerSync } from './workspace/learning/registryRunners'
 
 // Register built-in panels
 import './panels/register'
@@ -140,7 +142,14 @@ function LauncherRuntimeApp() {
   // Background clipboard age clock: first see = unknown baseline; real changes get known changedAt.
   // Prevents Global Launcher open from treating long-sitting clipboard as "just copied".
   useEffect(() => {
-    return startClipboardAgeTracker(readClipboardTextForAgeTracker)
+    const stopTracker = startClipboardAgeTracker(readClipboardTextForAgeTracker)
+    const stopRunnerSync = startPureTransformRunnerSync()
+    const stopObserver = startLearningObserver()
+    return () => {
+      stopObserver()
+      stopRunnerSync()
+      stopTracker()
+    }
   }, [])
 
   useEffect(() => {

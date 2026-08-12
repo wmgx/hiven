@@ -47,6 +47,20 @@ export const TelemetryEvents = {
   // ── Paste / output ───────────────────────────────────────────────────────
   pasteText: 'behavior:paste.text',
   pasteLatency: 'latency:paste',
+
+  // ── Self-learning (passive observation) ──────────────────────────────────
+  /** A shape-only event was recorded (per clipboard change; no raw text). */
+  learningObserve: 'perf:learning.observe',
+  /** A secret-like clipboard change was skipped (privacy confirmation). */
+  learningSecretSkip: 'perf:learning.secret_skip',
+  /** A reproducible transform pair was confirmed (the key "learning happened" signal). */
+  learningPairVerified: 'behavior:learning.pair_verified',
+  /** A transition was seen but no pure transform reproduced it. */
+  learningPairMiss: 'perf:learning.pair_miss',
+  /** Pure-transform runner table (re)built; runnerCount == 0 means pairing can never fire. */
+  learningRunnersBuilt: 'perf:learning.runners_built',
+  /** Time spent verifying a pair (dry-running candidate transforms). */
+  learningVerifyLatency: 'latency:learning.pair_verify',
 } as const
 
 export type TelemetryEventName = (typeof TelemetryEvents)[keyof typeof TelemetryEvents]

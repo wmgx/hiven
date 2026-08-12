@@ -339,6 +339,31 @@ type ClipboardAgeReadFn = () => Promise<string>
 
 let ageTrackerStop: (() => void) | null = null
 
+// ─── Change subscription (passive observers: self-learning, etc.) ─────────────
+
+type ClipboardChangeListener = (text: string, snapshot: ClipboardSnapshot) => void
+const clipboardChangeListeners = new Set<ClipboardChangeListener>()
+
+/**
+ * Subscribe to distinct clipboard content changes seen by the background age
+ * tracker. Fires only when the observed content actually changed (not on every
+ * poll). Reuses the existing poll — no extra timer.
+ */
+export function subscribeClipboardChange(listener: ClipboardChangeListener): () => void {
+  clipboardChangeListeners.add(listener)
+  return () => clipboardChangeListeners.delete(listener)
+}
+
+function emitClipboardChange(text: string, snapshot: ClipboardSnapshot): void {
+  for (const listener of clipboardChangeListeners) {
+    try {
+      listener(text, snapshot)
+    } catch {
+      // Isolate a bad subscriber from the tracker loop.
+    }
+  }
+}
+
 /**
  * Poll clipboard in the background so changedAt reflects when content actually
  * changed while the app is running — not when Global Launcher happens to open.
@@ -361,7 +386,11 @@ export function startClipboardAgeTracker(
     try {
       const text = await readClipboard()
       if (stopped) return
-      if (text) observeClipboardText(text)
+      if (text) {
+        const prevHash = getLastClipboardSnapshot()?.hash
+        const snapshot = observeClipboardText(text)
+        if (snapshot && snapshot.hash !== prevHash) emitClipboardChange(text, snapshot)
+      }
     } catch {
       // Ignore transient clipboard / permission errors.
     } finally {
