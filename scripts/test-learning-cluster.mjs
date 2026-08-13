@@ -31,6 +31,7 @@ function loadModule(path) {
 const cluster = loadModule('src/workspace/learning/cluster.ts')
 const proposals = loadModule('src/workspace/learning/proposals.ts')
 const coverage = loadModule('src/workspace/learning/coverage.ts')
+const frecency = loadModule('src/workspace/learning/frecency.ts')
 
 const HEX = 'cs:hex|len:m'
 const JSON_SIG = 'cs:mixed|len:l|ml'
@@ -294,6 +295,47 @@ const pair = (over) => ({ ts: 1000, kind: 'transform', inSig: HEX, toolId: 'x.de
   coverage.unregisterCoverageProvider('web-open')
   coverage.unregisterCoverageProvider('broken')
   assert.equal(coverage.isTokenCovered('12345'), false, 'unregister clears coverage')
+}
+
+// ─── frecency: decay, forgetting, ranking (P3) ───────────────────────────────
+{
+  const DAY = 24 * 60 * 60 * 1000
+  const now = 1_000_000_000_000
+
+  // Fresh rule keeps its strength.
+  assert.equal(
+    Math.round(frecency.effectiveStrength({ strength: 3, createdAt: now }, now)),
+    3,
+    'no decay at zero age',
+  )
+  // One half-life (30d) unused → halved.
+  const halved = frecency.effectiveStrength({ strength: 4, createdAt: now - 30 * DAY }, now)
+  assert.ok(Math.abs(halved - 2) < 0.01, 'strength halves after 30 days')
+
+  // lastUsedAt refreshes the clock — a recently-used old rule stays strong.
+  const used = frecency.effectiveStrength(
+    { strength: 3, createdAt: now - 200 * DAY, lastUsedAt: now },
+    now,
+  )
+  assert.ok(Math.abs(used - 3) < 0.01, 'recent use resets decay')
+
+  // Forgetting: a weak, long-unused rule falls below the floor.
+  assert.equal(
+    frecency.isForgettable({ strength: 2, createdAt: now - 90 * DAY }, now),
+    true,
+    'unused ~3 half-lives → forgettable',
+  )
+  assert.equal(
+    frecency.isForgettable({ strength: 3, createdAt: now, lastUsedAt: now }, now),
+    false,
+    'fresh rule not forgettable',
+  )
+
+  // Ranking priority rises with weight but is bounded.
+  const weak = frecency.firePriority({ strength: 1, createdAt: now }, now)
+  const strong = frecency.firePriority({ strength: 8, createdAt: now }, now)
+  assert.ok(strong > weak, 'stronger rule ranks higher')
+  assert.ok(strong <= 80, 'priority bounded')
 }
 
 console.log('test-learning-cluster: ok')

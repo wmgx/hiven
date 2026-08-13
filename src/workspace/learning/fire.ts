@@ -16,14 +16,19 @@ import { t, type Locale } from '../../i18n'
 import { openExternalUrl } from '../effectRunner'
 import { TelemetryEvents, trackBehavior } from '../telemetry'
 import type { LauncherItem } from './../launcher/types'
-import { queryAllRules, type LearnedRule } from './store'
+import { FIRE_STRENGTH_BONUS, firePriority } from './frecency'
+import { bumpRuleStrength, pruneForgottenRules, queryAllRules, type LearnedRule } from './store'
 import { fillTemplate, queryMatchesSlot, type UrlSlotKind } from './urlTemplate'
 
 let cachedUrlRules: LearnedRule[] = []
 
-/** Reload the in-memory url-template rule cache. Call on start + rule changes. */
+/**
+ * Reload the in-memory url-template rule cache (forgetting decayed rules first).
+ * Call on start + rule changes.
+ */
 export async function refreshLearnedUrlRules(): Promise<void> {
   try {
+    await pruneForgottenRules()
     const rules = await queryAllRules()
     cachedUrlRules = rules.filter((r) => r.transform.kind === 'url-template')
   } catch {
@@ -49,11 +54,16 @@ function buildOpenUrlItem(rule: LearnedRule, url: string, locale: Locale): Launc
     },
     behavior: { type: 'perform' },
     surfaces: ['global-launcher'],
-    // Learned direct answers are highly relevant when their slot matches — nudge up.
-    staticPriority: 60,
+    // Learned direct answers are highly relevant when their slot matches — the
+    // nudge scales with frecency so rules you keep using rank higher.
+    staticPriority: firePriority(rule),
     recordUsage: false,
     execute: async () => {
       await openExternalUrl(url)
+      // Frecency feedback: used → stronger + fresher; refresh the cache so the
+      // new weight ranks the next fire.
+      await bumpRuleStrength(rule.clusterKey, FIRE_STRENGTH_BONUS)
+      void refreshLearnedUrlRules()
       trackBehavior(TelemetryEvents.learningRuleFired, {
         slotKind: rule.transform.kind === 'url-template' ? rule.transform.slotKind : undefined,
       })
