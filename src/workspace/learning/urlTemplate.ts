@@ -26,7 +26,7 @@ export interface UrlTemplateResult {
   slotKinds: UrlSlotKind[]
 }
 
-const URL_RE = /^(https?):\/\/([^/?#]+)(\/[^?#]*)?/i
+const URL_RE = /^https?:\/\/([^/?#]+)([^#]*)/i
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** Classify a single path segment as a typed variable slot, or null if it's constant. */
@@ -44,19 +44,23 @@ function classifySegment(seg: string): UrlSlotKind | null {
 
 /**
  * Templatize one URL. Returns null for non-http(s) or malformed input.
- * Query and fragment are dropped for clustering stability (the id usually lives
- * in the path; query support is a later refinement).
+ * A path id wins (query dropped for clustering stability); if the path carries no
+ * id, an id-like query value is templatized instead (`?logid={hex}`), keeping
+ * only that param so query-carried ids are discoverable too. Fragment dropped.
  */
 export function templatizeUrl(url: string): UrlTemplateResult | null {
   const match = URL_RE.exec((url ?? '').trim())
   if (!match) return null
-  const host = (match[2] ?? '').toLowerCase()
+  const host = (match[1] ?? '').toLowerCase()
   if (!host) return null
-  const rawPath = match[3] ?? ''
-  const segments = rawPath.split('/')
+  const pathQuery = match[2] ?? ''
+  const qIdx = pathQuery.indexOf('?')
+  const path = qIdx === -1 ? pathQuery : pathQuery.slice(0, qIdx)
+  const query = qIdx === -1 ? '' : pathQuery.slice(qIdx + 1)
+
   const slots: string[] = []
   const slotKinds: UrlSlotKind[] = []
-  const templatedSegments = segments.map((seg) => {
+  const templatedSegments = path.split('/').map((seg) => {
     const kind = classifySegment(seg)
     if (kind) {
       slots.push(seg)
@@ -66,12 +70,27 @@ export function templatizeUrl(url: string): UrlTemplateResult | null {
     return seg
   })
   const templatePath = templatedSegments.join('/')
-  return {
-    host,
-    template: host + templatePath,
-    slots,
-    slotKinds,
+
+  // Path id is primary — keep single-slot templates by dropping the query.
+  if (slots.length > 0) {
+    return { host, template: host + templatePath, slots, slotKinds }
   }
+
+  // No path id → the first id-like query value becomes the slot.
+  if (query) {
+    for (const pair of query.split('&')) {
+      const eq = pair.indexOf('=')
+      if (eq === -1) continue
+      const value = pair.slice(eq + 1)
+      const kind = classifySegment(value)
+      if (kind) {
+        const key = pair.slice(0, eq)
+        return { host, template: `${host}${templatePath}?${key}={${kind}}`, slots: [value], slotKinds: [kind] }
+      }
+    }
+  }
+
+  return { host, template: host + templatePath, slots, slotKinds }
 }
 
 export interface NavigationRecord {

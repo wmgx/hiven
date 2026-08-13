@@ -44,10 +44,23 @@ const U = loadModule('src/workspace/learning/urlTemplate.ts')
   const uuid = U.templatizeUrl('https://svc.byted.org/trace/550e8400-e29b-41d4-a716-446655440000')
   assert.equal(uuid.template, 'svc.byted.org/trace/{uuid}', 'uuid → {uuid}')
 
-  // No id-like segment → template has no slot.
+  // Path id wins → query dropped (single-slot stability).
+  const withQuery = U.templatizeUrl('https://code.byted.org/lark/-/merge_requests/12345?tab=diffs')
+  assert.equal(withQuery.template, 'code.byted.org/lark/-/merge_requests/{n}', 'path id wins, query dropped')
+
+  // No path id → an id-like query value becomes the slot (logid case, discovered
+  // from browsing alone — no copy event needed); other params dropped.
+  const queryId = U.templatizeUrl('https://argos.byted.org/trace?logid=20240813abcd1234&region=cn')
+  assert.equal(queryId.template, 'argos.byted.org/trace?logid={hex}', 'query id templatized heuristically')
+  assert.equal(queryId.slotKinds.join(','), 'hex')
+
+  // No id-like segment anywhere → template has no slot.
   const homepage = U.templatizeUrl('https://code.byted.org/dashboard')
   assert.equal(homepage.template, 'code.byted.org/dashboard')
   assert.equal(homepage.slots.length, 0, 'no variable slot')
+
+  const plainQuery = U.templatizeUrl('https://x.org/search?q=hello&page=on')
+  assert.equal(plainQuery.slots.length, 0, 'non-id query values are not slots')
 
   // Non-http and junk rejected.
   assert.equal(U.templatizeUrl('ftp://x/y'), null, 'non-http rejected')
