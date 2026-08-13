@@ -16,6 +16,7 @@
 import { TelemetryEvents, trackBehavior, trackPerf } from '../telemetry'
 import { selectProposableCandidates, type RuleCandidate } from './cluster'
 import { isShapeCovered, representativeTokens, type CoverageProbe } from './coverage'
+import { extractFeatures, featureSignature } from './features'
 import { refreshLearnedUrlRules } from './fire'
 import { filterProposableCandidates, ruleFromCandidate, templateToCandidate } from './proposals'
 import {
@@ -137,6 +138,8 @@ interface LearningDebugApi {
   proposals: () => Promise<RuleCandidate[]>
   rules: () => Promise<LearnedRule[]>
   templates: () => Promise<DiscoveredTemplate[]>
+  /** Feature signature of a text — the matcher.sig to use when crafting a chain rule. */
+  sig: (text: string) => string
   dump: () => Promise<{
     pairs: number
     sigCounts: Record<string, number>
@@ -160,6 +163,7 @@ export function installLearningDebugHook(): void {
     proposals: getPendingProposals,
     rules: queryAllRules,
     templates: discoverTemplates,
+    sig: (text: string) => featureSignature(extractFeatures(text)),
     dump: async () => {
       const [pairs, sigCounts, rules, suppressions, navs] = await Promise.all([
         queryAllPairs(),
