@@ -72,7 +72,7 @@ function truncate(text: string, max = 80): string {
 
 // ─── url-template fire (scenario D) ────────────────────────────────────────────
 
-function buildOpenUrlItem(rule: LearnedRule, url: string, locale: Locale): LauncherItem {
+function buildOpenUrlItem(rule: LearnedRule, url: string, query: string, locale: Locale): LauncherItem {
   const host = rule.transform.kind === 'url-template' ? hostOf(rule.transform.template) : ''
   return {
     systemKey: `learned-url:${rule.clusterKey}`,
@@ -82,6 +82,9 @@ function buildOpenUrlItem(rule: LearnedRule, url: string, locale: Locale): Launc
       subtitle: url,
       icon: 'Globe',
       kindLabel: t(locale, 'palette.learnFireKind'),
+      // The triggering query is what surfaces this item — make it match itself so
+      // the query-present ranking filter (host items must match) keeps it.
+      aliases: [query],
     },
     behavior: { type: 'perform' },
     surfaces: ['global-launcher'],
@@ -103,7 +106,7 @@ function buildOpenUrlItem(rule: LearnedRule, url: string, locale: Locale): Launc
 
 // ─── chain fire (scenario B) ───────────────────────────────────────────────────
 
-function buildChainItem(rule: LearnedRule, result: string, locale: Locale): LauncherItem {
+function buildChainItem(rule: LearnedRule, result: string, query: string, locale: Locale): LauncherItem {
   const steps = rule.transform.kind === 'chain' ? rule.transform.toolIds.length : 0
   return {
     systemKey: `learned-chain:${rule.clusterKey}`,
@@ -113,6 +116,8 @@ function buildChainItem(rule: LearnedRule, result: string, locale: Locale): Laun
       subtitle: t(locale, 'palette.learnFireChain', { steps: String(steps) }),
       icon: 'Wand2',
       kindLabel: t(locale, 'palette.learnFireKind'),
+      // Match the triggering query so the query-present host-item filter keeps it.
+      aliases: [query],
     },
     behavior: { type: 'perform' },
     surfaces: ['global-launcher'],
@@ -137,7 +142,7 @@ export function learnedLauncherItems(query: string, locale: Locale): LauncherIte
     if (rule.transform.kind !== 'url-template') continue
     if (!queryMatchesSlot(q, rule.transform.slotKind as UrlSlotKind)) continue
     const url = 'https://' + fillTemplate(rule.transform.template, q)
-    items.push(buildOpenUrlItem(rule, url, locale))
+    items.push(buildOpenUrlItem(rule, url, q, locale))
   }
 
   if (cachedChainRules.length > 0) {
@@ -146,7 +151,7 @@ export function learnedLauncherItems(query: string, locale: Locale): LauncherIte
       if (rule.transform.kind !== 'chain') continue
       if (rule.matcher.kind !== 'feature-sig' || rule.matcher.sig !== sig) continue
       const result = runLearnedChain(rule.transform.toolIds, q)
-      if (result) items.push(buildChainItem(rule, result, locale))
+      if (result) items.push(buildChainItem(rule, result, q, locale))
     }
   }
 

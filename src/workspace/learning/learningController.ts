@@ -18,6 +18,7 @@ import { selectProposableCandidates, type RuleCandidate } from './cluster'
 import { isShapeCovered, representativeTokens, type CoverageProbe } from './coverage'
 import { extractFeatures, featureSignature } from './features'
 import { refreshLearnedUrlRules } from './fire'
+import { buildPureTransformRunners, runLearnedChain } from './registryRunners'
 import { filterProposableCandidates, ruleFromCandidate, templateToCandidate } from './proposals'
 import {
   addSuppression,
@@ -140,6 +141,10 @@ interface LearningDebugApi {
   templates: () => Promise<DiscoveredTemplate[]>
   /** Feature signature of a text — the matcher.sig to use when crafting a chain rule. */
   sig: (text: string) => string
+  /** All available pure-transform runner ids (use these exact ids in a chain rule). */
+  runners: () => string[]
+  /** Dry-run a chain over text (null = a tool is missing / declines / no change). */
+  testChain: (toolIds: string[], text: string) => string | null
   dump: () => Promise<{
     pairs: number
     sigCounts: Record<string, number>
@@ -164,6 +169,8 @@ export function installLearningDebugHook(): void {
     rules: queryAllRules,
     templates: discoverTemplates,
     sig: (text: string) => featureSignature(extractFeatures(text)),
+    runners: () => buildPureTransformRunners().map((r) => r.id),
+    testChain: (toolIds: string[], text: string) => runLearnedChain(toolIds, text),
     dump: async () => {
       const [pairs, sigCounts, rules, suppressions, navs] = await Promise.all([
         queryAllPairs(),
