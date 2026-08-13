@@ -61,6 +61,20 @@ export const TelemetryEvents = {
   learningRunnersBuilt: 'perf:learning.runners_built',
   /** Time spent verifying a pair (dry-running candidate transforms). */
   learningVerifyLatency: 'latency:learning.pair_verify',
+  /** A rule candidate is ready to propose to the user (P2). */
+  learningProposalReady: 'behavior:learning.proposal_ready',
+  /** The user accepted a proposal → a rule was learned (P2). */
+  learningRuleAccepted: 'behavior:learning.rule_accepted',
+  /** The user rejected a proposal → the cluster is suppressed (P2). */
+  learningRuleRejected: 'behavior:learning.rule_rejected',
+  /** The user deleted a learned rule from the management page (P2). */
+  learningRuleDeleted: 'behavior:learning.rule_deleted',
+  /** A navigation was passively observed and templatized (scenario D). */
+  learningNavObserve: 'perf:learning.nav_observe',
+  /** A discovered template was suppressed as already-covered (novelty guard). */
+  learningProposalCovered: 'perf:learning.proposal_covered',
+  /** A learned url-template rule fired (typed token → opened the page). */
+  learningRuleFired: 'behavior:learning.rule_fired',
 } as const
 
 export type TelemetryEventName = (typeof TelemetryEvents)[keyof typeof TelemetryEvents]

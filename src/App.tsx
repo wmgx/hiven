@@ -28,6 +28,9 @@ import {
 import { startClipboardAgeTracker } from './launcher/clipboard/clipboardSnapshot'
 import { startLearningObserver } from './workspace/learning/observer'
 import { startPureTransformRunnerSync } from './workspace/learning/registryRunners'
+import { startNavigationSensor } from './workspace/learning/navigationSensor'
+import { installLearningDebugHook } from './workspace/learning/learningController'
+import { refreshLearnedUrlRules } from './workspace/learning/fire'
 
 // Register built-in panels
 import './panels/register'
@@ -145,7 +148,13 @@ function LauncherRuntimeApp() {
     const stopTracker = startClipboardAgeTracker(readClipboardTextForAgeTracker)
     const stopRunnerSync = startPureTransformRunnerSync()
     const stopObserver = startLearningObserver()
+    const stopNavSensor = startNavigationSensor()
+    // Load learned url-template rules into memory for reverse-fire (typed id → open).
+    void refreshLearnedUrlRules()
+    // Devtools verification hook (window.__hivenLearning) — no user-facing UI yet.
+    installLearningDebugHook()
     return () => {
+      stopNavSensor()
       stopObserver()
       stopRunnerSync()
       stopTracker()

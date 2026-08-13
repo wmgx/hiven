@@ -18,6 +18,7 @@ import {
   setHostLauncherDynamicItemsProvider,
   setHostLauncherItemsProvider,
 } from './registry'
+import { learnedUrlLauncherItems } from '../learning/fire'
 import { measureLauncherPerf } from './perf'
 import { getHostPaneControlItems, getHostSystemPowerItems } from './hostActions'
 import { registerPluginSurfacePanelProvider } from '../pluginSurfacePanelProvider'
@@ -93,9 +94,14 @@ export function registerHostLauncherProviders(): void {
           bridgePromise,
         ])
 
+        // Learned direct answers (scenario D reverse fire): a typed id → open the
+        // discovered page. Sync + cached, so it never adds latency to the query path.
+        const learnedItems = learnedUrlLauncherItems(q, ctx.locale)
+
         // Window vs tab de-dupe is soft ranking (title near-dup + capability tier),
         // not a host product filter that knows about browser plugins.
         return [
+          ...learnedItems,
           ...workflowItems,
           ...appItems,
           ...windowItems,

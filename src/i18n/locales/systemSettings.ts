@@ -2,9 +2,23 @@ export default {
   en: {
     basicSettings: 'Settings',
     pluginManagement: 'Plugins',
+    learnedRules: 'Learned',
+    learnedRulesEmpty: 'Nothing learned yet. hiven watches how you transform content and will suggest a direct answer once it sees a repeated pattern.',
+    learnedRuleDesc: 'On {shape} · from {count} examples',
+    learnedRulesDelete: 'Delete',
+    learnedRulesSuppressed: 'Ignored',
+    learnedRulesSuppressedItem: 'Ignored suggestion',
+    learnedRulesRestore: 'Restore',
   },
   zh: {
     basicSettings: '基础设置',
     pluginManagement: '插件管理',
+    learnedRules: '已学',
+    learnedRulesEmpty: '还没学到规则。hiven 会观察你如何处理内容，出现重复模式时主动建议设为直答。',
+    learnedRuleDesc: '作用于 {shape} · 来自 {count} 个样本',
+    learnedRulesDelete: '删除',
+    learnedRulesSuppressed: '已忽略',
+    learnedRulesSuppressedItem: '已忽略的建议',
+    learnedRulesRestore: '恢复',
   },
 }

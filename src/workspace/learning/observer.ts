@@ -63,7 +63,7 @@ function handleClipboardText(text: string): void {
     })
     if (hit) {
       const inSig = featureSignature(extractFeatures(previous))
-      void putPair({ ts: Date.now(), kind: 'transform', inSig, toolId: hit.toolId })
+      void putPair({ ts: Date.now(), kind: 'transform', inSig, toolId: hit.toolId, inHash: saltedHash(previous) })
       trackBehavior(TelemetryEvents.learningPairVerified, { toolId: hit.toolId, kind: 'transform', inSig })
     } else {
       trackPerf(TelemetryEvents.learningPairMiss, { runnersTried: runners.length, inType: detectedType })

@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { Settings, Puzzle } from 'lucide-react'
+import { Settings, Puzzle, Sparkles } from 'lucide-react'
 import { useT } from '../i18n'
 import { SettingsContent } from '../surfaces/SettingsContent'
 import { PluginsContent } from '../surfaces/PluginsContent'
+import { LearnedRulesContent } from '../surfaces/LearnedRulesContent'
 import './SystemSettingsSurface.css'
 
-type TabId = 'settings' | 'plugins'
+type TabId = 'settings' | 'plugins' | 'learning'
 
 export function SystemSettingsSurface({ initialTab = 'settings' }: { initialTab?: TabId }) {
   const [activeTab, setActiveTab] = useState<TabId>(initialTab)
@@ -14,6 +15,7 @@ export function SystemSettingsSurface({ initialTab = 'settings' }: { initialTab?
   const tabs: { id: TabId; icon: React.ReactNode; label: string }[] = [
     { id: 'settings', icon: <Settings size={16} />, label: t('basicSettings') },
     { id: 'plugins', icon: <Puzzle size={16} />, label: t('pluginManagement') },
+    { id: 'learning', icon: <Sparkles size={16} />, label: t('learnedRules') },
   ]
 
   return (
@@ -34,6 +36,7 @@ export function SystemSettingsSurface({ initialTab = 'settings' }: { initialTab?
       <div className="system-settings-content" data-launcher-scrollable>
         {activeTab === 'settings' && <SettingsContent />}
         {activeTab === 'plugins' && <PluginsContent />}
+        {activeTab === 'learning' && <LearnedRulesContent />}
       </div>
     </div>
   )

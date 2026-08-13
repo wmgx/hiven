@@ -18,6 +18,8 @@
     "test:plugin-diff-boundary": "node scripts/test-plugin-diff-boundary.mjs",
     "test:intent-engine": "node scripts/test-intent-engine.mjs",
     "test:learning-pairing": "node scripts/test-learning-pairing.mjs",
+    "test:learning-cluster": "node scripts/test-learning-cluster.mjs",
+    "test:learning-urltemplate": "node scripts/test-learning-urltemplate.mjs",
     "test:intent-content-recommend": "node scripts/test-intent-content-recommend.mjs",
     "test:launcher-intent-ranking": "node scripts/test-launcher-intent-ranking.mjs",
     "test:quality-gate": "node scripts/test-quality-gate.mjs",

@@ -7,6 +7,7 @@ import { LauncherMixedList, type LauncherMixedItem } from './LauncherMixedList'
 import type { ClipboardObjectBlockState } from '../../launcher/clipboard/useClipboardObjectBlock'
 import { ObjectBlockToken } from './ObjectBlockToken'
 import { RecentClipboardHint } from './RecentClipboardHint'
+import { LearningProposalCard } from './LearningProposalCard'
 import type { RecommendedAction, RecommendedOutputTarget } from '../../launcher/clipboard/actionRecommendation'
 import { LauncherEmptyWell } from './LauncherEmptyWell'
 import { getPlatformShortcutMeta } from './launcherParamShortcuts'
@@ -115,6 +116,7 @@ export function GlobalLauncherSearchFrame({
         </div>
       )}
       <div className="global-launcher-body l-list" onMouseMove={onMouseMove}>
+        {!query && !block && !hint && <LearningProposalCard locale={locale} />}
         {hint && !block && (
           <RecentClipboardHint
             hint={hint}

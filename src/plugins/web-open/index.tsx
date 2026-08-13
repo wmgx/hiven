@@ -6,6 +6,7 @@
 
 import {
   definePlugin,
+  getPluginHostSdk,
   type LauncherDynamicContext,
   type LauncherExecutionContext,
   type LauncherItemContribution,
@@ -380,12 +381,28 @@ function migrateWebQuickOpenSettings(stored: unknown): WebQuickOpenSettings {
   return migrated
 }
 
+/**
+ * Declare this plugin's coverage to the self-learning novelty guard: the learner
+ * must never re-propose a rule for inputs an existing quick-open pattern already
+ * handles (e.g. a hand-coded logid → log tool). Sync regex test over the current
+ * entries' matchPatterns; re-registered on settings change.
+ */
+function registerWebOpenCoverage(settings: WebQuickOpenSettings): void {
+  const patterns = (settings.entries ?? [])
+    .map((entry) => entry.matchPattern)
+    .filter((pattern): pattern is string => typeof pattern === 'string' && pattern.trim().length > 0)
+  getPluginHostSdk().coverage.register('web-open', (token) =>
+    patterns.some((pattern) => testMatchPattern(pattern, token)),
+  )
+}
+
 export default definePlugin<WebQuickOpenSettings>({
   hooks: {
     // App start: warm favicons for current rules so launcher shows site icons after first session.
     startup(ctx) {
       const settings = (ctx.settings as WebQuickOpenSettings | undefined) ?? DEFAULT_WEB_QUICK_OPEN_SETTINGS
       scheduleWarmFavicons(settings, ctx.storage, ctx.source, ctx.pluginId, ctx.network)
+      registerWebOpenCoverage(settings)
     },
   },
 
@@ -399,6 +416,7 @@ export default definePlugin<WebQuickOpenSettings>({
     onChange(ctx) {
       const settings = ctx.value ?? DEFAULT_WEB_QUICK_OPEN_SETTINGS
       scheduleWarmFavicons(settings, ctx.storage, ctx.source, ctx.pluginId, ctx.network)
+      registerWebOpenCoverage(settings)
     },
     modals: [
       {

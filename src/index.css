@@ -5671,6 +5671,98 @@ body[data-theme='dark'] .launcher-preview-well {
   color: var(--text-2);
 }
 
+/* Self-learning proposal card (P2c) — first user-visible learning surface. */
+.learn-proposal-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 6px 8px 4px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: var(--hairline) solid color-mix(in srgb, var(--accent) 28%, transparent);
+  background: var(--accent-soft);
+  box-sizing: border-box;
+}
+
+.learn-proposal-card .learn-proposal-icon {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+}
+
+.learn-proposal-card .learn-proposal-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.learn-proposal-card .learn-proposal-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.learn-proposal-card .learn-proposal-desc {
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.35;
+}
+
+.learn-proposal-card .learn-proposal-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: center;
+}
+
+.learn-proposal-card .learn-proposal-accept,
+.learn-proposal-card .learn-proposal-reject {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: var(--hairline) solid transparent;
+  transition: background 0.14s, border-color 0.14s, color 0.14s;
+  white-space: nowrap;
+}
+
+.learn-proposal-card .learn-proposal-accept {
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+}
+
+.learn-proposal-card .learn-proposal-accept:hover {
+  background: color-mix(in srgb, var(--accent) 88%, #000);
+}
+
+.learn-proposal-card .learn-proposal-reject {
+  background: transparent;
+  color: var(--text-2);
+  border-color: var(--color-border-tertiary, var(--border));
+}
+
+.learn-proposal-card .learn-proposal-reject:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.learn-proposal-card .learn-proposal-accept:disabled,
+.learn-proposal-card .learn-proposal-reject:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .launcher-more-hint {
   padding: 8px 20px 10px;
   text-align: center;

@@ -247,6 +247,9 @@ LearnedRule = {
 | **P0 直答基座（无学习）** | 统一直答 resolver 协议；平移 calc/timestamp/jwt/json/color/base64/url；零查询直答剪贴板；去向系统接好 | 开窗即答；复制 JWT 开窗直接见解码，`↵` 复制、`⇥` 换去向；无命令步 |
 | **P1 被动观察层** | 运行时可读的 episode 存储；剪贴板时间线配对；前台 App + 浏览器流采集（先用现有 bridge 快照） | episode/pair store 有数据；能看到被动配对样本；secret 被跳过 |
 | **P2 聚类 + 归纳 + 提议** | 特征签名聚类；保守归纳（+过宽否决）；提议卡（唯一确认）；LearnedRule 存储 + 管理页 | 重复 3 次触发提议；确认后规则落库；管理页可停/删 |
+| ↳ P2a（已实现） | `cluster.ts` 纯核：聚类 + distinct 守卫 + 过宽否决；`test-learning-cluster` 契约 | 阈值/守卫/否决全测通 |
+| ↳ P2b（已实现） | `proposals.ts` 纯核（描述子/铸规则/过滤）；store v2（rules/suppressions）；`learningController`；`window.__hivenLearning` 调试钩子；3 个提议埋点 | 攒够证据可提议；accept 落库、reject 抑制 |
+| ↳ P2c（已实现） | launcher 提议卡（`LearningProposalCard`，全 i18n，鼠标驱动不入方向键模型）；工具名按 locale 从 registry 解析；设置页「已学」管理页（`LearnedRulesContent`，删规则/恢复忽略）；共享标签 `learningLabels` | 空查询开窗见提议卡；设为直答/不用；设置页可删规则、恢复被忽略的堆 |
 | **P3 命中 + 回喂** | learned rule 进直答排序；frecency 回喂；遗忘 | 学到的规则命中出直答（标"你教的"）；用/不用调权生效 |
 | **P4 浏览器深化（可并入）** | 扩展加：页面选中文本 / 导航事件 / 可选历史；站点作用域规则 | 在特定站点出条件化直答；选中文本作为输入源 |
 

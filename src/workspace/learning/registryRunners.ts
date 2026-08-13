@@ -14,6 +14,7 @@
 
 import { pluginRegistry } from '../pluginRegistry'
 import { TelemetryEvents, trackPerf } from '../telemetry'
+import type { Locale } from '../../i18n'
 import type { PluginPermission } from '../pluginTypes'
 import type {
   LauncherExecuteResult,
@@ -88,6 +89,24 @@ function runToolPure(tool: PluginToolContribution, text: string): string | null 
     return null
   }
   return captured
+}
+
+/**
+ * Resolve a runner toolId (`${pluginId}:${tool.id}`) to its localized display
+ * title from the registry — used to render learned-rule proposals in the user's
+ * locale (never a persisted string). Falls back to the tool's tail id.
+ */
+export function resolveLauncherToolTitle(toolId: string, locale: Locale): string {
+  for (const { definition, pluginId } of pluginRegistry.getAllPluginDefinitions()) {
+    for (const tool of definition.tools ?? []) {
+      if (`${pluginId}:${tool.id}` === toolId) {
+        return tool.titleI18n?.[locale] ?? tool.title ?? tool.id
+      }
+    }
+  }
+  // Unknown / unloaded tool: show the last id segment rather than a raw path.
+  const tail = toolId.split(':').pop() ?? toolId
+  return tail.split('.').pop() ?? tail
 }
 
 /** Build pure-transform runners from all currently registered plugins. */

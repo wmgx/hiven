@@ -118,3 +118,47 @@ body[data-theme='dark'] .system-settings-content,
   flex: 1;
   min-height: 0;
 }
+
+/* Learned-rules management page (P2c) */
+.learned-rules-empty {
+  padding: 32px 24px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2, #6b7280);
+  max-width: 420px;
+  margin: 24px auto 0;
+}
+
+.learned-rules-empty-inline {
+  padding: 12px 14px;
+  font-size: 12px;
+  color: var(--text-3, #9ca3af);
+}
+
+.learned-rules-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm, 6px);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: var(--hairline, 1px) solid var(--border);
+  background: transparent;
+  color: var(--text-2);
+  transition: background 0.14s, border-color 0.14s, color 0.14s;
+  white-space: nowrap;
+}
+
+.learned-rules-btn:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.learned-rules-btn-danger:hover {
+  color: var(--color-error, #dc2626);
+  border-color: color-mix(in srgb, var(--color-error, #dc2626) 40%, transparent);
+  background: color-mix(in srgb, var(--color-error, #dc2626) 8%, transparent);
+}

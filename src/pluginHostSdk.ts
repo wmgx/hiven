@@ -29,6 +29,11 @@ import {
   registerUrlSchemes,
   unregisterUrlSchemes,
 } from './workspace/urlSchemeRegistry'
+import {
+  registerCoverageProvider,
+  unregisterCoverageProvider,
+  type CoverageProvider,
+} from './workspace/learning/coverage'
 
 export type { PluginHostUi, PluginHostEffects, TextCommandDefinition } from './pluginHostCore.ts'
 export type { DesktopTargetsHostApi, DesktopTargetProvider } from './workspace/desktopTargets/pluginApi'
@@ -75,6 +80,16 @@ export type UrlSchemeRegistryApi = {
   list: () => string[]
 }
 
+export type CoverageRegistryApi = {
+  /**
+   * Declare which inputs this plugin already handles, so the self-learning layer
+   * never proposes a rule that duplicates an existing capability. The test gets a
+   * representative token and returns true if the plugin would already act on it.
+   */
+  register: (pluginId: string, test: CoverageProvider) => void
+  unregister: (pluginId: string) => void
+}
+
 export type PluginHostSdk = {
   definePlugin: typeof definePlugin
   react: typeof React
@@ -96,6 +111,11 @@ export type PluginHostSdk = {
    * Custom schemes are opened via open_system_url — not Tauri shell.open scope.
    */
   urlSchemes: UrlSchemeRegistryApi
+  /**
+   * Plugin-declared capability coverage — the self-learning novelty guard.
+   * Register a test so the learner won't re-propose what this plugin already does.
+   */
+  coverage: CoverageRegistryApi
 }
 
 declare global {
@@ -123,6 +143,10 @@ export function createPluginHostSdk(): PluginHostSdk {
       register: registerUrlSchemes,
       unregister: unregisterUrlSchemes,
       list: listRegisteredUrlSchemes,
+    },
+    coverage: {
+      register: registerCoverageProvider,
+      unregister: unregisterCoverageProvider,
     },
   }
 }
