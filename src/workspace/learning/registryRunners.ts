@@ -25,13 +25,17 @@ import type {
 import { setPureTransformRunners } from './observer'
 import type { PureTransformRunner } from './pairing'
 
-/** Any of these declared → the plugin can mutate the world / hit the network → not a pure transform. */
+/**
+ * Any of these declared → the plugin can mutate the world / hit the network →
+ * not a pure transform. Note: `clipboard.write` / `.image` / `.files` are
+ * intentionally NOT here — they deliver a tool's OUTPUT (which is exactly the
+ * transform result we capture), not a world mutation, and the dry-run stubs
+ * (STUB_API etc. in runToolPure) neutralize them regardless. Excluding them
+ * wrongly dropped legitimately-pure tools like json.prettify.
+ */
 const SIDE_EFFECT_PERMISSIONS: readonly PluginPermission[] = [
   'network.request',
   'shell.run',
-  'clipboard.write',
-  'clipboard.image',
-  'clipboard.files',
   'accessibility.paste',
   'app.launch',
   'globalShortcut.register',
