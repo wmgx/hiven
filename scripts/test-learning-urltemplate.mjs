@@ -112,6 +112,34 @@ const U = loadModule('src/workspace/learning/urlTemplate.ts')
   assert.equal(d[0].slotKind, 'hex', 'slotKind inferred from template')
 }
 
+// ─── scenario A: templatizeUrlWithToken (copy-correlated slot) ───────────────
+{
+  // Token in the path → slot around that exact token.
+  const p = U.templatizeUrlWithToken('https://code.byted.org/lark/-/merge_requests/9931', '9931')
+  assert.ok(p, 'path token templatized')
+  assert.equal(p.template, 'code.byted.org/lark/-/merge_requests/{n}')
+  assert.equal(p.slotKinds.join(','), 'n')
+
+  // Token in a query value → keep only that param (the logid case the heuristic drops).
+  // (all-hex value → {hex}; other params dropped for clustering stability.)
+  const q = U.templatizeUrlWithToken(
+    'https://argos.byted.org/trace?logid=20240813abcd1234&region=cn',
+    '20240813abcd1234',
+  )
+  assert.ok(q, 'query token templatized')
+  assert.equal(q.template, 'argos.byted.org/trace?logid={hex}', 'only the token param kept, others dropped')
+
+  // Opaque token (non-hex letters + digits, long) → slot kind id.
+  const opaque = U.templatizeUrlWithToken('https://x.org/o/orderXYZ12345', 'orderXYZ12345')
+  assert.ok(opaque, 'opaque token templatized')
+  assert.equal(opaque.slotKinds.join(','), 'id')
+
+  // Token not present, too short, or spaced → no template.
+  assert.equal(U.templatizeUrlWithToken('https://x.org/a/1', '1'), null, 'too short')
+  assert.equal(U.templatizeUrlWithToken('https://x.org/a/b', 'zzzz'), null, 'token absent')
+  assert.equal(U.templatizeUrlWithToken('ftp://x/y', 'abcd1234'), null, 'non-http rejected')
+}
+
 // ─── reverse fire: queryMatchesSlot / fillTemplate ───────────────────────────
 {
   assert.equal(U.queryMatchesSlot('12345', 'n'), true, 'digits match {n}')

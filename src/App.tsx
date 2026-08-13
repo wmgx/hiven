@@ -26,6 +26,7 @@ import {
   logLauncherPerfDuration,
 } from './workspace/launcher/perf'
 import { startClipboardAgeTracker } from './launcher/clipboard/clipboardSnapshot'
+import { readNativeClipboardText } from './workspace/nativeClipboard'
 import { startLearningObserver } from './workspace/learning/observer'
 import { startPureTransformRunnerSync } from './workspace/learning/registryRunners'
 import { startNavigationSensor } from './workspace/learning/navigationSensor'
@@ -36,17 +37,8 @@ import { refreshLearnedUrlRules } from './workspace/learning/fire'
 import './panels/register'
 
 /** Lightweight text-only read for age tracking (avoid file-path IPC every tick). */
-async function readClipboardTextForAgeTracker(): Promise<string> {
-  try {
-    const { readText } = await import('@tauri-apps/plugin-clipboard-manager')
-    return (await readText()) ?? ''
-  } catch {
-    try {
-      return await navigator.clipboard.readText()
-    } catch {
-      return ''
-    }
-  }
+function readClipboardTextForAgeTracker(): Promise<string> {
+  return readNativeClipboardText()
 }
 
 // Register first-party product plugin packages

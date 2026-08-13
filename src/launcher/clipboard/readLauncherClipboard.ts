@@ -15,6 +15,7 @@
 
 import { detectClipboardFilePath } from './clipboardSnapshot'
 import { launcherPerfNow, logLauncherPerfDuration } from '../../workspace/launcher/perf'
+import { readNativeClipboardText } from '../../workspace/nativeClipboard'
 
 async function readClipboardFilePath(): Promise<string | null> {
   try {
@@ -37,22 +38,11 @@ async function readClipboardFilePath(): Promise<string | null> {
 
 export async function readLauncherClipboard(): Promise<string> {
   // 1) Plain text — the common case, single main-thread IPC.
-  let text = ''
-  try {
-    const t0 = launcherPerfNow()
-    const { readText } = await import('@tauri-apps/plugin-clipboard-manager')
-    logLauncherPerfDuration('clipboard-read:import-clipboard-manager', t0, { kind: 'perf' })
-    const t1 = launcherPerfNow()
-    text = (await readText()) ?? ''
-    logLauncherPerfDuration('clipboard-read:read-text', t1, { kind: 'perf', textLength: text.length })
-  } catch {
-    // No Tauri plugin — fall back to the web clipboard API and stop here.
-    try {
-      return await navigator.clipboard.readText()
-    } catch {
-      return ''
-    }
-  }
+  // Never fall back to navigator.clipboard.readText() here: in WKWebView that
+  // pops a native English "Paste" chip on the focused search field.
+  const t1 = launcherPerfNow()
+  const text = await readNativeClipboardText()
+  logLauncherPerfDuration('clipboard-read:read-text', t1, { kind: 'perf', textLength: text.length })
 
   // 2) Only resolve the real Finder file path when the text is empty or looks like
   //    a bare filename / path. Skips the 2–4s file-path IPC for ordinary text/URLs.

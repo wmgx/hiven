@@ -4,6 +4,7 @@ import type { FluxEffect, SerializedRange } from '../types'
 import type { PluginLauncherApi } from '../launcher/types'
 import { useQuickEditorStore } from './quickEditorStore'
 import { readQuickEditorPaneSnapshot } from './quickEditorPaneSnapshot'
+import { readNativeClipboardText } from '../nativeClipboard'
 
 function splitLines(text: string): string[] {
   return text.split(/\r\n|\r|\n/)
@@ -90,16 +91,7 @@ async function writeClipboard(text: string): Promise<void> {
 }
 
 async function readClipboard(): Promise<string> {
-  try {
-    const { readText } = await import('@tauri-apps/plugin-clipboard-manager')
-    return (await readText()) ?? ''
-  } catch {
-    try {
-      return await navigator.clipboard.readText()
-    } catch {
-      return ''
-    }
-  }
+  return readNativeClipboardText()
 }
 
 export function createQuickEditorLauncherApi(baseApi: PluginLauncherApi): PluginLauncherApi {

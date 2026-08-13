@@ -23,6 +23,7 @@ import {
 import { createQuickEditorPane, overwriteQuickEditorText, showQuickEditorSurface } from '../quickEditor/quickEditorRequests'
 import { readQuickEditorPaneSnapshot } from '../quickEditor/quickEditorPaneSnapshot'
 import type { PluginPermission } from '../pluginTypes'
+import { readNativeClipboardText } from '../nativeClipboard'
 import type { PluginSettingsSource } from '../pluginSettingsStore'
 import type { DiscoveredApp, PluginAppsApi, PluginLauncherApi } from './types'
 
@@ -104,16 +105,7 @@ function buildMergedPaneSnapshot(): PaneSnapshot {
 }
 
 async function readClipboard(): Promise<string> {
-  try {
-    const { readText } = await import('@tauri-apps/plugin-clipboard-manager')
-    return (await readText()) ?? ''
-  } catch {
-    try {
-      return await navigator.clipboard.readText()
-    } catch {
-      return ''
-    }
-  }
+  return readNativeClipboardText()
 }
 
 async function writeClipboard(text: string): Promise<void> {

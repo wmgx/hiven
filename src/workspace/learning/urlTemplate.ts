@@ -172,6 +172,68 @@ function inferSlotKindFromTemplate(template: string): UrlSlotKind | null {
   return last.slice(1, -1) as UrlSlotKind
 }
 
+// ─── content → navigation pairing (scenario A) ─────────────────────────────────
+
+const TOKEN_DELIM = /[/?=&#.]/
+function isTokenBoundary(ch: string | undefined): boolean {
+  return ch === undefined || TOKEN_DELIM.test(ch)
+}
+
+/** Find a delimiter-bounded occurrence of `token` in `hay`, or -1. */
+function findBoundedToken(hay: string, token: string): number {
+  let from = 0
+  for (;;) {
+    const i = hay.indexOf(token, from)
+    if (i === -1) return -1
+    const before = i === 0 ? undefined : hay[i - 1]
+    const after = i + token.length >= hay.length ? undefined : hay[i + token.length]
+    if (isTokenBoundary(before) && isTokenBoundary(after)) return i
+    from = i + 1
+  }
+}
+
+function slotKindForToken(token: string): UrlSlotKind {
+  return classifySegment(token) ?? 'id'
+}
+
+/**
+ * Templatize a URL around a specific copied token (scenario A): if the token
+ * appears delimiter-bounded in the path or as a query value, replace that
+ * occurrence with a typed slot. Catches slots the pure heuristic misses —
+ * notably ids carried in the query (`?logid={id}`) which templatizeUrl drops.
+ */
+export function templatizeUrlWithToken(url: string, token: string): UrlTemplateResult | null {
+  const tok = (token ?? '').trim()
+  if (tok.length < 4 || /\s/.test(tok)) return null
+  const match = /^https?:\/\/([^/?#]+)([^#]*)/i.exec((url ?? '').trim())
+  if (!match) return null
+  const host = (match[1] ?? '').toLowerCase()
+  if (!host) return null
+  const pathQuery = match[2] ?? ''
+  const qIdx = pathQuery.indexOf('?')
+  const path = qIdx === -1 ? pathQuery : pathQuery.slice(0, qIdx)
+  const query = qIdx === -1 ? '' : pathQuery.slice(qIdx + 1)
+  const kind = slotKindForToken(tok)
+
+  const pathIdx = findBoundedToken(path, tok)
+  if (pathIdx !== -1) {
+    const templatedPath = path.slice(0, pathIdx) + `{${kind}}` + path.slice(pathIdx + tok.length)
+    return { host, template: host + templatedPath, slots: [tok], slotKinds: [kind] }
+  }
+
+  if (query) {
+    for (const pair of query.split('&')) {
+      const eq = pair.indexOf('=')
+      if (eq === -1) continue
+      if (pair.slice(eq + 1) === tok) {
+        const key = pair.slice(0, eq)
+        return { host, template: `${host}${path}?${key}={${kind}}`, slots: [tok], slotKinds: [kind] }
+      }
+    }
+  }
+  return null
+}
+
 // ─── reverse fire (scenario D — typed token → open template) ───────────────────
 
 /** True if a typed query is a value of the given slot kind (reverse-fire match). */

@@ -2,6 +2,7 @@ import type { TextRange } from '../../workspace/launcher/types'
 import { getActiveEditorContextSnapshot, getEditorContext } from '../../workspace/editorBridge'
 import { EDITOR_WINDOW_LABEL } from '../../workspace/windowManager/windowLabels'
 import { launcherPerfNow, logLauncherPerfDuration } from '../../workspace/launcher/perf'
+import { readNativeClipboardText } from '../../workspace/nativeClipboard'
 
 export type WorkContextInvocationSource = 'global-hotkey' | 'editor-command-bar' | 'plugin-surface'
 
@@ -100,7 +101,7 @@ export const editorContextProvider: ContextSnapshotProvider = {
 export const clipboardContextProvider: ContextSnapshotProvider = {
   id: 'clipboard',
   getSnapshot: async () => {
-    const text = await readClipboardText()
+    const text = await readNativeClipboardText()
     return {
       clipboard: text
         ? { kind: 'text', text, preview: text.slice(0, 240) }
@@ -133,18 +134,7 @@ export async function createDefaultWorkContextSnapshot(
 
 
 
-async function readClipboardText(): Promise<string> {
-  try {
-    const { readText } = await import('@tauri-apps/plugin-clipboard-manager')
-    return (await readText()) ?? ''
-  } catch {
-    try {
-      return await navigator.clipboard.readText()
-    } catch {
-      return ''
-    }
-  }
-}
+
 
 async function readForegroundAppContext(): Promise<WorkContextSnapshot['foreground'] | undefined> {
   if (!isTauriRuntime()) return undefined

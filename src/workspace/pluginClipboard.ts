@@ -14,6 +14,7 @@ import type {
   PluginPrivateStorageApi,
 } from './pluginTypes'
 import { requirePluginPermissions } from './pluginPermissions'
+import { isTauriClipboardRuntime, readNativeClipboardText } from './nativeClipboard'
 
 type ClipboardImage = {
   bytes: Uint8Array
@@ -31,16 +32,7 @@ type ClipboardImageSnapshot = {
 }
 
 async function readClipboardText(): Promise<string> {
-  try {
-    const { readText } = await import('@tauri-apps/plugin-clipboard-manager')
-    return (await readText()) ?? ''
-  } catch {
-    try {
-      return await navigator.clipboard.readText()
-    } catch {
-      return ''
-    }
-  }
+  return readNativeClipboardText()
 }
 
 export async function writeClipboardText(text: string): Promise<void> {
@@ -107,7 +99,10 @@ async function readClipboardImageSnapshot(): Promise<ClipboardImageSnapshot | nu
       }),
     }
   } catch {
-    // Fall through to browser clipboard read support.
+    // Native image read fails whenever the pasteboard has no image — the common
+    // case. Do not fall through to navigator.clipboard.read() in Tauri: WebKit
+    // shows a floating "Paste" permission chip on the focused launcher input.
+    if (isTauriClipboardRuntime()) return null
   }
 
   if (!navigator.clipboard?.read) return null

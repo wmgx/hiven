@@ -14,7 +14,7 @@
 
 import { detectClipboardType, subscribeClipboardChange } from '../../launcher/clipboard/clipboardSnapshot'
 import { TelemetryEvents, trackBehavior, trackLatency, trackPerf, telemetryNow } from '../telemetry'
-import { extractFeatures, featureSignature } from './features'
+import { extractFeatures, featureSignature, isPlausibleToken, normalizeToken } from './features'
 import { verifyTransformPair, type PureTransformRunner } from './pairing'
 import { putEvent, putPair, pruneOldEvents, saltedHash } from './store'
 
@@ -30,6 +30,20 @@ let runners: readonly PureTransformRunner[] = []
  */
 export function setPureTransformRunners(next: readonly PureTransformRunner[]): void {
   runners = next
+}
+
+/**
+ * Recent copied values that look like tokens (single-line, bounded) — the
+ * navigation sensor pairs these against subsequently-visited URLs (scenario A).
+ * In-memory only; never persisted.
+ */
+export function getRecentClipboardTokens(): string[] {
+  const seen = new Set<string>()
+  for (let i = recentTexts.length - 1; i >= 0; i -= 1) {
+    const token = normalizeToken(recentTexts[i])
+    if (token && isPlausibleToken(token) && !seen.has(token)) seen.add(token)
+  }
+  return [...seen]
 }
 
 function isSecretType(type: string): boolean {

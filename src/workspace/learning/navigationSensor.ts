@@ -15,9 +15,10 @@
 
 import { listDesktopBridgeTargets } from '../desktopControl/bridgeTargets'
 import { TelemetryEvents, trackPerf } from '../telemetry'
+import { getRecentClipboardTokens } from './observer'
 import { putNavigation, pruneOldNavigations } from './store'
 import { saltedHash } from './store'
-import { templatizeUrl } from './urlTemplate'
+import { templatizeUrl, templatizeUrlWithToken, type UrlTemplateResult } from './urlTemplate'
 
 const POLL_INTERVAL_MS = 3000
 
@@ -38,10 +39,25 @@ async function readActiveUrl(): Promise<string | null> {
   return null
 }
 
+/**
+ * Prefer a copy-correlated slot (scenario A): if a recently-copied token appears
+ * in the URL, template around that exact token — this also catches ids the pure
+ * heuristic drops, notably `?logid={id}`. Fall back to the path heuristic (D).
+ */
+function resolveTemplate(url: string): { result: UrlTemplateResult; copyCorrelated: boolean } | null {
+  for (const token of getRecentClipboardTokens()) {
+    const withToken = templatizeUrlWithToken(url, token)
+    if (withToken && withToken.slots.length > 0) return { result: withToken, copyCorrelated: true }
+  }
+  const heuristic = templatizeUrl(url)
+  if (heuristic && heuristic.slots.length > 0) return { result: heuristic, copyCorrelated: false }
+  return null
+}
+
 function recordNavigation(url: string): void {
-  const result = templatizeUrl(url)
-  // Only templates that carry a variable slot are discovery candidates.
-  if (!result || result.slots.length === 0) return
+  const resolved = resolveTemplate(url)
+  if (!resolved) return
+  const { result, copyCorrelated } = resolved
   const slotKind = result.slotKinds[result.slotKinds.length - 1]
   void putNavigation({
     template: result.template,
@@ -50,7 +66,7 @@ function recordNavigation(url: string): void {
     ts: Date.now(),
   })
   // Shape-only diagnostics — never the raw URL/value.
-  trackPerf(TelemetryEvents.learningNavObserve, { host: result.host, slotKind })
+  trackPerf(TelemetryEvents.learningNavObserve, { host: result.host, slotKind, copyCorrelated })
 }
 
 let started = false

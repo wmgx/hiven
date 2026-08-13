@@ -63,5 +63,6 @@ assert.match(globalLauncherSearchFrame, /clipboardHintSelected/, 'search frame p
 // GlobalLauncher regressions
 assert.doesNotMatch(globalLauncherHost, /simulateCopy|simulate_copy/, 'GlobalLauncherHost must not auto-simulate copy')
 assert.doesNotMatch(globalLauncherSearchFrame, /externalSelection|readExternalSelection/, 'search frame must not reference external selection')
+assert.match(globalLauncherSearchFrame, /autoComplete="off"/, 'search input must disable webkit autofill / Paste chip')
 
 console.log('clipboard object block UI contract checks passed')
