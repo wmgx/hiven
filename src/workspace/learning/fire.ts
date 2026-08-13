@@ -76,7 +76,10 @@ function buildOpenUrlItem(rule: LearnedRule, url: string, query: string, locale:
   const host = rule.transform.kind === 'url-template' ? hostOf(rule.transform.template) : ''
   return {
     systemKey: `learned-url:${rule.clusterKey}`,
-    kind: 'host',
+    // 'dynamic' (not 'host') so the query-present ranking filter keeps it — host
+    // items are dropped unless their text matches the query, but our result-titled
+    // items don't contain the raw input (same reason calculator uses 'dynamic').
+    kind: 'dynamic',
     display: {
       title: t(locale, 'palette.learnFireOpen', { host }),
       subtitle: url,
@@ -110,7 +113,10 @@ function buildChainItem(rule: LearnedRule, result: string, query: string, locale
   const steps = rule.transform.kind === 'chain' ? rule.transform.toolIds.length : 0
   return {
     systemKey: `learned-chain:${rule.clusterKey}`,
-    kind: 'host',
+    // 'dynamic' (not 'host') so the query-present ranking filter keeps it — host
+    // items are dropped unless their text matches the query, but our result-titled
+    // items don't contain the raw input (same reason calculator uses 'dynamic').
+    kind: 'dynamic',
     display: {
       title: truncate(result),
       subtitle: t(locale, 'palette.learnFireChain', { steps: String(steps) }),

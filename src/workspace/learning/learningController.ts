@@ -145,6 +145,11 @@ interface LearningDebugApi {
   runners: () => string[]
   /** Dry-run a chain over text (null = a tool is missing / declines / no change). */
   testChain: (toolIds: string[], text: string) => string | null
+  /** One-shot: verify a chain over `text` and, if it runs, teach it as a rule. */
+  teachChain: (
+    text: string,
+    toolIds: string[],
+  ) => Promise<{ sig: string; taught: boolean; result: string | null; missingRunners: string[] }>
   dump: () => Promise<{
     pairs: number
     sigCounts: Record<string, number>
@@ -171,6 +176,24 @@ export function installLearningDebugHook(): void {
     sig: (text: string) => featureSignature(extractFeatures(text)),
     runners: () => buildPureTransformRunners().map((r) => r.id),
     testChain: (toolIds: string[], text: string) => runLearnedChain(toolIds, text),
+    teachChain: async (text: string, toolIds: string[]) => {
+      const sig = featureSignature(extractFeatures(text))
+      const runnerIds = new Set(buildPureTransformRunners().map((r) => r.id))
+      const missingRunners = toolIds.filter((id) => !runnerIds.has(id))
+      const result = runLearnedChain(toolIds, text)
+      if (result) {
+        await acceptProposal({
+          clusterKey: `chain:${toolIds.join('>')}`,
+          matcher: { kind: 'feature-sig', sig },
+          transform: { kind: 'chain', toolIds },
+          sampleCount: 3,
+          distinctInputs: 3,
+          firstTs: 0,
+          lastTs: 0,
+        })
+      }
+      return { sig, taught: Boolean(result), result, missingRunners }
+    },
     dump: async () => {
       const [pairs, sigCounts, rules, suppressions, navs] = await Promise.all([
         queryAllPairs(),
