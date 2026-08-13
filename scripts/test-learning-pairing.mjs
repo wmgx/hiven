@@ -122,4 +122,23 @@ const runners = [
   )
 }
 
+// ─── runChainWith (scenario B reverse fire — the real sequencer) ─────────────
+{
+  const lookup = (id) => runners.find((r) => r.id === id)
+  const encoded = '%7B%22a%22%3A1%7D' // {"a":1} url-encoded
+
+  // url.decode → json.prettify collapses to the formatted JSON.
+  const out = pairing.runChainWith(lookup, ['url.decode', 'json.prettify'], encoded)
+  assert.equal(out, JSON.stringify({ a: 1 }, null, 2), 'chain replays url-decode → json-prettify')
+
+  // Guards: missing tool, declined textMatch, and no-op all return null.
+  assert.equal(pairing.runChainWith(lookup, ['nope.missing'], encoded), null, 'missing tool → null')
+  assert.equal(
+    pairing.runChainWith(lookup, ['json.prettify'], encoded),
+    null,
+    'json.prettify declines a url-encoded (non-JSON) input',
+  )
+  assert.equal(pairing.runChainWith(lookup, [], encoded), null, 'empty chain → null')
+}
+
 console.log('test-learning-pairing: ok')

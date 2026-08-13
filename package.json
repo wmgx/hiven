@@ -20,6 +20,7 @@
     "test:learning-pairing": "node scripts/test-learning-pairing.mjs",
     "test:learning-cluster": "node scripts/test-learning-cluster.mjs",
     "test:learning-urltemplate": "node scripts/test-learning-urltemplate.mjs",
+    "test:learning-chain-fire": "node scripts/verify-chain-fire.mjs",
     "test:intent-content-recommend": "node scripts/test-intent-content-recommend.mjs",
     "test:launcher-intent-ranking": "node scripts/test-launcher-intent-ranking.mjs",
     "test:quality-gate": "node scripts/test-quality-gate.mjs",

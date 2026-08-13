@@ -100,3 +100,28 @@ export function verifyTransformChain(
   }
   return toolIds.length >= 2 ? { toolIds } : null
 }
+
+/**
+ * Replay a learned tool chain over `text` (scenario B fire): each step's output
+ * feeds the next. `lookup` resolves a toolId to its runner. Returns the final
+ * text, or null if a tool is missing, a step declines its textMatch, a step
+ * returns null, or the chain produced no change (no-op). Pure — the reverse-fire
+ * path (registryRunners.runLearnedChain) is a thin wrapper over this.
+ */
+export function runChainWith(
+  lookup: (id: string) => PureTransformRunner | undefined,
+  toolIds: readonly string[],
+  text: string,
+): string | null {
+  if (toolIds.length === 0) return null
+  let current = text
+  for (const id of toolIds) {
+    const runner = lookup(id)
+    if (!runner) return null
+    if (runner.textMatch && !runner.textMatch(current)) return null
+    const next = runner.run(current)
+    if (next == null) return null
+    current = next
+  }
+  return current === text ? null : current
+}

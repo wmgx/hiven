@@ -23,7 +23,7 @@ import type {
   PluginToolOutput,
 } from './../launcher/types'
 import { setPureTransformRunners } from './observer'
-import type { PureTransformRunner } from './pairing'
+import { runChainWith, type PureTransformRunner } from './pairing'
 
 /**
  * Any of these declared → the plugin can mutate the world / hit the network →
@@ -136,22 +136,11 @@ export function buildPureTransformRunners(): PureTransformRunner[] {
 const runnersById = new Map<string, PureTransformRunner>()
 
 /**
- * Run a learned tool chain over `text` (scenario B fire): each step's output
- * feeds the next. Returns the final text, or null if a tool is missing or any
- * step declines (not applicable to the input).
+ * Run a learned tool chain over `text` (scenario B fire), resolving each step
+ * from the current runner table. Thin wrapper over the pure `runChainWith`.
  */
 export function runLearnedChain(toolIds: readonly string[], text: string): string | null {
-  if (toolIds.length === 0) return null
-  let current = text
-  for (const id of toolIds) {
-    const runner = runnersById.get(id)
-    if (!runner) return null
-    if (runner.textMatch && !runner.textMatch(current)) return null
-    const next = runner.run(current)
-    if (next == null) return null
-    current = next
-  }
-  return current === text ? null : current
+  return runChainWith((id) => runnersById.get(id), toolIds, text)
 }
 
 /**
