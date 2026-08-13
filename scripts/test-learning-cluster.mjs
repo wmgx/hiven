@@ -277,24 +277,41 @@ const pair = (over) => ({ ts: 1000, kind: 'transform', inSig: HEX, toolId: 'x.de
   assert.equal(rule.strength, 4)
 }
 
-// ─── coverage: novelty guard registry ────────────────────────────────────────
+// ─── coverage: novelty guard (host-aware, multi-sample) ──────────────────────
 {
-  assert.equal(coverage.isTokenCovered('12345'), false, 'no providers → nothing covered')
-  assert.equal(coverage.representativeToken('n'), '12345')
-  assert.equal(coverage.representativeToken('uuid'), '550e8400-e29b-41d4-a716-446655440000')
+  const probesFor = (slotKind, host) =>
+    coverage.representativeTokens(slotKind).map((token) => ({ token, host, slotKind }))
 
-  // A web-open-like provider that claims all-digit tokens.
-  coverage.registerCoverageProvider('web-open', (token) => /^\d+$/.test(token))
-  assert.equal(coverage.isTokenCovered('12345'), true, 'registered provider covers numbers')
-  assert.equal(coverage.isTokenCovered('a1b2c3d4e5f6'), false, 'hex not covered by digit provider')
+  assert.ok(coverage.representativeTokens('n').length >= 2, 'several samples per slot kind')
+  assert.equal(coverage.isShapeCovered(probesFor('n', 'x.org')), false, 'no providers → not covered')
+
+  // A web-open-like rule: numbers, but only for logs.byted.org.
+  coverage.registerCoverageProvider('web-open', (probe) =>
+    /^\d+$/.test(probe.token) && (!probe.host || probe.host === 'logs.byted.org'),
+  )
+  assert.equal(
+    coverage.isShapeCovered(probesFor('n', 'logs.byted.org')),
+    true,
+    'number rule covers its own host',
+  )
+  assert.equal(
+    coverage.isShapeCovered(probesFor('n', 'code.byted.org')),
+    false,
+    'same shape at a DIFFERENT host is still net-new',
+  )
+  assert.equal(
+    coverage.isShapeCovered(probesFor('hex', 'logs.byted.org')),
+    false,
+    'hex not covered by a digit rule',
+  )
 
   // A throwing provider must not break the check.
   coverage.registerCoverageProvider('broken', () => { throw new Error('boom') })
-  assert.equal(coverage.isTokenCovered('a1b2c3d4e5f6'), false, 'throwing provider isolated')
+  assert.equal(coverage.isShapeCovered(probesFor('hex', 'x.org')), false, 'throwing provider isolated')
 
   coverage.unregisterCoverageProvider('web-open')
   coverage.unregisterCoverageProvider('broken')
-  assert.equal(coverage.isTokenCovered('12345'), false, 'unregister clears coverage')
+  assert.equal(coverage.isShapeCovered(probesFor('n', 'logs.byted.org')), false, 'unregister clears coverage')
 }
 
 // ─── frecency: decay, forgetting, ranking (P3) ───────────────────────────────

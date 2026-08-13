@@ -384,15 +384,21 @@ function migrateWebQuickOpenSettings(stored: unknown): WebQuickOpenSettings {
 /**
  * Declare this plugin's coverage to the self-learning novelty guard: the learner
  * must never re-propose a rule for inputs an existing quick-open pattern already
- * handles (e.g. a hand-coded logid → log tool). Sync regex test over the current
- * entries' matchPatterns; re-registered on settings change.
+ * handles (e.g. a hand-coded logid → log tool). A shape is covered only when an
+ * entry's matchPattern matches the token AND that entry opens the SAME host —
+ * so a rule for one site never suppresses discovery of a different one.
+ * Sync; re-registered on settings change.
  */
 function registerWebOpenCoverage(settings: WebQuickOpenSettings): void {
-  const patterns = (settings.entries ?? [])
-    .map((entry) => entry.matchPattern)
-    .filter((pattern): pattern is string => typeof pattern === 'string' && pattern.trim().length > 0)
-  getPluginHostSdk().coverage.register('web-open', (token) =>
-    patterns.some((pattern) => testMatchPattern(pattern, token)),
+  const rules = (settings.entries ?? [])
+    .filter((entry) => typeof entry.matchPattern === 'string' && entry.matchPattern.trim().length > 0)
+    .map((entry) => ({ pattern: entry.matchPattern as string, host: extractDomain(entry.urlTemplate) }))
+  getPluginHostSdk().coverage.register('web-open', (probe) =>
+    rules.some(
+      (rule) =>
+        testMatchPattern(rule.pattern, probe.token) &&
+        (!probe.host || !rule.host || rule.host === probe.host),
+    ),
   )
 }
 

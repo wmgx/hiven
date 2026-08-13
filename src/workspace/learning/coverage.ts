@@ -4,15 +4,23 @@
  * The learner must only propose NET-NEW patterns — never re-surface something an
  * existing capability already handles (the user's hand-coded web-open rules, a
  * plugin that already opens that shape). Capabilities register a coverage test
- * here (via the plugin SDK); before proposing a scenario-D url-template the
- * learner asks "would a representative token already be handled?" and, if so,
- * skips it. Purely a suppression signal — no product semantics of its own.
+ * here (via the plugin SDK). Before proposing a scenario-D url-template the
+ * learner probes with several representative tokens *and the target host*, so a
+ * rule is only suppressed when an existing capability truly covers that shape at
+ * that destination — not merely because a token looks similar.
  *
  * See doc/2026-08-12-direct-answer-workbench-design.md §4.5 / §6.
  */
 
-/** Returns true if this capability would already act on the given token. */
-export type CoverageProvider = (token: string) => boolean
+/** What the learner would fire: a representative token headed to a host. */
+export interface CoverageProbe {
+  token: string
+  host: string
+  slotKind: string
+}
+
+/** Returns true if this capability would already act on the probe. */
+export type CoverageProvider = (probe: CoverageProbe) => boolean
 
 const providers = new Map<string, CoverageProvider>()
 
@@ -27,12 +35,10 @@ export function unregisterCoverageProvider(id: string): void {
   providers.delete(id.trim())
 }
 
-/** True if any registered capability already handles this token. */
-export function isTokenCovered(token: string): boolean {
-  if (!token) return false
+function isProbeCovered(probe: CoverageProbe): boolean {
   for (const provider of providers.values()) {
     try {
-      if (provider(token)) return true
+      if (provider(probe)) return true
     } catch {
       // A broken provider must never break proposal computation.
     }
@@ -40,18 +46,35 @@ export function isTokenCovered(token: string): boolean {
   return false
 }
 
-/** A representative concrete token for a discovered slot kind (novelty probing). */
-export function representativeToken(slotKind: string): string {
+/**
+ * True if an existing capability covers this shape+host. Probes several samples
+ * and requires a majority — one unlucky sample can't wrongly suppress, and one
+ * lucky sample can't wrongly pass.
+ */
+export function isShapeCovered(probes: readonly CoverageProbe[]): boolean {
+  if (probes.length === 0) return false
+  let covered = 0
+  for (const probe of probes) {
+    if (isProbeCovered(probe)) covered += 1
+  }
+  return covered * 2 > probes.length
+}
+
+/** Representative concrete tokens for a discovered slot kind (novelty probing). */
+export function representativeTokens(slotKind: string): string[] {
   switch (slotKind) {
     case 'n':
-      return '12345'
+      return ['42', '12345', '900719925']
     case 'hex':
-      return 'a1b2c3d4e5f6'
+      return ['a1b2c3d4', 'deadbeef1234', '0f1e2d3c4b5a']
     case 'uuid':
-      return '550e8400-e29b-41d4-a716-446655440000'
+      return [
+        '550e8400-e29b-41d4-a716-446655440000',
+        '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
+      ]
     case 'id':
-      return 'abcd1234efgh'
+      return ['orderXYZ12345', 'sessKQW98120x', 'itemLMN45678z']
     default:
-      return '12345'
+      return ['12345', 'a1b2c3d4']
   }
 }

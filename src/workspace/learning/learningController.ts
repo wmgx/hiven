@@ -15,7 +15,7 @@
 
 import { TelemetryEvents, trackBehavior, trackPerf } from '../telemetry'
 import { selectProposableCandidates, type RuleCandidate } from './cluster'
-import { isTokenCovered, representativeToken } from './coverage'
+import { isShapeCovered, representativeTokens, type CoverageProbe } from './coverage'
 import { refreshLearnedUrlRules } from './fire'
 import { filterProposableCandidates, ruleFromCandidate, templateToCandidate } from './proposals'
 import {
@@ -40,8 +40,11 @@ import { induceUrlTemplates, type DiscoveredTemplate } from './urlTemplate'
  */
 function isCandidateNovel(candidate: RuleCandidate): boolean {
   if (candidate.transform.kind !== 'url-template' || candidate.matcher.kind !== 'token') return true
-  const covered = isTokenCovered(representativeToken(candidate.matcher.tokenKind))
-  if (covered) trackPerf(TelemetryEvents.learningProposalCovered, { slotKind: candidate.matcher.tokenKind })
+  const slotKind = candidate.matcher.tokenKind
+  const host = candidate.transform.template.split('/')[0] ?? ''
+  const probes: CoverageProbe[] = representativeTokens(slotKind).map((token) => ({ token, host, slotKind }))
+  const covered = isShapeCovered(probes)
+  if (covered) trackPerf(TelemetryEvents.learningProposalCovered, { slotKind, host })
   return !covered
 }
 

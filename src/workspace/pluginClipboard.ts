@@ -2,7 +2,8 @@
  * Plugin Clipboard API — Host Implementation
  *
  * Provides clipboard read/write and a polling-based watch mechanism.
- * Uses @tauri-apps/plugin-clipboard-manager when available, falls back to navigator.clipboard.
+ * Uses @tauri-apps/plugin-clipboard-manager in Tauri. The web Clipboard API is
+ * only a non-Tauri fallback — never used for reads in the desktop webview.
  */
 
 import type {

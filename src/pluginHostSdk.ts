@@ -84,7 +84,8 @@ export type CoverageRegistryApi = {
   /**
    * Declare which inputs this plugin already handles, so the self-learning layer
    * never proposes a rule that duplicates an existing capability. The test gets a
-   * representative token and returns true if the plugin would already act on it.
+   * probe (representative token + target host) and returns true if the plugin
+   * would already act on it.
    */
   register: (pluginId: string, test: CoverageProvider) => void
   unregister: (pluginId: string) => void
