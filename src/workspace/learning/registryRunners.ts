@@ -128,6 +128,28 @@ export function buildPureTransformRunners(): PureTransformRunner[] {
   return runners
 }
 
+/** Current runners keyed by id — lets the chain-fire path replay a learned chain. */
+const runnersById = new Map<string, PureTransformRunner>()
+
+/**
+ * Run a learned tool chain over `text` (scenario B fire): each step's output
+ * feeds the next. Returns the final text, or null if a tool is missing or any
+ * step declines (not applicable to the input).
+ */
+export function runLearnedChain(toolIds: readonly string[], text: string): string | null {
+  if (toolIds.length === 0) return null
+  let current = text
+  for (const id of toolIds) {
+    const runner = runnersById.get(id)
+    if (!runner) return null
+    if (runner.textMatch && !runner.textMatch(current)) return null
+    const next = runner.run(current)
+    if (next == null) return null
+    current = next
+  }
+  return current === text ? null : current
+}
+
 /**
  * Keep the observer's pure-transform runners in sync with the registry.
  * Idempotent-friendly; returns an unsubscribe.
@@ -136,6 +158,8 @@ export function startPureTransformRunnerSync(): () => void {
   const rebuild = () => {
     const runners = buildPureTransformRunners()
     setPureTransformRunners(runners)
+    runnersById.clear()
+    for (const runner of runners) runnersById.set(runner.id, runner)
     trackPerf(TelemetryEvents.learningRunnersBuilt, {
       runnerCount: runners.length,
       pluginCount: pluginRegistry.getAllPluginDefinitions().length,

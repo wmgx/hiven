@@ -114,6 +114,7 @@ export default {
     'learnSlotUuid': 'a UUID',
     'learnSlotId': 'an id',
     'learnFireOpen': 'Open {host}',
+    'learnFireChain': 'Learned · {steps} steps in one',
     'learnFireKind': 'Direct',
   },
   zh: {
@@ -231,6 +232,7 @@ export default {
     'learnSlotUuid': 'UUID',
     'learnSlotId': '编号',
     'learnFireOpen': '打开 {host}',
+    'learnFireChain': '你教的 · {steps} 步合一',
     'learnFireKind': '直答',
   },
 }

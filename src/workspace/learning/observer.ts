@@ -15,7 +15,7 @@
 import { detectClipboardType, subscribeClipboardChange } from '../../launcher/clipboard/clipboardSnapshot'
 import { TelemetryEvents, trackBehavior, trackLatency, trackPerf, telemetryNow } from '../telemetry'
 import { extractFeatures, featureSignature, isPlausibleToken, normalizeToken } from './features'
-import { verifyTransformPair, type PureTransformRunner } from './pairing'
+import { verifyTransformChain, verifyTransformPair, type PureTransformRunner } from './pairing'
 import { putEvent, putPair, pruneOldEvents, saltedHash } from './store'
 
 /** How many recent clipboard texts to keep in memory for pair/chain verification. */
@@ -81,6 +81,19 @@ function handleClipboardText(text: string): void {
       trackBehavior(TelemetryEvents.learningPairVerified, { toolId: hit.toolId, kind: 'transform', inSig })
     } else {
       trackPerf(TelemetryEvents.learningPairMiss, { runnersTried: runners.length, inType: detectedType })
+    }
+  }
+
+  // Chain detection (scenario B): the last three distinct texts A→B→C reproduced
+  // by a ≥2-step pure-transform chain → a collapsible workflow.
+  const b = recentTexts[recentTexts.length - 1]
+  const a = recentTexts[recentTexts.length - 2]
+  if (a && b && a !== b && b !== text && runners.length > 0) {
+    const chain = verifyTransformChain([a, b, text], runners)
+    if (chain && chain.toolIds.length >= 2) {
+      const inSig = featureSignature(extractFeatures(a))
+      void putPair({ ts: Date.now(), kind: 'chain', inSig, toolIds: chain.toolIds, inHash: saltedHash(a) })
+      trackBehavior(TelemetryEvents.learningPairVerified, { kind: 'chain', inSig, steps: chain.toolIds.length })
     }
   }
 
