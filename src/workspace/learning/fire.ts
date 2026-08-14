@@ -18,9 +18,23 @@ import { TelemetryEvents, trackBehavior } from '../telemetry'
 import type { LauncherItem } from './../launcher/types'
 import { extractFeatures, featureSignature } from './features'
 import { FIRE_STRENGTH_BONUS, firePriority } from './frecency'
+import { getCurrentActiveHost } from './navigationSensor'
 import { runLearnedChain } from './registryRunners'
 import { bumpRuleStrength, pruneForgottenRules, queryAllRules, type LearnedRule } from './store'
 import { fillTemplate, queryMatchesSlot, type UrlSlotKind } from './urlTemplate'
+
+/**
+ * Fire-time disambiguation: when a token's shape matches multiple learned
+ * templates (e.g. the same hex shape learned on two different sites), boost
+ * the one whose destination host matches where the user currently is. Plain
+ * string equality on host names — no site/plugin semantics, works for any
+ * desktop-bridge source that reports a URL.
+ */
+const ACTIVE_HOST_FIRE_BOOST = 40
+
+export function activeHostFireBoost(ruleHost: string, activeHost: string | null): number {
+  return Boolean(ruleHost) && activeHost === ruleHost ? ACTIVE_HOST_FIRE_BOOST : 0
+}
 
 let cachedUrlRules: LearnedRule[] = []
 let cachedChainRules: LearnedRule[] = []
@@ -74,6 +88,7 @@ function truncate(text: string, max = 80): string {
 
 function buildOpenUrlItem(rule: LearnedRule, url: string, query: string, locale: Locale): LauncherItem {
   const host = rule.transform.kind === 'url-template' ? hostOf(rule.transform.template) : ''
+  const hostBoost = activeHostFireBoost(host, getCurrentActiveHost())
   return {
     systemKey: `learned-url:${rule.clusterKey}`,
     // 'dynamic' (not 'host') so the query-present ranking filter keeps it — host
@@ -92,8 +107,10 @@ function buildOpenUrlItem(rule: LearnedRule, url: string, query: string, locale:
     behavior: { type: 'perform' },
     surfaces: ['global-launcher'],
     // Learned direct answers are highly relevant when their slot matches — the
-    // nudge scales with frecency so rules you keep using rank higher.
-    staticPriority: firePriority(rule),
+    // nudge scales with frecency so rules you keep using rank higher, plus a
+    // fire-time boost when this rule's destination is where you are right now
+    // (disambiguates same-shape tokens learned on different sites).
+    staticPriority: firePriority(rule) + hostBoost,
     recordUsage: false,
     execute: async () => {
       await openExternalUrl(url)
@@ -101,6 +118,9 @@ function buildOpenUrlItem(rule: LearnedRule, url: string, query: string, locale:
       trackBehavior(TelemetryEvents.learningRuleFired, {
         transformKind: 'url-template',
         slotKind: rule.transform.kind === 'url-template' ? rule.transform.slotKind : undefined,
+        // Data for future ranking-weight learning (see host-plugin-genericity
+        // discussion): did the fire-time host boost apply to the fired rule?
+        hostBoosted: hostBoost > 0,
       })
       return { ok: true as const }
     },

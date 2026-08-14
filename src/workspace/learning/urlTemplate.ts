@@ -43,6 +43,18 @@ function classifySegment(seg: string): UrlSlotKind | null {
 }
 
 /**
+ * Extract just the lowercase host from a URL, or null for non-http(s)/malformed
+ * input. Used for fire-time disambiguation (which learned rule matches "where
+ * you are right now") — a plain string, no site semantics attached.
+ */
+export function hostnameOf(url: string): string | null {
+  const match = URL_RE.exec((url ?? '').trim())
+  if (!match) return null
+  const host = (match[1] ?? '').toLowerCase()
+  return host || null
+}
+
+/**
  * Templatize one URL. Returns null for non-http(s) or malformed input.
  * A path id wins (query dropped for clustering stability); if the path carries no
  * id, an id-like query value is templatized instead (`?logid={hex}`), keeping

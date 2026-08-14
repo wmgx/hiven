@@ -28,6 +28,16 @@ function loadModule(path) {
 
 const U = loadModule('src/workspace/learning/urlTemplate.ts')
 
+// ─── hostnameOf: plain host string, no site semantics ─────────────────────────
+{
+  assert.equal(U.hostnameOf('https://code.byted.org/lark/merge_requests/1'), 'code.byted.org')
+  assert.equal(U.hostnameOf('https://CODE.byted.org/x'), 'code.byted.org', 'lowercased')
+  assert.equal(U.hostnameOf('http://grafana.byted.org/d/x'), 'grafana.byted.org', 'http scheme too')
+  assert.equal(U.hostnameOf('not a url'), null, 'non-url → null')
+  assert.equal(U.hostnameOf('chrome://extensions'), null, 'non-http scheme → null')
+  assert.equal(U.hostnameOf(''), null, 'empty → null')
+}
+
 // ─── templatizeUrl: id-like path segments → typed slots ──────────────────────
 {
   const r = U.templatizeUrl('https://code.byted.org/lark/backend/-/merge_requests/12345?tab=diffs#note')
