@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '../../store'
 import { useShallow } from 'zustand/react/shallow'
-import { t } from '../../i18n'
+import { t, pickLocale } from '../../i18n'
 import { usePluginRegistryVersion } from '../../workspace/pluginRegistry'
 import { usePluginSettingsStore } from '../../workspace/pluginSettingsStore'
 import { useGlobalLauncherResultFrame } from '../../components/launcher/GlobalLauncherResults'
@@ -342,7 +342,7 @@ export function GlobalLauncherHost() {
         )
       })
       .map((action) => {
-        const title = locale === 'zh' ? action.titleZh : action.title
+        const title = pickLocale(locale, action.titleZh, action.title)
         const domainItem: LauncherItem = {
           systemKey: `object-action:${action.id}`,
           kind: 'host',
@@ -655,7 +655,7 @@ export function GlobalLauncherHost() {
         const pasteResult = await historyPaste.pasteText(text)
         if (!pasteResult.ok) {
           if (pasteResult.fallback === 'copied') {
-            showToast(pasteResult.message || (locale === 'zh' ? '已复制到剪贴板' : 'Copied to clipboard'), 'info')
+            showToast(pasteResult.message || pickLocale(locale, '已复制到剪贴板', 'Copied to clipboard'), 'info')
             return
           }
           throw new Error(pasteResult.message || 'Paste text failed')
@@ -665,7 +665,7 @@ export function GlobalLauncherHost() {
         const pasteResult = await historyPaste.pasteImage(blobId)
         if (!pasteResult.ok) {
           if (pasteResult.fallback === 'copied') {
-            showToast(pasteResult.message || (locale === 'zh' ? '已复制到剪贴板' : 'Copied to clipboard'), 'info')
+            showToast(pasteResult.message || pickLocale(locale, '已复制到剪贴板', 'Copied to clipboard'), 'info')
             return
           }
           throw new Error(pasteResult.message || 'Paste image failed')
@@ -678,7 +678,7 @@ export function GlobalLauncherHost() {
         const pasteResult = await historyPaste.pasteFiles(paths)
         if (!pasteResult.ok) {
           if (pasteResult.fallback === 'copied') {
-            showToast(pasteResult.message || (locale === 'zh' ? '已复制到剪贴板' : 'Copied to clipboard'), 'info')
+            showToast(pasteResult.message || pickLocale(locale, '已复制到剪贴板', 'Copied to clipboard'), 'info')
             return
           }
           throw new Error(pasteResult.message || 'Paste files failed')

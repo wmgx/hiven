@@ -15,6 +15,7 @@
 export type { Locale } from './registry'
 export { translate, registerMessages, unregisterMessages, getMessages } from './registry'
 export { useT, I18nNamespaceProvider, type TranslateFunction } from './context'
+export { isZh, pickLocale } from './pickLocale'
 
 // ─── Auto-register system locale modules ──────────────────────────────────────
 //

@@ -1,4 +1,4 @@
-import type { Locale } from '../i18n'
+import { pickLocale, type Locale } from '../i18n'
 import { surfaceTextResult, errorResult } from '../workspace/launcher/output'
 import type { LauncherExecutionContext, LauncherItem } from '../workspace/launcher/types'
 import {
@@ -66,7 +66,7 @@ function pipelineToLauncherItem(pipeline: TextPipeline): LauncherItem {
       const input = await resolvePipelineInput(ctx)
       if (!input.trim()) {
         return errorResult(
-          ctx.locale === 'zh' ? '需要文本输入' : 'Text input is required',
+          pickLocale(ctx.locale, '需要文本输入', 'Text input is required'),
         )
       }
       try {

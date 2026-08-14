@@ -6,7 +6,7 @@
  * re-running remote search (contacts / chats / docs).
  */
 
-import type { Locale } from '../../i18n'
+import { pickLocale, type Locale } from '../../i18n'
 import { openExternalUrl } from '../effectRunner'
 import type { LauncherItem } from './types'
 
@@ -140,7 +140,7 @@ export function buildPersistableRecentLauncherItems(options: {
         subtitle: row.subtitle,
         icon: row.icon,
         aliases: [row.title, ...(row.keywords ?? []), row.persistKey].filter(Boolean),
-        kindLabel: locale === 'zh' ? labels.zh : labels.en,
+        kindLabel: pickLocale(locale, labels.zh, labels.en),
         kindLabelI18n: { en: labels.en, zh: labels.zh },
       },
       behavior: { type: 'perform' as const },

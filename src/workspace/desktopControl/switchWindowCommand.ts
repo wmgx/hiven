@@ -16,6 +16,7 @@ import {
   listSwitchableWindowsForFilter,
   type DesktopWindow,
 } from './windows'
+import { pickLocale } from '../../i18n'
 
 function windowToChoice(entry: {
   win: DesktopWindow
@@ -119,18 +120,20 @@ export function getSwitchWindowHostItem(): LauncherItem {
       if (choices.length === 0) {
         return {
           ok: false as const,
-          message:
-            ctx.locale === 'zh'
-              ? '未找到匹配窗口，请从列表中选择'
-              : 'No matching window — pick one from the list',
+          message: pickLocale(
+            ctx.locale,
+            '未找到匹配窗口，请从列表中选择',
+            'No matching window — pick one from the list',
+          ),
         }
       }
       return {
         ok: false as const,
-        message:
-          ctx.locale === 'zh'
-            ? '多个匹配，请用方向键选择窗口后回车'
-            : 'Multiple matches — highlight a window and press Enter',
+        message: pickLocale(
+          ctx.locale,
+          '多个匹配，请用方向键选择窗口后回车',
+          'Multiple matches — highlight a window and press Enter',
+        ),
       }
     },
   }

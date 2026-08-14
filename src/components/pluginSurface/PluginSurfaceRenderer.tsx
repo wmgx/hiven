@@ -1,7 +1,7 @@
 import { Component, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { localized, useAppStore, type PluginSurfaceOpenTarget } from '../../store'
-import { t, type Locale } from '../../i18n'
+import { t, pickLocale, type Locale } from '../../i18n'
 import { makePluginT } from '../../i18n/pluginI18nRegistry'
 import { pluginRegistry, usePluginRegistryVersion } from '../../workspace/pluginRegistry'
 import { resolvePluginSettings, usePluginSettingsStore } from '../../workspace/pluginSettingsStore'
@@ -241,7 +241,7 @@ export function PluginSurfaceRenderer({
               void showLauncherWindow().catch((error) => {
                 console.warn('[hiven] Failed to show launcher after returnToLauncherWithObject:', error)
                 showToast(
-                  locale === 'zh' ? '无法带回 Launcher' : 'Could not return to Launcher',
+                  pickLocale(locale, '无法带回 Launcher', 'Could not return to Launcher'),
                   'error',
                 )
               })

@@ -5,7 +5,7 @@
  * - surfaces forced to global-launcher only
  */
 
-import type { Locale } from '../../i18n'
+import { pickLocale, type Locale } from '../../i18n'
 import type { PersistableContentKind, PersistableLauncherPayload } from '../launcher/persistableRecents'
 import type { LauncherItem } from '../launcher/types'
 import { clampProviderPriority } from './constants'
@@ -33,7 +33,7 @@ const KIND_LABELS: Record<string, { en: string; zh: string }> = {
 export function kindLabelFor(kind: string, locale: Locale): string {
   const row = KIND_LABELS[kind]
   if (!row) return kind
-  return locale === 'zh' ? row.zh : row.en
+  return pickLocale(locale, row.zh, row.en)
 }
 
 /**
@@ -57,7 +57,7 @@ export function resolveKindLabel(
       ...(overrideI18n ?? {}),
     }
     const kindLabel =
-      (locale === 'zh' ? mergedI18n.zh : mergedI18n.en)?.trim() ||
+      pickLocale(locale, mergedI18n.zh, mergedI18n.en)?.trim() ||
       target.kindLabel?.trim() ||
       kindLabelFor(target.kind, locale)
     return {

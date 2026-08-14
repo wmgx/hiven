@@ -1,4 +1,5 @@
 import { useAppStore } from '../../store'
+import { pickLocale } from '../../i18n'
 import { showToast } from '../toast'
 import { useQuickEditorStore } from './quickEditorStore'
 import type {
@@ -185,10 +186,12 @@ export async function overwriteQuickEditorText(
   const locale = useAppStore.getState().locale
   showToast(
     historyCount > 0
-      ? (locale === 'zh'
-        ? `已覆盖到快捷编辑器（${historyCount} 个历史版本）`
-        : `Overwritten in Quick Editor (${historyCount} version${historyCount === 1 ? '' : 's'})`)
-      : (locale === 'zh' ? '已覆盖到快捷编辑器' : 'Overwritten in Quick Editor'),
+      ? pickLocale(
+          locale,
+          `已覆盖到快捷编辑器（${historyCount} 个历史版本）`,
+          `Overwritten in Quick Editor (${historyCount} version${historyCount === 1 ? '' : 's'})`,
+        )
+      : pickLocale(locale, '已覆盖到快捷编辑器', 'Overwritten in Quick Editor'),
     'success',
     3500,
   )
@@ -223,7 +226,7 @@ export async function restoreQuickEditorExternalVersion(versionId: string): Prom
 
   const locale = useAppStore.getState().locale
   showToast(
-    locale === 'zh' ? '已恢复历史版本' : 'Restored historical version',
+    pickLocale(locale, '已恢复历史版本', 'Restored historical version'),
     'info',
     2500,
   )

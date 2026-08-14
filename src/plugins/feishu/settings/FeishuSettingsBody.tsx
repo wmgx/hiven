@@ -16,7 +16,7 @@ export function FeishuSettingsBody(props: PluginSettingsBodyProps<FeishuSettings
   const { ui } = sdk
   const { useCallback, useEffect, useState } = React
 
-  const zh = locale === 'zh'
+  const zh = (locale ?? '').toLowerCase().startsWith('zh')
 
   const [cliSummary, setCliSummary] = useState<string | null>(null)
   const [cliOk, setCliOk] = useState<boolean | null>(null)

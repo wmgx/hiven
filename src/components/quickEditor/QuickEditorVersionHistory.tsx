@@ -5,19 +5,19 @@ import { useQuickEditorStore } from '../../workspace/quickEditor/quickEditorStor
 import { restoreQuickEditorExternalVersion } from '../../workspace/quickEditor/quickEditorRequests'
 import type { QuickEditorExternalVersion } from '../../workspace/quickEditor/quickEditorTypes'
 import { useAppStore } from '../../store'
-import { useT } from '../../i18n'
+import { useT, pickLocale } from '../../i18n'
 
 function formatRelativeTime(at: number, locale: 'en' | 'zh', now = Date.now()): string {
   const sec = Math.max(0, Math.floor((now - at) / 1000))
-  if (sec < 45) return locale === 'zh' ? '刚刚' : 'Just now'
+  if (sec < 45) return pickLocale(locale, '刚刚', 'Just now')
   const min = Math.floor(sec / 60)
-  if (min < 60) return locale === 'zh' ? `${min} 分钟前` : `${min}m ago`
+  if (min < 60) return pickLocale(locale, `${min} 分钟前`, `${min}m ago`)
   const hr = Math.floor(min / 60)
-  if (hr < 24) return locale === 'zh' ? `${hr} 小时前` : `${hr}h ago`
+  if (hr < 24) return pickLocale(locale, `${hr} 小时前`, `${hr}h ago`)
   const day = Math.floor(hr / 24)
-  if (day < 7) return locale === 'zh' ? `${day} 天前` : `${day}d ago`
+  if (day < 7) return pickLocale(locale, `${day} 天前`, `${day}d ago`)
   try {
-    return new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : 'en-US', {
+    return new Intl.DateTimeFormat(pickLocale(locale, 'zh-CN', 'en-US'), {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
@@ -29,7 +29,7 @@ function formatRelativeTime(at: number, locale: 'en' | 'zh', now = Date.now()): 
 }
 
 function sourceLabel(source: string | undefined, locale: 'en' | 'zh'): string {
-  if (!source) return locale === 'zh' ? '覆盖' : 'Overwrite'
+  if (!source) return pickLocale(locale, '覆盖', 'Overwrite')
   const map: Record<string, { en: string; zh: string }> = {
     clipboard: { en: 'Clipboard', zh: '剪贴板' },
     'history-item': { en: 'History', zh: '历史' },
