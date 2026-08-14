@@ -33,6 +33,10 @@ const WHITELIST = new Set([
   'src/workflow/index.ts',
   // Barrel re-export only; consumers import concrete modules under desktopTargets/.
   'src/workspace/desktopTargets/index.ts',
+  // Scenario L (clipboard↔browser linkage) pure core — landed + verified ahead of
+  // its sensor/proposal wiring; covered by scripts/test-clipboard-browser-link.mjs.
+  // Remove from whitelist when the learning wiring imports it.
+  'src/workspace/learning/clipboardBrowserLink.ts',
 ])
 
 function isWhitelisted(relPath) {
