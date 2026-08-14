@@ -1,3 +1,8 @@
+// Type-only import: keeps this module free of runtime imports (naive test loaders
+// transpile it standalone). Browser defaults are applied at read time via
+// normalizeBrowserTabsSettings, so the default value below can omit `browser`.
+import type { BrowserTabsSettings } from '../browserTabsModel'
+
 export type WebQuickOpenEntry = {
   id: string
   title: string
@@ -16,12 +21,19 @@ export type WebQuickOpenEntry = {
 export type WebQuickOpenSettings = {
   enabled: boolean
   entries: WebQuickOpenEntry[]
+  /**
+   * Optional live-browser capability (Chromium extension bridge): tab / history
+   * search, focus-open-tab, idle-close. Nested so its `enabled` never collides
+   * with the plugin-level `enabled`. Absent → defaults apply (see browserTabsModel).
+   */
+  browser?: BrowserTabsSettings
 }
 
 export const DEFAULT_MAX_QUERY_HISTORY = 20
 
 export const DEFAULT_WEB_QUICK_OPEN_SETTINGS: WebQuickOpenSettings = {
   enabled: true,
+  // `browser` omitted → normalizeBrowserTabsSettings applies defaults on read.
   entries: [
     {
       id: 'google',

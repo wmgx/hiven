@@ -1,5 +1,5 @@
 /**
- * Collect D3 desktop bridge targets (browser tabs) → LauncherItem for host dynamic path.
+ * Collect D3 desktop bridge targets (browser tabs + history) → LauncherItem for host dynamic path.
  *
  * IMPORTANT: only runs the browser.chromium provider. Must not call collectDesktopTargets()
  * over *all* providers — slow plugin sources (e.g. feishu.docs CLI search) would block the
@@ -108,7 +108,10 @@ export async function getDesktopBridgeLauncherDynamicItems(ctx: {
 
     const targets = (Array.isArray(raw) ? raw : [])
       .filter((t): t is DesktopTarget => Boolean(t && (t.actionClass ?? 'focus') !== 'close'))
-      .filter((t) => t.kind === 'tab' && (t.sourceId === CHROMIUM_SOURCE_ID || !t.sourceId))
+      .filter((t) =>
+        (t.kind === 'tab' || t.kind === 'document') &&
+        (t.sourceId === CHROMIUM_SOURCE_ID || !t.sourceId),
+      )
       .map((t) => ({ ...t, sourceId: t.sourceId || CHROMIUM_SOURCE_ID }))
       .slice(0, 40)
 

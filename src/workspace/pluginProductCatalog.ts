@@ -28,8 +28,7 @@ const PRODUCT_CATALOG: PluginProductMetadata[] = [
   product('jwt-tools', 'JWT Tools', ['jwt']),
   product('hash-tools', 'Hash Tools', ['hash']),
   product('count', 'Count', ['count']),
-  product('web-open', 'Web Open', ['web-open']),
-  product('browser-tabs', 'Browser Tabs', ['browser-tabs'], '浏览器标签'),
+  product('web-open', 'Browser', ['web-open'], '浏览器'),
   product('feishu', 'Feishu', ['feishu'], '飞书'),
 ]
 

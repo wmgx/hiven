@@ -8,7 +8,14 @@ import {
   desktopBridgeStatus,
   focusDesktopBridgeTarget,
   invalidateDesktopBridgeListCache,
+  listDesktopBridgeEvents,
+  listDesktopBridgeHistory,
   listDesktopBridgeTargets,
+  openDesktopBridgeUrl,
+  setDesktopBridgeSourceConfig,
+  type DesktopBridgeEventDto,
+  type DesktopBridgeHistoryDto,
+  type DesktopBridgeSourceConfig,
   type DesktopBridgeStatus,
   type DesktopBridgeTargetDto,
 } from '../desktopControl/bridgeTargets'
@@ -19,7 +26,13 @@ import {
 import type { DesktopTargetProvider } from './types'
 
 export type { DesktopTargetProvider } from './types'
-export type { DesktopBridgeStatus, DesktopBridgeTargetDto }
+export type {
+  DesktopBridgeEventDto,
+  DesktopBridgeHistoryDto,
+  DesktopBridgeSourceConfig,
+  DesktopBridgeStatus,
+  DesktopBridgeTargetDto,
+}
 
 export type DesktopTargetsHostApi = {
   registerProvider: (provider: DesktopTargetProvider) => void
@@ -28,7 +41,11 @@ export type DesktopTargetsHostApi = {
     port: number
     status: () => Promise<DesktopBridgeStatus | null>
     listTargets: (sourceId?: string) => Promise<DesktopBridgeTargetDto[]>
+    listHistory: (sourceId?: string) => Promise<DesktopBridgeHistoryDto[]>
+    listEvents: (sourceId?: string, sinceTs?: number) => Promise<DesktopBridgeEventDto[]>
     focusTarget: (sourceId: string, id: string, windowId?: string | null) => Promise<void>
+    openUrl: (sourceId: string, url: string) => Promise<void>
+    setSourceConfig: (sourceId: string, config: DesktopBridgeSourceConfig) => Promise<void>
     invalidateCache: () => void
   }
   /**
@@ -52,7 +69,11 @@ export function createDesktopTargetsHostApi(): DesktopTargetsHostApi {
       port: DESKTOP_BRIDGE_PORT,
       status: () => desktopBridgeStatus(),
       listTargets: (sourceId) => listDesktopBridgeTargets(sourceId),
+      listHistory: (sourceId) => listDesktopBridgeHistory(sourceId),
+      listEvents: (sourceId, sinceTs) => listDesktopBridgeEvents(sourceId, sinceTs),
       focusTarget: (sourceId, id, windowId) => focusDesktopBridgeTarget(sourceId, id, windowId),
+      openUrl: (sourceId, url) => openDesktopBridgeUrl(sourceId, url),
+      setSourceConfig: (sourceId, config) => setDesktopBridgeSourceConfig(sourceId, config),
       invalidateCache: () => invalidateDesktopBridgeListCache(),
     },
     async openChromiumExtensionInstallFolder() {

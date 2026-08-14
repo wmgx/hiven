@@ -39,6 +39,26 @@ import {
   recordQueryHistory,
   removeQueryHistoryEntry,
 } from './queryHistory'
+import {
+  pushChromiumBridgeConfig,
+  registerChromiumTabsProvider,
+  unregisterChromiumTabsProvider,
+} from './browserProvider'
+import { normalizeBrowserTabsSettings } from './browserTabsModel'
+import { BrowserTabsConnectionModal } from './settings/BrowserTabsConnectionModal'
+
+/**
+ * Apply the optional live-browser capability from merged settings: register the
+ * Chromium tab/history/focus provider and push extension config. Gated on
+ * settings.browser.enabled; a no-op-safe path when no extension/bridge is present
+ * (the provider's health() simply reports not-connected).
+ */
+function applyBrowserCapability(settings: WebQuickOpenSettings): void {
+  const browser = normalizeBrowserTabsSettings(settings.browser)
+  if (browser.enabled) registerChromiumTabsProvider()
+  else unregisterChromiumTabsProvider()
+  pushChromiumBridgeConfig(browser)
+}
 
 function resolveEntryHistoryLimit(entry: WebQuickOpenEntry): number {
   return clampMaxQueryHistory(entry.maxQueryHistory ?? DEFAULT_MAX_QUERY_HISTORY)
@@ -409,6 +429,7 @@ export default definePlugin<WebQuickOpenSettings>({
       const settings = (ctx.settings as WebQuickOpenSettings | undefined) ?? DEFAULT_WEB_QUICK_OPEN_SETTINGS
       scheduleWarmFavicons(settings, ctx.storage, ctx.source, ctx.pluginId, ctx.network)
       registerWebOpenCoverage(settings)
+      applyBrowserCapability(settings)
     },
   },
 
@@ -423,6 +444,7 @@ export default definePlugin<WebQuickOpenSettings>({
       const settings = ctx.value ?? DEFAULT_WEB_QUICK_OPEN_SETTINGS
       scheduleWarmFavicons(settings, ctx.storage, ctx.source, ctx.pluginId, ctx.network)
       registerWebOpenCoverage(settings)
+      applyBrowserCapability(settings)
     },
     modals: [
       {
@@ -436,6 +458,12 @@ export default definePlugin<WebQuickOpenSettings>({
         title: 'Query History',
         titleI18n: { zh: '参数历史' },
         component: QueryHistoryModal,
+      },
+      {
+        id: 'browser-connection',
+        title: 'Browser Connection',
+        titleI18n: { zh: '浏览器连接' },
+        component: BrowserTabsConnectionModal,
       },
     ],
     schema: {
@@ -488,6 +516,29 @@ export default definePlugin<WebQuickOpenSettings>({
               buttonLabel: 'Manage',
               buttonLabelI18n: { zh: '管理' },
               requires: ['storage.private'],
+            },
+          ],
+        },
+        {
+          id: 'browser',
+          title: 'Browser',
+          titleI18n: { zh: '浏览器' },
+          description: 'Optional: connect a live Chromium browser to search tabs / history and focus already-open pages instead of opening duplicates. Works only with the companion extension; quick-open above needs none.',
+          descriptionI18n: {
+            zh: '可选：连接实时 Chromium 浏览器，搜索标签 / 历史，并对已打开的页面直接聚焦而非重复打开。需配套扩展；上面的网页快开无需扩展。',
+          },
+          fields: [
+            {
+              kind: 'modal',
+              id: 'browser-connection',
+              modalId: 'browser-connection',
+              icon: 'Globe',
+              label: 'Browser connection & tabs',
+              labelI18n: { zh: '浏览器连接与标签' },
+              description: 'Connection status, browsing history, idle auto-close, and extension install.',
+              descriptionI18n: { zh: '连接状态、浏览历史、不活跃自动关闭、扩展安装。' },
+              buttonLabel: 'Open',
+              buttonLabelI18n: { zh: '打开' },
             },
           ],
         },

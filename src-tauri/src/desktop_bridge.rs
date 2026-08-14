@@ -1,16 +1,22 @@
 //! Localhost bridge for D3 browser tabs.
 //!
-//! Chromium extensions push tab snapshots and poll focus commands.
-//! Launcher reads via Tauri commands — no extension process required for list
-//! when the bridge has a fresh snapshot.
+//! Chromium extensions push tab snapshots, history, and page events, then poll
+//! commands (focus / open / config). Launcher and the learning layer read via
+//! Tauri commands — no extension process required for list when the bridge has
+//! a fresh snapshot.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+/// Cap retained history items per source (extension already trims before POST).
+const HISTORY_CAP: usize = 300;
+/// Cap retained page events per source (ring buffer, newest last).
+const EVENT_CAP: usize = 256;
 
 /// Fixed loopback port so first-party extensions can hardcode discovery.
 pub const DESKTOP_BRIDGE_PORT: u16 = 19246;
@@ -40,11 +46,57 @@ pub struct BridgeFocusCommand {
     pub enqueued_at_ms: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BridgeOpenCommand {
+    pub url: String,
+    pub enqueued_at_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BridgeSourceConfig {
+    pub history_enabled: bool,
+    pub auto_close_idle_tabs: bool,
+    pub idle_timeout_minutes: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BridgeHistoryItem {
+    pub id: String,
+    pub title: String,
+    pub url: String,
+    pub last_visit_time: Option<f64>,
+    pub visit_count: Option<u32>,
+    pub typed_count: Option<u32>,
+    pub favicon_url: Option<String>,
+    pub app_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BridgeEvent {
+    #[serde(rename = "type")]
+    pub event_type: String,
+    pub ts: u64,
+    pub tab_id: Option<String>,
+    pub window_id: Option<String>,
+    pub title: Option<String>,
+    pub url: Option<String>,
+    pub favicon_url: Option<String>,
+    pub app_name: Option<String>,
+}
+
 #[derive(Debug, Default)]
 struct SourceState {
     targets: Vec<BridgeTarget>,
+    history: Vec<BridgeHistoryItem>,
+    events: VecDeque<BridgeEvent>,
     last_seen: Option<Instant>,
     pending_focus: Option<BridgeFocusCommand>,
+    pending_open: Option<BridgeOpenCommand>,
+    config: Option<BridgeSourceConfig>,
     app_name: Option<String>,
 }
 
@@ -254,6 +306,18 @@ fn route_request(method: &str, path: &str, body: String) -> Result<(u16, String)
         {
             return apply_snapshot(source_id, &body);
         }
+        if let Some(source_id) = path
+            .strip_prefix("/v1/sources/")
+            .and_then(|rest| rest.strip_suffix("/history"))
+        {
+            return apply_history(source_id, &body);
+        }
+        if let Some(source_id) = path
+            .strip_prefix("/v1/sources/")
+            .and_then(|rest| rest.strip_suffix("/events"))
+        {
+            return apply_events(source_id, &body);
+        }
     }
 
     // GET /v1/sources/{id}/commands
@@ -352,9 +416,122 @@ fn take_commands(source_id: &str) -> Result<(u16, String), String> {
             "enqueuedAtMs": cmd.enqueued_at_ms,
         }));
     }
+    if let Some(cmd) = entry.pending_open.take() {
+        commands.push(serde_json::json!({
+            "type": "open",
+            "url": cmd.url,
+            "enqueuedAtMs": cmd.enqueued_at_ms,
+        }));
+    }
+    // Config is sticky: re-sent every poll so a sleeping worker still converges.
+    if let Some(cfg) = &entry.config {
+        commands.push(serde_json::json!({
+            "type": "config",
+            "historyEnabled": cfg.history_enabled,
+            "autoCloseIdleTabs": cfg.auto_close_idle_tabs,
+            "idleTimeoutMinutes": cfg.idle_timeout_minutes,
+        }));
+    }
     Ok((
         200,
         serde_json::json!({ "commands": commands }).to_string(),
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HistoryBody {
+    items: Option<Vec<BridgeHistoryItem>>,
+    history: Option<Vec<BridgeHistoryItem>>,
+    app_name: Option<String>,
+}
+
+fn apply_history(source_id: &str, body: &str) -> Result<(u16, String), String> {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return Ok((400, r#"{"ok":false,"error":"empty body"}"#.to_string()));
+    }
+    let parsed: HistoryBody = match serde_json::from_str(trimmed) {
+        Ok(v) => v,
+        Err(error) => {
+            return Ok((
+                400,
+                serde_json::json!({ "ok": false, "error": format!("invalid history json: {}", error) })
+                    .to_string(),
+            ));
+        }
+    };
+    let mut items = parsed.items.or(parsed.history).unwrap_or_default();
+    if items.len() > HISTORY_CAP {
+        items.truncate(HISTORY_CAP);
+    }
+    for item in &mut items {
+        if item.app_name.is_none() {
+            item.app_name = parsed.app_name.clone();
+        }
+    }
+    let mut guard = bridge_state()
+        .lock()
+        .map_err(|_| "bridge lock poisoned".to_string())?;
+    let entry = guard.sources.entry(source_id.to_string()).or_default();
+    entry.history = items;
+    if parsed.app_name.is_some() {
+        entry.app_name = parsed.app_name;
+    }
+    Ok((
+        200,
+        serde_json::json!({ "ok": true, "count": entry.history.len() }).to_string(),
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EventsBody {
+    events: Option<Vec<BridgeEvent>>,
+    app_name: Option<String>,
+}
+
+fn apply_events(source_id: &str, body: &str) -> Result<(u16, String), String> {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return Ok((400, r#"{"ok":false,"error":"empty body"}"#.to_string()));
+    }
+    let parsed: EventsBody = match serde_json::from_str(trimmed) {
+        Ok(v) => v,
+        Err(error) => {
+            return Ok((
+                400,
+                serde_json::json!({ "ok": false, "error": format!("invalid events json: {}", error) })
+                    .to_string(),
+            ));
+        }
+    };
+    let incoming = parsed.events.unwrap_or_default();
+    let mut guard = bridge_state()
+        .lock()
+        .map_err(|_| "bridge lock poisoned".to_string())?;
+    let entry = guard.sources.entry(source_id.to_string()).or_default();
+    for mut event in incoming {
+        if event.event_type.trim().is_empty() {
+            continue;
+        }
+        if event.app_name.is_none() {
+            event.app_name = parsed.app_name.clone();
+        }
+        if event.ts == 0 {
+            event.ts = now_ms();
+        }
+        entry.events.push_back(event);
+        while entry.events.len() > EVENT_CAP {
+            entry.events.pop_front();
+        }
+    }
+    if parsed.app_name.is_some() {
+        entry.app_name = parsed.app_name;
+    }
+    Ok((
+        200,
+        serde_json::json!({ "ok": true, "count": entry.events.len() }).to_string(),
     ))
 }
 
@@ -411,6 +588,37 @@ pub struct DesktopBridgeSourceStatus {
     pub source_id: String,
     pub fresh: bool,
     pub target_count: usize,
+    pub history_count: usize,
+    pub event_count: usize,
+    pub app_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopBridgeHistoryDto {
+    pub id: String,
+    pub source_id: String,
+    pub title: String,
+    pub url: String,
+    pub last_visit_time: Option<f64>,
+    pub visit_count: Option<u32>,
+    pub typed_count: Option<u32>,
+    pub favicon_url: Option<String>,
+    pub app_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopBridgeEventDto {
+    #[serde(rename = "type")]
+    pub event_type: String,
+    pub ts: u64,
+    pub source_id: String,
+    pub tab_id: Option<String>,
+    pub window_id: Option<String>,
+    pub title: Option<String>,
+    pub url: Option<String>,
+    pub favicon_url: Option<String>,
     pub app_name: Option<String>,
 }
 
@@ -426,6 +634,8 @@ pub fn desktop_bridge_status() -> Result<DesktopBridgeStatus, String> {
             source_id: id.clone(),
             fresh: is_fresh(s.last_seen),
             target_count: s.targets.len(),
+            history_count: s.history.len(),
+            event_count: s.events.len(),
             app_name: s.app_name.clone(),
         })
         .collect();
@@ -513,6 +723,118 @@ pub fn focus_desktop_bridge_target(
     Ok(())
 }
 
+#[tauri::command]
+pub fn list_desktop_bridge_history(
+    source_id: Option<String>,
+) -> Result<Vec<DesktopBridgeHistoryDto>, String> {
+    let guard = bridge_state()
+        .lock()
+        .map_err(|_| "bridge lock poisoned".to_string())?;
+    let mut out = Vec::new();
+    for (sid, state) in &guard.sources {
+        if let Some(filter) = source_id.as_deref() {
+            if sid != filter {
+                continue;
+            }
+        }
+        for item in &state.history {
+            out.push(DesktopBridgeHistoryDto {
+                id: item.id.clone(),
+                source_id: sid.clone(),
+                title: if item.title.trim().is_empty() {
+                    item.url.clone()
+                } else {
+                    item.title.clone()
+                },
+                url: item.url.clone(),
+                last_visit_time: item.last_visit_time,
+                visit_count: item.visit_count,
+                typed_count: item.typed_count,
+                favicon_url: item.favicon_url.clone(),
+                app_name: item.app_name.clone().or_else(|| state.app_name.clone()),
+            });
+        }
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+pub fn list_desktop_bridge_events(
+    source_id: Option<String>,
+    since_ts: Option<u64>,
+) -> Result<Vec<DesktopBridgeEventDto>, String> {
+    let guard = bridge_state()
+        .lock()
+        .map_err(|_| "bridge lock poisoned".to_string())?;
+    let mut out = Vec::new();
+    for (sid, state) in &guard.sources {
+        if let Some(filter) = source_id.as_deref() {
+            if sid != filter {
+                continue;
+            }
+        }
+        for event in &state.events {
+            if let Some(min_ts) = since_ts {
+                if event.ts <= min_ts {
+                    continue;
+                }
+            }
+            out.push(DesktopBridgeEventDto {
+                event_type: event.event_type.clone(),
+                ts: event.ts,
+                source_id: sid.clone(),
+                tab_id: event.tab_id.clone(),
+                window_id: event.window_id.clone(),
+                title: event.title.clone(),
+                url: event.url.clone(),
+                favicon_url: event.favicon_url.clone(),
+                app_name: event.app_name.clone().or_else(|| state.app_name.clone()),
+            });
+        }
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+pub fn open_desktop_bridge_url(source_id: String, url: String) -> Result<(), String> {
+    let trimmed = url.trim().to_string();
+    if trimmed.is_empty() {
+        return Err("url required".into());
+    }
+    let mut guard = bridge_state()
+        .lock()
+        .map_err(|_| "bridge lock poisoned".to_string())?;
+    let entry = guard.sources.entry(source_id).or_default();
+    entry.pending_open = Some(BridgeOpenCommand {
+        url: trimmed,
+        enqueued_at_ms: now_ms(),
+    });
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_desktop_bridge_source_config(
+    source_id: String,
+    history_enabled: bool,
+    auto_close_idle_tabs: bool,
+    idle_timeout_minutes: u32,
+) -> Result<(), String> {
+    let minutes = idle_timeout_minutes.clamp(5, 24 * 60);
+    let mut guard = bridge_state()
+        .lock()
+        .map_err(|_| "bridge lock poisoned".to_string())?;
+    let entry = guard.sources.entry(source_id).or_default();
+    entry.config = Some(BridgeSourceConfig {
+        history_enabled,
+        auto_close_idle_tabs,
+        idle_timeout_minutes: minutes,
+    });
+    if !history_enabled {
+        entry.history.clear();
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -547,5 +869,34 @@ mod tests {
         let (st, json) = take_commands("browser.chromium").unwrap();
         assert_eq!(st, 200);
         assert!(json.contains("\"type\":\"focus\""));
+    }
+
+    #[test]
+    fn history_events_and_config_roundtrip() {
+        let source = "browser.chromium.test-history";
+        let history = r#"{"appName":"Chrome","items":[{"id":"h1","title":"Docs","url":"https://example.com/docs","visitCount":3}]}"#;
+        let (status, _) = apply_history(source, history).unwrap();
+        assert_eq!(status, 200);
+        let listed = list_desktop_bridge_history(Some(source.into())).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].url, "https://example.com/docs");
+
+        let events = r#"{"events":[{"type":"tab.opened","ts":100,"tabId":"2","url":"https://example.com/new","title":"New"},{"type":"tab.activated","ts":101,"tabId":"2","url":"https://example.com/new"}]}"#;
+        let (status, _) = apply_events(source, events).unwrap();
+        assert_eq!(status, 200);
+        let all = list_desktop_bridge_events(Some(source.into()), None).unwrap();
+        assert_eq!(all.len(), 2);
+        let newer = list_desktop_bridge_events(Some(source.into()), Some(100)).unwrap();
+        assert_eq!(newer.len(), 1);
+        assert_eq!(newer[0].event_type, "tab.activated");
+
+        set_desktop_bridge_source_config(source.into(), true, true, 45).unwrap();
+        open_desktop_bridge_url(source.into(), "https://example.com/open".into()).unwrap();
+        let (st, json) = take_commands(source).unwrap();
+        assert_eq!(st, 200);
+        assert!(json.contains("\"type\":\"open\""));
+        assert!(json.contains("\"type\":\"config\""));
+        assert!(json.contains("\"autoCloseIdleTabs\":true"));
+        assert!(json.contains("\"idleTimeoutMinutes\":45"));
     }
 }

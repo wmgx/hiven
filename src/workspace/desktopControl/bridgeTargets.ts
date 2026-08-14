@@ -32,8 +32,40 @@ export type DesktopBridgeStatus = {
     sourceId: string
     fresh: boolean
     targetCount: number
+    historyCount?: number
+    eventCount?: number
     appName?: string | null
   }>
+}
+
+export type DesktopBridgeHistoryDto = {
+  id: string
+  sourceId: string
+  title: string
+  url: string
+  lastVisitTime?: number | null
+  visitCount?: number | null
+  typedCount?: number | null
+  faviconUrl?: string | null
+  appName?: string | null
+}
+
+export type DesktopBridgeEventDto = {
+  type: string
+  ts: number
+  sourceId: string
+  tabId?: string | null
+  windowId?: string | null
+  title?: string | null
+  url?: string | null
+  faviconUrl?: string | null
+  appName?: string | null
+}
+
+export type DesktopBridgeSourceConfig = {
+  historyEnabled: boolean
+  autoCloseIdleTabs: boolean
+  idleTimeoutMinutes: number
 }
 
 const LIST_TTL_MS = 1500
@@ -82,6 +114,52 @@ export async function focusDesktopBridgeTarget(
     sourceId,
     id,
     windowId: windowId ?? null,
+  })
+}
+
+export async function listDesktopBridgeHistory(sourceId?: string): Promise<DesktopBridgeHistoryDto[]> {
+  if (!isTauriRuntime()) return []
+  try {
+    return await invoke<DesktopBridgeHistoryDto[]>('list_desktop_bridge_history', {
+      sourceId: sourceId ?? null,
+    })
+  } catch {
+    return []
+  }
+}
+
+export async function listDesktopBridgeEvents(
+  sourceId?: string,
+  sinceTs?: number,
+): Promise<DesktopBridgeEventDto[]> {
+  if (!isTauriRuntime()) return []
+  try {
+    return await invoke<DesktopBridgeEventDto[]>('list_desktop_bridge_events', {
+      sourceId: sourceId ?? null,
+      sinceTs: sinceTs ?? null,
+    })
+  } catch {
+    return []
+  }
+}
+
+export async function openDesktopBridgeUrl(sourceId: string, url: string): Promise<void> {
+  if (!isTauriRuntime()) {
+    throw new Error('Desktop bridge only available in desktop app')
+  }
+  await invoke('open_desktop_bridge_url', { sourceId, url })
+}
+
+export async function setDesktopBridgeSourceConfig(
+  sourceId: string,
+  config: DesktopBridgeSourceConfig,
+): Promise<void> {
+  if (!isTauriRuntime()) return
+  await invoke('set_desktop_bridge_source_config', {
+    sourceId,
+    historyEnabled: config.historyEnabled,
+    autoCloseIdleTabs: config.autoCloseIdleTabs,
+    idleTimeoutMinutes: config.idleTimeoutMinutes,
   })
 }
 

@@ -1,0 +1,188 @@
+/**
+ * browser.chromium DesktopTargetProvider — implemented via host SDK only
+ * (no workspace deep imports). Same protocol Feishu / editor adapters will use.
+ */
+
+import { getPluginHostSdk, type DesktopTargetProvider } from '@hiven/plugin'
+import { searchableFieldsMatch } from '@hiven/plugin'
+import {
+  DEFAULT_BROWSER_TABS_SETTINGS,
+  normalizeBrowserTabsSettings,
+  type BrowserTabsSettings,
+} from './browserTabsModel'
+import { findOpenTabForUrl, normalizeUrlForMatch } from './urlTabMatch'
+
+export const CHROMIUM_SOURCE_ID = 'browser.chromium' as const
+const QUERY_TAB_LIMIT = 24
+const QUERY_HISTORY_LIMIT = 16
+/**
+ * Copied a link that's already open? Focus beats "open a new tab". Strong
+ * positive bias (clamped ≤500 by the host) so the existing tab is the primary
+ * recommendation over web-open's generic direct-open.
+ */
+const OPEN_TAB_FOCUS_BIAS = 200
+
+function nativeIdFromTargetId(sourceId: string, kind: string, id: string): string {
+  const prefix = `${sourceId}:${kind}:`
+  if (id.startsWith(prefix)) return id.slice(prefix.length)
+  return id
+}
+
+function isRenderableIconUrl(url: string | null | undefined): url is string {
+  if (!url) return false
+  return url.startsWith('https://') || url.startsWith('http://') || url.startsWith('data:image/')
+}
+
+export function createChromiumTabsProvider(): DesktopTargetProvider {
+  return {
+    id: CHROMIUM_SOURCE_ID,
+    title: 'Browser Tabs',
+    titleI18n: { en: 'Browser Tabs', zh: '浏览器标签' },
+    priority: 10,
+    async health() {
+      try {
+        const { desktopTargets } = getPluginHostSdk()
+        const status = await desktopTargets.bridge.status()
+        if (!status?.running) return { ok: false, reason: 'bridge not running' }
+        const src = status.sources.find((s) => s.sourceId === CHROMIUM_SOURCE_ID)
+        if (!src?.fresh && (src?.historyCount ?? 0) === 0) {
+          return { ok: false, reason: 'extension not connected' }
+        }
+        return { ok: true }
+      } catch {
+        return { ok: false, reason: 'bridge unavailable' }
+      }
+    },
+    async list(ctx) {
+      if (ctx.surfaceId !== 'global-launcher') return []
+      const q = ctx.query.trim()
+      // Empty search: 0 tabs (product design).
+      if (!q) return []
+
+      const { desktopTargets } = getPluginHostSdk()
+      const raw = await desktopTargets.bridge.listTargets(CHROMIUM_SOURCE_ID)
+      // When the query is a link already open in the browser, focus that tab
+      // (primary) instead of opening a duplicate. Precise page identity, not a
+      // fuzzy substring; the identity hit is kept + surfaced first regardless of
+      // the text filter so a full-URL query can't drop or truncate it away.
+      const openHit = normalizeUrlForMatch(q) ? findOpenTabForUrl(q, raw) : null
+      const matched = raw.filter(
+        (t) =>
+          t.id === openHit?.id ||
+          searchableFieldsMatch(
+            {
+              id: t.id,
+              title: t.title,
+              aliases: [t.subtitle, t.url, t.appName].filter(Boolean) as string[],
+            },
+            q.toLowerCase(),
+            ctx.locale,
+          ),
+      )
+      const ordered = openHit
+        ? [...matched.filter((t) => t.id === openHit.id), ...matched.filter((t) => t.id !== openHit.id)]
+        : matched
+      const tabs = ordered
+        .slice(0, QUERY_TAB_LIMIT)
+        .map((dto) => {
+          const kind = dto.kind === 'document' ? 'document' : 'tab'
+          const favicon = isRenderableIconUrl(dto.faviconUrl) ? dto.faviconUrl : undefined
+          const isOpenHit = dto.id === openHit?.id
+          return {
+            id: `${dto.sourceId}:${kind}:${dto.id}`,
+            sourceId: dto.sourceId,
+            kind: kind as 'tab' | 'document',
+            title: dto.title,
+            subtitle: dto.subtitle ?? dto.appName ?? undefined,
+            appName: dto.appName ?? undefined,
+            appStableKey: dto.appName ?? dto.sourceId,
+            keywords: [dto.title, dto.url ?? '', dto.appName ?? ''].filter(Boolean),
+            meta: {
+              url: dto.url ?? undefined,
+              windowId: dto.windowId ?? undefined,
+              faviconKey: favicon,
+            },
+            icon: favicon ?? 'Globe',
+            actionClass: 'focus' as const,
+            ...(isOpenHit
+              ? { scoreBias: OPEN_TAB_FOCUS_BIAS, kindLabelI18n: { en: 'Open tab', zh: '已打开' } }
+              : {}),
+          }
+        })
+
+      const history = await desktopTargets.bridge.listHistory(CHROMIUM_SOURCE_ID)
+      const historyTargets = history
+        .filter((item) =>
+          searchableFieldsMatch(
+            {
+              id: item.id,
+              title: item.title,
+              aliases: [item.url, item.appName].filter(Boolean) as string[],
+            },
+            q.toLowerCase(),
+            ctx.locale,
+          ),
+        )
+        .slice(0, QUERY_HISTORY_LIMIT)
+        .map((item) => {
+          const favicon = isRenderableIconUrl(item.faviconUrl) ? item.faviconUrl : undefined
+          return {
+            id: `${item.sourceId}:document:${item.id}`,
+            sourceId: item.sourceId,
+            kind: 'document' as const,
+            title: item.title,
+            subtitle: item.url,
+            appName: item.appName ?? undefined,
+            appStableKey: item.appName ?? item.sourceId,
+            keywords: [item.title, item.url, item.appName ?? ''].filter(Boolean),
+            meta: {
+              url: item.url,
+              faviconKey: favicon,
+            },
+            icon: favicon ?? 'Globe',
+            actionClass: 'open' as const,
+            persistable: true,
+            persistKey: item.url,
+            scoreBias: -80,
+            kindLabelI18n: { en: 'History', zh: '历史' },
+          }
+        })
+
+      return [...tabs, ...historyTargets]
+    },
+    async activate(target) {
+      const { desktopTargets } = getPluginHostSdk()
+      if (target.actionClass === 'open' && target.meta?.url) {
+        await desktopTargets.bridge.openUrl(CHROMIUM_SOURCE_ID, target.meta.url)
+        desktopTargets.bridge.invalidateCache()
+        return
+      }
+      const nativeId = nativeIdFromTargetId(target.sourceId, target.kind, target.id)
+      await desktopTargets.bridge.focusTarget(
+        CHROMIUM_SOURCE_ID,
+        nativeId,
+        target.meta?.windowId,
+      )
+      desktopTargets.bridge.invalidateCache()
+    },
+  }
+}
+
+export function registerChromiumTabsProvider(): void {
+  getPluginHostSdk().desktopTargets.registerProvider(createChromiumTabsProvider())
+}
+
+export function unregisterChromiumTabsProvider(): void {
+  getPluginHostSdk().desktopTargets.unregisterProvider(CHROMIUM_SOURCE_ID)
+}
+
+export function pushChromiumBridgeConfig(settings: Partial<BrowserTabsSettings> | null | undefined): void {
+  const next = normalizeBrowserTabsSettings(settings ?? DEFAULT_BROWSER_TABS_SETTINGS)
+  void getPluginHostSdk().desktopTargets.bridge.setSourceConfig(CHROMIUM_SOURCE_ID, {
+    historyEnabled: next.historyEnabled,
+    autoCloseIdleTabs: next.autoCloseIdleTabs,
+    idleTimeoutMinutes: next.idleTimeoutMinutes,
+  }).catch(() => {
+    // bridge may not be up yet
+  })
+}

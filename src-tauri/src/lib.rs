@@ -5708,15 +5708,16 @@ fn reveal_path_in_file_manager_impl(path: &str) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-/// Chromium extension is part of the first-party `browser-tabs` plugin package.
-/// Embedded at compile time so prepare works even when the app cwd is not the repo
-/// and even when an older builtin release missed the `extension/` folder.
+/// Chromium extension is part of the first-party `web-open` (Browser) plugin
+/// package (merged from the former `browser-tabs`). Embedded at compile time so
+/// prepare works even when the app cwd is not the repo and even when an older
+/// builtin release missed the `extension/` folder.
 const BROWSER_TABS_EXTENSION_MANIFEST: &str =
-    include_str!("../../src/plugins/browser-tabs/extension/manifest.json");
+    include_str!("../../src/plugins/web-open/extension/manifest.json");
 const BROWSER_TABS_EXTENSION_BACKGROUND: &str =
-    include_str!("../../src/plugins/browser-tabs/extension/background.js");
+    include_str!("../../src/plugins/web-open/extension/background.js");
 
-/// Ensure `plugins/builtin/browser-tabs/extension` exists (plugin dir, not bridges/)
+/// Ensure `plugins/builtin/web-open/extension` exists (plugin dir, not bridges/)
 /// and return that path for Chrome “Load unpacked”.
 #[tauri::command]
 fn prepare_chromium_extension_package() -> Result<String, String> {
@@ -5724,7 +5725,7 @@ fn prepare_chromium_extension_package() -> Result<String, String> {
     let plugin_root = PathBuf::from(&config)
         .join("plugins")
         .join("builtin")
-        .join("browser-tabs");
+        .join("web-open");
     let dest = plugin_root.join("extension");
     fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
 
@@ -5748,11 +5749,11 @@ fn prepare_chromium_extension_package() -> Result<String, String> {
         let _ = fs::write(
             &plugin_manifest,
             r#"{
-  "pluginId": "browser-tabs",
-  "displayName": "Browser Tabs",
-  "displayNameI18n": { "zh": "浏览器标签" },
-  "version": "0.1.1",
-  "capabilities": ["settings"]
+  "pluginId": "web-open",
+  "displayName": "Browser",
+  "displayNameI18n": { "zh": "浏览器" },
+  "version": "1.5.0",
+  "capabilities": ["settings", "launcher-quick-entry"]
 }
 "#,
         );
@@ -5767,13 +5768,13 @@ fn resolve_chromium_extension_source_dir() -> Result<PathBuf, String> {
         candidates.push(
             cwd.join("src")
                 .join("plugins")
-                .join("browser-tabs")
+                .join("web-open")
                 .join("extension"),
         );
         candidates.push(
             cwd.join("plugins")
                 .join("builtin")
-                .join("browser-tabs")
+                .join("web-open")
                 .join("extension"),
         );
         candidates.push(cwd.join("extensions").join("hiven-chromium-tabs"));
@@ -5786,7 +5787,7 @@ fn resolve_chromium_extension_source_dir() -> Result<PathBuf, String> {
                     .join("..")
                     .join("src")
                     .join("plugins")
-                    .join("browser-tabs")
+                    .join("web-open")
                     .join("extension"),
             );
         }
@@ -6509,6 +6510,10 @@ pub fn run() {
             desktop_bridge::desktop_bridge_status,
             desktop_bridge::list_desktop_bridge_targets,
             desktop_bridge::focus_desktop_bridge_target,
+            desktop_bridge::list_desktop_bridge_history,
+            desktop_bridge::list_desktop_bridge_events,
+            desktop_bridge::open_desktop_bridge_url,
+            desktop_bridge::set_desktop_bridge_source_config,
             perform_system_power_action,
             surface_registry_snapshot,
             surface_registry_upsert,

@@ -51,9 +51,18 @@ const webOpen = loadModule('src/plugins/web-open/index.tsx', {
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/faviconCache'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/matchPatternCache'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/queryHistory'\s*;?\s*\n?/g,
+    /import\s*\{[\s\S]*?\}\s*from\s*'\.\/browserProvider'\s*;?\s*\n?/g,
+    /import\s*\{[\s\S]*?\}\s*from\s*'\.\/browserTabsModel'\s*;?\s*\n?/g,
+    /import\s*\{[\s\S]*?\}\s*from\s*'\.\/settings\/BrowserTabsConnectionModal'\s*;?\s*\n?/g,
   ],
   globals: {
     definePlugin: (definition) => definition,
+    // Merged browser capability — stubbed; not exercised by these dynamic-item checks.
+    pushChromiumBridgeConfig: () => {},
+    registerChromiumTabsProvider: () => {},
+    unregisterChromiumTabsProvider: () => {},
+    normalizeBrowserTabsSettings: (value) => value ?? {},
+    BrowserTabsConnectionModal: () => null,
     buildWebQuickOpenUrl: model.buildWebQuickOpenUrl,
     DEFAULT_MAX_QUERY_HISTORY: model.DEFAULT_MAX_QUERY_HISTORY,
     DEFAULT_WEB_QUICK_OPEN_SETTINGS: model.DEFAULT_WEB_QUICK_OPEN_SETTINGS,

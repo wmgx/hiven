@@ -208,7 +208,8 @@ LearnedRule = {
 - **上下文**：你此刻在哪个站 → 条件化直答（在 code review 页 vs 在翻译页，直答不同）与规则作用域。
 - **目的地**：把结果开成新标签 / 打开推导出的 URL（复用 `urlSchemeRegistry.ts` 的 openUrl 路由）。
 - **现有底座**：`desktop_bridge` + `browser-tabs` 插件（`DesktopBridgeTargetDto` 已有 url/active/favicon）。
-- **要新增（决策：只做历史）**：给扩展加**浏览历史**被动上报，作为后台学习的浏览器信号来源。**暂不做**页面选中文本上报与导航/激活事件（成本高、收益不确定，后续再议）。历史正好是被动信号，契合 §4 的后台学习模型。
+- **已落地的浏览器信号**：扩展上报**浏览历史**（`POST /v1/sources/{id}/history`）以及 **`tab.opened` / `tab.activated` 事件**（`POST /v1/sources/{id}/events`）。学习层优先消费事件，并用历史做一次播种；active-tab 快照仍作兜底。原始 URL 只进内存桥，学习存储仍只写模板 + 盐哈希。
+- **暂不做**：页面选中文本上报。
 
 ---
 

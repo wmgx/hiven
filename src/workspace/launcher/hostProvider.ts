@@ -30,7 +30,7 @@ export function registerHostLauncherProviders(): void {
   registerDefaultWorkflowProviders()
   registerBuiltinTextPipelines()
   // Host-owned desktop targets (window). Browser tabs are registered by the
-  // first-party browser-tabs plugin via desktopTargets.registerProvider.
+  // first-party Browser plugin (web-open) via desktopTargets.registerProvider.
   registerDesktopTargetProvider(hostWindowTargetProvider)
   setHostLauncherItemsProvider(() => [
     ...getHostPaneControlItems(),

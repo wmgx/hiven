@@ -2,25 +2,45 @@
  * Self-learning · navigation sensor (scenario D, D2 — impure).
  *
  * Passively accumulates the URLs the user visits so the template-induction core
- * can discover "you keep opening X/{id}" patterns. First cut reuses the existing
- * desktop bridge active-tab signal (no extension change): poll the active target,
- * and when its URL changes, templatize it and store the template + a salted hash
- * of the slot value. Raw URLs and raw slot values are never persisted.
+ * can discover "you keep opening X/{id}" patterns.
  *
- * One cached bridge read per tick (the list call caches ~1.5s); gated to the
- * Tauri runtime; a no-op when no bridge/extension is present.
+ * Preferred signal: extension page events (`tab.opened` / `tab.activated`) plus
+ * a one-shot history seed. Fallback: poll the active-tab snapshot when events
+ * are unavailable. Raw URLs and raw slot values are never persisted.
+ *
+ * Gated to the Tauri runtime; a no-op when no bridge/extension is present.
  *
  * See doc/2026-08-12-direct-answer-workbench-design.md §11 (D) / §5.
  */
 
-import { listDesktopBridgeTargets } from '../desktopControl/bridgeTargets'
+import {
+  listDesktopBridgeEvents,
+  listDesktopBridgeHistory,
+  listDesktopBridgeTargets,
+} from '../desktopControl/bridgeTargets'
 import { TelemetryEvents, trackPerf } from '../telemetry'
 import { getRecentClipboardTokens } from './observer'
 import { putNavigation, pruneOldNavigations } from './store'
 import { saltedHash } from './store'
-import { templatizeUrl, templatizeUrlWithToken, type UrlTemplateResult } from './urlTemplate'
+import { hostnameOf, templatizeUrl, templatizeUrlWithToken, type UrlTemplateResult } from './urlTemplate'
 
 const POLL_INTERVAL_MS = 3000
+const HISTORY_SEED_CAP = 200
+const PAGE_EVENT_TYPES = new Set(['tab.opened', 'tab.activated'])
+
+/**
+ * Host of the most recently observed active URL, from whatever desktop-bridge
+ * source reported it (source-agnostic — no browser/plugin concept here, just
+ * "the last URL any target gave us"). In-memory only; used by fire.ts to boost
+ * a learned rule whose destination host matches where the user currently is —
+ * a plain string comparison, not host-specific logic.
+ */
+let currentActiveHost: string | null = null
+
+/** Read the current active host (sync; cheap) — for fire-time rule disambiguation. */
+export function getCurrentActiveHost(): string | null {
+  return currentActiveHost
+}
 
 function isTauriRuntime(): boolean {
   return Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
@@ -37,6 +57,10 @@ async function readActiveUrl(): Promise<string | null> {
     // no bridge / not connected
   }
   return null
+}
+
+function isHttpUrl(url: string | null | undefined): url is string {
+  return typeof url === 'string' && /^https?:\/\//i.test(url)
 }
 
 /**
@@ -81,15 +105,55 @@ export function startNavigationSensor(): () => void {
   let stopped = false
   let polling = false
   let lastUrl: string | null = null
+  let lastEventTs = 0
+  let historySeeded = false
+
+  const consumeUrl = (url: string | null | undefined) => {
+    if (!isHttpUrl(url) || url === lastUrl) return
+    lastUrl = url
+    currentActiveHost = hostnameOf(url)
+    recordNavigation(url)
+  }
+
+  const seedHistory = async () => {
+    if (historySeeded) return
+    try {
+      const items = await listDesktopBridgeHistory()
+      if (items.length === 0) return
+      historySeeded = true
+      const seen = new Set<string>()
+      for (const item of items.slice(0, HISTORY_SEED_CAP)) {
+        if (!isHttpUrl(item.url) || seen.has(item.url)) continue
+        seen.add(item.url)
+        recordNavigation(item.url)
+      }
+    } catch {
+      // isolate from the poll loop
+    }
+  }
+
+  const consumeEvents = async () => {
+    try {
+      const events = await listDesktopBridgeEvents(undefined, lastEventTs)
+      for (const event of events) {
+        if (event.ts > lastEventTs) lastEventTs = event.ts
+        if (!PAGE_EVENT_TYPES.has(event.type)) continue
+        consumeUrl(event.url)
+      }
+    } catch {
+      // isolate from the poll loop
+    }
+  }
 
   const tick = async () => {
     if (stopped || polling) return
     polling = true
     try {
+      await consumeEvents()
+      if (!historySeeded) await seedHistory()
+      // Snapshot fallback when the extension is connected but events are quiet.
       const url = await readActiveUrl()
-      if (stopped || !url || url === lastUrl) return
-      lastUrl = url
-      recordNavigation(url)
+      if (!stopped) consumeUrl(url)
     } catch {
       // isolate from the poll loop
     } finally {
@@ -103,6 +167,7 @@ export function startNavigationSensor(): () => void {
   return () => {
     stopped = true
     started = false
+    currentActiveHost = null
     window.clearInterval(intervalId)
   }
 }

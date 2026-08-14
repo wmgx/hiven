@@ -36,7 +36,13 @@ import {
 } from './workspace/learning/coverage'
 
 export type { PluginHostUi, PluginHostEffects, TextCommandDefinition } from './pluginHostCore.ts'
-export type { DesktopTargetsHostApi, DesktopTargetProvider } from './workspace/desktopTargets/pluginApi'
+export type {
+  DesktopTargetsHostApi,
+  DesktopTargetProvider,
+  DesktopBridgeEventDto,
+  DesktopBridgeHistoryDto,
+  DesktopBridgeSourceConfig,
+} from './workspace/desktopTargets/pluginApi'
 
 type HostSettings = ReturnType<typeof useAppStore.getState>['settings']
 

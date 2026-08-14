@@ -24,6 +24,9 @@ export type {
   TextCommandDefinition,
   DesktopTargetsHostApi,
   DesktopTargetProvider,
+  DesktopBridgeEventDto,
+  DesktopBridgeHistoryDto,
+  DesktopBridgeSourceConfig,
 } from './pluginHostSdk'
 export type { Locale } from './i18n'
 export type { TranslateFunction } from './i18n'
