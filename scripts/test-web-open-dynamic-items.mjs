@@ -66,6 +66,9 @@ const webOpen = loadModule('src/plugins/web-open/index.tsx', {
     buildWebQuickOpenUrl: model.buildWebQuickOpenUrl,
     DEFAULT_MAX_QUERY_HISTORY: model.DEFAULT_MAX_QUERY_HISTORY,
     DEFAULT_WEB_QUICK_OPEN_SETTINGS: model.DEFAULT_WEB_QUICK_OPEN_SETTINGS,
+    AUTO_CREATED_TAG: model.AUTO_CREATED_TAG,
+    learnedOfferToEntry: () => null,
+    mergeLearnedEntry: (entries) => entries,
     FaviconCacheModal: () => null,
     QueryHistoryModal: () => null,
     extractDomain: (url) => {

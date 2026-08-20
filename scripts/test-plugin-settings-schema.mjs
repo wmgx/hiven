@@ -73,14 +73,35 @@ assert.match(schemaRenderer, /field\.kind === 'object-list'/, 'schema renderer m
 assert.match(schemaRenderer, /permissionReason/, 'schema renderer must derive disabled state from permission dependencies')
 assert.match(schemaRenderer, /field\.itemTitleKey/, 'object-list cards should use the schema-declared title key')
 assert.match(schemaRenderer, /fieldIconComponent/, 'schema renderer should render host-owned field icons')
-assert.match(schemaRenderer, /schema-object-list-card/, 'schema renderer must render object-list cards instead of JSON-only textareas')
-assert.match(schemaRenderer, /wr-card/, 'object-list settings should use the designed rule-card shell')
+// The object-list card markup became a master/detail layout; this assertion had
+// been pinned to the pre-refactor `schema-object-list-card` class and was failing
+// against a class name that no longer exists anywhere.
+assert.match(
+  schemaRenderer,
+  /schema-object-list-master-item/,
+  'schema renderer must render object-list rows instead of JSON-only textareas',
+)
+assert.match(
+  schemaRenderer,
+  /schema-object-list-master-detail/,
+  'object-list uses the master/detail layout',
+)
+// `wr-card` predates the master/detail rework; the rule shell is now `d-rules`
+// + `wr-field`. This had been asserting a class that no longer exists.
+assert.match(schemaRenderer, /d-rules/, 'object-list settings use the designed rule shell')
+assert.match(schemaRenderer, /wr-field/, 'object-list fields use the designed field shell')
 assert.match(schemaRenderer, /wr-aliases/, 'string-list settings should use the designed chip input container')
 assert.match(schemaRenderer, /event\.key === 'Backspace'/, 'chip inputs should support deleting the last trigger word with Backspace')
 assert.match(schemaRenderer, /storageScale/, 'schema renderer must support unit-scaled number fields')
 assert.match(schemaRenderer, /field\.unitI18n/, 'schema renderer must localize number field units')
 assert.match(schemaRenderer, /translate\(locale,\s*['"]scripts['"],\s*['"]settingsPermissionRequired['"]/, 'permission dependency reasons must use the shared i18n registry')
-assert.match(schemaRenderer, /plugin-settings-stepper/, 'schema renderer must render number fields as custom editable steppers')
+// Number fields render through `plugin-settings-num-field-row`, not the old
+// `plugin-settings-stepper` class.
+assert.match(
+  schemaRenderer,
+  /plugin-settings-num-field-row/,
+  'schema renderer must render number fields as custom editable rows',
+)
 assert.doesNotMatch(schemaRenderer, /type="number"/, 'schema renderer must not use native number inputs with browser spinners')
 assert.doesNotMatch(schemaRenderer, /locale\s*===\s*['"]zh['"]/, 'schema renderer must not branch on Chinese locale for UI copy')
 assert.match(schemaRenderer, /field\.kind === 'modal'/, 'schema renderer must render modal opener fields')
@@ -98,11 +119,27 @@ assert.match(files.css, /data-theme=['"]dark['"][\s\S]{0,260}\.schema-field-bloc
 assert.match(files.css, /data-theme=['"]dark['"][\s\S]{0,260}\.schema-select-wrap\.is-open \.schema-select-trigger[\s\S]{0,320}background:\s*var\(--surface-2\)[\s\S]{0,140}var\(--accent\)/, 'dark schema select open state must not use a white background')
 assert.match(files.css, /data-theme=['"]dark['"][\s\S]{0,220}\.menu[\s\S]{0,260}rgba\(0,\s*0,\s*0,\s*0\.65\)[\s\S]{0,180}rgba\(255,\s*255,\s*255,\s*0\.05\)/, 'dark menus must use the finalized dark shadow and light outline')
 
-const inlinePath = 'src/components/PluginSettingsInline.tsx'
-assert.ok(existsSync(join(root, inlinePath)), 'inline plugin detail settings component must exist')
-const inlineSettings = read(inlinePath)
-assert.match(inlineSettings, /contribution\.migrate/, 'inline plugin detail settings must run settings migrations just like the dialog')
-assert.doesNotMatch(inlineSettings, /storedVersion\s*!==\s*currentVersion\)\s*return contribution\.defaultValue/, 'inline plugin detail settings must not silently reset versioned settings')
+// PluginSettingsInline.tsx was deleted in the tactile-white rewrite (5cec1d8);
+// this block had been asserting a file that no longer exists. The contract it
+// protected — settings migration must run, and must never silently reset a
+// versioned value — now lives centrally in resolvePluginSettings, which every
+// settings surface goes through. Assert it there.
+const settingsStore = read('src/workspace/pluginSettingsStore.ts')
+assert.match(
+  settingsStore,
+  /contribution\.migrate/,
+  'settings resolution must run declared migrations',
+)
+assert.doesNotMatch(
+  settingsStore,
+  /storedVersion\s*!==\s*currentVersion\)\s*return contribution\.defaultValue/,
+  'settings resolution must not silently reset versioned settings on any mismatch',
+)
+assert.match(
+  settingsStore,
+  /storedVersion > currentVersion/,
+  'a downgrade must be handled explicitly rather than lumped in with upgrades',
+)
 
 assert.match(files.webOpen, /schema:\s*\{/, 'at least one bundled plugin should exercise host-rendered settings schema')
 assert.match(files.webOpen, /kind:\s*['"]object-list['"]/, 'web quick open should use schema object-list UI for entries')

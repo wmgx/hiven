@@ -288,6 +288,14 @@ assert.match(
   'normalizeContribution must pass through contribution.accepts',
 )
 const manifest = JSON.parse(readFileSync('src/plugins/web-open/manifest.json', 'utf8'))
-assert.equal(manifest.version, '1.4.0', 'web-open manifest version bumped for package 3')
+// Floor, not equality: plugin versions must rise whenever behavior changes
+// (CLAUDE.md), so pinning an exact version guarantees a false failure on the
+// next legitimate bump — which is what happened when the browser-tabs merge
+// shipped 1.5.0. Assert the package-3 bump happened and never regressed.
+const [major, minor] = manifest.version.split('.').map(Number)
+assert.ok(
+  major > 1 || (major === 1 && minor >= 4),
+  `web-open manifest version must be >= 1.4.0 (package 3 bump), got ${manifest.version}`,
+)
 
 console.log('✓ test-app-desktop-control-ranking passed')

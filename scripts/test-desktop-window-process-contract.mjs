@@ -95,7 +95,21 @@ assert.match(files.windows, /host\.window:focus:native:\$\{/, 'focus systemKey r
 assert.match(files.windows, /host\.window:close:native:\$\{/, 'close systemKey required')
 assert.match(files.windows, /kindLabelI18n/, 'window kindLabel i18n required')
 assert.match(files.processes, /isProcessModeQuery/, 'process mode gate required')
-assert.match(files.processes, /recordUsage:\s*false/, 'process items must not record usage')
+// The "processes are not usage-recorded" contract moved out of processes.ts into
+// shouldRecordUsage's kind allowlist; this assertion had been pointing at the old
+// location and silently passing on nothing. Assert the rule where it now lives:
+// 'process' must be absent from the allowlist, and terminate actions excluded.
+{
+  const toItem = read('src/workspace/desktopTargets/toLauncherItem.ts')
+  const allowlist = /export function shouldRecordUsage[\s\S]*?\n}/.exec(toItem)?.[0] ?? ''
+  assert.ok(allowlist, 'shouldRecordUsage must exist')
+  assert.doesNotMatch(
+    allowlist,
+    /target\.kind === 'process'/,
+    'process items must not record usage',
+  )
+  assert.match(allowlist, /action === 'terminate'/, 'terminate actions must not record usage')
+}
 assert.match(files.windows, /invoke\(['"]list_desktop_windows['"]/, 'windows must invoke list_desktop_windows')
 assert.match(files.windows, /list_desktop_windows_enriched/, 'windows must offline-enrich titles (not on keystroke path)')
 assert.match(files.windows, /subscribeDesktopWindowsUpdated/, 'windows must notify when titles enrich')

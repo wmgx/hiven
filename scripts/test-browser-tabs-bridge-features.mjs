@@ -28,7 +28,16 @@ const manifest = JSON.parse(read('src/plugins/web-open/extension/manifest.json')
 assert.ok(manifest.permissions.includes('history'), 'extension must request history')
 assert.ok(manifest.permissions.includes('storage'), 'extension must persist idle/history config')
 assert.ok(manifest.permissions.includes('tabs'))
-assert.match(manifest.version, /^0\.2\./)
+// Floor, not an exact minor: the extension version rises whenever its behavior
+// changes (0.3.0 added per-visit timestamps), so pinning one minor guarantees a
+// false failure on the next legitimate bump.
+{
+  const [major, minor] = manifest.version.split('.').map(Number)
+  assert.ok(
+    major > 0 || minor >= 2,
+    `extension version must be >= 0.2 , got ${manifest.version}`,
+  )
+}
 
 const background = read('src/plugins/web-open/extension/background.js')
 assert.match(background, /\/v1\/sources\/\$\{SOURCE_ID\}\/history/)

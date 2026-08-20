@@ -49,7 +49,13 @@ assert.match(bridge, /tab\.opened/)
 assert.match(bridge, /tab\.activated/)
 
 assert.match(browserPlugin, /browser\.chromium/)
-assert.match(browserPlugin, /if\s*\(!q\)\s*return\s*\[\]/, 'empty query must return 0 tabs')
+// Empty open now recommends the tabs worth returning to (ranked by visit
+// frecency) instead of returning nothing. See test-browser-empty-open-recommend.mjs.
+assert.match(
+  browserPlugin,
+  /if\s*\(!q\)\s*return\s*buildEmptyOpenTargets\(\)/,
+  'empty query must return frecency-ranked tab recommendations',
+)
 assert.doesNotMatch(host, /vscodeDocumentsProvider|editor\.vscode/)
 assert.match(host, /getDesktopBridgeLauncherDynamicItems/)
 assert.match(collect, /browser\.chromium/)

@@ -59,7 +59,9 @@ assert.match(
 )
 assert.match(provider, /browser\.chromium/)
 assert.match(provider, /getPluginHostSdk\(\)\.desktopTargets/)
-assert.match(provider, /if\s*\(!q\)\s*return\s*\[\]/)
+// Empty open now recommends the tabs worth returning to, ranked by visit
+// frecency, instead of returning nothing. See test-browser-empty-open-recommend.mjs.
+assert.match(provider, /if\s*\(!q\)\s*return\s*buildEmptyOpenTargets\(\)/)
 assert.match(provider, /listHistory/)
 assert.match(provider, /openUrl/)
 assert.match(provider, /setSourceConfig/)
