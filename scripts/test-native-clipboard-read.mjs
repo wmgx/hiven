@@ -30,6 +30,12 @@ assert.match(nativeSrc, /isTauriClipboardRuntime/, 'shared Tauri runtime guard')
 assert.match(nativeSrc, /readNativeClipboardText/, 'shared native text reader')
 assert.match(pluginClipboardSrc, /readNativeClipboardText/, 'plugin clipboard uses shared reader')
 assert.match(pluginClipboardSrc, /if \(isTauriClipboardRuntime\(\)\) return null/, 'plugin image read must not fall through in Tauri')
+assert.match(pluginClipboardSrc, /writeClipboardImageBytes/, 'plugin clipboard must expose image write')
+assert.doesNotMatch(
+  pluginClipboardSrc,
+  /catch\s*\{[\s\S]{0,80}await writeImage\(bytes\)/,
+  'image write must not pass PNG file bytes as RGBA',
+)
 assert.match(launcherReadSrc, /readNativeClipboardText/, 'launcher clipboard uses shared reader')
 assert.match(appSrc, /readNativeClipboardText/, 'age tracker uses shared reader')
 assert.match(contextBrokerSrc, /readNativeClipboardText/, 'context broker uses shared reader')

@@ -62,7 +62,16 @@
   "settings.idle": "自动关闭不活跃标签",
   "settings.idleHelp": "超过设定时间未使用的后台标签会被关闭。固定标签、正在播放声音的标签，以及窗口里的最后一个标签不会关。",
   "settings.idleToggle": "启用自动关闭",
-  "settings.idleTimeout": "不活跃超时（分钟）",
+  "settings.idleTimeout": "不活跃超时",
+  "settings.idleTimeout.15m": "15 分钟",
+  "settings.idleTimeout.30m": "30 分钟",
+  "settings.idleTimeout.1h": "1 小时",
+  "settings.idleTimeout.6h": "6 小时",
+  "settings.idleTimeout.12h": "12 小时",
+  "settings.idleTimeout.1d": "1 天",
+  "settings.idleTimeout.3d": "3 天",
+  "settings.idleTimeout.7d": "7 天",
+  "settings.idleTimeout.custom": "{minutes} 分钟",
   "settings.footer": "空搜索不会展示标签；输入标题或 URL 片段即可。断连时静默无结果，不打扰其它搜索。更新后请重新加载已解压的扩展，以便授予「历史记录」权限。",
   "settings.reloadHint": "更新后请在浏览器里重新加载已解压的扩展，以便授予新的「历史记录」权限。"
 }

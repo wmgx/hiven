@@ -1,0 +1,14 @@
+{
+  "pluginId": "qr-code",
+  "displayName": "QR Code",
+  "displayNameI18n": { "zh": "二维码" },
+  "version": "1.0.5",
+  "capabilities": ["surface"],
+  "permissions": [
+    "clipboard.read",
+    "clipboard.write",
+    "clipboard.image",
+    "storage.private",
+    "storage.blob"
+  ]
+}

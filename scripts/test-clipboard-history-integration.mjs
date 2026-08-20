@@ -129,6 +129,8 @@ const requiredKeys = [
   'hint.returnToLauncher',
   'hint.delete',
   'action.back',
+  'action.paste',
+  'action.copy',
   'action.close',
   'message.copied',
   'message.cleared',
@@ -143,6 +145,7 @@ const requiredKeys = [
   'meta.lastCopied',
   'error.loadFailed',
   'error.pasteFailed',
+  'error.copyFailed',
 ]
 
 for (const key of requiredKeys) {
@@ -187,6 +190,9 @@ assert.match(surfaceContent, /setQuery|query/, 'Surface must have search query s
 assert.match(surfaceContent, /setFilter|filter/, 'Surface must have filter state')
 assert.match(surfaceContent, /host\.requestBack\(\)/, 'Surface must render plugin-owned back affordance through host.requestBack()')
 assert.match(surfaceContent, /clipboard-history-topbar[\s\S]*<SearchField/, 'Surface must keep search in the top bar')
+assert.match(surfaceContent, /clipboard-history-topbar[\s\S]*action\.paste/, 'Surface must expose paste in the top bar')
+assert.match(surfaceContent, /clipboard-history-menu/, 'Surface must expose a context menu')
+assert.match(surfaceContent, /handleCopy|clipboard\.writeImage/, 'Surface must copy the selected item, not only DOM selection')
 assert.match(surfaceContent, /clipboard-history-list-toolbar[\s\S]*<SegmentedControl/, 'Surface must place the type filter above the left history list')
 assert.doesNotMatch(surfaceContent, /<Select[\s\S]{0,600}filter\.all/, 'Surface type filter must not use a native select menu')
 assert.match(surfaceContent, /<SurfaceList[\s\S]{0,180}data-launcher-scrollable/, 'Surface history list must opt into launcher window wheel scrolling')
@@ -203,6 +209,17 @@ assert.match(indexContent, /defaultHeight:\s*640/, 'Clipboard history surface sh
 assert.match(bundledLoaderContent, /plugins\/\*\/style\.css/, 'Bundled plugin loader must load plugin-owned style.css assets')
 assert.doesNotMatch(appCssContent, /clipboard-history-/, 'App global CSS must not own clipboard-history product styles')
 assert.match(pluginStyleContent, /\.clipboard-history-surface/, 'Clipboard history package must own its surface stylesheet')
+assert.match(pluginStyleContent, /\.clipboard-history-item-row:hover/, 'list row hover must stay defined')
+assert.match(
+  pluginStyleContent,
+  /\.clipboard-history-item-row:hover \.clipboard-history-item-favorite/,
+  'favorite/delete icons must still appear on row hover',
+)
+assert.doesNotMatch(
+  pluginStyleContent,
+  /\.clipboard-history-surface \.hiven-ui-icon-button:hover/,
+  'must not spray titlebar icon hover over the whole clipboard surface',
+)
 
 // Has loading and disabled states
 assert.match(surfaceContent, /loading/, 'Surface must handle loading state')

@@ -45,6 +45,8 @@ assert.match(background, /\/v1\/sources\/\$\{SOURCE_ID\}\/events/)
 assert.match(background, /type:\s*'tab\.opened'|type === 'tab\.opened'|tab\.opened/)
 assert.match(background, /tab\.activated/)
 assert.match(background, /autoCloseIdleTabs/)
+assert.doesNotMatch(background, /MAX_IDLE_TIMEOUT_MINUTES/)
+assert.match(background, /MIN_IDLE_TIMEOUT_MINUTES/)
 assert.match(background, /chrome\.tabs\.remove/)
 assert.match(background, /tab\.pinned/)
 assert.doesNotMatch(background, /from ['"]\.\.\/\.\.\/workspace\//)
@@ -72,6 +74,7 @@ assert.match(pluginIndex, /applyBrowserCapability/)
 const connectionModal = read('src/plugins/web-open/settings/BrowserTabsConnectionModal.tsx')
 assert.match(connectionModal, /historyEnabled/)
 assert.match(connectionModal, /autoCloseIdleTabs/)
+assert.match(connectionModal, /IDLE_TIMEOUT_PRESET_MINUTES/)
 
 function loadTs(path) {
   const src = readFileSync(path, 'utf8').replace(/import\s+type\s*\{[\s\S]*?\}\s*from\s*'[^']*'\s*;?\s*\n?/g, '')
@@ -93,8 +96,14 @@ assert.equal(model.normalizeBrowserTabsSettings({ enabled: false }).enabled, fal
 assert.equal(model.normalizeBrowserTabsSettings({ historyEnabled: false }).historyEnabled, false)
 assert.equal(model.normalizeBrowserTabsSettings({ autoCloseIdleTabs: true }).autoCloseIdleTabs, true)
 assert.equal(model.clampIdleTimeoutMinutes(1), 5)
-assert.equal(model.clampIdleTimeoutMinutes(9999), 24 * 60)
+assert.equal(model.clampIdleTimeoutMinutes(99999), 99999)
 assert.equal(model.clampIdleTimeoutMinutes(45), 45)
+assert.equal(model.clampIdleTimeoutMinutes(3 * 24 * 60), 3 * 24 * 60)
+assert.equal(model.clampIdleTimeoutMinutes(7 * 24 * 60), 7 * 24 * 60)
+assert.equal(model.MAX_IDLE_TIMEOUT_MINUTES, undefined)
+assert.deepEqual([...model.IDLE_TIMEOUT_PRESET_MINUTES], [15, 30, 60, 360, 720, 1440, 4320, 10080])
+assert.equal(model.idleTimeoutPresetKey(4320), '3d')
+assert.equal(model.idleTimeoutPresetKey(10080), '7d')
 
 const localesEn = JSON.parse(read('src/plugins/web-open/locales/en.json'))
 const localesZh = JSON.parse(read('src/plugins/web-open/locales/zh.json'))
@@ -106,6 +115,8 @@ for (const key of [
   'settings.idleHelp',
   'settings.idleToggle',
   'settings.idleTimeout',
+  'settings.idleTimeout.3d',
+  'settings.idleTimeout.7d',
   'settings.footer',
   'settings.reloadHint',
 ]) {

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { AlertTriangle, ArrowRight, Check, ChevronDown, Languages, LoaderCircle, Settings, X } from 'lucide-react'
+import { Button, IconButton } from '@hiven/plugin-ui'
+import { BackIcon, CloseIcon, SettingsIcon } from '@hiven/plugin-ui/icons'
+import { AlertTriangle, ArrowRight, Check, ChevronDown, LoaderCircle } from 'lucide-react'
 import type { SourceLanguageCode, TargetLanguageCode, TranslateProfile, TranslateSettings } from '../settings/model'
 import { currentUsageMonth } from '../settings/model'
 import { estimateBilledChars, resolveSmartTargetLang, translateText } from '../providers/adapters'
@@ -196,6 +198,8 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   const [inputFocused, setInputFocused] = useState(false)
   const [status, setStatus] = useState<TranslateStatus>({ kind: 'idle' })
   const [usageByProfile, setUsageByProfile] = useState(() => new Map(settings.profiles.map((profile) => [profile.id, profile.usedChars])))
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -286,6 +290,46 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
     return () => window.clearTimeout(timer)
   }, [inputText, activeProfile, sourceLang, targetLang, translateCurrentText])
 
+  const copyOutput = useCallback(async () => {
+    if (!outputText) return
+    try {
+      await host.clipboard.writeText(outputText)
+      host.showMessage(localizedText(t, 'toast.copied', 'Copied'), 'success')
+    } catch {
+      host.showMessage(localizedText(t, 'toast.copyFailed', 'Copy failed'), 'error')
+    }
+  }, [host, outputText, t])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'c') return
+      const target = event.target as HTMLElement | null
+      if (target?.closest('textarea, input, [contenteditable]')) return
+      if (!outputText) return
+      event.preventDefault()
+      void copyOutput()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [copyOutput, outputText])
+
+  useEffect(() => {
+    if (!menu) return
+    const onPointerDown = (event: PointerEvent) => {
+      if (menuRef.current?.contains(event.target as Node)) return
+      setMenu(null)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenu(null)
+    }
+    window.addEventListener('pointerdown', onPointerDown)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [menu])
+
   const activeUsedChars = activeProfile ? (usageByProfile.get(activeProfile.id) ?? activeProfile.usedChars) : 0
   const monthlyLimit = activeProfile?.monthlyLimitChars ?? 0
   const quotaPercent = monthlyLimit > 0 ? Math.min(100, Math.round((activeUsedChars / monthlyLimit) * 100)) : 0
@@ -296,17 +340,20 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   return (
     <section className="translate-surface" aria-label="Translate">
       <header className="translate-surface__header">
-        <div className="translate-surface__brand">
-          <Languages size={15} strokeWidth={1.75} />
-          <span className="translate-surface__title">{localizedText(t, 'surface.title', 'Translate')}</span>
-        </div>
+        <IconButton type="button" label={localizedText(t, 'action.back', 'Back')} onClick={() => host.requestBack()}>
+          <BackIcon size={14} strokeWidth={2} />
+        </IconButton>
+        <span className="translate-surface__title">{localizedText(t, 'surface.title', 'Translate')}</span>
         <div className="translate-surface__header-spacer" />
-        <button className="translate-iconbtn" type="button" aria-label={localizedText(t, 'action.openSettings', 'Open Settings')} onClick={() => host.openSettings()}>
-          <Settings size={16} strokeWidth={1.75} />
-        </button>
-        <button className="translate-iconbtn" type="button" aria-label={localizedText(t, 'action.close', 'Close')} onClick={() => host.close()}>
-          <X size={16} strokeWidth={1.9} />
-        </button>
+        <Button type="button" variant="primary" disabled={!outputText} onClick={() => void copyOutput()}>
+          {localizedText(t, 'action.copy', 'Copy')}
+        </Button>
+        <IconButton type="button" label={localizedText(t, 'action.openSettings', 'Open Settings')} onClick={() => host.openSettings()}>
+          <SettingsIcon size={16} />
+        </IconButton>
+        <IconButton type="button" label={localizedText(t, 'action.close', 'Close')} onClick={() => host.close()}>
+          <CloseIcon size={14} strokeWidth={2} />
+        </IconButton>
       </header>
 
       <div className="translate-surface__controls">
@@ -342,7 +389,19 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
             {localizedText(t, 'pane.translation', 'Translation')}
             <span className="detected">· {optionLabel(targetOptions, resolvedTarget)}</span>
           </div>
-          <div className={`translate-output ${outputText ? '' : 'is-empty'} ${status.kind === 'translating' ? 'is-stale' : ''}`} aria-live="polite">
+          <div
+            className={`translate-output ${outputText ? '' : 'is-empty'} ${status.kind === 'translating' ? 'is-stale' : ''}`}
+            aria-live="polite"
+            onContextMenu={(event) => {
+              if (!outputText) return
+              event.preventDefault()
+              event.stopPropagation()
+              setMenu({
+                x: Math.min(event.clientX, window.innerWidth - 168),
+                y: Math.min(event.clientY, window.innerHeight - 56),
+              })
+            }}
+          >
             {outputText || localizedText(t, 'output.placeholder', 'Translation appears here.')}
           </div>
         </div>
@@ -365,6 +424,25 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
           </div>
         </div>
       </footer>
+      {menu ? (
+        <div
+          ref={menuRef}
+          className="translate-surface__menu"
+          role="menu"
+          style={{ left: menu.x, top: menu.y }}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMenu(null)
+              void copyOutput()
+            }}
+          >
+            {localizedText(t, 'action.copy', 'Copy')}
+          </button>
+        </div>
+      ) : null}
     </section>
   )
 }

@@ -830,7 +830,7 @@ pub fn set_desktop_bridge_source_config(
     auto_close_idle_tabs: bool,
     idle_timeout_minutes: u32,
 ) -> Result<(), String> {
-    let minutes = idle_timeout_minutes.clamp(5, 24 * 60);
+    let minutes = idle_timeout_minutes.max(5);
     let mut guard = bridge_state()
         .lock()
         .map_err(|_| "bridge lock poisoned".to_string())?;
@@ -909,5 +909,10 @@ mod tests {
         assert!(json.contains("\"type\":\"config\""));
         assert!(json.contains("\"autoCloseIdleTabs\":true"));
         assert!(json.contains("\"idleTimeoutMinutes\":45"));
+
+        set_desktop_bridge_source_config(source.into(), true, true, 10080).unwrap();
+        let (st, json) = take_commands(source).unwrap();
+        assert_eq!(st, 200);
+        assert!(json.contains("\"idleTimeoutMinutes\":10080"));
     }
 }

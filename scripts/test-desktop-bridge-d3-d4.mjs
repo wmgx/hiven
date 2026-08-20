@@ -47,6 +47,8 @@ assert.match(bridge, /strip_suffix\("\/history"\)/)
 assert.match(bridge, /strip_suffix\("\/events"\)/)
 assert.match(bridge, /tab\.opened/)
 assert.match(bridge, /tab\.activated/)
+assert.doesNotMatch(bridge, /clamp\(5,\s*24\s*\*\s*60\)/, 'bridge must not cap idle timeout at 24h')
+assert.match(bridge, /idle_timeout_minutes\.max\(5\)/)
 
 assert.match(browserPlugin, /browser\.chromium/)
 // Empty open now recommends the tabs worth returning to (ranked by visit

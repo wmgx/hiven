@@ -11,6 +11,7 @@ const POLL_ALARM = 'hiven-tabs-poll'
 const HISTORY_ALARM = 'hiven-history-push'
 const IDLE_ALARM = 'hiven-idle-close'
 const HISTORY_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000
+const MIN_IDLE_TIMEOUT_MINUTES = 5
 const HISTORY_MAX = 200
 /** Pages enriched with per-visit timestamps (one getVisits call each). */
 const VISITS_DETAIL_MAX_URLS = 60
@@ -229,7 +230,10 @@ function pageEvent(type, tab, extras = {}) {
 
 async function applyConfig(next) {
   if (!next || typeof next !== 'object') return
-  const idleTimeoutMinutes = Math.max(5, Math.min(24 * 60, Number(next.idleTimeoutMinutes) || 60))
+  const parsed = Number(next.idleTimeoutMinutes)
+  const idleTimeoutMinutes = Number.isFinite(parsed)
+    ? Math.max(MIN_IDLE_TIMEOUT_MINUTES, Math.round(parsed))
+    : 60
   config = {
     historyEnabled: next.historyEnabled !== false,
     autoCloseIdleTabs: next.autoCloseIdleTabs === true,

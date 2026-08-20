@@ -10,8 +10,33 @@ export type BrowserTabsSettings = {
 }
 
 export const MIN_IDLE_TIMEOUT_MINUTES = 5
-export const MAX_IDLE_TIMEOUT_MINUTES = 24 * 60
 export const DEFAULT_IDLE_TIMEOUT_MINUTES = 60
+
+/** Preset idle durations shown in settings, including 3-day and 7-day. */
+export const IDLE_TIMEOUT_PRESET_MINUTES = [
+  15,
+  30,
+  60,
+  6 * 60,
+  12 * 60,
+  24 * 60,
+  3 * 24 * 60,
+  7 * 24 * 60,
+] as const
+
+export function idleTimeoutPresetKey(minutes: number): '15m' | '30m' | '1h' | '6h' | '12h' | '1d' | '3d' | '7d' | 'custom' {
+  switch (minutes) {
+    case 15: return '15m'
+    case 30: return '30m'
+    case 60: return '1h'
+    case 360: return '6h'
+    case 720: return '12h'
+    case 1440: return '1d'
+    case 4320: return '3d'
+    case 10080: return '7d'
+    default: return 'custom'
+  }
+}
 
 export const DEFAULT_BROWSER_TABS_SETTINGS: BrowserTabsSettings = {
   enabled: true,
@@ -23,7 +48,8 @@ export const DEFAULT_BROWSER_TABS_SETTINGS: BrowserTabsSettings = {
 export function clampIdleTimeoutMinutes(value: unknown): number {
   const n = typeof value === 'number' ? value : Number(value)
   if (!Number.isFinite(n)) return DEFAULT_IDLE_TIMEOUT_MINUTES
-  return Math.max(MIN_IDLE_TIMEOUT_MINUTES, Math.min(MAX_IDLE_TIMEOUT_MINUTES, Math.round(n)))
+  // No product max: 3d/7d (and any later preset) must survive host → bridge → extension sync.
+  return Math.max(MIN_IDLE_TIMEOUT_MINUTES, Math.round(n))
 }
 
 export function normalizeBrowserTabsSettings(value: Partial<BrowserTabsSettings> | null | undefined): BrowserTabsSettings {

@@ -29,12 +29,12 @@
 }
 
 .translate-surface__header {
-  height: 48px;
+  min-height: 50px;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 10px 0 14px;
+  gap: 8px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -52,7 +52,7 @@
 .translate-surface__title {
   color: var(--text);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 650;
   letter-spacing: 0;
 }
 
@@ -104,6 +104,74 @@
 .translate-iconbtn:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--ring);
+}
+
+.translate-surface .hiven-ui-button,
+.translate-surface .hiven-ui-icon-button {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.translate-surface .hiven-ui-button {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 11px;
+  border: var(--hairline) solid var(--color-border-secondary, var(--border-2));
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.translate-surface .hiven-ui-button-primary {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, #fff 18%, var(--accent)) 0%,
+    var(--accent) 100%
+  );
+}
+
+.translate-surface .hiven-ui-button-primary:hover:not(:disabled) {
+  color: #fff;
+  filter: brightness(1.06);
+}
+
+.translate-surface .hiven-ui-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.translate-surface .hiven-ui-icon-button:hover:not(:disabled) {
+  background: var(--surface);
+}
+
+.translate-surface__menu {
+  position: fixed;
+  z-index: 30;
+  min-width: 148px;
+  padding: 4px;
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+}
+
+.translate-surface__menu button {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  padding: 7px 10px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.translate-surface__menu button:hover {
+  background: var(--surface);
 }
 
 .translate-surface__controls {

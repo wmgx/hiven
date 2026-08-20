@@ -802,3 +802,70 @@ body[data-theme='dark'] .clipboard-history-surface {
   height: 120px;
   width: 100%;
 }
+
+.clipboard-history-topbar .hiven-ui-button,
+.clipboard-history-topbar .hiven-ui-icon-button {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.clipboard-history-topbar .hiven-ui-button {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 11px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.clipboard-history-topbar .hiven-ui-button-primary {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, #fff 18%, var(--hiven-color-accent)) 0%,
+    var(--hiven-color-accent) 100%
+  );
+}
+
+.clipboard-history-topbar .hiven-ui-button-primary:hover:not(:disabled) {
+  color: #fff;
+  filter: brightness(1.06);
+}
+
+.clipboard-history-topbar .hiven-ui-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.clipboard-history-topbar .hiven-ui-icon-button:hover:not(:disabled) {
+  background: var(--bg-surface-2, var(--hiven-color-bg-secondary));
+}
+
+.clipboard-history-menu {
+  position: fixed;
+  z-index: 30;
+  min-width: 148px;
+  padding: 4px;
+  border: 1px solid var(--border, var(--hiven-color-border));
+  border-radius: 8px;
+  background: var(--bg-surface, var(--hiven-color-bg-primary));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+}
+
+.clipboard-history-menu button {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  padding: 7px 10px;
+  background: transparent;
+  color: var(--hiven-color-text-primary);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.clipboard-history-menu button:hover {
+  background: var(--hiven-color-bg-secondary, var(--hiven-color-bg-tertiary));
+}

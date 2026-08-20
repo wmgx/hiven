@@ -59,6 +59,8 @@
   "error.loadFailed": "加载条目失败",
   "error.returnFailed": "无法带回 Launcher",
   "action.back": "返回",
+  "action.paste": "粘贴",
+  "action.copy": "复制",
   "action.close": "关闭",
   "action.openSettings": "打开设置",
   "action.clearAll": "清空全部",
@@ -91,5 +93,6 @@
   "message.undo": "撤销",
   "error.loadFailed": "加载剪贴板历史失败",
   "error.pasteFailed": "粘贴失败",
+  "error.copyFailed": "复制失败",
   "error.favoriteFailed": "更新收藏失败"
 }

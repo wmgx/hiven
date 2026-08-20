@@ -59,6 +59,8 @@
   "error.loadFailed": "Failed to load item",
   "error.returnFailed": "Could not return to Launcher",
   "action.back": "Back",
+  "action.paste": "Paste",
+  "action.copy": "Copy",
   "action.close": "Close",
   "action.openSettings": "Open Settings",
   "action.clearAll": "Clear All",
@@ -91,5 +93,6 @@
   "message.undo": "Undo",
   "error.loadFailed": "Failed to load clipboard history",
   "error.pasteFailed": "Paste failed",
+  "error.copyFailed": "Copy failed",
   "error.favoriteFailed": "Failed to update favorite"
 }

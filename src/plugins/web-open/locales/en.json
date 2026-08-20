@@ -62,7 +62,16 @@
   "settings.idle": "Auto-close idle tabs",
   "settings.idleHelp": "Close background tabs that have stayed inactive longer than the timeout. Pinned, audible, and the last tab in a window are never closed.",
   "settings.idleToggle": "Enable auto-close",
-  "settings.idleTimeout": "Idle timeout (minutes)",
+  "settings.idleTimeout": "Idle timeout",
+  "settings.idleTimeout.15m": "15 minutes",
+  "settings.idleTimeout.30m": "30 minutes",
+  "settings.idleTimeout.1h": "1 hour",
+  "settings.idleTimeout.6h": "6 hours",
+  "settings.idleTimeout.12h": "12 hours",
+  "settings.idleTimeout.1d": "1 day",
+  "settings.idleTimeout.3d": "3 days",
+  "settings.idleTimeout.7d": "7 days",
+  "settings.idleTimeout.custom": "{minutes} minutes",
   "settings.footer": "Empty search never lists tabs; type a title or URL fragment. When disconnected, results stay silent. After this update, reload the unpacked extension so Chrome grants History access.",
   "settings.reloadHint": "After this update, reload the unpacked extension so Chrome grants the new History permission."
 }

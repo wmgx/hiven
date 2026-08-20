@@ -54,7 +54,7 @@
     {
       "pluginId": "translate",
       "dir": "translate",
-      "version": "1.0.3"
+      "version": "1.0.4"
     },
     {
       "pluginId": "regex-tester",
@@ -69,7 +69,7 @@
     {
       "pluginId": "clipboard-history",
       "dir": "clipboard-history",
-      "version": "1.3.0"
+      "version": "1.3.1"
     },
     {
       "pluginId": "js-filter",
@@ -79,7 +79,12 @@
     {
       "pluginId": "web-open",
       "dir": "web-open",
-      "version": "1.8.0"
+      "version": "1.9.0"
+    },
+    {
+      "pluginId": "qr-code",
+      "dir": "qr-code",
+      "version": "1.0.5"
     }
   ]
 }

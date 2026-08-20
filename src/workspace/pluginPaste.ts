@@ -7,6 +7,7 @@
 
 import type { PluginPasteApi, PluginPasteResult, PluginPermission, PluginPermissionSnapshot, PluginPrivateStorageApi } from './pluginTypes'
 import { requirePluginPermissions } from './pluginPermissions'
+import { writeClipboardImageBytes } from './pluginClipboard'
 
 async function writeTextToClipboard(text: string): Promise<void> {
   try {
@@ -15,29 +16,6 @@ async function writeTextToClipboard(text: string): Promise<void> {
   } catch {
     await navigator.clipboard.writeText(text)
   }
-}
-
-async function writeImageToClipboard(bytes: Uint8Array): Promise<void> {
-  try {
-    const { writeImage } = await import('@tauri-apps/plugin-clipboard-manager')
-    try {
-      const { Image } = await import('@tauri-apps/api/image')
-      const image = await Image.fromBytes(bytes)
-      await writeImage(image)
-    } catch {
-      await writeImage(bytes)
-    }
-    return
-  } catch {
-    // Fall through to browser ClipboardItem support.
-  }
-
-  const ClipboardItemCtor = globalThis.ClipboardItem
-  if (!navigator.clipboard?.write || !ClipboardItemCtor) {
-    throw new Error('Image clipboard write is not supported in this environment')
-  }
-  const blob = new Blob([bytes as BlobPart], { type: 'image/png' })
-  await navigator.clipboard.write([new ClipboardItemCtor({ [blob.type]: blob })])
 }
 
 // The hide-then-paste sequence must run as a single native command rather than
@@ -89,7 +67,7 @@ export function createPluginPaste(
         return { ok: false, fallback: 'none', message: 'Image blob is no longer available' }
       }
       try {
-        await writeImageToClipboard(bytes)
+        await writeClipboardImageBytes(bytes)
       } catch {
         return { ok: false, fallback: 'none', message: 'Failed to write image to clipboard' }
       }

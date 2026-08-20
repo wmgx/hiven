@@ -17,9 +17,9 @@ import type { PluginSettingsModalBodyProps } from '@hiven/plugin'
 import { getPluginHostSdk } from '@hiven/plugin'
 import type { ReactNode } from 'react'
 import {
-  MAX_IDLE_TIMEOUT_MINUTES,
-  MIN_IDLE_TIMEOUT_MINUTES,
+  IDLE_TIMEOUT_PRESET_MINUTES,
   clampIdleTimeoutMinutes,
+  idleTimeoutPresetKey,
   normalizeBrowserTabsSettings,
   type BrowserTabsSettings,
 } from '../browserTabsModel'
@@ -222,17 +222,26 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
         </div>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginTop: 2 }}>
           <ui.Text style={{ fontSize: 11.5, color: 'var(--text-2)' }}>{t('settings.idleTimeout')}</ui.Text>
-          <ui.TextInput
-            type="number"
-            min={MIN_IDLE_TIMEOUT_MINUTES}
-            max={MAX_IDLE_TIMEOUT_MINUTES}
-            step={5}
+          <ui.Select
             disabled={value.autoCloseIdleTabs !== true}
-            value={clampIdleTimeoutMinutes(value.idleTimeoutMinutes)}
+            value={String(clampIdleTimeoutMinutes(value.idleTimeoutMinutes))}
+            options={(() => {
+              const current = clampIdleTimeoutMinutes(value.idleTimeoutMinutes)
+              const options = IDLE_TIMEOUT_PRESET_MINUTES.map((minutes) => ({
+                value: String(minutes),
+                label: t(`settings.idleTimeout.${idleTimeoutPresetKey(minutes)}`),
+              }))
+              if (!(IDLE_TIMEOUT_PRESET_MINUTES as readonly number[]).includes(current)) {
+                return [
+                  ...options,
+                  { value: String(current), label: t('settings.idleTimeout.custom', { minutes: current }) },
+                ]
+              }
+              return options
+            })()}
             onChange={(event: { target: { value: string } }) => {
               setValue({ ...value, idleTimeoutMinutes: clampIdleTimeoutMinutes(event.target.value) })
             }}
-            style={{ width: 80 }}
           />
         </label>
       </Card>

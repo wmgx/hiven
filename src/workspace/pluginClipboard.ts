@@ -49,27 +49,53 @@ export async function writeClipboardText(text: string): Promise<void> {
   }
 }
 
-async function writeClipboardImage(bytes: Uint8Array): Promise<void> {
-  try {
-    const { writeImage } = await import('@tauri-apps/plugin-clipboard-manager')
-    try {
-      const { Image } = await import('@tauri-apps/api/image')
-      const image = await Image.fromBytes(bytes)
-      await writeImage(image)
-    } catch {
-      await writeImage(bytes)
-    }
-    return
-  } catch {
-    // Fall through to browser ClipboardItem support.
-  }
+async function decodeImageBytesToRgba(bytes: Uint8Array): Promise<{
+  rgba: Uint8ClampedArray
+  width: number
+  height: number
+}> {
+  const blob = new Blob([bytes as BlobPart], { type: 'image/png' })
+  const bitmap = await createImageBitmap(blob)
+  const canvas = document.createElement('canvas')
+  canvas.width = bitmap.width
+  canvas.height = bitmap.height
+  const context = canvas.getContext('2d')
+  if (!context) throw new Error('Cannot decode clipboard image without canvas context')
+  context.drawImage(bitmap, 0, 0)
+  const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
+  bitmap.close()
+  return { rgba: imageData.data, width: imageData.width, height: imageData.height }
+}
 
+async function writeClipboardImageViaClipboardItem(bytes: Uint8Array): Promise<void> {
   const ClipboardItemCtor = globalThis.ClipboardItem
   if (!navigator.clipboard?.write || !ClipboardItemCtor) {
     throw new Error('Image clipboard write is not supported in this environment')
   }
   const blob = new Blob([bytes as BlobPart], { type: 'image/png' })
-  await navigator.clipboard.write([new ClipboardItemCtor({ [blob.type]: blob })])
+  await navigator.clipboard.write([new ClipboardItemCtor({ 'image/png': blob })])
+}
+
+/** Write PNG (or other image) bytes to the system clipboard as an image, not as text. */
+export async function writeClipboardImageBytes(bytes: Uint8Array): Promise<void> {
+  try {
+    const { writeImage } = await import('@tauri-apps/plugin-clipboard-manager')
+    const { Image } = await import('@tauri-apps/api/image')
+    try {
+      const image = await Image.fromBytes(bytes)
+      await writeImage(image)
+      return
+    } catch {
+      const decoded = await decodeImageBytesToRgba(bytes)
+      const image = await Image.new(decoded.rgba, decoded.width, decoded.height)
+      await writeImage(image)
+      return
+    }
+  } catch {
+    // Native image write unavailable — browser ClipboardItem PNG.
+  }
+
+  await writeClipboardImageViaClipboardItem(bytes)
 }
 
 async function readClipboardSourceApp(): Promise<string | undefined> {
@@ -219,7 +245,7 @@ export function createPluginClipboard(
       if (!storage) throw new Error('Image clipboard write requires plugin blob storage')
       const bytes = await storage.blob.get(blobId)
       if (!bytes) throw new Error(`Blob not found: ${blobId}`)
-      await writeClipboardImage(bytes)
+      await writeClipboardImageBytes(bytes)
     },
 
     async writeFiles(paths: string[]): Promise<void> {

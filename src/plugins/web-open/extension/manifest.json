@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Hiven Browser",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Pushes Chromium tabs, history, visits, and page events to the Hiven desktop bridge.",
   "permissions": ["tabs", "alarms", "history", "storage"],
   "host_permissions": ["http://127.0.0.1:19246/*"],

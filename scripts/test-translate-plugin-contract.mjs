@@ -41,8 +41,8 @@ assert.deepEqual(
 )
 assert.deepEqual(
   manifestJson.permissions?.sort(),
-  ['network.request', 'storage.private'].sort(),
-  'translate should request only storage.private and network.request; no clipboard/paste/background permissions',
+  ['clipboard.write', 'network.request', 'storage.private'].sort(),
+  'translate should request storage, network, and clipboard write for copying translation',
 )
 
 const builtin = JSON.parse(builtinIndex)
@@ -76,13 +76,15 @@ assert.doesNotMatch(index, /panels\s*:/, 'translate should not register workspac
 assert.doesNotMatch(index, /toolbar\s*:/, 'translate should not register workspace toolbar actions')
 
 for (const source of [index, surface, settings, adapters].join('\n')) {
-  assert.doesNotMatch(source, /clipboard\.readText|host\.clipboard|pasteText|host\.paste/, 'translate must not read clipboard or paste to foreground app')
+  assert.doesNotMatch(source, /clipboard\.readText|pasteText|host\.paste/, 'translate must not read clipboard or paste to foreground app')
   assert.doesNotMatch(source, /replaceActiveText|insertText|getActiveText|getSelectionText|getPaneSnapshot/, 'translate must not read or write workspace text')
   assert.doesNotMatch(source, /history|repository|background/i, 'translate must not implement translation history/background storage')
 }
 
 assert.match(surface, /800/, 'TranslateSurface must debounce automatic translation at 800ms')
-assert.doesNotMatch(surface, />\s*翻译\s*<|>\s*Translate\s*<\/[Bb]utton|copy translated|复制译文|从剪贴板|clipboard/i, 'surface must not expose translate/copy/clipboard buttons')
+assert.doesNotMatch(surface, />\s*翻译\s*<|>\s*Translate\s*<\/[Bb]utton|从剪贴板/, 'surface must not expose a translate-action or clipboard-import button')
+assert.match(surface, /host\.clipboard\.writeText/, 'surface should copy translation via host clipboard write')
+assert.match(surface, /action\.copy/, 'surface should expose a header copy action')
 assert.match(surface, /textarea|TextArea/, 'surface must expose a text input area')
 assert.match(surface, /translatedText|translationText|outputText/, 'surface must render translation text')
 assert.match(surface, /smart/i, 'surface must support smart target language')

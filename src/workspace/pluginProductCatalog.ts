@@ -29,6 +29,7 @@ const PRODUCT_CATALOG: PluginProductMetadata[] = [
   product('hash-tools', 'Hash Tools', ['hash']),
   product('count', 'Count', ['count']),
   product('web-open', 'Browser', ['web-open'], '浏览器'),
+  product('qr-code', 'QR Code', ['qr-code'], '二维码'),
   product('feishu', 'Feishu', ['feishu'], '飞书'),
 ]
 
