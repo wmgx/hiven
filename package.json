@@ -52,7 +52,6 @@
     "test:plugin-package-lifecycle": "node scripts/test-plugin-package-lifecycle.mjs",
     "test:plugin-i18n-localization": "node scripts/test-plugin-i18n-localization.mjs",
     "test:plugin-merge-groups": "node scripts/test-plugin-merge-groups.mjs",
-    "test:plugin-selection-input-resolution": "node scripts/test-plugin-selection-input-resolution.mjs",
     "test:input-resolver-editor-context": "node scripts/test-input-resolver-editor-context.mjs",
     "test:workspace-public-api-window-boundary": "node scripts/test-workspace-public-api-window-boundary.mjs",
     "test:effect-runner-window-boundary": "node scripts/test-effect-runner-window-boundary.mjs",

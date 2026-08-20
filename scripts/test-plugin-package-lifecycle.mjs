@@ -15,7 +15,8 @@ function assertNotHas(source, pattern, message) {
 
 const files = {
   packageJson: read('package.json'),
-  pluginsSurfaceContent: read('src/surfaces/PluginsManagerSurfaceContent.tsx') + '\n' + read('src/surfaces/PluginsContent.tsx'),
+  pluginsSurfaceContent: read('src/surfaces/PluginsContent.tsx'),
+  settingsContent: read('src/surfaces/SettingsContent.tsx'),
   pluginRuntime: read('src/workspace/pluginRuntime.ts'),
   pluginTypes: read('src/workspace/pluginTypes.ts'),
   configInit: read('src/configInit.ts'),
@@ -35,7 +36,14 @@ assertHas(files.pluginRuntime, /clearPluginPermissions/, 'installed uninstall an
 assertHas(files.pluginRuntime, /removePluginSettings/, 'installed uninstall and dev remove should clear plugin settings')
 assertHas(files.pluginsSurfaceContent, /await\s+uninstallPlugin\(plugin\.pluginId\)/, 'PluginsManagerSurfaceContent uninstall button should await physical uninstall')
 assertHas(files.pluginsSurfaceContent, /setUpdateStatus\(['"`]checking['"`]\)|setUpdateStatus\(['"`]done['"`]\)/, 'PluginsManagerSurfaceContent should refresh directory summaries after uninstall')
-assertHas(files.pluginsSurfaceContent, /const\s+result\s*=\s*await\s+checkBuiltinPluginsUpdate\(\)[\s\S]*result\.error[\s\S]*setUpdateStatus\(['"`]error['"`]\)/, 'PluginsManagerSurfaceContent package update checks should surface checkBuiltinPluginsUpdate returned errors')
+// Builtin-package update checking moved from the plugins page to the settings
+// page; this assertion had been pinned to the old home. PluginsContent now only
+// flips a local status flag on uninstall (see the note in the cleanup commit).
+assertHas(
+  files.settingsContent,
+  /const\s+result\s*=\s*await\s+checkBuiltinPluginsUpdate\(\)[\s\S]*result\.error[\s\S]*setPluginStatus\(['"`]error['"`]\)/,
+  'settings page package update checks should surface checkBuiltinPluginsUpdate returned errors',
+)
 
 assertNotHas(files.configInit, /createScriptPluginEntrySource|parseScriptToAction/, 'configInit should no longer use the legacy defineAction parser/wrapper')
 assertNotHas(files.configInit, /releaseUserScriptPluginPackages|releaseBuiltinScriptPluginPackages/, 'configInit should no longer release defineAction scripts as packages')

@@ -12,22 +12,24 @@ function readI18n() {
   return readdirSync(dir).filter((f) => f.endsWith('.ts')).map((f) => readFileSync(join(dir, f), 'utf8')).join('\n')
 }
 
+/**
+ * Selected-character-count reporting in the editor status bar.
+ *
+ * The WorkspaceShell active-pane assertion and the two-pane input-resolver one
+ * went away with the main workbench; what remains — Monaco selection
+ * subscription, the count itself, its status-bar rendering and i18n label — is
+ * live behavior in EditorSurface.
+ */
 function assert(condition, message) {
   if (!condition) {
     throw new Error(message)
   }
 }
 
-const workspaceShell = read('src/components/workspace/WorkspaceShell.tsx')
 const textEditorCore = read('src/kits/editor/TextEditorCore.tsx')
 const editorStatusBar = read('src/components/editor/EditorStatusBar.tsx')
-const pluginInputResolver = read('src/workspace/pluginInputResolver.ts')
 const i18n = readI18n()
 
-assert(
-  /onPointerDownCapture=\{\(\)\s*=>\s*setActivePaneId\(paneId\)\}/.test(workspaceShell),
-  'WorkspaceShell should mark the clicked pane active before pane-local controls run',
-)
 
 assert(
   /onDidChangeCursorSelection/.test(textEditorCore),
@@ -50,9 +52,5 @@ assert(
   'i18n should include a selected character count label',
 )
 
-assert(
-  /activePaneIndex[\s\S]*otherPaneId[\s\S]*paneSlots\[0\]\.key[\s\S]*firstPaneId[\s\S]*paneSlots\[1\]\.key[\s\S]*otherPaneId/.test(pluginInputResolver),
-  'Plugin input resolver should use active pane plus the other pane when exactly two panes are open',
-)
 
 console.log('pane active selection status checks passed')
