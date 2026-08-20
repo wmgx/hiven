@@ -124,7 +124,9 @@ const requiredKeys = [
   'state.empty',
   'preview.empty',
   'hint.paste',
-  'hint.copy',
+  // 'hint.copy' removed: the surface footer now shows paste / return / delete
+  // only, and no component references the key.
+  'hint.returnToLauncher',
   'hint.delete',
   'action.back',
   'action.close',
@@ -229,7 +231,16 @@ assert.match(bgContent, /unwatch\(\)|unwatch\s*=\s*null/, 'Background stop must 
 const manifest = JSON.parse(read('src/plugins/clipboard-history/manifest.json'))
 
 assert.equal(manifest.pluginId, 'clipboard-history')
-assert.equal(manifest.version, '1.2.1')
+// Floor, not equality: plugin versions rise whenever behavior changes
+// (CLAUDE.md), so pinning an exact version guarantees a false failure on the
+// next legitimate bump — the same trap already hit in web-open twice.
+{
+  const [major, minor] = manifest.version.split('.').map(Number)
+  assert.ok(
+    major > 1 || (major === 1 && minor >= 2),
+    `clipboard-history version must be >= 1.2, got ${manifest.version}`,
+  )
+}
 assert.ok(manifest.capabilities.includes('settings'))
 assert.ok(manifest.capabilities.includes('ui'))
 assert.ok(manifest.capabilities.includes('background'))
