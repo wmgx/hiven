@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { showToast } from './workspace/toast'
 import type { Locale } from './i18n'
 import { migrateLocalStorageKey } from './utils/persistMigration'
 import type {
@@ -77,13 +76,6 @@ export interface ConsoleLog {
   message: string
 }
 
-export type LastCommandStatus = {
-  title: string
-  status: 'running' | 'success' | 'error'
-  message?: string
-  updatedAt: number
-}
-
 export type AppTheme = 'dark' | 'light'
 export type GlobalPinnedLauncherDoubleModifier = 'Command' | 'Shift' | 'Option'
 export type GlobalLauncherPosition = {
@@ -135,10 +127,6 @@ interface AppState {
   quickEditorCommandInitialQuery: string
   openQuickEditorCommand: (initialQuery?: string) => void
   closeQuickEditorCommand: () => void
-
-  // Last command status
-  lastCommandStatus: LastCommandStatus | null
-  setLastCommandStatus: (status: LastCommandStatus | null) => void
 
   // Launcher usage (per surface, scoped by system launcher item key)
   launcherUsageBySurface: LauncherUsageBySurface
@@ -257,17 +245,6 @@ export const useAppStore = create<AppState>()(persist((set) => ({
   quickEditorCommandInitialQuery: '',
   openQuickEditorCommand: (initialQuery?: string) => set({ quickEditorCommandOpen: true, quickEditorCommandInitialQuery: initialQuery ?? '' }),
   closeQuickEditorCommand: () => set({ quickEditorCommandOpen: false, quickEditorCommandInitialQuery: '' }),
-
-  // Last command status
-  lastCommandStatus: null,
-  setLastCommandStatus: (status) => {
-    set({ lastCommandStatus: status })
-    if (status && status.status === 'success') {
-      showToast(status.message || status.title, 'success')
-    } else if (status && status.status === 'error') {
-      showToast(status.message || status.title, 'error')
-    }
-  },
 
   // Launcher usage (per surface, scoped by system launcher item key)
   launcherUsageBySurface: emptyUsageBySurface(),

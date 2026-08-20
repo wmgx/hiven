@@ -1,5 +1,6 @@
 import { useAppStore } from '../../store'
 import { openExternalUrl } from '../effectRunner'
+import { showToast } from '../toast'
 import type { FluxEffect, SerializedRange } from '../types'
 import type { PluginLauncherApi } from '../launcher/types'
 import { useQuickEditorStore } from './quickEditorStore'
@@ -138,12 +139,7 @@ export function createQuickEditorLauncherApi(baseApi: PluginLauncherApi): Plugin
     },
     dispatchEffects: applyEffectsToQuickEditor,
     showMessage: (message: string, level = 'info') => {
-      useAppStore.getState().setLastCommandStatus({
-        title: message,
-        status: level === 'error' ? 'error' : 'success',
-        message,
-        updatedAt: Date.now(),
-      })
+      showToast(message, level)
     },
   }
 }

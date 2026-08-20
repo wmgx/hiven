@@ -18,6 +18,7 @@ import { createPluginPaste } from './pluginPaste'
 import { createPluginNetwork } from './pluginNetwork'
 import { createPluginShell } from './pluginShell'
 import { useAppStore } from '../store'
+import { showToast } from './toast'
 import { getPluginPermissionSnapshot, missingPluginPermissions, usePluginPermissionStore } from './pluginPermissions'
 import { resolvePluginSettingsSource } from './launcher/pluginSource'
 
@@ -55,12 +56,7 @@ function buildBackgroundContext(
     network: createPluginNetwork(permissions),
     shell: createPluginShell(permissions),
     showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error') {
-      useAppStore.getState().setLastCommandStatus({
-        title: message,
-        status: level === 'error' ? 'error' : 'success',
-        message,
-        updatedAt: Date.now(),
-      })
+      showToast(message, level ?? 'info')
     },
   }
 }

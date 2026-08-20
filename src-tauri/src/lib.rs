@@ -584,11 +584,6 @@ fn restore_launcher_previous_input_source() -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn prepare_launcher_input_source(app: tauri::AppHandle) -> Result<(), String> {
-    run_launcher_input_source_on_main_thread(app, switch_to_default_english_input_source)
-}
-
-#[tauri::command]
 async fn restore_launcher_input_source(app: tauri::AppHandle) -> Result<(), String> {
     run_launcher_input_source_on_main_thread(app, restore_launcher_previous_input_source)
 }
@@ -6475,7 +6470,6 @@ pub fn run() {
             fetch_github_directory,
             hotkeys::register_double_modifier_hotkey,
             hotkeys::unregister_double_modifier_hotkey,
-            prepare_launcher_input_source,
             restore_launcher_input_source,
             show_launcher_window,
             focus_launcher_webview,

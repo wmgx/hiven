@@ -196,12 +196,7 @@ export function PluginSurfaceRenderer({
               onClose()
             },
             showMessage: (message, level) => {
-              useAppStore.getState().setLastCommandStatus({
-                title: message,
-                status: level === 'error' ? 'error' : 'success',
-                message,
-                updatedAt: Date.now(),
-              })
+              showToast(message, level ?? 'info')
             },
             showToast: (message, level, options) => showToast(message, level, options),
             dismissToast,

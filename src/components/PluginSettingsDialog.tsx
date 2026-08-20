@@ -10,6 +10,7 @@ import { X } from 'lucide-react'
 import { t } from '../i18n'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
 import { useAppStore } from '../store'
+import { showToast } from '../workspace/toast'
 import { pluginRegistry } from '../workspace/pluginRegistry'
 import {
   usePluginSettingsStore,
@@ -286,12 +287,7 @@ function SettingsDialogBody({
     permissions,
     storage: createPluginPrivateStorage(source, pluginId, permissions),
     showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error') {
-      useAppStore.getState().setLastCommandStatus({
-        title: message,
-        status: level === 'error' ? 'error' : 'success',
-        message,
-        updatedAt: Date.now(),
-      })
+      showToast(message, level ?? 'info')
     },
   }), [source, pluginId, permissions])
 

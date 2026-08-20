@@ -11,7 +11,7 @@
  */
 
 import { openExternalUrl } from '../effectRunner'
-import { useAppStore } from '../../store'
+import { showToast } from '../toast'
 import { requestOpenLauncherHostSurface } from '../launcherHostSurfaceBridge'
 import { openLauncherHostedPluginSurface } from '../pluginSurfaceOpenRequest'
 import { createPluginPrivateStorage } from '../pluginStorage'
@@ -211,12 +211,7 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
       return { applied: [], errors: ['dispatchEffects is only available in the editor window'] }
     },
     showMessage: (message: string, level = 'info') => {
-      useAppStore.getState().setLastCommandStatus({
-        title: message,
-        status: level === 'error' ? 'error' : 'success',
-        message,
-        updatedAt: Date.now(),
-      })
+      showToast(message, level)
     },
     openDiffPage: (payload) => {
       const original = payload?.original

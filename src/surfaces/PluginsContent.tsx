@@ -265,7 +265,9 @@ export function PluginsContent({}: PluginsContentProps) {
   const [remoteUrl, setRemoteUrl] = useState('')
   const [remoteOpen, setRemoteOpen] = useState(false)
   const [addMenuOpen, setAddMenuOpen] = useState(false)
-  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'done' | 'error'>('idle')
+  // Value itself is inert — only used to retrigger the [updateStatus] refetch effect
+  // below after an uninstall completes.
+  const [updateStatus, setUpdateStatus] = useState<'idle' | 'done'>('idle')
   const [openMenuKey, setOpenMenuKey] = useState<string | null>(null)
   const [pendingDangerKey, setPendingDangerKey] = useState<string | null>(null)
   const [menuFocusIndex, setMenuFocusIndex] = useState(0)
@@ -719,7 +721,6 @@ export function PluginsContent({}: PluginsContentProps) {
         confirmLabel: t(locale, 'scripts.actionUninstallConfirm'),
         action: () => void runTask(key, async () => {
           await uninstallPlugin(plugin.pluginId)
-          setUpdateStatus('checking')
           setUpdateStatus('done')
         }),
       })
@@ -1077,9 +1078,6 @@ export function PluginsContent({}: PluginsContentProps) {
       </div>
 
       {/* Errors */}
-      {updateStatus === 'error' && (
-        <div className="plugins-error-banner">{t(locale, 'scripts.packageUpdateError')}</div>
-      )}
       {listError && (
         <div className="plugins-error-banner">
           <AlertTriangle size={12} /> {listError}

@@ -16,10 +16,6 @@ export function runLauncherEscapeInterceptor(event: KeyboardEvent): boolean {
   return activeInterceptor ? activeInterceptor(event) : false
 }
 
-export function hasLauncherEscapeInterceptor(): boolean {
-  return activeInterceptor != null
-}
-
 /** Register while mounted. Pass `null` to skip registration (e.g. wrong host). */
 export function useLauncherEscapeInterceptor(handler: LauncherEscapeInterceptor | null) {
   useEffect(() => {
