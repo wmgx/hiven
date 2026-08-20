@@ -3,9 +3,15 @@ import { join } from 'node:path'
 
 const root = process.cwd()
 
+/**
+ * Deliberately strict: the previous version returned '' for a missing file, which
+ * made every "must NOT contain" assertion below pass vacuously. PaneEditor was
+ * deleted in the workbench retirement and this file kept reporting green on it.
+ */
 function read(path) {
   const absolute = join(root, path)
-  return existsSync(absolute) ? readFileSync(absolute, 'utf8') : ''
+  if (!existsSync(absolute)) throw new Error(`${path} no longer exists — repoint or drop the assertions that read it`)
+  return readFileSync(absolute, 'utf8')
 }
 
 function assert(condition, message) {
@@ -18,7 +24,6 @@ const coreTypes = read('src/kits/editor/types.ts')
 const core = read('src/kits/editor/TextEditorCore.tsx')
 const surface = read('src/components/editor/EditorSurface.tsx')
 const statusBar = read('src/components/editor/EditorStatusBar.tsx')
-const paneEditor = read('src/components/workspace/PaneEditor.tsx')
 const quickPanel = read('src/components/quickEditor/QuickEditorPanel.tsx')
 const dualEditor = read('src/kits/ui/DualEditorView.tsx')
 
@@ -34,8 +39,12 @@ for (const [label, text] of [['types', coreTypes], ['TextEditorCore', core]]) {
 // 2. core owns the unified baseline.
 assert(/tabSize:\s*2/.test(core), 'TextEditorCore should own the unified tabSize baseline')
 assert(/automaticLayout:\s*true/.test(core), 'TextEditorCore should own automaticLayout baseline')
-assert(/padding:\s*\{\s*top:\s*12,\s*bottom:\s*12,\s*left:\s*8\s*\}/.test(core),
+// `left` left the padding object: horizontal room is now derived from
+// lineDecorationsWidth so the gutter stays consistent with and without folding.
+assert(/padding:\s*\{\s*top:\s*12,\s*bottom:\s*12\s*\}/.test(core),
   'TextEditorCore should own the unified padding baseline')
+assert(/const\s+lineDecorationsWidth\s*=\s*foldingEnabled\s*\?\s*8\s*:\s*24/.test(core),
+  'TextEditorCore should own the unified gutter width baseline')
 assert(/executeEdits\('external'/.test(core), 'TextEditorCore should own the external value sync')
 assert(/startFindReplaceAction/.test(core), 'TextEditorCore should own the find-replace override')
 
@@ -47,7 +56,6 @@ assert(/useT\('editor'\)/.test(statusBar), 'EditorStatusBar should use editor i1
 
 // 4. Hosts no longer mount Monaco directly.
 for (const [label, text] of [
-  ['PaneEditor', paneEditor],
   ['QuickEditorPanel', quickPanel],
   ['DualEditorView', dualEditor],
 ]) {
@@ -56,7 +64,6 @@ for (const [label, text] of [
   assert(!/executeEdits\('external'/.test(text),
     `${label} must not re-implement external text sync`)
 }
-assert(/<EditorSurface/.test(paneEditor), 'PaneEditor should render EditorSurface')
 assert(/<EditorSurface/.test(quickPanel), 'QuickEditorPanel should render EditorSurface')
 assert(/<TextEditorCore/.test(dualEditor), 'DualEditorView should compose TextEditorCore')
 

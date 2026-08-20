@@ -56,6 +56,7 @@ const files = {
   tauriLib: read('src-tauri/src/lib.rs'),
   tauriHotkeys: read('src-tauri/src/hotkeys.rs'),
   searchRanking: read('src/workspace/searchRanking.ts'),
+  launcherRanking: read('src/workspace/launcher/ranking.ts'),
   tauriConfig: read('src-tauri/tauri.conf.json'),
   tauriCapabilities: read('src-tauri/capabilities/default.json'),
 }
@@ -210,25 +211,34 @@ check('launcher surfaces do not auto-discover legacy plugin commands', () => {
 })
 
 check('global launcher reuses shared search ranking logic', () => {
+  // Text-match quality and usage signal were split apart: searchRanking.ts scores
+  // how well a query matches an item's fields, launcher/ranking.ts owns frecency
+  // and every other signal. The launcher must consume both rather than re-deriving
+  // either one locally.
+  assertHas(
+    files.launcherRanking,
+    /scoreSearchableFields|searchableFieldsMatch/,
+    'launcher ranking should use shared search ranking helpers instead of local match logic',
+  )
   assertHas(
     files.globalLauncher,
-    /scoreSearchableFields|searchableFieldsMatch/,
-    'GlobalLauncher should use shared search ranking helpers instead of local ranking logic',
+    /rankLauncherItems|rankedLauncherItems/,
+    'GlobalLauncher should rank through the shared launcher ranker',
+  )
+  assertHas(
+    files.launcherRanking,
+    /Math\.log1p\(record\.count\)\s*\*\s*USAGE_FREQ_WEIGHT/,
+    'launcher ranking should include usage frequency',
+  )
+  assertHas(
+    files.launcherRanking,
+    /export function frecencyScore/,
+    'launcher ranking should include recency through frecency',
   )
   assertHas(
     files.searchRanking,
-    /recentNames\.indexOf\(usageKey\)/,
-    'shared search ranking should include recency',
-  )
-  assertHas(
-    files.searchRanking,
-    /Math\.log1p\(usageCounts\[usageKey\]/,
-    'shared search ranking should include usage frequency',
-  )
-  assertHas(
-    files.searchRanking,
-    /tier\s*\*\s*1000\s*\+\s*baseScore/,
-    'shared search ranking should combine match quality with recent usage',
+    /return tier \* 1000/,
+    'shared search ranking should score pure match quality, leaving usage to the launcher ranker',
   )
   assertHas(
     files.searchRanking,
@@ -352,21 +362,30 @@ check('launcher route clears the document background outside the panel', () => {
   )
 })
 
-check('standalone launcher rehydrates persisted settings before opening', () => {
+check('standalone launcher opens synchronously and rehydrates after', () => {
+  // This check used to require rehydrate-then-open. That ordering is now a known
+  // regression: awaiting rehydrate first left the panel visible with no mounted
+  // search input, so the native first responder had no caret to land on and the
+  // user had to click before typing. Open is synchronous; rehydrate trails it.
   assertHas(
     files.app,
     /rehydratePersistedAppState\(\)/,
     'LauncherWindowApp should rehydrate persisted settings so theme changes from the main window are fresh',
   )
-  const launcherOpen = files.app.match(/const\s+openLauncher\s*=\s*\(\)\s*=>\s*\{[\s\S]*?rehydratePersistedAppState[\s\S]*?openGlobalLauncherOverlay\(\)/)?.[0] ?? ''
+  const launcherOpen = files.app.match(/const\s+openLauncher\s*=\s*\(\)\s*=>\s*\{[\s\S]*?rehydratePersistedAppState/)?.[0] ?? ''
   assert.ok(launcherOpen, 'LauncherWindowApp should define an openLauncher handler')
-  const rehydrateIndex = launcherOpen.indexOf('rehydratePersistedAppState')
   const openIndex = launcherOpen.indexOf('openGlobalLauncherOverlay')
-  assert.ok(rehydrateIndex >= 0, 'openLauncher should rehydrate persisted settings')
+  const rehydrateIndex = launcherOpen.indexOf('rehydratePersistedAppState')
   assert.ok(openIndex >= 0, 'openLauncher should open the launcher overlay')
+  assert.ok(rehydrateIndex >= 0, 'openLauncher should still rehydrate persisted settings')
   assert.ok(
-    rehydrateIndex < openIndex,
-    'openLauncher should rehydrate persisted settings before opening the launcher overlay',
+    openIndex < rehydrateIndex,
+    'openLauncher must open the overlay before rehydrating, or first paint lands without a mounted input',
+  )
+  assertHas(
+    files.app,
+    /void \(async \(\) => \{[\s\S]{0,400}await rehydratePersistedAppState\(\)/,
+    'rehydrate must run detached so it cannot block the open path',
   )
 })
 
@@ -493,11 +512,24 @@ check('standalone launcher exposes the whole non-interactive panel as a drag sur
     /className="global-launcher-panel[\s\S]{0,220}onPointerDown=\{beginDrag\}/,
     'GlobalLauncher should bind drag handling to the panel so empty panel/header/body space can move the launcher',
   )
-  assertHas(
-    files.globalLauncher,
-    /closest\([\s\S]{0,200}\[data-launcher-scrollable\][\s\S]{0,80}\[data-no-drag\][\s\S]{0,200}input,\s*textarea,\s*select,\s*button[\s\S]{0,300}\.monaco-editor/,
-    'GlobalLauncher drag handling should preserve interactive controls and scrollable regions',
-  )
+  // The guard list became a joined array, so assert membership instead of one
+  // brittle mega-regex over its serialized form.
+  const dragGuardList = files.globalLauncher.match(/event\.target\.closest\(\s*\[([\s\S]*?)\]\.join/)?.[1] ?? ''
+  assert.ok(dragGuardList, 'GlobalLauncher drag handling should exclude a list of non-draggable selectors')
+  for (const selector of [
+    '[data-launcher-scrollable]',
+    '[data-no-drag]',
+    'input',
+    'textarea',
+    'select',
+    'button',
+    '.monaco-editor',
+  ]) {
+    assert.ok(
+      dragGuardList.includes(`'${selector}'`),
+      `GlobalLauncher drag handling should preserve ${selector} instead of stealing the gesture`,
+    )
+  }
   assertHas(
     files.globalLauncher,
     /\[role="grid"\]|\.rdg|csv-tools-surface/,
@@ -581,7 +613,7 @@ check('standalone launcher locks webview document panning while preserving list 
   )
   assertHas(
     files.globalLauncher,
-    /closest\([\s\S]{0,240}data-launcher-scrollable[\s\S]{0,400}\)/,
+    /event\.target\.closest\(\s*\[[\s\S]{0,80}'\[data-launcher-scrollable\]'/,
     'Global launcher dragging should not start from scrollable surface bodies or their scrollbars',
   )
 })
@@ -666,15 +698,31 @@ check('standalone launcher closes on Escape without bubbling to the app', () => 
     /function|const\s+handleHostEscape[\s\S]{0,700}controllerRef\.current\?\.back\(\)[\s\S]{0,260}closeLauncher\(\)/,
     'host Escape should go back from nested launcher frames before closing the launcher',
   )
+  // Escape now runs through a layer-interceptor chain (settings / plugin surface /
+  // permission / quick editor) before the launcher may claim the key, so assert the
+  // ordering of the handler body rather than raw character distance between calls.
+  {
+    const body = files.globalLauncher.match(/const handleHostEscape = useCallback\(\(event: KeyboardEvent\) => \{[\s\S]*?\n  \}, \[/)?.[0] ?? ''
+    assert.ok(body, 'handleHostEscape should exist as the host-level Escape handler')
+    const at = (needle) => body.indexOf(needle)
+    assert.ok(at("if (event.key !== 'Escape') return") === 0 || at("if (event.key !== 'Escape') return") > 0, 'handleHostEscape should ignore non-Escape keys first')
+    assert.ok(
+      at('runLauncherEscapeInterceptor(event)') > 0 && at('runLauncherEscapeInterceptor(event)') < at('event.preventDefault()'),
+      'layer interceptors must get first refusal before the launcher claims Escape',
+    )
+    assert.ok(
+      at('event.preventDefault()') > 0 && at('event.stopPropagation()') > at('event.preventDefault()'),
+      'Escape should stop app-level key handlers once the launcher claims it',
+    )
+    assert.ok(
+      at('controllerRef.current?.back?.()') > at('event.stopPropagation()') && at('closeLauncher()') > at('controllerRef.current?.back?.()'),
+      'Escape should pop the controller frame stack before closing the launcher',
+    )
+  }
   assertHas(
     files.globalLauncher,
-    /event\.key\s*!==\s*['"]Escape['"]\)\s*return[\s\S]{0,300}event\.preventDefault\(\)[\s\S]{0,180}event\.stopPropagation\(\)[\s\S]{0,180}closeLauncher\(\)/,
-    'Escape should only close the global launcher and stop app-level key handlers',
-  )
-  assertHas(
-    files.globalLauncher,
-    /hideLauncherWindow\(\)/,
-    'canceling the standalone launcher should only hide the launcher window',
+    /await hideLauncherWindow\(\{\s*restoreForeground\s*\}\)/,
+    'canceling the standalone launcher should only hide the launcher window, carrying the host foreground-restore policy',
   )
   assertHas(
     files.globalLauncher,
@@ -699,16 +747,31 @@ check('standalone launcher closes on Escape without bubbling to the app', () => 
 })
 
 check('standalone launcher closes when its window loses focus', () => {
-  assertHas(
-    files.globalLauncher,
-    /onCurrentLauncherWindowFocusChanged\(\(focused\)[\s\S]{0,220}if\s*\(!focused[\s\S]{0,80}\)\s*closeLauncher\(\)/,
-    'standalone launcher should hide itself when the launcher window loses focus',
-  )
-  assertHas(
-    files.globalLauncher,
-    /const\s+resetLauncherSession[\s\S]{0,500}setSurfaceFrame\(null\)[\s\S]{0,500}controllerRef\.current\?\.reset\(\)/,
-    'closing the launcher should reset plugin surface and controller state',
-  )
+  // Blur-dismiss got smarter: it still closes on blur, but not when a surface
+  // opted out (closeOnBlur: false) and not when focus merely moved to a sibling
+  // hiven window such as clipboard history.
+  {
+    const blurHandler = files.globalLauncher.match(/onCurrentLauncherWindowFocusChanged\(\(focused\) => \{[\s\S]*?\n    \}\)/)?.[0] ?? ''
+    assert.ok(blurHandler, 'standalone launcher should listen for launcher window focus changes')
+    assert.match(blurHandler, /if \(focused\) return/, 'gaining focus must not close the launcher')
+    assert.match(blurHandler, /closeLauncher\(\)/, 'standalone launcher should hide itself when the launcher window loses focus')
+    assert.match(blurHandler, /shouldKeepLauncherOpenOnBlur\(\)/, 'blur-dismiss must let focus move to sibling hiven windows without closing')
+    assert.match(blurHandler, /closeOnBlurRef\.current === false/, 'surfaces that opt out of blur-close must be honored')
+    assert.match(
+      blurHandler,
+      /generation !== blurGeneration/,
+      'a stale blur check must not close a launcher that was refocused while the check was in flight',
+    )
+  }
+  {
+    // resetLauncherSession grew sticky-query handling between the two calls, so
+    // bound the match by the callback body rather than a character budget.
+    const reset = files.globalLauncher.match(/const resetLauncherSession = useCallback\([\s\S]*?\n  \}, \[/)?.[0] ?? ''
+    assert.ok(reset, 'closing the launcher should go through resetLauncherSession')
+    for (const call of ['clearPluginSurfaceTool()', 'setSurfaceFrame(null)', 'controllerRef.current?.reset()']) {
+      assert.ok(reset.includes(call), `resetLauncherSession should reset plugin surface and controller state (${call})`)
+    }
+  }
   assertHas(
     files.globalLauncher,
     /if\s*\(open\)\s*return[\s\S]{0,320}controllerReset\(\)/,
@@ -851,15 +914,37 @@ check('native launcher is configured as a non-activating macOS panel', () => {
     /NSWindowStyleMaskNonactivatingPanel|1usize\s*<<\s*7/,
     'native launcher should apply the NSWindowStyleMaskNonactivatingPanel style bit',
   )
+  // Keying was extracted into rekey_launcher_window so it can run twice: once here
+  // for early key routing, once from the frontend after the search input mounts.
+  {
+    const showFn = files.tauriLib.match(/fn show_launcher_window_without_app_activation_macos\([\s\S]*?\n\}/)?.[0] ?? ''
+    assert.ok(showFn, 'src-tauri/src/lib.rs should expose the non-activating show path')
+    assert.match(showFn, /promote_window_to_nonactivating_panel\(ns_window\)/, 'the show path should promote the window to a non-activating panel')
+    assert.match(showFn, /orderFrontRegardless/, 'the show path should order the panel front without activating the app')
+    assert.match(showFn, /rekey_launcher_window\(window\)/, 'the show path should key the panel through the shared rekey helper')
+    assertHas(
+      files.tauriLib,
+      /fn rekey_launcher_window[\s\S]{0,900}makeKeyWindow/,
+      'native launcher should key the panel with makeKeyWindow, which does not activate the app',
+    )
+    assert.doesNotMatch(
+      files.tauriLib,
+      /msg_send!\[ns_window, makeKeyAndOrderFront/,
+      'makeKeyAndOrderFront would activate the app — the panel must stay non-activating',
+    )
+  }
+  // Passing the raw ns_view here is the bug, not the contract: the responder must
+  // land on WebKit's WKContentView, because one stuck on wry's WryWebViewParent
+  // leaves the page inactive — focus without a caret, keys never reaching the DOM.
   assertHas(
     files.tauriLib,
-    /orderFrontRegardless[\s\S]{0,220}makeKeyWindow|makeKeyWindow[\s\S]{0,220}orderFrontRegardless/,
-    'native launcher should order and key the panel without app activation',
+    /makeFirstResponder:\s*responder_target/,
+    'native launcher should make the WebView first responder so the search input receives keyboard focus',
   )
   assertHas(
     files.tauriLib,
-    /makeFirstResponder:\s*ns_view/,
-    'native launcher should make the WebView first responder so the search input receives keyboard focus',
+    /fn launcher_first_responder_target/,
+    'first-responder targeting should resolve WebKit content view rather than wry container',
   )
 })
 

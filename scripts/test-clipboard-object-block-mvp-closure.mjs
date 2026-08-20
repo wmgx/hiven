@@ -35,14 +35,18 @@ function transpileAndRun(path, globals = {}) {
 
 // ─── Load modules ──────────────────────────────────────────────────────────────
 const snapshot = transpileAndRun('src/launcher/clipboard/clipboardSnapshot.ts')
+const detect = transpileAndRun('src/kits/content/detectContent.ts')
+// Real attach policy, not a hand-written approximation of it — see the same note
+// in test-clipboard-direction-adjustment.mjs.
+const attachPolicy = transpileAndRun('src/launcher/clipboard/attachPolicy.ts', {
+  detectContent: detect.detectContent,
+  detectClipboardFilePath: snapshot.detectClipboardFilePath,
+  isSoftClipboardOperand: snapshot.isSoftClipboardOperand,
+})
 const objectBlock = transpileAndRun('src/launcher/clipboard/objectBlock.ts', {
   shouldAutoAttachClipboard: snapshot.shouldAutoAttachClipboard,
   shouldShowRecentClipboardHint: snapshot.shouldShowRecentClipboardHint,
-  isStrongClipboardAttachEligible: (text) => {
-    const t = String(text||'').trim()
-    return t.startsWith('{') || t.startsWith('[') || /^https?:\/\//i.test(t) || /\.csv$/i.test(t)
-  },
-  isSoftClipboardOperand: snapshot.isSoftClipboardOperand,
+  isStrongClipboardAttachEligible: attachPolicy.isStrongClipboardAttachEligible,
   isSoftClipboardOperand: snapshot.isSoftClipboardOperand,
   detectClipboardFilePath: snapshot.detectClipboardFilePath,
   detectClipboardType: snapshot.detectClipboardType,
