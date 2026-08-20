@@ -469,6 +469,7 @@ const definition: PluginDefinition = {
         id: 'calc-result',
         display: { title: `${input.trim()} = ${result}`, subtitle: input, icon: 'Calculator' },
         behavior: { type: 'perform' },
+        directAnswer: true,
         async execute(ctx2) {
           await ctx2.api.copyText(result)
           return { ok: true, output: { choices: [{ id: 'copy', title: result, primaryAction: async () => { await ctx2.api.copyText(result) } }] } }

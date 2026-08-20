@@ -390,6 +390,7 @@ export const dateTimeAssistantPlugin = definePlugin({
               id: 'dt-now-timestamp',
               display: { title: `${trimmed} -> ${timestampValue}`, subtitle: resultKindLabel('timestamp', ctx.locale), icon: 'Clock' },
               behavior: { type: 'perform' },
+              directAnswer: true,
               async execute(ctx2) {
                 await ctx2.api.copyText(timestampValue)
                 return { ok: true, output: { choices: [{ id: 'copy', title: timestampValue, primaryAction: async () => { await ctx2.api.copyText(timestampValue) } }] } }
@@ -399,6 +400,7 @@ export const dateTimeAssistantPlugin = definePlugin({
               id: 'dt-now-datetime',
               display: { title: `${trimmed} -> ${dateTimeValue}`, subtitle: resultKindLabel('datetime', ctx.locale), icon: 'Clock' },
               behavior: { type: 'perform' },
+              directAnswer: true,
               async execute(ctx2) {
                 await ctx2.api.copyText(dateTimeValue)
                 return { ok: true, output: { choices: [{ id: 'copy', title: dateTimeValue, primaryAction: async () => { await ctx2.api.copyText(dateTimeValue) } }] } }
@@ -414,6 +416,7 @@ export const dateTimeAssistantPlugin = definePlugin({
           id: `dt-date-timestamp-${index}`,
           display: { title: `${trimmed} -> ${result.display}`, subtitle: resultKindLabel(result.kind, ctx.locale), icon: 'Clock' },
           behavior: { type: 'perform' },
+          directAnswer: true,
           async execute(ctx2) {
             await ctx2.api.copyText(result.value)
             return { ok: true, output: { choices: [{ id: 'copy', title: result.value, primaryAction: async () => { await ctx2.api.copyText(result.value) } }] } }
@@ -428,6 +431,7 @@ export const dateTimeAssistantPlugin = definePlugin({
         id: 'dt-result',
         display: { title: `${trimmed} -> ${parsed.display}`, subtitle: resultKindLabel(parsed.kind, ctx.locale), icon: 'Clock' },
         behavior: { type: 'perform' },
+        directAnswer: true,
         async execute(ctx2) {
           await ctx2.api.copyText(parsed.value)
           return { ok: true, output: { choices: [{ id: 'copy', title: parsed.value, primaryAction: async () => { await ctx2.api.copyText(parsed.value) } }] } }

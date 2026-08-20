@@ -26,6 +26,7 @@ import type {
 } from './types'
 import { normalizeLauncherSurfaceId } from './types'
 import { emptyResult, textResult, replaceActiveTextResult, errorResult, choicesResult, REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID } from './output'
+import { toDirectAnswer } from './normalizeContribution'
 import type { Locale } from '../../i18n'
 import { getPluginPermissionSnapshot } from '../pluginPermissions'
 import { createPluginShell } from '../pluginShell'
@@ -157,6 +158,7 @@ export function adaptToolToLauncherItem(
     // Intent: declarative accepts + optional runtime match (same as textMatch — runtime-only)
     accepts: tool.accepts,
     match: tool.match,
+    directAnswer: toDirectAnswer(tool.directAnswer),
     // Legacy usage keys: the tool id may match a command id used in old usage data
     legacyUsageKeys: [tool.id],
     execute,

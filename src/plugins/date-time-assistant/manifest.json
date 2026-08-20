@@ -2,6 +2,6 @@
   "pluginId": "date-time-assistant",
   "displayName": "Date & Time Assistant",
   "displayNameI18n": { "zh": "时间助手" },
-  "version": "1.5.0",
+  "version": "1.6.0",
   "capabilities": ["command", "instant-suggestion"]
 }

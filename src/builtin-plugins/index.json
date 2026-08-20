@@ -1,5 +1,5 @@
 {
-  "version": 42,
+  "version": 44,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -44,12 +44,12 @@
     {
       "pluginId": "calculator",
       "dir": "calculator",
-      "version": "1.2.1"
+      "version": "1.3.0"
     },
     {
       "pluginId": "date-time-assistant",
       "dir": "date-time-assistant",
-      "version": "1.5.0"
+      "version": "1.6.0"
     },
     {
       "pluginId": "translate",

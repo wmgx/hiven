@@ -709,6 +709,12 @@ export type PluginToolContribution<TSettings = unknown> = {
    * Synchronous, local, budgeted by the host intent engine.
    */
   match?: (ctx: IntentMatchContext) => IntentHit[] | null
+  /**
+   * Declare that this tool's result IS the answer to the current input, not a
+   * command to pick — same semantics as {@link LauncherItemContribution.directAnswer}.
+   * Boolean by design; the ranking nudge is host-assigned (see normalizeContribution.ts).
+   */
+  directAnswer?: boolean
   run(ctx: PluginToolContext<TSettings>): Promise<PluginToolResult> | PluginToolResult
   surfaces?: PluginToolSurfaces
 }

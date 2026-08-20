@@ -29,6 +29,15 @@ import { resolvePluginSettingsSource } from './pluginSource'
  */
 const PLUGIN_DIRECT_ANSWER_PRIORITY = 30
 
+/**
+ * Shared across all contribution-authoring forms (launcher.items, tools,
+ * dynamicItems) so a plugin-declared `directAnswer: true` always resolves to the
+ * same host-assigned priority no matter which form declared it.
+ */
+export function toDirectAnswer(flag: boolean | undefined): LauncherItem['directAnswer'] {
+  return flag ? { priority: PLUGIN_DIRECT_ANSWER_PRIORITY, origin: 'builtin' as const } : undefined
+}
+
 export type NormalizeContributionOptions = {
   systemKey: SystemLauncherItemKey
   kind: LauncherItemContributionKind
@@ -56,9 +65,7 @@ export function normalizeContribution(
   // Answer semantics are plugin-declared; the ranking nudge is host-assigned so
   // plugins can't outbid each other (or the user's own learned rules) for the
   // top answer slot. Anything truthy means "I am an answer", nothing more.
-  const directAnswer = contribution.directAnswer
-    ? { priority: PLUGIN_DIRECT_ANSWER_PRIORITY, origin: 'builtin' as const }
-    : undefined
+  const directAnswer = toDirectAnswer(contribution.directAnswer)
   const recordUsage = options.kind === 'dynamic'
     ? (contribution.recordUsage === true ? true : undefined)
     : contribution.recordUsage
