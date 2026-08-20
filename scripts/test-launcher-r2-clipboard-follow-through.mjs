@@ -128,7 +128,11 @@ assert.match(surface, /frequent/)
 assert.match(surface, /favorite/)
 
 const host = readFileSync('src/launcher/hosts/GlobalLauncherHost.tsx', 'utf8')
-assert.match(host, /source !== 'history-item'/)
+// The host used to branch on `source !== 'history-item'`; it now branches positively
+// in two places — history keeps its own paste/copy/open action set, and it carries a
+// distinct row label so the user can tell a history pick from a live clipboard grab.
+assert.match(host, /if \(block\.source === 'history-item'\)/, 'history blocks must keep their own action set')
+assert.match(host, /block\.source === 'history-item'[\s\S]{0,80}zh: '历史'/, 'history blocks must be labeled distinctly from the live clipboard')
 assert.match(host, /paste-history-text|pasteText/)
 
 const renderer = readFileSync('src/components/pluginSurface/PluginSurfaceRenderer.tsx', 'utf8')

@@ -19,6 +19,7 @@ const files = {
   hostActions: read('src/workspace/launcher/hostActions.ts'),
   hostLifecycle: read('src/components/launcher/GlobalLauncherHostLifecycle.ts'),
   keyboard: read('src/components/launcher/GlobalLauncherKeyboard.ts'),
+  quickEditorEscape: read('src/components/quickEditor/useQuickEditorEscape.ts'),
   geometry: read('src/components/launcher/GlobalLauncherGeometry.ts'),
   layout: read('src/components/launcher/GlobalLauncherLayout.ts'),
   windowLifecycle: read('src/components/launcher/GlobalLauncherWindowLifecycle.ts'),
@@ -120,9 +121,55 @@ assert.ok(
   'launcher escape interceptor module must exist',
 )
 assert.match(files.hostLifecycle, /runLauncherEscapeInterceptor/, 'host escape chain must consult the interceptor')
-assert.match(files.hostLifecycle, /TODO\(escape-migration\)/, 'host escape chain must carry the migration TODO')
-assert.doesNotMatch(files.hostLifecycle, /quick-editor/, 'host escape chain must not carry quick editor product logic')
-assert.match(files.keyboard, /hasLauncherEscapeInterceptor/, 'panel keyboard host-surface escape must yield to an active interceptor')
+// This used to assert a TODO(escape-migration) marker. The migration finished in
+// 6e69f0f ("Escape Chain Unification"), so the marker is gone — asserting an
+// unfinished-work marker would now fail precisely because the work got done.
+// Assert the finished state instead: every Escape-owning layer that lives inside
+// the launcher host claims Escape through the interceptor protocol rather than
+// attaching its own capture listener.
+for (const layer of [
+  'src/components/launcher/GlobalLauncherSettingsFrame.tsx',
+  'src/components/launcher/GlobalLauncherPluginSurfaceFrame.tsx',
+  'src/components/launcher/GlobalLauncherPermissionFrame.tsx',
+  'src/components/launcher/GlobalLauncherSystemSurfaceFrame.tsx',
+]) {
+  const src = readFileSync(join(root, layer), 'utf8')
+  assert.match(src, /useLauncherEscapeInterceptor/, `${layer} must claim Escape through the interceptor protocol`)
+  assert.doesNotMatch(
+    src,
+    /addEventListener\(\s*['"]keydown['"][\s\S]{0,60}true\s*\)/,
+    `${layer} must not attach its own capture-phase keydown listener alongside the interceptor`,
+  )
+}
+// useQuickEditorEscape is the documented exception: the detached quick editor is
+// its own native window, outside the launcher host's escape chain entirely, so it
+// cannot register through the interceptor while detached. It uses the interceptor
+// when hosted and falls back to its own capture listener only when detached — the
+// two must stay mutually exclusive on the same `detached` flag, not both active.
+{
+  const src = files.quickEditorEscape
+  assert.match(src, /useLauncherEscapeInterceptor\(detached \? null : handleEscape\)/, 'useQuickEditorEscape must yield the interceptor slot when detached')
+  assert.match(
+    src,
+    /useEffect\(\(\) => \{\s*if \(!detached\) return[\s\S]{0,200}addEventListener\(\s*['"]keydown['"][\s\S]{0,60}true\s*\)/,
+    'the raw capture listener must be gated behind `detached` — hosted quick editor must rely on the interceptor alone',
+  )
+}
+// The host now documents its interceptor stack with "quick-editor" as an example
+// layer in a comment — that's explanation, not coupling. The actual boundary is
+// code coupling: no quick-editor import or direct call, only the generic
+// runLauncherEscapeInterceptor(event) dispatch.
+assert.doesNotMatch(files.hostLifecycle, /from\s+['"][^'"]*quickEditor[^'"]*['"]/, 'host escape chain must not import quick editor modules')
+assert.doesNotMatch(files.hostLifecycle, /quickEditorImperative|useQuickEditorEscape/, 'host escape chain must not call quick editor product logic directly')
+assert.match(files.hostLifecycle, /runLauncherEscapeInterceptor\(event\)/, 'host escape chain must dispatch through the generic interceptor, not a product-specific branch')
+// This tightened rather than regressed: the panel keyboard used to yield only when
+// an interceptor was conditionally active (hasLauncherEscapeInterceptor()). It now
+// yields on every Escape unconditionally, full stop — Escape is entirely owned by
+// the host chain (useGlobalLauncherHostEscape), so panel keyboard never touches it
+// regardless of interceptor state. hasLauncherEscapeInterceptor is still exported
+// from launcherEscapeInterceptor.ts but this was its only caller; report as unused
+// rather than re-import it here to force a check that no longer needs to exist.
+assert.match(files.keyboard, /if \(event\.key === ['"]Escape['"]\) return/, 'panel keyboard must unconditionally yield Escape to the host escape chain')
 assert.ok(
   existsSync(join(root, 'src/components/quickEditor/useQuickEditorEscape.ts')),
   'quick editor two-stage escape hook must exist',
@@ -162,7 +209,15 @@ assert.match(
 )
 assert.match(files.panel, /data-no-drag/, 'quick editor Monaco host must opt out of launcher drag handling')
 assert.match(files.windowLifecycle, /\.monaco-editor/, 'launcher JS drag handling must preserve Monaco mouse events')
-assert.match(files.css, /html\[data-window=['"]launcher['"]\]\s+\.global-launcher-panel\s+:is\([\s\S]{0,220}\.monaco-editor[\s\S]{0,120}-webkit-app-region:\s*no-drag/, 'standalone launcher native drag fallback must exempt Monaco editor')
+// The selector list grew (one item per line) and the char budget below it no
+// longer reaches from `:is(` to `.monaco-editor`; match the rule by its opening
+// selector and confirm .monaco-editor is a member of the same :is() list.
+{
+  const rule = files.css.match(/html\[data-window=['"]launcher['"]\]\s+\.global-launcher-panel\s+:is\(([\s\S]*?)\)\s*\{([\s\S]*?)\}/)?.[0] ?? ''
+  assert.ok(rule, 'standalone launcher must define a native drag-fallback exemption rule')
+  assert.match(rule, /\.monaco-editor/, 'standalone launcher native drag fallback must exempt Monaco editor')
+  assert.match(rule, /-webkit-app-region:\s*no-drag/, 'the exemption rule must disable native window drag on exempted elements')
+}
 assert.match(
   files.breadcrumbActions + '\n' + files.toolbar,
   /hideLauncherWindow\(\)[\s\S]{0,260}showQuickEditorWindow\(\)/,
@@ -315,10 +370,28 @@ assert.match(
   /\.quick-editor-detached-window\s*\{[\s\S]{0,260}-webkit-app-region:\s*no-drag/,
   'detached quick editor root should leave drag handling to the JS native fallback',
 )
-assert.match(
-  read('src-tauri/src/lib.rs'),
-  /launcher_default_window_size_for_window\(&window\)[\s\S]{0,160}window\.set_size\(LogicalSize::new\(quick_width,\s*quick_height\)\)/,
-  'detached quick editor default size should use the same computed size as the shortcut launcher',
-)
+// Sizing later diverged on purpose (documented in lib.rs): the launcher popup
+// shrinks its width on small screens via launcher_logical_width_for_monitor, but
+// the quick editor doesn't need to shrink — it only caps out so it never exceeds
+// the visible work area. Each now owns its own formula; assert the split and its
+// rationale instead of a shared call that no longer exists.
+{
+  const rust = read('src-tauri/src/lib.rs')
+  assert.match(
+    rust,
+    /fn quick_editor_default_window_size\(window: &tauri::WebviewWindow\) -> \(f64, f64\)/,
+    'quick editor should own a dedicated default-size function',
+  )
+  assert.match(
+    rust,
+    /it doesn't need to shrink on smaller screens[\s\S]{0,80}only cap out so it never exceeds the visible work area/,
+    'the size-formula split from the launcher must stay documented as intentional',
+  )
+  assert.match(
+    rust,
+    /quick_editor_default_window_size\(&window\)[\s\S]{0,160}window\.set_size\(LogicalSize::new\(quick_width,\s*quick_height\)\)/,
+    'detached quick editor must apply its own computed default size',
+  )
+}
 
 console.log('test-quick-editor-host-surface: all assertions passed')

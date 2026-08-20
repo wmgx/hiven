@@ -15,6 +15,7 @@ const lifecycle = read('src/components/launcher/GlobalLauncherWindowLifecycle.ts
 const hostLifecycle = read('src/components/launcher/GlobalLauncherHostLifecycle.ts')
 const quickEditorPanel = read('src/components/quickEditor/QuickEditorPanel.tsx')
 const quickEditorOverlay = read('src/components/quickEditor/QuickEditorCommandOverlay.tsx')
+const quickEditorEscape = read('src/components/quickEditor/useQuickEditorEscape.ts')
 const blurGuard = read('src/workspace/launcherBlurGuard.ts')
 const globalLauncherHost = read('src/launcher/hosts/GlobalLauncherHost.tsx')
 const launcherTypes = read('src/workspace/launcher/types.ts')
@@ -30,10 +31,26 @@ assert.equal(
   'package.json must expose the Quick Editor launcher behavior contract',
 )
 
+// 68b6bb1 ("migrate to launcher host surface, drop globalLauncherMode") replaced
+// the mode-based ternary with a declarative per-surface shell config. Quick editor
+// (like settings/plugins) now declares closeOnBlur: false on purpose — see
+// hostSurfaceShell.ts and the STANDALONE_SURFACE_BACKGROUND_IDLE_MS fallback below:
+// losing focus no longer closes it instantly (that punished a quick alt-tab mid-edit),
+// it only closes after sitting in the background past the idle timeout.
 assert.match(
   globalLauncherHost,
-  /closeOnBlur:\s*mode\s*===\s*['"]quick-editor['"]\s*\?\s*true\s*:/,
-  'Quick Editor mode should preserve the design-required blur-to-close behavior',
+  /closeOnBlur:\s*getHostSurfaceShell\(launcherHostSurfaceTarget\)\?\.closeOnBlur\s*\n\s*\?\?\s*activeSurfaceFrame\?\.surface\.shell\?\.closeOnBlur/,
+  'Quick Editor closeOnBlur should be resolved from the declarative host-surface shell config',
+)
+assert.match(
+  read('src/components/launcher/hostSurfaceShell.ts'),
+  /['"]quick-editor['"]:\s*\{\s*closeOnBlur:\s*false\s*\}/,
+  'quick editor host surface should intentionally opt out of instant blur-close',
+)
+assert.match(
+  globalLauncherHost,
+  /Surfaces with closeOnBlur:false can stay open after app switch[\s\S]{0,300}useAutoCloseStandaloneLauncherOnBackgroundIdle/,
+  'surfaces that opt out of blur-close must still fall back to idle-timeout close',
 )
 
 assert.match(
@@ -48,16 +65,29 @@ assert.match(
   'standalone launcher focus listener should refresh the closeOnBlur ref when mode changes',
 )
 
+// The condition became early returns rather than one combined boolean, and grew a
+// "smart blur" step in between: focus can move to clipboard history or another
+// hiven window without closing the launcher, checked async via
+// shouldKeepLauncherOpenOnBlur before closeLauncher() runs.
 assert.match(
   lifecycle,
-  /!\s*focused\s*&&\s*closeOnBlurRef\.current\s*!==\s*false[\s\S]*closeLauncher\(\)/,
+  /if \(focused\) return[\s\S]{0,200}if \(closeOnBlurRef\.current === false\) return[\s\S]{0,400}closeLauncher\(\)/,
   'standalone launcher focus listener should read closeOnBlur from the ref inside the native callback',
 )
 
+// shouldSuppressStandaloneLauncherBlur (short-lived suppression for internal Quick
+// Editor shortcuts) is no longer called directly from the lifecycle listener — it
+// was absorbed into shouldKeepLauncherOpenOnBlur, which checks it as one of several
+// reasons to keep the launcher open (see launcherBlurGuard.ts).
 assert.match(
   lifecycle,
-  /shouldSuppressStandaloneLauncherBlur\(\)/,
-  'standalone launcher blur close should support short-lived suppression for internal Quick Editor shortcuts',
+  /shouldKeepLauncherOpenOnBlur\(\)/,
+  'standalone launcher blur close should route through the combined keep-open check',
+)
+assert.match(
+  read('src/workspace/launcherBlurGuard.ts'),
+  /shouldKeepLauncherOpenOnBlur[\s\S]{0,300}shouldSuppressStandaloneLauncherBlur\(\)\s*\)\s*return true/,
+  'the combined keep-open check must still honor short-lived suppression for internal Quick Editor shortcuts',
 )
 
 assert.doesNotMatch(
@@ -102,10 +132,18 @@ assert.match(
   'Quick Editor should have an explicit transient blur suppression guard',
 )
 
+// store.ts no longer owns a toggleQuickEditor action — 68b6bb1 moved the decision
+// out of the store and into the global-hotkey router (globalPinnedLauncher.ts). The
+// behavior also changed on purpose: pressing the global shortcut again while quick
+// editor already owns the launcher no longer closes the launcher, it opens quick
+// editor's own internal command overlay (App 内命令入口), matching the product rule
+// that a foregrounded editor surface should get its own command entry rather than
+// having the global launcher toggle shut under it.
+assert.doesNotMatch(store, /toggleQuickEditor:/, 'store should not own a toggleQuickEditor action anymore')
 assert.match(
-  store,
-  /toggleQuickEditor:\s*\(\)\s*=>\s*\{[\s\S]*globalLauncherOpen\s*&&\s*globalLauncherMode\s*===\s*['"]quick-editor['"][\s\S]*setGlobalLauncherOpen\(false\)/,
-  'toggling Quick Editor while it is already open should close the launcher instead of only switching mode',
+  globalPinnedHotkeys,
+  /async function routeGlobalPinnedLauncherShortcut\(\)[\s\S]*state\.globalLauncherOpen\s*&&\s*state\.launcherHostSurfaceTarget\s*===\s*['"]quick-editor['"][\s\S]*state\.openQuickEditorCommand\(\)[\s\S]*return/,
+  'the global shortcut should route into quick editor\'s own command overlay while quick editor already owns the launcher',
 )
 
 assert.match(
@@ -158,7 +196,7 @@ assert.doesNotMatch(
 
 assert.match(
   globalPinnedHotkeys,
-  /globalLauncherOpen\s*&&\s*state\.globalLauncherMode\s*===\s*['"]quick-editor['"][\s\S]*openQuickEditorCommand\(\)[\s\S]*return[\s\S]*showLauncherWindow\(\)/,
+  /state\.globalLauncherOpen\s*&&\s*state\.launcherHostSurfaceTarget\s*===\s*['"]quick-editor['"][\s\S]*openQuickEditorCommand\(\)[\s\S]*return[\s\S]*showLauncherWindow\(\)/,
   'global Cmd/Ctrl+K routing should become the Quick Editor internal command overlay while Quick Editor is already open',
 )
 
@@ -186,11 +224,12 @@ assert.match(
   'normal launcher open path should keep preparing the search input source',
 )
 
-assert.match(
-  globalLauncherHost,
-  /if\s*\(\s*mode\s*===\s*['"]quick-editor['"]\s*\)\s*return[\s\S]*prepareLauncherInputSource\(\)/,
-  'Quick Editor mode should not invoke the launcher search input-source preparation effect',
-)
+// prepareLauncherInputSource (src/workspace/windowManager/launcherWindow.ts) has
+// zero call sites left anywhere in src/ — the effect this guarded no longer runs
+// for ANY mode, so the mode-gate itself is moot. Not removing prepareLauncherInputSource
+// here since that's dead-code cleanup, not test repair; flagging it instead of
+// asserting around code that no longer exists.
+assert.doesNotMatch(globalLauncherHost, /prepareLauncherInputSource/, 'GlobalLauncherHost should not call the retired input-source preparation effect')
 
 assert.match(
   quickEditorOverlay,
@@ -204,16 +243,26 @@ assert.match(
   'Quick Editor command overlay should render launcher controller frames so Escape can return to previous command steps',
 )
 
+// This moved out of the overlay and into the shared GlobalLauncherFrameSwitch,
+// which the overlay already renders — the frame switch, not the overlay itself,
+// now decides that a param-input top frame renders LauncherParamStep (which owns
+// its own Enter/Escape internally, see test-command-optional-params.mjs).
 assert.match(
-  quickEditorOverlay,
-  /topFrame\?\.kind\s*===\s*['"]param-input['"][\s\S]*return/,
-  'Quick Editor overlay root Enter handler should let parameter frames own Enter and Escape',
+  read('src/components/launcher/GlobalLauncherFrames.tsx'),
+  /topFrame\?\.kind === ['"]param-input['"][\s\S]{0,80}<LauncherParamStep/,
+  'the shared frame switch should let parameter frames own Enter and Escape',
 )
 
+// This moved out of hostLifecycle entirely as part of the Escape Chain Unification
+// (6e69f0f): the host no longer special-cases quick editor at all (see
+// test-quick-editor-host-surface.mjs's boundary checks). Instead useQuickEditorEscape
+// registers as a generic launcher escape interceptor, and its own handleEscape gates
+// on quickEditorCommandOpen to hand off to the overlay's handler before running its
+// own two-stage hint/exit logic.
 assert.match(
-  hostLifecycle,
-  /mode\s*===\s*['"]quick-editor['"][\s\S]*quickEditorCommandOpen[\s\S]*return[\s\S]*closeLauncher\(\)/,
-  'Quick Editor host Escape should leave Escape to the command overlay while it is open',
+  quickEditorEscape,
+  /if \(useAppStore\.getState\(\)\.quickEditorCommandOpen\)[\s\S]{0,80}return quickEditorImperative\.handleOverlayEscape\(event\)/,
+  'Quick Editor escape interceptor should leave Escape to the command overlay while it is open',
 )
 
 console.log('Quick Editor launcher behavior checks passed')

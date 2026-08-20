@@ -6,12 +6,10 @@
  *  - actionExecutor transforms text correctly (format JSON, minify)
  *  - getActionOutputTargets returns default + alternatives
  *  - getOutputTargetLabel provides Chinese labels
- *  - OutputTargetExpansion component renders targets with test ids
- *  - GlobalLauncherSearchFrame supports onExecuteAction + expansion state
- *  - Enter on action = execute default, Tab/→ = expand targets
+ *  - the dedicated expansion panel stays retired (object actions are ranked rows now)
  */
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
 
@@ -48,7 +46,10 @@ assert.deepEqual(JSON.parse(JSON.stringify(targets)), ['copy', 'open-editor'], '
 assert.equal(executor.getOutputTargetLabel('copy', 'zh'), '复制结果')
 assert.equal(executor.getOutputTargetLabel('copy-and-keep-open', 'zh'), '复制并保持打开')
 assert.equal(executor.getOutputTargetLabel('open-url', 'zh'), '打开 URL')
-assert.equal(executor.getOutputTargetLabel('open-editor', 'zh'), '打开到 Editor')
+// "Editor" became the quick editor, and the verb became 覆盖 because this target
+// overwrites the editor contents rather than opening a new document.
+assert.equal(executor.getOutputTargetLabel('open-editor', 'zh'), '覆盖到快捷编辑器')
+assert.equal(executor.getOutputTargetLabel('open-editor', 'en'), 'Overwrite Quick Editor')
 assert.equal(executor.getOutputTargetLabel('open-plugin-surface', 'zh'), '打开工具窗口')
 
 // ─── executeRecommendedAction: format JSON → copy ──────────────────────────────
@@ -113,20 +114,23 @@ assert.equal(result3.ok, true)
 assert.equal(editorText, 'hello world')
 assert.equal(editorTitle, '打开到编辑器')
 
-// ─── UI contract: OutputTargetExpansion ─────────────────────────────────────────
-const expansionSrc = readFileSync('src/components/launcher/OutputTargetExpansion.tsx', 'utf8')
-assert.match(expansionSrc, /data-testid="output-target-expansion"/, 'component must have test id')
-assert.match(expansionSrc, /data-target=\{target\}/, 'each row must expose target id')
-assert.match(expansionSrc, /onSelect/, 'component must accept onSelect callback')
-assert.match(expansionSrc, /onBack/, 'component must accept onBack callback')
-assert.match(expansionSrc, /getOutputTargetLabel/, 'component must display localized target labels')
-assert.match(expansionSrc, /默认/, 'first target should be marked as default')
-
-// ─── UI contract: SearchFrame supports expansion ───────────────────────────────
+// ─── The expansion UI is retired; the model behind it is not ───────────────────
+// Object actions became pinned launcher rows competing in the one result list, so
+// the dedicated OutputTargetExpansion panel and its Tab-to-expand state are gone.
+// What survives — and what this file is really worth keeping for — is the executor:
+// the transforms and target routing verified above. Assert the UI stays retired so
+// a second action list cannot quietly reappear alongside the ranked one.
+assert.equal(
+  existsSync('src/components/launcher/OutputTargetExpansion.tsx'),
+  false,
+  'the dedicated output-target expansion panel should stay retired',
+)
 const searchFrame = readFileSync('src/components/launcher/GlobalLauncherSearchFrame.tsx', 'utf8')
-assert.match(searchFrame, /onExecuteAction/, 'SearchFrame must accept onExecuteAction callback')
-assert.match(searchFrame, /expandedAction/, 'SearchFrame must track expanded action state')
-assert.match(searchFrame, /OutputTargetExpansion/, 'SearchFrame must render OutputTargetExpansion')
-assert.match(searchFrame, /setExpandedAction\(/, 'SearchFrame must allow back from expansion')
+assert.doesNotMatch(searchFrame, /OutputTargetExpansion|setExpandedAction\(/, 'SearchFrame must not render a second, separate action list')
+assert.match(
+  searchFrame,
+  /@deprecated Dedicated object-action rows removed[\s\S]{0,120}onExecuteAction\?:/,
+  'the leftover object-action props must stay marked deprecated so they are not rewired by accident',
+)
 
 console.log('output target expansion Phase R3 checks passed')
