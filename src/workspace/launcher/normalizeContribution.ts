@@ -8,7 +8,7 @@
  * Protocol fields (must stay in sync across all three authoring forms):
  *   display, behavior, surfaces, inputPolicy,
  *   params, defaultParams, requireParamSelection, executeWithParams,
- *   accepts, match, textMatch, suggest, recordUsage, execute
+ *   accepts, match, textMatch, suggest, recordUsage, directAnswer, execute
  */
 
 import type {
@@ -20,6 +20,14 @@ import type {
 import type { ContributionSource } from '../pluginTypes'
 import { sanitizeSurfaces } from './identity'
 import { resolvePluginSettingsSource } from './pluginSource'
+
+/**
+ * Ranking nudge given to any plugin-declared direct answer. Deliberately below
+ * the learned-rule baseline (see learning/frecency.ts firePriority, from 45), so
+ * a rule the user actually taught ranks above a generic built-in answer — while
+ * both still appear (learned never suppresses builtin).
+ */
+const PLUGIN_DIRECT_ANSWER_PRIORITY = 30
 
 export type NormalizeContributionOptions = {
   systemKey: SystemLauncherItemKey
@@ -45,6 +53,12 @@ export function normalizeContribution(
   }
 
   const hasParams = (contribution.params?.length ?? 0) > 0
+  // Answer semantics are plugin-declared; the ranking nudge is host-assigned so
+  // plugins can't outbid each other (or the user's own learned rules) for the
+  // top answer slot. Anything truthy means "I am an answer", nothing more.
+  const directAnswer = contribution.directAnswer
+    ? { priority: PLUGIN_DIRECT_ANSWER_PRIORITY, origin: 'builtin' as const }
+    : undefined
   const recordUsage = options.kind === 'dynamic'
     ? (contribution.recordUsage === true ? true : undefined)
     : contribution.recordUsage
@@ -66,6 +80,7 @@ export function normalizeContribution(
     match: contribution.match,
     textMatch: contribution.textMatch,
     suggest: contribution.suggest,
+    directAnswer,
     recordUsage,
     legacyUsageKeys: options.kind === 'dynamic' ? undefined : [contribution.id],
     execute: contribution.execute,

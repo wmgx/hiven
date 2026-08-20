@@ -15,7 +15,7 @@
  * See doc/2026-08-12-direct-answer-workbench-design.md §11 (D) / §5.
  */
 
-export type UrlSlotKind = 'n' | 'hex' | 'uuid' | 'id'
+export type UrlSlotKind = 'n' | 'hex' | 'uuid' | 'id' | 'slug'
 
 export interface UrlTemplateResult {
   host: string
@@ -29,16 +29,69 @@ export interface UrlTemplateResult {
 const URL_RE = /^https?:\/\/([^/?#]+)([^#]*)/i
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-/** Classify a single path segment as a typed variable slot, or null if it's constant. */
-function classifySegment(seg: string): UrlSlotKind | null {
+const IDENT_RE = /^[A-Za-z0-9._-]+$/
+const SEPARATOR_RE = /[-_.]/
+
+/**
+ * CONSERVATIVE classifier — used by the self-discovery path (`templatizeUrl`),
+ * where the only evidence is "the user browsed here".
+ *
+ * Browsing alone cannot distinguish a constant path word from a variable one:
+ * in `/-/merge_requests/12345`, both `merge_requests` and `12345` are just
+ * segments. So this only claims shapes that are self-evidently identifiers.
+ * Text-shaped variables (`/{owner}/{repo}`) are NOT found here — they need
+ * cross-sample evidence (see position-variance induction) or a copy event
+ * (see {@link classifyTokenSlot}).
+ */
+export function classifyPathSegment(seg: string): UrlSlotKind | null {
   if (!seg) return null
   if (/^\d+$/.test(seg)) return 'n'
   if (UUID_RE.test(seg)) return 'uuid'
   if (/^[0-9a-f]{7,}$/i.test(seg)) return 'hex'
   // Long mixed alphanumeric (has both a letter and a digit) → opaque id.
-  if (seg.length >= 12 && /[a-z]/i.test(seg) && /\d/.test(seg) && /^[A-Za-z0-9._-]+$/.test(seg)) {
+  if (seg.length >= 12 && /[a-z]/i.test(seg) && /\d/.test(seg) && IDENT_RE.test(seg)) {
     return 'id'
   }
+  return null
+}
+
+/**
+ * WIDE classifier — the single source of truth for both the copy-driven learn
+ * path (`templatizeUrlWithToken`) and reverse fire (`queryMatchesSlot`).
+ *
+ * These two MUST share one function. They used to differ: learning fell back to
+ * `'id'` for any unrecognized token while firing re-derived the kind with the
+ * conservative classifier, so text tokens (`claude-code`, `PROJ-1234`) were
+ * learned, stored, and shown as "learned" — then silently never fired.
+ *
+ * Wider than {@link classifyPathSegment} because a copy event is real evidence
+ * that the token is an entity identifier, not a path constant. It is a strict
+ * superset: whenever the conservative classifier claims a kind, this returns
+ * the SAME kind, so rules stay interchangeable between the two paths.
+ *
+ * Guardrail: a bare word (`hello`, `dashboard` — no separator, no digit) is
+ * never a slot. Otherwise every learned `{slug}` template would fire on any
+ * ordinary search query.
+ */
+export function classifyTokenSlot(token: string): UrlSlotKind | null {
+  const t = (token ?? '').trim()
+  if (!t || /\s/.test(t)) return null
+
+  // Superset guarantee: defer to the conservative classifier where it commits.
+  const conservative = classifyPathSegment(t)
+  if (conservative) return conservative
+
+  if (t.length < 3 || !IDENT_RE.test(t)) return null
+  const hasDigit = /\d/.test(t)
+  const hasLetter = /[A-Za-z]/.test(t)
+  const hasSeparator = SEPARATOR_RE.test(t)
+
+  // Mixed letters+digits → opaque id (`dQw4w9WgXcQ`, `PROJ-1234`). More
+  // specific than a slug, so it wins.
+  if (hasDigit && hasLetter && t.length >= 6) return 'id'
+  // Structured text with separators → slug (`claude-code`, `toutiao.mysql.user`).
+  if (hasSeparator && hasLetter) return 'slug'
+  // Bare word → not a slot (guardrail above).
   return null
 }
 
@@ -73,7 +126,7 @@ export function templatizeUrl(url: string): UrlTemplateResult | null {
   const slots: string[] = []
   const slotKinds: UrlSlotKind[] = []
   const templatedSegments = path.split('/').map((seg) => {
-    const kind = classifySegment(seg)
+    const kind = classifyPathSegment(seg)
     if (kind) {
       slots.push(seg)
       slotKinds.push(kind)
@@ -94,7 +147,7 @@ export function templatizeUrl(url: string): UrlTemplateResult | null {
       const eq = pair.indexOf('=')
       if (eq === -1) continue
       const value = pair.slice(eq + 1)
-      const kind = classifySegment(value)
+      const kind = classifyPathSegment(value)
       if (kind) {
         const key = pair.slice(0, eq)
         return { host, template: `${host}${templatePath}?${key}={${kind}}`, slots: [value], slotKinds: [kind] }
@@ -197,7 +250,7 @@ export function induceUrlTemplates(
 
 /** Last `{kind}` slot in a template (fallback when a record didn't store slotKind). */
 function inferSlotKindFromTemplate(template: string): UrlSlotKind | null {
-  const matches = template.match(/\{(n|hex|uuid|id)\}/g)
+  const matches = template.match(/\{(n|hex|uuid|id|slug)\}/g)
   if (!matches || matches.length === 0) return null
   const last = matches[matches.length - 1]
   return last.slice(1, -1) as UrlSlotKind
@@ -223,8 +276,13 @@ function findBoundedToken(hay: string, token: string): number {
   }
 }
 
-function slotKindForToken(token: string): UrlSlotKind {
-  return classifySegment(token) ?? 'id'
+/**
+ * Slot kind for a copied token. Returns null when the token is not
+ * identifier-shaped — the caller must then decline to build a rule rather than
+ * fall back to a kind the fire side cannot reproduce.
+ */
+function slotKindForToken(token: string): UrlSlotKind | null {
+  return classifyTokenSlot(token)
 }
 
 /**
@@ -244,7 +302,10 @@ export function templatizeUrlWithToken(url: string, token: string): UrlTemplateR
   const qIdx = pathQuery.indexOf('?')
   const path = qIdx === -1 ? pathQuery : pathQuery.slice(0, qIdx)
   const query = qIdx === -1 ? '' : pathQuery.slice(qIdx + 1)
+  // No fireable kind → no rule. Learning something that can never match back is
+  // worse than learning nothing: it shows up as "learned" and silently does nothing.
   const kind = slotKindForToken(tok)
+  if (!kind) return null
 
   const pathIdx = findBoundedToken(path, tok)
   if (pathIdx !== -1) {
@@ -267,11 +328,15 @@ export function templatizeUrlWithToken(url: string, token: string): UrlTemplateR
 
 // ─── reverse fire (scenario D — typed token → open template) ───────────────────
 
-/** True if a typed query is a value of the given slot kind (reverse-fire match). */
+/**
+ * True if a typed query is a value of the given slot kind (reverse-fire match).
+ * Uses the same wide classifier as the learn path — see {@link classifyTokenSlot}
+ * for why that symmetry is load-bearing.
+ */
 export function queryMatchesSlot(query: string, slotKind: UrlSlotKind): boolean {
   const q = (query ?? '').trim()
   if (!q) return false
-  return classifySegment(q) === slotKind
+  return classifyTokenSlot(q) === slotKind
 }
 
 /** Substitute the first `{slot}` placeholder in a template with a concrete value. */

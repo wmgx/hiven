@@ -27,6 +27,7 @@ function loadModule(path) {
 }
 
 const U = loadModule('src/workspace/learning/urlTemplate.ts')
+const C = loadModule('src/workspace/learning/coverage.ts')
 
 // ─── hostnameOf: plain host string, no site semantics ─────────────────────────
 {
@@ -177,6 +178,135 @@ const U = loadModule('src/workspace/learning/urlTemplate.ts')
     'code.byted.org/lark/-/merge_requests/9931',
     'slot filled with typed value',
   )
+}
+
+// ─── INVARIANT: anything learnable must be fireable ──────────────────────────
+// The learn side (templatizeUrlWithToken) and the fire side (queryMatchesSlot)
+// must agree on a token's slot kind. They used to call different classifiers,
+// so text tokens were learned with a `?? 'id'` fallback the fire side could
+// never reproduce: the rule stored fine, showed as "learned" in settings, and
+// silently never fired. Both sides now share classifyTokenSlot — this test is
+// the structural guard on that.
+{
+  const textTokens = [
+    ['claude-code', 'GitHub repo name'],
+    ['dQw4w9WgXcQ', 'YouTube video id (11 chars, under the old ≥12 rule)'],
+    ['flux_text', 'underscore repo name'],
+    ['PROJ-1234', 'Jira issue key'],
+    ['my-doc-slug', 'doc slug'],
+    ['toutiao.mysql.user', 'PSM triple'],
+    ['user_profile_v2', 'versioned text id'],
+    ['12345', 'numeric id (regression: still works)'],
+    ['a1b2c3d4e5f6', 'hex sha (regression)'],
+    ['550e8400-e29b-41d4-a716-446655440000', 'uuid (regression)'],
+  ]
+
+  for (const [token, desc] of textTokens) {
+    const r = U.templatizeUrlWithToken(`https://x.org/thing/${token}`, token)
+    assert.ok(r, `${desc}: learnable (${token})`)
+    const kind = r.slotKinds[0]
+    assert.equal(
+      U.queryMatchesSlot(token, kind),
+      true,
+      `${desc}: learned as {${kind}} but does not fire back — learn/fire asymmetry (${token})`,
+    )
+    assert.equal(
+      U.fillTemplate(r.template, token),
+      `x.org/thing/${token}`,
+      `${desc}: round-trips back to the original url`,
+    )
+  }
+}
+
+// ─── classifyTokenSlot: wide vocabulary, with guardrails ─────────────────────
+{
+  assert.equal(U.classifyTokenSlot('12345'), 'n')
+  assert.equal(U.classifyTokenSlot('a1b2c3d4e5f6'), 'hex')
+  assert.equal(U.classifyTokenSlot('550e8400-e29b-41d4-a716-446655440000'), 'uuid')
+
+  // Separator-bearing text → slug.
+  assert.equal(U.classifyTokenSlot('claude-code'), 'slug', 'hyphenated text → slug')
+  assert.equal(U.classifyTokenSlot('flux_text'), 'slug', 'underscored text → slug')
+  assert.equal(U.classifyTokenSlot('toutiao.mysql.user'), 'slug', 'dotted PSM → slug')
+
+  // Mixed letters+digits → id (more specific than slug).
+  assert.equal(U.classifyTokenSlot('dQw4w9WgXcQ'), 'id', 'base62 mixed → id')
+  assert.equal(U.classifyTokenSlot('PROJ-1234'), 'id', 'separator + digits → id, not slug')
+
+  // GUARDRAIL: a bare word must NOT be a slot, or every search query would
+  // fire every learned {slug} template.
+  assert.equal(U.classifyTokenSlot('hello'), null, 'bare word is not a slot')
+  assert.equal(U.classifyTokenSlot('dashboard'), null, 'bare word is not a slot')
+  assert.equal(U.classifyTokenSlot('hello world'), null, 'whitespace is never a slot')
+  assert.equal(U.classifyTokenSlot('ab'), null, 'too short')
+  assert.equal(U.classifyTokenSlot(''), null, 'empty')
+
+  // A bare word cannot be learned as a slot either.
+  assert.equal(
+    U.templatizeUrlWithToken('https://x.org/docs/dashboard', 'dashboard'),
+    null,
+    'bare word token → no rule (rather than an unfireable one)',
+  )
+}
+
+// ─── the wide classifier must be a strict superset of the conservative one ───
+// Wherever the self-discovery path assigns a kind, the token path must assign
+// the SAME kind — otherwise a rule learned by one path cannot fire via the other.
+{
+  const samples = [
+    '12345', '9931', 'a1b2c3d4e5f6', 'deadbeef01',
+    '550e8400-e29b-41d4-a716-446655440000',
+    'orderXYZ12345', 'claude-code', 'hello', 'merge_requests', 'commit', '',
+  ]
+  for (const s of samples) {
+    const conservative = U.classifyPathSegment(s)
+    if (conservative !== null) {
+      assert.equal(
+        U.classifyTokenSlot(s),
+        conservative,
+        `wide classifier disagrees with conservative one on "${s}"`,
+      )
+    }
+  }
+}
+
+// ─── self-discovery stays conservative (no evidence → no text slots) ─────────
+// Browsing alone cannot tell a constant path word from a variable one, so
+// templatizeUrl must NOT templatize text segments. Text variables in the
+// discovery path are found by position-variance induction instead.
+{
+  const r = U.templatizeUrl('https://github.com/anthropics/claude-code')
+  assert.equal(r.template, 'github.com/anthropics/claude-code', 'no text slots from browsing alone')
+  assert.equal(r.slots.length, 0, 'constant-looking segments stay literal')
+
+  const mr = U.templatizeUrl('https://code.byted.org/lark/-/merge_requests/12345')
+  assert.equal(
+    mr.template,
+    'code.byted.org/lark/-/merge_requests/{n}',
+    'merge_requests stays literal even though it contains an underscore',
+  )
+}
+
+// ─── INVARIANT: novelty-guard probes must match the kind they probe for ──────
+// representativeTokens(kind) feeds the coverage guard. If a token doesn't
+// classify back to its own kind, the guard asks capabilities about a shape the
+// rule would never fire on — the same class of asymmetry as the learn/fire bug.
+{
+  const kinds = ['n', 'hex', 'uuid', 'id', 'slug']
+  for (const kind of kinds) {
+    const tokens = C.representativeTokens(kind)
+    assert.ok(tokens.length > 0, `${kind}: has representative tokens`)
+    for (const token of tokens) {
+      assert.equal(
+        U.classifyTokenSlot(token),
+        kind,
+        `representative token "${token}" for {${kind}} classifies as {${U.classifyTokenSlot(token)}}`,
+      )
+    }
+  }
+  // (length, not deepEqual: vm-sandbox arrays are cross-realm so deepStrictEqual
+  // fails on prototype identity even when contents match.)
+  assert.equal(C.representativeTokens('unknown-kind').length, 0, 'unknown kind probes nothing')
 }
 
 console.log('test-learning-urltemplate: ok')

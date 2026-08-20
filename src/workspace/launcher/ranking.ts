@@ -198,6 +198,10 @@ function toSearchableFields(item: LauncherItem, locale: Locale): SearchableField
 export function itemMatchesQuery(item: LauncherItem, query: string, locale: Locale): boolean {
   const q = query.trim().toLowerCase()
   if (!q) return true
+  // A direct answer already answered this query — its title is the RESULT, which
+  // by construction does not contain the input text. Filtering it by text match
+  // would drop exactly the items that responded.
+  if (item.directAnswer) return true
   if (searchableFieldsMatch(getCachedSearchableFields(item, locale), q, locale)) return true
   // accepts.aliases alone can admit the item (exact normalized match).
   const aliases = item.accepts?.aliases
@@ -263,6 +267,9 @@ export function shouldKeepOnEmptyQuery(
   ctx: RankContext,
 ): boolean {
   if (score > 0) return true
+  // Zero-query answers (clipboard content already resolved) are the point of
+  // opening with an empty input — never hide them for lack of usage history.
+  if (item.directAnswer) return true
   if (item.kind === 'dynamic') return true
   if (isHostAppLauncherItem(item) || isDesktopNavigationItem(item)) return true
   if (item.kind === 'host') return true
@@ -274,6 +281,14 @@ export function shouldKeepOnEmptyQuery(
 }
 
 function staticPriority(item: LauncherItem): number {
+  // Direct answers carry their own priority whatever their kind — that is how
+  // frecency weighting and fire-time disambiguation order competing answers.
+  // (Answer producers are typically kind:'dynamic', which the host-only rule
+  // below would silently zero.)
+  const answerPriority = item.directAnswer?.priority
+  if (answerPriority != null) {
+    return Math.max(0, Math.min(MAX_STATIC_PRIORITY, answerPriority))
+  }
   // Only host-owned items may carry staticPriority; clamp to the ceiling.
   if (item.kind !== 'host' || item.staticPriority == null) return 0
   return Math.max(0, Math.min(MAX_STATIC_PRIORITY, item.staticPriority))

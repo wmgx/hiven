@@ -116,6 +116,10 @@ export default {
     'learnFireOpen': 'Open {host}',
     'learnFireChain': 'Learned · {steps} steps in one',
     'learnFireKind': 'Direct',
+    'learnFireKindHere': 'This site',
+    'learnFireKindNew': 'Newly learned',
+    'learnUndoTitle': "Don't learn this one",
+    'learnUndoSubtitle': 'Remove this rule and stop suggesting it',
   },
   zh: {
     'search': '搜索操作...',
@@ -234,5 +238,9 @@ export default {
     'learnFireOpen': '打开 {host}',
     'learnFireChain': '你教的 · {steps} 步合一',
     'learnFireKind': '直答',
+    'learnFireKindHere': '当前站点',
+    'learnFireKindNew': '新学的',
+    'learnUndoTitle': '不要这条',
+    'learnUndoSubtitle': '删掉这条规则，且不再学它',
   },
 }

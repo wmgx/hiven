@@ -448,6 +448,16 @@ export type LauncherItemContribution<TSettings = unknown> = {
    */
   match?: (ctx: IntentMatchContext) => IntentHit[] | null
   /**
+   * Declare that this item is a computed ANSWER for the current input rather
+   * than a command to pick (its title is the result). Exempts it from the
+   * query-present text filter.
+   *
+   * Boolean by design: the ranking nudge is host-assigned. If plugins could set
+   * their own answer priority, every plugin would claim to be the top answer —
+   * the same reason `staticPriority` is host-only.
+   */
+  directAnswer?: boolean
+  /**
    * Content matcher for ranking boost (textMatchBoost). Same field as tools.
    */
   textMatch?: (text: string) => boolean
@@ -550,6 +560,30 @@ export type LauncherItem = {
    * Runtime function field (same lifetime as textMatch).
    */
   match?: (ctx: IntentMatchContext) => IntentHit[] | null
+  /**
+   * Marks this item as a computed ANSWER for the current input rather than a
+   * command to pick — the "input → result, no command step" paradigm.
+   *
+   * Ranking treats it as first-class in two ways (see ranking.ts):
+   *  - it is exempt from the query-present text filter, because an answer's
+   *    title IS the result ("1,234" for "1000+234") and by construction does
+   *    not contain the query;
+   *  - its `priority` is honored regardless of `kind`, unlike `staticPriority`
+   *    which is host-only.
+   *
+   * Both exist because answer producers previously had to fake being a matching
+   * dynamic item (`kind:'dynamic'` + `aliases:[query]`), which silently zeroed
+   * their priority and disabled frecency ordering. Set this instead.
+   */
+  directAnswer?: {
+    /** Ranking nudge; clamped to the same ceiling as staticPriority. */
+    priority?: number
+    /**
+     * Learned answers rank above built-in ones but never suppress them —
+     * a stale personal rule must not bury an obviously-correct default.
+     */
+    origin?: 'builtin' | 'learned'
+  }
   /**
    * When true, selection writes to launcher usage for ranking.
    * Dynamic items must opt in with a stable systemKey; static items omit this (treated as true).

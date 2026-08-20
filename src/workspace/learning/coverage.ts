@@ -60,7 +60,14 @@ export function isShapeCovered(probes: readonly CoverageProbe[]): boolean {
   return covered * 2 > probes.length
 }
 
-/** Representative concrete tokens for a discovered slot kind (novelty probing). */
+/**
+ * Representative concrete tokens for a discovered slot kind (novelty probing).
+ *
+ * Every token here MUST classify back to its own kind (see the contract test in
+ * scripts/test-learning-urltemplate.mjs) — otherwise the guard probes with the
+ * wrong shape and asks capabilities a question about a token the rule would
+ * never actually fire on.
+ */
 export function representativeTokens(slotKind: string): string[] {
   switch (slotKind) {
     case 'n':
@@ -74,7 +81,12 @@ export function representativeTokens(slotKind: string): string[] {
       ]
     case 'id':
       return ['orderXYZ12345', 'sessKQW98120x', 'itemLMN45678z']
+    case 'slug':
+      return ['claude-code', 'my-doc-slug', 'user_profile']
     default:
-      return ['12345', 'a1b2c3d4']
+      // No representative sample → probe nothing rather than probe the wrong
+      // shape. isShapeCovered([]) is false, so the proposal is allowed through
+      // and judged on its own evidence instead of a bogus coverage answer.
+      return []
   }
 }
