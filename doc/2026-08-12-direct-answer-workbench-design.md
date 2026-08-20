@@ -47,6 +47,20 @@
 
 ### 3.1 接口（generic，不含具体产品语义）
 
+> **⚠️ 实现决策修订（2026-08-20）：本节的 `DirectAnswerResolver` 类型没有落地，且不打算落地。**
+>
+> 原因：现有的 plugin `dynamicItems` provider **已经**是「输入 → 直接出结果」的注册机制（calculator / date-time / web-open 都在用）。再建一套平行的 resolver 类型 + 适配层转回 `LauncherItem`，是在已有能力上套第二层壳。
+>
+> 真正缺失的不是「另一套协议」，而是**答案语义无法被声明**——直答项的标题是「结果」而不是「命令名」，因此会被 ranking 的 query-present 文本过滤器丢掉。历史上是靠 `kind:'dynamic'` + `aliases:[query]` 自我匹配绕过去的，代价是 `staticPriority` 静默失效（详见下方「已知陷阱」）。
+>
+> **实际落地形态**：
+> - `LauncherItem.directAnswer?: { priority?, origin? }` —— host 侧一等字段（`launcher/types.ts`）
+> - `LauncherItemContribution.directAnswer?: boolean` —— 插件只声明「我是答案」，**priority 由 host 分配**（`PLUGIN_DIRECT_ANSWER_PRIORITY = 30`，低于 learned 基线 45），与 `staticPriority` 的 host-only 约束同源
+> - ranking 三处一等支持：免 query-present 过滤、priority 不受 `kind` 限制、空查询保留
+> - 契约：`npm run test:launcher-direct-answer`
+>
+> 若后续仍要引入 resolver 注册表，请先说明它相对 `dynamicItems` 的增量价值，不要仅因本节写过就重建。
+
 ```
 DirectAnswerResolver = {
   id: string
@@ -114,6 +128,154 @@ DirectAnswer = {
 - 现有 `useClipboardObjectBlock` / `actionRecommendation` 的"推荐动作"逻辑**收敛为直答 resolver 的一个输入源**（source=`clipboard`）。
 - Object Block token 最多退化为一枚轻量**"来源指示"chip**（表明这批答案来自剪贴板某内容），不再承载独立的动作列表。
 - 落地时清理/改写 `src/launcher/clipboard/*` 中与"推荐动作行"相关的分支，避免双轨。
+
+---
+
+### 3.6 已知陷阱 · 静默失效史（2026-08-20 复盘）
+
+自学习这套东西的失败模式**不是崩溃，是「看起来学会了，其实永远不发火」**。规则落库、设置页显示「已学」、埋点也有记录——只有用户知道它没反应。已发现两例，根因相同：**同一个语义被两处独立实现，而没有测试锁住它们一致。**
+
+**① learn / fire 分类不对称**（`urlTemplate.ts`）
+
+```
+learn 期: slotKindForToken(tok) = classifySegment(tok) ?? 'id'   // 兜底成 id
+fire 期: queryMatchesSlot(q, k) = classifySegment(q) === k       // 没有对应兜底
+```
+
+`claude-code` / `PROJ-1234` / `my-doc-slug` 全部学成 `{id}`，但 fire 期 `classifySegment` 对它们返回 `null` ≠ `'id'` → 规则永不命中。
+
+**修法（结构性，而非补丁）**：两侧共用 `classifyTokenSlot`，让对称性成为**函数同一性**而不是约定；宽分类是保守分类的严格超集（有测试锁）；分类不出来就**拒绝建规则**（宁可不学，也不学一条学不会发火的）。
+
+**② 直答项 priority 被 kind 吞掉**（`ranking.ts`）
+
+为绕过 query-present 过滤把 learned item 从 `kind:'host'` 改成 `kind:'dynamic'`，但 `staticPriority()` 当时只认 `kind==='host'` → **P3 的 frecency 排序、发火期 host 消歧两个功能全程无效**，从未有人察觉。
+
+**修法**：`directAnswer` 一等语义（免过滤 + priority 不受 kind 限制），hack 撤除。
+
+**给后续的判断口径**：
+
+```
+只要「产出侧」和「消费侧」对同一概念各写了一次判定，
+就必须有一条不变量测试把它们钉在一起——
+否则它不会报错，只会安静地不工作。
+```
+
+现有两条不变量测试：`test:learning-urltemplate`（能学的必须能发火 + 护栏探测 token 必须自洽）、`test:launcher-direct-answer`（答案免过滤 + priority 真实生效）。
+
+---
+
+### 3.7 提议卡下线 · 改为静默学习（2026-08-20 拍板）
+
+**埋点证据**（`~/.local/hiven/logs/`，含轮转）：
+
+```
+proposal_ready   216 次   ← 只有 7 个唯一签名，最高一条被推了 64 遍
+rule_accepted      0 次
+rule_rejected      1 次
+rule_fired         0 次
+```
+
+转化率 0/216。根因不是「问」这个设计，而是**「问了不记得问过」**：`filterProposableCandidates` 只认两种终态——`learned`（接受）、`suppressed`（拒绝）。**「忽略」不是终态**，所以关掉 launcher 后下次开窗原样再来。
+
+**决策：去掉提议卡，改为静默学习 + 首次发火可见可逆。** 按「学错的代价」分层：
+
+| 代价 | 处理 |
+|---|---|
+| 只是多一条候选、排序变化 | 完全静默，靠 frecency 半衰期自动遗忘 |
+| 有副作用（url-template 会开浏览器） | 静默建规则，**首次发火时可见 + 可撤销**，不事前问 |
+
+**核心替换：用行为当确认，而不是用卡片当确认。** 用户重复 3 次本身就是信号，再弹卡问一遍是冗余。真正的确认是「第一次用了这条规则」——用了就固化（`FIRE_STRENGTH_BONUS`），不用就衰减遗忘（`isForgettable` + `pruneForgottenRules`）。这套自净机制本就存在，只是过去被「必须先接受提议」挡住，从未运转过。
+
+**安全属性**（`test:learning-autolearn` 锁定）：
+
+- 静默规则初始 strength = 2（远低于确认规则的 `distinctInputs`），约 6 周不用自动遗忘
+- 每轮最多学 3 条，不灌爆直答区
+- 学过的 clusterKey 永久离池 → 216 次重复不可能重现
+- 前 3 次发火带「新学的」标记 + 紧随一条「不要这条」项
+- **撤销 = 删除 + 抑制**（缺一不可：只删的话下一轮 auto-learn 会把用户刚拒绝的规则原样学回来）
+
+撤销做成普通 launcher item 而非 `⌘⌫` 快捷键：launcher 键盘模型是调过的（提议卡当初就刻意避开方向键模型），且快捷键不可发现。
+
+**待观察**：`rule_auto_learned` vs `rule_fired` vs `rule_undone` 三者比例。**大量学到、极少发火 = 学习在猜**，那是下一个要解决的问题——静默不该掩盖质量差。
+
+---
+
+### 3.8 学习结果的归属 · 交给已拥有该概念的插件（2026-08-20）
+
+学到的 url-template（「输入 MR 号 → 打开那个 MR」）和用户手写的网页快开规则，**是同一个东西的两个所有者**。各存一份的代价：两份列表做同一件事，而学到的那份**只能删、不能改**。
+
+**机制：sink，`coverage` 的镜像**
+
+```
+coverage.register  → 插件说「这个我已经能处理，别学」
+learning.registerSink → 插件说「你要真学到了这类，给我」
+```
+
+`autoLearnNow` 先把候选 offer 给 sinks；被认领则 host 不留副本，规则落在插件自己的列表里——**可见且可编辑**。
+
+依赖方向不变（host 不依赖插件）：offer 是纯结构描述（`template` + `slotKind`），把它翻译成什么由认领方决定。`ruleSink.ts` 有契约测试 grep 插件词汇，防止产品语义回流到 host。
+
+**顺带补齐的能力**：插件此前只能读 settings 不能写，认领的规则无处可存 → 新增 `settings.update`（走 settings UI 同一条 resolve→set→onChange 路径）。onChange 那一环是必须的：web-open 在那里重新注册 coverage，跳过就会导致刚交出去的规则被重新学一遍。
+
+**又一处跨层不对称风险（已用测试锁住）**：host 用 `classifyTokenSlot` 判定 slot kind，插件用正则匹配 query。两者漂移 = 学到了永不发火（正是 §3.6 ①的模式）。`test:web-open-learned-rules` 把 host 的 `representativeTokens` 灌进插件生成的正则，强制两边一致。
+
+### 3.9 访问频率信号 · 双尺度 frecency（2026-08-20）
+
+首屏推荐要同时表达两类「值得回去」：
+
+| 类型 | 例子 | 特征 |
+|---|---|---|
+| habit | 常用 AI 站 | 跨度长、持续 |
+| burst | 本周需求的 PRD/MR/技术方案 | 短期密集，上线即冷 |
+
+单一半衰期表达不了：慢衰减会让已上线的 PRD 挂榜数周（停 20 天在 45 天半衰期下仍剩 73%），快衰减会让长期习惯在安静期掉出去。
+
+**解法**（`src/workspace/launcher/visitFrecency.ts`）：
+
+1. 快尺度（2 天半衰期）抓「当下在搞」，慢尺度（45 天）抓「长期习惯」，取 max
+2. **慢尺度用访问跨度门控**（`habitFactor = span / 30天`）——三天的猛点击不能冒充数月的习惯，这是把已上线 PRD 压下去的关键
+3. **两个尺度必须归一化后再比**：原始衰减计数跨尺度不可比（慢尺度天然累加更多历史，`max()` 会永远偏向它）。除以各自半衰期得到「次/天」，才是同一量纲
+
+数据源分两级：`chrome.history.getVisits` 给真实时间戳序列（扩展 0.3.0+，`visits` 字段一路 optional 保证旧扩展不炸）；旧扩展只有 `visitCount`+`lastVisitTime`，落 `visitFrecencyFromSummary` 近似（log 阻尼处理量，但**拿不到 span 信号**）。
+
+**已知缺口**：`recordNavigation` 只记录能模板化的 URL，`claude.ai` 这类无 id 段的常用站首页一条不存——habit 这一类目前只能靠浏览器历史，hiven 自身没有观察底座。
+
+---
+
+### 3.10 位置方差归纳 · 自发现文本变量段（2026-08-20）
+
+`classifyPathSegment` 保守是对的：单条 URL 分不清 `merge_requests`（常量）和 `claude-code`（变量），按形态猜会把常量段变成槽。代价是 `github.com/{owner}/{repo}` 这类**纯文本变量**永远发现不了。
+
+**跨样本证据能解决单样本解决不了的事**：按 `host + 段数` 分组，逐位置统计 distinct 值。某位置取到很多不同值 = 变量（不管长什么样）；从不变化 = 路径常量。
+
+**两个判断刻意分开**（`positionVariance.ts` + `learningController`）：
+
+```
+① 哪些位置在变     → 跨样本、只比 hash 相等性
+② 变的位置能否发火 → 看该位置实际值的形态（classifyTokenSlot）
+```
+
+②是防止产生"万能规则"的关键：`react`、`core` 这种裸词位置**确实在变**，但用它做规则会让用户输入任何词都触发。所以变量位置的值分不出形态 → 不建规则。于是 `github.com/anthropics/{repo}`（你常去自己 org）能学，`github.com/{owner}/{repo}` 全裸词的不学。
+
+护栏：变量位置 > 2 拒绝；全部位置都在变拒绝（`cdn.x.org/{a}/{b}/{c}` 匹配一切等于什么都没说）。
+
+**隐私**：归纳只需相等性，故只存 per-segment salted hash（store v4 `paths`）。但拼模板需要常量段的**字面值**，所以 navigationSensor 在内存里保留每个形状最近一条具体路径（不落盘，重启丢失只延迟发现、不丢失发现）。
+
+### 3.11 收藏推荐 · 只推 habit 不推 burst（2026-08-20）
+
+「你常开这个，要不要留着？」只对**长期有用**的东西成立。本周猛刷的 PRD 周五上线后就是收藏夹里的垃圾；开了几个月的站才该留。
+
+所以推荐**按访问模式而非访问频次**判定（`favoriteSuggestion.ts`）：
+
+```
+habit → 推荐          （长跨度 + 仍活跃）
+burst → 永不推荐      （无论此刻多热）
+stale → 永不推荐      （含"曾是习惯但已荒废"）
+```
+
+呈现遵守 §3.7 拍板的原则：**不弹窗问**。命中的项把 kind 标签换成「常去」，出现在 `⌘P`（收藏快捷键）本来就够得着的地方——推到眼前，不打断。
+
+**信号/算法分工**（呼应 host-plugin 通用性原则）：`DesktopTarget.visits` 是一等的通用字段，**插件只报「什么时候访问过」，host 决定「据此得出什么结论」**（排序用双尺度 frecency，去留用 habit/burst 判定）。站点知识不进 host，排序策略不进插件。
 
 ---
 
@@ -246,11 +408,14 @@ LearnedRule = {
 | 阶段 | 目标 | 验证 |
 |---|---|---|
 | **P0 直答基座（无学习）** | 统一直答 resolver 协议；平移 calc/timestamp/jwt/json/color/base64/url；零查询直答剪贴板；去向系统接好 | 开窗即答；复制 JWT 开窗直接见解码，`↵` 复制、`⇥` 换去向；无命令步 |
+| ↳ P0a 答案语义一等化（**已实现 2026-08-20**） | `LauncherItem.directAnswer` + 插件布尔声明 + ranking 三处支持（见 §3.1 修订）；fire.ts 去掉 alias/kind hack | `test:launcher-direct-answer` 全绿；learned 规则 priority 真正生效 |
+| ↳ P0b 内置 resolver 平移（**未做**） | 给 calculator / jwt / json / color / base64 等声明 `directAnswer: true` | 会改变现有排序，建议先在真机验证观感再逐个开 |
+| ↳ P0c Object Block 收敛（**未做**，§3.5） | 剪贴板推荐动作并入直答区，`src/launcher/clipboard/*` 双轨清理 | 风险最高，需先有 P0b 的实际观感 |
 | **P1 被动观察层** | 运行时可读的 episode 存储；剪贴板时间线配对；前台 App + 浏览器流采集（先用现有 bridge 快照） | episode/pair store 有数据；能看到被动配对样本；secret 被跳过 |
 | **P2 聚类 + 归纳 + 提议** | 特征签名聚类；保守归纳（+过宽否决）；提议卡（唯一确认）；LearnedRule 存储 + 管理页 | 重复 3 次触发提议；确认后规则落库；管理页可停/删 |
 | ↳ P2a（已实现） | `cluster.ts` 纯核：聚类 + distinct 守卫 + 过宽否决；`test-learning-cluster` 契约 | 阈值/守卫/否决全测通 |
 | ↳ P2b（已实现） | `proposals.ts` 纯核（描述子/铸规则/过滤）；store v2（rules/suppressions）；`learningController`；`window.__hivenLearning` 调试钩子；3 个提议埋点 | 攒够证据可提议；accept 落库、reject 抑制 |
-| ↳ P2c（已实现） | launcher 提议卡（`LearningProposalCard`，全 i18n，鼠标驱动不入方向键模型）；工具名按 locale 从 registry 解析；设置页「已学」管理页（`LearnedRulesContent`，删规则/恢复忽略）；共享标签 `learningLabels` | 空查询开窗见提议卡；设为直答/不用；设置页可删规则、恢复被忽略的堆 |
+| ↳ **P2c 提议卡（已实现后又被移除 2026-08-20，见 §3.7）** | launcher 提议卡（`LearningProposalCard`，全 i18n，鼠标驱动不入方向键模型）；工具名按 locale 从 registry 解析；设置页「已学」管理页（`LearnedRulesContent`，删规则/恢复忽略）；共享标签 `learningLabels` | 空查询开窗见提议卡；设为直答/不用；设置页可删规则、恢复被忽略的堆 |
 | **P3 命中 + 回喂** | learned rule 进直答排序；frecency 回喂；遗忘 | 学到的规则命中出直答（标"你教的"）；用/不用调权生效 |
 | **P4 浏览器深化（可并入）** | 扩展加：页面选中文本 / 导航事件 / 可选历史；站点作用域规则 | 在特定站点出条件化直答；选中文本作为输入源 |
 
