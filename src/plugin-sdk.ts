@@ -10,6 +10,16 @@ export type {
   SearchableFields,
 } from './workspace/searchRanking'
 export {
+  visitFrecency,
+  visitFrecencyFromSummary,
+  classifyVisitPattern,
+  rankByVisitFrecency,
+} from './workspace/launcher/visitFrecency'
+export type {
+  VisitPattern,
+  VisitFrecencyEntry,
+} from './workspace/launcher/visitFrecency'
+export {
   textOutput,
   textError,
   defineTextCommand,

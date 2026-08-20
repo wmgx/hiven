@@ -13,7 +13,9 @@ import {
   type LauncherOutput,
   type LauncherSuggestContext,
 } from '@hiven/plugin'
+import { learnedOfferToEntry, mergeLearnedEntry } from './learnedRules'
 import {
+  AUTO_CREATED_TAG,
   buildWebQuickOpenUrl,
   DEFAULT_MAX_QUERY_HISTORY,
   DEFAULT_WEB_QUICK_OPEN_SETTINGS,
@@ -389,6 +391,10 @@ function migrateWebQuickOpenSettings(stored: unknown): WebQuickOpenSettings {
         maxQueryHistory: clampMaxQueryHistory(
           typeof source.maxQueryHistory === 'number' ? source.maxQueryHistory : DEFAULT_MAX_QUERY_HISTORY,
         ),
+        // Preserved through migration: dropping it would let the learner claim
+        // the same cluster again on the next pass, duplicating the rule.
+        learnedFrom: typeof source.learnedFrom === 'string' ? source.learnedFrom : undefined,
+        tags: Array.isArray(source.tags) ? source.tags.map(String).filter(Boolean) : undefined,
       }
     }),
   }
@@ -422,6 +428,36 @@ function registerWebOpenCoverage(settings: WebQuickOpenSettings): void {
   )
 }
 
+/**
+ * Claim learned url-templates from the self-learning layer.
+ *
+ * The learner discovers "type this shape → open that page"; that is precisely
+ * what a quick-open rule IS, so it belongs in the same list the user already
+ * manages — where it can be renamed, retargeted, or corrected. Left in the
+ * learner's private store it could only ever be deleted.
+ *
+ * The counterpart of registerWebOpenCoverage: coverage stops the learner from
+ * re-learning what we already do, this takes ownership of what it does learn.
+ */
+function registerLearnedRuleClaim(pluginId: string, source: 'builtin' | 'installed' | 'dev'): void {
+  getPluginHostSdk().learning.registerSink('web-open', (offer) => {
+    const learned = learnedOfferToEntry(offer)
+    if (!learned) return false
+
+    let claimed = false
+    getPluginHostSdk().settings.update<WebQuickOpenSettings>(pluginId, source, (current) => {
+      const settings = current ?? DEFAULT_WEB_QUICK_OPEN_SETTINGS
+      const merged = mergeLearnedEntry(settings.entries ?? [], learned)
+      // Same array back = already present (or user-edited); nothing to write,
+      // but we still claim it so the host doesn't keep a duplicate copy.
+      claimed = true
+      if (merged === settings.entries) return settings
+      return { ...settings, entries: merged as WebQuickOpenEntry[] }
+    })
+    return claimed
+  })
+}
+
 export default definePlugin<WebQuickOpenSettings>({
   hooks: {
     // App start: warm favicons for current rules so launcher shows site icons after first session.
@@ -429,6 +465,7 @@ export default definePlugin<WebQuickOpenSettings>({
       const settings = (ctx.settings as WebQuickOpenSettings | undefined) ?? DEFAULT_WEB_QUICK_OPEN_SETTINGS
       scheduleWarmFavicons(settings, ctx.storage, ctx.source, ctx.pluginId, ctx.network)
       registerWebOpenCoverage(settings)
+      registerLearnedRuleClaim(ctx.pluginId, ctx.source)
       applyBrowserCapability(settings)
     },
   },
@@ -555,6 +592,11 @@ export default definePlugin<WebQuickOpenSettings>({
               label: 'Quick-open rules',
               labelI18n: { zh: '网页快开规则' },
               itemTitleKey: 'title',
+              itemTagsKey: 'tags',
+              // Localized at render time; the stored value stays 'auto'.
+              itemTagLabelsI18n: {
+                [AUTO_CREATED_TAG]: { en: 'Auto', zh: '自动创建' },
+              },
               addLabel: 'Add rule',
               addLabelI18n: { zh: '添加规则' },
               itemLabel: 'Rule',

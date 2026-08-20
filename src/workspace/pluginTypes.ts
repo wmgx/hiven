@@ -355,6 +355,19 @@ export type PluginSettingsObjectListField<TSettings = unknown> = PluginSettingsF
   itemLabel?: string
   itemLabelI18n?: Partial<Record<Locale, string>>
   itemTitleKey?: string
+  /**
+   * Item key holding a string[] of tags, rendered as small pills next to the
+   * item title. Lets a list distinguish entries by origin or category — most
+   * immediately, marking which rows the system created rather than the user.
+   */
+  itemTagsKey?: string
+  /**
+   * Display text per tag value, by locale. A tag with no entry here renders
+   * verbatim, so user-authored tags pass through untouched while
+   * system-generated ones (`auto`, …) stay translatable — no human-readable
+   * string is ever persisted into the data.
+   */
+  itemTagLabelsI18n?: Record<string, Partial<Record<Locale, string>>>
   addLabel?: string
   addLabelI18n?: Partial<Record<Locale, string>>
   emptyText?: string

@@ -34,7 +34,15 @@ import {
   unregisterCoverageProvider,
   type CoverageProvider,
 } from './workspace/learning/coverage'
+import {
+  registerLearnedRuleSink,
+  unregisterLearnedRuleSink,
+  type LearnedRuleSink,
+} from './workspace/learning/ruleSink'
+import { updateOwnPluginSettings } from './workspace/pluginSettingsWrite'
+import type { PluginSettingsSource } from './workspace/pluginSettingsStore'
 
+export type { LearnedRuleOffer, LearnedRuleSink } from './workspace/learning/ruleSink'
 export type { PluginHostUi, PluginHostEffects, TextCommandDefinition } from './pluginHostCore.ts'
 export type {
   DesktopTargetsHostApi,
@@ -97,6 +105,39 @@ export type CoverageRegistryApi = {
   unregister: (pluginId: string) => void
 }
 
+export type LearningRegistryApi = {
+  /**
+   * Claim learned rules that belong to a concept this plugin already owns.
+   *
+   * The learner offers each discovered rule before storing it. Return true to
+   * take ownership: the rule then lives in this plugin's own storage, where the
+   * user can see and EDIT it alongside the ones they wrote by hand, instead of
+   * in a second delete-only list. Return false to leave it with the learner.
+   *
+   * The offer is structural (template + slot kind); translating it into whatever
+   * this plugin persists is the plugin's job.
+   */
+  registerSink: (pluginId: string, sink: LearnedRuleSink) => void
+  unregisterSink: (pluginId: string) => void
+}
+
+export type PluginSettingsWriteApi = {
+  /**
+   * Read-modify-write this plugin's own settings, through the same store the
+   * settings UI uses (so migrations, versioning and onChange all still apply).
+   *
+   * Exists so a plugin can persist something it learned or computed — a plugin
+   * could previously only READ its settings, which left claimed learned rules
+   * with nowhere to go. `pluginId`/`source` come from the host-provided plugin
+   * context; do not synthesize them.
+   */
+  update: <T>(
+    pluginId: string,
+    source: PluginSettingsSource,
+    updater: (current: T) => T,
+  ) => void
+}
+
 export type PluginHostSdk = {
   definePlugin: typeof definePlugin
   react: typeof React
@@ -123,6 +164,13 @@ export type PluginHostSdk = {
    * Register a test so the learner won't re-propose what this plugin already does.
    */
   coverage: CoverageRegistryApi
+  /**
+   * Self-learning integration: claim learned rules whose concept this plugin
+   * already owns, so they land in one editable list rather than two.
+   */
+  learning: LearningRegistryApi
+  /** Persist changes to this plugin's own settings (see PluginSettingsWriteApi). */
+  settings: PluginSettingsWriteApi
 }
 
 declare global {
@@ -154,6 +202,13 @@ export function createPluginHostSdk(): PluginHostSdk {
     coverage: {
       register: registerCoverageProvider,
       unregister: unregisterCoverageProvider,
+    },
+    learning: {
+      registerSink: registerLearnedRuleSink,
+      unregisterSink: unregisterLearnedRuleSink,
+    },
+    settings: {
+      update: updateOwnPluginSettings,
     },
   }
 }

@@ -689,6 +689,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
       }
 
       const titleKey = field.itemTitleKey ?? 'title'
+      const tagsKey = field.itemTagsKey
 
       const emptyText = localize(field.emptyText, field.emptyTextI18n, locale)
         || translate(locale, 'scripts', 'settingsEmptyList')
@@ -721,6 +722,11 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
                   : provider
                     ? provider
                     : ''
+                // Tags render verbatim unless the schema supplies a localized
+                // label for that value — keeps persisted data language-neutral.
+                const tags = tagsKey && Array.isArray(item[tagsKey])
+                  ? (item[tagsKey] as unknown[]).map(String).filter(Boolean)
+                  : []
                 return (
                   <button
                     key={`${cardId}-${itemIndex}`}
@@ -731,6 +737,11 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
                     <span className="schema-object-list-master-item-top">
                       <span className={`schema-object-list-master-dot ${isEnabled ? 'is-on' : ''}`} />
                       <span className="schema-object-list-master-title">{title}</span>
+                      {tags.map((tag) => (
+                        <span key={tag} className="schema-object-list-master-tag">
+                          {localize(tag, field.itemTagLabelsI18n?.[tag], locale)}
+                        </span>
+                      ))}
                     </span>
                     {subtitle && <span className="schema-object-list-master-sub">{subtitle}</span>}
                   </button>
