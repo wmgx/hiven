@@ -22,7 +22,15 @@ function loadModule(path, { stripImports = [], globals = {} } = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, esModuleInterop: true },
   }).outputText
   const moduleExports = {}
-  const sandbox = { exports: moduleExports, module: { exports: moduleExports }, console, ...globals }
+  // Naming the unstripped module beats a bare "require is not defined" — this
+  // loader breaks whenever the module under test grows a new import.
+  const sandbox = {
+    exports: moduleExports,
+    module: { exports: moduleExports },
+    console,
+    require: (id) => { throw new Error(`unstripped import in ${path}: ${id}`) },
+    ...globals,
+  }
   vm.runInNewContext(out, sandbox)
   return sandbox.module.exports
 }
@@ -45,13 +53,29 @@ const clipboardSnapshot = loadModule('src/launcher/clipboard/clipboardSnapshot.t
 })
 assert.equal(typeof clipboardSnapshot.detectClipboardType, 'function', 'clipboardSnapshot.ts must export detectClipboardType')
 
+// --- src/launcher/clipboard/attachPolicy.ts (objectBlock dependency) ---
+const attachPolicy = loadModule('src/launcher/clipboard/attachPolicy.ts', {
+  stripImports: [
+    ...stripTypeImports,
+    /import\s*\{\s*detectContent\s*\}\s*from\s*'\.\.\/\.\.\/kits\/content\/index'\s*;?\s*\n?/,
+    /import\s*\{[\s\S]*?\}\s*from\s*'\.\/clipboardSnapshot'\s*;?\s*\n?/,
+  ],
+  globals: {
+    detectContent: detectContentModule.detectContent,
+    detectClipboardFilePath: clipboardSnapshot.detectClipboardFilePath,
+    isSoftClipboardOperand: clipboardSnapshot.isSoftClipboardOperand,
+  },
+})
+
 // --- src/launcher/clipboard/objectBlock.ts (depends on clipboardSnapshot.ts) ---
 const objectBlock = loadModule('src/launcher/clipboard/objectBlock.ts', {
   stripImports: [
     ...stripTypeImports,
     /import\s*\{[^}]*\}\s*from\s*'\.\/clipboardSnapshot'\s*;?\s*\n?/,
+    /import\s*\{[^}]*\}\s*from\s*'\.\/attachPolicy'\s*;?\s*\n?/,
   ],
   globals: {
+    isStrongClipboardAttachEligible: attachPolicy.isStrongClipboardAttachEligible,
     detectClipboardFilePath: clipboardSnapshot.detectClipboardFilePath,
     detectClipboardType: clipboardSnapshot.detectClipboardType,
     fileNameFromPath: clipboardSnapshot.fileNameFromPath,

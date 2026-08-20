@@ -3,7 +3,7 @@
  * Desktop Target registry + toLauncherItem contracts (design D0).
  */
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
 import { createRequire } from 'node:module'
@@ -29,6 +29,12 @@ function loadTsTree(entryRel) {
     const mod = { exports: moduleExports }
     cache.set(resolved, moduleExports)
     const localRequire = (spec) => {
+      // i18n is checked BEFORE the relative-path branch: it resolves on disk, so
+      // that branch would load the entire locale registry instead of falling
+      // through to this stub. Only pickLocale is actually needed here.
+      if (spec === '../../i18n' || spec.endsWith('/i18n')) {
+        return { pickLocale: (locale, zh, en) => (String(locale).startsWith('zh') ? zh : en) }
+      }
       if (spec.startsWith('.')) {
         const base = path.dirname(resolved)
         const candidates = [
@@ -37,14 +43,19 @@ function loadTsTree(entryRel) {
           path.join(base, spec, 'index.ts'),
         ]
         for (const c of candidates) {
+          // statSync is imported at module scope: this is an ESM file, so the
+          // bare require('fs') that used to be here always threw, and the catch
+          // turned every candidate into a miss — the resolver reported
+          // "Cannot resolve" for modules sitting right there on disk.
+          let isFile = false
           try {
-            if (require('fs').statSync(c).isFile()) return load(c)
-          } catch { /* continue */ }
+            isFile = statSync(c).isFile()
+          } catch { /* not this candidate */ }
+          // Deliberately outside the try: a module that EXISTS but fails to load
+          // must surface its own error, not be reported as unresolvable.
+          if (isFile) return load(c)
         }
         throw new Error(`Cannot resolve ${spec} from ${resolved}`)
-      }
-      if (spec === '../../i18n' || spec.endsWith('/i18n')) {
-        return { /* Locale type only */ }
       }
       if (spec.includes('launcher/types')) {
         return {}
@@ -209,7 +220,15 @@ assert.equal(closeItem.recordUsage, false)
 // Process mode helper
 const processesSrc = readFileSync('src/workspace/desktopControl/processes.ts', 'utf8')
 assert.match(processesSrc, /isProcessModeQuery/)
-assert.match(processesSrc, /recordUsage:\s*false/)
+// "Process rows are not usage-recorded" moved out of processes.ts into
+// shouldRecordUsage's kind allowlist (same stale assertion as in
+// test-desktop-window-process-contract). Assert it where it now lives.
+{
+  const toItem = readFileSync('src/workspace/desktopTargets/toLauncherItem.ts', 'utf8')
+  const allowlist = /export function shouldRecordUsage[\s\S]*?\n}/.exec(toItem)?.[0] ?? ''
+  assert.ok(allowlist, 'shouldRecordUsage must exist')
+  assert.doesNotMatch(allowlist, /target\.kind === 'process'/, 'process rows must not record usage')
+}
 
 // surfaces force in toLauncherItem
 assert.match(readFileSync('src/workspace/desktopTargets/toLauncherItem.ts', 'utf8'), /surfaces:\s*\[\s*'global-launcher'\s*\]/)

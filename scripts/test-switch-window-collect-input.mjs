@@ -18,6 +18,9 @@ function loadSwitchCommand() {
   let src = readFileSync(file, 'utf8')
   src = src.replace(/from '\.\/windows'/g, "from '__windows__'")
   src = src.replace(/from '\.\.\/launcher\/types'/g, "from '__types__'")
+  // switchWindowCommand grew a pickLocale import; stub it rather than pulling the
+  // whole i18n registry into the sandbox.
+  src = src.replace(/from '\.\.\/\.\.\/i18n'/g, "from '__i18n__'")
   const out = ts.transpileModule(src, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, esModuleInterop: true },
   }).outputText
@@ -68,6 +71,9 @@ function loadSwitchCommand() {
         }
       }
       if (spec === '__types__') return {}
+      if (spec === '__i18n__') {
+        return { pickLocale: (locale, zh, en) => (String(locale).startsWith('zh') ? zh : en) }
+      }
       throw new Error(`unexpected require ${spec}`)
     },
   }

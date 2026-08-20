@@ -37,12 +37,28 @@ const clipboardSnapshot = loadModule('src/launcher/clipboard/clipboardSnapshot.t
   ],
   globals: { detectContent: detectContentModule.detectContent },
 })
+// attachPolicy joined this chain later; without stripping it the sandbox hits a
+// bare require and the whole load fails.
+const attachPolicy = loadModule('src/launcher/clipboard/attachPolicy.ts', {
+  stripImports: [
+    ...stripTypeImports,
+    /import\s*\{\s*detectContent\s*\}\s*from\s*'\.\.\/\.\.\/kits\/content\/index'\s*;?\s*\n?/,
+    /import\s*\{[\s\S]*?\}\s*from\s*'\.\/clipboardSnapshot'\s*;?\s*\n?/,
+  ],
+  globals: {
+    detectContent: detectContentModule.detectContent,
+    detectClipboardFilePath: clipboardSnapshot.detectClipboardFilePath,
+    isSoftClipboardOperand: clipboardSnapshot.isSoftClipboardOperand,
+  },
+})
 const objectBlock = loadModule('src/launcher/clipboard/objectBlock.ts', {
   stripImports: [
     ...stripTypeImports,
     /import\s*\{[^}]*\}\s*from\s*'\.\/clipboardSnapshot'\s*;?\s*\n?/,
+    /import\s*\{[^}]*\}\s*from\s*'\.\/attachPolicy'\s*;?\s*\n?/,
   ],
   globals: {
+    isStrongClipboardAttachEligible: attachPolicy.isStrongClipboardAttachEligible,
     detectClipboardFilePath: clipboardSnapshot.detectClipboardFilePath,
     detectClipboardType: clipboardSnapshot.detectClipboardType,
     fileNameFromPath: clipboardSnapshot.fileNameFromPath,

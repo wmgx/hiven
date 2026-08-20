@@ -37,7 +37,24 @@ function loadModule(path, { stripImports = [], globals = {} } = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, esModuleInterop: true },
   }).outputText
   const moduleExports = {}
-  const sandbox = { exports: moduleExports, module: { exports: moduleExports }, console, ...globals }
+  // Fallback require: modules under test keep growing host dependencies
+  // (telemetry, permissions, registry…) that the assertions below never
+  // exercise. Return an inert stub instead of failing to load. If a code path
+  // genuinely needs one, the stub does nothing and the assertion FAILS — the
+  // safe direction. A named export that is used as a value still resolves.
+  const inert = new Proxy(() => undefined, {
+    get: (_t, prop) => (prop === 'then' ? undefined : inert),
+    apply: () => undefined,
+    construct: () => ({}),
+  })
+  const fallbackRequire = () => new Proxy({}, { get: () => inert })
+  const sandbox = {
+    exports: moduleExports,
+    module: { exports: moduleExports },
+    console,
+    require: fallbackRequire,
+    ...globals,
+  }
   vm.runInNewContext(out, sandbox)
   return sandbox.module.exports
 }
@@ -76,8 +93,17 @@ const toolAdapter = loadModule('src/workspace/launcher/toolAdapter.ts', {
     ...stripTypeImports,
     /import\s*\{[^}]*\}\s*from\s*'\.\/output'\s*;?\s*\n?/,
     /import\s*\{[^}]*normalizeLauncherSurfaceId[^}]*\}\s*from\s*'\.\/types'\s*;?\s*\n?/,
+    // toolAdapter later grew permissions / shell / registry dependencies. The
+    // preview-signal path under test consults none of them, so stub all three
+    // rather than dragging the host runtime into the sandbox.
+    /import\s*\{[^}]*\}\s*from\s*'\.\.\/pluginPermissions'\s*;?\s*\n?/,
+    /import\s*\{[^}]*\}\s*from\s*'\.\.\/pluginShell'\s*;?\s*\n?/,
+    /import\s*\{[^}]*\}\s*from\s*'\.\.\/pluginRegistry'\s*;?\s*\n?/,
   ],
   globals: {
+    getPluginPermissionSnapshot: () => ({ granted: [], requested: [] }),
+    createPluginShell: () => ({ run: () => Promise.reject(new Error('shell unavailable in test')) }),
+    pluginRegistry: { getPluginPermissions: () => [], getAllPluginDefinitions: () => [] },
     normalizeLauncherSurfaceId: (surfaceId) => surfaceId === 'command-palette' ? 'editor-command-bar' : surfaceId,
     textResult: output.textResult,
     replaceActiveTextResult: output.replaceActiveTextResult,
