@@ -19,7 +19,8 @@ import { isShapeCovered, representativeTokens, type CoverageProbe } from './cove
 import { extractFeatures, featureSignature } from './features'
 import { refreshLearnedUrlRules } from './fire'
 import { buildPureTransformRunners, runLearnedChain } from './registryRunners'
-import { filterProposableCandidates, ruleFromCandidate, templateToCandidate } from './proposals'
+import { ruleFromCandidate, selectAutoLearnable, templateToCandidate } from './proposals'
+import { offerLearnedRule } from './ruleSink'
 import {
   addSuppression,
   countEventSigs,
@@ -29,11 +30,14 @@ import {
   queryAllRules,
   queryAllSuppressions,
   queryNavigations,
+  queryPathObservations,
   removeSuppression,
   type LearnedRule,
   type Suppression,
 } from './store'
-import { induceUrlTemplates, type DiscoveredTemplate } from './urlTemplate'
+import { classifyTokenSlot, induceUrlTemplates, type DiscoveredTemplate } from './urlTemplate'
+import { buildTemplateFromPositions, induceVariablePositions } from './positionVariance'
+import { getRecentPathSample } from './navigationSensor'
 
 /**
  * A discovered url-template is net-new only if a representative slot token isn't
@@ -50,8 +54,15 @@ function isCandidateNovel(candidate: RuleCandidate): boolean {
   return !covered
 }
 
-/** Compute the proposals worth surfacing right now (strongest first, capped). */
-export async function getPendingProposals(): Promise<RuleCandidate[]> {
+/**
+ * All candidates the observer currently has evidence for, strongest first,
+ * minus the ones already learned or explicitly suppressed.
+ */
+async function collectCandidates(): Promise<{
+  candidates: RuleCandidate[]
+  learnedKeys: string[]
+  suppressedKeys: string[]
+}> {
   const [pairs, eventSigCounts, rules, suppressions, navs] = await Promise.all([
     queryAllPairs(),
     countEventSigs(),
@@ -61,9 +72,10 @@ export async function getPendingProposals(): Promise<RuleCandidate[]> {
   ])
   // Merge both discovery sources: verified transform clusters + navigation
   // templates (self-discovery), strongest evidence first.
-  const merged = [
+  const candidates = [
     ...selectProposableCandidates(pairs, eventSigCounts),
     ...induceUrlTemplates(navs).map(templateToCandidate),
+    ...(await positionVarianceCandidates()),
   ]
     .filter(isCandidateNovel)
     .sort((a, b) => {
@@ -71,19 +83,129 @@ export async function getPendingProposals(): Promise<RuleCandidate[]> {
       if (b.sampleCount !== a.sampleCount) return b.sampleCount - a.sampleCount
       return b.lastTs - a.lastTs
     })
-  const filtered = filterProposableCandidates(merged, {
+  return {
+    candidates,
     learnedKeys: rules.map((r) => r.clusterKey),
     suppressedKeys: suppressions.map((s) => s.clusterKey),
-  })
-  if (filtered.length > 0) {
-    const top = filtered[0]
-    trackBehavior(TelemetryEvents.learningProposalReady, {
-      transformKind: top.transform.kind,
-      sampleCount: top.sampleCount,
-      distinctInputs: top.distinctInputs,
+  }
+}
+
+/**
+ * Candidates from position-variance induction — the text-variable paths the
+ * shape heuristic cannot see (`github.com/anthropics/{repo}`).
+ *
+ * Two independent judgements, deliberately kept apart:
+ *   1. WHICH positions vary — decided across samples, by hash equality only.
+ *   2. WHETHER a varying position can safely fire — decided by the shape of its
+ *      actual value, via the same classifier the fire path uses.
+ *
+ * (2) is what stops this from producing catch-all rules. A position holding bare
+ * words (`react`, `core`) varies perfectly well, but a rule keyed on it would
+ * fire on any word the user typed, so it is dropped. Only positions whose values
+ * classify as a real token shape survive.
+ */
+async function positionVarianceCandidates(): Promise<RuleCandidate[]> {
+  const observations = await queryPathObservations()
+  if (observations.length === 0) return []
+
+  const candidates: RuleCandidate[] = []
+  for (const shape of induceVariablePositions(observations)) {
+    // Needs one concrete path to recover the literal constants.
+    const sample = getRecentPathSample(shape.host, shape.segmentCount)
+    if (!sample) continue
+
+    const slotKinds: string[] = []
+    let fireable = true
+    for (const index of shape.variableIndices) {
+      const kind = classifyTokenSlot(sample.segments[index] ?? '')
+      if (!kind) {
+        fireable = false
+        break
+      }
+      slotKinds.push(kind)
+    }
+    if (!fireable) continue
+
+    const template = buildTemplateFromPositions(
+      shape.host,
+      sample.segments,
+      shape.variableIndices,
+      slotKinds,
+    )
+    if (!template) continue
+
+    // Single-slot only: the reverse-fire path substitutes one typed query.
+    if (slotKinds.length !== 1) continue
+
+    candidates.push({
+      clusterKey: `url:${template}`,
+      matcher: { kind: 'token', tokenKind: slotKinds[0] },
+      transform: { kind: 'url-template', template, slotKind: slotKinds[0] },
+      sampleCount: shape.observations,
+      distinctInputs: shape.distinctPerIndex[shape.variableIndices[0]] ?? 0,
+      firstTs: shape.firstTs,
+      lastTs: shape.lastTs,
     })
   }
-  return filtered
+  return candidates
+}
+
+/** Candidates that would be learned next — devtools/inspection only. */
+export async function getPendingProposals(): Promise<RuleCandidate[]> {
+  const { candidates, learnedKeys, suppressedKeys } = await collectCandidates()
+  return selectAutoLearnable(candidates, { learnedKeys, suppressedKeys })
+}
+
+/**
+ * Silently learn whatever there is now enough evidence for — no proposal, no
+ * confirmation. Returns how many rules were learned.
+ *
+ * This replaces the proposal card. Rules land weak (see AUTO_LEARN_INITIAL_STRENGTH),
+ * announce themselves the first few times they FIRE (where undo is one key away),
+ * and decay back out on their own if never used. Learning a cluster removes it
+ * from the pool permanently, which is what stops the old repeat-forever loop.
+ */
+export async function autoLearnNow(now: number = Date.now()): Promise<number> {
+  const { candidates, learnedKeys, suppressedKeys } = await collectCandidates()
+  const learnable = selectAutoLearnable(candidates, { learnedKeys, suppressedKeys })
+  if (learnable.length === 0) return 0
+
+  for (const candidate of learnable) {
+    // Offer it to whoever already owns this concept first (e.g. the web quick-open
+    // plugin owns "type this shape → open that page"). A claimed rule lives in
+    // that plugin's own list — visible and EDITABLE where the user already
+    // manages such rules — instead of a second, delete-only private store.
+    const claimedBy = await offerToSink(candidate)
+    if (!claimedBy) {
+      await putRule(ruleFromCandidate(candidate, now, { silent: true }))
+    }
+    trackBehavior(TelemetryEvents.learningRuleAutoLearned, {
+      transformKind: candidate.transform.kind,
+      sampleCount: candidate.sampleCount,
+      distinctInputs: candidate.distinctInputs,
+      claimedBy: claimedBy ?? undefined,
+    })
+  }
+  await refreshLearnedUrlRules()
+  return learnable.length
+}
+
+/**
+ * Offer a url-template candidate to registered sinks. Only url-templates are
+ * offerable today — a chain rule has no owner outside the learner.
+ */
+async function offerToSink(candidate: RuleCandidate): Promise<string | null> {
+  if (candidate.transform.kind !== 'url-template') return null
+  return await offerLearnedRule({
+    kind: 'url-template',
+    template: candidate.transform.template,
+    slotKind: candidate.transform.slotKind,
+    clusterKey: candidate.clusterKey,
+    evidence: {
+      sampleCount: candidate.sampleCount,
+      distinctInputs: candidate.distinctInputs,
+    },
+  })
 }
 
 /** Persist a user-accepted proposal as a learned rule. */
@@ -100,6 +222,53 @@ export async function acceptProposal(candidate: RuleCandidate, now: number = Dat
 export async function rejectProposal(clusterKey: string): Promise<void> {
   await addSuppression(clusterKey)
   trackBehavior(TelemetryEvents.learningRuleRejected, {})
+}
+
+/**
+ * Undo a silently-learned rule at fire time ("not this one").
+ *
+ * Deletes the rule AND suppresses its cluster. Both halves are required: with
+ * silent learning, deleting alone would let the next auto-learn pass re-learn
+ * the exact rule the user just dismissed — the undo has to be a terminal state,
+ * for the same reason "ignored" had to become one.
+ */
+export async function undoLearnedRule(rule: LearnedRule): Promise<void> {
+  if (rule.id != null) await deleteRule(rule.id)
+  await addSuppression(rule.clusterKey)
+  await refreshLearnedUrlRules()
+  trackBehavior(TelemetryEvents.learningRuleUndone, {
+    transformKind: rule.transform.kind,
+    fireCount: rule.fireCount ?? 0,
+  })
+}
+
+/** Delay before the first auto-learn pass, so startup isn't competing with it. */
+const AUTO_LEARN_FIRST_DELAY_MS = 30_000
+/** Interval between later passes. Learning is not urgent; being cheap matters more. */
+const AUTO_LEARN_INTERVAL_MS = 10 * 60_000
+
+/**
+ * Run silent learning in the background, off the launcher hot path.
+ *
+ * Deliberately timer-driven rather than triggered on launcher open: opening the
+ * launcher is the latency-critical moment (see doc/launcher-perf-telemetry.md),
+ * and learning a rule 10 minutes later costs the user nothing.
+ */
+export function startAutoLearnLoop(): () => void {
+  let stopped = false
+  const run = () => {
+    if (stopped) return
+    void autoLearnNow().catch(() => {
+      // fail-soft: learning must never break the app
+    })
+  }
+  const first = setTimeout(run, AUTO_LEARN_FIRST_DELAY_MS)
+  const timer = setInterval(run, AUTO_LEARN_INTERVAL_MS)
+  return () => {
+    stopped = true
+    clearTimeout(first)
+    clearInterval(timer)
+  }
 }
 
 // ─── management page (P2c) ─────────────────────────────────────────────────────

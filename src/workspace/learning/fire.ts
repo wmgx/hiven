@@ -19,6 +19,7 @@ import type { LauncherItem } from './../launcher/types'
 import { extractFeatures, featureSignature } from './features'
 import { FIRE_STRENGTH_BONUS, firePriority } from './frecency'
 import { getCurrentActiveHost } from './navigationSensor'
+import { isNewlyLearned } from './proposals'
 import { runLearnedChain } from './registryRunners'
 import { bumpRuleStrength, pruneForgottenRules, queryAllRules, type LearnedRule } from './store'
 import { fillTemplate, queryMatchesSlot, type UrlSlotKind } from './urlTemplate'
@@ -86,31 +87,35 @@ function truncate(text: string, max = 80): string {
 
 // ─── url-template fire (scenario D) ────────────────────────────────────────────
 
-function buildOpenUrlItem(rule: LearnedRule, url: string, query: string, locale: Locale): LauncherItem {
+function buildOpenUrlItem(rule: LearnedRule, url: string, locale: Locale): LauncherItem {
   const host = rule.transform.kind === 'url-template' ? hostOf(rule.transform.template) : ''
   const hostBoost = activeHostFireBoost(host, getCurrentActiveHost())
+  const boosted = hostBoost > 0
   return {
     systemKey: `learned-url:${rule.clusterKey}`,
-    // 'dynamic' (not 'host') so the query-present ranking filter keeps it — host
-    // items are dropped unless their text matches the query, but our result-titled
-    // items don't contain the raw input (same reason calculator uses 'dynamic').
     kind: 'dynamic',
     display: {
       title: t(locale, 'palette.learnFireOpen', { host }),
       subtitle: url,
-      icon: 'Globe',
-      kindLabel: t(locale, 'palette.learnFireKind'),
-      // The triggering query is what surfaces this item — make it match itself so
-      // the query-present ranking filter (host items must match) keeps it.
-      aliases: [query],
+      // Boosted (fire-time host match) gets a distinct icon + label so the
+      // disambiguation is visible, not just felt via ranking — same shape
+      // learned on two sites otherwise looks identical either way.
+      icon: boosted ? 'MapPin' : 'Globe',
+      // A silently-learned rule announces itself while it's still new — this is
+      // what replaces asking up front. It stops after a few fires (see
+      // isNewlyLearned) so an established rule doesn't nag forever.
+      kindLabel: isNewlyLearned(rule)
+        ? t(locale, 'palette.learnFireKindNew')
+        : t(locale, boosted ? 'palette.learnFireKindHere' : 'palette.learnFireKind'),
     },
     behavior: { type: 'perform' },
     surfaces: ['global-launcher'],
-    // Learned direct answers are highly relevant when their slot matches — the
-    // nudge scales with frecency so rules you keep using rank higher, plus a
-    // fire-time boost when this rule's destination is where you are right now
-    // (disambiguates same-shape tokens learned on different sites).
-    staticPriority: firePriority(rule) + hostBoost,
+    // First-class answer: exempt from the query-present filter (the title is the
+    // destination, not the typed token) and its priority is honored whatever the
+    // kind. The nudge scales with frecency so rules you keep using rank higher,
+    // plus a fire-time boost when this rule's destination is where you are right
+    // now (disambiguates same-shape tokens learned on different sites).
+    directAnswer: { priority: firePriority(rule) + hostBoost, origin: 'learned' },
     recordUsage: false,
     execute: async () => {
       await openExternalUrl(url)
@@ -129,30 +134,60 @@ function buildOpenUrlItem(rule: LearnedRule, url: string, query: string, locale:
 
 // ─── chain fire (scenario B) ───────────────────────────────────────────────────
 
-function buildChainItem(rule: LearnedRule, result: string, query: string, locale: Locale): LauncherItem {
+function buildChainItem(rule: LearnedRule, result: string, locale: Locale): LauncherItem {
   const steps = rule.transform.kind === 'chain' ? rule.transform.toolIds.length : 0
   return {
     systemKey: `learned-chain:${rule.clusterKey}`,
-    // 'dynamic' (not 'host') so the query-present ranking filter keeps it — host
-    // items are dropped unless their text matches the query, but our result-titled
-    // items don't contain the raw input (same reason calculator uses 'dynamic').
     kind: 'dynamic',
     display: {
+      // The title is the collapsed RESULT — which is exactly why this needs to be
+      // a first-class direct answer rather than a text-matched list item.
       title: truncate(result),
       subtitle: t(locale, 'palette.learnFireChain', { steps: String(steps) }),
       icon: 'Wand2',
       kindLabel: t(locale, 'palette.learnFireKind'),
-      // Match the triggering query so the query-present host-item filter keeps it.
-      aliases: [query],
     },
     behavior: { type: 'perform' },
     surfaces: ['global-launcher'],
-    staticPriority: firePriority(rule),
+    directAnswer: { priority: firePriority(rule), origin: 'learned' },
     recordUsage: false,
     execute: async () => {
       await copyToClipboard(result)
       await feedback(rule)
       trackBehavior(TelemetryEvents.learningRuleFired, { transformKind: 'chain', steps })
+      return { ok: true as const }
+    },
+  }
+}
+
+/**
+ * "Not this one" — offered right below a rule that was learned silently, for its
+ * first few fires only.
+ *
+ * The undo lives HERE, at the moment the rule actually does something, rather
+ * than in an up-front proposal: the user sees a concrete result and decides
+ * about that, instead of being asked to rule on an abstract pattern. It is a
+ * plain launcher item (not a keyboard shortcut) so it's discoverable, and so it
+ * stays out of the tuned arrow-key model.
+ */
+function buildUndoItem(rule: LearnedRule, locale: Locale, priority: number): LauncherItem {
+  return {
+    systemKey: `learned-undo:${rule.clusterKey}`,
+    kind: 'dynamic',
+    display: {
+      title: t(locale, 'palette.learnUndoTitle'),
+      subtitle: t(locale, 'palette.learnUndoSubtitle'),
+      icon: 'Trash2',
+      kindLabel: t(locale, 'palette.learnFireKindNew'),
+    },
+    behavior: { type: 'perform' },
+    surfaces: ['global-launcher'],
+    // Just below its own rule, so it never outranks the answer it annotates.
+    directAnswer: { priority: Math.max(0, priority - 1), origin: 'learned' },
+    recordUsage: false,
+    execute: async () => {
+      const { undoLearnedRule } = await import('./learningController')
+      await undoLearnedRule(rule)
       return { ok: true as const }
     },
   }
@@ -168,7 +203,11 @@ export function learnedLauncherItems(query: string, locale: Locale): LauncherIte
     if (rule.transform.kind !== 'url-template') continue
     if (!queryMatchesSlot(q, rule.transform.slotKind as UrlSlotKind)) continue
     const url = 'https://' + fillTemplate(rule.transform.template, q)
-    items.push(buildOpenUrlItem(rule, url, q, locale))
+    const item = buildOpenUrlItem(rule, url, locale)
+    items.push(item)
+    if (isNewlyLearned(rule)) {
+      items.push(buildUndoItem(rule, locale, item.directAnswer?.priority ?? 0))
+    }
   }
 
   if (cachedChainRules.length > 0) {
@@ -177,7 +216,7 @@ export function learnedLauncherItems(query: string, locale: Locale): LauncherIte
       if (rule.transform.kind !== 'chain') continue
       if (rule.matcher.kind !== 'feature-sig' || rule.matcher.sig !== sig) continue
       const result = runLearnedChain(rule.transform.toolIds, q)
-      if (result) items.push(buildChainItem(rule, result, q, locale))
+      if (result) items.push(buildChainItem(rule, result, locale))
     }
   }
 

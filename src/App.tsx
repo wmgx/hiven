@@ -30,7 +30,7 @@ import { readNativeClipboardText } from './workspace/nativeClipboard'
 import { startLearningObserver } from './workspace/learning/observer'
 import { startPureTransformRunnerSync } from './workspace/learning/registryRunners'
 import { startNavigationSensor } from './workspace/learning/navigationSensor'
-import { installLearningDebugHook } from './workspace/learning/learningController'
+import { installLearningDebugHook, startAutoLearnLoop } from './workspace/learning/learningController'
 import { refreshLearnedUrlRules } from './workspace/learning/fire'
 
 // Register built-in panels
@@ -141,11 +141,15 @@ function LauncherRuntimeApp() {
     const stopRunnerSync = startPureTransformRunnerSync()
     const stopObserver = startLearningObserver()
     const stopNavSensor = startNavigationSensor()
+    // Learn silently in the background — rules introduce themselves when they
+    // first fire, instead of interrupting with a proposal card.
+    const stopAutoLearn = startAutoLearnLoop()
     // Load learned url-template rules into memory for reverse-fire (typed id → open).
     void refreshLearnedUrlRules()
     // Devtools verification hook (window.__hivenLearning) — no user-facing UI yet.
     installLearningDebugHook()
     return () => {
+      stopAutoLearn()
       stopNavSensor()
       stopObserver()
       stopRunnerSync()

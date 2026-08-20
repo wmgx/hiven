@@ -75,6 +75,15 @@ export const TelemetryEvents = {
   learningProposalCovered: 'perf:learning.proposal_covered',
   /** A learned url-template rule fired (typed token → opened the page). */
   learningRuleFired: 'behavior:learning.rule_fired',
+  /**
+   * A rule was learned silently, with no user confirmation (the default path
+   * since the proposal card was removed). Pair with `rule_fired` and
+   * `rule_undone` to judge whether silent learning is guessing well: many
+   * auto-learned + few fired = learning noise.
+   */
+  learningRuleAutoLearned: 'behavior:learning.rule_auto_learned',
+  /** The user undid a newly-learned rule at fire time (badge → one-key undo). */
+  learningRuleUndone: 'behavior:learning.rule_undone',
 } as const
 
 export type TelemetryEventName = (typeof TelemetryEvents)[keyof typeof TelemetryEvents]

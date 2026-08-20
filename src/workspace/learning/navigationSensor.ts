@@ -20,7 +20,7 @@ import {
 } from '../desktopControl/bridgeTargets'
 import { TelemetryEvents, trackPerf } from '../telemetry'
 import { getRecentClipboardTokens } from './observer'
-import { putNavigation, pruneOldNavigations } from './store'
+import { putNavigation, putPathObservation, pruneOldNavigations } from './store'
 import { saltedHash } from './store'
 import { hostnameOf, templatizeUrl, templatizeUrlWithToken, type UrlTemplateResult } from './urlTemplate'
 
@@ -78,7 +78,73 @@ function resolveTemplate(url: string): { result: UrlTemplateResult; copyCorrelat
   return null
 }
 
+/**
+ * One concrete path per (host, segment count), kept in memory only.
+ *
+ * Position-variance induction runs on hashes, but turning its result into a
+ * template needs the literal constants back (`merge_requests`). Rather than
+ * persist raw segments, we keep the most recent example of each shape for the
+ * process lifetime and read it when a rule is actually being built. Lost on
+ * restart, which only delays a discovery — it never loses one.
+ */
+const recentPathSamples = new Map<string, { host: string; segments: string[] }>()
+const RECENT_PATH_SAMPLES_MAX = 200
+
+export function pathSampleKey(host: string, segmentCount: number): string {
+  return `${host} ${segmentCount}`
+}
+
+/** Most recent concrete path for a shape, if this process has seen one. */
+export function getRecentPathSample(
+  host: string,
+  segmentCount: number,
+): { host: string; segments: string[] } | null {
+  return recentPathSamples.get(pathSampleKey(host, segmentCount)) ?? null
+}
+
+/** Split a URL path into non-empty segments; null when there is nothing to learn from. */
+function pathSegmentsOf(url: string): { host: string; segments: string[] } | null {
+  const match = /^https?:\/\/([^/?#]+)([^?#]*)/i.exec(url.trim())
+  if (!match) return null
+  const host = (match[1] ?? '').toLowerCase()
+  if (!host) return null
+  const segments = (match[2] ?? '').split('/').filter(Boolean)
+  if (segments.length === 0) return null
+  return { host, segments }
+}
+
+/**
+ * Record the path shape for position-variance induction: per-segment salted
+ * hashes (never the segments themselves), plus an in-memory literal sample.
+ *
+ * Runs for EVERY http navigation, including ones templatizeUrl rejects — those
+ * are exactly the text-variable paths this induction exists to find.
+ */
+function recordPathShape(url: string): void {
+  const parsed = pathSegmentsOf(url)
+  if (!parsed) return
+  const { host, segments } = parsed
+
+  const key = pathSampleKey(host, segments.length)
+  if (!recentPathSamples.has(key) && recentPathSamples.size >= RECENT_PATH_SAMPLES_MAX) {
+    // Bounded: drop the oldest inserted shape (Map preserves insertion order).
+    const oldest = recentPathSamples.keys().next().value
+    if (oldest !== undefined) recentPathSamples.delete(oldest)
+  }
+  recentPathSamples.set(key, { host, segments })
+
+  void putPathObservation({
+    host,
+    segmentHashes: segments.map((segment) => saltedHash(segment)),
+    ts: Date.now(),
+  })
+}
+
 function recordNavigation(url: string): void {
+  // Independent of templatization: a path with no id-shaped segment still
+  // carries positional evidence.
+  recordPathShape(url)
+
   const resolved = resolveTemplate(url)
   if (!resolved) return
   const { result, copyCorrelated } = resolved

@@ -55,8 +55,37 @@ function matcherSigOf(candidate: RuleCandidate): string {
   return candidate.matcher.kind === 'token' ? `token:${candidate.matcher.tokenKind}` : candidate.matcher.sig
 }
 
+/**
+ * Initial strength for a SILENTLY learned rule.
+ *
+ * Deliberately far below the evidence-seeded strength of a rule the user
+ * explicitly taught: nobody endorsed this one, so it must be able to die on its
+ * own. With the 30-day half-life in frecency.ts, 2 decays under the forget floor
+ * (0.75) in ~6 weeks of non-use — long enough to survive a vacation, short
+ * enough that a bad guess cleans itself up. Using it once bumps it clear.
+ */
+export const AUTO_LEARN_INITIAL_STRENGTH = 2
+
+/** Fires before a silently-learned rule stops advertising itself as new. */
+const NEWLY_LEARNED_FIRE_LIMIT = 3
+
+/** Max rules taken in one auto-learn pass, so the answer area can't flood. */
+const AUTO_LEARN_BATCH = 3
+
+export interface RuleMintOptions {
+  /**
+   * Learned passively, without the user confirming. Starts weaker and carries
+   * the "newly learned" badge until it has proven itself a few times.
+   */
+  silent?: boolean
+}
+
 /** Mint a persistable rule from a candidate (strength seeded from evidence). */
-export function ruleFromCandidate(candidate: RuleCandidate, now: number = Date.now()): LearnedRule {
+export function ruleFromCandidate(
+  candidate: RuleCandidate,
+  now: number = Date.now(),
+  options: RuleMintOptions = {},
+): LearnedRule {
   return {
     clusterKey: candidate.clusterKey,
     matcherSig: matcherSigOf(candidate),
@@ -64,12 +93,48 @@ export function ruleFromCandidate(candidate: RuleCandidate, now: number = Date.n
     transform: candidate.transform,
     descriptor: describeCandidate(candidate),
     // Seed frecency from independent evidence so a well-supported rule starts
-    // ahead; P3 feedback moves it from here.
-    strength: candidate.distinctInputs,
+    // ahead; P3 feedback moves it from here. Silent rules start low instead —
+    // evidence that a pattern EXISTS is not evidence the user wants it.
+    strength: options.silent ? AUTO_LEARN_INITIAL_STRENGTH : candidate.distinctInputs,
     origin: 'learned',
+    autoLearned: options.silent ? true : undefined,
     createdAt: now,
+    fireCount: 0,
     sampleCount: candidate.sampleCount,
   }
+}
+
+/**
+ * True while a silently-learned rule should still announce itself (badge + one
+ * key undo) when it fires. This is what replaces the up-front proposal: the rule
+ * introduces itself at the moment it does something, not before.
+ *
+ * Explicitly-taught rules are never badged — the user already knows about them.
+ * Rules stored before `fireCount` existed are treated as established (they have
+ * usage history), so an upgrade doesn't badge everything at once.
+ */
+export function isNewlyLearned(rule: LearnedRule): boolean {
+  if (!rule.autoLearned) return false
+  if (rule.fireCount == null) return false
+  return rule.fireCount < NEWLY_LEARNED_FIRE_LIMIT
+}
+
+/**
+ * Candidates to silently learn right now: not already learned, not explicitly
+ * suppressed, capped per pass.
+ *
+ * Note the terminal-state fix this encodes: once learned, a cluster leaves the
+ * pool permanently. The old proposal path had no terminal state for "user
+ * ignored it", so one candidate was re-surfaced up to 64 times.
+ */
+export function selectAutoLearnable(
+  candidates: readonly RuleCandidate[],
+  state: ProposalFilterState = {},
+): RuleCandidate[] {
+  return filterProposableCandidates(candidates, {
+    ...state,
+    maxConcurrent: state.maxConcurrent ?? AUTO_LEARN_BATCH,
+  })
 }
 
 export interface ProposalFilterState {
