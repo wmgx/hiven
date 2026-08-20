@@ -29,7 +29,7 @@ const requiredProducts = [
   'JWT Tools',
   'Hash Tools',
   'Count',
-  'Web Open',
+  'Browser',
 ]
 for (const product of requiredProducts) {
   assert.ok(productSrc.includes(product), `missing product capability: ${product}`)

@@ -1,5 +1,5 @@
 /**
- * Web Quick Open Plugin
+ * Browser Plugin (quick-open rules + live browser bridge)
  * Allows users to configure URL templates and quickly open web pages
  * via the launcher collect-input flow.
  */
@@ -471,8 +471,9 @@ export default definePlugin<WebQuickOpenSettings>({
   },
 
   settings: {
-    title: 'Web Quick Open',
-    titleI18n: { zh: '网页快开' },
+    // Matches the plugin's displayName (manifest.json) — one identity, one name.
+    title: 'Browser',
+    titleI18n: { zh: '浏览器' },
     version: 6,
     defaultValue: DEFAULT_WEB_QUICK_OPEN_SETTINGS,
     migrate: migrateWebQuickOpenSettings,
@@ -526,7 +527,7 @@ export default definePlugin<WebQuickOpenSettings>({
           title: 'Cache',
           titleI18n: { zh: '缓存' },
           description: 'Plugin-internal caches used by quick-open results.',
-          descriptionI18n: { zh: '网页快开使用的插件内缓存。' },
+          descriptionI18n: { zh: '快开规则使用的插件内缓存。' },
           fields: [
             {
               kind: 'modal',
@@ -562,7 +563,7 @@ export default definePlugin<WebQuickOpenSettings>({
           titleI18n: { zh: '浏览器' },
           description: 'Optional: connect a live Chromium browser to search tabs / history and focus already-open pages instead of opening duplicates. Works only with the companion extension; quick-open above needs none.',
           descriptionI18n: {
-            zh: '可选：连接实时 Chromium 浏览器，搜索标签 / 历史，并对已打开的页面直接聚焦而非重复打开。需配套扩展；上面的网页快开无需扩展。',
+            zh: '可选：连接实时 Chromium 浏览器，搜索标签 / 历史，并对已打开的页面直接聚焦而非重复打开。需配套扩展；上面的快开规则无需扩展。',
           },
           fields: [
             {
@@ -590,7 +591,7 @@ export default definePlugin<WebQuickOpenSettings>({
               kind: 'object-list',
               key: 'entries',
               label: 'Quick-open rules',
-              labelI18n: { zh: '网页快开规则' },
+              labelI18n: { zh: '快开规则' },
               itemTitleKey: 'title',
               itemTagsKey: 'tags',
               // Localized at render time; the stored value stays 'auto'.
@@ -602,7 +603,7 @@ export default definePlugin<WebQuickOpenSettings>({
               itemLabel: 'Rule',
               itemLabelI18n: { zh: '规则' },
               emptyText: 'No quick-open rules yet.',
-              emptyTextI18n: { zh: '还没有网页快开规则。' },
+              emptyTextI18n: { zh: '还没有快开规则。' },
               itemDefaults: {
                 id: 'web',
                 title: 'New rule',

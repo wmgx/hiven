@@ -1,5 +1,5 @@
 /**
- * Pre-compiled matchPattern cache for Web Quick Open.
+ * Pre-compiled matchPattern cache for the Browser plugin quick-open rules.
  *
  * Patterns are compiled once and reused across keystrokes. When settings
  * entries change, call `replaceMatchPatternCache` so old patterns are dropped

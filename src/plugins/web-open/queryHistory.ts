@@ -1,5 +1,5 @@
 /**
- * Per-entry query parameter history for Web Quick Open.
+ * Per-entry query parameter history for Browser plugin quick-open rules.
  * Stored in plugin private kv (not settings).
  */
 

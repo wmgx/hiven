@@ -1,6 +1,6 @@
 {
-  "pluginTitle": "Web Quick Open",
-  "settingsTitle": "Web Quick Open Settings",
+  "pluginTitle": "Browser",
+  "settingsTitle": "Browser Settings",
   "entryTitle": "Web Search",
   "addEntry": "Add",
   "removeEntry": "Remove",
@@ -13,7 +13,7 @@
   "emptyQueryOpen": "Allow empty",
   "emptyQueryBehavior": "Empty input behavior",
   "testOpen": "Test open",
-  "disabledMessage": "Web Quick Open is disabled",
+  "disabledMessage": "Quick-open rules are disabled",
   "defaultBaiduTitle": "Baidu Search",
   "defaultBaiduPlaceholder": "Enter search keywords",
   "matchPattern": "Quick match pattern",

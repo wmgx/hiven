@@ -1,5 +1,5 @@
 {
-  "version": 41,
+  "version": 42,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -79,7 +79,7 @@
     {
       "pluginId": "web-open",
       "dir": "web-open",
-      "version": "1.7.0"
+      "version": "1.8.0"
     }
   ]
 }
