@@ -54,13 +54,17 @@ assert.equal(
 
 assert.match(
   lifecycle,
-  /STANDALONE_LAUNCHER_BACKGROUND_IDLE_MS\s*=\s*5\s*\*\s*60\s*\*\s*1000/,
+  // Renamed to STANDALONE_SURFACE_BACKGROUND_IDLE_MS (the old name survives as a
+  // deprecated alias, so the literal is no longer on the old identifier).
+  /STANDALONE_SURFACE_BACKGROUND_IDLE_MS\s*=\s*5\s*\*\s*60\s*\*\s*1000/,
   'background idle threshold must be 5 minutes',
 )
 
 assert.match(
   lifecycle,
-  /export function isStandaloneLauncherBackgroundIdle/,
+  // Also renamed (…Launcher… → …Surface…); the old name is a re-export alias,
+  // so `export function` no longer appears on it.
+  /export function isStandaloneSurfaceBackgroundIdle/,
   'pure idle predicate must be exported for tests and reuse',
 )
 

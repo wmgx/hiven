@@ -35,7 +35,14 @@ assert.doesNotMatch(files.settingsSurfaceContent, /onClick=\{\(\) => chooseDoubl
 assert.match(files.pluginsSurfaceContent, /<ShortcutRecorder/, 'PluginsManagerSurfaceContent should use ShortcutRecorder for plugin surface shortcuts')
 assert.doesNotMatch(files.pluginsSurfaceContent, /<input[\s\S]{0,240}plugin-surface-shortcut-input/, 'plugin surface shortcuts should not use a manual text input')
 assert.doesNotMatch(files.pluginsSurfaceContent, /shortcutDrafts/, 'plugin surface shortcut binding should not keep text-entry drafts')
-assert.match(files.pluginsSurfaceContent, /grantPluginPermissions[\s\S]{0,320}setPluginSurfaceShortcut/, 'plugin surface recording should still grant global shortcut permission before binding')
+// The permission gate moved from the settings UI (grant-then-bind) down to the
+// registration layer, which checks globalShortcut.register at the moment the
+// accelerator is actually registered — closer to the operation it guards.
+assert.match(
+  read('src/hotkeys/pluginSurfaceShortcuts.ts'),
+  /missingPluginPermissions\([\s\S]{0,200}'globalShortcut\.register'/,
+  'plugin surface shortcuts must still be gated on globalShortcut.register',
+)
 
 assert.match(files.css, /shortcut-recorder/, 'shared shortcut recorder styles should exist')
 
