@@ -34,15 +34,22 @@ function transpileAndRun(path, globals = {}) {
 }
 
 const snapshot = transpileAndRun('src/launcher/clipboard/clipboardSnapshot.ts')
+const detect = transpileAndRun('src/kits/content/detectContent.ts')
+// Load the REAL attach policy rather than re-deriving it here. This test used to
+// stub isStrongClipboardAttachEligible with a hand-written "{ or [ or http or
+// .csv" rule; production later added secret/jwt/base64/… to STRONG_ATTACH_CONTENT_KINDS
+// and the stub silently disagreed — the kind of drift a stub can only ever hide.
+const attachPolicy = transpileAndRun('src/launcher/clipboard/attachPolicy.ts', {
+  detectContent: detect.detectContent,
+  detectClipboardFilePath: snapshot.detectClipboardFilePath,
+  isSoftClipboardOperand: snapshot.isSoftClipboardOperand,
+})
 const objectBlock = transpileAndRun('src/launcher/clipboard/objectBlock.ts', {
   shouldAutoAttachClipboard: snapshot.shouldAutoAttachClipboard,
   shouldShowRecentClipboardHint: snapshot.shouldShowRecentClipboardHint,
-  isStrongClipboardAttachEligible: (text) => {
-    const t = String(text||'').trim()
-    return t.startsWith('{') || t.startsWith('[') || /^https?:\/\//i.test(t) || /\.csv$/i.test(t)
-  },
+  isStrongClipboardAttachEligible: attachPolicy.isStrongClipboardAttachEligible,
   isSoftClipboardOperand: snapshot.isSoftClipboardOperand,
-  isSoftClipboardOperand: snapshot.isSoftClipboardOperand,
+  detectClipboardType: snapshot.detectClipboardType,
   detectClipboardFilePath: snapshot.detectClipboardFilePath,
   fileNameFromPath: snapshot.fileNameFromPath,
 })
@@ -52,9 +59,11 @@ const contextBroker = readFileSync('src/launcher/context/contextBroker.ts', 'utf
 const globalLauncherHost = readFileSync('src/launcher/hosts/GlobalLauncherHost.tsx', 'utf8')
 const searchFrame = readFileSync('src/components/launcher/GlobalLauncherSearchFrame.tsx', 'utf8')
 const keyboard = readFileSync('src/components/launcher/GlobalLauncherKeyboard.ts', 'utf8')
-const editorHost = readFileSync('src/launcher/hosts/EditorCommandBarHost.tsx', 'utf8')
+// EditorCommandBarHost and useEditorObjectBlock were deleted in the workbench
+// retirement (6e69f0f). The in-editor command entry is now the quick editor
+// overlay; requirement #10 below tracks it there.
+const editorCommandSurface = readFileSync('src/components/quickEditor/QuickEditorCommandOverlay.tsx', 'utf8')
 const hookSrc = readFileSync('src/launcher/clipboard/useClipboardObjectBlock.ts', 'utf8')
-const editorHookSrc = readFileSync('src/launcher/clipboard/useEditorObjectBlock.ts', 'utf8')
 
 // ─── #1: Global Launcher no longer reads external selection ────────────────────
 assert.doesNotMatch(
@@ -131,10 +140,13 @@ assert.doesNotMatch(
 )
 
 // ─── #8: Object Block shows recommended actions, not clipboard as search ───────
-assert.match(searchFrame, /recommendActionsForBlock/, '#8: recommended actions computed from block')
-assert.match(searchFrame, /block && \(/, '#8: actions shown when block exists (object-action mode)')
-assert.match(searchFrame, /filteredActions/, '#8: actions filtered by query')
-assert.match(searchFrame, /RecommendedActionRow/, '#8: actions rendered as RecommendedActionRow')
+// Recommendation moved from the search frame up to the host: actions are now
+// pinned launcher rows above ranked tools rather than a separate action list, so
+// they compete in the one result list instead of stacking a second UI on top.
+assert.match(globalLauncherHost, /recommendActionsForBlock\(clipboardBlock\.block\)/, '#8: recommended actions computed from block')
+assert.match(globalLauncherHost, /pinnedObjectActionItems/, '#8: actions pinned above ranked tools when a block exists')
+assert.match(globalLauncherHost, /const block = clipboardBlock\.block\s*\n\s*if \(!block\) return \[\]/, '#8: no block means no pinned object actions')
+assert.match(searchFrame, /block && \(/, '#8: search frame renders the block itself in object-action mode')
 
 // ─── #9: Action labels use descriptive text, not plugin name as primary ────────
 const jsonActions = recommendation.recommendActionsForBlock({ source: 'clipboard', kind: 'json' })
@@ -143,16 +155,20 @@ for (const action of jsonActions) {
   // Title should be descriptive, e.g. "格式化剪贴板 JSON" not "JSON Tools"
   if (action.pluginId) assert.ok(!action.titleZh.startsWith(action.pluginId), '#9: title should not start with plugin name')
 }
-const rowSrc = readFileSync('src/components/launcher/RecommendedActionRow.tsx', 'utf8')
-assert.match(rowSrc, /action\.titleZh/, '#9: row displays Chinese action title')
-assert.match(rowSrc, /来自/, '#9: plugin name shown as attribution, not primary')
+// RecommendedActionRow is gone with the dedicated action list; the host now folds
+// actions into launcher items, so the localized title must survive that mapping.
+assert.match(globalLauncherHost, /pickLocale\(locale, action\.titleZh, action\.title\)/, '#9: host picks the localized action title')
+assert.match(globalLauncherHost, /titleI18n:\s*\{\s*en: action\.title,\s*zh: action\.titleZh\s*\}/, '#9: pinned action items keep both locales for ranking and display')
+assert.match(globalLauncherHost, /action\.titleZh\.toLowerCase\(\)\.includes\(q\)/, '#9: pinned actions are searchable by their Chinese title')
 
-// ─── #10: Editor Cmd+K uses EditorObjectBlock, not clipboard freshness ─────────
-assert.match(editorHost, /useEditorObjectBlock/, '#10: editor uses useEditorObjectBlock')
-assert.doesNotMatch(editorHost, /shouldAutoAttachClipboard|FRESH_CLIPBOARD_TTL/, '#10: editor does not use clipboard freshness')
-assert.doesNotMatch(editorHookSrc, /shouldAutoAttachClipboard|readClipboard/, '#10: editor hook does not use clipboard')
-assert.match(editorHookSrc, /createEditorSelectionObjectBlock/, '#10: editor hook creates selection block')
-assert.match(editorHookSrc, /createEditorDocumentObjectBlock/, '#10: editor hook creates document block')
+// ─── #10: In-editor command entry never rides on clipboard freshness ──────────
+// The original requirement was "editor Cmd+K attaches the editor's own selection
+// or document, never a fresh-clipboard guess". The attach half was retired with
+// the editor command bar — the quick editor overlay attaches nothing at all — but
+// the "never clipboard freshness" half is exactly what still must hold.
+assert.doesNotMatch(editorCommandSurface, /shouldAutoAttachClipboard|FRESH_CLIPBOARD_TTL/, '#10: in-editor command entry must not use clipboard freshness')
+assert.doesNotMatch(editorCommandSurface, /readLauncherClipboard|readClipboard/, '#10: in-editor command entry must not read the clipboard')
+assert.match(editorCommandSurface, /emptyClipboardBlock/, '#10: in-editor command entry must pass an explicitly empty object block')
 
 // ─── #11: Secret mask ──────────────────────────────────────────────────────────
 const secretSnap = { ...s1, changedAt: Date.now() - 5_000, ageConfidence: 'known', detectedType: 'secret', text: 'sk-abc123' }

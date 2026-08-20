@@ -1,3 +1,17 @@
+/**
+ * Spatial UI contract
+ *
+ * Pins the visual shell: theme tokens, the shared spec CSS vocabulary, the
+ * standalone launcher window treatment, the Monaco palette, and the Tauri
+ * window/capability declarations that back them.
+ *
+ * The workbench retirement (6e69f0f) deleted EditorView, CommandPalette,
+ * PaneEditor, WorkspaceShell and RenderStatusBar. Their surviving contracts
+ * moved: the theme toggle to the settings surface, and gutter/padding
+ * normalization down into the TextEditorCore primitive — which is where the
+ * framework boundary says it belongs. Assertions follow them there; the ones
+ * whose subject was retired outright are gone.
+ */
 import { existsSync, readFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 
@@ -31,58 +45,67 @@ const files = {
   app: read('src/App.tsx'),
   store: read('src/store.ts'),
   css: read('src/index.css'),
-  editor: read('src/views/EditorView.tsx'),
+  quickEditorView: read('src/views/QuickEditorDetachedView.tsx'),
   scripts: read('src/surfaces/PluginsContent.tsx'),
   settings: read('src/surfaces/SettingsContent.tsx'),
-  pluginEditor: read('src/surfaces/PluginEditorSurfaceContent.tsx'),
-  commandPalette: read('src/components/CommandPalette.tsx'),
-  launcherDomainSearchStep: read('src/components/launcher/LauncherDomainSearchStep.tsx'),
   launcherMixedList: read('src/components/launcher/LauncherMixedList.tsx'),
   globalLauncher: read('src/launcher/hosts/GlobalLauncherHost.tsx') + '\n' + read('src/components/launcher/GlobalLauncherWindowLifecycle.ts') + '\n' + read('src/workspace/windowManager/launcherWindow.ts') + '\n' + read('src/components/launcher/GlobalLauncherPanel.tsx'),
-  paneEditor: read('src/components/workspace/PaneEditor.tsx'),
   dualEditor: read('src/kits/ui/DualEditorView.tsx'),
   textEditorCore: read('src/kits/editor/TextEditorCore.tsx'),
   monacoTheme: read('src/utils/monacoTheme.ts'),
-  workspaceShell: read('src/components/workspace/WorkspaceShell.tsx'),
-  renderStatusBar: read('src/components/workspace/RenderStatusBar.tsx'),
   tauriConfig: read('src-tauri/tauri.conf.json'),
   defaultCapability: read('src-tauri/capabilities/default.json'),
 }
 
 has(files.packageJson, /"test:spatial-ui-contract":\s*"node scripts\/test-spatial-ui-contract\.mjs"/, 'package.json should expose the spatial UI contract test')
 
+// ─── Theme ──────────────────────────────────────────────────────────────────
+
 has(files.store, /theme:\s*['"]dark['"]\s*\|\s*['"]light['"]/, 'settings should type a persisted dark/light theme')
 has(files.store, /theme:\s*['"]dark['"]/, 'default settings should include a dark theme')
 has(files.app, /data-theme=\{theme\}/, 'App should apply persisted theme through data-theme')
 has(files.app, /setTheme\(theme\)/, 'App should sync the native Tauri app theme with the persisted theme')
 notHas(files.app, /<FluxTitlebar\b|function FluxTitlebar|className=["']flux-titlebar/, 'App should not render a custom top titlebar')
-has(files.editor, /updateSetting\(['"]theme['"]/, 'Editor toolbar should provide the in-app theme toggle')
-has(files.editor, /\{t\(['"]runAction['"]\)\}[\s\S]{0,640}theme === ['"]dark['"] \? <Sun/, 'Theme toggle should sit after the run action in the editor toolbar')
 has(files.app, /flux-spatial-shell/, 'App should wrap the launcher runtime in a spatial shell')
+// The toggle left the retired editor toolbar for the settings surface.
+has(files.settings, /updateSetting\(['"]theme['"],\s*value \? ['"]dark['"] : ['"]light['"]\)/, 'Settings should provide the theme toggle')
 
 has(files.css, /body\[data-theme=['"]dark['"]\]/, 'CSS should define the dark theme token scope')
 has(files.css, /body\[data-theme=['"]light['"]\]/, 'CSS should define the light theme token scope')
 notHas(files.css, /\.flux-titlebar\b|\.flux-titlebar-logo\b|\.flux-titlebar-kbd\b|\.flux-titlebar-spacer\b/, 'CSS should not keep custom titlebar styles after the titlebar is removed')
-assert.equal(existsSync('src/components/Sidebar.tsx'), false, 'retired main-window Sidebar component should be removed')
-assert.equal(existsSync('src/views/PinnedRunnerView.tsx'), false, 'retired main-window PinnedRunnerView component should be removed')
+
+// ─── Retired shells stay retired ────────────────────────────────────────────
+
+for (const retired of [
+  'src/components/Sidebar.tsx',
+  'src/views/PinnedRunnerView.tsx',
+  'src/views/EditorView.tsx',
+  'src/components/CommandPalette.tsx',
+  'src/components/workspace/WorkspaceShell.tsx',
+  'src/components/workspace/PaneEditor.tsx',
+]) {
+  assert.equal(existsSync(retired), false, `retired main-window component ${retired} should stay removed`)
+}
+
+// ─── Shared spec CSS vocabulary ─────────────────────────────────────────────
+
 has(files.css, /\.glass\b/, 'CSS should include the shared glass panel utility')
 has(files.css, /\.btn-primary\b/, 'CSS should include spec primary buttons')
 has(files.css, /\.toggle(?:\s|\{|,)/, 'CSS should include spec toggle controls')
 has(files.css, /\.seg-control\b/, 'CSS should include spec segmented controls')
 has(files.css, /\.card\b/, 'CSS should include spec cards')
 has(files.css, /\.cmd-item\b/, 'CSS should include spec command items')
-notHas(files.editor, /status-dot ready|editor-topbar-status/, 'Editor topbar should not render the removed ready status')
 has(files.css, /\.status-dot\.running\b/, 'CSS should include running status dots')
 has(files.css, /\.status-dot\.error-dot\b/, 'CSS should include error status dots')
 
-has(files.editor, /className=.*btn.*btn-ghost.*btn-sm/s, 'Editor toolbar action should use spec button classes')
-has(files.scripts, /seg-control sm/, 'Scripts view should use segmented controls for plugin tabs')
-has(files.scripts, /className=.*card/s, 'Scripts view plugin rows should use spec card classes')
-has(files.settings, /function ThemeSettings|settings\.theme/, 'Settings should expose theme controls')
-has(files.settings, /className=.*toggle/s, 'Settings toggles should use the spec toggle component')
-has(files.pluginEditor, /file-tree|tree-node/, 'Plugin editor should use file tree node component classes')
-has(files.commandPalette, /EditorCommandBar/, 'Command palette compatibility wrapper should delegate to EditorCommandBar')
-has(files.launcherDomainSearchStep + files.launcherMixedList, /cmd-item/, 'Shared launcher rows should render spec command items')
+has(files.quickEditorView, /className="ft-btn ft-btn-ghost ft-btn-sm/, 'Editor topbar action should use spec button classes')
+notHas(files.quickEditorView, /status-dot ready|editor-topbar-status/, 'Editor topbar should not render the removed ready status')
+has(files.scripts, /className="plugins-row/, 'Plugin manager rows should use the plugins-row vocabulary')
+has(files.settings, /<Toggle value=/, 'Settings toggles should use the spec toggle component')
+has(files.launcherMixedList, /cmd-item/, 'Shared launcher rows should render spec command items')
+
+// ─── Standalone global launcher window ──────────────────────────────────────
+
 has(files.globalLauncher, /global-launcher-panel/, 'Global launcher should use a bounded panel component')
 has(files.globalLauncher, /startCurrentLauncherWindowDrag|startDragging\(\)/, 'Standalone global launcher should drag the native window instead of moving inside its own bounds')
 has(files.store, /globalLauncherWindowPosition\??:\s*GlobalLauncherPosition/, 'Global launcher should persist its dragged native window position separately from in-app panel position')
@@ -91,16 +114,20 @@ has(files.css, /\.global-launcher-panel[\s\S]{0,260}max-height:\s*min\(var\(--la
 has(files.css, /\.flux-spatial-shell\[data-theme=['"]light['"]\]\s+\.global-launcher-panel\.palette-panel[\s\S]{0,220}background:\s*#ffffff\s*!important;[\s\S]{0,260}backdrop-filter:\s*none;/, 'Light global launcher should use the clean white card surface treatment')
 has(files.css, /html\[data-window=['"]launcher['"]\]\s+\.global-launcher-overlay,[\s\S]{0,260}\.flux-spatial-shell\[data-theme=['"]light['"]\]\s+\.global-launcher-overlay\.open[\s\S]{0,180}background:\s*transparent\s*!important;[\s\S]{0,160}backdrop-filter:\s*none\s*!important;/, 'Standalone global launcher overlay should stay fully transparent in light theme')
 has(files.css, /html\[data-window=['"]launcher['"]\]\s+\.flux-spatial-shell\[data-theme=['"]light['"]\]\s+\.global-launcher-panel\.palette-panel[\s\S]{0,160}box-shadow:\s*0 0 0 1px rgba\(17,\s*24,\s*39,\s*0\.1\)/, 'Standalone light global launcher should avoid a rectangular outer drop shadow')
-has(files.css, /\.global-launcher-body[\s\S]{0,120}overflow-y:\s*auto/, 'Global launcher body should scroll instead of clipping the footer')
-notHas(files.workspaceShell, /pane-tab/, 'Workspace split panes should not render a separate pane title bar')
-has(files.paneEditor, /pane-status-index/, 'Primary editor status bar should identify split pane order')
-has(files.renderStatusBar, /statusbar/, 'Renderer status should use the demo statusbar component')
-has(files.paneEditor, /const\s+lineDecorationsWidth\s*=\s*foldingEnabled\s*\?\s*8\s*:\s*24/, 'Primary editor should normalize total gutter width for folding and plaintext panes')
-has(files.paneEditor, /lineDecorationsWidth,\s*\n\s*lineNumbersMinChars:\s*3/, 'Primary editor should keep a consistent VS Code-like gap after compact line numbers')
-has(files.paneEditor, /lineNumbersMinChars:\s*3/, 'Primary editor should use a fixed line-number width across panes')
-has(files.textEditorCore, /padding:\s*\{\s*top:\s*12,\s*bottom:\s*12,\s*left:\s*8\s*\}/, 'Editor primitive should own the unified editor padding')
-has(files.paneEditor, /renderLineHighlight:\s*['"]line['"]/, 'Primary editor should use VS Code-like current line highlighting')
-has(files.textEditorCore, /padding:\s*\{\s*top:\s*12,\s*bottom:\s*12,\s*left:\s*8\s*\}/, 'Dual editor panes should match the primary editor padding')
+has(files.css, /\.global-launcher-body\s*\{[\s\S]{0,220}overflow-y:\s*auto/, 'Global launcher body should scroll instead of clipping the footer')
+
+// ─── Editor primitive owns gutter + padding normalization ───────────────────
+// These used to be duplicated per pane in the workbench; they now live once in
+// the primitive, so every editor surface inherits the same metrics.
+
+has(files.textEditorCore, /const\s+lineDecorationsWidth\s*=\s*foldingEnabled\s*\?\s*8\s*:\s*24/, 'Editor primitive should normalize total gutter width for folding and plaintext content')
+has(files.textEditorCore, /lineDecorationsWidth,\s*\n\s*lineNumbersMinChars:\s*3/, 'Editor primitive should keep a consistent VS Code-like gap after compact line numbers')
+has(files.textEditorCore, /padding:\s*\{\s*top:\s*12,\s*bottom:\s*12\s*\}/, 'Editor primitive should own the unified editor padding')
+has(files.textEditorCore, /renderLineHighlight:\s*['"]line['"]/, 'Editor primitive should use VS Code-like current line highlighting')
+has(files.dualEditor, /renderLineHighlight:\s*['"]none['"]/, 'Dual editor panes should suppress the current line highlight so diff backgrounds stay readable')
+
+// ─── Monaco palette ─────────────────────────────────────────────────────────
+
 assert.equal(
   cssColor(files.monacoTheme, 'editorGutter.background'),
   cssColor(files.monacoTheme, 'editor.background'),
@@ -116,6 +143,8 @@ assert.equal(cssColor(files.monacoTheme, 'editorBracketHighlight.foreground2'), 
 assert.equal(cssColor(files.monacoTheme, 'editorBracketHighlight.foreground3'), '#7fc7ff', 'Dark Monaco bracket pair color 3 should stay readable without clashing with syntax tokens')
 has(files.css, /\.monaco-editor \.margin[\s\S]{0,100}background:\s*var\(--vscode-editor-background\)/, 'Monaco line-number margin should use the editor background')
 has(files.css, /\.margin-view-overlays \.current-line[\s\S]{0,100}background:\s*transparent/, 'Monaco current line highlight should not paint a separate gutter block')
+
+// ─── Native window declarations ─────────────────────────────────────────────
 
 {
   const config = JSON.parse(files.tauriConfig)
@@ -133,3 +162,5 @@ has(files.css, /\.margin-view-overlays \.current-line[\s\S]{0,100}background:\s*
 }
 
 notHas(files.app, /fontFamily:\s*['"]var\(--font-mono\)['"]/s, 'The app shell should rely on global spatial typography instead of forcing mono everywhere')
+
+console.log('spatial UI contract checks passed')

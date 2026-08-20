@@ -54,7 +54,9 @@ assertHas(files.tauriLib, /get\("displayNameI18n"\)/, 'Tauri manifest summary sh
 assertHas(files.pluginsSurfaceContent, /displayNameI18n:\s*pkg\.displayNameI18n/, 'PluginsManagerSurfaceContent should preserve displayNameI18n when syncing scanned packages into store')
 assertHas(files.pluginsSurfaceContent, /updatePluginMetadata\(pkg\.pluginId[\s\S]*displayNameI18n:\s*pkg\.displayNameI18n/, 'PluginsManagerSurfaceContent should refresh displayNameI18n for already persisted packages')
 assertHas(files.pluginsSurfaceContent, /function\s+pluginDisplayName[\s\S]*localized\([\s\S]*displayNameI18n[\s\S]*locale[\s\S]*\)/, 'PluginsManagerSurfaceContent should localize plugin package display names from displayNameI18n')
-assertHas(files.pluginsSurfaceContent, /title=\{pluginDisplayName\(plugin,\s*locale\)\}/, 'PluginsManagerSurfaceContent cards should render localized plugin display names')
+// The plugin manager became master-detail: the localized name is no longer passed
+// straight into JSX, it lands on the row model (`title:`) that the list renders.
+assertHas(files.pluginsSurfaceContent, /title:\s*pluginDisplayName\(plugin,\s*locale\)/, 'PluginsManagerSurfaceContent rows should carry localized plugin display names')
 assertHas(files.pluginsSurfaceContent, /searchableFieldsMatch\(pluginSearchFields\(plugin\),\s*query,\s*locale\)/, 'PluginsManagerSurfaceContent search should use the shared matcher for localized plugin display names')
 assertHas(files.pluginsSurfaceContent, /titleI18n:\s*plugin\.displayNameI18n/, 'PluginsManagerSurfaceContent search fields should preserve localized plugin display names')
 

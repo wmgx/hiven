@@ -23,15 +23,22 @@ function transpileAndRun(path, globals = {}) {
 }
 
 const snapshot = transpileAndRun('src/launcher/clipboard/clipboardSnapshot.ts')
+const detect = transpileAndRun('src/kits/content/detectContent.ts')
+// Real attach policy, not a hand-written approximation of it — see the same note
+// in test-clipboard-direction-adjustment.mjs.
+const attachPolicy = transpileAndRun('src/launcher/clipboard/attachPolicy.ts', {
+  detectContent: detect.detectContent,
+  detectClipboardFilePath: snapshot.detectClipboardFilePath,
+  isSoftClipboardOperand: snapshot.isSoftClipboardOperand,
+})
 const objectBlock = transpileAndRun('src/launcher/clipboard/objectBlock.ts', {
   shouldAutoAttachClipboard: snapshot.shouldAutoAttachClipboard,
   shouldShowRecentClipboardHint: snapshot.shouldShowRecentClipboardHint,
-  isStrongClipboardAttachEligible: (text) => {
-    const t = String(text||'').trim()
-    return t.startsWith('{') || t.startsWith('[') || /^https?:\/\//i.test(t) || /\.csv$/i.test(t)
-  },
+  isStrongClipboardAttachEligible: attachPolicy.isStrongClipboardAttachEligible,
   isSoftClipboardOperand: snapshot.isSoftClipboardOperand,
-  isSoftClipboardOperand: snapshot.isSoftClipboardOperand,
+  detectClipboardType: snapshot.detectClipboardType,
+  detectClipboardFilePath: snapshot.detectClipboardFilePath,
+  fileNameFromPath: snapshot.fileNameFromPath,
 })
 
 const expectedSources = [
@@ -96,7 +103,10 @@ const history = objectBlock.createHistoryItemObjectBlock({
   sizeLabel: '5 B',
 })
 assert.equal(history.source, 'history-item')
-assert.equal(history.removable, false)
+// A history pick is a deliberate user choice, so ⌫ must be able to undo it and
+// return to typing. Only the query block is non-removable — removing that one
+// would mean removing the query itself.
+assert.equal(history.removable, true)
 assert.ok(history.subtitle.includes('3 小时前'))
 
 const query = objectBlock.createQueryObjectBlock({ query: '1,280 * 0.15', kind: 'timestamp' })

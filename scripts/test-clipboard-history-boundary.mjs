@@ -146,13 +146,19 @@ assert.match(bgManager, /usePluginPermissionStore\.subscribe/, 'background manag
 assert.match(bgManager, /stopBackground\(instance\.source,\s*instance\.pluginId\)/, 'background manager must stop active backgrounds when permissions are revoked')
 assert.match(launcher, /getPluginPermissionSnapshot|usePluginPermissionStore/, 'GlobalLauncher must use the permission store')
 assert.match(launcher, /PluginSurfacePermissionGate/, 'GlobalLauncher must show a host permission gate before rendering protected surfaces')
-assert.match(pluginsSurfaceContent, /plugin-permissions[\s\S]{0,160}is-missing/, 'PluginsManagerSurfaceContent must render a prominent missing-permission console state')
-assert.match(pluginsSurfaceContent, /scripts\.permissionsBlockedTitle/, 'PluginsManagerSurfaceContent missing-permission state must have a localized title')
-assert.match(pluginsSurfaceContent, /scripts\.permissionsBlockedDetail/, 'PluginsManagerSurfaceContent missing-permission state must explain that background features are paused')
-assert.match(indexCss, /\.plugin-permissions\.is-missing/, 'Missing permission state must have dedicated PluginsManagerSurfaceContent styling')
-assert.match(indexCss, /\.plugin-permissions-grant/, 'Missing permission grant action must keep a dedicated style hook')
-assert.match(scriptsI18n, /permissionsBlockedTitle/, 'PluginsManagerSurfaceContent i18n must include missing permission title')
-assert.match(scriptsI18n, /permissionsBlockedDetail/, 'PluginsManagerSurfaceContent i18n must include missing permission detail')
+// The contract is "a plugin missing permissions must be visible at a glance and
+// grantable in place". Its rendering moved from a `.plugin-permissions.is-missing`
+// console block with blockedTitle/blockedDetail copy to a row-level warn pill plus
+// per-permission grant buttons in the detail drawer — same guarantee, new surface.
+assert.match(pluginsSurfaceContent, /missingCount > 0 &&[\s\S]{0,160}plugins-warn-pill/, 'plugin rows must flag missing permissions inline')
+assert.match(pluginsSurfaceContent, /scripts\.permissionsPendingCount/, 'the missing-permission flag must carry a localized count')
+assert.match(pluginsSurfaceContent, /missing\.map[\s\S]{0,400}grantPermissions\(row\.settingsSource, row\.pluginId, \[permission\]\)/, 'each missing permission must be grantable in place')
+assert.match(pluginsSurfaceContent, /scripts\.permissionsGrantAll/, 'multiple missing permissions must offer a grant-all action')
+assert.match(indexCss, /\.plugins-warn-pill/, 'the missing-permission flag must have dedicated styling')
+assert.match(indexCss, /\.plugins-drawer-link/, 'the grant action must keep a dedicated style hook')
+for (const key of ['permissionsPendingCount', 'permissionsGrant', 'permissionsGrantAll', 'permissionsAllGranted']) {
+  assert.match(scriptsI18n, new RegExp(`'${key}'`), `scripts i18n must include ${key}`)
+}
 
 // ─── 7. plugin-sdk.ts must re-export new types ──────────────────────────────
 

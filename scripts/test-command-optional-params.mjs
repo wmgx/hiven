@@ -18,10 +18,16 @@ function assert(condition, message) {
   }
 }
 
-const commandPalette = [
-  read('src/components/CommandPalette.tsx'),
-  read('src/launcher/hosts/EditorCommandBarHost.tsx'),
-  read('src/components/launcher/LauncherDomainSearchStep.tsx'),
+// CommandPalette / EditorCommandBarHost / LauncherDomainSearchStep were deleted in
+// the workbench retirement (6e69f0f). The param-customization contract they carried
+// did not go away — it moved into the shared launcher chain: the keyboard handler
+// reads the modifier, the panel decides whether the hint applies, the search frame
+// renders it, and the quick editor overlay reuses all three.
+const commandSurfaces = [
+  read('src/components/launcher/GlobalLauncherKeyboard.ts'),
+  read('src/components/launcher/GlobalLauncherPanel.tsx'),
+  read('src/components/launcher/GlobalLauncherSearchFrame.tsx'),
+  read('src/components/quickEditor/QuickEditorCommandOverlay.tsx'),
 ].join('\n')
 const launcherParamStep = read('src/components/launcher/LauncherParamStep.tsx')
 const launcherParamShortcuts = read('src/components/launcher/launcherParamShortcuts.ts')
@@ -47,20 +53,23 @@ assert(/customizeParamsLabel/.test(i18n), 'i18n should include the compact custo
 assert(!/Hold Command to customize parameters|按住 Command 键自定义参数/.test(i18n), 'i18n should not use the old long customize hint')
 assert(/getPlatformShortcutMeta/.test(launcherParamShortcuts), 'shared launcher shortcut helper should expose platform shortcut metadata')
 assert(/isMacPlatform/.test(launcherParamShortcuts), 'shared launcher shortcut helper should detect macOS for Command shortcuts')
-assert(/event\.metaKey/.test(commandPalette) && /event\.ctrlKey/.test(commandPalette), 'CommandPalette should pass click modifier state for macOS and other platforms')
+assert(/event\.metaKey/.test(commandSurfaces) && /event\.ctrlKey/.test(commandSurfaces), 'launcher surfaces should pass modifier state for macOS and other platforms')
 assert(/shouldCustomizeParams/.test(launcherParamShortcuts), 'launcher should centralize customize modifier handling')
-assert(/selectItem\([^,]+,\s*shouldCustomizeParams\([^)]*\.metaKey,\s*[^)]*\.ctrlKey\)\)/.test(commandPalette), 'CommandPalette should support platform-aware selection intent')
+assert(/selectItem\([^,]+,\s*shouldCustomizeParams\([^)]*\.metaKey,\s*[^)]*\.ctrlKey\)\)/.test(commandSurfaces), 'launcher surfaces should support platform-aware selection intent')
 assert(/return\s+shortcutMeta\.modifier === 'meta' \? metaKey : ctrlKey/.test(launcherParamShortcuts), 'launcher should customize based on the platform modifier at selection time')
 assert(/supportsDefaultParamRun/.test(launcherParamShortcuts), 'launcher should gate default runs behind explicit default support')
 assert(/item\.requireParamSelection/.test(launcherParamShortcuts), 'launcher should block default runs for explicit parameter-selection tools')
 assert(/supportsDefaultParamRun\(item\)/.test(launcherParamShortcuts), 'launcher should show the parameter shortcut only when Enter can still default-run')
 assert(/hasExplicitDefaultParams/.test(launcherParamShortcuts), 'launcher should require explicit defaults for optional params')
-assert(/customize-shortcut-chip/.test(commandPalette), 'CommandPalette should render optional params as a compact shortcut chip')
-assert(/supportsParamCustomization\(items\[selectedIndex\]\)/.test(commandPalette), 'CommandPalette footer should show the parameter shortcut for the selected optional-param item')
-assert(/LauncherParamStep/.test(commandPalette), 'CommandPalette should render the shared launcher parameter step')
+// The compact chip became a footer hint key, sharing the launcher's one hint row
+// instead of owning a bespoke chip element.
+assert(/showCustomizeHint && \(\s*<LauncherHintKey/.test(commandSurfaces), 'launcher footer should surface the parameter shortcut as a shared hint key')
+assert(/palette\.customizeParamsLabel/.test(commandSurfaces), 'the parameter shortcut hint must use the localized customize label')
+assert(/supportsParamCustomization\(selectedItem\.domainItem\)/.test(commandSurfaces), 'launcher footer should show the parameter shortcut only for the selected optional-param item')
+assert(/LauncherParamStep/.test(read('src/components/launcher/GlobalLauncherFrames.tsx')), 'launcher frames should render the shared launcher parameter step')
 assert(/LauncherParamStep/.test(globalLauncher), 'GlobalLauncher should render the shared launcher parameter step')
 assert(/ParamInputFrame/.test(globalLauncher), 'GlobalLauncher should support param-input controller frames')
-assert(/commitCurrentParam/.test(commandPalette) && /commitCurrentParam/.test(globalLauncher), 'launcher surfaces should commit one parameter at a time through the controller')
+assert(/commitCurrentParam/.test(commandSurfaces) && /commitCurrentParam/.test(globalLauncher), 'launcher surfaces should commit one parameter at a time through the controller')
 assert(/frame\.paramIndex/.test(launcherParamStep) && /frame\.query/.test(launcherParamStep) && /frame\.selectedIndex/.test(launcherParamStep), 'LauncherParamStep should consume launcher param frame state')
 assert(/searchableFieldsMatch/.test(launcherParamStep), 'LauncherParamStep option search should use the shared launcher matcher')
 assert(/labelI18n/.test(launcherParamStep), 'LauncherParamStep option search should preserve localized labels for pinyin matching')
@@ -69,9 +78,9 @@ assert(!/\bCheck\b/.test(launcherParamStep), 'LauncherParamStep single-select op
 assert((launcherParamStep.match(/<input/g) ?? []).length === 1, 'LauncherParamStep should keep filtering/input in the single launcher input row')
 assert(/event\.key === 'Escape'[\s\S]*onBack\(\)/.test(launcherParamStep), 'LauncherParamStep should support Escape back navigation')
 assert(/event\.key === 'Backspace' && frame\.query === ''[\s\S]*onBack\(\)/.test(launcherParamStep), 'LauncherParamStep should support Backspace back navigation only when the launcher input is empty')
-assert(!/<form/.test(commandPalette), 'CommandPalette must not render the old parameter form')
-assert(!/<select/.test(commandPalette), 'CommandPalette must not render native select parameters')
-assert(!/multiple/.test(commandPalette), 'CommandPalette must not render native multi-select parameters')
+assert(!/<form/.test(commandSurfaces), 'launcher surfaces must not render the old parameter form')
+assert(!/<select/.test(commandSurfaces), 'launcher surfaces must not render native select parameters')
+assert(!/multiple/.test(commandSurfaces), 'launcher surfaces must not render native multi-select parameters')
 
 function pluginIndex(dir) {
   const p = join(root, 'src/plugins', dir, 'index.ts')
