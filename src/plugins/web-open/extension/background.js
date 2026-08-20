@@ -12,6 +12,10 @@ const HISTORY_ALARM = 'hiven-history-push'
 const IDLE_ALARM = 'hiven-idle-close'
 const HISTORY_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000
 const HISTORY_MAX = 200
+/** Pages enriched with per-visit timestamps (one getVisits call each). */
+const VISITS_DETAIL_MAX_URLS = 60
+/** Timestamps kept per page — enough to establish span without bloating the POST. */
+const VISITS_PER_URL_MAX = 80
 const CONFIG_KEY = 'hivenBridgeConfig'
 
 /** @type {{ historyEnabled: boolean, autoCloseIdleTabs: boolean, idleTimeoutMinutes: number }} */
@@ -116,6 +120,47 @@ async function pushSnapshot() {
   }
 }
 
+/**
+ * Fetch individual visit timestamps for the busiest pages.
+ *
+ * visitCount + lastVisitTime cannot tell a months-long habit from a three-day
+ * sprint that ended weeks ago — both look like "N visits, last seen X days ago".
+ * getVisits returns the actual distribution, which is what the desktop side
+ * needs to rank them differently.
+ *
+ * Note getVisits is NOT bounded by the search lookback window: a page returned
+ * by a 30-day search yields its full retained visit history, which is exactly
+ * the long-span signal the summary fields cannot provide.
+ *
+ * Bounded on both axes — one call per URL, so only the top pages are enriched,
+ * and only the most recent timestamps per page are kept.
+ */
+async function collectVisitTimestamps(items) {
+  if (!chrome.history?.getVisits) return new Map()
+  const ranked = [...items]
+    .sort((a, b) => (b.visitCount ?? 0) - (a.visitCount ?? 0))
+    .slice(0, VISITS_DETAIL_MAX_URLS)
+
+  const byUrl = new Map()
+  await Promise.all(
+    ranked.map(async (item) => {
+      try {
+        const visits = await chrome.history.getVisits({ url: item.url })
+        const times = visits
+          .map((visit) => visit.visitTime)
+          .filter((time) => typeof time === 'number' && time > 0)
+        if (times.length === 0) return
+        // Newest last; keep the tail so recency survives the cap.
+        times.sort((a, b) => a - b)
+        byUrl.set(item.url, times.slice(-VISITS_PER_URL_MAX))
+      } catch {
+        // One unreadable URL must not cost the whole history push.
+      }
+    }),
+  )
+  return byUrl
+}
+
 async function collectHistory() {
   if (!chrome.history?.search) return []
   const items = await chrome.history.search({
@@ -123,18 +168,19 @@ async function collectHistory() {
     maxResults: HISTORY_MAX,
     startTime: Date.now() - HISTORY_LOOKBACK_MS,
   })
-  return items
-    .filter((item) => isHttpUrl(item.url))
-    .map((item) => ({
-      id: String(item.id ?? item.url),
-      title: item.title || item.url,
-      url: item.url,
-      lastVisitTime: item.lastVisitTime,
-      visitCount: item.visitCount,
-      typedCount: item.typedCount,
-      faviconUrl: faviconForUrl(item.url),
-      appName: browserLabel(),
-    }))
+  const httpItems = items.filter((item) => isHttpUrl(item.url))
+  const visitsByUrl = await collectVisitTimestamps(httpItems)
+  return httpItems.map((item) => ({
+    id: String(item.id ?? item.url),
+    title: item.title || item.url,
+    url: item.url,
+    lastVisitTime: item.lastVisitTime,
+    visitCount: item.visitCount,
+    typedCount: item.typedCount,
+    visits: visitsByUrl.get(item.url),
+    faviconUrl: faviconForUrl(item.url),
+    appName: browserLabel(),
+  }))
 }
 
 async function pushHistory() {

@@ -4,7 +4,7 @@
  */
 
 import { getPluginHostSdk, type DesktopTargetProvider } from '@hiven/plugin'
-import { searchableFieldsMatch } from '@hiven/plugin'
+import { searchableFieldsMatch, visitFrecency, visitFrecencyFromSummary } from '@hiven/plugin'
 import {
   DEFAULT_BROWSER_TABS_SETTINGS,
   normalizeBrowserTabsSettings,
@@ -21,6 +21,16 @@ const QUERY_HISTORY_LIMIT = 16
  * recommendation over web-open's generic direct-open.
  */
 const OPEN_TAB_FOCUS_BIAS = 200
+/** How many tabs the empty-open recommendation shows before it becomes a wall. */
+const EMPTY_OPEN_TAB_LIMIT = 6
+/**
+ * Bias for empty-open tabs that have real visit history behind them. Kept well
+ * under OPEN_TAB_FOCUS_BIAS so an explicit "I copied this link" intent still
+ * outranks a passive recommendation.
+ */
+const EMPTY_OPEN_BASE_BIAS = 60
+/** Tabs we know nothing about: still shown (they're open), but after the rest. */
+const EMPTY_OPEN_UNRANKED_BIAS = 10
 
 function nativeIdFromTargetId(sourceId: string, kind: string, id: string): string {
   const prefix = `${sourceId}:${kind}:`
@@ -31,6 +41,90 @@ function nativeIdFromTargetId(sourceId: string, kind: string, id: string): strin
 function isRenderableIconUrl(url: string | null | undefined): url is string {
   if (!url) return false
   return url.startsWith('https://') || url.startsWith('http://') || url.startsWith('data:image/')
+}
+
+/**
+ * Empty-open recommendations: the open tabs you're most likely to want back.
+ *
+ * Ranked by visit frecency rather than tab order, so the list reflects two
+ * different reasons a page matters:
+ *   - a site you return to for months (habit)
+ *   - the doc/MR you're hammering this week and will drop after it ships (burst)
+ * See visitFrecency in the host SDK for why one decay rate can't express both.
+ *
+ * Frequency data comes from browser history joined onto the open tabs by URL —
+ * a tab carries no visit stats of its own. Tabs with no history match still
+ * appear (they're open, that counts for something) but rank below known ones.
+ */
+async function buildEmptyOpenTargets() {
+  const { desktopTargets } = getPluginHostSdk()
+  const [tabs, history] = await Promise.all([
+    desktopTargets.bridge.listTargets(CHROMIUM_SOURCE_ID),
+    desktopTargets.bridge.listHistory(CHROMIUM_SOURCE_ID),
+  ])
+  if (tabs.length === 0) return []
+
+  const statsByUrl = new Map<
+    string,
+    { visitCount: number; lastVisitTime: number | null; visits: number[] }
+  >()
+  for (const item of history) {
+    const key = normalizeUrlForMatch(item.url)
+    if (!key) continue
+    const prev = statsByUrl.get(key)
+    const visitCount = (prev?.visitCount ?? 0) + (item.visitCount ?? 0)
+    const lastVisitTime = Math.max(prev?.lastVisitTime ?? 0, item.lastVisitTime ?? 0) || null
+    const visits = [...(prev?.visits ?? []), ...(item.visits ?? [])]
+    statsByUrl.set(key, { visitCount, lastVisitTime, visits })
+  }
+
+  const now = Date.now()
+  const scored = tabs.map((dto) => {
+    const key = dto.url ? normalizeUrlForMatch(dto.url) : null
+    const stats = key ? statsByUrl.get(key) : undefined
+    // Real timestamps when the extension provides them — only they carry the
+    // visit SPAN that separates a long-running habit from a finished sprint.
+    // Older extensions send counts only, so fall back to the approximation.
+    const score = !stats
+      ? 0
+      : stats.visits.length > 0
+        ? visitFrecency(stats.visits, now)
+        : visitFrecencyFromSummary(stats.visitCount, stats.lastVisitTime, now)
+    return { dto, score }
+  })
+  scored.sort((a, b) => b.score - a.score)
+
+  return scored.slice(0, EMPTY_OPEN_TAB_LIMIT).map(({ dto, score }, index) => {
+    const favicon = isRenderableIconUrl(dto.faviconUrl) ? dto.faviconUrl : undefined
+    const kind = dto.kind === 'document' ? 'document' : 'tab'
+    const key = dto.url ? normalizeUrlForMatch(dto.url) : null
+    const visits = key ? statsByUrl.get(key)?.visits : undefined
+    return {
+      // Raw signal for the host: it decides both ordering and whether this looks
+      // like a habit worth keeping. No policy on this side.
+      visits: visits && visits.length > 0 ? visits : undefined,
+      id: `${dto.sourceId}:${kind}:${dto.id}`,
+      sourceId: dto.sourceId,
+      kind: kind as 'tab' | 'document',
+      title: dto.title,
+      subtitle: dto.subtitle ?? dto.appName ?? undefined,
+      appName: dto.appName ?? undefined,
+      appStableKey: dto.appName ?? dto.sourceId,
+      keywords: [dto.title, dto.url ?? '', dto.appName ?? ''].filter(Boolean),
+      meta: {
+        url: dto.url ?? undefined,
+        windowId: dto.windowId ?? undefined,
+        faviconKey: favicon,
+      },
+      icon: favicon ?? 'Globe',
+      actionClass: 'focus' as const,
+      // Rank within our own slice; the host clamps this to ±500. Descending by
+      // position keeps our frecency order intact after host-side merging, while
+      // staying below the copied-link focus bias so an explicit intent wins.
+      scoreBias: score > 0 ? EMPTY_OPEN_BASE_BIAS - index : EMPTY_OPEN_UNRANKED_BIAS - index,
+      kindLabelI18n: { en: 'Open tab', zh: '已打开' },
+    }
+  })
 }
 
 export function createChromiumTabsProvider(): DesktopTargetProvider {
@@ -56,8 +150,9 @@ export function createChromiumTabsProvider(): DesktopTargetProvider {
     async list(ctx) {
       if (ctx.surfaceId !== 'global-launcher') return []
       const q = ctx.query.trim()
-      // Empty search: 0 tabs (product design).
-      if (!q) return []
+      // Empty open: surface the pages worth returning to, ranked by how you
+      // actually use them (see buildEmptyOpenTargets).
+      if (!q) return buildEmptyOpenTargets()
 
       const { desktopTargets } = getPluginHostSdk()
       const raw = await desktopTargets.bridge.listTargets(CHROMIUM_SOURCE_ID)

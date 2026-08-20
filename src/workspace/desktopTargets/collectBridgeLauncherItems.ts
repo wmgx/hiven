@@ -9,6 +9,7 @@
 import type { Locale } from '../../i18n'
 import type { LauncherItem, LauncherSurfaceId } from '../launcher/types'
 import { launcherPerfNow, logLauncherPerfDuration } from '../launcher/perf'
+import { useAppStore } from '../../store'
 import { listDesktopTargetProviders } from './registry'
 import { desktopTargetToLauncherItem } from './toLauncherItem'
 import type { DesktopTarget, DesktopTargetQueryContext } from './types'
@@ -115,6 +116,8 @@ export async function getDesktopBridgeLauncherDynamicItems(ctx: {
       .map((t) => ({ ...t, sourceId: t.sourceId || CHROMIUM_SOURCE_ID }))
       .slice(0, 40)
 
+    // Read once per pass: only used to avoid flagging something already kept.
+    const favoriteKeys = useAppStore.getState().launcherFavoriteKeys
     const items = targets.map((target) =>
       desktopTargetToLauncherItem(target, {
         locale: ctx.locale,
@@ -122,6 +125,7 @@ export async function getDesktopBridgeLauncherDynamicItems(ctx: {
         activate: provider.activate
           ? (t, c) => provider.activate!(t, c)
           : undefined,
+        favoriteKeys,
       }),
     )
     logLauncherPerfDuration('bridge-target:collect', startedAt, { itemCount: items.length })

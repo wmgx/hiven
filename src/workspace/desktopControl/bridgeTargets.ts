@@ -46,6 +46,12 @@ export type DesktopBridgeHistoryDto = {
   lastVisitTime?: number | null
   visitCount?: number | null
   typedCount?: number | null
+  /**
+   * Individual visit timestamps when the extension can supply them
+   * (chrome.history.getVisits), newest last. Absent on older extensions — the
+   * summary fields above are the fallback.
+   */
+  visits?: number[] | null
   faviconUrl?: string | null
   appName?: string | null
 }

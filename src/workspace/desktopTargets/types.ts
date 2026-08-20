@@ -71,6 +71,15 @@ export type DesktopTarget = {
    * `persistable` is true. Must not be a volatile window/tab/pid id.
    */
   persistKey?: string
+  /**
+   * Visit timestamps for this target, when the provider can supply them.
+   *
+   * A generic signal, not product data: providers report WHEN something was
+   * visited, and the host owns what to conclude from it (two-scale frecency for
+   * ordering, habit-vs-burst for whether it is worth keeping). Keeps site
+   * knowledge out of the host and ranking policy out of providers.
+   */
+  visits?: number[]
 }
 
 export type DesktopTargetQueryContext = {

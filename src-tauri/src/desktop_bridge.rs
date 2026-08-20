@@ -72,6 +72,17 @@ pub struct BridgeHistoryItem {
     pub typed_count: Option<u32>,
     pub favicon_url: Option<String>,
     pub app_name: Option<String>,
+    /// Individual visit timestamps (chrome.history.getVisits), newest last.
+    ///
+    /// `visit_count` + `last_visit_time` cannot distinguish "25 visits over three
+    /// frantic days" from "25 visits spread over four months" — the span signal
+    /// that separates a habit from a burst. This carries the real distribution
+    /// when the extension can supply it.
+    ///
+    /// `serde(default)`: extensions predating this field omit it entirely, and
+    /// their POSTs must keep deserializing rather than failing wholesale.
+    #[serde(default)]
+    pub visits: Option<Vec<f64>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
