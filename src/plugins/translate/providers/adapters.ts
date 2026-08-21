@@ -1,5 +1,6 @@
 import type { PluginNetworkApi } from '@hiven/plugin'
 import type { LanguageCode, SourceLanguageCode, TranslateProfile } from '../settings/model'
+import { translateWithTencent } from './tencent'
 
 export type TranslateRequest = {
   text: string
@@ -15,8 +16,20 @@ export type TranslateResult = {
 
 type BaiduResponse = {
   trans_result?: Array<{ src: string; dst: string }>
-  error_code?: string
+  error_code?: string | number
   error_msg?: string
+}
+
+/** Baidu returns 52000 / 0 / omitted on success; any other error_code is a failure. */
+const BAIDU_SUCCESS_CODES = new Set(['', '0', '52000'])
+
+export function baiduFailureMessage(status: number, data: BaiduResponse): string | null {
+  const code = data.error_code == null ? '' : String(data.error_code)
+  const httpFailed = status < 200 || status >= 300
+  const codeFailed = code !== '' && !BAIDU_SUCCESS_CODES.has(code)
+  if (!httpFailed && !codeFailed) return null
+  const detail = data.error_msg || `Baidu translate failed (${status})`
+  return codeFailed ? `${detail} (${code})` : detail
 }
 
 type DeepLResponse = {
@@ -73,6 +86,10 @@ export function resolveSmartTargetLang(text: string): LanguageCode {
 
 export function estimateBilledChars(text: string): number {
   return Array.from(text).length
+}
+
+export function isAutoTranslateReady(text: string): boolean {
+  return estimateBilledChars(text.trim()) > 0
 }
 
 function rotateLeft(value: number, amount: number): number {
@@ -165,9 +182,8 @@ async function translateWithBaidu(req: TranslateRequest, profile: TranslateProfi
     body: body.toString(),
   })
   const data = JSON.parse(response.body) as BaiduResponse
-  if (response.status < 200 || response.status >= 300 || data.error_code) {
-    throw new Error(data.error_msg || `Baidu translate failed (${response.status})`)
-  }
+  const failure = baiduFailureMessage(response.status, data)
+  if (failure) throw new Error(failure)
   const text = data.trans_result?.map((item) => item.dst).join('\n') ?? ''
   if (!text) throw new Error('Baidu returned an empty translation')
   return { text, billedChars: estimateBilledChars(req.text), providerRequestId: salt }
@@ -207,6 +223,8 @@ export async function translateText(req: TranslateRequest, profile: TranslatePro
       return translateWithBaidu(req, profile, network)
     case 'deepl':
       return translateWithDeepL(req, profile, network)
+    case 'tencent':
+      return translateWithTencent(req, profile, network)
     default:
       throw new Error(`Unsupported translate provider: ${String(profile.provider)}`)
   }

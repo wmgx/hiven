@@ -22,6 +22,9 @@ const surface = readIfExists(`${pluginDir}/surfaces/TranslateSurface.tsx`)
 const styles = readIfExists(`${pluginDir}/style.css`)
 const settings = readIfExists(`${pluginDir}/settings/model.ts`)
 const adapters = readIfExists(`${pluginDir}/providers/adapters.ts`)
+const tencent = readIfExists(`${pluginDir}/providers/tencent.ts`)
+const localeZh = readIfExists(`${pluginDir}/locales/zh.json`)
+const localeEn = readIfExists(`${pluginDir}/locales/en.json`)
 const builtinIndex = read('src/builtin-plugins/index.json')
 const packageJson = read('package.json')
 
@@ -31,6 +34,7 @@ assert.ok(surface, 'translate plugin must ship TranslateSurface.tsx')
 assert.ok(styles, 'translate plugin must ship dedicated style.css')
 assert.ok(settings, 'translate plugin must define settings/model.ts')
 assert.ok(adapters, 'translate plugin must define provider adapters')
+assert.ok(tencent, 'translate plugin must define tencent adapter')
 
 const manifestJson = JSON.parse(manifest)
 assert.equal(manifestJson.pluginId, 'translate', 'manifest pluginId must be translate')
@@ -54,7 +58,7 @@ assert.ok(
 const packageScripts = JSON.parse(packageJson).scripts ?? {}
 assert.equal(
   packageScripts['test:translate-plugin'],
-  'node scripts/test-translate-plugin-contract.mjs',
+  'node scripts/test-translate-plugin-contract.mjs && node scripts/test-translate-baidu-response.mjs && node scripts/test-translate-tencent.mjs',
   'package.json must expose test:translate-plugin',
 )
 
@@ -75,13 +79,15 @@ assert.doesNotMatch(index, /commands\s*:/, 'translate should not be modeled as a
 assert.doesNotMatch(index, /panels\s*:/, 'translate should not register workspace panels')
 assert.doesNotMatch(index, /toolbar\s*:/, 'translate should not register workspace toolbar actions')
 
-for (const source of [index, surface, settings, adapters].join('\n')) {
+for (const source of [index, surface, settings, adapters, tencent].join('\n')) {
   assert.doesNotMatch(source, /clipboard\.readText|pasteText|host\.paste/, 'translate must not read clipboard or paste to foreground app')
   assert.doesNotMatch(source, /replaceActiveText|insertText|getActiveText|getSelectionText|getPaneSnapshot/, 'translate must not read or write workspace text')
   assert.doesNotMatch(source, /history|repository|background/i, 'translate must not implement translation history/background storage')
 }
 
 assert.match(surface, /800/, 'TranslateSurface must debounce automatic translation at 800ms')
+assert.match(surface, /isAutoTranslateReady/, 'surface must skip only empty input, not a character minimum')
+assert.doesNotMatch(adapters, /MIN_AUTO_TRANSLATE_CHARS/, 'auto-translate must not impose a character-count threshold')
 assert.doesNotMatch(surface, />\s*翻译\s*<|>\s*Translate\s*<\/[Bb]utton|从剪贴板/, 'surface must not expose a translate-action or clipboard-import button')
 assert.match(surface, /host\.clipboard\.writeText/, 'surface should copy translation via host clipboard write')
 assert.match(surface, /action\.copy/, 'surface should expose a header copy action')
@@ -104,7 +110,21 @@ assert.match(settings, /monthlyLimitChars/, 'settings must model monthly charact
 assert.match(settings, /usedChars/, 'settings must model monthly used characters')
 assert.match(adapters, /provider:\s*['"]baidu['"]|case\s+['"]baidu['"]/, 'provider adapters must include baidu')
 assert.doesNotMatch(adapters, /crypto\.subtle\.digest\(['"]MD5['"]/, 'Baidu signing must not rely on unsupported WebCrypto MD5')
-assert.match(surface, /host\.storage\.kv\.(get|set)/, 'surface must persist monthly usage with plugin private storage')
+assert.match(adapters, /BAIDU_SUCCESS_CODES|baiduFailureMessage/, 'Baidu adapter must distinguish success codes from real errors')
+assert.match(surface, /hostRef/, 'auto-translate must not depend on host object identity')
+assert.doesNotMatch(
+  surface,
+  /\[host\.network,\s*host\.storage,\s*usageByProfile\]/,
+  'auto-translate debounce must not reset when launcher recreates host.network',
+)
+assert.match(surface, /host(?:Ref\.current)?\.storage\.kv\.(get|set)/, 'surface must persist monthly usage with plugin private storage')
 assert.match(adapters, /provider:\s*['"]deepl['"]|case\s+['"]deepl['"]/, 'provider adapters must include deepl')
+assert.match(adapters, /case\s+['"]tencent['"]/, 'provider adapters must include tencent')
+assert.match(index, /value:\s*['"]tencent['"]/, 'settings must offer tencent as a provider option')
+assert.match(settings, /provider:\s*['"]tencent['"]/, 'settings model must include tencent profile')
+assert.match(settings, /migrateTranslateSettings/, 'existing users must receive a tencent profile via settings migrate')
+assert.match(localeZh, /腾讯云翻译/, 'zh locale must name Tencent Cloud')
+assert.match(localeEn, /Tencent Cloud/, 'en locale must name Tencent Cloud')
+assert.match(tencent, /TC3-HMAC-SHA256/, 'tencent adapter must sign with TC3')
 
 console.log('translate plugin contract checks passed')

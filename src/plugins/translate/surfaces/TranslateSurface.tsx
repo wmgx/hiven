@@ -5,10 +5,9 @@ import { BackIcon, CloseIcon, SettingsIcon } from '@hiven/plugin-ui/icons'
 import { AlertTriangle, ArrowRight, Check, ChevronDown, LoaderCircle } from 'lucide-react'
 import type { SourceLanguageCode, TargetLanguageCode, TranslateProfile, TranslateSettings } from '../settings/model'
 import { currentUsageMonth } from '../settings/model'
-import { estimateBilledChars, resolveSmartTargetLang, translateText } from '../providers/adapters'
+import { estimateBilledChars, isAutoTranslateReady, resolveSmartTargetLang, translateText } from '../providers/adapters'
 
 const AUTO_TRANSLATE_DEBOUNCE_MS = 800
-const MIN_TRANSLATE_CHARS = 3
 
 type TranslateStatus =
   | { kind: 'idle' }
@@ -187,6 +186,8 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const requestIdRef = useRef(0)
   const cacheRef = useRef(new Map<string, CacheEntry>())
+  const hostRef = useRef(host)
+  hostRef.current = host
 
   const initialProfile = useMemo(() => selectInitialProfile(settings), [settings])
   const [profileId, setProfileId] = useState(initialProfile?.id ?? '')
@@ -198,17 +199,25 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   const [inputFocused, setInputFocused] = useState(false)
   const [status, setStatus] = useState<TranslateStatus>({ kind: 'idle' })
   const [usageByProfile, setUsageByProfile] = useState(() => new Map(settings.profiles.map((profile) => [profile.id, profile.usedChars])))
+  const usageRef = useRef(usageByProfile)
+  usageRef.current = usageByProfile
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let cancelled = false
-    void host.storage.kv.get<Record<string, number>>('usage.currentMonth').then((stored) => {
+    void hostRef.current.storage.kv.get<Record<string, number>>('usage.currentMonth').then((stored) => {
       if (cancelled || !stored) return
-      setUsageByProfile(new Map(Object.entries(stored)))
+      setUsageByProfile((current) => {
+        const next = new Map(Object.entries(stored))
+        if (next.size === current.size && [...next].every(([key, value]) => current.get(key) === value)) {
+          return current
+        }
+        return next
+      })
     }).catch(() => {})
     return () => { cancelled = true }
-  }, [host.storage])
+  }, [])
 
   const profiles = useMemo(() => enabledProfiles(settings), [settings])
   const sourceOptions = useMemo(() => localizedOptions(t, SOURCE_LANGUAGE_OPTIONS), [t])
@@ -221,6 +230,22 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
     () => settings.profiles.find((profile) => profile.id === profileId) ?? initialProfile,
     [settings.profiles, profileId, initialProfile],
   )
+  const profileRef = useRef(activeProfile)
+  profileRef.current = activeProfile
+  const translateProfileKey = activeProfile
+    ? [
+        activeProfile.id,
+        activeProfile.provider,
+        activeProfile.appId ?? '',
+        activeProfile.secret ?? '',
+        activeProfile.authKey ?? '',
+        activeProfile.secretId ?? '',
+        activeProfile.secretKey ?? '',
+        activeProfile.region ?? '',
+        activeProfile.endpoint ?? '',
+        String(activeProfile.monthlyLimitChars ?? 0),
+      ].join('\0')
+    : ''
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => inputRef.current?.focus())
@@ -238,7 +263,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
     const normalizedProfile = resetUsageMonth(profile, month)
     const effectiveTarget = target === 'smart' ? resolveSmartTargetLang(text) : target
     const billedChars = estimateBilledChars(text)
-    const currentUsed = usageByProfile.get(profile.id) ?? normalizedProfile.usedChars
+    const currentUsed = usageRef.current.get(profile.id) ?? normalizedProfile.usedChars
     const monthlyLimit = Number(normalizedProfile.monthlyLimitChars) || 0
     if (monthlyLimit > 0 && currentUsed + billedChars > monthlyLimit) {
       setStatus({ kind: 'quota-exceeded', usedChars: currentUsed, limitChars: monthlyLimit })
@@ -255,14 +280,14 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
 
     setStatus({ kind: 'translating', requestId })
     try {
-      const result = await translateText({ text, sourceLang: source, targetLang: effectiveTarget }, normalizedProfile, host.network)
+      const result = await translateText({ text, sourceLang: source, targetLang: effectiveTarget }, normalizedProfile, hostRef.current.network)
       if (requestIdRef.current !== requestId) return
       cacheRef.current.set(cacheKey, { text: result.text, billedChars: result.billedChars })
       setOutputText(result.text)
       setUsageByProfile((current) => {
         const next = new Map(current)
         next.set(profile.id, (next.get(profile.id) ?? normalizedProfile.usedChars) + result.billedChars)
-        void host.storage.kv.set('usage.currentMonth', Object.fromEntries(next)).catch(() => {})
+        void hostRef.current.storage.kv.set('usage.currentMonth', Object.fromEntries(next)).catch(() => {})
         return next
       })
       setStatus({ kind: 'success', translatedAt: Date.now() })
@@ -270,14 +295,15 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
       if (requestIdRef.current !== requestId) return
       setStatus({ kind: 'error', message: error instanceof Error ? error.message : 'Unknown error' })
     }
-  }, [host.network, host.storage, usageByProfile])
+  }, [])
 
   useEffect(() => {
     const trimmed = inputText.trim()
     requestIdRef.current += 1
     const requestId = requestIdRef.current
+    const profile = profileRef.current
 
-    if (!activeProfile || trimmed.length < MIN_TRANSLATE_CHARS) {
+    if (!profile || !isAutoTranslateReady(trimmed)) {
       setOutputText('')
       setStatus({ kind: 'idle' })
       return
@@ -285,10 +311,10 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
 
     setStatus({ kind: 'waiting', dueAt: Date.now() + AUTO_TRANSLATE_DEBOUNCE_MS })
     const timer = window.setTimeout(() => {
-      void translateCurrentText(requestId, activeProfile, trimmed, sourceLang, targetLang)
+      void translateCurrentText(requestId, profile, trimmed, sourceLang, targetLang)
     }, AUTO_TRANSLATE_DEBOUNCE_MS)
     return () => window.clearTimeout(timer)
-  }, [inputText, activeProfile, sourceLang, targetLang, translateCurrentText])
+  }, [inputText, translateProfileKey, sourceLang, targetLang, translateCurrentText])
 
   const copyOutput = useCallback(async () => {
     if (!outputText) return

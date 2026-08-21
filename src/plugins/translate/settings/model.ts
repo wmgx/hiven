@@ -1,4 +1,4 @@
-export type TranslateProvider = 'baidu' | 'deepl'
+export type TranslateProvider = 'baidu' | 'deepl' | 'tencent'
 
 export type LanguageCode = 'zh' | 'en' | 'ja' | 'ko' | 'fr' | 'de' | 'es'
 export type SourceLanguageCode = 'auto' | LanguageCode
@@ -14,6 +14,9 @@ export type TranslateProfile = {
   apiKey?: string
   secret?: string
   authKey?: string
+  secretId?: string
+  secretKey?: string
+  region?: string
   defaultSourceLang: SourceLanguageCode
   defaultTargetLang: TargetLanguageCode
   monthlyLimitChars: number
@@ -25,6 +28,22 @@ export type TranslateSettings = {
   defaultProfileId: string
   defaultTargetLang: TargetLanguageCode
   profiles: TranslateProfile[]
+}
+
+export const TENCENT_DEFAULT_PROFILE: TranslateProfile = {
+  id: 'tencent-default',
+  name: '腾讯云翻译',
+  provider: 'tencent',
+  enabled: false,
+  endpoint: 'https://tmt.tencentcloudapi.com',
+  secretId: '',
+  secretKey: '',
+  region: 'ap-guangzhou',
+  defaultSourceLang: 'auto',
+  defaultTargetLang: 'smart',
+  monthlyLimitChars: 5000000,
+  usedCharsMonth: '',
+  usedChars: 0,
 }
 
 export const DEFAULT_TRANSLATE_SETTINGS: TranslateSettings = {
@@ -58,7 +77,21 @@ export const DEFAULT_TRANSLATE_SETTINGS: TranslateSettings = {
       usedCharsMonth: '',
       usedChars: 0,
     },
+    TENCENT_DEFAULT_PROFILE,
   ],
+}
+
+export function migrateTranslateSettings(stored: unknown, _fromVersion: number): TranslateSettings {
+  const value = stored && typeof stored === 'object' ? stored as Partial<TranslateSettings> : {}
+  const profiles = Array.isArray(value.profiles) ? value.profiles.filter((profile): profile is TranslateProfile => Boolean(profile && typeof profile === 'object')) : []
+  const nextProfiles = profiles.some((profile) => profile.provider === 'tencent')
+    ? profiles
+    : [...profiles, TENCENT_DEFAULT_PROFILE]
+  return {
+    defaultProfileId: value.defaultProfileId || DEFAULT_TRANSLATE_SETTINGS.defaultProfileId,
+    defaultTargetLang: value.defaultTargetLang || DEFAULT_TRANSLATE_SETTINGS.defaultTargetLang,
+    profiles: nextProfiles.length > 0 ? nextProfiles : DEFAULT_TRANSLATE_SETTINGS.profiles,
+  }
 }
 
 export function currentUsageMonth(now = new Date()): string {

@@ -1,6 +1,6 @@
 import { definePlugin, type PluginSettingsObjectListItemField } from '@hiven/plugin'
 import type { TranslateSettings } from './settings/model'
-import { DEFAULT_TRANSLATE_SETTINGS } from './settings/model'
+import { DEFAULT_TRANSLATE_SETTINGS, migrateTranslateSettings } from './settings/model'
 import { TranslateSurface } from './surfaces/TranslateSurface'
 import './style.css'
 
@@ -25,6 +25,7 @@ const PROFILE_FIELDS: PluginSettingsObjectListItemField[] = [
     options: [
       { label: 'Baidu Translate', labelI18n: { zh: '百度翻译' }, value: 'baidu' },
       { label: 'DeepL', value: 'deepl' },
+      { label: 'Tencent Cloud', labelI18n: { zh: '腾讯云翻译' }, value: 'tencent' },
     ],
     group: 'Basic',
     groupI18n: { zh: '基本' },
@@ -70,6 +71,46 @@ const PROFILE_FIELDS: PluginSettingsObjectListItemField[] = [
     visibleWhen: { key: 'provider', equals: 'deepl' },
   },
   {
+    key: 'secretId',
+    label: 'SecretId',
+    kind: 'text',
+    mono: true,
+    group: 'Credentials',
+    groupI18n: { zh: '凭据' },
+    sensitive: true,
+    visibleWhen: { key: 'provider', equals: 'tencent' },
+  },
+  {
+    key: 'secretKey',
+    label: 'SecretKey',
+    kind: 'text',
+    mono: true,
+    group: 'Credentials',
+    groupI18n: { zh: '凭据' },
+    sensitive: true,
+    visibleWhen: { key: 'provider', equals: 'tencent' },
+  },
+  {
+    key: 'region',
+    label: 'Region',
+    labelI18n: { zh: '地域' },
+    kind: 'text',
+    mono: true,
+    placeholder: 'ap-guangzhou',
+    group: 'Credentials',
+    groupI18n: { zh: '凭据' },
+    visibleWhen: { key: 'provider', equals: 'tencent' },
+  },
+  {
+    key: 'endpoint',
+    label: 'Endpoint',
+    kind: 'text',
+    mono: true,
+    group: 'Credentials',
+    groupI18n: { zh: '凭据' },
+    visibleWhen: { key: 'provider', equals: 'tencent' },
+  },
+  {
     key: 'defaultTargetLang',
     label: 'Default target language',
     labelI18n: { zh: '默认目标语种' },
@@ -96,8 +137,9 @@ export default definePlugin<TranslateSettings>({
   settings: {
     title: 'Translate',
     titleI18n: { zh: '翻译' },
-    version: 3,
+    version: 4,
     defaultValue: DEFAULT_TRANSLATE_SETTINGS,
+    migrate: migrateTranslateSettings,
     schema: {
       sections: [
         {
@@ -161,6 +203,9 @@ export default definePlugin<TranslateSettings>({
                 appId: '',
                 secret: '',
                 authKey: '',
+                secretId: '',
+                secretKey: '',
+                region: 'ap-guangzhou',
                 defaultSourceLang: 'auto',
                 defaultTargetLang: 'smart',
                 monthlyLimitChars: 100000,

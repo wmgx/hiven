@@ -43,7 +43,7 @@
     "test:editor-primitive-boundary": "node scripts/test-editor-primitive-boundary.mjs",
     "test:calculator-command-mode": "node scripts/test-calculator-command-mode.mjs",
     "test:date-time-assistant": "node scripts/test-date-time-assistant.mjs",
-    "test:translate-plugin": "node scripts/test-translate-plugin-contract.mjs",
+    "test:translate-plugin": "node scripts/test-translate-plugin-contract.mjs && node scripts/test-translate-baidu-response.mjs && node scripts/test-translate-tencent.mjs",
     "test:feishu-cli-logic": "node scripts/test-feishu-cli-logic.mjs",
     "test:feishu-plugin": "node scripts/test-feishu-plugin.mjs",
     "test:plugin-network-proxy": "node scripts/test-plugin-network-proxy.mjs",
