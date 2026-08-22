@@ -35,14 +35,21 @@ function loadModule(path, { stripImports = [], globals = {} } = {}) {
 }
 
 const fire = loadModule('src/workspace/learning/fire.ts', {
+  // One pattern per import path — a shared non-greedy pattern with gaps in
+  // this list lets one pattern's match swallow whichever import sits between
+  // two matched paths (this bit test-learning-history-recall.mjs once — see
+  // its note; keeping this list complete avoids depending on that by luck).
   stripImports: [
     /import\s+type\s*\{[\s\S]*?\}\s*from\s*'[^']*'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\.\/\.\.\/i18n'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\.\/effectRunner'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\.\/telemetry'\s*;?\s*\n?/g,
+    /import\s*\{[\s\S]*?\}\s*from\s*'\.\/clipboardBrowserLink'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/features'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/frecency'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/navigationSensor'\s*;?\s*\n?/g,
+    /import\s*\{[\s\S]*?\}\s*from\s*'\.\/observer'\s*;?\s*\n?/g,
+    /import\s*\{[\s\S]*?\}\s*from\s*'\.\/proposals'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/registryRunners'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/store'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/urlTemplate'\s*;?\s*\n?/g,
@@ -52,11 +59,17 @@ const fire = loadModule('src/workspace/learning/fire.ts', {
     openExternalUrl: async () => {},
     TelemetryEvents: { learningRuleFired: 'learningRuleFired' },
     trackBehavior: () => {},
+    findHistoryRecall: () => [],
     extractFeatures: () => ({}),
     featureSignature: () => '',
+    isPlausibleToken: () => false,
+    normalizeToken: (s) => (s ?? '').trim(),
     FIRE_STRENGTH_BONUS: 1,
     firePriority: () => 0,
     getCurrentActiveHost: () => null, // unused by activeHostFireBoost itself
+    getRecentHistoryForRecall: () => [],
+    getRecentClipboardTokensWithSource: () => [],
+    isNewlyLearned: () => false,
     runLearnedChain: () => null,
     bumpRuleStrength: async () => {},
     pruneForgottenRules: async () => {},

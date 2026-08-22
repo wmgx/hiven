@@ -29,6 +29,7 @@
     "test:clipboard-browser-link": "node scripts/test-clipboard-browser-link.mjs",
     "test:learning-fire-hostboost": "node scripts/test-learning-fire-hostboost.mjs",
     "test:learning-history-recall": "node scripts/test-learning-history-recall.mjs",
+    "test:learning-source-scope-fire": "node scripts/test-learning-source-scope-fire.mjs",
     "test:launcher-direct-answer": "node scripts/test-launcher-direct-answer.mjs",
     "test:learning-autolearn": "node scripts/test-learning-autolearn.mjs",
     "test:visit-frecency": "node scripts/test-visit-frecency.mjs",

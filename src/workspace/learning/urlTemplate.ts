@@ -164,6 +164,13 @@ export interface NavigationRecord {
   slotHash: string
   slotKind?: UrlSlotKind
   ts: number
+  /**
+   * Host that was active when the copied token was captured (scenario L1/L2),
+   * present only when that differs from the destination host — a same-site
+   * copy→navigate carries no disambiguating signal, so it is left unset and
+   * flows through the plain (host-agnostic) induction below instead.
+   */
+  sourceHost?: string
 }
 
 export interface DiscoveredTemplate {
@@ -205,6 +212,9 @@ export function induceUrlTemplates(
     { hashes: Set<string>; visits: number; firstTs: number; lastTs: number; slotKind: UrlSlotKind }
   >()
   for (const nav of navs) {
+    // Cross-context evidence belongs to induceSourceScopedTemplates (L1/L2),
+    // not here — keeps a record from being learned (and firing) twice.
+    if (nav.sourceHost) continue
     // Only templates that actually carry a variable slot are direct-answer candidates.
     if (!nav.template.includes('{')) continue
     const slotKind = nav.slotKind ?? inferSlotKindFromTemplate(nav.template)
@@ -232,6 +242,95 @@ export function induceUrlTemplates(
     discovered.push({
       template,
       host: hostOf(template),
+      slotKind: g.slotKind,
+      distinctValues: g.hashes.size,
+      visits: g.visits,
+      firstTs: g.firstTs,
+      lastTs: g.lastTs,
+    })
+  }
+
+  discovered.sort((a, b) => {
+    if (b.distinctValues !== a.distinctValues) return b.distinctValues - a.distinctValues
+    if (b.visits !== a.visits) return b.visits - a.visits
+    return b.lastTs - a.lastTs
+  })
+  return discovered
+}
+
+export interface DiscoveredSourceScopedTemplate {
+  /** Host that was active when the token was copied — the disambiguating key. */
+  sourceHost: string
+  template: string
+  host: string
+  slotKind: UrlSlotKind
+  distinctValues: number
+  visits: number
+  firstTs: number
+  lastTs: number
+}
+
+/**
+ * Discover source-scoped templates (scenario L1/L2): the same token SHAPE
+ * copied on different sites can mean different destinations (a hex string on
+ * grafana vs. on a code host) — this groups by (sourceHost, template) instead
+ * of template alone, so each copy-time site earns its own candidate. Mirrors
+ * {@link induceUrlTemplates} otherwise (same threshold, same ranking).
+ *
+ * Only records carrying a `sourceHost` are considered — the disambiguating
+ * evidence navigationSensor attaches when the copy site differs from the
+ * destination (see {@link NavigationRecord.sourceHost}).
+ */
+export function induceSourceScopedTemplates(
+  navs: readonly NavigationRecord[],
+  opts: InduceTemplateOptions = {},
+): DiscoveredSourceScopedTemplate[] {
+  const minDistinct = opts.minDistinctValues ?? DEFAULT_MIN_DISTINCT_VALUES
+
+  const groups = new Map<
+    string,
+    {
+      sourceHost: string
+      template: string
+      hashes: Set<string>
+      visits: number
+      firstTs: number
+      lastTs: number
+      slotKind: UrlSlotKind
+    }
+  >()
+  for (const nav of navs) {
+    if (!nav.sourceHost) continue
+    if (!nav.template.includes('{')) continue
+    const slotKind = nav.slotKind ?? inferSlotKindFromTemplate(nav.template)
+    if (!slotKind) continue
+    const key = `${nav.sourceHost} ${nav.template}`
+    const g = groups.get(key)
+    if (g) {
+      g.hashes.add(nav.slotHash)
+      g.visits += 1
+      if (nav.ts < g.firstTs) g.firstTs = nav.ts
+      if (nav.ts > g.lastTs) g.lastTs = nav.ts
+    } else {
+      groups.set(key, {
+        sourceHost: nav.sourceHost,
+        template: nav.template,
+        hashes: new Set([nav.slotHash]),
+        visits: 1,
+        firstTs: nav.ts,
+        lastTs: nav.ts,
+        slotKind,
+      })
+    }
+  }
+
+  const discovered: DiscoveredSourceScopedTemplate[] = []
+  for (const g of groups.values()) {
+    if (g.hashes.size < minDistinct) continue
+    discovered.push({
+      sourceHost: g.sourceHost,
+      template: g.template,
+      host: hostOf(g.template),
       slotKind: g.slotKind,
       distinctValues: g.hashes.size,
       visits: g.visits,

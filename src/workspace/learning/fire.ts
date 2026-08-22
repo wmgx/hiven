@@ -20,6 +20,7 @@ import { findHistoryRecall, type HistoryRecallHit } from './clipboardBrowserLink
 import { extractFeatures, featureSignature, isPlausibleToken, normalizeToken } from './features'
 import { FIRE_STRENGTH_BONUS, firePriority } from './frecency'
 import { getCurrentActiveHost, getRecentHistoryForRecall } from './navigationSensor'
+import { getRecentClipboardTokensWithSource } from './observer'
 import { isNewlyLearned } from './proposals'
 import { runLearnedChain } from './registryRunners'
 import { bumpRuleStrength, pruneForgottenRules, queryAllRules, type LearnedRule } from './store'
@@ -47,6 +48,20 @@ const ACTIVE_HOST_FIRE_BOOST = 40
 
 export function activeHostFireBoost(ruleHost: string, activeHost: string | null): number {
   return Boolean(ruleHost) && activeHost === ruleHost ? ACTIVE_HOST_FIRE_BOOST : 0
+}
+
+/**
+ * Fire-time source disambiguation (scenario L1/L2): a scoped rule only fires
+ * when the query's OWN copy-time site is known and matches — never on a guess.
+ * If the query wasn't a recent copy (typed by hand, or stale), this is null and
+ * every scoped rule for that shape is skipped rather than picking one blindly.
+ */
+export function sourceHostForQuery(query: string): string | null {
+  const normalized = normalizeToken(query)
+  for (const { token, sourceHost } of getRecentClipboardTokensWithSource()) {
+    if (token === normalized && sourceHost) return sourceHost
+  }
+  return null
 }
 
 let cachedUrlRules: LearnedRule[] = []
@@ -245,9 +260,15 @@ export function learnedLauncherItems(query: string, locale: Locale): LauncherIte
     }
   }
 
+  const currentSourceHost = sourceHostForQuery(q)
   for (const rule of cachedUrlRules) {
     if (rule.transform.kind !== 'url-template') continue
     if (!queryMatchesSlot(q, rule.transform.slotKind as UrlSlotKind)) continue
+    // Scoped (L1/L2) rule: only fire on a confirmed copy-time site match —
+    // no known source for this query means skip, never a blind guess.
+    if (rule.matcher.kind === 'token' && rule.matcher.sourceHost) {
+      if (rule.matcher.sourceHost !== currentSourceHost) continue
+    }
     const url = 'https://' + fillTemplate(rule.transform.template, q)
     const item = buildOpenUrlItem(rule, url, locale)
     items.push(item)

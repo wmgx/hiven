@@ -19,7 +19,7 @@ import { isShapeCovered, representativeTokens, type CoverageProbe } from './cove
 import { extractFeatures, featureSignature } from './features'
 import { refreshLearnedUrlRules } from './fire'
 import { buildPureTransformRunners, runLearnedChain } from './registryRunners'
-import { ruleFromCandidate, selectAutoLearnable, templateToCandidate } from './proposals'
+import { ruleFromCandidate, selectAutoLearnable, sourceScopedTemplateToCandidate, templateToCandidate } from './proposals'
 import { offerLearnedRule } from './ruleSink'
 import {
   addSuppression,
@@ -35,7 +35,7 @@ import {
   type LearnedRule,
   type Suppression,
 } from './store'
-import { classifyTokenSlot, induceUrlTemplates, type DiscoveredTemplate } from './urlTemplate'
+import { classifyTokenSlot, induceSourceScopedTemplates, induceUrlTemplates, type DiscoveredTemplate } from './urlTemplate'
 import { buildTemplateFromPositions, induceVariablePositions } from './positionVariance'
 import { getRecentPathSample } from './navigationSensor'
 
@@ -75,6 +75,7 @@ async function collectCandidates(): Promise<{
   const candidates = [
     ...selectProposableCandidates(pairs, eventSigCounts),
     ...induceUrlTemplates(navs).map(templateToCandidate),
+    ...induceSourceScopedTemplates(navs).map(sourceScopedTemplateToCandidate),
     ...(await positionVarianceCandidates()),
   ]
     .filter(isCandidateNovel)
@@ -196,6 +197,11 @@ export async function autoLearnNow(now: number = Date.now()): Promise<number> {
  */
 async function offerToSink(candidate: RuleCandidate): Promise<string | null> {
   if (candidate.transform.kind !== 'url-template') return null
+  // Source-scoped (L1/L2) candidates stay host-owned: the sink protocol only
+  // carries template + slotKind, so a claiming plugin would silently drop the
+  // sourceHost disambiguation on accept — the exact §3.6 failure mode (learns,
+  // never fires right) if it later collides with an unscoped rule of its own.
+  if (candidate.matcher.kind === 'token' && candidate.matcher.sourceHost) return null
   return await offerLearnedRule({
     kind: 'url-template',
     template: candidate.transform.template,

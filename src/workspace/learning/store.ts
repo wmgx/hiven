@@ -56,8 +56,13 @@ export interface LearnedPair {
 /** How a learned rule decides an input matches it. */
 export type RuleMatcher =
   | { kind: 'feature-sig'; sig: string }
-  /** Scenario D reverse-fire: match any token of this kind (e.g. any number → open MR page). */
-  | { kind: 'token'; tokenKind: string }
+  /**
+   * Scenario D reverse-fire: match any token of this kind (e.g. any number →
+   * open MR page). `sourceHost`, when present, narrows this to scenario L1/L2:
+   * fire only when the token's own copy-time site matches — see fire.ts's
+   * sourceHostForQuery.
+   */
+  | { kind: 'token'; tokenKind: string; sourceHost?: string }
 
 /** What a learned rule does once it matches. */
 export type RuleTransform =

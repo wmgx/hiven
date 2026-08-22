@@ -14,7 +14,7 @@
  */
 
 import type { RuleCandidate } from './cluster'
-import type { DiscoveredTemplate } from './urlTemplate'
+import type { DiscoveredSourceScopedTemplate, DiscoveredTemplate } from './urlTemplate'
 import type { LearnedRule, RuleDescriptor } from './store'
 
 /**
@@ -50,9 +50,25 @@ export function templateToCandidate(discovered: DiscoveredTemplate): RuleCandida
   }
 }
 
+/** Convert a discovered source-scoped template (scenario L1/L2) into a candidate. */
+export function sourceScopedTemplateToCandidate(discovered: DiscoveredSourceScopedTemplate): RuleCandidate {
+  return {
+    clusterKey: `url-scoped:${discovered.sourceHost}:${discovered.template}`,
+    matcher: { kind: 'token', tokenKind: discovered.slotKind, sourceHost: discovered.sourceHost },
+    transform: { kind: 'url-template', template: discovered.template, slotKind: discovered.slotKind },
+    sampleCount: discovered.visits,
+    distinctInputs: discovered.distinctValues,
+    firstTs: discovered.firstTs,
+    lastTs: discovered.lastTs,
+  }
+}
+
 /** Denormalized matcher sig used as the fire-path index key. */
 function matcherSigOf(candidate: RuleCandidate): string {
-  return candidate.matcher.kind === 'token' ? `token:${candidate.matcher.tokenKind}` : candidate.matcher.sig
+  if (candidate.matcher.kind !== 'token') return candidate.matcher.sig
+  return candidate.matcher.sourceHost
+    ? `token:${candidate.matcher.tokenKind}@${candidate.matcher.sourceHost}`
+    : `token:${candidate.matcher.tokenKind}`
 }
 
 /**

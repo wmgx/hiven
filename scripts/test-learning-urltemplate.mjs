@@ -136,6 +136,49 @@ const C = loadModule('src/workspace/learning/coverage.ts')
   assert.equal(d[0].slotKind, 'hex', 'slotKind inferred from template')
 }
 
+// ─── scenario L1/L2: induceSourceScopedTemplates + D/L partition ─────────────
+{
+  const T = 'a.org/commit/{hex}'
+  const mkScoped = (sourceHost, slotHash, ts) => ({ template: T, slotHash, slotKind: 'hex', ts, sourceHost })
+  const mkPlain = (slotHash, ts) => ({ template: T, slotHash, slotKind: 'hex', ts })
+
+  // Same shape, two different copy-time sites, 3 distinct values each → two
+  // SEPARATE candidates, not merged into one (that would erase the disambiguation).
+  const navs = [
+    ...['h1', 'h2', 'h3'].map((h, i) => mkScoped('grafana.byted.org', h, i)),
+    ...['h4', 'h5', 'h6'].map((h, i) => mkScoped('code.byted.org', h, 10 + i)),
+  ]
+  const scoped = U.induceSourceScopedTemplates(navs)
+  assert.equal(scoped.length, 2, 'two source-scoped candidates, one per copy-time site')
+  const bySite = Object.fromEntries(scoped.map((s) => [s.sourceHost, s]))
+  assert.equal(bySite['grafana.byted.org'].template, T)
+  assert.equal(bySite['grafana.byted.org'].distinctValues, 3)
+  assert.equal(bySite['code.byted.org'].distinctValues, 3)
+
+  // Below threshold at one site → only the other site's candidate survives.
+  const thin = [
+    ...['h1', 'h2', 'h3'].map((h, i) => mkScoped('grafana.byted.org', h, i)),
+    ...['h4'].map((h, i) => mkScoped('code.byted.org', h, 10 + i)), // only 1 distinct
+  ]
+  const thinScoped = U.induceSourceScopedTemplates(thin)
+  assert.equal(thinScoped.length, 1, 'below-threshold site is dropped, not learned half-confident')
+  assert.equal(thinScoped[0].sourceHost, 'grafana.byted.org')
+
+  // Records with no sourceHost are invisible to L — plain D discovery unaffected.
+  assert.equal(U.induceSourceScopedTemplates([mkPlain('h1', 1), mkPlain('h2', 2), mkPlain('h3', 3)]).length, 0)
+
+  // Partition symmetry: induceUrlTemplates (D) must SKIP sourceHost-tagged
+  // records — otherwise the same evidence is learned twice (plain + scoped),
+  // and the same query fires two competing direct answers for one copy.
+  const mixed = [
+    ...['h1', 'h2', 'h3'].map((h, i) => mkScoped('grafana.byted.org', h, i)),
+    ...['p1', 'p2', 'p3'].map((h, i) => mkPlain(h, 20 + i)),
+  ]
+  const plainDiscovered = U.induceUrlTemplates(mixed)
+  assert.equal(plainDiscovered.length, 1, 'D only sees the untagged records')
+  assert.equal(plainDiscovered[0].distinctValues, 3, 'scoped hashes excluded from the D count')
+}
+
 // ─── scenario A: templatizeUrlWithToken (copy-correlated slot) ───────────────
 {
   // Token in the path → slot around that exact token.

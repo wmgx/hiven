@@ -51,6 +51,7 @@ const fire = loadModule('src/workspace/learning/fire.ts', {
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/features'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/frecency'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/navigationSensor'\s*;?\s*\n?/g,
+    /import\s*\{[\s\S]*?\}\s*from\s*'\.\/observer'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/proposals'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/registryRunners'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/store'\s*;?\s*\n?/g,
@@ -73,6 +74,7 @@ const fire = loadModule('src/workspace/learning/fire.ts', {
     firePriority: () => 0,
     getCurrentActiveHost: () => null,
     getRecentHistoryForRecall: () => historySnapshot,
+    getRecentClipboardTokensWithSource: () => [], // no L1/L2 signal — out of scope for this test
     isNewlyLearned: () => false,
     runLearnedChain: () => null,
     bumpRuleStrength: async () => {},

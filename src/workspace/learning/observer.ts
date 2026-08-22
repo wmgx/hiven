@@ -22,14 +22,28 @@ import { putEvent, putPair, pruneOldEvents, saltedHash } from './store'
 const TIMELINE_MAX = 6
 
 const recentTexts: string[] = []
+/** Parallel to recentTexts (same push/shift points) — '' when unknown. */
+const recentSourceHosts: string[] = []
 let runners: readonly PureTransformRunner[] = []
 
 /**
- * Install pure-transform runners (built from the registry by the adapter slice).
+ * Host active when the clipboard last changed (pushed by navigationSensor,
+ * which owns "current active host" — see its getCurrentActiveHost). Read at
+ * the moment a new clipboard text is recorded, so each entry in recentTexts
+ * gets tagged with wherever the user was when THAT copy happened.
+ */
+let currentSourceHost: string | null = null
+
+/** Install pure-transform runners (built from the registry by the adapter slice).
  * Empty until then — pairing simply produces nothing.
  */
 export function setPureTransformRunners(next: readonly PureTransformRunner[]): void {
   runners = next
+}
+
+/** Update "where the user is right now" — call on every active-host change. */
+export function setCurrentSourceHost(host: string | null): void {
+  currentSourceHost = host
 }
 
 /**
@@ -46,6 +60,24 @@ export function getRecentClipboardTokens(): string[] {
   return [...seen]
 }
 
+/**
+ * Same as {@link getRecentClipboardTokens}, but paired with the host that was
+ * active when each token was copied (scenario L1/L2 disambiguation). Empty
+ * string when unknown — never a rejected/absent case, just "no signal".
+ */
+export function getRecentClipboardTokensWithSource(): Array<{ token: string; sourceHost: string }> {
+  const seen = new Set<string>()
+  const out: Array<{ token: string; sourceHost: string }> = []
+  for (let i = recentTexts.length - 1; i >= 0; i -= 1) {
+    const token = normalizeToken(recentTexts[i])
+    if (token && isPlausibleToken(token) && !seen.has(token)) {
+      seen.add(token)
+      out.push({ token, sourceHost: recentSourceHosts[i] ?? '' })
+    }
+  }
+  return out
+}
+
 function isSecretType(type: string): boolean {
   return type === 'secret' || type === 'secret-like'
 }
@@ -58,6 +90,7 @@ function handleClipboardText(text: string): void {
     // Never learn secrets; also do not chain a transform across a secret.
     trackPerf(TelemetryEvents.learningSecretSkip, { detectedType })
     recentTexts.length = 0
+    recentSourceHosts.length = 0
     return
   }
 
@@ -98,7 +131,9 @@ function handleClipboardText(text: string): void {
   }
 
   recentTexts.push(text)
+  recentSourceHosts.push(currentSourceHost ?? '')
   if (recentTexts.length > TIMELINE_MAX) recentTexts.shift()
+  if (recentSourceHosts.length > TIMELINE_MAX) recentSourceHosts.shift()
 }
 
 let started = false
@@ -118,6 +153,7 @@ export function startLearningObserver(): () => void {
   return () => {
     started = false
     recentTexts.length = 0
+    recentSourceHosts.length = 0
     unsubscribe()
   }
 }

@@ -20,7 +20,7 @@ import {
 } from '../desktopControl/bridgeTargets'
 import { TelemetryEvents, trackPerf } from '../telemetry'
 import type { HistoryEntryLike } from './clipboardBrowserLink'
-import { getRecentClipboardTokens } from './observer'
+import { getRecentClipboardTokensWithSource, setCurrentSourceHost } from './observer'
 import { putNavigation, putPathObservation, pruneOldNavigations } from './store'
 import { saltedHash } from './store'
 import { hostnameOf, templatizeUrl, templatizeUrlWithToken, type UrlTemplateResult } from './urlTemplate'
@@ -96,14 +96,19 @@ function isHttpUrl(url: string | null | undefined): url is string {
  * Prefer a copy-correlated slot (scenario A): if a recently-copied token appears
  * in the URL, template around that exact token — this also catches ids the pure
  * heuristic drops, notably `?logid={id}`. Fall back to the path heuristic (D).
+ *
+ * Also carries the token's own copy-time source host (scenario L1/L2) — '' when
+ * unknown or when this was a pure heuristic match with no copy behind it.
  */
-function resolveTemplate(url: string): { result: UrlTemplateResult; copyCorrelated: boolean } | null {
-  for (const token of getRecentClipboardTokens()) {
+function resolveTemplate(
+  url: string,
+): { result: UrlTemplateResult; copyCorrelated: boolean; sourceHost: string } | null {
+  for (const { token, sourceHost } of getRecentClipboardTokensWithSource()) {
     const withToken = templatizeUrlWithToken(url, token)
-    if (withToken && withToken.slots.length > 0) return { result: withToken, copyCorrelated: true }
+    if (withToken && withToken.slots.length > 0) return { result: withToken, copyCorrelated: true, sourceHost }
   }
   const heuristic = templatizeUrl(url)
-  if (heuristic && heuristic.slots.length > 0) return { result: heuristic, copyCorrelated: false }
+  if (heuristic && heuristic.slots.length > 0) return { result: heuristic, copyCorrelated: false, sourceHost: '' }
   return null
 }
 
@@ -176,16 +181,20 @@ function recordNavigation(url: string): void {
 
   const resolved = resolveTemplate(url)
   if (!resolved) return
-  const { result, copyCorrelated } = resolved
+  const { result, copyCorrelated, sourceHost } = resolved
   const slotKind = result.slotKinds[result.slotKinds.length - 1]
+  // Cross-context only: same-site copy→navigate has no disambiguating signal
+  // (see NavigationRecord.sourceHost) and stays in the plain D pool instead.
+  const scoped = copyCorrelated && sourceHost && sourceHost !== result.host
   void putNavigation({
     template: result.template,
     slotHash: saltedHash(result.slots.join('|')),
     slotKind,
     ts: Date.now(),
+    sourceHost: scoped ? sourceHost : undefined,
   })
   // Shape-only diagnostics — never the raw URL/value.
-  trackPerf(TelemetryEvents.learningNavObserve, { host: result.host, slotKind, copyCorrelated })
+  trackPerf(TelemetryEvents.learningNavObserve, { host: result.host, slotKind, copyCorrelated, scoped: Boolean(scoped) })
 }
 
 let started = false
@@ -207,6 +216,7 @@ export function startNavigationSensor(): () => void {
     if (!isHttpUrl(url) || url === lastUrl) return
     lastUrl = url
     currentActiveHost = hostnameOf(url)
+    setCurrentSourceHost(currentActiveHost)
     recordNavigation(url)
   }
 
@@ -269,6 +279,7 @@ export function startNavigationSensor(): () => void {
     stopped = true
     started = false
     currentActiveHost = null
+    setCurrentSourceHost(null)
     recentHistoryEntries = []
     window.clearInterval(intervalId)
     window.clearInterval(recallIntervalId)
