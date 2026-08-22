@@ -19,6 +19,7 @@ import {
   listDesktopBridgeTargets,
 } from '../desktopControl/bridgeTargets'
 import { TelemetryEvents, trackPerf } from '../telemetry'
+import type { HistoryEntryLike } from './clipboardBrowserLink'
 import { getRecentClipboardTokens } from './observer'
 import { putNavigation, putPathObservation, pruneOldNavigations } from './store'
 import { saltedHash } from './store'
@@ -27,6 +28,34 @@ import { hostnameOf, templatizeUrl, templatizeUrlWithToken, type UrlTemplateResu
 const POLL_INTERVAL_MS = 3000
 const HISTORY_SEED_CAP = 200
 const PAGE_EVENT_TYPES = new Set(['tab.opened', 'tab.activated'])
+
+/**
+ * Recent history for scenario L3 (clipboard token → "you already saw this page").
+ * A plain refresh cache, independent of the one-shot template-discovery seed
+ * above — recall needs to stay current for as long as the sensor runs, not
+ * just bootstrap once. In-memory only; titles are never persisted to the
+ * learning store (the query-time match happens directly against this cache).
+ */
+const HISTORY_RECALL_CAP = 300
+const HISTORY_RECALL_REFRESH_MS = 2 * 60 * 1000
+let recentHistoryEntries: HistoryEntryLike[] = []
+
+/** Snapshot of recently visited pages, newest-first — read by fire.ts (sync, cheap). */
+export function getRecentHistoryForRecall(): readonly HistoryEntryLike[] {
+  return recentHistoryEntries
+}
+
+async function refreshHistoryRecallCache(): Promise<void> {
+  try {
+    const items = await listDesktopBridgeHistory()
+    recentHistoryEntries = items.slice(0, HISTORY_RECALL_CAP).map((item) => ({
+      url: item.url,
+      title: item.title,
+    }))
+  } catch {
+    // isolate from the poll loop — keep the last-known-good cache
+  }
+}
 
 /**
  * Host of the most recently observed active URL, from whatever desktop-bridge
@@ -230,10 +259,18 @@ export function startNavigationSensor(): () => void {
   const intervalId = window.setInterval(() => void tick(), POLL_INTERVAL_MS)
   void tick()
 
+  const recallIntervalId = window.setInterval(
+    () => void refreshHistoryRecallCache(),
+    HISTORY_RECALL_REFRESH_MS,
+  )
+  void refreshHistoryRecallCache()
+
   return () => {
     stopped = true
     started = false
     currentActiveHost = null
+    recentHistoryEntries = []
     window.clearInterval(intervalId)
+    window.clearInterval(recallIntervalId)
   }
 }

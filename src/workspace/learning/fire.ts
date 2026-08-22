@@ -16,13 +16,25 @@ import { t, type Locale } from '../../i18n'
 import { openExternalUrl } from '../effectRunner'
 import { TelemetryEvents, trackBehavior } from '../telemetry'
 import type { LauncherItem } from './../launcher/types'
-import { extractFeatures, featureSignature } from './features'
+import { findHistoryRecall, type HistoryRecallHit } from './clipboardBrowserLink'
+import { extractFeatures, featureSignature, isPlausibleToken, normalizeToken } from './features'
 import { FIRE_STRENGTH_BONUS, firePriority } from './frecency'
-import { getCurrentActiveHost } from './navigationSensor'
+import { getCurrentActiveHost, getRecentHistoryForRecall } from './navigationSensor'
 import { isNewlyLearned } from './proposals'
 import { runLearnedChain } from './registryRunners'
 import { bumpRuleStrength, pruneForgottenRules, queryAllRules, type LearnedRule } from './store'
 import { fillTemplate, queryMatchesSlot, type UrlSlotKind } from './urlTemplate'
+
+/**
+ * Priority for a scenario-L3 history recall ("you already saw this page").
+ * Below the learned baseline (45) — this wasn't taught, it's a standing
+ * capability — but above the flat plugin-builtin tier (30): an exact bounded
+ * token match against real browsing history is stronger evidence than a
+ * generic plugin's self-declared answer.
+ */
+const HISTORY_RECALL_PRIORITY = 35
+/** At most this many recall hits per query — direct answers must stay scannable. */
+const HISTORY_RECALL_LIMIT = 1
 
 /**
  * Fire-time disambiguation: when a token's shape matches multiple learned
@@ -193,11 +205,45 @@ function buildUndoItem(rule: LearnedRule, locale: Locale, priority: number): Lau
   }
 }
 
+// ─── history recall fire (scenario L3) ─────────────────────────────────────────
+
+function buildHistoryRecallItem(hit: HistoryRecallHit, locale: Locale): LauncherItem {
+  return {
+    systemKey: `learned-recall:${hit.url}`,
+    kind: 'dynamic',
+    display: {
+      title: hit.title,
+      subtitle: hit.url,
+      icon: 'History',
+      kindLabel: t(locale, 'palette.learnFireKindRecall'),
+    },
+    behavior: { type: 'perform' },
+    surfaces: ['global-launcher'],
+    // First-class answer for the same reason as buildOpenUrlItem: the title is
+    // the destination (a page you already saw), not the typed token.
+    directAnswer: { priority: HISTORY_RECALL_PRIORITY, origin: 'builtin' },
+    recordUsage: false,
+    execute: async () => {
+      await openExternalUrl(hit.url)
+      trackBehavior(TelemetryEvents.learningRuleFired, { transformKind: 'history-recall' })
+      return { ok: true as const }
+    },
+  }
+}
+
 /** Learned direct-answer items for a query (sync; cheap; empty when nothing matches). */
 export function learnedLauncherItems(query: string, locale: Locale): LauncherItem[] {
   const q = query.trim()
   if (!q) return []
   const items: LauncherItem[] = []
+
+  if (isPlausibleToken(q)) {
+    const history = getRecentHistoryForRecall()
+    if (history.length > 0) {
+      const hits = findHistoryRecall(normalizeToken(q), history, HISTORY_RECALL_LIMIT)
+      for (const hit of hits) items.push(buildHistoryRecallItem(hit, locale))
+    }
+  }
 
   for (const rule of cachedUrlRules) {
     if (rule.transform.kind !== 'url-template') continue
