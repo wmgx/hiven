@@ -202,7 +202,7 @@ function LauncherRuntimeApp() {
       }
       logLauncherPerfDuration('open:event-to-store-open', eventReceivedAt)
 
-      void (async () => {
+      const rehydrateAfterOpen = async () => {
         // Throttle rehydrate: full persist.rehydrate() mid-open can re-render the
         // panel during first paint (p50 ~24ms, sometimes 70ms+). Settings rarely
         // change between rapid open/close; position restore still uses live store.
@@ -223,7 +223,8 @@ function LauncherRuntimeApp() {
         } catch (error) {
           console.warn('[hiven] Failed to restore launcher window position:', error)
         }
-      })()
+      }
+      runAfterLauncherFirstPaint(() => void rehydrateAfterOpen())
     }
     openLauncher()
 
@@ -432,6 +433,12 @@ function canScrollLauncherElement(element: HTMLElement, deltaY: number, deltaX =
 /** Skip rehydrate if we already did one this recently (open-path hot loop). */
 const REHYDRATE_MIN_INTERVAL_MS = 3_000
 let lastPersistedRehydrateAt = 0
+
+function runAfterLauncherFirstPaint(run: () => void): void {
+  // The second rAF observes the first painted frame; the timer keeps rehydrate
+  // out of that frame's callback queue as well.
+  requestAnimationFrame(() => requestAnimationFrame(() => window.setTimeout(run, 0)))
+}
 
 /** @returns true when rehydrate actually ran */
 async function rehydratePersistedAppState(): Promise<boolean> {

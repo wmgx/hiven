@@ -358,15 +358,25 @@ check('standalone launcher rehydrates persisted settings before opening', () => 
     /rehydratePersistedAppState\(\)/,
     'LauncherWindowApp should rehydrate persisted settings so theme changes from the main window are fresh',
   )
-  const launcherOpen = files.app.match(/const\s+openLauncher\s*=\s*\(\)\s*=>\s*\{[\s\S]*?rehydratePersistedAppState[\s\S]*?openGlobalLauncherOverlay\(\)/)?.[0] ?? ''
+  const launcherOpen = files.app.match(/const\s+openLauncher\s*=\s*\(\)\s*=>\s*\{[\s\S]*?rehydratePersistedAppState/)?.[0] ?? ''
   assert.ok(launcherOpen, 'LauncherWindowApp should define an openLauncher handler')
   const rehydrateIndex = launcherOpen.indexOf('rehydratePersistedAppState')
   const openIndex = launcherOpen.indexOf('openGlobalLauncherOverlay')
   assert.ok(rehydrateIndex >= 0, 'openLauncher should rehydrate persisted settings')
   assert.ok(openIndex >= 0, 'openLauncher should open the launcher overlay')
   assert.ok(
-    rehydrateIndex < openIndex,
-    'openLauncher should rehydrate persisted settings before opening the launcher overlay',
+    openIndex < rehydrateIndex,
+    'openLauncher must open the overlay before rehydrating, or first paint lands without a mounted input',
+  )
+  assertHas(
+    files.app,
+    /const rehydrateAfterOpen[\s\S]{0,1200}await rehydratePersistedAppState\(\)[\s\S]{0,1200}runAfterLauncherFirstPaint\(\(\) => void rehydrateAfterOpen\(\)\)/,
+    'rehydrate must run after first paint so it cannot block the open path',
+  )
+  assertHas(
+    files.app,
+    /function runAfterLauncherFirstPaint[\s\S]{0,240}requestAnimationFrame\(\(\) => requestAnimationFrame\(\(\) => window\.setTimeout\(run, 0\)\)\)/,
+    'after-paint helper must defer through two animation frames and a task',
   )
 })
 
