@@ -4,9 +4,22 @@
  * character-level diff highlighting.
  */
 
-import { definePlugin, type LauncherExecutionContext, type DiffSourcePayload as DiffSource } from '@hiven/plugin'
-import { TextDiffSurface } from './TextDiffSurface'
+import { lazy, Suspense } from 'react'
+import { definePlugin, type LauncherExecutionContext, type DiffSourcePayload as DiffSource, type PluginSurfaceProps } from '@hiven/plugin'
 import './style.css'
+
+const TextDiffSurface = lazy(async () => {
+  const module = await import('./TextDiffSurface')
+  return { default: module.TextDiffSurface }
+})
+
+function LazyTextDiffSurface(props: PluginSurfaceProps) {
+  return (
+    <Suspense fallback={null}>
+      <TextDiffSurface {...props} />
+    </Suspense>
+  )
+}
 
 type PaneSnapshot = {
   activePaneId: string
@@ -87,7 +100,7 @@ export const textDiffPlugin = definePlugin({
         titleI18n: { zh: '文本对比' },
         icon: 'GitCompare',
         aliases: ['diff', 'compare', 'text diff', '文本对比', 'duibi'],
-        component: TextDiffSurface,
+        component: LazyTextDiffSurface,
         entry: { launcher: false, shortcutBindable: false },
         shell: {
           defaultWidth: 960,

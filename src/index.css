@@ -1024,16 +1024,10 @@ html[data-window='launcher'] .global-launcher-overlay.open {
   animation: dropdown-in 0.15s var(--ease-out-expo, ease-out);
 }
 
-.anim-palette-item {
-  animation: palette-item-in 0.12s ease both;
-}
-
 /* ─── Palette Overlay ─── */
 .palette-overlay {
   background: rgba(0, 0, 0, 0);
   backdrop-filter: none;
-  transition:
-    background 0.2s ease;
 }
 .palette-overlay.open {
   background: rgba(0, 0, 0, 0.12);
@@ -5030,6 +5024,11 @@ html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-lau
   justify-content: center;
   padding: clamp(12px, 3vh, 28px) 14px 0;
   box-sizing: border-box;
+}
+
+.quick-editor-loading-skeleton {
+  height: 100%;
+  background: var(--color-background-primary);
 }
 
 .quick-editor-command-layer--detached {

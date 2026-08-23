@@ -13,7 +13,10 @@ const refactorSuite = readFileSync('scripts/test-refactor-suite.mjs', 'utf8')
 const pluginHostSdk = readFileSync('src/pluginHostSdk.ts', 'utf8')
 const editorBridge = readFileSync('src/workspace/editorBridge.ts', 'utf8')
 const pluginSdk = readFileSync('src/plugin-sdk.ts', 'utf8')
-const jsFilter = readFileSync('src/plugins/jsFilter/index.tsx', 'utf8')
+const jsFilter =
+  readFileSync('src/plugins/jsFilter/index.tsx', 'utf8') +
+  '\n' +
+  readFileSync('src/plugins/jsFilter/JsFilterPanel.tsx', 'utf8')
 const regexTester =
   readFileSync('src/plugins/regex-tester/index.tsx', 'utf8') +
   '\n' +

@@ -119,9 +119,6 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
     onSelect(item)
   }, [item, onSelect])
 
-  // Keep stagger short so tiny lists (e.g. 2 options) don't feel like a full entrance.
-  const staggerDelay = index < 6 ? `${index * 6}ms` : '0ms'
-
   return (
     <button
       ref={ref}
@@ -130,7 +127,6 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
       data-launcher-row-index={index}
       data-quick-select={quickSelectLabel ?? undefined}
       className={`l-row cmd-item w-full border-none text-left ${selected ? 'sel selected' : ''}`}
-      style={{ animationDelay: staggerDelay }}
       onClick={handleClick}
       // Hover select is gated by parent (must move pointer first); enter alone is not enough.
       onMouseEnter={onHoverIndex ? handleMouseEnter : undefined}
