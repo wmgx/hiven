@@ -23,6 +23,11 @@ import { readFileSync } from 'node:fs'
 
 const src = readFileSync(new URL('../src/plugins/web-open/browserProvider.ts', import.meta.url), 'utf8')
 
+// Long history URLs usually differ at the tail (MR/PR id, redirect target).
+// Showing the common prefix makes distinct rows look identical after ellipsis.
+assert.match(src, /function compactHistoryUrl\(rawUrl: string\): string/)
+assert.match(src, /subtitle: compactHistoryUrl\(item\.url\)/)
+
 // ─── every open tab in query results gets the "Browser tab" pill ─────────────
 {
   const start = src.indexOf('const tabs = ordered')

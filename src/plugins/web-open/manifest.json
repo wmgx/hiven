@@ -2,7 +2,7 @@
   "pluginId": "web-open",
   "displayName": "Browser",
   "displayNameI18n": { "zh": "浏览器" },
-  "version": "1.9.2",
+  "version": "1.9.3",
   "capabilities": ["settings", "launcher-quick-entry"],
   "permissions": ["storage.private", "storage.blob", "network.request"]
 }

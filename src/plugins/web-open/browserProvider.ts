@@ -49,6 +49,19 @@ function isRenderableIconUrl(url: string | null | undefined): url is string {
   return url.startsWith('https://') || url.startsWith('http://') || url.startsWith('data:image/')
 }
 
+function compactHistoryUrl(rawUrl: string): string {
+  try {
+    const url = new URL(rawUrl)
+    const suffix = `${url.pathname}${url.search}${url.hash}`
+    const full = `${url.host}${suffix}`
+    if (full.length <= 72) return full
+    const tailBudget = Math.max(24, 69 - url.host.length)
+    return `${url.host}/…${suffix.slice(-tailBudget)}`
+  } catch {
+    return rawUrl
+  }
+}
+
 /**
  * Empty-open recommendations: the open tabs you're most likely to want back.
  *
@@ -234,7 +247,7 @@ export function createChromiumTabsProvider(): DesktopTargetProvider {
             sourceId: item.sourceId,
             kind: 'document' as const,
             title: item.title,
-            subtitle: item.url,
+            subtitle: compactHistoryUrl(item.url),
             appName: item.appName ?? undefined,
             appStableKey: item.appName ?? item.sourceId,
             keywords: [item.title, item.url, item.appName ?? ''].filter(Boolean),
