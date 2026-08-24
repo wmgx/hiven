@@ -52,7 +52,7 @@ function isRenderableIconUrl(url: string | null | undefined): url is string {
 function compactHistoryUrl(rawUrl: string): string {
   try {
     const url = new URL(rawUrl)
-    const suffix = `${url.pathname}${url.search}${url.hash}`
+    const suffix = url.pathname
     const full = `${url.host}${suffix}`
     if (full.length <= 72) return full
     const tailBudget = Math.max(24, 69 - url.host.length)
@@ -227,6 +227,7 @@ export function createChromiumTabsProvider(): DesktopTargetProvider {
         })
 
       const history = await desktopTargets.bridge.listHistory(CHROMIUM_SOURCE_ID)
+      const seenHistoryPaths = new Set<string>()
       const historyTargets = history
         .filter((item) =>
           searchableFieldsMatch(
@@ -239,6 +240,17 @@ export function createChromiumTabsProvider(): DesktopTargetProvider {
             ctx.locale,
           ),
         )
+        .filter((item) => {
+          try {
+            const url = new URL(item.url)
+            const key = `${url.origin}${url.pathname.replace(/\/+$/, '') || '/'}`
+            if (seenHistoryPaths.has(key)) return false
+            seenHistoryPaths.add(key)
+            return true
+          } catch {
+            return true
+          }
+        })
         .slice(0, QUERY_HISTORY_LIMIT)
         .map((item) => {
           const favicon = isRenderableIconUrl(item.faviconUrl) ? item.faviconUrl : undefined
