@@ -21,6 +21,29 @@ export function shouldSuppressStandaloneLauncherBlur(): boolean {
   return Date.now() < suppressStandaloneLauncherBlurUntil
 }
 
+/**
+ * DevTools/Web Inspector opens as its own native panel outside Tauri's
+ * webview-window registry, so it is invisible to `isHivenCompanionWindowActive`
+ * — the native focus-changed listener sees a plain blur and closes the
+ * launcher out from under the user the moment they open the console.
+ * Not a timed suppress: devtools can hold focus indefinitely, and clearing it
+ * on the first regained-focus tick races with clicking back into the search
+ * input to keep typing (devtools can re-steal focus for a beat right after —
+ * that follow-up blur would no longer be suppressed and would close the
+ * launcher mid-keystroke). Instead this stays on for the rest of the current
+ * launcher open and is only reset when a fresh open starts (see
+ * `useCloseStandaloneLauncherOnBlur`).
+ */
+let devtoolsBlurSuppressActive = false
+
+export function suppressStandaloneLauncherBlurForDevtools(): void {
+  devtoolsBlurSuppressActive = true
+}
+
+export function clearStandaloneLauncherBlurDevtoolsSuppress(): void {
+  devtoolsBlurSuppressActive = false
+}
+
 function isTauriRuntime(): boolean {
   return Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
 }
@@ -68,6 +91,7 @@ export async function isHivenCompanionWindowActive(): Promise<boolean> {
 export async function shouldKeepLauncherOpenOnBlur(
   options?: { handoffDelayMs?: number },
 ): Promise<boolean> {
+  if (devtoolsBlurSuppressActive) return true
   if (shouldSuppressStandaloneLauncherBlur()) return true
 
   const delayMs = options?.handoffDelayMs ?? 80

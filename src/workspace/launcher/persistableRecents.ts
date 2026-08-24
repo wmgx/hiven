@@ -49,7 +49,7 @@ export const PERSISTABLE_RECENTS_QUERY_BOOST = 20
 export const CLEAR_PERSISTABLE_RECENTS_EVENT = 'hiven:launcher-clear-persistable-recents'
 
 const KIND_LABELS: Record<PersistableContentKind, { en: string; zh: string }> = {
-  document: { en: 'Recent doc', zh: '最近文档' },
+  document: { en: 'Recently visited', zh: '最近访问' },
   chat: { en: 'Recent chat', zh: '最近会话' },
   person: { en: 'Recent person', zh: '最近联系人' },
 }

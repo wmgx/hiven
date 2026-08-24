@@ -4,6 +4,7 @@ import { useAppStore } from '../../store'
 import type { LauncherItem } from './types'
 import { getHostEditorActionItems } from './hostEditorActions'
 import { isQuickEditorWindowOpen, showQuickEditorWindow } from '../windowManager/quickEditorWindow'
+import { clearStandaloneLauncherBlurDevtoolsSuppress, suppressStandaloneLauncherBlurForDevtools } from '../launcherBlurGuard'
 
 type SystemPowerAction = 'restart' | 'shutdown' | 'lock-screen'
 
@@ -142,10 +143,15 @@ export function getHostPaneControlItems(): LauncherItem[] {
       execute: async () => {
         try {
           const { invoke } = await import('@tauri-apps/api/core')
+          // DevTools opens as its own native panel outside the webview-window
+          // registry — the blur-dismiss listener would otherwise see this as
+          // "user left" and close the launcher out from under the console.
+          suppressStandaloneLauncherBlurForDevtools()
           // Prefer the current window; fall back to launcher label.
           await invoke('open_devtools')
           return { ok: true, keepOpen: true }
         } catch (error) {
+          clearStandaloneLauncherBlurDevtoolsSuppress()
           const message = error instanceof Error ? error.message : String(error)
           return { ok: false, message }
         }

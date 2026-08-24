@@ -43,15 +43,16 @@ export function LauncherMixedList({
    */
   isKeyboardNavRef?: MutableRefObject<boolean>
 }) {
+  // Stable identity for memo children — do not allocate per-row lambdas in map.
+  // Must run before any early return (Rules of Hooks).
+  const handleHover = useCallback((index: number) => {
+    onHoverIndex?.(index)
+  }, [onHoverIndex])
+
   if (items.length === 0) return null
 
   const shouldTruncate = truncate && items.length > MAX_VISIBLE_IDLE
   const visible = shouldTruncate ? items.slice(0, MAX_VISIBLE_IDLE) : items
-
-  // Stable identity for memo children — do not allocate per-row lambdas in map.
-  const handleHover = useCallback((index: number) => {
-    onHoverIndex?.(index)
-  }, [onHoverIndex])
 
   return (
     <>
@@ -100,8 +101,14 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
   const appIcon = isAppIconRef(item.icon)
   const avatarIcon = isRemoteAvatarIcon(item.icon)
   const tag = getLauncherItemKindLabel(item, locale)
+  const hasKindTagOverride = hasMeaningfulKindTag(item)
   // SuperCmd-style: show ⌘1…⌘8 on the first eight rows so quick-run is discoverable.
   const quickSelectLabel = quickSelectBadge(index)
+  const showTag = !quickSelectLabel || hasKindTagOverride
+  const showQuickSelect = Boolean(quickSelectLabel)
+  // Two chips reading as one crowds the trailing column — when both would show,
+  // fold ⌘N into the tag pill instead of floating it as a second box.
+  const combineTagAndQuickSelect = showTag && showQuickSelect
   const iconSlotClass = appIcon ? 'r-app' : avatarIcon ? 'r-ico r-avatar' : 'r-ico'
 
   useEffect(() => {
@@ -158,16 +165,26 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
       {item.shortcut && !quickSelectLabel && (
         <kbd className="r-shortcut-badge">{item.shortcut}</kbd>
       )}
-      {/* Prefer ⌘N over noisy kind pills; keep kind only when no quick-select. */}
-      {!quickSelectLabel && (
-        <span className="r-tag launcher-kind-tag">
+      {/*
+        Prefer ⌘N over the noisy generic App/Command pill on quick-select rows,
+        but a meaningful pill (open tab / history / window / …) is exactly the
+        signal that tells same-looking rows apart — keep it, folded into the
+        same pill as ⌘N rather than as a second floating chip.
+      */}
+      {showTag && (
+        <span className={`r-tag launcher-kind-tag${combineTagAndQuickSelect ? ' r-tag-combo' : ''}`}>
           {tag}
           {item.matchType === 'pinyin' && (
             <span className="launcher-pinyin-badge">{t(locale, 'palette.pinyinBadge')}</span>
           )}
+          {combineTagAndQuickSelect && (
+            <kbd className={`r-quick-select-inline${selected ? ' is-selected' : ''}`}>
+              {quickSelectLabel}
+            </kbd>
+          )}
         </span>
       )}
-      {quickSelectLabel && (
+      {showQuickSelect && !combineTagAndQuickSelect && (
         <kbd className={`r-shortcut-badge r-quick-select${selected ? ' is-selected' : ''}`}>
           {quickSelectLabel}
         </kbd>
@@ -188,6 +205,19 @@ function getLauncherItemKindLabel(item: LauncherMixedItem, locale: Locale) {
   }
   if (isAppIconRef(item.icon)) return t(locale, 'palette.kindApp')
   return t(locale, 'palette.kindCommand')
+}
+
+/**
+ * True when the kind pill carries real signal (open tab, history, window,
+ * process, Feishu doc, …) rather than the generic App/Command fallback that
+ * every plain command row would otherwise show.
+ */
+function hasMeaningfulKindTag(item: LauncherMixedItem): boolean {
+  if (item.kind !== 'domain') return false
+  const display = item.domainItem.display
+  const i18n = display?.kindLabelI18n
+  if (i18n && (Boolean(i18n.en?.trim()) || Boolean(i18n.zh?.trim()))) return true
+  return Boolean(display?.kindLabel?.trim())
 }
 
 function isAppIconRef(icon?: string): boolean {

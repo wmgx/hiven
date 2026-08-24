@@ -25,6 +25,7 @@ export function LauncherEmptyWell({
     <div
       className={['launcher-empty-well', className].filter(Boolean).join(' ')}
       data-testid={testId}
+      data-no-drag
       role="status"
     >
       <div className="launcher-empty-well-icon" aria-hidden>

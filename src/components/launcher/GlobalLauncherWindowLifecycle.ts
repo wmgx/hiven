@@ -2,7 +2,7 @@ import { useCallback, useLayoutEffect, useRef, type PointerEvent as ReactPointer
 import type { LauncherHostSurfaceTarget } from '../../store'
 import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from '../../workspace/launcherWindowEvents'
 import { onCurrentLauncherWindowFocusChanged, resizeCurrentLauncherWindow, startCurrentLauncherWindowDrag } from '../../workspace/windowManager/launcherWindow'
-import { shouldKeepLauncherOpenOnBlur } from '../../workspace/launcherBlurGuard'
+import { clearStandaloneLauncherBlurDevtoolsSuppress, shouldKeepLauncherOpenOnBlur } from '../../workspace/launcherBlurGuard'
 import { applyStandaloneLauncherGeometry, computeStandaloneLauncherGeometry } from './GlobalLauncherLayout'
 import { logLauncherPerf } from '../../workspace/launcher/perf'
 
@@ -48,15 +48,26 @@ export function useCloseStandaloneLauncherOnBlur({
   closeLauncher: () => void
 }) {
   const closeOnBlurRef = useRef(closeOnBlur)
+  const closeLauncherRef = useRef(closeLauncher)
 
   useLayoutEffect(() => {
     closeOnBlurRef.current = closeOnBlur
   }, [closeOnBlur])
 
   useLayoutEffect(() => {
+    closeLauncherRef.current = closeLauncher
+  }, [closeLauncher])
+
+  useLayoutEffect(() => {
     if (!open || !standaloneLauncher) return
     if (!isTauriRuntime()) return
-    if (closeOnBlurRef.current === false) return
+    // Fresh session — do not carry a devtools blur-suppress over from a launcher
+    // instance that was already closed. Once set below it stays on for the rest
+    // of *this* open (see the comment in launcherBlurGuard.ts): clearing it on
+    // the first regained-focus tick races with clicking back into the search
+    // input to keep typing, since devtools can re-steal focus for a beat right
+    // after and that follow-up blur would no longer be suppressed.
+    clearStandaloneLauncherBlurDevtoolsSuppress()
 
     let disposed = false
     let unlisten: (() => void) | undefined
@@ -70,7 +81,7 @@ export function useCloseStandaloneLauncherOnBlur({
         if (disposed || generation !== blurGeneration) return
         if (keepOpen) return
         if (closeOnBlurRef.current === false) return
-        closeLauncher()
+        closeLauncherRef.current()
       })
     })
       .then((cleanup) => {
@@ -84,7 +95,7 @@ export function useCloseStandaloneLauncherOnBlur({
       disposed = true
       unlisten?.()
     }
-  }, [closeOnBlur, closeLauncher, open, standaloneLauncher])
+  }, [open, standaloneLauncher])
 }
 
 /**
@@ -337,6 +348,8 @@ export function useGlobalLauncherNativeDrag(standaloneLauncher: boolean) {
           '.rdg',
           '.csv-tools-surface',
           '.global-launcher-surface-shell .global-launcher-body',
+          '.global-launcher-body',
+          '.launcher-empty-well',
           '.l-row',
           '.cmd-item',
           '.object-block-remove',

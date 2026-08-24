@@ -116,7 +116,12 @@ export function GlobalLauncherSearchFrame({
           {error}
         </div>
       )}
-      <div className="global-launcher-body l-list" onMouseMove={onMouseMove}>
+      <div
+        className="global-launcher-body l-list"
+        data-no-drag
+        data-launcher-scrollable
+        onMouseMove={onMouseMove}
+      >
         {hint && !block && (
           <RecentClipboardHint
             hint={hint}
@@ -159,10 +164,18 @@ export function GlobalLauncherSearchFrame({
           <LauncherHintKey keys="esc" label={t(locale, 'palette.back')} />
         </div>
         {/* SuperCmd/Tinycast action capsule: primary action + ↵, not a keycap manual */}
-        <span className="l-foot-primary grp">
+        <button
+          type="button"
+          className="l-foot-primary grp"
+          disabled={!selectedItem}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            if (selectedItem) onSelectItem(selectedItem)
+          }}
+        >
           <span className="l-foot-primary-label">{primaryActionLabel(selectedItem, locale)}</span>
           <kbd>↵</kbd>
-        </span>
+        </button>
       </div>
     </>
   )

@@ -110,6 +110,15 @@ check('pinned-only mode builds launcher commands and pinned action items', () =>
   )
 })
 
+check('buildGlobalLauncherItems preserves distinct actions with the same title and subtitle', () => {
+  const items = read('src/components/launcher/GlobalLauncherItems.ts')
+  assert.doesNotMatch(
+    items,
+    /seenRows|rowKey/,
+    'display text is not action identity; browser tab/history and other distinct actions may share it',
+  )
+})
+
 check('main panel launcher command is contributed by host launcher actions', () => {
   assert.doesNotMatch(
     files.corePlugin,
@@ -510,7 +519,7 @@ check('standalone launcher exposes the whole non-interactive panel as a drag sur
   assertHas(
     files.globalLauncher,
     /className="global-launcher-panel[\s\S]{0,220}onPointerDown=\{beginDrag\}/,
-    'GlobalLauncher should bind drag handling to the panel so empty panel/header/body space can move the launcher',
+    'GlobalLauncher should bind drag handling to the panel so header/footer chrome can move the launcher',
   )
   // The guard list became a joined array, so assert membership instead of one
   // brittle mega-regex over its serialized form.
@@ -524,6 +533,8 @@ check('standalone launcher exposes the whole non-interactive panel as a drag sur
     'select',
     'button',
     '.monaco-editor',
+    '.global-launcher-body',
+    '.launcher-empty-well',
   ]) {
     assert.ok(
       dragGuardList.includes(`'${selector}'`),
@@ -554,6 +565,30 @@ check('standalone launcher exposes the whole non-interactive panel as a drag sur
     files.indexCss,
     /global-launcher-body--surface[\s\S]{0,160}-webkit-app-region:\s*no-drag/,
     'plugin surface body inside launcher must opt out of window drag for table scrolling',
+  )
+  assertHas(
+    files.indexCss,
+    /html\[data-window=['"]launcher['"]\]\s+\.global-launcher-body[\s\S]{0,160}-webkit-app-region:\s*no-drag/,
+    'search/result list body must opt out of native window drag so rows stay clickable and the list can scroll',
+  )
+})
+
+check('search list body is a scroll surface, not a window-drag handle', () => {
+  const searchFrame = read('src/components/launcher/GlobalLauncherSearchFrame.tsx')
+  assertHas(
+    searchFrame,
+    /className="global-launcher-body l-list"[\s\S]{0,120}data-no-drag[\s\S]{0,80}data-launcher-scrollable/,
+    'search result list must opt out of window drag and into wheel scrolling',
+  )
+  assertHas(
+    searchFrame,
+    /items\.length === 0 && query \?[\s\S]{0,80}<LauncherEmptyWell[\s\S]{0,200}<LauncherMixedList/,
+    'empty-well and mixed list must stay mutually exclusive so a no-results well cannot cover live rows',
+  )
+  assertHas(
+    searchFrame,
+    /<button[\s\S]{0,80}className="l-foot-primary grp"[\s\S]{0,240}onSelectItem\(selectedItem\)/,
+    'footer 执行 capsule must be a real button that runs the highlighted row',
   )
 })
 
@@ -754,13 +789,47 @@ check('standalone launcher closes when its window loses focus', () => {
     const blurHandler = files.globalLauncher.match(/onCurrentLauncherWindowFocusChanged\(\(focused\) => \{[\s\S]*?\n    \}\)/)?.[0] ?? ''
     assert.ok(blurHandler, 'standalone launcher should listen for launcher window focus changes')
     assert.match(blurHandler, /if \(focused\) return/, 'gaining focus must not close the launcher')
-    assert.match(blurHandler, /closeLauncher\(\)/, 'standalone launcher should hide itself when the launcher window loses focus')
+    assert.match(blurHandler, /closeLauncherRef\.current\(\)/, 'standalone launcher should hide itself when the launcher window loses focus')
     assert.match(blurHandler, /shouldKeepLauncherOpenOnBlur\(\)/, 'blur-dismiss must let focus move to sibling hiven windows without closing')
     assert.match(blurHandler, /closeOnBlurRef\.current === false/, 'surfaces that opt out of blur-close must be honored')
     assert.match(
       blurHandler,
       /generation !== blurGeneration/,
       'a stale blur check must not close a launcher that was refocused while the check was in flight',
+    )
+  }
+  {
+    // DevTools opens as its own native panel (invisible to isHivenCompanionWindowActive),
+    // so opening it must suppress blur-dismiss for the rest of *this* launcher open —
+    // not just clear on the first regained-focus tick, which would race with clicking
+    // back into the search input to keep typing (devtools can re-steal focus for a
+    // beat right after, and that follow-up blur would no longer be suppressed).
+    const effectBody = files.globalLauncher.match(
+      /useLayoutEffect\(\(\) => \{\n\s*if \(!open \|\| !standaloneLauncher\) return[\s\S]*?\n  \}, \[/,
+    )?.[0] ?? ''
+    assert.ok(effectBody, 'standalone launcher blur-listener effect must exist')
+    const resetIdx = effectBody.indexOf('clearStandaloneLauncherBlurDevtoolsSuppress()')
+    const listenIdx = effectBody.indexOf('onCurrentLauncherWindowFocusChanged(')
+    assert.ok(resetIdx >= 0, 'a fresh launcher open must reset any leftover devtools blur-suppress')
+    assert.ok(listenIdx >= 0, 'must still register the native focus-changed listener')
+    assert.ok(
+      resetIdx < listenIdx,
+      'devtools blur-suppress must reset once per fresh open, before the listener attaches — not inside the focus callback on every regained-focus tick',
+    )
+    assert.doesNotMatch(
+      effectBody,
+      /if \(focused\) \{[\s\S]{0,400}clearStandaloneLauncherBlurDevtoolsSuppress/,
+      'must not clear the devtools blur-suppress from inside the focus-regained branch (races with typing right after)',
+    )
+    assert.match(
+      read('src/components/launcher/GlobalLauncherWindowLifecycle.ts'),
+      /\}, \[open, standaloneLauncher\]\)/,
+      'blur listener and devtools reset must run once per launcher open, not on every query-driven callback change',
+    )
+    assert.match(
+      files.hostActions,
+      /catch \(error\) \{[\s\S]{0,180}clearStandaloneLauncherBlurDevtoolsSuppress\(\)/,
+      'failed open_devtools calls must not leave blur suppression active',
     )
   }
   {

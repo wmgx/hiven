@@ -158,7 +158,27 @@ export function GlobalLauncherPanel({
   useEffect(() => {
     hoverSelectArmedRef.current = false
     lastPointerRef.current = null
-  }, [query, listIdentity])
+  }, [query])
+
+  /**
+   * Debounced providers (app search, browser history/tabs, …) can re-rank or
+   * insert rows under an already-hovering, perfectly still cursor — no native
+   * mouseenter fires for that, so selectedIndex would keep pointing at the old
+   * row index while a different item slides into it (reported as "hovering
+   * row N, but row N+1 lights up"). Only resync when hover was already
+   * driving selection — a fresh open/query must still not hover-select
+   * whatever happens to sit under the cursor.
+   */
+  useEffect(() => {
+    const pointer = lastPointerRef.current
+    if (!hoverSelectArmedRef.current || !pointer) return
+    const el = document.elementFromPoint(pointer.x, pointer.y)
+    const row = el instanceof HTMLElement ? el.closest('[data-launcher-row-index]') : null
+    if (!(row instanceof HTMLElement)) return
+    const index = Number(row.dataset.launcherRowIndex)
+    if (Number.isFinite(index)) setSelectedIndex(index)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listIdentity])
 
   const handleSearchHoverIndex = useCallback((index: number) => {
     if (!hoverSelectArmedRef.current) return

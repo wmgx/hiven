@@ -26,11 +26,16 @@ export function buildGlobalLauncherItems({
   return rankedLauncherItems.map((domainItem) => {
     const title = resolveDisplayTitle(domainItem.display, locale)
     const match = q ? computeTitleMatchRanges(title, q, locale) : undefined
+    const rawSubtitle = resolveDisplaySubtitle(domainItem.display, locale) ?? ''
+    // Subtitle is now always rendered (not just on selection), so a subtitle
+    // that only repeats the title case-insensitively ("Settings" / "settings")
+    // is pure noise once it's permanently on screen — drop it.
+    const subtitle = rawSubtitle.trim().toLowerCase() === title.trim().toLowerCase() ? '' : rawSubtitle
     return {
       kind: 'domain' as const,
       id: domainItem.systemKey,
       title,
-      subtitle: resolveDisplaySubtitle(domainItem.display, locale) ?? '',
+      subtitle,
       icon: domainItem.display.icon,
       aliases: domainItem.display.aliases,
       shortcut: resolveItemShortcutLabel(domainItem.systemKey, shortcuts),
@@ -39,6 +44,7 @@ export function buildGlobalLauncherItems({
       matchType: match?.type,
     }
   })
+
 }
 
 // ─── Shortcut Resolution ────────────────────────────────────────────────────

@@ -17,6 +17,11 @@ assert.match(read('src/workspace/desktopTargets/types.ts'), /persistable\?:/)
 assert.match(read('src/workspace/desktopTargets/toLauncherItem.ts'), /buildPersistPayload|persistPayload/)
 assert.match(read('src/workspace/launcher/persistableRecents.ts'), /recordPersistableRecent|buildPersistableRecentLauncherItems/)
 assert.match(read('src/workspace/launcher/useLauncherSession.ts'), /persistableRecentItems|recordPersistableLauncherSelection/)
+assert.match(
+  read('src/workspace/launcher/useLauncherSession.ts'),
+  /const liveKeys = new Set\(\[\.\.\.staticCandidates, \.\.\.pluginDynamicItems, \.\.\.hostDynamicItems, \.\.\.documentDynamicItems\]\.map\(\(item\) => item\.systemKey\)\)/,
+  'rehydrated recents must be deduped against every live candidate source so duplicate React keys cannot corrupt quick-select indices',
+)
 assert.match(read('src/store.ts'), /launcherPersistableRecents/)
 assert.match(read('src/plugins/feishu/provider/contactsTargetProvider.ts'), /persistable:\s*Boolean/)
 assert.match(read('src/plugins/feishu/provider/chatsTargetProvider.ts'), /persistable:\s*Boolean/)
@@ -27,7 +32,7 @@ const tmp = mkdtempSync(join(tmpdir(), 'persist-recents-'))
 const src = read('src/workspace/launcher/persistableRecents.ts')
 // Strip effectRunner import for isolated test
 const stripped = src
-  .replace(/import type \{ Locale \} from '[^']+'\n/, "/** @typedef {'en'|'zh'} Locale */\n")
+  .replace(/import \{ pickLocale, type Locale \} from '[^']+'\n/, "const pickLocale = (locale, zh, en) => locale === 'zh' ? zh : en\n")
   .replace(/import \{ openExternalUrl \} from '[^']+'\n/, '')
   .replace(/import type \{ LauncherItem \} from '[^']+'\n/, '')
   .replace(/const openUrl = options\.openUrl \?\? openExternalUrl/, 'const openUrl = options.openUrl ?? (async () => {})')

@@ -247,7 +247,7 @@ export function LauncherParamStep({
         )}
       </div>
       {!isTextParam && (
-        <div className={bodyClassName}>
+        <div className={bodyClassName} data-no-drag data-launcher-scrollable>
           {options.map((option, index) => {
             const optionKey = String(option.value)
             const isChecked = currentMultiValue.includes(optionKey)

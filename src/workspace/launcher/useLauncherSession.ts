@@ -564,8 +564,9 @@ export function useLauncherSession({
     const rankQuery = deferredQuery.trim()
     const contentText = objectBlockText ?? (rankQuery || undefined)
     const detections = contentText ? detectContent(contentText) : []
-    // Dedupe: live document results win over rehydrated recents with the same systemKey.
-    const liveKeys = new Set(documentDynamicItems.map((item) => item.systemKey))
+    // Any live result wins over its rehydrated recent snapshot. Keeping both
+    // also creates duplicate React keys, which corrupts visible quick-run indices.
+    const liveKeys = new Set([...staticCandidates, ...pluginDynamicItems, ...hostDynamicItems, ...documentDynamicItems].map((item) => item.systemKey))
     const recentsDeduped = persistableRecentItems.filter((item) => !liveKeys.has(item.systemKey))
     return measureLauncherPerfSync('session:rank-items', () => rankLauncherItems(
       {

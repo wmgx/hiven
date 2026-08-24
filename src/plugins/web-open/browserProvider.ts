@@ -31,6 +31,12 @@ const EMPTY_OPEN_TAB_LIMIT = 6
 const EMPTY_OPEN_BASE_BIAS = 60
 /** Tabs we know nothing about: still shown (they're open), but after the rest. */
 const EMPTY_OPEN_UNRANKED_BIAS = 10
+/**
+ * History entries are a weaker signal than anything currently open — demote
+ * them clearly below the open-tab biases above (which sit at 0..200) so a
+ * closed page never crowds out a tab you can actually switch to.
+ */
+const HISTORY_SCORE_BIAS = -160
 
 function nativeIdFromTargetId(sourceId: string, kind: string, id: string): string {
   const prefix = `${sourceId}:${kind}:`
@@ -122,7 +128,7 @@ async function buildEmptyOpenTargets() {
       // position keeps our frecency order intact after host-side merging, while
       // staying below the copied-link focus bias so an explicit intent wins.
       scoreBias: score > 0 ? EMPTY_OPEN_BASE_BIAS - index : EMPTY_OPEN_UNRANKED_BIAS - index,
-      kindLabelI18n: { en: 'Open tab', zh: '已打开' },
+      kindLabelI18n: { en: 'Browser tab', zh: '浏览器标签页' },
     }
   })
 }
@@ -199,9 +205,11 @@ export function createChromiumTabsProvider(): DesktopTargetProvider {
             },
             icon: favicon ?? 'Globe',
             actionClass: 'focus' as const,
-            ...(isOpenHit
-              ? { scoreBias: OPEN_TAB_FOCUS_BIAS, kindLabelI18n: { en: 'Open tab', zh: '已打开' } }
-              : {}),
+            // Every open tab gets the same pill, not just the identity hit —
+            // otherwise only the exact-URL match reads as "already open" and the
+            // rest look indistinguishable from history entries below.
+            kindLabelI18n: { en: 'Browser tab', zh: '浏览器标签页' },
+            ...(isOpenHit ? { scoreBias: OPEN_TAB_FOCUS_BIAS } : {}),
           }
         })
 
@@ -238,8 +246,8 @@ export function createChromiumTabsProvider(): DesktopTargetProvider {
             actionClass: 'open' as const,
             persistable: true,
             persistKey: item.url,
-            scoreBias: -80,
-            kindLabelI18n: { en: 'History', zh: '历史' },
+            scoreBias: HISTORY_SCORE_BIAS,
+            kindLabelI18n: { en: 'Browser history', zh: '浏览器历史' },
           }
         })
 

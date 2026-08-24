@@ -93,9 +93,22 @@ function isHttpUrl(url: string | null | undefined): url is string {
 }
 
 /**
- * Prefer a copy-correlated slot (scenario A): if a recently-copied token appears
- * in the URL, template around that exact token — this also catches ids the pure
- * heuristic drops, notably `?logid={id}`. Fall back to the path heuristic (D).
+ * Deterministic path heuristic (scenario D) first, copy-correlation (scenario A)
+ * only as a fallback for what it can't reach on its own.
+ *
+ * §11.D is explicit that A and D must converge on the same url-template
+ * LearnedRule for the same destination ("两者收敛到同一条 url-template
+ * LearnedRule，互相印证"). The heuristic is a pure function of the URL, so it
+ * always induces the same template; the clipboard is transient session state,
+ * so templating around "whatever token happens to be recently copied" is not —
+ * revisiting the same page with different clipboard contents each time (e.g. a
+ * session full of copy-pasting unrelated text) induced a *different* template
+ * per visit, so the same destination never converged and was learned as
+ * several unrelated rules instead of one (reported as duplicate rows in the
+ * launcher — see GlobalLauncherItems.ts's render-layer dedup for the symptom).
+ * Trying the heuristic first keeps every revisit of a heuristic-classifiable
+ * URL on the one stable template; copy-correlation still adds real coverage
+ * for ids the heuristic can't reach on its own, notably `?logid={id}`.
  *
  * Also carries the token's own copy-time source host (scenario L1/L2) — '' when
  * unknown or when this was a pure heuristic match with no copy behind it.
@@ -103,12 +116,17 @@ function isHttpUrl(url: string | null | undefined): url is string {
 function resolveTemplate(
   url: string,
 ): { result: UrlTemplateResult; copyCorrelated: boolean; sourceHost: string } | null {
+  const heuristic = templatizeUrl(url)
+  if (heuristic && heuristic.slots.length > 0) {
+    for (const { token, sourceHost } of getRecentClipboardTokensWithSource()) {
+      if (heuristic.slots.includes(token.trim())) return { result: heuristic, copyCorrelated: true, sourceHost }
+    }
+    return { result: heuristic, copyCorrelated: false, sourceHost: '' }
+  }
   for (const { token, sourceHost } of getRecentClipboardTokensWithSource()) {
     const withToken = templatizeUrlWithToken(url, token)
     if (withToken && withToken.slots.length > 0) return { result: withToken, copyCorrelated: true, sourceHost }
   }
-  const heuristic = templatizeUrl(url)
-  if (heuristic && heuristic.slots.length > 0) return { result: heuristic, copyCorrelated: false, sourceHost: '' }
   return null
 }
 
