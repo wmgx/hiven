@@ -356,6 +356,7 @@ async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<L
   // Prefer memory/blob favicon when available; otherwise multi-try origin icon.
   const keywordMatches = entries
     .filter((entry) => !isUnchangedDefaultEntry(entry))
+    .filter((entry) => !entry.learnedFrom)
     .filter((entry) => entryMatchesQuery(entry, ctx.query))
     .map((entry) => {
       const icon = resolveLauncherIcon(entry.urlTemplate, ctx)

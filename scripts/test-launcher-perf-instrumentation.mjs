@@ -32,6 +32,11 @@ assert.match(bridge, /bridge-target:collect/, 'bridge collect timing required')
 assert.match(session, /session:document-dynamic-partial-apply|session:host-dynamic-partial-apply/, 'session partial apply timing')
 assert.match(session, /useFrameBatchedLauncherItems/, 'dynamic partial rows must batch commits by animation frame')
 assert.match(session, /setPluginDynamicItemsNextFrame|setDocumentDynamicItemsNextFrame/, 'progressive providers must use the frame batcher')
+assert.match(
+  session,
+  /documentQueryRef\.current = q\s+setDocumentDynamicItems\(\[\]\)[\s\S]{0,300}window\.setTimeout/,
+  'query changes must clear stale document rows before the remote debounce',
+)
 assert.match(session, /installLauncherPerfDebugApi/, 'session must install debug API')
 
 assert.match(rust, /spawn_blocking/, 'native shell must use spawn_blocking')

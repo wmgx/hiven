@@ -45,6 +45,13 @@ function loadModule(path) {
 const L = loadModule('src/plugins/web-open/learnedRules.ts')
 const U = loadModule('src/workspace/learning/urlTemplate.ts')
 const C = loadModule('src/workspace/learning/coverage.ts')
+const webOpenIndex = read('src/plugins/web-open/index.tsx')
+
+assert.match(
+  webOpenIndex,
+  /const keywordMatches = entries[\s\S]{0,180}\.filter\(\(entry\) => !entry\.learnedFrom\)/,
+  'learned rules must only fire through matchPattern, not ordinary title search',
+)
 
 const offer = (over = {}) => ({
   kind: 'url-template',

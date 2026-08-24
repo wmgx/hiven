@@ -488,6 +488,9 @@ export function useLauncherSession({
     }
 
     documentQueryRef.current = q
+    setDocumentDynamicItems([])
+    documentPartialsRef.current.clear()
+    documentAbortRef.current?.abort()
     const scheduledAt = launcherPerfNow()
     logLauncherPerf('session:document-dynamic-schedule', {
       queryLength: q.length,
@@ -503,7 +506,6 @@ export function useLauncherSession({
       const abortController = new AbortController()
       documentAbortRef.current = abortController
       documentPartialsRef.current = new Map()
-      setDocumentDynamicItems([])
       const startedAt = launcherPerfNow()
       void getDesktopDocumentLauncherDynamicItems(
         {
