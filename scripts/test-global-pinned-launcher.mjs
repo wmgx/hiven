@@ -393,8 +393,13 @@ check('standalone launcher opens synchronously and rehydrates after', () => {
   )
   assertHas(
     files.app,
-    /void \(async \(\) => \{[\s\S]{0,400}await rehydratePersistedAppState\(\)/,
-    'rehydrate must run detached so it cannot block the open path',
+    /const rehydrateAfterOpen[\s\S]{0,1200}await rehydratePersistedAppState\(\)[\s\S]{0,1200}runAfterLauncherFirstPaint\(\(\) => void rehydrateAfterOpen\(\)\)/,
+    'rehydrate must run after first paint so it cannot block the open path',
+  )
+  assertHas(
+    files.app,
+    /function runAfterLauncherFirstPaint[\s\S]{0,240}requestAnimationFrame\(\(\) => requestAnimationFrame\(\(\) => window\.setTimeout\(run, 0\)\)\)/,
+    'after-paint helper must defer through two animation frames and a task',
   )
 })
 

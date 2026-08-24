@@ -171,6 +171,18 @@ assert.match(
 )
 
 assert.match(
+  quickEditorOverlay,
+  /query:\s*rankingQuery/,
+  'Quick Editor list mapping should follow the deferred ranking query instead of rebuilding on every keystroke',
+)
+
+assert.match(
+  quickEditorOverlay,
+  /hoverSelectArmedRef[\s\S]*dx \* dx \+ dy \* dy < 4[\s\S]*setSelectedIndex\(index\)/,
+  'Quick Editor hover selection should require intentional pointer movement',
+)
+
+assert.match(
   quickEditorActions,
   /applyEffectsToQuickEditor/,
   'Quick Editor should provide an effect router for command output',

@@ -1,14 +1,19 @@
-import { useCallback } from 'react'
+import { lazy, Suspense, useCallback } from 'react'
 import type { LauncherHostSurfaceTarget } from '../../store'
 import { useAppStore } from '../../store'
 import { t } from '../../i18n'
 import { useLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
 import { SurfaceBreadcrumbHeader } from '../SurfaceBreadcrumbHeader'
 import { SystemSettingsSurface } from '../SystemSettingsSurface'
-import { QuickEditorPanel } from '../quickEditor/QuickEditorPanel'
 import { QuickEditorBreadcrumbActions } from '../quickEditor/QuickEditorBreadcrumbActions'
+import { loadMonacoNls } from '../../kits/editor/monacoNls'
 
 const BREADCRUMB_HEIGHT = 40
+const QuickEditorPanel = lazy(async () => {
+  await loadMonacoNls()
+  const module = await import('../quickEditor/QuickEditorPanel')
+  return { default: module.QuickEditorPanel }
+})
 
 export function GlobalLauncherSystemSurfaceFrame({
   target,
@@ -47,7 +52,9 @@ export function GlobalLauncherSystemSurfaceFrame({
           actions={<QuickEditorBreadcrumbActions />}
         />
         <div className="global-launcher-body" style={{ height: bodyHeight, maxHeight: bodyHeight, overflow: 'hidden' }}>
-          <QuickEditorPanel onRequestExit={onBack} />
+          <Suspense fallback={<div className="quick-editor-loading-skeleton" aria-hidden />}>
+            <QuickEditorPanel onRequestExit={onBack} />
+          </Suspense>
         </div>
       </div>
     )

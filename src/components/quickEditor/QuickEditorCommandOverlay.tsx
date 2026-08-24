@@ -34,6 +34,7 @@ export function QuickEditorCommandOverlay() {
 
   const {
     query,
+    rankingQuery,
     setQuery,
     selectedIndex,
     setSelectedIndex,
@@ -77,10 +78,41 @@ export function QuickEditorCommandOverlay() {
 
   const visibleFiltered = useMemo(() => buildGlobalLauncherItems({
     rankedLauncherItems: rankedItems.slice(0, MAX_OVERLAY_ITEMS),
-    query,
+    query: rankingQuery,
     locale,
-  }), [locale, query, rankedItems])
+  }), [locale, rankingQuery, rankedItems])
   const selectedItem = visibleFiltered[Math.min(selectedIndex, Math.max(0, visibleFiltered.length - 1))]
+
+  const hoverSelectArmedRef = useRef(false)
+  const lastPointerRef = useRef<{ x: number; y: number } | null>(null)
+  const listIdentity = visibleFiltered.map((item) => item.id).join('\0')
+  useEffect(() => {
+    hoverSelectArmedRef.current = false
+    lastPointerRef.current = null
+  }, [query, listIdentity])
+
+  const handleSearchHoverIndex = (index: number) => {
+    if (!hoverSelectArmedRef.current || isKeyboardNavRef.current) return
+    setSelectedIndex(index)
+  }
+
+  const handleSearchMouseMove = (event: { clientX: number; clientY: number; target: EventTarget | null }) => {
+    const previous = lastPointerRef.current
+    const next = { x: event.clientX, y: event.clientY }
+    lastPointerRef.current = next
+    if (!previous) return
+    const dx = next.x - previous.x
+    const dy = next.y - previous.y
+    if (dx * dx + dy * dy < 4) return
+
+    hoverSelectArmedRef.current = true
+    isKeyboardNavRef.current = false
+    const row = (event.target as HTMLElement | null)?.closest?.('[data-launcher-row-index]')
+    if (row instanceof HTMLElement) {
+      const index = Number(row.dataset.launcherRowIndex)
+      if (Number.isFinite(index)) setSelectedIndex(index)
+    }
+  }
 
   const selectMixedItem = (item?: GlobalLauncherItem) => {
     if (item?.kind === 'domain') {
@@ -310,8 +342,8 @@ export function QuickEditorCommandOverlay() {
         onToggleResultChoice={toggleResultChoice}
         onSearchQueryChange={(value) => { setQuery(value); setSelectedIndex(0, { pin: false }) }}
         onSearchSelectItem={(item) => selectMixedItem(item)}
-        onSearchHoverIndex={(index) => { if (!isKeyboardNavRef.current) setSelectedIndex(index) }}
-        onSearchMouseMove={() => { isKeyboardNavRef.current = false }}
+        onSearchHoverIndex={handleSearchHoverIndex}
+        onSearchMouseMove={handleSearchMouseMove}
         clipboardBlock={emptyClipboardBlock}
       />
     </div>

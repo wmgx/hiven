@@ -12,7 +12,10 @@ import type { editor as MonacoEditor } from 'monaco-editor'
 import { createMonacoDisposableBucket } from '../../utils/monacoDisposables'
 import { registerFluxMonacoThemes } from '../../utils/monacoTheme'
 import { installMonacoHoverOverlay } from '../../utils/monacoHoverOverlay'
+import { configureMonacoRuntime } from './monacoRuntime'
 import type { TextEditorCoreHandle, TextEditorCoreProps } from './types'
+
+configureMonacoRuntime()
 
 export const TextEditorCore = forwardRef<TextEditorCoreHandle, TextEditorCoreProps>(
   function TextEditorCore(props, ref) {

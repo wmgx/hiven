@@ -96,6 +96,46 @@ export type LauncherSession = {
   reset: () => void
 }
 
+function useFrameBatchedLauncherItems() {
+  const [items, setItemsState] = useState<LauncherItem[]>([])
+  const pendingRef = useRef<LauncherItem[] | null>(null)
+  const frameRef = useRef<number | null>(null)
+
+  const apply = useCallback((next: LauncherItem[]) => {
+    setItemsState((current) => (
+      current.length === next.length && current.every((item, index) => item === next[index])
+        ? current
+        : next
+    ))
+  }, [])
+
+  const setItems = useCallback((next: LauncherItem[]) => {
+    pendingRef.current = null
+    if (frameRef.current !== null) {
+      cancelAnimationFrame(frameRef.current)
+      frameRef.current = null
+    }
+    apply(next)
+  }, [apply])
+
+  const setItemsNextFrame = useCallback((next: LauncherItem[]) => {
+    pendingRef.current = next
+    if (frameRef.current !== null) return
+    frameRef.current = requestAnimationFrame(() => {
+      frameRef.current = null
+      const pending = pendingRef.current
+      pendingRef.current = null
+      if (pending) apply(pending)
+    })
+  }, [apply])
+
+  useEffect(() => () => {
+    if (frameRef.current !== null) cancelAnimationFrame(frameRef.current)
+  }, [])
+
+  return [items, setItems, setItemsNextFrame] as const
+}
+
 export function useLauncherSession({
   hostId,
   open,
@@ -124,14 +164,14 @@ export function useLauncherSession({
   const [controllerState, setControllerState] = useState<LauncherControllerState | null>(null)
   const [controller, setController] = useState<LauncherController | null>(null)
   /** Plugin dynamicItems (calc, timestamp, web-open, …) — progressive. */
-  const [pluginDynamicItems, setPluginDynamicItems] = useState<LauncherItem[]>([])
+  const [pluginDynamicItems, setPluginDynamicItems, setPluginDynamicItemsNextFrame] = useFrameBatchedLauncherItems()
   /** Host dynamic items (apps / workflow / bridge tabs) — isolated from plugin path. */
-  const [hostDynamicItems, setHostDynamicItems] = useState<LauncherItem[]>([])
+  const [hostDynamicItems, setHostDynamicItems, setHostDynamicItemsNextFrame] = useFrameBatchedLauncherItems()
   /**
    * Slow remote document Desktop Targets (e.g. feishu.docs).
    * Progressive + long debounce; never blocks host apps/windows path.
    */
-  const [documentDynamicItems, setDocumentDynamicItems] = useState<LauncherItem[]>([])
+  const [documentDynamicItems, setDocumentDynamicItems, setDocumentDynamicItemsNextFrame] = useFrameBatchedLauncherItems()
   const controllerRef = useRef<LauncherController | null>(null)
   const pluginQueryRef = useRef('')
   const hostQueryRef = useRef('')
@@ -346,7 +386,7 @@ export function useLauncherSession({
             [...pluginPartialsRef.current.values()].flat(),
             normalizedHostId,
           )
-          setPluginDynamicItems(merged)
+          setPluginDynamicItemsNextFrame(merged)
         },
       }).then((items) => {
         if (abortController.signal.aborted) return
@@ -408,7 +448,7 @@ export function useLauncherSession({
           if (hostQueryRef.current !== q) return
           if (update.kind !== 'host') return
           const applyStartedAt = launcherPerfNow()
-          setHostDynamicItems(filterDynamicForSurface(update.items, normalizedHostId))
+          setHostDynamicItemsNextFrame(filterDynamicForSurface(update.items, normalizedHostId))
           logLauncherPerfDuration('session:host-dynamic-partial-apply', applyStartedAt, {
             itemCount: update.items.length,
           })
@@ -482,7 +522,7 @@ export function useLauncherSession({
               [...documentPartialsRef.current.values()].flat(),
               normalizedHostId,
             )
-            setDocumentDynamicItems(merged)
+            setDocumentDynamicItemsNextFrame(merged)
             logLauncherPerfDuration('session:document-dynamic-partial-apply', mergeStartedAt, {
               sourceId: update.sourceId,
               itemCount: update.items.length,
