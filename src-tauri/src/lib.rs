@@ -53,6 +53,7 @@ static LAST_FOREGROUND_SELECTION_TEXT: OnceLock<Mutex<Option<ForegroundSelection
     OnceLock::new();
 static INSTALLED_APP_TARGETS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 static PLUGIN_KV_DB: OnceLock<Result<Mutex<PluginKvDb>, String>> = OnceLock::new();
+static LAST_SAVEABLE_RUN: OnceLock<Mutex<Option<serde_json::Value>>> = OnceLock::new();
 static PLUGIN_SURFACE_WINDOW_TOKENS: OnceLock<Mutex<HashMap<String, u64>>> = OnceLock::new();
 static PLUGIN_SURFACE_PAYLOADS: OnceLock<Mutex<HashMap<String, PluginSurfacePayload>>> =
     OnceLock::new();
@@ -62,6 +63,7 @@ const MAX_APP_ICON_CACHE_WARM_COUNT: usize = 20;
 #[allow(dead_code)]
 const FOREGROUND_SELECTION_CACHE_TTL: Duration = Duration::from_secs(30);
 const LAUNCHER_PERF_ENV: &str = "HIVEN_LAUNCHER_PERF";
+const LAST_SAVEABLE_RUN_TTL_MS: i64 = 30 * 60 * 1000;
 
 #[derive(Clone)]
 #[allow(dead_code)]
@@ -5662,7 +5664,207 @@ fn validate_experience_event(event: &ExperienceEventInput) -> Result<(), String>
     {
         return Err("output.applied requires an explicit output intent".to_string());
     }
+    if event.event_type.starts_with("artifact.") {
+        if event.artifact_id.is_none() || event.action_key.is_none() {
+            return Err("artifact events require artifact_id and action_key".to_string());
+        }
+        if event.input_fingerprint.is_some()
+            || event.param_signature.is_some()
+            || event.safe_params_json.is_some()
+        {
+            return Err("artifact events cannot contain mining fields".to_string());
+        }
+    }
+    if event.event_type == "artifact.invoked"
+        && (event.run_id.is_none()
+            || event.surface_id.is_none()
+            || event.via.as_deref() != Some("saved-action"))
+    {
+        return Err("artifact.invoked requires a saved-action run".to_string());
+    }
     Ok(())
+}
+
+fn validate_last_saveable_run(run: &serde_json::Value) -> Result<(), String> {
+    let object = run
+        .as_object()
+        .ok_or_else(|| "last saveable run must be an object".to_string())?;
+    let status = object
+        .get("status")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "last saveable run requires status".to_string())?;
+    let allowed_keys: &[&str] = match status {
+        "ready" => &[
+            "status",
+            "runId",
+            "actionKey",
+            "savedParams",
+            "inputBinding",
+            "outputIntent",
+            "contractFingerprint",
+            "actionPolicy",
+            "completedAt",
+        ],
+        "blocked" => &[
+            "status",
+            "runId",
+            "actionKey",
+            "blockedKeys",
+            "reason",
+            "completedAt",
+        ],
+        _ => return Err("last saveable run status is not allowed".to_string()),
+    };
+    if object
+        .keys()
+        .any(|key| !allowed_keys.contains(&key.as_str()))
+    {
+        return Err("last saveable run contains an unsupported field".to_string());
+    }
+    let run_id = object
+        .get("runId")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "last saveable run requires runId".to_string())?;
+    let action_key = object
+        .get("actionKey")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "last saveable run requires actionKey".to_string())?;
+    validate_experience_identifier(run_id, "runId")?;
+    validate_experience_identifier(action_key, "actionKey")?;
+    if object
+        .get("completedAt")
+        .and_then(serde_json::Value::as_i64)
+        .is_none_or(|value| value < 0)
+    {
+        return Err("last saveable run requires a non-negative completedAt".to_string());
+    }
+    if status == "blocked" {
+        validate_experience_enum(
+            object.get("reason").and_then(serde_json::Value::as_str),
+            &["unsaveable-non-default", "invalid-saveable-value"],
+            "reason",
+        )?;
+        let keys = object
+            .get("blockedKeys")
+            .and_then(serde_json::Value::as_array)
+            .ok_or_else(|| "blocked last saveable run requires blockedKeys".to_string())?;
+        if keys.is_empty() {
+            return Err("blockedKeys must not be empty".to_string());
+        }
+        for key in keys {
+            validate_experience_identifier(
+                key.as_str()
+                    .ok_or_else(|| "blockedKeys must contain strings".to_string())?,
+                "blockedKey",
+            )?;
+        }
+        return Ok(());
+    }
+
+    validate_experience_enum(
+        object
+            .get("inputBinding")
+            .and_then(serde_json::Value::as_str),
+        &["selection", "active-text", "prompt"],
+        "inputBinding",
+    )?;
+    validate_experience_enum(
+        object
+            .get("outputIntent")
+            .and_then(serde_json::Value::as_str),
+        &[
+            "copy",
+            "replace-active-text",
+            "insert",
+            "return-to-launcher",
+            "open-quick-editor",
+        ],
+        "outputIntent",
+    )?;
+    let fingerprint = object
+        .get("contractFingerprint")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "ready last saveable run requires contractFingerprint".to_string())?;
+    if fingerprint.len() != 19
+        || !fingerprint.starts_with("v1:")
+        || !fingerprint[3..].chars().all(|ch| ch.is_ascii_hexdigit())
+    {
+        return Err("contractFingerprint is invalid".to_string());
+    }
+    let policy = object
+        .get("actionPolicy")
+        .and_then(serde_json::Value::as_object)
+        .ok_or_else(|| "ready last saveable run requires actionPolicy".to_string())?;
+    validate_experience_enum(
+        policy.get("effect").and_then(serde_json::Value::as_str),
+        &[
+            "pure",
+            "read",
+            "local-write",
+            "external-write",
+            "destructive",
+            "unknown",
+        ],
+        "actionPolicy.effect",
+    )?;
+    if policy.get("learnable").and_then(serde_json::Value::as_bool) != Some(true) {
+        return Err("ready last saveable run must be learnable".to_string());
+    }
+    if policy.len() != 2 {
+        return Err("actionPolicy contains an unsupported field".to_string());
+    }
+    let params = object
+        .get("savedParams")
+        .and_then(serde_json::Value::as_object)
+        .ok_or_else(|| "ready last saveable run requires savedParams".to_string())?;
+    if params.len() > 64 {
+        return Err("savedParams has too many values".to_string());
+    }
+    for (key, value) in params {
+        validate_experience_identifier(key, "savedParam key")?;
+        let valid = match value {
+            serde_json::Value::Bool(_) | serde_json::Value::Number(_) => true,
+            serde_json::Value::String(value) => value.len() <= 256,
+            serde_json::Value::Array(values) => {
+                values.len() <= 64
+                    && values
+                        .iter()
+                        .all(|value| value.as_str().is_some_and(|value| value.len() <= 256))
+            }
+            _ => false,
+        };
+        if !valid {
+            return Err("savedParams contains an invalid value".to_string());
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn last_saveable_run_set(run: serde_json::Value) -> Result<(), String> {
+    validate_last_saveable_run(&run)?;
+    *LAST_SAVEABLE_RUN
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .map_err(|error| error.to_string())? = Some(run);
+    Ok(())
+}
+
+#[tauri::command]
+fn last_saveable_run_get() -> Result<Option<serde_json::Value>, String> {
+    let now = current_millis_i64()?;
+    let mut slot = LAST_SAVEABLE_RUN
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .map_err(|error| error.to_string())?;
+    if slot.as_ref().is_some_and(|run| {
+        run.get("completedAt")
+            .and_then(serde_json::Value::as_i64)
+            .is_none_or(|completed_at| now.saturating_sub(completed_at) > LAST_SAVEABLE_RUN_TTL_MS)
+    }) {
+        *slot = None;
+    }
+    Ok(slot.clone())
 }
 
 #[tauri::command]
@@ -6822,6 +7024,8 @@ pub fn run() {
             experience_journal_export,
             experience_journal_clear_since,
             experience_journal_clear_all,
+            last_saveable_run_set,
+            last_saveable_run_get,
             plugin_blob_save,
             plugin_blob_read,
             plugin_blob_delete,
@@ -7293,9 +7497,22 @@ HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\App Paths\Example.e
             ))
             .expect("append output");
 
+            let mut artifact = event("event_artifact", "artifact.saved", None, None, None);
+            artifact.run_id = None;
+            artifact.surface_id = None;
+            artifact.via = None;
+            assert!(experience_journal_append(artifact).is_err());
+
+            let mut artifact = event("event_artifact", "artifact.saved", None, None, None);
+            artifact.run_id = None;
+            artifact.surface_id = None;
+            artifact.via = None;
+            artifact.artifact_id = Some("artifact_test".to_string());
+            experience_journal_append(artifact).expect("append artifact");
+
             let exported = experience_journal_export().expect("export journal");
             let rows: serde_json::Value = serde_json::from_str(&exported).expect("valid JSON");
-            assert_eq!(rows.as_array().map(Vec::len), Some(3));
+            assert_eq!(rows.as_array().map(Vec::len), Some(4));
             assert!(!exported.contains("message"));
 
             let invalid_error = event(
@@ -7327,6 +7544,49 @@ HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\App Paths\Example.e
             experience_journal_clear_all().expect("clear all");
             assert_eq!(experience_journal_export().expect("export empty again"), "[]");
         });
+    }
+
+    #[test]
+    fn last_saveable_run_is_memory_only_validated_and_expires() {
+        let now = current_millis_i64().expect("clock");
+        let ready = serde_json::json!({
+            "status": "ready",
+            "runId": "run_saved",
+            "actionKey": "plugin:line-tools:tool:line-tools.join",
+            "savedParams": { "separator": ", " },
+            "inputBinding": "selection",
+            "outputIntent": "copy",
+            "contractFingerprint": "v1:0123456789abcdef",
+            "actionPolicy": { "effect": "pure", "learnable": true },
+            "completedAt": now,
+        });
+        last_saveable_run_set(ready.clone()).expect("set ready run");
+        assert_eq!(last_saveable_run_get().expect("get ready run"), Some(ready));
+
+        let expired = serde_json::json!({
+            "status": "blocked",
+            "runId": "run_old",
+            "actionKey": "plugin:line-tools:tool:line-tools.join",
+            "blockedKeys": ["trim"],
+            "reason": "unsaveable-non-default",
+            "completedAt": now - 30 * 60 * 1000 - 1,
+        });
+        last_saveable_run_set(expired).expect("set expired run");
+        assert_eq!(last_saveable_run_get().expect("expired run"), None);
+
+        let unsafe_snapshot = serde_json::json!({
+            "status": "ready",
+            "runId": "run_unsafe",
+            "actionKey": "plugin:line-tools:tool:line-tools.join",
+            "savedParams": {},
+            "inputBinding": "selection",
+            "outputIntent": "copy",
+            "contractFingerprint": "v1:0123456789abcdef",
+            "actionPolicy": { "effect": "pure", "learnable": true },
+            "completedAt": now,
+            "inputText": "must-not-enter-native-state"
+        });
+        assert!(last_saveable_run_set(unsafe_snapshot).is_err());
     }
 
     #[test]

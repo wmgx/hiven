@@ -39,6 +39,12 @@ export type SaveableRunSnapshot = {
   inputBinding: InputBinding
   savedParams: Record<string, SaveableParamValue>
   contractFingerprint: string
+  actionPolicy: ToolActionPolicy
+}
+
+export type BlockedSaveableRunSnapshot = {
+  blockedKeys: string[]
+  reason: 'unsaveable-non-default' | 'invalid-saveable-value'
 }
 
 export type CommittedRunContext = {
@@ -48,6 +54,8 @@ export type CommittedRunContext = {
   via: CommitVia
   inputBinding?: InputBinding
   saveSnapshot?: SaveableRunSnapshot
+  saveBlocked?: BlockedSaveableRunSnapshot
+  artifactId?: string
 }
 
 export type LauncherHostCapability =
@@ -564,6 +572,14 @@ export type LauncherItem = {
   contractFingerprint?: string
   /** Saved Action projections enter the same Commit Gate with a distinct source. */
   commitVia?: CommitVia
+  /** Host-only artifact identity for Saved Action invocation facts. */
+  savedActionArtifactId?: string
+  /** Generic host-owned availability state; disabled items remain visible with an explanation. */
+  disabledReason?: {
+    code: string
+    message: string
+    messageI18n?: Partial<Record<Locale, string>>
+  }
   /** Journal-management commands use the gate but do not journal themselves. */
   experienceRecord?: boolean
   /** Host-only ranking nudge for a small number of host-owned items. */
@@ -730,7 +746,7 @@ export type PluginToolContext<TSettings = unknown> = {
 
 export type PluginToolResult = LauncherExecuteResult
 
-export type PluginToolContribution<TSettings = unknown> = {
+type PluginToolContributionBase<TSettings> = {
   id: string
   title: string
   titleI18n?: Partial<Record<Locale, string>>
@@ -739,8 +755,6 @@ export type PluginToolContribution<TSettings = unknown> = {
   icon?: IconRef
   aliases?: string[]
   inputPolicy?: TextInputPolicy
-  policy?: ToolActionPolicy
-  params?: LauncherParamSpec[]
   defaultParams?: Record<string, unknown>
   /** When true, launcher selection prompts for params even when defaults exist. */
   requireParamSelection?: boolean
@@ -769,6 +783,17 @@ export type PluginToolContribution<TSettings = unknown> = {
   run(ctx: PluginToolContext<TSettings>): Promise<PluginToolResult> | PluginToolResult
   surfaces?: PluginToolSurfaces
 }
+
+export type PluginToolContribution<TSettings = unknown> = PluginToolContributionBase<TSettings> & (
+  | {
+      policy: ToolActionPolicy & { learnable: true }
+      params?: Array<LauncherParamSpec & { saveable: boolean }>
+    }
+  | {
+      policy?: ToolActionPolicy & { learnable: false }
+      params?: LauncherParamSpec[]
+    }
+)
 
 // ─── Panel Action Model (separate surface) ───────────────────────────────────
 

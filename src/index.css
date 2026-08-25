@@ -5729,6 +5729,11 @@ body[data-theme='dark'] .launcher-preview-well {
   contain: inline-size style;
 }
 
+.l-row.disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 /* Light hover: readable surface grey (not near-invisible ink wash). */
 .l-row:hover:not(.sel):not(.selected) {
   background: var(--surface, #f3f4f5);

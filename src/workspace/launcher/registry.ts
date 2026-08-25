@@ -43,6 +43,7 @@ import { resolvePluginSettingsSource } from './pluginSource'
 import { adaptToolToLauncherItem } from './toolAdapter'
 import { normalizeContribution } from './normalizeContribution'
 import { applyProductProviderToLauncherItem, resolvePluginProductMetadata } from '../pluginProductCatalog'
+import { getSavedActionLauncherItems } from '../savedActions/provider'
 
 const DYNAMIC_QUERY_MAX_LENGTH = 500
 const DYNAMIC_PROVIDER_TIMEOUT_MS = 1000
@@ -472,7 +473,12 @@ function resolveDynamicItem(
  * Dynamic items are collected separately (async) and merged by the controller.
  */
 export function collectStaticCandidates(surfaceId: LauncherSurfaceId): LauncherItem[] {
-  const all = [...getHostLauncherItems(), ...collectStaticPluginItems()]
+  const baseItems = [...getHostLauncherItems(), ...collectStaticPluginItems()]
+  const api = createPluginLauncherApi()
+  const all = [...baseItems, ...getSavedActionLauncherItems(baseItems, {
+    selection: Boolean(api.getSelectionText()),
+    activeText: Boolean(api.getActiveText()),
+  })]
   return all.filter((item) => appearsOnSurface(item, surfaceId))
 }
 

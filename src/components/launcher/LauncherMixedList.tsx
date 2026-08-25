@@ -16,7 +16,7 @@ function quickSelectBadge(index: number): string | null {
 }
 
 export type LauncherMixedItem =
-  | { kind: 'domain'; id: string; title: string; subtitle: string; icon?: string; aliases?: string[]; shortcut?: string; domainItem: DomainLauncherItem; matchRanges?: MatchRange[]; matchType?: MatchType }
+  | { kind: 'domain'; id: string; title: string; subtitle: string; icon?: string; aliases?: string[]; shortcut?: string; disabled?: boolean; domainItem: DomainLauncherItem; matchRanges?: MatchRange[]; matchType?: MatchType }
 
 /** Maximum items rendered in the list when no query is active (scannable empty-open). */
 export const MAX_VISIBLE_IDLE = 12
@@ -133,7 +133,8 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
       tabIndex={-1}
       data-launcher-row-index={index}
       data-quick-select={quickSelectLabel ?? undefined}
-      className={`l-row cmd-item w-full border-none text-left ${selected ? 'sel selected' : ''}`}
+      className={`l-row cmd-item w-full border-none text-left ${selected ? 'sel selected' : ''} ${item.disabled ? 'disabled' : ''}`}
+      disabled={item.disabled}
       onClick={handleClick}
       // Hover select is gated by parent (must move pointer first); enter alone is not enough.
       onMouseEnter={onHoverIndex ? handleMouseEnter : undefined}

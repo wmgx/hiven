@@ -167,7 +167,7 @@ export function GlobalLauncherSearchFrame({
         <button
           type="button"
           className="l-foot-primary grp"
-          disabled={!selectedItem}
+          disabled={!selectedItem || selectedItem.disabled}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => {
             if (selectedItem) onSelectItem(selectedItem)

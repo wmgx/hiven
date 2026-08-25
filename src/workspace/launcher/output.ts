@@ -149,3 +149,27 @@ export function emptyResult(): LauncherExecuteResult {
 export function isOutputResult(result: LauncherExecuteResult): result is { ok: true; output: LauncherOutput } {
   return result.ok === true && result.output != null && result.output.choices.length > 0
 }
+
+/** Select one existing Host-marked output path without trusting plugin ids or labels. */
+export function selectHostOutputResult(
+  result: LauncherExecuteResult,
+  intent: OutputIntent,
+): LauncherExecuteResult | null {
+  if (!isOutputResult(result)) return null
+  for (const choice of result.output.choices) {
+    if (getHostOutputIntent(choice) === intent) {
+      return { ok: true, output: { choices: [choice] } }
+    }
+    const action = choice.secondaryActions?.find((candidate) => getHostOutputIntent(candidate) === intent)
+    if (action) {
+      const projected = markHostOutputAction<LauncherResultChoice>({
+        id: `launcher.saved-output.${intent}`,
+        title: choice.title,
+        preview: choice.preview,
+        primaryAction: () => action.run(),
+      }, intent)
+      return { ok: true, output: { choices: [projected] } }
+    }
+  }
+  return null
+}

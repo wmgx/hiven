@@ -20,6 +20,7 @@
 import type {
   CommittedRunContext,
   CommitVia,
+  InputBinding,
   LauncherExecuteResult,
   LauncherInputSpec,
   LauncherItem,
@@ -49,6 +50,9 @@ import {
 import { classifyExperienceError } from '../experience/errorType'
 import type { ExperienceErrorType, ExperienceEvent, ExperienceRunStatus } from '../experience/types'
 import { isSafeExperienceIdentifier } from '../contentBoundary'
+import { extractSaveableParams } from '../experience/saveableParams'
+import { setLastSaveableRun } from '../savedActions/lastSaveableRun'
+import { touchSavedAction } from '../savedActions/store'
 
 // ─── Frames ──────────────────────────────────────────────────────────────────
 
@@ -259,6 +263,16 @@ export class LauncherController {
     return params
   }
 
+  private inputBindingFor(item: LauncherItem): InputBinding | undefined {
+    const mode = item.inputPolicy?.mode
+    if (!mode) return undefined
+    const api = this.deps.makeApi?.(item) ?? this.deps.api
+    if (mode === 'selection') return api.getSelectionText() ? 'selection' : undefined
+    if (mode === 'all') return api.getActiveText() ? 'active-text' : undefined
+    if (api.getSelectionText()) return 'selection'
+    return api.getActiveText() ? 'active-text' : undefined
+  }
+
   private paramOptions(param: LauncherParamSpec): unknown[] {
     if (param.type === 'boolean') return [true, false]
     return (param.options ?? []).map((option) => typeof option === 'string' ? option : option.value)
@@ -296,9 +310,13 @@ export class LauncherController {
   }
 
   private shouldCollectTextInput(item: LauncherItem): boolean {
+    const mode = item.inputPolicy?.mode ?? 'auto'
+    const api = this.deps.makeApi?.(item) ?? this.deps.api
+    const hasBoundSelection = (mode === 'auto' || mode === 'selection') && Boolean(api.getSelectionText())
     return this.deps.surfaceId === 'global-launcher' &&
       item.behavior.type === 'perform' &&
-      item.inputPolicy != null
+      item.inputPolicy != null &&
+      !hasBoundSelection
   }
 
   private hasObjectBlockText(text: string | undefined): text is string {
@@ -333,6 +351,12 @@ export class LauncherController {
    */
   async selectItem(item: LauncherItem, options: SelectOptions = {}): Promise<void> {
     this.setState({ error: null })
+    if (item.disabledReason) {
+      this.setState({
+        error: item.disabledReason.messageI18n?.[this.deps.locale as Locale] ?? item.disabledReason.message,
+      })
+      return
+    }
     trackBehavior(TelemetryEvents.launcherItemSelect, {
       ...itemTelemetryProps(item),
       surfaceId: this.state.surfaceId,
@@ -397,6 +421,7 @@ export class LauncherController {
       item,
       via: item.commitVia ?? 'execute',
       params: this.defaultParamsFor(item),
+      inputBinding: this.inputBindingFor(item),
       sourceTitle: this.itemTitle(item),
       execute: () => Promise.resolve(item.execute(this.buildExecutionContext(item))),
     })
@@ -547,6 +572,7 @@ export class LauncherController {
       item: top.item,
       via: top.item.commitVia ?? 'execute',
       params: top.params,
+      inputBinding: this.inputBindingFor(top.item),
       sourceTitle: this.itemTitle(top.item),
       execute: () => Promise.resolve(top.item.executeWithParams?.(this.buildExecutionContext(top.item), top.params) ?? top.item.execute(this.buildExecutionContext(top.item))),
     })
@@ -787,6 +813,7 @@ export class LauncherController {
           item,
           via: 'suggestion',
           params: top.params ?? this.defaultParamsFor(item),
+          inputBinding: 'prompt',
           sourceTitle: highlighted.title,
           resolvedChoice: highlighted,
         })
@@ -810,6 +837,7 @@ export class LauncherController {
         item,
         via: 'preview-choice',
         params: top.params ?? this.defaultParamsFor(item),
+        inputBinding: 'prompt',
         sourceTitle: firstPreviewChoice.title,
         resolvedChoice: firstPreviewChoice,
       })
@@ -820,6 +848,7 @@ export class LauncherController {
       item,
       via: item.commitVia ?? 'execute',
       params: top.params ?? this.defaultParamsFor(item),
+      inputBinding: 'prompt',
       sourceTitle: this.itemTitle(item),
       execute: () => Promise.resolve(
         top.params && item.executeWithParams
@@ -939,6 +968,7 @@ export class LauncherController {
       actionKey: item.systemKey,
       surfaceId: this.deps.surfaceId,
       via,
+      artifactId: item.savedActionArtifactId,
     }
   }
 
@@ -989,20 +1019,78 @@ export class LauncherController {
       outputIntent,
       outputApplication: 'explicit',
     })
+    if (run.via === 'saved-action' && run.artifactId) {
+      this.recordExperience({
+        eventId: newExperienceId('event'),
+        ts: Date.now(),
+        sessionId: currentExperienceSessionId(this.fallbackSessionId),
+        runId: run.runId,
+        eventType: 'artifact.invoked',
+        actionKey: run.actionKey,
+        surfaceId: run.surfaceId,
+        via: run.via,
+        artifactId: run.artifactId,
+      })
+      touchSavedAction(run.artifactId)
+    }
+    if (run.via !== 'saved-action') {
+      const completedAt = Date.now()
+      if (run.saveSnapshot) {
+        setLastSaveableRun({
+          status: 'ready',
+          runId: run.runId,
+          actionKey: run.actionKey,
+          ...run.saveSnapshot,
+          outputIntent,
+          completedAt,
+        })
+      } else if (run.saveBlocked) {
+        setLastSaveableRun({
+          status: 'blocked',
+          runId: run.runId,
+          actionKey: run.actionKey,
+          ...run.saveBlocked,
+          completedAt,
+        })
+      }
+    }
   }
 
   private async commitResolvedAction(input: {
     item: LauncherItem
     via: CommitVia
     params: Record<string, unknown>
+    inputBinding?: InputBinding
     sourceTitle: string
     execute?: () => Promise<LauncherExecuteResult>
     resolvedChoice?: LauncherResultChoice
   }): Promise<void> {
     const { item, via, sourceTitle, execute, resolvedChoice } = input
-    // PR2 consumes params for LastSaveableRun; PR1 deliberately persists none.
-    void input.params
     const committedRun = this.committedRunFor(item, via)
+    if (
+      committedRun &&
+      via !== 'saved-action' &&
+      input.inputBinding &&
+      item.contractFingerprint &&
+      item.actionPolicy?.learnable === true &&
+      (item.actionPolicy.effect === 'pure' || item.actionPolicy.effect === 'read')
+    ) {
+      committedRun.inputBinding = input.inputBinding
+      const saveable = extractSaveableParams(item, input.params)
+      if (saveable.ok) {
+        committedRun.saveSnapshot = {
+          inputBinding: input.inputBinding,
+          savedParams: saveable.params,
+          contractFingerprint: item.contractFingerprint,
+          actionPolicy: item.actionPolicy,
+        }
+      } else {
+        committedRun.saveBlocked = {
+          blockedKeys: saveable.blockedKeys,
+          reason: saveable.reason,
+        }
+      }
+    }
     if (committedRun) this.recordRunStarted(committedRun)
 
     this.setState({ busy: true, error: null })

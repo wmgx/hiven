@@ -12,6 +12,10 @@ import {
   isExperienceLearningPaused,
   setExperienceLearningPaused,
 } from '../experience/journal'
+import { getLastSaveableRun } from '../savedActions/lastSaveableRun'
+import { createSavedAction, deleteSavedAction, listSavedActions } from '../savedActions/store'
+import { recordSavedActionEvent } from '../savedActions/events'
+import { translate } from '../../i18n'
 
 type SystemPowerAction = 'restart' | 'shutdown' | 'lock-screen'
 
@@ -188,6 +192,112 @@ export function getHostExperienceJournalItems(): LauncherItem[] {
         setExperienceLearningPaused(!isExperienceLearningPaused())
         return { ok: true }
       },
+    },
+  ]
+}
+
+export function getHostSavedActionItems(): LauncherItem[] {
+  return [
+    {
+      systemKey: 'host:saved-action:save-last',
+      kind: 'host',
+      display: {
+        title: 'Save Last Run as a Tool',
+        titleI18n: { zh: '把上一次运行保存为工具' },
+        subtitle: 'Use “Name | alias one, alias two”',
+        subtitleI18n: { zh: '输入“名称 | 别名一, 别名二”' },
+        icon: 'BookmarkPlus',
+        aliases: ['save action', 'save tool', 'saved action', '保存工具', '保存上次运行'],
+      },
+      behavior: {
+        type: 'collect-input',
+        input: {
+          placeholder: 'Name | optional aliases',
+          placeholderI18n: { zh: '名称 | 可选别名' },
+          emptyInputMessage: 'A name is required',
+          emptyInputMessageI18n: { zh: '请输入名称' },
+        },
+      },
+      surfaces: ['global-launcher'],
+      experienceRecord: false,
+      execute: async (ctx) => {
+        const lastRun = await getLastSaveableRun()
+        if (!lastRun) return { ok: false, message: translate(ctx.locale, 'palette', 'savedActionNoRecent') }
+        if (lastRun.status === 'blocked') {
+          return {
+            ok: false,
+            message: translate(ctx.locale, 'palette', 'savedActionBlockedParams', { keys: lastRun.blockedKeys.join(', ') }),
+          }
+        }
+        const [rawName, rawAliases = ''] = (ctx.input?.text ?? '').split('|', 2)
+        if (!rawName?.trim()) return { ok: false, message: translate(ctx.locale, 'palette', 'savedActionNameRequired') }
+        try {
+          const artifact = createSavedAction(lastRun, rawName ?? '', rawAliases.split(','))
+          recordSavedActionEvent('artifact.saved', artifact)
+          return { ok: true }
+        } catch (error) {
+          console.warn('[hiven] Failed to save Saved Action:', error)
+          return { ok: false, message: translate(ctx.locale, 'palette', 'savedActionSaveFailed') }
+        }
+      },
+    },
+    {
+      systemKey: 'host:saved-action:delete',
+      kind: 'host',
+      display: {
+        title: 'Delete a Saved Tool',
+        titleI18n: { zh: '删除已保存工具' },
+        subtitle: 'Choose a Saved Action to remove',
+        subtitleI18n: { zh: '选择要删除的已保存工具' },
+        icon: 'BookmarkX',
+        aliases: ['delete saved action', 'remove saved tool', '删除已保存工具'],
+      },
+      behavior: {
+        type: 'collect-input',
+        input: {
+          placeholder: 'Search saved tools',
+          placeholderI18n: { zh: '搜索已保存工具' },
+          allowEmptyInput: true,
+        },
+      },
+      surfaces: ['global-launcher'],
+      experienceRecord: false,
+      suggest: async (ctx) => {
+        const query = ctx.inputText.trim().toLocaleLowerCase()
+        return {
+          choices: listSavedActions()
+            .filter((artifact) => !query || [artifact.name, ...artifact.aliases].some((value) => value.toLocaleLowerCase().includes(query)))
+            .map((artifact) => ({
+              id: `saved-action-delete-${artifact.id}`,
+              title: artifact.name,
+              primaryAction: async () => ({
+                ok: true as const,
+                output: {
+                  choices: [
+                    {
+                      id: `saved-action-delete-confirm-${artifact.id}`,
+                      title: `Confirm deleting “${artifact.name}”`,
+                      titleI18n: { zh: `确认删除“${artifact.name}”` },
+                      tone: 'danger' as const,
+                      primaryAction: async () => {
+                        const removed = deleteSavedAction(artifact.id)
+                        if (removed) recordSavedActionEvent('artifact.deleted', removed)
+                      },
+                    },
+                    {
+                      id: `saved-action-delete-cancel-${artifact.id}`,
+                      title: 'Cancel',
+                      titleI18n: { zh: '取消' },
+                      tone: 'muted' as const,
+                      primaryAction: async () => ({ ok: true as const, keepOpen: true }),
+                    },
+                  ],
+                },
+              }),
+            })),
+        }
+      },
+      execute: async () => ({ ok: true, keepOpen: true }),
     },
   ]
 }
