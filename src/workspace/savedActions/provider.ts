@@ -1,6 +1,6 @@
 import type { LauncherExecutionContext, LauncherItem } from '../launcher/types'
 import { selectHostOutputResult } from '../launcher/output'
-import { savedActionDisabledReason } from './compatibility'
+import { isGlobalLauncherSavedActionOutput, savedActionDisabledReason } from './compatibility'
 import { listSavedActions, setSavedActionDisabledReason } from './store'
 import type { SavedActionV1 } from './types'
 import { translate, type Locale } from '../../i18n'
@@ -31,9 +31,7 @@ export function projectSavedAction(
 ): LauncherItem {
   const disabledReason = savedActionDisabledReason(artifact, baseAction, {
     inputAvailable,
-    outputAvailable: artifact.outputIntent === 'copy' ||
-      artifact.outputIntent === 'return-to-launcher' ||
-      artifact.outputIntent === 'open-quick-editor',
+    outputAvailable: isGlobalLauncherSavedActionOutput(artifact.outputIntent),
   })
   const subtitle = disabledReason ? disabledText[disabledReason] : ['Saved Action', '已保存工具']
   return {
@@ -94,9 +92,7 @@ export function getSavedActionLauncherItems(
       : inputAvailability[artifact.inputBinding === 'selection' ? 'selection' : 'activeText']
     const disabledReason = savedActionDisabledReason(artifact, baseAction, {
       inputAvailable,
-      outputAvailable: artifact.outputIntent === 'copy' ||
-        artifact.outputIntent === 'return-to-launcher' ||
-        artifact.outputIntent === 'open-quick-editor',
+      outputAvailable: isGlobalLauncherSavedActionOutput(artifact.outputIntent),
     })
     setSavedActionDisabledReason(artifact.id, disabledReason)
     return projectSavedAction({ ...artifact, disabledReason }, baseAction, inputAvailable)

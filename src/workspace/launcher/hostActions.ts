@@ -15,6 +15,7 @@ import {
 import { getLastSaveableRun } from '../savedActions/lastSaveableRun'
 import { createSavedAction, deleteSavedAction, listSavedActions } from '../savedActions/store'
 import { recordSavedActionEvent } from '../savedActions/events'
+import { isGlobalLauncherSavedActionOutput } from '../savedActions/compatibility'
 import { translate } from '../../i18n'
 
 type SystemPowerAction = 'restart' | 'shutdown' | 'lock-screen'
@@ -229,7 +230,11 @@ export function getHostSavedActionItems(): LauncherItem[] {
             message: translate(ctx.locale, 'palette', 'savedActionBlockedParams', { keys: lastRun.blockedKeys.join(', ') }),
           }
         }
-        const [rawName, rawAliases = ''] = (ctx.input?.text ?? '').split('|', 2)
+        if (!isGlobalLauncherSavedActionOutput(lastRun.outputIntent)) {
+          return { ok: false, message: translate(ctx.locale, 'palette', 'savedActionEditorOutputUnsupported') }
+        }
+        const [rawName, ...rawAliasParts] = (ctx.input?.text ?? '').split('|')
+        const rawAliases = rawAliasParts.join('|')
         if (!rawName?.trim()) return { ok: false, message: translate(ctx.locale, 'palette', 'savedActionNameRequired') }
         try {
           const artifact = createSavedAction(lastRun, rawName ?? '', rawAliases.split(','))

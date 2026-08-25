@@ -131,6 +131,7 @@ export default {
     'savedActionSaveabilityChanged': 'Saved parameters are no longer allowed',
     'savedActionInputUnavailable': 'Required input is unavailable',
     'savedActionOutputUnavailable': 'Saved output is unavailable',
+    'savedActionEditorOutputUnsupported': 'The last run used an editor-only output. Saved tools currently run in Global Launcher.',
   },
   zh: {
     'search': '搜索操作...',
@@ -264,5 +265,6 @@ export default {
     'savedActionSaveabilityChanged': '已保存参数不再允许固化',
     'savedActionInputUnavailable': '所需输入当前不可用',
     'savedActionOutputUnavailable': '保存的输出方式当前不可用',
+    'savedActionEditorOutputUnsupported': '上一次运行使用了仅编辑器可用的输出方式；保存的工具目前只能在 Global Launcher 中运行。',
   },
 }

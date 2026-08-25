@@ -7,7 +7,10 @@ import { extractSaveableParams } from '../src/workspace/experience/saveableParam
 import { CONTENT_SOURCE_STORES } from '../src/workspace/contentBoundary.ts'
 import { getLastSaveableRun, setLastSaveableRun } from '../src/workspace/savedActions/lastSaveableRun.ts'
 import { createSavedAction, deleteSavedAction, listSavedActions } from '../src/workspace/savedActions/store.ts'
-import { savedActionDisabledReason } from '../src/workspace/savedActions/compatibility.ts'
+import {
+  isGlobalLauncherSavedActionOutput,
+  savedActionDisabledReason,
+} from '../src/workspace/savedActions/compatibility.ts'
 
 const item = {
   systemKey: 'plugin:line-tools:tool:line-tools.join',
@@ -229,7 +232,7 @@ const replayBase = {
 }
 const providerModule = loadModule('src/workspace/savedActions/provider.ts', {
   '../launcher/output': outputModule,
-  './compatibility': { savedActionDisabledReason },
+  './compatibility': { isGlobalLauncherSavedActionOutput, savedActionDisabledReason },
 })
 const replay = providerModule.projectSavedAction(artifact, replayBase)
 assert.equal(replay.systemKey, `host:saved-action:${artifact.id}`)
@@ -283,22 +286,38 @@ const registrySource = readFileSync('src/workspace/launcher/registry.ts', 'utf8'
 assert.match(registrySource, /getSavedActionLauncherItems\(baseItems, \{/)
 
 const artifactEvents = []
+let savedCommandArgs
 const savedFromCommand = { ...artifact, id: 'artifact_command' }
 const hostActionsModule = loadModule('src/workspace/launcher/hostActions.ts', {
   '../savedActions/lastSaveableRun': { getLastSaveableRun: async () => lastRun },
   '../savedActions/store': {
-    createSavedAction: () => savedFromCommand,
+    createSavedAction: (run, name, aliases) => {
+      savedCommandArgs = { run, name, aliases }
+      return savedFromCommand
+    },
     deleteSavedAction: () => savedFromCommand,
     listSavedActions: () => [savedFromCommand],
   },
   '../savedActions/events': { recordSavedActionEvent: (eventType, saved) => artifactEvents.push([eventType, saved.id]) },
+  '../savedActions/compatibility': { isGlobalLauncherSavedActionOutput },
 })
 const savedActionCommands = hostActionsModule.getHostSavedActionItems()
 const saveCommand = savedActionCommands.find((entry) => entry.systemKey === 'host:saved-action:save-last')
 const deleteCommand = savedActionCommands.find((entry) => entry.systemKey === 'host:saved-action:delete')
 assert.ok(saveCommand && deleteCommand)
-assert.equal((await saveCommand.execute({ input: { text: 'Join commas | csv, comma' } })).ok, true)
+assert.equal((await saveCommand.execute({ input: { text: 'Join commas | csv|pipe, comma' } })).ok, true)
+assert.deepEqual(Array.from(savedCommandArgs.aliases), [' csv|pipe', ' comma'])
 assert.deepEqual(artifactEvents, [['artifact.saved', 'artifact_command']])
+
+let unsupportedSaveCalls = 0
+const unsupportedHostActions = loadModule('src/workspace/launcher/hostActions.ts', {
+  '../savedActions/lastSaveableRun': { getLastSaveableRun: async () => ({ ...lastRun, outputIntent: 'insert' }) },
+  '../savedActions/store': { createSavedAction: () => { unsupportedSaveCalls += 1 } },
+  '../savedActions/compatibility': { isGlobalLauncherSavedActionOutput },
+}).getHostSavedActionItems()
+const unsupportedSaveCommand = unsupportedHostActions.find((entry) => entry.systemKey === 'host:saved-action:save-last')
+assert.equal((await unsupportedSaveCommand.execute({ input: { text: 'Never runnable' } })).ok, false)
+assert.equal(unsupportedSaveCalls, 0, 'editor-only output must be rejected before creating an Artifact')
 const deleteSuggestions = await deleteCommand.suggest({ inputText: '' })
 const deleteConfirmation = await deleteSuggestions.choices[0].primaryAction()
 await deleteConfirmation.output.choices[0].primaryAction()

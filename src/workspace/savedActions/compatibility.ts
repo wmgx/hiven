@@ -1,6 +1,12 @@
 import { extractSaveableParams } from '../experience/saveableParams.ts'
-import type { LauncherItem } from '../launcher/types'
+import type { LauncherItem, OutputIntent } from '../launcher/types'
 import type { SavedActionDisabledReason, SavedActionV1 } from './types'
+
+export function isGlobalLauncherSavedActionOutput(outputIntent: OutputIntent): boolean {
+  return outputIntent === 'copy' ||
+    outputIntent === 'return-to-launcher' ||
+    outputIntent === 'open-quick-editor'
+}
 
 export function savedActionDisabledReason(
   artifact: SavedActionV1,
