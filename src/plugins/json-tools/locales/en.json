@@ -1,4 +1,6 @@
 {
+  "json.indent.label": "Indent spaces",
+  "json.sortKeys.label": "Sort keys",
   "json.prettify.title": "JSON Prettify",
   "json.prettify.description": "Pretty-print JSON with indentation",
   "json.compact.title": "JSON Compact",

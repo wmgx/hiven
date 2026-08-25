@@ -5,8 +5,45 @@ import type { LauncherItem } from './types'
 import { getHostEditorActionItems } from './hostEditorActions'
 import { isQuickEditorWindowOpen, showQuickEditorWindow } from '../windowManager/quickEditorWindow'
 import { clearStandaloneLauncherBlurDevtoolsSuppress, suppressStandaloneLauncherBlurForDevtools } from '../launcherBlurGuard'
+import {
+  clearAllExperienceEvents,
+  clearExperienceEventsSince,
+  exportExperienceEvents,
+  isExperienceLearningPaused,
+  setExperienceLearningPaused,
+} from '../experience/journal'
 
 type SystemPowerAction = 'restart' | 'shutdown' | 'lock-screen'
+
+function confirmExperienceClear(
+  scope: 'today' | 'all',
+  clear: () => Promise<void>,
+): LauncherExecuteResult {
+  const all = scope === 'all'
+  return {
+    ok: true,
+    output: {
+      choices: [
+        {
+          id: `host.experience.clear-${scope}.confirm`,
+          title: all ? 'Confirm clearing all learning events' : "Confirm clearing today's learning events",
+          titleI18n: { zh: all ? '确认清除全部学习事件' : '确认清除今天的学习事件' },
+          tone: 'danger',
+          primaryAction: async () => {
+            await clear()
+          },
+        },
+        {
+          id: `host.experience.clear-${scope}.cancel`,
+          title: 'Cancel',
+          titleI18n: { zh: '取消' },
+          tone: 'muted',
+          primaryAction: async () => ({ ok: true, keepOpen: true }),
+        },
+      ],
+    },
+  }
+}
 
 async function performSystemPowerAction(action: SystemPowerAction): Promise<LauncherExecuteResult> {
   try {
@@ -68,6 +105,89 @@ export function getHostSystemPowerItems(): LauncherItem[] {
       surfaces: ['global-launcher'],
       requiredCapabilities: ['system-power'],
       execute: async () => performSystemPowerAction('lock-screen'),
+    },
+  ]
+}
+
+export function getHostExperienceJournalItems(): LauncherItem[] {
+  return [
+    {
+      systemKey: 'host:experience:export',
+      kind: 'host',
+      display: {
+        title: 'Export Learning Events',
+        titleI18n: { zh: '导出学习事件' },
+        subtitle: 'Copy the no-content event log as JSON',
+        subtitleI18n: { zh: '将无正文事件日志复制为 JSON' },
+        icon: 'Download',
+        aliases: ['learning export', 'experience journal', '导出学习事件'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['global-launcher'],
+      experienceRecord: false,
+      execute: async (ctx) => {
+        try {
+          await ctx.api.copyText(await exportExperienceEvents())
+          return { ok: true }
+        } catch (error) {
+          return { ok: false, message: error instanceof Error ? error.message : String(error) }
+        }
+      },
+    },
+    {
+      systemKey: 'host:experience:clear-today',
+      kind: 'host',
+      display: {
+        title: "Clear Today's Learning Events",
+        titleI18n: { zh: '清除今天的学习事件' },
+        subtitle: 'Delete events recorded since local midnight',
+        subtitleI18n: { zh: '删除本地时间今天零点后的事件' },
+        icon: 'CalendarX',
+        aliases: ['clear learning today', '清除今天学习事件'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['global-launcher'],
+      experienceRecord: false,
+      execute: async () => confirmExperienceClear('today', async () => {
+          const midnight = new Date()
+          midnight.setHours(0, 0, 0, 0)
+          await clearExperienceEventsSince(midnight.getTime())
+      }),
+    },
+    {
+      systemKey: 'host:experience:clear-all',
+      kind: 'host',
+      display: {
+        title: 'Clear All Learning Events',
+        titleI18n: { zh: '清除全部学习事件' },
+        subtitle: 'Delete the complete local experience journal',
+        subtitleI18n: { zh: '删除全部本地学习事件' },
+        icon: 'Trash2',
+        aliases: ['clear all learning', '清除全部学习事件'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['global-launcher'],
+      experienceRecord: false,
+      execute: async () => confirmExperienceClear('all', clearAllExperienceEvents),
+    },
+    {
+      systemKey: 'host:experience:pause',
+      kind: 'host',
+      display: {
+        title: 'Pause / Resume Personal Learning',
+        titleI18n: { zh: '暂停 / 恢复个性化学习' },
+        subtitle: 'Toggle Experience Journal recording',
+        subtitleI18n: { zh: '切换学习事件记录状态' },
+        icon: 'PauseCircle',
+        aliases: ['pause learning', 'resume learning', '暂停学习', '恢复学习'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['global-launcher'],
+      experienceRecord: false,
+      execute: async () => {
+        setExperienceLearningPaused(!isExperienceLearningPaused())
+        return { ok: true }
+      },
     },
   ]
 }

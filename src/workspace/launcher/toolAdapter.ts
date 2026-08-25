@@ -24,9 +24,11 @@ import type {
   ResolvedTextInput,
   TextInputMode,
 } from './types'
+import { DEFAULT_TOOL_ACTION_POLICY } from './types'
 import { normalizeLauncherSurfaceId } from './types'
 import { emptyResult, textResult, replaceActiveTextResult, errorResult, choicesResult, REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID } from './output'
 import { toDirectAnswer } from './normalizeContribution'
+import { computeContractFingerprint } from './contractFingerprint'
 import type { Locale } from '../../i18n'
 import { getPluginPermissionSnapshot } from '../pluginPermissions'
 import { createPluginShell } from '../pluginShell'
@@ -151,6 +153,12 @@ export function adaptToolToLauncherItem(
     behavior: { type: 'perform' },
     surfaces: launcherOptions?.surfaces,
     inputPolicy: tool.inputPolicy,
+    actionPolicy: tool.policy ?? DEFAULT_TOOL_ACTION_POLICY,
+    contractFingerprint: computeContractFingerprint({
+      systemKey: options.systemKey,
+      inputPolicy: tool.inputPolicy,
+      params: tool.params,
+    }),
     params: tool.params,
     defaultParams,
     requireParamSelection: tool.requireParamSelection,

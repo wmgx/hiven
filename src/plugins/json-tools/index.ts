@@ -9,10 +9,13 @@
 import { definePlugin } from '@hiven/plugin'
 import { JsonSurface } from './JsonSurface'
 
+const LEARNABLE_PURE = { effect: 'pure', learnable: true } as const
+
 // ─── JSON ─────────────────────────────────────────────────────────────────────
 
-function jsonPrettify(text: string): string {
-  return JSON.stringify(JSON.parse(text), null, 2)
+function jsonPrettify(text: string, indent: number, shouldSort: boolean): string {
+  const value = JSON.parse(text)
+  return JSON.stringify(shouldSort ? sortKeys(value) : value, null, indent)
 }
 
 function jsonCompact(text: string): string {
@@ -102,10 +105,15 @@ export const jsonToolsPlugin = definePlugin({
       icon: 'Braces',
       aliases: ['fmt', '格式化', 'pretty', 'json format', 'json格式化', 'pretty json', 'json beautify'],
       inputPolicy: { mode: 'auto' },
+      policy: LEARNABLE_PURE,
+      params: [
+        { key: 'indent', label: 'json.indent.label', type: 'number', default: 2, saveable: true },
+        { key: 'sortKeys', label: 'json.sortKeys.label', type: 'boolean', default: false, saveable: true },
+      ],
       accepts: { kinds: ['json'], aliases: ['fmt', '格式化', 'pretty'] },
       textMatch: isJson,
       run(ctx) {
-        try { return ctx.output.text(jsonPrettify(ctx.input.text)) }
+        try { return ctx.output.text(jsonPrettify(ctx.input.text, Number(ctx.params.indent ?? 2), Boolean(ctx.params.sortKeys))) }
         catch (e: any) { return ctx.output.error('Error: ' + e.message) }
       },
       surfaces: { launcher: true, panel: true },
@@ -117,6 +125,7 @@ export const jsonToolsPlugin = definePlugin({
       icon: 'Braces',
       aliases: ['json minify', 'json压缩', 'compact json', 'json compress'],
       inputPolicy: { mode: 'auto' },
+      policy: LEARNABLE_PURE,
       accepts: { kinds: ['json'] },
       textMatch: isJson,
       run(ctx) {
@@ -132,6 +141,7 @@ export const jsonToolsPlugin = definePlugin({
       icon: 'ArrowUpNarrowWide',
       aliases: ['json sort', 'sort json keys', 'json key排序', 'json排序'],
       inputPolicy: { mode: 'auto' },
+      policy: LEARNABLE_PURE,
       accepts: { kinds: ['json'] },
       textMatch: isJson,
       run(ctx) {
@@ -147,6 +157,7 @@ export const jsonToolsPlugin = definePlugin({
       icon: 'Search',
       aliases: ['qs2json', 'query to json', 'querystring to json', 'qs转json'],
       inputPolicy: { mode: 'auto' },
+      policy: LEARNABLE_PURE,
       textMatch: isQueryString,
       run(ctx) {
         try { return ctx.output.text(queryStringToJson(ctx.input.text)) }
@@ -161,6 +172,7 @@ export const jsonToolsPlugin = definePlugin({
       icon: 'Search',
       aliases: ['json2qs', 'json to query', 'json to querystring', 'json转qs'],
       inputPolicy: { mode: 'auto' },
+      policy: LEARNABLE_PURE,
       accepts: { kinds: ['json'] },
       textMatch: isJson,
       run(ctx) {

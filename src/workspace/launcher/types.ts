@@ -31,6 +31,25 @@ export type LauncherHostId = 'global-launcher' | 'editor-command-bar' | 'quick-e
 /** `command-palette` is retained as a legacy alias for `editor-command-bar`. */
 export type LauncherSurfaceId = LauncherHostId | 'command-palette'
 
+export type InputBinding = 'selection' | 'active-text' | 'prompt'
+export type SaveableParamValue = boolean | number | string | string[]
+export type CommitVia = 'execute' | 'preview-choice' | 'suggestion' | 'saved-action'
+
+export type SaveableRunSnapshot = {
+  inputBinding: InputBinding
+  savedParams: Record<string, SaveableParamValue>
+  contractFingerprint: string
+}
+
+export type CommittedRunContext = {
+  runId: string
+  actionKey: string
+  surfaceId: LauncherSurfaceId
+  via: CommitVia
+  inputBinding?: InputBinding
+  saveSnapshot?: SaveableRunSnapshot
+}
+
 export type LauncherHostCapability =
   | 'app-search'
   | 'plugin-surfaces'
@@ -206,6 +225,22 @@ export type LauncherParamSpec = {
   minSelect?: number
   /** For multi-select params: maximum selected items. Reaching it disables unselected options. */
   maxSelect?: number
+  /** Explicit opt-in for persisting this parameter in a Saved Action. */
+  saveable?: boolean
+  /** Required upper bound for saveable text parameters. */
+  saveableMaxLength?: number
+}
+
+export type ActionEffect = 'pure' | 'read' | 'local-write' | 'external-write' | 'destructive' | 'unknown'
+
+export type ToolActionPolicy = {
+  effect: ActionEffect
+  learnable: boolean
+}
+
+export const DEFAULT_TOOL_ACTION_POLICY: ToolActionPolicy = {
+  effect: 'unknown',
+  learnable: false,
 }
 
 /**
@@ -234,6 +269,13 @@ export type LauncherResultAction = {
   icon?: IconRef
   run: LauncherResultActionHandler
 }
+
+export type OutputIntent =
+  | 'copy'
+  | 'replace-active-text'
+  | 'insert'
+  | 'return-to-launcher'
+  | 'open-quick-editor'
 
 export type WorkflowObjectItemMetadata = {
   kind: 'workflow-object'
@@ -516,6 +558,14 @@ export type LauncherItem = {
   behavior: LauncherBehavior
   surfaces?: LauncherSurfaceId[]
   inputPolicy?: TextInputPolicy
+  /** Tool behavior metadata. Missing means {@link DEFAULT_TOOL_ACTION_POLICY}. */
+  actionPolicy?: ToolActionPolicy
+  /** Stable behavior contract hash; labels and saveability metadata are excluded. */
+  contractFingerprint?: string
+  /** Saved Action projections enter the same Commit Gate with a distinct source. */
+  commitVia?: CommitVia
+  /** Journal-management commands use the gate but do not journal themselves. */
+  experienceRecord?: boolean
   /** Host-only ranking nudge for a small number of host-owned items. */
   staticPriority?: number
   /** Host-owned ranking metadata. Plugins never construct resolved launcher items. */
@@ -689,6 +739,7 @@ export type PluginToolContribution<TSettings = unknown> = {
   icon?: IconRef
   aliases?: string[]
   inputPolicy?: TextInputPolicy
+  policy?: ToolActionPolicy
   params?: LauncherParamSpec[]
   defaultParams?: Record<string, unknown>
   /** When true, launcher selection prompts for params even when defaults exist. */

@@ -73,7 +73,6 @@ export function measureLatencySync<T>(
   } catch (error) {
     trackLatencyFrom(name, startedAt, {
       failed: true,
-      message: error instanceof Error ? error.message : String(error),
     })
     throw error
   }
@@ -85,8 +84,6 @@ export function queryTelemetryProps(query: string | undefined | null): TrackProp
   return {
     queryLength: q.length,
     queryEmpty: !q.trim(),
-    // Short preview for diagnosis only (local always-on log).
-    queryPreview: q.trim().slice(0, 32),
   }
 }
 
@@ -102,7 +99,6 @@ export function itemTelemetryProps(item: {
     itemKind: item.kind,
     pluginId: item.pluginId,
     behaviorType: item.behavior?.type,
-    titlePreview: item.display?.title?.slice(0, 48),
   }
 }
 

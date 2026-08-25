@@ -1,3 +1,5 @@
+import { sanitizeNoContentDetails } from '../contentBoundary'
+
 const LAUNCHER_PERF_STORAGE_KEY = 'hiven:launcher-perf'
 const LAUNCHER_PERF_PREFIX = '[hiven:launcher-perf]'
 /** Samples slower than this (ms) are flagged `slow: true` for quick scanning. */
@@ -238,6 +240,7 @@ function labelLooksLikeBehavior(label: string): boolean {
 }
 
 export function logLauncherPerf(label: string, details?: Record<string, unknown>): void {
+  details = sanitizeNoContentDetails(details)
   const durationMs =
     details && typeof details.durationMs === 'number' ? details.durationMs : undefined
   // Prefer explicit openId in details (session-start/end); else current session.
@@ -323,7 +326,6 @@ export async function measureLauncherPerf<T>(
   } catch (error) {
     logLauncherPerfDuration(label, startedAt, {
       failed: true,
-      message: error instanceof Error ? error.message : String(error),
     })
     throw error
   }

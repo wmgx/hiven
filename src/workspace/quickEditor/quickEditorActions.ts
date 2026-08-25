@@ -1,4 +1,3 @@
-import { useAppStore } from '../../store'
 import { openExternalUrl } from '../effectRunner'
 import { showToast } from '../toast'
 import type { FluxEffect, SerializedRange } from '../types'
@@ -59,12 +58,7 @@ export function applyEffectsToQuickEditor(effects: FluxEffect[]) {
           break
         }
         case 'status.message':
-          useAppStore.getState().setLastCommandStatus({
-            title: effect.message,
-            status: effect.level === 'error' ? 'error' : 'success',
-            message: effect.message,
-            updatedAt: Date.now(),
-          })
+          showToast(effect.message, effect.level)
           applied.push(effect)
           break
         default:

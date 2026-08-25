@@ -14,7 +14,9 @@ import type {
   LauncherExecuteResult,
   LauncherOutput,
   LauncherResultChoice,
+  LauncherResultAction,
   LauncherSurfaceId,
+  OutputIntent,
   PluginLauncherApi,
 } from './types'
 import { normalizeLauncherSurfaceId } from './types'
@@ -22,6 +24,18 @@ import { translate, type Locale } from '../../i18n'
 
 export const TEXT_OUTPUT_CHOICE_ID = 'launcher.text-output'
 export const REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID = 'launcher.replace-active-text-output'
+
+type HostOutputActionNode = LauncherResultChoice | LauncherResultAction
+const hostOutputIntentByAction = new WeakMap<object, OutputIntent>()
+
+function markHostOutputAction<T extends HostOutputActionNode>(action: T, intent: OutputIntent): T {
+  hostOutputIntentByAction.set(action, intent)
+  return action
+}
+
+export function getHostOutputIntent(action: HostOutputActionNode): OutputIntent | null {
+  return hostOutputIntentByAction.get(action) ?? null
+}
 
 function palette(locale: Locale, key: string): string {
   return translate(locale, 'palette', key)
@@ -32,7 +46,7 @@ function palette(locale: Locale, key: string): string {
  * `api` is captured so the copy action can run without re-plumbing.
  */
 export function textResult(text: string, api: PluginLauncherApi, locale: Locale = 'en'): LauncherExecuteResult {
-  const choice: LauncherResultChoice = {
+  const choice: LauncherResultChoice = markHostOutputAction({
     id: TEXT_OUTPUT_CHOICE_ID,
     title: text,
     preview: text,
@@ -41,7 +55,7 @@ export function textResult(text: string, api: PluginLauncherApi, locale: Locale 
       await api.copyText(text)
     },
     secondaryActions: [
-      {
+      markHostOutputAction({
         id: 'return-to-launcher',
         title: palette(locale, 'returnToLauncher'),
         icon: 'CornerDownLeft',
@@ -49,8 +63,8 @@ export function textResult(text: string, api: PluginLauncherApi, locale: Locale 
           await api.returnToLauncher(text)
           return { ok: true, keepOpen: true }
         },
-      },
-      {
+      }, 'return-to-launcher'),
+      markHostOutputAction({
         id: 'open-quick-editor',
         title: palette(locale, 'openQuickEditor'),
         icon: 'SquarePen',
@@ -58,9 +72,9 @@ export function textResult(text: string, api: PluginLauncherApi, locale: Locale 
           // Default replaceActiveText overwrites Quick Editor with one-step rollback.
           await api.replaceActiveText(text)
         },
-      },
+      }, 'open-quick-editor'),
     ],
-  }
+  }, 'copy')
   return { ok: true, output: { choices: [choice] } }
 }
 
@@ -69,7 +83,7 @@ export function textResult(text: string, api: PluginLauncherApi, locale: Locale 
  * copying. Still shows the value as the choice title/preview.
  */
 export function replaceActiveTextResult(text: string, api: PluginLauncherApi, locale: Locale = 'en'): LauncherExecuteResult {
-  const choice: LauncherResultChoice = {
+  const choice: LauncherResultChoice = markHostOutputAction({
     id: REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID,
     title: text,
     preview: text,
@@ -77,24 +91,24 @@ export function replaceActiveTextResult(text: string, api: PluginLauncherApi, lo
       await api.replaceActiveText(text)
     },
     secondaryActions: [
-      {
+      markHostOutputAction({
         id: 'copy',
         title: palette(locale, 'copy'),
         icon: 'Copy',
         run: async () => {
           await api.copyText(text)
         },
-      },
-      {
+      }, 'copy'),
+      markHostOutputAction({
         id: 'insert',
         title: palette(locale, 'insert'),
         icon: 'TextCursorInput',
         run: async () => {
           await api.insertText(text)
         },
-      },
+      }, 'insert'),
     ],
-  }
+  }, 'replace-active-text')
   return { ok: true, output: { choices: [choice] } }
 }
 

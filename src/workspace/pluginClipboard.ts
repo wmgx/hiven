@@ -87,7 +87,7 @@ export async function writeClipboardImageBytes(bytes: Uint8Array): Promise<void>
       return
     } catch {
       const decoded = await decodeImageBytesToRgba(bytes)
-      const image = await Image.new(decoded.rgba, decoded.width, decoded.height)
+      const image = await Image.new(new Uint8Array(decoded.rgba), decoded.width, decoded.height)
       await writeImage(image)
       return
     }

@@ -7,6 +7,8 @@
 
 import { definePlugin } from '@hiven/plugin'
 
+const LEARNABLE_PURE = { effect: 'pure', learnable: true } as const
+
 // ─── Base64 ───────────────────────────────────────────────────────────────────
 
 function base64Encode(text: string): string {
@@ -136,6 +138,7 @@ export const encodeDecodePlugin = definePlugin({
       icon: 'Binary',
       aliases: ['base64 encode', 'base64编码', 'b64 encode', 'btoa'],
       inputPolicy: { mode: 'auto' },
+      policy: LEARNABLE_PURE,
       textMatch: (text) => !isBase64(text), // text is NOT base64 → offer to encode
       run(ctx) {
         try { return ctx.output.text(base64Encode(ctx.input.text)) }
@@ -150,6 +153,7 @@ export const encodeDecodePlugin = definePlugin({
       icon: 'Binary',
       aliases: ['b64', 'base64', 'base64 decode', 'base64解码', 'b64 decode', 'atob'],
       inputPolicy: { mode: 'auto' },
+      policy: LEARNABLE_PURE,
       accepts: { kinds: ['base64'], aliases: ['b64', 'base64', 'base64 decode', 'base64解码'] },
       textMatch: isBase64,
       run(ctx) {

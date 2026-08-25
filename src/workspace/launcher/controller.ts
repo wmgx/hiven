@@ -18,18 +18,21 @@
  */
 
 import type {
+  CommittedRunContext,
+  CommitVia,
   LauncherExecuteResult,
   LauncherInputSpec,
   LauncherItem,
   LauncherOutput,
   LauncherParamSpec,
+  LauncherResultAction,
   LauncherResultChoice,
   LauncherSurfaceId,
   PluginLauncherApi,
 } from './types'
 import type { PluginNetworkApi, PluginPrivateStorageApi, PluginShellApi } from '../pluginTypes'
 import { appendUsageJournal } from '../usageJournal'
-import { isOutputResult } from './output'
+import { getHostOutputIntent, isOutputResult } from './output'
 import { translate, type Locale } from '../../i18n'
 import {
   TelemetryEvents,
@@ -38,6 +41,14 @@ import {
   trackLatencyFrom,
   telemetryNow,
 } from '../telemetry'
+import {
+  appendExperienceEvent,
+  currentExperienceSessionId,
+  newExperienceId,
+} from '../experience/journal'
+import { classifyExperienceError } from '../experience/errorType'
+import type { ExperienceErrorType, ExperienceEvent, ExperienceRunStatus } from '../experience/types'
+import { isSafeExperienceIdentifier } from '../contentBoundary'
 
 // ─── Frames ──────────────────────────────────────────────────────────────────
 
@@ -76,6 +87,7 @@ export type ResultFrame = {
   output: LauncherOutput
   /** The item or choice that produced this output (for labeling). */
   sourceTitle?: string
+  committedRun?: CommittedRunContext
 }
 
 export type LauncherFrame = ListFrame | CollectInputFrame | ParamInputFrame | ResultFrame
@@ -109,6 +121,8 @@ export type LauncherControllerDeps = {
   requestClose: () => void
   /** Notify subscribers of a state change. */
   onChange: (state: LauncherControllerState) => void
+  /** Test/alternate sink injection; production defaults to the native journal. */
+  appendExperienceEvent?: (event: ExperienceEvent) => void
 }
 
 const emptyStorage: PluginPrivateStorageApi = {
@@ -164,6 +178,7 @@ export class LauncherController {
   private suggestDebounceTimer: ReturnType<typeof setTimeout> | null = null
   /** Last journaled command id (for prev_command_id chain). */
   private lastJournalCommandId: string | null = null
+  private fallbackSessionId = newExperienceId('session')
 
   constructor(deps: LauncherControllerDeps) {
     this.deps = deps
@@ -194,6 +209,7 @@ export class LauncherController {
       clearTimeout(this.suggestDebounceTimer)
       this.suggestDebounceTimer = null
     }
+    this.fallbackSessionId = newExperienceId('session')
     this.setState({ frames: [{ kind: 'list' }], error: null, busy: false })
   }
 
@@ -336,11 +352,13 @@ export class LauncherController {
     if (item.behavior.type === 'collect-input') {
       this.recordSelectionIfNeeded(item, options)
       if (this.hasObjectBlockText(options.objectBlockText)) {
-        await this.runAndHandle(
-          () => Promise.resolve(item.execute(this.buildExecutionContext(item, options.objectBlockText))),
-          this.itemTitle(item),
+        await this.commitResolvedAction({
           item,
-        )
+          via: item.commitVia ?? 'execute',
+          params: this.defaultParamsFor(item),
+          sourceTitle: this.itemTitle(item),
+          execute: () => Promise.resolve(item.execute(this.buildExecutionContext(item, options.objectBlockText))),
+        })
         return
       }
       trackBehavior(TelemetryEvents.launcherEnterCollectInput, itemTelemetryProps(item))
@@ -355,11 +373,13 @@ export class LauncherController {
       // If Object Block text is available, skip collect-input and execute directly.
       if (this.hasObjectBlockText(options.objectBlockText)) {
         this.recordSelectionIfNeeded(item, options)
-        await this.runAndHandle(
-          () => Promise.resolve(item.execute(this.buildExecutionContext(item, options.objectBlockText))),
-          this.itemTitle(item),
+        await this.commitResolvedAction({
           item,
-        )
+          via: item.commitVia ?? 'execute',
+          params: this.defaultParamsFor(item),
+          sourceTitle: this.itemTitle(item),
+          execute: () => Promise.resolve(item.execute(this.buildExecutionContext(item, options.objectBlockText))),
+        })
         return
       }
       this.recordSelectionIfNeeded(item, options)
@@ -373,11 +393,13 @@ export class LauncherController {
 
     // perform: record before execution
     this.recordSelectionIfNeeded(item, options)
-    await this.runAndHandle(
-      () => Promise.resolve(item.execute(this.buildExecutionContext(item))),
-      this.itemTitle(item),
+    await this.commitResolvedAction({
       item,
-    )
+      via: item.commitVia ?? 'execute',
+      params: this.defaultParamsFor(item),
+      sourceTitle: this.itemTitle(item),
+      execute: () => Promise.resolve(item.execute(this.buildExecutionContext(item))),
+    })
   }
 
   setParamQuery(query: string): void {
@@ -506,10 +528,13 @@ export class LauncherController {
     if (this.shouldCollectTextInput(top.item)) {
       // If Object Block text is available, skip collect-input and execute directly with params.
       if (this.hasObjectBlockText(top.objectBlockText)) {
-        await this.runAndHandle(
-          () => Promise.resolve(top.item.executeWithParams?.(this.buildExecutionContext(top.item, top.objectBlockText), top.params) ?? top.item.execute(this.buildExecutionContext(top.item, top.objectBlockText))),
-          this.itemTitle(top.item),
-        )
+        await this.commitResolvedAction({
+          item: top.item,
+          via: top.item.commitVia ?? 'execute',
+          params: top.params,
+          sourceTitle: this.itemTitle(top.item),
+          execute: () => Promise.resolve(top.item.executeWithParams?.(this.buildExecutionContext(top.item, top.objectBlockText), top.params) ?? top.item.execute(this.buildExecutionContext(top.item, top.objectBlockText))),
+        })
         return
       }
       const frames = this.state.frames.slice(0, -1)
@@ -518,10 +543,13 @@ export class LauncherController {
       return
     }
 
-    await this.runAndHandle(
-      () => Promise.resolve(top.item.executeWithParams?.(this.buildExecutionContext(top.item), top.params) ?? top.item.execute(this.buildExecutionContext(top.item))),
-      this.itemTitle(top.item),
-    )
+    await this.commitResolvedAction({
+      item: top.item,
+      via: top.item.commitVia ?? 'execute',
+      params: top.params,
+      sourceTitle: this.itemTitle(top.item),
+      execute: () => Promise.resolve(top.item.executeWithParams?.(this.buildExecutionContext(top.item), top.params) ?? top.item.execute(this.buildExecutionContext(top.item))),
+    })
   }
 
   /** Update the text in the active collect-input frame. */
@@ -755,9 +783,12 @@ export class LauncherController {
     if (top.selectedSuggestionIndex >= 0) {
       const highlighted = top.previewOutput?.choices[top.selectedSuggestionIndex]
       if (highlighted) {
-        await this.runChoiceAction(() => highlighted.primaryAction(), highlighted.title, {
+        await this.commitResolvedAction({
+          item,
           via: 'suggestion',
-          systemKey: item.systemKey,
+          params: top.params ?? this.defaultParamsFor(item),
+          sourceTitle: highlighted.title,
+          resolvedChoice: highlighted,
         })
         return
       }
@@ -775,32 +806,37 @@ export class LauncherController {
       ? top.previewOutput?.choices[0]
       : undefined
     if (firstPreviewChoice && this.shouldPreviewInput(top) && !item.suggest) {
-      await this.runChoiceAction(() => firstPreviewChoice.primaryAction(), firstPreviewChoice.title, {
+      await this.commitResolvedAction({
+        item,
         via: 'preview-choice',
-        systemKey: item.systemKey,
+        params: top.params ?? this.defaultParamsFor(item),
+        sourceTitle: firstPreviewChoice.title,
+        resolvedChoice: firstPreviewChoice,
       })
       return
     }
 
-    await this.runAndHandle(
-      () => Promise.resolve(
+    await this.commitResolvedAction({
+      item,
+      via: item.commitVia ?? 'execute',
+      params: top.params ?? this.defaultParamsFor(item),
+      sourceTitle: this.itemTitle(item),
+      execute: () => Promise.resolve(
         top.params && item.executeWithParams
           ? item.executeWithParams(this.buildExecutionContext(item, inputText), top.params)
           : item.execute(this.buildExecutionContext(item, inputText)),
       ),
-      this.itemTitle(item),
-      item,
-      'submit-input',
-    )
+    })
   }
 
   /** Activate a result choice's primary action. */
   async activateChoice(choice: LauncherResultChoice): Promise<void> {
     trackBehavior(TelemetryEvents.launcherChoiceActivate, {
-      titlePreview: choice.title?.slice(0, 48),
       via: 'primary',
     })
-    await this.runChoiceAction(() => choice.primaryAction(), choice.title)
+    const top = this.topFrame()
+    const committedRun = top.kind === 'result' ? top.committedRun : undefined
+    await this.runChoiceAction(() => choice.primaryAction(), choice.title, undefined, committedRun, choice)
   }
 
   /** Activate a result choice's secondary action by id. */
@@ -808,18 +844,19 @@ export class LauncherController {
     const action = choice.secondaryActions?.find((a) => a.id === actionId)
     if (!action) return
     trackBehavior(TelemetryEvents.launcherChoiceActivate, {
-      titlePreview: action.title?.slice(0, 48),
       via: 'secondary',
       actionId,
     })
-    await this.runChoiceAction(() => action.run(), action.title, { via: 'secondary', actionId })
+    const top = this.topFrame()
+    const committedRun = top.kind === 'result' ? top.committedRun : undefined
+    await this.runChoiceAction(() => action.run(), action.title, { via: 'secondary', actionId }, committedRun, action)
   }
 
   /** Submit a multi-select result frame. */
   async submitResultSelection(choices: LauncherResultChoice[]): Promise<void> {
     const top = this.topFrame()
     if (top.kind !== 'result' || top.output.selection?.type !== 'multi') return
-    await this.runChoiceAction(() => top.output.selection?.submit(choices), top.sourceTitle ?? '')
+    await this.runChoiceAction(() => top.output.selection?.submit(choices), top.sourceTitle ?? '', undefined, top.committedRun)
   }
 
   /**
@@ -891,41 +928,170 @@ export class LauncherController {
 
   // ─── Execution plumbing ────────────────────────────────────────────────────
 
-  private async runAndHandle(
-    run: () => Promise<LauncherExecuteResult>,
-    sourceTitle: string,
-    item?: LauncherItem,
-    via: string = 'select',
-  ): Promise<void> {
+  private recordExperience(event: ExperienceEvent): void {
+    ;(this.deps.appendExperienceEvent ?? appendExperienceEvent)(event)
+  }
+
+  private committedRunFor(item: LauncherItem, via: CommitVia): CommittedRunContext | undefined {
+    if (item.experienceRecord === false || !isSafeExperienceIdentifier(item.systemKey)) return undefined
+    return {
+      runId: newExperienceId('run'),
+      actionKey: item.systemKey,
+      surfaceId: this.deps.surfaceId,
+      via,
+    }
+  }
+
+  private recordRunStarted(run: CommittedRunContext): void {
+    this.recordExperience({
+      eventId: newExperienceId('event'),
+      ts: Date.now(),
+      sessionId: currentExperienceSessionId(this.fallbackSessionId),
+      runId: run.runId,
+      eventType: 'run.started',
+      actionKey: run.actionKey,
+      surfaceId: run.surfaceId,
+      via: run.via,
+    })
+  }
+
+  private recordRunFinished(
+    run: CommittedRunContext,
+    status: ExperienceRunStatus,
+    errorType?: ExperienceErrorType,
+  ): void {
+    this.recordExperience({
+      eventId: newExperienceId('event'),
+      ts: Date.now(),
+      sessionId: currentExperienceSessionId(this.fallbackSessionId),
+      runId: run.runId,
+      eventType: 'run.finished',
+      actionKey: run.actionKey,
+      surfaceId: run.surfaceId,
+      via: run.via,
+      status,
+      errorType,
+    })
+  }
+
+  private recordOutputApplied(run: CommittedRunContext, node: LauncherResultChoice | LauncherResultAction): void {
+    const outputIntent = getHostOutputIntent(node)
+    if (!outputIntent) return
+    this.recordExperience({
+      eventId: newExperienceId('event'),
+      ts: Date.now(),
+      sessionId: currentExperienceSessionId(this.fallbackSessionId),
+      runId: run.runId,
+      eventType: 'output.applied',
+      actionKey: run.actionKey,
+      surfaceId: run.surfaceId,
+      via: run.via,
+      outputIntent,
+      outputApplication: 'explicit',
+    })
+  }
+
+  private async commitResolvedAction(input: {
+    item: LauncherItem
+    via: CommitVia
+    params: Record<string, unknown>
+    sourceTitle: string
+    execute?: () => Promise<LauncherExecuteResult>
+    resolvedChoice?: LauncherResultChoice
+  }): Promise<void> {
+    const { item, via, sourceTitle, execute, resolvedChoice } = input
+    // PR2 consumes params for LastSaveableRun; PR1 deliberately persists none.
+    void input.params
+    const committedRun = this.committedRunFor(item, via)
+    if (committedRun) this.recordRunStarted(committedRun)
+
     this.setState({ busy: true, error: null })
     const startedAt = telemetryNow()
+
+    if (resolvedChoice) {
+      let result: Awaited<ReturnType<LauncherResultChoice['primaryAction']>>
+      try {
+        result = await resolvedChoice.primaryAction()
+      } catch (error) {
+        const failure = classifyExperienceError(error, 'output-failed')
+        if (committedRun) this.recordRunFinished(committedRun, failure.status, failure.errorType)
+        trackLatencyFrom(TelemetryEvents.launcherChoiceLatency, startedAt, {
+          via,
+          systemKey: item.systemKey,
+          failed: true,
+        })
+        this.setState({ busy: false, error: error instanceof Error ? error.message : String(error) })
+        return
+      }
+
+      const launcherResult = result && typeof result === 'object' && 'ok' in result
+        ? result as LauncherExecuteResult
+        : undefined
+      const succeeded = launcherResult?.ok !== false
+      if (committedRun) {
+        if (succeeded) {
+          this.recordRunFinished(committedRun, 'success')
+          this.recordOutputApplied(committedRun, resolvedChoice)
+        } else {
+          const failure = classifyExperienceError(new Error(launcherResult.message), 'output-failed')
+          this.recordRunFinished(committedRun, failure.status, failure.errorType)
+        }
+      }
+      trackLatencyFrom(TelemetryEvents.launcherChoiceLatency, startedAt, {
+        via,
+        systemKey: item.systemKey,
+        terminal: !launcherResult,
+        failed: !succeeded,
+      })
+      if (launcherResult) {
+        await this.applyResult(launcherResult, sourceTitle, committedRun)
+      } else {
+        this.setState({ busy: false })
+        this.deps.requestClose()
+      }
+      return
+    }
+
+    if (!execute) return
     let result: LauncherExecuteResult
     try {
-      result = await run()
+      result = await execute()
     } catch (error) {
+      const failure = classifyExperienceError(error, 'provider-failed')
+      if (committedRun) this.recordRunFinished(committedRun, failure.status, failure.errorType)
       trackLatencyFrom(TelemetryEvents.launcherItemExecute, startedAt, {
-        ...(item ? itemTelemetryProps(item) : { titlePreview: sourceTitle.slice(0, 48) }),
+        ...itemTelemetryProps(item),
         via,
         failed: true,
-        message: error instanceof Error ? error.message : String(error),
       })
       this.setState({ busy: false, error: error instanceof Error ? error.message : String(error) })
       return
     }
+
+    if (committedRun) {
+      if (result.ok) {
+        this.recordRunFinished(committedRun, 'success')
+      } else {
+        const failure = classifyExperienceError(new Error(result.message), 'provider-failed')
+        this.recordRunFinished(committedRun, failure.status, failure.errorType)
+      }
+    }
     trackLatencyFrom(TelemetryEvents.launcherItemExecute, startedAt, {
-      ...(item ? itemTelemetryProps(item) : { titlePreview: sourceTitle.slice(0, 48) }),
+      ...itemTelemetryProps(item),
       via,
       ok: result.ok,
-      keepOpen: 'keepOpen' in result ? Boolean((result as { keepOpen?: boolean }).keepOpen) : undefined,
+      keepOpen: 'keepOpen' in result ? Boolean(result.keepOpen) : undefined,
       hasOutput: isOutputResult(result),
     })
-    this.applyResult(result, sourceTitle)
+    await this.applyResult(result, sourceTitle, committedRun)
   }
 
   private async runChoiceAction(
     run: () => ReturnType<LauncherResultChoice['primaryAction']>,
     sourceTitle: string,
     extra?: Record<string, unknown>,
+    committedRun?: CommittedRunContext,
+    actionNode?: LauncherResultChoice | LauncherResultAction,
   ): Promise<void> {
     this.setState({ busy: true, error: null })
     const startedAt = telemetryNow()
@@ -934,22 +1100,25 @@ export class LauncherController {
       result = await run()
     } catch (error) {
       trackLatencyFrom(TelemetryEvents.launcherChoiceLatency, startedAt, {
-        titlePreview: sourceTitle.slice(0, 48),
         failed: true,
-        message: error instanceof Error ? error.message : String(error),
         ...extra,
       })
       this.setState({ busy: false, error: error instanceof Error ? error.message : String(error) })
       return
     }
     trackLatencyFrom(TelemetryEvents.launcherChoiceLatency, startedAt, {
-      titlePreview: sourceTitle.slice(0, 48),
       terminal: !(result && typeof result === 'object' && 'ok' in result),
       ...extra,
     })
+    const launcherResult = result && typeof result === 'object' && 'ok' in result
+      ? result as LauncherExecuteResult
+      : undefined
+    if (committedRun && actionNode && launcherResult?.ok !== false) {
+      this.recordOutputApplied(committedRun, actionNode)
+    }
     // Choice actions may return more output (multi-level) or void (terminal).
-    if (result && typeof result === 'object' && 'ok' in result) {
-      this.applyResult(result as LauncherExecuteResult, sourceTitle)
+    if (launcherResult) {
+      await this.applyResult(launcherResult, sourceTitle, committedRun)
     } else {
       // Terminal action with no further output → close.
       this.setState({ busy: false })
@@ -957,7 +1126,11 @@ export class LauncherController {
     }
   }
 
-  private applyResult(result: LauncherExecuteResult, sourceTitle: string): void {
+  private async applyResult(
+    result: LauncherExecuteResult,
+    sourceTitle: string,
+    committedRun?: CommittedRunContext,
+  ): Promise<void> {
     if (!result.ok) {
       // Failure: keep launcher open, show error.
       this.setState({ busy: false, error: result.message })
@@ -966,14 +1139,15 @@ export class LauncherController {
     if (isOutputResult(result)) {
       // Single choice: execute directly without entering result frame
       if (result.output.choices.length === 1) {
-        void this.runChoiceAction(() => result.output.choices[0].primaryAction(), result.output.choices[0].title)
+        const choice = result.output.choices[0]
+        await this.runChoiceAction(() => choice.primaryAction(), choice.title, undefined, committedRun, choice)
         return
       }
       // Success with output: enter result-choice mode (keep open).
       this.setState({
         busy: false,
         error: null,
-        frames: [...this.state.frames, { kind: 'result', output: result.output, sourceTitle }],
+        frames: [...this.state.frames, { kind: 'result', output: result.output, sourceTitle, committedRun }],
       })
       return
     }

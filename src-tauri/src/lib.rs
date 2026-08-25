@@ -4957,6 +4957,55 @@ struct PluginKvPruneResult {
     removed_items: i64,
 }
 
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ExperienceEventInput {
+    event_id: String,
+    ts: i64,
+    session_id: String,
+    run_id: Option<String>,
+    event_type: String,
+    action_key: Option<String>,
+    surface_id: Option<String>,
+    via: Option<String>,
+    status: Option<String>,
+    error_type: Option<String>,
+    input_binding: Option<String>,
+    input_fingerprint: Option<String>,
+    param_signature: Option<String>,
+    safe_params_json: Option<String>,
+    output_intent: Option<String>,
+    output_application: Option<String>,
+    artifact_id: Option<String>,
+    candidate_key: Option<String>,
+    candidate_decision: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExperienceEventExport {
+    seq: i64,
+    event_id: String,
+    ts: i64,
+    session_id: String,
+    run_id: Option<String>,
+    event_type: String,
+    action_key: Option<String>,
+    surface_id: Option<String>,
+    via: Option<String>,
+    status: Option<String>,
+    error_type: Option<String>,
+    input_binding: Option<String>,
+    input_fingerprint: Option<String>,
+    param_signature: Option<String>,
+    safe_params_json: Option<String>,
+    output_intent: Option<String>,
+    output_application: Option<String>,
+    artifact_id: Option<String>,
+    candidate_key: Option<String>,
+    candidate_decision: Option<String>,
+}
+
 #[cfg_attr(not(test), allow(dead_code))]
 struct PluginKvDb {
     path: PathBuf,
@@ -5027,7 +5076,59 @@ fn open_plugin_kv_db(path: PathBuf) -> Result<PluginKvDb, String> {
                 "#,
         )
         .map_err(|e| e.to_string())?;
+    migrate_experience_journal(&connection)?;
     Ok(PluginKvDb { path, connection })
+}
+
+fn migrate_experience_journal(connection: &Connection) -> Result<(), String> {
+    let version: i64 = connection
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+    if version < 1 {
+        connection
+            .execute_batch(
+                r#"
+                CREATE TABLE IF NOT EXISTS experience_events (
+                  seq                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                  event_id            TEXT NOT NULL UNIQUE,
+                  ts                  INTEGER NOT NULL,
+                  session_id          TEXT NOT NULL,
+                  run_id              TEXT,
+                  event_type          TEXT NOT NULL,
+                  action_key          TEXT,
+                  surface_id          TEXT,
+                  via                 TEXT,
+                  status              TEXT,
+                  error_type          TEXT,
+                  input_binding       TEXT,
+                  input_fingerprint   TEXT,
+                  param_signature     TEXT,
+                  safe_params_json    TEXT,
+                  output_intent       TEXT,
+                  output_application  TEXT,
+                  artifact_id         TEXT,
+                  candidate_key       TEXT,
+                  candidate_decision  TEXT
+                );
+                CREATE INDEX IF NOT EXISTS experience_events_run_idx
+                  ON experience_events(run_id, seq);
+                CREATE INDEX IF NOT EXISTS experience_events_action_idx
+                  ON experience_events(action_key, ts);
+                CREATE INDEX IF NOT EXISTS experience_events_candidate_idx
+                  ON experience_events(candidate_key, ts);
+                PRAGMA user_version = 1;
+                "#,
+            )
+            .map_err(|e| e.to_string())?;
+    }
+    let cutoff = current_millis_i64()?.saturating_sub(30_i64.saturating_mul(86_400_000));
+    connection
+        .execute(
+            "DELETE FROM experience_events WHERE ts < ?1",
+            params![cutoff],
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 fn init_plugin_kv_db() -> Result<Mutex<PluginKvDb>, String> {
@@ -5421,6 +5522,264 @@ fn usage_journal_prune(
             .map_err(|e| e.to_string())?;
     }
 
+    Ok(())
+}
+
+fn validate_experience_identifier(value: &str, label: &str) -> Result<(), String> {
+    if value.is_empty()
+        || value.len() > 512
+        || !value
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, ':' | '.' | '_' | '-'))
+    {
+        return Err(format!("{} must be a stable no-content identifier", label));
+    }
+    Ok(())
+}
+
+fn validate_experience_enum(
+    value: Option<&str>,
+    allowed: &[&str],
+    label: &str,
+) -> Result<(), String> {
+    if value.is_some_and(|value| !allowed.contains(&value)) {
+        return Err(format!("{} is not allowed", label));
+    }
+    Ok(())
+}
+
+fn validate_experience_event(event: &ExperienceEventInput) -> Result<(), String> {
+    validate_experience_identifier(&event.event_id, "event_id")?;
+    validate_experience_identifier(&event.session_id, "session_id")?;
+    if let Some(value) = event.run_id.as_deref() {
+        validate_experience_identifier(value, "run_id")?;
+    }
+    if let Some(value) = event.action_key.as_deref() {
+        validate_experience_identifier(value, "action_key")?;
+    }
+    if let Some(value) = event.artifact_id.as_deref() {
+        validate_experience_identifier(value, "artifact_id")?;
+    }
+    if let Some(value) = event.candidate_key.as_deref() {
+        validate_experience_identifier(value, "candidate_key")?;
+    }
+    validate_experience_enum(
+        Some(event.event_type.as_str()),
+        &[
+            "run.started",
+            "run.finished",
+            "output.applied",
+            "artifact.saved",
+            "artifact.invoked",
+            "artifact.deleted",
+            "candidate.surfaced",
+            "candidate.dismissed",
+        ],
+        "event_type",
+    )?;
+    validate_experience_enum(
+        event.surface_id.as_deref(),
+        &[
+            "global-launcher",
+            "editor-command-bar",
+            "quick-editor-command",
+            "command-palette",
+        ],
+        "surface_id",
+    )?;
+    validate_experience_enum(
+        event.via.as_deref(),
+        &["execute", "preview-choice", "suggestion", "saved-action"],
+        "via",
+    )?;
+    validate_experience_enum(
+        event.status.as_deref(),
+        &["success", "failed", "cancelled"],
+        "status",
+    )?;
+    validate_experience_enum(
+        event.error_type.as_deref(),
+        &[
+            "permission-denied",
+            "timeout",
+            "validation",
+            "provider-failed",
+            "output-failed",
+            "unknown",
+        ],
+        "error_type",
+    )?;
+    validate_experience_enum(
+        event.input_binding.as_deref(),
+        &["selection", "active-text", "prompt"],
+        "input_binding",
+    )?;
+    validate_experience_enum(
+        event.output_intent.as_deref(),
+        &[
+            "copy",
+            "replace-active-text",
+            "insert",
+            "return-to-launcher",
+            "open-quick-editor",
+        ],
+        "output_intent",
+    )?;
+    validate_experience_enum(
+        event.output_application.as_deref(),
+        &["explicit"],
+        "output_application",
+    )?;
+    validate_experience_enum(
+        event.candidate_decision.as_deref(),
+        &["ignore-once", "suppress-cluster", "disable-action-learning"],
+        "candidate_decision",
+    )?;
+    if let Some(value) = event.safe_params_json.as_deref() {
+        if value.len() > 16 * 1024 {
+            return Err("safe_params_json is too large".to_string());
+        }
+        let parsed: serde_json::Value = serde_json::from_str(value).map_err(|e| e.to_string())?;
+        if !parsed.is_object() {
+            return Err("safe_params_json must be an object".to_string());
+        }
+    }
+    if event.event_type.starts_with("run.") || event.event_type == "output.applied" {
+        if event.run_id.is_none()
+            || event.action_key.is_none()
+            || event.surface_id.is_none()
+            || event.via.is_none()
+        {
+            return Err("run events require run_id, action_key, surface_id, and via".to_string());
+        }
+    }
+    if event.event_type == "run.finished" && event.status.is_none() {
+        return Err("run.finished requires status".to_string());
+    }
+    if event.event_type == "output.applied"
+        && (event.output_intent.is_none()
+            || event.output_application.as_deref() != Some("explicit"))
+    {
+        return Err("output.applied requires an explicit output intent".to_string());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn experience_journal_append(event: ExperienceEventInput) -> Result<(), String> {
+    validate_experience_event(&event)?;
+    let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
+    db.connection
+        .execute(
+            r#"
+            INSERT INTO experience_events (
+              event_id, ts, session_id, run_id, event_type,
+              action_key, surface_id, via, status, error_type,
+              input_binding, input_fingerprint, param_signature, safe_params_json,
+              output_intent, output_application, artifact_id, candidate_key, candidate_decision
+            ) VALUES (
+              ?1, ?2, ?3, ?4, ?5,
+              ?6, ?7, ?8, ?9, ?10,
+              ?11, ?12, ?13, ?14,
+              ?15, ?16, ?17, ?18, ?19
+            )
+            "#,
+            params![
+                event.event_id,
+                event.ts,
+                event.session_id,
+                event.run_id,
+                event.event_type,
+                event.action_key,
+                event.surface_id,
+                event.via,
+                event.status,
+                event.error_type,
+                event.input_binding,
+                event.input_fingerprint,
+                event.param_signature,
+                event.safe_params_json,
+                event.output_intent,
+                event.output_application,
+                event.artifact_id,
+                event.candidate_key,
+                event.candidate_decision,
+            ],
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn experience_journal_export() -> Result<String, String> {
+    let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
+    let mut statement = db
+        .connection
+        .prepare(
+            r#"
+            SELECT seq, event_id, ts, session_id, run_id, event_type,
+                   action_key, surface_id, via, status, error_type,
+                   input_binding, input_fingerprint, param_signature, safe_params_json,
+                   output_intent, output_application, artifact_id, candidate_key, candidate_decision
+            FROM experience_events
+            ORDER BY seq ASC
+            "#,
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok(ExperienceEventExport {
+                seq: row.get(0)?,
+                event_id: row.get(1)?,
+                ts: row.get(2)?,
+                session_id: row.get(3)?,
+                run_id: row.get(4)?,
+                event_type: row.get(5)?,
+                action_key: row.get(6)?,
+                surface_id: row.get(7)?,
+                via: row.get(8)?,
+                status: row.get(9)?,
+                error_type: row.get(10)?,
+                input_binding: row.get(11)?,
+                input_fingerprint: row.get(12)?,
+                param_signature: row.get(13)?,
+                safe_params_json: row.get(14)?,
+                output_intent: row.get(15)?,
+                output_application: row.get(16)?,
+                artifact_id: row.get(17)?,
+                candidate_key: row.get(18)?,
+                candidate_decision: row.get(19)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    let mut events = Vec::new();
+    for row in rows {
+        events.push(row.map_err(|e| e.to_string())?);
+    }
+    serde_json::to_string_pretty(&events).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn experience_journal_clear_since(since_ts: i64) -> Result<(), String> {
+    if since_ts < 0 {
+        return Err("since_ts must be non-negative".to_string());
+    }
+    let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
+    db.connection
+        .execute(
+            "DELETE FROM experience_events WHERE ts >= ?1",
+            params![since_ts],
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn experience_journal_clear_all() -> Result<(), String> {
+    let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
+    db.connection
+        .execute("DELETE FROM experience_events", [])
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -6459,6 +6818,10 @@ pub fn run() {
             plugin_kv_clear,
             usage_journal_append,
             usage_journal_prune,
+            experience_journal_append,
+            experience_journal_export,
+            experience_journal_clear_since,
+            experience_journal_clear_all,
             plugin_blob_save,
             plugin_blob_read,
             plugin_blob_delete,
@@ -6875,6 +7238,94 @@ HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\App Paths\Example.e
                 )
                 .expect("oldest");
             assert_eq!(oldest_cmd, "cmd-b");
+        });
+    }
+
+    #[test]
+    fn experience_journal_migrates_validates_and_clears_no_content_events() {
+        fn event(
+            event_id: &str,
+            event_type: &str,
+            status: Option<&str>,
+            error_type: Option<&str>,
+            output_intent: Option<&str>,
+        ) -> ExperienceEventInput {
+            ExperienceEventInput {
+                event_id: event_id.to_string(),
+                ts: 10_000,
+                session_id: "session_test".to_string(),
+                run_id: Some("run_test".to_string()),
+                event_type: event_type.to_string(),
+                action_key: Some("plugin:test:tool:format".to_string()),
+                surface_id: Some("global-launcher".to_string()),
+                via: Some("execute".to_string()),
+                status: status.map(str::to_string),
+                error_type: error_type.map(str::to_string),
+                input_binding: None,
+                input_fingerprint: None,
+                param_signature: None,
+                safe_params_json: None,
+                output_intent: output_intent.map(str::to_string),
+                output_application: output_intent.map(|_| "explicit".to_string()),
+                artifact_id: None,
+                candidate_key: None,
+                candidate_decision: None,
+            }
+        }
+
+        with_isolated_home("experience-journal", |_home| {
+            experience_journal_append(event("event_start", "run.started", None, None, None))
+                .expect("append started");
+            experience_journal_append(event(
+                "event_finish",
+                "run.finished",
+                Some("success"),
+                None,
+                None,
+            ))
+            .expect("append finished");
+            experience_journal_append(event(
+                "event_output",
+                "output.applied",
+                None,
+                None,
+                Some("copy"),
+            ))
+            .expect("append output");
+
+            let exported = experience_journal_export().expect("export journal");
+            let rows: serde_json::Value = serde_json::from_str(&exported).expect("valid JSON");
+            assert_eq!(rows.as_array().map(Vec::len), Some(3));
+            assert!(!exported.contains("message"));
+
+            let invalid_error = event(
+                "event_bad_error",
+                "run.finished",
+                Some("failed"),
+                Some("cancelled"),
+                None,
+            );
+            assert!(experience_journal_append(invalid_error).is_err());
+
+            let mut unsafe_action = event("event_bad_action", "run.started", None, None, None);
+            unsafe_action.action_key = Some("https://secret.example/path".to_string());
+            assert!(experience_journal_append(unsafe_action).is_err());
+
+            let db = get_plugin_kv_db().expect("db").lock().expect("lock");
+            let version: i64 = db
+                .connection
+                .query_row("PRAGMA user_version", [], |row| row.get(0))
+                .expect("user_version");
+            assert_eq!(version, 1);
+            drop(db);
+
+            experience_journal_clear_since(10_000).expect("clear since");
+            assert_eq!(experience_journal_export().expect("export empty"), "[]");
+
+            experience_journal_append(event("event_again", "run.started", None, None, None))
+                .expect("append after clear");
+            experience_journal_clear_all().expect("clear all");
+            assert_eq!(experience_journal_export().expect("export empty again"), "[]");
         });
     }
 

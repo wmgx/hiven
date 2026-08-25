@@ -1,10 +1,10 @@
 {
-  "version": 44,
+  "version": 45,
   "packages": [
     {
       "pluginId": "encode-decode",
       "dir": "encode-decode",
-      "version": "2.2.0"
+      "version": "2.3.0"
     },
     {
       "pluginId": "formatter",
@@ -14,12 +14,12 @@
     {
       "pluginId": "json-tools",
       "dir": "json-tools",
-      "version": "2.1.0"
+      "version": "2.2.0"
     },
     {
       "pluginId": "line-tools",
       "dir": "line-tools",
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "pluginId": "text-utils",
@@ -54,7 +54,7 @@
     {
       "pluginId": "translate",
       "dir": "translate",
-      "version": "1.0.4"
+      "version": "1.0.8"
     },
     {
       "pluginId": "regex-tester",
@@ -64,7 +64,7 @@
     {
       "pluginId": "text-diff",
       "dir": "textDiff",
-      "version": "3.2.1"
+      "version": "3.2.2"
     },
     {
       "pluginId": "clipboard-history",
@@ -74,7 +74,7 @@
     {
       "pluginId": "js-filter",
       "dir": "jsFilter",
-      "version": "1.0.1"
+      "version": "1.0.2"
     },
     {
       "pluginId": "web-open",

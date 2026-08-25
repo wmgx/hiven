@@ -119,11 +119,12 @@ const controllerModule = loadModule('src/workspace/launcher/controller.ts', {
     ...stripTypeImports,
     stripI18nImport,
     /import\s*\{\s*appendUsageJournal\s*\}\s*from\s*'\.\.\/usageJournal'\s*;?\s*\n?/,
-    /import\s*\{\s*isOutputResult\s*\}\s*from\s*'\.\/output'\s*;?\s*\n?/,
+    /import\s*\{[^}]*isOutputResult[^}]*\}\s*from\s*'\.\/output'\s*;?\s*\n?/,
   ],
   globals: {
     translate,
     appendUsageJournal: async () => {},
+    getHostOutputIntent: output.getHostOutputIntent,
     isOutputResult: output.isOutputResult,
   },
 })
