@@ -117,6 +117,25 @@ export function getHostSystemPowerItems(): LauncherItem[] {
 export function getHostExperienceJournalItems(): LauncherItem[] {
   return [
     {
+      systemKey: 'host:experience:learning-inbox',
+      kind: 'host',
+      display: {
+        title: 'Learning Inbox',
+        titleI18n: { zh: '学习收件箱' },
+        subtitle: 'Review repeated non-default actions',
+        subtitleI18n: { zh: '查看重复出现的非默认动作' },
+        icon: 'Inbox',
+        aliases: ['learning candidate', 'saved action candidate', '学习候选', '可能值得保存'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['global-launcher'],
+      experienceRecord: false,
+      execute: async () => {
+        await requestOpenLauncherHostSurface('learning-inbox')
+        return { ok: true, keepOpen: true }
+      },
+    },
+    {
       systemKey: 'host:experience:export',
       kind: 'host',
       display: {

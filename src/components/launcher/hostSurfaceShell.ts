@@ -12,6 +12,7 @@ const HOST_SURFACE_SHELL: Record<LauncherHostSurfaceTarget, HostSurfaceShellConf
   'quick-editor': { closeOnBlur: false },
   'system-settings': { closeOnBlur: false },
   'system-plugins': { closeOnBlur: false },
+  'learning-inbox': { closeOnBlur: false },
 }
 
 export function getHostSurfaceShell(

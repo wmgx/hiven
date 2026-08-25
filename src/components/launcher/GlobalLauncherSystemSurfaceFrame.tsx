@@ -7,6 +7,7 @@ import { SurfaceBreadcrumbHeader } from '../SurfaceBreadcrumbHeader'
 import { SystemSettingsSurface } from '../SystemSettingsSurface'
 import { QuickEditorBreadcrumbActions } from '../quickEditor/QuickEditorBreadcrumbActions'
 import { loadMonacoNls } from '../../kits/editor/monacoNls'
+import { LearningInboxSurface } from '../learning/LearningInboxSurface'
 
 const BREADCRUMB_HEIGHT = 40
 const QuickEditorPanel = lazy(async () => {
@@ -55,6 +56,17 @@ export function GlobalLauncherSystemSurfaceFrame({
           <Suspense fallback={<div className="quick-editor-loading-skeleton" aria-hidden />}>
             <QuickEditorPanel onRequestExit={onBack} />
           </Suspense>
+        </div>
+      </div>
+    )
+  }
+
+  if (target === 'learning-inbox') {
+    return (
+      <div className="global-launcher-host-surface-shell flex flex-col min-h-0 outline-none" tabIndex={-1} style={{ height }}>
+        <SurfaceBreadcrumbHeader title={t(locale, 'palette.learningInboxTitle')} onBack={onBack} onClose={onClose} />
+        <div className="global-launcher-body" style={{ height: bodyHeight, maxHeight: bodyHeight, overflow: 'auto' }}>
+          <LearningInboxSurface />
         </div>
       </div>
     )
