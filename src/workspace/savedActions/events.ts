@@ -10,6 +10,7 @@ const fallbackSessionId = newExperienceId('session')
 export function recordSavedActionEvent(
   eventType: 'artifact.saved' | 'artifact.deleted',
   artifact: SavedActionV1,
+  candidateKey?: string,
 ): void {
   appendExperienceEvent({
     eventId: newExperienceId('event'),
@@ -18,6 +19,7 @@ export function recordSavedActionEvent(
     eventType,
     actionKey: artifact.baseActionKey,
     artifactId: artifact.id,
+    candidateKey,
     inputBinding: artifact.inputBinding,
     outputIntent: artifact.outputIntent,
   })

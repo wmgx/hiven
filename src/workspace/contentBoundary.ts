@@ -10,6 +10,8 @@ export const NO_CONTENT_SINKS = [
   'telemetry',
   'usage-journal',
   'experience-journal',
+  'experience-installation-secret',
+  'learning-candidate-suppressions',
 ] as const
 
 const SAFE_TELEMETRY_STRING_KEYS = new Set([

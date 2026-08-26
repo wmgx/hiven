@@ -5550,6 +5550,48 @@ fn validate_experience_enum(
     Ok(())
 }
 
+fn validate_experience_hmac(value: &str, label: &str) -> Result<(), String> {
+    if value.len() != 67
+        || !value.starts_with("h1:")
+        || !value[3..].chars().all(|ch| ch.is_ascii_hexdigit())
+    {
+        return Err(format!("{} must be an HMAC-SHA256 identifier", label));
+    }
+    Ok(())
+}
+
+fn validate_safe_params_json(value: &str) -> Result<(), String> {
+    if value.len() > 16 * 1024 {
+        return Err("safe_params_json is too large".to_string());
+    }
+    let parsed: serde_json::Value = serde_json::from_str(value).map_err(|e| e.to_string())?;
+    let params = parsed
+        .as_object()
+        .ok_or_else(|| "safe_params_json must be an object".to_string())?;
+    if params.len() > 64 {
+        return Err("safe_params_json has too many values".to_string());
+    }
+    for (key, value) in params {
+        validate_experience_identifier(key, "safe param key")?;
+        let valid = match value {
+            serde_json::Value::Bool(_) => true,
+            serde_json::Value::Number(value) => value.as_f64().is_some_and(f64::is_finite),
+            serde_json::Value::String(value) => value.len() <= 256,
+            serde_json::Value::Array(values) => {
+                values.len() <= 64
+                    && values
+                        .iter()
+                        .all(|value| value.as_str().is_some_and(|value| value.len() <= 256))
+            }
+            _ => false,
+        };
+        if !valid {
+            return Err("safe_params_json contains an invalid value".to_string());
+        }
+    }
+    Ok(())
+}
+
 fn validate_experience_event(event: &ExperienceEventInput) -> Result<(), String> {
     validate_experience_identifier(&event.event_id, "event_id")?;
     validate_experience_identifier(&event.session_id, "session_id")?;
@@ -5637,14 +5679,26 @@ fn validate_experience_event(event: &ExperienceEventInput) -> Result<(), String>
         &["ignore-once", "suppress-cluster", "disable-action-learning"],
         "candidate_decision",
     )?;
+    if let Some(value) = event.input_fingerprint.as_deref() {
+        validate_experience_hmac(value, "input_fingerprint")?;
+    }
+    if let Some(value) = event.param_signature.as_deref() {
+        validate_experience_hmac(value, "param_signature")?;
+    }
     if let Some(value) = event.safe_params_json.as_deref() {
-        if value.len() > 16 * 1024 {
-            return Err("safe_params_json is too large".to_string());
-        }
-        let parsed: serde_json::Value = serde_json::from_str(value).map_err(|e| e.to_string())?;
-        if !parsed.is_object() {
-            return Err("safe_params_json must be an object".to_string());
-        }
+        validate_safe_params_json(value)?;
+    }
+    let has_mining_fields = event.input_fingerprint.is_some()
+        || event.param_signature.is_some()
+        || event.safe_params_json.is_some();
+    if has_mining_fields
+        && (event.event_type != "run.started"
+            || event.input_binding.is_none()
+            || event.input_fingerprint.is_none()
+            || event.param_signature.is_none()
+            || event.safe_params_json.is_none())
+    {
+        return Err("mining fields must form a complete run.started snapshot".to_string());
     }
     if event.event_type.starts_with("run.") || event.event_type == "output.applied" {
         if event.run_id.is_none()
@@ -5681,6 +5735,20 @@ fn validate_experience_event(event: &ExperienceEventInput) -> Result<(), String>
             || event.via.as_deref() != Some("saved-action"))
     {
         return Err("artifact.invoked requires a saved-action run".to_string());
+    }
+    if event.event_type.starts_with("candidate.") {
+        if event.candidate_key.is_none() || event.action_key.is_none() {
+            return Err("candidate events require candidate_key and action_key".to_string());
+        }
+        if event.run_id.is_some() || has_mining_fields {
+            return Err("candidate events cannot contain run or mining fields".to_string());
+        }
+    }
+    if event.event_type == "candidate.dismissed" && event.candidate_decision.is_none() {
+        return Err("candidate.dismissed requires candidate_decision".to_string());
+    }
+    if event.event_type != "candidate.dismissed" && event.candidate_decision.is_some() {
+        return Err("candidate_decision is only allowed on candidate.dismissed".to_string());
     }
     Ok(())
 }
@@ -7510,9 +7578,49 @@ HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\App Paths\Example.e
             artifact.artifact_id = Some("artifact_test".to_string());
             experience_journal_append(artifact).expect("append artifact");
 
+            let mut mined = event("event_mined", "run.started", None, None, None);
+            mined.run_id = Some("run_mined".to_string());
+            mined.input_binding = Some("selection".to_string());
+            mined.input_fingerprint = Some(format!("h1:{}", "1".repeat(64)));
+            mined.param_signature = Some(format!("h1:{}", "2".repeat(64)));
+            mined.safe_params_json = Some(r#"{"separator":", "}"#.to_string());
+            experience_journal_append(mined).expect("append mining snapshot");
+
+            let mut partial = event("event_partial", "run.started", None, None, None);
+            partial.input_binding = Some("selection".to_string());
+            partial.safe_params_json = Some("{}".to_string());
+            assert!(experience_journal_append(partial).is_err());
+
+            let mut surfaced = event(
+                "event_candidate_surface",
+                "candidate.surfaced",
+                None,
+                None,
+                None,
+            );
+            surfaced.run_id = None;
+            surfaced.surface_id = None;
+            surfaced.via = None;
+            surfaced.candidate_key = Some("candidate_0123456789abcdef".to_string());
+            experience_journal_append(surfaced).expect("append candidate surface");
+
+            let mut dismissed = event(
+                "event_candidate_dismiss",
+                "candidate.dismissed",
+                None,
+                None,
+                None,
+            );
+            dismissed.run_id = None;
+            dismissed.surface_id = None;
+            dismissed.via = None;
+            dismissed.candidate_key = Some("candidate_0123456789abcdef".to_string());
+            dismissed.candidate_decision = Some("suppress-cluster".to_string());
+            experience_journal_append(dismissed).expect("append candidate dismissal");
+
             let exported = experience_journal_export().expect("export journal");
             let rows: serde_json::Value = serde_json::from_str(&exported).expect("valid JSON");
-            assert_eq!(rows.as_array().map(Vec::len), Some(4));
+            assert_eq!(rows.as_array().map(Vec::len), Some(7));
             assert!(!exported.contains("message"));
 
             let invalid_error = event(

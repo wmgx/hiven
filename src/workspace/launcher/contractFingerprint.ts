@@ -4,7 +4,7 @@ function optionValue(option: LauncherParamOption): string {
   return typeof option === 'string' ? option : option.value
 }
 
-function fnv1a64(value: string): string {
+export function fnv1a64(value: string): string {
   let hash = 0xcbf29ce484222325n
   for (const byte of new TextEncoder().encode(value)) {
     hash ^= BigInt(byte)

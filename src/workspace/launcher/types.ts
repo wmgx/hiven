@@ -47,12 +47,19 @@ export type BlockedSaveableRunSnapshot = {
   reason: 'unsaveable-non-default' | 'invalid-saveable-value'
 }
 
+export type MiningRunSnapshot = {
+  inputFingerprint: string
+  paramSignature: string
+  safeParamsJson: string
+}
+
 export type CommittedRunContext = {
   runId: string
   actionKey: string
   surfaceId: LauncherSurfaceId
   via: CommitVia
   inputBinding?: InputBinding
+  miningSnapshot?: MiningRunSnapshot
   saveSnapshot?: SaveableRunSnapshot
   saveBlocked?: BlockedSaveableRunSnapshot
   artifactId?: string

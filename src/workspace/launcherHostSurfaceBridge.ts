@@ -92,7 +92,8 @@ export function isLauncherHostSurfaceTarget(value: unknown): value is LauncherHo
     value === 'plugins' ||
     value === 'system-settings' ||
     value === 'system-plugins' ||
-    value === 'quick-editor'
+    value === 'quick-editor' ||
+    value === 'learning-inbox'
   )
 }
 

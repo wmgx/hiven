@@ -29,6 +29,7 @@ import type {
   LauncherResultAction,
   LauncherResultChoice,
   LauncherSurfaceId,
+  MiningRunSnapshot,
   PluginLauncherApi,
 } from './types'
 import type { PluginNetworkApi, PluginPrivateStorageApi, PluginShellApi } from '../pluginTypes'
@@ -51,6 +52,7 @@ import { classifyExperienceError } from '../experience/errorType'
 import type { ExperienceErrorType, ExperienceEvent, ExperienceRunStatus } from '../experience/types'
 import { isSafeExperienceIdentifier } from '../contentBoundary'
 import { extractSaveableParams } from '../experience/saveableParams'
+import { createMiningFingerprints } from '../experience/miningFingerprint'
 import { setLastSaveableRun } from '../savedActions/lastSaveableRun'
 import { touchSavedAction } from '../savedActions/store'
 
@@ -174,6 +176,7 @@ export type SelectOptions = {
 // ─── Controller ───────────────────────────────────────────────────────────
 
 export class LauncherController {
+  private readonly experienceRunQueues = new WeakMap<CommittedRunContext, Promise<void>>()
   private state: LauncherControllerState
   private deps: LauncherControllerDeps
   private previewRunId = 0
@@ -380,6 +383,8 @@ export class LauncherController {
           item,
           via: item.commitVia ?? 'execute',
           params: this.defaultParamsFor(item),
+          inputBinding: 'prompt',
+          inputText: options.objectBlockText,
           sourceTitle: this.itemTitle(item),
           execute: () => Promise.resolve(item.execute(this.buildExecutionContext(item, options.objectBlockText))),
         })
@@ -401,6 +406,8 @@ export class LauncherController {
           item,
           via: item.commitVia ?? 'execute',
           params: this.defaultParamsFor(item),
+          inputBinding: 'prompt',
+          inputText: options.objectBlockText,
           sourceTitle: this.itemTitle(item),
           execute: () => Promise.resolve(item.execute(this.buildExecutionContext(item, options.objectBlockText))),
         })
@@ -557,6 +564,8 @@ export class LauncherController {
           item: top.item,
           via: top.item.commitVia ?? 'execute',
           params: top.params,
+          inputBinding: 'prompt',
+          inputText: top.objectBlockText,
           sourceTitle: this.itemTitle(top.item),
           execute: () => Promise.resolve(top.item.executeWithParams?.(this.buildExecutionContext(top.item, top.objectBlockText), top.params) ?? top.item.execute(this.buildExecutionContext(top.item, top.objectBlockText))),
         })
@@ -814,6 +823,7 @@ export class LauncherController {
           via: 'suggestion',
           params: top.params ?? this.defaultParamsFor(item),
           inputBinding: 'prompt',
+          inputText,
           sourceTitle: highlighted.title,
           resolvedChoice: highlighted,
         })
@@ -838,6 +848,7 @@ export class LauncherController {
         via: 'preview-choice',
         params: top.params ?? this.defaultParamsFor(item),
         inputBinding: 'prompt',
+        inputText,
         sourceTitle: firstPreviewChoice.title,
         resolvedChoice: firstPreviewChoice,
       })
@@ -849,6 +860,7 @@ export class LauncherController {
       via: item.commitVia ?? 'execute',
       params: top.params ?? this.defaultParamsFor(item),
       inputBinding: 'prompt',
+      inputText,
       sourceTitle: this.itemTitle(item),
       execute: () => Promise.resolve(
         top.params && item.executeWithParams
@@ -972,8 +984,11 @@ export class LauncherController {
     }
   }
 
-  private recordRunStarted(run: CommittedRunContext): void {
-    this.recordExperience({
+  private recordRunStarted(
+    run: CommittedRunContext,
+    miningSnapshot?: Promise<MiningRunSnapshot | null>,
+  ): void {
+    const event: ExperienceEvent = {
       eventId: newExperienceId('event'),
       ts: Date.now(),
       sessionId: currentExperienceSessionId(this.fallbackSessionId),
@@ -982,7 +997,38 @@ export class LauncherController {
       actionKey: run.actionKey,
       surfaceId: run.surfaceId,
       via: run.via,
-    })
+      inputBinding: run.inputBinding,
+    }
+    if (!miningSnapshot) {
+      this.recordExperience(event)
+      return
+    }
+    const queued = miningSnapshot
+      .catch(() => null)
+      .then((snapshot) => {
+        if (snapshot) {
+          run.miningSnapshot = snapshot
+          event.inputFingerprint = snapshot.inputFingerprint
+          event.paramSignature = snapshot.paramSignature
+          event.safeParamsJson = snapshot.safeParamsJson
+        }
+        this.recordExperience(event)
+      })
+    this.experienceRunQueues.set(run, queued)
+    void queued.catch(() => {})
+  }
+
+  private queueExperience(run: CommittedRunContext, event: ExperienceEvent): void {
+    const pending = this.experienceRunQueues.get(run)
+    if (!pending) {
+      this.recordExperience(event)
+      return
+    }
+    const queued = pending
+      .catch(() => {})
+      .then(() => this.recordExperience(event))
+    this.experienceRunQueues.set(run, queued)
+    void queued.catch(() => {})
   }
 
   private recordRunFinished(
@@ -990,7 +1036,7 @@ export class LauncherController {
     status: ExperienceRunStatus,
     errorType?: ExperienceErrorType,
   ): void {
-    this.recordExperience({
+    this.queueExperience(run, {
       eventId: newExperienceId('event'),
       ts: Date.now(),
       sessionId: currentExperienceSessionId(this.fallbackSessionId),
@@ -1007,7 +1053,7 @@ export class LauncherController {
   private recordOutputApplied(run: CommittedRunContext, node: LauncherResultChoice | LauncherResultAction): void {
     const outputIntent = getHostOutputIntent(node)
     if (!outputIntent) return
-    this.recordExperience({
+    this.queueExperience(run, {
       eventId: newExperienceId('event'),
       ts: Date.now(),
       sessionId: currentExperienceSessionId(this.fallbackSessionId),
@@ -1020,7 +1066,7 @@ export class LauncherController {
       outputApplication: 'explicit',
     })
     if (run.via === 'saved-action' && run.artifactId) {
-      this.recordExperience({
+      this.queueExperience(run, {
         eventId: newExperienceId('event'),
         ts: Date.now(),
         sessionId: currentExperienceSessionId(this.fallbackSessionId),
@@ -1061,12 +1107,14 @@ export class LauncherController {
     via: CommitVia
     params: Record<string, unknown>
     inputBinding?: InputBinding
+    inputText?: string
     sourceTitle: string
     execute?: () => Promise<LauncherExecuteResult>
     resolvedChoice?: LauncherResultChoice
   }): Promise<void> {
     const { item, via, sourceTitle, execute, resolvedChoice } = input
     const committedRun = this.committedRunFor(item, via)
+    let miningSnapshot: Promise<MiningRunSnapshot | null> | undefined
     if (
       committedRun &&
       via !== 'saved-action' &&
@@ -1084,6 +1132,15 @@ export class LauncherController {
           contractFingerprint: item.contractFingerprint,
           actionPolicy: item.actionPolicy,
         }
+        const api = this.deps.makeApi?.(item) ?? this.deps.api
+        const inputText = input.inputText ?? (
+          input.inputBinding === 'selection'
+            ? api.getSelectionText()
+            : input.inputBinding === 'active-text'
+              ? api.getActiveText()
+              : ''
+        )
+        miningSnapshot = createMiningFingerprints(inputText, saveable.params)
       } else {
         committedRun.saveBlocked = {
           blockedKeys: saveable.blockedKeys,
@@ -1091,7 +1148,7 @@ export class LauncherController {
         }
       }
     }
-    if (committedRun) this.recordRunStarted(committedRun)
+    if (committedRun) this.recordRunStarted(committedRun, miningSnapshot)
 
     this.setState({ busy: true, error: null })
     const startedAt = telemetryNow()
