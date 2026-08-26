@@ -39,6 +39,7 @@ export function buildGlobalLauncherItems({
       icon: domainItem.display.icon,
       aliases: domainItem.display.aliases,
       shortcut: resolveItemShortcutLabel(domainItem.systemKey, shortcuts),
+      disabled: Boolean(domainItem.disabledReason),
       domainItem,
       matchRanges: match?.ranges,
       matchType: match?.type,

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { CONTENT_SOURCE_STORES, NO_CONTENT_SINKS, sanitizeNoContentDetails } from '../src/workspace/contentBoundary.ts'
 import { computeContractFingerprint } from '../src/workspace/launcher/contractFingerprint.ts'
+import { assertLearnableToolSaveableContract } from '../src/workspace/launcher/toolContract.ts'
 
 const read = (path) => readFileSync(path, 'utf8')
 const canary = 'HIVEN_NO_CONTENT_CANARY_input_output_query_error'
@@ -67,6 +68,34 @@ for (const key of ['separator', 'prefix', 'suffix', 'left', 'right']) {
 assert.match(jsonTools, /key: 'indent'[^\n]+type: 'number'[^\n]+saveable: true/)
 assert.match(jsonTools, /key: 'sortKeys'[^\n]+type: 'boolean'[^\n]+saveable: true/)
 assert.ok((encodeDecode.match(/policy: LEARNABLE_PURE/g) ?? []).length >= 2)
+
+const learnableTool = {
+  id: 'future-tool',
+  title: 'Future tool',
+  policy: { effect: 'pure', learnable: true },
+  params: [{ key: 'mode', label: 'Mode', type: 'boolean', saveable: false }],
+  run: () => ({ ok: true }),
+}
+assert.doesNotThrow(() => assertLearnableToolSaveableContract(learnableTool))
+assert.throws(
+  () => assertLearnableToolSaveableContract({
+    ...learnableTool,
+    params: [{ key: 'mode', label: 'Mode', type: 'boolean' }],
+  }),
+  /future-tool.*mode.*saveable/,
+)
+assert.throws(
+  () => assertLearnableToolSaveableContract({
+    ...learnableTool,
+    params: [{ key: 'separator', label: 'Separator', type: 'text', saveable: true }],
+  }),
+  /future-tool.*separator.*saveableMaxLength/,
+)
+assert.doesNotThrow(() => assertLearnableToolSaveableContract({
+  ...learnableTool,
+  policy: { effect: 'unknown', learnable: false },
+  params: [{ key: 'opaque', label: 'Opaque', type: 'text' }],
+}))
 
 const adapter = read('src/workspace/launcher/toolAdapter.ts')
 assert.match(adapter, /actionPolicy: tool\.policy \?\? DEFAULT_TOOL_ACTION_POLICY/)

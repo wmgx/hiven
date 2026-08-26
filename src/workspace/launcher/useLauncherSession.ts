@@ -583,7 +583,7 @@ export function useLauncherSession({
       surfaceId: normalizedHostId,
     }))
     return staticItemFilter ? staticItemFilter(raw) : raw
-  }, [normalizedHostId, pluginRegistryVersion, pluginSettings, staticItemFilter])
+  }, [normalizedHostId, open, pluginRegistryVersion, pluginSettings, staticItemFilter])
 
   /** Host recents from plugin-opted persistable selections (contacts/chats/docs). */
   const persistableRecentItems = useMemo<LauncherItem[]>(() => {

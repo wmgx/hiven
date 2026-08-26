@@ -20,7 +20,7 @@ import {
 } from './registry'
 import { learnedLauncherItems } from '../learning/fire'
 import { measureLauncherPerf } from './perf'
-import { getHostExperienceJournalItems, getHostPaneControlItems, getHostSystemPowerItems } from './hostActions'
+import { getHostExperienceJournalItems, getHostPaneControlItems, getHostSavedActionItems, getHostSystemPowerItems } from './hostActions'
 import { registerPluginSurfacePanelProvider } from '../pluginSurfacePanelProvider'
 import { registerWorkflowOutputShelfPanelProvider } from '../workflowOutputShelfPanelProvider'
 
@@ -36,6 +36,7 @@ export function registerHostLauncherProviders(): void {
     ...getHostPaneControlItems(),
     ...getHostSystemPowerItems(),
     ...getHostExperienceJournalItems(),
+    ...getHostSavedActionItems(),
     ...getHostAppLauncherStaticItems(),
     ...getTextPipelineLauncherItems(),
     // Kill Process: first-level command → collect-input second level (suggest list).

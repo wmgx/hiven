@@ -29,6 +29,7 @@ import { normalizeLauncherSurfaceId } from './types'
 import { emptyResult, textResult, replaceActiveTextResult, errorResult, choicesResult, REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID } from './output'
 import { toDirectAnswer } from './normalizeContribution'
 import { computeContractFingerprint } from './contractFingerprint'
+import { assertLearnableToolSaveableContract } from './toolContract'
 import type { Locale } from '../../i18n'
 import { getPluginPermissionSnapshot } from '../pluginPermissions'
 import { createPluginShell } from '../pluginShell'
@@ -91,6 +92,7 @@ export function adaptToolToLauncherItem(
   tool: PluginToolContribution,
   options: ToolAdaptOptions,
 ): LauncherItem {
+  assertLearnableToolSaveableContract(tool)
   const launcherOpt = tool.surfaces?.launcher
   const launcherOptions = typeof launcherOpt === 'object' ? launcherOpt : undefined
   const mode: TextInputMode = tool.inputPolicy?.mode ?? 'auto'
