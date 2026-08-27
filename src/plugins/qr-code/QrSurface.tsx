@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, IconButton, SegmentedControl, Select, TextArea } from '@hiven/plugin-ui'
+import { Button, ContextMenu, IconButton, SegmentedControl, Select, TextArea } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
 import {
   DEFAULT_QR_ERROR_LEVEL,
@@ -21,12 +21,6 @@ import {
 } from './qrCore'
 
 type Mode = 'generate' | 'scan'
-
-type ContextMenuState = {
-  x: number
-  y: number
-  items: Array<{ id: string; label: string; run: () => void }>
-}
 
 function decodeErrorKey(code: Exclude<QrDecodeResult, { ok: true }>['code']): string {
   if (code === 'not-image') return 'error.notImage'
@@ -56,9 +50,7 @@ export function QrSurface(props: PluginSurfaceProps) {
   const [scanError, setScanError] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [menu, setMenu] = useState<ContextMenuState | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const payload = text.trim()
@@ -142,8 +134,6 @@ export function QrSurface(props: PluginSurfaceProps) {
     if (file) void decodeBlob(file)
   }, [decodeBlob])
 
-  const closeMenu = useCallback(() => setMenu(null), [])
-
   const copyText = useCallback(async (value: string, toastKey: string) => {
     if (!value) return
     try {
@@ -200,40 +190,6 @@ export function QrSurface(props: PluginSurfaceProps) {
     link.click()
     host.showMessage(t('toast.downloaded'), 'success')
   }, [dataUrl, host, t])
-
-  const openQrMenu = useCallback((event: { clientX: number; clientY: number; preventDefault: () => void; stopPropagation: () => void }) => {
-    if (!dataUrl) return
-    event.preventDefault()
-    event.stopPropagation()
-    const width = 168
-    const height = 120
-    setMenu({
-      x: Math.min(event.clientX, window.innerWidth - width),
-      y: Math.min(event.clientY, window.innerHeight - height),
-      items: [
-        { id: 'copy-image', label: t('action.copyImage'), run: () => void copyImage() },
-        { id: 'copy-base64', label: t('action.copyBase64'), run: () => void copyBase64() },
-        { id: 'download', label: t('action.download'), run: downloadImage },
-      ],
-    })
-  }, [copyBase64, copyImage, dataUrl, downloadImage, t])
-
-  useEffect(() => {
-    if (!menu) return
-    const onPointerDown = (event: PointerEvent) => {
-      if (menuRef.current?.contains(event.target as Node)) return
-      closeMenu()
-    }
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closeMenu()
-    }
-    window.addEventListener('pointerdown', onPointerDown)
-    window.addEventListener('keydown', onKeyDown)
-    return () => {
-      window.removeEventListener('pointerdown', onPointerDown)
-      window.removeEventListener('keydown', onKeyDown)
-    }
-  }, [closeMenu, menu])
 
   return (
     <section className="qr-surface" aria-label={t('surface.title')} data-no-drag>
@@ -302,15 +258,25 @@ export function QrSurface(props: PluginSurfaceProps) {
             />
           </div>
           <div className="qr-surface__pane qr-surface__pane--preview">
-            <div className="qr-surface__preview" onContextMenu={openQrMenu}>
-              {dataUrl ? (
-                <img src={dataUrl} alt={t('surface.title')} draggable={false} />
-              ) : (
-                <div className={genError ? 'qr-surface__error' : 'qr-surface__placeholder'}>
-                  {genError || t('generate.empty')}
+            <ContextMenu
+              disabled={!dataUrl}
+              trigger={
+                <div className="qr-surface__preview">
+                  {dataUrl ? (
+                    <img src={dataUrl} alt={t('surface.title')} draggable={false} />
+                  ) : (
+                    <div className={genError ? 'qr-surface__error' : 'qr-surface__placeholder'}>
+                      {genError || t('generate.empty')}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              }
+              items={[
+                { key: 'copy-image', label: t('action.copyImage'), onSelect: () => void copyImage() },
+                { key: 'copy-base64', label: t('action.copyBase64'), onSelect: () => void copyBase64() },
+                { key: 'download', label: t('action.download'), onSelect: downloadImage },
+              ]}
+            />
             <div className="qr-surface__actions">
               <Button type="button" disabled={!dataUrl} onClick={() => void copyBase64()}>
                 {t('action.copyBase64')}
@@ -364,49 +330,21 @@ export function QrSurface(props: PluginSurfaceProps) {
             {scanError ? (
               <div className="qr-surface__error">{scanError}</div>
             ) : (
-              <pre
-                className="qr-surface__result"
-                onContextMenu={(event) => {
-                  if (!scanResult) return
-                  event.preventDefault()
-                  event.stopPropagation()
-                  setMenu({
-                    x: Math.min(event.clientX, window.innerWidth - 168),
-                    y: Math.min(event.clientY, window.innerHeight - 56),
-                    items: [
-                      { id: 'copy-text', label: t('action.copyText'), run: () => void copyText(scanResult, 'toast.copiedText') },
-                    ],
-                  })
-                }}
-              >
-                {busy ? t('scan.working') : (scanResult || t('scan.drop'))}
-              </pre>
+              <ContextMenu
+                disabled={!scanResult}
+                trigger={
+                  <pre className="qr-surface__result">
+                    {busy ? t('scan.working') : (scanResult || t('scan.drop'))}
+                  </pre>
+                }
+                items={[
+                  { key: 'copy-text', label: t('action.copyText'), onSelect: () => void copyText(scanResult, 'toast.copiedText') },
+                ]}
+              />
             )}
           </div>
         </div>
       )}
-      {menu ? (
-        <div
-          ref={menuRef}
-          className="qr-surface__menu"
-          role="menu"
-          style={{ left: menu.x, top: menu.y }}
-        >
-          {menu.items.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                closeMenu()
-                item.run()
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
     </section>
   )
 }

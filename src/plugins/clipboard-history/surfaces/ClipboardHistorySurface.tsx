@@ -13,6 +13,8 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import {
   Button,
+  ContextMenu,
+  Dialog,
   IconButton,
   SearchField,
   SegmentedControl,
@@ -23,6 +25,7 @@ import {
   SurfacePreview,
   ToolbarButton,
   useImeKeyboard,
+  type MenuItemSpec,
 } from '@hiven/plugin-ui'
 import { BackIcon, ClipboardIcon, CloseIcon, FileTextIcon, ImageIcon, SettingsIcon, StarIcon } from '@hiven/plugin-ui/icons'
 import type { ClipboardHistorySettings } from '../settings/model'
@@ -63,9 +66,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [filter, setFilter] = useState<FilterKind>('all')
   const [loading, setLoading] = useState(!hasInitialCache)
   const [titleDialog, setTitleDialog] = useState<FavoriteTitleDialogState | null>(null)
-  const [menu, setMenu] = useState<{ x: number; y: number; item: ClipboardHistoryItem } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
   const imeKeyDown = useImeKeyboard()
@@ -296,15 +297,11 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     }
   }, [host, resolveFullItem, t])
 
-  const openItemMenu = useCallback((event: { clientX: number; clientY: number; preventDefault: () => void; stopPropagation: () => void }, item: ClipboardHistoryItem) => {
-    event.preventDefault()
-    event.stopPropagation()
-    setMenu({
-      x: Math.min(event.clientX, window.innerWidth - 168),
-      y: Math.min(event.clientY, window.innerHeight - 120),
-      item,
-    })
-  }, [])
+  const itemContextMenuItems = useCallback((item: ClipboardHistoryItem): MenuItemSpec[] => [
+    { key: 'paste', label: t('action.paste'), onSelect: () => void handlePaste(item) },
+    { key: 'copy', label: t('action.copy'), onSelect: () => void handleCopy(item) },
+    { key: 'delete', label: t('action.delete'), danger: true, onSelect: () => handleDelete(item.id) },
+  ], [handlePaste, handleCopy, handleDelete, t])
 
   const applyItemUpdate = useCallback((updated: ClipboardHistoryItem) => {
     setItems((current) =>
@@ -654,7 +651,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                             onPaste={handlePaste}
                             onDelete={handleDelete}
                             onFavorite={handleFavoriteClick}
-                            onContextMenu={(event) => openItemMenu(event, row.item)}
+                            menuItems={itemContextMenuItems(row.item)}
                           />
                         </div>
                       )
@@ -665,47 +662,46 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
             </div>
           </div>
 
-          <SurfacePreview
-            className="clipboard-history-preview"
-            data-launcher-scrollable
-            onContextMenu={(event) => {
-              if (!selectedItem) return
-              openItemMenu(event, selectedFullItem ?? selectedItem)
-            }}
-          >
-            {!selectedItem ? (
-              <SurfaceEmptyState>
-                {t('preview.empty')}
-              </SurfaceEmptyState>
-            ) : (
-              <>
-                <div className="clipboard-history-preview-content" data-launcher-scrollable>
-                  {renderPreview(selectedFullItem ?? selectedItem, t, host.storage)}
-                </div>
-                {(selectedFullItem ?? selectedItem).isFavorite && (
-                  <div className="clipboard-history-favorite-title-bar">
-                    <span className="clipboard-history-favorite-title-label">
-                      {(selectedFullItem ?? selectedItem).favoriteTitle || t('favorite.untitled')}
-                    </span>
-                    <ToolbarButton
-                      type="button"
-                      onClick={() => openFavoriteTitleDialog(selectedFullItem ?? selectedItem, 'edit')}
-                    >
-                      {t('action.editFavoriteTitle')}
-                    </ToolbarButton>
-                  </div>
-                )}
-                <div className="clipboard-history-meta">
-                  {getMetaRows(selectedFullItem ?? selectedItem, locale, t).map((row) => (
-                    <div key={row.label} className="clipboard-history-meta-row">
-                      <span>{row.label}</span>
-                      <strong>{row.value}</strong>
+          <ContextMenu
+            disabled={!selectedItem}
+            items={selectedItem ? itemContextMenuItems(selectedFullItem ?? selectedItem) : []}
+            trigger={
+              <SurfacePreview className="clipboard-history-preview" data-launcher-scrollable>
+                {!selectedItem ? (
+                  <SurfaceEmptyState>
+                    {t('preview.empty')}
+                  </SurfaceEmptyState>
+                ) : (
+                  <>
+                    <div className="clipboard-history-preview-content" data-launcher-scrollable>
+                      {renderPreview(selectedFullItem ?? selectedItem, t, host.storage)}
                     </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </SurfacePreview>
+                    {(selectedFullItem ?? selectedItem).isFavorite && (
+                      <div className="clipboard-history-favorite-title-bar">
+                        <span className="clipboard-history-favorite-title-label">
+                          {(selectedFullItem ?? selectedItem).favoriteTitle || t('favorite.untitled')}
+                        </span>
+                        <ToolbarButton
+                          type="button"
+                          onClick={() => openFavoriteTitleDialog(selectedFullItem ?? selectedItem, 'edit')}
+                        >
+                          {t('action.editFavoriteTitle')}
+                        </ToolbarButton>
+                      </div>
+                    )}
+                    <div className="clipboard-history-meta">
+                      {getMetaRows(selectedFullItem ?? selectedItem, locale, t).map((row) => (
+                        <div key={row.label} className="clipboard-history-meta-row">
+                          <span>{row.label}</span>
+                          <strong>{row.value}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </SurfacePreview>
+            }
+          />
         </div>
 
         <SurfaceFooterHints className="clipboard-history-footer">
@@ -716,23 +712,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       </>
     )
   }
-
-  useEffect(() => {
-    if (!menu) return
-    const onPointerDown = (event: PointerEvent) => {
-      if (menuRef.current?.contains(event.target as Node)) return
-      setMenu(null)
-    }
-    const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') setMenu(null)
-    }
-    window.addEventListener('pointerdown', onPointerDown)
-    window.addEventListener('keydown', onKeyDown)
-    return () => {
-      window.removeEventListener('pointerdown', onPointerDown)
-      window.removeEventListener('keydown', onKeyDown)
-    }
-  }, [menu])
 
   useEffect(() => {
     if (!titleDialog) return
@@ -791,44 +770,21 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
       {renderContent()}
 
-      {menu ? (
-        <div
-          ref={menuRef}
-          className="clipboard-history-menu"
-          role="menu"
-          style={{ left: menu.x, top: menu.y }}
-        >
-          <button type="button" role="menuitem" onClick={() => { const item = menu.item; setMenu(null); void handlePaste(item) }}>
-            {t('action.paste')}
-          </button>
-          <button type="button" role="menuitem" onClick={() => { const item = menu.item; setMenu(null); void handleCopy(item) }}>
-            {t('action.copy')}
-          </button>
-          <button type="button" role="menuitem" className="clipboard-history-danger-action" onClick={() => { const item = menu.item; setMenu(null); handleDelete(item.id) }}>
-            {t('action.delete')}
-          </button>
-        </div>
-      ) : null}
-
-      {titleDialog && (
-        <div
-          className="clipboard-history-title-dialog"
-          role="dialog"
-          aria-modal="true"
-          aria-label={t('favorite.titleDialog')}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') {
-              event.stopPropagation()
-              setTitleDialog(null)
-            }
-            if (event.key === 'Enter' && !imeKeyDown.shouldIgnoreKeyDown(event as unknown as KeyboardEvent)) {
-              event.preventDefault()
-              confirmFavoriteTitleDialog()
-            }
-          }}
-        >
-          <div className="clipboard-history-title-dialog-panel">
-            <div className="clipboard-history-title-dialog-title">{t('favorite.titleDialog')}</div>
+      <Dialog
+        open={Boolean(titleDialog)}
+        onOpenChange={(open) => { if (!open) setTitleDialog(null) }}
+        title={t('favorite.titleDialog')}
+      >
+        {titleDialog && (
+          <div
+            style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !imeKeyDown.shouldIgnoreKeyDown(event as unknown as KeyboardEvent)) {
+                event.preventDefault()
+                confirmFavoriteTitleDialog()
+              }
+            }}
+          >
             <input
               ref={titleInputRef}
               className="clipboard-history-title-dialog-input"
@@ -848,8 +804,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
               </ToolbarButton>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Dialog>
     </div>
   )
 }
@@ -865,7 +821,7 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   onPaste,
   onDelete,
   onFavorite,
-  onContextMenu,
+  menuItems,
 }: {
   item: ClipboardHistoryItem
   selected: boolean
@@ -877,7 +833,7 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   onPaste: (item: ClipboardHistoryItem) => Promise<void>
   onDelete: (id: string) => void
   onFavorite: (item: ClipboardHistoryItem) => void
-  onContextMenu?: (event: { clientX: number; clientY: number; preventDefault: () => void; stopPropagation: () => void }) => void
+  menuItems: MenuItemSpec[]
 }) {
   const ref = useRef<HTMLDivElement>(null)
 
@@ -890,45 +846,49 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   const pasteCount = item.pasteCount ?? 0
 
   return (
-    <div
-      ref={ref}
-      className={`clipboard-history-item-row${selected ? ' is-selected' : ''}${item.isFavorite ? ' is-favorite' : ''}`}
-      onContextMenu={onContextMenu}
-    >
-      <SurfaceListItem
-        type="button"
-        selected={selected}
-        className="clipboard-history-item"
-        onClick={() => onSelect(item.id)}
-        onMouseEnter={() => onHover && onHover(item.id)}
-        onDoubleClick={() => void onPaste(item)}
-      >
-        {renderItemMedia(item, storage)}
-        <span className="clipboard-history-item-text">
-          <span className="clipboard-history-item-title">{getItemTitle(item, t)}</span>
-          <span className="clipboard-history-item-subtitle">
-            {getItemSubtitle(item, locale, t)}
-            {pasteCount > 0 ? ` · ×${pasteCount}` : ''}
-          </span>
-        </span>
-      </SurfaceListItem>
-      <IconButton
-        type="button"
-        label={item.isFavorite ? t('action.unfavorite') : t('action.favorite')}
-        className={`clipboard-history-item-favorite${item.isFavorite ? ' is-active' : ''}`}
-        onClick={() => onFavorite(item)}
-      >
-        <StarIcon size={14} fill={item.isFavorite ? 'currentColor' : 'none'} />
-      </IconButton>
-      <IconButton
-        type="button"
-        label={t('action.delete')}
-        className="clipboard-history-item-delete"
-        onClick={() => onDelete(item.id)}
-      >
-        <CloseIcon size={14} />
-      </IconButton>
-    </div>
+    <ContextMenu
+      items={menuItems}
+      trigger={
+        <div
+          ref={ref}
+          className={`clipboard-history-item-row${selected ? ' is-selected' : ''}${item.isFavorite ? ' is-favorite' : ''}`}
+        >
+          <SurfaceListItem
+            type="button"
+            selected={selected}
+            className="clipboard-history-item"
+            onClick={() => onSelect(item.id)}
+            onMouseEnter={() => onHover && onHover(item.id)}
+            onDoubleClick={() => void onPaste(item)}
+          >
+            {renderItemMedia(item, storage)}
+            <span className="clipboard-history-item-text">
+              <span className="clipboard-history-item-title">{getItemTitle(item, t)}</span>
+              <span className="clipboard-history-item-subtitle">
+                {getItemSubtitle(item, locale, t)}
+                {pasteCount > 0 ? ` · ×${pasteCount}` : ''}
+              </span>
+            </span>
+          </SurfaceListItem>
+          <IconButton
+            type="button"
+            label={item.isFavorite ? t('action.unfavorite') : t('action.favorite')}
+            className={`clipboard-history-item-favorite${item.isFavorite ? ' is-active' : ''}`}
+            onClick={() => onFavorite(item)}
+          >
+            <StarIcon size={14} fill={item.isFavorite ? 'currentColor' : 'none'} />
+          </IconButton>
+          <IconButton
+            type="button"
+            label={t('action.delete')}
+            className="clipboard-history-item-delete"
+            onClick={() => onDelete(item.id)}
+          >
+            <CloseIcon size={14} />
+          </IconButton>
+        </div>
+      }
+    />
   )
 })
 

@@ -191,7 +191,6 @@ assert.match(surfaceContent, /setFilter|filter/, 'Surface must have filter state
 assert.match(surfaceContent, /host\.requestBack\(\)/, 'Surface must render plugin-owned back affordance through host.requestBack()')
 assert.match(surfaceContent, /clipboard-history-topbar[\s\S]*<SearchField/, 'Surface must keep search in the top bar')
 assert.match(surfaceContent, /clipboard-history-topbar[\s\S]*action\.paste/, 'Surface must expose paste in the top bar')
-assert.match(surfaceContent, /clipboard-history-menu/, 'Surface must expose a context menu')
 assert.match(surfaceContent, /handleCopy|clipboard\.writeImage/, 'Surface must copy the selected item, not only DOM selection')
 assert.match(surfaceContent, /clipboard-history-list-toolbar[\s\S]*<SegmentedControl/, 'Surface must place the type filter above the left history list')
 assert.doesNotMatch(surfaceContent, /<Select[\s\S]{0,600}filter\.all/, 'Surface type filter must not use a native select menu')

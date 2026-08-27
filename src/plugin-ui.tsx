@@ -13,6 +13,7 @@ import {
 import { Dialog as BaseDialog } from '@base-ui/react/dialog'
 import { Combobox as BaseCombobox } from '@base-ui/react/combobox'
 import { Menu as BaseMenu } from '@base-ui/react/menu'
+import { ContextMenu as BaseContextMenu } from '@base-ui/react/context-menu'
 import { NumberField as BaseNumberField } from '@base-ui/react/number-field'
 import { ScrollArea as BaseScrollArea } from '@base-ui/react/scroll-area'
 import { Select as BaseSelect } from '@base-ui/react/select'
@@ -115,6 +116,14 @@ type MenuProps = {
   onOpenChange?: (open: boolean) => void
 }
 
+type ContextMenuProps = {
+  trigger: ReactElement
+  items: MenuItemSpec[]
+  disabled?: boolean
+  className?: string
+  onOpenChange?: (open: boolean) => void
+}
+
 type SurfaceListItemProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   selected?: boolean
 }
@@ -127,6 +136,14 @@ type ConfirmDialogProps = {
   cancelLabel?: string
   onConfirm: () => void
   onCancel: () => void
+}
+
+type DialogProps = {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  title?: ReactNode
+  children: ReactNode
+  className?: string
 }
 
 function cx(...values: Array<string | false | undefined>): string {
@@ -445,6 +462,34 @@ export function Menu({ trigger, items, align = 'end', header, className, onOpenC
   )
 }
 
+export function ContextMenu({ trigger, items, disabled, className, onOpenChange }: ContextMenuProps) {
+  return (
+    <BaseContextMenu.Root disabled={disabled} onOpenChange={onOpenChange}>
+      <BaseContextMenu.Trigger render={trigger} />
+      <BaseContextMenu.Portal>
+        <BaseContextMenu.Positioner className="hiven-ui-select-positioner" data-launcher-scrollable sideOffset={4}>
+          <BaseContextMenu.Popup className={cx('hiven-ui-select-menu', 'hiven-ui-menu', className)}>
+            <MenuScroller>
+              {items.map((item) => (
+                <BaseContextMenu.Item
+                  key={item.key}
+                  className={cx('hiven-ui-menu-item', item.danger && 'is-danger')}
+                  disabled={item.disabled}
+                  closeOnClick={item.closeOnClick}
+                  onClick={item.onSelect}
+                >
+                  <span className="hiven-ui-menu-item-label">{item.label}</span>
+                  {item.description ? <span className="hiven-ui-menu-item-desc">{item.description}</span> : null}
+                </BaseContextMenu.Item>
+              ))}
+            </MenuScroller>
+          </BaseContextMenu.Popup>
+        </BaseContextMenu.Positioner>
+      </BaseContextMenu.Portal>
+    </BaseContextMenu.Root>
+  )
+}
+
 export const Slider = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Slider(
   props,
   ref,
@@ -477,6 +522,20 @@ export function SurfaceEmptyState({ className, ...props }: ComponentPropsWithout
 
 export function SurfaceFooterHints({ className, ...props }: ComponentPropsWithoutRef<'div'>) {
   return <div className={cx('hiven-ui-surface-footer-hints', className)} {...props} />
+}
+
+export function Dialog({ open, onOpenChange, title, children, className }: DialogProps) {
+  return (
+    <BaseDialog.Root open={open} onOpenChange={onOpenChange}>
+      <BaseDialog.Portal>
+        <BaseDialog.Backdrop className="hiven-ui-dialog" />
+        <BaseDialog.Popup className={cx('hiven-ui-dialog-panel', className)}>
+          {title ? <BaseDialog.Title className="hiven-ui-dialog-title">{title}</BaseDialog.Title> : null}
+          {children}
+        </BaseDialog.Popup>
+      </BaseDialog.Portal>
+    </BaseDialog.Root>
+  )
 }
 
 export function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', onConfirm, onCancel }: ConfirmDialogProps) {
