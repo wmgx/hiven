@@ -16,7 +16,7 @@ import { detectClipboardType, subscribeClipboardChange } from '../../launcher/cl
 import { TelemetryEvents, trackBehavior, trackLatency, trackPerf, telemetryNow } from '../telemetry'
 import { extractFeatures, featureSignature, isPlausibleToken, normalizeToken } from './features'
 import { verifyTransformChain, verifyTransformPair, type PureTransformRunner } from './pairing'
-import { putEvent, putPair, pruneOldEvents, saltedHash } from './store'
+import { putEvent, putPair, pruneOldEvents, pruneOldPairs, saltedHash } from './store'
 
 /** How many recent clipboard texts to keep in memory for pair/chain verification. */
 const TIMELINE_MAX = 6
@@ -143,6 +143,7 @@ export function startLearningObserver(): () => void {
   if (started) return () => undefined
   started = true
   void pruneOldEvents()
+  void pruneOldPairs()
   const unsubscribe = subscribeClipboardChange((text) => {
     try {
       handleClipboardText(text)

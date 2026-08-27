@@ -114,7 +114,7 @@ export interface Suppression {
 }
 
 const DB_NAME = 'hiven-learning'
-const DB_VERSION = 4
+const DB_VERSION = 5
 const STORE_EVENTS = 'events'
 const STORE_PAIRS = 'pairs'
 const STORE_RULES = 'rules'
@@ -124,6 +124,7 @@ const STORE_PATHS = 'paths'
 const SALT_KEY = 'hiven:learning:salt'
 const EVENT_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 const NAV_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
+const PAIR_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 
 function hasIndexedDb(): boolean {
   return typeof indexedDB !== 'undefined'
@@ -148,6 +149,16 @@ function openDb(): Promise<IDBDatabase | null> {
           const store = db.createObjectStore(STORE_PAIRS, { keyPath: 'id', autoIncrement: true })
           store.createIndex('inSig', 'inSig', { unique: false })
           store.createIndex('kind', 'kind', { unique: false })
+          store.createIndex('ts', 'ts', { unique: false })
+        } else if (request.transaction) {
+          // v5: pairs never had a TTL — the set only ever grew, so periodic
+          // clustering re-scanned an unbounded table. Add the `ts` index (data
+          // already has the field) so pruneOldPairs can sweep it like the
+          // other timelines.
+          const store = request.transaction.objectStore(STORE_PAIRS)
+          if (!store.indexNames.contains('ts')) {
+            store.createIndex('ts', 'ts', { unique: false })
+          }
         }
         // v2: user-confirmed rules + rejected-cluster suppressions.
         if (!db.objectStoreNames.contains(STORE_RULES)) {
@@ -554,4 +565,14 @@ export async function pruneOldNavigations(now: number = Date.now()): Promise<voi
   const cutoff = now - NAV_TTL_MS
   await pruneStoreByTs(STORE_NAV, cutoff)
   await pruneStoreByTs(STORE_PATHS, cutoff)
+}
+
+/**
+ * Bound the verified-pairs timeline. Without this, `queryAllPairs` (read by
+ * every periodic auto-learn pass) grows for as long as the app is installed —
+ * the full-table scan and clustering over it get slower release over release.
+ */
+export async function pruneOldPairs(now: number = Date.now()): Promise<void> {
+  const cutoff = now - PAIR_TTL_MS
+  await pruneStoreByTs(STORE_PAIRS, cutoff)
 }

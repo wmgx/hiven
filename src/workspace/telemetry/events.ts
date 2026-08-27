@@ -84,6 +84,12 @@ export const TelemetryEvents = {
   learningRuleAutoLearned: 'behavior:learning.rule_auto_learned',
   /** The user undid a newly-learned rule at fire time (badge → one-key undo). */
   learningRuleUndone: 'behavior:learning.rule_undone',
+  /**
+   * One full background auto-learn pass (candidate collection + induction +
+   * apply). Runs on a 10-minute timer regardless of launcher state — this is
+   * the label to check first if the launcher stutters roughly on that cadence.
+   */
+  learningAutoLearnPass: 'latency:learning.auto_learn_pass',
 } as const
 
 export type TelemetryEventName = (typeof TelemetryEvents)[keyof typeof TelemetryEvents]

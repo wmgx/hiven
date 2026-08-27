@@ -13,7 +13,8 @@
  * See doc/2026-08-12-direct-answer-workbench-design.md §8 (P2).
  */
 
-import { TelemetryEvents, trackBehavior, trackPerf } from '../telemetry'
+import { TelemetryEvents, measureLatency, trackBehavior, trackPerf } from '../telemetry'
+import { scheduleIdleWork } from '../scheduleIdleWork'
 import { selectProposableCandidates, type RuleCandidate } from './cluster'
 import { isShapeCovered, representativeTokens, type CoverageProbe } from './coverage'
 import { extractFeatures, featureSignature } from './features'
@@ -252,6 +253,12 @@ export async function undoLearnedRule(rule: LearnedRule): Promise<void> {
 const AUTO_LEARN_FIRST_DELAY_MS = 30_000
 /** Interval between later passes. Learning is not urgent; being cheap matters more. */
 const AUTO_LEARN_INTERVAL_MS = 10 * 60_000
+/**
+ * Idle-callback budget: run as soon as the main thread has a natural gap, but
+ * never wait longer than this even under sustained activity (the launcher
+ * being kept open + typed in continuously must not starve learning forever).
+ */
+const AUTO_LEARN_IDLE_TIMEOUT_MS = 5_000
 
 /**
  * Run silent learning in the background, off the launcher hot path.
@@ -259,14 +266,28 @@ const AUTO_LEARN_INTERVAL_MS = 10 * 60_000
  * Deliberately timer-driven rather than triggered on launcher open: opening the
  * launcher is the latency-critical moment (see doc/launcher-perf-telemetry.md),
  * and learning a rule 10 minutes later costs the user nothing.
+ *
+ * The timer only *schedules* — the actual pass runs via `scheduleIdleWork` so
+ * it lands in a gap between keystrokes/renders instead of firing mid-interaction
+ * on whatever main-thread tick the interval happens to land on.
  */
 export function startAutoLearnLoop(): () => void {
   let stopped = false
+  let cancelIdle: (() => void) | null = null
   const run = () => {
     if (stopped) return
-    void autoLearnNow().catch(() => {
-      // fail-soft: learning must never break the app
-    })
+    cancelIdle?.()
+    cancelIdle = scheduleIdleWork(() => {
+      cancelIdle = null
+      if (stopped) return
+      void measureLatency(
+        TelemetryEvents.learningAutoLearnPass,
+        () => autoLearnNow(),
+        (learnedCount) => ({ learnedCount }),
+      ).catch(() => {
+        // fail-soft: learning must never break the app
+      })
+    }, AUTO_LEARN_IDLE_TIMEOUT_MS)
   }
   const first = setTimeout(run, AUTO_LEARN_FIRST_DELAY_MS)
   const timer = setInterval(run, AUTO_LEARN_INTERVAL_MS)
@@ -274,6 +295,7 @@ export function startAutoLearnLoop(): () => void {
     stopped = true
     clearTimeout(first)
     clearInterval(timer)
+    cancelIdle?.()
   }
 }
 

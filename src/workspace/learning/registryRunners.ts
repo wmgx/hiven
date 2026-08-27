@@ -144,6 +144,14 @@ export function runLearnedChain(toolIds: readonly string[], text: string): strin
 }
 
 /**
+ * Registry mutations that land in a burst (e.g. auto-learn silently applying
+ * N candidates in a row, each via its own `putRule`) must not trigger N full
+ * `buildPureTransformRunners()` scans — coalesce to one rebuild per burst,
+ * the same way `useFrameBatchedLauncherItems` coalesces launcher item updates.
+ */
+const REBUILD_DEBOUNCE_MS = 50
+
+/**
  * Keep the observer's pure-transform runners in sync with the registry.
  * Idempotent-friendly; returns an unsubscribe.
  */
@@ -158,6 +166,20 @@ export function startPureTransformRunnerSync(): () => void {
       pluginCount: pluginRegistry.getAllPluginDefinitions().length,
     })
   }
+  // Immediate on start — the launcher needs runners ready before first paint,
+  // only later burst-triggered rebuilds should debounce.
   rebuild()
-  return pluginRegistry.subscribe(rebuild)
+  let rebuildTimer: ReturnType<typeof setTimeout> | null = null
+  const scheduleRebuild = () => {
+    if (rebuildTimer != null) clearTimeout(rebuildTimer)
+    rebuildTimer = setTimeout(() => {
+      rebuildTimer = null
+      rebuild()
+    }, REBUILD_DEBOUNCE_MS)
+  }
+  const unsubscribe = pluginRegistry.subscribe(scheduleRebuild)
+  return () => {
+    if (rebuildTimer != null) clearTimeout(rebuildTimer)
+    unsubscribe()
+  }
 }
