@@ -1,8 +1,6 @@
 import { useState, type ChangeEvent, type KeyboardEvent } from 'react'
 import {
   CalendarDays,
-  Check,
-  ChevronDown,
   Clipboard,
   Database,
   ExternalLink,
@@ -33,6 +31,7 @@ import type {
 } from '../workspace/pluginTypes'
 import { describePluginPermission } from '../workspace/pluginPermissions'
 import { translate, type Locale } from '../i18n'
+import { NumberField, Select, Switch } from '../plugin-ui'
 
 type PluginSettingsSchemaRendererProps<TSettings = unknown> = {
   schema: PluginSettingsSchema<TSettings>
@@ -167,12 +166,6 @@ function clampNumber(value: number, min?: number, max?: number): number {
   return value
 }
 
-function formatNumberInputValue(value: number): string {
-  if (!Number.isFinite(value)) return ''
-  if (Number.isInteger(value)) return String(value)
-  return String(Number(value.toFixed(4)))
-}
-
 function isEmptySettingsValue(value: unknown): boolean {
   if (value == null) return true
   if (typeof value === 'string') return value.trim() === ''
@@ -191,15 +184,7 @@ function validateSettingsFieldValue(
   raw: unknown,
   ctx: unknown,
   locale: Locale,
-  draft?: string,
 ): string {
-  if (field.kind === 'number' && draft !== undefined) {
-    if (draft.trim() === '') {
-      if (field.required) return translate(locale, 'scripts', 'settingsFieldRequired')
-    } else if (!Number.isFinite(Number.parseFloat(draft))) {
-      return translate(locale, 'scripts', 'settingsFieldInvalidNumber')
-    }
-  }
   if (field.required && isEmptySettingsValue(raw)) {
     return translate(locale, 'scripts', 'settingsFieldRequired')
   }
@@ -238,7 +223,6 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
 }: PluginSettingsSchemaRendererProps<TSettings>) {
   const record = getSettingsRecord(value)
   const [openObjectListCards, setOpenObjectListCards] = useState<Record<string, string>>({})
-  const [openSelectId, setOpenSelectId] = useState<string | null>(null)
   const [numberDrafts, setNumberDrafts] = useState<Record<string, string>>({})
   const [visibleSensitiveKeys, setVisibleSensitiveKeys] = useState<Set<string>>(new Set())
   const [touchedKeys, setTouchedKeys] = useState<Set<string>>(() => new Set())
@@ -293,53 +277,18 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
     onChange: (next: string) => void,
     disabled?: boolean,
   ) {
-    const selected = options.find((option) => option.value === currentValue) ?? options[0]
-    const isOpen = openSelectId === id
     return (
-      <div
-        className={`schema-select-wrap ${isOpen ? 'is-open' : ''}`}
-        onBlur={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-            setOpenSelectId((current) => (current === id ? null : current))
-          }
-        }}
-      >
-        <button
-          type="button"
-          className="schema-select-trigger"
-          disabled={disabled}
-          aria-haspopup="listbox"
-          aria-expanded={isOpen}
-          onClick={() => setOpenSelectId((current) => (current === id ? null : id))}
-        >
-          <span>{selected ? localize(selected.label, selected.labelI18n, locale) : ''}</span>
-          <ChevronDown className="schema-select-chevron" size={14} strokeWidth={1.8} />
-        </button>
-        {isOpen && (
-          <div className="schema-select-menu" role="listbox">
-            {options.map((option) => {
-              const selectedOption = option.value === currentValue
-              return (
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={selectedOption}
-                  className={`schema-select-option ${selectedOption ? 'is-selected' : ''}`}
-                  key={option.value}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => {
-                    onChange(option.value)
-                    setOpenSelectId(null)
-                  }}
-                >
-                  <span>{localize(option.label, option.labelI18n, locale)}</span>
-                  {selectedOption && <Check className="schema-select-check" size={13} strokeWidth={2} />}
-                </button>
-              )
-            })}
-          </div>
-        )}
-      </div>
+      <Select
+        id={id}
+        className="schema-select-wrap"
+        value={currentValue}
+        disabled={disabled}
+        options={options.map((option) => ({
+          value: option.value,
+          label: localize(option.label, option.labelI18n, locale),
+        }))}
+        onChange={(event) => onChange(event.currentTarget.value)}
+      />
     )
   }
 
@@ -376,11 +325,10 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
 
     if (itemField.kind === 'switch') {
       return (
-        <label className="schema-object-list-switch wr-field">
+        <div className="schema-object-list-switch wr-field">
           <span className="schema-object-list-switch-copy">{itemLabel}</span>
-          <input className="schema-native-hidden" type="checkbox" checked={Boolean(value)} onChange={(event) => onChange(event.currentTarget.checked)} />
-          <span className={`sw schema-switch ${Boolean(value) ? 'on' : ''}`} />
-        </label>
+          <Switch checked={Boolean(value)} onCheckedChange={onChange} aria-label={label} />
+        </div>
       )
     }
 
@@ -400,16 +348,12 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
         <label className="schema-object-list-field wr-field">
           {itemLabel}
           <span className="plugin-settings-num-field-row">
-            <input
-              className="wr-in"
-              type="text"
-              inputMode="decimal"
-              value={Number.isFinite(numeric) ? String(numeric) : ''}
-              onChange={(event) => {
-                const next = Number.parseFloat(event.currentTarget.value)
-                if (Number.isFinite(next)) onChange(clampNumber(next, itemField.min, itemField.max))
-                else if (event.currentTarget.value.trim() === '') onChange(0)
-              }}
+            <NumberField
+              value={Number.isFinite(numeric) ? numeric : 0}
+              min={itemField.min}
+              max={itemField.max}
+              aria-label={label}
+              onChange={(next) => onChange(clampNumber(next, itemField.min, itemField.max))}
             />
             {unitLabel && <span className="plugin-settings-num-unit">{unitLabel}</span>}
           </span>
@@ -513,20 +457,18 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
 
     if (field.kind === 'switch') {
       return (
-        <label className={`schema-row ${disabled ? 'is-disabled' : ''}`}>
+        <div className={`schema-row ${disabled ? 'is-disabled' : ''}`}>
           <span className="schema-row-icon"><Icon size={14} strokeWidth={1.8} /></span>
           {commonLabel}
           <span className="schema-row-control">
-            <input
-              className="schema-native-hidden"
-              type="checkbox"
+            <Switch
               checked={Boolean(record[field.key])}
               disabled={disabled}
-              onChange={(event: ChangeEvent<HTMLInputElement>) => setFieldValue(field.key, event.currentTarget.checked)}
+              aria-label={label}
+              onCheckedChange={(next) => setFieldValue(field.key, next)}
             />
-            <span className={`sw schema-switch ${Boolean(record[field.key]) ? 'on' : ''}`} />
           </span>
-        </label>
+        </div>
       )
     }
 
@@ -534,33 +476,13 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
       const scale = field.storageScale && field.storageScale > 0 ? field.storageScale : 1
       const rawValue = typeof record[field.key] === 'number' ? Number(record[field.key]) : 0
       const displayValue = scale === 1 ? rawValue : rawValue / scale
-      const displayText = numberDrafts[field.key] ?? formatNumberInputValue(displayValue)
       const unitLabel = localize(field.unit, field.unitI18n, locale)
       const commitDisplayValue = (nextDisplayValue: number) => {
         const clamped = clampNumber(nextDisplayValue, field.min, field.max)
         setFieldValue(field.key, scale === 1 ? clamped : Math.round(clamped * scale))
       }
-      const commitDraft = () => {
-        markTouched(field.key)
-        const draft = numberDrafts[field.key]
-        if (draft === undefined) return
-        const next = Number.parseFloat(draft)
-        if (Number.isFinite(next)) {
-          commitDisplayValue(next)
-        }
-        setNumberDrafts((current) => {
-          const { [field.key]: _removed, ...rest } = current
-          return rest
-        })
-      }
       const errorMessage = touchedKeys.has(field.key)
-        ? validateSettingsFieldValue(
-          { ...field, kind: 'number' },
-          scale === 1 ? rawValue : displayValue,
-          value,
-          locale,
-          numberDrafts[field.key],
-        )
+        ? validateSettingsFieldValue({ ...field, kind: 'number' }, scale === 1 ? rawValue : displayValue, value, locale)
         : ''
       return (
         <label className={`schema-row ${disabled ? 'is-disabled' : ''} ${errorMessage ? 'has-error' : ''}`}>
@@ -568,22 +490,15 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
           {commonLabel}
           <div className="schema-row-control schema-row-control-number">
             <span className="plugin-settings-num-field">
-              <input
-                type="text"
-                inputMode="decimal"
-                value={displayText}
+              <NumberField
+                value={Number.isFinite(displayValue) ? displayValue : 0}
+                min={field.min}
+                max={field.max}
                 disabled={disabled}
+                aria-label={label}
                 aria-invalid={Boolean(errorMessage)}
-                onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                  const next = event.currentTarget.value.trim()
-                  setNumberDrafts((current) => ({ ...current, [field.key]: next }))
-                  const numericValue = Number.parseFloat(next)
-                  if (Number.isFinite(numericValue)) commitDisplayValue(numericValue)
-                }}
-                onBlur={commitDraft}
-                onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
-                  if (event.key === 'Enter') event.currentTarget.blur()
-                }}
+                onChange={commitDisplayValue}
+                onBlur={() => markTouched(field.key)}
               />
             </span>
             {unitLabel && <span className="plugin-settings-num-unit">{unitLabel}</span>}

@@ -1,16 +1,22 @@
 import {
   forwardRef,
-  useCallback,
-  useEffect,
-  useId,
   useRef,
   useState,
   type ButtonHTMLAttributes,
   type ComponentPropsWithoutRef,
   type InputHTMLAttributes,
   type LabelHTMLAttributes,
+  type ReactElement,
+  type ReactNode,
   type TextareaHTMLAttributes,
 } from 'react'
+import { Dialog as BaseDialog } from '@base-ui/react/dialog'
+import { Combobox as BaseCombobox } from '@base-ui/react/combobox'
+import { Menu as BaseMenu } from '@base-ui/react/menu'
+import { NumberField as BaseNumberField } from '@base-ui/react/number-field'
+import { ScrollArea as BaseScrollArea } from '@base-ui/react/scroll-area'
+import { Select as BaseSelect } from '@base-ui/react/select'
+import { Switch as BaseSwitch } from '@base-ui/react/switch'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from './utils/imeKeyboard'
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -44,14 +50,17 @@ type SelectProps = {
   onChange?: (event: SelectChangeEvent) => void
 }
 
-/** Only one shared Select menu open at a time. */
-const openSelectClosers = new Set<() => void>()
-
-function closeOtherSelects(except?: () => void) {
-  for (const close of openSelectClosers) {
-    if (close !== except) close()
-  }
+type ComboboxProps = {
+  options: SelectOption[]
+  value?: string
+  disabled?: boolean
+  className?: string
+  placeholder?: string
+  emptyLabel?: string
+  'aria-label'?: string
+  onChange: (value: string) => void
 }
+
 type ToggleOption = {
   label: string
   value: string
@@ -64,6 +73,46 @@ type SegmentedControlProps = {
   className?: string
   disabled?: boolean
   'aria-label'?: string
+}
+
+type SwitchProps = {
+  checked: boolean
+  onCheckedChange: (checked: boolean) => void
+  disabled?: boolean
+  className?: string
+  'aria-label'?: string
+}
+
+type NumberFieldControlProps = {
+  value: number
+  onChange: (value: number) => void
+  min?: number
+  max?: number
+  step?: number
+  disabled?: boolean
+  className?: string
+  'aria-label'?: string
+  'aria-invalid'?: boolean
+  onBlur?: () => void
+}
+
+export type MenuItemSpec = {
+  key: string
+  label: ReactNode
+  description?: string
+  danger?: boolean
+  disabled?: boolean
+  closeOnClick?: boolean
+  onSelect: () => void
+}
+
+type MenuProps = {
+  trigger: ReactElement
+  items: MenuItemSpec[]
+  align?: 'start' | 'end'
+  header?: ReactNode
+  className?: string
+  onOpenChange?: (open: boolean) => void
 }
 
 type SurfaceListItemProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -82,6 +131,35 @@ type ConfirmDialogProps = {
 
 function cx(...values: Array<string | false | undefined>): string {
   return values.filter(Boolean).join(' ')
+}
+
+function MenuScroller({ children }: { children: ReactNode }) {
+  return (
+    <BaseScrollArea.Root className="hiven-ui-menu-scroll-area">
+      <BaseScrollArea.Viewport className="hiven-ui-menu-scroll-viewport">
+        {children}
+      </BaseScrollArea.Viewport>
+      <BaseScrollArea.Scrollbar className="hiven-ui-menu-scrollbar">
+        <BaseScrollArea.Thumb className="hiven-ui-menu-scroll-thumb" />
+      </BaseScrollArea.Scrollbar>
+    </BaseScrollArea.Root>
+  )
+}
+
+function ChevronIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg className="hiven-ui-select-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  )
 }
 
 export function useImeKeyboard() {
@@ -156,42 +234,6 @@ export const Select = forwardRef<HTMLDivElement, SelectProps>(function Select(
   const current = value ?? uncontrolled
   const selected = options.find((option) => option.value === current) ?? options[0]
   const [open, setOpen] = useState(false)
-  const rootRef = useRef<HTMLDivElement | null>(null)
-  const listId = useId()
-
-  const close = useCallback(() => setOpen(false), [])
-
-  const setRootRef = useCallback(
-    (node: HTMLDivElement | null) => {
-      rootRef.current = node
-      if (typeof ref === 'function') ref(node)
-      else if (ref) ref.current = node
-    },
-    [ref],
-  )
-
-  useEffect(() => {
-    if (!open) return
-    openSelectClosers.add(close)
-    closeOtherSelects(close)
-
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null
-      if (target && rootRef.current?.contains(target)) return
-      setOpen(false)
-    }
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
-    }
-
-    document.addEventListener('pointerdown', onPointerDown, true)
-    document.addEventListener('keydown', onKeyDown, true)
-    return () => {
-      openSelectClosers.delete(close)
-      document.removeEventListener('pointerdown', onPointerDown, true)
-      document.removeEventListener('keydown', onKeyDown, true)
-    }
-  }, [close, open])
 
   const commit = (next: string) => {
     if (value === undefined) setUncontrolled(next)
@@ -200,67 +242,90 @@ export const Select = forwardRef<HTMLDivElement, SelectProps>(function Select(
       currentTarget: { value: next, name },
     }
     onChange?.(payload)
-    setOpen(false)
   }
 
   return (
-    <div
-      ref={setRootRef}
-      className={cx('hiven-ui-select', open && 'is-open', disabled && 'is-disabled', className)}
-      id={id}
+    <BaseSelect.Root
+      value={current}
+      onValueChange={(next) => next !== null && commit(next)}
+      onOpenChange={setOpen}
+      disabled={disabled}
+      name={name}
+      items={options}
     >
-      <button
-        type="button"
-        className="hiven-ui-select-trigger"
-        aria-label={ariaLabel}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={listId}
-        disabled={disabled}
-        onClick={() => {
-          if (disabled) return
-          setOpen((currentOpen) => {
-            const next = !currentOpen
-            if (next) closeOtherSelects(close)
-            return next
-          })
-        }}
-      >
-        <span className="hiven-ui-select-label">{selected?.label ?? ''}</span>
-        <span className="hiven-ui-select-chevron" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="m6 9 6 6 6-6" />
-          </svg>
-        </span>
-      </button>
-      {open && !disabled && (
-        <div className="hiven-ui-select-menu" role="listbox" id={listId}>
-          {options.map((option) => {
-            const isSelected = option.value === current
-            return (
-              <button
-                key={option.value}
-                type="button"
-                role="option"
-                aria-selected={isSelected}
-                className={cx('hiven-ui-select-option', isSelected && 'is-selected')}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => commit(option.value)}
-              >
-                <span>{option.label}</span>
-                {isSelected ? (
-                  <svg className="hiven-ui-select-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
-                    <path d="M20 6 9 17l-5-5" />
-                  </svg>
-                ) : null}
-              </button>
-            )
-          })}
-        </div>
-      )}
-    </div>
+      <div ref={ref} className={cx('hiven-ui-select', open && 'is-open', disabled && 'is-disabled', className)}>
+        <BaseSelect.Trigger className="hiven-ui-select-trigger" aria-label={ariaLabel} id={id}>
+          <span className="hiven-ui-select-label">{selected?.label ?? ''}</span>
+          <BaseSelect.Icon className="hiven-ui-select-chevron">
+            <ChevronIcon />
+          </BaseSelect.Icon>
+        </BaseSelect.Trigger>
+      </div>
+      <BaseSelect.Portal>
+        <BaseSelect.Positioner className="hiven-ui-select-positioner" data-launcher-scrollable sideOffset={6} alignItemWithTrigger={false}>
+          <BaseSelect.Popup className="hiven-ui-select-menu">
+            <MenuScroller>
+              <BaseSelect.List>
+                {options.map((option) => (
+                  <BaseSelect.Item key={option.value} value={option.value} className="hiven-ui-select-option">
+                    <BaseSelect.ItemText className="hiven-ui-select-option-label">{option.label}</BaseSelect.ItemText>
+                    <BaseSelect.ItemIndicator className="hiven-ui-select-option-indicator">
+                      <CheckIcon />
+                    </BaseSelect.ItemIndicator>
+                  </BaseSelect.Item>
+                ))}
+              </BaseSelect.List>
+            </MenuScroller>
+          </BaseSelect.Popup>
+        </BaseSelect.Positioner>
+      </BaseSelect.Portal>
+    </BaseSelect.Root>
   )
 })
+
+export function Combobox({ options, value = '', disabled, className, placeholder, emptyLabel = '', 'aria-label': ariaLabel, onChange }: ComboboxProps) {
+  const selected = options.find((option) => option.value === value) ?? null
+  const [open, setOpen] = useState(false)
+  return (
+    <BaseCombobox.Root
+      items={options}
+      value={selected}
+      disabled={disabled}
+      onValueChange={(option) => onChange(option?.value ?? '')}
+      onOpenChange={setOpen}
+      isItemEqualToValue={(item, candidate) => item.value === candidate.value}
+    >
+      <div className={cx('hiven-ui-select', open && 'is-open', disabled && 'is-disabled', className)}>
+        <BaseCombobox.Trigger className="hiven-ui-select-trigger" aria-label={ariaLabel}>
+          <span className="hiven-ui-select-label">{selected?.label ?? placeholder ?? emptyLabel ?? ''}</span>
+          <BaseCombobox.Icon className="hiven-ui-select-chevron">
+            <ChevronIcon />
+          </BaseCombobox.Icon>
+        </BaseCombobox.Trigger>
+      </div>
+      <BaseCombobox.Portal>
+        <BaseCombobox.Positioner className="hiven-ui-select-positioner" data-launcher-scrollable sideOffset={6} align="start">
+          <BaseCombobox.Popup className="hiven-ui-combobox-menu">
+            <BaseCombobox.Input className="hiven-ui-combobox-search" placeholder={placeholder} aria-label={ariaLabel} />
+            <MenuScroller>
+              <BaseCombobox.Empty className="hiven-ui-combobox-empty">{emptyLabel}</BaseCombobox.Empty>
+              <BaseCombobox.List className="hiven-ui-combobox-list">
+                {(option: SelectOption) => (
+                  <BaseCombobox.Item key={option.value} value={option} className="hiven-ui-select-option">
+                    <span className="hiven-ui-select-option-label">{option.label}</span>
+                    <BaseCombobox.ItemIndicator className="hiven-ui-select-option-indicator">
+                      <CheckIcon />
+                    </BaseCombobox.ItemIndicator>
+                  </BaseCombobox.Item>
+                )}
+              </BaseCombobox.List>
+            </MenuScroller>
+          </BaseCombobox.Popup>
+        </BaseCombobox.Positioner>
+      </BaseCombobox.Portal>
+    </BaseCombobox.Root>
+  )
+}
 
 export function Checkbox({ className, children, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> & LabelHTMLAttributes<HTMLLabelElement>) {
   return (
@@ -299,12 +364,86 @@ export function SegmentedControl({ options, value, onChange, className, disabled
   )
 }
 
-export const NumberField = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function NumberField(
-  props,
-  ref,
-) {
-  return <TextInput ref={ref} type="number" {...props} />
-})
+export function Switch({ checked, onCheckedChange, disabled, className, 'aria-label': ariaLabel }: SwitchProps) {
+  return (
+    <BaseSwitch.Root
+      className={cx('hiven-ui-switch', className)}
+      checked={checked}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      onCheckedChange={onCheckedChange}
+    >
+      <BaseSwitch.Thumb className="hiven-ui-switch-thumb" />
+    </BaseSwitch.Root>
+  )
+}
+
+export function NumberField({
+  value,
+  onChange,
+  min,
+  max,
+  step = 1,
+  disabled,
+  className,
+  'aria-label': ariaLabel,
+  'aria-invalid': ariaInvalid,
+  onBlur,
+}: NumberFieldControlProps) {
+  return (
+    <BaseNumberField.Root
+      className={cx('hiven-ui-number', className)}
+      value={value}
+      min={min}
+      max={max}
+      step={step}
+      disabled={disabled}
+      onValueChange={(next) => {
+        if (typeof next === 'number' && Number.isFinite(next)) onChange(next)
+      }}
+    >
+      <BaseNumberField.Group className="hiven-ui-number-group">
+        <BaseNumberField.Decrement className="hiven-ui-number-step" aria-label="-">−</BaseNumberField.Decrement>
+        <BaseNumberField.Input
+          className="hiven-ui-number-input"
+          aria-label={ariaLabel}
+          aria-invalid={ariaInvalid}
+          onBlur={onBlur}
+        />
+        <BaseNumberField.Increment className="hiven-ui-number-step" aria-label="+">＋</BaseNumberField.Increment>
+      </BaseNumberField.Group>
+    </BaseNumberField.Root>
+  )
+}
+
+export function Menu({ trigger, items, align = 'end', header, className, onOpenChange }: MenuProps) {
+  return (
+    <BaseMenu.Root onOpenChange={onOpenChange}>
+      <BaseMenu.Trigger render={trigger} />
+      <BaseMenu.Portal>
+        <BaseMenu.Positioner className="hiven-ui-select-positioner" data-launcher-scrollable sideOffset={6} align={align}>
+          <BaseMenu.Popup className={cx('hiven-ui-select-menu', 'hiven-ui-menu', className)}>
+            {header ? <div className="hiven-ui-menu-header">{header}</div> : null}
+            <MenuScroller>
+              {items.map((item) => (
+                <BaseMenu.Item
+                  key={item.key}
+                  className={cx('hiven-ui-menu-item', item.danger && 'is-danger')}
+                  disabled={item.disabled}
+                  closeOnClick={item.closeOnClick}
+                  onClick={item.onSelect}
+                >
+                  <span className="hiven-ui-menu-item-label">{item.label}</span>
+                  {item.description ? <span className="hiven-ui-menu-item-desc">{item.description}</span> : null}
+                </BaseMenu.Item>
+              ))}
+            </MenuScroller>
+          </BaseMenu.Popup>
+        </BaseMenu.Positioner>
+      </BaseMenu.Portal>
+    </BaseMenu.Root>
+  )
+}
 
 export const Slider = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Slider(
   props,
@@ -341,17 +480,19 @@ export function SurfaceFooterHints({ className, ...props }: ComponentPropsWithou
 }
 
 export function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', onConfirm, onCancel }: ConfirmDialogProps) {
-  if (!open) return null
   return (
-    <div className="hiven-ui-confirm" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="hiven-ui-confirm-panel">
-        <div className="hiven-ui-confirm-title">{title}</div>
-        {message && <div className="hiven-ui-confirm-message">{message}</div>}
-        <div className="hiven-ui-confirm-actions">
-          <Button variant="danger" onClick={onConfirm}>{confirmLabel}</Button>
-          <Button onClick={onCancel}>{cancelLabel}</Button>
-        </div>
-      </div>
-    </div>
+    <BaseDialog.Root open={open} onOpenChange={(next) => { if (!next) onCancel() }}>
+      <BaseDialog.Portal>
+        <BaseDialog.Backdrop className="hiven-ui-confirm" />
+        <BaseDialog.Popup className="hiven-ui-confirm-panel">
+          <BaseDialog.Title className="hiven-ui-confirm-title">{title}</BaseDialog.Title>
+          {message && <BaseDialog.Description className="hiven-ui-confirm-message">{message}</BaseDialog.Description>}
+          <div className="hiven-ui-confirm-actions">
+            <Button variant="danger" onClick={onConfirm}>{confirmLabel}</Button>
+            <BaseDialog.Close render={<Button />}>{cancelLabel}</BaseDialog.Close>
+          </div>
+        </BaseDialog.Popup>
+      </BaseDialog.Portal>
+    </BaseDialog.Root>
   )
 }
