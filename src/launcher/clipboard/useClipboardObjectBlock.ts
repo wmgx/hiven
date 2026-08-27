@@ -49,6 +49,7 @@ export type ClipboardObjectBlockState = {
   selectBlockForDelete: () => void
   handleBackspace: (queryEmpty: boolean) => boolean
   attachHintAsBlock: () => void
+  markBlockConsumed: () => void
 }
 
 /** Blocks handed in from history / tools — re-stash on hide so ⌘↵ is not lost mid-transition. */
@@ -254,6 +255,23 @@ export function useClipboardObjectBlock(params: {
   }, [])
 
   /**
+   * Mark the current block's clipboard content as handled — for when an object
+   * action already acted on it (pasted / exported / opened it) and the launcher
+   * is closing right after. No exit transition (nothing to animate; the whole
+   * launcher is going away), just the same dismiss-cooldown bookkeeping
+   * {@link removeBlock} uses.
+   *
+   * Without this the OS clipboard still holds the identical text (executing an
+   * action doesn't clear it), so the very next open would silently re-attach
+   * the same block — reproducing the "still has my old input" complaint.
+   */
+  const markBlockConsumed = useCallback(() => {
+    if (!block) return
+    const snapshot = getLastClipboardSnapshot()
+    if (snapshot) dismissClipboardBlock(snapshot)
+  }, [block])
+
+  /**
    * Handle Backspace when query is empty: remove the object block in one press
    * (with exit transition). Returns true if Backspace was consumed.
    */
@@ -296,5 +314,6 @@ export function useClipboardObjectBlock(params: {
     selectBlockForDelete,
     handleBackspace,
     attachHintAsBlock,
+    markBlockConsumed,
   }
 }

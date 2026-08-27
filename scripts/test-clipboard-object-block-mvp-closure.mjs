@@ -119,8 +119,8 @@ console.log('Scenario 2: Executor uses full payloadText, not preview')
 console.log('Scenario 3: Query filters history object actions')
 {
   const hostSrc = readFileSync('src/launcher/hosts/GlobalLauncherHost.tsx', 'utf8')
-  // Retired RecommendedActionRow — filtering lives on historyObjectActionItems
-  assert.match(hostSrc, /historyObjectActionItems/, 'Host builds historyObjectActionItems')
+  // Retired RecommendedActionRow — filtering lives on pinnedObjectActionItems
+  assert.match(hostSrc, /pinnedObjectActionItems/, 'Host builds pinnedObjectActionItems')
   assert.match(
     hostSrc,
     /action\.title\.toLowerCase\(\)\.includes\(q\)/,
@@ -158,7 +158,7 @@ console.log('Scenario 5: RecentClipboardHint attach preserves original ageLabel'
   // Verify createClipboardObjectBlock supports forceAttach option
   const objectBlockSrc = readFileSync('src/launcher/clipboard/objectBlock.ts', 'utf8')
   assert.match(objectBlockSrc, /forceAttach\?:\s*boolean/, 'createClipboardObjectBlock accepts forceAttach option')
-  assert.match(objectBlockSrc, /!options\?\.forceAttach && !shouldAutoAttachClipboard/, 'forceAttach bypasses freshness check')
+  assert.match(objectBlockSrc, /if \(!options\?\.forceAttach\) \{[\s\S]*?shouldAutoAttachClipboard/, 'forceAttach bypasses freshness check')
 
   // Verify useClipboardObjectBlock uses forceAttach
   const hookSrc = readFileSync('src/launcher/clipboard/useClipboardObjectBlock.ts', 'utf8')

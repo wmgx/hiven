@@ -699,9 +699,14 @@ export function GlobalLauncherHost() {
     }
 
     if (result.ok && target !== 'copy-and-keep-open') {
+      // Acting on the block (paste / open-editor / …) is "done with it" — mark
+      // the underlying clipboard content consumed so the next open doesn't
+      // silently re-attach the same block (the OS clipboard is unchanged by
+      // most actions, so without this it looked like the launcher never reset).
+      clipboardBlock.markBlockConsumed()
       closeLauncherAfterAction()
     }
-  }, [clipboardBlock.block, closeLauncherAfterAction, locale, openPluginSurface])
+  }, [clipboardBlock.block, clipboardBlock.markBlockConsumed, closeLauncherAfterAction, locale, openPluginSurface])
 
   const selectItemWithObjectActions = useCallback((item: GlobalLauncherItem) => {
     // Support both current prefix and the retired history-only prefix.
