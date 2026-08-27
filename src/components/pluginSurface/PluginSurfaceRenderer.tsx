@@ -12,6 +12,7 @@ import { createPluginClipboard } from '../../workspace/pluginClipboard'
 import { showToast, dismissToast } from '../../workspace/toast'
 import { createPluginPaste } from '../../workspace/pluginPaste'
 import { createPluginNetwork } from '../../workspace/pluginNetwork'
+import { createPluginAi } from '../../workspace/ai/runtime'
 import { createPluginShell } from '../../workspace/pluginShell'
 import { ensurePluginRuntimeReady } from '../../workspace/pluginRuntimeBootstrap'
 import type {
@@ -116,6 +117,7 @@ export function PluginSurfaceRenderer({
           paste: createPluginPaste(permissions, storage),
           network: createPluginNetwork(permissions),
           shell: createPluginShell(permissions),
+          ai: createPluginAi(target.pluginId, target.source, permissions),
         })
 
         if (!disposed) {
@@ -246,6 +248,7 @@ export function PluginSurfaceRenderer({
             paste: createPluginPaste(surfaceState.permissions, hostStorage),
             network: createPluginNetwork(surfaceState.permissions),
             shell: createPluginShell(surfaceState.permissions),
+            ai: createPluginAi(target.pluginId, target.source, surfaceState.permissions),
           }}
         />
       )}

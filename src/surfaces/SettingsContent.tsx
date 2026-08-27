@@ -1,14 +1,18 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { getVersion } from '@tauri-apps/api/app'
-import { Check, Command, Download, Hash, Languages, Moon, RefreshCw, Save, Type, WrapText } from 'lucide-react'
+import { BrainCircuit, Check, Command, Download, Hash, Languages, LogIn, LogOut, Moon, RefreshCw, Save, Search, Type, WrapText } from 'lucide-react'
 import { useAppStore } from '../store'
 import { useT } from '../i18n'
 import { checkBuiltinPluginsUpdate } from '../configInit'
 import { ShortcutRecorder } from '../components/ShortcutRecorder'
 import { AppHotkeysSettings } from '../components/AppHotkeysSettings'
+import { listAiProviders, loginAiProvider, logoutAiProvider } from '../workspace/ai/runtime'
+import type { AiProviderDescriptor, AiReasoningEffort } from '../workspace/ai/types'
+import { openExternalUrl } from '../workspace/effectRunner'
+import { showToast } from '../workspace/toast'
 
 export function SettingsContent() {
   const { settings, updateSetting } = useAppStore()
@@ -142,6 +146,236 @@ export function SettingsContent() {
   )
 }
 
+export function AiSubscriptionsContent() {
+  const { settings, updateSetting } = useAppStore()
+  const locale = useAppStore((state) => state.locale)
+  const t = useT('settings')
+  const [providers, setProviders] = useState<AiProviderDescriptor[]>([])
+  const [loading, setLoading] = useState(false)
+  const [pendingProviderId, setPendingProviderId] = useState<string | null>(null)
+
+  const refresh = async () => {
+    setLoading(true)
+    try {
+      setProviders(await listAiProviders())
+    } catch (error) {
+      showToast(t('aiRefreshFailed', { message: formatUserFacingError(error).short }), 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { void refresh() }, [])
+  useEffect(() => {
+    if (!pendingProviderId) return
+    let checking = false
+    const check = async () => {
+      if (checking) return
+      checking = true
+      try {
+        const next = await listAiProviders()
+        setProviders(next)
+        if (next.some((item) => item.id === pendingProviderId && item.status === 'ready')) {
+          setPendingProviderId(null)
+        }
+      } catch {
+        // The manual refresh action reports errors; background OAuth polling stays quiet.
+      } finally {
+        checking = false
+      }
+    }
+    const interval = window.setInterval(() => void check(), 1500)
+    const timeout = window.setTimeout(() => setPendingProviderId(null), 120_000)
+    return () => {
+      window.clearInterval(interval)
+      window.clearTimeout(timeout)
+    }
+  }, [pendingProviderId])
+
+  const readyProviders = providers.filter((item) => item.status === 'ready')
+  const defaultProvider = readyProviders.find((item) => item.id === settings.aiDefaultProviderId)
+    ?? readyProviders.find((item) => item.isDefault)
+    ?? readyProviders[0]
+  const agents = defaultProvider?.agents ?? []
+
+  const connect = async (providerId: string) => {
+    setLoading(true)
+    try {
+      const result = await loginAiProvider(providerId)
+      if (result.url) await openExternalUrl(result.url)
+      setPendingProviderId(providerId)
+    } catch (error) {
+      showToast(t('aiConnectFailed', { message: formatUserFacingError(error).short }), 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const disconnect = async (providerId: string) => {
+    setLoading(true)
+    try {
+      await logoutAiProvider(providerId)
+      setPendingProviderId(null)
+      setProviders(await listAiProviders())
+    } catch (error) {
+      showToast(t('aiDisconnectFailed', { message: formatUserFacingError(error).short }), 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="sscroll">
+      <SettingGroup title={t('aiSubscriptionManagement')}>
+        {providers.map((provider) => {
+          const ready = provider.status === 'ready'
+          const waiting = pendingProviderId === provider.id
+          const subscription = [provider.subscription?.accountName, provider.subscription?.plan].filter(Boolean).join(' · ')
+          return (
+            <div className="ai-subscription-provider" key={provider.id}>
+              <SettingsListRow
+                icon={ready ? <Check size={15} strokeWidth={2} style={{ color: 'var(--color-success-text)' }} /> : <LogIn size={15} strokeWidth={2} />}
+                name={provider.name}
+                desc={waiting
+                  ? t('aiSubscriptionWaiting')
+                  : ready
+                    ? t('aiSubscriptionReady', { plan: subscription })
+                    : provider.statusMessage ?? t('aiSubscriptionLoginRequired')}
+              >
+                <div className="flex items-center gap-2">
+                  {ready && (
+                    <span className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--color-success-text)' }}>
+                      <Check size={11} /> {t('aiConnected')}
+                    </span>
+                  )}
+                  {ready
+                    ? <button type="button" className="scripts-btn" disabled={loading} onClick={() => void disconnect(provider.id)}><LogOut size={11} /> {t('aiDisconnect')}</button>
+                    : <button type="button" className="scripts-btn scripts-btn-primary" disabled={loading || waiting || provider.status === 'unavailable'} onClick={() => void connect(provider.id)}>{waiting ? <RefreshCw size={11} className="animate-spin" /> : <LogIn size={11} />} {t(waiting ? 'aiConnecting' : 'aiConnect')}</button>}
+                  <button type="button" className="scripts-btn" disabled={loading} onClick={() => void refresh()} aria-label={t('aiRefresh')}>
+                    <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+                  </button>
+                </div>
+              </SettingsListRow>
+              {ready && <AiQuotaUsage provider={provider} locale={locale} t={t} />}
+            </div>
+          )
+        })}
+      </SettingGroup>
+
+      <SettingGroup title={t('aiDefaults')}>
+        <SettingsListRow icon={<BrainCircuit size={15} strokeWidth={2} />} name={t('aiDefaultProvider')} desc={t('aiDefaultProviderInfo')}>
+          <LocaleSelect
+            value={defaultProvider?.id ?? ''}
+            options={readyProviders.map((item) => ({ value: item.id, label: item.name }))}
+            wide
+            disabled={readyProviders.length === 0}
+            emptyLabel={t('aiNoProviders')}
+            onChange={(value) => {
+              updateSetting('aiDefaultProviderId', value)
+              updateSetting('aiDefaultAgentId', undefined)
+            }}
+          />
+        </SettingsListRow>
+        <SettingsListRow icon={<BrainCircuit size={15} strokeWidth={2} />} name={t('aiDefaultAgent')} desc={t('aiDefaultAgentInfo')}>
+          <LocaleSelect
+            value={settings.aiDefaultAgentId ?? agents.find((item) => item.isDefault)?.id ?? agents[0]?.id ?? ''}
+            options={agents.map((item) => ({ value: item.id, label: item.name }))}
+            wide
+            searchable
+            searchPlaceholder={t('aiSearchAgents')}
+            noResultsLabel={t('aiNoMatchingAgents')}
+            disabled={agents.length === 0}
+            emptyLabel={t('aiNoAgents')}
+            onChange={(value) => updateSetting('aiDefaultAgentId', value)}
+          />
+        </SettingsListRow>
+        <SettingsListRow icon={<BrainCircuit size={15} strokeWidth={2} />} name={t('aiDefaultEffort')} desc={t('aiDefaultEffortInfo')}>
+          <LocaleSelect
+            value={settings.aiDefaultEffort}
+            wide
+            options={(['low', 'medium', 'high', 'xhigh'] as AiReasoningEffort[]).map((value) => ({
+              value,
+              label: t(`aiEffort_${value}`),
+            }))}
+            onChange={(value) => updateSetting('aiDefaultEffort', value)}
+          />
+        </SettingsListRow>
+      </SettingGroup>
+    </div>
+  )
+}
+
+function AiQuotaUsage({ provider, locale, t }: { provider: AiProviderDescriptor; locale: string; t: ReturnType<typeof useT> }) {
+  const buckets = [...(provider.quota?.buckets ?? [])].sort((left, right) => quotaBucketPriority(left) - quotaBucketPriority(right))
+  const entries = buckets.flatMap((bucket) => {
+    const bucketName = bucket.name?.trim() || formatQuotaBucketName(bucket.id, t)
+    const hasBothWindows = Boolean(bucket.primary && bucket.secondary)
+    return ([['primary', bucket.primary], ['secondary', bucket.secondary]] as const).flatMap(([kind, window]) => {
+      if (!window) return []
+      const used = Math.max(0, Math.min(100, window.usedPercent))
+      return [{
+        key: `${bucket.id}-${kind}`,
+        label: [bucketName, hasBothWindows ? t(kind === 'primary' ? 'aiQuotaPrimary' : 'aiQuotaSecondary') : '', formatQuotaWindow(window.windowDurationMinutes, locale)].filter(Boolean).join(' · '),
+        technicalId: bucket.name?.trim() ? undefined : bucket.id,
+        used,
+        reset: formatQuotaReset(window.resetsAt, locale, t),
+      }]
+    })
+  })
+  if (entries.length === 0 && provider.quota?.creditsRemaining == null) return null
+
+  return (
+    <div className="ai-quota-grid">
+      {entries.map((entry) => (
+        <div className="ai-quota-item" key={entry.key}>
+          <div className="ai-quota-meta">
+            <span className="ai-quota-label" title={entry.technicalId}>{entry.label}</span>
+            <strong>{Math.round(entry.used)}%</strong>
+          </div>
+          <div className="ai-quota-track" role="progressbar" aria-label={entry.label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(entry.used)}>
+            <span className="ai-quota-fill" data-level={entry.used >= 80 ? 'high' : entry.used >= 50 ? 'medium' : 'low'} style={{ width: `${entry.used}%` }} />
+          </div>
+          <div className="ai-quota-reset">{entry.reset}</div>
+        </div>
+      ))}
+      {provider.quota?.creditsRemaining != null && (
+        <div className="ai-quota-credits">{t('aiCreditsRemaining', { credits: provider.quota.creditsRemaining })}</div>
+      )}
+    </div>
+  )
+}
+
+function formatQuotaWindow(minutes: number | undefined, locale: string): string {
+  if (!minutes) return locale === 'zh' ? '额度' : 'Limit'
+  if (minutes % 1440 === 0) return locale === 'zh' ? `${minutes / 1440} 天` : `${minutes / 1440}d`
+  if (minutes % 60 === 0) return locale === 'zh' ? `${minutes / 60} 小时` : `${minutes / 60}h`
+  return locale === 'zh' ? `${minutes} 分钟` : `${minutes}m`
+}
+
+function formatQuotaBucketName(id: string, t: ReturnType<typeof useT>): string {
+  if (id.trim().toLowerCase() === 'gpt-reserve') return t('aiQuotaOther')
+  return id.split(/[-_.:/]+/).filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')
+}
+
+function quotaBucketPriority(bucket: NonNullable<AiProviderDescriptor['quota']>['buckets'][number]): number {
+  const names = [bucket.id, bucket.name ?? ''].map((value) => value.trim().toLowerCase())
+  if (names.includes('codex')) return 0
+  if (names.some((value) => value.includes('reserve'))) return 1
+  return 2
+}
+
+function formatQuotaReset(resetsAt: number | undefined, locale: string, t: ReturnType<typeof useT>): string {
+  if (resetsAt == null) return t('aiQuotaResetUnknown')
+  const value = resetsAt < 1_000_000_000_000 ? resetsAt * 1000 : resetsAt
+  const formatted = new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : 'en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value))
+  return t('aiQuotaResetsAt', { reset: formatted })
+}
+
 export function SettingGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="sgroup">
@@ -191,12 +425,19 @@ function formatUserFacingError(err: unknown, maxLen = 160): { short: string; ful
   return { short: `${single.slice(0, maxLen - 1)}…`, full: single }
 }
 
-function LocaleSelect({ options, value, onChange }: { options: { value: string; label: string }[]; value: string; onChange: (value: string) => void }) {
+function LocaleSelect({ options, value, onChange, disabled = false, emptyLabel = '', wide = false, searchable = false, searchPlaceholder = '', noResultsLabel = '' }: { options: { value: string; label: string }[]; value: string; onChange: (value: string) => void; disabled?: boolean; emptyLabel?: string; wide?: boolean; searchable?: boolean; searchPlaceholder?: string; noResultsLabel?: string }) {
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const [focusedIndex, setFocusedIndex] = useState(-1)
   const ref = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
   const optionRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const listboxId = useId()
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+  const visibleOptions = normalizedQuery
+    ? options.filter((option) => `${option.label} ${option.value}`.toLocaleLowerCase().includes(normalizedQuery))
+    : options
 
   useEffect(() => {
     if (!open) return
@@ -209,21 +450,30 @@ function LocaleSelect({ options, value, onChange }: { options: { value: string; 
 
   useEffect(() => {
     if (open) {
+      if (searchable) {
+        requestAnimationFrame(() => searchRef.current?.focus())
+        return
+      }
       const selectedIdx = options.findIndex((o) => o.value === value)
       const idx = selectedIdx >= 0 ? selectedIdx : 0
       setFocusedIndex(idx)
       requestAnimationFrame(() => optionRefs.current[idx]?.focus())
     } else {
+      setQuery('')
       setFocusedIndex(-1)
     }
   }, [open])
 
   const selected = options.find((option) => option.value === value)
+  const closeAndFocusTrigger = () => {
+    setOpen(false)
+    requestAnimationFrame(() => triggerRef.current?.focus())
+  }
 
   const handleTriggerKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault()
-      setOpen(true)
+      if (!disabled) setOpen(true)
     }
   }
 
@@ -231,14 +481,19 @@ function LocaleSelect({ options, value, onChange }: { options: { value: string; 
     switch (e.key) {
       case 'ArrowDown': {
         e.preventDefault()
-        const next = index < options.length - 1 ? index + 1 : 0
+        const next = index < visibleOptions.length - 1 ? index + 1 : 0
         setFocusedIndex(next)
         optionRefs.current[next]?.focus()
         break
       }
       case 'ArrowUp': {
         e.preventDefault()
-        const prev = index > 0 ? index - 1 : options.length - 1
+        if (searchable && index === 0) {
+          setFocusedIndex(-1)
+          searchRef.current?.focus()
+          break
+        }
+        const prev = index > 0 ? index - 1 : visibleOptions.length - 1
         setFocusedIndex(prev)
         optionRefs.current[prev]?.focus()
         break
@@ -246,54 +501,89 @@ function LocaleSelect({ options, value, onChange }: { options: { value: string; 
       case 'Enter':
       case ' ': {
         e.preventDefault()
-        onChange(options[index].value)
-        setOpen(false)
-        triggerRef.current?.focus()
+        onChange(visibleOptions[index].value)
+        closeAndFocusTrigger()
         break
       }
       case 'Escape': {
         e.preventDefault()
-        setOpen(false)
-        triggerRef.current?.focus()
+        closeAndFocusTrigger()
         break
       }
     }
   }
 
   return (
-    <div className={`settings-select-wrap ${open ? 'is-open' : ''}`} ref={ref}>
-      <button
-        type="button"
-        ref={triggerRef}
-        className={`sel-ctl ${open ? 'open' : ''}`}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        onClick={() => setOpen(!open)}
-        onKeyDown={handleTriggerKeyDown}
-      >
-        <span>{selected?.label ?? value}</span>
-        <span className="chev">▾</span>
-      </button>
-      {open && (
-        <div className="settings-select-menu" role="listbox" aria-activedescendant={focusedIndex >= 0 ? `locale-option-${options[focusedIndex].value}` : undefined}>
-          {options.map((option, index) => (
+    <div className={`settings-select-wrap ${wide ? 'is-wide' : ''} ${open ? 'is-open' : ''}`} ref={ref}>
+      {searchable && open
+        ? (
+            <div className="sel-ctl open settings-select-combobox">
+              <Search size={12} aria-hidden="true" />
+              <input
+                ref={searchRef}
+                type="text"
+                role="combobox"
+                value={query}
+                placeholder={searchPlaceholder}
+                aria-label={searchPlaceholder}
+                aria-expanded="true"
+                aria-controls={listboxId}
+                aria-autocomplete="list"
+                onChange={(event) => { setQuery(event.target.value); setFocusedIndex(-1) }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    event.preventDefault()
+                    closeAndFocusTrigger()
+                  } else if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && visibleOptions.length > 0) {
+                    event.preventDefault()
+                    const index = event.key === 'ArrowDown' ? 0 : visibleOptions.length - 1
+                    setFocusedIndex(index)
+                    optionRefs.current[index]?.focus()
+                  }
+                }}
+              />
+              <span className="chev">▾</span>
+            </div>
+          )
+        : (
             <button
               type="button"
-              key={option.value}
-              id={`locale-option-${option.value}`}
-              ref={(el) => { optionRefs.current[index] = el }}
-              role="option"
-              aria-selected={value === option.value}
-              className={`settings-select-item ${value === option.value ? 'is-selected' : ''} ${focusedIndex === index ? 'is-focused' : ''}`}
-              onClick={() => { onChange(option.value); setOpen(false); triggerRef.current?.focus() }}
-              onKeyDown={(e) => handleOptionKeyDown(e, index)}
+              ref={triggerRef}
+              className={`sel-ctl ${open ? 'open' : ''}`}
+              aria-expanded={open}
+              aria-haspopup="listbox"
+              aria-controls={open ? listboxId : undefined}
+              disabled={disabled}
+              onClick={() => setOpen(!open)}
+              onKeyDown={handleTriggerKeyDown}
             >
-              <span className="w-3.5 shrink-0 flex items-center justify-center">
-                {value === option.value && <Check size={10} style={{ color: 'var(--color-accent)' }} />}
-              </span>
-              <span>{option.label}</span>
+              <span className="sel-ctl-label">{(selected?.label ?? value) || emptyLabel}</span>
+              <span className="chev">▾</span>
             </button>
-          ))}
+          )}
+      {open && (
+        <div className="settings-select-menu">
+          <div id={listboxId} role="listbox">
+            {visibleOptions.map((option, index) => (
+              <button
+                type="button"
+                key={option.value}
+                id={`${listboxId}-option-${index}`}
+                ref={(el) => { optionRefs.current[index] = el }}
+                role="option"
+                aria-selected={value === option.value}
+                className={`settings-select-item ${value === option.value ? 'is-selected' : ''} ${focusedIndex === index ? 'is-focused' : ''}`}
+                onClick={() => { onChange(option.value); closeAndFocusTrigger() }}
+                onKeyDown={(e) => handleOptionKeyDown(e, index)}
+              >
+                <span className="w-3.5 shrink-0 flex items-center justify-center">
+                  {value === option.value && <Check size={10} style={{ color: 'var(--color-accent)' }} />}
+                </span>
+                <span>{option.label}</span>
+              </button>
+            ))}
+            {visibleOptions.length === 0 && <div className="settings-select-empty">{noResultsLabel}</div>}
+          </div>
         </div>
       )}
     </div>

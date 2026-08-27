@@ -17,6 +17,7 @@
 import type { ComponentType } from 'react'
 import type { Locale } from '../../i18n'
 import type { PluginNetworkApi, PluginPrivateStorageApi, PluginShellApi } from '../pluginTypes'
+import type { PluginAiApi } from '../ai/types'
 import type { FluxEffect } from '../types'
 import type { DiffSourcePayload } from '../diffTypes'
 import type { EffectRunnerResult } from '../effectRunner'
@@ -428,6 +429,7 @@ export type LauncherExecutionContext<TSettings = unknown> = {
   locale: Locale
   api: PluginLauncherApi
   storage: PluginPrivateStorageApi
+  ai: PluginAiApi
   /** Plugin-scoped translate function. */
   t: (key: string, vars?: Record<string, string | number>) => string
 }
@@ -453,6 +455,7 @@ export type LauncherSuggestContext<TSettings = unknown> = {
   locale: Locale
   api: PluginLauncherApi
   storage: PluginPrivateStorageApi
+  ai: PluginAiApi
   network: PluginNetworkApi
   shell: PluginShellApi
   t: (key: string, vars?: Record<string, string | number>) => string
@@ -537,6 +540,7 @@ export type LauncherDynamicContext = {
   settings: unknown
   api: PluginLauncherApi
   storage: PluginPrivateStorageApi
+  ai: PluginAiApi
   network: PluginNetworkApi
   shell: PluginShellApi
   t: (key: string, vars?: Record<string, string | number>) => string
@@ -742,6 +746,7 @@ export type PluginToolContext<TSettings = unknown> = {
   locale: Locale
   api: PluginLauncherApi
   storage: PluginPrivateStorageApi
+  ai: PluginAiApi
   /**
    * Shell runtime when the plugin requested `shell.run`.
    * Unauthorized / missing → calls throw a permission error.

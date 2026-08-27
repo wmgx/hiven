@@ -33,6 +33,7 @@ import type {
   PluginLauncherApi,
 } from './types'
 import type { PluginNetworkApi, PluginPrivateStorageApi, PluginShellApi } from '../pluginTypes'
+import type { PluginAiApi } from '../ai/types'
 import { appendUsageJournal } from '../usageJournal'
 import { getHostOutputIntent, isOutputResult } from './output'
 import { translate, type Locale } from '../../i18n'
@@ -116,6 +117,7 @@ export type LauncherControllerDeps = {
   getStorage?: (item: LauncherItem) => PluginPrivateStorageApi
   getNetwork?: (item: LauncherItem) => PluginNetworkApi
   getShell?: (item: LauncherItem) => PluginShellApi
+  getAi?: (item: LauncherItem) => PluginAiApi
   locale: string
   /** Translate function scoped to the item's plugin. */
   makeT: (item: LauncherItem) => (key: string, vars?: Record<string, string | number>) => string
@@ -162,6 +164,15 @@ const emptyShell: PluginShellApi = {
   run: async () => {
     throw new Error('Plugin shell is not available for this launcher item')
   },
+}
+
+const emptyAi: PluginAiApi = {
+  providers: async () => [],
+  stream: async function* () {
+    throw new Error('AI is not available for this launcher item')
+  },
+  cancel: async () => {},
+  usage: async () => [],
 }
 
 export type SelectOptions = {
@@ -231,6 +242,7 @@ export class LauncherController {
       locale: this.deps.locale as never,
       api: this.deps.makeApi?.(item) ?? this.deps.api,
       storage: this.deps.getStorage?.(item) ?? emptyStorage,
+      ai: this.deps.getAi?.(item) ?? emptyAi,
       t: this.deps.makeT(item),
     }
   }
@@ -682,6 +694,7 @@ export class LauncherController {
           storage: this.deps.getStorage?.(item) ?? emptyStorage,
           network: this.deps.getNetwork?.(item) ?? emptyNetwork,
           shell: this.deps.getShell?.(item) ?? emptyShell,
+          ai: this.deps.getAi?.(item) ?? emptyAi,
           t: this.deps.makeT(item),
           pluginId: item.pluginId,
           source: item.source,

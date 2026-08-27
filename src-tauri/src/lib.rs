@@ -19,6 +19,7 @@ use tauri::Manager;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use zip::ZipArchive;
 
+pub mod ai_codex;
 pub mod desktop_bridge;
 pub mod hotkeys;
 
@@ -2269,8 +2270,7 @@ fn get_or_register_keyable_panel_class() -> *const objc2::runtime::AnyClass {
 fn current_foreground_process_id() -> Option<u32> {
     unsafe {
         let workspace_cls = objc2::runtime::AnyClass::get(c"NSWorkspace")?;
-        let workspace: *mut objc2::runtime::AnyObject =
-            objc2::msg_send![workspace_cls, sharedWorkspace];
+        let workspace: *mut objc2::runtime::AnyObject = objc2::msg_send![workspace_cls, sharedWorkspace];
         if workspace.is_null() {
             return None;
         }
@@ -3329,7 +3329,8 @@ fn macos_bundle_id_from_app_id(app_id: &str) -> Option<String> {
 fn macos_frontmost_bundle_id() -> Option<String> {
     unsafe {
         let workspace_cls = objc2::runtime::AnyClass::get(c"NSWorkspace")?;
-        let workspace: *mut objc2::runtime::AnyObject = objc2::msg_send![workspace_cls, sharedWorkspace];
+        let workspace: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![workspace_cls, sharedWorkspace];
         if workspace.is_null() {
             return None;
         }
@@ -5075,6 +5076,20 @@ fn open_plugin_kv_db(path: PathBuf) -> Result<PluginKvDb, String> {
                 );
                 CREATE INDEX IF NOT EXISTS idx_usage_journal_executed_at
                   ON usage_journal (executed_at);
+                CREATE TABLE IF NOT EXISTS ai_usage_records (
+                  run_id TEXT PRIMARY KEY,
+                  plugin_id TEXT NOT NULL,
+                  plugin_source TEXT NOT NULL,
+                  provider_id TEXT NOT NULL,
+                  agent_id TEXT NOT NULL,
+                  effort TEXT,
+                  status TEXT NOT NULL,
+                  started_at INTEGER NOT NULL,
+                  finished_at INTEGER,
+                  metrics_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_ai_usage_plugin_started
+                  ON ai_usage_records (plugin_source, plugin_id, started_at DESC);
                 "#,
         )
         .map_err(|e| e.to_string())?;
@@ -5525,6 +5540,118 @@ fn usage_journal_prune(
     }
 
     Ok(())
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AiUsageRecord {
+    run_id: String,
+    plugin_id: String,
+    plugin_source: String,
+    provider_id: String,
+    agent_id: String,
+    effort: Option<String>,
+    status: String,
+    started_at: i64,
+    finished_at: Option<i64>,
+    metrics: Vec<serde_json::Value>,
+}
+
+#[tauri::command]
+fn ai_usage_record_upsert(record: AiUsageRecord) -> Result<(), String> {
+    validate_plugin_kv_namespace(&record.plugin_source, &record.plugin_id)?;
+    validate_experience_identifier(&record.run_id, "run_id")?;
+    validate_experience_identifier(&record.provider_id, "provider_id")?;
+    validate_experience_identifier(&record.agent_id, "agent_id")?;
+    if !matches!(
+        record.status.as_str(),
+        "running" | "completed" | "failed" | "cancelled"
+    ) {
+        return Err("invalid AI usage status".to_string());
+    }
+    let metrics_json = serde_json::to_string(&record.metrics).map_err(|error| error.to_string())?;
+    let db = get_plugin_kv_db()?
+        .lock()
+        .map_err(|error| error.to_string())?;
+    db.connection
+        .execute(
+            r#"
+              INSERT INTO ai_usage_records (
+                run_id, plugin_id, plugin_source, provider_id, agent_id, effort,
+                status, started_at, finished_at, metrics_json
+              ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+              ON CONFLICT(run_id) DO UPDATE SET
+                status = excluded.status,
+                finished_at = excluded.finished_at,
+                metrics_json = excluded.metrics_json
+            "#,
+            params![
+                record.run_id,
+                record.plugin_id,
+                record.plugin_source,
+                record.provider_id,
+                record.agent_id,
+                record.effort,
+                record.status,
+                record.started_at,
+                record.finished_at,
+                metrics_json,
+            ],
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn ai_usage_record_list(
+    plugin_id: String,
+    plugin_source: String,
+    provider_id: Option<String>,
+    since: Option<i64>,
+    limit: Option<i64>,
+) -> Result<Vec<AiUsageRecord>, String> {
+    validate_plugin_kv_namespace(&plugin_source, &plugin_id)?;
+    let limit = limit.unwrap_or(100).clamp(1, 1000);
+    let db = get_plugin_kv_db()?
+        .lock()
+        .map_err(|error| error.to_string())?;
+    let mut statement = db
+        .connection
+        .prepare(
+            r#"
+          SELECT run_id, plugin_id, plugin_source, provider_id, agent_id, effort,
+                 status, started_at, finished_at, metrics_json
+          FROM ai_usage_records
+          WHERE plugin_id = ?1 AND plugin_source = ?2
+            AND (?3 IS NULL OR provider_id = ?3)
+            AND (?4 IS NULL OR started_at >= ?4)
+          ORDER BY started_at DESC
+          LIMIT ?5
+        "#,
+        )
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map(
+            params![plugin_id, plugin_source, provider_id, since, limit],
+            |row| {
+                let metrics_json: String = row.get(9)?;
+                Ok(AiUsageRecord {
+                    run_id: row.get(0)?,
+                    plugin_id: row.get(1)?,
+                    plugin_source: row.get(2)?,
+                    provider_id: row.get(3)?,
+                    agent_id: row.get(4)?,
+                    effort: row.get(5)?,
+                    status: row.get(6)?,
+                    started_at: row.get(7)?,
+                    finished_at: row.get(8)?,
+                    metrics: serde_json::from_str(&metrics_json).unwrap_or_default(),
+                })
+            },
+        )
+        .map_err(|error| error.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())
 }
 
 fn validate_experience_identifier(value: &str, label: &str) -> Result<(), String> {
@@ -7086,8 +7213,12 @@ pub fn run() {
             plugin_kv_usage,
             plugin_kv_prune,
             plugin_kv_clear,
+            ai_codex::ai_codex_rpc,
+            ai_codex::ai_codex_notify,
             usage_journal_append,
             usage_journal_prune,
+            ai_usage_record_upsert,
+            ai_usage_record_list,
             experience_journal_append,
             experience_journal_export,
             experience_journal_clear_since,

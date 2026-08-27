@@ -169,6 +169,9 @@ interface AppState {
     globalLauncherWindowPositionSource?: 'user'
     /** Per-app global shortcuts (focus/hide toggle). */
     appHotkeys: AppHotkeyBinding[]
+    aiDefaultProviderId?: string
+    aiDefaultAgentId?: string
+    aiDefaultEffort: 'low' | 'medium' | 'high' | 'xhigh'
   }
   updateSetting: (key: string, value: any) => void
   setAppHotkey: (binding: AppHotkeyBinding) => void
@@ -289,6 +292,9 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     globalLauncherWindowPosition: undefined,
     globalLauncherWindowPositionSource: undefined,
     appHotkeys: emptyAppHotkeys(),
+    aiDefaultProviderId: 'openai-chatgpt',
+    aiDefaultAgentId: undefined,
+    aiDefaultEffort: 'medium',
   },
   updateSetting: (key, value) =>
     set((state) => {

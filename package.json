@@ -51,6 +51,7 @@
     "test:feishu-cli-logic": "node scripts/test-feishu-cli-logic.mjs",
     "test:feishu-plugin": "node scripts/test-feishu-plugin.mjs",
     "test:plugin-network-proxy": "node scripts/test-plugin-network-proxy.mjs",
+    "test:ai-provider-runtime": "node scripts/test-ai-provider-runtime.mjs",
     "test:plugin-shell-runtime": "node scripts/test-plugin-shell-runtime.mjs",
     "test:directory-plugin-convergence": "node scripts/test-directory-plugin-convergence.mjs",
     "test:instant-suggestion-multiple-results": "node scripts/test-instant-suggestion-multiple-results.mjs",

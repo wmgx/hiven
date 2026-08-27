@@ -20,6 +20,7 @@ import { openExternalUrl } from '../workspace/effectRunner'
 import type { PluginSettingsContribution } from '../workspace/pluginTypes'
 import { createPluginPrivateStorage } from '../workspace/pluginStorage'
 import { createPluginNetwork } from '../workspace/pluginNetwork'
+import { createPluginAi } from '../workspace/ai/runtime'
 import { createPluginShell } from '../workspace/pluginShell'
 import { getPluginPermissionSnapshot, usePluginPermissionStore } from '../workspace/pluginPermissions'
 import { PluginSettingsSchemaRenderer } from './PluginSettingsSchemaRenderer'
@@ -286,6 +287,7 @@ function SettingsDialogBody({
   const settingsHost = useMemo(() => ({
     permissions,
     storage: createPluginPrivateStorage(source, pluginId, permissions),
+    ai: createPluginAi(pluginId, source, permissions),
     showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error') {
       showToast(message, level ?? 'info')
     },
@@ -310,11 +312,12 @@ function SettingsDialogBody({
         storage: settingsHost.storage,
         network: settingsNetwork,
         shell: settingsShell,
+        ai: settingsHost.ai,
       }),
     ).catch((error) => {
       console.warn(`[hiven] Plugin settings onChange failed for "${pluginId}":`, error)
     })
-  }, [contribution, pluginId, source, settingsHost.storage, settingsNetwork, settingsShell])
+  }, [contribution, pluginId, source, settingsHost.ai, settingsHost.storage, settingsNetwork, settingsShell])
 
   const setValue = useCallback(
     (next: unknown) => {

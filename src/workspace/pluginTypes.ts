@@ -7,6 +7,7 @@
 import type { ComponentType } from 'react'
 import type { Locale } from '../i18n'
 import type { FluxEffect, PaneId } from './types'
+import type { PluginAiApi } from './ai/types'
 import type {
   LauncherItemContribution,
   LauncherDynamicItemProvider,
@@ -249,6 +250,7 @@ export type PluginSettingsModalBodyProps<TSettings = unknown> = PluginSettingsBo
 export type PluginSettingsHostApi = {
   permissions: PluginPermissionSnapshot
   storage: PluginPrivateStorageApi
+  ai: PluginAiApi
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
 }
 
@@ -426,6 +428,7 @@ export type PluginSettingsChangeContext<TSettings = unknown> = {
   storage: PluginPrivateStorageApi
   network: PluginNetworkApi
   shell: PluginShellApi
+  ai: PluginAiApi
 }
 
 export type PluginSettingsContribution<TSettings = unknown> = {
@@ -467,6 +470,7 @@ export type PluginPermission =
   | 'desktop.processes'
   /** L3: run arbitrary local shell commands (default denied until user grants). */
   | 'shell.run'
+  | 'ai.use'
 
 export type PluginPermissionGrant = {
   granted: boolean
@@ -685,6 +689,7 @@ export type PluginSurfaceHostApi = {
   paste: PluginPasteApi
   network: PluginNetworkApi
   shell: PluginShellApi
+  ai: PluginAiApi
 }
 
 export type PluginSurfaceProps<TSettings = unknown> = {
@@ -712,6 +717,7 @@ export type PluginSurfaceOpenContext<TSettings = unknown> = {
   paste: PluginPasteApi
   network: PluginNetworkApi
   shell: PluginShellApi
+  ai: PluginAiApi
 }
 
 export type PluginUiSurfaceContribution<TSettings = unknown> = {
@@ -756,6 +762,7 @@ export type PluginBackgroundContext<TSettings = unknown> = {
   paste: PluginPasteApi
   network: PluginNetworkApi
   shell: PluginShellApi
+  ai: PluginAiApi
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
 }
 
@@ -776,6 +783,7 @@ export type PluginStartupHookContext<TSettings = unknown> = {
   paste: PluginPasteApi
   network: PluginNetworkApi
   shell: PluginShellApi
+  ai: PluginAiApi
   api: PluginLauncherApi
   t: (key: string, vars?: Record<string, string | number>) => string
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void

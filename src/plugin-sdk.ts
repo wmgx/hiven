@@ -159,3 +159,16 @@ export type {
 // text-diff uses `@hiven/plugin-diff` for DualEditorView / line diff / bound text.
 // Structural compare payload (transport only): DiffSourcePayload.
 export type { DiffSourcePayload } from './workspace/diffTypes'
+export type {
+  AiAgent,
+  AiCapability,
+  AiEvent,
+  AiInput,
+  AiProviderDescriptor,
+  AiReasoningEffort,
+  AiRequest,
+  AiUsageMetric,
+  AiUsageQuery,
+  AiUsageRecord,
+  PluginAiApi,
+} from './workspace/ai/types'

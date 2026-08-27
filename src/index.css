@@ -7214,6 +7214,90 @@ body[data-theme='dark'] .srow .s-ico,
   /* keep focus ring visible on nested controls */
 }
 
+.ai-subscription-provider + .ai-subscription-provider {
+  border-top: 1px solid var(--border-subtle, var(--border));
+}
+
+.ai-quota-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px 20px;
+  padding: 2px 16px 16px 64px;
+}
+
+.ai-quota-item {
+  min-width: 0;
+}
+
+.ai-quota-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-2);
+  font-size: 11.5px;
+}
+
+.ai-quota-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-quota-meta strong {
+  color: var(--text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-quota-track {
+  height: 6px;
+  margin-top: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.ai-quota-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-accent);
+  transition: width 180ms ease-out, background-color 180ms ease-out;
+}
+
+.ai-quota-fill[data-level='medium'] {
+  background: var(--color-warning);
+}
+
+.ai-quota-fill[data-level='high'] {
+  background: var(--color-danger, #dc2626);
+}
+
+.ai-quota-reset,
+.ai-quota-credits {
+  margin-top: 5px;
+  color: var(--text-3);
+  font-size: 10.5px;
+}
+
+.ai-quota-credits {
+  align-self: end;
+  margin: 0;
+}
+
+@media (max-width: 680px) {
+  .ai-quota-grid {
+    padding-left: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-quota-fill {
+    transition: none;
+  }
+}
+
 .sw {
   width: 38px;
   height: 22px;
@@ -7320,6 +7404,11 @@ body[data-theme='dark'] .num,
   min-width: 112px;
 }
 
+.settings-select-wrap.is-wide {
+  width: min(220px, 36vw);
+  min-width: min(220px, 36vw);
+}
+
 .settings-select-wrap.is-open {
   z-index: 80;
 }
@@ -7334,13 +7423,13 @@ body[data-theme='dark'] .num,
   box-sizing: border-box;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: linear-gradient(180deg, var(--panel), var(--surface));
+  background: var(--panel);
   color: var(--text);
   cursor: pointer;
   font-size: 12.5px;
   font-weight: 500;
   padding: 0 11px;
-  box-shadow: 0 1px 1px rgba(18, 22, 28, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  box-shadow: none;
 }
 
 body[data-theme='dark'] .sel-ctl,
@@ -7350,40 +7439,52 @@ body[data-theme='dark'] .sel-ctl,
 }
 
 .sel-ctl:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
-  outline-offset: 2px;
+  outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  outline-offset: 1px;
 }
 
 .sel-ctl.open {
-  border-color: var(--accent);
+  border-color: var(--border-2);
+  border-radius: 8px 8px 0 0;
   background: var(--panel);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: none;
 }
 
 .flux-spatial-shell[data-theme='dark'] .sel-ctl.open,
 body[data-theme='dark'] .sel-ctl.open {
-  border-color: var(--accent);
+  border-color: var(--border-2);
   background: var(--surface-2);
 }
 
 .sel-ctl .chev {
+  flex: none;
   color: var(--text-3);
   font-size: 9px;
+}
+
+.sel-ctl-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-select-menu {
   position: absolute;
   z-index: 50;
-  top: calc(100% + 6px);
+  top: calc(100% - var(--hairline));
   left: 0;
   right: 0;
   width: 100%;
   box-sizing: border-box;
-  overflow: hidden;
-  border: 1px solid var(--border-2);
-  border-radius: var(--radius-sm);
+  max-height: min(280px, 44vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 4px;
+  border: var(--hairline) solid var(--border-2);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
   background: var(--panel);
-  box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);
 }
 
 .settings-select-item {
@@ -7391,15 +7492,59 @@ body[data-theme='dark'] .sel-ctl.open {
   align-items: center;
   gap: 6px;
   padding: 7px 8px;
+  border-radius: calc(var(--radius-sm) - 2px);
   color: var(--text);
   cursor: pointer;
   font-size: 12px;
+  line-height: 1.35;
+}
+
+.settings-select-combobox {
+  color: var(--text-3);
+  cursor: text;
+}
+
+.settings-select-combobox:focus-within {
+  outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  outline-offset: 1px;
+}
+
+.settings-select-combobox input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.settings-select-combobox input::placeholder,
+.settings-select-empty {
+  color: var(--text-3);
+}
+
+.settings-select-empty {
+  padding: 8px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.settings-select-item > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-select-item:hover,
-.settings-select-item.is-selected,
 .settings-select-item.is-focused {
-  background: var(--accent-soft);
+  background: var(--surface);
+}
+
+.settings-select-item.is-selected {
+  background: var(--surface-2);
 }
 
 /* Reset button styles for sel-ctl and settings-select-item when rendered as <button> */
@@ -7418,14 +7563,9 @@ button.settings-select-item {
   width: 100%;
 }
 
-button.sel-ctl:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
 button.settings-select-item:focus-visible {
   outline: none;
-  background: var(--accent-soft);
+  background: var(--surface);
 }
 
 /* Plugin settings should read like the UX mock, not like nested admin panels. */

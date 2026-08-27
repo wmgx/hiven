@@ -17,6 +17,7 @@ import { createPluginClipboard } from './pluginClipboard'
 import { createPluginPaste } from './pluginPaste'
 import { createPluginNetwork } from './pluginNetwork'
 import { createPluginShell } from './pluginShell'
+import { createPluginAi } from './ai/runtime'
 import { useAppStore } from '../store'
 import { showToast } from './toast'
 import { getPluginPermissionSnapshot, missingPluginPermissions, usePluginPermissionStore } from './pluginPermissions'
@@ -55,6 +56,7 @@ function buildBackgroundContext(
     paste: createPluginPaste(permissions, storage),
     network: createPluginNetwork(permissions),
     shell: createPluginShell(permissions),
+    ai: createPluginAi(pluginId, source, permissions),
     showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error') {
       showToast(message, level ?? 'info')
     },

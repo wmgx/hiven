@@ -1,6 +1,7 @@
 export default {
   en: {
     basicSettings: 'Settings',
+    aiSubscriptions: 'AI subscriptions',
     pluginManagement: 'Plugins',
     learnedRules: 'Learned',
     learnedRulesEmpty: 'Nothing learned yet. hiven watches how you transform content and will suggest a direct answer once it sees a repeated pattern.',
@@ -12,6 +13,7 @@ export default {
   },
   zh: {
     basicSettings: '基础设置',
+    aiSubscriptions: 'AI 订阅',
     pluginManagement: '插件管理',
     learnedRules: '已学',
     learnedRulesEmpty: '还没学到规则。hiven 会观察你如何处理内容，出现重复模式时主动建议设为直答。',

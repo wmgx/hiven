@@ -36,6 +36,7 @@ import {
 } from './identity'
 import { createPluginLauncherApi, createPluginLauncherStorage } from './pluginApi'
 import { createPluginNetwork } from '../pluginNetwork'
+import { createPluginAi } from '../ai/runtime'
 import { createPluginShell } from '../pluginShell'
 import { getPluginPermissionSnapshot } from '../pluginPermissions'
 import { launcherPerfNow, logLauncherPerfDuration, measureLauncherPerf } from './perf'
@@ -406,6 +407,11 @@ export async function collectDynamicItems(
             api: createPluginLauncherApi({ pluginId, source: settingsSource, requestedPermissions }),
             storage: createPluginLauncherStorage({ pluginId, source: settingsSource, requestedPermissions }),
             network: createPluginNetwork(getPluginPermissionSnapshot(settingsSource, pluginId, requestedPermissions)),
+            ai: createPluginAi(
+              pluginId,
+              settingsSource,
+              getPluginPermissionSnapshot(settingsSource, pluginId, requestedPermissions),
+            ),
             shell: createPluginShell(getPluginPermissionSnapshot(settingsSource, pluginId, requestedPermissions)),
             t: makePluginT(pluginId, locale),
           })),

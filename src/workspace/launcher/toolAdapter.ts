@@ -124,6 +124,7 @@ export function adaptToolToLauncherItem(
         locale: ctx.locale,
         api: ctx.api,
         storage: ctx.storage,
+        ai: ctx.ai,
         shell,
         t: ctx.t,
         output: makeOutput(ctx.api, ctx.locale, ctx.surfaceId ?? ''),
