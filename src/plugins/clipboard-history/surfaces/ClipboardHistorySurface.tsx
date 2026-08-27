@@ -297,12 +297,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     }
   }, [host, resolveFullItem, t])
 
-  const itemContextMenuItems = useCallback((item: ClipboardHistoryItem): MenuItemSpec[] => [
-    { key: 'paste', label: t('action.paste'), onSelect: () => void handlePaste(item) },
-    { key: 'copy', label: t('action.copy'), onSelect: () => void handleCopy(item) },
-    { key: 'delete', label: t('action.delete'), danger: true, onSelect: () => handleDelete(item.id) },
-  ], [handlePaste, handleCopy, handleDelete, t])
-
   const applyItemUpdate = useCallback((updated: ClipboardHistoryItem) => {
     setItems((current) =>
       current.map((entry) => {
@@ -430,6 +424,12 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
     pendingDeleteRef.current = { timerId, id, toastId }
   }, [items, repository, t])
+
+  const itemContextMenuItems = useCallback((item: ClipboardHistoryItem): MenuItemSpec[] => [
+    { key: 'paste', label: t('action.paste'), onSelect: () => void handlePaste(item) },
+    { key: 'copy', label: t('action.copy'), onSelect: () => void handleCopy(item) },
+    { key: 'delete', label: t('action.delete'), danger: true, onSelect: () => handleDelete(item.id) },
+  ], [handlePaste, handleCopy, handleDelete, t])
 
   const handleItemHover = useCallback((id: string) => {
     if (!isKeyboardNavRef.current) {
