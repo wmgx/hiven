@@ -55,9 +55,9 @@ assert.match(
 
 const offer = (over = {}) => ({
   kind: 'url-template',
-  template: 'code.byted.org/lark/-/merge_requests/{n}',
-  slotKind: 'n',
-  clusterKey: 'url:code.byted.org/lark/-/merge_requests/{n}',
+  template: 'code.byted.org/lark/x/commit/{hex}',
+  slotKind: 'hex',
+  clusterKey: 'url:code.byted.org/lark/x/commit/{hex}',
   evidence: { sampleCount: 27, distinctInputs: 7 },
   ...over,
 })
@@ -68,7 +68,7 @@ const offer = (over = {}) => ({
   assert.ok(entry, 'url-template offer converts')
   assert.equal(
     entry.urlTemplate,
-    'https://code.byted.org/lark/-/merge_requests/{query}',
+    'https://code.byted.org/lark/x/commit/{query}',
     'slot becomes {query} and the scheme is restored',
   )
   assert.ok(entry.matchPattern, 'carries a match pattern so it only fires on the right shape')
@@ -89,7 +89,7 @@ const offer = (over = {}) => ({
   const b = L.learnedOfferToEntry(offer())
   assert.equal(a.id, b.id, 'same offer → same id, so re-claiming cannot duplicate')
 
-  const other = L.learnedOfferToEntry(offer({ clusterKey: 'url:other.org/x/{n}', template: 'other.org/x/{n}' }))
+  const other = L.learnedOfferToEntry(offer({ clusterKey: 'url:other.org/x/{hex}', template: 'other.org/x/{hex}' }))
   assert.notEqual(a.id, other.id, 'different clusters get different ids')
 }
 
@@ -113,6 +113,11 @@ const offer = (over = {}) => ({
   assert.equal(L.learnedOfferToEntry(offer({ template: 'no-slot-here.org/x' })), null, 'a template with no slot is useless')
   assert.equal(L.learnedOfferToEntry(offer({ template: '' })), null, 'empty template rejected')
   assert.equal(L.learnedOfferToEntry(offer({ slotKind: 'nonsense' })), null, 'unknown slot kind rejected')
+  assert.equal(
+    L.learnedOfferToEntry(offer({ template: 'x.org/a/{n}', slotKind: 'n', clusterKey: 'url:x.org/a/{n}' })),
+    null,
+    'number slot kind is no longer supported — too ambiguous to safely auto-fire',
+  )
 }
 
 // ─── 5. merging into existing entries: no duplicates, user edits preserved ───
@@ -141,7 +146,7 @@ const offer = (over = {}) => ({
 // ─── 6. CROSS-LAYER: host slot kinds and plugin regexes must agree ───────────
 // If these drift, rules get learned and silently never fire.
 {
-  for (const slotKind of ['n', 'hex', 'uuid', 'id', 'slug']) {
+  for (const slotKind of ['hex', 'uuid', 'id', 'slug']) {
     const entry = L.learnedOfferToEntry(offer({
       template: `x.org/a/{${slotKind}}`,
       slotKind,
@@ -175,10 +180,9 @@ const offer = (over = {}) => ({
       clusterKey: `k:${slotKind}`,
     })).matchPattern)
 
-  assert.equal(patternFor('n').test('claude-code'), false, '{n} must not match text')
   assert.equal(patternFor('uuid').test('12345'), false, '{uuid} must not match a plain number')
   // A bare word is never a slot value anywhere (guardrail mirrored from the host).
-  for (const kind of ['n', 'hex', 'uuid', 'id', 'slug']) {
+  for (const kind of ['hex', 'uuid', 'id', 'slug']) {
     assert.equal(
       patternFor(kind).test('hello'),
       false,

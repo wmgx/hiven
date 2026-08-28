@@ -41,12 +41,15 @@ const C = loadModule('src/workspace/learning/coverage.ts')
 
 // ─── templatizeUrl: id-like path segments → typed slots ──────────────────────
 {
+  // Pure digits are deliberately never a slot — an MR number, a page number
+  // and a quantity are indistinguishable strings, and in practice this was
+  // the noisiest matcher. The path stays fully literal; query/fragment are
+  // still dropped only when a slot is actually found (see withQuery below).
   const r = U.templatizeUrl('https://code.byted.org/lark/backend/-/merge_requests/12345?tab=diffs#note')
   assert.ok(r, 'valid https url templatized')
   assert.equal(r.host, 'code.byted.org')
-  assert.equal(r.template, 'code.byted.org/lark/backend/-/merge_requests/{n}', 'numeric id → {n}, query/fragment dropped')
-  assert.equal(r.slots.join(','), '12345', 'concrete slot captured (for hashing, not stored)')
-  assert.equal(r.slotKinds.join(','), 'n')
+  assert.equal(r.template, 'code.byted.org/lark/backend/-/merge_requests/12345', 'numeric id stays literal, not a slot')
+  assert.equal(r.slots.length, 0, 'digits never produce a slot')
 
   // Constant path words are kept; only the id varies.
   const commit = U.templatizeUrl('https://code.byted.org/lark/x/commit/a1b2c3d4e5f6')
@@ -55,15 +58,20 @@ const C = loadModule('src/workspace/learning/coverage.ts')
   const uuid = U.templatizeUrl('https://svc.byted.org/trace/550e8400-e29b-41d4-a716-446655440000')
   assert.equal(uuid.template, 'svc.byted.org/trace/{uuid}', 'uuid → {uuid}')
 
-  // Path id wins → query dropped (single-slot stability).
+  // A numeric path segment plus an unrelated query still yields no slot at all.
   const withQuery = U.templatizeUrl('https://code.byted.org/lark/-/merge_requests/12345?tab=diffs')
-  assert.equal(withQuery.template, 'code.byted.org/lark/-/merge_requests/{n}', 'path id wins, query dropped')
+  assert.equal(withQuery.template, 'code.byted.org/lark/-/merge_requests/12345', 'digits stay literal even with a query present')
+  assert.equal(withQuery.slots.length, 0)
 
   // No path id → an id-like query value becomes the slot (logid case, discovered
   // from browsing alone — no copy event needed); other params dropped.
   const queryId = U.templatizeUrl('https://argos.byted.org/trace?logid=20240813abcd1234&region=cn')
   assert.equal(queryId.template, 'argos.byted.org/trace?logid={hex}', 'query id templatized heuristically')
   assert.equal(queryId.slotKinds.join(','), 'hex')
+
+  // A purely numeric query value is not a slot either.
+  const queryNumber = U.templatizeUrl('https://x.org/trace?id=20240813&region=cn')
+  assert.equal(queryNumber.slots.length, 0, 'a numeric query value is not a slot')
 
   // No id-like segment anywhere → template has no slot.
   const homepage = U.templatizeUrl('https://code.byted.org/dashboard')
@@ -181,11 +189,13 @@ const C = loadModule('src/workspace/learning/coverage.ts')
 
 // ─── scenario A: templatizeUrlWithToken (copy-correlated slot) ───────────────
 {
-  // Token in the path → slot around that exact token.
-  const p = U.templatizeUrlWithToken('https://code.byted.org/lark/-/merge_requests/9931', '9931')
-  assert.ok(p, 'path token templatized')
-  assert.equal(p.template, 'code.byted.org/lark/-/merge_requests/{n}')
-  assert.equal(p.slotKinds.join(','), 'n')
+  // A purely numeric copied token is no longer learnable — too ambiguous to
+  // safely auto-fire (order #, page #, quantity all look the same).
+  assert.equal(
+    U.templatizeUrlWithToken('https://code.byted.org/lark/-/merge_requests/9931', '9931'),
+    null,
+    'numeric token → no rule (rather than an over-eager one)',
+  )
 
   // Token in a query value → keep only that param (the logid case the heuristic drops).
   // (all-hex value → {hex}; other params dropped for clustering stability.)
@@ -209,7 +219,7 @@ const C = loadModule('src/workspace/learning/coverage.ts')
 
 // ─── reverse fire: queryMatchesSlot / fillTemplate ───────────────────────────
 {
-  assert.equal(U.queryMatchesSlot('12345', 'n'), true, 'digits match {n}')
+  assert.equal(U.queryMatchesSlot('12345', 'n'), false, 'digits are no longer a slot kind — never matches')
   assert.equal(U.queryMatchesSlot('a1b2c3d4', 'hex'), true, 'hex string matches {hex}')
   assert.equal(U.queryMatchesSlot('550e8400-e29b-41d4-a716-446655440000', 'uuid'), true, 'uuid matches {uuid}')
   assert.equal(U.queryMatchesSlot('12345', 'hex'), false, 'a pure number is not a hex id')
@@ -217,8 +227,8 @@ const C = loadModule('src/workspace/learning/coverage.ts')
   assert.equal(U.queryMatchesSlot('', 'n'), false, 'empty does not match')
 
   assert.equal(
-    U.fillTemplate('code.byted.org/lark/-/merge_requests/{n}', '9931'),
-    'code.byted.org/lark/-/merge_requests/9931',
+    U.fillTemplate('code.byted.org/lark/x/commit/{hex}', 'a1b2c3d4e5f6'),
+    'code.byted.org/lark/x/commit/a1b2c3d4e5f6',
     'slot filled with typed value',
   )
 }
@@ -239,7 +249,6 @@ const C = loadModule('src/workspace/learning/coverage.ts')
     ['my-doc-slug', 'doc slug'],
     ['toutiao.mysql.user', 'PSM triple'],
     ['user_profile_v2', 'versioned text id'],
-    ['12345', 'numeric id (regression: still works)'],
     ['a1b2c3d4e5f6', 'hex sha (regression)'],
     ['550e8400-e29b-41d4-a716-446655440000', 'uuid (regression)'],
   ]
@@ -259,11 +268,19 @@ const C = loadModule('src/workspace/learning/coverage.ts')
       `${desc}: round-trips back to the original url`,
     )
   }
+
+  // Pure digits are the deliberate exception: not learnable at all, on either side.
+  assert.equal(
+    U.templatizeUrlWithToken('https://x.org/thing/12345', '12345'),
+    null,
+    'numeric id: no longer learnable — too ambiguous to safely auto-fire',
+  )
 }
 
 // ─── classifyTokenSlot: wide vocabulary, with guardrails ─────────────────────
 {
-  assert.equal(U.classifyTokenSlot('12345'), 'n')
+  // Pure digits are never a slot — too ambiguous (order #, page #, quantity…).
+  assert.equal(U.classifyTokenSlot('12345'), null, 'pure digits are not a slot')
   assert.equal(U.classifyTokenSlot('a1b2c3d4e5f6'), 'hex')
   assert.equal(U.classifyTokenSlot('550e8400-e29b-41d4-a716-446655440000'), 'uuid')
 
@@ -325,9 +342,10 @@ const C = loadModule('src/workspace/learning/coverage.ts')
   const mr = U.templatizeUrl('https://code.byted.org/lark/-/merge_requests/12345')
   assert.equal(
     mr.template,
-    'code.byted.org/lark/-/merge_requests/{n}',
-    'merge_requests stays literal even though it contains an underscore',
+    'code.byted.org/lark/-/merge_requests/12345',
+    'merge_requests stays literal (underscore), and so does the numeric id (no longer a slot)',
   )
+  assert.equal(mr.slots.length, 0)
 }
 
 // ─── INVARIANT: novelty-guard probes must match the kind they probe for ──────
@@ -335,7 +353,7 @@ const C = loadModule('src/workspace/learning/coverage.ts')
 // classify back to its own kind, the guard asks capabilities about a shape the
 // rule would never fire on — the same class of asymmetry as the learn/fire bug.
 {
-  const kinds = ['n', 'hex', 'uuid', 'id', 'slug']
+  const kinds = ['hex', 'uuid', 'id', 'slug']
   for (const kind of kinds) {
     const tokens = C.representativeTokens(kind)
     assert.ok(tokens.length > 0, `${kind}: has representative tokens`)
@@ -350,6 +368,7 @@ const C = loadModule('src/workspace/learning/coverage.ts')
   // (length, not deepEqual: vm-sandbox arrays are cross-realm so deepStrictEqual
   // fails on prototype identity even when contents match.)
   assert.equal(C.representativeTokens('unknown-kind').length, 0, 'unknown kind probes nothing')
+  assert.equal(C.representativeTokens('n').length, 0, 'digits are no longer a probeable slot kind')
 }
 
 console.log('test-learning-urltemplate: ok')

@@ -30,7 +30,7 @@ import { readNativeClipboardText } from './workspace/nativeClipboard'
 import { startLearningObserver } from './workspace/learning/observer'
 import { startPureTransformRunnerSync } from './workspace/learning/registryRunners'
 import { startNavigationSensor } from './workspace/learning/navigationSensor'
-import { installLearningDebugHook, startAutoLearnLoop } from './workspace/learning/learningController'
+import { installLearningDebugHook, purgeStaleNumberLearning, startAutoLearnLoop } from './workspace/learning/learningController'
 import { refreshLearnedUrlRules } from './workspace/learning/fire'
 
 // Register built-in panels
@@ -146,6 +146,9 @@ function LauncherRuntimeApp() {
     const stopAutoLearn = startAutoLearnLoop()
     // Load learned url-template rules into memory for reverse-fire (typed id → open).
     void refreshLearnedUrlRules()
+    // One-time cleanup of number-slot ("n") rules/navigations learned before
+    // digits were excluded from url-template matching (too ambiguous to fire on).
+    void purgeStaleNumberLearning()
     // Devtools verification hook (window.__hivenLearning) — no user-facing UI yet.
     installLearningDebugHook()
     return () => {

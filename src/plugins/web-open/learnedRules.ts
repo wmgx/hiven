@@ -31,7 +31,6 @@ export interface LearnedOffer {
  * a `{slug}` rule that matched "hello" would open a page on every search.
  */
 const SLOT_PATTERNS: Record<string, string> = {
-  n: '^\\d+$',
   hex: '^[0-9a-fA-F]{7,}$',
   uuid: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
   // Mixed letters+digits, 6+ chars: dQw4w9WgXcQ, PROJ-1234, orderXYZ12345.
@@ -41,7 +40,7 @@ const SLOT_PATTERNS: Record<string, string> = {
   slug: '^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)+$',
 }
 
-const SLOT_RE = /\{(n|hex|uuid|id|slug)\}/
+const SLOT_RE = /\{(hex|uuid|id|slug)\}/
 
 /** Short stable suffix from a cluster key, so ids don't collide or churn. */
 function stableSuffix(clusterKey: string): string {

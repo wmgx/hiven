@@ -27,6 +27,7 @@ import {
   countEventSigs,
   deleteRule,
   putRule,
+  purgeNumberSlotHistoryOnce,
   queryAllPairs,
   queryAllRules,
   queryAllSuppressions,
@@ -247,6 +248,21 @@ export async function undoLearnedRule(rule: LearnedRule): Promise<void> {
     transformKind: rule.transform.kind,
     fireCount: rule.fireCount ?? 0,
   })
+}
+
+/**
+ * One-time migration: remove url-template rules and navigation evidence
+ * learned under the old, more permissive classifier that treated pure digits
+ * as an identifier slot. See store.purgeNumberSlotHistoryOnce. Fail-soft and
+ * safe to call on every startup — the store gates the actual work.
+ */
+export async function purgeStaleNumberLearning(): Promise<void> {
+  try {
+    await purgeNumberSlotHistoryOnce()
+    await refreshLearnedUrlRules()
+  } catch {
+    // fail-soft: cleanup must never break the app
+  }
 }
 
 /** Delay before the first auto-learn pass, so startup isn't competing with it. */

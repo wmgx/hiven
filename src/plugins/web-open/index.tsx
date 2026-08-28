@@ -368,6 +368,20 @@ async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<L
   return results
 }
 
+/**
+ * Match pattern the learner used to use for the digit-only slot kind. Number
+ * shapes turned out too ambiguous to auto-fire (a page number, a quantity, an
+ * MR number all look the same) and are no longer learned — see
+ * urlTemplate.classifyPathSegment — so any rule the system created for exactly
+ * this pattern is stale, never-user-edited noise from before that fix.
+ */
+const STALE_AUTO_NUMBER_PATTERN = '^\\d+$'
+
+function isStaleAutoNumberEntry(entry: Pick<WebQuickOpenEntry, 'matchPattern' | 'tags' | 'learnedFrom'>): boolean {
+  if (entry.matchPattern !== STALE_AUTO_NUMBER_PATTERN) return false
+  return Boolean(entry.learnedFrom) || Boolean(entry.tags?.includes(AUTO_CREATED_TAG))
+}
+
 function migrateWebQuickOpenSettings(stored: unknown): WebQuickOpenSettings {
   const value = stored && typeof stored === 'object' && !Array.isArray(stored)
     ? stored as Partial<WebQuickOpenSettings>
@@ -375,29 +389,33 @@ function migrateWebQuickOpenSettings(stored: unknown): WebQuickOpenSettings {
   const entries = Array.isArray(value.entries) ? value.entries : DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries
   const migrated: WebQuickOpenSettings = {
     enabled: typeof value.enabled === 'boolean' ? value.enabled : DEFAULT_WEB_QUICK_OPEN_SETTINGS.enabled,
-    entries: entries.map((entry, index) => {
-      const source = entry && typeof entry === 'object' && !Array.isArray(entry)
-        ? entry as Partial<WebQuickOpenSettings['entries'][number]>
-        : {}
-      return {
-        id: String(source.id || 'web-' + (index + 1)),
-        title: String(source.title || ''),
-        aliases: Array.isArray(source.aliases) ? source.aliases.map(String) : [],
-        placeholder: String(source.placeholder || ''),
-        urlTemplate: String(source.urlTemplate || 'https://example.com/search?q={query}'),
-        encodeQuery: typeof source.encodeQuery === 'boolean' ? source.encodeQuery : true,
-        emptyQueryBehavior: source.emptyQueryBehavior === 'open' ? 'open' : 'block',
-        matchPattern: typeof source.matchPattern === 'string' ? source.matchPattern : undefined,
-        recordQueryHistory: source.recordQueryHistory === true,
-        maxQueryHistory: clampMaxQueryHistory(
-          typeof source.maxQueryHistory === 'number' ? source.maxQueryHistory : DEFAULT_MAX_QUERY_HISTORY,
-        ),
-        // Preserved through migration: dropping it would let the learner claim
-        // the same cluster again on the next pass, duplicating the rule.
-        learnedFrom: typeof source.learnedFrom === 'string' ? source.learnedFrom : undefined,
-        tags: Array.isArray(source.tags) ? source.tags.map(String).filter(Boolean) : undefined,
-      }
-    }),
+    entries: entries
+      .map((entry, index) => {
+        const source = entry && typeof entry === 'object' && !Array.isArray(entry)
+          ? entry as Partial<WebQuickOpenSettings['entries'][number]>
+          : {}
+        return {
+          id: String(source.id || 'web-' + (index + 1)),
+          title: String(source.title || ''),
+          aliases: Array.isArray(source.aliases) ? source.aliases.map(String) : [],
+          placeholder: String(source.placeholder || ''),
+          urlTemplate: String(source.urlTemplate || 'https://example.com/search?q={query}'),
+          encodeQuery: typeof source.encodeQuery === 'boolean' ? source.encodeQuery : true,
+          emptyQueryBehavior: source.emptyQueryBehavior === 'open' ? 'open' : 'block',
+          matchPattern: typeof source.matchPattern === 'string' ? source.matchPattern : undefined,
+          recordQueryHistory: source.recordQueryHistory === true,
+          maxQueryHistory: clampMaxQueryHistory(
+            typeof source.maxQueryHistory === 'number' ? source.maxQueryHistory : DEFAULT_MAX_QUERY_HISTORY,
+          ),
+          // Preserved through migration: dropping it would let the learner claim
+          // the same cluster again on the next pass, duplicating the rule.
+          learnedFrom: typeof source.learnedFrom === 'string' ? source.learnedFrom : undefined,
+          tags: Array.isArray(source.tags) ? source.tags.map(String).filter(Boolean) : undefined,
+        }
+      })
+      // Drop stale auto-learned number rules — user-written ones (no learnedFrom/
+      // auto tag) are never touched even if they happen to use the same pattern.
+      .filter((entry) => !isStaleAutoNumberEntry(entry)),
   }
   // Keep regex cache in sync when settings are loaded/migrated (replace semantics).
   replaceMatchPatternCache(
@@ -475,7 +493,7 @@ export default definePlugin<WebQuickOpenSettings>({
     // Matches the plugin's displayName (manifest.json) — one identity, one name.
     title: 'Browser',
     titleI18n: { zh: '浏览器' },
-    version: 6,
+    version: 7,
     defaultValue: DEFAULT_WEB_QUICK_OPEN_SETTINGS,
     migrate: migrateWebQuickOpenSettings,
     // Settings write-through: re-warm domains when rules / URL templates change.

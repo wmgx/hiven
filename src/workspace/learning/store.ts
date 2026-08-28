@@ -576,3 +576,64 @@ export async function pruneOldPairs(now: number = Date.now()): Promise<void> {
   const cutoff = now - PAIR_TTL_MS
   await pruneStoreByTs(STORE_PAIRS, cutoff)
 }
+
+// ─── one-time cleanup: stale number-slot ("n") learning history ───────────────
+
+/**
+ * Pure digits are no longer classified as an identifier slot (see
+ * urlTemplate.classifyPathSegment) — a page number, a quantity and an MR
+ * number are indistinguishable strings, and in practice this was the noisiest
+ * matcher. This purges what was already learned under the old, more permissive
+ * classifier: url-template rules and navigation evidence keyed on slot kind
+ * `'n'`. Runs once (localStorage-gated); string-shaped rules (hex/uuid/id/slug)
+ * are untouched.
+ */
+const NUMBER_SLOT_PURGE_FLAG = 'hiven:learning:purged-number-slot-v1'
+
+function isNumberSlotRule(rule: LearnedRule): boolean {
+  if (rule.matcher.kind === 'token' && rule.matcher.tokenKind === 'n') return true
+  if (rule.transform.kind === 'url-template' && rule.transform.slotKind === 'n') return true
+  return false
+}
+
+async function purgeMatchingCursor<T>(
+  db: IDBDatabase,
+  storeName: string,
+  isStale: (value: T) => boolean,
+): Promise<void> {
+  try {
+    const store = objectStore(db, storeName, 'readwrite')
+    await new Promise<void>((resolve) => {
+      const request = store.openCursor()
+      request.onsuccess = () => {
+        const cursor = request.result
+        if (cursor) {
+          if (isStale(cursor.value as T)) cursor.delete()
+          cursor.continue()
+        } else {
+          resolve()
+        }
+      }
+      request.onerror = () => resolve()
+    })
+  } catch {
+    // fail-soft
+  }
+}
+
+export async function purgeNumberSlotHistoryOnce(): Promise<void> {
+  try {
+    if (localStorage.getItem(NUMBER_SLOT_PURGE_FLAG)) return
+  } catch {
+    return
+  }
+  const db = await openDb()
+  if (!db) return
+  await purgeMatchingCursor<LearnedRule>(db, STORE_RULES, isNumberSlotRule)
+  await purgeMatchingCursor<NavigationRecord>(db, STORE_NAV, (nav) => (nav.slotKind as string | undefined) === 'n')
+  try {
+    localStorage.setItem(NUMBER_SLOT_PURGE_FLAG, String(Date.now()))
+  } catch {
+    // fail-soft
+  }
+}
