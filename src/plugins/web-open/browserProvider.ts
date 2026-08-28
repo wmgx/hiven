@@ -37,6 +37,13 @@ const EMPTY_OPEN_UNRANKED_BIAS = 10
  * closed page never crowds out a tab you can actually switch to.
  */
 const HISTORY_SCORE_BIAS = -160
+/**
+ * Per-rank step subtracted from HISTORY_SCORE_BIAS as history entries get
+ * older/rarer (see the frecency sort below). Keeps a stale entry from tying
+ * with — let alone crowding out — a page visited yesterday, while the whole
+ * history tier stays far under any open-tab bias even at QUERY_HISTORY_LIMIT.
+ */
+const HISTORY_RANK_STEP_BIAS = 4
 
 function nativeIdFromTargetId(sourceId: string, kind: string, id: string): string {
   const prefix = `${sourceId}:${kind}:`
@@ -227,7 +234,29 @@ export function createChromiumTabsProvider(): DesktopTargetProvider {
         })
 
       const history = await desktopTargets.bridge.listHistory(CHROMIUM_SOURCE_ID)
-      const seenHistoryPaths = new Set<string>()
+      // A page already open in a tab shouldn't also show as "history" — the
+      // tab above already represents it, ranked higher. Built from `ordered`
+      // (every open tab that matched the query, not just the slice actually
+      // rendered) so history can't smuggle in a duplicate of a tab the user
+      // will see.
+      //
+      // Query-blind (ignoreQuery: true) on purpose, and for the same-page
+      // check within history below: compactHistoryUrl never displays the
+      // query, and many sites (this Meego/Lark issue link included) attach a
+      // per-visit or tracking query param that changes on every visit. Using
+      // the precise identity here would leave rows that render byte-for-byte
+      // identical — same title, same visible URL — sitting right next to
+      // each other, which is the exact "these look the same" bug this exists
+      // to fix. The precise, query-sensitive identity (openHit above) is
+      // reserved for "focus this exact open tab", where a different query
+      // really does mean a different page state to jump to.
+      const openTabUrlKeys = new Set(
+        ordered
+          .map((dto) => normalizeUrlForMatch(dto.url, { ignoreQuery: true }))
+          .filter((key): key is string => key !== null),
+      )
+      const seenHistoryUrlKeys = new Set<string>()
+      const now = Date.now()
       const historyTargets = history
         .filter((item) =>
           searchableFieldsMatch(
@@ -241,18 +270,27 @@ export function createChromiumTabsProvider(): DesktopTargetProvider {
           ),
         )
         .filter((item) => {
-          try {
-            const url = new URL(item.url)
-            const key = `${url.origin}${url.pathname.replace(/\/+$/, '') || '/'}`
-            if (seenHistoryPaths.has(key)) return false
-            seenHistoryPaths.add(key)
-            return true
-          } catch {
-            return true
-          }
+          const key = normalizeUrlForMatch(item.url, { ignoreQuery: true })
+          if (!key) return true
+          if (openTabUrlKeys.has(key)) return false
+          if (seenHistoryUrlKeys.has(key)) return false
+          seenHistoryUrlKeys.add(key)
+          return true
         })
+        .map((item) => ({
+          item,
+          // Recency (and, where the extension reports full visit lists,
+          // frequency) decayed score — see visitFrecency for why one decay
+          // rate can't express both a returning habit and a finished burst.
+          // Older/rarer visits sink toward the bottom of the history tier.
+          score:
+            item.visits && item.visits.length > 0
+              ? visitFrecency(item.visits, now)
+              : visitFrecencyFromSummary(item.visitCount ?? 0, item.lastVisitTime, now),
+        }))
+        .sort((a, b) => b.score - a.score)
         .slice(0, QUERY_HISTORY_LIMIT)
-        .map((item) => {
+        .map(({ item }, index) => {
           const favicon = isRenderableIconUrl(item.faviconUrl) ? item.faviconUrl : undefined
           return {
             id: `${item.sourceId}:document:${item.id}`,
@@ -271,7 +309,7 @@ export function createChromiumTabsProvider(): DesktopTargetProvider {
             actionClass: 'open' as const,
             persistable: true,
             persistKey: item.url,
-            scoreBias: HISTORY_SCORE_BIAS,
+            scoreBias: HISTORY_SCORE_BIAS - index * HISTORY_RANK_STEP_BIAS,
             kindLabelI18n: { en: 'Browser history', zh: '浏览器历史' },
           }
         })

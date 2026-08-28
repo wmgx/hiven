@@ -61,6 +61,40 @@ const { normalizeUrlForMatch, findOpenTabForUrl } = loadModule('src/plugins/web-
   assert.equal(normalizeUrlForMatch(null), null, 'null not matchable')
 }
 
+// ─── normalizeUrlForMatch({ ignoreQuery: true }) — coarse "same page" grouping ─
+{
+  // Used to declutter history/recents rows, which never display the query
+  // (see compactHistoryUrl) — so two visits differing only by a tracking or
+  // per-visit query param must collapse to one key, unlike the default.
+  const withoutQuery = normalizeUrlForMatch('https://example.com/foo/bar', { ignoreQuery: true })
+  assert.ok(withoutQuery, 'valid https url normalizes with ignoreQuery')
+  assert.equal(
+    normalizeUrlForMatch('https://example.com/foo/bar?session=abc123', { ignoreQuery: true }),
+    withoutQuery,
+    'a query-only difference collapses to the same key when ignoreQuery is set',
+  )
+  assert.equal(
+    normalizeUrlForMatch('https://example.com/foo/bar?session=xyz789', { ignoreQuery: true }),
+    withoutQuery,
+    'a DIFFERENT query-only difference also collapses to the same key',
+  )
+  // Default behavior (no options / ignoreQuery: false) is unchanged — query
+  // still distinguishes pages, since that precision is required for focusing
+  // an exact open tab.
+  assert.notEqual(
+    normalizeUrlForMatch('https://example.com/foo/bar?session=abc123'),
+    withoutQuery,
+    'without ignoreQuery, a query difference still changes identity',
+  )
+  // A path difference still changes identity even with ignoreQuery — only
+  // the query is dropped, not the whole page identity.
+  assert.notEqual(
+    normalizeUrlForMatch('https://example.com/foo/other', { ignoreQuery: true }),
+    withoutQuery,
+    'ignoreQuery does not blur a real path difference',
+  )
+}
+
 // ─── findOpenTabForUrl — resolve to the focusable tab ────────────────────────
 {
   const tabs = [

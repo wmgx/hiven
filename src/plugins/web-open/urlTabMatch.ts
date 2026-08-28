@@ -28,9 +28,20 @@ export interface OpenTabMatch {
 /**
  * Canonical page-identity key for a URL, or null when it isn't an http(s) URL.
  * Folds http/https to one scheme, lowercases host, strips a trailing slash and
- * the #fragment, and keeps path + query verbatim (they change page identity).
+ * the #fragment, and by default keeps the query verbatim (it usually changes
+ * page identity — a different search or tab param is a different page).
+ *
+ * Pass `ignoreQuery: true` for the coarser "is this the same page" grouping
+ * used to declutter history/recents (see compactHistoryUrl in
+ * browserProvider.ts, which never displays the query either) — many sites
+ * append per-visit or tracking query params that don't change what the user
+ * would consider "the same page", and keeping them distinct there just
+ * produces visually-identical duplicate rows.
  */
-export function normalizeUrlForMatch(url: string | null | undefined): string | null {
+export function normalizeUrlForMatch(
+  url: string | null | undefined,
+  options?: { ignoreQuery?: boolean },
+): string | null {
   if (typeof url !== 'string') return null
   const trimmed = url.trim()
   if (!/^https?:\/\//i.test(trimmed)) return null
@@ -46,8 +57,9 @@ export function normalizeUrlForMatch(url: string | null | undefined): string | n
   let path = parsed.pathname
   if (path === '/') path = ''
   else if (path.endsWith('/')) path = path.slice(0, -1)
+  const query = options?.ignoreQuery ? '' : parsed.search
   // scheme folded (web://) so an https tab matches an http copy and vice versa.
-  return `web://${host}${path}${parsed.search}`
+  return `web://${host}${path}${query}`
 }
 
 /**

@@ -27,9 +27,6 @@ const src = readFileSync(new URL('../src/plugins/web-open/browserProvider.ts', i
 // Showing the common prefix makes distinct rows look identical after ellipsis.
 assert.match(src, /function compactHistoryUrl\(rawUrl: string\): string/)
 assert.match(src, /subtitle: compactHistoryUrl\(item\.url\)/)
-assert.match(src, /const seenHistoryPaths = new Set<string>\(\)/)
-assert.match(src, /const key = `\$\{url\.origin\}\$\{url\.pathname\.replace/)
-assert.match(src, /seenHistoryPaths\.has\(key\)[\s\S]{0,120}seenHistoryPaths\.add\(key\)/)
 assert.doesNotMatch(src.match(/function compactHistoryUrl[\s\S]*?\n\}/)?.[0] ?? '', /url\.search|url\.hash/)
 
 // ─── every open tab in query results gets the "Browser tab" pill ─────────────
