@@ -26,6 +26,7 @@ export type PersistableLauncherPayload = {
   appName?: string
   appStableKey?: string
   scoreBias?: number
+  fallback?: boolean
   keywords?: string[]
   sourceId?: string
 }
@@ -36,10 +37,6 @@ export type PersistableRecentEntry = PersistableLauncherPayload & {
 }
 
 export const PERSISTABLE_RECENTS_MAX = 48
-/** Empty Global Launcher query: keep recents short so static tools stay scannable. */
-export const PERSISTABLE_RECENTS_EMPTY_QUERY_MAX = 8
-/** Non-empty query: allow a few more filtered matches. */
-export const PERSISTABLE_RECENTS_QUERY_MAX = 12
 /** Empty-query boost — max host providerPriorityBoost is 50. */
 export const PERSISTABLE_RECENTS_EMPTY_BOOST = 40
 /** Weak match boost when user is typing. */
@@ -113,23 +110,17 @@ export function buildPersistableRecentLauncherItems(options: {
   const openUrl = options.openUrl ?? openExternalUrl
   const q = options.query.trim()
   const emptyQuery = !q
-  const max =
-    options.max ??
-    (emptyQuery ? PERSISTABLE_RECENTS_EMPTY_QUERY_MAX : PERSISTABLE_RECENTS_QUERY_MAX)
-  // Prefer frequent + recent when empty; filter already keeps order for typed query.
-  const matched = (
-    emptyQuery
-      ? [...filterPersistableRecents(options.recents, options.query)].sort((a, b) => {
-          if (b.count !== a.count) return b.count - a.count
-          return b.lastSelectedAt - a.lastSelectedAt
-        })
-      : filterPersistableRecents(options.recents, options.query)
-  ).slice(0, max)
+  // Keep every persisted candidate for the shared search/ranking pass. Callers may
+  // still request a smaller explicit snapshot, but the default storage is already bounded.
+  const matched = options.max == null ? options.recents : options.recents.slice(0, options.max)
   const locale = options.locale
   const boost = emptyQuery ? PERSISTABLE_RECENTS_EMPTY_BOOST : PERSISTABLE_RECENTS_QUERY_BOOST
 
   return matched.map((row, index) => {
     const labels = KIND_LABELS[row.kind]
+    // Browser-history snapshots saved before `fallback` existed still need the
+    // same secondary rank after upgrade; explicit false remains authoritative.
+    const fallback = row.fallback ?? (row.sourceId === 'browser.chromium' && row.kind === 'document')
     // Slight within-list decay so order stays stable under equal usage scores.
     const orderNudge = Math.max(0, 8 - index)
     return {
@@ -139,7 +130,7 @@ export function buildPersistableRecentLauncherItems(options: {
         title: row.title,
         subtitle: row.subtitle,
         icon: row.icon,
-        aliases: [row.title, ...(row.keywords ?? []), row.persistKey].filter(Boolean),
+        aliases: [row.title, row.subtitle, ...(row.keywords ?? []), row.persistKey].filter(Boolean),
         kindLabel: pickLocale(locale, labels.zh, labels.en),
         kindLabelI18n: { en: labels.en, zh: labels.zh },
       },
@@ -152,6 +143,7 @@ export function buildPersistableRecentLauncherItems(options: {
           : undefined,
       ranking: {
         ...(row.scoreBias != null ? { scoreBias: row.scoreBias } : {}),
+        ...(fallback ? { fallback: true } : {}),
         providerPriorityBoost: Math.min(50, boost + orderNudge),
       },
       persistable: true,
@@ -166,6 +158,7 @@ export function buildPersistableRecentLauncherItems(options: {
         appName: row.appName,
         appStableKey: row.appStableKey,
         scoreBias: row.scoreBias,
+        fallback,
         keywords: row.keywords,
         sourceId: row.sourceId,
       },

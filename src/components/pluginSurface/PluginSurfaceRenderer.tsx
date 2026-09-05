@@ -60,6 +60,7 @@ export function PluginSurfaceRenderer({
 }: PluginSurfaceRendererProps) {
   const pluginRegistryVersion = usePluginRegistryVersion()
   const permissionVersion = usePluginPermissionStore((s) => s.version)
+  const appearance = useAppStore((s) => s.settings)
   const grantPluginPermissions = usePluginPermissionStore((s) => s.grantPermissions)
   const openSettingsDialog = usePluginSettingsStore((s) => s.openSettingsDialog)
   const [surfaceState, setSurfaceState] = useState<PluginSurfaceRendererState>({ status: 'loading-runtime' })
@@ -124,11 +125,12 @@ export function PluginSurfaceRenderer({
           setSurfaceState({ status: 'ready', ...resolved })
         }
       } catch (error) {
+        console.error(`[hiven] Plugin surface failed to open (${target.pluginId}):`, error)
         if (!disposed) {
           setSurfaceState({
             status: 'error',
-            title: 'Plugin surface failed to open',
-            message: error instanceof Error ? error.message : String(error),
+            title: t(locale, 'palette.surfaceOpenFailed'),
+            message: '',
           })
         }
       }
@@ -140,16 +142,16 @@ export function PluginSurfaceRenderer({
   }, [target, pluginRegistryVersion, permissionVersion, locale])
 
   if (surfaceState.status === 'loading-runtime') {
-    return <PluginSurfaceMessage title="Loading plugin surface..." />
+    return <PluginSurfaceMessage title={t(locale, 'palette.surfaceLoading')} />
   }
   if (surfaceState.status === 'error') {
-    return <PluginSurfaceMessage title={surfaceState.title} message={surfaceState.message} variant="error" />
+    return <PluginSurfaceMessage title={surfaceState.title} message={surfaceState.message} variant="error" onBack={onBack} backLabel={t(locale, 'palette.back')} />
   }
   if (surfaceState.status === 'surface-not-found') {
-    return <PluginSurfaceMessage title="Plugin surface not found" message={surfaceState.message} variant="error" />
+    return <PluginSurfaceMessage title={t(locale, 'palette.surfaceNotFound')} message={surfaceState.message} variant="error" onBack={onBack} backLabel={t(locale, 'palette.back')} />
   }
   if (surfaceState.status === 'before-open') {
-    return <PluginSurfaceMessage title="Opening plugin surface..." />
+    return <PluginSurfaceMessage title={t(locale, 'palette.surfaceOpening')} />
   }
 
   const settingsContribution = surfaceState.definition.settings
@@ -159,7 +161,7 @@ export function PluginSurfaceRenderer({
   const SurfaceComponent = surfaceState.surface.component
 
   return (
-    <PluginSurfaceErrorBoundary pluginId={target.pluginId} onBack={onBack}>
+    <PluginSurfaceErrorBoundary pluginId={target.pluginId} locale={locale} onBack={onBack}>
       {surfaceState.status === 'permission-gate' ? (
         <PluginSurfacePermissionGate
           permissions={surfaceState.missingPermissions}
@@ -177,6 +179,7 @@ export function PluginSurfaceRenderer({
           locale={locale}
           t={pluginT}
           settings={settings}
+          appearance={appearance}
           permissions={surfaceState.permissions}
           initialText={target.initialText}
           host={{
@@ -293,7 +296,7 @@ export function PluginSurfacePermissionGate({
   )
 }
 
-function PluginSurfaceMessage({ title, message, variant }: { title: string; message?: string; variant?: 'loading' | 'error' }) {
+function PluginSurfaceMessage({ title, message, variant, onBack, backLabel }: { title: string; message?: string; variant?: 'loading' | 'error'; onBack?: () => void; backLabel?: string }) {
   return (
     <div className="plugin-surface-window-message">
       {variant === 'error' ? (
@@ -303,12 +306,14 @@ function PluginSurfaceMessage({ title, message, variant }: { title: string; mess
       )}
       <div>{title}</div>
       {message && <small>{message}</small>}
+      {onBack && <button type="button" onClick={onBack}>{backLabel}</button>}
     </div>
   )
 }
 
 type SurfaceErrorBoundaryProps = {
   pluginId: string
+  locale: Locale
   onBack: () => void
   children: ReactNode
 }
@@ -333,9 +338,8 @@ class PluginSurfaceErrorBoundary extends Component<SurfaceErrorBoundaryProps, Su
     if (this.state.hasError) {
       return (
         <div className="plugin-surface-window-message">
-          <div>Plugin surface crashed</div>
-          {this.state.error && <small>{this.state.error}</small>}
-          <button type="button" onClick={this.props.onBack}>Back</button>
+          <div>{t(this.props.locale, 'palette.surfaceCrashed')}</div>
+          <button type="button" onClick={this.props.onBack}>{t(this.props.locale, 'palette.back')}</button>
         </div>
       )
     }

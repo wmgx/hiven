@@ -92,10 +92,11 @@ assert.doesNotMatch(
   /launch_installed_app\s*,\s*\{\s*(path|displayPath)\b/,
   'host app launcher must not launch by path',
 )
-assert.match(files.hostAppLauncher, /EMPTY_QUERY_APP_LIMIT\s*=\s*5/, 'empty query must cap host apps at 5')
-assert.match(files.hostAppLauncher, /QUERY_APP_LIMIT\s*=\s*50/, 'query-present path should keep a reasonable app cap')
-assert.match(files.hostAppLauncher, /limitMatchedApps|compareAppsForEmptyQuery/, 'empty-query apps must be ordered (installedAt then name) before cap')
-assert.match(files.hostAppLauncher, /if\s*\(!q\)\s*return true/, 'host app launcher should still match all apps when query is empty (then limit)')
+assert.doesNotMatch(
+  files.hostAppLauncher,
+  /EMPTY_QUERY_APP_LIMIT|QUERY_APP_LIMIT|limitMatchedApps|getEmptyQueryTopApps/,
+  'app source must not discard candidates before shared launcher ranking',
+)
 assert.match(files.hostAppLauncher, /searchableFieldsMatch/, 'host app launcher must reuse shared launcher search ranking')
 assert.doesNotMatch(files.hostAppLauncher, /pinyin-pro|pinyin\(value/, 'host app launcher must not reimplement pinyin search locally')
 assert.match(files.hostAppLauncher, /app-icon:\$\{appId\}/, 'host app launcher must use host app-icon refs')
@@ -113,6 +114,8 @@ assert.match(files.tauriLib, /dedupe_app_discovery_collapses_same_display_name_a
 assert.match(files.tauriLib, /dedupe_app_discovery_collapses_localized_aliases/, 'native tests must cover localized-name duplicate aliases')
 
 assert.match(files.resolveIcon, /read_installed_app_icon_url/, 'existing icon resolver must still load host app icon refs')
+assert.match(files.resolveIcon, /__HIVEN_WEB_NATIVE_BRIDGE__[\s\S]*read_installed_app_icon_png[\s\S]*URL\.createObjectURL/, 'validation browser must render native app icon bytes')
+assert.match(files.tauriLib, /fn read_installed_app_icon_png[\s\S]*fs::read/, 'native host must expose cached app icon bytes')
 assert.match(files.resolveIcon, /APP_ICON_MAX_CONCURRENT\s*=\s*2/, 'host app icon refs should remain lazy-loaded with bounded concurrency')
 
 console.log('host app launcher contract checks passed')

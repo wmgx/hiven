@@ -223,6 +223,14 @@ export function createPluginPrivateStorage(
         const cached = blobUrlCache.get(blobId)
         if (cached) return cached
         if (!isTauri()) return ''
+        if (window.__HIVEN_WEB_NATIVE_BRIDGE__) {
+          const result = await invoke<NativeBlobReadResult | null>('plugin_blob_read', { source, pluginId, blobId })
+          if (!result) return ''
+          const bytes = result.bytes instanceof Uint8Array ? result.bytes : new Uint8Array(result.bytes)
+          const url = URL.createObjectURL(new Blob([bytes.slice().buffer], { type: result.contentType }))
+          blobUrlCache.set(blobId, url)
+          return url
+        }
         const path = await invoke<string | null>('plugin_blob_path', { source, pluginId, blobId })
         if (!path) return ''
         const { convertFileSrc } = await import('@tauri-apps/api/core')

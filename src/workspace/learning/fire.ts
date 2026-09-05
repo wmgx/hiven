@@ -3,8 +3,8 @@
  *
  * Makes an accepted rule usable as a direct answer:
  *  - url-template (D): the query is a value of the slot kind → open the filled URL.
- *  - chain (B): the query matches the learned input shape → run the tool chain and
- *    show/copy the collapsed result, in one step instead of several.
+ *  - tool/chain (B): the query matches the learned input shape → run the learned
+ *    transform and show/copy the result, in one step instead of several.
  *
  * Rules are cached in memory (refreshed on accept/delete) so the per-keystroke
  * match is a cheap sync check — no IndexedDB on the query hot path.
@@ -18,7 +18,7 @@ import { TelemetryEvents, trackBehavior } from '../telemetry'
 import type { LauncherItem } from './../launcher/types'
 import { findHistoryRecall, type HistoryRecallHit } from './clipboardBrowserLink'
 import { extractFeatures, featureSignature, isPlausibleToken, normalizeToken } from './features'
-import { FIRE_STRENGTH_BONUS, firePriority } from './frecency'
+import { FIRE_STRENGTH_BONUS, firePriority, isForgettable } from './frecency'
 import { getCurrentActiveHost, getRecentHistoryForRecall } from './navigationSensor'
 import { getRecentClipboardTokensWithSource } from './observer'
 import { isNewlyLearned } from './proposals'
@@ -65,7 +65,7 @@ export function sourceHostForQuery(query: string): string | null {
 }
 
 let cachedUrlRules: LearnedRule[] = []
-let cachedChainRules: LearnedRule[] = []
+let cachedTransformRules: LearnedRule[] = []
 
 /**
  * Reload the in-memory learned-rule caches (forgetting decayed rules first).
@@ -76,10 +76,10 @@ export async function refreshLearnedUrlRules(): Promise<void> {
     await pruneForgottenRules()
     const rules = await queryAllRules()
     cachedUrlRules = rules.filter((r) => r.transform.kind === 'url-template')
-    cachedChainRules = rules.filter((r) => r.transform.kind === 'chain')
+    cachedTransformRules = rules.filter((r) => r.transform.kind === 'tool' || r.transform.kind === 'chain')
   } catch {
     cachedUrlRules = []
-    cachedChainRules = []
+    cachedTransformRules = []
   }
 }
 
@@ -159,12 +159,13 @@ function buildOpenUrlItem(rule: LearnedRule, url: string, locale: Locale): Launc
   }
 }
 
-// ─── chain fire (scenario B) ───────────────────────────────────────────────────
+// ─── tool / chain fire (scenario B) ────────────────────────────────────────────
 
-function buildChainItem(rule: LearnedRule, result: string, locale: Locale): LauncherItem {
-  const steps = rule.transform.kind === 'chain' ? rule.transform.toolIds.length : 0
+function buildTransformItem(rule: LearnedRule, result: string, locale: Locale): LauncherItem {
+  const transformKind = rule.transform.kind === 'tool' ? 'tool' : 'chain'
+  const steps = rule.transform.kind === 'tool' ? 1 : rule.transform.kind === 'chain' ? rule.transform.toolIds.length : 0
   return {
-    systemKey: `learned-chain:${rule.clusterKey}`,
+    systemKey: `learned-${transformKind}:${rule.clusterKey}`,
     kind: 'dynamic',
     display: {
       // The title is the collapsed RESULT — which is exactly why this needs to be
@@ -181,7 +182,7 @@ function buildChainItem(rule: LearnedRule, result: string, locale: Locale): Laun
     execute: async () => {
       await copyToClipboard(result)
       await feedback(rule)
-      trackBehavior(TelemetryEvents.learningRuleFired, { transformKind: 'chain', steps })
+      trackBehavior(TelemetryEvents.learningRuleFired, { transformKind, steps })
       return { ok: true as const }
     },
   }
@@ -251,6 +252,7 @@ export function learnedLauncherItems(query: string, locale: Locale): LauncherIte
   const q = query.trim()
   if (!q) return []
   const items: LauncherItem[] = []
+  const now = Date.now()
 
   if (isPlausibleToken(q)) {
     const history = getRecentHistoryForRecall()
@@ -262,6 +264,7 @@ export function learnedLauncherItems(query: string, locale: Locale): LauncherIte
 
   const currentSourceHost = sourceHostForQuery(q)
   for (const rule of cachedUrlRules) {
+    if (isForgettable(rule, now)) continue
     if (rule.transform.kind !== 'url-template') continue
     if (!queryMatchesSlot(q, rule.transform.slotKind as UrlSlotKind)) continue
     // Scoped (L1/L2) rule: only fire on a confirmed copy-time site match —
@@ -277,13 +280,15 @@ export function learnedLauncherItems(query: string, locale: Locale): LauncherIte
     }
   }
 
-  if (cachedChainRules.length > 0) {
+  if (cachedTransformRules.length > 0) {
     const sig = featureSignature(extractFeatures(q))
-    for (const rule of cachedChainRules) {
-      if (rule.transform.kind !== 'chain') continue
+    for (const rule of cachedTransformRules) {
+      if (isForgettable(rule, now)) continue
       if (rule.matcher.kind !== 'feature-sig' || rule.matcher.sig !== sig) continue
-      const result = runLearnedChain(rule.transform.toolIds, q)
-      if (result) items.push(buildChainItem(rule, result, locale))
+      if (rule.transform.kind !== 'tool' && rule.transform.kind !== 'chain') continue
+      const toolIds = rule.transform.kind === 'tool' ? [rule.transform.toolId] : rule.transform.toolIds
+      const result = runLearnedChain(toolIds, q)
+      if (result) items.push(buildTransformItem(rule, result, locale))
     }
   }
 

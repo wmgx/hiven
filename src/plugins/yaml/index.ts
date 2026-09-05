@@ -31,7 +31,7 @@ export const yamlPlugin = definePlugin({
         try {
           return ctx.output.text(yamlToJson(ctx.input.text))
         } catch (e: any) {
-          return ctx.output.error(`Error: ${e.message}`)
+          return ctx.output.error(ctx.t('error.convert', { message: e.message }))
         }
       },
       surfaces: { launcher: true, panel: true },
@@ -48,7 +48,7 @@ export const yamlPlugin = definePlugin({
         try {
           return ctx.output.text(jsonToYaml(ctx.input.text))
         } catch (e: any) {
-          return ctx.output.error(`Error: ${e.message}`)
+          return ctx.output.error(ctx.t('error.convert', { message: e.message }))
         }
       },
       surfaces: { launcher: true, panel: true },

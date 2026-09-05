@@ -142,7 +142,7 @@ export const encodeDecodePlugin = definePlugin({
       textMatch: (text) => !isBase64(text), // text is NOT base64 → offer to encode
       run(ctx) {
         try { return ctx.output.text(base64Encode(ctx.input.text)) }
-        catch (e: any) { return ctx.output.error(`Error: ${e.message}`) }
+        catch (e: any) { return ctx.output.error(ctx.t('error.convert', { message: e.message })) }
       },
       surfaces: { launcher: true, panel: true },
     },
@@ -158,7 +158,7 @@ export const encodeDecodePlugin = definePlugin({
       textMatch: isBase64,
       run(ctx) {
         try { return ctx.output.text(base64Decode(ctx.input.text)) }
-        catch (e: any) { return ctx.output.error(`Error: ${e.message}`) }
+        catch (e: any) { return ctx.output.error(ctx.t('error.convert', { message: e.message })) }
       },
       surfaces: { launcher: true, panel: true },
     },
@@ -171,7 +171,7 @@ export const encodeDecodePlugin = definePlugin({
       inputPolicy: { mode: 'auto' },
       run(ctx) {
         try { return ctx.output.text(urlEncode(ctx.input.text)) }
-        catch (e: any) { return ctx.output.error(`Error: ${e.message}`) }
+        catch (e: any) { return ctx.output.error(ctx.t('error.convert', { message: e.message })) }
       },
       surfaces: { launcher: true, panel: true },
     },
@@ -186,7 +186,7 @@ export const encodeDecodePlugin = definePlugin({
       textMatch: isUrlEncoded,
       run(ctx) {
         try { return ctx.output.text(urlDecode(ctx.input.text)) }
-        catch (e: any) { return ctx.output.error(`Error: ${e.message}`) }
+        catch (e: any) { return ctx.output.error(ctx.t('error.convert', { message: e.message })) }
       },
       surfaces: { launcher: true, panel: true },
     },
@@ -243,7 +243,7 @@ export const encodeDecodePlugin = definePlugin({
       textMatch: isJwt,
       run(ctx) {
         try { return ctx.output.text(decodeJwt(ctx.input.text)) }
-        catch (e: any) { return ctx.output.error(`Error: ${e.message}`) }
+        catch (e: any) { return ctx.output.error(ctx.t('error.convert', { message: e.message })) }
       },
       surfaces: { launcher: true, panel: true },
     },

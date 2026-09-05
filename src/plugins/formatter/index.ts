@@ -5,8 +5,12 @@
  * Each operation is an independent tool — no sub-selection needed.
  */
 
-import { definePlugin } from '@hiven/plugin'
+import { definePlugin, getPluginHostSdk } from '@hiven/plugin'
 import { format as sqlFormat } from 'sql-formatter'
+
+function matchesContentKind(text: string, kind: 'css' | 'sql' | 'xml'): boolean {
+  return getPluginHostSdk().kits.content.detectContent(text).some((item) => item.kind === kind)
+}
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 
@@ -68,6 +72,8 @@ export const formatterPlugin = definePlugin({
       icon: 'Paintbrush',
       aliases: ['css format', 'css格式化', 'css beautify'],
       inputPolicy: { mode: 'auto' },
+      accepts: { kinds: ['css'] },
+      textMatch: (text) => matchesContentKind(text, 'css'),
       run(ctx) { return ctx.output.text(cssPrettify(ctx.input.text)) },
       surfaces: { launcher: true, panel: true },
     },
@@ -78,6 +84,8 @@ export const formatterPlugin = definePlugin({
       icon: 'Paintbrush',
       aliases: ['css minify', 'css压缩', 'css compress'],
       inputPolicy: { mode: 'auto' },
+      accepts: { kinds: ['css'] },
+      textMatch: (text) => matchesContentKind(text, 'css'),
       run(ctx) { return ctx.output.text(cssCompact(ctx.input.text)) },
       surfaces: { launcher: true, panel: true },
     },
@@ -88,9 +96,11 @@ export const formatterPlugin = definePlugin({
       icon: 'Database',
       aliases: ['sql format', 'sql格式化', 'sql beautify'],
       inputPolicy: { mode: 'auto' },
+      accepts: { kinds: ['sql'] },
+      textMatch: (text) => matchesContentKind(text, 'sql'),
       run(ctx) {
         try { return ctx.output.text(sqlPrettify(ctx.input.text)) }
-        catch (e: any) { return ctx.output.error(`Error: ${e.message}`) }
+        catch (e: any) { return ctx.output.error(ctx.t('error.format', { message: e.message })) }
       },
       surfaces: { launcher: true, panel: true },
     },
@@ -101,6 +111,8 @@ export const formatterPlugin = definePlugin({
       icon: 'Database',
       aliases: ['sql minify', 'sql压缩', 'sql compress'],
       inputPolicy: { mode: 'auto' },
+      accepts: { kinds: ['sql'] },
+      textMatch: (text) => matchesContentKind(text, 'sql'),
       run(ctx) { return ctx.output.text(sqlCompact(ctx.input.text)) },
       surfaces: { launcher: true, panel: true },
     },
@@ -111,6 +123,8 @@ export const formatterPlugin = definePlugin({
       icon: 'Code',
       aliases: ['xml format', 'xml格式化', 'xml beautify'],
       inputPolicy: { mode: 'auto' },
+      accepts: { kinds: ['xml'] },
+      textMatch: (text) => matchesContentKind(text, 'xml'),
       run(ctx) { return ctx.output.text(xmlPrettify(ctx.input.text)) },
       surfaces: { launcher: true, panel: true },
     },
@@ -121,6 +135,8 @@ export const formatterPlugin = definePlugin({
       icon: 'Code',
       aliases: ['xml minify', 'xml压缩', 'xml compress'],
       inputPolicy: { mode: 'auto' },
+      accepts: { kinds: ['xml'] },
+      textMatch: (text) => matchesContentKind(text, 'xml'),
       run(ctx) { return ctx.output.text(xmlCompact(ctx.input.text)) },
       surfaces: { launcher: true, panel: true },
     },

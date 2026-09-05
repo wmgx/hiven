@@ -26,7 +26,6 @@ function buildSnippetTools(settings: SnippetsSettings): PluginToolContribution<S
       'snippet',
       '片段',
     ].filter(Boolean),
-    inputPolicy: { mode: 'auto' },
     async run(ctx) {
       const body = snippet.body?.trim()
       if (!body) return ctx.output.error(ctx.t('tool.expand.empty'))

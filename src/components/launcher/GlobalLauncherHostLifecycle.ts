@@ -15,7 +15,8 @@ import { TelemetryEvents, queryTelemetryProps, trackBehavior } from '../../works
 const GLOBAL_LAUNCHER_STICKY_SURFACE = 'global-launcher'
 
 export function isStandaloneLauncherWindow() {
-  return new URLSearchParams(window.location.search).get('window') === 'launcher'
+  return !window.__HIVEN_WEB_NATIVE_BRIDGE__
+    && new URLSearchParams(window.location.search).get('window') === 'launcher'
 }
 
 /**
@@ -249,6 +250,7 @@ export function useGlobalLauncherHostEscape({
 }) {
   const handleHostEscape = useCallback((event: KeyboardEvent) => {
     if (event.key !== 'Escape') return
+    if (event.target instanceof Element && event.target.closest('[role="dialog"][data-open]')) return
 
     // Clear any stuck IME composition flag so Esc can never be permanently dead.
     // (compositionend can be missed after remount / webview rekey / focus thrash.)

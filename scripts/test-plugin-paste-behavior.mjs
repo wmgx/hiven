@@ -24,7 +24,7 @@ function plain(value) {
   return JSON.parse(JSON.stringify(value))
 }
 
-function loadPluginPaste({ invokeImpl, writeTextImpl, writeImageImpl, navigatorClipboard } = {}) {
+function loadPluginPaste({ invokeImpl, writeTextImpl, writeImageImpl, navigatorClipboard, locale = 'en' } = {}) {
   let src = readFileSync('src/workspace/pluginPaste.ts', 'utf8')
   src = src.replace(/import\s+type\s*\{[\s\S]*?\}\s*from\s*['"][^'"]*['"]\s*;?\s*\n?/g, '')
   src = src.replace(/import\s*\{[\s\S]*?\}\s*from\s*['"][^'"]*['"]\s*;?\s*\n?/g, '')
@@ -56,6 +56,24 @@ function loadPluginPaste({ invokeImpl, writeTextImpl, writeImageImpl, navigatorC
       calls.push(['require', required])
       if (snapshot?.deny) throw new Error(`denied:${required.join(',')}`)
     },
+    writeClipboardImageBytes: async (bytes) => {
+      const image = { kind: 'image', bytes: Array.from(bytes) }
+      if (writeImageImpl) await writeImageImpl(image)
+      else calls.push(['tauri.writeImage', image])
+    },
+    useAppStore: { getState: () => ({ locale }) },
+    t: (currentLocale, key) => ({
+      en: {
+        'workspace.paste.clipboardWriteFailed': 'Failed to write to clipboard',
+        'workspace.paste.imageStorageRequired': 'Image paste requires plugin blob storage',
+        'workspace.paste.accessibilityRequired': 'Copied to clipboard. Grant Accessibility access in System Settings → Privacy & Security → Accessibility to enable auto-paste.',
+      },
+      zh: {
+        'workspace.paste.clipboardWriteFailed': '无法写入剪贴板',
+        'workspace.paste.imageStorageRequired': '图片粘贴需要插件存储权限',
+        'workspace.paste.accessibilityRequired': '已复制到剪贴板。请在系统设置 → 隐私与安全性 → 辅助功能中授权，以启用自动粘贴。',
+      },
+    })[currentLocale]?.[key] ?? key,
   }
   sandbox.globalThis = sandbox
   const loadMockModule = (specifier) => {
@@ -158,6 +176,16 @@ function loadPluginPaste({ invokeImpl, writeTextImpl, writeImageImpl, navigatorC
   const { api } = loadPluginPaste({ writeTextImpl: async () => { throw new Error('write failed') }, navigatorClipboard: { writeText: async () => { throw new Error('write failed') } } })
   const result = await api.createPluginPaste().pasteText('cannot copy')
   assert.deepEqual(plain(result), { ok: false, fallback: 'none', message: 'Failed to write to clipboard' })
+}
+
+{
+  const { api } = loadPluginPaste({
+    locale: 'zh',
+    writeTextImpl: async () => { throw new Error('write failed') },
+    navigatorClipboard: { writeText: async () => { throw new Error('write failed') } },
+  })
+  const result = await api.createPluginPaste().pasteText('cannot copy')
+  assert.deepEqual(plain(result), { ok: false, fallback: 'none', message: '无法写入剪贴板' })
 }
 
 console.log('plugin paste behavior checks passed')

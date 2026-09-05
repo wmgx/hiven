@@ -36,6 +36,7 @@ import { NumberField, Select, Switch } from '../plugin-ui'
 type PluginSettingsSchemaRendererProps<TSettings = unknown> = {
   schema: PluginSettingsSchema<TSettings>
   locale: Locale
+  translateText?: (key: string) => string
   value: TSettings
   updateValue: (patch: Partial<TSettings>) => void
   onOpenModal: (field: PluginSettingsModalField<TSettings>) => void
@@ -46,8 +47,9 @@ function localize(
   text: string | undefined,
   textI18n: Partial<Record<Locale, string>> | undefined,
   locale: Locale,
+  translateText?: (key: string) => string,
 ): string {
-  return textI18n?.[locale] ?? text ?? ''
+  return textI18n?.[locale] ?? (text ? translateText?.(text) ?? text : '')
 }
 
 function getSettingsRecord(value: unknown): Record<string, unknown> {
@@ -216,11 +218,14 @@ function validateSettingsFieldValue(
 export function PluginSettingsSchemaRenderer<TSettings = unknown>({
   schema,
   locale,
+  translateText,
   value,
   updateValue,
   onOpenModal,
   permissions,
 }: PluginSettingsSchemaRendererProps<TSettings>) {
+  const localizeText = (text: string | undefined, textI18n?: Partial<Record<Locale, string>>) =>
+    localize(text, textI18n, locale, translateText)
   const record = getSettingsRecord(value)
   const [openObjectListCards, setOpenObjectListCards] = useState<Record<string, string>>({})
   const [numberDrafts, setNumberDrafts] = useState<Record<string, string>>({})
@@ -285,7 +290,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
         disabled={disabled}
         options={options.map((option) => ({
           value: option.value,
-          label: localize(option.label, option.labelI18n, locale),
+          label: localizeText(option.label, option.labelI18n),
         }))}
         onChange={(event) => onChange(event.currentTarget.value)}
       />
@@ -298,9 +303,9 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
     controlId: string,
     onChange: (next: unknown) => void,
   ) {
-    const label = localize(itemField.label, itemField.labelI18n, locale)
-    const description = localize(itemField.description, itemField.descriptionI18n, locale)
-    const placeholder = localize(itemField.placeholder, itemField.placeholderI18n, locale)
+    const label = localizeText(itemField.label, itemField.labelI18n)
+    const description = localizeText(itemField.description, itemField.descriptionI18n)
+    const placeholder = localizeText(itemField.placeholder, itemField.placeholderI18n)
     const value = item[itemField.key]
     const itemLabel = renderControlLabel(label, description)
 
@@ -332,6 +337,29 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
       )
     }
 
+    if (itemField.kind === 'modal') {
+      const reason = permissionReason(permissions, itemField.requires, locale)
+      return (
+        <div className="schema-row schema-object-list-field-wide">
+          {renderFieldTitle(label, description, reason)}
+          <button
+            type="button"
+            className="scripts-btn"
+            disabled={Boolean(reason)}
+            onClick={() => onOpenModal({
+              kind: 'modal',
+              id: itemField.key,
+              modalId: itemField.modalId,
+              label: itemField.label,
+              context: { itemId: String(item.id ?? '') },
+            })}
+          >
+            {localizeText(itemField.buttonLabel, itemField.buttonLabelI18n)}
+          </button>
+        </div>
+      )
+    }
+
     if (itemField.kind === 'select') {
       return (
         <div className="schema-object-list-field schema-object-list-field-select wr-field schema-object-list-field-wide">
@@ -342,7 +370,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
     }
 
     if (itemField.kind === 'number') {
-      const unitLabel = localize(itemField.unit, itemField.unitI18n, locale)
+      const unitLabel = localizeText(itemField.unit, itemField.unitI18n)
       const numeric = typeof value === 'number' ? value : Number(value)
       return (
         <label className="schema-object-list-field wr-field">
@@ -448,8 +476,8 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
   }
 
   function renderField(field: PluginSettingsField<TSettings>) {
-    const label = localize(field.label, field.labelI18n, locale)
-    const description = localize(field.description, field.descriptionI18n, locale)
+    const label = localizeText(field.label, field.labelI18n)
+    const description = localizeText(field.description, field.descriptionI18n)
     const reason = permissionReason(permissions, field.requires, locale)
     const disabled = Boolean(field.disabled || reason)
     const commonLabel = renderFieldTitle(label, description, reason)
@@ -475,8 +503,8 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
     if (field.kind === 'number') {
       const scale = field.storageScale && field.storageScale > 0 ? field.storageScale : 1
       const rawValue = typeof record[field.key] === 'number' ? Number(record[field.key]) : 0
-      const displayValue = scale === 1 ? rawValue : rawValue / scale
-      const unitLabel = localize(field.unit, field.unitI18n, locale)
+      const displayValue = scale === 1 ? rawValue : Number((rawValue / scale).toFixed(6))
+      const unitLabel = localizeText(field.unit, field.unitI18n)
       const commitDisplayValue = (nextDisplayValue: number) => {
         const clamped = clampNumber(nextDisplayValue, field.min, field.max)
         setFieldValue(field.key, scale === 1 ? clamped : Math.round(clamped * scale))
@@ -494,6 +522,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
                 value={Number.isFinite(displayValue) ? displayValue : 0}
                 min={field.min}
                 max={field.max}
+                step={field.step}
                 disabled={disabled}
                 aria-label={label}
                 aria-invalid={Boolean(errorMessage)}
@@ -532,7 +561,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
             className={field.mono ? 'schema-mono' : undefined}
             type="text"
             value={String(record[field.key] ?? '')}
-            placeholder={localize(field.placeholder, field.placeholderI18n, locale)}
+            placeholder={localizeText(field.placeholder, field.placeholderI18n)}
             disabled={disabled}
             aria-invalid={Boolean(errorMessage)}
             onChange={(event: ChangeEvent<HTMLInputElement>) => setFieldValue(field.key, event.currentTarget.value)}
@@ -554,7 +583,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
             className={field.mono ? 'schema-mono' : undefined}
             rows={field.rows ?? 4}
             value={String(record[field.key] ?? '')}
-            placeholder={localize(field.placeholder, field.placeholderI18n, locale)}
+            placeholder={localizeText(field.placeholder, field.placeholderI18n)}
             disabled={disabled}
             aria-invalid={Boolean(errorMessage)}
             onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setFieldValue(field.key, event.currentTarget.value)}
@@ -588,8 +617,8 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
 
     if (field.kind === 'object-list') {
       const items = getObjectList(record[field.key])
-      const itemLabel = localize(field.itemLabel, field.itemLabelI18n, locale) || label
-      const addLabel = localize(field.addLabel, field.addLabelI18n, locale) || '+'
+      const itemLabel = localizeText(field.itemLabel, field.itemLabelI18n) || label
+      const addLabel = localizeText(field.addLabel, field.addLabelI18n) || '+'
       const selectedCardId = openObjectListCards[field.key]
       const selectedIndex = items.findIndex((item, i) => String(item.id ?? i) === selectedCardId)
       const activeIndex = selectedIndex >= 0 ? selectedIndex : (items.length > 0 ? 0 : -1)
@@ -606,7 +635,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
       const titleKey = field.itemTitleKey ?? 'title'
       const tagsKey = field.itemTagsKey
 
-      const emptyText = localize(field.emptyText, field.emptyTextI18n, locale)
+      const emptyText = localizeText(field.emptyText, field.emptyTextI18n)
         || translate(locale, 'scripts', 'settingsEmptyList')
       const emptyHint = translate(locale, 'scripts', 'settingsEmptyListHint')
       const deleteLabel = translate(locale, 'scripts', 'settingsDelete')
@@ -654,7 +683,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
                       <span className="schema-object-list-master-title">{title}</span>
                       {tags.map((tag) => (
                         <span key={tag} className="schema-object-list-master-tag">
-                          {localize(tag, field.itemTagLabelsI18n?.[tag], locale)}
+                          {localizeText(tag, field.itemTagLabelsI18n?.[tag])}
                         </span>
                       ))}
                     </span>
@@ -715,7 +744,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
                       }
                       return groups.map((grp, gi) => {
                         const groupTitle = grp.group
-                          ? localize(grp.group, grp.fields[0]?.groupI18n, locale)
+                          ? localizeText(grp.group, grp.fields[0]?.groupI18n)
                           : ''
                         const body = grp.fields.map((itemField) => (
                           <div key={itemField.key} className={itemField.kind === 'text' || itemField.kind === 'select' || itemField.kind === 'string-list' || itemField.kind === 'textarea' ? 'schema-object-list-span-full' : undefined}>
@@ -797,7 +826,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
             disabled={disabled}
             onClick={() => onOpenModal(field)}
           >
-            {localize(field.buttonLabel, field.buttonLabelI18n, locale) || label}
+            {localizeText(field.buttonLabel, field.buttonLabelI18n) || label}
           </button>
         </div>
       )
@@ -815,11 +844,11 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
           <section key={section.id} className="schema-section">
             {(section.title || section.titleI18n || section.description || section.descriptionI18n) && (
               <header className="schema-section-header">
-                {localize(section.title, section.titleI18n, locale) && (
-                  <h3>{localize(section.title, section.titleI18n, locale)}</h3>
+                {localizeText(section.title, section.titleI18n) && (
+                  <h3>{localizeText(section.title, section.titleI18n)}</h3>
                 )}
-                {localize(section.description, section.descriptionI18n, locale) && (
-                  <p>{localize(section.description, section.descriptionI18n, locale)}</p>
+                {localizeText(section.description, section.descriptionI18n) && (
+                  <p>{localizeText(section.description, section.descriptionI18n)}</p>
                 )}
               </header>
             )}

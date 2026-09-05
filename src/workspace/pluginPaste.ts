@@ -8,6 +8,10 @@
 import type { PluginPasteApi, PluginPasteResult, PluginPermission, PluginPermissionSnapshot, PluginPrivateStorageApi } from './pluginTypes'
 import { requirePluginPermissions } from './pluginPermissions'
 import { writeClipboardImageBytes } from './pluginClipboard'
+import { t } from '../i18n'
+import { useAppStore } from '../store'
+
+const pasteMessage = (key: string) => t(useAppStore.getState().locale, `workspace.${key}`)
 
 async function writeTextToClipboard(text: string): Promise<void> {
   try {
@@ -31,7 +35,7 @@ async function pasteAfterClipboardWrite(fallbackMessage: string): Promise<Plugin
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     const message = msg.includes('Accessibility permission')
-      ? 'Copied to clipboard. Grant Accessibility access in System Settings → Privacy & Security → Accessibility to enable auto-paste.'
+      ? pasteMessage('paste.accessibilityRequired')
       : fallbackMessage
     return { ok: false, fallback: 'copied', message }
   }
@@ -51,28 +55,28 @@ export function createPluginPaste(
       try {
         await writeTextToClipboard(text)
       } catch {
-        return { ok: false, fallback: 'none', message: 'Failed to write to clipboard' }
+        return { ok: false, fallback: 'none', message: pasteMessage('paste.clipboardWriteFailed') }
       }
 
-      return pasteAfterClipboardWrite('Copied to clipboard. Enable accessibility permissions for direct paste.')
+      return pasteAfterClipboardWrite(pasteMessage('paste.copied'))
     },
 
     async pasteImage(blobId: string): Promise<PluginPasteResult> {
       requirePermissions(['clipboard.write', 'clipboard.image', 'storage.blob', 'accessibility.paste'])
       if (!storage) {
-        return { ok: false, fallback: 'none', message: 'Image paste requires plugin blob storage' }
+        return { ok: false, fallback: 'none', message: pasteMessage('paste.imageStorageRequired') }
       }
       const bytes = await storage.blob.get(blobId)
       if (!bytes) {
-        return { ok: false, fallback: 'none', message: 'Image blob is no longer available' }
+        return { ok: false, fallback: 'none', message: pasteMessage('paste.imageUnavailable') }
       }
       try {
         await writeClipboardImageBytes(bytes)
       } catch {
-        return { ok: false, fallback: 'none', message: 'Failed to write image to clipboard' }
+        return { ok: false, fallback: 'none', message: pasteMessage('paste.imageWriteFailed') }
       }
 
-      return pasteAfterClipboardWrite('Image copied to clipboard. Enable accessibility permissions for direct paste.')
+      return pasteAfterClipboardWrite(pasteMessage('paste.imageCopied'))
     },
 
     async pasteFiles(paths: string[]): Promise<PluginPasteResult> {
@@ -80,10 +84,10 @@ export function createPluginPaste(
       try {
         await writeTextToClipboard(paths.join('\n'))
       } catch {
-        return { ok: false, fallback: 'none', message: 'Failed to write file paths to clipboard' }
+        return { ok: false, fallback: 'none', message: pasteMessage('paste.filesWriteFailed') }
       }
 
-      return pasteAfterClipboardWrite('File paths copied to clipboard. Enable accessibility permissions for direct paste.')
+      return pasteAfterClipboardWrite(pasteMessage('paste.filesCopied'))
     },
   }
 }

@@ -30,6 +30,7 @@ import {
 import { Dialog } from '@base-ui/react/dialog'
 import { t } from '../i18n'
 import type { Locale } from '../i18n'
+import { makePluginT } from '../i18n/pluginI18nRegistry'
 import { localized, useAppStore } from '../store'
 import { getConfigDir } from '../configInit'
 import { listBundledPluginPackageSummaries } from '../workspace/bundledPluginLoader'
@@ -154,6 +155,22 @@ function PluginRowIcon({ pluginId, title, loading }: { pluginId: string; title: 
   )
 }
 
+function PluginsListSkeleton({ label }: { label: string }) {
+  return (
+    <div className="plugins-list-skeleton" role="status" aria-label={label} aria-busy="true">
+      {Array.from({ length: 6 }, (_, index) => (
+        <div className="plugins-list-skeleton-row" key={index} aria-hidden="true">
+          <span className="plugins-list-skeleton-icon" />
+          <span className="plugins-list-skeleton-copy">
+            <span className="plugins-list-skeleton-name" />
+            <span className="plugins-list-skeleton-desc" />
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function isTauri() {
   return !!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
 }
@@ -262,6 +279,7 @@ export function PluginsContent({}: PluginsContentProps) {
   const [query, setQuery] = useState('')
   const [builtinPlugins, setBuiltinPlugins] = useState<PluginPackageSummary[]>([])
   const [installedPackages, setInstalledPackages] = useState<PluginPackageSummary[]>([])
+  const [directoryLoading, setDirectoryLoading] = useState(true)
   const [busy, setBusy] = useState<BusyMap>({})
   const [errors, setErrors] = useState<ErrorMap>({})
   const [listError, setListError] = useState('')
@@ -333,13 +351,18 @@ export function PluginsContent({}: PluginsContentProps) {
   useEffect(() => {
     let cancelled = false
     async function loadDirectoryPlugins() {
+      setDirectoryLoading(true)
       if (!isTauri()) {
         setBuiltinPlugins(listBundledPluginPackageSummaries())
         setInstalledPackages([])
+        setDirectoryLoading(false)
         return
       }
       const configDir = await getConfigDir()
-      if (!configDir || cancelled) return
+      if (!configDir || cancelled) {
+        if (!cancelled) setDirectoryLoading(false)
+        return
+      }
       try {
         setListError('')
         const [builtinSummaries, installedSummaries] = await Promise.all([
@@ -385,6 +408,8 @@ export function PluginsContent({}: PluginsContentProps) {
         if (!cancelled) setBuiltinPlugins([])
         if (!cancelled) setInstalledPackages([])
         if (!cancelled) setListError(error instanceof Error ? error.message : String(error))
+      } finally {
+        if (!cancelled) setDirectoryLoading(false)
       }
     }
     void loadDirectoryPlugins()
@@ -475,6 +500,9 @@ export function PluginsContent({}: PluginsContentProps) {
       return next
     })
 
+  const reloadDirectoryPlugins = () =>
+    setUpdateStatus((status) => status === 'idle' ? 'done' : 'idle')
+
   async function runTask(key: string, task: () => Promise<void>) {
     if (!isTauri()) {
       setItemError(key, t(locale, 'scripts.desktopRequired'))
@@ -485,9 +513,8 @@ export function PluginsContent({}: PluginsContentProps) {
     try {
       await task()
     } catch (error) {
-      const raw = error instanceof Error ? error.message : String(error)
-      const single = raw.replace(/\s+/g, ' ').trim()
-      setItemError(key, single.length > 160 ? `${single.slice(0, 159)}…` : single)
+      console.warn('Plugin action failed', error)
+      setItemError(key, t(locale, 'scripts.pluginActionFailed'))
     } finally {
       setItemBusy(key, false)
     }
@@ -597,10 +624,14 @@ export function PluginsContent({}: PluginsContentProps) {
     if (definition?.settings?.component && (definition.settings.title || definition.settings.titleI18n)) {
       return localized(definition.settings.title ?? '', definition.settings.titleI18n, currentLocale)
     }
-    const surface = definition?.ui?.surfaces?.[0]
-    if (surface) return localized(surface.title, surface.titleI18n, currentLocale)
     const command = definition?.commands?.find((item) => item.description || item.descriptionI18n)
     if (command) return localized(command.description ?? '', command.descriptionI18n, currentLocale)
+    const tool = definition?.tools?.find((item) => item.subtitle || item.subtitleI18n)
+    if (tool) return tool.subtitleI18n
+      ? localized(tool.subtitle ?? '', tool.subtitleI18n, currentLocale)
+      : makePluginT(pluginId, currentLocale)(tool.subtitle ?? '')
+    const surface = definition?.ui?.surfaces?.[0]
+    if (surface) return localized(surface.title, surface.titleI18n, currentLocale)
     return ''
   }
 
@@ -663,7 +694,7 @@ export function PluginsContent({}: PluginsContentProps) {
         confirmLabel: t(locale, 'scripts.actionUninstallConfirm'),
         action: () => void runTask(key, async () => {
           await uninstallPlugin(plugin.pluginId)
-          setUpdateStatus('done')
+          reloadDirectoryPlugins()
         }),
       })
       return items
@@ -731,7 +762,8 @@ export function PluginsContent({}: PluginsContentProps) {
 
     return (
       <div className="plugins-drawer" onClick={(event) => event.stopPropagation()}>
-        <div className="plugins-drawer-line">
+        <div className="plugins-drawer-inner">
+          <div className="plugins-drawer-line">
           <div className="plugins-drawer-label">{t(locale, 'scripts.drawerPermissions')}</div>
           <div className="plugins-drawer-value">
             {requested.length === 0 ? (
@@ -769,9 +801,9 @@ export function PluginsContent({}: PluginsContentProps) {
               </>
             )}
           </div>
-        </div>
+          </div>
 
-        <div className="plugins-drawer-line">
+          <div className="plugins-drawer-line">
           <div className="plugins-drawer-label">{t(locale, 'scripts.surfaceShortcutTitle')}</div>
           <div className="plugins-drawer-value">
             {surfaces.length === 0 ? (
@@ -833,13 +865,15 @@ export function PluginsContent({}: PluginsContentProps) {
               })
             )}
           </div>
-        </div>
+          </div>
 
-        <div className="plugins-drawer-line">
+          <div className="plugins-drawer-line">
           <div className="plugins-drawer-label">{t(locale, 'scripts.drawerAbout')}</div>
           <div className="plugins-drawer-value">
             {row.error ? (
-              <span className="plugins-drawer-error">{row.error}</span>
+              <span className="plugins-drawer-error" title={row.error}>
+                {errors[row.key] || t(locale, 'scripts.pluginUnavailable')}
+              </span>
             ) : (
               <>
                 <span className={`plugins-drawer-status-dot ${statusKey}`} />
@@ -852,6 +886,7 @@ export function PluginsContent({}: PluginsContentProps) {
                 )}
               </>
             )}
+          </div>
           </div>
         </div>
       </div>
@@ -959,7 +994,6 @@ export function PluginsContent({}: PluginsContentProps) {
         </div>
         <Menu
           align="end"
-          header={t(locale, 'scripts.installFrom')}
           trigger={
             <button data-testid="plugin-new-button" type="button" className="btn primary split">
               <span className="bi">＋</span>{t(locale, 'scripts.addPlugin')}<span className="chev">▾</span>
@@ -969,19 +1003,16 @@ export function PluginsContent({}: PluginsContentProps) {
             {
               key: 'github',
               label: t(locale, 'scripts.importGithub'),
-              description: t(locale, 'scripts.importGithubDesc'),
               onSelect: () => setRemoteOpen(true),
             },
             {
               key: 'zip',
               label: t(locale, 'scripts.importZip'),
-              description: '.zip',
               onSelect: () => { void handleInstallZip() },
             },
             {
               key: 'folder',
               label: t(locale, 'scripts.importFolder'),
-              description: t(locale, 'scripts.importFolderDesc'),
               onSelect: () => { void handleInstallDirectory() },
             },
           ]}
@@ -991,13 +1022,19 @@ export function PluginsContent({}: PluginsContentProps) {
       {/* Errors */}
       {listError && (
         <div className="plugins-error-banner">
-          <AlertTriangle size={12} /> {listError}
+          <AlertTriangle size={12} />
+          <span title={listError}>{t(locale, 'scripts.loadPluginsFailed')}</span>
+          <button type="button" className="plugins-drawer-link" onClick={reloadDirectoryPlugins}>
+            {t(locale, 'scripts.retry')}
+          </button>
         </div>
       )}
 
       {/* Plugin list */}
       <div className="plugins-list">
-        {pluginDetailRows.length === 0 ? (
+        {directoryLoading ? (
+          <PluginsListSkeleton label={t(locale, 'scripts.loadingPlugins')} />
+        ) : pluginDetailRows.length === 0 ? (
           <LauncherEmptyWell
             className="plugins-empty"
             testId="plugins-empty-well"
@@ -1084,7 +1121,8 @@ export function PluginsContent({}: PluginsContentProps) {
               </div>
               {errors['_remote'] && (
                 <div className="plugins-error-banner">
-                  <AlertTriangle size={12} /> {errors['_remote']}
+                  <AlertTriangle size={12} />
+                  {errors['_remote']}
                 </div>
               )}
             </div>

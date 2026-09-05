@@ -1,18 +1,20 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { getVersion } from '@tauri-apps/api/app'
-import { BrainCircuit, Check, Command, Download, Hash, Languages, LogIn, LogOut, Moon, RefreshCw, Save, Search, Type, WrapText } from 'lucide-react'
+import { BrainCircuit, Check, Command, Download, Hash, Languages, LogIn, LogOut, Moon, RefreshCw, Save, Type, WrapText } from 'lucide-react'
 import { useAppStore } from '../store'
 import { useT } from '../i18n'
+import { pickLocale } from '../i18n/pickLocale'
 import { checkBuiltinPluginsUpdate } from '../configInit'
 import { ShortcutRecorder } from '../components/ShortcutRecorder'
 import { AppHotkeysSettings } from '../components/AppHotkeysSettings'
-import { listAiProviders, loginAiProvider, logoutAiProvider } from '../workspace/ai/runtime'
+import { listAiProviders, loginAiProvider, logoutAiProvider, refreshAiProvider } from '../workspace/ai/runtime'
 import type { AiProviderDescriptor, AiReasoningEffort } from '../workspace/ai/types'
 import { openExternalUrl } from '../workspace/effectRunner'
 import { showToast } from '../workspace/toast'
+import { Combobox, NumberField, Select, Switch } from '../plugin-ui'
 
 export function SettingsContent() {
   const { settings, updateSetting } = useAppStore()
@@ -65,10 +67,10 @@ export function SettingsContent() {
           />
         </SettingsListRow>
         <SettingsListRow icon={<Moon size={15} strokeWidth={2} />} name={t('darkTheme')} desc={t('darkThemeInfo')}>
-          <Toggle value={settings.theme === 'dark'} onChange={(value) => updateSetting('theme', value ? 'dark' : 'light')} label={t('darkTheme')} />
+          <Switch checked={settings.theme === 'dark'} onCheckedChange={(value) => updateSetting('theme', value ? 'dark' : 'light')} aria-label={t('darkTheme')} />
         </SettingsListRow>
         <SettingsListRow icon={<Save size={15} strokeWidth={2} />} name={t('persistParams')} desc={t('persistParamsInfo')}>
-          <Toggle value={settings.persistParams} onChange={(value) => updateSetting('persistParams', value)} label={t('persistParams')} />
+          <Switch checked={settings.persistParams} onCheckedChange={(value) => updateSetting('persistParams', value)} aria-label={t('persistParams')} />
         </SettingsListRow>
       </SettingGroup>
 
@@ -93,38 +95,26 @@ export function SettingsContent() {
             onClear={() => updateSetting('quickEditorShortcut', { kind: 'disabled' })}
           />
         </SettingsListRow>
-        <SettingsListRow icon={<Command size={15} strokeWidth={2} />} name={t('appHotkeys')} desc={t('appHotkeysInfo')}>
+        <SettingsListRow stacked icon={<Command size={15} strokeWidth={2} />} name={t('appHotkeys')} desc={t('appHotkeysInfo')}>
           <AppHotkeysSettings />
         </SettingsListRow>
       </SettingGroup>
 
       <SettingGroup title={t('editor')}>
         <SettingsListRow icon={<Type size={15} strokeWidth={2} />} name={t('fontSize')} desc={t('fontSizeInfo')}>
-          <span className="num">
-            <button
-              type="button"
-              disabled={settings.fontSize <= 10}
-              aria-disabled={settings.fontSize <= 10}
-              onClick={() => updateSetting('fontSize', Math.max(10, settings.fontSize - 1))}
-            >
-              −
-            </button>
-            <span className="v">{settings.fontSize}</span>
-            <button
-              type="button"
-              disabled={settings.fontSize >= 24}
-              aria-disabled={settings.fontSize >= 24}
-              onClick={() => updateSetting('fontSize', Math.min(24, settings.fontSize + 1))}
-            >
-              ＋
-            </button>
-          </span>
+          <NumberField
+            value={settings.fontSize}
+            min={10}
+            max={24}
+            aria-label={t('fontSize')}
+            onChange={(value) => updateSetting('fontSize', value)}
+          />
         </SettingsListRow>
         <SettingsListRow icon={<WrapText size={15} strokeWidth={2} />} name={t('wordWrap')} desc={t('wordWrapInfo')}>
-          <Toggle value={settings.wordWrap} onChange={(value) => updateSetting('wordWrap', value)} label={t('wordWrap')} />
+          <Switch checked={settings.wordWrap} onCheckedChange={(value) => updateSetting('wordWrap', value)} aria-label={t('wordWrap')} />
         </SettingsListRow>
         <SettingsListRow icon={<Hash size={15} strokeWidth={2} />} name={t('lineNumbers')} desc={t('lineNumbersInfo')}>
-          <Toggle value={settings.lineNumbers} onChange={(value) => updateSetting('lineNumbers', value)} label={t('lineNumbers')} />
+          <Switch checked={settings.lineNumbers} onCheckedChange={(value) => updateSetting('lineNumbers', value)} aria-label={t('lineNumbers')} />
         </SettingsListRow>
       </SettingGroup>
 
@@ -151,17 +141,41 @@ export function AiSubscriptionsContent() {
   const locale = useAppStore((state) => state.locale)
   const t = useT('settings')
   const [providers, setProviders] = useState<AiProviderDescriptor[]>([])
+  const providerOrderRef = useRef(new Map<string, number>())
+  const [initialLoading, setInitialLoading] = useState(true)
+  const [pendingProviderCount, setPendingProviderCount] = useState(2)
   const [loading, setLoading] = useState(false)
   const [pendingProviderId, setPendingProviderId] = useState<string | null>(null)
+  const [refreshingProviderId, setRefreshingProviderId] = useState<string | null>(null)
 
   const refresh = async () => {
-    setLoading(true)
     try {
-      setProviders(await listAiProviders())
+      const next = await listAiProviders((provider, _completed, total, index) => {
+        providerOrderRef.current.set(provider.id, index)
+        setProviders((current) => {
+          const visible = [...current.filter((item) => item.id !== provider.id), provider]
+            .sort((left, right) => (providerOrderRef.current.get(left.id) ?? 0) - (providerOrderRef.current.get(right.id) ?? 0))
+          setPendingProviderCount(Math.max(0, total - visible.length))
+          return visible
+        })
+      })
+      setProviders(next)
     } catch (error) {
       showToast(t('aiRefreshFailed', { message: formatUserFacingError(error).short }), 'error')
     } finally {
-      setLoading(false)
+      setInitialLoading(false)
+    }
+  }
+
+  const refreshProvider = async (providerId: string) => {
+    setRefreshingProviderId(providerId)
+    try {
+      const provider = await refreshAiProvider(providerId)
+      if (provider) setProviders((current) => current.map((item) => item.id === providerId ? provider : item))
+    } catch (error) {
+      showToast(t('aiRefreshFailed', { message: formatUserFacingError(error).short }), 'error')
+    } finally {
+      setRefreshingProviderId(null)
     }
   }
 
@@ -185,7 +199,7 @@ export function AiSubscriptionsContent() {
       }
     }
     const interval = window.setInterval(() => void check(), 1500)
-    const timeout = window.setTimeout(() => setPendingProviderId(null), 120_000)
+    const timeout = window.setTimeout(() => setPendingProviderId(null), 300_000)
     return () => {
       window.clearInterval(interval)
       window.clearTimeout(timeout)
@@ -203,6 +217,7 @@ export function AiSubscriptionsContent() {
     try {
       const result = await loginAiProvider(providerId)
       if (result.url) await openExternalUrl(result.url)
+      if (result.verificationCode) showToast(t('aiVerificationCode', { code: result.verificationCode }), 'info', 300_000)
       setPendingProviderId(providerId)
     } catch (error) {
       showToast(t('aiConnectFailed', { message: formatUserFacingError(error).short }), 'error')
@@ -230,6 +245,7 @@ export function AiSubscriptionsContent() {
         {providers.map((provider) => {
           const ready = provider.status === 'ready'
           const waiting = pendingProviderId === provider.id
+          const refreshing = refreshingProviderId === provider.id
           const subscription = [provider.subscription?.accountName, provider.subscription?.plan].filter(Boolean).join(' · ')
           return (
             <div className="ai-subscription-provider" key={provider.id}>
@@ -240,7 +256,7 @@ export function AiSubscriptionsContent() {
                   ? t('aiSubscriptionWaiting')
                   : ready
                     ? t('aiSubscriptionReady', { plan: subscription })
-                    : provider.statusMessage ?? t('aiSubscriptionLoginRequired')}
+                    : provider.statusMessage ?? t(provider.status === 'unavailable' ? 'aiProviderUnavailable' : 'aiSubscriptionLoginRequired')}
               >
                 <div className="flex items-center gap-2">
                   {ready && (
@@ -251,8 +267,8 @@ export function AiSubscriptionsContent() {
                   {ready
                     ? <button type="button" className="scripts-btn" disabled={loading} onClick={() => void disconnect(provider.id)}><LogOut size={11} /> {t('aiDisconnect')}</button>
                     : <button type="button" className="scripts-btn scripts-btn-primary" disabled={loading || waiting || provider.status === 'unavailable'} onClick={() => void connect(provider.id)}>{waiting ? <RefreshCw size={11} className="animate-spin" /> : <LogIn size={11} />} {t(waiting ? 'aiConnecting' : 'aiConnect')}</button>}
-                  <button type="button" className="scripts-btn" disabled={loading} onClick={() => void refresh()} aria-label={t('aiRefresh')}>
-                    <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+                  <button type="button" className="scripts-btn" disabled={loading || waiting || refreshing} onClick={() => void refreshProvider(provider.id)} aria-label={t('aiRefresh')}>
+                    <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} />
                   </button>
                 </div>
               </SettingsListRow>
@@ -260,6 +276,7 @@ export function AiSubscriptionsContent() {
             </div>
           )
         })}
+        {initialLoading && <AiProviderSkeleton label={t('aiLoadingProviders')} count={pendingProviderCount} />}
       </SettingGroup>
 
       <SettingGroup title={t('aiDefaults')}>
@@ -279,7 +296,12 @@ export function AiSubscriptionsContent() {
         <SettingsListRow icon={<BrainCircuit size={15} strokeWidth={2} />} name={t('aiDefaultAgent')} desc={t('aiDefaultAgentInfo')}>
           <LocaleSelect
             value={settings.aiDefaultAgentId ?? agents.find((item) => item.isDefault)?.id ?? agents[0]?.id ?? ''}
-            options={agents.map((item) => ({ value: item.id, label: item.name }))}
+            options={agents.map((item) => ({
+              value: item.id,
+              label: item.contextWindow
+                ? `${item.name} · ${t('aiContextWindow', { tokens: formatTokenCount(item.contextWindow) })}`
+                : item.name,
+            }))}
             wide
             searchable
             searchPlaceholder={t('aiSearchAgents')}
@@ -305,18 +327,38 @@ export function AiSubscriptionsContent() {
   )
 }
 
+function AiProviderSkeleton({ label, count = 2 }: { label: string; count?: number }) {
+  if (count <= 0) return null
+  return (
+    <div className="ai-provider-skeleton" aria-label={label} aria-busy="true" role="status">
+      {Array.from({ length: count }, (_, index) => (
+        <div className="srow" key={index} aria-hidden="true">
+          <div className="ai-provider-skeleton-icon" />
+          <div className="s-main">
+            <div className="ai-provider-skeleton-line ai-provider-skeleton-name" />
+            <div className="ai-provider-skeleton-line ai-provider-skeleton-desc" />
+          </div>
+          <div className="ai-provider-skeleton-action" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function AiQuotaUsage({ provider, locale, t }: { provider: AiProviderDescriptor; locale: string; t: ReturnType<typeof useT> }) {
   const buckets = [...(provider.quota?.buckets ?? [])].sort((left, right) => quotaBucketPriority(left) - quotaBucketPriority(right))
   const entries = buckets.flatMap((bucket) => {
-    const bucketName = bucket.name?.trim() || formatQuotaBucketName(bucket.id, t)
+    const rawBucketName = bucket.name?.trim() || bucket.id
+    const hasKnownLabel = ['gpt-reserve', 'grok-subscription'].includes(rawBucketName.toLowerCase())
+    const bucketName = hasKnownLabel ? formatQuotaBucketName(rawBucketName, t) : bucket.name?.trim() || formatQuotaBucketName(bucket.id, t)
     const hasBothWindows = Boolean(bucket.primary && bucket.secondary)
     return ([['primary', bucket.primary], ['secondary', bucket.secondary]] as const).flatMap(([kind, window]) => {
       if (!window) return []
       const used = Math.max(0, Math.min(100, window.usedPercent))
       return [{
         key: `${bucket.id}-${kind}`,
-        label: [bucketName, hasBothWindows ? t(kind === 'primary' ? 'aiQuotaPrimary' : 'aiQuotaSecondary') : '', formatQuotaWindow(window.windowDurationMinutes, locale)].filter(Boolean).join(' · '),
-        technicalId: bucket.name?.trim() ? undefined : bucket.id,
+        label: [bucketName, hasBothWindows ? t(kind === 'primary' ? 'aiQuotaPrimary' : 'aiQuotaSecondary') : '', formatQuotaWindow(window.windowDurationMinutes, t)].filter(Boolean).join(' · '),
+        technicalId: hasKnownLabel ? rawBucketName : bucket.name?.trim() ? undefined : bucket.id,
         used,
         reset: formatQuotaReset(window.resetsAt, locale, t),
       }]
@@ -345,15 +387,22 @@ function AiQuotaUsage({ provider, locale, t }: { provider: AiProviderDescriptor;
   )
 }
 
-function formatQuotaWindow(minutes: number | undefined, locale: string): string {
-  if (!minutes) return locale === 'zh' ? '额度' : 'Limit'
-  if (minutes % 1440 === 0) return locale === 'zh' ? `${minutes / 1440} 天` : `${minutes / 1440}d`
-  if (minutes % 60 === 0) return locale === 'zh' ? `${minutes / 60} 小时` : `${minutes / 60}h`
-  return locale === 'zh' ? `${minutes} 分钟` : `${minutes}m`
+function formatQuotaWindow(minutes: number | undefined, t: ReturnType<typeof useT>): string {
+  if (!minutes) return t('aiQuotaLimit')
+  if (minutes % 1440 === 0) return t('aiQuotaDays', { count: minutes / 1440 })
+  if (minutes % 60 === 0) return t('aiQuotaHours', { count: minutes / 60 })
+  return t('aiQuotaMinutes', { count: minutes })
+}
+
+function formatTokenCount(tokens: number): string {
+  if (tokens >= 1_000_000) return `${Number((tokens / 1_000_000).toFixed(1))}M`
+  if (tokens >= 1_000) return `${Number((tokens / 1_000).toFixed(0))}K`
+  return String(tokens)
 }
 
 function formatQuotaBucketName(id: string, t: ReturnType<typeof useT>): string {
   if (id.trim().toLowerCase() === 'gpt-reserve') return t('aiQuotaOther')
+  if (id.trim().toLowerCase() === 'grok-subscription') return t('aiQuotaGrokSubscription')
   return id.split(/[-_.:/]+/).filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')
 }
 
@@ -367,7 +416,7 @@ function quotaBucketPriority(bucket: NonNullable<AiProviderDescriptor['quota']>[
 function formatQuotaReset(resetsAt: number | undefined, locale: string, t: ReturnType<typeof useT>): string {
   if (resetsAt == null) return t('aiQuotaResetUnknown')
   const value = resetsAt < 1_000_000_000_000 ? resetsAt * 1000 : resetsAt
-  const formatted = new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : 'en-US', {
+  const formatted = new Intl.DateTimeFormat(pickLocale(locale, 'zh-CN', 'en-US'), {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
@@ -385,9 +434,9 @@ export function SettingGroup({ title, children }: { title: string; children: Rea
   )
 }
 
-export function SettingsListRow({ icon, name, desc, children }: { icon: ReactNode; name: string; desc?: string; children: ReactNode }) {
+export function SettingsListRow({ icon, name, desc, children, stacked = false }: { icon: ReactNode; name: string; desc?: string; children: ReactNode; stacked?: boolean }) {
   return (
-    <div className="srow">
+    <div className={`srow${stacked ? ' srow--stacked' : ''}`}>
       <div className="s-ico">{icon}</div>
       <div className="s-main">
         <div className="s-name">{name}</div>
@@ -398,26 +447,6 @@ export function SettingsListRow({ icon, name, desc, children }: { icon: ReactNod
   )
 }
 
-function Toggle({
-  value,
-  onChange,
-  label,
-}: {
-  value: boolean
-  onChange: (value: boolean) => void
-  label?: string
-}) {
-  return (
-    <button
-      type="button"
-      className={`sw toggle ${value ? 'on' : ''}`}
-      aria-pressed={value}
-      aria-label={label}
-      onClick={() => onChange(!value)}
-    />
-  )
-}
-
 function formatUserFacingError(err: unknown, maxLen = 160): { short: string; full: string } {
   const full = err instanceof Error ? (err.message || String(err)) : String(err)
   const single = full.replace(/\s+/g, ' ').trim()
@@ -425,171 +454,45 @@ function formatUserFacingError(err: unknown, maxLen = 160): { short: string; ful
   return { short: `${single.slice(0, maxLen - 1)}…`, full: single }
 }
 
-function LocaleSelect({ options, value, onChange, disabled = false, emptyLabel = '', wide = false, searchable = false, searchPlaceholder = '', noResultsLabel = '' }: { options: { value: string; label: string }[]; value: string; onChange: (value: string) => void; disabled?: boolean; emptyLabel?: string; wide?: boolean; searchable?: boolean; searchPlaceholder?: string; noResultsLabel?: string }) {
-  const [open, setOpen] = useState(false)
-  const [query, setQuery] = useState('')
-  const [focusedIndex, setFocusedIndex] = useState(-1)
-  const ref = useRef<HTMLDivElement>(null)
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  const searchRef = useRef<HTMLInputElement>(null)
-  const optionRefs = useRef<(HTMLButtonElement | null)[]>([])
-  const listboxId = useId()
-  const normalizedQuery = query.trim().toLocaleLowerCase()
-  const visibleOptions = normalizedQuery
-    ? options.filter((option) => `${option.label} ${option.value}`.toLocaleLowerCase().includes(normalizedQuery))
-    : options
-
-  useEffect(() => {
-    if (!open) return
-    const handler = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
-
-  useEffect(() => {
-    if (open) {
-      if (searchable) {
-        requestAnimationFrame(() => searchRef.current?.focus())
-        return
-      }
-      const selectedIdx = options.findIndex((o) => o.value === value)
-      const idx = selectedIdx >= 0 ? selectedIdx : 0
-      setFocusedIndex(idx)
-      requestAnimationFrame(() => optionRefs.current[idx]?.focus())
-    } else {
-      setQuery('')
-      setFocusedIndex(-1)
-    }
-  }, [open])
-
-  const selected = options.find((option) => option.value === value)
-  const closeAndFocusTrigger = () => {
-    setOpen(false)
-    requestAnimationFrame(() => triggerRef.current?.focus())
-  }
-
-  const handleTriggerKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      e.preventDefault()
-      if (!disabled) setOpen(true)
-    }
-  }
-
-  const handleOptionKeyDown = (e: React.KeyboardEvent, index: number) => {
-    switch (e.key) {
-      case 'ArrowDown': {
-        e.preventDefault()
-        const next = index < visibleOptions.length - 1 ? index + 1 : 0
-        setFocusedIndex(next)
-        optionRefs.current[next]?.focus()
-        break
-      }
-      case 'ArrowUp': {
-        e.preventDefault()
-        if (searchable && index === 0) {
-          setFocusedIndex(-1)
-          searchRef.current?.focus()
-          break
-        }
-        const prev = index > 0 ? index - 1 : visibleOptions.length - 1
-        setFocusedIndex(prev)
-        optionRefs.current[prev]?.focus()
-        break
-      }
-      case 'Enter':
-      case ' ': {
-        e.preventDefault()
-        onChange(visibleOptions[index].value)
-        closeAndFocusTrigger()
-        break
-      }
-      case 'Escape': {
-        e.preventDefault()
-        closeAndFocusTrigger()
-        break
-      }
-    }
-  }
-
-  return (
-    <div className={`settings-select-wrap ${wide ? 'is-wide' : ''} ${open ? 'is-open' : ''}`} ref={ref}>
-      {searchable && open
-        ? (
-            <div className="sel-ctl open settings-select-combobox">
-              <Search size={12} aria-hidden="true" />
-              <input
-                ref={searchRef}
-                type="text"
-                role="combobox"
-                value={query}
-                placeholder={searchPlaceholder}
-                aria-label={searchPlaceholder}
-                aria-expanded="true"
-                aria-controls={listboxId}
-                aria-autocomplete="list"
-                onChange={(event) => { setQuery(event.target.value); setFocusedIndex(-1) }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Escape') {
-                    event.preventDefault()
-                    closeAndFocusTrigger()
-                  } else if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && visibleOptions.length > 0) {
-                    event.preventDefault()
-                    const index = event.key === 'ArrowDown' ? 0 : visibleOptions.length - 1
-                    setFocusedIndex(index)
-                    optionRefs.current[index]?.focus()
-                  }
-                }}
-              />
-              <span className="chev">▾</span>
-            </div>
-          )
-        : (
-            <button
-              type="button"
-              ref={triggerRef}
-              className={`sel-ctl ${open ? 'open' : ''}`}
-              aria-expanded={open}
-              aria-haspopup="listbox"
-              aria-controls={open ? listboxId : undefined}
-              disabled={disabled}
-              onClick={() => setOpen(!open)}
-              onKeyDown={handleTriggerKeyDown}
-            >
-              <span className="sel-ctl-label">{(selected?.label ?? value) || emptyLabel}</span>
-              <span className="chev">▾</span>
-            </button>
-          )}
-      {open && (
-        <div className="settings-select-menu">
-          <div id={listboxId} role="listbox">
-            {visibleOptions.map((option, index) => (
-              <button
-                type="button"
-                key={option.value}
-                id={`${listboxId}-option-${index}`}
-                ref={(el) => { optionRefs.current[index] = el }}
-                role="option"
-                aria-selected={value === option.value}
-                className={`settings-select-item ${value === option.value ? 'is-selected' : ''} ${focusedIndex === index ? 'is-focused' : ''}`}
-                onClick={() => { onChange(option.value); closeAndFocusTrigger() }}
-                onKeyDown={(e) => handleOptionKeyDown(e, index)}
-              >
-                <span className="w-3.5 shrink-0 flex items-center justify-center">
-                  {value === option.value && <Check size={10} style={{ color: 'var(--color-accent)' }} />}
-                </span>
-                <span>{option.label}</span>
-              </button>
-            ))}
-            {visibleOptions.length === 0 && <div className="settings-select-empty">{noResultsLabel}</div>}
-          </div>
-        </div>
-      )}
-    </div>
-  )
+type LocaleSelectProps = {
+  options: { value: string; label: string }[]
+  value: string
+  onChange: (value: string) => void
+  disabled?: boolean
+  emptyLabel?: string
+  wide?: boolean
+  searchable?: boolean
+  searchPlaceholder?: string
+  noResultsLabel?: string
 }
 
+function LocaleSelect(props: LocaleSelectProps) {
+  const className = `settings-select-wrap ${props.wide ? 'is-wide' : ''}`
+  if (props.searchable) {
+    return (
+      <Combobox
+        className={className}
+        value={props.value}
+        options={props.options}
+        disabled={props.disabled}
+        placeholder={props.searchPlaceholder || props.emptyLabel}
+        emptyLabel={props.noResultsLabel}
+        aria-label={props.searchPlaceholder || props.emptyLabel}
+        onChange={props.onChange}
+      />
+    )
+  }
+  const options = props.options.length > 0 ? props.options : [{ value: '', label: props.emptyLabel ?? '' }]
+  return (
+    <Select
+      className={className}
+      value={props.value}
+      options={options}
+      disabled={props.disabled}
+      onChange={(event) => props.onChange(event.currentTarget.value)}
+    />
+  )
+}
 
 function formatHotkeyRegistrationStatus(
   shortcut: ReturnType<typeof useAppStore.getState>['settings']['globalPinnedLauncherShortcut'],

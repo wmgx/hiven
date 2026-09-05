@@ -22,6 +22,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
 const src = readFileSync(new URL('../src/plugins/web-open/browserProvider.ts', import.meta.url), 'utf8')
+assert.match(src, /item\.lastVisitTime >= Date\.now\(\) - historySearchDays \* 24 \* 60 \* 60 \* 1000/, 'Global Launcher history must honor the configured age range')
+assert.match(src, /item\.lastVisitTime == null \|\|/, 'history with an unknown timestamp remains searchable for older extensions')
 
 // Long history URLs usually differ at the tail (MR/PR id, redirect target).
 // Showing the common prefix makes distinct rows look identical after ellipsis.
@@ -32,7 +34,7 @@ assert.doesNotMatch(src.match(/function compactHistoryUrl[\s\S]*?\n\}/)?.[0] ?? 
 // ─── every open tab in query results gets the "Browser tab" pill ─────────────
 {
   const start = src.indexOf('const tabs = ordered')
-  const end = src.indexOf('const history = await desktopTargets.bridge.listHistory')
+  const end = src.indexOf('const history = historySearchDays')
   assert.ok(start >= 0 && end > start, 'must find the tabs = ordered...map(...) block')
   const tabsBlock = src.slice(start, end)
   assert.match(
@@ -64,19 +66,23 @@ assert.doesNotMatch(src.match(/function compactHistoryUrl[\s\S]*?\n\}/)?.[0] ?? 
     /scoreBias:\s*HISTORY_SCORE_BIAS/,
     'history bias must be a named constant, not an inline magic number',
   )
+  assert.match(
+    src,
+    /fallback:\s*true[\s\S]*scoreBias:\s*HISTORY_SCORE_BIAS/,
+    'history must declare categorical fallback ranking so text-match tiers cannot overtake open tabs',
+  )
   assert.doesNotMatch(src, /scoreBias:\s*-80\b/, 'the old inline -80 history bias must be gone')
 
   const historyBias = Number(/HISTORY_SCORE_BIAS\s*=\s*(-?\d+)/.exec(src)?.[1])
   const focus = Number(/OPEN_TAB_FOCUS_BIAS\s*=\s*(\d+)/.exec(src)?.[1])
-  const base = Number(/EMPTY_OPEN_BASE_BIAS\s*=\s*(\d+)/.exec(src)?.[1])
-  const unranked = Number(/EMPTY_OPEN_UNRANKED_BIAS\s*=\s*(\d+)/.exec(src)?.[1])
-  for (const [name, value] of [['OPEN_TAB_FOCUS_BIAS', focus], ['EMPTY_OPEN_BASE_BIAS', base], ['EMPTY_OPEN_UNRANKED_BIAS', unranked]]) {
+  const emptyMax = Number(/EMPTY_OPEN_MAX_BIAS\s*=\s*(\d+)/.exec(src)?.[1])
+  for (const [name, value] of [['OPEN_TAB_FOCUS_BIAS', focus], ['EMPTY_OPEN_MAX_BIAS', emptyMax]]) {
     assert.ok(Number.isFinite(value), `${name} must be a named constant`)
   }
   assert.ok(Number.isFinite(historyBias) && historyBias < 0, 'HISTORY_SCORE_BIAS must be negative')
   assert.ok(
-    historyBias < unranked && historyBias < base && historyBias < focus,
-    `history must rank below every open-tab bias tier: ${historyBias} < ${unranked}, ${base}, ${focus}`,
+    historyBias < emptyMax && historyBias < focus,
+    `history must rank below every open-tab bias tier: ${historyBias} < ${emptyMax}, ${focus}`,
   )
   // Demoted, but must stay within the same-tier bias budget (see toLauncherItem SCORE_BIAS_CAP).
   assert.ok(historyBias > -500, `HISTORY_SCORE_BIAS must stay within the ±500 same-tier bias cap, got ${historyBias}`)

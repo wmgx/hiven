@@ -217,6 +217,23 @@ const closeItem = toItem.desktopTargetToLauncherItem(
 )
 assert.equal(closeItem.recordUsage, false)
 
+const fallbackItem = toItem.desktopTargetToLauncherItem(
+  {
+    id: 'browser.chromium:document:history-1',
+    sourceId: 'browser.chromium',
+    kind: 'document',
+    title: 'Docs',
+    actionClass: 'open',
+    meta: { url: 'https://example.com/docs' },
+    persistable: true,
+    persistKey: 'https://example.com/docs',
+    fallback: true,
+  },
+  { locale: 'en' },
+)
+assert.equal(fallbackItem.ranking?.fallback, true, 'target fallback reaches launcher ranking')
+assert.equal(fallbackItem.persistPayload?.fallback, true, 'persisted target keeps fallback semantics')
+
 // Process mode helper
 const processesSrc = readFileSync('src/workspace/desktopControl/processes.ts', 'utf8')
 assert.match(processesSrc, /isProcessModeQuery/)

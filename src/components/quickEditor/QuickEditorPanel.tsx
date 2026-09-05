@@ -12,6 +12,8 @@ import { QuickEditorVersionHistory } from './QuickEditorVersionHistory'
 import { useT } from '../../i18n'
 import type { QuickEditorPaneId, QuickEditorPaneState } from '../../workspace/quickEditor/quickEditorTypes'
 import { X } from 'lucide-react'
+import { pluginRegistry } from '../../workspace/pluginRegistry'
+import { applyEffectsToQuickEditor } from '../../workspace/quickEditor/quickEditorActions'
 
 export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void }) {
   const panes = useQuickEditorStore((s) => s.panes)
@@ -106,6 +108,12 @@ function QuickEditorPaneSurface({
   const tEditor = useT('editor')
   const initialCursorRef = useRef(pane.cursorPosition)
   const initialScrollRef = useRef(pane.scrollPosition)
+  const panelInstancesV2 = useQuickEditorStore((s) => s.panelInstancesV2)
+  const paneBottomPanels = Object.values(panelInstancesV2).filter((instance) => (
+    instance.placement === 'pane-bottom' &&
+    instance.scope?.type === 'pane' &&
+    instance.scope.paneId === pane.id
+  ))
 
   const updatePane = useCallback((
     paneId: QuickEditorPaneId,
@@ -131,6 +139,31 @@ function QuickEditorPaneSurface({
     <EditorSurface
       binding={binding}
       autoFocus={autoFocus}
+      bottomPanels={paneBottomPanels.map((instance) => {
+        const panelEntry = pluginRegistry.resolvePanel(instance.panelId, instance.isDevPanel)
+        if (!panelEntry) return null
+        const PanelComponent = panelEntry.contribution.component
+        return (
+          <div
+            key={instance.panelId}
+            className="quick-editor-pane-panel"
+            style={{
+              borderTop: 'var(--hairline) solid var(--color-border-tertiary)',
+              height: panelEntry.contribution.height,
+            }}
+          >
+            <PanelComponent
+              inputs={instance.inputs}
+              panelId={instance.panelId}
+              paneId={pane.id}
+              host={{
+                close: () => useQuickEditorStore.getState().closePanelV2(instance.panelId),
+                dispatch: (effects) => { applyEffectsToQuickEditor(effects) },
+              }}
+            />
+          </div>
+        )
+      })}
       actions={[{
         id: 'quick-editor-command',
         label: 'Quick Editor Command',

@@ -71,11 +71,18 @@ assert.match(app, /installAppHotkeys/)
 
 const settings = readFileSync('src/surfaces/SettingsContent.tsx', 'utf8')
 assert.match(settings, /AppHotkeysSettings/)
+assert.match(settings, /<SettingsListRow stacked[\s\S]{0,180}<AppHotkeysSettings/, 'app hotkeys should use the full-width settings row layout')
+const appHotkeysSettings = readFileSync('src/components/AppHotkeysSettings.tsx', 'utf8')
+assert.match(appHotkeysSettings, /import \{ Combobox \} from ['"]\.\.\/plugin-ui['"]/)
+assert.match(appHotkeysSettings, /<Combobox/)
+assert.doesNotMatch(appHotkeysSettings, /<select\b/)
+assert.doesNotMatch(appHotkeysSettings, /app-hotkeys-help/, 'app hotkeys should not repeat the parent row description')
 
 const css = readFileSync('src/index.css', 'utf8')
 // Dark launcher is solid SuperCmd charcoal (not translucent glass)
 assert.match(css, /data-theme='dark'[\s\S]*#1c1c1e/)
 assert.match(css, /data-theme='dark'[\s\S]*#3a3a3c/)
 assert.match(css, /Never apply light translucent glass/)
+assert.match(css, /\.srow--stacked[\s\S]{0,180}grid-template-columns:\s*34px minmax\(0, 1fr\)/, 'stacked settings rows should reserve a full-width control column')
 
 console.log('✓ test-app-hotkeys passed')

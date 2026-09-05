@@ -48,7 +48,7 @@ export function registerHostLauncherProviders(): void {
   setHostLauncherDynamicItemsProvider(async (ctx) => {
     // Process terminate is NOT first-level dynamic. Use getKillProcessHostItem (static).
     // Window focus: both static L2 command and first-level dynamic mix (below).
-    // Empty open: apps only (memo top-N) + cached windows if any. No workflow, no waiting.
+    // Empty open: apps + cached windows + cached browser recommendations. No workflow.
     // Query present: apps + windows + bridge tabs in parallel.
     // Slow remote document sources (feishu.docs) are NOT collected here — they stream
     // on a separate progressive path in useLauncherSession so typing stays responsive.
@@ -65,20 +65,6 @@ export function registerHostLauncherProviders(): void {
           itemCount: items.length,
         }))
 
-        if (!q) {
-          // Empty open path: skip workflow + bridge tabs (empty-search tabs = 0).
-          const [appItems, windowItems] = await Promise.all([appPromise, windowPromise])
-          return [...appItems, ...windowItems]
-        }
-
-        const workflowPromise = measureLauncherPerf('host-provider:workflow-items', () => getWorkflowObjectLauncherItems(ctx), (items) => ({
-          queryLength: q.length,
-          itemCount: items.length,
-        })).catch((error) => {
-          console.warn('[launcher] workflow dynamic items failed:', error)
-          return [] as Awaited<ReturnType<typeof getWorkflowObjectLauncherItems>>
-        })
-
         // D3: Chromium tabs only (never fan-out to all DesktopTarget providers).
         const bridgePromise = measureLauncherPerf(
           'host-provider:bridge-items',
@@ -87,6 +73,23 @@ export function registerHostLauncherProviders(): void {
         ).catch((error) => {
           console.warn('[launcher] desktop bridge dynamic items failed:', error)
           return [] as Awaited<ReturnType<typeof getDesktopBridgeLauncherDynamicItems>>
+        })
+
+        if (!q) {
+          const [appItems, windowItems, bridgeItems] = await Promise.all([
+            appPromise,
+            windowPromise,
+            bridgePromise,
+          ])
+          return [...appItems, ...windowItems, ...bridgeItems]
+        }
+
+        const workflowPromise = measureLauncherPerf('host-provider:workflow-items', () => getWorkflowObjectLauncherItems(ctx), (items) => ({
+          queryLength: q.length,
+          itemCount: items.length,
+        })).catch((error) => {
+          console.warn('[launcher] workflow dynamic items failed:', error)
+          return [] as Awaited<ReturnType<typeof getWorkflowObjectLauncherItems>>
         })
 
         const [appItems, windowItems, workflowItems, bridgeItems] = await Promise.all([

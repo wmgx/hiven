@@ -3,6 +3,7 @@ import { pluginRegistry } from './pluginRegistry'
 import { resizeCurrentLauncherWindow, showLauncherWindow } from './windowManager/launcherWindow'
 import { LAUNCHER_WINDOW_LABEL } from './windowManager/windowLabels'
 import type { PluginDefinition } from './pluginTypes'
+import { isNativeDesktopRuntime } from './webNativeBridge'
 import {
   getPluginSurfaceShortcutPresentation,
   showPluginSurfaceWindow,
@@ -76,7 +77,7 @@ export async function requestOpenPluginSurfaceTool(target: PluginSurfaceOpenTarg
     clearPendingPluginSurfaceOpenTarget()
     // Desktop: independent plugin-surface window.
     // Browser / non-Tauri: window open is a no-op — fall back to launcher tool-shell.
-    if (isTauriRuntime()) {
+    if (isNativeDesktopRuntime()) {
       await showPluginSurfaceWindow(target)
       return
     }
@@ -85,7 +86,7 @@ export async function requestOpenPluginSurfaceTool(target: PluginSurfaceOpenTarg
   }
 
   writePendingPluginSurfaceOpenTarget(target)
-  if (!isTauriRuntime()) {
+  if (!isNativeDesktopRuntime()) {
     openLauncherHostedPluginSurface(target)
     return
   }
@@ -130,10 +131,6 @@ async function preSizeCurrentLauncherWindowForPluginSurface(target: PluginSurfac
   } catch {
     // Non-critical: window will resize later via useLayoutEffect fallback.
   }
-}
-
-function isTauriRuntime(): boolean {
-  return Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
 }
 
 function isLauncherWindowRuntime(): boolean {

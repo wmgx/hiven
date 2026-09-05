@@ -24,10 +24,14 @@ function scheduleAppIconLoads(): void {
     const startedAt = launcherPerfNow()
 
     void import('@tauri-apps/api/core')
-      .then(({ convertFileSrc, invoke }) =>
-        invoke<NativeAppIconUrlResult>('read_installed_app_icon_url', { appId: job.appId })
-          .then((path) => path ? convertFileSrc(path) : ''),
-      )
+      .then(async ({ convertFileSrc, invoke }) => {
+        if (window.__HIVEN_WEB_NATIVE_BRIDGE__) {
+          const bytes = await invoke<number[] | null>('read_installed_app_icon_png', { appId: job.appId })
+          return bytes ? URL.createObjectURL(new Blob([new Uint8Array(bytes).buffer], { type: 'image/png' })) : ''
+        }
+        const path = await invoke<NativeAppIconUrlResult>('read_installed_app_icon_url', { appId: job.appId })
+        return path ? convertFileSrc(path) : ''
+      })
       .then((url) => {
         logLauncherPerfDuration('app-icon:load', startedAt, {
           appId: job.appId,

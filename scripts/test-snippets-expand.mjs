@@ -56,6 +56,7 @@ assert.equal(model.enabledSnippets({ ...settings, enabled: false }).length, 0)
 const index = readFileSync('src/plugins/snippets/index.ts', 'utf8')
 assert.match(index, /toolsFor/)
 assert.match(index, /expandSnippetTemplate/)
+assert.doesNotMatch(index, /inputPolicy/, 'snippets should expand immediately from selection or clipboard')
 const manifest = JSON.parse(readFileSync('src/plugins/snippets/manifest.json', 'utf8'))
 assert.equal(manifest.pluginId, 'snippets')
 

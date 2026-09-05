@@ -20,7 +20,7 @@ vm.runInNewContext(out, {
   console,
   TextEncoder,
 })
-const { baiduFailureMessage, isAutoTranslateReady } = moduleExports
+const { baiduFailureMessage, isAutoTranslateReady, translateWithAi } = moduleExports
 
 assert.equal(typeof baiduFailureMessage, 'function', 'baiduFailureMessage must be exported')
 assert.equal(baiduFailureMessage(200, { trans_result: [{ src: 'hello', dst: '你好' }] }), null)
@@ -45,5 +45,23 @@ assert.equal(isAutoTranslateReady('a'), true, 'single Latin letter must translat
 assert.equal(isAutoTranslateReady('  hi  '), true, 'trim before counting')
 assert.equal(isAutoTranslateReady('  '), false, 'whitespace-only stays idle')
 assert.equal(isAutoTranslateReady(''), false, 'empty stays idle')
+
+const aiPrompts = []
+const aiRequests = []
+const aiResult = await translateWithAi({ text: '你好', sourceLang: 'auto', targetLang: 'en' }, { aiProviderId: 'system-ai', aiAgentId: 'translator', aiEffort: 'high' }, {
+  async *stream(request) {
+    aiRequests.push(request)
+    aiPrompts.push(request.input[0].text)
+    yield { type: 'text.delta', runId: '1', delta: 'Hel' }
+    yield { type: 'text.delta', runId: '1', delta: 'lo' }
+    yield { type: 'completed', runId: '1', status: 'completed' }
+  },
+})
+assert.equal(aiResult.text, 'Hello')
+assert.equal(aiResult.billedChars, 2)
+assert.match(aiPrompts[0], /Return only the translation/)
+assert.equal(aiRequests[0].providerId, 'system-ai')
+assert.equal(aiRequests[0].agentId, 'translator')
+assert.equal(aiRequests[0].effort, 'high')
 
 console.log('translate baidu response checks passed')

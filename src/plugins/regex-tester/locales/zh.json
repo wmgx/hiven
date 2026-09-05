@@ -8,5 +8,14 @@
   "panel.regex.matches": "{count} 个匹配",
   "panel.regex.more": "还有 {count} 个",
   "panel.regex.noMatches": "无匹配",
-  "panel.close": "关闭"
+  "panel.close": "关闭",
+  "surface.title": "正则测试器",
+  "surface.subtitle": "表达式、标记和示例文本",
+  "surface.back": "返回",
+  "surface.close": "关闭",
+  "surface.sampleText": "示例文本",
+  "surface.matches": "匹配结果",
+  "surface.enterPattern": "输入表达式",
+  "surface.emptyGroup": "空",
+  "error.invalid": "正则表达式或标记无效，请检查后重试。"
 }

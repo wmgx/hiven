@@ -13,6 +13,8 @@
   "choice.quickEditorPane": "Quick Editor · {title}",
   "textDiff.title": "Text Diff",
   "surface.breadcrumb": "Text Compare",
+  "surface.original": "Original",
+  "surface.modified": "Modified",
   "diff.textMode": "Text",
   "diff.jsonMode": "JSON",
   "diff.mode": "Diff mode",

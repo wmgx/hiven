@@ -2,6 +2,7 @@ import { definePlugin, type PluginSettingsObjectListItemField } from '@hiven/plu
 import type { TranslateSettings } from './settings/model'
 import { DEFAULT_TRANSLATE_SETTINGS, migrateTranslateSettings } from './settings/model'
 import { TranslateSurface } from './surfaces/TranslateSurface'
+import { AiTranslateSettingsModal } from './settings/AiTranslateSettingsModal'
 import './style.css'
 
 const LANGUAGE_OPTIONS = [
@@ -23,10 +24,26 @@ const PROFILE_FIELDS: PluginSettingsObjectListItemField[] = [
     labelI18n: { zh: '服务商' },
     kind: 'select',
     options: [
+      { label: 'AI (system provider)', labelI18n: { zh: 'AI（系统服务商）' }, value: 'ai' },
       { label: 'Baidu Translate', labelI18n: { zh: '百度翻译' }, value: 'baidu' },
       { label: 'DeepL', value: 'deepl' },
       { label: 'Tencent Cloud', labelI18n: { zh: '腾讯云翻译' }, value: 'tencent' },
     ],
+    group: 'Basic',
+    groupI18n: { zh: '基本' },
+  },
+  {
+    key: 'aiSettings',
+    label: 'System provider, model, and reasoning',
+    labelI18n: { zh: '系统服务商、模型和思考深度' },
+    description: 'Choose from the AI providers available in Hiven.',
+    descriptionI18n: { zh: '从 Hiven 当前可用的系统 AI 中选择。' },
+    kind: 'modal',
+    modalId: 'ai-provider',
+    buttonLabel: 'Configure',
+    buttonLabelI18n: { zh: '配置' },
+    requires: ['ai.use'],
+    visibleWhen: { key: 'provider', equals: 'ai' },
     group: 'Basic',
     groupI18n: { zh: '基本' },
   },
@@ -137,9 +154,17 @@ export default definePlugin<TranslateSettings>({
   settings: {
     title: 'Translate',
     titleI18n: { zh: '翻译' },
-    version: 4,
+    version: 6,
     defaultValue: DEFAULT_TRANSLATE_SETTINGS,
     migrate: migrateTranslateSettings,
+    modals: [
+      {
+        id: 'ai-provider',
+        title: 'AI translation',
+        titleI18n: { zh: 'AI 翻译' },
+        component: AiTranslateSettingsModal,
+      },
+    ],
     schema: {
       sections: [
         {

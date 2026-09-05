@@ -103,7 +103,7 @@ const IconDown = () => (
   </svg>
 )
 
-export function TextDiffSurface({ t, settings, host, initialText }: PluginSurfaceProps) {
+export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurfaceProps) {
   // Diff kits are first-party only (@hiven/plugin-diff), not public PluginHostSdk.
   const { kits: diffKits } = getPluginDiffHost()
   const {
@@ -219,8 +219,6 @@ export function TextDiffSurface({ t, settings, host, initialText }: PluginSurfac
   // Follow the user-selected mode (not only successful JSON parse) so Monaco
   // can offer JSON folding / syntax while editing toward valid JSON.
   const editorLanguage = diffMode === 'json' ? 'json' : 'plaintext'
-  const hostSettings = settings as { fontSize?: number; lineNumbers?: boolean; wordWrap?: boolean; theme?: string }
-
   return (
     <div className="td-surface">
       {/* Header — breadcrumb left, mode center-right, actions right */}
@@ -274,6 +272,11 @@ export function TextDiffSurface({ t, settings, host, initialText }: PluginSurfac
         </div>
       </div>
 
+      <div className="td-pane-labels" aria-hidden="true">
+        <span>{t('surface.original')}</span>
+        <span>{t('surface.modified')}</span>
+      </div>
+
       {/* Editor body */}
       <div className="td-body">
         <DualEditorView
@@ -287,10 +290,12 @@ export function TextDiffSurface({ t, settings, host, initialText }: PluginSurfac
           language={editorLanguage}
           onLeftChange={setOriginalText}
           onRightChange={setModifiedText}
-          fontSize={hostSettings.fontSize ?? 13}
-          lineNumbers={hostSettings.lineNumbers ?? true}
-          wordWrap={hostSettings.wordWrap ?? false}
-          monacoTheme={hostSettings.theme === 'dark' ? 'flux-vscode-dark' : 'flux-vscode-light'}
+          fontSize={appearance.fontSize}
+          lineNumbers={appearance.lineNumbers}
+          wordWrap={appearance.wordWrap}
+          monacoTheme={appearance.theme === 'dark' ? 'flux-vscode-dark' : 'flux-vscode-light'}
+          leftAriaLabel={t('surface.original')}
+          rightAriaLabel={t('surface.modified')}
         />
       </div>
 

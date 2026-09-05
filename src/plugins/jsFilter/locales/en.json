@@ -3,6 +3,7 @@
   "command.open.description": "Open the JSON expression bottom bar",
   "panel.placeholder": "JSON expression; e.g. .key.subkey, [0][1], .map(x=>x.val)",
   "panel.execute": "Run",
+  "panel.close": "Close expression panel",
   "panel.error.notJson": "Current content is not valid JSON",
   "panel.error.expression": "Expression error: {0}"
 }

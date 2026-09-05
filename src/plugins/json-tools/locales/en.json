@@ -10,5 +10,15 @@
   "queryString.toJson.title": "Query String → JSON",
   "queryString.toJson.description": "Convert URL query string to JSON object",
   "queryString.fromJson.title": "JSON → Query String",
-  "queryString.fromJson.description": "Convert JSON object to URL query string"
+  "queryString.fromJson.description": "Convert JSON object to URL query string",
+  "surface.title": "JSON",
+  "surface.inputPlaceholder": "Paste JSON here…",
+  "surface.emptyOutput": "Formatted JSON appears here.",
+  "surface.invalid": "Invalid JSON. Check the syntax and try again.",
+  "action.back": "Back",
+  "action.copy": "Copy",
+  "action.close": "Close",
+  "toast.copied": "Copied formatted JSON",
+  "toast.copyFailed": "Copy failed",
+  "error.convert": "Failed to process: {message}"
 }

@@ -20,6 +20,7 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 use zip::ZipArchive;
 
 pub mod ai_codex;
+pub mod ai_xai;
 pub mod desktop_bridge;
 pub mod hotkeys;
 
@@ -2528,6 +2529,12 @@ fn read_installed_app_icon_url(app: tauri::AppHandle, app_id: String) -> Option<
         return None;
     }
     Some(cache_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn read_installed_app_icon_png(app: tauri::AppHandle, app_id: String) -> Option<Vec<u8>> {
+    let path = read_installed_app_icon_url(app, app_id)?;
+    fs::read(path).ok()
 }
 
 #[tauri::command]
@@ -7184,7 +7191,7 @@ pub fn run() {
             }
 
             // D3/D4: localhost bridge for Chromium tabs + editor documents.
-            desktop_bridge::start_desktop_bridge_server();
+            desktop_bridge::start_desktop_bridge_server(app.handle().clone());
 
             Ok(())
         })
@@ -7215,6 +7222,11 @@ pub fn run() {
             plugin_kv_clear,
             ai_codex::ai_codex_rpc,
             ai_codex::ai_codex_notify,
+            ai_xai::ai_xai_login_start,
+            ai_xai::ai_xai_describe,
+            ai_xai::ai_xai_response_stream,
+            ai_xai::ai_xai_cancel,
+            ai_xai::ai_xai_logout,
             usage_journal_append,
             usage_journal_prune,
             ai_usage_record_upsert,
@@ -7258,6 +7270,7 @@ pub fn run() {
             // last_foreground_selection_text,
             discover_installed_apps,
             read_installed_app_icon_url,
+            read_installed_app_icon_png,
             cache_installed_app_icons,
             launch_installed_app,
             toggle_installed_app,

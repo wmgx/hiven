@@ -19,6 +19,7 @@ import { readLauncherClipboard } from '../clipboard/readLauncherClipboard'
 import { GlobalLauncherPanel } from '../../components/launcher/GlobalLauncherPanel'
 import { useGlobalLauncherSelectionController } from '../../components/launcher/useGlobalLauncherSelectionController'
 import { useClipboardObjectBlock } from '../clipboard/useClipboardObjectBlock'
+import { getObjectBlockRecommendationText } from '../clipboard/objectBlock'
 import { executeRecommendedAction } from '../clipboard/actionExecutor'
 import { recommendActionsForBlock, type RecommendedAction, type RecommendedOutputTarget } from '../clipboard/actionRecommendation'
 import { createPluginClipboard, writeClipboardText } from '../../workspace/pluginClipboard'
@@ -26,7 +27,7 @@ import { createGlobalLauncherPluginApi } from '../clipboard/globalLauncherApi'
 import { createPluginPaste } from '../../workspace/pluginPaste'
 import { createPluginPrivateStorage } from '../../workspace/pluginStorage'
 import { createQuickEditorPane } from '../../workspace/quickEditor/quickEditorRequests'
-import { open as openUrl } from '@tauri-apps/plugin-shell'
+import { openExternalUrl } from '../../workspace/effectRunner'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import { restoreLauncherInputSource } from '../../workspace/windowManager/launcherWindow'
 import { getHostSurfaceShell } from '../../components/launcher/hostSurfaceShell'
@@ -77,7 +78,10 @@ export function GlobalLauncherHost() {
   const isKeyboardNavRef = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  const visibleSelectionItemsRef = useRef<readonly LauncherItem[]>([])
   const [selectedObjectActionIndex, setSelectedObjectActionIndex] = useState(0)
+  const [hostSurfaceExiting, setHostSurfaceExiting] = useState(false)
+  const hostSurfaceExitTimerRef = useRef<number | null>(null)
   const objectActionControllerRef = useRef<{ expand: () => void; execute: (keepOpen?: boolean) => void } | null>(null)
   const { isImeComposingRef, handleCompositionStart, handleCompositionEnd } = useGlobalLauncherImeComposition()
   const standaloneLauncher = isStandaloneLauncherWindow()
@@ -85,6 +89,20 @@ export function GlobalLauncherHost() {
     ? settingsDialogTarget
     : null
   const hostSurfaceTarget = launcherHostSurfaceTarget
+
+  const scheduleHostSurfaceExit = useCallback((finish: () => void) => {
+    if (hostSurfaceExitTimerRef.current !== null) return
+    setHostSurfaceExiting(true)
+    hostSurfaceExitTimerRef.current = window.setTimeout(() => {
+      hostSurfaceExitTimerRef.current = null
+      finish()
+      setHostSurfaceExiting(false)
+    }, 90)
+  }, [])
+
+  useEffect(() => () => {
+    if (hostSurfaceExitTimerRef.current !== null) window.clearTimeout(hostSurfaceExitTimerRef.current)
+  }, [])
   // Live query for suppress gate (session is declared below; ref stays current each render).
   const liveQueryRef = useRef('')
   const clipboardBlock = useClipboardObjectBlock({
@@ -98,7 +116,7 @@ export function GlobalLauncherHost() {
     ),
   })
   // Recommendations while block is mounted (exit keeps mode stable to avoid ranking jank).
-  const objectBlockText = clipboardBlock.block?.payloadText ?? undefined
+  const objectBlockText = getObjectBlockRecommendationText(clipboardBlock.block)
   const [foregroundApp, setForegroundApp] = useState<string | undefined>()
 
   const {
@@ -111,6 +129,7 @@ export function GlobalLauncherHost() {
     controllerRef,
     controllerState,
     rankedItems: rankedLauncherItems,
+    syncSelection,
   } = useLauncherSession({
     hostId: 'global-launcher',
     open,
@@ -119,6 +138,7 @@ export function GlobalLauncherHost() {
     objectBlockText,
     foregroundApp,
     makeApi: createGlobalLauncherPluginApi,
+    visibleSelectionItemsRef,
   })
   liveQueryRef.current = query
   // Only when the user clears a non-empty draft — never on every empty render.
@@ -228,6 +248,7 @@ export function GlobalLauncherHost() {
     setSurfaceFrame,
     activeSurfaceFrame,
     surfaceFocusVersion,
+    surfaceExiting,
     openPluginSurface,
     leaveSurface,
     requestSurfaceBack,
@@ -275,8 +296,7 @@ export function GlobalLauncherHost() {
     }, [controllerRef]),
   })
 
-  // Use rankingQuery (deferred), not live query — otherwise every keystroke rebuilds
-  // all list item objects and busts row memo before deferred rank catches up.
+  // Ranking and execution share the live query snapshot.
   const rankedVisible = useMemo(() => {
     void pluginRegistryVersion
     return buildGlobalLauncherItems({
@@ -287,7 +307,7 @@ export function GlobalLauncherHost() {
   }, [locale, pluginRegistryVersion, rankingQuery, rankedLauncherItems])
 
   /**
-   * Object Block host rows pinned above ranking tools.
+   * Object Block host rows pinned near the top of the composed list.
    *
    * Ranking / textMatch no longer shows static recommendActionsForBlock entries
    * (RecommendedActionRow UI is disabled). History keeps paste/copy/open rows;
@@ -366,10 +386,23 @@ export function GlobalLauncherHost() {
       })
   }, [clipboardBlock.block, locale, objectActions, rankingQuery])
 
-  const visibleFiltered = useMemo(
-    () => [...pinnedObjectActionItems, ...rankedVisible],
-    [pinnedObjectActionItems, rankedVisible],
+  const visibleFiltered = useMemo(() => {
+    if (
+      !objectBlockText
+      || clipboardBlock.block?.source === 'history-item'
+      || rankedVisible.length === 0
+    ) {
+      return [...pinnedObjectActionItems, ...rankedVisible]
+    }
+    // The best content-aware recommendation should beat the generic editor fallback.
+    return [rankedVisible[0], ...pinnedObjectActionItems, ...rankedVisible.slice(1)]
+  }, [clipboardBlock.block?.source, objectBlockText, pinnedObjectActionItems, rankedVisible])
+  const visibleSelectionItems = useMemo(
+    () => visibleFiltered.map((item) => item.domainItem),
+    [visibleFiltered],
   )
+  visibleSelectionItemsRef.current = visibleSelectionItems
+  useEffect(() => syncSelection(), [syncSelection, visibleSelectionItems])
 
   /**
    * Primitive resize trigger — controllerState object identity changes every setState.
@@ -464,10 +497,12 @@ export function GlobalLauncherHost() {
     })
   }, [overlay, query, resetLauncherSession, setOpen, standaloneLauncher, restoreFocus])
 
-  const leaveHostSurface = useCallback(() => {
+  const leaveHostSurface = useCallback(() => scheduleHostSurfaceExit(() => {
     clearLauncherHostSurface()
     focusSearchInputAfterBack()
-  }, [clearLauncherHostSurface, focusSearchInputAfterBack])
+  }), [clearLauncherHostSurface, focusSearchInputAfterBack, scheduleHostSurfaceExit])
+
+  const closeHostSurface = useCallback(() => scheduleHostSurfaceExit(closeLauncher), [closeLauncher, scheduleHostSurfaceExit])
 
   // Close launcher after a command has been executed (don't hide the main window)
   const closeLauncherAfterAction = useCallback(() => {
@@ -576,6 +611,7 @@ export function GlobalLauncherHost() {
     grantPluginPermissions: grantPluginPermissions as never,
     focusSearchInputAfterBack,
     objectBlockText: clipboardBlock.block?.payloadText ?? undefined,
+    locale,
   })
 
   useGlobalLauncherHostEscape({
@@ -634,7 +670,7 @@ export function GlobalLauncherHost() {
         return invoke<string>('read_file', { path })
       },
       openUrl: async (url) => {
-        await openUrl(url)
+        await openExternalUrl(url)
       },
       replaceSelection: async (text) => {
         await createQuickEditorPane({ text })
@@ -804,6 +840,7 @@ export function GlobalLauncherHost() {
         focusSearchInputAfterBack={focusSearchInputAfterBack}
         surfaceFrame={surfaceFrame}
         activeSurfaceFrame={activeSurfaceFrame}
+        surfaceExiting={surfaceExiting}
         leaveSurface={leaveSurface}
         itemPermissionFrame={itemPermissionFrame}
         cancelItemPermissionPrompt={cancelItemPermissionPrompt}
@@ -824,13 +861,14 @@ export function GlobalLauncherHost() {
         isWorkflowObjectLauncherItem={isWorkflowObjectLauncherItem}
         selectItem={selectItemWithObjectActions as never}
         hostSurfaceTarget={hostSurfaceTarget}
+        hostSurfaceExiting={hostSurfaceExiting}
         clearLauncherHostSurface={clearLauncherHostSurface}
         query={query}
         setQuery={setQuery}
         locale={locale}
         searchPlaceholder={t(locale, 'palette.globalPlaceholder')}
         requestSurfaceBack={hostSurfaceTarget ? leaveHostSurface : requestSurfaceBack}
-        requestSurfaceClose={hostSurfaceTarget ? closeLauncher : requestSurfaceClose}
+        requestSurfaceClose={hostSurfaceTarget ? closeHostSurface : requestSurfaceClose}
         handleCompositionStart={handleCompositionStart}
         handleCompositionEnd={handleCompositionEnd}
         clipboardBlock={clipboardBlock}

@@ -1,4 +1,4 @@
-import type { PluginNetworkApi } from '@hiven/plugin'
+import type { PluginAiApi, PluginNetworkApi } from '@hiven/plugin'
 import type { LanguageCode, SourceLanguageCode, TranslateProfile } from '../settings/model'
 import { translateWithTencent } from './tencent'
 
@@ -66,6 +66,17 @@ const DEEPL_SOURCE_LANG: Partial<Record<SourceLanguageCode, string>> = {
   fr: 'FR',
   de: 'DE',
   es: 'ES',
+}
+
+const LANGUAGE_NAME: Record<SourceLanguageCode | LanguageCode, string> = {
+  auto: 'the automatically detected source language',
+  zh: 'Chinese',
+  en: 'English',
+  ja: 'Japanese',
+  ko: 'Korean',
+  fr: 'French',
+  de: 'German',
+  es: 'Spanish',
 }
 
 const MD5_SHIFT_AMOUNTS = [
@@ -217,8 +228,28 @@ async function translateWithDeepL(req: TranslateRequest, profile: TranslateProfi
   return { text, billedChars: estimateBilledChars(req.text) }
 }
 
-export async function translateText(req: TranslateRequest, profile: TranslateProfile, network: PluginNetworkApi): Promise<TranslateResult> {
+export async function translateWithAi(req: TranslateRequest, profile: TranslateProfile, ai: PluginAiApi): Promise<TranslateResult> {
+  const prompt = `Translate the text below from ${LANGUAGE_NAME[req.sourceLang]} to ${LANGUAGE_NAME[req.targetLang]}. Preserve meaning, tone, formatting, and line breaks. Return only the translation, with no explanation.\n\n${req.text}`
+  let text = ''
+  for await (const event of ai.stream({
+    providerId: profile.aiProviderId || undefined,
+    agentId: profile.aiAgentId || undefined,
+    effort: profile.aiEffort || 'inherit',
+    input: [{ type: 'text', text: prompt }],
+    capabilities: ['text.generate'],
+  })) {
+    if (event.type === 'text.delta') text += event.delta
+    if (event.type === 'error') throw new Error(event.message)
+  }
+  text = text.trim()
+  if (!text) throw new Error('AI returned an empty translation')
+  return { text, billedChars: estimateBilledChars(req.text) }
+}
+
+export async function translateText(req: TranslateRequest, profile: TranslateProfile, network: PluginNetworkApi, ai: PluginAiApi): Promise<TranslateResult> {
   switch (profile.provider) {
+    case 'ai':
+      return translateWithAi(req, profile, ai)
     case 'baidu':
       return translateWithBaidu(req, profile, network)
     case 'deepl':

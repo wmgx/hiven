@@ -8,5 +8,14 @@
   "panel.regex.matches": "{count} matches",
   "panel.regex.more": "{count} more",
   "panel.regex.noMatches": "No matches",
-  "panel.close": "Close"
+  "panel.close": "Close",
+  "surface.title": "Regex Tester",
+  "surface.subtitle": "Pattern, flags and sample text",
+  "surface.back": "Back",
+  "surface.close": "Close",
+  "surface.sampleText": "Sample text",
+  "surface.matches": "Matches",
+  "surface.enterPattern": "Enter a pattern",
+  "surface.emptyGroup": "empty",
+  "error.invalid": "Invalid pattern or flags. Check the expression and try again."
 }

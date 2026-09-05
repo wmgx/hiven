@@ -1,0 +1,20 @@
+{
+  "token.label": "大爆炸",
+  "token.remove": "返回",
+  "action.close": "关闭",
+  "action.clear": "清除选择",
+  "action.copy": "复制",
+  "action.confirm": "上屏",
+  "input.placeholder": "粘贴或输入一段文本…",
+  "input.clear": "清空文本",
+  "empty.hint": "输入后即时炸开",
+  "canvas.label": "可选择的文本碎片",
+  "canvas.linkGroup": "链接碎片",
+  "preview.title": "拼接预览",
+  "preview.count": "已选 {count} 个片段",
+  "preview.empty": "拖拽或点击上方碎片进行选择…",
+  "footer.hint": "拖拽框选 · Shift 拖拽取消选中 · 点击链接虚线框整条切换",
+  "message.copied": "已复制",
+  "error.copyFailed": "复制失败",
+  "error.pasteFailed": "上屏失败"
+}

@@ -1,0 +1,1376 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hiven LauncherItem Model Prototype</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", sans-serif;
+      --page: #eef0f2;
+      --panel: rgba(251, 252, 252, .98);
+      --surface: #f4f5f5;
+      --surface-strong: #e9ebec;
+      --ink: #17191a;
+      --muted: #686e72;
+      --faint: #92979a;
+      --line: #dde0e2;
+      --accent: #365fdd;
+      --accent-soft: #e9eeff;
+      --accent-ink: #2347b8;
+      --good: #17724d;
+      --good-soft: #e6f5ee;
+      --warn: #9a5a0a;
+      --warn-soft: #fff3dd;
+      --danger: #b93e36;
+      --danger-soft: #fff0ee;
+      --shadow: 0 24px 70px rgba(26, 32, 38, .19), 0 2px 9px rgba(26, 32, 38, .08);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      overflow-x: hidden;
+      background:
+        radial-gradient(circle at 12% 12%, rgba(54, 95, 221, .11), transparent 28%),
+        radial-gradient(circle at 88% 88%, rgba(36, 124, 96, .08), transparent 31%),
+        var(--page);
+      color: var(--ink);
+    }
+    button, input { font: inherit; }
+    button { color: inherit; }
+
+    .prototype-banner {
+      position: fixed;
+      z-index: 20;
+      top: 18px;
+      left: 22px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: .02em;
+    }
+    .prototype-mark {
+      padding: 4px 7px;
+      border: 1px solid rgba(185, 62, 54, .24);
+      border-radius: 999px;
+      background: var(--danger-soft);
+      color: var(--danger);
+      font-weight: 760;
+      letter-spacing: .08em;
+    }
+
+    .stage {
+      min-height: 100vh;
+      display: grid;
+      place-items: start center;
+      padding: 32px 20px 122px;
+    }
+    .launcher {
+      width: min(850px, calc(100vw - 28px));
+      overflow: hidden;
+      border: 1px solid rgba(24, 29, 32, .08);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .search-bar {
+      min-height: 66px;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      padding: 0 17px;
+      border-bottom: 1px solid var(--line);
+    }
+    .search-glyph {
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border-radius: 9px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 16px;
+    }
+    .query {
+      width: 100%;
+      min-width: 0;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--ink);
+      font-size: 17px;
+      line-height: 1.3;
+    }
+    .query::placeholder { color: #747a7e; }
+    .search-status { display: flex; align-items: center; gap: 7px; }
+    .variant-chip, .status-chip, .role-chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 0 7px;
+      border-radius: 999px;
+      background: var(--surface-strong);
+      color: #555b5f;
+      font-size: 10px;
+      font-weight: 680;
+      white-space: nowrap;
+    }
+    .variant-chip { background: var(--ink); color: #fff; }
+    .status-chip.good { background: var(--good-soft); color: var(--good); }
+    .status-chip.warn { background: var(--warn-soft); color: var(--warn); }
+    .status-chip.danger { background: var(--danger-soft); color: var(--danger); }
+    .status-chip.info { background: var(--accent-soft); color: var(--accent-ink); }
+
+    .variant-explainer {
+      min-height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 8px 16px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(246, 247, 247, .78);
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .variant-explainer strong { color: var(--ink); font-weight: 720; }
+    .no-mutation { color: var(--faint); white-space: nowrap; }
+
+    .launcher-body { min-height: 390px; max-height: 440px; overflow: auto; }
+    .launcher-body.variant-a {
+      display: grid;
+      grid-template-columns: minmax(0, 1.16fr) minmax(278px, .84fr);
+      overflow: hidden;
+    }
+    .list-pane { min-width: 0; overflow: auto; }
+    .variant-a .list-pane { max-height: 440px; border-right: 1px solid var(--line); }
+    .context-rail { min-width: 0; overflow: auto; background: #f7f8f8; }
+
+    .section-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 15px 6px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 740;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .section-label span:last-child { color: var(--faint); font-weight: 600; letter-spacing: 0; }
+    .empty-results { padding: 48px 20px; color: var(--muted); text-align: center; font-size: 12px; }
+
+    .entry-shell { position: relative; margin: 2px 7px; border-radius: 12px; }
+    .entry-shell.selected { background: var(--accent-soft); }
+    .entry-shell.expanded { background: #f6f8ff; box-shadow: inset 0 0 0 1px #dbe3ff; }
+    .entry-row {
+      width: 100%;
+      min-height: 58px;
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 11px;
+      padding: 7px 43px 7px 9px;
+      border: 0;
+      border-radius: 12px;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+    }
+    .entry-row:hover { background: rgba(34, 42, 48, .035); }
+    .entry-row[aria-disabled="true"] { color: #6f7478; cursor: default; }
+    .entry-icon {
+      width: 32px;
+      height: 32px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(25, 30, 33, .06);
+      border-radius: 9px;
+      background: #fff;
+      color: #3d4448;
+      font-size: 12px;
+      font-weight: 780;
+      box-shadow: 0 1px 2px rgba(20, 25, 28, .05);
+    }
+    .entry-copy { min-width: 0; }
+    .entry-title, .entry-subtitle { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .entry-title { font-size: 13px; font-weight: 700; }
+    .entry-subtitle { margin-top: 3px; color: var(--muted); font-size: 10px; }
+    .entry-trail { display: flex; align-items: center; gap: 6px; }
+    .quick-key { color: var(--faint); font-family: ui-monospace, "SF Mono", monospace; font-size: 9px; }
+    .disclose {
+      position: absolute;
+      top: 15px;
+      right: 9px;
+      width: 29px;
+      height: 29px;
+      display: grid;
+      place-items: center;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .disclose:hover { background: rgba(54, 95, 221, .10); color: var(--accent); }
+    .disclose.open { transform: rotate(90deg); }
+
+    .variant-b .entry-shell { margin-inline: 9px; }
+    .variant-b .entry-shell.expanded { padding-bottom: 7px; }
+    .variant-c { padding-bottom: 8px; }
+    .variant-c .entry-shell {
+      margin: 7px 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+    .variant-c .entry-shell.selected { border-color: #c9d5ff; box-shadow: 0 0 0 3px rgba(54, 95, 221, .08); }
+    .variant-c .entry-shell.expanded { background: #fbfcff; }
+
+    .detail {
+      min-width: 0;
+      padding: 12px 13px 14px;
+      border-top: 1px solid rgba(30, 37, 42, .08);
+    }
+    .context-rail .detail { min-height: 100%; border-top: 0; padding: 16px; }
+    .detail-empty {
+      min-height: 100%;
+      display: grid;
+      place-items: center;
+      padding: 34px 24px;
+      color: var(--muted);
+      text-align: center;
+    }
+    .detail-empty .empty-icon {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      margin: 0 auto 12px;
+      border-radius: 13px;
+      background: var(--surface-strong);
+      color: #73797c;
+      font-size: 18px;
+    }
+    .detail-empty strong { display: block; color: var(--ink); font-size: 12px; }
+    .detail-empty p { max-width: 230px; margin: 6px 0 0; font-size: 11px; line-height: 1.5; }
+    .detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 11px; }
+    .detail-head strong { display: block; font-size: 12px; }
+    .detail-head span { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
+    .lifecycle {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin-bottom: 10px;
+      padding: 9px 10px;
+      border-radius: 9px;
+      background: var(--surface);
+      color: #4e5559;
+      font-size: 10px;
+      line-height: 1.45;
+    }
+    .lifecycle.good { background: var(--good-soft); color: var(--good); }
+    .lifecycle.warn { background: var(--warn-soft); color: var(--warn); }
+    .lifecycle.danger { background: var(--danger-soft); color: var(--danger); }
+    .lifecycle.info { background: var(--accent-soft); color: var(--accent-ink); }
+    .spinner {
+      width: 12px;
+      height: 12px;
+      flex: 0 0 auto;
+      margin-top: 1px;
+      border: 2px solid rgba(54, 95, 221, .22);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .facts { display: grid; gap: 6px; margin: 0 0 12px; }
+    .fact { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 8px; font-size: 10px; line-height: 1.45; }
+    .fact dt { color: var(--muted); }
+    .fact dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: #33393d; }
+    .subhead { margin: 12px 0 6px; color: var(--muted); font-size: 9px; font-weight: 760; letter-spacing: .09em; text-transform: uppercase; }
+
+    .member-list, .action-list { display: grid; gap: 5px; }
+    .member, .action {
+      width: 100%;
+      min-height: 39px;
+      display: grid;
+      grid-template-columns: 22px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border: 1px solid transparent;
+      border-radius: 9px;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+    }
+    .member:hover, .action:hover { background: rgba(40, 47, 52, .045); }
+    .member.active, .action.active { border-color: #c7d3ff; background: var(--accent-soft); }
+    .action.danger { color: var(--danger); }
+    .action.danger.active, .action.danger:hover { background: var(--danger-soft); border-color: #f3c8c3; }
+    .member-mark {
+      width: 17px;
+      height: 17px;
+      display: grid;
+      place-items: center;
+      border: 1px solid #b9bec1;
+      border-radius: 5px;
+      background: #fff;
+      color: transparent;
+      font-size: 10px;
+      font-weight: 800;
+    }
+    .member-mark.radio { border-radius: 50%; }
+    .member-mark.checked { border-color: var(--accent); background: var(--accent); color: #fff; }
+    .member-copy, .action-copy { min-width: 0; }
+    .member-copy strong, .member-copy span, .action-copy strong, .action-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .member-copy strong, .action-copy strong { font-size: 10px; font-weight: 700; }
+    .member-copy span, .action-copy span { margin-top: 2px; color: var(--muted); font-size: 9px; }
+    .member-conflict { color: var(--danger); font-size: 9px; }
+    .action-icon { color: var(--muted); text-align: center; font-size: 12px; }
+    .role-chip { min-height: 19px; padding-inline: 6px; font-size: 8px; }
+    .role-chip.primary { background: var(--accent-soft); color: var(--accent-ink); }
+    .role-chip.feedback { background: var(--warn-soft); color: var(--warn); }
+    .role-chip.recovery { background: var(--good-soft); color: var(--good); }
+    .role-chip.undo { background: #f0eaff; color: #6d3fba; }
+    .toggle {
+      width: 29px;
+      height: 17px;
+      padding: 2px;
+      border-radius: 999px;
+      background: #c7cbce;
+    }
+    .toggle::after {
+      content: "";
+      display: block;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: #fff;
+      transition: transform 120ms ease-out;
+    }
+    .toggle.on { background: var(--accent); }
+    .toggle.on::after { transform: translateX(12px); }
+
+    .launcher-footer {
+      min-height: 43px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 7px 11px 7px 15px;
+      border-top: 1px solid var(--line);
+      background: #fbfcfc;
+      color: var(--muted);
+      font-size: 9px;
+    }
+    .key-hints { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+    kbd {
+      min-width: 19px;
+      min-height: 18px;
+      display: inline-grid;
+      place-items: center;
+      padding: 0 4px;
+      border: 1px solid #cfd3d5;
+      border-bottom-width: 2px;
+      border-radius: 5px;
+      background: #fff;
+      color: #5d6367;
+      font-family: inherit;
+      font-size: 8px;
+      line-height: 1;
+    }
+    .footer-actions { display: flex; align-items: center; gap: 6px; }
+    .footer-button, .frame-button {
+      min-height: 29px;
+      padding: 0 9px;
+      border: 1px solid #d1d5d7;
+      border-radius: 8px;
+      background: #fff;
+      color: #3b4145;
+      font-size: 9px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .footer-button.primary, .frame-button.primary { border-color: var(--ink); background: var(--ink); color: #fff; }
+    .frame-button.danger { border-color: var(--danger); background: var(--danger); color: #fff; }
+
+    .state-strip {
+      min-height: 31px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 6px 15px;
+      border-top: 1px solid var(--line);
+      background: #1f2326;
+      color: #bbc1c5;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 8px;
+      white-space: nowrap;
+      overflow-x: auto;
+    }
+    .state-strip b { color: #fff; font-weight: 650; }
+
+    .frame { min-height: 540px; background: #fbfcfc; }
+    .frame-head {
+      min-height: 58px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 15px;
+      border-bottom: 1px solid var(--line);
+    }
+    .back-button {
+      width: 31px;
+      height: 31px;
+      display: grid;
+      place-items: center;
+      border: 0;
+      border-radius: 9px;
+      background: var(--surface);
+      cursor: pointer;
+    }
+    .frame-head-copy { min-width: 0; }
+    .frame-head-copy strong, .frame-head-copy span { display: block; }
+    .frame-head-copy strong { font-size: 13px; }
+    .frame-head-copy span { margin-top: 3px; color: var(--muted); font-size: 10px; }
+    .frame-body { max-width: 570px; margin: 0 auto; padding: 42px 24px; }
+    .frame-body h2 { margin: 0; font-size: 21px; letter-spacing: -.025em; }
+    .frame-body p { margin: 9px 0 22px; color: var(--muted); font-size: 12px; line-height: 1.65; }
+    .frame-card { padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+    .field-label { display: block; margin-bottom: 7px; color: var(--muted); font-size: 10px; font-weight: 700; }
+    .param-input {
+      width: 100%;
+      min-height: 40px;
+      padding: 0 11px;
+      border: 1px solid #cfd4d7;
+      border-radius: 9px;
+      outline: none;
+      background: #fff;
+    }
+    .param-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(54, 95, 221, .11); }
+    .frame-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+    .surface-preview {
+      min-height: 188px;
+      display: grid;
+      place-items: center;
+      border: 1px dashed #bfc5c9;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #f0f3ff, #f4f8f6);
+      color: var(--muted);
+      text-align: center;
+      font-size: 11px;
+      line-height: 1.6;
+    }
+
+    .switcher {
+      position: fixed;
+      z-index: 30;
+      left: 50%;
+      bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px;
+      border: 1px solid rgba(22, 27, 30, .12);
+      border-radius: 13px;
+      background: rgba(250, 251, 251, .92);
+      box-shadow: 0 10px 28px rgba(23, 28, 32, .15);
+      backdrop-filter: blur(16px);
+      transform: translateX(-50%);
+    }
+    .switcher button {
+      min-height: 32px;
+      padding: 0 11px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .switcher button.active { background: var(--ink); color: #fff; }
+    .switcher-divider { width: 1px; height: 20px; margin: 0 3px; background: var(--line); }
+    .toast {
+      position: fixed;
+      z-index: 40;
+      top: 20px;
+      left: 50%;
+      max-width: min(480px, calc(100vw - 24px));
+      padding: 9px 12px;
+      border-radius: 9px;
+      background: #202427;
+      color: #fff;
+      font-size: 10px;
+      box-shadow: 0 10px 30px rgba(20, 25, 28, .22);
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, -16px);
+      transition: opacity 130ms ease-out, transform 130ms ease-out;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    @media (max-width: 700px) {
+      .stage { padding: 56px 8px 122px; }
+      .launcher { width: calc(100vw - 16px); }
+      .launcher-body.variant-a { display: block; overflow: auto; }
+      .variant-a .list-pane { max-height: none; border-right: 0; }
+      .variant-a .context-rail { border-top: 1px solid var(--line); }
+      .context-rail .detail { min-height: 230px; }
+      .entry-trail .status-chip { display: none; }
+      .variant-explainer { align-items: flex-start; flex-direction: column; gap: 3px; }
+      .no-mutation { white-space: normal; }
+      .prototype-banner { left: 12px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <!-- PROTOTYPE ONLY: in-memory interaction study; no real host/plugin mutation. -->
+  <div class="prototype-banner">
+    <span class="prototype-mark">PROTOTYPE</span>
+    <span id="prototype-caption">Memory-only interaction study</span>
+  </div>
+
+  <main class="stage">
+    <section class="launcher" id="launcher" aria-label="Hiven Global Launcher prototype"></section>
+  </main>
+
+  <nav class="switcher" aria-label="Prototype variant switcher">
+    <button type="button" data-variant="A">A · Compact + Rail</button>
+    <button type="button" data-variant="B">B · Progressive</button>
+    <button type="button" data-variant="C">C · Composite</button>
+    <span class="switcher-divider" aria-hidden="true"></span>
+    <button type="button" data-locale="zh">中文</button>
+    <button type="button" data-locale="en">EN</button>
+  </nav>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const bi = (zh, en) => ({ zh, en })
+    const hostCopy = {
+      zh: {
+        prototype: '仅内存交互演示 · 不执行真实写入', search: '搜索命令、结果与对象…', results: '结果',
+        context: '当前上下文', actions: '动作', members: '成员', noResults: '没有匹配的搜索单元',
+        inspectTitle: '选择一个搜索单元', inspectBody: '按 Tab 查看详情与从属动作；它们不会进入搜索排名或数字快捷键。',
+        detail: '详情', searchZone: '搜索区', interactionZone: '交互区', groupZone: 'Group 区',
+        noMutation: '所有状态仅存在于当前页面；Frame 与 Surface 也是模拟。',
+        select: '选择', openDetail: '详情', run: '执行', back: '返回', confirm: '确认', cancel: '取消',
+        frameParams: 'Params Frame', frameConfirm: 'Result / Confirm Frame', frameSurface: 'Plugin Surface',
+        paramsTitle: '编辑命令参数', paramsBody: '文本、数字、多字段与校验继续使用现有 Params Frame，不塞进 Item。',
+        surfaceTitle: '进入插件 Surface', surfaceBody: '复杂布局、长列表、编辑与多层导航从这里离开 Launcher 的通用原语。',
+        confirmTitle: '确认有副作用的动作', confirmBody: 'Host 统一展示影响、权限与确认；快捷键不能绕过这一层。',
+        returnHint: '返回后恢复 query、selected、expanded、zone 与选择集。',
+        focusPreserved: '搜索 input 仍是真实 DOM 焦点', wouldClose: '真实 Launcher 会在这里关闭',
+        shortcutBlocked: '当前状态不能 quick run；已打开解释或恢复路径', conflict: '选择被阻止：与已选成员冲突',
+        done: '操作完成', refreshed: '数据已刷新', recovered: '能力已恢复', copied: '已复制', opened: '已打开',
+        frameOpened: '进入现有 Frame', surfaceOpened: '进入已注册 Surface', rejected: '建议已拒绝，可撤销', accepted: '规则已接受，可撤销',
+        undoDone: '已撤销', selectedCount: '已选择', hiddenSelected: '其中 1 项被筛选隐藏', closeSelected: '关闭所选',
+        saved: '已固定', unsaved: '未固定', staleBlocked: '数据已失效，请先刷新', disabledReason: '桌面浏览器桥接未连接',
+        runDefault: '按默认参数运行', operationIdle: 'idle',
+      },
+      en: {
+        prototype: 'In-memory interaction study · no real writes', search: 'Search commands, results, and objects…', results: 'Results',
+        context: 'Current context', actions: 'Actions', members: 'Members', noResults: 'No matching search units',
+        inspectTitle: 'Select a search unit', inspectBody: 'Press Tab for detail and owned actions. They never enter ranking or number shortcuts.',
+        detail: 'Detail', searchZone: 'Search zone', interactionZone: 'Interaction zone', groupZone: 'Group zone',
+        noMutation: 'All state is memory-only; Frames and Surfaces are simulated.',
+        select: 'Select', openDetail: 'Detail', run: 'Run', back: 'Back', confirm: 'Confirm', cancel: 'Cancel',
+        frameParams: 'Params Frame', frameConfirm: 'Result / Confirm Frame', frameSurface: 'Plugin Surface',
+        paramsTitle: 'Edit command parameters', paramsBody: 'Text, numbers, multi-field input, and validation stay in the existing Params Frame.',
+        surfaceTitle: 'Enter a plugin Surface', surfaceBody: 'Rich layouts, long lists, editing, and nested navigation leave Launcher primitives here.',
+        confirmTitle: 'Confirm an effectful action', confirmBody: 'The Host owns impact, permissions, and confirmation. Shortcuts cannot bypass it.',
+        returnHint: 'Back restores query, selected, expanded, zone, and the selection set.',
+        focusPreserved: 'The search input still owns real DOM focus', wouldClose: 'The real Launcher would close here',
+        shortcutBlocked: 'Quick run is blocked; explanation or recovery is open', conflict: 'Selection blocked: conflicts with an existing member',
+        done: 'Action completed', refreshed: 'Data refreshed', recovered: 'Capability restored', copied: 'Copied', opened: 'Opened',
+        frameOpened: 'Entered an existing Frame', surfaceOpened: 'Entered a registered Surface', rejected: 'Suggestion rejected; undo is available', accepted: 'Rule accepted; undo is available',
+        undoDone: 'Undone', selectedCount: 'Selected', hiddenSelected: '1 selected item is filtered out', closeSelected: 'Close selected',
+        saved: 'Pinned', unsaved: 'Not pinned', staleBlocked: 'Data is stale; refresh first', disabledReason: 'Desktop browser bridge is disconnected',
+        runDefault: 'Run with defaults', operationIdle: 'idle',
+      },
+    }
+
+    const variantMeta = {
+      A: {
+        title: bi('紧凑 Entry + 外部上下文区', 'Compact Entry + external context rail'),
+        body: bi('根行固定高度；选中对象的预览、状态与从属动作投影到独立 Rail。', 'Rows stay fixed-height; detail, state, and owned actions project into a separate rail.'),
+      },
+      B: {
+        title: bi('一层渐进展开 Detail', 'One-level progressive disclosure'),
+        body: bi('对象与反馈留在同一视觉单元；同一时刻只展开一个 Detail。', 'Object and feedback stay in one visual unit; only one Detail can be open.'),
+      },
+      C: {
+        title: bi('复合 Entry / Item Group', 'Composite Entry / Item Group'),
+        body: bi('真正有关联的成员、互斥、冲突与批量提交由 Group 显式表达。', 'Real members, exclusion, conflicts, and batch submission are explicit Group structure.'),
+      },
+    }
+
+    const items = [
+      {
+        id: 'url', icon: '↗',
+        title: bi('建议：用 ABC-123 打开 Jira', 'Suggestion: open Jira with ABC-123'),
+        subtitle: bi('新学习候选 · 基于最近 3 次相同路径', 'Learning candidate · based on 3 recent paths'),
+        kind: bi('建议', 'Suggestion'),
+      },
+      {
+        id: 'browser', icon: 'C',
+        title: bi('Hiven Launcher Design · Chrome', 'Hiven Launcher Design · Chrome'),
+        subtitle: bi('已打开标签 + 历史记录 · 同一 URL', 'Open tab + history · same URL'),
+        kind: bi('浏览器', 'Browser'),
+      },
+      {
+        id: 'result', icon: '=',
+        title: bi('1,234', '1,234'),
+        subtitle: bi('1000 + 234 · 即时结果', '1000 + 234 · instant result'),
+        kind: bi('结果', 'Result'),
+      },
+      {
+        id: 'params', icon: '{}',
+        title: bi('格式化 JSON', 'Format JSON'),
+        subtitle: bi('2 空格 · 不排序 Key · 替换当前文本', '2 spaces · preserve keys · replace active text'),
+        kind: bi('参数命令', 'Param command'),
+      },
+      {
+        id: 'batch', icon: '☷',
+        title: bi('整理临时浏览器标签', 'Tidy temporary browser tabs'),
+        subtitle: bi('同一窗口 · 3 个候选 · 显式批量提交', 'One window · 3 candidates · explicit batch submit'),
+        kind: bi('多选 Group', 'Multi-select Group'),
+      },
+      {
+        id: 'disabled', icon: '!',
+        title: bi('读取当前浏览器标签', 'Read current browser tabs'),
+        subtitle: bi('不可用，但可以查看原因并恢复', 'Unavailable, but explainable and recoverable'),
+        kind: bi('需要恢复', 'Recovery'),
+      },
+    ]
+
+    const initialVariant = new URLSearchParams(location.search).get('variant')?.toUpperCase()
+    const initialLocale = new URLSearchParams(location.search).get('lang')
+    const state = {
+      variant: ['A', 'B', 'C'].includes(initialVariant) ? initialVariant : 'B',
+      locale: ['zh', 'en'].includes(initialLocale) ? initialLocale : 'zh',
+      query: '', selectedId: 'url', expandedId: null, zone: 'search', target: 0,
+      caretStart: 0, caretEnd: 0, composing: false, compositionEndedAt: 0,
+      operation: { kind: 'idle', itemId: null, message: null },
+      frame: null, returnPoint: null,
+      urlDecision: 'pending', browserStale: true, browserPinned: false, browserChoice: 'live',
+      batchSelected: new Set(['draft', 'search']), disabledRecovered: false,
+    }
+
+    const root = document.getElementById('launcher')
+    const toast = document.getElementById('toast')
+    const tx = (value) => typeof value === 'string' ? value : value?.[state.locale] ?? ''
+    const t = (key) => hostCopy[state.locale][key] ?? key
+    const keyText = (key) => bi(hostCopy.zh[key] ?? key, hostCopy.en[key] ?? key)
+    const h = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]))
+
+    function visibleItems() {
+      const needle = state.query.trim().toLocaleLowerCase()
+      if (!needle) return items
+      return items.filter((item) => `${tx(item.title)} ${tx(item.subtitle)} ${tx(item.kind)} ${item.id}`.toLocaleLowerCase().includes(needle))
+    }
+
+    function ensureSelection() {
+      const visible = visibleItems()
+      if (!visible.some((item) => item.id === state.selectedId)) state.selectedId = visible[0]?.id ?? null
+      if (state.expandedId && !visible.some((item) => item.id === state.expandedId)) {
+        state.expandedId = null
+        state.zone = 'search'
+        state.target = 0
+      }
+      return visible
+    }
+
+    const currentItem = () => items.find((item) => item.id === state.selectedId) ?? null
+
+    function lifecycleFor(item) {
+      if (state.operation.itemId === item.id && state.operation.kind !== 'idle') {
+        const tone = state.operation.kind === 'failure' ? 'danger' : state.operation.kind === 'success' ? 'good' : 'info'
+        return { kind: state.operation.kind, tone, text: state.operation.message }
+      }
+      if (item.id === 'url' && state.urlDecision === 'accepted') return { kind: 'undoable', tone: 'good', text: bi('规则已添加；撤销仍可用', 'Rule added; undo remains available') }
+      if (item.id === 'url' && state.urlDecision === 'rejected') return { kind: 'completed', tone: 'warn', text: bi('建议已拒绝；反馈仍从属于原建议', 'Suggestion rejected; feedback still belongs to the proposal') }
+      if (item.id === 'browser' && state.browserStale) return { kind: 'stale', tone: 'warn', text: bi('标签快照已失效；副作用动作暂时禁用', 'Tab snapshot is stale; effectful actions are temporarily blocked') }
+      if (item.id === 'disabled' && !state.disabledRecovered) return { kind: 'disabled', tone: 'danger', text: bi('桌面浏览器桥接未连接；主动作不可执行', 'Desktop browser bridge is disconnected; primary action is unavailable') }
+      if (item.id === 'disabled' && state.disabledRecovered) return { kind: 'available', tone: 'good', text: bi('连接已恢复；同一稳定 ID 原地变为可用', 'Connection restored; the same stable ID is available in place') }
+      return null
+    }
+
+    function factsFor(item) {
+      if (item.id === 'url') return [
+        [bi('目标', 'Destination'), 'https://jira.example.com/browse/ABC-123'],
+        [bi('依据', 'Evidence'), bi('最近 3 次复制编号后打开同一路径', '3 recent copy-then-open paths')],
+        [bi('作用域', 'Scope'), bi('仅 web-open 插件；Host 不理解 URL 规则', 'web-open plugin only; Host does not know URL rules')],
+      ]
+      if (item.id === 'browser') return [
+        [bi('URL', 'URL'), 'https://docs.example.com/hiven/launcher-item'],
+        [bi('窗口', 'Window'), bi('Chrome · 工作窗口', 'Chrome · Work window')],
+        [bi('新鲜度', 'Freshness'), state.browserStale ? bi('stale · 需要刷新', 'stale · refresh required') : bi('fresh · revision 43', 'fresh · revision 43')],
+      ]
+      if (item.id === 'result') return [
+        [bi('表达式', 'Expression'), '1000 + 234'],
+        [bi('完整结果', 'Full result'), '1234'],
+        [bi('边界', 'Boundary'), bi('短结果留在 Detail；长结果进入 Result Frame', 'Short result stays in Detail; long output enters Result Frame')],
+      ]
+      if (item.id === 'params') return [
+        [bi('缩进', 'Indent'), bi('2 空格', '2 spaces')],
+        [bi('Key 排序', 'Sort keys'), bi('关闭', 'Off')],
+        [bi('输出', 'Output'), bi('替换当前文本', 'Replace active text')],
+      ]
+      if (item.id === 'batch') return [
+        [bi('选择', 'Selection'), `${state.batchSelected.size} / 3`],
+        [bi('提交', 'Submit'), bi('显式确认，不在达到 max 时自动执行', 'Explicit confirmation; never auto-run at max')],
+        [bi('约束', 'Constraint'), bi('“旧 PR”与“临时文档”互斥', '“Old PR” conflicts with “Scratch document”')],
+      ]
+      return [
+        [bi('原因', 'Reason'), state.disabledRecovered ? bi('能力已恢复', 'Capability restored') : bi('desktop-browser-tabs capability 缺失', 'desktop-browser-tabs capability is missing')],
+        [bi('行为', 'Behavior'), bi('aria-disabled，但仍可选择、解释和恢复', 'aria-disabled, but still selectable, explainable, and recoverable')],
+      ]
+    }
+
+    function membersFor(item) {
+      if (item.id === 'browser' && state.variant === 'C') return [
+        { id: 'live', mode: 'single', title: bi('当前已打开标签', 'Current open tab'), subtitle: bi('主变体 · Enter 聚焦', 'Primary variant · Enter focuses'), checked: state.browserChoice === 'live' },
+        { id: 'history', mode: 'single', title: bi('最近历史记录', 'Recent history entry'), subtitle: bi('附属变体 · 打开新标签', 'Alternative variant · opens a new tab'), checked: state.browserChoice === 'history' },
+      ]
+      if (item.id === 'batch') return [
+        { id: 'draft', mode: 'multi', title: bi('临时文档', 'Scratch document'), subtitle: bi('可关闭', 'Can be closed'), checked: state.batchSelected.has('draft') },
+        { id: 'pr', mode: 'multi', title: bi('旧 PR 页面', 'Old PR page'), subtitle: bi('与“临时文档”冲突', 'Conflicts with “Scratch document”'), checked: state.batchSelected.has('pr'), conflict: state.batchSelected.has('draft') },
+        { id: 'search', mode: 'multi', title: bi('过期搜索结果', 'Stale search results'), subtitle: bi('可关闭', 'Can be closed'), checked: state.batchSelected.has('search') },
+      ]
+      return []
+    }
+
+    function action(id, label, description, role, kind, extra = {}) {
+      return { id, label, description, role, kind, ...extra }
+    }
+
+    function actionsFor(item) {
+      if (item.id === 'url') {
+        if (state.urlDecision !== 'pending') return [
+          action('open-url', bi('打开目标', 'Open destination'), bi('主动作', 'Primary action'), 'primary', 'invoke'),
+          action('undo-url', bi('撤销反馈', 'Undo feedback'), bi('恢复到待决定状态', 'Return to pending state'), 'undo', 'undo'),
+        ]
+        return [
+          action('try-url', bi('仅本次打开', 'Open once'), bi('不保存规则', 'Do not save the rule'), 'primary', 'invoke'),
+          action('accept-url', bi('接受并添加规则', 'Accept and add rule'), bi('反馈动作 · 本地写入', 'Feedback · local write'), 'feedback', 'accept'),
+          action('reject-url', bi('不是这条', 'Not this one'), bi('拒绝仍从属于建议', 'Rejection remains owned by the suggestion'), 'feedback', 'reject'),
+          action('edit-url', bi('编辑后添加', 'Edit before adding'), bi('进入插件 Surface', 'Enter plugin Surface'), 'secondary', 'surface'),
+        ]
+      }
+      if (item.id === 'browser') {
+        if (state.browserStale) return [
+          action('refresh-browser', bi('刷新标签快照', 'Refresh tab snapshot'), bi('恢复后保留同一 selected key', 'Preserve the same selected key'), 'recovery', 'refresh'),
+        ]
+        return [
+          action('focus-tab', bi('切换到标签', 'Focus tab'), bi('主动作', 'Primary action'), 'primary', 'invoke'),
+          action('copy-url', bi('复制 URL', 'Copy URL'), bi('保持 Launcher 打开', 'Keep Launcher open'), 'secondary', 'copy'),
+          action('pin-tab', state.browserPinned ? bi('取消固定', 'Unpin tab') : bi('固定标签', 'Pin tab'), bi('简单 Toggle 原地完成', 'Simple Toggle stays in place'), 'secondary', 'toggle', { value: state.browserPinned }),
+          action('close-tab', bi('关闭标签', 'Close tab'), bi('需要 Host 确认', 'Requires Host confirmation'), 'secondary', 'danger'),
+        ]
+      }
+      if (item.id === 'result') return [
+        action('copy-result', bi('复制结果', 'Copy result'), bi('主动作 · 短反馈', 'Primary · short feedback'), 'primary', 'copy'),
+        action('paste-result', bi('粘贴到前台应用', 'Paste into foreground app'), bi('由 Host effect policy 执行', 'Runs through Host effect policy'), 'secondary', 'invoke'),
+        action('edit-result', bi('在快速编辑器打开', 'Open in Quick Editor'), bi('进入已注册 Surface', 'Enter a registered Surface'), 'secondary', 'surface'),
+      ]
+      if (item.id === 'params') return [
+        action('run-params', bi('按默认参数运行', 'Run with defaults'), bi('主动作', 'Primary action'), 'primary', 'invoke'),
+        action('edit-params', bi('定制参数', 'Customize parameters'), bi('进入现有 Params Frame', 'Enter existing Params Frame'), 'secondary', 'params'),
+      ]
+      if (item.id === 'batch') return [
+        action('submit-batch', bi('关闭所选标签', 'Close selected tabs'), bi('Group action · 显式提交', 'Group action · explicit submit'), 'primary', 'batch'),
+        action('clear-batch', bi('清除选择', 'Clear selection'), bi('选择状态属于当前 Group', 'Selection belongs to this Group'), 'secondary', 'clear'),
+      ]
+      if (!state.disabledRecovered) return [
+        action('recover-browser', bi('重新连接', 'Reconnect'), bi('Recovery action', 'Recovery action'), 'recovery', 'recover'),
+        action('browser-settings', bi('打开连接设置', 'Open connection settings'), bi('进入插件 Surface', 'Enter plugin Surface'), 'secondary', 'surface'),
+      ]
+      return [
+        action('read-tabs', bi('读取当前标签', 'Read current tabs'), bi('主动作已恢复', 'Primary action restored'), 'primary', 'invoke'),
+        action('browser-settings', bi('连接设置', 'Connection settings'), bi('进入插件 Surface', 'Enter plugin Surface'), 'secondary', 'surface'),
+      ]
+    }
+
+    function targetsFor(item) {
+      return [
+        ...membersFor(item).map((member) => ({ kind: 'member', id: member.id, member })),
+        ...actionsFor(item).map((entryAction) => ({ kind: 'action', id: entryAction.id, action: entryAction })),
+      ]
+    }
+
+    function primaryActionFor(item) {
+      if (!item) return null
+      if (item.id === 'url') return actionsFor(item)[0]
+      if (item.id === 'browser' && state.browserStale) return null
+      if (item.id === 'batch') return null
+      if (item.id === 'disabled' && !state.disabledRecovered) return null
+      return actionsFor(item).find((entryAction) => entryAction.role === 'primary') ?? actionsFor(item)[0]
+    }
+
+    function operationBadge(item) {
+      const lifecycle = lifecycleFor(item)
+      if (!lifecycle) return ''
+      const labels = {
+        running: bi('执行中', 'Running'), success: bi('成功', 'Success'), failure: bi('失败', 'Failed'),
+        stale: bi('已失效', 'Stale'), disabled: bi('不可用', 'Disabled'), undoable: bi('可撤销', 'Undoable'),
+        completed: bi('已完成', 'Completed'), available: bi('已恢复', 'Recovered'),
+      }
+      const tone = lifecycle.tone === 'danger' ? 'danger' : lifecycle.tone === 'warn' ? 'warn' : lifecycle.tone === 'good' ? 'good' : 'info'
+      return `<span class="status-chip ${tone}">${h(tx(labels[lifecycle.kind] ?? lifecycle.kind))}</span>`
+    }
+
+    function renderEntry(item, index, inlineDetail = false) {
+      const selected = item.id === state.selectedId
+      const expanded = item.id === state.expandedId
+      const disabled = (item.id === 'disabled' && !state.disabledRecovered) || (item.id === 'browser' && state.browserStale)
+      return `
+        <article class="entry-shell ${selected ? 'selected' : ''} ${expanded ? 'expanded' : ''}" data-select-item="${h(item.id)}">
+          <button type="button" id="entry-${h(item.id)}" class="entry-row" data-item-primary="${h(item.id)}"
+            role="option" tabindex="-1" aria-selected="${selected}" aria-disabled="${disabled}">
+            <span class="entry-icon">${h(item.icon)}</span>
+            <span class="entry-copy"><span class="entry-title">${h(tx(item.title))}</span><span class="entry-subtitle">${h(tx(item.subtitle))}</span></span>
+            <span class="entry-trail">${operationBadge(item)}<span class="status-chip">${h(tx(item.kind))}</span><span class="quick-key">⌘${index + 1}</span></span>
+          </button>
+          <button type="button" class="disclose ${expanded ? 'open' : ''}" data-disclose="${h(item.id)}" tabindex="-1" aria-label="${h(t('openDetail'))}" aria-expanded="${expanded}">›</button>
+          ${inlineDetail && expanded ? renderDetail(item, 'inline') : ''}
+        </article>`
+    }
+
+    function renderFacts(item) {
+      return `<dl class="facts">${factsFor(item).map(([label, value]) => `<div class="fact"><dt>${h(tx(label))}</dt><dd>${h(tx(value))}</dd></div>`).join('')}</dl>`
+    }
+
+    function targetIndex(item, kind, id) {
+      return targetsFor(item).findIndex((target) => target.kind === kind && target.id === id)
+    }
+
+    function renderMembers(item) {
+      const members = membersFor(item)
+      if (!members.length) return ''
+      return `
+        <div class="subhead">${h(t('members'))}</div>
+        <div class="member-list" role="group">
+          ${members.map((member) => {
+            const index = targetIndex(item, 'member', member.id)
+            const active = state.zone !== 'search' && state.target === index
+            return `<button type="button" id="target-${h(item.id)}-${index}" class="member ${active ? 'active' : ''}" data-target="${index}" tabindex="-1" role="${member.mode === 'single' ? 'radio' : 'checkbox'}" aria-checked="${member.checked}">
+              <span class="member-mark ${member.mode === 'single' ? 'radio' : ''} ${member.checked ? 'checked' : ''}">${member.checked ? '✓' : ''}</span>
+              <span class="member-copy"><strong>${h(tx(member.title))}</strong><span>${h(tx(member.subtitle))}</span></span>
+              ${member.conflict ? `<span class="member-conflict">${h(state.locale === 'zh' ? '冲突' : 'Conflict')}</span>` : ''}
+            </button>`
+          }).join('')}
+        </div>`
+    }
+
+    function renderActions(item) {
+      const actions = actionsFor(item)
+      const icons = { primary: '↵', secondary: '·', feedback: '◌', recovery: '↻', undo: '↶' }
+      return `
+        <div class="subhead">${h(t('actions'))}</div>
+        <div class="action-list">
+          ${actions.map((entryAction) => {
+            const index = targetIndex(item, 'action', entryAction.id)
+            const active = state.zone !== 'search' && state.target === index
+            const danger = entryAction.kind === 'danger' || entryAction.kind === 'batch'
+            return `<button type="button" id="target-${h(item.id)}-${index}" class="action ${active ? 'active' : ''} ${danger ? 'danger' : ''}" data-target="${index}" tabindex="-1">
+              <span class="action-icon">${icons[entryAction.role] ?? '·'}</span>
+              <span class="action-copy"><strong>${h(tx(entryAction.label))}</strong><span>${h(tx(entryAction.description))}</span></span>
+              ${entryAction.kind === 'toggle'
+                ? `<span class="toggle ${entryAction.value ? 'on' : ''}" role="switch" aria-checked="${entryAction.value}"></span>`
+                : `<span class="role-chip ${h(entryAction.role)}">${h(entryAction.role)}</span>`}
+            </button>`
+          }).join('')}
+        </div>`
+    }
+
+    function renderLifecycle(item) {
+      const lifecycle = lifecycleFor(item)
+      if (!lifecycle) return ''
+      const spinning = lifecycle.kind === 'running'
+      return `<div class="lifecycle ${h(lifecycle.tone)}">${spinning ? '<span class="spinner" aria-hidden="true"></span>' : '<span aria-hidden="true">●</span>'}<span>${h(tx(lifecycle.text))}</span></div>`
+    }
+
+    function renderDetail(item, placement) {
+      const zoneLabel = state.zone === 'group' ? t('groupZone') : state.zone === 'detail' ? t('interactionZone') : t('detail')
+      return `<section class="detail ${placement}" aria-label="${h(t('detail'))}">
+        <div class="detail-head">
+          <div><strong>${h(tx(item.title))}</strong><span>${h(tx(item.kind))} · ${h(zoneLabel)}</span></div>
+          <span class="variant-chip">${h(state.variant)}</span>
+        </div>
+        ${renderLifecycle(item)}
+        ${renderFacts(item)}
+        ${renderMembers(item)}
+        ${renderActions(item)}
+      </section>`
+    }
+
+    function renderList(visible, variant) {
+      if (!visible.length) return `<div class="empty-results">${h(t('noResults'))}</div>`
+      return visible.map((item, index) => renderEntry(item, index, variant === 'B' || variant === 'C')).join('')
+    }
+
+    function renderLauncher() {
+      const visible = ensureSelection()
+      const selected = currentItem()
+      const activeDescendant = state.zone === 'search'
+        ? (selected ? `entry-${selected.id}` : '')
+        : (selected ? `target-${selected.id}-${Math.min(state.target, Math.max(targetsFor(selected).length - 1, 0))}` : '')
+      const meta = variantMeta[state.variant]
+      const list = `<div class="section-label"><span>${h(t('results'))}</span><span>${visible.length}</span></div>${renderList(visible, state.variant)}`
+      const body = state.variant === 'A'
+        ? `<div class="launcher-body variant-a"><div class="list-pane" id="launcher-results" role="listbox">${list}</div><aside class="context-rail">${state.expandedId && selected ? renderDetail(selected, 'rail') : renderEmptyDetail()}</aside></div>`
+        : `<div class="launcher-body variant-${state.variant.toLowerCase()}" id="launcher-results" role="listbox">${list}</div>`
+
+      root.innerHTML = `
+        <header class="search-bar">
+          <span class="search-glyph" aria-hidden="true">⌕</span>
+          <input id="query" class="query" value="${h(state.query)}" placeholder="${h(t('search'))}" autocomplete="off" spellcheck="false"
+            role="combobox" aria-controls="launcher-results" aria-expanded="${Boolean(state.expandedId)}" aria-activedescendant="${h(activeDescendant)}" />
+          <span class="search-status"><span class="variant-chip">${h(state.variant)}</span><kbd>esc</kbd></span>
+        </header>
+        <div class="variant-explainer"><span><strong>${h(tx(meta.title))}</strong> · ${h(tx(meta.body))}</span><span class="no-mutation">${h(t('noMutation'))}</span></div>
+        ${body}
+        ${renderFooter(selected)}
+        ${renderStateStrip()}`
+
+      const input = document.getElementById('query')
+      input.focus({ preventScroll: true })
+      input.setSelectionRange(Math.min(state.caretStart, state.query.length), Math.min(state.caretEnd, state.query.length))
+      input.addEventListener('compositionstart', () => { state.composing = true })
+      input.addEventListener('compositionend', (event) => {
+        state.composing = false
+        state.compositionEndedAt = Date.now()
+        state.query = event.currentTarget.value
+        state.caretStart = event.currentTarget.selectionStart ?? state.query.length
+        state.caretEnd = event.currentTarget.selectionEnd ?? state.query.length
+        state.zone = 'search'; state.expandedId = null; state.target = 0
+        setTimeout(render, 125)
+      })
+      input.addEventListener('input', (event) => {
+        state.query = event.currentTarget.value
+        state.caretStart = event.currentTarget.selectionStart ?? state.query.length
+        state.caretEnd = event.currentTarget.selectionEnd ?? state.query.length
+        if (state.composing || event.isComposing) return
+        state.zone = 'search'; state.expandedId = null; state.target = 0
+        render()
+      })
+    }
+
+    function renderEmptyDetail() {
+      return `<div class="detail-empty"><div><span class="empty-icon">Tab</span><strong>${h(t('inspectTitle'))}</strong><p>${h(t('inspectBody'))}</p></div></div>`
+    }
+
+    function renderFooter(item) {
+      const inContext = state.zone !== 'search'
+      return `<footer class="launcher-footer">
+        <span class="key-hints">
+          <kbd>↑↓</kbd> ${h(t('select'))}
+          <kbd>Tab</kbd> ${h(t('openDetail'))}
+          <kbd>Enter</kbd> ${h(t('run'))}
+          <kbd>Space</kbd> ${h(inContext ? (state.zone === 'group' ? t('members') : 'toggle / choice') : t('searchZone'))}
+          <kbd>←→</kbd> ${h(inContext ? t('back') : 'caret')}
+        </span>
+        <span class="footer-actions">
+          <button type="button" class="footer-button" data-footer-detail tabindex="-1">${h(t('openDetail'))} · Tab</button>
+          <button type="button" class="footer-button primary" data-footer-primary tabindex="-1">${h(primaryActionFor(item)?.label ? tx(primaryActionFor(item).label) : t('openDetail'))} · ↵</button>
+        </span>
+      </footer>`
+    }
+
+    function renderStateStrip() {
+      return `<div class="state-strip" aria-label="Prototype state">
+        <span>query=<b>“${h(state.query)}”</b></span>
+        <span>selected=<b>${h(state.selectedId ?? 'null')}</b></span>
+        <span>zone=<b>${h(state.zone)}</b></span>
+        <span>expanded=<b>${h(state.expandedId ?? 'null')}</b></span>
+        <span>target=<b>${state.target}</b></span>
+        <span>operation=<b>${h(state.operation.kind)}</b></span>
+        <span>focus=<b>${state.frame ? 'frame' : 'query'}</b></span>
+      </div>`
+    }
+
+    function renderFrame() {
+      const frame = state.frame
+      const isParams = frame.kind === 'params'
+      const isSurface = frame.kind === 'surface'
+      const title = isParams ? t('frameParams') : isSurface ? t('frameSurface') : t('frameConfirm')
+      const heading = isParams ? t('paramsTitle') : isSurface ? t('surfaceTitle') : t('confirmTitle')
+      const body = isParams ? t('paramsBody') : isSurface ? t('surfaceBody') : t('confirmBody')
+      root.innerHTML = `<section class="frame" aria-label="${h(title)}">
+        <header class="frame-head"><button type="button" class="back-button" data-frame-back aria-label="${h(t('back'))}">←</button><div class="frame-head-copy"><strong>${h(title)}</strong><span>${h(tx(frame.item.title))}</span></div></header>
+        <div class="frame-body">
+          <h2>${h(heading)}</h2><p>${h(body)}</p>
+          ${isParams ? `<div class="frame-card"><label class="field-label" for="param-value">${h(state.locale === 'zh' ? '缩进大小' : 'Indent size')}</label><input id="param-value" class="param-input" value="2" inputmode="numeric" /></div>` : ''}
+          ${isSurface ? `<div class="surface-preview"><div><strong>${h(t('frameSurface'))}</strong><br />${h(state.locale === 'zh' ? '任意产品布局止于这条边界之外' : 'Arbitrary product layout begins beyond this boundary')}</div></div>` : ''}
+          ${!isParams && !isSurface ? `<div class="frame-card">${h(tx(frame.action.label))}<br /><span style="color:var(--muted);font-size:10px">${h(t('returnHint'))}</span></div>` : ''}
+          <div class="frame-actions"><button type="button" class="frame-button" data-frame-back>${h(t('cancel'))}</button>${!isSurface ? `<button type="button" class="frame-button ${frame.kind === 'confirm' ? 'danger' : 'primary'}" data-frame-confirm>${h(t('confirm'))}</button>` : ''}</div>
+        </div>
+        ${renderStateStrip()}
+      </section>`
+      const focusTarget = document.getElementById('param-value') ?? root.querySelector('[data-frame-back]')
+      focusTarget?.focus({ preventScroll: true })
+    }
+
+    function render() {
+      document.documentElement.lang = state.locale === 'zh' ? 'zh-CN' : 'en'
+      document.getElementById('prototype-caption').textContent = t('prototype')
+      document.querySelectorAll('[data-variant]').forEach((button) => button.classList.toggle('active', button.dataset.variant === state.variant))
+      document.querySelectorAll('[data-locale]').forEach((button) => button.classList.toggle('active', button.dataset.locale === state.locale))
+      if (state.frame) renderFrame()
+      else renderLauncher()
+    }
+
+    function preserveCaret() {
+      const input = document.getElementById('query')
+      if (!input) return
+      state.caretStart = input.selectionStart ?? state.query.length
+      state.caretEnd = input.selectionEnd ?? state.query.length
+    }
+
+    function showToast(message) {
+      toast.textContent = tx(message)
+      toast.classList.add('show')
+      clearTimeout(showToast.timer)
+      showToast.timer = setTimeout(() => toast.classList.remove('show'), 1500)
+    }
+
+    function setOperation(kind, item, message) {
+      state.operation = { kind, itemId: item?.id ?? null, message: message ?? null }
+    }
+
+    function settleOperation(item, message, after) {
+      setOperation('running', item, bi('正在执行…', 'Running…'))
+      render()
+      setTimeout(() => {
+        after?.()
+        setOperation('success', item, message)
+        render()
+        showToast(message)
+        setTimeout(() => {
+          if (state.operation.itemId === item.id && state.operation.kind === 'success') {
+            setOperation('idle', null, null)
+            render()
+          }
+        }, 1050)
+      }, 520)
+    }
+
+    function openContext(item) {
+      if (!item) return
+      preserveCaret()
+      state.selectedId = item.id
+      state.expandedId = item.id
+      state.zone = membersFor(item).length ? 'group' : 'detail'
+      state.target = 0
+      render()
+    }
+
+    function closeContext() {
+      preserveCaret()
+      state.zone = 'search'
+      state.expandedId = null
+      state.target = 0
+      render()
+    }
+
+    function selectItem(id) {
+      if (state.selectedId === id) return
+      preserveCaret()
+      state.selectedId = id
+      if (state.expandedId !== id) {
+        state.expandedId = null
+        state.zone = 'search'
+        state.target = 0
+      }
+      render()
+    }
+
+    function moveRoot(delta) {
+      const visible = ensureSelection()
+      if (!visible.length) return
+      const index = Math.max(0, visible.findIndex((item) => item.id === state.selectedId))
+      state.selectedId = visible[(index + delta + visible.length) % visible.length].id
+      state.expandedId = null
+      state.zone = 'search'
+      state.target = 0
+      render()
+    }
+
+    function activatePrimary(item = currentItem()) {
+      if (!item) return
+      if ((item.id === 'disabled' && !state.disabledRecovered) || (item.id === 'browser' && state.browserStale) || item.id === 'batch') {
+        showToast(item.id === 'browser' ? keyText('staleBlocked') : keyText('shortcutBlocked'))
+        openContext(item)
+        return
+      }
+      const primary = primaryActionFor(item)
+      if (primary) runAction(item, primary)
+    }
+
+    function activateTarget(index = state.target) {
+      const item = currentItem()
+      const target = item ? targetsFor(item)[index] : null
+      if (!target) return
+      state.target = index
+      if (target.kind === 'member') toggleMember(item, target.member)
+      else runAction(item, target.action)
+    }
+
+    function toggleMember(item, member) {
+      if (member.mode === 'single') {
+        state.browserChoice = member.id
+        setOperation('success', item, bi('已切换主变体', 'Primary variant changed'))
+        showToast(bi('已选择浏览器变体', 'Browser variant selected'))
+        render()
+        return
+      }
+      if (member.id === 'pr' && state.batchSelected.has('draft')) {
+        setOperation('failure', item, keyText('conflict'))
+        showToast(keyText('conflict'))
+        render()
+        return
+      }
+      if (state.batchSelected.has(member.id)) state.batchSelected.delete(member.id)
+      else state.batchSelected.add(member.id)
+      setOperation('idle', null, null)
+      render()
+    }
+
+    function runAction(item, entryAction) {
+      if (!item || !entryAction || state.operation.kind === 'running') return
+      if (entryAction.kind === 'invoke') {
+        settleOperation(item, keyText('opened'))
+        return
+      }
+      if (entryAction.kind === 'copy') {
+        settleOperation(item, keyText('copied'))
+        return
+      }
+      if (entryAction.kind === 'toggle') {
+        state.browserPinned = !state.browserPinned
+        setOperation('success', item, state.browserPinned ? keyText('saved') : keyText('unsaved'))
+        showToast(state.operation.message)
+        render()
+        return
+      }
+      if (entryAction.kind === 'accept') {
+        settleOperation(item, keyText('accepted'), () => { state.urlDecision = 'accepted' })
+        return
+      }
+      if (entryAction.kind === 'reject') {
+        settleOperation(item, keyText('rejected'), () => { state.urlDecision = 'rejected' })
+        return
+      }
+      if (entryAction.kind === 'undo') {
+        settleOperation(item, keyText('undoDone'), () => { state.urlDecision = 'pending' })
+        return
+      }
+      if (entryAction.kind === 'refresh') {
+        settleOperation(item, keyText('refreshed'), () => { state.browserStale = false })
+        return
+      }
+      if (entryAction.kind === 'recover') {
+        settleOperation(item, keyText('recovered'), () => { state.disabledRecovered = true })
+        return
+      }
+      if (entryAction.kind === 'clear') {
+        state.batchSelected.clear()
+        setOperation('success', item, bi('选择已清除', 'Selection cleared'))
+        render()
+        return
+      }
+      if (entryAction.kind === 'params') {
+        openFrame('params', item, entryAction)
+        return
+      }
+      if (entryAction.kind === 'surface') {
+        openFrame('surface', item, entryAction)
+        return
+      }
+      if (entryAction.kind === 'danger' || entryAction.kind === 'batch') {
+        if (entryAction.kind === 'batch' && state.batchSelected.size === 0) {
+          setOperation('failure', item, bi('至少选择一项', 'Select at least one item'))
+          render()
+          return
+        }
+        openFrame('confirm', item, entryAction)
+      }
+    }
+
+    function openFrame(kind, item, entryAction) {
+      preserveCaret()
+      state.returnPoint = {
+        query: state.query, selectedId: state.selectedId, expandedId: state.expandedId,
+        zone: state.zone, target: state.target, caretStart: state.caretStart, caretEnd: state.caretEnd,
+        batchSelected: new Set(state.batchSelected),
+      }
+      state.frame = { kind, item, action: entryAction }
+      state.zone = 'frame'
+      setOperation(kind === 'confirm' ? 'confirming' : 'idle', item, kind === 'confirm' ? bi('等待确认', 'Awaiting confirmation') : null)
+      render()
+    }
+
+    function backFromFrame() {
+      const point = state.returnPoint
+      state.frame = null
+      state.returnPoint = null
+      if (point) {
+        state.query = point.query
+        state.selectedId = point.selectedId
+        state.expandedId = point.expandedId
+        state.zone = point.zone
+        state.target = point.target
+        state.caretStart = point.caretStart
+        state.caretEnd = point.caretEnd
+        state.batchSelected = new Set(point.batchSelected)
+      } else {
+        state.zone = 'search'
+      }
+      setOperation('idle', null, null)
+      render()
+    }
+
+    function confirmFrame() {
+      const frame = state.frame
+      if (!frame) return
+      const isBatch = frame.action.kind === 'batch'
+      const message = isBatch ? bi(`${state.batchSelected.size} 个标签已关闭`, `${state.batchSelected.size} tabs closed`) : bi('标签页已关闭', 'Tab closed')
+      const item = frame.item
+      backFromFrame()
+      if (isBatch) state.batchSelected.clear()
+      setOperation('success', item, message)
+      showToast(message)
+      render()
+    }
+
+    function updateUrl() {
+      const url = new URL(location.href)
+      url.searchParams.set('variant', state.variant)
+      url.searchParams.set('lang', state.locale)
+      history.replaceState(null, '', url)
+    }
+
+    let pointerSample = null
+    root.addEventListener('mousedown', (event) => {
+      if (event.target.closest('button, [role="option"], [data-target]')) event.preventDefault()
+    })
+    root.addEventListener('pointermove', (event) => {
+      const itemNode = event.target.closest('[data-select-item]')
+      if (!itemNode || state.frame) return
+      if (!pointerSample) { pointerSample = { x: event.clientX, y: event.clientY }; return }
+      const moved = Math.abs(event.clientX - pointerSample.x) + Math.abs(event.clientY - pointerSample.y)
+      pointerSample = { x: event.clientX, y: event.clientY }
+      if (moved < 3) return
+      selectItem(itemNode.dataset.selectItem)
+    })
+    root.addEventListener('click', (event) => {
+      const frameBack = event.target.closest('[data-frame-back]')
+      if (frameBack) { backFromFrame(); return }
+      const frameConfirm = event.target.closest('[data-frame-confirm]')
+      if (frameConfirm) { state.frame?.kind === 'params' ? backFromFrame() : confirmFrame(); return }
+      const disclose = event.target.closest('[data-disclose]')
+      if (disclose) {
+        const item = items.find((candidate) => candidate.id === disclose.dataset.disclose)
+        state.expandedId === item.id ? closeContext() : openContext(item)
+        return
+      }
+      const target = event.target.closest('[data-target]')
+      if (target) { activateTarget(Number(target.dataset.target)); return }
+      const primary = event.target.closest('[data-item-primary]')
+      if (primary) {
+        const item = items.find((candidate) => candidate.id === primary.dataset.itemPrimary)
+        state.selectedId = item.id
+        activatePrimary(item)
+        return
+      }
+      if (event.target.closest('[data-footer-detail]')) { openContext(currentItem()); return }
+      if (event.target.closest('[data-footer-primary]')) activatePrimary()
+    })
+
+    document.querySelector('.switcher').addEventListener('mousedown', (event) => {
+      if (event.target.closest('button')) event.preventDefault()
+    })
+    document.querySelector('.switcher').addEventListener('click', (event) => {
+      const variant = event.target.closest('[data-variant]')?.dataset.variant
+      const locale = event.target.closest('[data-locale]')?.dataset.locale
+      if (variant) {
+        state.variant = variant
+        if (state.expandedId) {
+          const item = currentItem()
+          state.zone = membersFor(item).length ? 'group' : 'detail'
+          state.target = 0
+        }
+      }
+      if (locale) state.locale = locale
+      updateUrl()
+      render()
+    })
+
+    window.addEventListener('keydown', (event) => {
+      if (state.frame) {
+        if (event.key === 'Escape') { event.preventDefault(); backFromFrame(); return }
+        if (event.key === 'Enter' && state.frame.kind === 'confirm') { event.preventDefault(); confirmFrame(); return }
+        return
+      }
+      if (event.isComposing || state.composing || event.keyCode === 229 || Date.now() - state.compositionEndedAt < 120) return
+
+      if (state.zone === 'search') {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault(); preserveCaret(); moveRoot(event.key === 'ArrowDown' ? 1 : -1); return
+        }
+        if (event.key === 'Enter') { event.preventDefault(); activatePrimary(); return }
+        if (event.key === 'Tab') { event.preventDefault(); openContext(currentItem()); return }
+        if (event.key === 'Escape') { event.preventDefault(); showToast(keyText('wouldClose')); return }
+        if ((event.metaKey || event.ctrlKey) && /^[1-8]$/.test(event.key)) {
+          event.preventDefault()
+          const item = visibleItems()[Number(event.key) - 1]
+          if (!item) return
+          state.selectedId = item.id
+          activatePrimary(item)
+        }
+        return
+      }
+
+      const item = currentItem()
+      const targets = item ? targetsFor(item) : []
+      if ((event.metaKey || event.ctrlKey) && /^[1-8]$/.test(event.key)) { event.preventDefault(); return }
+      if (event.key === 'Escape' || event.key === 'ArrowLeft') { event.preventDefault(); closeContext(); return }
+      if (event.key === 'Tab' || event.key === 'ArrowDown' || event.key === 'ArrowRight' || event.key === 'ArrowUp') {
+        event.preventDefault()
+        const delta = event.shiftKey || event.key === 'ArrowUp' ? -1 : 1
+        state.target = targets.length ? (state.target + delta + targets.length) % targets.length : 0
+        render(); return
+      }
+      if (event.key === 'Enter') { event.preventDefault(); activateTarget(); return }
+      if (event.key === ' ') {
+        const target = targets[state.target]
+        if (target?.kind === 'member' || target?.action?.kind === 'toggle') {
+          event.preventDefault(); activateTarget(); return
+        }
+        event.preventDefault(); return
+      }
+      if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        state.zone = 'search'; state.expandedId = null; state.target = 0
+      }
+    })
+
+    render()
+  </script>
+</body>
+</html>

@@ -46,6 +46,10 @@ assert.match(csvSurface, /pane\.table|Table/, 'CSV surface should show table vie
 assert.match(csvSurface, /pane\.output|Output/, 'CSV surface should show output view')
 assert.match(csvSurface, /pane\.source|Source/, 'CSV surface should show source view')
 assert.match(csvSurface, /Delimiter[\s\S]*Header[\s\S]*Output/, 'CSV surface should expose params')
+assert.match(csvSurface, /toolbar\.parameters/, 'CSV toolbar accessible name should be localized')
+assert.match(csvSurface, /meta\.estimatedLines/, 'CSV estimated line count should be localized')
+assert.match(csvSurface, /toast\.copied[\s\S]*toast\.copyFailed/, 'CSV copy should report success and failure')
+assert.match(csvSurface, /is-error[^>]*role="alert"/, 'CSV parse errors should be announced')
 assert.match(csvSurface, /requestBack|action\.back/, 'CSV surface should expose back action')
 assert.match(csvSurface, /detachToWindow|action\.detach/, 'CSV surface should expose detach-to-window action')
 assert.match(csvSurface, /react-data-grid|DataGrid/, 'CSV surface should use react-data-grid for table')
@@ -93,6 +97,6 @@ assert.match(encodeIndex, /url\.encode|URL/, 'Encode / Decode should include URL
 const regexIndex = readFileSync('src/plugins/regex-tester/index.tsx', 'utf8')
 const regexViews = readFileSync('src/plugins/regex-tester/RegexTesterViews.tsx', 'utf8')
 assert.match(regexIndex, /title:\s*['"]Regex Tester['"][\s\S]*entry:\s*{\s*launcher:\s*true/, 'Regex Tester should expose a global launcher surface')
-assert.match(regexViews, /Pattern[\s\S]*flags[\s\S]*sample text/i, 'Regex Tester surface should expose pattern, flags, and sample text')
+assert.match(regexViews, /panel\.regex\.pattern[\s\S]*flags[\s\S]*surface\.sampleText/, 'Regex Tester surface should expose localized pattern, flags, and sample text')
 
 console.log('step5 no-pin, CSV, Encode / Decode, and Regex surface checks passed')

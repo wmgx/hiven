@@ -9,6 +9,7 @@ import type {
 } from './quickEditorTypes'
 import { isQuickEditorWindowOpen, showQuickEditorWindow } from '../windowManager/quickEditorWindow'
 import { requestOpenLauncherHostSurface } from '../launcherHostSurfaceBridge'
+import { isNativeDesktopRuntime } from '../webNativeBridge'
 
 export const QUICK_EDITOR_CREATE_PANE_EVENT = 'hiven://quick-editor-create-pane'
 export const QUICK_EDITOR_SET_PANE_TEXT_EVENT = 'hiven://quick-editor-set-pane-text'
@@ -38,10 +39,6 @@ export type OverwriteQuickEditorResult = {
   historyCount: number
 }
 
-function isTauriRuntime(): boolean {
-  return Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
-}
-
 function normalizeDirection(direction: QuickEditorPaneRequest['direction']): 'right' | 'bottom' {
   return direction === 'top' || direction === 'bottom' ? 'bottom' : 'right'
 }
@@ -55,7 +52,7 @@ function normalizeDirection(direction: QuickEditorPaneRequest['direction']): 'ri
  * Browser / non-Tauri: fall back to the launcher host surface.
  */
 export async function showQuickEditorSurface(): Promise<void> {
-  if (!isTauriRuntime()) {
+  if (!isNativeDesktopRuntime()) {
     await requestOpenLauncherHostSurface('quick-editor')
     return
   }
@@ -81,7 +78,7 @@ export async function showQuickEditorSurface(): Promise<void> {
 export async function createQuickEditorPane(input: QuickEditorPaneRequest = {}): Promise<QuickEditorPaneId | undefined> {
   if (await isQuickEditorWindowOpen()) {
     await showQuickEditorWindow()
-    if (isTauriRuntime()) {
+    if (isNativeDesktopRuntime()) {
       const { emit } = await import('@tauri-apps/api/event')
       await emit(QUICK_EDITOR_CREATE_PANE_EVENT, input)
     }
@@ -137,7 +134,7 @@ export function isQuickEditorSetPaneTextRequest(value: unknown): value is QuickE
  */
 export async function setQuickEditorPaneText(paneId: QuickEditorPaneId, text: string): Promise<boolean> {
   const updated = useQuickEditorStore.getState().setPaneText(paneId, text)
-  if (!isTauriRuntime()) return updated
+  if (!isNativeDesktopRuntime()) return updated
   try {
     if (await isQuickEditorWindowOpen()) {
       const { emit } = await import('@tauri-apps/api/event')
@@ -168,7 +165,7 @@ export async function overwriteQuickEditorText(
     externalVersionHistory: history,
   }
 
-  if (isTauriRuntime()) {
+  if (isNativeDesktopRuntime()) {
     try {
       if (await isQuickEditorWindowOpen()) {
         const { emit } = await import('@tauri-apps/api/event')
@@ -207,7 +204,7 @@ export async function restoreQuickEditorExternalVersion(versionId: string): Prom
   if (!restored) return false
 
   const state = useQuickEditorStore.getState()
-  if (isTauriRuntime()) {
+  if (isNativeDesktopRuntime()) {
     try {
       if (await isQuickEditorWindowOpen()) {
         const { emit } = await import('@tauri-apps/api/event')

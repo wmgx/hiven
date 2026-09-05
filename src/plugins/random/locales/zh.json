@@ -33,5 +33,6 @@
   "error.range": "最大值必须大于或等于最小值",
   "error.length": "长度必须是 1–1024 的正整数",
   "error.count": "数量必须是 1–100 的正整数",
-  "error.bytes": "字节数必须是 1–1024 的正整数"
+  "error.bytes": "字节数必须是 1–1024 的正整数",
+  "error.generate": "生成失败：{message}"
 }

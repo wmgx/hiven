@@ -1,4 +1,4 @@
-import { definePlugin, textOutput, type TextInput, type LauncherDynamicContext, type LauncherItemContribution } from '@hiven/plugin'
+import { definePlugin, textError, textOutput, type TextInput, type LauncherDynamicContext, type LauncherItemContribution } from '@hiven/plugin'
 
 function pad(n: number, width = 2): string {
   return String(n).padStart(width, '0')
@@ -101,6 +101,12 @@ type ParsedResult = {
   display: string
   value: string
   actionLabelKey: string
+}
+
+class TimestampConversionError extends Error {
+  constructor(readonly value: string) {
+    super(`Invalid date "${value}"`)
+  }
 }
 
 function resultKindLabel(kind: ParsedResult['kind'], locale: LauncherDynamicContext['locale']): string {
@@ -293,7 +299,7 @@ function convertTimestampText(text: string, params: Record<string, unknown>, inP
 
       let date = new Date(body)
       if (Number.isNaN(date.getTime())) date = new Date(trimmed)
-      if (Number.isNaN(date.getTime())) return `Error: Invalid date "${trimmed}"`
+      if (Number.isNaN(date.getTime())) throw new TimestampConversionError(trimmed)
       if (offsetMinutes !== undefined) {
         const localOffsetMinutes = -date.getTimezoneOffset()
         const utcMs = date.getTime() + (localOffsetMinutes - offsetMinutes) * 60000
@@ -302,7 +308,8 @@ function convertTimestampText(text: string, params: Record<string, unknown>, inP
       const result = formatTimestamp(date, unit)
       return showOriginal ? `${trimmed} -> ${result}` : result
     } catch (error: unknown) {
-      return `Error: ${error instanceof Error ? error.message : String(error)}`
+      if (error instanceof TimestampConversionError) throw error
+      throw new TimestampConversionError(trimmed)
     }
   }).join('\n')
 }
@@ -342,7 +349,12 @@ export const dateTimeAssistantPlugin = definePlugin({
       accepts: { kinds: ['timestamp'], aliases: ['ts', '时间戳'] },
       params: TIMESTAMP_PARAMS,
       run(ctx) {
-        return ctx.output.replaceActiveText(convertTimestampText(ctx.input.text, ctx.params, ctx.input.source === 'all'))
+        try {
+          return ctx.output.replaceActiveText(convertTimestampText(ctx.input.text, ctx.params, ctx.input.source === 'all'))
+        } catch (error) {
+          const value = error instanceof TimestampConversionError ? error.value : ctx.input.text.trim()
+          return ctx.output.error(ctx.t('error.invalidDate', { value }))
+        }
       },
       surfaces: { launcher: true, panel: true },
     },
@@ -364,7 +376,11 @@ export const dateTimeAssistantPlugin = definePlugin({
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
         const inPlace = !!input?.paneId
-        return textOutput(convertTimestampText(text, ctx.params, inPlace))
+        try {
+          return textOutput(convertTimestampText(text, ctx.params, inPlace))
+        } catch (error) {
+          return textError(error instanceof Error ? error.message : String(error))
+        }
       },
     },
   ],

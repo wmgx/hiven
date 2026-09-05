@@ -94,5 +94,7 @@
   "error.loadFailed": "Failed to load clipboard history",
   "error.pasteFailed": "Paste failed",
   "error.copyFailed": "Copy failed",
-  "error.favoriteFailed": "Failed to update favorite"
+  "error.favoriteFailed": "Failed to update favorite",
+  "error.background": "Clipboard history error: {message}",
+  "error.watcherStart": "Failed to start clipboard watcher: {message}"
 }

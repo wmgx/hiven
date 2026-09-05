@@ -3,6 +3,7 @@
   "command.open.description": "打开 JSON 表达式底部栏",
   "panel.placeholder": "JSON 表达式；示例 .key.subkey、[0][1]、.map(x=>x.val)",
   "panel.execute": "执行",
+  "panel.close": "关闭表达式面板",
   "panel.error.notJson": "当前内容不是有效的 JSON",
   "panel.error.expression": "表达式错误: {0}"
 }

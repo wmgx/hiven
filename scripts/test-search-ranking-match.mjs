@@ -34,6 +34,7 @@ function loadSearchRanking() {
 
 const {
   searchableFieldsMatch,
+  scoreSearchableFields,
   tokenPrefixMatch,
   computeTitleMatchRanges,
 } = loadSearchRanking()
@@ -171,5 +172,20 @@ assert.equal(settingsHighlight.type, 'substring', 'se should highlight Settings 
 assert.equal(settingsHighlight.ranges?.length, 1)
 assert.equal(settingsHighlight.ranges[0].start, 7)
 assert.equal(settingsHighlight.ranges[0].end, 9)
+
+// Filtering and scoring must use the same match classification.
+for (const candidate of [
+  fields({ title: 'Settings' }),
+  fields({ title: 'Other', aliases: ['格式化'] }),
+  fields({ title: 'Other', titleI18n: { zh: '设置' } }),
+]) {
+  for (const query of ['set', 'gsh', 'sz', 'missing']) {
+    assert.equal(
+      scoreSearchableFields(candidate, query, 'en') > 0,
+      searchableFieldsMatch(candidate, query, 'en'),
+      `score/filter disagreement for query=${query}`,
+    )
+  }
+}
 
 console.log('search ranking match checks passed')

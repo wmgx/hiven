@@ -131,7 +131,6 @@
   margin: 1px 0;
   border: none;
   border-radius: var(--radius-sm, 7px);
-  transition: all 140ms ease;
 }
 
 .clipboard-history-item-row:hover {
@@ -809,4 +808,3 @@ body[data-theme='dark'] .clipboard-history-surface {
 .clipboard-history-topbar .hiven-ui-icon-button:hover:not(:disabled) {
   background: var(--bg-surface-2, var(--hiven-color-bg-secondary));
 }
-

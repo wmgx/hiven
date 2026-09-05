@@ -2,6 +2,6 @@
   "pluginId": "random",
   "displayName": "Random",
   "displayNameI18n": { "zh": "随机生成" },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "capabilities": ["command"]
 }

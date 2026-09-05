@@ -41,6 +41,8 @@ import {
 } from './workspace/learning/ruleSink'
 import { updateOwnPluginSettings } from './workspace/pluginSettingsWrite'
 import type { PluginSettingsSource } from './workspace/pluginSettingsStore'
+import { useQuickEditorStore } from './workspace/quickEditor/quickEditorStore'
+import { hivenEventBus, type HivenEventBusApi, type HivenHostEvents } from './workspace/hostEventBus'
 
 export type { LearnedRuleOffer, LearnedRuleSink } from './workspace/learning/ruleSink'
 export type { PluginHostUi, PluginHostEffects, TextCommandDefinition } from './pluginHostCore.ts'
@@ -81,6 +83,7 @@ export type PluginHostHooks = {
 }
 
 export type { MonacoDisposable }
+export type { HivenEventBusApi, HivenHostEvents }
 
 export type PluginHostI18n = {
   /** Build a namespaced translate function for a given locale (non-reactive). */
@@ -154,6 +157,8 @@ export type PluginHostSdk = {
    * that feed Global Launcher mix — not parallel dynamicItems lists.
    */
   desktopTargets: DesktopTargetsHostApi
+  /** Typed host events crossing native / WebView boundaries. */
+  events: HivenEventBusApi
   /**
    * Plugin-declared URL schemes for host openUrl routing.
    * Custom schemes are opened via open_system_url — not Tauri shell.open scope.
@@ -194,6 +199,7 @@ export function createPluginHostSdk(): PluginHostSdk {
     textError: core.textError,
     defineTextCommand: core.defineTextCommand,
     desktopTargets: createDesktopTargetsHostApi(),
+    events: hivenEventBus,
     urlSchemes: {
       register: registerUrlSchemes,
       unregister: unregisterUrlSchemes,
@@ -250,11 +256,13 @@ function createPluginHostHooks(): PluginHostHooks {
     useSettings: () => useAppStore((s) => s.settings),
     useLocale: () => useAppStore((s) => s.locale),
     usePaneText: (paneId) => {
-      return React.useSyncExternalStore(
+      const editorText = React.useSyncExternalStore(
         subscribeActiveEditorState,
         () => getMirroredEditorPaneText(paneId),
         () => undefined,
       )
+      const quickEditorText = useQuickEditorStore((state) => state.panes[paneId]?.text)
+      return quickEditorText ?? editorText
     },
     useT: (pluginId) => {
       const locale = useAppStore((s) => s.locale)

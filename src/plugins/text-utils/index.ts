@@ -9,12 +9,17 @@ import { definePlugin } from '@hiven/plugin'
 
 // ─── Text Statistics ──────────────────────────────────────────────────────────
 
-function textStats(text: string): string {
+function textStats(text: string, t: (key: string, vars?: Record<string, string | number>) => string): string {
   const lines = text.split('\n').length
   const words = text.split(/\s+/).filter((w) => w.length > 0).length
   const chars = text.length
   const charsNoSpace = text.replace(/\s/g, '').length
-  return `Lines: ${lines}\nWords: ${words}\nCharacters: ${chars}\nCharacters (no spaces): ${charsNoSpace}`
+  return [
+    t('count.lines', { count: lines }),
+    t('count.words', { count: words }),
+    t('count.characters', { count: chars }),
+    t('count.charactersNoSpace', { count: charsNoSpace }),
+  ].join('\n')
 }
 
 // ─── Plugin Definition ────────────────────────────────────────────────────────
@@ -78,7 +83,7 @@ export const textUtilsPlugin = definePlugin({
       icon: 'ChartBar',
       aliases: ['stats', 'wc', '文本统计', '字数统计'],
       inputPolicy: { mode: 'auto' },
-      run(ctx) { return ctx.output.text(textStats(ctx.input.text)) },
+      run(ctx) { return ctx.output.text(textStats(ctx.input.text, ctx.t)) },
       surfaces: { launcher: true, panel: true },
     },
   ],

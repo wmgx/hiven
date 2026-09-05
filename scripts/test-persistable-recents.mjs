@@ -73,6 +73,7 @@ recents = mod.recordPersistableRecent(
     kind: 'chat',
     title: '项目群',
     url: 'lark://applink.feishu.cn/client/chat/open?openChatId=oc_2',
+    fallback: true,
   },
   3000,
 )
@@ -89,27 +90,52 @@ const items = mod.buildPersistableRecentLauncherItems({
   openUrl: async () => {},
 })
 assert.ok(items.length >= 2)
-// Empty query: most frequent first — 李昊天 count=2 > 项目群 count=1
-assert.equal(items[0].display.title, '李昊天', 'empty query ranks by count then recency')
-assert.equal(items[0].display.kindLabel, '最近联系人')
-assert.equal(items[0].persistable, true)
+// Builder preserves every stored candidate; shared launcher ranking owns final order.
+assert.equal(items[0].display.title, '项目群', 'builder preserves the recent snapshot order')
+assert.equal(items[0].ranking?.fallback, true, 'rehydrated recent keeps fallback ranking')
+assert.equal(items[0].persistPayload?.fallback, true, 'fallback survives another persistence cycle')
+const personItem = items.find((item) => item.display.title === '李昊天')
+assert.equal(personItem?.display.kindLabel, '最近联系人')
+assert.equal(personItem?.persistable, true)
+assert.ok(personItem?.display.aliases?.includes('dept'), 'rehydrated recent keeps subtitle searchable')
 assert.ok(
-  (items[0].ranking?.providerPriorityBoost ?? 0) >= 40,
+  (personItem?.ranking?.providerPriorityBoost ?? 0) >= 40,
   'empty-query recents get higher boost',
 )
 
 const typed = mod.buildPersistableRecentLauncherItems({
   recents,
-  query: '项目',
+  query: 'li',
   locale: 'zh',
   openUrl: async () => {},
 })
-assert.equal(typed.length, 1)
-assert.equal(typed[0].display.title, '项目群')
+assert.equal(
+  typed.length,
+  recents.length,
+  'typed query keeps the full bounded snapshot for shared pinyin search/ranking',
+)
 assert.ok(
   (typed[0].ranking?.providerPriorityBoost ?? 0) <= 40,
   'typed-query boost is not higher than empty boost',
 )
+
+const [legacyBrowserHistory] = mod.buildPersistableRecentLauncherItems({
+  recents: [{
+    persistKey: 'https://example.com/docs',
+    systemKey: 'browser.chromium:document:history-1',
+    sourceId: 'browser.chromium',
+    kind: 'document',
+    title: 'Docs',
+    url: 'https://example.com/docs',
+    count: 1,
+    lastSelectedAt: 1000,
+  }],
+  query: 'docs',
+  locale: 'en',
+  openUrl: async () => {},
+})
+assert.equal(legacyBrowserHistory.ranking?.fallback, true, 'legacy browser history restores as fallback')
+assert.equal(legacyBrowserHistory.persistPayload?.fallback, true, 'legacy browser history self-heals on selection')
 
 assert.match(
   read('src/store.ts'),

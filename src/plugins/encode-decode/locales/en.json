@@ -16,5 +16,6 @@
   "slashes.unescape.title": "Unescape",
   "slashes.unescape.description": "Unescape special characters (restore \\n \\t \\\" etc.)",
   "jwt.decode.title": "JWT Decode",
-  "jwt.decode.description": "Decode JWT token header and payload"
+  "jwt.decode.description": "Decode JWT token header and payload",
+  "error.convert": "Conversion failed: {message}"
 }

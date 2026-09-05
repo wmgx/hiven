@@ -8,6 +8,7 @@ import type { PluginPrivateStorageApi } from '@hiven/plugin'
 export type QueryHistoryItem = {
   text: string
   lastUsedAt: number
+  useCount: number
 }
 
 export type QueryHistoryRecord = {
@@ -34,7 +35,10 @@ export function normalizeQueryHistory(raw: unknown): QueryHistoryItem[] {
     const lastUsedAt = typeof (entry as QueryHistoryItem).lastUsedAt === 'number'
       ? (entry as QueryHistoryItem).lastUsedAt
       : 0
-    items.push({ text, lastUsedAt })
+    const useCount = typeof (entry as QueryHistoryItem).useCount === 'number'
+      ? Math.max(1, Math.floor((entry as QueryHistoryItem).useCount))
+      : 1
+    items.push({ text, lastUsedAt, useCount })
   }
   return items
 }
@@ -45,12 +49,17 @@ export function upsertQueryHistory(
   text: string,
   max: number,
   now: number = Date.now(),
+  observedUseCount?: number,
 ): QueryHistoryItem[] {
   const trimmed = text.trim()
   if (!trimmed) return items
   const limit = Math.max(1, Math.floor(max) || DEFAULT_MAX_QUERY_HISTORY)
+  const previous = items.find((item) => item.text === trimmed)
+  const useCount = observedUseCount === undefined
+    ? (previous?.useCount ?? 0) + 1
+    : Math.max(previous?.useCount ?? 0, Math.max(1, Math.floor(observedUseCount)))
   const rest = items.filter((item) => item.text !== trimmed)
-  return [{ text: trimmed, lastUsedAt: now }, ...rest].slice(0, limit)
+  return [{ text: trimmed, lastUsedAt: Math.max(previous?.lastUsedAt ?? 0, now), useCount }, ...rest].slice(0, limit)
 }
 
 export function removeQueryHistoryItem(items: QueryHistoryItem[], text: string): QueryHistoryItem[] {
@@ -59,11 +68,81 @@ export function removeQueryHistoryItem(items: QueryHistoryItem[], text: string):
   return items.filter((item) => item.text !== trimmed)
 }
 
-/** Case-insensitive substring filter; empty query returns all (newest first assumed). */
-export function filterQueryHistory(items: QueryHistoryItem[], query: string): QueryHistoryItem[] {
+/** 60% frequency + 40% 30-day recency decay. */
+export function filterQueryHistory(items: QueryHistoryItem[], query: string, now: number = Date.now()): QueryHistoryItem[] {
   const q = query.trim().toLowerCase()
-  if (!q) return items
-  return items.filter((item) => item.text.toLowerCase().includes(q))
+  const filtered = q ? items.filter((item) => item.text.toLowerCase().includes(q)) : items
+  const maxCount = Math.max(1, ...filtered.map((item) => item.useCount ?? 1))
+  return [...filtered].sort((a, b) => {
+    const score = (item: QueryHistoryItem) =>
+      0.6 * Math.log1p(item.useCount ?? 1) / Math.log1p(maxCount) +
+      0.4 * Math.exp(-Math.max(0, now - item.lastUsedAt) / (30 * 24 * 60 * 60 * 1000))
+    return score(b) - score(a) || b.lastUsedAt - a.lastUsedAt
+  })
+}
+
+const TEMPLATE_SLOT_RE = /\{(?:query|clipboard)\}/g
+const TEMPLATE_SLOT_MARKER = '__hiven_slot__'
+
+function captureTemplateValue(templatePart: string, actual: string, wildcard: string): string[] | null {
+  const slots = templatePart.match(TEMPLATE_SLOT_RE)?.length ?? 0
+  if (slots === 0) return templatePart === actual ? [] : null
+  const pattern = templatePart
+    .split(TEMPLATE_SLOT_RE)
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join(`(${wildcard})`)
+  const match = actual.match(new RegExp(`^${pattern}$`))
+  return match ? match.slice(1).map(decodeURIComponent) : null
+}
+
+/** Match only template-declared URL parts; unrelated browser query params are ignored. */
+export function queryFromBrowserUrl(template: string, browserUrl: string): string | null {
+  try {
+    const expected = new URL(template.replace(TEMPLATE_SLOT_RE, TEMPLATE_SLOT_MARKER))
+    const actual = new URL(browserUrl)
+    if (expected.origin !== actual.origin) return null
+
+    const captures = captureTemplateValue(
+      expected.pathname.split(TEMPLATE_SLOT_MARKER).join('{query}'),
+      actual.pathname,
+      '[^/]+',
+    )
+    if (!captures) return null
+    for (const [key, value] of expected.searchParams) {
+      const matched = captureTemplateValue(
+        value.split(TEMPLATE_SLOT_MARKER).join('{query}'),
+        actual.searchParams.get(key) ?? '',
+        '.+',
+      )
+      if (!matched) return null
+      captures.push(...matched)
+    }
+    if (captures.length === 0 || captures.some((value) => value !== captures[0])) return null
+    return captures[0]?.trim() || null
+  } catch {
+    return null
+  }
+}
+
+export async function importBrowserQueryHistory(
+  storage: PluginPrivateStorageApi,
+  entries: readonly { id: string; urlTemplate: string; recordQueryHistory?: boolean; maxQueryHistory?: number }[],
+  history: readonly { url: string; lastVisitTime?: number | null; visitCount?: number | null }[],
+): Promise<number> {
+  let imported = 0
+  for (const entry of entries) {
+    if (!entry.recordQueryHistory) continue
+    let remembered = await loadQueryHistory(storage, entry.id)
+    const before = new Set(remembered.map((item) => item.text))
+    const limit = clampMaxQueryHistory(entry.maxQueryHistory)
+    for (const item of history) {
+      const query = queryFromBrowserUrl(entry.urlTemplate, item.url)
+      if (query) remembered = upsertQueryHistory(remembered, query, limit, item.lastVisitTime ?? Date.now(), item.visitCount ?? undefined)
+    }
+    imported += remembered.reduce((count, item) => count + (before.has(item.text) ? 0 : 1), 0)
+    await saveQueryHistory(storage, entry.id, remembered)
+  }
+  return imported
 }
 
 export function clampMaxQueryHistory(value: unknown): number {

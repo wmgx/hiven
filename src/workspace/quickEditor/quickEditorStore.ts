@@ -92,6 +92,7 @@ const INITIAL_STATE: QuickEditorState = {
   cursorPosition: initialPane.cursorPosition,
   scrollPosition: initialPane.scrollPosition,
   externalVersionHistory: [],
+  panelInstancesV2: {},
 }
 
 export const useQuickEditorStore = create<QuickEditorStore>()(
@@ -255,6 +256,14 @@ export const useQuickEditorStore = create<QuickEditorStore>()(
         return true
       },
       clearExternalVersionHistory: () => set({ externalVersionHistory: [] }),
+      openPanelV2: (instance) => set((state) => ({
+        panelInstancesV2: { ...state.panelInstancesV2, [instance.panelId]: instance },
+      })),
+      closePanelV2: (panelId) => set((state) => {
+        const panelInstancesV2 = { ...state.panelInstancesV2 }
+        delete panelInstancesV2[panelId]
+        return { panelInstancesV2 }
+      }),
       applyOverwriteFromRemote: (input) => {
         const state = get()
         const pane = state.panes[input.paneId] ?? activePaneSnapshot(state)

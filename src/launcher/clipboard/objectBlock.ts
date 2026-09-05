@@ -97,6 +97,15 @@ export type LauncherObjectBlock = {
   meta?: ObjectBlockMeta
 }
 
+/** Raw object text may feed recommendations unless the block masks a secret. */
+export function getObjectBlockRecommendationText(
+  block: LauncherObjectBlock | null | undefined,
+): string | undefined {
+  return !block || block.secretMasked || isSecretKind(block.kind)
+    ? undefined
+    : block.payloadText
+}
+
 // ─── Age label ─────────────────────────────────────────────────────────────────
 
 export function formatAgeLabel(ageMs: number): string {

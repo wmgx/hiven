@@ -13,6 +13,8 @@
   "choice.quickEditorPane": "快捷编辑器 · {title}",
   "textDiff.title": "文本对比",
   "surface.breadcrumb": "文本对比",
+  "surface.original": "原文",
+  "surface.modified": "修改后",
   "diff.textMode": "文本",
   "diff.jsonMode": "JSON",
   "diff.mode": "对比模式",

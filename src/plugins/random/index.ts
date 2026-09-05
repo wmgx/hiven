@@ -156,7 +156,6 @@ export const randomPlugin = definePlugin({
       subtitle: 'integer.description',
       icon: 'Dices',
       aliases: ['random int', 'rand int', '随机整数', '随机数'],
-      inputPolicy: { mode: 'auto' },
       params: [
         { key: 'min', label: 'param.min', type: 'number', default: 0 },
         { key: 'max', label: 'param.max', type: 'number', default: 100 },
@@ -171,7 +170,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.text(multi(count, () => String(randomInt(min, max))))
         } catch (e: any) {
           if (e?.message === 'COUNT') return ctx.output.error(ctx.t('error.count'))
-          return ctx.output.error(`Error: ${e.message}`)
+          return ctx.output.error(ctx.t('error.generate', { message: e.message }))
         }
       },
       surfaces: { launcher: true, panel: true },
@@ -182,7 +181,6 @@ export const randomPlugin = definePlugin({
       subtitle: 'float.description',
       icon: 'Dices',
       aliases: ['random float', 'random decimal', '随机小数', '随机浮点'],
-      inputPolicy: { mode: 'auto' },
       params: [
         { key: 'min', label: 'param.min', type: 'number', default: 0 },
         { key: 'max', label: 'param.max', type: 'number', default: 1 },
@@ -199,7 +197,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.text(multi(count, () => randomFloat(min, max, decimals)))
         } catch (e: any) {
           if (e?.message === 'COUNT') return ctx.output.error(ctx.t('error.count'))
-          return ctx.output.error(`Error: ${e.message}`)
+          return ctx.output.error(ctx.t('error.generate', { message: e.message }))
         }
       },
       surfaces: { launcher: true, panel: true },
@@ -210,7 +208,6 @@ export const randomPlugin = definePlugin({
       subtitle: 'string.description',
       icon: 'Dices',
       aliases: ['random string', 'rand str', '随机字符串', '随机串'],
-      inputPolicy: { mode: 'auto' },
       params: [
         { key: 'length', label: 'param.length', type: 'number', default: 16 },
         {
@@ -240,7 +237,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.text(multi(count, () => randomString(length, charset)))
         } catch (e: any) {
           if (e?.message === 'COUNT') return ctx.output.error(ctx.t('error.count'))
-          return ctx.output.error(`Error: ${e.message}`)
+          return ctx.output.error(ctx.t('error.generate', { message: e.message }))
         }
       },
       surfaces: { launcher: true, panel: true },
@@ -251,7 +248,6 @@ export const randomPlugin = definePlugin({
       subtitle: 'uuid.description',
       icon: 'Hash',
       aliases: ['uuid', 'guid', 'uuidv4', '随机uuid', '生成uuid'],
-      inputPolicy: { mode: 'auto' },
       params: [
         { key: 'count', label: 'param.count', type: 'number', default: 1 },
       ],
@@ -261,7 +257,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.text(multi(count, () => randomUuid()))
         } catch (e: any) {
           if (e?.message === 'COUNT') return ctx.output.error(ctx.t('error.count'))
-          return ctx.output.error(`Error: ${e.message}`)
+          return ctx.output.error(ctx.t('error.generate', { message: e.message }))
         }
       },
       surfaces: { launcher: true, panel: true },
@@ -272,7 +268,6 @@ export const randomPlugin = definePlugin({
       subtitle: 'password.description',
       icon: 'KeyRound',
       aliases: ['password', 'passwd', '随机密码', '生成密码'],
-      inputPolicy: { mode: 'auto' },
       params: [
         { key: 'length', label: 'param.length', type: 'number', default: 16 },
         { key: 'count', label: 'param.count', type: 'number', default: 1 },
@@ -285,7 +280,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.text(multi(count, () => randomPassword(length)))
         } catch (e: any) {
           if (e?.message === 'COUNT') return ctx.output.error(ctx.t('error.count'))
-          return ctx.output.error(`Error: ${e.message}`)
+          return ctx.output.error(ctx.t('error.generate', { message: e.message }))
         }
       },
       surfaces: { launcher: true, panel: true },
@@ -296,7 +291,6 @@ export const randomPlugin = definePlugin({
       subtitle: 'hex.description',
       icon: 'Binary',
       aliases: ['random hex', 'random bytes', '随机hex', '随机字节'],
-      inputPolicy: { mode: 'auto' },
       params: [
         { key: 'bytes', label: 'param.bytes', type: 'number', default: 16 },
         { key: 'count', label: 'param.count', type: 'number', default: 1 },
@@ -309,7 +303,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.text(multi(count, () => randomHex(bytes)))
         } catch (e: any) {
           if (e?.message === 'COUNT') return ctx.output.error(ctx.t('error.count'))
-          return ctx.output.error(`Error: ${e.message}`)
+          return ctx.output.error(ctx.t('error.generate', { message: e.message }))
         }
       },
       surfaces: { launcher: true, panel: true },
@@ -320,7 +314,6 @@ export const randomPlugin = definePlugin({
       subtitle: 'color.description',
       icon: 'Palette',
       aliases: ['random color', 'random hex color', '随机颜色', '随机色值'],
-      inputPolicy: { mode: 'auto' },
       params: [
         { key: 'count', label: 'param.count', type: 'number', default: 1 },
       ],
@@ -330,7 +323,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.text(multi(count, () => randomColor()))
         } catch (e: any) {
           if (e?.message === 'COUNT') return ctx.output.error(ctx.t('error.count'))
-          return ctx.output.error(`Error: ${e.message}`)
+          return ctx.output.error(ctx.t('error.generate', { message: e.message }))
         }
       },
       surfaces: { launcher: true, panel: true },
@@ -341,7 +334,6 @@ export const randomPlugin = definePlugin({
       subtitle: 'boolean.description',
       icon: 'ToggleLeft',
       aliases: ['random bool', 'random true false', '随机布尔', '随机真假'],
-      inputPolicy: { mode: 'auto' },
       params: [
         { key: 'count', label: 'param.count', type: 'number', default: 1 },
       ],
@@ -351,7 +343,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.text(multi(count, () => randomBoolean()))
         } catch (e: any) {
           if (e?.message === 'COUNT') return ctx.output.error(ctx.t('error.count'))
-          return ctx.output.error(`Error: ${e.message}`)
+          return ctx.output.error(ctx.t('error.generate', { message: e.message }))
         }
       },
       surfaces: { launcher: true, panel: true },

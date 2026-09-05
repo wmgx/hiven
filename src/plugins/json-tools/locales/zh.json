@@ -10,5 +10,15 @@
   "queryString.toJson.title": "Query String → JSON",
   "queryString.toJson.description": "将 URL 查询字符串转为 JSON 对象",
   "queryString.fromJson.title": "JSON → Query String",
-  "queryString.fromJson.description": "将 JSON 对象转为 URL 查询字符串"
+  "queryString.fromJson.description": "将 JSON 对象转为 URL 查询字符串",
+  "surface.title": "JSON",
+  "surface.inputPlaceholder": "在此粘贴 JSON…",
+  "surface.emptyOutput": "格式化后的 JSON 将显示在这里。",
+  "surface.invalid": "JSON 解析失败，请检查格式。",
+  "action.back": "返回",
+  "action.copy": "复制",
+  "action.close": "关闭",
+  "toast.copied": "已复制格式化 JSON",
+  "toast.copyFailed": "复制失败",
+  "error.convert": "处理失败：{message}"
 }

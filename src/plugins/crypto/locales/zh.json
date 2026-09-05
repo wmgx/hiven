@@ -4,5 +4,6 @@
   "command.sha1.title": "SHA-1",
   "command.sha1.description": "计算 SHA-1 哈希",
   "command.sha512.title": "SHA-512",
-  "command.sha512.description": "计算 SHA-512 哈希"
+  "command.sha512.description": "计算 SHA-512 哈希",
+  "error.hash": "哈希计算失败：{message}"
 }

@@ -15,5 +15,6 @@
   "result.datetime": "日期时间",
   "action.copyDateTime": "复制日期时间",
   "action.copyDate": "复制日期",
-  "action.copyTimestamp": "复制时间戳"
+  "action.copyTimestamp": "复制时间戳",
+  "error.invalidDate": "无效日期：{value}"
 }

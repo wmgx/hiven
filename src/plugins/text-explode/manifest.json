@@ -1,0 +1,10 @@
+{
+  "pluginId": "text-explode",
+  "displayName": "Text Explode",
+  "displayNameI18n": {
+    "zh": "大爆炸"
+  },
+  "version": "1.0.2",
+  "capabilities": ["ui"],
+  "permissions": ["clipboard.write", "accessibility.paste"]
+}

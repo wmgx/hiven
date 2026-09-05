@@ -7,6 +7,8 @@ type HostElementProps = {
   children?: ReactNode
   className?: string
   style?: CSSProperties
+  role?: ComponentPropsWithoutRef<'span'>['role']
+  'aria-live'?: ComponentPropsWithoutRef<'span'>['aria-live']
 }
 
 type SelectOption = {
@@ -90,7 +92,8 @@ export function createPluginHostUi(): PluginHostUi {
       className: ['flex flex-col', className].filter(Boolean).join(' '),
       style: { gap, ...style },
     }, children),
-    Text: ({ children, className = '', style }) => createElement('span', {
+    Text: ({ children, className = '', style, ...props }) => createElement('span', {
+      ...props,
       className,
       style: { color: 'var(--color-text-secondary)', ...style },
     }, children),

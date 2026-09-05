@@ -24,6 +24,11 @@ export async function closeGlobalLauncherWindow({
    */
   restoreForeground?: RestoreForegroundMode
 }) {
+  if (window.__HIVEN_WEB_NATIVE_BRIDGE__) {
+    setOpen(true)
+    return
+  }
+
   if (standaloneLauncher) {
     try {
       await hideLauncherWindow({ restoreForeground })

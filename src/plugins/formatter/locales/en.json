@@ -10,5 +10,6 @@
   "xml.prettify.title": "XML Prettify",
   "xml.prettify.description": "Format XML with indentation",
   "xml.compact.title": "XML Compact",
-  "xml.compact.description": "Minify XML (remove whitespace)"
+  "xml.compact.description": "Minify XML (remove whitespace)",
+  "error.format": "Formatting failed: {message}"
 }

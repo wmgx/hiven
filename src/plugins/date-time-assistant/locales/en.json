@@ -15,5 +15,6 @@
   "result.datetime": "DateTime",
   "action.copyDateTime": "Copy Date & Time",
   "action.copyDate": "Copy Date",
-  "action.copyTimestamp": "Copy Timestamp"
+  "action.copyTimestamp": "Copy Timestamp",
+  "error.invalidDate": "Invalid date: {value}"
 }

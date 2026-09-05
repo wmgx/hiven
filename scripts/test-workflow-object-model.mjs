@@ -32,6 +32,7 @@ assert.match(files.outputTarget, /OutputTarget|output/, 'output target model exi
 assert.match(files.outputRouter, /routeTextOutput|copy|paste/, 'output router routes text')
 assert.match(files.workflowRegistry, /register|getWorkActions|WorkAction/, 'workflow registry exists')
 assert.match(files.defaultWorkflowProviders, /provider|register|WorkObject/, 'default providers exist')
+assert.doesNotMatch(files.defaultWorkflowProviders, /surfaceObjectProvider/, 'surface registry entries stay out of launcher search')
 assert.match(files.workflowLauncherAdapter, /LauncherItem|WorkAction|adapter/, 'launcher adapter exists')
 assert.match(files.contextBroker, /WorkContextSnapshot/, 'context broker snapshot exists')
 assert.match(files.surfaceActions, /focusSurfaceInstance|showQuickEditorSurface|requestOpenLauncherHostSurface/, 'surface focus uses launcher-only paths')

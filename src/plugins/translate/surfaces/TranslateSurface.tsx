@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, IconButton } from '@hiven/plugin-ui'
+import { Button, IconButton, Select } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon, SettingsIcon } from '@hiven/plugin-ui/icons'
-import { AlertTriangle, ArrowRight, Check, ChevronDown, LoaderCircle } from 'lucide-react'
+import { AlertTriangle, ArrowRight, LoaderCircle } from 'lucide-react'
 import type { SourceLanguageCode, TargetLanguageCode, TranslateProfile, TranslateSettings } from '../settings/model'
 import { currentUsageMonth } from '../settings/model'
 import { estimateBilledChars, isAutoTranslateReady, resolveSmartTargetLang, translateText } from '../providers/adapters'
@@ -126,57 +126,17 @@ function SchemaSelect<T extends string>({
   width?: number
   ariaLabel: string
 }) {
-  const selected = options.find((option) => option.value === value) ?? options[0]
-  const [open, setOpen] = useState(false)
   return (
-    <div
-      className={`schema-select-wrap translate-select ${open ? 'is-open' : ''}`}
-      style={width ? { width } : undefined}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false)
-      }}
-    >
-      <button
-        type="button"
-        className="schema-select-trigger"
+    <div className="translate-select" style={width ? { width } : undefined}>
+      <Select
         aria-label={ariaLabel}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-      >
-        <span className="schema-select-label translate-select__value">
-          {selected?.label}
-          {selected?.sub && <span className="translate-surface__menu-sub"> · {selected.sub}</span>}
-        </span>
-        <ChevronDown className="schema-select-chevron" size={14} strokeWidth={1.8} />
-      </button>
-      {open && (
-        <div className="schema-select-menu" role="listbox">
-          {options.map((option) => {
-            const selectedOption = option.value === value
-            return (
-              <button
-                key={option.value}
-                type="button"
-                role="option"
-                aria-selected={selectedOption}
-                className={`schema-select-option ${selectedOption ? 'is-selected' : ''}`}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => {
-                  onChange(option.value)
-                  setOpen(false)
-                }}
-              >
-                <span>
-                  {option.label}
-                  {option.sub && <span className="translate-surface__menu-sub"> · {option.sub}</span>}
-                </span>
-                {selectedOption && <Check className="schema-select-check" size={13} strokeWidth={2} />}
-              </button>
-            )
-          })}
-        </div>
-      )}
+        value={value}
+        options={options.map((option) => ({
+          value: option.value,
+          label: option.sub ? `${option.label} · ${option.sub}` : option.label,
+        }))}
+        onChange={(event) => onChange(event.currentTarget.value as T)}
+      />
     </div>
   )
 }
@@ -201,8 +161,6 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   const [usageByProfile, setUsageByProfile] = useState(() => new Map(settings.profiles.map((profile) => [profile.id, profile.usedChars])))
   const usageRef = useRef(usageByProfile)
   usageRef.current = usageByProfile
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -280,7 +238,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
 
     setStatus({ kind: 'translating', requestId })
     try {
-      const result = await translateText({ text, sourceLang: source, targetLang: effectiveTarget }, normalizedProfile, hostRef.current.network)
+      const result = await translateText({ text, sourceLang: source, targetLang: effectiveTarget }, normalizedProfile, hostRef.current.network, hostRef.current.ai)
       if (requestIdRef.current !== requestId) return
       cacheRef.current.set(cacheKey, { text: result.text, billedChars: result.billedChars })
       setOutputText(result.text)
@@ -326,36 +284,6 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
     }
   }, [host, outputText, t])
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'c') return
-      const target = event.target as HTMLElement | null
-      if (target?.closest('textarea, input, [contenteditable]')) return
-      if (!outputText) return
-      event.preventDefault()
-      void copyOutput()
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [copyOutput, outputText])
-
-  useEffect(() => {
-    if (!menu) return
-    const onPointerDown = (event: PointerEvent) => {
-      if (menuRef.current?.contains(event.target as Node)) return
-      setMenu(null)
-    }
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMenu(null)
-    }
-    window.addEventListener('pointerdown', onPointerDown)
-    window.addEventListener('keydown', onKeyDown)
-    return () => {
-      window.removeEventListener('pointerdown', onPointerDown)
-      window.removeEventListener('keydown', onKeyDown)
-    }
-  }, [menu])
-
   const activeUsedChars = activeProfile ? (usageByProfile.get(activeProfile.id) ?? activeProfile.usedChars) : 0
   const monthlyLimit = activeProfile?.monthlyLimitChars ?? 0
   const quotaPercent = monthlyLimit > 0 ? Math.min(100, Math.round((activeUsedChars / monthlyLimit) * 100)) : 0
@@ -364,7 +292,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   const statusState = stateName(status)
 
   return (
-    <section className="translate-surface" aria-label="Translate">
+    <section className="translate-surface" aria-label={localizedText(t, 'surface.title', 'Translate')}>
       <header className="translate-surface__header">
         <IconButton type="button" label={localizedText(t, 'action.back', 'Back')} onClick={() => host.requestBack()}>
           <BackIcon size={14} strokeWidth={2} />
@@ -415,26 +343,24 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
             {localizedText(t, 'pane.translation', 'Translation')}
             <span className="detected">· {optionLabel(targetOptions, resolvedTarget)}</span>
           </div>
-          <div
-            className={`translate-output ${outputText ? '' : 'is-empty'} ${status.kind === 'translating' ? 'is-stale' : ''}`}
+          <textarea
+            className={`translate-output ${status.kind === 'translating' ? 'is-stale' : ''}`}
+            value={outputText}
+            placeholder={localizedText(t, 'output.placeholder', 'Translation appears here.')}
+            aria-label={localizedText(t, 'pane.translation', 'Translation')}
             aria-live="polite"
-            onContextMenu={(event) => {
-              if (!outputText) return
-              event.preventDefault()
-              event.stopPropagation()
-              setMenu({
-                x: Math.min(event.clientX, window.innerWidth - 168),
-                y: Math.min(event.clientY, window.innerHeight - 56),
-              })
-            }}
-          >
-            {outputText || localizedText(t, 'output.placeholder', 'Translation appears here.')}
-          </div>
+            readOnly
+            spellCheck={false}
+          />
         </div>
       </div>
 
       <footer className="translate-surface__status">
-        <div className="translate-status" data-state={statusState}>
+        <div
+          className="translate-status"
+          data-state={statusState}
+          role={status.kind === 'error' || status.kind === 'quota-exceeded' ? 'alert' : 'status'}
+        >
           <span className="translate-status__dot" />
           <LoaderCircle className="translate-status__spin" size={13} strokeWidth={2.2} />
           <AlertTriangle className="translate-status__alert" size={13} strokeWidth={1.9} />
@@ -450,25 +376,6 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
           </div>
         </div>
       </footer>
-      {menu ? (
-        <div
-          ref={menuRef}
-          className="translate-surface__menu"
-          role="menu"
-          style={{ left: menu.x, top: menu.y }}
-        >
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setMenu(null)
-              void copyOutput()
-            }}
-          >
-            {localizedText(t, 'action.copy', 'Copy')}
-          </button>
-        </div>
-      ) : null}
     </section>
   )
 }

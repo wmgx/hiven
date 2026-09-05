@@ -2,5 +2,6 @@
   "command.toJson.title": "YAML → JSON",
   "command.toJson.description": "Convert YAML to JSON",
   "command.fromJson.title": "JSON → YAML",
-  "command.fromJson.description": "Convert JSON to YAML"
+  "command.fromJson.description": "Convert JSON to YAML",
+  "error.convert": "Conversion failed: {message}"
 }

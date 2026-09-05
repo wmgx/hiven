@@ -44,9 +44,8 @@ export function computeStandaloneLauncherGeometry({
         Math.ceil(
           (hostSurfaceTarget
             ? STANDALONE_SURFACE_MAX_HEIGHT
-            : launcherSettingsTarget
-            ? GLOBAL_LAUNCHER_SETTINGS_HEIGHT
-            : surfaceShell?.defaultHeight ?? measured.panelHeight
+            : surfaceShell?.defaultHeight
+            ?? (launcherSettingsTarget ? GLOBAL_LAUNCHER_SETTINGS_HEIGHT : measured.panelHeight)
           ) + STANDALONE_LAUNCHER_VERTICAL_PADDING,
         ),
         STANDALONE_LAUNCHER_MIN_HEIGHT,
@@ -60,10 +59,10 @@ export function computeStandaloneLauncherGeometry({
 
   const desiredPanelWidth = hostSurfaceTarget
     ? STANDALONE_SURFACE_MAX_WIDTH + STANDALONE_LAUNCHER_HORIZONTAL_PADDING
-    : launcherSettingsTarget
-    ? GLOBAL_LAUNCHER_SETTINGS_WIDTH + STANDALONE_LAUNCHER_HORIZONTAL_PADDING
     : surfaceShell?.defaultWidth
     ? surfaceShell.defaultWidth + STANDALONE_LAUNCHER_HORIZONTAL_PADDING
+    : launcherSettingsTarget
+    ? GLOBAL_LAUNCHER_SETTINGS_WIDTH + STANDALONE_LAUNCHER_HORIZONTAL_PADDING
     : currentWindowWidth
   const maxWidth = isSurfaceLike ? STANDALONE_SURFACE_MAX_WIDTH + STANDALONE_LAUNCHER_HORIZONTAL_PADDING : currentWindowWidth
   const minWidth = isSurfaceLike ? STANDALONE_LAUNCHER_WIDTH : currentWindowWidth

@@ -123,6 +123,13 @@ function runTimestampCommand(text) {
   return result.effects?.[0]?.text
 }
 
+function runTimestampCommandOutput(text) {
+  return timestampCommand.run({
+    inputs: { input: { kind: 'text', text, paneId: 'pane-test' } },
+    params: { unit: 'ms', overwrite: 'yes' },
+  }).output
+}
+
 assert.equal(
   runTimestampCommand(['now', 'now+1day', 'now+12h', 'now UTC+8'].join('\n')),
   [
@@ -138,5 +145,6 @@ assert.equal(
   '1781064306000',
   'timestamp command should parse UTC+8 datetime suffixes',
 )
+assert.equal(runTimestampCommandOutput('not-a-date')?.kind, 'error', 'invalid dates must not become replaceable text output')
 
 console.log('date time assistant checks passed')

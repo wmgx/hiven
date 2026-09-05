@@ -2,6 +2,6 @@
   "pluginId": "text-utils",
   "displayName": "Text Utilities",
   "displayNameI18n": { "zh": "文本工具" },
-  "version": "2.0.0",
+  "version": "2.0.1",
   "capabilities": ["command"]
 }

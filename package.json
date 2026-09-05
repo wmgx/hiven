@@ -64,6 +64,7 @@
     "test:effect-runner-window-boundary": "node scripts/test-effect-runner-window-boundary.mjs",
     "test:web-open-dynamic-items": "node scripts/test-web-open-dynamic-items.mjs",
     "test:web-open-query-history": "node scripts/test-web-open-query-history.mjs",
+    "test:web-open-browser-template-learning": "node scripts/test-web-open-browser-template-learning.mjs",
     "test:app-launcher-contract": "node scripts/test-app-launcher-contract.mjs",
     "test:app-launcher-cache-normalization": "node scripts/test-app-launcher-cache-normalization.mjs",
     "test:desktop-window-process-contract": "node scripts/test-desktop-window-process-contract.mjs",

@@ -197,7 +197,8 @@ export default function JsFilterPanel({ host, paneId }: PanelPropsV2) {
           fontSize: 14,
           lineHeight: 1,
         }}
-        title="Close"
+        title={t('panel.close')}
+        aria-label={t('panel.close')}
       >
         ×
       </button>

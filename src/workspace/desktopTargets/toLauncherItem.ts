@@ -170,6 +170,7 @@ function buildPersistPayload(
     appName: target.appName,
     appStableKey: target.appStableKey,
     scoreBias: target.scoreBias,
+    fallback: target.fallback,
     keywords: target.keywords,
     sourceId: target.sourceId,
   }
@@ -200,6 +201,7 @@ export function desktopTargetToLauncherItem(
   const recordUsage = shouldRecordUsage(target)
   const providerBoost = clampProviderPriority(options.provider?.priority)
   const scoreBias = clampTargetScoreBias(target.scoreBias)
+  const fallback = target.fallback === true
   const persistPayload = buildPersistPayload(target, target.id)
   const persistable = Boolean(persistPayload)
 
@@ -219,10 +221,11 @@ export function desktopTargetToLauncherItem(
   const activate = options.activate ?? options.provider?.activate
 
   const ranking =
-    providerBoost > 0 || scoreBias != null
+    providerBoost > 0 || scoreBias != null || fallback
       ? {
           ...(providerBoost > 0 ? { providerPriorityBoost: providerBoost } : {}),
           ...(scoreBias != null ? { scoreBias } : {}),
+          ...(fallback ? { fallback: true } : {}),
         }
       : undefined
 

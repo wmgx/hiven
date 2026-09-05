@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { flushSync } from 'react-dom'
 import { BrainCircuit, Settings, Puzzle, Sparkles } from 'lucide-react'
 import { useT } from '../i18n'
 import { AiSubscriptionsContent, SettingsContent } from '../surfaces/SettingsContent'
@@ -19,15 +20,29 @@ export function SystemSettingsSurface({ initialTab = 'settings' }: { initialTab?
     { id: 'learning', icon: <Sparkles size={16} />, label: t('learnedRules') },
   ]
 
+  const selectTab = (tabId: TabId) => {
+    if (tabId === activeTab) return
+    const startViewTransition = (document as Document & {
+      startViewTransition?: (update: () => void) => void
+    }).startViewTransition
+    if (!startViewTransition) {
+      setActiveTab(tabId)
+      return
+    }
+    startViewTransition.call(document, () => flushSync(() => setActiveTab(tabId)))
+  }
+
   return (
-    <div className="system-settings-surface">
+    <div className={`system-settings-surface ${typeof document.startViewTransition === 'function' ? 'supports-view-transitions' : ''}`}>
       <div className="system-settings-sidebar" data-launcher-scrollable>
         {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
             className={`system-settings-tab ${activeTab === tab.id ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab.id)}
+            aria-label={tab.label}
+            title={tab.label}
+            onClick={() => selectTab(tab.id)}
           >
             <span className="system-settings-tab-icon">{tab.icon}</span>
             <span className="system-settings-tab-label">{tab.label}</span>
@@ -35,10 +50,12 @@ export function SystemSettingsSurface({ initialTab = 'settings' }: { initialTab?
         ))}
       </div>
       <div className="system-settings-content" data-launcher-scrollable>
-        {activeTab === 'settings' && <SettingsContent />}
-        {activeTab === 'ai' && <AiSubscriptionsContent />}
-        {activeTab === 'plugins' && <PluginsContent />}
-        {activeTab === 'learning' && <LearnedRulesContent />}
+        <div key={activeTab} className="system-settings-page">
+          {activeTab === 'settings' && <SettingsContent />}
+          {activeTab === 'ai' && <AiSubscriptionsContent />}
+          {activeTab === 'plugins' && <PluginsContent />}
+          {activeTab === 'learning' && <LearnedRulesContent />}
+        </div>
       </div>
     </div>
   )

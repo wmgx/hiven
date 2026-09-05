@@ -48,6 +48,7 @@ import { getSavedActionLauncherItems } from '../savedActions/provider'
 
 const DYNAMIC_QUERY_MAX_LENGTH = 500
 const DYNAMIC_PROVIDER_TIMEOUT_MS = 1000
+const DYNAMIC_PROVIDER_ITEM_LIMIT = 20
 
 // ─── Host-owned items ────────────────────────────────────────────────────────
 
@@ -287,12 +288,13 @@ type DynamicProviderEntry = {
 }
 
 function collectDynamicProviders(): DynamicProviderEntry[] {
-  const entries: DynamicProviderEntry[] = []
+  const entries = new Map<string, DynamicProviderEntry>()
   for (const { definition, pluginId, source } of pluginRegistry.getAllPluginDefinitions()) {
     const provider = (definition as PluginDefinition<unknown>).launcher?.dynamicItems
-    if (provider) entries.push({ provider, pluginId, source })
+    // Later definitions (dev) replace production for the same plugin id.
+    if (provider) entries.set(pluginId, { provider, pluginId, source })
   }
-  return entries
+  return [...entries.values()]
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -387,6 +389,11 @@ export async function collectDynamicItems(
   if (signal?.aborted) return []
 
   const providers = collectDynamicProviders()
+  // Seed the consumer Map in provider registration order. Replacing these
+  // entries on completion then cannot turn network timing into a ranking tie-break.
+  for (const { pluginId } of providers) {
+    onPartial?.({ kind: 'plugin', pluginId, items: [] })
+  }
   const results = await Promise.all(
     providers.map(async ({ provider, pluginId, source }) => {
       if (signal?.aborted) return [] as LauncherItem[]
@@ -396,7 +403,7 @@ export async function collectDynamicItems(
         const settingsSource = resolvePluginSettingsSource(pluginId, source)
         const requestedPermissions = pluginRegistry.getPluginPermissions(pluginId, settingsSource)
         const raw = await withTimeout(
-          Promise.resolve(provider({
+          Promise.resolve().then(() => provider({
             query: resolvedInputText,
             surfaceId,
             locale,
@@ -422,9 +429,7 @@ export async function collectDynamicItems(
           onPartial?.({ kind: 'plugin', pluginId, items: [] })
           return []
         }
-        const items = raw
-          .map((contribution) => resolveDynamicItem(contribution, pluginId, source))
-          .filter((item): item is LauncherItem => item != null)
+        const items = resolveDynamicProviderItems(raw, pluginId, source)
         logLauncherPerfDuration('registry:plugin-dynamic-provider', startedAt, {
           pluginId,
           source,
@@ -470,6 +475,37 @@ function resolveDynamicItem(
     pluginId,
     source,
   })
+}
+
+function resolveDynamicProviderItems(
+  raw: unknown[],
+  pluginId: string,
+  source: ContributionSource,
+): LauncherItem[] {
+  const contributions = raw.slice(0, DYNAMIC_PROVIDER_ITEM_LIMIT)
+  const ids = contributions.map((contribution) => (
+    contribution && typeof contribution === 'object' && typeof (contribution as { id?: unknown }).id === 'string'
+      ? (contribution as { id: string }).id
+      : ''
+  ))
+  const idErrors = validateLauncherItemIds(ids)
+  const invalidIds = new Set(idErrors.filter((error) => error.reason === 'invalid-format').map((error) => error.itemId))
+  for (const error of idErrors) {
+    console.warn(`[launcher] dynamic provider "${pluginId}" item id "${error.itemId}": ${error.reason}`)
+  }
+
+  const items: LauncherItem[] = []
+  const systemKeys = new Set<string>()
+  for (let index = 0; index < contributions.length; index += 1) {
+    const contribution = contributions[index]
+    const id = ids[index]
+    if (!id || invalidIds.has(id) || !contribution || typeof contribution !== 'object') continue
+    const item = resolveDynamicItem(contribution as LauncherItemContribution, pluginId, source)
+    if (!item || systemKeys.has(item.systemKey)) continue
+    systemKeys.add(item.systemKey)
+    items.push(item)
+  }
+  return items
 }
 
 // ─── Combined candidate collection ───────────────────────────────────────────

@@ -20,5 +20,6 @@
   "upper.title": "UPPER CASE",
   "upper.description": "Convert identifiers to UPPER CASE words",
   "title.title": "Title Case",
-  "title.description": "Convert identifiers to Title Case words"
+  "title.description": "Convert identifiers to Title Case words",
+  "error.convert": "Conversion failed: {message}"
 }

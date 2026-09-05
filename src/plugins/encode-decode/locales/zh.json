@@ -16,5 +16,6 @@
   "slashes.unescape.title": "反转义",
   "slashes.unescape.description": "反转义特殊字符（还原 \\n \\t \\\" 等）",
   "jwt.decode.title": "JWT 解码",
-  "jwt.decode.description": "解码 JWT 令牌，展示 Header 和 Payload"
+  "jwt.decode.description": "解码 JWT 令牌，展示 Header 和 Payload",
+  "error.convert": "转换失败：{message}"
 }

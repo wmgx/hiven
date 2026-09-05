@@ -225,25 +225,31 @@ function sumNumericTokens(text: string): string {
 
 type BaseConversionMode = 'dec2hex' | 'hex2dec' | 'dec2bin' | 'bin2dec'
 
+class BaseConversionError extends Error {
+  constructor(readonly kind: 'missing' | 'decimal' | 'hex' | 'binary', readonly value: string) {
+    super(`${kind}: ${value}`)
+  }
+}
+
 function parseSignedBaseInteger(raw: string, radix: 2 | 10 | 16): bigint {
   const trimmed = raw.trim()
   const sign = trimmed.startsWith('-') ? -1n : 1n
   const unsigned = trimmed.replace(/^[+-]/, '')
-  if (!unsigned) throw new Error('Missing number')
+  if (!unsigned) throw new BaseConversionError('missing', raw)
 
   if (radix === 10) {
-    if (!/^\d+$/.test(unsigned)) throw new Error(`Invalid decimal number: ${raw}`)
+    if (!/^\d+$/.test(unsigned)) throw new BaseConversionError('decimal', raw)
     return sign * BigInt(unsigned)
   }
 
   if (radix === 16) {
     const digits = unsigned.replace(/^0x/i, '')
-    if (!/^[0-9a-f]+$/i.test(digits)) throw new Error(`Invalid hex number: ${raw}`)
+    if (!/^[0-9a-f]+$/i.test(digits)) throw new BaseConversionError('hex', raw)
     return sign * BigInt(`0x${digits}`)
   }
 
   const digits = unsigned.replace(/^0b/i, '')
-  if (!/^[01]+$/i.test(digits)) throw new Error(`Invalid binary number: ${raw}`)
+  if (!/^[01]+$/i.test(digits)) throw new BaseConversionError('binary', raw)
   return sign * BigInt(`0b${digits}`)
 }
 
@@ -275,6 +281,7 @@ type CalculationResultPanelInputs = {
 function CalculationResultPanel({ inputs, host }: PanelPropsV2<CalculationResultPanelInputs>) {
   const { hooks, effects, react: React } = getPluginHostSdk()
   const t = hooks.useT('calculator')
+  const [copyStatus, setCopyStatus] = React.useState<'idle' | 'copied' | 'failed'>('idle')
   const sourceText = inputs?.sourceText ?? ''
   const resultText = inputs?.resultText ?? calculateFormulaLines(sourceText)
   const e = React.createElement
@@ -285,7 +292,12 @@ function CalculationResultPanel({ inputs, host }: PanelPropsV2<CalculationResult
         e('div', { className: 'calculator-result-panel__title' }, t('panel.result.title')),
         e('div', { className: 'calculator-result-panel__subtitle' }, t('panel.result.subtitle')),
       ),
-      e('button', { type: 'button', className: 'calculator-result-panel__ghost', onClick: () => host.close() }, '×'),
+      e('button', {
+        type: 'button',
+        className: 'calculator-result-panel__ghost',
+        'aria-label': t('panel.result.close'),
+        onClick: () => host.close(),
+      }, '×'),
     ),
     e('div', { className: 'calculator-result-panel__grid' },
       e('section', null,
@@ -298,7 +310,22 @@ function CalculationResultPanel({ inputs, host }: PanelPropsV2<CalculationResult
       ),
     ),
     e('div', { className: 'calculator-result-panel__footer' },
-      e('button', { type: 'button', onClick: () => navigator.clipboard?.writeText(resultText) }, t('panel.result.copy')),
+      copyStatus !== 'idle' && e('span', {
+        role: copyStatus === 'failed' ? 'alert' : 'status',
+        className: `calculator-result-panel__copy-status is-${copyStatus}`,
+      }, t(copyStatus === 'copied' ? 'panel.result.copied' : 'panel.result.copyFailed')),
+      e('button', {
+        type: 'button',
+        onClick: async () => {
+          try {
+            if (!navigator.clipboard) throw new Error('clipboard unavailable')
+            await navigator.clipboard.writeText(resultText)
+            setCopyStatus('copied')
+          } catch {
+            setCopyStatus('failed')
+          }
+        },
+      }, t('panel.result.copy')),
       e('button', { type: 'button', onClick: () => host.dispatch([effects.replaceActiveText(resultText)]) }, t('panel.result.replace')),
       e('button', {
         type: 'button',
@@ -374,7 +401,10 @@ const definition: PluginDefinition = {
             (ctx.params.mode ?? 'dec2hex') as BaseConversionMode,
           ))
         } catch (error: any) {
-          return ctx.output.error(`Error: ${error.message}`)
+          if (error instanceof BaseConversionError) {
+            return ctx.output.error(ctx.t(`error.base.${error.kind}`, { value: error.value }))
+          }
+          return ctx.output.error(ctx.t('error.convert', { message: error.message }))
         }
       },
       surfaces: { launcher: true, panel: true },

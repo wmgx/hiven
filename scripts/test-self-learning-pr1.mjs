@@ -67,6 +67,7 @@ const { LauncherController } = controllerModule
 
 function createHarness() {
   const events = []
+  const usage = []
   const calls = { copy: 0, insert: 0, replace: 0, return: 0, close: 0 }
   const api = {
     getActiveText: () => '',
@@ -82,12 +83,12 @@ function createHarness() {
     locale: 'en',
     makeT: () => (key) => key,
     getSettings: () => ({}),
-    recordSelection: () => {},
+    recordSelection: (_surfaceId, selectedItem) => { usage.push(selectedItem.systemKey) },
     requestClose: () => { calls.close += 1 },
     onChange: () => {},
     appendExperienceEvent: (event) => events.push(structuredClone(event)),
   })
-  return { controller, events, calls, api }
+  return { controller, events, usage, calls, api }
 }
 
 function item(overrides = {}) {
@@ -115,6 +116,7 @@ const allEvents = []
   let executions = 0
   await h.controller.selectItem(item({ execute: async () => { executions += 1; return { ok: true } } }))
   assert.equal(executions, 1)
+  assert.deepEqual(h.usage, ['plugin:test:tool:action'], 'successful commit records usage once')
   assertPair(h.events)
   allEvents.push(...h.events)
 }
@@ -127,8 +129,10 @@ const allEvents = []
   })
   await h.controller.selectItem(paramItem, { customizeParams: true })
   assert.equal(h.events.length, 0)
+  assert.equal(h.usage.length, 0, 'entering parameter input does not record usage')
   await h.controller.commitCurrentParam('b')
   assert.equal(executions, 1)
+  assert.equal(h.usage.length, 1, 'successful parameter commit records usage')
   assertPair(h.events)
   allEvents.push(...h.events)
 }
@@ -140,9 +144,11 @@ const allEvents = []
     execute: async () => { executions += 1; return { ok: true } },
   })
   await h.controller.selectItem(inputItem)
+  assert.equal(h.usage.length, 0, 'entering collect-input does not record usage')
   h.controller.setInputText('secret input')
   await h.controller.submitInput()
   assert.equal(executions, 1)
+  assert.equal(h.usage.length, 1, 'successful collect-input commit records usage')
   assertPair(h.events)
   assert.doesNotMatch(JSON.stringify(h.events), /secret input/)
   allEvents.push(...h.events)
@@ -196,6 +202,22 @@ const allEvents = []
 }
 {
   const h = createHarness()
+  const previewItem = item({
+    inputPolicy: { mode: 'auto' },
+    execute: async () => output.textResult('preview result', h.api, 'en'),
+  })
+  await h.controller.selectItem(previewItem)
+  h.controller.setInputText('preview input')
+  await h.controller.previewInput()
+  const frame = h.controller.getState().frames.at(-1)
+  const choice = frame?.kind === 'collect-input' ? frame.previewOutput?.choices[0] : undefined
+  assert.ok(choice, 'live preview should expose an output choice')
+  await h.controller.activateSecondary(choice, 'return-to-launcher')
+  assert.equal(h.calls.return, 1)
+  assert.deepEqual(h.usage, ['plugin:test:tool:action'], 'successful live-preview output records usage once')
+}
+{
+  const h = createHarness()
   let executions = 0
   await h.controller.selectItem(item({
     commitVia: 'saved-action',
@@ -218,7 +240,42 @@ const allEvents = []
   await h.controller.selectItem(item({ execute: async () => output.choicesResult([customCopy]) }))
   assertPair(h.events)
   assert.equal(h.calls.copy, 1)
+  assert.deepEqual(h.usage, ['plugin:test:tool:action'], 'successful output action records usage once')
   allEvents.push(...h.events)
+}
+{
+  const h = createHarness()
+  const failingChoice = {
+    id: 'fail',
+    title: 'Fail',
+    primaryAction: async () => { throw new Error('output failed') },
+  }
+  await h.controller.selectItem(item({ execute: async () => output.choicesResult([failingChoice]) }))
+  assert.equal(h.usage.length, 0, 'failed output action must not record usage')
+}
+{
+  const h = createHarness()
+  const choices = [
+    { id: 'one', title: 'One', primaryAction: async () => {} },
+    { id: 'two', title: 'Two', primaryAction: async () => {} },
+  ]
+  await h.controller.selectItem(item({ execute: async () => output.choicesResult(choices) }))
+  assert.equal(h.usage.length, 0, 'showing output choices must not record usage')
+  h.controller.back()
+  assert.equal(h.usage.length, 0, 'cancelling output choices must not record usage')
+}
+{
+  const h = createHarness()
+  const cancel = {
+    id: 'cancel',
+    title: 'Cancel',
+    tone: 'muted',
+    primaryAction: async () => ({ ok: true, keepOpen: true }),
+  }
+  const confirm = { id: 'confirm', title: 'Confirm', primaryAction: async () => {} }
+  await h.controller.selectItem(item({ execute: async () => output.choicesResult([confirm, cancel]) }))
+  await h.controller.activateChoice(cancel)
+  assert.equal(h.usage.length, 0, 'cancel choice must not record usage')
 }
 {
   const h = createHarness()
@@ -270,6 +327,7 @@ for (const secondaryId of ['copy', 'insert']) {
   const h = createHarness()
   const canary = 'RAW_ERROR_CANARY_DO_NOT_PERSIST'
   await h.controller.selectItem(item({ execute: async () => { throw new Error(canary) } }))
+  assert.equal(h.usage.length, 0, 'thrown execution does not record usage')
   assert.deepEqual(h.events.map((event) => event.eventType), ['run.started', 'run.finished'])
   assert.equal(h.events[1].status, 'failed')
   assert.equal(h.events[1].errorType, 'provider-failed')
@@ -286,6 +344,12 @@ for (const secondaryId of ['copy', 'insert']) {
   h.controller.setParamQuery('not committed')
   h.controller.back()
   assert.equal(h.events.length, 0, 'parameter browse/cancel must produce zero events')
+  assert.equal(h.usage.length, 0, 'parameter browse/cancel must not record usage')
+}
+{
+  const h = createHarness()
+  await h.controller.selectItem(item({ execute: async () => ({ ok: false, message: 'failed' }) }))
+  assert.equal(h.usage.length, 0, 'explicit failed result does not record usage')
 }
 
 for (const applied of allEvents.filter((event) => event.eventType === 'output.applied')) {
@@ -313,4 +377,21 @@ assert.match(hostActions, /confirmExperienceClear\('all'/)
 const experienceTypes = readFileSync('src/workspace/experience/types.ts', 'utf8')
 const errorTypeUnion = experienceTypes.match(/export type ExperienceErrorType =([\s\S]*?)\n\n/)?.[1] ?? ''
 assert.doesNotMatch(errorTypeUnion, /cancelled/)
+
+const globalSelection = readFileSync('src/components/launcher/useGlobalLauncherSelectionController.ts', 'utf8')
+assert.match(
+  globalSelection,
+  /await showPluginSurfaceWindow\(target\)[\s\S]{0,160}recordSuccessfulSelection\(item\.domainItem\)/,
+  'window plugin surfaces record usage through the controller after opening',
+)
+assert.match(
+  globalSelection,
+  /await measureLatency\([\s\S]{0,320}recordSuccessfulSelection\(item\.domainItem\)/,
+  'embedded plugin surfaces record usage through the controller after opening',
+)
+assert.match(
+  globalSelection,
+  /\}\)\(\)\.catch\([\s\S]{0,240}showToast\(/,
+  'plugin surface open failures must be handled without recording usage',
+)
 console.log('self-learning PR1 checks passed')

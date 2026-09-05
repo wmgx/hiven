@@ -21,6 +21,8 @@ export type AiAgent = {
   capabilities: AiCapability[]
   inputModalities: string[]
   supportedEfforts: AiReasoningEffort[]
+  contextWindow?: number
+  maxOutputTokens?: number
   defaultEffort?: AiReasoningEffort
   isDefault?: boolean
 }
@@ -128,7 +130,7 @@ export type AiProviderRequest = Omit<AiRequest, 'providerId' | 'agentId' | 'effo
 
 export interface AiProviderAdapter {
   readonly id: string
-  describe(): Promise<Omit<AiProviderDescriptor, 'isDefault'>>
+  describe(onUpdate?: (provider: Omit<AiProviderDescriptor, 'isDefault'>) => void): Promise<Omit<AiProviderDescriptor, 'isDefault'>>
   stream(request: AiProviderRequest): AsyncIterable<AiEvent>
   cancel(runId: string): Promise<void>
   login?(): Promise<{ url?: string; verificationCode?: string }>

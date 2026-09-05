@@ -64,7 +64,7 @@ const src = readFileSync(new URL('../src/plugins/web-open/browserProvider.ts', i
     /\$\{url\.origin\}\$\{url\.pathname\.replace/,
     'the bespoke query-blind history key must be replaced by normalizeUrlForMatch',
   )
-  const historyBlock = src.slice(src.indexOf('const history = await desktopTargets.bridge.listHistory'))
+  const historyBlock = src.slice(src.indexOf('const history = historySearchDays'))
   assert.match(
     historyBlock,
     /normalizeUrlForMatch\(item\.url,\s*\{\s*ignoreQuery:\s*true\s*\}\)/,
@@ -77,7 +77,7 @@ const src = readFileSync(new URL('../src/plugins/web-open/browserProvider.ts', i
 // ─── history ranking decays with recency (and frequency, when known) ─────────
 {
   const historyBlock = src.slice(
-    src.indexOf('const history = await desktopTargets.bridge.listHistory'),
+    src.indexOf('const history = historySearchDays'),
     src.indexOf('return [...tabs, ...historyTargets]'),
   )
   assert.match(

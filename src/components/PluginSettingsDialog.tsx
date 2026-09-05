@@ -5,7 +5,7 @@
  * The plugin provides the body content via its settings.component.
  */
 
-import { Component, useCallback, useMemo, useState, type ErrorInfo, type ReactNode } from 'react'
+import { Component, useCallback, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from 'react'
 import { Dialog } from '@base-ui/react/dialog'
 import { X } from 'lucide-react'
 import { t } from '../i18n'
@@ -61,33 +61,52 @@ export function PluginSettingsDialog() {
   const locale = useAppStore((s) => s.locale)
   const target = usePluginSettingsStore((s) => s.settingsDialogTarget)
   const closeSettingsDialog = usePluginSettingsStore((s) => s.closeSettingsDialog)
+  const [renderedTarget, setRenderedTarget] = useState(target)
+  const [isClosing, setIsClosing] = useState(false)
   const titleId = 'plugin-settings-dialog-title'
 
-  if (!target) return null
-  if (target.presentation === 'global-launcher') return null
+  useEffect(() => {
+    if (target) {
+      setRenderedTarget(target)
+      setIsClosing(false)
+      return
+    }
+    if (!renderedTarget) return
+    setIsClosing(true)
+    const timer = window.setTimeout(() => {
+      setRenderedTarget(null)
+      setIsClosing(false)
+    }, 90)
+    return () => window.clearTimeout(timer)
+  }, [renderedTarget, target])
+
+  const activeTarget = target ?? renderedTarget
+  if (!activeTarget) return null
+  if (activeTarget.presentation === 'global-launcher') return null
+  const fillsPluginWindow = activeTarget.presentation === 'plugin-surface-window'
 
   return (
-    <Dialog.Root open onOpenChange={(open) => { if (!open) closeSettingsDialog() }}>
+    <Dialog.Root open onOpenChange={(open) => { if (!open && !isClosing) closeSettingsDialog() }}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 bg-black/40 z-[1200]" />
+        <Dialog.Backdrop className={`plugin-settings-dialog-backdrop fixed inset-0 bg-black/40 z-[1200]${isClosing ? ' is-closing' : ''}`} />
         <Dialog.Popup
           aria-labelledby={titleId}
           initialFocus={() => document.querySelector<HTMLElement>('[data-settings-dialog-close]')}
-          className="fixed left-1/2 top-1/2 z-[1201] -translate-x-1/2 -translate-y-1/2 flex flex-col overflow-hidden plugin-settings-dialog-panel anim-dropdown"
+          className={`fixed left-1/2 top-1/2 z-[1201] -translate-x-1/2 -translate-y-1/2 flex flex-col overflow-hidden plugin-settings-dialog-panel${isClosing ? ' is-closing' : ''}`}
           style={{
-            width: 'min(780px, calc(100vw - 40px))',
-            height: 'min(680px, calc(100vh - 48px))',
-            maxHeight: 'min(680px, calc(100vh - 48px))',
+            width: fillsPluginWindow ? '100vw' : 'min(780px, calc(100vw - 40px))',
+            height: fillsPluginWindow ? '100vh' : 'min(680px, calc(100vh - 48px))',
+            maxHeight: fillsPluginWindow ? '100vh' : 'min(680px, calc(100vh - 48px))',
             background: 'var(--panel, var(--bg-surface, #ffffff))',
             border: '1px solid var(--border, var(--color-border-secondary))',
-            borderRadius: '14px',
+            borderRadius: fillsPluginWindow ? 0 : '14px',
             boxShadow: 'var(--shadow-panel, 0 20px 50px -12px rgba(18, 22, 28, 0.22), 0 0 0 1px rgba(18, 22, 28, 0.06))',
             outline: 'none',
           }}
         >
           <PluginSettingsContent
-            pluginId={target.pluginId}
-            source={target.source}
+            pluginId={activeTarget.pluginId}
+            source={activeTarget.source}
             locale={locale}
             onClose={closeSettingsDialog}
             titleId={titleId}
@@ -180,6 +199,8 @@ function SettingsDialogBody({
   const storedRecord = usePluginSettingsStore((s) => s.pluginSettings[source][pluginId])
   const pluginPermissionVersion = usePluginPermissionStore((s) => s.version)
   const [settingsModalTarget, setSettingsModalTarget] = useState<ResolvedPluginSettingsModal<unknown> | null>(null)
+  const [renderedSettingsModalTarget, setRenderedSettingsModalTarget] = useState<ResolvedPluginSettingsModal<unknown> | null>(null)
+  const [isSettingsModalClosing, setIsSettingsModalClosing] = useState(false)
   void pluginPermissionVersion
 
   const currentVersion = contribution.version ?? 1
@@ -277,9 +298,25 @@ function SettingsDialogBody({
   }, [])
 
   const SettingsComponent = contribution.component
-  const SettingsModalComponent = settingsModalTarget?.modal.component
-  const settingsModalTitle = settingsModalTarget
-    ? settingsModalTarget.modal.titleI18n?.[locale] ?? settingsModalTarget.modal.title
+  useEffect(() => {
+    if (settingsModalTarget) {
+      setRenderedSettingsModalTarget(settingsModalTarget)
+      setIsSettingsModalClosing(false)
+      return
+    }
+    if (!renderedSettingsModalTarget) return
+    setIsSettingsModalClosing(true)
+    const timer = window.setTimeout(() => {
+      setRenderedSettingsModalTarget(null)
+      setIsSettingsModalClosing(false)
+    }, 90)
+    return () => window.clearTimeout(timer)
+  }, [renderedSettingsModalTarget, settingsModalTarget])
+
+  const activeSettingsModalTarget = settingsModalTarget ?? renderedSettingsModalTarget
+  const SettingsModalComponent = activeSettingsModalTarget?.modal.component
+  const settingsModalTitle = activeSettingsModalTarget
+    ? activeSettingsModalTarget.modal.titleI18n?.[locale] ?? activeSettingsModalTarget.modal.title
     : ''
   const settingsModalTitleId = 'plugin-settings-modal-title'
 
@@ -352,6 +389,7 @@ function SettingsDialogBody({
             <PluginSettingsSchemaRenderer
               schema={contribution.schema}
               locale={locale}
+              translateText={pluginT}
               value={value}
               updateValue={updateValue}
               onOpenModal={(field) => setSettingsModalTarget(resolvePluginSettingsModal(contribution, field))}
@@ -365,14 +403,14 @@ function SettingsDialogBody({
         </SettingsErrorBoundary>
       </div>
 
-      {settingsModalTarget && SettingsModalComponent && (
-        <Dialog.Root open onOpenChange={(open) => { if (!open) setSettingsModalTarget(null) }}>
+      {activeSettingsModalTarget && SettingsModalComponent && (
+        <Dialog.Root open onOpenChange={(open) => { if (!open && !isSettingsModalClosing) setSettingsModalTarget(null) }}>
           <Dialog.Portal>
-            <Dialog.Backdrop className="fixed inset-0 bg-black/40 z-[1210]" />
+            <Dialog.Backdrop className={`plugin-settings-modal-backdrop fixed inset-0 bg-black/40 z-[1210]${isSettingsModalClosing ? ' is-closing' : ''}`} />
             <Dialog.Popup
               aria-labelledby={settingsModalTitleId}
               initialFocus={() => document.querySelector<HTMLElement>('[data-settings-modal-close]')}
-              className="fixed left-1/2 top-1/2 z-[1211] -translate-x-1/2 -translate-y-1/2 flex max-h-[calc(100%-48px)] w-[min(520px,calc(100%-48px))] flex-col overflow-hidden rounded-lg anim-dropdown"
+              className={`plugin-settings-modal-panel fixed left-1/2 top-1/2 z-[1211] -translate-x-1/2 -translate-y-1/2 flex max-h-[calc(100%-48px)] w-[min(520px,calc(100%-48px))] flex-col overflow-hidden rounded-lg${isSettingsModalClosing ? ' is-closing' : ''}`}
               style={{
                 background: 'var(--panel, var(--bg-surface, #ffffff))',
                 border: 'var(--hairline) solid var(--color-border-secondary)',
@@ -401,7 +439,8 @@ function SettingsDialogBody({
                 <SettingsErrorBoundary fallback={errorFallback}>
                   <SettingsModalComponent
                     {...settingsBodyProps}
-                    modalId={settingsModalTarget.modal.id}
+                    modalId={activeSettingsModalTarget.modal.id}
+                    context={activeSettingsModalTarget.field.context}
                     close={() => setSettingsModalTarget(null)}
                   />
                 </SettingsErrorBoundary>

@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import { getPluginHostSdk, type PanelPropsV2, type PluginSurfaceProps } from '@hiven/plugin'
+import { IconButton } from '@hiven/plugin-ui'
+import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
 
 type MatchResult = {
   index: number
@@ -60,8 +62,8 @@ export function RegexTesterPluginPanel({ host, paneId }: PanelPropsV2<unknown>) 
 
       <div className="flex-1 overflow-auto px-3 py-1.5">
         {result.error && (
-          <div className="text-[11px] py-1" style={{ color: 'var(--color-error-text)' }}>
-            {result.error}
+          <div role="alert" className="text-[11px] py-1" style={{ color: 'var(--color-error-text)' }}>
+            {t('error.invalid')}
           </div>
         )}
         {!result.error && result.matches.length > 0 && (
@@ -100,20 +102,24 @@ export function RegexTesterPluginPanel({ host, paneId }: PanelPropsV2<unknown>) 
 }
 
 export function RegexTesterSurface(props: PluginSurfaceProps) {
-  const { host } = props
+  const { host, t } = props
   const [pattern, setPattern] = useState('[a-z]+')
   const [flags, setFlags] = useState('g')
   const [sourceText, setSourceText] = useState(props.initialText ?? 'hello 123\nworld 456')
   const result = useMemo(() => evaluateRegex(pattern, flags, sourceText), [flags, pattern, sourceText])
 
   return (
-    <section className="regex-tester-surface" aria-label="Regex Tester">
+    <section className="regex-tester-surface" aria-label={t('surface.title')}>
       <header className="regex-tester-surface__header">
-        <div>
-          <strong>Regex Tester</strong>
-          <span>Pattern, flags and sample text</span>
-        </div>
-        <button type="button" onClick={() => host.close()}>Close</button>
+        <IconButton type="button" label={t('surface.back')} onClick={() => host.requestBack()}>
+          <BackIcon size={14} strokeWidth={2} />
+        </IconButton>
+        <strong>{t('surface.title')}</strong>
+        <span>{t('surface.subtitle')}</span>
+        <div className="regex-tester-surface__header-spacer" />
+        <IconButton type="button" label={t('surface.close')} onClick={() => host.close()}>
+          <CloseIcon size={14} strokeWidth={2} />
+        </IconButton>
       </header>
 
       <div className="regex-tester-surface__pattern">
@@ -121,7 +127,7 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
         <input
           value={pattern}
           onChange={(event) => setPattern(event.target.value)}
-          placeholder="pattern"
+          placeholder={t('panel.regex.pattern')}
           spellCheck={false}
           autoFocus
         />
@@ -137,24 +143,26 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
 
       <div className="regex-tester-surface__body">
         <label className="regex-tester-surface__pane">
-          <span>Sample text</span>
+          <span>{t('surface.sampleText')}</span>
           <textarea value={sourceText} onChange={(event) => setSourceText(event.target.value)} spellCheck={false} />
         </label>
         <div className="regex-tester-surface__pane">
-          <span>Matches</span>
+          <span>{t('surface.matches')}</span>
           <div className="regex-tester-surface__matches">
-            {result.error && <div className="regex-tester-surface__error">{result.error}</div>}
+            {result.error && <div role="alert" className="regex-tester-surface__error">{t('error.invalid')}</div>}
             {!result.error && result.matches.length === 0 && (
-              <div className="regex-tester-surface__empty">{pattern ? 'No matches' : 'Enter a pattern'}</div>
+              <div className="regex-tester-surface__empty">{pattern ? t('panel.regex.noMatches') : t('surface.enterPattern')}</div>
             )}
             {!result.error && result.matches.length > 0 && (
               <>
-                <div className="regex-tester-surface__summary">{result.matches.length} match{result.matches.length === 1 ? '' : 'es'}</div>
+                <div className="regex-tester-surface__summary">
+                  {t(result.matches.length === 1 ? 'panel.regex.match' : 'panel.regex.matches', { count: result.matches.length })}
+                </div>
                 {result.matches.slice(0, 100).map((match, index) => (
                   <div key={`${match.index}:${index}`} className="regex-tester-surface__match">
                     <span>{match.line}:{match.col}</span>
                     <code>{match.text}</code>
-                    {match.groups.length > 0 && <em>{match.groups.map((group) => group || 'empty').join(', ')}</em>}
+                    {match.groups.length > 0 && <em>{match.groups.map((group) => group || t('surface.emptyGroup')).join(', ')}</em>}
                   </div>
                 ))}
               </>

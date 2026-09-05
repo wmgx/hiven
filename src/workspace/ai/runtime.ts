@@ -2,7 +2,9 @@ import { invoke } from '@tauri-apps/api/core'
 import { useAppStore } from '../../store'
 import { requirePluginPermissions } from '../pluginPermissions'
 import type { PluginPermissionSnapshot } from '../pluginTypes'
+import { measureLatency } from '../telemetry'
 import { codexChatGptProvider } from './codexProvider'
+import { xaiGrokProvider } from './xaiProvider'
 import type {
   AiEvent,
   AiProviderAdapter,
@@ -15,31 +17,78 @@ import type {
   PluginAiApi,
 } from './types'
 
-const providers = new Map<string, AiProviderAdapter>([[codexChatGptProvider.id, codexChatGptProvider]])
+const providers = new Map<string, AiProviderAdapter>([
+  [codexChatGptProvider.id, codexChatGptProvider],
+  [xaiGrokProvider.id, xaiGrokProvider],
+])
 const activeRuns = new Map<string, string>()
 const BROWSER_USAGE_KEY = 'hiven-ai-usage'
+const PROVIDER_TIMEOUT_MS = 10_000
+const PROVIDER_CACHE_MS = 60_000
+const providerCache = new Map<string, { value: AiProviderDescriptor; cachedAt: number }>()
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('AI_PROVIDER_TIMEOUT')), ms)
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value) },
+      (error) => { clearTimeout(timer); reject(error) },
+    )
+  })
+}
+
+function invalidateProvider(providerId: string): void {
+  providerCache.delete(providerId)
+}
 
 export function registerAiProvider(provider: AiProviderAdapter): () => void {
   providers.set(provider.id, provider)
   return () => providers.delete(provider.id)
 }
 
-async function describeProviders(): Promise<AiProviderDescriptor[]> {
+async function describeProviders(
+  onProvider?: (provider: AiProviderDescriptor, completed: number, total: number, index: number) => void,
+  onlyProviderId?: string,
+): Promise<AiProviderDescriptor[]> {
   const settings = useAppStore.getState().settings
-  const descriptions = await Promise.all([...providers.values()].map(async (provider) => {
+  const adapters = [...providers.values()].filter((provider) => !onlyProviderId || provider.id === onlyProviderId)
+  let completed = 0
+  const descriptions = await Promise.all(adapters.map(async (provider, index) => {
+    const cached = providerCache.get(provider.id)
+    if (cached && Date.now() - cached.cachedAt < PROVIDER_CACHE_MS) onProvider?.(cached.value, completed, adapters.length, index)
+    let description: AiProviderDescriptor
+    let partialDescription: AiProviderDescriptor | undefined
     try {
-      return await provider.describe()
+      const publish = (partial: Omit<AiProviderDescriptor, 'isDefault'>) => {
+        const value = { ...partial, isDefault: false }
+        partialDescription = value
+        providerCache.set(provider.id, { value, cachedAt: Date.now() })
+        onProvider?.(value, completed, adapters.length, index)
+      }
+      description = {
+        ...await withTimeout(measureLatency(
+          'latency:ai.provider.describe',
+          () => provider.describe(publish),
+          { providerId: provider.id },
+        ), PROVIDER_TIMEOUT_MS),
+        isDefault: false,
+      }
     } catch (error) {
-      return {
+      description = partialDescription ?? {
         id: provider.id,
         kind: provider.id,
         name: provider.id,
         status: 'unavailable' as const,
-        statusMessage: error instanceof Error ? error.message : String(error),
+        statusMessage: error instanceof Error && error.message !== 'AI_PROVIDER_TIMEOUT' ? error.message : undefined,
         capabilities: [],
         agents: [],
+        isDefault: false,
       }
     }
+    providerCache.set(provider.id, { value: description, cachedAt: Date.now() })
+    completed += 1
+    onProvider?.(description, completed, adapters.length, index)
+    return description
   }))
   const effectiveDefault = descriptions.find((item) => item.id === settings.aiDefaultProviderId && item.status === 'ready')
     ?? descriptions.find((item) => item.status === 'ready')
@@ -243,6 +292,7 @@ export function createPluginAi(
 export async function loginAiProvider(providerId: string): Promise<{ url?: string; verificationCode?: string }> {
   const adapter = providers.get(providerId)
   if (!adapter?.login) throw new Error('This provider does not support login')
+  invalidateProvider(providerId)
   return adapter.login()
 }
 
@@ -250,8 +300,19 @@ export async function logoutAiProvider(providerId: string): Promise<void> {
   const adapter = providers.get(providerId)
   if (!adapter?.logout) throw new Error('This provider does not support logout')
   await adapter.logout()
+  invalidateProvider(providerId)
 }
 
-export async function listAiProviders(): Promise<AiProviderDescriptor[]> {
-  return describeProviders()
+export async function listAiProviders(
+  onProvider?: (provider: AiProviderDescriptor, completed: number, total: number, index: number) => void,
+): Promise<AiProviderDescriptor[]> {
+  return describeProviders(onProvider)
+}
+
+export async function refreshAiProvider(
+  providerId: string,
+  onProvider?: (provider: AiProviderDescriptor, completed: number, total: number, index: number) => void,
+): Promise<AiProviderDescriptor | undefined> {
+  invalidateProvider(providerId)
+  return (await describeProviders(onProvider, providerId))[0]
 }

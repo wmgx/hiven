@@ -51,8 +51,6 @@ export async function getDesktopBridgeLauncherDynamicItems(ctx: {
   signal?: AbortSignal
 }): Promise<LauncherItem[]> {
   if (ctx.surfaceId !== 'global-launcher') return []
-  // Empty open: no tabs (design empty-search = 0 for bridge sources).
-  if (!ctx.query.trim()) return []
   if (ctx.signal?.aborted) return []
 
   const startedAt = launcherPerfNow()

@@ -191,6 +191,7 @@ for (const id of [
 }
 
 for (const tool of rndTools) {
+  assert.equal(tool.inputPolicy, undefined, `${tool.id} should quick-run without asking for unrelated source text`)
   if (tool.params) {
     for (const p of tool.params) {
       assert.notEqual(p.default, undefined, `${tool.id} param ${p.key} should have default`)

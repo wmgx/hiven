@@ -146,34 +146,6 @@
   background: var(--surface);
 }
 
-.translate-surface__menu {
-  position: fixed;
-  z-index: 30;
-  min-width: 148px;
-  padding: 4px;
-  border: 1px solid var(--border-2);
-  border-radius: 8px;
-  background: var(--panel);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
-}
-
-.translate-surface__menu button {
-  display: block;
-  width: 100%;
-  border: 0;
-  border-radius: 6px;
-  padding: 7px 10px;
-  background: transparent;
-  color: var(--text);
-  font-size: 12.5px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.translate-surface__menu button:hover {
-  background: var(--surface);
-}
-
 .translate-surface__controls {
   height: 46px;
   flex: 0 0 auto;
@@ -209,10 +181,15 @@
   height: 31px;
 }
 
-.translate-surface .translate-select .schema-select-trigger {
+.translate-select .hiven-ui-select {
+  width: 100%;
+}
+
+.translate-surface .translate-select .hiven-ui-select-trigger {
   width: 100%;
   min-width: 0;
   height: 31px;
+  min-height: 31px;
 }
 
 .translate-select__value {
@@ -304,23 +281,25 @@
 
 .translate-output {
   flex: 1;
+  width: 100%;
   min-height: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  resize: none;
   overflow-y: auto;
   color: var(--text);
+  background: transparent;
+  font: inherit;
   font-size: 15px;
   line-height: 1.62;
-  white-space: pre-wrap;
-  word-break: break-word;
-  user-select: text;
-  -webkit-user-select: text;
 }
 
-.translate-output::selection,
-.translate-output ::selection {
+.translate-output::selection {
   background: var(--accent-soft);
 }
 
-.translate-output.is-empty,
+.translate-output::placeholder,
 .translate-output.is-stale {
   color: var(--text-3);
 }
@@ -457,9 +436,38 @@
   50% { opacity: 1; }
 }
 
+.translate-ai-settings-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px;
+}
+
+.translate-ai-settings-skeleton__field span,
+.translate-ai-settings-skeleton__field div {
+  display: block;
+  background: color-mix(in srgb, var(--text-2) 14%, transparent);
+  animation: translate-pulse 1.2s ease-in-out infinite;
+}
+
+.translate-ai-settings-skeleton__field span {
+  width: 92px;
+  height: 10px;
+  margin-bottom: 7px;
+  border-radius: 5px;
+}
+
+.translate-ai-settings-skeleton__field div {
+  width: 100%;
+  height: 30px;
+  border-radius: 7px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .translate-status__spin,
-  .translate-status[data-state="waiting"] .translate-status__dot {
+  .translate-status[data-state="waiting"] .translate-status__dot,
+  .translate-ai-settings-skeleton__field span,
+  .translate-ai-settings-skeleton__field div {
     animation: none;
   }
 }
@@ -476,5 +484,32 @@
 
   .translate-select {
     width: 150px !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .translate-surface__controls {
+    height: auto;
+    min-height: 46px;
+    flex-wrap: wrap;
+    padding-block: 7px;
+  }
+
+  .translate-pair {
+    width: 100%;
+  }
+
+  .translate-pair .translate-select,
+  .translate-surface__controls > .translate-select {
+    flex: 1;
+    width: auto !important;
+  }
+
+  .translate-surface__controls > .grow {
+    display: none;
+  }
+
+  .translate-controls-label {
+    margin-left: auto;
   }
 }

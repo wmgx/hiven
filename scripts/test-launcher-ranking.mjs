@@ -101,6 +101,8 @@ function item(systemKey, title, opts = {}) {
     },
     behavior: { type: 'perform' },
     staticPriority: opts.staticPriority,
+    directAnswer: opts.directAnswer,
+    accepts: opts.accepts,
     ranking: opts.ranking,
     legacyUsageKeys: opts.legacyUsageKeys,
     execute: () => ({ ok: true }),
@@ -346,5 +348,46 @@ const rankedMany = ranking.rankLauncherItems(
   many,
 )
 assert.ok(rankedMany.length <= 16, 'empty-open ranked list is capped')
+
+// --- 14. Product rank bands beat additive score gaps ---
+const timestampAnswer = item('plugin:date-time:dynamic:answer', '2024-03-10 00:00:00', {
+  kind: 'dynamic',
+  directAnswer: { priority: 30, origin: 'builtin' },
+})
+const timestampTool = item('plugin:date-time:launcher:timestamp', 'Convert Timestamp', {
+  accepts: { kinds: ['timestamp'] },
+})
+const rankedTimestamp = ranking.rankLauncherItems(
+  {
+    query: '',
+    contentText: '1710000000',
+    detections: [{ kind: 'timestamp', confidence: 0.95, normalized: '1710000000' }],
+    locale: 'en',
+    surfaceId: 'global-launcher',
+    usage: usage.emptyUsageBySurface(),
+    now,
+  },
+  [timestampTool, timestampAnswer],
+)
+assert.equal(
+  rankedTimestamp[0].systemKey,
+  timestampAnswer.systemKey,
+  'an automatic direct answer ranks above the stronger-scoring generic tool',
+)
+
+const liveTab = item('browser.chromium:tab:live', 'Docs workspace', { kind: 'host' })
+const historyHit = item('browser.chromium:document:history', 'Docs', {
+  kind: 'host',
+  ranking: { fallback: true },
+})
+const rankedBrowser = ranking.rankLauncherItems(
+  { query: 'docs', locale: 'en', surfaceId: 'global-launcher', usage: usage.emptyUsageBySurface(), now },
+  [historyHit, liveTab],
+)
+assert.equal(
+  rankedBrowser[0].systemKey,
+  liveTab.systemKey,
+  'a live tab ranks above a stronger text match from browser history',
+)
 
 console.log('✓ test-launcher-ranking passed')

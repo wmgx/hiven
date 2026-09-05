@@ -10,5 +10,6 @@
   "xml.prettify.title": "XML 格式化",
   "xml.prettify.description": "美化 XML（缩进换行）",
   "xml.compact.title": "XML 压缩",
-  "xml.compact.description": "压缩 XML（去空白）"
+  "xml.compact.description": "压缩 XML（去空白）",
+  "error.format": "格式化失败：{message}"
 }

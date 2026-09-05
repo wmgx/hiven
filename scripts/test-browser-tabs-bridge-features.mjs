@@ -75,6 +75,7 @@ const connectionModal = read('src/plugins/web-open/settings/BrowserTabsConnectio
 assert.match(connectionModal, /historyEnabled/)
 assert.match(connectionModal, /autoCloseIdleTabs/)
 assert.match(connectionModal, /IDLE_TIMEOUT_PRESET_MINUTES/)
+assert.match(connectionModal, /HISTORY_SEARCH_DAY_OPTIONS/)
 
 function loadTs(path) {
   const src = readFileSync(path, 'utf8').replace(/import\s+type\s*\{[\s\S]*?\}\s*from\s*'[^']*'\s*;?\s*\n?/g, '')
@@ -90,10 +91,15 @@ const model = loadTs(join(root, 'src/plugins/web-open/browserTabsModel.ts'))
 const defaults = model.normalizeBrowserTabsSettings(undefined)
 assert.equal(defaults.enabled, true)
 assert.equal(defaults.historyEnabled, true)
+assert.equal(defaults.historySearchDays, 5)
 assert.equal(defaults.autoCloseIdleTabs, false)
 assert.equal(defaults.idleTimeoutMinutes, 60)
 assert.equal(model.normalizeBrowserTabsSettings({ enabled: false }).enabled, false)
 assert.equal(model.normalizeBrowserTabsSettings({ historyEnabled: false }).historyEnabled, false)
+assert.equal(model.normalizeBrowserTabsSettings({ historySearchDays: 30 }).historySearchDays, 30)
+assert.equal(model.normalizeBrowserTabsSettings({ historySearchDays: 'all' }).historySearchDays, 'all')
+assert.equal(model.normalizeBrowserTabsSettings({ historySearchDays: 10 }).historySearchDays, 5)
+assert.deepEqual([...model.HISTORY_SEARCH_DAY_OPTIONS], [3, 5, 7, 30, 60, 90, 365, 'all'])
 assert.equal(model.normalizeBrowserTabsSettings({ autoCloseIdleTabs: true }).autoCloseIdleTabs, true)
 assert.equal(model.clampIdleTimeoutMinutes(1), 5)
 assert.equal(model.clampIdleTimeoutMinutes(99999), 99999)
@@ -111,6 +117,9 @@ for (const key of [
   'settings.history',
   'settings.historyHelp',
   'settings.historyToggle',
+  'settings.historySearchRange',
+  'settings.historySearchRange.days',
+  'settings.historySearchRange.all',
   'settings.idle',
   'settings.idleHelp',
   'settings.idleToggle',

@@ -1,0 +1,302 @@
+.text-explode-surface {
+  --panel: var(--bg-surface, var(--hiven-color-bg-primary));
+  --surface: var(--bg-surface-2, var(--hiven-color-bg-secondary));
+  --surface-2: var(--hiven-color-bg-tertiary);
+  --border: var(--color-border-tertiary, var(--hiven-color-border));
+  --text: var(--hiven-color-text-primary);
+  --text-2: var(--hiven-color-text-secondary);
+  --text-3: var(--hiven-color-text-tertiary);
+  --accent: var(--hiven-color-accent);
+  --accent-soft: var(--color-accent-bg, color-mix(in srgb, var(--hiven-color-accent) 14%, transparent));
+  --radius: 10px;
+  --radius-sm: 7px;
+
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 13px;
+  font-family: var(--font, var(--font-sans));
+}
+
+/*
+ * Reuses the real launcher search row (.l-search, global CSS) for the outer
+ * chrome, but the command itself renders as the established blue command
+ * token (see launcher-token-interaction-direction) with the query continuing
+ * inline — same "token + input" row every other command uses, base64 included.
+ */
+.tx-search-row {
+  flex: 0 0 auto;
+}
+
+.tx-search-row input {
+  font-size: 15px;
+}
+
+.tx-token {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  height: 27px;
+  padding: 0 6px 0 9px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
+.tx-token-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 4px;
+  padding: 0;
+  background: transparent;
+  color: currentColor;
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+.tx-token-remove:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.tx-chrome-btn {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  color: var(--text-2);
+}
+
+/* ─── empty state (before any text) ─── */
+
+.tx-empty {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 28px 20px;
+  color: var(--text-3);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+/* ─── explosion canvas ───
+ * Grows with content, not flex:1 — a one-line explode shouldn't force the
+ * launcher panel to stretch to full height. Caps out and scrolls internally
+ * once there's enough chips to matter (~9 rows).
+ */
+
+.tx-canvas {
+  position: relative;
+  flex: none;
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 9px 8px;
+  padding: 16px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Sits above the chips (z-index beats the implicit z-index:0 stacking contexts
+ * the chips get from their burst `transform`), so the fill has to stay
+ * translucent — an opaque tint would hide the very chips it is selecting. */
+.tx-rubber {
+  position: absolute;
+  z-index: 5;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  pointer-events: none;
+}
+
+.tx-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--text) 16%, transparent);
+  cursor: pointer;
+  white-space: nowrap;
+  transform-origin: center;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.4s ease,
+    box-shadow 0.12s, background 0.14s, color 0.14s, border-color 0.14s;
+}
+
+.tx-chip:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.tx-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.tx-chip.tx-chip-punct,
+.tx-chip.tx-chip-url-punct {
+  height: 22px;
+  padding: 0 6px;
+  font-size: 12px;
+  color: var(--text-3);
+  background: transparent;
+  border-color: transparent;
+}
+
+.tx-chip.tx-chip-url-origin {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: transparent;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12px;
+}
+
+.tx-chip.tx-chip-url-seg,
+.tx-chip.tx-chip-url-key,
+.tx-chip.tx-chip-url-val {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12px;
+}
+
+.tx-chip.is-selected {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.tx-chip.tx-chip-punct.is-selected,
+.tx-chip.tx-chip-url-punct.is-selected {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 5px;
+}
+
+/* Shift+drag toggle preview: an already-selected chip caught in the marquee
+ * reads as "about to be removed" instead of staying in its solid selected
+ * look, so the drag preview never lies about what release will do. */
+.tx-chip.is-pending-remove {
+  color: var(--text-3);
+  background: var(--surface);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  border-style: dashed;
+  opacity: 0.6;
+}
+
+.tx-canvas:not(.is-exploded) .tx-chip {
+  opacity: 0;
+  transform: translate(var(--dx, 0px), var(--dy, 0px)) rotate(var(--rot, 0deg)) scale(0.42);
+}
+
+.tx-canvas.is-exploded .tx-chip {
+  opacity: 1;
+  transform: translate(0, 0) rotate(0deg) scale(1);
+}
+
+.tx-gap {
+  flex: none;
+  width: 8px;
+}
+
+.tx-brk {
+  flex-basis: 100%;
+  height: 0;
+}
+
+.tx-url-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 11px;
+  border: 1px dashed var(--accent);
+  opacity: 0.55;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: opacity 0.14s, background 0.14s;
+}
+
+.tx-url-group:hover {
+  opacity: 0.9;
+}
+
+.tx-url-group.is-all-selected {
+  opacity: 1;
+  background: var(--accent-soft);
+}
+
+/* ─── preview well ─── */
+
+.tx-preview {
+  flex: 0 0 auto;
+  margin: 0 14px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.tx-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px 0;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.tx-preview-body {
+  padding: 6px 12px 11px;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+  word-break: break-all;
+  min-height: 20px;
+}
+
+.tx-preview-empty {
+  color: var(--text-3);
+  font-family: var(--font, var(--font-sans));
+  font-size: 12px;
+}
+
+/* ─── footer ─── */
+
+.tx-footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 14px;
+}
+
+.tx-footer-hint {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 11.5px;
+}

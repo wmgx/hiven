@@ -30,7 +30,7 @@ export const jsFilterPlugin = definePlugin({
           icon: 'Code',
           aliases: ['json-expression', 'jq', 'json-filter', 'expression'],
         },
-        surfaces: ['command-palette'],
+        surfaces: ['editor-command-bar', 'quick-editor-command'],
         execute(ctx) {
           const paneId = ctx.api.getPaneSnapshot().activePaneId
           const result = ctx.api.dispatchEffects(ctx.api.isPanePanelOpen(PANEL_ID)

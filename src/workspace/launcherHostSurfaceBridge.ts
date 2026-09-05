@@ -1,5 +1,6 @@
 import { useAppStore, type LauncherHostSurfaceTarget } from '../store'
 import { usePluginSettingsStore, type PluginSettingsSource } from './pluginSettingsStore'
+import { isNativeDesktopRuntime } from './webNativeBridge'
 import { showLauncherWindow } from './windowManager/launcherWindow'
 import { LAUNCHER_WINDOW_LABEL } from './windowManager/windowLabels'
 
@@ -28,7 +29,7 @@ export async function requestOpenLauncherPluginSettingsSurface(source: PluginSet
 export async function requestOpenLauncherHostSurfaceRequest(request: LauncherHostSurfaceOpenRequest): Promise<void> {
   writePendingLauncherHostSurfaceOpen(request)
 
-  if (!isTauriRuntime()) {
+  if (!isNativeDesktopRuntime()) {
     openLauncherHostSurfaceRequestLocally(request)
     return
   }
@@ -118,8 +119,4 @@ function writePendingLauncherHostSurfaceOpen(request: LauncherHostSurfaceOpenReq
 
 function isPluginSettingsSource(value: unknown): value is PluginSettingsSource {
   return value === 'builtin' || value === 'installed' || value === 'dev'
-}
-
-function isTauriRuntime(): boolean {
-  return Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
 }

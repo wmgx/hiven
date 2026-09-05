@@ -33,5 +33,6 @@
   "error.range": "Max must be greater than or equal to min",
   "error.length": "Length must be a positive integer (1–1024)",
   "error.count": "Count must be a positive integer (1–100)",
-  "error.bytes": "Bytes must be a positive integer (1–1024)"
+  "error.bytes": "Bytes must be a positive integer (1–1024)",
+  "error.generate": "Generation failed: {message}"
 }

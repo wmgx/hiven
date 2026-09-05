@@ -2,7 +2,7 @@
   "pluginId": "snippets",
   "displayName": "Snippets",
   "displayNameI18n": { "zh": "文本片段" },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "capabilities": ["command"],
   "permissions": ["clipboard.read", "clipboard.write"]
 }

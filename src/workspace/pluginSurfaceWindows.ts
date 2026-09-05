@@ -4,6 +4,7 @@ import { markSurfaceInstanceState, upsertSurfaceInstance } from '../surfaces/reg
 import { suppressStandaloneLauncherBlur } from './launcherBlurGuard'
 import type { PluginSurfaceOpenTarget } from '../store'
 import type { PluginDefinition, PluginSurfaceShortcutPresentation, PluginUiSurfaceContribution } from './pluginTypes'
+import { isNativeDesktopRuntime } from './webNativeBridge'
 
 type WindowSurfaceEntry = NonNullable<PluginUiSurfaceContribution['entry']> & {
   shortcutPresentation?: PluginSurfaceShortcutPresentation
@@ -28,7 +29,7 @@ export function getPluginSurfaceShortcutPresentation(target: PluginSurfaceOpenTa
 }
 
 export async function requestOpenPluginSurfaceWindow(target: PluginSurfaceOpenTarget): Promise<void> {
-  if (!isTauriRuntime()) return
+  if (!isNativeDesktopRuntime()) return
 
   const surface = resolvePluginSurface(target)
   const shell = surface?.shell
@@ -76,7 +77,7 @@ export async function requestOpenPluginSurfaceWindow(target: PluginSurfaceOpenTa
 }
 
 export async function requestHidePluginSurfaceWindow(target: PluginSurfaceOpenTarget): Promise<void> {
-  if (!isTauriRuntime()) return
+  if (!isNativeDesktopRuntime()) return
 
   const surface = resolvePluginSurface(target)
   const destroyTimeoutMs = surface?.shell?.destroyTimeout ?? DEFAULT_DESTROY_TIMEOUT_MS
@@ -101,8 +102,4 @@ export function pluginSurfaceWindowLabel(target: PluginSurfaceOpenTarget): strin
 function resolvePluginSurface(target: PluginSurfaceOpenTarget): WindowCapableSurface | null {
   const def = pluginRegistry.getPluginDefinition(target.pluginId, target.source) as PluginDefinition<unknown> | undefined
   return (def?.ui?.surfaces?.find((surface) => surface.id === target.surfaceId) as WindowCapableSurface | undefined) ?? null
-}
-
-function isTauriRuntime(): boolean {
-  return Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
 }

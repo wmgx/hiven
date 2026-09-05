@@ -244,6 +244,7 @@ export type PluginSettingsBodyProps<TSettings = unknown> = {
 
 export type PluginSettingsModalBodyProps<TSettings = unknown> = PluginSettingsBodyProps<TSettings> & {
   modalId: string
+  context?: Record<string, unknown>
   close: () => void
 }
 
@@ -251,6 +252,7 @@ export type PluginSettingsHostApi = {
   permissions: PluginPermissionSnapshot
   storage: PluginPrivateStorageApi
   ai: PluginAiApi
+  t: (key: string, vars?: Record<string, string | number>) => string
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
 }
 
@@ -332,11 +334,15 @@ export type PluginSettingsObjectListItemField = {
   labelI18n?: Partial<Record<Locale, string>>
   description?: string
   descriptionI18n?: Partial<Record<Locale, string>>
-  kind: 'text' | 'textarea' | 'switch' | 'select' | 'string-list' | 'number'
+  kind: 'text' | 'textarea' | 'switch' | 'select' | 'string-list' | 'number' | 'modal'
   placeholder?: string
   placeholderI18n?: Partial<Record<Locale, string>>
   rows?: number
   options?: PluginSettingsOption[]
+  modalId?: string
+  buttonLabel?: string
+  buttonLabelI18n?: Partial<Record<Locale, string>>
+  requires?: PluginPermission[]
   mono?: boolean
   group?: string
   groupI18n?: Partial<Record<Locale, string>>
@@ -395,6 +401,7 @@ export type PluginSettingsModalField<TSettings = unknown> = Omit<PluginSettingsF
   buttonLabel?: string
   buttonLabelI18n?: Partial<Record<Locale, string>>
   component?: ComponentType<PluginSettingsModalBodyProps<TSettings>>
+  context?: Record<string, unknown>
 }
 
 export type PluginSettingsField<TSettings = unknown> =
@@ -651,6 +658,14 @@ export type PluginSurfaceShell = {
   rendersTitlebar?: boolean
   breadcrumbTitle?: string
   breadcrumbTitleI18n?: Partial<Record<Locale, string>>
+  /**
+   * Inline 'launcher' presentation only: treat defaultHeight as a max-height
+   * cap and let the surface shrink-wrap its own content, instead of the
+   * default behavior of always rendering a fixed-height box. Off by default
+   * because most existing surfaces rely on a definite ancestor height to
+   * stretch an internal flex:1 list/pane to fill it.
+   */
+  autoHeight?: boolean
 }
 
 /** Neutral input for returning a snapshot object into Global Launcher as Object Block. */
@@ -692,12 +707,20 @@ export type PluginSurfaceHostApi = {
   ai: PluginAiApi
 }
 
+export type PluginSurfaceAppearance = {
+  theme: 'dark' | 'light'
+  fontSize: number
+  lineNumbers: boolean
+  wordWrap: boolean
+}
+
 export type PluginSurfaceProps<TSettings = unknown> = {
   pluginId: string
   surfaceId: string
   locale: Locale
   t: (key: string, vars?: Record<string, string | number>) => string
   settings: TSettings
+  appearance: PluginSurfaceAppearance
   permissions: PluginPermissionSnapshot
   initialText?: string
   host: PluginSurfaceHostApi

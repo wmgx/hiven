@@ -3,8 +3,18 @@
  * (no workspace deep imports). Same protocol Feishu / editor adapters will use.
  */
 
-import { getPluginHostSdk, type DesktopTargetProvider } from '@hiven/plugin'
-import { searchableFieldsMatch, visitFrecency, visitFrecencyFromSummary } from '@hiven/plugin'
+import {
+  getPluginHostSdk,
+  type DesktopBridgeHistoryDto,
+  type DesktopBridgeTargetDto,
+  type DesktopTargetProvider,
+} from '@hiven/plugin'
+import {
+  classifyVisitPattern,
+  searchableFieldsMatch,
+  visitFrecency,
+  visitFrecencyFromSummary,
+} from '@hiven/plugin'
 import {
   DEFAULT_BROWSER_TABS_SETTINGS,
   normalizeBrowserTabsSettings,
@@ -21,29 +31,48 @@ const QUERY_HISTORY_LIMIT = 16
  * recommendation over web-open's generic direct-open.
  */
 const OPEN_TAB_FOCUS_BIAS = 200
-/** How many tabs the empty-open recommendation shows before it becomes a wall. */
-const EMPTY_OPEN_TAB_LIMIT = 6
+/** Thin history is not enough evidence to turn an open tab into a recommendation. */
+const EMPTY_OPEN_MIN_VISITS = 8
 /**
- * Bias for empty-open tabs that have real visit history behind them. Kept well
- * under OPEN_TAB_FOCUS_BIAS so an explicit "I copied this link" intent still
- * outranks a passive recommendation.
+ * Maximum frecency-derived bias for empty-open tabs. Kept well under
+ * OPEN_TAB_FOCUS_BIAS so explicit intent still outranks passive recommendations.
  */
-const EMPTY_OPEN_BASE_BIAS = 60
-/** Tabs we know nothing about: still shown (they're open), but after the rest. */
-const EMPTY_OPEN_UNRANKED_BIAS = 10
+const EMPTY_OPEN_MAX_BIAS = 60
 /**
- * History entries are a weaker signal than anything currently open — demote
- * them clearly below the open-tab biases above (which sit at 0..200) so a
- * closed page never crowds out a tab you can actually switch to.
+ * History entries are categorical fallbacks below live tabs. This bias only
+ * orders history against other same-band results.
  */
 const HISTORY_SCORE_BIAS = -160
 /**
  * Per-rank step subtracted from HISTORY_SCORE_BIAS as history entries get
  * older/rarer (see the frecency sort below). Keeps a stale entry from tying
  * with — let alone crowding out — a page visited yesterday, while the whole
- * history tier stays far under any open-tab bias even at QUERY_HISTORY_LIMIT.
+ * history list remains strictly ordered at QUERY_HISTORY_LIMIT.
  */
 const HISTORY_RANK_STEP_BIAS = 4
+
+let cachedBrowserTargets: DesktopBridgeTargetDto[] = []
+let cachedBrowserHistory: DesktopBridgeHistoryDto[] = []
+let cachedBrowserHealthy = false
+let historySearchDays: BrowserTabsSettings['historySearchDays'] = 5
+
+/** Refresh off the query path; launcher filtering reads these arrays only. */
+export async function refreshChromiumBrowserIndex(): Promise<void> {
+  const { bridge } = getPluginHostSdk().desktopTargets
+  try {
+    const [status, targets, history] = await Promise.all([
+      bridge.status(),
+      bridge.listTargets(CHROMIUM_SOURCE_ID),
+      bridge.listHistory(CHROMIUM_SOURCE_ID),
+    ])
+    cachedBrowserTargets = targets
+    cachedBrowserHistory = history
+    const source = status?.sources.find((item) => item.sourceId === CHROMIUM_SOURCE_ID)
+    cachedBrowserHealthy = Boolean(status?.running && (source?.fresh || (source?.historyCount ?? 0) > 0))
+  } catch {
+    // Keep the last usable index while the extension is disconnected.
+  }
+}
 
 function nativeIdFromTargetId(sourceId: string, kind: string, id: string): string {
   const prefix = `${sourceId}:${kind}:`
@@ -79,15 +108,12 @@ function compactHistoryUrl(rawUrl: string): string {
  * See visitFrecency in the host SDK for why one decay rate can't express both.
  *
  * Frequency data comes from browser history joined onto the open tabs by URL —
- * a tab carries no visit stats of its own. Tabs with no history match still
- * appear (they're open, that counts for something) but rank below known ones.
+ * a tab carries no visit stats of its own. Thin, stale, and unknown tabs remain
+ * searchable but do not become passive recommendations just because they're open.
  */
 async function buildEmptyOpenTargets() {
-  const { desktopTargets } = getPluginHostSdk()
-  const [tabs, history] = await Promise.all([
-    desktopTargets.bridge.listTargets(CHROMIUM_SOURCE_ID),
-    desktopTargets.bridge.listHistory(CHROMIUM_SOURCE_ID),
-  ])
+  const tabs = cachedBrowserTargets
+  const history = cachedBrowserHistory
   if (tabs.length === 0) return []
 
   const statsByUrl = new Map<
@@ -105,30 +131,35 @@ async function buildEmptyOpenTargets() {
   }
 
   const now = Date.now()
-  const scored = tabs.map((dto) => {
+  const scored = tabs.flatMap((dto) => {
     const key = dto.url ? normalizeUrlForMatch(dto.url) : null
     const stats = key ? statsByUrl.get(key) : undefined
+    if (!stats) return []
+
+    const visits = stats.visits.length > 0 ? stats.visits : undefined
+    const evidenceCount = visits?.length ?? stats.visitCount
+    const patternVisits = visits ?? (stats.lastVisitTime == null ? [] : [stats.lastVisitTime])
+    if (
+      evidenceCount < EMPTY_OPEN_MIN_VISITS ||
+      classifyVisitPattern(patternVisits, now) === 'stale'
+    ) return []
+
     // Real timestamps when the extension provides them — only they carry the
     // visit SPAN that separates a long-running habit from a finished sprint.
     // Older extensions send counts only, so fall back to the approximation.
-    const score = !stats
-      ? 0
-      : stats.visits.length > 0
-        ? visitFrecency(stats.visits, now)
-        : visitFrecencyFromSummary(stats.visitCount, stats.lastVisitTime, now)
-    return { dto, score }
+    const score = visits
+      ? visitFrecency(visits, now)
+      : visitFrecencyFromSummary(stats.visitCount, stats.lastVisitTime, now)
+    return [{ dto, score, visits }]
   })
   scored.sort((a, b) => b.score - a.score)
 
-  return scored.slice(0, EMPTY_OPEN_TAB_LIMIT).map(({ dto, score }, index) => {
+  return scored.map(({ dto, score, visits }) => {
     const favicon = isRenderableIconUrl(dto.faviconUrl) ? dto.faviconUrl : undefined
     const kind = dto.kind === 'document' ? 'document' : 'tab'
-    const key = dto.url ? normalizeUrlForMatch(dto.url) : null
-    const visits = key ? statsByUrl.get(key)?.visits : undefined
     return {
-      // Raw signal for the host: it decides both ordering and whether this looks
-      // like a habit worth keeping. No policy on this side.
-      visits: visits && visits.length > 0 ? visits : undefined,
+      // Raw timestamps still let the host decide whether this looks worth keeping.
+      visits,
       id: `${dto.sourceId}:${kind}:${dto.id}`,
       sourceId: dto.sourceId,
       kind: kind as 'tab' | 'document',
@@ -144,10 +175,9 @@ async function buildEmptyOpenTargets() {
       },
       icon: favicon ?? 'Globe',
       actionClass: 'focus' as const,
-      // Rank within our own slice; the host clamps this to ±500. Descending by
-      // position keeps our frecency order intact after host-side merging, while
-      // staying below the copied-link focus bias so an explicit intent wins.
-      scoreBias: score > 0 ? EMPTY_OPEN_BASE_BIAS - index : EMPTY_OPEN_UNRANKED_BIAS - index,
+      // Use the actual visits/day score as a bounded cross-source nudge: strength,
+      // not a fixed tab position, decides whether apps and tabs interleave.
+      scoreBias: Math.min(EMPTY_OPEN_MAX_BIAS, score),
       kindLabelI18n: { en: 'Browser tab', zh: '浏览器标签页' },
     }
   })
@@ -160,18 +190,9 @@ export function createChromiumTabsProvider(): DesktopTargetProvider {
     titleI18n: { en: 'Browser Tabs', zh: '浏览器标签' },
     priority: 10,
     async health() {
-      try {
-        const { desktopTargets } = getPluginHostSdk()
-        const status = await desktopTargets.bridge.status()
-        if (!status?.running) return { ok: false, reason: 'bridge not running' }
-        const src = status.sources.find((s) => s.sourceId === CHROMIUM_SOURCE_ID)
-        if (!src?.fresh && (src?.historyCount ?? 0) === 0) {
-          return { ok: false, reason: 'extension not connected' }
-        }
-        return { ok: true }
-      } catch {
-        return { ok: false, reason: 'bridge unavailable' }
-      }
+      return cachedBrowserHealthy
+        ? { ok: true }
+        : { ok: false, reason: 'extension not connected' }
     },
     async list(ctx) {
       if (ctx.surfaceId !== 'global-launcher') return []
@@ -180,8 +201,7 @@ export function createChromiumTabsProvider(): DesktopTargetProvider {
       // actually use them (see buildEmptyOpenTargets).
       if (!q) return buildEmptyOpenTargets()
 
-      const { desktopTargets } = getPluginHostSdk()
-      const raw = await desktopTargets.bridge.listTargets(CHROMIUM_SOURCE_ID)
+      const raw = cachedBrowserTargets
       // When the query is a link already open in the browser, focus that tab
       // (primary) instead of opening a duplicate. Precise page identity, not a
       // fuzzy substring; the identity hit is kept + surfaced first regardless of
@@ -233,7 +253,12 @@ export function createChromiumTabsProvider(): DesktopTargetProvider {
           }
         })
 
-      const history = await desktopTargets.bridge.listHistory(CHROMIUM_SOURCE_ID)
+      const history = historySearchDays === 'all'
+        ? cachedBrowserHistory
+        : cachedBrowserHistory.filter((item) =>
+            item.lastVisitTime == null ||
+            item.lastVisitTime >= Date.now() - historySearchDays * 24 * 60 * 60 * 1000,
+          )
       // A page already open in a tab shouldn't also show as "history" — the
       // tab above already represents it, ranked higher. Built from `ordered`
       // (every open tab that matched the query, not just the slice actually
@@ -309,6 +334,7 @@ export function createChromiumTabsProvider(): DesktopTargetProvider {
             actionClass: 'open' as const,
             persistable: true,
             persistKey: item.url,
+            fallback: true,
             scoreBias: HISTORY_SCORE_BIAS - index * HISTORY_RANK_STEP_BIAS,
             kindLabelI18n: { en: 'Browser history', zh: '浏览器历史' },
           }
@@ -336,6 +362,7 @@ export function createChromiumTabsProvider(): DesktopTargetProvider {
 
 export function registerChromiumTabsProvider(): void {
   getPluginHostSdk().desktopTargets.registerProvider(createChromiumTabsProvider())
+  void refreshChromiumBrowserIndex()
 }
 
 export function unregisterChromiumTabsProvider(): void {
@@ -344,6 +371,7 @@ export function unregisterChromiumTabsProvider(): void {
 
 export function pushChromiumBridgeConfig(settings: Partial<BrowserTabsSettings> | null | undefined): void {
   const next = normalizeBrowserTabsSettings(settings ?? DEFAULT_BROWSER_TABS_SETTINGS)
+  historySearchDays = next.historySearchDays
   void getPluginHostSdk().desktopTargets.bridge.setSourceConfig(CHROMIUM_SOURCE_ID, {
     historyEnabled: next.historyEnabled,
     autoCloseIdleTabs: next.autoCloseIdleTabs,

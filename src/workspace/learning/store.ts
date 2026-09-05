@@ -637,3 +637,24 @@ export async function purgeNumberSlotHistoryOnce(): Promise<void> {
     // fail-soft
   }
 }
+
+const URL_TEMPLATE_PURGE_FLAG = 'hiven:learning:purged-url-templates-v1'
+
+/** URL shape is not sufficient evidence of user intent; remove rules and source evidence. */
+export async function purgeUrlTemplateLearningOnce(): Promise<void> {
+  try {
+    if (localStorage.getItem(URL_TEMPLATE_PURGE_FLAG)) return
+  } catch {
+    return
+  }
+  const db = await openDb()
+  if (!db) return
+  await purgeMatchingCursor<LearnedRule>(db, STORE_RULES, (rule) => rule.transform.kind === 'url-template')
+  await purgeMatchingCursor<unknown>(db, STORE_NAV, () => true)
+  await purgeMatchingCursor<unknown>(db, STORE_PATHS, () => true)
+  try {
+    localStorage.setItem(URL_TEMPLATE_PURGE_FLAG, String(Date.now()))
+  } catch {
+    // fail-soft
+  }
+}

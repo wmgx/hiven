@@ -609,6 +609,8 @@ export type LauncherItem = {
      * Product policy lives on the provider; host only applies the clamp.
      */
     scoreBias?: number
+    /** Keep secondary recall rows below live/primary results regardless of text score. */
+    fallback?: boolean
   }
   /**
    * Host-only legacy usage keys (e.g. the backing command id) consulted as a
@@ -641,10 +643,11 @@ export type LauncherItem = {
    * Marks this item as a computed ANSWER for the current input rather than a
    * command to pick — the "input → result, no command step" paradigm.
    *
-   * Ranking treats it as first-class in two ways (see ranking.ts):
+   * Ranking treats it as first-class in three ways (see ranking.ts):
    *  - it is exempt from the query-present text filter, because an answer's
    *    title IS the result ("1,234" for "1000+234") and by construction does
    *    not contain the query;
+   *  - on empty input, an already-computed answer ranks ahead of commands;
    *  - its `priority` is honored regardless of `kind`, unlike `staticPriority`
    *    which is host-only.
    *

@@ -5,6 +5,9 @@ import type { PluginLauncherApi } from '../launcher/types'
 import { useQuickEditorStore } from './quickEditorStore'
 import { readQuickEditorPaneSnapshot } from './quickEditorPaneSnapshot'
 import { readNativeClipboardText } from '../nativeClipboard'
+import { pluginRegistry } from '../pluginRegistry'
+import { t } from '../../i18n'
+import { useAppStore } from '../../store'
 
 function splitLines(text: string): string[] {
   return text.split(/\r\n|\r|\n/)
@@ -57,6 +60,33 @@ export function applyEffectsToQuickEditor(effects: FluxEffect[]) {
           applied.push(effect)
           break
         }
+        case 'panel.openV2': {
+          const panelEntry = pluginRegistry.resolvePanel(effect.panelId, effect._isDev)
+          if (!panelEntry) {
+            errors.push(`${t(useAppStore.getState().locale, 'workspace.panel.notFound')}: ${effect.panelId}`)
+            break
+          }
+          const existing = useQuickEditorStore.getState().panelInstancesV2[effect.panelId]
+          const placement = effect.placement ?? existing?.placement ?? panelEntry.contribution.defaultPlacement ?? 'bottom'
+          store.openPanelV2({
+            ...existing,
+            panelId: effect.panelId,
+            placement,
+            inputs: effect.inputs ?? existing?.inputs ?? null,
+            scope: effect.scope ?? existing?.scope ?? (placement === 'pane-bottom'
+              ? { type: 'pane', paneId: store.activePaneId }
+              : undefined),
+            title: effect.title ?? panelEntry.contribution.title,
+            ownerPluginId: effect.ownerPluginId ?? panelEntry.meta.pluginId,
+            isDevPanel: effect._isDev ?? existing?.isDevPanel,
+          })
+          applied.push(effect)
+          break
+        }
+        case 'panel.closeV2':
+          store.closePanelV2(effect.panelId)
+          applied.push(effect)
+          break
         case 'status.message':
           showToast(effect.message, effect.level)
           applied.push(effect)
@@ -117,6 +147,7 @@ export function createQuickEditorLauncherApi(baseApi: PluginLauncherApi): Plugin
         renderers: {},
       }
     },
+    isPanePanelOpen: (panelId) => Boolean(useQuickEditorStore.getState().panelInstancesV2[panelId]),
     getClipboardText: () => readClipboard(),
     replaceActiveText: async (text: string) => {
       useQuickEditorStore.getState().setText(text)

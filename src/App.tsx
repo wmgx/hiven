@@ -30,8 +30,9 @@ import { readNativeClipboardText } from './workspace/nativeClipboard'
 import { startLearningObserver } from './workspace/learning/observer'
 import { startPureTransformRunnerSync } from './workspace/learning/registryRunners'
 import { startNavigationSensor } from './workspace/learning/navigationSensor'
-import { installLearningDebugHook, purgeStaleNumberLearning, startAutoLearnLoop } from './workspace/learning/learningController'
+import { installLearningDebugHook, purgeStaleUrlTemplateLearning, startAutoLearnLoop } from './workspace/learning/learningController'
 import { refreshLearnedUrlRules } from './workspace/learning/fire'
+import { startNativeValidationRelay } from './workspace/webNativeBridge'
 
 // Register built-in panels
 import './panels/register'
@@ -49,12 +50,24 @@ export default function App() {
   return <LauncherRuntimeApp />
 }
 
+function syncDocumentTheme(theme: string) {
+  document.documentElement.dataset.theme = theme
+  document.body.dataset.theme = theme
+}
+
+function isNativeDesktopRuntime() {
+  return Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
+    && !window.__HIVEN_WEB_NATIVE_BRIDGE__
+}
+
 function LauncherRuntimeApp() {
   const fontSize = useAppStore((s) => s.settings.fontSize)
   const theme = useAppStore((s) => s.settings.theme)
   const launcherWindowPosition = useAppStore((s) => s.settings.globalLauncherWindowPosition)
   const launcherProgrammaticMoveRef = useRef(false)
   const launcherProgrammaticMoveResetRef = useRef<number | undefined>(undefined)
+
+  useEffect(() => startNativeValidationRelay(), [])
 
   const suppressNextLauncherMovePersistence = () => {
     launcherProgrammaticMoveRef.current = true
@@ -129,14 +142,15 @@ function LauncherRuntimeApp() {
     return () => window.removeEventListener(LAUNCHER_PROGRAMMATIC_MOVE_EVENT, suppressProgrammaticMove)
   }, [])
 
-  useEffect(() => installGlobalPinnedLauncherHotkeys(), [])
-  useEffect(() => installPluginSurfaceShortcutHotkeys(), [])
-  useEffect(() => installAppHotkeys(), [])
-  useEffect(() => installQuickEditorHotkeys(), [])
+  useEffect(() => isNativeDesktopRuntime() ? installGlobalPinnedLauncherHotkeys() : undefined, [])
+  useEffect(() => isNativeDesktopRuntime() ? installPluginSurfaceShortcutHotkeys() : undefined, [])
+  useEffect(() => isNativeDesktopRuntime() ? installAppHotkeys() : undefined, [])
+  useEffect(() => isNativeDesktopRuntime() ? installQuickEditorHotkeys() : undefined, [])
 
   // Background clipboard age clock: first see = unknown baseline; real changes get known changedAt.
   // Prevents Global Launcher open from treating long-sitting clipboard as "just copied".
   useEffect(() => {
+    if (window.__HIVEN_WEB_NATIVE_BRIDGE__) return
     const stopTracker = startClipboardAgeTracker(readClipboardTextForAgeTracker)
     const stopRunnerSync = startPureTransformRunnerSync()
     const stopObserver = startLearningObserver()
@@ -146,9 +160,7 @@ function LauncherRuntimeApp() {
     const stopAutoLearn = startAutoLearnLoop()
     // Load learned url-template rules into memory for reverse-fire (typed id → open).
     void refreshLearnedUrlRules()
-    // One-time cleanup of number-slot ("n") rules/navigations learned before
-    // digits were excluded from url-template matching (too ambiguous to fire on).
-    void purgeStaleNumberLearning()
+    void purgeStaleUrlTemplateLearning()
     // Devtools verification hook (window.__hivenLearning) — no user-facing UI yet.
     installLearningDebugHook()
     return () => {
@@ -161,7 +173,7 @@ function LauncherRuntimeApp() {
   }, [])
 
   useEffect(() => {
-    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+    if (!isNativeDesktopRuntime()) return
     let disposed = false
     import('@tauri-apps/api/app')
       .then(async ({ setTheme }) => {
@@ -177,7 +189,7 @@ function LauncherRuntimeApp() {
   }, [theme])
 
   useEffect(() => {
-    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+    if (!isNativeDesktopRuntime()) return
     let disposed = false
     let unlisten: (() => void) | undefined
     import('@tauri-apps/api/event')
@@ -228,7 +240,7 @@ function LauncherRuntimeApp() {
         logLauncherPerfDuration('open:rehydrate', rehydrateStartedAt, {
           skipped: !didRehydrate,
         })
-        if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+        if (!isNativeDesktopRuntime()) return
         const settings = useAppStore.getState().settings
         const saved = settings.globalLauncherWindowPositionSource === 'user'
           ? settings.globalLauncherWindowPosition
@@ -245,7 +257,7 @@ function LauncherRuntimeApp() {
     }
     openLauncher()
 
-    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+    if (!isNativeDesktopRuntime()) return
     let disposed = false
     let unlisten: (() => void) | undefined
     import('@tauri-apps/api/event')
@@ -264,7 +276,7 @@ function LauncherRuntimeApp() {
   }, [])
 
   useEffect(() => {
-    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+    if (!isNativeDesktopRuntime()) return
     let disposed = false
     let unlisten: (() => void) | undefined
     import('@tauri-apps/api/event')
@@ -291,7 +303,7 @@ function LauncherRuntimeApp() {
   }, [])
 
   useEffect(() => {
-    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+    if (!isNativeDesktopRuntime()) return
     let disposed = false
     let unlisten: (() => void) | undefined
     import('@tauri-apps/api/event')
@@ -313,7 +325,7 @@ function LauncherRuntimeApp() {
   }, [])
 
   useEffect(() => {
-    if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
+    if (!isNativeDesktopRuntime()) return
     let disposed = false
     let unlisten: (() => void) | undefined
     let moveThrottleTimer: ReturnType<typeof setTimeout> | undefined
@@ -383,6 +395,10 @@ function LauncherRuntimeApp() {
     return () => window.removeEventListener('wheel', handleLauncherWheel, true)
   }, [])
 
+  useEffect(() => {
+    syncDocumentTheme(theme)
+  }, [theme])
+
   return (
     <div className="flux-spatial-shell launcher-window-shell" data-theme={theme} data-launcher-position={launcherWindowPosition ? 'stored' : 'default'} style={{ fontSize }}>
       <GlobalLauncher />
@@ -400,7 +416,7 @@ function shouldAllowLauncherListWheel(event: WheelEvent) {
   // Do not block deltaX here — that was preventing horizontal table scroll.
   if (
     target.closest(
-      '.global-launcher-body--surface, [data-launcher-scrollable], [role="grid"], .rdg, .csv-tools-surface',
+      '.global-launcher-body--surface, [data-launcher-scrollable], [role="grid"], .rdg, .csv-tools-surface, .hiven-ui-select-positioner',
     )
   ) {
     return true
@@ -419,7 +435,9 @@ function findLauncherWheelScroller(
   const launcherBody = target?.closest('.global-launcher-body') as HTMLElement | null
   let candidate = target instanceof HTMLElement ? target : target?.parentElement ?? null
   while (candidate) {
-    const isExplicitLauncherScroller = candidate.matches('[data-launcher-scrollable], .global-launcher-body')
+    const isExplicitLauncherScroller = candidate.matches(
+      '[data-launcher-scrollable], .global-launcher-body, .hiven-ui-select-positioner, .hiven-ui-menu-scroll-viewport',
+    )
     const isNestedLauncherScroller = launcherBody?.contains(candidate) ?? false
     if (
       (isExplicitLauncherScroller || isNestedLauncherScroller) &&

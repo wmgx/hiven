@@ -719,15 +719,17 @@ export function CsvSurface(props: PluginSurfaceProps) {
       if (!text) return
       try {
         await host.clipboard.writeText(text)
+        host.showMessage(localizedText(t, 'toast.copied', 'Copied'), 'success')
       } catch {
         try {
           await navigator.clipboard.writeText(text)
+          host.showMessage(localizedText(t, 'toast.copied', 'Copied'), 'success')
         } catch {
-          // ignore
+          host.showMessage(localizedText(t, 'toast.copyFailed', 'Copy failed'), 'error')
         }
       }
     },
-    [host.clipboard],
+    [host, t],
   )
 
   const copySelection = useCallback(async () => {
@@ -912,7 +914,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
   return (
     <section
       className="csv-tools-surface"
-      aria-label="CSV Tools"
+      aria-label={localizedText(t, 'surface.title', 'CSV Tools')}
       data-no-drag
       data-launcher-scrollable
     >
@@ -994,13 +996,14 @@ export function CsvSurface(props: PluginSurfaceProps) {
       </header>
 
       {fileError ? (
-        <div className="csv-tools-surface__banner is-error">
+        <div className="csv-tools-surface__banner is-error" role="alert">
           {localizedText(t, 'error.file', 'File error: {message}', { message: fileError })}
         </div>
       ) : null}
 
       {showTruncationBanner || fullJob.status === 'running' || fullJob.status === 'done' || fullJob.status === 'error' ? (
         <div
+          role={fullJob.status === 'error' ? 'alert' : 'status'}
           className={
             fullJob.status === 'error'
               ? 'csv-tools-surface__banner is-error'
@@ -1086,7 +1089,10 @@ export function CsvSurface(props: PluginSurfaceProps) {
         </div>
       ) : null}
 
-      <div className="csv-tools-surface__toolbar" aria-label="CSV parameters">
+      <div
+        className="csv-tools-surface__toolbar"
+        aria-label={localizedText(t, 'toolbar.parameters', 'CSV parameters')}
+      >
         <div className="csv-tools-surface__toolbar-group">
           <label className="csv-tools-surface__field">
             <span>{localizedText(t, 'param.delimiter', 'Delimiter')}</span>
@@ -1205,7 +1211,11 @@ export function CsvSurface(props: PluginSurfaceProps) {
         ) : (
           <span className="csv-tools-surface__tab-hint mono">
             {formatBytes(sourceText.length)}
-            {estimatedLines > 0 ? ` · ~${estimatedLines.toLocaleString()} lines` : ''}
+            {estimatedLines > 0
+              ? ` · ${localizedText(t, 'meta.estimatedLines', '~{count} lines', {
+                  count: estimatedLines.toLocaleString(),
+                })}`
+              : ''}
             {mainView === 'table' && (globalFilter.trim() || sqlFilter.trim())
               ? ` · ${displayGridRows.length}/${gridRows.length}`
               : ''}
@@ -1217,7 +1227,9 @@ export function CsvSurface(props: PluginSurfaceProps) {
         {mainView === 'table' ? (
           <div className="csv-tools-surface__grid-wrap" data-no-drag data-launcher-scrollable>
             {errorMessage ? (
-              <div className="csv-tools-surface__empty is-error">{errorMessage}</div>
+              <div className="csv-tools-surface__empty is-error" role="alert">
+                {errorMessage}
+              </div>
             ) : table && table.headers.length > 0 ? (
               <>
                 <div className="csv-tools-surface__table-tools" data-no-drag>

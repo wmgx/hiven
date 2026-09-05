@@ -19,7 +19,15 @@
   "panel.result.source": "Source",
   "panel.result.output": "Result",
   "panel.result.copy": "Copy",
+  "panel.result.copied": "Copied",
+  "panel.result.copyFailed": "Copy failed",
+  "panel.result.close": "Close",
   "panel.result.replace": "Replace selection",
   "panel.result.newPane": "New pane",
-  "panel.result.newPaneTitle": "Calculation Result"
+  "panel.result.newPaneTitle": "Calculation Result",
+  "error.convert": "Conversion failed: {message}",
+  "error.base.missing": "Enter a number",
+  "error.base.decimal": "Invalid decimal number: {value}",
+  "error.base.hex": "Invalid hexadecimal number: {value}",
+  "error.base.binary": "Invalid binary number: {value}"
 }

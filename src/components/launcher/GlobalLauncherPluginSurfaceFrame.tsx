@@ -11,14 +11,18 @@ export function GlobalLauncherPluginSurfaceFrame({
   target,
   locale,
   shellHeight,
+  autoHeight,
   breadcrumbTitle,
+  exiting,
   onBack,
   onClose,
 }: {
   target: PluginSurfaceOpenTarget
   locale: Locale
   shellHeight: number
+  autoHeight?: boolean
   breadcrumbTitle?: string
+  exiting: boolean
   onBack: () => void
   onClose: () => void
 }) {
@@ -35,9 +39,9 @@ export function GlobalLauncherPluginSurfaceFrame({
 
   return (
     <div
-      className="global-launcher-surface-shell flex flex-col min-h-0 outline-none"
+      className={`global-launcher-surface-shell flex flex-col min-h-0 outline-none${exiting ? ' is-exiting' : ''}`}
       tabIndex={-1}
-      style={{ height: shellHeight }}
+      style={autoHeight ? { maxHeight: shellHeight } : { height: shellHeight }}
     >
       {breadcrumbTitle && (
         <SurfaceBreadcrumbHeader
@@ -50,7 +54,11 @@ export function GlobalLauncherPluginSurfaceFrame({
         className="global-launcher-body global-launcher-body--surface"
         data-no-drag
         data-launcher-scrollable
-        style={{ maxHeight: bodyHeight, height: bodyHeight, overflow: 'hidden', touchAction: 'auto' }}
+        style={
+          autoHeight
+            ? { maxHeight: bodyHeight, overflow: 'hidden', touchAction: 'auto' }
+            : { maxHeight: bodyHeight, height: bodyHeight, overflow: 'hidden', touchAction: 'auto' }
+        }
       >
         <PluginSurfaceRenderer
           target={target}

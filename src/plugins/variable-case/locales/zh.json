@@ -20,5 +20,6 @@
   "upper.title": "大写空格",
   "upper.description": "将标识符转为大写空格分隔",
   "title.title": "Title Case 标题",
-  "title.description": "将标识符转为每个词首字母大写"
+  "title.description": "将标识符转为每个词首字母大写",
+  "error.convert": "转换失败：{message}"
 }

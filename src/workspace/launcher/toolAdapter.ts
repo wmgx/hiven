@@ -170,8 +170,6 @@ export function adaptToolToLauncherItem(
     accepts: tool.accepts,
     match: tool.match,
     directAnswer: toDirectAnswer(tool.directAnswer),
-    // Legacy usage keys: the tool id may match a command id used in old usage data
-    legacyUsageKeys: [tool.id],
     execute,
     executeWithParams: tool.params && tool.params.length > 0 ? executeWithParams : undefined,
   }

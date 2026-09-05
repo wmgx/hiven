@@ -58,6 +58,11 @@ export function QuickEditorDetachedView() {
   const commandShortcut = navigator.platform.toLowerCase().includes('mac') ? 'Cmd+K' : 'Ctrl+K'
 
   useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    document.body.dataset.theme = theme
+  }, [theme])
+
+  useEffect(() => {
     if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
     void loadInstalledPluginsFromStore().catch((error) => {
       console.error('[hiven] Failed to load plugins for quick editor:', error)

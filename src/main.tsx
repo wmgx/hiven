@@ -2,16 +2,23 @@ import { StrictMode, type ComponentType } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import { loadMonacoNls } from './kits/editor/monacoNls'
+import { installWebNativeBridge } from './workspace/webNativeBridge'
 
-const windowType = new URLSearchParams(window.location.search).get('window')
+if (await installWebNativeBridge()) {
+  document.documentElement.dataset.webNativeBridge = 'true'
+}
+
+const isNativeTauriRuntime = Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) && !window.__HIVEN_WEB_NATIVE_BRIDGE__
+const windowType = new URLSearchParams(window.location.search).get('window') ?? (isNativeTauriRuntime ? null : 'launcher')
 if (windowType === 'launcher') {
   document.documentElement.dataset.window = 'launcher'
 } else if (windowType === 'plugin-surface' || windowType === 'quick-editor') {
   document.documentElement.dataset.window = windowType
 }
 
-// 禁用浏览器右键菜单
-document.addEventListener('contextmenu', (e) => e.preventDefault())
+if (isNativeTauriRuntime) {
+  document.addEventListener('contextmenu', (e) => e.preventDefault())
+}
 
 async function loadRootComponent(): Promise<ComponentType> {
   if (windowType === 'plugin-surface') {

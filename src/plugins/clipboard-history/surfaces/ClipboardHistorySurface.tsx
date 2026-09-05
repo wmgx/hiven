@@ -70,7 +70,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const searchRef = useRef<HTMLInputElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
   const imeKeyDown = useImeKeyboard()
-  const isKeyboardNavRef = useRef(false)
   const pendingDeleteRef = useRef<{ timerId: ReturnType<typeof setTimeout>; id: string; toastId: string } | null>(null)
   const frequentThreshold = settings.frequentPasteThreshold ?? 3
 
@@ -197,7 +196,10 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     let cancelled = false
     setSelectedFullItem(null)
     void repository.getItem(selectedId).then((item) => {
-      if (!cancelled && item) setSelectedFullItem(item)
+      if (!cancelled && item) {
+        setSelectedFullItem(item)
+        setItems((current) => current.map((entry) => entry.id === item.id ? item : entry))
+      }
     })
     return () => { cancelled = true }
   }, [selectedId, repository])
@@ -431,12 +433,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     { key: 'delete', label: t('action.delete'), danger: true, onSelect: () => handleDelete(item.id) },
   ], [handlePaste, handleCopy, handleDelete, t])
 
-  const handleItemHover = useCallback((id: string) => {
-    if (!isKeyboardNavRef.current) {
-      setSelectedId(id)
-    }
-  }, [])
-
   const handleReturnToLauncher = useCallback(async (item: ClipboardHistoryItem) => {
     try {
       let fullItem = item
@@ -521,7 +517,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       void handleCopy(selectedItem)
     } else if (e.key === 'ArrowDown') {
       e.preventDefault()
-      isKeyboardNavRef.current = true
       const idx = filteredItems.findIndex((i) => i.id === selectedId)
       if (idx < filteredItems.length - 1) {
         const nextId = filteredItems[idx + 1].id
@@ -531,7 +526,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
-      isKeyboardNavRef.current = true
       const idx = filteredItems.findIndex((i) => i.id === selectedId)
       if (idx > 0) {
         const prevId = filteredItems[idx - 1].id
@@ -578,7 +572,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     return (
       <>
         <div className="clipboard-history-main">
-          <div className="clipboard-history-list-pane" onMouseMove={() => { isKeyboardNavRef.current = false }}>
+          <div className="clipboard-history-list-pane">
             <div className="clipboard-history-list-toolbar">
               <SegmentedControl
                 className="clipboard-history-filter"
@@ -647,7 +641,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                             t={t}
                             storage={host.storage}
                             onSelect={setSelectedId}
-                            onHover={handleItemHover}
                             onPaste={handlePaste}
                             onDelete={handleDelete}
                             onFavorite={handleFavoriteClick}
@@ -817,7 +810,6 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   t,
   storage,
   onSelect,
-  onHover,
   onPaste,
   onDelete,
   onFavorite,
@@ -829,7 +821,6 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   t: (key: string) => string
   storage: SurfaceStorage
   onSelect: (id: string) => void
-  onHover?: (id: string) => void
   onPaste: (item: ClipboardHistoryItem) => Promise<void>
   onDelete: (id: string) => void
   onFavorite: (item: ClipboardHistoryItem) => void
@@ -858,7 +849,6 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
             selected={selected}
             className="clipboard-history-item"
             onClick={() => onSelect(item.id)}
-            onMouseEnter={() => onHover && onHover(item.id)}
             onDoubleClick={() => void onPaste(item)}
           >
             {renderItemMedia(item, storage)}

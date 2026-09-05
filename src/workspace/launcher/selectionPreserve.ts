@@ -20,7 +20,7 @@ export type SelectableKeyItem = {
 export function resolvePreservedSelection(options: {
   selectedKey: string | null
   selectedIndex: number
-  items: SelectableKeyItem[]
+  items: readonly SelectableKeyItem[]
 }): { index: number; key: string | null } {
   const { selectedKey, items } = options
   if (items.length === 0) {

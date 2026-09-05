@@ -34,6 +34,7 @@ async function ensureBridge(): Promise<void> {
     await listenerPromise
     await rpc('initialize', {
       clientInfo: { name: 'hiven', title: 'Hiven', version: '0.2.57' },
+      capabilities: { experimentalApi: true, requestAttestation: false },
     }, false)
     await invoke('ai_codex_notify', { method: 'initialized', params: {} })
     initialized = true
@@ -100,6 +101,8 @@ function mapAgent(value: unknown): AiAgent | undefined {
     inputModalities,
     capabilities: modelCapabilities(inputModalities),
     supportedEfforts,
+    contextWindow: asNumber(model.contextWindow),
+    maxOutputTokens: asNumber(model.maxOutputTokens),
     defaultEffort: toEffort(model.defaultReasoningEffort),
     isDefault: model.isDefault === true,
   }
@@ -220,7 +223,7 @@ async function* streamCodex(request: AiProviderRequest): AsyncIterable<AiEvent> 
     const threadResult = await rpc('thread/start', {
       model: request.agentId,
       approvalPolicy: 'never',
-      sandbox: 'readOnly',
+      permissions: ':read-only',
       ephemeral: true,
       serviceName: 'hiven',
       baseInstructions: 'Follow the user request as a general AI assistant. Do not inspect files or run commands.',
@@ -234,10 +237,6 @@ async function* streamCodex(request: AiProviderRequest): AsyncIterable<AiEvent> 
       model: request.agentId,
       effort: request.effort,
       approvalPolicy: 'never',
-      sandboxPolicy: {
-        type: 'readOnly',
-        access: { type: 'restricted', includePlatformDefaults: true, readableRoots: [] },
-      },
     })
     turnId = String(asRecord(turnResult.turn).id ?? '')
     if (!turnId) throw new Error('Codex did not return a turn id')
@@ -262,7 +261,7 @@ async function* streamCodex(request: AiProviderRequest): AsyncIterable<AiEvent> 
 export const codexChatGptProvider: AiProviderAdapter = {
   id: 'openai-chatgpt',
 
-  async describe() {
+  async describe(onUpdate) {
     await ensureBridge()
     const [accountResult, modelResult] = await Promise.all([
       rpc('account/read', { refreshToken: false }),
@@ -274,7 +273,7 @@ export const codexChatGptProvider: AiProviderAdapter = {
       : []
     const isChatGpt = account.type === 'chatgpt'
     const capabilities = [...new Set(agents.flatMap((agent) => agent.capabilities))]
-    return {
+    const description = {
       id: this.id,
       kind: 'openai-chatgpt-subscription',
       name: 'OpenAI ChatGPT',
@@ -285,8 +284,9 @@ export const codexChatGptProvider: AiProviderAdapter = {
         accountName: typeof account.email === 'string' ? account.email : undefined,
         plan: typeof account.planType === 'string' ? account.planType : undefined,
       } : undefined,
-      quota: isChatGpt ? await readQuota() : undefined,
     }
+    onUpdate?.(description)
+    return isChatGpt ? { ...description, quota: await readQuota() } : description
   },
 
   stream: streamCodex,

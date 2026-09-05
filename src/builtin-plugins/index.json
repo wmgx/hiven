@@ -1,20 +1,20 @@
 {
-  "version": 45,
+  "version": 56,
   "packages": [
     {
       "pluginId": "encode-decode",
       "dir": "encode-decode",
-      "version": "2.3.0"
+      "version": "2.3.1"
     },
     {
       "pluginId": "formatter",
       "dir": "formatter",
-      "version": "2.0.0"
+      "version": "2.0.2"
     },
     {
       "pluginId": "json-tools",
       "dir": "json-tools",
-      "version": "2.2.0"
+      "version": "2.2.2"
     },
     {
       "pluginId": "line-tools",
@@ -24,67 +24,97 @@
     {
       "pluginId": "text-utils",
       "dir": "text-utils",
-      "version": "2.0.0"
+      "version": "2.0.1"
     },
     {
       "pluginId": "crypto",
       "dir": "crypto",
-      "version": "2.0.0"
+      "version": "2.0.1"
     },
     {
       "pluginId": "csv",
       "dir": "csv",
-      "version": "1.7.0"
+      "version": "1.7.1"
     },
     {
       "pluginId": "yaml",
       "dir": "yaml",
-      "version": "1.1.0"
+      "version": "1.1.1"
     },
     {
       "pluginId": "calculator",
       "dir": "calculator",
-      "version": "1.3.0"
+      "version": "1.3.2"
     },
     {
       "pluginId": "date-time-assistant",
       "dir": "date-time-assistant",
-      "version": "1.6.0"
+      "version": "1.6.1"
     },
     {
       "pluginId": "translate",
       "dir": "translate",
-      "version": "1.0.8"
+      "version": "1.0.13"
     },
     {
       "pluginId": "regex-tester",
       "dir": "regex-tester",
-      "version": "1.0.1"
+      "version": "1.0.4"
     },
     {
       "pluginId": "text-diff",
       "dir": "textDiff",
-      "version": "3.2.2"
+      "version": "3.2.3"
     },
     {
       "pluginId": "clipboard-history",
       "dir": "clipboard-history",
-      "version": "1.3.1"
+      "version": "1.3.3"
     },
     {
       "pluginId": "js-filter",
       "dir": "jsFilter",
-      "version": "1.0.2"
+      "version": "1.0.4"
     },
     {
       "pluginId": "web-open",
       "dir": "web-open",
-      "version": "1.9.7"
+      "version": "1.12.3"
     },
     {
       "pluginId": "qr-code",
       "dir": "qr-code",
       "version": "1.0.5"
+    },
+    {
+      "pluginId": "feishu",
+      "dir": "feishu",
+      "version": "0.7.2"
+    },
+    {
+      "pluginId": "random",
+      "dir": "random",
+      "version": "1.0.1"
+    },
+    {
+      "pluginId": "snippets",
+      "dir": "snippets",
+      "version": "1.0.1"
+    },
+    {
+      "pluginId": "text-explode",
+      "dir": "text-explode",
+      "version": "1.0.0"
+    },
+    {
+      "pluginId": "user-commands",
+      "dir": "user-commands",
+      "version": "1.0.1"
+    },
+    {
+      "pluginId": "variable-case",
+      "dir": "variable-case",
+      "version": "1.0.1"
     }
   ]
 }

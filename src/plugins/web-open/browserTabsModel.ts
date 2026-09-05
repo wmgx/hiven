@@ -3,6 +3,8 @@ export type BrowserTabsSettings = {
   enabled: boolean
   /** Push recent browsing history to the host for search + learning. */
   historyEnabled: boolean
+  /** Browser-history age included in Global Launcher search. */
+  historySearchDays: 3 | 5 | 7 | 30 | 60 | 90 | 365 | 'all'
   /** Close unused tabs after idleTimeoutMinutes. */
   autoCloseIdleTabs: boolean
   /** Minutes a background tab may stay idle before auto-close. */
@@ -11,6 +13,7 @@ export type BrowserTabsSettings = {
 
 export const MIN_IDLE_TIMEOUT_MINUTES = 5
 export const DEFAULT_IDLE_TIMEOUT_MINUTES = 60
+export const HISTORY_SEARCH_DAY_OPTIONS = [3, 5, 7, 30, 60, 90, 365, 'all'] as const
 
 /** Preset idle durations shown in settings, including 3-day and 7-day. */
 export const IDLE_TIMEOUT_PRESET_MINUTES = [
@@ -41,6 +44,7 @@ export function idleTimeoutPresetKey(minutes: number): '15m' | '30m' | '1h' | '6
 export const DEFAULT_BROWSER_TABS_SETTINGS: BrowserTabsSettings = {
   enabled: true,
   historyEnabled: true,
+  historySearchDays: 5,
   autoCloseIdleTabs: false,
   idleTimeoutMinutes: DEFAULT_IDLE_TIMEOUT_MINUTES,
 }
@@ -53,9 +57,13 @@ export function clampIdleTimeoutMinutes(value: unknown): number {
 }
 
 export function normalizeBrowserTabsSettings(value: Partial<BrowserTabsSettings> | null | undefined): BrowserTabsSettings {
+  const historySearchDays = HISTORY_SEARCH_DAY_OPTIONS.includes(value?.historySearchDays as never)
+    ? value?.historySearchDays as BrowserTabsSettings['historySearchDays']
+    : 5
   return {
     enabled: value?.enabled !== false,
     historyEnabled: value?.historyEnabled !== false,
+    historySearchDays,
     autoCloseIdleTabs: value?.autoCloseIdleTabs === true,
     idleTimeoutMinutes: clampIdleTimeoutMinutes(value?.idleTimeoutMinutes),
   }

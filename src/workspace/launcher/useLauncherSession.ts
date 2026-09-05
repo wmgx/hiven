@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import { makePluginT } from '../../i18n/pluginI18nRegistry'
 import { detectContent } from '../../kits/content'
 import { useAppStore } from '../../store'
@@ -42,11 +42,8 @@ import { normalizeLauncherSurfaceId } from './types'
 
 /** Local compute plugins (calc / timestamp / regex match) — keep near-instant. */
 const PLUGIN_DYNAMIC_DEBOUNCE_MS = 60
-/**
- * Host app / window list debounce while typing.
- * Apps filter in-memory; windows use 8s CG cache.
- */
-const HOST_DYNAMIC_DEBOUNCE_MS = 200
+/** Host app / window / browser indexes are memory-backed while typing. */
+const HOST_DYNAMIC_DEBOUNCE_MS = 0
 /**
  * Empty-open: wait a frame so static list paints before any host dynamic work.
  * Previously debounce was 0 on empty open and felt like a freeze on first show.
@@ -66,6 +63,8 @@ type UseLauncherSessionOptions = {
   staticItemFilter?: (items: LauncherItem[]) => LauncherItem[]
   collectDynamicWhenEmpty?: boolean
   objectBlockText?: string
+  /** Rendered list identity when the host prepends rows outside ranking. */
+  visibleSelectionItemsRef?: MutableRefObject<readonly LauncherItem[]>
   /** Foreground application name when host can resolve it (contextBoost). */
   foregroundApp?: string
   makeApi?: (api: PluginLauncherApi, item?: LauncherItem) => PluginLauncherApi
@@ -74,10 +73,7 @@ type UseLauncherSessionOptions = {
 export type LauncherSession = {
   hostId: LauncherHostId
   query: string
-  /**
-   * Deferred query used for ranking + list mapping (match highlights).
-   * Live `query` drives the input; use this so typing does not rebuild the full list every keystroke.
-   */
+  /** Query snapshot used by ranking, rendering, and execution. */
   rankingQuery: string
   setQuery: (value: string) => void
   selectedIndex: number
@@ -94,7 +90,17 @@ export type LauncherSession = {
   controllerRef: MutableRefObject<LauncherController | null>
   controllerState: LauncherControllerState | null
   rankedItems: LauncherItem[]
+  syncSelection: () => void
   reset: () => void
+}
+
+function mergePartials(
+  partials: Map<string, LauncherItem[]>,
+  sortKeys = false,
+): LauncherItem[] {
+  const entries = [...partials.entries()]
+  if (sortKeys) entries.sort(([left], [right]) => left.localeCompare(right))
+  return entries.flatMap(([, items]) => items)
 }
 
 function useFrameBatchedLauncherItems() {
@@ -144,6 +150,7 @@ export function useLauncherSession({
   staticItemFilter,
   collectDynamicWhenEmpty = false,
   objectBlockText,
+  visibleSelectionItemsRef,
   foregroundApp,
   makeApi,
 }: UseLauncherSessionOptions): LauncherSession {
@@ -154,13 +161,12 @@ export function useLauncherSession({
   const launcherFavoriteKeys = useAppStore((s) => s.launcherFavoriteKeys)
   const launcherPersistableRecents = useAppStore((s) => s.launcherPersistableRecents)
   const recordPersistableLauncherSelection = useAppStore((s) => s.recordPersistableLauncherSelection)
+  const rankingNow = useMemo(() => Date.now(), [open])
   const pluginRegistryVersion = usePluginRegistryVersion()
   // toolsFor depends on live settings — recollect static tools when any plugin settings change.
   const pluginSettings = usePluginSettingsStore((s) => s.pluginSettings)
 
   const [query, setQueryState] = useState('')
-  /** Keep the input box on the live query; defer ranking so keystrokes stay responsive. */
-  const deferredQuery = useDeferredValue(query)
   const [selectedIndex, setSelectedIndexState] = useState(0)
   const [controllerState, setControllerState] = useState<LauncherControllerState | null>(null)
   const [controller, setController] = useState<LauncherController | null>(null)
@@ -214,14 +220,26 @@ export function useLauncherSession({
       const next = typeof value === 'function' ? value(prev) : value
       selectedIndexRef.current = next
       if (pin) {
-        const item = rankedItemsRef.current[next]
+        const item = (visibleSelectionItemsRef?.current ?? rankedItemsRef.current)[next]
         selectedKeyRef.current = item?.systemKey ?? null
       } else {
         selectedKeyRef.current = null
       }
       return next
     })
-  }, [])
+  }, [visibleSelectionItemsRef])
+
+  const syncSelection = useCallback(() => {
+    const resolved = resolvePreservedSelection({
+      selectedKey: selectedKeyRef.current,
+      selectedIndex: selectedIndexRef.current,
+      items: visibleSelectionItemsRef?.current ?? rankedItemsRef.current,
+    })
+    selectedKeyRef.current = resolved.key
+    if (resolved.index === selectedIndexRef.current) return
+    selectedIndexRef.current = resolved.index
+    setSelectedIndexState(resolved.index)
+  }, [visibleSelectionItemsRef])
 
   /** Typing starts a new result generation — drop sticky key so highlight tracks ranking top. */
   const setQuery = useCallback((value: string) => {
@@ -332,13 +350,7 @@ export function useLauncherSession({
           makeT: (item) => makePluginT(item.pluginId ?? '', locale),
           getSettings: getLauncherItemSettings,
           recordSelection: (surfaceId, item) => {
-            // List identity may be volatile (window/tab id); also record stable usage keys.
             recordLauncherSelection(surfaceId, item.systemKey)
-            for (const key of item.legacyUsageKeys ?? []) {
-              if (key && key !== item.systemKey) {
-                recordLauncherSelection(surfaceId, key)
-              }
-            }
             // Plugin-declared durable content → host recents for next-session recommend.
             const payload = payloadFromLauncherItem(item)
             if (payload) {
@@ -395,10 +407,7 @@ export function useLauncherSession({
           if (pluginQueryRef.current !== q) return
           if (update.kind !== 'plugin' || !update.pluginId) return
           pluginPartialsRef.current.set(update.pluginId, update.items)
-          const merged = filterDynamicForSurface(
-            [...pluginPartialsRef.current.values()].flat(),
-            normalizedHostId,
-          )
+          const merged = filterDynamicForSurface(mergePartials(pluginPartialsRef.current), normalizedHostId)
           setPluginDynamicItemsNextFrame(merged)
         },
       }).then((items) => {
@@ -410,7 +419,10 @@ export function useLauncherSession({
           itemCount: items.length,
         })
         if (pluginQueryRef.current !== q) return
-        setPluginDynamicItems(filterDynamicForSurface(items, normalizedHostId))
+        const merged = pluginPartialsRef.current.size > 0
+          ? mergePartials(pluginPartialsRef.current)
+          : items
+        setPluginDynamicItems(filterDynamicForSurface(merged, normalizedHostId))
       }).catch(() => { /* aborted or failed — ignore */ })
     }, q || inputText ? PLUGIN_DYNAMIC_DEBOUNCE_MS : 0)
 
@@ -533,10 +545,7 @@ export function useLauncherSession({
             if (documentQueryRef.current !== q) return
             const mergeStartedAt = launcherPerfNow()
             documentPartialsRef.current.set(update.sourceId, update.items)
-            const merged = filterDynamicForSurface(
-              [...documentPartialsRef.current.values()].flat(),
-              normalizedHostId,
-            )
+            const merged = filterDynamicForSurface(mergePartials(documentPartialsRef.current, true), normalizedHostId)
             setDocumentDynamicItemsNextFrame(merged)
             logLauncherPerfDuration('session:document-dynamic-partial-apply', mergeStartedAt, {
               sourceId: update.sourceId,
@@ -554,7 +563,10 @@ export function useLauncherSession({
             itemCount: items.length,
           })
           if (documentQueryRef.current !== q) return
-          setDocumentDynamicItems(filterDynamicForSurface(items, normalizedHostId))
+          const merged = documentPartialsRef.current.size > 0
+            ? mergePartials(documentPartialsRef.current, true)
+            : items
+          setDocumentDynamicItems(filterDynamicForSurface(merged, normalizedHostId))
         })
         .catch(() => { /* aborted or failed */ })
     }, DOCUMENT_DYNAMIC_DEBOUNCE_MS)
@@ -603,11 +615,10 @@ export function useLauncherSession({
     if (normalizedHostId !== 'global-launcher') return []
     return buildPersistableRecentLauncherItems({
       recents: launcherPersistableRecents,
-      query: deferredQuery.trim(),
+      query: query.trim(),
       locale,
-      // empty / typed caps live in persistableRecents defaults
     })
-  }, [deferredQuery, launcherPersistableRecents, locale, normalizedHostId])
+  }, [launcherPersistableRecents, locale, normalizedHostId, query])
 
   // Keep open-path warm-cache decision off the render dependency list.
   hostDynamicItemsRef.current = hostDynamicItems
@@ -615,8 +626,7 @@ export function useLauncherSession({
   const rankedItems = useMemo<LauncherItem[]>(() => {
     // contentText for textMatch: Object Block takes precedence (it IS the text to process);
     // only fall back to query when no Object Block is present.
-    // Rank against deferredQuery so typing is not blocked by detectContent + full re-rank.
-    const rankQuery = deferredQuery.trim()
+    const rankQuery = query.trim()
     const contentText = objectBlockText ?? (rankQuery || undefined)
     const detections = contentText ? detectContent(contentText) : []
     // Any live result wins over its rehydrated recent snapshot. Keeping both
@@ -629,7 +639,7 @@ export function useLauncherSession({
         locale,
         surfaceId: normalizedHostId,
         usage: launcherUsageBySurface,
-        now: Date.now(),
+        now: rankingNow,
         contentText,
         detections,
         foregroundApp,
@@ -655,7 +665,6 @@ export function useLauncherSession({
       resultCount: items.length,
     }))
   }, [
-    deferredQuery,
     documentDynamicItems,
     foregroundApp,
     hostDynamicItems,
@@ -666,6 +675,8 @@ export function useLauncherSession({
     objectBlockText,
     persistableRecentItems,
     pluginDynamicItems,
+    query,
+    rankingNow,
     staticCandidates,
   ])
   // After progressive partials / re-rank:
@@ -673,23 +684,13 @@ export function useLauncherSession({
   // - default (no pin) → stay on ranking top (index 0)
   useEffect(() => {
     rankedItemsRef.current = rankedItems
-    const resolved = resolvePreservedSelection({
-      selectedKey: selectedKeyRef.current,
-      selectedIndex: selectedIndexRef.current,
-      items: rankedItems,
-    })
-    selectedKeyRef.current = resolved.key
-    if (resolved.index !== selectedIndexRef.current) {
-      selectedIndexRef.current = resolved.index
-      // Use state setter only — do not go through setSelectedIndex (would re-pin).
-      setSelectedIndexState(resolved.index)
-    }
-  }, [rankedItems])
+    syncSelection()
+  }, [rankedItems, syncSelection])
 
   return {
     hostId: normalizedHostId,
     query,
-    rankingQuery: deferredQuery,
+    rankingQuery: query,
     setQuery,
     selectedIndex,
     setSelectedIndex,
@@ -697,6 +698,7 @@ export function useLauncherSession({
     controllerRef,
     controllerState,
     rankedItems,
+    syncSelection,
     reset,
   }
 }

@@ -69,7 +69,7 @@ const dto = read('src/workspace/desktopControl/bridgeTargets.ts')
   assert.match(dto, /visits\?: number\[\] \| null/, 'history DTO treats visits as optional')
 
   // Ranking: exact when available, summary otherwise.
-  assert.match(provider, /visitFrecency\(stats\.visits, now\)/, 'uses exact timestamps when present')
+  assert.match(provider, /visitFrecency\(visits, now\)/, 'uses exact timestamps when present')
   assert.match(
     provider,
     /visitFrecencyFromSummary\(stats\.visitCount, stats\.lastVisitTime, now\)/,
@@ -77,7 +77,7 @@ const dto = read('src/workspace/desktopControl/bridgeTargets.ts')
   )
   assert.match(
     provider,
-    /stats\.visits\.length > 0/,
+    /stats\.visits\.length > 0 \? stats\.visits : undefined/,
     'the fallback is chosen by presence of real timestamps',
   )
 }

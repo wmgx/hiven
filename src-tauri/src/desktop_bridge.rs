@@ -12,6 +12,10 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tauri::Emitter;
+
+const BROWSER_BRIDGE_EVENTS_EVENT: &str = "hiven://browser-bridge-events";
+static APP_HANDLE: OnceLock<tauri::AppHandle> = OnceLock::new();
 
 /// Cap retained history items per source (extension already trims before POST).
 const HISTORY_CAP: usize = 300;
@@ -22,6 +26,9 @@ const EVENT_CAP: usize = 256;
 pub const DESKTOP_BRIDGE_PORT: u16 = 19246;
 /// Freshness window: health fails (silent empty list) after this.
 const SNAPSHOT_FRESH_MS: u128 = 5_000;
+const MAX_HTTP_BODY_BYTES: usize = 2 * 1024 * 1024;
+// Validation relays JSON-encoded byte arrays; a permitted 10 MB image can expand to ~40 MB.
+const MAX_VALIDATION_RESULT_BODY_BYTES: usize = 64 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -117,6 +124,56 @@ struct BridgeState {
     started: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ValidationRequest {
+    id: String,
+    command: String,
+    #[serde(default)]
+    args: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ValidationResult {
+    id: String,
+    ok: bool,
+    #[serde(default)]
+    value: serde_json::Value,
+    error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ValidationEvent {
+    callback_id: u32,
+    payload: serde_json::Value,
+}
+
+#[derive(Debug)]
+struct ValidationState {
+    token: String,
+    requests: VecDeque<ValidationRequest>,
+    results: HashMap<String, ValidationResult>,
+    events: VecDeque<ValidationEvent>,
+}
+
+fn validation_state() -> &'static Mutex<ValidationState> {
+    static STATE: OnceLock<Mutex<ValidationState>> = OnceLock::new();
+    STATE.get_or_init(|| {
+        let seed = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or(0);
+        Mutex::new(ValidationState {
+            token: format!("{:x}-{:x}", seed, std::process::id()),
+            requests: VecDeque::new(),
+            results: HashMap::new(),
+            events: VecDeque::new(),
+        })
+    })
+}
+
 fn bridge_state() -> &'static Mutex<BridgeState> {
     static STATE: OnceLock<Mutex<BridgeState>> = OnceLock::new();
     STATE.get_or_init(|| Mutex::new(BridgeState::default()))
@@ -137,7 +194,8 @@ fn is_fresh(last: Option<Instant>) -> bool {
 }
 
 /// Start the loopback HTTP bridge once (idempotent).
-pub fn start_desktop_bridge_server() {
+pub fn start_desktop_bridge_server(app_handle: tauri::AppHandle) {
+    let _ = APP_HANDLE.set(app_handle);
     let mut guard = match bridge_state().lock() {
         Ok(g) => g,
         Err(_) => return,
@@ -155,10 +213,7 @@ pub fn start_desktop_bridge_server() {
             let listener = match TcpListener::bind(&addr) {
                 Ok(l) => l,
                 Err(error) => {
-                    eprintln!(
-                        "[hiven] desktop bridge bind failed on {}: {}",
-                        addr, error
-                    );
+                    eprintln!("[hiven] desktop bridge bind failed on {}: {}", addr, error);
                     return;
                 }
             };
@@ -192,15 +247,17 @@ pub fn start_desktop_bridge_server() {
 }
 
 fn handle_http(mut stream: TcpStream) -> Result<(), String> {
-    let (method, path, body) = read_http_request(&mut stream)?;
-    let (status, body_out) = route_request(&method, &path, body)?;
+    let (method, path, body, origin) = read_http_request(&mut stream)?;
+    let (status, body_out) = route_request(&method, &path, body, origin.as_deref())?;
     write_http_response(&mut stream, status, &body_out)
 }
 
 /// Read a full HTTP/1.x request (headers + Content-Length body).
 /// A single `stream.read` often returns only headers while the body is still
 /// in flight — that produced empty-body JSON EOFs in the logs.
-fn read_http_request(stream: &mut TcpStream) -> Result<(String, String, String), String> {
+fn read_http_request(
+    stream: &mut TcpStream,
+) -> Result<(String, String, String, Option<String>), String> {
     let mut raw = Vec::with_capacity(8192);
     let mut chunk = [0u8; 8192];
     let header_end = loop {
@@ -224,8 +281,20 @@ fn read_http_request(stream: &mut TcpStream) -> Result<(String, String, String),
 
     let header = String::from_utf8_lossy(&raw[..header_end]).into_owned();
     let mut body = raw[header_end + 4..].to_vec();
+    let max_body_bytes = if header
+        .lines()
+        .next()
+        .is_some_and(|line| line.contains(" /v1/validation/result?"))
+    {
+        MAX_VALIDATION_RESULT_BODY_BYTES
+    } else {
+        MAX_HTTP_BODY_BYTES
+    };
 
     let content_length = parse_content_length(&header).unwrap_or(0);
+    if content_length > max_body_bytes {
+        return Err("http body too large".to_string());
+    }
     while body.len() < content_length {
         let n = stream
             .read(&mut chunk)
@@ -234,7 +303,7 @@ fn read_http_request(stream: &mut TcpStream) -> Result<(String, String, String),
             break;
         }
         body.extend_from_slice(&chunk[..n]);
-        if body.len() > 2 * 1024 * 1024 {
+        if body.len() > max_body_bytes {
             return Err("http body too large".to_string());
         }
     }
@@ -242,6 +311,11 @@ fn read_http_request(stream: &mut TcpStream) -> Result<(String, String, String),
         body.truncate(content_length);
     }
 
+    let origin = header.lines().skip(1).find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.eq_ignore_ascii_case("origin")
+            .then(|| value.trim().to_string())
+    });
     let mut lines = header.lines();
     let request_line = lines.next().ok_or_else(|| "empty request".to_string())?;
     let mut parts = request_line.split_whitespace();
@@ -254,7 +328,7 @@ fn read_http_request(stream: &mut TcpStream) -> Result<(String, String, String),
         .ok_or_else(|| "missing path".to_string())?
         .to_string();
     let body = String::from_utf8_lossy(&body).into_owned();
-    Ok((method, path, body))
+    Ok((method, path, body, origin))
 }
 
 fn find_header_end(raw: &[u8]) -> Option<usize> {
@@ -293,7 +367,12 @@ fn write_http_response(stream: &mut TcpStream, status: u16, body: &str) -> Resul
     Ok(())
 }
 
-fn route_request(method: &str, path: &str, body: String) -> Result<(u16, String), String> {
+fn route_request(
+    method: &str,
+    path: &str,
+    body: String,
+    origin: Option<&str>,
+) -> Result<(u16, String), String> {
     if method == "OPTIONS" {
         return Ok((204, String::new()));
     }
@@ -307,6 +386,12 @@ fn route_request(method: &str, path: &str, body: String) -> Result<(u16, String)
             })
             .to_string(),
         ));
+    }
+
+    if cfg!(debug_assertions) {
+        if let Some(response) = route_validation_request(method, path, &body, origin)? {
+            return Ok(response);
+        }
     }
 
     // POST /v1/sources/{id}/snapshot
@@ -354,6 +439,102 @@ fn route_request(method: &str, path: &str, body: String) -> Result<(u16, String)
     Ok((404, r#"{"error":"not found"}"#.to_string()))
 }
 
+fn route_validation_request(
+    method: &str,
+    path: &str,
+    body: &str,
+    origin: Option<&str>,
+) -> Result<Option<(u16, String)>, String> {
+    let (pathname, query) = path.split_once('?').unwrap_or((path, ""));
+    if !pathname.starts_with("/v1/validation/") {
+        return Ok(None);
+    }
+
+    let allowed_origin = matches!(
+        origin,
+        Some("http://127.0.0.1:1420")
+            | Some("http://localhost:1420")
+            | Some("http://tauri.localhost")
+            | Some("https://tauri.localhost")
+            | Some("tauri://localhost")
+    );
+    if !allowed_origin {
+        return Ok(Some((400, r#"{"error":"origin not allowed"}"#.to_string())));
+    }
+
+    if method == "GET" && pathname == "/v1/validation/session" {
+        let guard = validation_state()
+            .lock()
+            .map_err(|_| "validation bridge lock poisoned".to_string())?;
+        return Ok(Some((
+            200,
+            serde_json::json!({ "ok": true, "token": guard.token }).to_string(),
+        )));
+    }
+
+    let token = query
+        .split('&')
+        .find_map(|part| part.strip_prefix("token="))
+        .unwrap_or("");
+    let mut guard = validation_state()
+        .lock()
+        .map_err(|_| "validation bridge lock poisoned".to_string())?;
+    if token != guard.token {
+        return Ok(Some((
+            400,
+            r#"{"error":"invalid validation token"}"#.to_string(),
+        )));
+    }
+
+    let response = match (method, pathname) {
+        ("POST", "/v1/validation/invoke") => {
+            let request: ValidationRequest = serde_json::from_str(body)
+                .map_err(|error| format!("invalid validation request: {}", error))?;
+            if request.id.is_empty() || request.command.is_empty() {
+                (
+                    400,
+                    r#"{"error":"id and command are required"}"#.to_string(),
+                )
+            } else {
+                guard.requests.push_back(request);
+                (200, r#"{"ok":true}"#.to_string())
+            }
+        }
+        ("GET", "/v1/validation/requests") => {
+            let requests: Vec<_> = guard.requests.drain(..).collect();
+            (200, serde_json::json!({ "requests": requests }).to_string())
+        }
+        ("POST", "/v1/validation/result") => {
+            let result: ValidationResult = serde_json::from_str(body)
+                .map_err(|error| format!("invalid validation result: {}", error))?;
+            guard.results.insert(result.id.clone(), result);
+            (200, r#"{"ok":true}"#.to_string())
+        }
+        ("GET", "/v1/validation/result") => {
+            let id = query
+                .split('&')
+                .find_map(|part| part.strip_prefix("id="))
+                .unwrap_or("");
+            match guard.results.remove(id) {
+                Some(result) => (200, serde_json::to_string(&result).unwrap_or_default()),
+                None => (204, String::new()),
+            }
+        }
+        ("POST", "/v1/validation/event") => {
+            let event: ValidationEvent = serde_json::from_str(body)
+                .map_err(|error| format!("invalid validation event: {}", error))?;
+            guard.events.push_back(event);
+            (200, r#"{"ok":true}"#.to_string())
+        }
+        ("GET", "/v1/validation/events") => {
+            let events: Vec<_> = guard.events.drain(..).collect();
+            (200, serde_json::json!({ "events": events }).to_string())
+        }
+        _ => (404, r#"{"error":"not found"}"#.to_string()),
+    };
+    Ok(Some(response))
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SnapshotBody {
@@ -366,10 +547,7 @@ fn apply_snapshot(source_id: &str, body: &str) -> Result<(u16, String), String> 
     let trimmed = body.trim();
     // Incomplete TCP frames or empty POSTs must not spam the log as hard errors.
     if trimmed.is_empty() {
-        return Ok((
-            400,
-            r#"{"ok":false,"error":"empty body"}"#.to_string(),
-        ));
+        return Ok((400, r#"{"ok":false,"error":"empty body"}"#.to_string()));
     }
     let parsed: SnapshotBody = match serde_json::from_str(trimmed) {
         Ok(v) => v,
@@ -381,10 +559,7 @@ fn apply_snapshot(source_id: &str, body: &str) -> Result<(u16, String), String> 
             ));
         }
     };
-    let mut targets = parsed
-        .targets
-        .or(parsed.tabs)
-        .unwrap_or_default();
+    let mut targets = parsed.targets.or(parsed.tabs).unwrap_or_default();
     // Normalize kinds
     for t in &mut targets {
         if t.kind.as_deref().unwrap_or("").is_empty() {
@@ -443,10 +618,7 @@ fn take_commands(source_id: &str) -> Result<(u16, String), String> {
             "idleTimeoutMinutes": cfg.idle_timeout_minutes,
         }));
     }
-    Ok((
-        200,
-        serde_json::json!({ "commands": commands }).to_string(),
-    ))
+    Ok((200, serde_json::json!({ "commands": commands }).to_string()))
 }
 
 #[derive(Debug, Deserialize)]
@@ -522,6 +694,7 @@ fn apply_events(source_id: &str, body: &str) -> Result<(u16, String), String> {
         .lock()
         .map_err(|_| "bridge lock poisoned".to_string())?;
     let entry = guard.sources.entry(source_id.to_string()).or_default();
+    let mut accepted = Vec::new();
     for mut event in incoming {
         if event.event_type.trim().is_empty() {
             continue;
@@ -532,6 +705,7 @@ fn apply_events(source_id: &str, body: &str) -> Result<(u16, String), String> {
         if event.ts == 0 {
             event.ts = now_ms();
         }
+        accepted.push(event.clone());
         entry.events.push_back(event);
         while entry.events.len() > EVENT_CAP {
             entry.events.pop_front();
@@ -540,9 +714,19 @@ fn apply_events(source_id: &str, body: &str) -> Result<(u16, String), String> {
     if parsed.app_name.is_some() {
         entry.app_name = parsed.app_name;
     }
+    let count = entry.events.len();
+    drop(guard);
+    if !accepted.is_empty() {
+        if let Some(app_handle) = APP_HANDLE.get() {
+            let _ = app_handle.emit(
+                BROWSER_BRIDGE_EVENTS_EVENT,
+                serde_json::json!({ "sourceId": source_id, "events": accepted }),
+            );
+        }
+    }
     Ok((
         200,
-        serde_json::json!({ "ok": true, "count": entry.events.len() }).to_string(),
+        serde_json::json!({ "ok": true, "count": count }).to_string(),
     ))
 }
 
@@ -675,10 +859,7 @@ pub fn list_desktop_bridge_targets(
             continue;
         }
         for t in &state.targets {
-            let kind = t
-                .kind
-                .clone()
-                .unwrap_or_else(|| "tab".to_string());
+            let kind = t.kind.clone().unwrap_or_else(|| "tab".to_string());
             let subtitle = t
                 .url
                 .clone()
@@ -871,12 +1052,8 @@ mod tests {
         let listed = list_desktop_bridge_targets(Some("browser.chromium".into())).unwrap();
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].title, "Example");
-        focus_desktop_bridge_target(
-            "browser.chromium".into(),
-            "1".into(),
-            Some("w1".into()),
-        )
-        .unwrap();
+        focus_desktop_bridge_target("browser.chromium".into(), "1".into(), Some("w1".into()))
+            .unwrap();
         let (st, json) = take_commands("browser.chromium").unwrap();
         assert_eq!(st, 200);
         assert!(json.contains("\"type\":\"focus\""));

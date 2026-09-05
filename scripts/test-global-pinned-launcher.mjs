@@ -246,12 +246,12 @@ check('global launcher reuses shared search ranking logic', () => {
   )
   assertHas(
     files.searchRanking,
-    /return tier \* 1000/,
+    /return searchableFieldsMatchTier\(fields, query, locale\) \* 1000/,
     'shared search ranking should score pure match quality, leaving usage to the launcher ranker',
   )
   assertHas(
     files.searchRanking,
-    /for \(const alias of fields\.aliases[\s\S]*fieldTextMatches\(alias,\s*query\)/,
+    /for \(const alias of fields\.aliases[\s\S]*fieldTextMatchTier\(alias,\s*query/,
     'shared search ranking should match aliases via the shared field matcher',
   )
   assertHas(
@@ -633,13 +633,23 @@ check('standalone launcher locks webview document panning while preserving list 
   )
   assertHas(
     files.app,
-    /function\s+shouldAllowLauncherListWheel[\s\S]{0,900}deltaX[\s\S]{0,900}global-launcher-body[\s\S]{0,900}scrollTop/,
+    /function\s+shouldAllowLauncherListWheel[\s\S]{0,900}deltaX[\s\S]{0,900}global-launcher-body[\s\S]{0,1400}scrollTop/,
     'LauncherWindowApp should only allow wheel scrolling inside the launcher result list',
   )
   assertHas(
     files.app,
     /function\s+shouldAllowLauncherListWheel[\s\S]{0,900}data-launcher-scrollable[\s\S]{0,400}role="grid"|function\s+shouldAllowLauncherListWheel[\s\S]{0,1200}data-launcher-scrollable/,
     'LauncherWindowApp should also allow wheel scrolling inside launcher-owned modal scroll bodies and data grids',
+  )
+  assertHas(
+    files.app,
+    /shouldAllowLauncherListWheel[\s\S]{0,800}hiven-ui-select-positioner/,
+    'Launcher wheel capture must not swallow portaled Select/Combobox menus',
+  )
+  assertHas(
+    files.app,
+    /findLauncherWheelScroller[\s\S]{0,900}hiven-ui-menu-scroll-viewport/,
+    'Launcher wheel helper must treat menu viewports as real overflow containers even when they portal outside .global-launcher-body',
   )
   assertHas(
     files.app,
@@ -746,6 +756,10 @@ check('standalone launcher closes on Escape without bubbling to the app', () => 
     assert.ok(body, 'handleHostEscape should exist as the host-level Escape handler')
     const at = (needle) => body.indexOf(needle)
     assert.ok(at("if (event.key !== 'Escape') return") === 0 || at("if (event.key !== 'Escape') return") > 0, 'handleHostEscape should ignore non-Escape keys first')
+    assert.ok(
+      at("closest('[role=\"dialog\"][data-open]')") > 0 && at("closest('[role=\"dialog\"][data-open]')") < at('runLauncherEscapeInterceptor(event)'),
+      'an open modal dialog must own Escape before launcher surfaces or controller frames',
+    )
     assert.ok(
       at('runLauncherEscapeInterceptor(event)') > 0 && at('runLauncherEscapeInterceptor(event)') < at('event.preventDefault()'),
       'layer interceptors must get first refusal before the launcher claims Escape',

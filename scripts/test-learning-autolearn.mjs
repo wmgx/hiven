@@ -34,6 +34,12 @@ function loadModule(path) {
 
 const P = loadModule('src/workspace/learning/proposals.ts')
 const F = loadModule('src/workspace/learning/frecency.ts')
+const controllerSource = read('src/workspace/learning/learningController.ts')
+assert.match(
+  controllerSource,
+  /autoLearnNow[\s\S]*?await refreshLearnedUrlRules\(\)[\s\S]*?collectCandidates\(\)/,
+  'periodic auto-learn must prune persisted forgotten rules before an empty-candidate early return',
+)
 
 const DAY = 24 * 60 * 60 * 1000
 const now = 1_700_000_000_000

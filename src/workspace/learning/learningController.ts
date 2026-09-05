@@ -27,7 +27,7 @@ import {
   countEventSigs,
   deleteRule,
   putRule,
-  purgeNumberSlotHistoryOnce,
+  purgeUrlTemplateLearningOnce,
   queryAllPairs,
   queryAllRules,
   queryAllSuppressions,
@@ -80,6 +80,9 @@ async function collectCandidates(): Promise<{
     ...induceSourceScopedTemplates(navs).map(sourceScopedTemplateToCandidate),
     ...(await positionVarianceCandidates()),
   ]
+    // URL shape alone is not enough intent evidence: the same opaque ID shape
+    // occurs in checkout tokens, auth links, logs, tickets, and many other sites.
+    .filter((candidate) => candidate.transform.kind !== 'url-template')
     .filter(isCandidateNovel)
     .sort((a, b) => {
       if (b.distinctInputs !== a.distinctInputs) return b.distinctInputs - a.distinctInputs
@@ -169,6 +172,8 @@ export async function getPendingProposals(): Promise<RuleCandidate[]> {
  * from the pool permanently, which is what stops the old repeat-forever loop.
  */
 export async function autoLearnNow(now: number = Date.now()): Promise<number> {
+  // The periodic pass also owns persisted-rule pruning, even when nothing new is learnable.
+  await refreshLearnedUrlRules()
   const { candidates, learnedKeys, suppressedKeys } = await collectCandidates()
   const learnable = selectAutoLearnable(candidates, { learnedKeys, suppressedKeys })
   if (learnable.length === 0) return 0
@@ -250,15 +255,10 @@ export async function undoLearnedRule(rule: LearnedRule): Promise<void> {
   })
 }
 
-/**
- * One-time migration: remove url-template rules and navigation evidence
- * learned under the old, more permissive classifier that treated pure digits
- * as an identifier slot. See store.purgeNumberSlotHistoryOnce. Fail-soft and
- * safe to call on every startup — the store gates the actual work.
- */
-export async function purgeStaleNumberLearning(): Promise<void> {
+/** Remove URL-shape rules learned before URL-template auto-learning was retired. */
+export async function purgeStaleUrlTemplateLearning(): Promise<void> {
   try {
-    await purgeNumberSlotHistoryOnce()
+    await purgeUrlTemplateLearningOnce()
     await refreshLearnedUrlRules()
   } catch {
     // fail-soft: cleanup must never break the app

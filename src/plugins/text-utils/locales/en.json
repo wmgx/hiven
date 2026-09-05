@@ -4,5 +4,7 @@
   "case.title.title": "Title Case", "case.title.description": "Capitalize first letter of each word",
   "case.camel.title": "camelCase", "case.camel.description": "Convert text to camelCase",
   "case.snake.title": "snake_case", "case.snake.description": "Convert text to snake_case",
-  "count.title": "Text Statistics", "count.description": "Count lines, words, and characters"
+  "count.title": "Text Statistics", "count.description": "Count lines, words, and characters",
+  "count.lines": "Lines: {count}", "count.words": "Words: {count}",
+  "count.characters": "Characters: {count}", "count.charactersNoSpace": "Characters (no spaces): {count}"
 }

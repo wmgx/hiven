@@ -1,9 +1,12 @@
 export default {
   en: {
+    title: 'Settings',
     basicSettings: 'Settings',
     aiSubscriptions: 'AI subscriptions',
     pluginManagement: 'Plugins',
     learnedRules: 'Learned',
+    learnedRulesLoading: 'Loading learned rules…',
+    learnedRulesEmptyTitle: 'No learned rules yet',
     learnedRulesEmpty: 'Nothing learned yet. hiven watches how you transform content and will suggest a direct answer once it sees a repeated pattern.',
     learnedRuleDesc: 'On {shape} · from {count} examples',
     learnedRulesDelete: 'Delete',
@@ -12,10 +15,13 @@ export default {
     learnedRulesRestore: 'Restore',
   },
   zh: {
+    title: '设置',
     basicSettings: '基础设置',
     aiSubscriptions: 'AI 订阅',
     pluginManagement: '插件管理',
     learnedRules: '已学',
+    learnedRulesLoading: '正在加载已学规则…',
+    learnedRulesEmptyTitle: '还没有已学规则',
     learnedRulesEmpty: '还没学到规则。hiven 会观察你如何处理内容，出现重复模式时主动建议设为直答。',
     learnedRuleDesc: '作用于 {shape} · 来自 {count} 个样本',
     learnedRulesDelete: '删除',

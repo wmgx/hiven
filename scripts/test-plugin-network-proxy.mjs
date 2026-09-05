@@ -11,6 +11,7 @@ const files = {
   packageJson: read('package.json'),
   pluginTypes: read('src/workspace/pluginTypes.ts'),
   pluginPermissions: read('src/workspace/pluginPermissions.ts'),
+  pluginNetwork: read('src/workspace/pluginNetwork.ts'),
   globalLauncher: read('src/components/GlobalLauncher.tsx'),
   pluginSurfaceRenderer: read('src/components/pluginSurface/PluginSurfaceRenderer.tsx'),
   tauriLib: read('src-tauri/src/lib.rs'),
@@ -30,6 +31,8 @@ assert.match(files.pluginTypes, /network:\s*PluginNetworkApi/, 'PluginSurfaceHos
 assert.match(files.pluginTypes, /'network\.request'/, 'PluginPermission must include network.request')
 assert.match(files.pluginPermissions, /'network\.request'/, 'ALL_PLUGIN_PERMISSIONS must include network.request')
 assert.match(files.pluginPermissions, /Network request|访问网络|网络请求/, 'network.request must have localized permission labels')
+assert.match(files.pluginNetwork, /__TAURI_INTERNALS__[\s\S]*fetch\(input\.url/, 'browser-only preview must use browser fetch instead of a missing native invoke')
+assert.match(files.pluginNetwork, /responseType === 'binary'[\s\S]*arrayBuffer/, 'browser network fallback must preserve binary responses')
 
 assert.match(files.pluginSurfaceRenderer, /network:\s*createPluginNetwork\(/, 'GlobalLauncher surface host must pass createPluginNetwork')
 assert.match(files.pluginSurfaceRenderer, /import\s*\{[\s\S]*?createPluginNetwork[\s\S]*?\}/, 'GlobalLauncher must import createPluginNetwork')
@@ -48,6 +51,6 @@ assert.ok(manifest.permissions?.includes('network.request'), 'translate manifest
 assert.match(files.translateAdapters, /network:\s*PluginNetworkApi|PluginNetworkApi/, 'translate adapters must accept PluginNetworkApi')
 assert.match(files.translateAdapters, /network\.request/, 'translate adapters must call host network proxy')
 assert.doesNotMatch(files.translateAdapters, /\bfetch\(/, 'translate adapters must not call browser fetch directly')
-assert.match(files.translateSurface, /network:\s*host\.network|host\.network/, 'TranslateSurface must pass host.network into adapter')
+assert.match(files.translateSurface, /host(?:Ref\.current)?\.network/, 'TranslateSurface must pass host network into adapter')
 
 console.log('plugin network proxy checks passed')

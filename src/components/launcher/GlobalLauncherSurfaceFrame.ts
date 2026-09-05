@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import { useAppStore, type PluginSurfaceOpenTarget } from '../../store'
 import { samePluginSurfaceTarget } from './GlobalLauncherSurfaceRegistry'
@@ -32,6 +32,22 @@ export function useGlobalLauncherSurfaceFrame({
 }) {
   const [surfaceFrame, setSurfaceFrame] = useState<GlobalLauncherSurfaceFrameTarget | null>(null)
   const [surfaceFocusVersion, setSurfaceFocusVersion] = useState(0)
+  const [surfaceExiting, setSurfaceExiting] = useState(false)
+  const surfaceExitTimerRef = useRef<number | null>(null)
+
+  const scheduleSurfaceExit = useCallback((finish: () => void) => {
+    if (surfaceExitTimerRef.current !== null) return
+    setSurfaceExiting(true)
+    surfaceExitTimerRef.current = window.setTimeout(() => {
+      surfaceExitTimerRef.current = null
+      finish()
+      setSurfaceExiting(false)
+    }, 90)
+  }, [])
+
+  useEffect(() => () => {
+    if (surfaceExitTimerRef.current !== null) window.clearTimeout(surfaceExitTimerRef.current)
+  }, [])
 
   const openPluginSurface = useCallback(async (target: GlobalLauncherSurfaceFrameTarget) => {
     if (!getPluginSurfaceDefinition(target)) {
@@ -42,6 +58,9 @@ export function useGlobalLauncherSurfaceFrame({
       )
       return
     }
+    if (surfaceExitTimerRef.current !== null) window.clearTimeout(surfaceExitTimerRef.current)
+    surfaceExitTimerRef.current = null
+    setSurfaceExiting(false)
     setSurfaceFrame(target)
     setSurfaceFocusVersion((version) => version + 1)
   }, [pluginRegistryVersion])
@@ -69,33 +88,20 @@ export function useGlobalLauncherSurfaceFrame({
    * 2. Restore suspended host (e.g. quick-editor under Diff), if any
    * 3. Otherwise return to the launcher list
    */
-  const leaveSurface = useCallback(() => {
-    const wasToolSurface = Boolean(
-      surfaceFrame &&
-      pluginSurfaceToolTarget &&
-      samePluginSurfaceTarget(surfaceFrame, pluginSurfaceToolTarget),
-    )
-
+  const leaveSurface = useCallback(() => scheduleSurfaceExit(() => {
+    const wasToolSurface = Boolean(surfaceFrame && pluginSurfaceToolTarget && samePluginSurfaceTarget(surfaceFrame, pluginSurfaceToolTarget))
     setSurfaceFrame(null)
+    if (wasToolSurface) useAppStore.getState().clearPluginSurfaceTool()
+    if (!useAppStore.getState().restorePreviousLauncherHostSurface()) onReturnedToList?.()
+  }), [onReturnedToList, pluginSurfaceToolTarget, scheduleSurfaceExit, surfaceFrame])
 
-    if (wasToolSurface) {
-      useAppStore.getState().clearPluginSurfaceTool()
-    }
-
-    if (useAppStore.getState().restorePreviousLauncherHostSurface()) {
-      return
-    }
-
-    onReturnedToList?.()
-  }, [onReturnedToList, pluginSurfaceToolTarget, surfaceFrame])
-
-  const closeSurface = useCallback(() => {
+  const closeSurface = useCallback(() => scheduleSurfaceExit(() => {
     setSurfaceFrame(null)
     useAppStore.getState().clearPluginSurfaceTool()
     // Explicit close discards any suspended host surface.
     useAppStore.setState({ previousLauncherHostSurfaceTarget: null })
     closeLauncher()
-  }, [closeLauncher])
+  }), [closeLauncher, scheduleSurfaceExit])
 
   const requestSurfaceBack = useCallback(() => {
     window.dispatchEvent(new CustomEvent(PLUGIN_SURFACE_BACK_EVENT))
@@ -124,6 +130,7 @@ export function useGlobalLauncherSurfaceFrame({
     setSurfaceFrame,
     activeSurfaceFrame,
     surfaceFocusVersion,
+    surfaceExiting,
     openPluginSurface,
     leaveSurface,
     closeSurface,

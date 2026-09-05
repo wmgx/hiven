@@ -15,7 +15,7 @@ export const regexTesterPlugin = definePlugin({
         id: 'main',
         kind: 'custom-view',
         title: 'Regex Tester',
-        titleI18n: { zh: 'Regex Tester' },
+        titleI18n: { zh: '正则测试器' },
         icon: 'Regex',
         aliases: ['regex', 'regexp', 'regular expression', '正则', '正则表达式'],
         component: RegexTesterSurface,

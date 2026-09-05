@@ -128,6 +128,29 @@ assert.equal(localized.definition.launcher.items[0].display.title, 'Web Quick Op
 assert.equal(localized.panel.actions[0].title, 'Apply', 'panel action title should localize')
 assert.equal(localized.settings.title, 'Plugin Settings', 'settings title should localize')
 
+const settingsRenderer = readFileSync('src/components/PluginSettingsSchemaRenderer.tsx', 'utf8')
+const settingsDialog = readFileSync('src/components/PluginSettingsDialog.tsx', 'utf8')
+const breadcrumbHeader = readFileSync('src/components/SurfaceBreadcrumbHeader.tsx', 'utf8')
+const pluginSurfaceRenderer = readFileSync('src/components/pluginSurface/PluginSurfaceRenderer.tsx', 'utf8')
+const systemSettingsLocale = readFileSync('src/i18n/locales/systemSettings.ts', 'utf8')
+assert.match(settingsRenderer, /translateText\?: \(key: string\) => string/, 'settings schema renderer should accept plugin translation')
+assert.match(settingsRenderer, /translateText\?\.\(text\)/, 'settings schema renderer should resolve plugin locale keys')
+assert.match(settingsDialog, /translateText=\{pluginT\}/, 'settings dialog should pass the plugin translator')
+assert.match(breadcrumbHeader, /useT\(['"]palette['"]\)/, 'shared surface breadcrumbs should localize back and close actions')
+assert.match(breadcrumbHeader, /aria-label=\{t\(['"]back['"]\)\}[\s\S]*aria-label=\{t\(['"]close['"]\)\}/, 'shared surface breadcrumb actions should not hardcode English labels')
+for (const key of ['surfaceLoading', 'surfaceOpening', 'surfaceOpenFailed', 'surfaceCrashed']) {
+  assert.match(pluginSurfaceRenderer, new RegExp(`palette\\.${key}`), `plugin surface ${key} state must use host i18n`)
+}
+assert.doesNotMatch(pluginSurfaceRenderer, />Plugin surface crashed<|>Back<|Loading plugin surface/, 'plugin surface fallback UI must not hardcode English')
+assert.match(systemSettingsLocale, /en:\s*\{[\s\S]*title:\s*['"]Settings['"][\s\S]*zh:\s*\{[\s\S]*title:\s*['"]设置['"]/, 'system settings surface title should exist in both locales')
+
+const jsonSurface = readFileSync('src/plugins/json-tools/JsonSurface.tsx', 'utf8')
+const jsonLocaleEn = JSON.parse(readFileSync('src/plugins/json-tools/locales/en.json', 'utf8'))
+const jsonLocaleZh = JSON.parse(readFileSync('src/plugins/json-tools/locales/zh.json', 'utf8'))
+assert.match(jsonSurface, /if \(!text\.trim\(\)\) return \{ ok: true, formatted: '' \}/, 'empty JSON input should not be an error')
+assert.equal(jsonLocaleEn['surface.emptyOutput'], 'Formatted JSON appears here.')
+assert.equal(jsonLocaleZh['surface.emptyOutput'], '格式化后的 JSON 将显示在这里。')
+
 for (const file of readSourceFiles('src')) {
   assert.doesNotMatch(
     file.source,

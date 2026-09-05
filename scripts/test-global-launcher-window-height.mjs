@@ -133,6 +133,18 @@ assert.match(
   'standalone launcher resize lifecycle should use a single geometry calculation for CSS and native size',
 )
 
+assert.match(
+  files.globalLauncherGeometry,
+  /surfaceShell\?\.defaultWidth[\s\S]*launcherSettingsTarget[\s\S]*GLOBAL_LAUNCHER_SETTINGS_WIDTH/,
+  'settings opened from a plugin surface must preserve the surface window width',
+)
+
+assert.match(
+  files.globalLauncherGeometry,
+  /surfaceShell\?\.defaultHeight[\s\S]*launcherSettingsTarget\s*\?\s*GLOBAL_LAUNCHER_SETTINGS_HEIGHT/,
+  'settings opened from a plugin surface must preserve the surface window height',
+)
+
 assert.doesNotMatch(
   files.indexCss,
   /html\[data-window='launcher'\]\s+\.global-launcher-panel\.palette-panel\s*\{[\s\S]*?--launcher-list-max-height:\s*calc\(100vh - 130px\)/,

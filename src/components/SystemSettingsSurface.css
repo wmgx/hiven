@@ -91,6 +91,31 @@
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.7),
     0 10px 28px rgba(18, 22, 28, 0.06);
+  view-transition-name: system-settings-page;
+}
+
+::view-transition-old(system-settings-page) {
+  animation: system-settings-page-out 90ms ease-in both;
+}
+
+::view-transition-new(system-settings-page) {
+  animation: system-settings-page-in 140ms ease-out both;
+}
+
+@keyframes system-settings-page-out {
+  to { opacity: 0; transform: translateY(-2px); }
+}
+
+@keyframes system-settings-page-in {
+  from { opacity: 0; transform: translateY(3px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .system-settings-page,
+  ::view-transition-old(system-settings-page),
+  ::view-transition-new(system-settings-page) {
+    animation-duration: 0.01ms;
+  }
 }
 
 body[data-theme='dark'] .system-settings-content,
@@ -100,12 +125,24 @@ body[data-theme='dark'] .system-settings-content,
     0 10px 28px rgba(0, 0, 0, 0.28);
 }
 
-.system-settings-content > .sscroll {
+.system-settings-page {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  animation: system-settings-page-in 140ms ease-out both;
+}
+
+.supports-view-transitions .system-settings-page {
+  animation: none;
+}
+
+.system-settings-page > .sscroll {
   flex: 1;
   min-height: 0;
 }
 
-.system-settings-content > .plugins-content-inner {
+.system-settings-page > .plugins-content-inner {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -119,6 +156,73 @@ body[data-theme='dark'] .system-settings-content,
   min-height: 0;
 }
 
+@media (max-width: 720px) {
+  .system-settings-surface {
+    flex-direction: column;
+  }
+
+  .system-settings-sidebar {
+    flex-direction: row;
+    width: 100%;
+    min-width: 0;
+    padding: 8px 12px 4px;
+    overflow-x: auto;
+  }
+
+  .system-settings-tab {
+    flex: 0 0 auto;
+    min-width: 0;
+    justify-content: center;
+    padding: 0 8px;
+  }
+
+  .system-settings-content {
+    margin: 4px 12px 12px;
+  }
+
+  .system-settings-page > .sscroll {
+    padding: 18px;
+  }
+}
+
+@media (max-width: 560px) {
+  .system-settings-sidebar {
+    overflow-x: hidden;
+  }
+
+  .system-settings-tab {
+    flex: 1;
+  }
+
+  .system-settings-tab-label {
+    display: none;
+  }
+
+  .system-settings-tab.active .system-settings-tab-label {
+    display: inline;
+  }
+
+  .system-settings-page > .sscroll {
+    padding: 14px;
+  }
+
+  .srow {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .srow .s-main {
+    flex-basis: calc(100% - 48px);
+  }
+
+  .srow .s-ctl {
+    width: 100%;
+    max-width: none;
+    padding-left: 48px;
+    justify-content: flex-end;
+  }
+}
+
 /* Learned-rules management page (P2c) */
 .learned-rules-empty {
   padding: 32px 24px;
@@ -128,6 +232,19 @@ body[data-theme='dark'] .system-settings-content,
   color: var(--text-2, #6b7280);
   max-width: 420px;
   margin: 24px auto 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.learned-rules-empty svg {
+  color: var(--accent, var(--color-accent));
+}
+
+.learned-rules-empty strong {
+  color: var(--text, var(--color-text-primary));
+  font-size: 14px;
 }
 
 .learned-rules-empty-inline {

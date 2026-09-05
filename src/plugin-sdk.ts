@@ -37,6 +37,8 @@ export type {
   DesktopBridgeEventDto,
   DesktopBridgeHistoryDto,
   DesktopBridgeSourceConfig,
+  HivenEventBusApi,
+  HivenHostEvents,
 } from './pluginHostSdk'
 export type { Locale } from './i18n'
 export type { TranslateFunction } from './i18n'
@@ -79,6 +81,7 @@ export type {
   PluginUiContribution,
   PluginSurfaceOpenContext,
   PluginSurfaceProps,
+  PluginSurfaceAppearance,
   PluginSurfaceHostApi,
   PluginObjectBlockInput,
   // Plugin Background types

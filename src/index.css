@@ -41,15 +41,8 @@
   --launcher-panel-max-height: calc(100vh / 3);
   --launcher-panel-width: calc(100vw / 3);
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --hiven-color-bg-primary: var(--color-background-primary);
-  --hiven-color-bg-secondary: var(--color-background-secondary);
-  --hiven-color-bg-tertiary: var(--color-background-tertiary);
-  --hiven-color-text-primary: var(--color-text-primary);
-  --hiven-color-text-secondary: var(--color-text-secondary);
-  --hiven-color-text-tertiary: var(--color-text-tertiary);
-  --hiven-color-border: var(--color-border-secondary);
-  --hiven-color-accent: var(--color-accent);
-  --hiven-color-danger: var(--color-error);
+  /* Only --hiven-* aliases whose sources also live on :root belong here.
+   * The --hiven-color-* aliases must NOT — see the bridge rule below. */
   --hiven-radius-sm: 4px;
   --hiven-radius-md: 6px;
   --hiven-radius-lg: 8px;
@@ -61,6 +54,37 @@
   --hiven-space-4: 16px;
 }
 
+/* ─── Plugin-facing colour token bridge (--hiven-color-*) ───
+ *
+ * These MUST be declared on the elements that actually carry the theme
+ * (body / .flux-spatial-shell / .quick-editor-detached-window — see the
+ * [data-theme] blocks below), never on :root.
+ *
+ * A custom property's var() references are substituted on the element that
+ * *declares* it, not on the element that reads it. The --color-* theme tokens
+ * only exist from the theme carriers downwards, so declaring
+ * `--hiven-color-accent: var(--color-accent)` on :root made it resolve to the
+ * guaranteed-invalid value, which then inherited — as invalid — into the whole
+ * document. Every consumer without an explicit fallback silently became
+ * "invalid at computed-value time" and fell back to the property's initial
+ * value: `border: 1px solid var(--hiven-color-accent)` computed to
+ * `border-style: none`, i.e. no border painted at all, and
+ * `background: var(--hiven-color-accent)` computed to transparent.
+ */
+body,
+.flux-spatial-shell,
+.quick-editor-detached-window {
+  --hiven-color-bg-primary: var(--color-background-primary);
+  --hiven-color-bg-secondary: var(--color-background-secondary);
+  --hiven-color-bg-tertiary: var(--color-background-tertiary);
+  --hiven-color-text-primary: var(--color-text-primary);
+  --hiven-color-text-secondary: var(--color-text-secondary);
+  --hiven-color-text-tertiary: var(--color-text-tertiary);
+  --hiven-color-border: var(--color-border-secondary);
+  --hiven-color-accent: var(--color-accent);
+  --hiven-color-danger: var(--color-error);
+}
+
 .plugin-surface-panel {
   height: 100%;
   min-height: 0;
@@ -68,6 +92,36 @@
   flex-direction: column;
   background: var(--color-background-primary);
   color: var(--color-text-primary);
+}
+
+.global-launcher-surface-shell,
+.global-launcher-host-surface-shell,
+.global-launcher-settings-shell {
+  animation: launcher-frame-in 140ms ease-out both;
+}
+
+.global-launcher-flow-frame {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  animation: launcher-flow-frame-in 120ms ease-out both;
+}
+
+@keyframes launcher-flow-frame-in {
+  from { opacity: 0; }
+}
+
+@keyframes launcher-frame-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+
+.global-launcher-surface-shell.is-exiting,
+.global-launcher-host-surface-shell.is-exiting {
+  animation: plugin-settings-dialog-out 90ms ease-in both;
+  pointer-events: none;
 }
 
 .plugin-surface-panel-titlebar {
@@ -425,6 +479,17 @@ html[data-window='launcher'] .global-launcher-overlay.open {
   box-shadow: none !important;
 }
 
+/* Browser validation keeps desktop geometry when DevTools narrows the viewport. */
+html[data-web-native-bridge='true'][data-window='launcher'],
+html[data-web-native-bridge='true'][data-window='launcher'] body,
+html[data-web-native-bridge='true'][data-window='launcher'] #root,
+html[data-web-native-bridge='true'][data-window='launcher'] .flux-spatial-shell,
+html[data-web-native-bridge='true'][data-window='launcher'] .launcher-window-shell,
+html[data-web-native-bridge='true'][data-window='launcher'] .global-launcher-overlay {
+  min-width: 944px;
+  overflow: auto;
+}
+
 #root {
   width: 100vw;
   height: 100vh;
@@ -465,11 +530,16 @@ html[data-window='launcher'] .global-launcher-overlay.open {
   user-select: text;
 }
 
-/* 控件类禁止文本选中（避免误选按钮文字等） */
+/*
+ * 控件类禁止文本选中（避免误选按钮文字等）。
+ * .no-select / [data-no-select] 是插件自定义交互区域（拖拽多选等）的官方逃生口——
+ * 必须显式覆盖子孙节点，否则会被上面 span:not(button span) 直接命中子级 span 抢走
+ * （同优先级下按源码顺序判负），逼着每个插件在自己每个 span 上重复补 data-no-select。
+ */
 .flux-spatial-shell :is(
   button, [role="button"],
-  .drag-handle, [data-no-select],
-  .icon, .no-select
+  .drag-handle, [data-no-select], [data-no-select] *,
+  .icon, .no-select, .no-select *
 ) {
   -webkit-user-select: none;
   user-select: none;
@@ -1019,9 +1089,33 @@ html[data-window='launcher'] .global-launcher-overlay.open {
 }
 
 /* ─── Dropdown enter (P3-6) ─── */
-.plugins-dropdown-menu.anim-dropdown,
-.plugin-settings-dialog-panel.anim-dropdown {
+.plugins-dropdown-menu.anim-dropdown {
   animation: dropdown-in 0.15s var(--ease-out-expo, ease-out);
+}
+
+@keyframes plugin-settings-dialog-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes plugin-settings-dialog-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.plugin-settings-dialog-panel,
+.plugin-settings-dialog-backdrop,
+.plugin-settings-modal-panel,
+.plugin-settings-modal-backdrop {
+  animation: plugin-settings-dialog-in 140ms ease-out both;
+}
+
+.plugin-settings-dialog-panel.is-closing,
+.plugin-settings-dialog-backdrop.is-closing,
+.plugin-settings-modal-panel.is-closing,
+.plugin-settings-modal-backdrop.is-closing {
+  animation: plugin-settings-dialog-out 90ms ease-in both;
+  pointer-events: none;
 }
 
 /* ─── Palette Overlay ─── */
@@ -2804,6 +2898,18 @@ body[data-theme='dark'] .schema-field-block textarea:focus {
   border: 0 !important;
 }
 
+/* The dialog body owns scrolling; nested object-list panes expand naturally. */
+.plugin-settings-dialog-panel .schema-object-list-master-detail {
+  height: auto;
+  overflow: visible;
+}
+
+.plugin-settings-dialog-panel .schema-object-list-master,
+.plugin-settings-dialog-panel .schema-object-list-detail,
+.plugin-settings-dialog-panel .schema-object-list-detail .schema-object-list-grid {
+  overflow: visible;
+}
+
 .wr-sensitive-wrap {
   display: flex;
   align-items: center;
@@ -4328,6 +4434,12 @@ body[data-theme='dark'] .monaco-editor .find-widget {
   background: var(--hiven-color-danger);
 }
 
+.hiven-ui-button:disabled,
+.hiven-ui-icon-button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
 .hiven-ui-button-ghost,
 .hiven-ui-icon-button {
   border-color: transparent;
@@ -5215,6 +5327,12 @@ html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-lau
 .quick-editor-loading-skeleton {
   height: 100%;
   background: var(--color-background-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
 }
 
 .quick-editor-command-layer--detached {
@@ -7371,8 +7489,64 @@ body[data-theme='dark'] .srow .s-ico,
   /* keep focus ring visible on nested controls */
 }
 
+.srow--stacked {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: start;
+}
+
+.srow--stacked .s-ctl {
+  grid-column: 2;
+  width: 100%;
+  max-width: none;
+}
+
 .ai-subscription-provider + .ai-subscription-provider {
   border-top: 1px solid var(--border-subtle, var(--border));
+}
+
+@keyframes ai-provider-skeleton-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.9; }
+}
+
+.ai-provider-skeleton .srow + .srow {
+  border-top: 1px solid var(--border-subtle, var(--border));
+}
+
+.ai-provider-skeleton-icon,
+.ai-provider-skeleton-line,
+.ai-provider-skeleton-action {
+  background: color-mix(in srgb, var(--text-2) 14%, transparent);
+  animation: ai-provider-skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+.ai-provider-skeleton-icon {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 9px;
+}
+
+.ai-provider-skeleton-line {
+  height: 10px;
+  border-radius: 5px;
+}
+
+.ai-provider-skeleton-name { width: min(150px, 45%); }
+.ai-provider-skeleton-desc { width: min(260px, 72%); margin-top: 8px; }
+
+.ai-provider-skeleton-action {
+  width: 84px;
+  height: 28px;
+  flex: none;
+  border-radius: 7px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-provider-skeleton-icon,
+  .ai-provider-skeleton-line,
+  .ai-provider-skeleton-action { animation: none; }
 }
 
 .ai-quota-grid {
@@ -8478,13 +8652,13 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
 }
 
 .json-surface__header {
-  min-height: 48px;
+  min-height: 50px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 14px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--color-border-tertiary);
-  background: var(--color-background-secondary);
+  background: var(--color-background-primary);
 }
 
 .json-surface__header strong {
@@ -8494,22 +8668,6 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
 
 .json-surface__spacer {
   flex: 1;
-}
-
-.json-surface button {
-  min-width: 58px;
-  border: 1px solid var(--color-border-secondary);
-  border-radius: 6px;
-  padding: 5px 9px;
-  background: var(--color-background-primary);
-  color: var(--color-text-primary);
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.json-surface button:disabled {
-  cursor: default;
-  opacity: 0.45;
 }
 
 .json-surface__body {
@@ -8732,19 +8890,13 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
 }
 
 .regex-tester-surface__header {
-  min-height: 48px;
+  min-height: 50px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 14px;
+  gap: 8px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--color-border-tertiary);
-  background: var(--color-background-secondary);
-}
-
-.regex-tester-surface__header strong,
-.regex-tester-surface__header span {
-  display: block;
+  background: var(--color-background-primary);
 }
 
 .regex-tester-surface__header strong {
@@ -8753,20 +8905,12 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
 }
 
 .regex-tester-surface__header span {
-  margin-top: 2px;
   color: var(--color-text-tertiary);
   font-size: 11px;
 }
 
-.regex-tester-surface button {
-  min-width: 58px;
-  border: 1px solid var(--color-border-secondary);
-  border-radius: 6px;
-  padding: 5px 9px;
-  background: var(--color-background-primary);
-  color: var(--color-text-primary);
-  cursor: pointer;
-  font-size: 12px;
+.regex-tester-surface__header-spacer {
+  flex: 1;
 }
 
 .regex-tester-surface__pattern {
@@ -9870,6 +10014,10 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
 
 
 /* Step 5: Calculator Editor result panel */
+.quick-editor-pane-panel {
+  animation: launcher-frame-in 140ms ease-out both;
+}
+
 .calculator-result-panel {
   display: flex;
   flex-direction: column;
@@ -9935,6 +10083,16 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
 
 .calculator-result-panel__footer {
   justify-content: flex-end;
+}
+
+.calculator-result-panel__copy-status {
+  margin-right: auto;
+  font-size: 11px;
+  color: var(--color-success-text, var(--color-text-secondary));
+}
+
+.calculator-result-panel__copy-status.is-failed {
+  color: var(--color-error-text, var(--color-error));
 }
 
 .calculator-result-panel__footer button,
@@ -10035,6 +10193,52 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   padding: 2px 0 8px;
 }
 
+.plugins-list-skeleton-row {
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 12px;
+}
+
+.plugins-list-skeleton-icon,
+.plugins-list-skeleton-name,
+.plugins-list-skeleton-desc {
+  display: block;
+  background: color-mix(in srgb, var(--text-2) 14%, transparent);
+  animation: ai-provider-skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+.plugins-list-skeleton-icon {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 10px;
+}
+
+.plugins-list-skeleton-copy {
+  flex: 1;
+}
+
+.plugins-list-skeleton-name {
+  width: min(150px, 32%);
+  height: 11px;
+  border-radius: 6px;
+}
+
+.plugins-list-skeleton-desc {
+  width: min(320px, 58%);
+  height: 9px;
+  margin-top: 8px;
+  border-radius: 5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plugins-list-skeleton-icon,
+  .plugins-list-skeleton-name,
+  .plugins-list-skeleton-desc { animation: none; }
+}
+
 .plugins-row-wrapper {
   border-radius: 11px;
   transition: background 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
@@ -10052,7 +10256,6 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   padding: 11px 12px;
   border-radius: 11px;
   cursor: pointer;
-  transition: background 0.12s ease;
 }
 
 .plugins-row:focus-visible {
@@ -10297,9 +10500,24 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
 
 /* Drawer — three summary lines */
 .plugins-drawer {
+  display: grid;
+  grid-template-rows: 1fr;
+  animation: plugins-drawer-in 140ms ease-out both;
+}
+
+.plugins-drawer-inner {
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   padding: 0 14px 14px 62px;
+}
+
+@keyframes plugins-drawer-in {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
 }
 
 .plugins-drawer-line {
@@ -10487,7 +10705,7 @@ a:focus-visible {
   flex-direction: column;
   gap: 10px;
   min-width: min(360px, 100%);
-  max-width: 420px;
+  width: 100%;
 }
 .app-hotkeys-help,
 .app-hotkeys-empty {
@@ -10603,9 +10821,7 @@ html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-lau
   background: #ffffff !important;
   border: 1px solid rgba(17, 24, 39, 0.12) !important;
   border-radius: 12px !important;
-  box-shadow:
-    0 18px 44px rgba(17, 24, 39, 0.14),
-    0 3px 10px rgba(17, 24, 39, 0.08) !important;
+  box-shadow: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   overflow: hidden;
@@ -10978,4 +11194,15 @@ html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .recent-clip
 .learning-candidate-save-form input {
   min-width: 180px;
   flex: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }

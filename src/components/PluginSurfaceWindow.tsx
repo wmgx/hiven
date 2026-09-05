@@ -68,6 +68,11 @@ export function PluginSurfaceWindow() {
   }, [])
 
   useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    document.body.dataset.theme = theme
+  }, [theme])
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       if (isImeComposingRef.current || event.isComposing || (event as unknown as { keyCode: number }).keyCode === 229) return

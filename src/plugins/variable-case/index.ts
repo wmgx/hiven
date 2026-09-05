@@ -100,7 +100,7 @@ function toolRun(style: CaseStyle) {
     try {
       return ctx.output.text(convertText(ctx.input.text, style))
     } catch (e: any) {
-      return ctx.output.error(`Error: ${e.message}`)
+      return ctx.output.error(ctx.t('error.convert', { message: e.message }))
     }
   }
 }

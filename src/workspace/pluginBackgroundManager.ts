@@ -22,6 +22,7 @@ import { useAppStore } from '../store'
 import { showToast } from './toast'
 import { getPluginPermissionSnapshot, missingPluginPermissions, usePluginPermissionStore } from './pluginPermissions'
 import { resolvePluginSettingsSource } from './launcher/pluginSource'
+import { makePluginT } from '../i18n/pluginI18nRegistry'
 
 type BackgroundInstance = {
   key: string
@@ -57,6 +58,7 @@ function buildBackgroundContext(
     network: createPluginNetwork(permissions),
     shell: createPluginShell(permissions),
     ai: createPluginAi(pluginId, source, permissions),
+    t: makePluginT(pluginId, locale),
     showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error') {
       showToast(message, level ?? 'info')
     },

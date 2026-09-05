@@ -1,0 +1,20 @@
+{
+  "token.label": "Text Explode",
+  "token.remove": "Back",
+  "action.close": "Close",
+  "action.clear": "Clear selection",
+  "action.copy": "Copy",
+  "action.confirm": "Insert",
+  "input.placeholder": "Paste or type some text…",
+  "input.clear": "Clear text",
+  "empty.hint": "Explodes as soon as you type",
+  "canvas.label": "Selectable text fragments",
+  "canvas.linkGroup": "Link fragments",
+  "preview.title": "Assembled",
+  "preview.count": "{count} selected",
+  "preview.empty": "Drag or click fragments to select…",
+  "footer.hint": "Drag to select · Shift+drag to deselect · click a link's frame to toggle it all",
+  "message.copied": "Copied",
+  "error.copyFailed": "Copy failed",
+  "error.pasteFailed": "Could not insert text"
+}

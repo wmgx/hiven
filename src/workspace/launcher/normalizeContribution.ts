@@ -89,7 +89,6 @@ export function normalizeContribution(
     suggest: contribution.suggest,
     directAnswer,
     recordUsage,
-    legacyUsageKeys: options.kind === 'dynamic' ? undefined : [contribution.id],
     execute: contribution.execute,
     // Params protocol: same for static and dynamic. executeWithParams only when schema exists
     // (or author supplied a custom handler without params array — rare).

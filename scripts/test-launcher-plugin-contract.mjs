@@ -78,11 +78,31 @@ function assertLauncherToolsHaveSubtitles() {
   }
 }
 
+function assertFormatterToolsDeclareContentIntent() {
+  const tools = splitTopLevelObjects(extractToolsArray(read('src/plugins/formatter/index.ts')) ?? '')
+  for (const kind of ['css', 'sql', 'xml']) {
+    const matching = tools.filter((item) => new RegExp(`id:\\s*['"]${kind}\\.`).test(item))
+    assert.equal(matching.length, 2, `formatter should expose two ${kind} tools`)
+    for (const item of matching) {
+      assert.match(item, new RegExp(`accepts:\\s*\\{\\s*kinds:\\s*\\[['"]${kind}['"]\\]`), `${kind} tool must declare accepts`)
+      assert.match(item, /textMatch\s*:/, `${kind} tool must declare textMatch`)
+    }
+  }
+}
+
 function assertBuiltinVersionsMatchManifests() {
   const index = JSON.parse(read('src/builtin-plugins/index.json'))
   assert.equal(typeof index.version, 'number', 'builtin plugin index must have a numeric release version')
   assert.ok(index.version >= 37, 'builtin plugin index version should be bumped after builtin package updates')
   assert.equal(index.packages.some((pkg) => pkg.pluginId === 'core-pane'), false, 'core-pane should no longer ship as a bundled plugin')
+  const manifestPackages = readdirSync('src/plugins')
+    .filter((dir) => existsSync(join('src/plugins', dir, 'manifest.json')))
+    .map((dir) => ({ dir, manifest: JSON.parse(read(`src/plugins/${dir}/manifest.json`)) }))
+  assert.deepEqual(
+    index.packages.map((pkg) => pkg.pluginId).sort(),
+    manifestPackages.map(({ manifest }) => manifest.pluginId).sort(),
+    'builtin plugin index should release every first-party plugin directory',
+  )
   for (const pkg of index.packages) {
     const manifest = JSON.parse(read(`src/plugins/${pkg.dir}/manifest.json`))
     assert.equal(pkg.version, manifest.version, `${pkg.pluginId} builtin index version should match manifest version`)
@@ -140,7 +160,7 @@ function assertTextDiffCanBeFoundAndFailureIsVisible() {
   const effectRunner = read('src/workspace/effectRunner.ts')
   assert.match(
     effectRunner,
-    /Renderer "\$\{effect\.renderer\}" not found[\s\S]*return message/,
+    /workspace\.renderer\.notFound['"]\)[\s\S]*effect\.renderer[\s\S]*return message/,
     'missing pane renderers should be returned through EffectRunnerResult.errors',
   )
   assert.match(
@@ -255,6 +275,7 @@ function assertLauncherSystemMessagesAreLocalized() {
 }
 
 assertLauncherToolsHaveSubtitles()
+assertFormatterToolsDeclareContentIntent()
 assertBuiltinVersionsMatchManifests()
 assertTextDiffCanBeFoundAndFailureIsVisible()
 assertLauncherApiExposesPaneCreation()

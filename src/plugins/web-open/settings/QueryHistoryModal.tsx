@@ -3,13 +3,15 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import type { PluginSettingsModalBodyProps } from '@hiven/plugin'
+import { getPluginHostSdk, type PluginSettingsModalBodyProps } from '@hiven/plugin'
 import {
   clearQueryHistory,
+  importBrowserQueryHistory,
   loadQueryHistory,
   type QueryHistoryItem,
 } from '../queryHistory'
 import type { WebQuickOpenSettings } from './model'
+import { CHROMIUM_SOURCE_ID } from '../browserProvider'
 
 type EntryHistoryRow = {
   entryId: string
@@ -22,6 +24,7 @@ export function QueryHistoryModal({
   value,
   host,
   t,
+  context,
 }: PluginSettingsModalBodyProps<WebQuickOpenSettings>) {
   const [rows, setRows] = useState<EntryHistoryRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -30,7 +33,8 @@ export function QueryHistoryModal({
   const reload = useCallback(async () => {
     setLoading(true)
     try {
-      const entries = value?.entries ?? []
+      const entryId = typeof context?.itemId === 'string' ? context.itemId : ''
+      const entries = (value?.entries ?? []).filter((entry) => !entryId || entry.id === entryId)
       const next: EntryHistoryRow[] = []
       for (const entry of entries) {
         const items = await loadQueryHistory(host.storage, entry.id)
@@ -48,7 +52,7 @@ export function QueryHistoryModal({
     } finally {
       setLoading(false)
     }
-  }, [host.storage, value?.entries])
+  }, [context?.itemId, host.storage, value?.entries])
 
   useEffect(() => {
     void reload()
@@ -67,11 +71,36 @@ export function QueryHistoryModal({
     }
   }
 
+  const handleLearn = async () => {
+    setBusy(true)
+    try {
+      const history = await getPluginHostSdk().desktopTargets.bridge.listHistory(CHROMIUM_SOURCE_ID)
+      const entryId = typeof context?.itemId === 'string' ? context.itemId : ''
+      const entries = (value?.entries ?? []).filter((entry) => !entryId || entry.id === entryId)
+      const count = await importBrowserQueryHistory(host.storage, entries, history)
+      await reload()
+      host.showMessage(t('queryHistory.learned', { count }), 'success')
+    } catch {
+      host.showMessage(t('queryHistory.learnFailed'), 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-3 p-1">
       <p className="text-[12px]" style={{ color: 'var(--muted-foreground)' }}>
         {t('queryHistory.description')}
       </p>
+      <button
+        type="button"
+        className="self-start rounded px-3 py-1.5 text-[12px]"
+        style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}
+        disabled={busy}
+        onClick={() => { void handleLearn() }}
+      >
+        {t('queryHistory.learnFromBrowser')}
+      </button>
       {loading ? (
         <div className="text-[12px]" style={{ color: 'var(--muted-foreground)' }}>
           {t('queryHistory.loading')}

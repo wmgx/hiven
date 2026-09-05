@@ -26,7 +26,6 @@ function buildCommandTools(settings: UserCommandsSettings): PluginToolContributi
       '自定义命令',
       '脚本',
     ].filter(Boolean),
-    inputPolicy: { mode: 'auto' },
     requireParamSelection: false,
     async run(ctx) {
       const command = entry.command.trim()
@@ -60,13 +59,13 @@ function buildCommandTools(settings: UserCommandsSettings): PluginToolContributi
               if (result.timedOut || code !== 0) {
                 const msg = ctx.t('result.fail', {
                   code: String(code),
-                  stderr: stderr || stdout || (result.timedOut ? 'timed out' : 'failed'),
+                  stderr: stderr || stdout || ctx.t(result.timedOut ? 'result.timedOut' : 'result.failedFallback'),
                 })
                 return { ok: false as const, message: msg }
               }
               const msg = ctx.t('result.ok', {
                 code: String(code),
-                stdout: stdout || '(no output)',
+                  stdout: stdout || ctx.t('result.noOutput'),
               })
               // Show output as a copyable result by writing via secondary path:
               // return ok and let host toast; also copy stdout when non-empty.

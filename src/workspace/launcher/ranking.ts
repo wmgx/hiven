@@ -10,9 +10,10 @@
  *     + scoreBias (optional, provider-declared, |bias| < one match tier)
  *
  * Rules:
+ *  - Semantic bands dominate additive score: direct answers on empty input,
+ *    then primary/live results, then fallback recall.
  *  - Match relevance dominates (match tier contributes thousands; the rest are
- *    bounded well below one tier so a strong match always beats a weak match
- *    with high usage).
+ *    bounded well below one tier, within the same semantic band).
  *  - Intent slots are large (1.6k–2.4k) but still below exact title match (6k).
  *  - Usage is per surface (frecency = log frequency × recency decay).
  *  - Favorites get a bounded boost so pinned commands float on empty open.
@@ -452,7 +453,7 @@ function safeTextMatch(matcher: (text: string) => boolean, text: string): boolea
  */
 const MAX_RANKED_RESULTS = 50
 
-type ScoredItem = { item: LauncherItem; index: number; score: number }
+type ScoredItem = { item: LauncherItem; index: number; score: number; band: number }
 
 export function rankLauncherItems(ctx: RankContext, items: LauncherItem[]): LauncherItem[] {
   // Initialize per-call cache
@@ -475,6 +476,9 @@ export function rankLauncherItems(ctx: RankContext, items: LauncherItem[]): Laun
     item,
     index,
     score: scoreLauncherItem(ctx, item, candidates),
+    // Product semantics are categorical: an automatic answer on empty input is
+    // immediately useful, while fallback recall must stay behind live results.
+    band: item.ranking?.fallback ? 0 : !q && item.directAnswer ? 2 : 1,
   }))
 
   // Empty open: drop cold unused plugins so Recent/Favorites/Apps stay scannable.
@@ -487,7 +491,7 @@ export function rankLauncherItems(ctx: RankContext, items: LauncherItem[]): Laun
 
   if (scored.length <= limit) {
     // Small enough — full sort is fine
-    scored.sort((a, b) => (b.score - a.score) || (a.index - b.index))
+    scored.sort(scoredCompare)
   } else {
     // Partial sort: partition the top `limit` items, then sort only those
     partialSortTopK(scored, limit)
@@ -507,19 +511,19 @@ export function rankLauncherItems(ctx: RankContext, items: LauncherItem[]): Laun
 
 /**
  * In-place partial sort: ensures scored[0..k) contain the top-k items in
- * descending score order (ties broken by ascending index for stability).
+ * descending semantic band and score order (ties preserve input order).
  * Uses quickselect to partition, then sorts only the top-k portion.
  */
 function partialSortTopK(arr: ScoredItem[], k: number): void {
   quickselect(arr, 0, arr.length - 1, k)
   // Sort only the top-k portion
   const top = arr.slice(0, k)
-  top.sort((a, b) => (b.score - a.score) || (a.index - b.index))
+  top.sort(scoredCompare)
   for (let i = 0; i < k; i++) arr[i] = top[i]
 }
 
 function scoredCompare(a: ScoredItem, b: ScoredItem): number {
-  return (b.score - a.score) || (a.index - b.index)
+  return (b.band - a.band) || (b.score - a.score) || (a.index - b.index)
 }
 
 /**

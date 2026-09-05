@@ -4,7 +4,7 @@
 
 Hiven Host 向插件提供统一的 `ctx.ai`：插件可以发现当前可用的订阅 Provider、Agent、能力和额度，并以事件流调用 AI。请求中的 `providerId`、`agentId`、`effort` 均可省略；Host 按系统默认值解析，默认值失效时回退到可用 Provider 或其默认 Agent。
 
-第一版注册 `openai-chatgpt` Provider，通过 Codex App Server 完成 ChatGPT OAuth、模型发现、流式调用、取消、账户额度读取和 token 用量读取。Provider 框架不包含 OpenAI 协议字段，后续 Provider 通过同一 Host registry 接入。
+当前注册 `openai-chatgpt` 与 `xai-grok` Provider。前者通过 Codex App Server 完成 ChatGPT OAuth、模型发现、流式调用、取消、账户额度读取和 token 用量读取；后者通过 xAI 官方 device-code OAuth 使用 SuperGrok / X Premium 订阅，并通过订阅 CLI proxy 的 Responses API 完成文本/图片理解、Web Search、模型发现、流式调用、取消、订阅额度窗口和 token 用量读取。Provider 框架不包含供应商协议字段，后续 Provider 通过同一 Host registry 接入。
 
 Codex App Server 使用 Hiven 独立的 `CODEX_HOME`，不会读取、覆盖或退出用户在 Codex CLI/桌面应用中的登录。桌面包需要携带或安装可执行的 `codex`；也可以通过 `HIVEN_CODEX_BIN` 指定路径。
 
@@ -52,4 +52,4 @@ Host 负责默认值解析、权限校验、插件归因和持久化。插件负
 
 ## 6. 当前边界
 
-第一版不接 API Key、不实现第二个 Provider、不把 OpenAI 原始事件暴露给插件。原生桥不开放 `command/exec`、配置写入等 Codex RPC；普通 turn 固定使用 `approvalPolicy: never`、restricted read-only sandbox、空读取根和独立空工作目录，避免继承 Hiven 启动目录的文件权限。插件获得的是多模态生成与工具事件流，不是 Codex 编码环境。
+当前不接 API Key，也不把供应商原始事件暴露给插件。xAI Provider 当前开放文本、图片理解和服务端 Web Search；图片生成/编辑、音频和视频仍未接入，不声明对应能力。Codex 原生桥不开放 `command/exec`、配置写入等 RPC；普通 turn 固定使用 `approvalPolicy: never`、restricted read-only sandbox、空读取根和独立空工作目录，避免继承 Hiven 启动目录的文件权限。插件获得的是生成能力，不是供应商的编码环境。

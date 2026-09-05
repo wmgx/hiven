@@ -59,6 +59,8 @@ export type DesktopTarget = {
    * the same match tier without hardcoding Feishu in host ranking.
    */
   scoreBias?: number
+  /** Secondary recall result; live/primary targets always rank ahead of it. */
+  fallback?: boolean
   /**
    * When true, host may persist this selection for cross-session recents /
    * ranking. Requires a stable identity (`persistKey` or stable `id`).

@@ -10,26 +10,27 @@ export type PluginProductMetadata = {
 }
 
 const PRODUCT_CATALOG: PluginProductMetadata[] = [
-  product('calculator', 'Calculator', ['calculator']),
-  product('date-time-assistant', 'Date Time Assistant', ['date-time-assistant']),
-  product('json-tools', 'JSON Tools', ['json', 'js-filter', 'sort-json']),
-  product('text-diff', 'Text Diff', ['text-diff']),
-  product('regex-tester', 'Regex Tester', ['regex-tester']),
-  product('clipboard-history', 'Clipboard History', ['clipboard-history']),
-  product('translate', 'Translate', ['translate']),
-  product('csv-tools', 'CSV Tools', ['csv']),
-  product('encode-decode-tools', 'Encode / Decode Tools', ['base64', 'url', 'html', 'slashes']),
-  product('yaml-tools', 'YAML Tools', ['yaml']),
-  product('query-string-tools', 'Query String Tools', ['query-string']),
-  product('sql-tools', 'SQL Tools', ['sql', 'sqlin']),
-  product('css-formatter', 'CSS Formatter', ['css']),
-  product('xml-formatter', 'XML Formatter', ['xml']),
-  product('text-tools', 'Text Tools', ['case', 'line-tools', 'line-affix', 'mdquote']),
-  product('jwt-tools', 'JWT Tools', ['jwt']),
-  product('hash-tools', 'Hash Tools', ['hash']),
-  product('count', 'Count', ['count']),
+  product('calculator', 'Calculator', ['calculator'], '计算器'),
+  product('date-time-assistant', 'Date Time Assistant', ['date-time-assistant'], '日期时间助手'),
+  product('json-tools', 'JSON Tools', ['json', 'js-filter', 'sort-json'], 'JSON 工具'),
+  product('text-diff', 'Text Diff', ['text-diff'], '文本对比'),
+  product('regex-tester', 'Regex Tester', ['regex-tester'], '正则测试器'),
+  product('clipboard-history', 'Clipboard History', ['clipboard-history'], '剪贴板历史'),
+  product('translate', 'Translate', ['translate'], '翻译'),
+  product('csv-tools', 'CSV Tools', ['csv'], 'CSV 工具'),
+  product('encode-decode-tools', 'Encode / Decode Tools', ['base64', 'url', 'html', 'slashes'], '编解码工具'),
+  product('yaml-tools', 'YAML Tools', ['yaml'], 'YAML 工具'),
+  product('query-string-tools', 'Query String Tools', ['query-string'], '查询字符串工具'),
+  product('sql-tools', 'SQL Tools', ['sql', 'sqlin'], 'SQL 工具'),
+  product('css-formatter', 'CSS Formatter', ['css'], 'CSS 格式化'),
+  product('xml-formatter', 'XML Formatter', ['xml'], 'XML 格式化'),
+  product('text-tools', 'Text Tools', ['case', 'line-tools', 'line-affix', 'mdquote'], '文本工具'),
+  product('jwt-tools', 'JWT Tools', ['jwt'], 'JWT 工具'),
+  product('hash-tools', 'Hash Tools', ['hash'], '哈希工具'),
+  product('count', 'Count', ['count'], '计数'),
   product('web-open', 'Browser', ['web-open'], '浏览器'),
   product('qr-code', 'QR Code', ['qr-code'], '二维码'),
+  product('text-explode', 'Text Explode', ['text-explode'], '大爆炸'),
   product('feishu', 'Feishu', ['feishu'], '飞书'),
 ]
 
@@ -81,12 +82,17 @@ export function applyProductProviderToLauncherItem(item: LauncherItem): Launcher
   if (!item.pluginId) return item
   const metadata = resolvePluginProductMetadata(item.pluginId)
   const productProvider = metadata.provider
+  const hasSubtitle = item.display.subtitle != null || item.display.subtitleI18n != null
   return {
     ...item,
     display: {
       ...item.display,
-      subtitle: item.display.subtitle ?? `来自 ${productProvider}`,
-      aliases: [...(item.display.aliases ?? []), productProvider, metadata.productId],
+      subtitle: hasSubtitle ? item.display.subtitle : `From ${productProvider}`,
+      subtitleI18n: hasSubtitle ? item.display.subtitleI18n : {
+        en: `From ${productProvider}`,
+        zh: `来自 ${metadata.providerZh ?? productProvider}`,
+      },
+      aliases: [...(item.display.aliases ?? []), productProvider, metadata.providerZh ?? productProvider, metadata.productId],
     },
     metadata: item.metadata,
     productProvider,
