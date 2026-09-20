@@ -15,7 +15,7 @@ const pasteMessage = (key: string) => t(useAppStore.getState().locale, `workspac
 
 async function writeTextToClipboard(text: string): Promise<void> {
   try {
-    const { writeText } = await import('@tauri-apps/plugin-clipboard-manager')
+    const { writeText } = await import('./nativeClipboard')
     await writeText(text)
   } catch {
     await navigator.clipboard.writeText(text)

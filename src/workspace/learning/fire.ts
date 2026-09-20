@@ -91,7 +91,7 @@ async function feedback(rule: LearnedRule): Promise<void> {
 
 async function copyToClipboard(text: string): Promise<void> {
   try {
-    const { writeText } = await import('@tauri-apps/plugin-clipboard-manager')
+    const { writeText } = await import('../nativeClipboard')
     await writeText(text)
   } catch {
     try {

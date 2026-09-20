@@ -2,7 +2,7 @@
  * Plugin Clipboard API — Host Implementation
  *
  * Provides clipboard read/write and a polling-based watch mechanism.
- * Uses @tauri-apps/plugin-clipboard-manager in Tauri. The web Clipboard API is
+ * Uses the host's native clipboard commands in Tauri. The web Clipboard API is
  * only a non-Tauri fallback — never used for reads in the desktop webview.
  */
 
@@ -38,7 +38,7 @@ async function readClipboardText(): Promise<string> {
 
 export async function writeClipboardText(text: string): Promise<void> {
   try {
-    const { writeText } = await import('@tauri-apps/plugin-clipboard-manager')
+    const { writeText } = await import('./nativeClipboard')
     await writeText(text)
   } catch {
     try {
@@ -79,7 +79,7 @@ async function writeClipboardImageViaClipboardItem(bytes: Uint8Array): Promise<v
 /** Write PNG (or other image) bytes to the system clipboard as an image, not as text. */
 export async function writeClipboardImageBytes(bytes: Uint8Array): Promise<void> {
   try {
-    const { writeImage } = await import('@tauri-apps/plugin-clipboard-manager')
+    const { writeImage } = await import('./nativeClipboard')
     const { Image } = await import('@tauri-apps/api/image')
     try {
       const image = await Image.fromBytes(bytes)
@@ -110,7 +110,7 @@ async function readClipboardSourceApp(): Promise<string | undefined> {
 
 async function readClipboardImageSnapshot(): Promise<ClipboardImageSnapshot | null> {
   try {
-    const { readImage } = await import('@tauri-apps/plugin-clipboard-manager')
+    const { readImage } = await import('./nativeClipboard')
     const image = await readImage()
     const [rgba, size] = await Promise.all([image.rgba(), image.size()])
     return {

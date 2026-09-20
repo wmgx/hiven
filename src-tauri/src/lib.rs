@@ -21,6 +21,7 @@ use zip::ZipArchive;
 
 pub mod ai_codex;
 pub mod ai_xai;
+mod clipboard_privacy;
 pub mod desktop_bridge;
 pub mod hotkeys;
 
@@ -1720,7 +1721,9 @@ fn capture_foreground_selection_text(app: &tauri::AppHandle) {
 
 #[allow(dead_code)]
 fn capture_foreground_selection_text_impl(app: &tauri::AppHandle) -> Option<String> {
-    let before = app.clipboard().read_text().ok();
+    let before = clipboard_privacy::with_clipboard(app, |app| {
+        app.clipboard().read_text().map_err(|error| error.to_string())
+    }).ok();
     let before_change_count = read_clipboard_change_count(&app);
     simulate_copy_selection_impl().ok()?;
     std::thread::sleep(Duration::from_millis(80));
@@ -1731,9 +1734,13 @@ fn capture_foreground_selection_text_impl(app: &tauri::AppHandle) -> Option<Stri
     {
         return None;
     }
-    let selected = app.clipboard().read_text().ok()?.trim().to_string();
+    let selected = clipboard_privacy::with_clipboard(app, |app| {
+        app.clipboard().read_text().map_err(|error| error.to_string())
+    }).ok()?.trim().to_string();
     if let Some(previous) = before {
-        let _ = app.clipboard().write_text(previous);
+        let _ = clipboard_privacy::with_clipboard(app, move |app| {
+            app.clipboard().write_text(previous).map_err(|error| error.to_string())
+        });
     }
     if selected.is_empty() {
         None
@@ -1744,17 +1751,19 @@ fn capture_foreground_selection_text_impl(app: &tauri::AppHandle) -> Option<Stri
 
 #[cfg(target_os = "macos")]
 #[allow(dead_code)]
-fn read_clipboard_change_count(_app: &tauri::AppHandle) -> Option<i64> {
-    unsafe {
-        let pasteboard_cls = objc2::runtime::AnyClass::get(c"NSPasteboard")?;
+fn read_clipboard_change_count(app: &tauri::AppHandle) -> Option<i64> {
+    clipboard_privacy::with_clipboard(app, |_| unsafe {
+        let pasteboard_cls = objc2::runtime::AnyClass::get(c"NSPasteboard")
+            .ok_or_else(|| "NSPasteboard unavailable".to_string())?;
         let pasteboard: *mut objc2::runtime::AnyObject =
             objc2::msg_send![pasteboard_cls, generalPasteboard];
         if pasteboard.is_null() {
-            return None;
+            return Err("Clipboard unavailable".into());
         }
         let change_count: i64 = objc2::msg_send![pasteboard, changeCount];
-        Some(change_count)
-    }
+        Ok(change_count)
+    })
+    .ok()
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -1766,10 +1775,10 @@ fn read_clipboard_change_count(_app: &tauri::AppHandle) -> Option<i64> {
 /// Read local file paths from the system clipboard (Finder / file manager copy).
 /// Prefer this over plain text: macOS often puts only the bare filename in the text flavor.
 #[tauri::command]
-fn read_clipboard_file_paths() -> Result<Vec<String>, String> {
+fn read_clipboard_file_paths(_app: tauri::AppHandle) -> Result<Vec<String>, String> {
     #[cfg(target_os = "macos")]
     {
-        read_macos_clipboard_file_paths()
+        clipboard_privacy::with_clipboard(&_app, |_| read_macos_clipboard_file_paths())
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -7204,6 +7213,11 @@ pub fn run() {
             fetch_url,
             plugin_http_request,
             plugin_shell_run,
+            clipboard_privacy::clipboard_read_public_text,
+            clipboard_privacy::clipboard_write_sensitive_text,
+            clipboard_privacy::clipboard_write_text,
+            clipboard_privacy::clipboard_read_image,
+            clipboard_privacy::clipboard_write_image,
             list_plugin_dirs,
             remove_plugin_dir,
             replace_plugin_dir,

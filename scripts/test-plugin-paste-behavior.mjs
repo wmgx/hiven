@@ -77,7 +77,7 @@ function loadPluginPaste({ invokeImpl, writeTextImpl, writeImageImpl, navigatorC
   }
   sandbox.globalThis = sandbox
   const loadMockModule = (specifier) => {
-    if (specifier === '@tauri-apps/plugin-clipboard-manager') {
+    if (specifier === './nativeClipboard') {
       return {
         writeText: writeTextImpl ?? (async (text) => calls.push(['tauri.writeText', text])),
         writeImage: writeImageImpl ?? (async (image) => calls.push(['tauri.writeImage', image])),
